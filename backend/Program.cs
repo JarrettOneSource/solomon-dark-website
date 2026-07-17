@@ -256,8 +256,18 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
+var frontendFiles = new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Context.Response.Headers.CacheControl = "no-cache";
+        }
+    }
+};
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(frontendFiles);
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storage.ScreenshotsPath),
@@ -285,7 +295,7 @@ app.MapMethods(
     "/api/{**path}",
     ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     () => ApiErrors.NotFound("No such API route exists."));
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html", frontendFiles);
 
 app.Run();
 
