@@ -8,17 +8,6 @@ namespace SolomonDarkRevived.Data;
 
 public static class SeedData
 {
-    // Hosts are living canon NPCs (the dead of the Memoratorium stay memorialized);
-    // every boneyard is a place the game actually names.
-    internal static IReadOnlyList<SeedMatchDefinition> MatchDefinitions { get; } =
-    [
-        new("seed-1", "Machinimbus", "Dratmoor", 18, 32, "hub"),
-        new("seed-2", "Hagatha", "Mount Awful", 7, 16, "hub"),
-        new("seed-3", "Fomentius", "Heck Hollow", 11, 24, "session"),
-        new("seed-4", "Shlorio the Dowser", "Highland Province", 4, 12, "session"),
-        new("seed-5", "Luthacus", "Peasant Provinces of Man", 9, 20, "session")
-    ];
-
     public static async Task InitializeAsync(
         AppDb db,
         IPasswordHasher<User> passwordHasher,
@@ -144,9 +133,6 @@ public static class SeedData
             CreatedAtUtc = now.AddHours(-definition.HoursAgo)
         }));
 
-        db.Matches.AddRange(MatchDefinitions.Select(
-            definition => CreateMatch(definition, now.AddDays(-14), now)));
-
         var saveDefinitions = new[]
         {
             (Slot: 0, Name: "Before the Tower", Size: 192),
@@ -177,22 +163,6 @@ public static class SeedData
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    internal static MatchSession CreateMatch(
-        SeedMatchDefinition definition,
-        DateTime firstSeenUtc,
-        DateTime lastSeenUtc) =>
-        new()
-        {
-            SessionKey = definition.SessionKey,
-            HostPlayer = definition.HostPlayer,
-            Boneyard = definition.Boneyard,
-            Players = definition.Players,
-            MaxPlayers = definition.MaxPlayers,
-            Status = definition.Status,
-            FirstSeenUtc = firstSeenUtc,
-            LastSeenUtc = lastSeenUtc
-        };
-
     private static byte[] CreatePlaceholderZip(string modName)
     {
         using var stream = new MemoryStream();
@@ -205,14 +175,6 @@ public static class SeedData
 
         return stream.ToArray();
     }
-
-    internal sealed record SeedMatchDefinition(
-        string SessionKey,
-        string HostPlayer,
-        string Boneyard,
-        int Players,
-        int MaxPlayers,
-        string Status);
 
     private sealed record SeedMod(
         string Slug,

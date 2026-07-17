@@ -46,6 +46,9 @@ if (string.IsNullOrWhiteSpace(jwtSecret))
 
 var jwtExpiryDays = builder.Configuration.GetValue<int?>("Jwt:ExpiryDays") ?? 7;
 builder.Services.AddSingleton(new TokenService(jwtSecret, jwtExpiryDays));
+builder.Services.AddSingleton<LobbyJoinTicketService>();
+builder.Services.AddHttpClient<SteamOpenIdService>(client =>
+    client.Timeout = TimeSpan.FromSeconds(10));
 
 // SQLite round-trips lose DateTimeKind, so DB-read timestamps would serialize
 // without the trailing Z and browsers would misparse them as local time.
@@ -104,10 +107,6 @@ if (isDevelopment)
     });
 }
 
-// Keep live seed matches inside the 120s window, with gently drifting player
-// counts, so the master list never demos empty.
-builder.Services.AddHostedService<SeedMatchHeartbeat>();
-
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -123,12 +122,23 @@ builder.Services.AddRateLimiter(options =>
             new { error = message },
             cancellationToken);
     };
-    options.AddPolicy("match-announcements", context =>
+    options.AddPolicy("lobby-announcements", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("lobby-passwords", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
@@ -160,7 +170,7 @@ app.UseForwardedHeaders();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDb>();
-    await db.Database.EnsureCreatedAsync();
+    await DatabaseSchema.EnsureCurrentAsync(db);
     await SeedData.InitializeAsync(
         db,
         scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
@@ -228,8 +238,9 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 AuthEndpoints.Map(app);
+SteamAuthEndpoints.Map(app);
 ModEndpoints.Map(app);
-MatchEndpoints.Map(app);
+LobbyEndpoints.Map(app);
 SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
 
@@ -240,52 +251,6 @@ app.MapMethods(
 app.MapFallbackToFile("index.html");
 
 app.Run();
-
-internal sealed class SeedMatchHeartbeat(IServiceScopeFactory scopeFactory) : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            await using (var scope = scopeFactory.CreateAsyncScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<SolomonDarkRevived.Data.AppDb>();
-                var now = DateTime.UtcNow;
-                var matches = await db.Matches
-                    .Where(match => EF.Functions.Like(match.SessionKey, "seed-%"))
-                    .ToListAsync(stoppingToken);
-                foreach (var match in matches)
-                {
-                    if (match.Players <= 0)
-                    {
-                        continue;
-                    }
-
-                    match.LastSeenUtc = now;
-                    match.Players = Math.Clamp(
-                        match.Players + Random.Shared.Next(-1, 2),
-                        1,
-                        match.MaxPlayers);
-                }
-
-                var existingSessionKeys = matches
-                    .Select(match => match.SessionKey)
-                    .ToHashSet(StringComparer.Ordinal);
-                foreach (var definition in SeedData.MatchDefinitions)
-                {
-                    if (!existingSessionKeys.Contains(definition.SessionKey))
-                    {
-                        db.Matches.Add(SeedData.CreateMatch(definition, now, now));
-                    }
-                }
-
-                await db.SaveChangesAsync(stoppingToken);
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(45), stoppingToken);
-        }
-    }
-}
 
 internal sealed class UtcDateTimeJsonConverter : System.Text.Json.Serialization.JsonConverter<DateTime>
 {

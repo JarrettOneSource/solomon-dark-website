@@ -161,71 +161,12 @@ Mod `author` objects gain `school`: `{id, username, school}` (REVISION 7).
 - The SSE endpoint must also send response header `X-Accel-Buffering: no`
   (nginx honors it per-response; proxies otherwise buffer the stream dead).
 
-## Matches (multiplayer session master list)
+## Steam lobbies and live updates
 
-> REVISION 2 — replaces the old “Servers” section entirely. A *match* is a live
-> multiplayer session hosted by a player through the SDR loader. Joining happens
-> via the loader (the site fires an `sdr://` link), so there is **no host/port
-> anywhere** — the join handle is an opaque `sessionKey` (Steam lobby id or a
-> loader-generated GUID). “Boneyard” is the name of the run/map the match is
-> being played on (a distinct in-game concept — do not confuse with servers).
-> Rename everything; keep NO aliases or compatibility routes for the old
-> `/api/servers` shape (nothing consumes it yet).
-
-> REVISION 4: matches are homogeneous (one game version for everyone), so
-> Version and ModLoaderVersion are REMOVED everywhere. A match that stops
-> announcing is DELETED outright once it leaves the 120s window — there is no
-> offline/stale/adjourned state and no `includeOffline`. New required field:
-> `status`, either `"hub"` (pre-game lobby where players gather) or
-> `"session"` (run underway).
-
-Entity `MatchSession` (table `Matches`): Id, SessionKey (≤64, unique index),
-HostPlayer (≤32), Boneyard (≤60), Players, MaxPlayers, Status (`hub|session`),
-FirstSeenUtc, LastSeenUtc.
-
-- `POST /api/matches/announce` JSON `{sessionKey (required), hostPlayer
-  (required), boneyard (required), players (≥0), maxPlayers (1–64),
-  status ("hub"|"session", required)}`. Upsert on SessionKey: update fields +
-  `LastSeenUtc=UtcNow`; insert sets `FirstSeenUtc`. Clamp `players` to
-  `maxPlayers`. → `200 {id, expiresInSeconds: 120}`. Rate limit per IP,
-  30 req/min (policy `match-announcements`). On announce AND on every list/
-  stream read below, first hard-delete rows with `LastSeenUtc < UtcNow-120s`
-  (a tiny helper both endpoints call is fine).
-- `DELETE /api/matches/announce` JSON `{sessionKey}` → 204 (deletes the row).
-- `GET /api/matches` → `{items, playerCount}` — everything returned is live by
-  definition. Sort players desc. Item shape:
-  `{id, sessionKey, hostPlayer, boneyard, players, maxPlayers, status}`.
-- `GET /api/matches/game` — bare JSON array for the in-game multiplayer tab:
-  `[{sessionKey, hostPlayer, boneyard, players, maxPlayers, status}]`.
-  No auth, no rate limit.
-- SSE `GET /api/matches/events` — same payload as `GET /api/matches`. The
-  change fingerprint MUST include statuses and player counts (e.g. hash the
-  concatenation of `sessionKey:status:players` plus row count) so hub→session
-  flips push an event.
-- Stats endpoint: `matchesLive` = match count, `wizardsOnline` = players sum.
-- Seed matches: 5 rows, all live, sessionKey `seed-1`…`seed-5`, hostPlayer
-  from mage names (Vorpus, Griselda, Wazoo, Morth, Sirmin), boneyard names
-  ("Dead Hawg Outskirts", "Mount Awful", "The Grimwood", "Dratmoor Fen",
-  "The Old Cemetery"), statuses: two `hub`, three `session`.
-- Dev seed heartbeat in Program.cs keeps filter
-  `SessionKey LIKE 'seed-%' AND Players > 0` (it now keeps all five alive,
-  which is the point — the hard-delete would otherwise eat them). It also
-  re-inserts any missing canonical seed match with fresh `FirstSeenUtc` and
-  `LastSeenUtc` values.
-
-## Live updates (SSE)
-
-- `GET /api/matches/events` — Server-Sent Events (`text/event-stream`), no
-  auth, no rate limit. On connect, immediately emit an event named `matches`
-  whose data is the same JSON as `GET /api/matches?includeOffline=true` (the
-  client filters). Then re-check the DB every 3 seconds and emit a fresh
-  `matches` event only when a fingerprint changes (row count + max LastSeenUtc
-  + players sum is enough). Send a `: keepalive` comment every 15 seconds so
-  proxies keep the stream open. Honor request cancellation cleanly (no
-  unobserved exceptions on disconnect). .NET 10 has first-class SSE results
-  (`TypedResults.ServerSentEvents`) — use that if it fits, otherwise write the
-  stream by hand with `Response.ContentType = "text/event-stream"` + flushes.
-  Do not buffer; it must stream through the Vite dev proxy.
+The former unauthenticated `/api/matches` demo contract and seed heartbeat have
+been replaced by the Steam lobby directory. The canonical privacy, Steam-link,
+host-announcement, list/SSE, password-authorization, status, and `sdr://`
+contracts are in [`backend/LOBBY_API.md`](../backend/LOBBY_API.md).
 
 ## Cloud saves
 
