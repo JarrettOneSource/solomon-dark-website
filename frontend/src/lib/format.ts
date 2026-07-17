@@ -26,6 +26,13 @@ export function timeAgo(iso: string): string {
   return `${Math.floor(mo / 12)}y ago`
 }
 
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.floor(seconds)}s in`
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m}m in`
+  return `${Math.floor(m / 60)}h ${m % 60}m in`
+}
+
 export function formatDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''

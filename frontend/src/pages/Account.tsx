@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { ErrorNote, Spinner, TypeBadge } from '../components/ui'
 import { api, ApiError, type CloudSave, type ModSummary, type School } from '../lib/api'
@@ -96,6 +96,106 @@ function SchoolPicker() {
           — the wand trail and your school’s click rites (this device only)
         </span>
       </label>
+    </section>
+  )
+}
+
+function SteamRegistrar() {
+  const { user, refresh } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const consumedResult = useRef(false)
+
+  // Steam's OpenID round-trip lands back here with ?steamLink=<result>.
+  useEffect(() => {
+    if (consumedResult.current) return
+    const result = searchParams.get('steamLink')
+    if (!result) return
+    consumedResult.current = true
+    if (result === 'linked') {
+      setNote('Your Steam self is now on record.')
+      refresh()
+    } else if (result === 'conflict') {
+      setError('That Steam profile is already bound to another wizard.')
+    } else {
+      setError('Steam declined the ritual. Try the link again.')
+    }
+    searchParams.delete('steamLink')
+    setSearchParams(searchParams, { replace: true })
+  }, [searchParams, setSearchParams, refresh])
+
+  if (!user) return null
+
+  const link = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const start = await api.steam.link('/account')
+      window.location.assign(start.authorizationUrl)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'The Registrar’s door stuck. Try again.')
+      setBusy(false)
+    }
+  }
+
+  const unlink = async () => {
+    if (!window.confirm('Strike your Steam profile from the record? Friends-only classes and warded-lobby tickets will stop working until you relink.')) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.steam.unlink()
+      setNote(null)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'The record resisted erasure. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mt-12">
+      <Reveal>
+        <div className="kicker mb-1.5">The Registrar</div>
+        <h2 className="h-display text-xl">Steam Linkage</h2>
+        <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
+          Bind your Steam self to your SDR account. The Registrar uses it to show you
+          friends-only classes and to cut join tickets for warded ones. The rite happens
+          on Steam’s own doorstep — no password changes hands here.
+        </p>
+      </Reveal>
+      <div className="mt-6">
+        {user.steamId ? (
+          <div className="slab flex flex-wrap items-center gap-x-5 gap-y-2 rounded px-4 py-3">
+            <span className="badge badge-arcane">Linked</span>
+            <span className="font-mono text-xs text-bone-dim">{user.steamId}</span>
+            <a
+              href={`https://steamcommunity.com/profiles/${user.steamId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="link-arcane text-[11px] uppercase tracking-wider"
+            >
+              view profile
+            </a>
+            <button
+              type="button"
+              className="ml-auto text-[11px] uppercase tracking-wider text-blood/80 hover:text-blood"
+              onClick={unlink}
+              disabled={busy}
+            >
+              unlink
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn btn-gold" onClick={link} disabled={busy}>
+            {busy ? 'Opening Steam…' : 'Link Steam profile'}
+          </button>
+        )}
+        {note && <p className="mt-3 text-sm text-moss">{note}</p>}
+        {error && <div className="mt-3"><ErrorNote message={error} /></div>}
+      </div>
     </section>
   )
 }
@@ -210,6 +310,8 @@ export default function Account() {
           </button>
         </div>
       </Reveal>
+
+      <SteamRegistrar />
 
       <SchoolPicker />
 

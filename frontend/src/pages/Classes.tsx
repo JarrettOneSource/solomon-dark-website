@@ -1,24 +1,44 @@
-import { useMemo, useState } from 'react'
-import MatchTable from '../components/MatchTable'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
+import LobbyTable from '../components/LobbyTable'
 import Reveal from '../fx/Reveal'
 import { EmptyState, ErrorNote, Spinner } from '../components/ui'
-import { useMatches } from '../lib/useMatches'
+import type { Lobby } from '../lib/api'
+import { useAuth } from '../lib/auth'
+import { useLobbies } from '../lib/useLobbies'
 
 export default function Classes() {
   const [search, setSearch] = useState('')
   const [openSeats, setOpenSeats] = useState(false)
-  const { data, error, loading } = useMatches()
+  const [knock, setKnock] = useState<Lobby | null>(null)
+  const { user } = useAuth()
+  const { data, error, loading } = useLobbies()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const consumedDeepLink = useRef(false)
+
+  // sdr hand-off: /classes?lobby=<id> opens the knock dialog for that class.
+  useEffect(() => {
+    if (consumedDeepLink.current || !data) return
+    const wanted = searchParams.get('lobby')
+    if (!wanted) return
+    consumedDeepLink.current = true
+    const target = data.items.find((item) => String(item.id) === wanted)
+    if (target?.access === 'password') setKnock(target)
+    setSearchParams({}, { replace: true })
+  }, [data, searchParams, setSearchParams])
 
   const filtered = useMemo(() => {
     let items = data?.items ?? []
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       items = items.filter(
-        (m) =>
-          m.hostPlayer.toLowerCase().includes(q) || m.boneyard.toLowerCase().includes(q),
+        (lobby) =>
+          lobby.hostPlayer.toLowerCase().includes(q) ||
+          (lobby.game.boneyardName ?? '').toLowerCase().includes(q),
       )
     }
-    if (openSeats) items = items.filter((m) => m.players < m.maxPlayers)
+    if (openSeats) items = items.filter((lobby) => lobby.players < lobby.maxPlayers)
     return items
   }, [data, search, openSeats])
 
@@ -36,8 +56,8 @@ export default function Classes() {
         </div>
         <h1 className="h-display text-3xl">Classes in Session</h1>
         <p className="text-fell mt-2 max-w-xl text-bone-dim">
-          Live multiplayer expeditions led by fellow students. Pick a class and the SDR
-          loader walks you in. Attendance is optional; survival is graded.
+          Live multiplayer expeditions led by fellow students. Open doors connect at a
+          click; warded ones want a password. Attendance is optional; survival is graded.
         </p>
       </Reveal>
 
@@ -70,18 +90,41 @@ export default function Classes() {
             line={
               search || openSeats
                 ? 'Nothing matches. Loosen the filters — or lower your standards.'
-                : 'The faculty deny all knowledge. Host one from the game’s multiplayer tab — or go rogue over Steam P2P.'
+                : 'The faculty deny all knowledge. Host one from the SDR loader — or go rogue over Steam P2P.'
             }
           />
         ) : (
-          <MatchTable matches={filtered} />
+          <LobbyTable lobbies={filtered} onKnock={setKnock} />
         )}
 
         <p className="text-fell mt-6 text-center text-xs text-bone-dim/70">
-          Prefer to keep it private? SDR also speaks plain Steam P2P — host and invite
-          friends directly, no website, no account, no paper trail.
+          {user?.steamId ? (
+            <>
+              Friends-only classes hosted by your Steam friends appear here automatically,
+              marked <span className="text-arcane">Friends</span>.
+            </>
+          ) : user ? (
+            <>
+              Friends-only classes stay hidden until the Registrar knows your Steam self —{' '}
+              <Link to="/account" className="link-arcane">
+                link it in the Annals
+              </Link>
+              .
+            </>
+          ) : (
+            <>
+              Friends-only classes show for{' '}
+              <Link to="/login" className="link-arcane">
+                signed-in wizards
+              </Link>{' '}
+              with a linked Steam profile. Steam invites work regardless — no website, no
+              account, no paper trail.
+            </>
+          )}
         </p>
       </div>
+
+      {knock && <LobbyPasswordDialog lobby={knock} onClose={() => setKnock(null)} />}
     </div>
   )
 }

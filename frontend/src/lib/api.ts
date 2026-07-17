@@ -8,6 +8,7 @@ export interface User {
   username: string
   email?: string
   school: School | null
+  steamId: string | null
   createdAtUtc: string
 }
 
@@ -75,21 +76,73 @@ export interface WizardProfile {
   mods: ModSummary[]
 }
 
-export type MatchStatus = 'hub' | 'session'
+export type LobbyPrivacy = 'public' | 'passwordProtected' | 'friendsOnly'
+export type LobbyAccess = 'public' | 'password' | 'friend'
+export type LobbyPhase = 'hub' | 'loading' | 'session' | 'results'
 
-export interface MatchSession {
-  id: number
-  sessionKey: string
-  hostPlayer: string
-  boneyard: string
-  players: number
-  maxPlayers: number
-  status: MatchStatus
+export interface LobbyBuild {
+  appId: number
+  protocolVersion: number
+  manifestSha256: string
+  loaderVersion: string
 }
 
-export interface MatchList {
-  items: MatchSession[]
+export interface LobbyGame {
+  phase: LobbyPhase
+  boneyardId: string | null
+  boneyardName: string | null
+  boneyardSha256: string | null
+  wave: number | null
+  difficulty: string | null
+  elapsedSeconds: number | null
+  statusText: string | null
+}
+
+/** Public KDF parameters for a warded lobby — never the hash itself. */
+export interface LobbyPasswordInfo {
+  algorithm: string
+  iterations: number
+  salt: string
+}
+
+export interface LobbyJoinInfo {
+  lobbyId: string
+  launchUri: string
+}
+
+export interface Lobby {
+  id: number
+  hostPlayer: string
+  hostSteamId: string
+  privacy: LobbyPrivacy
+  access: LobbyAccess
+  players: number
+  maxPlayers: number
+  lastSeenUtc: string
+  expiresAtUtc: string
+  build: LobbyBuild
+  game: LobbyGame
+  password: LobbyPasswordInfo | null
+  /** Withheld for password lobbies until authorization succeeds. */
+  join: LobbyJoinInfo | null
+}
+
+export interface LobbyList {
+  items: Lobby[]
   playerCount: number
+}
+
+export interface LobbyAuthorization {
+  lobbyId: string
+  steamId: string
+  ticket: string
+  expiresAtUtc: string
+  launchUri: string
+}
+
+export interface SteamLinkStart {
+  authorizationUrl: string
+  expiresAtUtc: string
 }
 
 export interface Stats {
@@ -209,11 +262,17 @@ export const api = {
       request<WizardProfile>(`/api/users/${encodeURIComponent(username)}`),
   },
 
-  matches: {
-    list: () => request<MatchList>('/api/matches'),
-    eventsUrl: '/api/matches/events',
-    /** Placeholder scheme until the loader registers its real protocol handler. */
-    joinUrl: (sessionKey: string) => `sdr://join/${encodeURIComponent(sessionKey)}`,
+  lobbies: {
+    list: () => request<LobbyList>('/api/lobbies'),
+    eventsUrl: '/api/lobbies/events',
+    authorize: (id: number, passwordHash: string) =>
+      request<LobbyAuthorization>(`/api/lobbies/${id}/authorize`, json({ passwordHash })),
+  },
+
+  steam: {
+    link: (returnPath: string) =>
+      request<SteamLinkStart>('/api/auth/steam/link', json({ returnPath })),
+    unlink: () => request<void>('/api/auth/steam', { method: 'DELETE' }),
   },
 
   stats: () => request<Stats>('/api/stats'),

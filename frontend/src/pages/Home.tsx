@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Hero from './Hero'
 import Reveal from '../fx/Reveal'
-import MatchTable from '../components/MatchTable'
+import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
+import LobbyTable from '../components/LobbyTable'
 import ModCard from '../components/ModCard'
 import { EmptyState, SectionHead, Spinner, StatTile } from '../components/ui'
-import { api } from '../lib/api'
+import { api, type Lobby } from '../lib/api'
 import { useApi } from '../lib/useApi'
-import { useMatches } from '../lib/useMatches'
+import { useLobbies } from '../lib/useLobbies'
 import { useAuth } from '../lib/auth'
 import { art, skillIcons } from '../lib/assets'
 import { formatCount } from '../lib/format'
@@ -41,10 +43,11 @@ const FEATURES = [
 export default function Home() {
   const { user } = useAuth()
   const stats = useApi(() => api.stats(), [], 30_000)
-  const matches = useMatches()
+  const lobbies = useLobbies()
   const mods = useApi(() => api.mods.list({ sort: 'newest', pageSize: 4 }), [])
+  const [knock, setKnock] = useState<Lobby | null>(null)
 
-  const liveMatches = (matches.data?.items ?? []).slice(0, 5)
+  const liveLobbies = (lobbies.data?.items ?? []).slice(0, 5)
 
   return (
     <div>
@@ -123,17 +126,17 @@ export default function Home() {
               </Link>
             }
           />
-          {matches.loading ? (
+          {lobbies.loading ? (
             <Spinner label="Fetching classes…" />
-          ) : matches.error ? (
-            <EmptyState title="The crystal ball is cloudy" line={matches.error} />
-          ) : liveMatches.length === 0 ? (
+          ) : lobbies.error ? (
+            <EmptyState title="The crystal ball is cloudy" line={lobbies.error} />
+          ) : liveLobbies.length === 0 ? (
             <EmptyState
               title="No classes in session"
-              line="Solomon, for the record, is not resting. Host one from the game’s multiplayer tab."
+              line="Solomon, for the record, is not resting. Host one from the SDR loader’s multiplayer card."
             />
           ) : (
-            <MatchTable matches={liveMatches} />
+            <LobbyTable lobbies={liveLobbies} onKnock={setKnock} />
           )}
         </Reveal>
       </section>
@@ -247,6 +250,8 @@ export default function Home() {
           )}
         </Reveal>
       </section>
+
+      {knock && <LobbyPasswordDialog lobby={knock} onClose={() => setKnock(null)} />}
     </div>
   )
 }

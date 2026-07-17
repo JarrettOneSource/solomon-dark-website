@@ -235,8 +235,8 @@ export default function Shell() {
             Demonstration only
           </span>
           <span className="mx-2 text-blood/70">✦</span>
-          The tomes, wizards, and classes in session shown here are display data. The mod
-          is not yet released — no real mods or lobbies exist yet.
+          The tomes and wizards shown here are display data — the mod is not yet
+          released. Classes in session are live lobbies from the SDR directory.
         </p>
       </div>
 
