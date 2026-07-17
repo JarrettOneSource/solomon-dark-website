@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
 using SolomonDarkRevived.Services;
@@ -12,9 +13,46 @@ public static class SteamAuthEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
+        app.MapPost("/api/auth/steam/session", CreateSessionAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(8 * 1024))
+            .RequireRateLimiting("steam-ticket-auth");
         app.MapPost("/api/auth/steam/link", StartLinkAsync).RequireAuthorization();
         app.MapGet("/api/auth/steam/callback", CompleteLinkAsync);
         app.MapDelete("/api/auth/steam", UnlinkAsync).RequireAuthorization();
+    }
+
+    private static async Task<IResult> CreateSessionAsync(
+        SteamSessionRequest request,
+        HttpContext context,
+        SteamTicketVerifier verifier,
+        TokenService tokens,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var ticket = NormalizeTicket(request.Ticket);
+        if (ticket is null)
+        {
+            return ApiErrors.BadRequest(
+                "Steam Web API tickets must be even-length hexadecimal values no larger than 2560 bytes.");
+        }
+
+        var verification = await verifier.VerifyAsync(ticket, cancellationToken);
+        if (verification.Status == SteamTicketVerificationStatus.Rejected)
+        {
+            return ApiErrors.Unauthorized(verification.Error);
+        }
+        if (verification.Status == SteamTicketVerificationStatus.Unavailable)
+        {
+            return ApiErrors.Error(StatusCodes.Status503ServiceUnavailable, verification.Error);
+        }
+
+        var session = tokens.CreateSteamSession(verification.SteamId!);
+        return Results.Ok(new
+        {
+            token = session.Token,
+            steamId = session.SteamId,
+            expiresAtUtc = session.ExpiresAtUtc
+        });
     }
 
     private static async Task<IResult> StartLinkAsync(
@@ -159,5 +197,16 @@ public static class SteamAuthEndpoints
     private static string AppendResult(string returnPath, string result) =>
         returnPath + (returnPath.Contains('?') ? '&' : '?') + "steamLink=" + result;
 
+    private static string? NormalizeTicket(string? ticket)
+    {
+        ticket = ticket?.Trim().ToLowerInvariant();
+        return ticket is { Length: > 0 and <= 5120 } &&
+               ticket.Length % 2 == 0 &&
+               ticket.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f')
+            ? ticket
+            : null;
+    }
+
     public sealed record StartSteamLinkRequest(string? ReturnPath);
+    public sealed record SteamSessionRequest(string? Ticket);
 }

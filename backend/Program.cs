@@ -16,6 +16,9 @@ using SolomonDarkRevived.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 var isDevelopment = builder.Environment.IsDevelopment();
+builder.Logging.AddFilter(
+    "System.Net.Http.HttpClient.SteamTicketVerifier",
+    LogLevel.Warning);
 
 var configuredStorageRoot = builder.Configuration["Storage:Root"];
 if (string.IsNullOrWhiteSpace(configuredStorageRoot))
@@ -49,6 +52,11 @@ builder.Services.AddSingleton(new TokenService(jwtSecret, jwtExpiryDays));
 builder.Services.AddSingleton<LobbyJoinTicketService>();
 builder.Services.AddHttpClient<SteamOpenIdService>(client =>
     client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddHttpClient<SteamTicketVerifier>(client =>
+{
+    client.BaseAddress = new Uri("https://api.steampowered.com/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 // SQLite round-trips lose DateTimeKind, so DB-read timestamps would serialize
 // without the trailing Z and browsers would misparse them as local time.
@@ -86,7 +94,19 @@ builder.Services
             }
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder(
+            JwtBearerDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context => TokenService.GetUserId(context.User) is not null)
+        .Build();
+    options.AddPolicy("lobby-viewer", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            TokenService.GetUserId(context.User) is not null ||
+            TokenService.GetSteamSessionId(context.User) is not null));
+});
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -113,11 +133,17 @@ builder.Services.AddRateLimiter(options =>
     options.OnRejected = async (context, cancellationToken) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        var message = context.HttpContext.Request.Path.Value?.EndsWith(
-            "/comments",
-            StringComparison.OrdinalIgnoreCase) == true
+        var requestPath = context.HttpContext.Request.Path.Value;
+        var message = requestPath?.EndsWith(
+                "/comments",
+                StringComparison.OrdinalIgnoreCase) == true
             ? "The ink must dry before you add another marginal note. Try again in a minute."
-            : "Too many match announcements; try again in a minute.";
+            : string.Equals(
+                requestPath,
+                "/api/auth/steam/session",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many Steam authentication attempts; try again in a minute."
+                : "Too many match announcements; try again in a minute.";
         await context.HttpContext.Response.WriteAsJsonAsync(
             new { error = message },
             cancellationToken);
@@ -139,6 +165,17 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("steam-ticket-auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
