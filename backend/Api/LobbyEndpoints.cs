@@ -26,7 +26,7 @@ public static class LobbyEndpoints
             .RequireRateLimiting("lobby-announcements");
         app.MapDelete("/api/lobbies/{lobbyId}", DelistAsync);
         app.MapPost("/api/lobbies/{id:int}/authorize", AuthorizeAsync)
-            .RequireAuthorization()
+            .RequireAuthorization("lobby-viewer")
             .RequireRateLimiting("lobby-passwords");
         app.MapGet("/api/lobbies/events", StreamEventsAsync);
         app.MapGet("/api/lobbies", ListAsync);
@@ -194,16 +194,14 @@ public static class LobbyEndpoints
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
-        var userId = TokenService.GetUserId(context.User);
-        var steamId = userId is null
-            ? null
-            : await db.Users
-                .Where(user => user.Id == userId.Value)
-                .Select(user => user.SteamId)
-                .SingleOrDefaultAsync(cancellationToken);
+        var steamId = await ResolveViewerSteamIdAsync(
+            context.User,
+            db,
+            cancellationToken);
         if (steamId is null)
         {
-            return ApiErrors.Forbidden("Link a Steam profile before joining a protected lobby.");
+            return ApiErrors.Forbidden(
+                "A linked website account or verified launcher Steam session is required.");
         }
 
         await DeleteExpiredLobbiesAsync(db, DateTime.UtcNow, cancellationToken);
@@ -296,15 +294,10 @@ public static class LobbyEndpoints
         CancellationToken cancellationToken)
     {
         await DeleteExpiredLobbiesAsync(db, DateTime.UtcNow, cancellationToken);
-        string? viewerSteamId = null;
-        var userId = TokenService.GetUserId(context.User);
-        if (userId is not null)
-        {
-            viewerSteamId = await db.Users
-                .Where(user => user.Id == userId.Value)
-                .Select(user => user.SteamId)
-                .SingleOrDefaultAsync(cancellationToken);
-        }
+        var viewerSteamId = await ResolveViewerSteamIdAsync(
+            context.User,
+            db,
+            cancellationToken);
 
         var lobbies = await db.Lobbies.AsNoTracking()
             .OrderByDescending(lobby => lobby.Players)
@@ -317,6 +310,23 @@ public static class LobbyEndpoints
             .Select(MapLobby)
             .ToArray();
         return new LobbyListResponse(items, items.Sum(item => item.Players));
+    }
+
+    private static async Task<string?> ResolveViewerSteamIdAsync(
+        System.Security.Claims.ClaimsPrincipal principal,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var userId = TokenService.GetUserId(principal);
+        if (userId is not null)
+        {
+            return await db.Users
+                .Where(user => user.Id == userId.Value)
+                .Select(user => user.SteamId)
+                .SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return TokenService.GetSteamSessionId(principal);
     }
 
     private static LobbyItem MapLobby(LobbySession lobby)
