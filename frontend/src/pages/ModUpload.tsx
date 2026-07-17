@@ -77,7 +77,7 @@ export default function ModUpload() {
       form.set('type', type)
       form.set('version', version.trim() || '1.0.0')
       form.set('file', file)
-      for (const s of screens.slice(0, 5)) form.append('screenshots', s)
+      for (const s of screens.slice(0, 10)) form.append('screenshots', s)
       const created = await api.mods.create(form)
       navigate(`/mods/${created.slug}`)
     } catch (err) {
@@ -185,13 +185,13 @@ export default function ModUpload() {
           />
         </Field>
 
-        <Field label="Screenshots" hint="Up to 5 · png/jpg · 2MB each">
+        <Field label="Screenshots" hint="Up to 10 · png/jpg · 2MB each">
           <input
             type="file"
             accept="image/png,image/jpeg"
             multiple
             className="block w-full text-xs text-bone-dim file:mr-3 file:cursor-pointer file:rounded file:border file:border-gold/30 file:bg-crypt file:px-3 file:py-1.5 file:font-display file:text-[11px] file:uppercase file:tracking-wider file:text-gold"
-            onChange={(e) => setScreens(Array.from(e.target.files ?? []).slice(0, 5))}
+            onChange={(e) => setScreens(Array.from(e.target.files ?? []).slice(0, 10))}
           />
         </Field>
 

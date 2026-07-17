@@ -212,6 +212,7 @@ await using (var scope = app.Services.CreateAsyncScope())
         db,
         scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
         storage,
+        Path.Combine(builder.Environment.ContentRootPath, "seed-assets"),
         devLogins: isDevelopment);
 }
 

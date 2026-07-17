@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
-import { ErrorNote, Field, Spinner, TypeBadge } from '../components/ui'
+import PlatesGallery from '../components/PlatesGallery'
+import { ErrorNote, Spinner, TypeBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import type { ModDetail as ModDetailShape } from '../lib/api'
 import { useApi } from '../lib/useApi'
@@ -44,21 +45,71 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
   }
 
   const items = comments.data?.items ?? []
+  const total = comments.data?.total ?? items.length
 
   return (
-    <div className="mt-8">
-      <div className="kicker mb-3">Marginalia · notes in the margin</div>
+    <section className="mt-14">
+      <div className="flex items-center gap-4" aria-hidden="true">
+        <div className="rule-gold flex-1" />
+        <img src={art.skullWhite} alt="" className="h-5 opacity-45" />
+        <div className="rule-gold flex-1" />
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="h-display text-lg">Marginalia</h2>
+        <span className="text-fell text-sm text-bone-dim">notes left in the margins</span>
+        {comments.data && (
+          <span className="ml-auto font-mono text-xs text-bone-dim/70">
+            {total} {total === 1 ? 'note' : 'notes'}
+          </span>
+        )}
+      </div>
+
+      {user ? (
+        <form onSubmit={submit} className="slab mt-5 space-y-2.5 rounded p-4">
+          <textarea
+            className="input min-h-20"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            maxLength={1000}
+            placeholder="Leave a note in the margin…"
+          />
+          {error && <ErrorNote message={error} />}
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[11px] text-bone-dim/50">{body.length}/1000</span>
+            <button type="submit" className="btn btn-stone" disabled={busy || !body.trim()}>
+              {busy ? 'Inscribing…' : 'Inscribe'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <p className="mt-5 text-sm text-bone-dim">
+          <Link to="/login" className="link-arcane">
+            Sign in
+          </Link>{' '}
+          to leave a note. The Librarian checks signatures.
+        </p>
+      )}
+
       {comments.loading ? (
         <Spinner label="Deciphering handwriting…" />
       ) : items.length === 0 ? (
-        <div className="slab rounded px-5 py-6 text-center text-sm text-bone-dim">
-          No notes yet. The margins are pristine — suspiciously so.
+        <div className="mt-5 rounded border border-dashed border-gold/20 px-5 py-8 text-center">
+          <p className="text-fell text-sm text-bone-dim">
+            No notes yet. The margins are pristine — suspiciously so.
+          </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="mt-5 space-y-3">
           {items.map((c) => (
-            <div key={c.id} className="slab rounded px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <article
+              key={c.id}
+              className="rounded-r border-l-2 border-gold/30 bg-crypt/50 px-4 py-3 transition-colors hover:border-gold/60 hover:bg-crypt/70"
+            >
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full border border-gold/30 bg-[#0d0b12] font-display text-xs font-bold text-gold shadow-[inset_0_0_8px_rgba(0,0,0,.8)]">
+                  {c.author.username.charAt(0).toUpperCase()}
+                </span>
                 <Link
                   to={`/wizards/${encodeURIComponent(c.author.username)}`}
                   className="font-display text-[13px] font-bold tracking-wide text-gold hover:text-gold-bright"
@@ -73,7 +124,7 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
                     className="h-3.5"
                   />
                 )}
-                <span className="text-xs text-bone-dim/70">{timeAgo(c.createdAtUtc)}</span>
+                <span className="text-xs text-bone-dim/60">{timeAgo(c.createdAtUtc)}</span>
                 {user && (user.id === c.author.id || user.id === mod.author.id) && (
                   <button
                     type="button"
@@ -84,97 +135,137 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
                   </button>
                 )}
               </div>
-              <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-relaxed text-bone/90">{c.body}</p>
-            </div>
+              <p className="text-fell mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-bone/90">
+                {c.body}
+              </p>
+            </article>
           ))}
         </div>
       )}
-
-      {user ? (
-        <form onSubmit={submit} className="mt-4 space-y-2">
-          <textarea
-            className="input min-h-20"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            maxLength={1000}
-            placeholder="Leave a note in the margin…"
-          />
-          {error && <ErrorNote message={error} />}
-          <button type="submit" className="btn btn-stone" disabled={busy || !body.trim()}>
-            {busy ? 'Inscribing…' : 'Inscribe'}
-          </button>
-        </form>
-      ) : (
-        <p className="mt-4 text-sm text-bone-dim">
-          <Link to="/login" className="link-arcane">
-            Sign in
-          </Link>{' '}
-          to leave a note. The Librarian checks signatures.
-        </p>
-      )}
-    </div>
+    </section>
   )
 }
 
-function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) {
-  const [version, setVersion] = useState('')
-  const [changelog, setChangelog] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+/** Author-side plate management: bind, unbind, and shuffle the tome's images. */
+function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const plates = mod.screenshots
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!file || !version.trim()) {
-      setError('A version number and a zip are both required. Pedantry is policy.')
-      return
-    }
+  const run = async (action: () => Promise<unknown>) => {
     setBusy(true)
     setError(null)
     try {
-      const form = new FormData()
-      form.set('version', version.trim())
-      form.set('changelog', changelog)
-      form.set('file', file)
-      await api.mods.addVersion(slug, form)
-      setVersion('')
-      setChangelog('')
-      setFile(null)
-      onDone()
+      await action()
+      onChanged()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Upload failed')
+      setError(err instanceof ApiError ? err.message : 'The plate press jammed.')
     } finally {
       setBusy(false)
     }
   }
 
+  const add = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const form = new FormData()
+    for (const f of Array.from(files)) form.append('screenshots', f)
+    void run(() => api.mods.screenshots.add(mod.slug, form))
+  }
+
+  const move = (from: number, dir: -1 | 1) => {
+    const ids = plates.map((p) => p.id)
+    ;[ids[from], ids[from + dir]] = [ids[from + dir], ids[from]]
+    void run(() => api.mods.screenshots.reorder(mod.slug, ids))
+  }
+
+  const smallButton =
+    'absolute flex h-5 w-5 items-center justify-center rounded bg-black/75 text-[11px] leading-none opacity-0 transition-opacity group-hover:opacity-100'
+
   return (
-    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-gold/15 pt-4">
-      <div className="kicker">Publish a new version</div>
-      <Field label="Version">
-        <input className="input" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.1.0" />
-      </Field>
-      <Field label="Changelog">
-        <textarea
-          className="input min-h-20"
-          value={changelog}
-          onChange={(e) => setChangelog(e.target.value)}
-          placeholder="Fixed the golem. The golem is fine now."
-        />
-      </Field>
-      <Field label="Zip file">
+    <div className="mt-4 border-t border-gold/15 pt-4">
+      <div className="kicker mb-3">Plates · {plates.length}/10 bound</div>
+      {plates.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {plates.map((p, n) => (
+            <div key={p.id} className="group relative overflow-hidden rounded border border-gold/20">
+              <img src={p.url} alt="" className="h-14 w-full object-cover" />
+              <button
+                type="button"
+                aria-label="Unbind this plate"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm('Unbind this plate from the tome?')) {
+                    void run(() => api.mods.screenshots.remove(mod.slug, p.id))
+                  }
+                }}
+                className={`${smallButton} right-0.5 top-0.5 text-blood/80 hover:text-blood`}
+              >
+                ✕
+              </button>
+              {n > 0 && (
+                <button
+                  type="button"
+                  aria-label="Move plate earlier"
+                  disabled={busy}
+                  onClick={() => move(n, -1)}
+                  className={`${smallButton} bottom-0.5 left-0.5 text-gold/80 hover:text-gold-bright`}
+                >
+                  ‹
+                </button>
+              )}
+              {n < plates.length - 1 && (
+                <button
+                  type="button"
+                  aria-label="Move plate later"
+                  disabled={busy}
+                  onClick={() => move(n, 1)}
+                  className={`${smallButton} bottom-0.5 right-0.5 text-gold/80 hover:text-gold-bright`}
+                >
+                  ›
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <label
+        className={`mt-3 block ${plates.length >= 10 ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'}`}
+      >
+        <span className="btn btn-stone pointer-events-none w-full !py-2 !text-[11px]">
+          {busy ? 'Pressing…' : 'Bind new plates'}
+        </span>
         <input
           type="file"
-          accept=".zip"
-          className="block w-full text-xs text-bone-dim file:mr-3 file:cursor-pointer file:rounded file:border file:border-gold/30 file:bg-crypt file:px-3 file:py-1.5 file:font-display file:text-[11px] file:uppercase file:tracking-wider file:text-gold"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          accept="image/png,image/jpeg"
+          multiple
+          className="hidden"
+          disabled={busy || plates.length >= 10}
+          onChange={(e) => {
+            add(e.target.files)
+            e.target.value = ''
+          }}
         />
-      </Field>
-      {error && <ErrorNote message={error} />}
-      <button type="submit" className="btn btn-stone w-full" disabled={busy}>
-        {busy ? 'Cataloguing…' : 'Publish version'}
-      </button>
-    </form>
+      </label>
+      <p className="mt-2 text-[11px] leading-relaxed text-bone-dim/70">
+        png/jpg · 2MB each · the first plate faces the Library.
+      </p>
+      {error && (
+        <div className="mt-2">
+          <ErrorNote message={error} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecordRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 text-sm">
+      <span className="font-display text-[11px] uppercase tracking-[0.18em] text-bone-dim/70">
+        {label}
+      </span>
+      <span className="min-w-0 text-right text-bone/90">{children}</span>
+    </div>
   )
 }
 
@@ -203,7 +294,7 @@ export default function ModDetail() {
   }
 
   const m = mod.data
-  const isOwner = user && user.id === m.author.id
+  const isOwner = user != null && user.id === m.author.id
   const latest = m.versions[0]
 
   const remove = async () => {
@@ -231,7 +322,10 @@ export default function ModDetail() {
         <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-sm text-bone-dim">
           <span>
             by{' '}
-            <Link to={`/wizards/${encodeURIComponent(m.author.username)}`} className="text-gold hover:text-gold-bright">
+            <Link
+              to={`/wizards/${encodeURIComponent(m.author.username)}`}
+              className="text-gold hover:text-gold-bright"
+            >
               {m.author.username}
             </Link>
           </span>
@@ -243,54 +337,29 @@ export default function ModDetail() {
               className="h-4"
             />
           )}
-          <span>· updated {timeAgo(m.updatedAtUtc)} · <span className="font-mono text-xs">{m.slug}</span></span>
+          <span>· updated {timeAgo(m.updatedAtUtc)}</span>
         </p>
-        <p className="mt-3 max-w-2xl text-[15px] text-bone/90">{m.summary}</p>
+        <p className="text-fell mt-3 max-w-2xl text-[16px] text-bone/85">{m.summary}</p>
       </Reveal>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_320px]">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
           {m.screenshots.length > 0 && (
-            <div className="mb-8 flex snap-x gap-3 overflow-x-auto pb-2">
-              {m.screenshots.map((s) => (
-                <a key={s.id} href={s.url} target="_blank" rel="noreferrer" className="snap-start">
-                  <img
-                    src={s.url}
-                    alt=""
-                    className="h-44 rounded border border-gold/20 object-cover transition-transform hover:scale-[1.02] sm:h-56"
-                  />
-                </a>
-              ))}
-            </div>
+            <Reveal delay={60}>
+              <PlatesGallery plates={m.screenshots} name={m.name} />
+            </Reveal>
           )}
 
-          <div className="panel panel-ornate p-6 sm:p-8">
-            <div className="kicker mb-3">From the tome’s preface</div>
-            <div className="prose-sdr whitespace-pre-wrap text-[15px]">{m.description || m.summary}</div>
-          </div>
+          <Reveal delay={100} className={m.screenshots.length > 0 ? 'mt-8' : ''}>
+            <div className="panel panel-ornate p-6 sm:p-8">
+              <div className="kicker mb-3">From the tome’s preface</div>
+              <div className="prose-sdr whitespace-pre-wrap text-[15px]">
+                {m.description || m.summary}
+              </div>
+            </div>
+          </Reveal>
 
           <Marginalia mod={m} />
-
-          <div className="mt-8">
-            <div className="kicker mb-3">Editions</div>
-            <div className="space-y-2">
-              {m.versions.map((v) => (
-                <div key={v.id} className="slab flex flex-wrap items-center gap-x-5 gap-y-2 rounded px-4 py-3">
-                  <span className="badge badge-gold">v{v.version}</span>
-                  <span className="text-xs text-bone-dim">{formatDate(v.createdAtUtc)}</span>
-                  <span className="font-mono text-xs text-bone-dim">{formatBytes(v.fileSize)}</span>
-                  <span className="font-mono text-xs text-bone-dim">↓ {formatCount(v.downloads)}</span>
-                  {v.changelog && <span className="w-full text-sm text-bone-dim/90 sm:w-auto sm:flex-1">{v.changelog}</span>}
-                  <a
-                    href={api.mods.versionDownloadUrl(m.slug, v.id)}
-                    className="link-arcane ml-auto text-xs uppercase tracking-wider"
-                  >
-                    download
-                  </a>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         <aside className="space-y-6">
@@ -317,13 +386,13 @@ export default function ModDetail() {
               )}
             </a>
             <p className="mt-3 font-mono text-xs text-bone-dim">
-              v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} · ↓{' '}
-              {formatCount(m.downloads)} total
+              v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} ·
+              ↓ {formatCount(m.downloads)} total
             </p>
             <div className="rule-gold my-4" />
             <p className="text-left text-xs leading-relaxed text-bone-dim">
-              One click installs it through the SDR loader (unreleased; the seal
-              holds). Prefer to do it by hand?{' '}
+              One click installs it through the SDR loader (unreleased; the seal holds). Prefer to
+              do it by hand?{' '}
               <a href={api.mods.downloadUrl(m.slug)} className="link-arcane">
                 Download the zip
               </a>
@@ -331,18 +400,74 @@ export default function ModDetail() {
             </p>
           </div>
 
+          {latest && (
+            <div className="panel p-6">
+              <div className="kicker mb-3">Latest edition</div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="badge badge-gold">v{latest.version}</span>
+                <span className="text-xs text-bone-dim">{formatDate(latest.createdAtUtc)}</span>
+                <span className="ml-auto font-mono text-xs text-bone-dim">
+                  {formatBytes(latest.fileSize)}
+                </span>
+              </div>
+              <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-bone-dim/90">
+                {latest.changelog || 'No changelog. The scribe was terse.'}
+              </p>
+              <Link
+                to={`/mods/${m.slug}/versions`}
+                className="btn btn-stone mt-4 w-full !py-2.5 !text-[11px]"
+              >
+                {m.versions.length > 1
+                  ? `Browse all ${m.versions.length} editions`
+                  : 'Open the catalogue'}
+              </Link>
+            </div>
+          )}
+
+          <div className="panel p-6">
+            <div className="kicker mb-2">Tome record</div>
+            <div className="divide-y divide-gold/10">
+              <RecordRow label="Kind">
+                <TypeBadge type={m.type} />
+              </RecordRow>
+              <RecordRow label="Author">
+                <Link
+                  to={`/wizards/${encodeURIComponent(m.author.username)}`}
+                  className="text-gold hover:text-gold-bright"
+                >
+                  {m.author.username}
+                </Link>
+              </RecordRow>
+              <RecordRow label="Shelved">{formatDate(m.createdAtUtc)}</RecordRow>
+              <RecordRow label="Revised">{timeAgo(m.updatedAtUtc)}</RecordRow>
+              <RecordRow label="Editions">{m.versions.length}</RecordRow>
+              <RecordRow label="Downloads">{formatCount(m.downloads)}</RecordRow>
+              <RecordRow label="Shelfmark">
+                <span className="font-mono text-xs">{m.slug}</span>
+              </RecordRow>
+            </div>
+          </div>
+
           {isOwner && (
             <div className="panel p-6">
               <div className="kicker">Author’s desk</div>
-              <AddVersionForm slug={m.slug} onDone={mod.reload} />
-              <button
-                type="button"
-                onClick={remove}
-                disabled={deleting}
-                className="btn btn-blood mt-4 w-full"
-              >
-                {deleting ? 'Burning…' : 'Burn this tome'}
-              </button>
+              <PlateManager mod={m} onChanged={mod.reload} />
+              <div className="mt-4 border-t border-gold/15 pt-4">
+                <Link
+                  to={`/mods/${m.slug}/versions`}
+                  className="btn btn-stone w-full !py-2.5 !text-[11px]"
+                >
+                  Publish a new edition →
+                </Link>
+                <button
+                  type="button"
+                  onClick={remove}
+                  disabled={deleting}
+                  className="btn btn-blood mt-3 w-full !py-2.5 !text-[11px]"
+                >
+                  {deleting ? 'Burning…' : 'Burn this tome'}
+                </button>
+              </div>
             </div>
           )}
         </aside>

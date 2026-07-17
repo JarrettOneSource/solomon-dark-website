@@ -12,6 +12,7 @@ public static class ModEndpoints
 {
     private const long MaxModBytes = 100L * 1024 * 1024;
     private const long MaxScreenshotBytes = 2L * 1024 * 1024;
+    private const int MaxScreenshotsPerMod = 10;
     private const long UploadRequestLimit = 120L * 1024 * 1024;
     private const string InvalidModTypeError =
         "A tome is either Lua or a Boneyard. The Librarian does not file 'miscellaneous.'";
@@ -33,6 +34,13 @@ public static class ModEndpoints
         app.MapPost("/api/mods/{slug}/versions", AddVersionAsync)
             .RequireAuthorization()
             .WithMetadata(new RequestSizeLimitAttribute(UploadRequestLimit));
+        app.MapPost("/api/mods/{slug}/screenshots", AddScreenshotsAsync)
+            .RequireAuthorization()
+            .WithMetadata(new RequestSizeLimitAttribute(UploadRequestLimit));
+        app.MapDelete("/api/mods/{slug}/screenshots/{id:int}", DeleteScreenshotAsync)
+            .RequireAuthorization();
+        app.MapPut("/api/mods/{slug}/screenshots/order", ReorderScreenshotsAsync)
+            .RequireAuthorization();
         app.MapPatch("/api/mods/{slug}", PatchAsync).RequireAuthorization();
         app.MapDelete("/api/mods/{slug}", DeleteAsync).RequireAuthorization();
         app.MapGet("/api/mods/{slug}/download", DownloadLatestAsync);
@@ -312,22 +320,15 @@ public static class ModEndpoints
         }
 
         var screenshots = form.Files.GetFiles("screenshots").ToArray();
-        if (screenshots.Length > 5)
+        if (screenshots.Length > MaxScreenshotsPerMod)
         {
-            return ApiErrors.BadRequest("A mod may have at most 5 screenshots.");
+            return ApiErrors.BadRequest($"A tome may display at most {MaxScreenshotsPerMod} screenshots.");
         }
 
-        foreach (var screenshot in screenshots)
+        var screenshotValidationError = ValidateScreenshots(screenshots);
+        if (screenshotValidationError is not null)
         {
-            if (screenshot.Length > MaxScreenshotBytes)
-            {
-                return ApiErrors.BadRequest("Each screenshot may not exceed 2 MiB.");
-            }
-
-            if (ScreenshotExtension(screenshot.FileName) is null)
-            {
-                return ApiErrors.BadRequest("Screenshots must be .png or .jpg files.");
-            }
+            return ApiErrors.BadRequest(screenshotValidationError);
         }
 
         var userId = TokenService.GetUserId(context.User);
@@ -380,7 +381,7 @@ public static class ModEndpoints
                 await using var source = screenshot.OpenReadStream();
                 var fileName = await storage.SaveScreenshotAsync(
                     mod.Id,
-                    index + 1,
+                    Guid.NewGuid().ToString("N")[..8],
                     ScreenshotExtension(screenshot.FileName)!,
                     source,
                     cancellationToken);
@@ -408,6 +409,182 @@ public static class ModEndpoints
 
         var created = await LoadModAsync(db, slug, cancellationToken);
         return Results.Json(ToDetail(created!), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> AddScreenshotsAsync(
+        string slug,
+        HttpContext context,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        if (!context.Request.HasFormContentType)
+        {
+            return ApiErrors.UnsupportedMediaType("Screenshot uploads must use multipart/form-data.");
+        }
+
+        IFormCollection form;
+        try
+        {
+            form = await context.Request.ReadFormAsync(cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return ApiErrors.BadRequest("The multipart upload could not be read.");
+        }
+
+        var mod = await db.Mods
+            .Include(candidate => candidate.Screenshots)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may add screenshots.");
+        }
+
+        var screenshots = form.Files.GetFiles("screenshots").ToArray();
+        if (screenshots.Length == 0)
+        {
+            return ApiErrors.BadRequest("Choose at least one non-empty screenshot.");
+        }
+
+        if (mod.Screenshots.Count + screenshots.Length > MaxScreenshotsPerMod)
+        {
+            return ApiErrors.BadRequest($"A tome may display at most {MaxScreenshotsPerMod} screenshots.");
+        }
+
+        var validationError = ValidateScreenshots(screenshots);
+        if (validationError is not null)
+        {
+            return ApiErrors.BadRequest(validationError);
+        }
+
+        var nextSortOrder = mod.Screenshots.Count == 0
+            ? 0
+            : mod.Screenshots.Max(screenshot => screenshot.SortOrder) + 1;
+        var screenshotNames = new List<string>();
+        try
+        {
+            for (var index = 0; index < screenshots.Length; index++)
+            {
+                var screenshot = screenshots[index];
+                await using var source = screenshot.OpenReadStream();
+                var fileName = await storage.SaveScreenshotAsync(
+                    mod.Id,
+                    Guid.NewGuid().ToString("N")[..8],
+                    ScreenshotExtension(screenshot.FileName)!,
+                    source,
+                    cancellationToken);
+                screenshotNames.Add(fileName);
+                mod.Screenshots.Add(new ModScreenshot
+                {
+                    FileName = fileName,
+                    SortOrder = nextSortOrder + index
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            foreach (var screenshotName in screenshotNames)
+            {
+                storage.DeleteScreenshot(screenshotName);
+            }
+
+            throw;
+        }
+
+        var updated = await LoadModAsync(db, slug, cancellationToken);
+        return Results.Json(ToDetail(updated!), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> DeleteScreenshotAsync(
+        string slug,
+        int id,
+        HttpContext context,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods
+            .Include(candidate => candidate.Screenshots)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may remove screenshots.");
+        }
+
+        var screenshot = mod.Screenshots.SingleOrDefault(candidate => candidate.Id == id);
+        if (screenshot is null)
+        {
+            return ApiErrors.NotFound("That screenshot is missing from the tome.");
+        }
+
+        db.ModScreenshots.Remove(screenshot);
+        var remaining = mod.Screenshots
+            .Where(candidate => candidate.Id != id)
+            .OrderBy(candidate => candidate.SortOrder)
+            .ThenBy(candidate => candidate.Id)
+            .ToArray();
+        for (var index = 0; index < remaining.Length; index++)
+        {
+            remaining[index].SortOrder = index;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        storage.DeleteScreenshot(screenshot.FileName);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ReorderScreenshotsAsync(
+        string slug,
+        ReorderScreenshotsRequest request,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods
+            .Include(candidate => candidate.Screenshots)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may reorder screenshots.");
+        }
+
+        var ids = request.Ids;
+        var currentIds = mod.Screenshots.Select(screenshot => screenshot.Id).ToHashSet();
+        if (ids is null ||
+            ids.Length != currentIds.Count ||
+            ids.Distinct().Count() != ids.Length ||
+            !currentIds.SetEquals(ids))
+        {
+            return ApiErrors.BadRequest("The screenshot order must name every plate exactly once.");
+        }
+
+        var screenshotsById = mod.Screenshots.ToDictionary(screenshot => screenshot.Id);
+        for (var index = 0; index < ids.Length; index++)
+        {
+            screenshotsById[ids[index]].SortOrder = index;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        var updated = await LoadModAsync(db, slug, cancellationToken);
+        return Results.Ok(ToDetail(updated!));
     }
 
     private static async Task<IResult> AddVersionAsync(
@@ -846,6 +1023,29 @@ public static class ModEndpoints
         return string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ? "jpg" : null;
     }
 
+    private static string? ValidateScreenshots(IEnumerable<IFormFile> screenshots)
+    {
+        foreach (var screenshot in screenshots)
+        {
+            if (screenshot.Length == 0)
+            {
+                return "Choose non-empty screenshots.";
+            }
+
+            if (screenshot.Length > MaxScreenshotBytes)
+            {
+                return "Each screenshot may not exceed 2 MiB.";
+            }
+
+            if (ScreenshotExtension(screenshot.FileName) is null)
+            {
+                return "Screenshots must be .png or .jpg files.";
+            }
+        }
+
+        return null;
+    }
+
     private static int ParseInt(string value, int fallback) =>
         int.TryParse(value, out var parsed) ? parsed : fallback;
 
@@ -854,6 +1054,8 @@ public static class ModEndpoints
         string? Summary,
         string? Description,
         string? Type);
+
+    public sealed record ReorderScreenshotsRequest(int[]? Ids);
 
     public sealed record CommentRequest(string? Body);
 }

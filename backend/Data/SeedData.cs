@@ -12,6 +12,7 @@ public static class SeedData
         AppDb db,
         IPasswordHasher<User> passwordHasher,
         StorageService storage,
+        string seedAssetsPath,
         bool devLogins,
         CancellationToken cancellationToken = default)
     {
@@ -72,15 +73,27 @@ public static class SeedData
         var seedMods = new Dictionary<string, Mod>(StringComparer.Ordinal);
         foreach (var definition in modDefinitions)
         {
-            const string versionName = "1.0.0";
-            var zipBytes = CreatePlaceholderZip(definition.Name);
-            await using var zipStream = new MemoryStream(zipBytes, writable: false);
-            var storedFileName = await storage.SaveModFileAsync(
-                definition.Slug,
-                versionName,
-                zipStream,
-                cancellationToken);
             var createdAtUtc = now.AddDays(-definition.DaysAgo);
+            var versions = new List<ModVersion>();
+            foreach (var versionDefinition in VersionsFor(definition))
+            {
+                var zipBytes = CreatePlaceholderZip(definition.Name);
+                await using var zipStream = new MemoryStream(zipBytes, writable: false);
+                var storedFileName = await storage.SaveModFileAsync(
+                    definition.Slug,
+                    versionDefinition.Version,
+                    zipStream,
+                    cancellationToken);
+                versions.Add(new ModVersion
+                {
+                    Version = versionDefinition.Version,
+                    Changelog = versionDefinition.Changelog,
+                    FileName = storedFileName,
+                    FileSize = zipBytes.LongLength,
+                    Downloads = versionDefinition.Downloads,
+                    CreatedAtUtc = now.AddDays(-versionDefinition.DaysAgo)
+                });
+            }
 
             var mod = new Mod
             {
@@ -93,22 +106,51 @@ public static class SeedData
                 Author = definition.Author,
                 Downloads = definition.Downloads,
                 CreatedAtUtc = createdAtUtc,
-                UpdatedAtUtc = createdAtUtc,
-                Versions =
-                [
-                    new ModVersion
-                    {
-                        Version = versionName,
-                        Changelog = "First recovered edition.",
-                        FileName = storedFileName,
-                        FileSize = zipBytes.LongLength,
-                        Downloads = definition.Downloads,
-                        CreatedAtUtc = createdAtUtc
-                    }
-                ]
+                UpdatedAtUtc = versions.Max(version => version.CreatedAtUtc),
+                Versions = versions
             };
             db.Mods.Add(mod);
             seedMods.Add(mod.Slug, mod);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (Directory.Exists(seedAssetsPath))
+        {
+            var screenshotDefinitions = new[]
+            {
+                new SeedScreenshots("prismatic-shock-rework", ["prismatic-shock-rework-1.png", "prismatic-shock-rework-2.png", "prismatic-shock-rework-3.png"]),
+                new SeedScreenshots("fleetfinger", ["fleetfinger-1.png", "fleetfinger-2.png"]),
+                new SeedScreenshots("mount-awful-endless", ["mount-awful-endless-1.png", "mount-awful-endless-2.png"]),
+                new SeedScreenshots("dratmoor-after-dark", ["dratmoor-after-dark-1.png"])
+            };
+
+            foreach (var definition in screenshotDefinitions)
+            {
+                var mod = seedMods[definition.ModSlug];
+                for (var index = 0; index < definition.FileNames.Length; index++)
+                {
+                    var sourcePath = Path.Combine(seedAssetsPath, "plates", definition.FileNames[index]);
+                    if (!File.Exists(sourcePath))
+                    {
+                        continue;
+                    }
+
+                    await using var source = File.OpenRead(sourcePath);
+                    var fileName = await storage.SaveScreenshotAsync(
+                        mod.Id,
+                        $"seed-{index + 1}",
+                        "png",
+                        source,
+                        cancellationToken);
+                    db.ModScreenshots.Add(new ModScreenshot
+                    {
+                        ModId = mod.Id,
+                        FileName = fileName,
+                        SortOrder = index
+                    });
+                }
+            }
         }
 
         var commentDefinitions = new[]
@@ -176,6 +218,27 @@ public static class SeedData
         return stream.ToArray();
     }
 
+    private static IReadOnlyList<SeedVersion> VersionsFor(SeedMod mod) => mod.Slug switch
+    {
+        "prismatic-shock-rework" =>
+        [
+            new("1.0.0", "First recovered edition.", 630, 5),
+            new("1.1.0", "Rebalanced the third refraction. The prism no longer argues with its own reflections.", 1050, 3),
+            new("1.2.0", "Fixed a crash when six shocks share one skeleton. The skeleton is not fine, which is the point.", 2520, 1)
+        ],
+        "fleetfinger" =>
+        [
+            new("1.0.0", "First recovered edition.", 563, 14),
+            new("1.1.0", "The cursor now heels properly during crowded waves. Fewer apologies required.", 1312, 4)
+        ],
+        "mount-awful-endless" =>
+        [
+            new("1.0.0", "First recovered edition.", 253, 10),
+            new("1.0.1", "Wave 41 no longer spawns inside the scenery. The scenery had lodged complaints.", 590, 6)
+        ],
+        _ => [new("1.0.0", "First recovered edition.", mod.Downloads, mod.DaysAgo)]
+    };
+
     private sealed record SeedMod(
         string Slug,
         string Name,
@@ -185,6 +248,14 @@ public static class SeedData
         int Downloads,
         int DaysAgo,
         User Author);
+
+    private sealed record SeedVersion(
+        string Version,
+        string Changelog,
+        int Downloads,
+        int DaysAgo);
+
+    private sealed record SeedScreenshots(string ModSlug, string[] FileNames);
 
     private sealed record SeedComment(
         string ModSlug,

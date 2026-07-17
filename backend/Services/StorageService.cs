@@ -42,12 +42,17 @@ public sealed partial class StorageService
 
     public async Task<string> SaveScreenshotAsync(
         int modId,
-        int number,
+        string token,
         string extension,
         Stream source,
         CancellationToken cancellationToken = default)
     {
-        var fileName = $"{modId}-{number}.{extension}";
+        if (!SafeScreenshotTokenRegex().IsMatch(token))
+        {
+            throw new ArgumentException("Unsafe screenshot storage path.");
+        }
+
+        var fileName = $"{modId}-{token}.{extension}";
         var path = ResolvePath(ScreenshotsPath, fileName);
         await SaveStreamAsync(path, source, cancellationToken);
         return fileName;
@@ -154,4 +159,7 @@ public sealed partial class StorageService
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._+-]*$")]
     private static partial Regex SafeVersionRegex();
+
+    [GeneratedRegex("^[a-z0-9-]{1,32}$")]
+    private static partial Regex SafeScreenshotTokenRegex();
 }

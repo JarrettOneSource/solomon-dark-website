@@ -1,6 +1,19 @@
 // Central manifest of extracted game art (see tools/extract-assets.sh + design.md §5).
 
 import logoSolomonDark from '../assets/game/logo-solomon-dark.png'
+import fxBone113 from '../assets/game/fx-bone-113.png'
+import fxBone115 from '../assets/game/fx-bone-115.png'
+import fxBone116 from '../assets/game/fx-bone-116.png'
+import fxBone117 from '../assets/game/fx-bone-117.png'
+import fxBone118 from '../assets/game/fx-bone-118.png'
+import fxBone119 from '../assets/game/fx-bone-119.png'
+import fxBone120 from '../assets/game/fx-bone-120.png'
+import fxBone121 from '../assets/game/fx-bone-121.png'
+import fxSkull1819 from '../assets/game/fx-skull-1819.png'
+import fxSkull1820 from '../assets/game/fx-skull-1820.png'
+import fxSkull1821 from '../assets/game/fx-skull-1821.png'
+import fxSkull1822 from '../assets/game/fx-skull-1822.png'
+import fxStarFlash from '../assets/game/fx-star-flash.png'
 import menuSolomonBody from '../assets/game/menu-solomon-body.png'
 import menuSolomonEyes from '../assets/game/menu-solomon-eyes.png'
 import menuSolomonCloak0 from '../assets/game/menu-solomon-cloak-0.png'
@@ -154,6 +167,24 @@ export const menuSolomon = {
   body: menuSolomonBody,
   eyes: menuSolomonEyes,
   cloak: [menuSolomonCloak0, menuSolomonCloak1, menuSolomonCloak2, menuSolomonCloak3, menuSolomonCloak4],
+}
+
+/** The skeleton death payload, keyed by BadGuys.bundle record number
+ * (docs/skeleton-death-effects-re): the base shatter shards the presenter
+ * actually selects, the four skulls, and the unbind star flash. */
+export const skeletonDeath = {
+  shards: {
+    113: fxBone113,
+    115: fxBone115,
+    116: fxBone116,
+    117: fxBone117,
+    118: fxBone118,
+    119: fxBone119,
+    120: fxBone120,
+    121: fxBone121,
+  } as Record<number, string>,
+  skulls: [fxSkull1819, fxSkull1820, fxSkull1821, fxSkull1822],
+  starFlash: fxStarFlash,
 }
 
 /** The game's eight skill elements, as rendered in Skills.png. */

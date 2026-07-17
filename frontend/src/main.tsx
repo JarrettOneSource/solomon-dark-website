@@ -21,6 +21,7 @@ import Home from './pages/Home'
 import Classes from './pages/Classes'
 import Mods from './pages/Mods'
 import ModDetail from './pages/ModDetail'
+import ModVersions from './pages/ModVersions'
 import ModUpload from './pages/ModUpload'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -38,6 +39,7 @@ const router = createBrowserRouter([
       { path: '/mods', element: <Mods /> },
       { path: '/mods/upload', element: <ModUpload /> },
       { path: '/mods/:slug', element: <ModDetail /> },
+      { path: '/mods/:slug/versions', element: <ModVersions /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/account', element: <Account /> },

@@ -255,6 +255,23 @@ export const api = {
       remove: (slug: string, id: number) =>
         request<void>(`/api/mods/${encodeURIComponent(slug)}/comments/${id}`, { method: 'DELETE' }),
     },
+
+    screenshots: {
+      add: (slug: string, form: FormData) =>
+        request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}/screenshots`, {
+          method: 'POST',
+          body: form,
+        }),
+      remove: (slug: string, id: number) =>
+        request<void>(`/api/mods/${encodeURIComponent(slug)}/screenshots/${id}`, {
+          method: 'DELETE',
+        }),
+      reorder: (slug: string, ids: number[]) =>
+        request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}/screenshots/order`, {
+          ...json({ ids }),
+          method: 'PUT',
+        }),
+    },
   },
 
   users: {

@@ -476,6 +476,12 @@ body {
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
 }
 
+/* a fresh plate settling into the gallery frame (components/PlatesGallery.tsx) */
+@keyframes plate-in {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: none; }
+}
+
 /* the game's TAKE confirmation stamp, slammed over "Take This Tome" */
 @keyframes stamp-slam {
   0% { opacity: 0; transform: scale(2.2) rotate(-14deg); }

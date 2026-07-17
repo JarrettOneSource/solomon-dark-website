@@ -7,7 +7,6 @@ import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
 import { SCHOOLS } from '../fx/SchoolBursts'
-import { mouseFxEnabled, setMouseFxEnabled } from '../fx/bus'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
 
 const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7]
@@ -25,7 +24,6 @@ function SchoolPicker() {
   const { user, refresh } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fxOn, setFxOn] = useState(mouseFxEnabled)
   if (!user) return null
 
   const declare = async (school: School) => {
@@ -80,22 +78,6 @@ function SchoolPicker() {
         <p className="text-fell mt-3 text-sm text-bone-dim">{SCHOOL_LORE[user.school]}</p>
       )}
       {error && <div className="mt-3"><ErrorNote message={error} /></div>}
-
-      <label className="mt-5 flex w-fit cursor-pointer items-center gap-2 text-xs uppercase tracking-wider text-bone-dim">
-        <input
-          type="checkbox"
-          checked={fxOn}
-          onChange={(e) => {
-            setMouseFxEnabled(e.target.checked)
-            setFxOn(e.target.checked)
-          }}
-          className="accent-[#c8a862]"
-        />
-        mouse effects
-        <span className="normal-case tracking-normal text-bone-dim/60">
-          — the wand trail and your school’s click rites (this device only)
-        </span>
-      </label>
     </section>
   )
 }

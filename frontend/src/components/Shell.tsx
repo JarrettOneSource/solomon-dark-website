@@ -7,7 +7,8 @@ import SchoolBursts, { SCHOOLS, setProfileSchool } from '../fx/SchoolBursts'
 import { ATTUNEMENT_KEY } from '../fx/grimoire'
 import SolomonScurry from '../fx/SolomonScurry'
 import { CrawlerStroll } from '../fx/Critters'
-import { castSpell } from '../fx/bus'
+import { castSpell, mouseFxEnabled, setMouseFxEnabled } from '../fx/bus'
+import { isSfxMuted, toggleSfxMuted } from '../fx/audio'
 import { currentTrack, ensureStarted, isMuted, toggleMuted, uiClick, uiHover, uiPage } from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
@@ -52,10 +53,45 @@ function NavItem({ to, label, end }: { to: string; label: string; end?: boolean 
 
 const SFX_TARGETS = 'a, button, select, [role="button"]'
 
+/** One button of the header's effects rail: lit gold when on, struck through
+ * and dimmed when off. */
+function FxToggle({
+  on,
+  glyph,
+  label,
+  title,
+  onClick,
+}: {
+  on: boolean
+  glyph: string
+  label: string
+  title: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={label}
+      title={title}
+      className={`rounded border px-2 py-1.5 font-display text-sm leading-none transition-colors ${
+        on
+          ? 'border-gold/30 text-gold hover:border-gold/60'
+          : 'border-bone-dim/25 text-bone-dim/50 hover:border-bone-dim/50 hover:text-bone-dim'
+      }`}
+    >
+      <span className={on ? '' : 'line-through'}>{glyph}</span>
+    </button>
+  )
+}
+
 export default function Shell() {
   const { user, loading: authLoading, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [quiet, setQuiet] = useState(isMuted)
+  const [sfxQuiet, setSfxQuiet] = useState(isSfxMuted)
+  const [wandOn, setWandOn] = useState(mouseFxEnabled)
   const location = useLocation()
 
   useEffect(() => {
@@ -127,23 +163,42 @@ export default function Shell() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3 md:ml-6">
-            <button
-              type="button"
-              onClick={() => setQuiet(toggleMuted())}
-              className={`rounded border px-2.5 py-1.5 font-display text-sm transition-colors ${
-                quiet
-                  ? 'border-bone-dim/25 text-bone-dim/50 hover:border-bone-dim/50 hover:text-bone-dim'
-                  : 'border-gold/30 text-gold hover:border-gold/60'
-              }`}
-              title={
-                quiet
-                  ? 'Let the College hum'
-                  : `Silence the College${currentTrack() ? ` (now playing: ${currentTrack()})` : ''}`
-              }
-              aria-label={quiet ? 'Unmute music and sounds' : 'Mute music and sounds'}
-            >
-              <span className={quiet ? 'line-through' : ''}>♪</span>
-            </button>
+            {/* the effects rail: music, sound effects, and the wand cursor —
+                each a per-device choice that persists across visits */}
+            <div className="flex items-center gap-1.5" role="group" aria-label="Effects">
+              <FxToggle
+                on={!quiet}
+                glyph="♪"
+                label={quiet ? 'Unmute music' : 'Mute music'}
+                title={
+                  quiet
+                    ? 'Let the College hum'
+                    : `Silence the College${currentTrack() ? ` (now playing: ${currentTrack()})` : ''}`
+                }
+                onClick={() => setQuiet(toggleMuted())}
+              />
+              <FxToggle
+                on={!sfxQuiet}
+                glyph="✷"
+                label={sfxQuiet ? 'Unmute sound effects' : 'Mute sound effects'}
+                title={sfxQuiet ? 'Let the clicks and casts sound' : 'Hush the clicks and casts'}
+                onClick={() => setSfxQuiet(toggleSfxMuted())}
+              />
+              <FxToggle
+                on={wandOn}
+                glyph={'☄︎'}
+                label={wandOn ? 'Disable cursor effects' : 'Enable cursor effects'}
+                title={
+                  wandOn
+                    ? 'Ground the wand — no trail, no click rites'
+                    : 'Raise the wand — the trail and click rites return'
+                }
+                onClick={() => {
+                  setMouseFxEnabled(!wandOn)
+                  setWandOn(!wandOn)
+                }}
+              />
+            </div>
             <span
               aria-disabled="true"
               title={SEALED_TITLE}

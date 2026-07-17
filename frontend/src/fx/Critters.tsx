@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { art } from '../lib/assets'
+import BoneShatter from './BoneShatter'
 import { onSpell } from './bus'
 import { playSound } from './sounds'
 
@@ -40,12 +41,11 @@ export function CrawlerStroll() {
     dur: number
     top: number
     scale: number
-    dying: boolean
   }[]>([])
+  const [shatters, setShatters] = useState<{ id: number; x: number; y: number; scale: number }[]>([])
   const nextId = useRef(1)
   const timers = useRef(new Set<number>())
   const activeIds = useRef(new Set<number>())
-  const dyingIds = useRef(new Set<number>())
 
   const schedule = (callback: () => void, delay: number) => {
     const timer = window.setTimeout(() => {
@@ -57,7 +57,6 @@ export function CrawlerStroll() {
 
   const removeCrawler = (id: number) => {
     activeIds.current.delete(id)
-    dyingIds.current.delete(id)
     setCrawlers((prev) => prev.filter((crawler) => crawler.id !== id))
   }
 
@@ -65,7 +64,6 @@ export function CrawlerStroll() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const scheduledTimers = timers.current
     const activeCrawlers = activeIds.current
-    const dyingCrawlers = dyingIds.current
 
     const spawnCrawler = () => {
       if (activeIds.current.size >= MAX_CRAWLERS) return
@@ -81,7 +79,6 @@ export function CrawlerStroll() {
           dur,
           top: 8 + Math.random() * 84,
           scale: 0.85 + Math.random() * 0.3,
-          dying: false,
         },
       ])
       schedule(() => removeCrawler(id), dur * 1000 + 500)
@@ -116,7 +113,6 @@ export function CrawlerStroll() {
       scheduledTimers.forEach(window.clearTimeout)
       scheduledTimers.clear()
       activeCrawlers.clear()
-      dyingCrawlers.clear()
       offSpell()
     }
   }, [])
@@ -132,33 +128,41 @@ export function CrawlerStroll() {
             ['--tx-from' as string]: crawler.leftToRight ? '-8vw' : '108vw',
             ['--tx-to' as string]: crawler.leftToRight ? '108vw' : '-8vw',
             animation: `traverse-x ${crawler.dur}s linear both`,
-            animationPlayState: crawler.dying ? 'paused' : 'running',
           }}
         >
           <div
             className="pointer-events-auto cursor-pointer"
             style={{
               ...stripStyle(art.animCrawler, CRAWLER, 1.15),
-              pointerEvents: crawler.dying ? 'none' : 'auto',
               // The unmirrored base strip reaches left; mirror it only for rightward travel.
               transform: `scale(${crawler.scale}) scaleX(${crawler.leftToRight ? -1 : 1})`,
-              opacity: crawler.dying ? 0 : 0.95,
-              translate: crawler.dying ? '0 20px' : '0 0',
-              transition: 'opacity 1.1s ease-in, translate 1.1s ease-in',
+              opacity: 0.95,
               filter: 'brightness(1.12) drop-shadow(0 0 3px rgba(214,210,150,.18)) drop-shadow(0 2px 6px rgba(0,0,0,.8))',
             }}
             title="…let it rest"
-            onClick={() => {
-              if (dyingIds.current.has(crawler.id)) return
-              dyingIds.current.add(crawler.id)
+            onClick={(e) => {
+              // the game's death presenter: remove the live actor and
+              // scatter the bones
+              const rect = e.currentTarget.getBoundingClientRect()
+              removeCrawler(crawler.id)
+              const id = nextId.current++
+              setShatters((prev) => [
+                ...prev,
+                { id, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, scale: crawler.scale },
+              ])
               playSound('skeletonDie', 0.3)
-              setCrawlers((prev) => prev.map((item) => (
-                item.id === crawler.id ? { ...item, dying: true } : item
-              )))
-              schedule(() => removeCrawler(crawler.id), 1200)
             }}
           />
         </div>
+      ))}
+      {shatters.map((s) => (
+        <BoneShatter
+          key={s.id}
+          x={s.x}
+          y={s.y}
+          scale={s.scale}
+          onDone={() => setShatters((prev) => prev.filter((p) => p.id !== s.id))}
+        />
       ))}
     </div>
   )

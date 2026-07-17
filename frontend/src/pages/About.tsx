@@ -139,8 +139,8 @@ export default function About() {
             >
               Download
             </span>
-            <Link to="/mods?type=boneyard" className="btn btn-stone">
-              Boneyards
+            <Link to="/mods" className="btn btn-stone">
+              Browse the Library
             </Link>
           </div>
         </div>
