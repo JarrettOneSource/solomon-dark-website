@@ -1,0 +1,859 @@
+using System.Globalization;
+using System.Text;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using SolomonDarkRevived.Data;
+using SolomonDarkRevived.Services;
+
+namespace SolomonDarkRevived.Api;
+
+public static class ModEndpoints
+{
+    private const long MaxModBytes = 100L * 1024 * 1024;
+    private const long MaxScreenshotBytes = 2L * 1024 * 1024;
+    private const long UploadRequestLimit = 120L * 1024 * 1024;
+    private const string InvalidModTypeError =
+        "A tome is either Lua or a Boneyard. The Librarian does not file 'miscellaneous.'";
+
+    public static void Map(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/mods", ListAsync);
+        app.MapGet("/api/mods/{slug}", DetailAsync);
+        app.MapGet("/api/mods/{slug}/comments", ListCommentsAsync);
+        app.MapPost("/api/mods/{slug}/comments", CreateCommentAsync)
+            .RequireAuthorization()
+            .RequireRateLimiting("mod-comments");
+        app.MapDelete("/api/mods/{slug}/comments/{id:int}", DeleteCommentAsync)
+            .RequireAuthorization();
+        app.MapGet("/api/users/{username}", PublicProfileAsync);
+        app.MapPost("/api/mods", CreateAsync)
+            .RequireAuthorization()
+            .WithMetadata(new RequestSizeLimitAttribute(UploadRequestLimit));
+        app.MapPost("/api/mods/{slug}/versions", AddVersionAsync)
+            .RequireAuthorization()
+            .WithMetadata(new RequestSizeLimitAttribute(UploadRequestLimit));
+        app.MapPatch("/api/mods/{slug}", PatchAsync).RequireAuthorization();
+        app.MapDelete("/api/mods/{slug}", DeleteAsync).RequireAuthorization();
+        app.MapGet("/api/mods/{slug}/download", DownloadLatestAsync);
+        app.MapGet("/api/mods/{slug}/versions/{versionId:int}/download", DownloadVersionAsync);
+    }
+
+    private static async Task<IResult> ListAsync(
+        HttpRequest request,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var search = request.Query["search"].ToString().Trim();
+        var type = request.Query["type"].ToString().Trim();
+        var sort = request.Query["sort"].ToString().Trim().ToLowerInvariant();
+        var page = Math.Max(ParseInt(request.Query["page"].ToString(), 1), 1);
+        var pageSize = Math.Clamp(ParseInt(request.Query["pageSize"].ToString(), 20), 1, 50);
+
+        if (type.Length > 0 && !IsValidModType(type))
+        {
+            return ApiErrors.BadRequest(InvalidModTypeError);
+        }
+
+        IQueryable<Mod> query = db.Mods.AsNoTracking();
+        if (search.Length > 0)
+        {
+            var pattern = $"%{search}%";
+            query = query.Where(mod =>
+                EF.Functions.Like(mod.Name, pattern) ||
+                EF.Functions.Like(mod.Summary, pattern));
+        }
+
+        if (type.Length > 0)
+        {
+            query = query.Where(mod => mod.Type == type);
+        }
+
+        var total = await query.CountAsync(cancellationToken);
+        query = sort == "downloads"
+            ? query.OrderByDescending(mod => mod.Downloads).ThenByDescending(mod => mod.CreatedAtUtc)
+            : query.OrderByDescending(mod => mod.CreatedAtUtc).ThenByDescending(mod => mod.Id);
+
+        var mods = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Include(mod => mod.Author)
+            .Include(mod => mod.Versions)
+            .Include(mod => mod.Screenshots)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            items = mods.Select(ToItem).ToArray(),
+            total,
+            page,
+            pageSize
+        });
+    }
+
+    private static async Task<IResult> DetailAsync(
+        string slug,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var mod = await LoadModAsync(db, slug, cancellationToken);
+        return mod is null
+            ? ApiErrors.NotFound("That tome is missing from the library.")
+            : Results.Ok(ToDetail(mod));
+    }
+
+    private static async Task<IResult> ListCommentsAsync(
+        string slug,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var modId = await db.Mods.AsNoTracking()
+            .Where(mod => mod.Slug == slug)
+            .Select(mod => (int?)mod.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (modId is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        var query = db.ModComments.AsNoTracking()
+            .Where(comment => comment.ModId == modId.Value);
+        var total = await query.CountAsync(cancellationToken);
+        var comments = await query
+            .OrderByDescending(comment => comment.CreatedAtUtc)
+            .ThenByDescending(comment => comment.Id)
+            .Take(100)
+            .Include(comment => comment.Author)
+            .ToArrayAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            items = comments.Select(ToComment).ToArray(),
+            total
+        });
+    }
+
+    private static async Task<IResult> CreateCommentAsync(
+        string slug,
+        CommentRequest request,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods.SingleOrDefaultAsync(
+            candidate => candidate.Slug == slug,
+            cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        var body = request.Body?.Trim() ?? string.Empty;
+        if (body.Length == 0)
+        {
+            return ApiErrors.BadRequest("Blank parchment is not marginalia.");
+        }
+
+        if (body.Length > 1000)
+        {
+            return ApiErrors.BadRequest("The margin permits 1,000 characters. Procure a smaller quill.");
+        }
+
+        var userId = TokenService.GetUserId(context.User);
+        var author = userId is null
+            ? null
+            : await db.Users.SingleOrDefaultAsync(
+                user => user.Id == userId.Value,
+                cancellationToken);
+        if (author is null)
+        {
+            return ApiErrors.Unauthorized("The Annals could not identify this scribe.");
+        }
+
+        var comment = new ModComment
+        {
+            ModId = mod.Id,
+            AuthorId = author.Id,
+            Author = author,
+            Body = body,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        db.ModComments.Add(comment);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Json(ToComment(comment), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> DeleteCommentAsync(
+        string slug,
+        int id,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var comment = await db.ModComments
+            .Include(candidate => candidate.Mod)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == id && candidate.Mod.Slug == slug,
+                cancellationToken);
+        if (comment is null)
+        {
+            return ApiErrors.NotFound("That marginal note is missing from the tome.");
+        }
+
+        var userId = TokenService.GetUserId(context.User);
+        if (userId != comment.AuthorId && userId != comment.Mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the note's author or the tome's owner may erase it.");
+        }
+
+        db.ModComments.Remove(comment);
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> PublicProfileAsync(
+        string username,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var user = await db.Users.AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.Username == username, cancellationToken);
+        if (user is null)
+        {
+            return ApiErrors.NotFound("No wizard by that name appears in the Annals.");
+        }
+
+        var authoredMods = db.Mods.AsNoTracking().Where(mod => mod.AuthorId == user.Id);
+        var modCount = await authoredMods.CountAsync(cancellationToken);
+        var downloadsTotal = await authoredMods
+            .SumAsync(mod => (int?)mod.Downloads, cancellationToken) ?? 0;
+        var mods = await authoredMods
+            .OrderByDescending(mod => mod.CreatedAtUtc)
+            .ThenByDescending(mod => mod.Id)
+            .Take(50)
+            .Include(mod => mod.Author)
+            .Include(mod => mod.Versions)
+            .Include(mod => mod.Screenshots)
+            .AsSplitQuery()
+            .ToArrayAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            user = new { user.Id, user.Username, user.School, user.CreatedAtUtc },
+            modCount,
+            downloadsTotal,
+            mods = mods.Select(ToItem).ToArray()
+        });
+    }
+
+    private static async Task<IResult> CreateAsync(
+        HttpContext context,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        if (!context.Request.HasFormContentType)
+        {
+            return ApiErrors.UnsupportedMediaType("Mod uploads must use multipart/form-data.");
+        }
+
+        IFormCollection form;
+        try
+        {
+            form = await context.Request.ReadFormAsync(cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return ApiErrors.BadRequest("The multipart upload could not be read.");
+        }
+
+        var name = form["name"].ToString().Trim();
+        var summary = form["summary"].ToString().Trim();
+        var description = form["description"].ToString();
+        var type = form["type"].ToString().Trim();
+        var versionName = form["version"].ToString().Trim();
+        if (versionName.Length == 0)
+        {
+            versionName = "1.0.0";
+        }
+
+        var validationError = ValidateModFields(name, summary, description);
+        if (validationError is not null)
+        {
+            return ApiErrors.BadRequest(validationError);
+        }
+
+        if (!IsValidModType(type))
+        {
+            return ApiErrors.BadRequest(InvalidModTypeError);
+        }
+
+        if (!StorageService.IsSafeVersion(versionName))
+        {
+            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
+        }
+
+        var file = form.Files.GetFile("file");
+        if (file is null || file.Length == 0)
+        {
+            return ApiErrors.BadRequest("Choose a non-empty mod zip.");
+        }
+
+        if (!string.Equals(Path.GetExtension(file.FileName), ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiErrors.BadRequest("Mod files must be .zip archives.");
+        }
+
+        if (file.Length > MaxModBytes)
+        {
+            return ApiErrors.BadRequest("Mod files may not exceed 100 MiB.");
+        }
+
+        var screenshots = form.Files.GetFiles("screenshots").ToArray();
+        if (screenshots.Length > 5)
+        {
+            return ApiErrors.BadRequest("A mod may have at most 5 screenshots.");
+        }
+
+        foreach (var screenshot in screenshots)
+        {
+            if (screenshot.Length > MaxScreenshotBytes)
+            {
+                return ApiErrors.BadRequest("Each screenshot may not exceed 2 MiB.");
+            }
+
+            if (ScreenshotExtension(screenshot.FileName) is null)
+            {
+                return ApiErrors.BadRequest("Screenshots must be .png or .jpg files.");
+            }
+        }
+
+        var userId = TokenService.GetUserId(context.User);
+        if (userId is null || !await db.Users.AnyAsync(user => user.Id == userId.Value, cancellationToken))
+        {
+            return ApiErrors.Unauthorized("The Annals could not identify this mod author.");
+        }
+
+        var slug = await UniqueSlugAsync(db, name, cancellationToken);
+        var now = DateTime.UtcNow;
+        var mod = new Mod
+        {
+            Slug = slug,
+            Name = name,
+            Summary = summary,
+            Description = description,
+            Type = type,
+            AuthorId = userId.Value,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        var version = new ModVersion
+        {
+            Version = versionName,
+            Changelog = "",
+            FileSize = file.Length,
+            CreatedAtUtc = now
+        };
+        mod.Versions.Add(version);
+
+        var screenshotNames = new List<string>();
+        try
+        {
+            await using (var source = file.OpenReadStream())
+            {
+                version.FileName = await storage.SaveModFileAsync(
+                    slug,
+                    versionName,
+                    source,
+                    cancellationToken);
+            }
+
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            db.Mods.Add(mod);
+            await db.SaveChangesAsync(cancellationToken);
+
+            for (var index = 0; index < screenshots.Length; index++)
+            {
+                var screenshot = screenshots[index];
+                await using var source = screenshot.OpenReadStream();
+                var fileName = await storage.SaveScreenshotAsync(
+                    mod.Id,
+                    index + 1,
+                    ScreenshotExtension(screenshot.FileName)!,
+                    source,
+                    cancellationToken);
+                screenshotNames.Add(fileName);
+                mod.Screenshots.Add(new ModScreenshot
+                {
+                    FileName = fileName,
+                    SortOrder = index
+                });
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            storage.DeleteModDirectory(slug);
+            foreach (var screenshotName in screenshotNames)
+            {
+                storage.DeleteScreenshot(screenshotName);
+            }
+
+            throw;
+        }
+
+        var created = await LoadModAsync(db, slug, cancellationToken);
+        return Results.Json(ToDetail(created!), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> AddVersionAsync(
+        string slug,
+        HttpContext context,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        if (!context.Request.HasFormContentType)
+        {
+            return ApiErrors.UnsupportedMediaType("Version uploads must use multipart/form-data.");
+        }
+
+        IFormCollection form;
+        try
+        {
+            form = await context.Request.ReadFormAsync(cancellationToken);
+        }
+        catch (InvalidDataException)
+        {
+            return ApiErrors.BadRequest("The multipart upload could not be read.");
+        }
+
+        var mod = await db.Mods
+            .Include(candidate => candidate.Versions)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may add a version.");
+        }
+
+        var versionName = form["version"].ToString().Trim();
+        if (!StorageService.IsSafeVersion(versionName))
+        {
+            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
+        }
+
+        if (mod.Versions.Any(version => version.Version == versionName))
+        {
+            return ApiErrors.Conflict("That version is already in the library.");
+        }
+
+        var file = form.Files.GetFile("file");
+        if (file is null || file.Length == 0)
+        {
+            return ApiErrors.BadRequest("Choose a non-empty mod zip.");
+        }
+
+        if (!string.Equals(Path.GetExtension(file.FileName), ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApiErrors.BadRequest("Mod files must be .zip archives.");
+        }
+
+        if (file.Length > MaxModBytes)
+        {
+            return ApiErrors.BadRequest("Mod files may not exceed 100 MiB.");
+        }
+
+        var now = DateTime.UtcNow;
+        var version = new ModVersion
+        {
+            Version = versionName,
+            Changelog = form["changelog"].ToString(),
+            FileSize = file.Length,
+            CreatedAtUtc = now
+        };
+
+        try
+        {
+            await using var source = file.OpenReadStream();
+            version.FileName = await storage.SaveModFileAsync(
+                mod.Slug,
+                versionName,
+                source,
+                cancellationToken);
+            mod.Versions.Add(version);
+            mod.UpdatedAtUtc = now;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            if (version.FileName.Length > 0)
+            {
+                storage.DeleteModFile(version.FileName);
+            }
+
+            throw;
+        }
+
+        var updated = await LoadModAsync(db, slug, cancellationToken);
+        return Results.Json(ToDetail(updated!), statusCode: StatusCodes.Status201Created);
+    }
+
+    private static async Task<IResult> PatchAsync(
+        string slug,
+        PatchModRequest request,
+        HttpContext context,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods.SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may revise it.");
+        }
+
+        var name = request.Name?.Trim();
+        var summary = request.Summary?.Trim();
+        if (name is not null && (name.Length < 3 || name.Length > 60))
+        {
+            return ApiErrors.BadRequest("Mod names must be 3–60 characters.");
+        }
+
+        if (summary is not null && summary.Length > 140)
+        {
+            return ApiErrors.BadRequest("Summaries may not exceed 140 characters.");
+        }
+
+        if (request.Description is not null && request.Description.Length > 10_000)
+        {
+            return ApiErrors.BadRequest("Descriptions may not exceed 10,000 characters.");
+        }
+
+        var type = request.Type?.Trim();
+        if (type is not null && !IsValidModType(type))
+        {
+            return ApiErrors.BadRequest(InvalidModTypeError);
+        }
+
+        if (name is not null)
+        {
+            mod.Name = name;
+        }
+
+        if (summary is not null)
+        {
+            mod.Summary = summary;
+        }
+
+        if (request.Description is not null)
+        {
+            mod.Description = request.Description;
+        }
+
+        if (type is not null)
+        {
+            mod.Type = type;
+        }
+
+        mod.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var updated = await LoadModAsync(db, slug, cancellationToken);
+        return Results.Ok(ToDetail(updated!));
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        string slug,
+        HttpContext context,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods
+            .Include(candidate => candidate.Screenshots)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        if (TokenService.GetUserId(context.User) != mod.AuthorId)
+        {
+            return ApiErrors.Forbidden("Only the tome's author may remove it.");
+        }
+
+        var screenshotNames = mod.Screenshots.Select(screenshot => screenshot.FileName).ToArray();
+        db.Mods.Remove(mod);
+        await db.SaveChangesAsync(cancellationToken);
+
+        storage.DeleteModDirectory(mod.Slug);
+        foreach (var screenshotName in screenshotNames)
+        {
+            storage.DeleteScreenshot(screenshotName);
+        }
+
+        return Results.NoContent();
+    }
+
+    private static Task<IResult> DownloadLatestAsync(
+        string slug,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken) =>
+        DownloadAsync(slug, null, db, storage, cancellationToken);
+
+    private static Task<IResult> DownloadVersionAsync(
+        string slug,
+        int versionId,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken) =>
+        DownloadAsync(slug, versionId, db, storage, cancellationToken);
+
+    private static async Task<IResult> DownloadAsync(
+        string slug,
+        int? versionId,
+        AppDb db,
+        StorageService storage,
+        CancellationToken cancellationToken)
+    {
+        var mod = await db.Mods
+            .Include(candidate => candidate.Versions)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        if (mod is null)
+        {
+            return ApiErrors.NotFound("That tome is missing from the library.");
+        }
+
+        var version = versionId is null
+            ? LatestVersion(mod)
+            : mod.Versions.SingleOrDefault(candidate => candidate.Id == versionId.Value);
+        if (version is null)
+        {
+            return ApiErrors.NotFound("That version is missing from the library.");
+        }
+
+        var path = storage.GetModFilePath(version.FileName);
+        if (!File.Exists(path))
+        {
+            return ApiErrors.NotFound("The archive for that version is missing.");
+        }
+
+        version.Downloads++;
+        mod.Downloads++;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.File(
+            path,
+            contentType: "application/zip",
+            fileDownloadName: $"{mod.Slug}-{version.Version}.zip",
+            enableRangeProcessing: true);
+    }
+
+    private static async Task<Mod?> LoadModAsync(
+        AppDb db,
+        string slug,
+        CancellationToken cancellationToken) =>
+        await db.Mods.AsNoTracking()
+            .Include(mod => mod.Author)
+            .Include(mod => mod.Versions)
+            .Include(mod => mod.Screenshots)
+            .AsSplitQuery()
+            .SingleOrDefaultAsync(mod => mod.Slug == slug, cancellationToken);
+
+    private static object ToItem(Mod mod)
+    {
+        var latest = LatestVersion(mod);
+        var thumbnail = mod.Screenshots.OrderBy(screenshot => screenshot.SortOrder).FirstOrDefault();
+        return new
+        {
+            mod.Id,
+            mod.Slug,
+            mod.Name,
+            mod.Summary,
+            mod.Type,
+            author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
+            latestVersion = latest?.Version,
+            mod.Downloads,
+            thumbnailUrl = thumbnail is null ? null : ScreenshotUrl(thumbnail.FileName),
+            mod.CreatedAtUtc,
+            mod.UpdatedAtUtc
+        };
+    }
+
+    private static object ToDetail(Mod mod)
+    {
+        var latest = LatestVersion(mod);
+        var thumbnail = mod.Screenshots.OrderBy(screenshot => screenshot.SortOrder).FirstOrDefault();
+        return new
+        {
+            mod.Id,
+            mod.Slug,
+            mod.Name,
+            mod.Summary,
+            mod.Type,
+            author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
+            latestVersion = latest?.Version,
+            mod.Downloads,
+            thumbnailUrl = thumbnail is null ? null : ScreenshotUrl(thumbnail.FileName),
+            mod.CreatedAtUtc,
+            mod.UpdatedAtUtc,
+            mod.Description,
+            screenshots = mod.Screenshots
+                .OrderBy(screenshot => screenshot.SortOrder)
+                .Select(screenshot => new
+                {
+                    screenshot.Id,
+                    url = ScreenshotUrl(screenshot.FileName),
+                    screenshot.SortOrder
+                })
+                .ToArray(),
+            versions = mod.Versions
+                .OrderByDescending(version => version.CreatedAtUtc)
+                .ThenByDescending(version => version.Id)
+                .Select(version => new
+                {
+                    version.Id,
+                    version.Version,
+                    version.Changelog,
+                    version.FileSize,
+                    version.Downloads,
+                    version.CreatedAtUtc
+                })
+                .ToArray()
+        };
+    }
+
+    private static object ToComment(ModComment comment) => new
+    {
+        comment.Id,
+        comment.Body,
+        comment.CreatedAtUtc,
+        author = new { comment.Author.Id, comment.Author.Username, comment.Author.School }
+    };
+
+    private static ModVersion? LatestVersion(Mod mod) =>
+        mod.Versions
+            .OrderByDescending(version => version.CreatedAtUtc)
+            .ThenByDescending(version => version.Id)
+            .FirstOrDefault();
+
+    private static string ScreenshotUrl(string fileName) => $"/uploads/screenshots/{fileName}";
+
+    private static string? ValidateModFields(
+        string name,
+        string summary,
+        string description)
+    {
+        if (name.Length < 3 || name.Length > 60)
+        {
+            return "Mod names must be 3–60 characters.";
+        }
+
+        if (summary.Length > 140)
+        {
+            return "Summaries may not exceed 140 characters.";
+        }
+
+        if (description.Length > 10_000)
+        {
+            return "Descriptions may not exceed 10,000 characters.";
+        }
+
+        return null;
+    }
+
+    private static bool IsValidModType(string type) => type is "lua" or "boneyard";
+
+    private static async Task<string> UniqueSlugAsync(
+        AppDb db,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var baseSlug = Slugify(name);
+        var slug = baseSlug;
+        var suffix = 2;
+        while (await db.Mods.AnyAsync(mod => mod.Slug == slug, cancellationToken))
+        {
+            slug = $"{baseSlug}-{suffix}";
+            suffix++;
+        }
+
+        return slug;
+    }
+
+    private static string Slugify(string name)
+    {
+        var builder = new StringBuilder();
+        var pendingHyphen = false;
+        foreach (var character in name.Normalize(NormalizationForm.FormD))
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (character is >= 'A' and <= 'Z')
+            {
+                if (pendingHyphen && builder.Length > 0)
+                {
+                    builder.Append('-');
+                }
+
+                builder.Append(char.ToLowerInvariant(character));
+                pendingHyphen = false;
+            }
+            else if (character is >= 'a' and <= 'z' or >= '0' and <= '9')
+            {
+                if (pendingHyphen && builder.Length > 0)
+                {
+                    builder.Append('-');
+                }
+
+                builder.Append(character);
+                pendingHyphen = false;
+            }
+            else
+            {
+                pendingHyphen = true;
+            }
+        }
+
+        return builder.Length == 0 ? "mod" : builder.ToString();
+    }
+
+    private static string? ScreenshotExtension(string fileName)
+    {
+        var extension = Path.GetExtension(fileName);
+        if (string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase))
+        {
+            return "png";
+        }
+
+        return string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ? "jpg" : null;
+    }
+
+    private static int ParseInt(string value, int fallback) =>
+        int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    public sealed record PatchModRequest(
+        string? Name,
+        string? Summary,
+        string? Description,
+        string? Type);
+
+    public sealed record CommentRequest(string? Body);
+}

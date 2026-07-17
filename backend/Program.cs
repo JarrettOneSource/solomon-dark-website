@@ -1,0 +1,302 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.IdentityModel.Tokens;
+using SolomonDarkRevived.Api;
+using SolomonDarkRevived.Data;
+using SolomonDarkRevived.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+var isDevelopment = builder.Environment.IsDevelopment();
+
+var configuredStorageRoot = builder.Configuration["Storage:Root"];
+if (string.IsNullOrWhiteSpace(configuredStorageRoot))
+{
+    configuredStorageRoot = "data";
+}
+
+var storageRoot = Path.IsPathRooted(configuredStorageRoot)
+    ? configuredStorageRoot
+    : Path.Combine(builder.Environment.ContentRootPath, configuredStorageRoot);
+var storage = new StorageService(storageRoot);
+builder.Services.AddSingleton(storage);
+builder.Services.AddDbContext<AppDb>(options =>
+    options.UseSqlite($"Data Source={storage.DatabasePath}"));
+
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+var generatedJwtSecret = false;
+if (string.IsNullOrWhiteSpace(jwtSecret))
+{
+    if (isDevelopment)
+    {
+        throw new InvalidOperationException("Jwt:Secret must be configured in Development.");
+    }
+
+    jwtSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    generatedJwtSecret = true;
+}
+
+var jwtExpiryDays = builder.Configuration.GetValue<int?>("Jwt:ExpiryDays") ?? 7;
+builder.Services.AddSingleton(new TokenService(jwtSecret, jwtExpiryDays));
+
+// SQLite round-trips lose DateTimeKind, so DB-read timestamps would serialize
+// without the trailing Z and browsers would misparse them as local time.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()));
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            NameClaimType = "unique_name"
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "A valid bearer token is required." });
+            },
+            OnForbidden = async context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "This bearer may not enter here." });
+            }
+        };
+    });
+builder.Services.AddAuthorization();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Add(IPAddress.Loopback);
+    options.KnownProxies.Add(IPAddress.IPv6Loopback);
+});
+
+if (isDevelopment)
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("vite", policy => policy
+            .WithOrigins("http://localhost:5173", "http://localhost:5174")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+    });
+}
+
+// Keep live seed matches inside the 120s window, with gently drifting player
+// counts, so the master list never demos empty.
+builder.Services.AddHostedService<SeedMatchHeartbeat>();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        var message = context.HttpContext.Request.Path.Value?.EndsWith(
+            "/comments",
+            StringComparison.OrdinalIgnoreCase) == true
+            ? "The ink must dry before you add another marginal note. Try again in a minute."
+            : "Too many match announcements; try again in a minute.";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { error = message },
+            cancellationToken);
+    };
+    options.AddPolicy("match-announcements", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("mod-comments", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+});
+
+var app = builder.Build();
+
+if (generatedJwtSecret)
+{
+    app.Logger.LogWarning(
+        "Jwt:Secret was not configured; generated an ephemeral key and sessions will not survive restart.");
+}
+
+app.UseForwardedHeaders();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDb>();
+    await db.Database.EnsureCreatedAsync();
+    await SeedData.InitializeAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
+        storage,
+        devLogins: isDevelopment);
+}
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        var statusCode = exception is BadHttpRequestException badRequest
+            ? badRequest.StatusCode
+            : StatusCodes.Status500InternalServerError;
+        context.Response.StatusCode = statusCode;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = statusCode == StatusCodes.Status500InternalServerError
+                ? "The server lost its place in the Annals."
+                : "The request could not be read."
+        });
+    });
+});
+
+app.UseStatusCodePages(async statusContext =>
+{
+    var context = statusContext.HttpContext;
+    if (!context.Request.Path.StartsWithSegments("/api"))
+    {
+        return;
+    }
+
+    var message = context.Response.StatusCode switch
+    {
+        StatusCodes.Status400BadRequest => "The request could not be read.",
+        StatusCodes.Status401Unauthorized => "A valid bearer token is required.",
+        StatusCodes.Status403Forbidden => "This bearer may not enter here.",
+        StatusCodes.Status404NotFound => "No such API route exists.",
+        StatusCodes.Status405MethodNotAllowed => "That method is not allowed here.",
+        StatusCodes.Status413PayloadTooLarge => "The request body is too large.",
+        StatusCodes.Status415UnsupportedMediaType => "That content type is not supported.",
+        StatusCodes.Status429TooManyRequests => "Too many requests; try again shortly.",
+        _ => "The request could not be completed."
+    };
+    await context.Response.WriteAsJsonAsync(new { error = message });
+});
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(storage.ScreenshotsPath),
+    RequestPath = "/uploads/screenshots"
+});
+
+app.UseRouting();
+if (isDevelopment)
+{
+    app.UseCors("vite");
+}
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
+
+AuthEndpoints.Map(app);
+ModEndpoints.Map(app);
+MatchEndpoints.Map(app);
+SaveEndpoints.Map(app);
+StatsEndpoints.Map(app);
+
+app.MapMethods(
+    "/api/{**path}",
+    ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    () => ApiErrors.NotFound("No such API route exists."));
+app.MapFallbackToFile("index.html");
+
+app.Run();
+
+internal sealed class SeedMatchHeartbeat(IServiceScopeFactory scopeFactory) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await using (var scope = scopeFactory.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<SolomonDarkRevived.Data.AppDb>();
+                var now = DateTime.UtcNow;
+                var matches = await db.Matches
+                    .Where(match => EF.Functions.Like(match.SessionKey, "seed-%"))
+                    .ToListAsync(stoppingToken);
+                foreach (var match in matches)
+                {
+                    if (match.Players <= 0)
+                    {
+                        continue;
+                    }
+
+                    match.LastSeenUtc = now;
+                    match.Players = Math.Clamp(
+                        match.Players + Random.Shared.Next(-1, 2),
+                        1,
+                        match.MaxPlayers);
+                }
+
+                var existingSessionKeys = matches
+                    .Select(match => match.SessionKey)
+                    .ToHashSet(StringComparer.Ordinal);
+                foreach (var definition in SeedData.MatchDefinitions)
+                {
+                    if (!existingSessionKeys.Contains(definition.SessionKey))
+                    {
+                        db.Matches.Add(SeedData.CreateMatch(definition, now, now));
+                    }
+                }
+
+                await db.SaveChangesAsync(stoppingToken);
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(45), stoppingToken);
+        }
+    }
+}
+
+internal sealed class UtcDateTimeJsonConverter : System.Text.Json.Serialization.JsonConverter<DateTime>
+{
+    public override DateTime Read(
+        ref System.Text.Json.Utf8JsonReader reader,
+        Type typeToConvert,
+        System.Text.Json.JsonSerializerOptions options) => reader.GetDateTime();
+
+    public override void Write(
+        System.Text.Json.Utf8JsonWriter writer,
+        DateTime value,
+        System.Text.Json.JsonSerializerOptions options) =>
+        writer.WriteStringValue(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+}

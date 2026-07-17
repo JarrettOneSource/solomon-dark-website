@@ -1,0 +1,18 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Runtime data (db, uploads, saves)
+backend/data/
+backend/wwwroot/
+
+# Misc
+.env
+*.log
+.DS_Store

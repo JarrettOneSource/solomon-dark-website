@@ -1,0 +1,497 @@
+@import 'tailwindcss';
+
+/*
+ * Solomon Dark Revived — theme
+ * Palette + surface language pulled from the actual game atlases (see design.md §3).
+ * Gold is chrome, arcane cyan is interactive energy, necro purple / blood red are garnish.
+ */
+
+@theme {
+  --color-abyss: #08070b;
+  --color-crypt: #14111a;
+  --color-crypt-2: #1c1725;
+  --color-stone: #3a3d42;
+  --color-gold: #c8a862;
+  --color-gold-bright: #f0d491;
+  --color-gold-dim: #8a744a;
+  --color-bone: #e6dcc3;
+  --color-bone-dim: #a99f88;
+  --color-arcane: #41e3ff;
+  --color-necro: #b45fe0;
+  --color-blood: #d43a3a;
+  --color-moss: #7fb35f;
+
+  --font-display: 'Cinzel', 'Times New Roman', serif;
+  --font-body: 'Alegreya', Georgia, serif;
+  --font-fell: 'IM Fell English', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* ---------- base ---------- */
+
+html {
+  color-scheme: dark;
+  scrollbar-color: #2a2333 var(--color-abyss);
+}
+
+body {
+  @apply bg-abyss text-bone font-body antialiased;
+  background-image:
+    radial-gradient(1100px 500px at 50% -100px, rgb(70 50 110 / 0.14), transparent 70%),
+    radial-gradient(900px 420px at 85% 110%, rgb(35 70 55 / 0.1), transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgb(200 168 98 / 0.85);
+  color: #171208;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(65 227 255 / 0.7);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-abyss); }
+::-webkit-scrollbar-thumb {
+  background: #241e2e;
+  border: 1px solid rgb(200 168 98 / 0.18);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover { background: #372d46; }
+
+@layer components {
+  /* ---------- typography ---------- */
+
+  .h-display {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--color-gold);
+    text-shadow:
+      0 1px 0 rgb(0 0 0 / 0.9),
+      0 0 26px rgb(200 168 98 / 0.16);
+  }
+
+  .text-fell {
+    font-family: var(--font-fell);
+    font-style: italic;
+  }
+
+  .kicker {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    font-size: 0.72rem;
+    color: rgb(200 168 98 / 0.75);
+  }
+
+  /* ---------- surfaces ---------- */
+
+  .panel {
+    position: relative;
+    background: linear-gradient(160deg, #171320, #0e0c13);
+    border: 1px solid rgb(200 168 98 / 0.18);
+    border-radius: 6px;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 10px 30px rgb(0 0 0 / 0.45);
+  }
+
+  .panel-ornate::before {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    border: 1px solid rgb(200 168 98 / 0.12);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  .slab {
+    background: linear-gradient(180deg, #1b1722, #131019);
+    border: 1px solid rgb(0 0 0 / 0.6);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  }
+
+  .rule-gold {
+    height: 1px;
+    border: 0;
+    background: linear-gradient(90deg, transparent, rgb(200 168 98 / 0.5), transparent);
+  }
+
+  /* ---------- controls ---------- */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.72rem 1.2rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, filter 0.15s, transform 0.06s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.45; pointer-events: none; }
+
+  .btn-stone {
+    background: linear-gradient(180deg, #413d4b, #262230 55%, #191622);
+    border-color: #06050a;
+    color: var(--color-bone);
+    text-shadow: 0 1px 1px rgb(0 0 0 / 0.9);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.13),
+      inset 0 -2px 5px rgb(0 0 0 / 0.55),
+      0 2px 8px rgb(0 0 0 / 0.5);
+  }
+  .btn-stone:hover {
+    border-color: rgb(200 168 98 / 0.55);
+    color: var(--color-gold-bright);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.13),
+      inset 0 -2px 5px rgb(0 0 0 / 0.55),
+      0 0 18px rgb(200 168 98 / 0.18);
+  }
+
+  .btn-gold {
+    background: linear-gradient(180deg, #eed392, #c8a862 52%, #92713b);
+    border-color: #52401f;
+    color: #1c1508;
+    text-shadow: 0 1px 0 rgb(255 255 255 / 0.28);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      inset 0 -2px 4px rgb(80 58 22 / 0.55),
+      0 2px 14px rgb(200 168 98 / 0.22);
+  }
+  .btn-gold:hover {
+    filter: brightness(1.09);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      inset 0 -2px 4px rgb(80 58 22 / 0.55),
+      0 0 26px rgb(200 168 98 / 0.4);
+  }
+
+  /* main-menu plaque buttons (PLAY / EXPLORE THE DARK CLOUD …) */
+  .btn-plaque {
+    display: block;
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 0.82rem;
+    color: #e5cd8e;
+    padding: 0.85rem 2.2rem;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #26202e, #15111a 60%, #100d15);
+    border: 1px solid rgb(200 168 98 / 0.5);
+    box-shadow:
+      inset 0 0 0 2px #0d0a10,
+      inset 0 0 0 3px rgb(200 168 98 / 0.18),
+      inset 0 0 24px rgb(0 0 0 / 0.65),
+      0 3px 10px rgb(0 0 0 / 0.6);
+    text-shadow: 0 1px 2px #000;
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.06s;
+  }
+  .btn-plaque:hover {
+    color: var(--color-gold-bright);
+    border-color: rgb(240 212 145 / 0.8);
+    box-shadow:
+      inset 0 0 0 2px #0d0a10,
+      inset 0 0 0 3px rgb(200 168 98 / 0.28),
+      inset 0 0 24px rgb(0 0 0 / 0.65),
+      0 0 22px rgb(200 168 98 / 0.25);
+  }
+  .btn-plaque:active { transform: translateY(1px); }
+
+  /* the enchanted plaque: a breathing gold aura + a recurring sheen sweep,
+     deliberately off-phase from the logo shimmer so they never sync up */
+  .btn-plaque-beacon {
+    position: relative;
+    overflow: hidden;
+    animation: plaque-breathe 3.4s ease-in-out infinite;
+  }
+  .btn-plaque-beacon::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 40%, rgb(255 244 214 / 0.16) 50%, transparent 60%);
+    background-size: 260% 100%;
+    animation: shimmer-move 5.5s ease 1.6s infinite;
+  }
+  /* hovering hands control back to the standard plaque hover glow */
+  .btn-plaque-beacon:hover { animation: none; }
+
+  .btn-blood {
+    background: linear-gradient(180deg, #5c1f1f, #381111);
+    border-color: #120404;
+    color: #f0c9c9;
+    text-shadow: 0 1px 1px rgb(0 0 0 / 0.9);
+  }
+  .btn-blood:hover {
+    border-color: rgb(212 58 58 / 0.6);
+    box-shadow: 0 0 16px rgb(212 58 58 / 0.25);
+  }
+
+  .input {
+    width: 100%;
+    background: #0d0b12;
+    border: 1px solid rgb(200 168 98 / 0.22);
+    border-radius: 4px;
+    padding: 0.55rem 0.8rem;
+    color: var(--color-bone);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input::placeholder { color: rgb(169 159 136 / 0.45); }
+  .input:focus {
+    outline: none;
+    border-color: rgb(65 227 255 / 0.6);
+    box-shadow: 0 0 0 1px rgb(65 227 255 / 0.35), 0 0 18px rgb(65 227 255 / 0.08);
+  }
+
+  .label {
+    display: block;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    font-size: 0.66rem;
+    letter-spacing: 0.2em;
+    color: rgb(200 168 98 / 0.85);
+    margin-bottom: 0.4rem;
+  }
+
+  .link-arcane {
+    color: var(--color-arcane);
+    text-decoration: none;
+    transition: text-shadow 0.15s, color 0.15s;
+  }
+  .link-arcane:hover {
+    color: #8deeff;
+    text-shadow: 0 0 12px rgb(65 227 255 / 0.55);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 0.14rem 0.5rem;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+  .badge-necro { color: #d9a1f2; border-color: rgb(180 95 224 / 0.45); background: rgb(180 95 224 / 0.08); }
+  .badge-gold { color: var(--color-gold-bright); border-color: rgb(200 168 98 / 0.4); background: rgb(200 168 98 / 0.07); }
+  .badge-moss { color: #a9d18d; border-color: rgb(127 179 95 / 0.45); background: rgb(127 179 95 / 0.08); }
+  .badge-arcane { color: #8deeff; border-color: rgb(65 227 255 / 0.4); background: rgb(65 227 255 / 0.06); }
+
+  .orb { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+  .orb-on { background: var(--color-moss); box-shadow: 0 0 10px rgb(127 179 95 / 0.9); }
+  .orb-hub { background: var(--color-arcane); box-shadow: 0 0 10px rgb(65 227 255 / 0.8); }
+  .orb-off { background: #6e2626; box-shadow: 0 0 6px rgb(212 58 58 / 0.4); }
+
+  /* gold banner in the style of the game's "FETCHING BONEYARDS" strip */
+  .gold-banner {
+    display: inline-block;
+    background: linear-gradient(180deg, #dcbf7c, #b2924e);
+    color: #251d09;
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    font-size: 0.72rem;
+    padding: 0.45rem 1.6rem;
+    box-shadow: 0 2px 0 rgb(0 0 0 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.45);
+  }
+
+  /* ---------- longform ---------- */
+
+  .prose-sdr p { margin: 0.85rem 0; line-height: 1.75; color: rgb(230 220 195 / 0.92); }
+  .prose-sdr h2 {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-gold);
+    font-size: 1.15rem;
+    margin: 2.2rem 0 0.6rem;
+  }
+  .prose-sdr a { color: var(--color-arcane); }
+  .prose-sdr blockquote {
+    font-family: var(--font-fell);
+    font-style: italic;
+    border-left: 2px solid rgb(200 168 98 / 0.5);
+    padding-left: 1rem;
+    margin: 1.2rem 0;
+    color: rgb(200 168 98 / 0.9);
+  }
+  .prose-sdr ul { list-style: disc; padding-left: 1.4rem; margin: 0.85rem 0; line-height: 1.7; }
+
+}
+
+/* ---------- animation ---------- */
+
+@keyframes eye-pulse {
+  0%, 100% { opacity: 0.5; filter: drop-shadow(0 0 5px rgb(212 58 58 / 0.6)) brightness(0.9); }
+  50% { opacity: 1; filter: drop-shadow(0 0 14px rgb(255 70 70 / 0.95)) brightness(1.25); }
+}
+@keyframes sway-x {
+  from { transform: translate3d(-2.5%, 0, 0); }
+  to { transform: translate3d(2.5%, 0, 0); }
+}
+/* the beacon plaque inhales: border and outer aura brighten, never past hover level */
+@keyframes plaque-breathe {
+  0%, 100% {
+    border-color: rgb(200 168 98 / 0.5);
+    box-shadow:
+      inset 0 0 0 2px #0d0a10,
+      inset 0 0 0 3px rgb(200 168 98 / 0.18),
+      inset 0 0 24px rgb(0 0 0 / 0.65),
+      0 3px 10px rgb(0 0 0 / 0.6);
+  }
+  50% {
+    border-color: rgb(240 212 145 / 0.85);
+    box-shadow:
+      inset 0 0 0 2px #0d0a10,
+      inset 0 0 0 3px rgb(200 168 98 / 0.3),
+      inset 0 0 24px rgb(0 0 0 / 0.65),
+      0 3px 10px rgb(0 0 0 / 0.6),
+      0 0 26px rgb(200 168 98 / 0.3);
+  }
+}
+
+@keyframes float-y {
+  from { transform: translateY(-5px); }
+  to { transform: translateY(6px); }
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes spin-slow-rev { to { transform: rotate(-360deg); } }
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes banner-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+/* recurring sweep: shine crosses in the first ~30%, then rests until the next pass */
+@keyframes shimmer-move {
+  0% { background-position: 130% 0; }
+  30% { background-position: -60% 0; }
+  100% { background-position: -60% 0; }
+}
+
+/* ambient graveyard haunts (see fx/Haunts.tsx) */
+@keyframes haunt-fade {
+  0% { opacity: 0; transform: translateY(8px); }
+  35% { opacity: var(--peak, 0.45); }
+  65% { opacity: var(--peak, 0.45); }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+
+/* site secrets (fx/Haunts.tsx, fx/Overlays.tsx, fx/Critters.tsx, fx/IdleSpider.tsx) */
+@keyframes inclined-traverse {
+  from { transform: translate3d(var(--tx-from, -15vw), var(--ty-from, 0), 0); }
+  to { transform: translate3d(var(--tx-to, 115vw), var(--ty-to, 0), 0); }
+}
+@keyframes spell-cast-drift {
+  from { transform: translateY(var(--drift-from, -4px)); }
+  to { transform: translateY(var(--drift-to, 4px)); }
+}
+@keyframes midnight-veil {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes midnight-slam {
+  0% { opacity: 0; transform: scale(2.6); }
+  9% { opacity: 1; transform: scale(1); }
+  12% { transform: scale(1.06); }
+  15% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.98); }
+}
+@keyframes gameover-flash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* frame-strip playback: element shows one frame; steps(n) walks the strip */
+@keyframes strip-run {
+  to { background-position-x: var(--strip-shift); }
+}
+/* generic horizontal traverse, endpoints set per critter */
+@keyframes traverse-x {
+  from { transform: translateX(var(--tx-from, -15vw)); }
+  to { transform: translateX(var(--tx-to, 115vw)); }
+}
+@keyframes spider-sway {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+/* School of Magic click effects (fx/SchoolBursts.tsx) */
+@keyframes bolt-strike {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  28% { opacity: 0.35; }
+  42% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes ring-expand {
+  0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.25); }
+  70% { opacity: 0.5; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.9); }
+}
+@keyframes orb-fly {
+  to { transform: translate(var(--fx-dx), var(--fx-dy)); }
+}
+/* earth's slam: x drifts linearly while y decelerates up to --fx-peak then
+   accelerates down past the click to --fx-fall — nested layers make the lob */
+@keyframes rock-cast-x {
+  to { transform: translateX(var(--fx-dx)); }
+}
+@keyframes rock-cast-y {
+  0% { transform: translateY(0); opacity: 1; animation-timing-function: cubic-bezier(0.16, 0.7, 0.38, 1); }
+  44% { transform: translateY(var(--fx-peak)); animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.4); }
+  86% { opacity: 1; }
+  100% { transform: translateY(var(--fx-fall)); opacity: 0; }
+}
+@keyframes slam-thud {
+  0% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.25); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+/* the game's TAKE confirmation stamp, slammed over "Take This Tome" */
+@keyframes stamp-slam {
+  0% { opacity: 0; transform: scale(2.2) rotate(-14deg); }
+  22% { opacity: 1; transform: scale(1) rotate(-8deg); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.97) rotate(-8deg); }
+}
+
+.reveal { opacity: 0; }
+.reveal-in { animation: reveal-up 0.55s cubic-bezier(0.2, 0.6, 0.25, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal { opacity: 1; }
+}
