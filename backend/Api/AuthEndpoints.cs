@@ -168,6 +168,7 @@ public static class AuthEndpoints
         user.Username,
         user.Email,
         user.School,
+        user.SteamId,
         user.CreatedAtUtc
     };
 

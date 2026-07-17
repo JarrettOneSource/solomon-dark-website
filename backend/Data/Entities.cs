@@ -7,6 +7,7 @@ public sealed class User
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string? School { get; set; }
+    public string? SteamId { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 }
 
@@ -61,17 +62,44 @@ public sealed class ModComment
     public User Author { get; set; } = null!;
 }
 
-public sealed class MatchSession
+public sealed class LobbySession
 {
     public int Id { get; set; }
-    public string SessionKey { get; set; } = string.Empty;
+    public string LobbyId { get; set; } = string.Empty;
+    public string HostSteamId { get; set; } = string.Empty;
     public string HostPlayer { get; set; } = string.Empty;
-    public string Boneyard { get; set; } = string.Empty;
+    public string Privacy { get; set; } = string.Empty;
+    public string Secret { get; set; } = string.Empty;
+    public string? PasswordSalt { get; set; }
+    public string? PasswordHash { get; set; }
+    public string FriendSteamIdsJson { get; set; } = "[]";
     public int Players { get; set; }
     public int MaxPlayers { get; set; }
-    public string Status { get; set; } = string.Empty;
+    public long AppId { get; set; }
+    public int ProtocolVersion { get; set; }
+    public string ManifestSha256 { get; set; } = string.Empty;
+    public string LoaderVersion { get; set; } = string.Empty;
+    public string Phase { get; set; } = string.Empty;
+    public string? BoneyardId { get; set; }
+    public string? BoneyardName { get; set; }
+    public string? BoneyardSha256 { get; set; }
+    public int? Wave { get; set; }
+    public string? Difficulty { get; set; }
+    public int? ElapsedSeconds { get; set; }
+    public string? StatusText { get; set; }
     public DateTime FirstSeenUtc { get; set; }
     public DateTime LastSeenUtc { get; set; }
+}
+
+public sealed class SteamLinkAttempt
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string StateHash { get; set; } = string.Empty;
+    public string ReturnPath { get; set; } = string.Empty;
+    public DateTime ExpiresAtUtc { get; set; }
+
+    public User User { get; set; } = null!;
 }
 
 public sealed class CloudSave

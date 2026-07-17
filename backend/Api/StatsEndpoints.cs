@@ -15,12 +15,12 @@ public static class StatsEndpoints
         CancellationToken cancellationToken)
     {
         var liveCutoff = DateTime.UtcNow.AddSeconds(-120);
-        var matchesLive = await db.Matches.CountAsync(
-            match => match.LastSeenUtc >= liveCutoff,
+        var matchesLive = await db.Lobbies.CountAsync(
+            lobby => lobby.LastSeenUtc >= liveCutoff,
             cancellationToken);
-        var wizardsOnline = await db.Matches
-            .Where(match => match.LastSeenUtc >= liveCutoff)
-            .SumAsync(match => (int?)match.Players, cancellationToken) ?? 0;
+        var wizardsOnline = await db.Lobbies
+            .Where(lobby => lobby.LastSeenUtc >= liveCutoff)
+            .SumAsync(lobby => (int?)lobby.Players, cancellationToken) ?? 0;
         var tomes = await db.Mods.CountAsync(cancellationToken);
         var savesSynced = await db.CloudSaves.CountAsync(cancellationToken);
         var enrolled = await db.Users.CountAsync(cancellationToken);
