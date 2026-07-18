@@ -19,6 +19,7 @@ public static class SeedData
         // Real registrations may predate seeding; the seed wizards themselves mark a seeded DB.
         if (await db.Users.AnyAsync(u => u.Username == "Luthacus", cancellationToken))
         {
+            await EnsureSeedDownloadEventsAsync(db, cancellationToken);
             return;
         }
 
@@ -202,6 +203,83 @@ public static class SeedData
             });
         }
 
+        await db.SaveChangesAsync(cancellationToken);
+        await EnsureSeedDownloadEventsAsync(db, cancellationToken);
+    }
+
+    private static async Task EnsureSeedDownloadEventsAsync(
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        if (await db.ModDownloadEvents.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var definitions = new[]
+        {
+            (Slug: "prismatic-shock-rework", Last30: 55, Mid30: 52, Old30: 53),
+            (Slug: "fleetfinger", Last30: 32, Mid30: 31, Old30: 32),
+            (Slug: "karen-you-scandalous-wench", Last30: 12, Mid30: 28, Old30: 70),
+            (Slug: "dratmoor-after-dark", Last30: 58, Mid30: 17, Old30: 10),
+            (Slug: "lua-bots", Last30: 24, Mid30: 23, Old30: 23),
+            (Slug: "mount-awful-endless", Last30: 22, Mid30: 18, Old30: 15),
+            (Slug: "acid-rain-certified", Last30: 13, Mid30: 14, Old30: 13),
+            (Slug: "iron-golem-plus", Last30: 10, Mid30: 10, Old30: 10),
+            (Slug: "heck-hollow-gauntlet", Last30: 12, Mid30: 20, Old30: 13),
+            (Slug: "fast-start-waves", Last30: 8, Mid30: 9, Old30: 8),
+            (Slug: "dark-cloud-sorter", Last30: 5, Mid30: 5, Old30: 5),
+            (Slug: "custom-intro-stories", Last30: 3, Mid30: 2, Old30: 3)
+        };
+
+        var slugs = definitions.Select(definition => definition.Slug).ToArray();
+        var modIdsBySlug = await db.Mods.AsNoTracking()
+            .Where(mod => slugs.Contains(mod.Slug))
+            .Select(mod => new { mod.Slug, mod.Id })
+            .ToDictionaryAsync(mod => mod.Slug, mod => mod.Id, cancellationToken);
+        if (modIdsBySlug.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var latest = now.AddMinutes(-5);
+        var random = new Random(20260718);
+        var events = new List<ModDownloadEvent>();
+        foreach (var definition in definitions)
+        {
+            if (!modIdsBySlug.TryGetValue(definition.Slug, out var modId))
+            {
+                continue;
+            }
+
+            var buckets = new[]
+            {
+                (Count: definition.Last30, StartDays: 0),
+                (Count: definition.Mid30, StartDays: 30),
+                (Count: definition.Old30, StartDays: 60)
+            };
+            foreach (var bucket in buckets)
+            {
+                for (var index = 0; index < bucket.Count; index++)
+                {
+                    var downloadedAtUtc = now.AddMinutes(-(
+                        bucket.StartDays * 1440 + random.NextDouble() * 30 * 1440));
+                    if (downloadedAtUtc > latest)
+                    {
+                        downloadedAtUtc = latest;
+                    }
+
+                    events.Add(new ModDownloadEvent
+                    {
+                        ModId = modId,
+                        DownloadedAtUtc = downloadedAtUtc
+                    });
+                }
+            }
+        }
+
+        db.ModDownloadEvents.AddRange(events);
         await db.SaveChangesAsync(cancellationToken);
     }
 

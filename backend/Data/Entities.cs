@@ -30,6 +30,13 @@ public sealed class Mod
     public ICollection<ModComment> Comments { get; set; } = [];
 }
 
+public sealed class ModDownloadEvent
+{
+    public int Id { get; set; }
+    public int ModId { get; set; }
+    public DateTime DownloadedAtUtc { get; set; }
+}
+
 public sealed class ModTag
 {
     public int Id { get; set; }

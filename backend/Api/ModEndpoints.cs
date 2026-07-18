@@ -24,6 +24,7 @@ public static class ModEndpoints
     {
         app.MapGet("/api/mods", ListAsync);
         app.MapGet("/api/tags", ListTagsAsync);
+        app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
         app.MapGet("/api/mods/{slug}/comments", ListCommentsAsync);
         app.MapPost("/api/mods/{slug}/comments", CreateCommentAsync)
@@ -107,10 +108,53 @@ public static class ModEndpoints
 
         return Results.Ok(new
         {
-            items = mods.Select(ToItem).ToArray(),
+            items = mods.Select(mod => ToItem(mod)).ToArray(),
             total,
             page,
             pageSize
+        });
+    }
+
+    private static async Task<IResult> PopularAsync(
+        HttpRequest request,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var days = ParseInt(request.Query["days"].ToString(), 30);
+        if (days is not (30 or 60 or 90))
+        {
+            days = 30;
+        }
+
+        var since = DateTime.UtcNow.AddDays(-days);
+        var counts = await db.ModDownloadEvents.AsNoTracking()
+            .Where(e => e.DownloadedAtUtc >= since)
+            .GroupBy(e => e.ModId)
+            .Select(g => new { ModId = g.Key, Count = g.Count() })
+            .OrderByDescending(g => g.Count)
+            .Take(6)
+            .ToArrayAsync(cancellationToken);
+
+        var countsById = counts.ToDictionary(count => count.ModId, count => count.Count);
+        var modIds = countsById.Keys.ToArray();
+        var mods = await db.Mods.AsNoTracking()
+            .Where(mod => modIds.Contains(mod.Id))
+            .Include(mod => mod.Author)
+            .Include(mod => mod.Tags)
+            .Include(mod => mod.Versions)
+            .Include(mod => mod.Screenshots)
+            .AsSplitQuery()
+            .ToArrayAsync(cancellationToken);
+
+        var ordered = mods
+            .OrderByDescending(mod => countsById[mod.Id])
+            .ThenByDescending(mod => mod.Downloads)
+            .ThenByDescending(mod => mod.CreatedAtUtc);
+
+        return Results.Ok(new
+        {
+            days,
+            items = ordered.Select(mod => ToItem(mod, countsById[mod.Id])).ToArray()
         });
     }
 
@@ -280,7 +324,7 @@ public static class ModEndpoints
             user = new { user.Id, user.Username, user.School, user.CreatedAtUtc },
             modCount,
             downloadsTotal,
-            mods = mods.Select(ToItem).ToArray()
+            mods = mods.Select(mod => ToItem(mod)).ToArray()
         });
     }
 
@@ -870,7 +914,17 @@ public static class ModEndpoints
 
         version.Downloads++;
         mod.Downloads++;
+        db.ModDownloadEvents.Add(new ModDownloadEvent
+        {
+            ModId = mod.Id,
+            DownloadedAtUtc = DateTime.UtcNow
+        });
         await db.SaveChangesAsync(cancellationToken);
+
+        var pruneBefore = DateTime.UtcNow.AddDays(-100);
+        await db.ModDownloadEvents
+            .Where(e => e.DownloadedAtUtc < pruneBefore)
+            .ExecuteDeleteAsync(cancellationToken);
 
         return Results.File(
             path,
@@ -891,7 +945,7 @@ public static class ModEndpoints
             .AsSplitQuery()
             .SingleOrDefaultAsync(mod => mod.Slug == slug, cancellationToken);
 
-    private static object ToItem(Mod mod)
+    private static object ToItem(Mod mod, int? recentDownloads = null)
     {
         var latest = LatestVersion(mod);
         var thumbnail = mod.Screenshots.OrderBy(screenshot => screenshot.SortOrder).FirstOrDefault();
@@ -905,6 +959,7 @@ public static class ModEndpoints
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
             mod.Downloads,
+            recentDownloads,
             thumbnailUrl = thumbnail is null ? null : ScreenshotUrl(thumbnail.FileName),
             mod.CreatedAtUtc,
             mod.UpdatedAtUtc

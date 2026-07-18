@@ -79,6 +79,18 @@ public static class DatabaseSchema
             CREATE UNIQUE INDEX IF NOT EXISTS IX_ModTags_ModId_Name
                 ON ModTags (ModId, Name);
             CREATE INDEX IF NOT EXISTS IX_ModTags_Name ON ModTags (Name);
+
+            CREATE TABLE IF NOT EXISTS ModDownloadEvents (
+                Id INTEGER NOT NULL CONSTRAINT PK_ModDownloadEvents PRIMARY KEY AUTOINCREMENT,
+                ModId INTEGER NOT NULL,
+                DownloadedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_ModDownloadEvents_Mods_ModId
+                    FOREIGN KEY (ModId) REFERENCES Mods (Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_ModDownloadEvents_DownloadedAtUtc
+                ON ModDownloadEvents (DownloadedAtUtc);
+            CREATE INDEX IF NOT EXISTS IX_ModDownloadEvents_ModId_DownloadedAtUtc
+                ON ModDownloadEvents (ModId, DownloadedAtUtc);
             """,
             cancellationToken);
 

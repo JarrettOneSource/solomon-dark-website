@@ -4,7 +4,7 @@ import Hero from './Hero'
 import Reveal from '../fx/Reveal'
 import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
 import LobbyTable from '../components/LobbyTable'
-import ModCard from '../components/ModCard'
+import PopularStrip from '../components/PopularStrip'
 import { EmptyState, SectionHead, Spinner, StatTile } from '../components/ui'
 import { api, type Lobby } from '../lib/api'
 import { useApi } from '../lib/useApi'
@@ -44,7 +44,6 @@ export default function Home() {
   const { user } = useAuth()
   const stats = useApi(() => api.stats(), [], 30_000)
   const lobbies = useLobbies()
-  const mods = useApi(() => api.mods.list({ sort: 'newest', pageSize: 4 }), [])
   const [knock, setKnock] = useState<Lobby | null>(null)
 
   const liveLobbies = (lobbies.data?.items ?? []).slice(0, 5)
@@ -141,36 +140,15 @@ export default function Home() {
         </Reveal>
       </section>
 
-      {/* fresh tomes */}
-      <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
-        <Reveal>
-          <SectionHead
-            kicker="New acquisitions"
-            title="Fresh from the Library"
-            action={
-              <Link to="/mods" className="link-arcane text-xs uppercase tracking-[0.15em]">
-                Enter the Library →
-              </Link>
-            }
-          />
-          {mods.loading ? (
-            <Spinner label="Fetching tomes…" />
-          ) : mods.error ? (
-            <EmptyState title="Professor Semicus is indisposed" line={mods.error} />
-          ) : (mods.data?.items.length ?? 0) === 0 ? (
-            <EmptyState
-              title="The shelves are bare"
-              line="No tomes have been contributed yet. Enroll and be the first — the Librarian promises minimal judgment."
-            />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {mods.data!.items.map((m) => (
-                <ModCard key={m.id} mod={m} />
-              ))}
-            </div>
-          )}
-        </Reveal>
-      </section>
+      {/* in heavy circulation */}
+      <PopularStrip
+        className="mx-auto mt-24 max-w-6xl px-4 sm:px-6"
+        action={
+          <Link to="/mods" className="link-arcane text-xs uppercase tracking-[0.15em]">
+            Enter the Library →
+          </Link>
+        }
+      />
 
       {/* the story so far */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">

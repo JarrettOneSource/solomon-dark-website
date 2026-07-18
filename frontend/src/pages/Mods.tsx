@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ModCard from '../components/ModCard'
+import PopularStrip from '../components/PopularStrip'
 import Reveal from '../fx/Reveal'
 import { TomeFlybys } from '../fx/Critters'
 import { EmptyState, ErrorNote, Spinner, TagBadge } from '../components/ui'
@@ -70,6 +71,8 @@ export default function Mods() {
           </Link>
         </div>
       </Reveal>
+
+      <PopularStrip className="mt-8" />
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <input

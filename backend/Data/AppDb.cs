@@ -6,6 +6,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Mod> Mods => Set<Mod>();
+    public DbSet<ModDownloadEvent> ModDownloadEvents => Set<ModDownloadEvent>();
     public DbSet<ModTag> ModTags => Set<ModTag>();
     public DbSet<ModVersion> ModVersions => Set<ModVersion>();
     public DbSet<ModScreenshot> ModScreenshots => Set<ModScreenshot>();
@@ -48,6 +49,16 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             entity.HasMany(mod => mod.Comments)
                 .WithOne(comment => comment.Mod)
                 .HasForeignKey(comment => comment.ModId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ModDownloadEvent>(entity =>
+        {
+            entity.HasIndex(e => e.DownloadedAtUtc);
+            entity.HasIndex(e => new { e.ModId, e.DownloadedAtUtc });
+            entity.HasOne<Mod>()
+                .WithMany()
+                .HasForeignKey(e => e.ModId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
