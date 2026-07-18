@@ -132,7 +132,7 @@ public static class ModEndpoints
             .GroupBy(e => e.ModId)
             .Select(g => new { ModId = g.Key, Count = g.Count() })
             .OrderByDescending(g => g.Count)
-            .Take(6)
+            .Take(8)
             .ToArrayAsync(cancellationToken);
 
         var countsById = counts.ToDictionary(count => count.ModId, count => count.Count);

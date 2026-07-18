@@ -245,7 +245,7 @@ export const api = {
     get: (slug: string) => request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}`),
     /** Tags currently in use across the Library, busiest first. */
     tagIndex: () => request<{ items: TagCount[] }>('/api/tags'),
-    /** The most-taken tomes inside a 30/60/90-day window, at most six. */
+    /** The most-taken tomes inside a 30/60/90-day window, at most eight. */
     popular: (days: 30 | 60 | 90 = 30) =>
       request<{ days: number; items: ModSummary[] }>(`/api/mods/popular?days=${days}`),
     create: (form: FormData) => request<ModDetail>('/api/mods', { method: 'POST', body: form }),

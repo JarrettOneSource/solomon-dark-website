@@ -61,31 +61,33 @@ export default function PopularStrip({
             </div>
           </div>
 
-          <div className="mt-4 flex gap-3 overflow-x-auto pb-1.5">
-            {shown.items.map((m, i) => (
-              <Link key={m.id} to={`/mods/${m.slug}`} className="group w-44 flex-none">
-                <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded border border-gold/15 bg-[#0b0910] transition-colors group-hover:border-gold/40">
-                  {m.thumbnailUrl ? (
-                    <img
-                      src={m.thumbnailUrl}
-                      alt=""
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
-                    />
-                  ) : (
-                    <img src={art.skullGold} alt="" className="h-8 opacity-25" />
-                  )}
-                  <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-gold shadow-[0_1px_4px_rgba(0,0,0,.6)]">
-                    №{i + 1}
-                  </span>
-                </div>
-                <div className="mt-2 truncate font-display text-[13px] font-bold tracking-wide text-bone group-hover:text-gold-bright">
-                  {m.name}
-                </div>
-                <div className="font-mono text-[11px] text-bone-dim">
-                  ↓ {formatCount(m.recentDownloads ?? 0)} · past {shown.days}d
-                </div>
-              </Link>
-            ))}
+          <div className="mt-4 overflow-x-auto pb-1.5">
+            <div className="grid min-w-[44rem] grid-cols-4 gap-x-3 gap-y-4">
+              {shown.items.map((m, i) => (
+                <Link key={m.id} to={`/mods/${m.slug}`} className="group min-w-0">
+                  <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden rounded border border-gold/15 bg-[#0b0910] transition-colors group-hover:border-gold/40">
+                    {m.thumbnailUrl ? (
+                      <img
+                        src={m.thumbnailUrl}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+                      />
+                    ) : (
+                      <img src={art.skullGold} alt="" className="h-8 opacity-25" />
+                    )}
+                    <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] text-gold shadow-[0_1px_4px_rgba(0,0,0,.6)]">
+                      №{i + 1}
+                    </span>
+                  </div>
+                  <div className="mt-2 truncate font-display text-[13px] font-bold tracking-wide text-bone group-hover:text-gold-bright">
+                    {m.name}
+                  </div>
+                  <div className="font-mono text-[11px] text-bone-dim">
+                    ↓ {formatCount(m.recentDownloads ?? 0)} · past {shown.days}d
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </Reveal>
