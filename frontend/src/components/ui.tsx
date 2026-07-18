@@ -1,5 +1,4 @@
-import { type ReactNode } from 'react'
-import type { ModType } from '../lib/api'
+import { type MouseEvent, type ReactNode } from 'react'
 import { art } from '../lib/assets'
 
 /** Summoning-circle spinner — the game's arcane circle, slowly rotating. */
@@ -75,12 +74,43 @@ export function Field({
   )
 }
 
-/** What kind of tome this is: a Lua script or a downloadable Boneyard run. */
-export function TypeBadge({ type }: { type: ModType }) {
-  return type === 'boneyard' ? (
-    <span className="badge badge-necro" title="A downloadable Boneyard run">Boneyard</span>
+/** A catalogue tag chip — interactive when given onClick (filtering, adding). */
+export function TagBadge({
+  tag,
+  count,
+  active,
+  onClick,
+  title,
+}: {
+  tag: string
+  count?: number
+  active?: boolean
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void
+  title?: string
+}) {
+  const look = active ? 'badge-gold' : 'badge-bone'
+  const body = (
+    <>
+      {tag}
+      {count !== undefined && (
+        <span className={active ? 'text-gold/70' : 'text-bone-dim/50'}>{count}</span>
+      )}
+    </>
+  )
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      className={`badge ${look} cursor-pointer transition-colors hover:border-gold/60 hover:text-gold-bright`}
+    >
+      {body}
+    </button>
   ) : (
-    <span className="badge badge-arcane" title="A Lua script tome">Lua</span>
+    <span className={`badge ${look}`} title={title}>
+      {body}
+    </span>
   )
 }
 

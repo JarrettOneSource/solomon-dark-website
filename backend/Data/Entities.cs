@@ -18,16 +18,23 @@ public sealed class Mod
     public string Name { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
     public int AuthorId { get; set; }
     public int Downloads { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 
     public User Author { get; set; } = null!;
+    public ICollection<ModTag> Tags { get; set; } = [];
     public ICollection<ModVersion> Versions { get; set; } = [];
     public ICollection<ModScreenshot> Screenshots { get; set; } = [];
     public ICollection<ModComment> Comments { get; set; } = [];
+}
+
+public sealed class ModTag
+{
+    public int Id { get; set; }
+    public int ModId { get; set; }
+    public string Name { get; set; } = string.Empty;
 }
 
 public sealed class ModVersion

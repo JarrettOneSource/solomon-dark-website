@@ -2,10 +2,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { ModSummary } from '../lib/api'
 import { formatCount, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
-import { TypeBadge } from './ui'
+import { TagBadge } from './ui'
 
 export default function ModCard({ mod }: { mod: ModSummary }) {
   const navigate = useNavigate()
+  // Two wide chips crush the byline, so a long pair shows one chip + count.
+  const shownTags =
+    (mod.tags[0]?.length ?? 0) + (mod.tags[1]?.length ?? 0) > 18
+      ? mod.tags.slice(0, 1)
+      : mod.tags.slice(0, 2)
   return (
     <Link
       to={`/mods/${mod.slug}`}
@@ -75,7 +80,28 @@ export default function ModCard({ mod }: { mod: ModSummary }) {
             )}
             <span className="flex-none text-bone-dim/50">{timeAgo(mod.updatedAtUtc)}</span>
           </span>
-          <TypeBadge type={mod.type} />
+          {shownTags.length > 0 && (
+            <span className="flex flex-none items-center gap-1">
+              {shownTags.map((tag) => (
+                <TagBadge
+                  key={tag}
+                  tag={tag}
+                  title={`Everything filed under ${tag}`}
+                  onClick={(e) => {
+                    // chips live inside the card's Link — don't open the tome
+                    e.preventDefault()
+                    e.stopPropagation()
+                    navigate(`/mods?tag=${encodeURIComponent(tag)}`)
+                  }}
+                />
+              ))}
+              {mod.tags.length > shownTags.length && (
+                <span className="font-mono text-[10px] text-bone-dim/50">
+                  +{mod.tags.length - shownTags.length}
+                </span>
+              )}
+            </span>
+          )}
         </div>
       </div>
     </Link>

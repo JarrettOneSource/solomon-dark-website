@@ -6,7 +6,6 @@ import IdleSpider from '../fx/IdleSpider'
 import SchoolBursts, { SCHOOLS, setProfileSchool } from '../fx/SchoolBursts'
 import { ATTUNEMENT_KEY } from '../fx/grimoire'
 import SolomonScurry from '../fx/SolomonScurry'
-import { CrawlerStroll } from '../fx/Critters'
 import { castSpell, mouseFxEnabled, setMouseFxEnabled } from '../fx/bus'
 import { isSfxMuted, toggleSfxMuted } from '../fx/audio'
 import { currentTrack, ensureStarted, isMuted, toggleMuted, uiClick, uiHover, uiPage } from '../fx/jukebox'
@@ -145,7 +144,6 @@ export default function Shell() {
       <IdleSpider />
       <SchoolBursts />
       <SolomonScurry />
-      <CrawlerStroll />
 
       <header className="sticky top-0 z-50 border-b border-gold/15 bg-abyss/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
@@ -290,8 +288,8 @@ export default function Shell() {
             Demonstration only
           </span>
           <span className="mx-2 text-blood/70">✦</span>
-          The tomes and wizards shown here are display data — the mod is not yet
-          released. Classes in session are live lobbies from the SDR directory.
+          The tomes, wizards, and classes in session are display data — the mod
+          is not yet released.
         </p>
       </div>
 

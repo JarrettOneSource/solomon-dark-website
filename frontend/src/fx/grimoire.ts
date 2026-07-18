@@ -72,7 +72,7 @@ export function installGrimoire() {
           '  %csd.gameover()%c           you would not be the first\n\n' +
           'VISITATIONS\n' +
           '  %csd.spider()%c             request an arachnid inspection (site-wide)\n' +
-          '  %csd.wave(3)%c              call 1–5 crawlers; omit for chance (site-wide)\n' +
+          '  %csd.wave(3)%c              call 1–5 crawlers; omit for chance (hero only)\n' +
           '  %csd.solomon()%c            summon the Headmaster in person (site-wide)\n' +
           '  %csd.tome()%c               loosen one volume from the stacks (Library)\n\n' +
           'THE JUKEBOX\n' +

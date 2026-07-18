@@ -68,8 +68,33 @@ public static class DatabaseSchema
                 ON SteamLinkAttempts (ExpiresAtUtc);
             CREATE INDEX IF NOT EXISTS IX_SteamLinkAttempts_UserId
                 ON SteamLinkAttempts (UserId);
+
+            CREATE TABLE IF NOT EXISTS ModTags (
+                Id INTEGER NOT NULL CONSTRAINT PK_ModTags PRIMARY KEY AUTOINCREMENT,
+                ModId INTEGER NOT NULL,
+                Name TEXT NOT NULL,
+                CONSTRAINT FK_ModTags_Mods_ModId
+                    FOREIGN KEY (ModId) REFERENCES Mods (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ModTags_ModId_Name
+                ON ModTags (ModId, Name);
+            CREATE INDEX IF NOT EXISTS IX_ModTags_Name ON ModTags (Name);
             """,
             cancellationToken);
+
+        if (await HasColumnAsync(db, "Mods", "Type", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT OR IGNORE INTO ModTags (ModId, Name)
+                SELECT Id, lower(trim(Type))
+                FROM Mods
+                WHERE length(trim(Type)) BETWEEN 2 AND 24;
+
+                ALTER TABLE Mods DROP COLUMN Type;
+                """,
+                cancellationToken);
+        }
     }
 
     private static async Task<bool> HasColumnAsync(

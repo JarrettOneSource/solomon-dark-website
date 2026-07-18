@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { art } from '../lib/assets'
 import AmbientHaunts from '../fx/Haunts'
+import { CrawlerStroll } from '../fx/Critters'
 import MenuSolomon from '../fx/MenuSolomon'
 import { castSpell, onSpell } from '../fx/bus'
 import { playSound } from '../fx/sounds'
@@ -219,9 +220,10 @@ export default function Hero() {
           epitaph={<>our beloved beta testers<br />they knew the risks</>} onTip={setTip} />
       </div>
 
-      {/* L3.5 — ambient haunts: enemies fading in and out, spell flybys
-          (the crawler waves now roam the whole site from the Shell) */}
+      {/* L3.5 — ambient haunts: enemies fading in and out, spell flybys,
+          and the crawler waves shambling among the graves */}
       <AmbientHaunts />
+      <CrawlerStroll />
 
       {/* L4 — the man himself, watching from the left exactly as the game's
           menu renders him; fog and grass wash over his hem. Slightly reduced

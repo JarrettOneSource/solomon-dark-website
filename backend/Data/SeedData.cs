@@ -56,18 +56,18 @@ public static class SeedData
         // the map, and Karen You Scandalous Wench is — verbatim — a canon item.
         var modDefinitions = new[]
         {
-            new SeedMod("prismatic-shock-rework", "Prismatic Shock Rework", "Makes every Prismatic Shock worthy of a banned wizard's grimoire.", "Rebalances the prismatic crackle without sanding away the dangerous edges.", "lua", 4200, 5, luthacus),
-            new SeedMod("mount-awful-endless", "Mount Awful — Endless", "A Mount Awful run that does not stop, even when wiser wizards would.", "An endless Boneyard route with escalating waves and no planned final bell.", "boneyard", 843, 10, hagatha),
-            new SeedMod("fleetfinger", "Fleetfinger", "Teaches your cursor the Fleetfinger's old dexterity.", "A restrained overlay for apprentices who lose the cursor during crowded waves.", "lua", 1875, 14, hagatha),
-            new SeedMod("acid-rain-certified", "Acid Rain Certified", "Forecasts Dratmoor acid rain with unsettling confidence.", "Adds readable weather timing and a suitably caustic warning bell. The spell itself remains neither licensed nor certified.", "lua", 936, 27, luthacus),
-            new SeedMod("heck-hollow-gauntlet", "The Heck Hollow Gauntlet", "A curated gauntlet through Heck Hollow's nastiest arrangements.", "A hand-picked sequence of Heck Hollow encounters tuned as a complete gauntlet.", "boneyard", 512, 34, luthacus),
-            new SeedMod("iron-golem-plus", "Iron Golem Plus", "Teaches iron golems several new and impolite tricks.", "Extends golem behavior while keeping the old stone-headed temperament intact.", "lua", 611, 39, hagatha),
-            new SeedMod("lua-bots", "Lua Bots", "Tiny scripted familiars for repetitive boneyard chores.", "A collection of readable Lua companions that haul, sort, and complain.", "lua", 1280, 51, luthacus),
-            new SeedMod("karen-you-scandalous-wench", "Karen You Scandalous Wench", "Returns the College's most scandalous wand to honest circulation.", "Restores the item, its reputation, and the paperwork both generate.", "lua", 1543, 58, hagatha),
-            new SeedMod("fast-start-waves", "Fast Start Waves", "Gets the first grim wave moving before the brandy goes cold.", "Shortens the quiet opening without changing late-wave difficulty.", "lua", 420, 64, hagatha),
-            new SeedMod("dratmoor-after-dark", "Dratmoor, After Dark", "A harder remix of Dratmoor for wizards who found daylight too forgiving.", "Remixes the Dratmoor route with tougher waves, tighter supplies, and nightfall.", "boneyard", 268, 70, hagatha),
-            new SeedMod("dark-cloud-sorter", "Dark Cloud Sorter", "Sorts Dark Clouds by omen, density, and probable doom.", "A clean overlay for readers whose cloud shelf has become indefensible.", "lua", 154, 77, luthacus),
-            new SeedMod("custom-intro-stories", "Custom Intro Stories", "Lets each new wizard arrive with a different bad decision.", "Loads short custom prologues before the first trip to the College Solomon attended.", "lua", 37, 89, hagatha)
+            new SeedMod("prismatic-shock-rework", "Prismatic Shock Rework", "Makes every Prismatic Shock worthy of a banned wizard's grimoire.", "Rebalances the prismatic crackle without sanding away the dangerous edges.", ["spells", "balance"], 4200, 5, luthacus),
+            new SeedMod("mount-awful-endless", "Mount Awful — Endless", "A Mount Awful run that does not stop, even when wiser wizards would.", "An endless Boneyard route with escalating waves and no planned final bell.", ["boneyard", "endless", "mount-awful"], 843, 10, hagatha),
+            new SeedMod("fleetfinger", "Fleetfinger", "Teaches your cursor the Fleetfinger's old dexterity.", "A restrained overlay for apprentices who lose the cursor during crowded waves.", ["interface", "quality-of-life"], 1875, 14, hagatha),
+            new SeedMod("acid-rain-certified", "Acid Rain Certified", "Forecasts Dratmoor acid rain with unsettling confidence.", "Adds readable weather timing and a suitably caustic warning bell. The spell itself remains neither licensed nor certified.", ["interface", "weather", "dratmoor"], 936, 27, luthacus),
+            new SeedMod("heck-hollow-gauntlet", "The Heck Hollow Gauntlet", "A curated gauntlet through Heck Hollow's nastiest arrangements.", "A hand-picked sequence of Heck Hollow encounters tuned as a complete gauntlet.", ["boneyard", "heck-hollow", "difficulty"], 512, 34, luthacus),
+            new SeedMod("iron-golem-plus", "Iron Golem Plus", "Teaches iron golems several new and impolite tricks.", "Extends golem behavior while keeping the old stone-headed temperament intact.", ["monsters", "balance"], 611, 39, hagatha),
+            new SeedMod("lua-bots", "Lua Bots", "Tiny scripted familiars for repetitive boneyard chores.", "A collection of readable Lua companions that haul, sort, and complain.", ["automation", "familiars"], 1280, 51, luthacus),
+            new SeedMod("karen-you-scandalous-wench", "Karen You Scandalous Wench", "Returns the College's most scandalous wand to honest circulation.", "Restores the item, its reputation, and the paperwork both generate.", ["items", "restoration"], 1543, 58, hagatha),
+            new SeedMod("fast-start-waves", "Fast Start Waves", "Gets the first grim wave moving before the brandy goes cold.", "Shortens the quiet opening without changing late-wave difficulty.", ["waves", "quality-of-life"], 420, 64, hagatha),
+            new SeedMod("dratmoor-after-dark", "Dratmoor, After Dark", "A harder remix of Dratmoor for wizards who found daylight too forgiving.", "Remixes the Dratmoor route with tougher waves, tighter supplies, and nightfall.", ["boneyard", "dratmoor", "difficulty"], 268, 70, hagatha),
+            new SeedMod("dark-cloud-sorter", "Dark Cloud Sorter", "Sorts Dark Clouds by omen, density, and probable doom.", "A clean overlay for readers whose cloud shelf has become indefensible.", ["interface", "items"], 154, 77, luthacus),
+            new SeedMod("custom-intro-stories", "Custom Intro Stories", "Lets each new wizard arrive with a different bad decision.", "Loads short custom prologues before the first trip to the College Solomon attended.", ["story", "quality-of-life"], 37, 89, hagatha)
         };
 
         var seedMods = new Dictionary<string, Mod>(StringComparer.Ordinal);
@@ -101,12 +101,12 @@ public static class SeedData
                 Name = definition.Name,
                 Summary = definition.Summary,
                 Description = definition.Description,
-                Type = definition.Type,
                 AuthorId = definition.Author.Id,
                 Author = definition.Author,
                 Downloads = definition.Downloads,
                 CreatedAtUtc = createdAtUtc,
                 UpdatedAtUtc = versions.Max(version => version.CreatedAtUtc),
+                Tags = definition.Tags.Select(name => new ModTag { Name = name }).ToList(),
                 Versions = versions
             };
             db.Mods.Add(mod);
@@ -244,7 +244,7 @@ public static class SeedData
         string Name,
         string Summary,
         string Description,
-        string Type,
+        string[] Tags,
         int Downloads,
         int DaysAgo,
         User Author);

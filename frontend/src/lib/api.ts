@@ -23,15 +23,21 @@ export interface MeResponse {
   saveCount: number
 }
 
-/** "lua" = script tomes; "boneyard" = downloadable runs for the game's Boneyard shelf. */
-export type ModType = 'lua' | 'boneyard'
+/** Sort orders the Library index understands. */
+export type ModSort = 'newest' | 'downloads' | 'updated' | 'name'
+
+/** A catalogue tag in use, and how many tomes bear it. */
+export interface TagCount {
+  tag: string
+  count: number
+}
 
 export interface ModSummary {
   id: number
   slug: string
   name: string
   summary: string
-  type: ModType
+  tags: string[]
   author: { id: number; username: string; school: School | null }
   latestVersion: string
   downloads: number
@@ -224,10 +230,10 @@ export const api = {
     request<{ user: User }>('/api/auth/school', { ...json({ school }), method: 'PUT' }),
 
   mods: {
-    list: (params: { search?: string; type?: ModType | ''; sort?: string; page?: number; pageSize?: number } = {}) => {
+    list: (params: { search?: string; tags?: string[]; sort?: ModSort; page?: number; pageSize?: number } = {}) => {
       const q = new URLSearchParams()
       if (params.search) q.set('search', params.search)
-      if (params.type) q.set('type', params.type)
+      for (const tag of params.tags ?? []) q.append('tag', tag)
       if (params.sort) q.set('sort', params.sort)
       if (params.page) q.set('page', String(params.page))
       if (params.pageSize) q.set('pageSize', String(params.pageSize))
@@ -235,7 +241,17 @@ export const api = {
       return request<ModList>(`/api/mods${qs ? `?${qs}` : ''}`)
     },
     get: (slug: string) => request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}`),
+    /** Tags currently in use across the Library, busiest first. */
+    tagIndex: () => request<{ items: TagCount[] }>('/api/tags'),
     create: (form: FormData) => request<ModDetail>('/api/mods', { method: 'POST', body: form }),
+    update: (
+      slug: string,
+      patch: { name?: string; summary?: string; description?: string; tags?: string[] },
+    ) =>
+      request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}`, {
+        ...json(patch),
+        method: 'PATCH',
+      }),
     addVersion: (slug: string, form: FormData) =>
       request<ModDetail>(`/api/mods/${encodeURIComponent(slug)}/versions`, { method: 'POST', body: form }),
     remove: (slug: string) => request<void>(`/api/mods/${encodeURIComponent(slug)}`, { method: 'DELETE' }),

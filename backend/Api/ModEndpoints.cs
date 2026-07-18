@@ -13,13 +13,17 @@ public static class ModEndpoints
     private const long MaxModBytes = 100L * 1024 * 1024;
     private const long MaxScreenshotBytes = 2L * 1024 * 1024;
     private const int MaxScreenshotsPerMod = 10;
+    private const int MaxTagsPerMod = 5;
     private const long UploadRequestLimit = 120L * 1024 * 1024;
-    private const string InvalidModTypeError =
-        "A tome is either Lua or a Boneyard. The Librarian does not file 'miscellaneous.'";
+    private const string InvalidTagError =
+        "Tags are 2–24 plain characters — letters, numbers, spaces, hyphens. The filing system predates punctuation.";
+    private const string TooManyTagsError =
+        "A tome carries at most five tags. The Librarian's patience is finite.";
 
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/mods", ListAsync);
+        app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
         app.MapGet("/api/mods/{slug}/comments", ListCommentsAsync);
         app.MapPost("/api/mods/{slug}/comments", CreateCommentAsync)
@@ -53,15 +57,16 @@ public static class ModEndpoints
         CancellationToken cancellationToken)
     {
         var search = request.Query["search"].ToString().Trim();
-        var type = request.Query["type"].ToString().Trim();
+        var tagFilters = request.Query["tag"]
+            .SelectMany(value => (value ?? string.Empty).Split(','))
+            .Select(NormalizeTag)
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxTagsPerMod)
+            .ToArray();
         var sort = request.Query["sort"].ToString().Trim().ToLowerInvariant();
         var page = Math.Max(ParseInt(request.Query["page"].ToString(), 1), 1);
         var pageSize = Math.Clamp(ParseInt(request.Query["pageSize"].ToString(), 20), 1, 50);
-
-        if (type.Length > 0 && !IsValidModType(type))
-        {
-            return ApiErrors.BadRequest(InvalidModTypeError);
-        }
 
         IQueryable<Mod> query = db.Mods.AsNoTracking();
         if (search.Length > 0)
@@ -72,20 +77,29 @@ public static class ModEndpoints
                 EF.Functions.Like(mod.Summary, pattern));
         }
 
-        if (type.Length > 0)
+        foreach (var value in tagFilters)
         {
-            query = query.Where(mod => mod.Type == type);
+            query = query.Where(mod => mod.Tags.Any(tag => tag.Name == value));
         }
 
         var total = await query.CountAsync(cancellationToken);
-        query = sort == "downloads"
-            ? query.OrderByDescending(mod => mod.Downloads).ThenByDescending(mod => mod.CreatedAtUtc)
-            : query.OrderByDescending(mod => mod.CreatedAtUtc).ThenByDescending(mod => mod.Id);
+        query = sort switch
+        {
+            "downloads" => query.OrderByDescending(mod => mod.Downloads)
+                .ThenByDescending(mod => mod.CreatedAtUtc),
+            "updated" => query.OrderByDescending(mod => mod.UpdatedAtUtc)
+                .ThenByDescending(mod => mod.Id),
+            "name" => query.OrderBy(mod => EF.Functions.Collate(mod.Name, "NOCASE"))
+                .ThenBy(mod => mod.Id),
+            _ => query.OrderByDescending(mod => mod.CreatedAtUtc)
+                .ThenByDescending(mod => mod.Id)
+        };
 
         var mods = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Include(mod => mod.Author)
+            .Include(mod => mod.Tags)
             .Include(mod => mod.Versions)
             .Include(mod => mod.Screenshots)
             .AsSplitQuery()
@@ -98,6 +112,19 @@ public static class ModEndpoints
             page,
             pageSize
         });
+    }
+
+    private static async Task<IResult> ListTagsAsync(
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var items = await db.ModTags.AsNoTracking()
+            .GroupBy(tag => tag.Name)
+            .Select(group => new { tag = group.Key, count = group.Count() })
+            .OrderByDescending(entry => entry.count)
+            .ThenBy(entry => entry.tag)
+            .ToArrayAsync(cancellationToken);
+        return Results.Ok(new { items });
     }
 
     private static async Task<IResult> DetailAsync(
@@ -242,6 +269,7 @@ public static class ModEndpoints
             .ThenByDescending(mod => mod.Id)
             .Take(50)
             .Include(mod => mod.Author)
+            .Include(mod => mod.Tags)
             .Include(mod => mod.Versions)
             .Include(mod => mod.Screenshots)
             .AsSplitQuery()
@@ -280,7 +308,7 @@ public static class ModEndpoints
         var name = form["name"].ToString().Trim();
         var summary = form["summary"].ToString().Trim();
         var description = form["description"].ToString();
-        var type = form["type"].ToString().Trim();
+        var rawTags = form["tags"].ToString();
         var versionName = form["version"].ToString().Trim();
         if (versionName.Length == 0)
         {
@@ -293,9 +321,10 @@ public static class ModEndpoints
             return ApiErrors.BadRequest(validationError);
         }
 
-        if (!IsValidModType(type))
+        var tagValidationError = ParseTags(rawTags, out var tags);
+        if (tagValidationError is not null)
         {
-            return ApiErrors.BadRequest(InvalidModTypeError);
+            return ApiErrors.BadRequest(tagValidationError);
         }
 
         if (!StorageService.IsSafeVersion(versionName))
@@ -345,10 +374,10 @@ public static class ModEndpoints
             Name = name,
             Summary = summary,
             Description = description,
-            Type = type,
             AuthorId = userId.Value,
             CreatedAtUtc = now,
-            UpdatedAtUtc = now
+            UpdatedAtUtc = now,
+            Tags = tags.Select(tag => new ModTag { Name = tag }).ToList()
         };
         var version = new ModVersion
         {
@@ -691,7 +720,9 @@ public static class ModEndpoints
         AppDb db,
         CancellationToken cancellationToken)
     {
-        var mod = await db.Mods.SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
+        var mod = await db.Mods
+            .Include(candidate => candidate.Tags)
+            .SingleOrDefaultAsync(candidate => candidate.Slug == slug, cancellationToken);
         if (mod is null)
         {
             return ApiErrors.NotFound("That tome is missing from the library.");
@@ -719,10 +750,14 @@ public static class ModEndpoints
             return ApiErrors.BadRequest("Descriptions may not exceed 10,000 characters.");
         }
 
-        var type = request.Type?.Trim();
-        if (type is not null && !IsValidModType(type))
+        string[]? tags = null;
+        if (request.Tags is not null)
         {
-            return ApiErrors.BadRequest(InvalidModTypeError);
+            var tagValidationError = ParseTags(request.Tags, out tags);
+            if (tagValidationError is not null)
+            {
+                return ApiErrors.BadRequest(tagValidationError);
+            }
         }
 
         if (name is not null)
@@ -740,9 +775,13 @@ public static class ModEndpoints
             mod.Description = request.Description;
         }
 
-        if (type is not null)
+        if (tags is not null)
         {
-            mod.Type = type;
+            mod.Tags.Clear();
+            foreach (var tag in tags)
+            {
+                mod.Tags.Add(new ModTag { Name = tag });
+            }
         }
 
         mod.UpdatedAtUtc = DateTime.UtcNow;
@@ -846,6 +885,7 @@ public static class ModEndpoints
         CancellationToken cancellationToken) =>
         await db.Mods.AsNoTracking()
             .Include(mod => mod.Author)
+            .Include(mod => mod.Tags)
             .Include(mod => mod.Versions)
             .Include(mod => mod.Screenshots)
             .AsSplitQuery()
@@ -861,7 +901,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
-            mod.Type,
+            tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
             mod.Downloads,
@@ -881,7 +921,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
-            mod.Type,
+            tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
             mod.Downloads,
@@ -930,6 +970,59 @@ public static class ModEndpoints
 
     private static string ScreenshotUrl(string fileName) => $"/uploads/screenshots/{fileName}";
 
+    private static string? ParseTags(string rawTags, out string[] tags) =>
+        ParseTags(rawTags.Split(','), out tags);
+
+    private static string? ParseTags(IEnumerable<string> rawTags, out string[] tags)
+    {
+        tags = rawTags
+            .Select(NormalizeTag)
+            .Where(tag => tag.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (tags.Length > MaxTagsPerMod)
+        {
+            return TooManyTagsError;
+        }
+
+        return tags.Any(tag => !IsValidTag(tag)) ? InvalidTagError : null;
+    }
+
+    private static string NormalizeTag(string rawTag)
+    {
+        var normalized = rawTag.Trim().ToLowerInvariant();
+        var builder = new StringBuilder(normalized.Length);
+        var pendingSpace = false;
+        foreach (var character in normalized)
+        {
+            if (char.IsWhiteSpace(character))
+            {
+                pendingSpace = true;
+                continue;
+            }
+
+            if (pendingSpace && builder.Length > 0)
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(character);
+            pendingSpace = false;
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsValidTag(string tag) =>
+        tag.Length is >= 2 and <= 24 &&
+        IsTagLetterOrDigit(tag[0]) &&
+        IsTagLetterOrDigit(tag[^1]) &&
+        tag.All(character => IsTagLetterOrDigit(character) || character is ' ' or '-');
+
+    private static bool IsTagLetterOrDigit(char character) =>
+        character is >= 'a' and <= 'z' or >= '0' and <= '9';
+
     private static string? ValidateModFields(
         string name,
         string summary,
@@ -952,8 +1045,6 @@ public static class ModEndpoints
 
         return null;
     }
-
-    private static bool IsValidModType(string type) => type is "lua" or "boneyard";
 
     private static async Task<string> UniqueSlugAsync(
         AppDb db,
@@ -1053,7 +1144,7 @@ public static class ModEndpoints
         string? Name,
         string? Summary,
         string? Description,
-        string? Type);
+        string[]? Tags);
 
     public sealed record ReorderScreenshotsRequest(int[]? Ids);
 

@@ -3,32 +3,32 @@ import { Link, useSearchParams } from 'react-router-dom'
 import ModCard from '../components/ModCard'
 import Reveal from '../fx/Reveal'
 import { TomeFlybys } from '../fx/Critters'
-import { EmptyState, ErrorNote, Spinner } from '../components/ui'
+import { EmptyState, ErrorNote, Spinner, TagBadge } from '../components/ui'
 import { api } from '../lib/api'
-import type { ModType } from '../lib/api'
+import type { ModSort } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
-
-const SHELVES = [
-  { value: '' as const, label: 'All Tomes' },
-  { value: 'lua' as const, label: 'Lua' },
-  { value: 'boneyard' as const, label: 'Boneyards' },
-]
 
 export default function Mods() {
   const { user } = useAuth()
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
-  const [sort, setSort] = useState<'newest' | 'downloads'>('newest')
+  const [sort, setSort] = useState<ModSort>('newest')
   const [page, setPage] = useState(1)
   const pageSize = 12
 
-  // The shelf lives in the URL so /mods?type=boneyard deep-links to it.
-  const rawType = params.get('type')
-  const type: ModType | '' = rawType === 'lua' || rawType === 'boneyard' ? rawType : ''
-  const setType = (t: ModType | '') =>
-    setParams(t ? { type: t } : {}, { replace: true })
+  // Selected tags live in the URL so /mods?tag=boneyard deep-links to a shelf.
+  const selected = params.getAll('tag')
+  const selectedKey = selected.join(',')
+  const toggleTag = (tag: string) => {
+    const next = selected.includes(tag)
+      ? selected.filter((t) => t !== tag)
+      : [...selected, tag]
+    setParams(next.length > 0 ? { tag: next } : {}, { replace: true })
+  }
+
+  const tagIndex = useApi(() => api.mods.tagIndex(), [])
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(search), 250)
@@ -37,15 +37,19 @@ export default function Mods() {
 
   useEffect(() => {
     setPage(1)
-  }, [debounced, type, sort])
+  }, [debounced, selectedKey, sort])
 
   const mods = useApi(
-    () => api.mods.list({ search: debounced, type, sort, page, pageSize }),
-    [debounced, type, sort, page],
+    () => api.mods.list({ search: debounced, tags: selected, sort, page, pageSize }),
+    [debounced, selectedKey, sort, page],
   )
 
   const total = mods.data?.total ?? 0
   const maxPage = Math.max(1, Math.ceil(total / pageSize))
+
+  // Deep links may carry tags the index no longer lists; keep them toggleable.
+  const indexed = tagIndex.data?.items ?? []
+  const phantoms = selected.filter((tag) => !indexed.some((entry) => entry.tag === tag))
 
   return (
     <div className="relative z-10 mx-auto max-w-6xl px-4 py-14 sm:px-6">
@@ -68,31 +72,22 @@ export default function Mods() {
       </Reveal>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        <div className="flex overflow-hidden rounded border border-gold/25" role="group" aria-label="Which shelf">
-          {SHELVES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => setType(s.value)}
-              className={`px-3.5 py-2.5 font-display text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
-                type === s.value
-                  ? 'bg-gold/15 text-gold-bright shadow-[inset_0_0_10px_rgba(200,168,98,.15)]'
-                  : 'text-bone-dim hover:bg-gold/5 hover:text-bone'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
         <input
           className="input max-w-xs"
           placeholder="Search the shelves…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value as 'newest' | 'downloads')}>
+        <select
+          className="input w-auto"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as ModSort)}
+          aria-label="Sort the shelves"
+        >
           <option value="newest">Newest</option>
           <option value="downloads">Most taken</option>
+          <option value="updated">Recently revised</option>
+          <option value="name">Alphabetical</option>
         </select>
         {total > 0 && (
           <span className="ml-auto font-mono text-xs text-bone-dim/60">
@@ -100,6 +95,35 @@ export default function Mods() {
           </span>
         )}
       </div>
+
+      {(indexed.length > 0 || phantoms.length > 0) && (
+        <div className="mt-4 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag">
+          <span className="mr-1 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-bone-dim/70">
+            Filed under
+          </span>
+          {indexed.map(({ tag, count }) => (
+            <TagBadge
+              key={tag}
+              tag={tag}
+              count={count}
+              active={selected.includes(tag)}
+              onClick={() => toggleTag(tag)}
+            />
+          ))}
+          {phantoms.map((tag) => (
+            <TagBadge key={tag} tag={tag} active onClick={() => toggleTag(tag)} />
+          ))}
+          {selected.length > 0 && (
+            <button
+              type="button"
+              className="link-arcane ml-1 text-[11px] uppercase tracking-wider"
+              onClick={() => setParams({}, { replace: true })}
+            >
+              clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="mt-6">
         {mods.loading ? (
@@ -112,11 +136,9 @@ export default function Mods() {
             line={
               debounced
                 ? 'Nothing matches. The Librarian suggests spelling it differently, or wanting something else.'
-                : type === 'boneyard'
-                  ? 'No Boneyards on the shelf yet. Bury the first.'
-                  : type === 'lua'
-                    ? 'No Lua tomes yet. The grimoire section awaits its first author.'
-                    : 'No tomes yet. Contribute the first and enjoy a brief, glorious monopoly.'
+                : selected.length > 0
+                  ? `Nothing is filed under ${selected.join(' + ')}. The Librarian admires your specificity.`
+                  : 'No tomes yet. Contribute the first and enjoy a brief, glorious monopoly.'
             }
           />
         ) : (

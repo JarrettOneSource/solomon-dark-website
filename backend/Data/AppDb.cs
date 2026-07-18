@@ -6,6 +6,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Mod> Mods => Set<Mod>();
+    public DbSet<ModTag> ModTags => Set<ModTag>();
     public DbSet<ModVersion> ModVersions => Set<ModVersion>();
     public DbSet<ModScreenshot> ModScreenshots => Set<ModScreenshot>();
     public DbSet<ModComment> ModComments => Set<ModComment>();
@@ -32,6 +33,10 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
                 .WithMany()
                 .HasForeignKey(mod => mod.AuthorId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(mod => mod.Tags)
+                .WithOne()
+                .HasForeignKey(tag => tag.ModId)
+                .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(mod => mod.Versions)
                 .WithOne()
                 .HasForeignKey(version => version.ModId)
@@ -44,6 +49,13 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
                 .WithOne(comment => comment.Mod)
                 .HasForeignKey(comment => comment.ModId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ModTag>(entity =>
+        {
+            entity.Property(tag => tag.Name).HasMaxLength(24);
+            entity.HasIndex(tag => new { tag.ModId, tag.Name }).IsUnique();
+            entity.HasIndex(tag => tag.Name);
         });
 
         modelBuilder.Entity<ModComment>(entity =>

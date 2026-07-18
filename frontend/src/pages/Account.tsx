@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
-import { ErrorNote, Spinner, TypeBadge } from '../components/ui'
+import { ErrorNote, Spinner, TagBadge } from '../components/ui'
 import { api, ApiError, type CloudSave, type ModSummary, type School } from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
@@ -349,7 +349,9 @@ export default function Account() {
                 <Link to={`/mods/${m.slug}`} className="font-display text-sm font-bold tracking-wide text-bone hover:text-gold-bright">
                   {m.name}
                 </Link>
-                <TypeBadge type={m.type} />
+                {m.tags.slice(0, 2).map((tag) => (
+                  <TagBadge key={tag} tag={tag} />
+                ))}
                 <span className="badge badge-gold">v{m.latestVersion}</span>
                 <span className="font-mono text-xs text-bone-dim">↓ {formatCount(m.downloads)}</span>
                 <span className="text-xs text-bone-dim/70">updated {timeAgo(m.updatedAtUtc)}</span>

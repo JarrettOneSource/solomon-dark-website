@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import PlatesGallery from '../components/PlatesGallery'
-import { ErrorNote, Spinner, TypeBadge } from '../components/ui'
+import TagsInput from '../components/TagsInput'
+import { ErrorNote, Spinner, TagBadge } from '../components/ui'
 import { api, ApiError } from '../lib/api'
 import type { ModDetail as ModDetailShape } from '../lib/api'
 import { useApi } from '../lib/useApi'
@@ -258,6 +259,48 @@ function PlateManager({ mod, onChanged }: { mod: ModDetailShape; onChanged: () =
   )
 }
 
+/** Author-side filing: revise the tome's tags in place. */
+function TagEditor({ mod, onChanged }: { mod: ModDetailShape; onChanged: () => void }) {
+  const [tags, setTags] = useState(mod.tags)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const dirty = [...tags].sort().join(',') !== [...mod.tags].sort().join(',')
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.mods.update(mod.slug, { tags })
+      onChanged()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'The filing system rejected it.')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-gold/15 pt-4">
+      <div className="kicker mb-3">Filing · {tags.length}/5 tags</div>
+      <TagsInput tags={tags} onChange={setTags} disabled={busy} />
+      {error && (
+        <div className="mt-2">
+          <ErrorNote message={error} />
+        </div>
+      )}
+      {dirty && (
+        <button
+          type="button"
+          className="btn btn-stone mt-3 w-full !py-2 !text-[11px]"
+          disabled={busy}
+          onClick={save}
+        >
+          {busy ? 'Refiling…' : 'Save the filing'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function RecordRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2 text-sm">
@@ -317,7 +360,18 @@ export default function ModDetail() {
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <h1 className="h-display text-3xl">{m.name}</h1>
-          <TypeBadge type={m.type} />
+          {m.tags.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1.5">
+              {m.tags.map((tag) => (
+                <TagBadge
+                  key={tag}
+                  tag={tag}
+                  title={`Everything filed under ${tag}`}
+                  onClick={() => navigate(`/mods?tag=${encodeURIComponent(tag)}`)}
+                />
+              ))}
+            </span>
+          )}
         </div>
         <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-sm text-bone-dim">
           <span>
@@ -427,8 +481,20 @@ export default function ModDetail() {
           <div className="panel p-6">
             <div className="kicker mb-2">Tome record</div>
             <div className="divide-y divide-gold/10">
-              <RecordRow label="Kind">
-                <TypeBadge type={m.type} />
+              <RecordRow label="Filed under">
+                {m.tags.length > 0 ? (
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {m.tags.map((tag) => (
+                      <TagBadge
+                        key={tag}
+                        tag={tag}
+                        onClick={() => navigate(`/mods?tag=${encodeURIComponent(tag)}`)}
+                      />
+                    ))}
+                  </span>
+                ) : (
+                  <span className="text-bone-dim/60">unfiled</span>
+                )}
               </RecordRow>
               <RecordRow label="Author">
                 <Link
@@ -452,6 +518,7 @@ export default function ModDetail() {
             <div className="panel p-6">
               <div className="kicker">Author’s desk</div>
               <PlateManager mod={m} onChanged={mod.reload} />
+              <TagEditor key={m.tags.join(',')} mod={m} onChanged={mod.reload} />
               <div className="mt-4 border-t border-gold/15 pt-4">
                 <Link
                   to={`/mods/${m.slug}/versions`}

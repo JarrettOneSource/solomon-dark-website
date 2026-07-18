@@ -7,8 +7,8 @@ import { playSound } from './sounds'
 
 /**
  * Wandering sprites, resurrected straight from BadGuys.png via the game's own
- * bundle metadata (tools/extract-anims.py): boneyard crawlers that drag
- * themselves across the viewport, and stray library tomes that tumble across
+ * bundle metadata (tools/extract-anims.py): boneyard crawlers that shamble
+ * through the home hero's graveyard, and stray library tomes that tumble across
  * the stacks. Frame strips play via steps() on
  * background-position (see strip-run in index.css).
  */
@@ -33,7 +33,8 @@ function stripStyle(
   }
 }
 
-/** Occasionally, skeletons drag themselves across the screen. Let them. */
+/** Occasionally, skeletons drag themselves across the graveyard. Let them.
+ * Fills its host section — the home hero mounts it over the graves. */
 export function CrawlerStroll() {
   const [crawlers, setCrawlers] = useState<{
     id: number
@@ -46,6 +47,7 @@ export function CrawlerStroll() {
   const nextId = useRef(1)
   const timers = useRef(new Set<number>())
   const activeIds = useRef(new Set<number>())
+  const rootRef = useRef<HTMLDivElement>(null)
 
   const schedule = (callback: () => void, delay: number) => {
     const timer = window.setTimeout(() => {
@@ -118,7 +120,7 @@ export function CrawlerStroll() {
   }, [])
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[45] overflow-hidden" aria-hidden>
+    <div ref={rootRef} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
       {crawlers.map((crawler) => (
         <div
           key={crawler.id}
@@ -143,12 +145,20 @@ export function CrawlerStroll() {
             onClick={(e) => {
               // the game's death presenter: remove the live actor and
               // scatter the bones
+              // BoneShatter positions absolutely inside this section, so the
+              // sprite's viewport rect must become host-relative coordinates
               const rect = e.currentTarget.getBoundingClientRect()
+              const host = rootRef.current?.getBoundingClientRect()
               removeCrawler(crawler.id)
               const id = nextId.current++
               setShatters((prev) => [
                 ...prev,
-                { id, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, scale: crawler.scale },
+                {
+                  id,
+                  x: rect.left + rect.width / 2 - (host?.left ?? 0),
+                  y: rect.top + rect.height / 2 - (host?.top ?? 0),
+                  scale: crawler.scale,
+                },
               ])
               playSound('skeletonDie', 0.3)
             }}

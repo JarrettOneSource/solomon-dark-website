@@ -298,6 +298,7 @@ body {
   .badge-gold { color: var(--color-gold-bright); border-color: rgb(200 168 98 / 0.4); background: rgb(200 168 98 / 0.07); }
   .badge-moss { color: #a9d18d; border-color: rgb(127 179 95 / 0.45); background: rgb(127 179 95 / 0.08); }
   .badge-arcane { color: #8deeff; border-color: rgb(65 227 255 / 0.4); background: rgb(65 227 255 / 0.06); }
+  .badge-bone { color: var(--color-bone-dim); border-color: rgb(200 168 98 / 0.22); background: rgb(200 168 98 / 0.04); }
 
   .orb { width: 9px; height: 9px; border-radius: 999px; flex: none; }
   .orb-on { background: var(--color-moss); box-shadow: 0 0 10px rgb(127 179 95 / 0.9); }

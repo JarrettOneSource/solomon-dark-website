@@ -1,28 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
+import TagsInput from '../components/TagsInput'
 import { ErrorNote, Field } from '../components/ui'
 import { api, ApiError } from '../lib/api'
-import type { ModType } from '../lib/api'
+import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
 
 const MAX_ZIP_MB = 100
-
-const TOME_KINDS: { value: ModType; badge: string; title: string; blurb: string }[] = [
-  {
-    value: 'lua',
-    badge: 'badge-arcane',
-    title: 'Lua',
-    blurb: 'A script tome for the sd.* grimoire — new spells, tweaks, familiars.',
-  },
-  {
-    value: 'boneyard',
-    badge: 'badge-necro',
-    title: 'Boneyard',
-    blurb: 'A downloadable run for the game’s Boneyard shelf.',
-  },
-]
 
 export default function ModUpload() {
   const { user, loading } = useAuth()
@@ -31,13 +17,14 @@ export default function ModUpload() {
   const [name, setName] = useState('')
   const [summary, setSummary] = useState('')
   const [description, setDescription] = useState('')
-  const [type, setType] = useState<ModType>('lua')
+  const [tags, setTags] = useState<string[]>([])
   const [version, setVersion] = useState('1.0.0')
   const [file, setFile] = useState<File | null>(null)
   const [screens, setScreens] = useState<File[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const tagIndex = useApi(() => api.mods.tagIndex(), [])
 
   useEffect(() => {
     if (!loading && !user) navigate('/login', { replace: true })
@@ -74,7 +61,7 @@ export default function ModUpload() {
       form.set('name', name.trim())
       form.set('summary', summary.trim())
       form.set('description', description)
-      form.set('type', type)
+      if (tags.length > 0) form.set('tags', tags.join(','))
       form.set('version', version.trim() || '1.0.0')
       form.set('file', file)
       for (const s of screens.slice(0, 10)) form.append('screenshots', s)
@@ -141,25 +128,17 @@ export default function ModUpload() {
         </div>
 
         <div>
-          <span className="label">What kind of tome is this?</span>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {TOME_KINDS.map((k) => (
-              <button
-                key={k.value}
-                type="button"
-                onClick={() => setType(k.value)}
-                aria-pressed={type === k.value}
-                className={`rounded border p-4 text-left transition-all ${
-                  type === k.value
-                    ? 'border-arcane/60 bg-arcane/5 shadow-[0_0_14px_rgba(65,227,255,.18)]'
-                    : 'border-gold/20 bg-[#0b0910] opacity-70 hover:opacity-100'
-                }`}
-              >
-                <span className={`badge ${k.badge}`}>{k.title}</span>
-                <p className="mt-2 text-xs leading-relaxed text-bone-dim">{k.blurb}</p>
-              </button>
-            ))}
-          </div>
+          <span className="label">Filing tags</span>
+          <TagsInput
+            tags={tags}
+            onChange={setTags}
+            suggestions={(tagIndex.data?.items ?? []).map((entry) => entry.tag)}
+            disabled={busy}
+          />
+          <span className="mt-1.5 block text-xs text-bone-dim/70">
+            Up to five — how the Library files it. Boneyard runs tag themselves
+            “boneyard”; the rest is your taxonomy.
+          </span>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
