@@ -33,10 +33,6 @@ var storage = new StorageService(storageRoot);
 builder.Services.AddSingleton(storage);
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
-if (isDevelopment)
-{
-    builder.Services.AddHostedService<SeedLobbyHeartbeat>();
-}
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var generatedJwtSecret = false;
