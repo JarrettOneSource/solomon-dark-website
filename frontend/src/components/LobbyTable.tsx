@@ -71,7 +71,7 @@ function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby
   const cls = compact ? 'btn btn-gold !px-3 !py-1.5 !text-[10px]' : 'btn btn-gold !px-3.5 !py-2 !text-[10px]'
   if (lobby.join) {
     return (
-      <a href={lobby.join.launchUri} className={cls} title="Opens the SDR loader and joins this class">
+      <a href={lobby.join.launchUri} className={cls} title="Opens Solomon Dark and joins this lobby">
         Connect
       </a>
     )

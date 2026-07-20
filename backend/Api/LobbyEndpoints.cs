@@ -379,7 +379,9 @@ public static class LobbyEndpoints
                 ? new LobbyPassword(PasswordAlgorithm, PasswordIterations, lobby.PasswordSalt!)
                 : null,
             canJoinDirectly
-                ? new LobbyJoin(lobby.LobbyId, $"sdr://join/{lobby.LobbyId}")
+                ? new LobbyJoin(
+                    lobby.LobbyId,
+                    $"solomondarkrevived://join/{lobby.LobbyId}")
                 : null);
     }
 
