@@ -304,6 +304,7 @@ body {
   .orb-on { background: var(--color-moss); box-shadow: 0 0 10px rgb(127 179 95 / 0.9); }
   .orb-hub { background: var(--color-arcane); box-shadow: 0 0 10px rgb(65 227 255 / 0.8); }
   .orb-off { background: #6e2626; box-shadow: 0 0 6px rgb(212 58 58 / 0.4); }
+  .orb-veiled { background: #b45fe0; box-shadow: 0 0 8px rgb(180 95 224 / 0.6); }
 
   /* gold banner in the style of the game's "FETCHING BONEYARDS" strip */
   .gold-banner {

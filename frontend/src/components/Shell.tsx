@@ -271,28 +271,6 @@ export default function Shell() {
         )}
       </header>
 
-      {/* Until release day, the whole site is a staged exhibition — and says so,
-          in blood red so nobody scrolls past it. */}
-      <div
-        className="sticky top-16 z-40 border-b border-blood/40 px-4 py-2 text-center"
-        style={{
-          background: 'linear-gradient(180deg, #4a1414, #350e0e)',
-          boxShadow: 'inset 0 -8px 18px rgba(0,0,0,.35)',
-        }}
-      >
-        <p className="text-[12px] leading-snug text-[#e8c4c4]">
-          <span
-            className="font-display text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff9e9e]"
-            style={{ textShadow: '0 0 10px rgba(212,58,58,.55)' }}
-          >
-            Demonstration only
-          </span>
-          <span className="mx-2 text-blood/70">✦</span>
-          The tomes, wizards, and classes in session are display data — the mod
-          is not yet released.
-        </p>
-      </div>
-
       <main className="flex-1">
         <Outlet />
       </main>

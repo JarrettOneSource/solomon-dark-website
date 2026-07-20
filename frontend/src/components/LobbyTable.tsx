@@ -1,4 +1,4 @@
-import type { Lobby, LobbyGame, LobbyPhase } from '../lib/api'
+import type { Lobby, LobbyGame, LobbyPhase, PrivateClass } from '../lib/api'
 import { formatDuration } from '../lib/format'
 import { PlayerBar } from './ui'
 
@@ -7,6 +7,30 @@ const PHASE: Record<LobbyPhase, { orb: string; text: string; label: string }> = 
   loading: { orb: 'orb-hub', text: 'text-arcane/90', label: 'Loading in' },
   session: { orb: 'orb-on', text: 'text-moss', label: 'In session' },
   results: { orb: '', text: 'text-bone-dim', label: 'Wrapping up' },
+}
+
+const VEIL_TITLE = 'Friends Only — warded to the host’s Steam circle'
+
+type Row =
+  | { kind: 'listed'; lobby: Lobby }
+  | { kind: 'veiled'; players: number; maxPlayers: number; key: string }
+
+// Both lists arrive sorted by attendance; veiled classes take their honest
+// place in that order, with listed (joinable) classes winning ties.
+function mergeRows(lobbies: Lobby[], veiled: PrivateClass[]): Row[] {
+  const rows: Row[] = []
+  let i = 0
+  let j = 0
+  while (i < lobbies.length || j < veiled.length) {
+    if (i < lobbies.length && (j >= veiled.length || veiled[j].players <= lobbies[i].players)) {
+      rows.push({ kind: 'listed', lobby: lobbies[i] })
+      i += 1
+    } else {
+      rows.push({ kind: 'veiled', ...veiled[j], key: `veiled-${j}` })
+      j += 1
+    }
+  }
+  return rows
 }
 
 function gameDetail(game: LobbyGame): string | null {
@@ -35,6 +59,14 @@ function AccessBadge({ lobby }: { lobby: Lobby }) {
   return null
 }
 
+function VeiledBadge() {
+  return (
+    <span className="badge badge-necro" title={VEIL_TITLE}>
+      Private
+    </span>
+  )
+}
+
 function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby: Lobby) => void; compact?: boolean }) {
   const cls = compact ? 'btn btn-gold !px-3 !py-1.5 !text-[10px]' : 'btn btn-gold !px-3.5 !py-2 !text-[10px]'
   if (lobby.join) {
@@ -58,16 +90,47 @@ function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby
 
 export default function LobbyTable({
   lobbies,
+  veiled = [],
   onKnock,
 }: {
   lobbies: Lobby[]
+  veiled?: PrivateClass[]
   onKnock: (lobby: Lobby) => void
 }) {
+  const rows = mergeRows(lobbies, veiled)
   return (
     <>
       {/* narrow screens: stacked cards so the join action never hides off-canvas */}
       <div className="space-y-2 md:hidden">
-        {lobbies.map((lobby) => {
+        {rows.map((row) => {
+          if (row.kind === 'veiled') {
+            return (
+              <div key={row.key} className="slab rounded px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="orb orb-veiled flex-none" />
+                  <span className="flex-none text-[10px] uppercase tracking-wider text-[#d9a1f2]/90">
+                    Veiled
+                  </span>
+                  <span className="text-fell truncate text-[13px] italic text-bone-dim">
+                    A discreet tutor
+                  </span>
+                  <span className="ml-auto flex-none text-[10px] uppercase tracking-wider text-bone-dim/50">
+                    Invitation only
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-fell min-w-0 truncate text-[13px] text-bone-dim/70">
+                    Undisclosed grounds
+                  </span>
+                  <span className="flex flex-none items-center gap-2">
+                    <VeiledBadge />
+                    <PlayerBar players={row.players} max={row.maxPlayers} />
+                  </span>
+                </div>
+              </div>
+            )
+          }
+          const { lobby } = row
           const phase = PHASE[lobby.game.phase]
           const detail = gameDetail(lobby.game)
           return (
@@ -116,7 +179,41 @@ export default function LobbyTable({
             </tr>
           </thead>
           <tbody>
-            {lobbies.map((lobby) => {
+            {rows.map((row) => {
+              if (row.kind === 'veiled') {
+                return (
+                  <tr key={row.key}>
+                    <td className="slab rounded-l border-r-0 px-3 py-2.5">
+                      <span className="flex items-center gap-2">
+                        <span className="orb orb-veiled" />
+                        <span className="text-xs text-[#d9a1f2]/90">Veiled</span>
+                      </span>
+                    </td>
+                    <td className="slab border-x-0 px-3 py-2.5">
+                      <span className="text-fell text-[13px] italic text-bone-dim">
+                        A discreet tutor
+                      </span>
+                    </td>
+                    <td className="slab border-x-0 px-3 py-2.5">
+                      <span className="text-fell block text-[13px] text-bone-dim/70">
+                        Undisclosed grounds
+                      </span>
+                    </td>
+                    <td className="slab border-x-0 px-3 py-2.5">
+                      <PlayerBar players={row.players} max={row.maxPlayers} />
+                    </td>
+                    <td className="slab border-x-0 px-3 py-2.5">
+                      <VeiledBadge />
+                    </td>
+                    <td className="slab rounded-r border-l-0 px-3 py-2">
+                      <span className="text-[10px] uppercase tracking-wider text-bone-dim/50">
+                        Invitation only
+                      </span>
+                    </td>
+                  </tr>
+                )
+              }
+              const { lobby } = row
               const phase = PHASE[lobby.game.phase]
               const detail = gameDetail(lobby.game)
               return (

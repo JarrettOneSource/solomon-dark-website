@@ -33,7 +33,6 @@ var storage = new StorageService(storageRoot);
 builder.Services.AddSingleton(storage);
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
-builder.Services.AddHostedService<SeedLobbyHeartbeat>();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var generatedJwtSecret = false;
@@ -209,12 +208,6 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDb>();
     await DatabaseSchema.EnsureCurrentAsync(db);
-    await SeedData.InitializeAsync(
-        db,
-        scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
-        storage,
-        Path.Combine(builder.Environment.ContentRootPath, "seed-assets"),
-        devLogins: isDevelopment);
 }
 
 app.UseExceptionHandler(errorApp =>

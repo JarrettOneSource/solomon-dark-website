@@ -47,6 +47,11 @@ export default function Home() {
   const [knock, setKnock] = useState<Lobby | null>(null)
 
   const liveLobbies = (lobbies.data?.items ?? []).slice(0, 5)
+  // Veiled classes fill whatever of the five preview rows is left.
+  const veiledClasses = (lobbies.data?.privateClasses ?? []).slice(
+    0,
+    Math.max(0, 5 - liveLobbies.length),
+  )
 
   return (
     <div>
@@ -129,13 +134,13 @@ export default function Home() {
             <Spinner label="Fetching classes…" />
           ) : lobbies.error ? (
             <EmptyState title="The crystal ball is cloudy" line={lobbies.error} />
-          ) : liveLobbies.length === 0 ? (
+          ) : liveLobbies.length === 0 && veiledClasses.length === 0 ? (
             <EmptyState
               title="No classes in session"
               line="Solomon, for the record, is not resting. Host one from the SDR loader’s multiplayer card."
             />
           ) : (
-            <LobbyTable lobbies={liveLobbies} onKnock={setKnock} />
+            <LobbyTable lobbies={liveLobbies} veiled={veiledClasses} onKnock={setKnock} />
           )}
         </Reveal>
       </section>

@@ -211,6 +211,10 @@ public static class LobbyEndpoints
         {
             return ApiErrors.NotFound("That lobby is no longer available.");
         }
+        if (lobby.Privacy == "friendsOnly" && !CanViewFriendsOnlyLobby(lobby, steamId))
+        {
+            return ApiErrors.NotFound("That lobby is no longer available.");
+        }
         if (lobby.Privacy != "passwordProtected" || lobby.PasswordHash is null)
         {
             return ApiErrors.BadRequest("That lobby does not use website password authorization.");
@@ -303,13 +307,23 @@ public static class LobbyEndpoints
             .OrderByDescending(lobby => lobby.Players)
             .ThenBy(lobby => lobby.Id)
             .ToArrayAsync(cancellationToken);
-        var items = lobbies
-            .Where(lobby => lobby.Privacy != "friendsOnly" ||
-                (viewerSteamId is not null &&
-                    (lobby.HostSteamId == viewerSteamId || IsFriend(lobby, viewerSteamId))))
-            .Select(MapLobby)
-            .ToArray();
-        return new LobbyListResponse(items, items.Sum(item => item.Players));
+        var items = new List<LobbyItem>(lobbies.Length);
+        var privateClasses = new List<PrivateClassItem>();
+        var playerCount = 0;
+        foreach (var lobby in lobbies)
+        {
+            playerCount += lobby.Players;
+            if (lobby.Privacy == "friendsOnly" &&
+                !CanViewFriendsOnlyLobby(lobby, viewerSteamId))
+            {
+                privateClasses.Add(new PrivateClassItem(lobby.Players, lobby.MaxPlayers));
+            }
+            else
+            {
+                items.Add(MapLobby(lobby));
+            }
+        }
+        return new LobbyListResponse(items.ToArray(), privateClasses.ToArray(), playerCount);
     }
 
     private static async Task<string?> ResolveViewerSteamIdAsync(
@@ -376,6 +390,10 @@ public static class LobbyEndpoints
             StorageJsonOptions) ?? [];
         return friendIds.Contains(viewerSteamId, StringComparer.Ordinal);
     }
+
+    private static bool CanViewFriendsOnlyLobby(LobbySession lobby, string? viewerSteamId) =>
+        viewerSteamId is not null &&
+        (lobby.HostSteamId == viewerSteamId || IsFriend(lobby, viewerSteamId));
 
     private static async Task WriteEventAsync(
         HttpResponse response,
@@ -548,7 +566,11 @@ public static class LobbyEndpoints
 
     public sealed record PasswordAuthorizationRequest(string? PasswordHash);
 
-    private sealed record LobbyListResponse(LobbyItem[] Items, int PlayerCount);
+    private sealed record PrivateClassItem(int Players, int MaxPlayers);
+    private sealed record LobbyListResponse(
+        LobbyItem[] Items,
+        PrivateClassItem[] PrivateClasses,
+        int PlayerCount);
     private sealed record LobbyItem(
         int Id,
         string HostPlayer,

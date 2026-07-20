@@ -42,13 +42,20 @@ export default function Classes() {
     return items
   }, [data, search, openSeats])
 
+  // Veiled classes carry nothing searchable and no seat you could claim, so
+  // they only show on the unfiltered view.
+  const veiledAll = data?.privateClasses ?? []
+  const veiled = search.trim() || openSeats ? [] : veiledAll
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6">
       <Reveal>
         <div className="mb-2 flex items-center gap-3">
           <span className="orb orb-on [animation:banner-pulse_2.2s_ease-in-out_infinite]" />
           <span className="font-mono text-xs text-moss">
-            {data ? `${data.items.length} live · ${data.playerCount} wizards afield` : '…'}
+            {data
+              ? `${data.items.length + veiledAll.length} live · ${data.playerCount} wizards afield`
+              : '…'}
           </span>
           <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-bone-dim/50">
             live
@@ -84,7 +91,7 @@ export default function Classes() {
           <Spinner label="Fetching classes…" />
         ) : error ? (
           <ErrorNote message={error} />
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && veiled.length === 0 ? (
           <EmptyState
             title="No classes in session"
             line={
@@ -94,18 +101,20 @@ export default function Classes() {
             }
           />
         ) : (
-          <LobbyTable lobbies={filtered} onKnock={setKnock} />
+          <LobbyTable lobbies={filtered} veiled={veiled} onKnock={setKnock} />
         )}
 
         <p className="text-fell mt-6 text-center text-xs text-bone-dim/70">
           {user?.steamId ? (
             <>
-              Friends-only classes hosted by your Steam friends appear here automatically,
-              marked <span className="text-arcane">Friends</span>.
+              Veiled classes are warded to their host’s Steam circle. When a host counts
+              you among their friends, theirs unmask for you automatically, marked{' '}
+              <span className="text-arcane">Friends</span>.
             </>
           ) : user ? (
             <>
-              Friends-only classes stay hidden until the Registrar knows your Steam self —{' '}
+              Veiled classes are warded to their host’s Steam circle. The ones that know
+              you will unmask once the Registrar knows your Steam self —{' '}
               <Link to="/account" className="link-arcane">
                 link it in the Annals
               </Link>
@@ -113,11 +122,11 @@ export default function Classes() {
             </>
           ) : (
             <>
-              Friends-only classes show for{' '}
+              Veiled classes are warded to their host’s Steam circle — they unmask for{' '}
               <Link to="/login" className="link-arcane">
                 signed-in wizards
               </Link>{' '}
-              with a linked Steam profile. Steam invites work regardless — no website, no
+              the host counts as friends. Steam invites work regardless — no website, no
               account, no paper trail.
             </>
           )}
