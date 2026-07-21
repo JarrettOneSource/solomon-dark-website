@@ -14,7 +14,7 @@ upload form must exactly match `manifest.version`.
 ```text
 manifest.json
 files/
-  survival.boneyard
+  Survival Arena.boneyard
 ```
 
 Use the [Boneyard-only manifest example](/examples/boneyard-only-manifest.json).
@@ -50,7 +50,9 @@ Use the [combined manifest example](/examples/combined-manifest.json).
 - `priority` controls overlay order. Higher-priority mods are applied later.
 - `overlays` copies each `source` under `files/` to its staged-game `target`.
   Website packages may target files under `data/`; custom Boneyards may also
-  target `DarkCloud/mylevels/*.boneyard`.
+  target `sandbox/DarkCloud/mylevels/*.boneyard`. The `sandbox/` prefix is part
+  of the staged game path; the native path resolver supplies the matching
+  player-profile sandbox root at runtime.
 - `runtime.entryScript` names a `.lua` file under `scripts/`.
 - `runtime.apiVersion` declares the Lua API contract used by the script.
 - `requiredCapabilities` and `optionalCapabilities` declare requested sandbox
@@ -59,6 +61,11 @@ Use the [combined manifest example](/examples/combined-manifest.json).
 
 Paths use `/`, are relative, and must match the case of files inside the ZIP.
 Do not wrap the package in an extra top-level directory.
+
+Every `.boneyard` overlay is parsed during upload using the native SyncBuffer
+container grammar and the 13-section Arena / 14-section RegionLayout envelopes.
+Empty, truncated, trailing, or otherwise malformed files are rejected before
+publication.
 
 The complete machine-readable contract is
 [mod-manifest.schema.json](/mod-manifest.schema.json).

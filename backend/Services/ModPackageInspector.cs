@@ -307,18 +307,20 @@ public static partial class ModPackageInspector
             var target = ValidateManifestPath(overlay.Target, "Overlay target");
             var allowedDataTarget = target.StartsWith("data/", StringComparison.Ordinal);
             var allowedCustomBoneyard =
-                target.StartsWith("DarkCloud/mylevels/", StringComparison.Ordinal) &&
+                target.StartsWith("sandbox/DarkCloud/mylevels/", StringComparison.Ordinal) &&
                 target.EndsWith(".boneyard", StringComparison.Ordinal);
             if (!allowedDataTarget && !allowedCustomBoneyard)
             {
                 throw new ModPackageValidationException(
-                    $"Website overlay targets must live under data/, or be custom Boneyards under DarkCloud/mylevels/: {overlay.Target}");
+                    $"Website overlay targets must live under data/, or be custom Boneyards under sandbox/DarkCloud/mylevels/: {overlay.Target}");
             }
 
             if (overlay.Format.Length > MaxStringLength)
             {
                 throw new ModPackageValidationException("Overlay format values may not exceed 256 characters.");
             }
+
+            ValidateBoneyardOverlay(overlay, source, target, files[source]);
         }
 
         if (hasLua)
@@ -354,6 +356,43 @@ public static partial class ModPackageInspector
         {
             throw new ModPackageValidationException("A mod may not require itself.");
         }
+    }
+
+    private static void ValidateBoneyardOverlay(
+        PackageOverlay overlay,
+        string source,
+        string target,
+        ZipArchiveEntry sourceEntry)
+    {
+        var sourceIsBoneyard = source.EndsWith(".boneyard", StringComparison.OrdinalIgnoreCase);
+        var targetIsBoneyard = target.EndsWith(".boneyard", StringComparison.OrdinalIgnoreCase);
+        var formatIsBoneyard = string.Equals(
+            overlay.Format,
+            "boneyard",
+            StringComparison.OrdinalIgnoreCase);
+        if (!sourceIsBoneyard && !targetIsBoneyard && !formatIsBoneyard)
+        {
+            return;
+        }
+
+        if (!sourceIsBoneyard || !targetIsBoneyard ||
+            (!string.IsNullOrWhiteSpace(overlay.Format) && !formatIsBoneyard))
+        {
+            throw new ModPackageValidationException(
+                "Boneyard overlays must use .boneyard source and target paths and format 'boneyard' when format is present.");
+        }
+
+        var allowedBoneyardTarget =
+            target.StartsWith("data/levels/", StringComparison.Ordinal) ||
+            target.StartsWith("sandbox/DarkCloud/mylevels/", StringComparison.Ordinal);
+        if (!allowedBoneyardTarget)
+        {
+            throw new ModPackageValidationException(
+                $"Website Boneyard targets must be stock levels under data/levels/ or custom levels under sandbox/DarkCloud/mylevels/: {target}");
+        }
+
+        using var stream = sourceEntry.Open();
+        BoneyardFileInspector.Validate(stream, source);
     }
 
     private static string ValidateManifestPath(string value, string label)

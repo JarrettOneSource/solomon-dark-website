@@ -21,6 +21,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+BONEYARD_FIXTURE = ROOT / "tests" / "fixtures" / "flat_multiplayer_test.boneyard"
 
 
 def package(files: dict[str, bytes], manifest: dict[str, object]) -> bytes:
@@ -97,7 +98,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             stderr=subprocess.STDOUT,
             text=True,
         )
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             if cls.server.poll() is not None:
                 output = cls.server.stdout.read() if cls.server.stdout else ""
@@ -110,8 +111,13 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 pass
             time.sleep(0.1)
         else:
-            output = cls.server.stdout.read() if cls.server.stdout else ""
-            raise RuntimeError(f"website did not start within 20 seconds:\n{output}")
+            cls.server.terminate()
+            try:
+                output, _ = cls.server.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                cls.server.kill()
+                output, _ = cls.server.communicate(timeout=5)
+            raise RuntimeError(f"website did not start within 60 seconds:\n{output}")
 
     @classmethod
     def stop_server(cls) -> None:
@@ -209,13 +215,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "priority": 10,
             "overlays": [
                 {
-                    "target": "data/levels/survival.boneyard",
-                    "source": "files/survival.boneyard",
+                    "target": "sandbox/DarkCloud/mylevels/Blank Test.boneyard",
+                    "source": "files/Blank Test.boneyard",
                     "format": "boneyard",
                 }
             ],
         }
-        boneyard_zip = package({"files/survival.boneyard": b""}, boneyard_manifest)
+        fixture = BONEYARD_FIXTURE.read_bytes()
+        boneyard_zip = package({"files/Blank Test.boneyard": fixture}, boneyard_manifest)
         status, boneyard = self.upload("Blank Boneyard", "1.0.0", boneyard_zip)
         self.assertEqual(status, 201, boneyard)
         self.assertEqual(boneyard["launcherModId"], boneyard_manifest["id"])
@@ -256,13 +263,51 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         }
         combined_zip = package(
             {
-                "files/survival.boneyard": b"boneyard fixture",
+                "files/survival.boneyard": fixture,
                 "scripts/main.lua": b"return true\n",
             },
             combined_manifest,
         )
         status, combined = self.upload("Combined Mod", "2.0.0", combined_zip)
         self.assertEqual(status, 201, combined)
+
+        invalid_manifest = {
+            "id": "tests.invalid-boneyard",
+            "name": "Invalid Boneyard",
+            "version": "1.0.0",
+            "overlays": [
+                {
+                    "target": "data/levels/survival.boneyard",
+                    "source": "files/survival.boneyard",
+                    "format": "boneyard",
+                }
+            ],
+        }
+        status, _ = self.upload(
+            "Invalid Boneyard",
+            "1.0.0",
+            package({"files/survival.boneyard": b""}, invalid_manifest),
+        )
+        self.assertEqual(status, 400)
+
+        legacy_target_manifest = {
+            **invalid_manifest,
+            "id": "tests.legacy-boneyard-target",
+            "name": "Legacy Boneyard Target",
+            "overlays": [
+                {
+                    "target": "DarkCloud/mylevels/Legacy.boneyard",
+                    "source": "files/Legacy.boneyard",
+                    "format": "boneyard",
+                }
+            ],
+        }
+        status, _ = self.upload(
+            "Legacy Boneyard Target",
+            "1.0.0",
+            package({"files/Legacy.boneyard": fixture}, legacy_target_manifest),
+        )
+        self.assertEqual(status, 400)
 
         exact = []
         for item in (boneyard, lua, combined):

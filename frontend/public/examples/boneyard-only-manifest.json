@@ -6,8 +6,8 @@
   "priority": 100,
   "overlays": [
     {
-      "target": "data/levels/survival.boneyard",
-      "source": "files/survival.boneyard",
+      "target": "sandbox/DarkCloud/mylevels/Survival Arena.boneyard",
+      "source": "files/Survival Arena.boneyard",
       "format": "boneyard"
     }
   ],
