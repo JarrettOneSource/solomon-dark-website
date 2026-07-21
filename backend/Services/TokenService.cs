@@ -12,7 +12,6 @@ public sealed class TokenService(string secret, int expiryDays)
     private const string SteamSessionTypeClaim = "sdr_token_type";
     private const string SteamIdClaim = "steam_id";
     private const string SteamAppIdClaim = "steam_appid";
-    private const string SteamAppId = "480";
     private static readonly TimeSpan SteamSessionLifetime = TimeSpan.FromMinutes(15);
     private readonly SymmetricSecurityKey _key = new(Encoding.UTF8.GetBytes(secret));
     private readonly int _expiryDays = expiryDays;
@@ -42,7 +41,7 @@ public sealed class TokenService(string secret, int expiryDays)
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
             new Claim(SteamSessionTypeClaim, SteamSessionType),
             new Claim(SteamIdClaim, steamId),
-            new Claim(SteamAppIdClaim, SteamAppId)
+            new Claim(SteamAppIdClaim, SteamApplication.AppIdText)
         };
         var token = new JwtSecurityToken(
             claims: claims,
@@ -64,7 +63,7 @@ public sealed class TokenService(string secret, int expiryDays)
     public static string? GetSteamSessionId(ClaimsPrincipal principal)
     {
         if (principal.FindFirstValue(SteamSessionTypeClaim) != SteamSessionType ||
-            principal.FindFirstValue(SteamAppIdClaim) != SteamAppId)
+            principal.FindFirstValue(SteamAppIdClaim) != SteamApplication.AppIdText)
         {
             return null;
         }

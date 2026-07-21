@@ -5,7 +5,6 @@ namespace SolomonDarkRevived.Services;
 
 public sealed class SteamTicketVerifier(HttpClient http, IConfiguration configuration)
 {
-    public const uint AppId = 480;
     public const string TicketIdentity = "solomon-dark-directory-v1";
     private const string AuthenticatePath = "ISteamUserAuth/AuthenticateUserTicket/v1/";
 
@@ -21,7 +20,7 @@ public sealed class SteamTicketVerifier(HttpClient http, IConfiguration configur
         }
 
         var path = AuthenticatePath +
-            $"?appid={AppId}&ticket={Uri.EscapeDataString(ticket)}" +
+            $"?appid={SteamApplication.AppId}&ticket={Uri.EscapeDataString(ticket)}" +
             $"&identity={Uri.EscapeDataString(TicketIdentity)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.TryAddWithoutValidation("x-webapi-key", apiKey);
