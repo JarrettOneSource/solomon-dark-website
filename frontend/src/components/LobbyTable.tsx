@@ -72,7 +72,7 @@ function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby
   if (lobby.join) {
     return (
       <a href={lobby.join.launchUri} className={cls} title="Opens Solomon Dark and joins this lobby">
-        Connect
+        Join Game
       </a>
     )
   }
@@ -133,6 +133,9 @@ export default function LobbyTable({
           const { lobby } = row
           const phase = PHASE[lobby.game.phase]
           const detail = gameDetail(lobby.game)
+          const modSummary = lobby.mods.length === 0
+            ? 'No active mods'
+            : `${lobby.mods.length} mod${lobby.mods.length === 1 ? '' : 's'} · ${lobby.mods.map((mod) => mod.id).join(', ')}`
           return (
             <div key={lobby.id} className="slab rounded px-4 py-3">
               <div className="flex items-center gap-2">
@@ -155,6 +158,9 @@ export default function LobbyTable({
                   {detail && (
                     <span className="block truncate text-[11px] text-bone-dim/80">{detail}</span>
                   )}
+                  <span className="block max-w-64 truncate font-mono text-[10px] text-arcane/70" title={modSummary}>
+                    {modSummary}
+                  </span>
                 </span>
                 <span className="flex flex-none items-center gap-2">
                   <AccessBadge lobby={lobby} />
@@ -216,6 +222,9 @@ export default function LobbyTable({
               const { lobby } = row
               const phase = PHASE[lobby.game.phase]
               const detail = gameDetail(lobby.game)
+              const modSummary = lobby.mods.length === 0
+                ? 'No active mods'
+                : `${lobby.mods.length} mod${lobby.mods.length === 1 ? '' : 's'} · ${lobby.mods.map((mod) => mod.id).join(', ')}`
               return (
                 <tr key={lobby.id} className="group">
                   <td className="slab rounded-l border-r-0 px-3 py-2.5">
@@ -234,6 +243,9 @@ export default function LobbyTable({
                       {lobby.game.boneyardName ?? '—'}
                     </span>
                     {detail && <span className="block text-[11px] text-bone-dim/80">{detail}</span>}
+                    <span className="block max-w-72 truncate font-mono text-[10px] text-arcane/70" title={modSummary}>
+                      {modSummary}
+                    </span>
                   </td>
                   <td className="slab border-x-0 px-3 py-2.5">
                     <PlayerBar players={lobby.players} max={lobby.maxPlayers} />

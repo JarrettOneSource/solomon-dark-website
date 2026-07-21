@@ -30,6 +30,8 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         modelBuilder.Entity<Mod>(entity =>
         {
             entity.HasIndex(mod => mod.Slug).IsUnique();
+            entity.Property(mod => mod.LauncherModId).HasMaxLength(128).UseCollation("NOCASE");
+            entity.HasIndex(mod => mod.LauncherModId).IsUnique();
             entity.HasOne(mod => mod.Author)
                 .WithMany()
                 .HasForeignKey(mod => mod.AuthorId)
@@ -50,6 +52,19 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
                 .WithOne(comment => comment.Mod)
                 .HasForeignKey(comment => comment.ModId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ModVersion>(entity =>
+        {
+            entity.Property(version => version.ManifestVersion).HasMaxLength(64);
+            entity.Property(version => version.PackageSha256).HasMaxLength(64);
+            entity.Property(version => version.ContentSha256).HasMaxLength(64);
+            entity.HasIndex(version => new
+            {
+                version.ModId,
+                version.ManifestVersion,
+                version.ContentSha256
+            }).IsUnique();
         });
 
         modelBuilder.Entity<ModDownloadEvent>(entity =>

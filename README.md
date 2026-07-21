@@ -1,5 +1,28 @@
 # Solomon Dark Website
 
+## Mod packages
+
+Community mod ZIPs require `manifest.json` at the archive root. Website
+packages may contain data overlays/Boneyards, sandboxed Lua, or both. See the
+[authoring guide](frontend/public/mod-package-format.md),
+[JSON Schema](frontend/public/mod-manifest.schema.json), and the
+[copyable examples](frontend/public/examples/).
+
+Website Join Game links give the launcher the lobby directory origin. The
+launcher fetches the host's exact active mod identities, reuses exact manual or
+cached copies, downloads missing website versions, verifies both package and
+content hashes, and stages only the host set. Direct Steam invites and direct
+lobby-ID joins use the configured website the same way when its lobby metadata
+is available. If it is unavailable, the launcher falls back to the locally
+enabled set and the native exact-compatibility handshake, so manual P2P play
+does not depend on this service.
+
+Run the backend integration contract with a .NET 10 SDK:
+
+```bash
+python3 -m unittest tests.test_mod_sync_contract -v
+```
+
 ## Steam ticket authentication
 
 The backend requires a standard Steam Web API user key to verify the tickets created by the mod loader. Register a key at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) using a real domain you control.

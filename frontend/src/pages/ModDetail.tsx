@@ -419,15 +419,15 @@ export default function ModDetail() {
         <aside className="space-y-6">
           <div className="panel panel-ornate p-6 text-center">
             <a
-              href={api.mods.installUrl(m.slug)}
+              href={api.mods.downloadUrl(m.slug)}
               className="btn btn-gold relative w-full !py-4 !text-sm"
-              title="Opens the SDR loader and installs this tome"
+              title="Downloads the latest mod package"
               onClick={() => {
                 setStamp((k) => k + 1)
                 playSound('tomeGet', 0.3)
               }}
             >
-              ⬩ Take This Tome
+              ⬩ Download This Tome
               {stamp > 0 && (
                 <img
                   key={stamp}
@@ -445,12 +445,9 @@ export default function ModDetail() {
             </p>
             <div className="rule-gold my-4" />
             <p className="text-left text-xs leading-relaxed text-bone-dim">
-              One click installs it through the SDR loader (unreleased; the seal holds). Prefer to
-              do it by hand?{' '}
-              <a href={api.mods.downloadUrl(m.slug)} className="link-arcane">
-                Download the zip
-              </a>
-              .
+              Website Join Game links install an exact host mod set automatically. For standalone
+              or offline play, extract this ZIP as a folder under the loader’s <code>mods</code>{' '}
+              directory and enable it there.
             </p>
           </div>
 
@@ -507,6 +504,16 @@ export default function ModDetail() {
               <RecordRow label="Shelved">{formatDate(m.createdAtUtc)}</RecordRow>
               <RecordRow label="Revised">{timeAgo(m.updatedAtUtc)}</RecordRow>
               <RecordRow label="Editions">{m.versions.length}</RecordRow>
+              <RecordRow label="Launcher ID">
+                <span className="font-mono text-xs">{m.launcherModId ?? 'legacy package'}</span>
+              </RecordRow>
+              {latest?.contentSha256 && (
+                <RecordRow label="Content hash">
+                  <span className="font-mono text-xs" title={latest.contentSha256}>
+                    {latest.contentSha256.slice(0, 12)}…
+                  </span>
+                </RecordRow>
+              )}
               <RecordRow label="Downloads">{formatCount(m.downloads)}</RecordRow>
               <RecordRow label="Shelfmark">
                 <span className="font-mono text-xs">{m.slug}</span>

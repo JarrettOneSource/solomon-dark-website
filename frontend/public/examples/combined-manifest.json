@@ -1,0 +1,21 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "example.arcane-arena",
+  "name": "Arcane Arena",
+  "version": "1.0.0",
+  "priority": 100,
+  "overlays": [
+    {
+      "target": "data/levels/survival.boneyard",
+      "source": "files/survival.boneyard",
+      "format": "boneyard"
+    }
+  ],
+  "runtime": {
+    "apiVersion": "0.2.0",
+    "entryScript": "scripts/main.lua",
+    "requiredCapabilities": [],
+    "optionalCapabilities": ["ui"]
+  },
+  "requiredMods": []
+}

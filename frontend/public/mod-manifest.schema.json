@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/mod-manifest.schema.json",
+  "title": "Solomon Dark Revived website mod manifest",
+  "description": "The root manifest for a website-distributed overlay/Boneyard and/or sandboxed Lua mod.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
+    "priority": { "type": "integer", "minimum": -100000, "maximum": 100000 },
+    "overlays": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target", "source"],
+        "properties": {
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "anyOf": [
+              { "pattern": "^data/.+" },
+              { "pattern": "^DarkCloud/mylevels/.+\\.boneyard$" }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 240,
+            "pattern": "^files/.+"
+          },
+          "format": { "type": "string", "maxLength": 256 }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "entryScript": {
+          "type": "string",
+          "minLength": 13,
+          "maxLength": 240,
+          "pattern": "^scripts/.+\\.lua$"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        },
+        "optionalCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        }
+      },
+      "dependentRequired": {
+        "entryScript": ["apiVersion"]
+      }
+    },
+    "requiredMods": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "required": ["overlays"],
+      "properties": { "overlays": { "minItems": 1 } }
+    },
+    {
+      "required": ["runtime"],
+      "properties": {
+        "runtime": { "required": ["apiVersion", "entryScript"] }
+      }
+    }
+  ]
+}

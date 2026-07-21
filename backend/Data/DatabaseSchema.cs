@@ -17,11 +17,47 @@ public static class DatabaseSchema
                 cancellationToken);
         }
 
+        if (!await HasColumnAsync(db, "Mods", "LauncherModId", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE Mods ADD COLUMN LauncherModId TEXT NULL;",
+                cancellationToken);
+        }
+
+        if (!await HasColumnAsync(db, "ModVersions", "ManifestVersion", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE ModVersions ADD COLUMN ManifestVersion TEXT NULL;",
+                cancellationToken);
+        }
+
+        if (!await HasColumnAsync(db, "ModVersions", "PackageSha256", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE ModVersions ADD COLUMN PackageSha256 TEXT NULL;",
+                cancellationToken);
+        }
+
+        if (!await HasColumnAsync(db, "ModVersions", "ContentSha256", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE ModVersions ADD COLUMN ContentSha256 TEXT NULL;",
+                cancellationToken);
+        }
+
         await db.Database.ExecuteSqlRawAsync(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS IX_Users_SteamId
             ON Users (SteamId)
             WHERE SteamId IS NOT NULL;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_Mods_LauncherModId
+            ON Mods (LauncherModId COLLATE NOCASE)
+            WHERE LauncherModId IS NOT NULL;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_ModVersions_ModId_ManifestVersion_ContentSha256
+            ON ModVersions (ModId, ManifestVersion, ContentSha256)
+            WHERE ManifestVersion IS NOT NULL AND ContentSha256 IS NOT NULL;
 
             CREATE TABLE IF NOT EXISTS Lobbies (
                 Id INTEGER NOT NULL CONSTRAINT PK_Lobbies PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +69,7 @@ public static class DatabaseSchema
                 PasswordSalt TEXT NULL,
                 PasswordHash TEXT NULL,
                 FriendSteamIdsJson TEXT NOT NULL,
+                ActiveModsJson TEXT NOT NULL,
                 Players INTEGER NOT NULL,
                 MaxPlayers INTEGER NOT NULL,
                 AppId INTEGER NOT NULL,
@@ -93,6 +130,13 @@ public static class DatabaseSchema
                 ON ModDownloadEvents (ModId, DownloadedAtUtc);
             """,
             cancellationToken);
+
+        if (!await HasColumnAsync(db, "Lobbies", "ActiveModsJson", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE Lobbies ADD COLUMN ActiveModsJson TEXT NOT NULL DEFAULT '[]';",
+                cancellationToken);
+        }
 
         if (await HasColumnAsync(db, "Mods", "Type", cancellationToken))
         {

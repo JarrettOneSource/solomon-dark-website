@@ -23,6 +23,7 @@ public static class ModEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/mods", ListAsync);
+        app.MapPost("/api/mods/resolve", ResolveAsync);
         app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
@@ -50,6 +51,85 @@ public static class ModEndpoints
         app.MapDelete("/api/mods/{slug}", DeleteAsync).RequireAuthorization();
         app.MapGet("/api/mods/{slug}/download", DownloadLatestAsync);
         app.MapGet("/api/mods/{slug}/versions/{versionId:int}/download", DownloadVersionAsync);
+    }
+
+    private static async Task<IResult> ResolveAsync(
+        ResolveModsRequest request,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var required = request.Mods ?? [];
+        if (required.Length > 128)
+        {
+            return ApiErrors.BadRequest("At most 128 exact mods may be resolved at once.");
+        }
+
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in required)
+        {
+            if (mod is null ||
+                !IsValidLauncherModId(mod.Id) ||
+                !StorageService.IsSafeVersion(mod.Version ?? string.Empty) ||
+                !IsSha256(mod.ContentSha256))
+            {
+                return ApiErrors.BadRequest(
+                    "Every requested mod must include a valid id, version, and contentSha256.");
+            }
+
+            if (!seenIds.Add(mod.Id!))
+            {
+                return ApiErrors.BadRequest($"The requested mod id is duplicated: {mod.Id}");
+            }
+        }
+
+        var requestedIds = required.Select(mod => mod.Id!).ToArray();
+        var candidates = await db.Mods.AsNoTracking()
+            .Where(mod => mod.LauncherModId != null && requestedIds.Contains(mod.LauncherModId))
+            .Include(mod => mod.Versions)
+            .ToArrayAsync(cancellationToken);
+
+        var resolved = new List<object>();
+        var missing = new List<object>();
+        foreach (var requirement in required)
+        {
+            var mod = candidates.SingleOrDefault(candidate => string.Equals(
+                candidate.LauncherModId,
+                requirement.Id,
+                StringComparison.OrdinalIgnoreCase));
+            var version = mod?.Versions.SingleOrDefault(candidate =>
+                string.Equals(candidate.ManifestVersion, requirement.Version, StringComparison.Ordinal) &&
+                string.Equals(candidate.ContentSha256, requirement.ContentSha256, StringComparison.OrdinalIgnoreCase) &&
+                candidate.PackageSha256 is not null);
+            if (mod is null || version is null)
+            {
+                missing.Add(new
+                {
+                    id = requirement.Id,
+                    version = requirement.Version,
+                    contentSha256 = requirement.ContentSha256?.ToLowerInvariant()
+                });
+                continue;
+            }
+
+            resolved.Add(new
+            {
+                id = mod.LauncherModId,
+                version = version.ManifestVersion,
+                contentSha256 = version.ContentSha256,
+                packageSha256 = version.PackageSha256,
+                mod.Slug,
+                mod.Name,
+                versionId = version.Id,
+                version.FileSize,
+                downloadUrl = $"api/mods/{mod.Slug}/versions/{version.Id}/download"
+            });
+        }
+
+        return Results.Ok(new
+        {
+            mods = resolved,
+            missing
+        });
     }
 
     private static async Task<IResult> ListAsync(
@@ -354,10 +434,6 @@ public static class ModEndpoints
         var description = form["description"].ToString();
         var rawTags = form["tags"].ToString();
         var versionName = form["version"].ToString().Trim();
-        if (versionName.Length == 0)
-        {
-            versionName = "1.0.0";
-        }
 
         var validationError = ValidateModFields(name, summary, description);
         if (validationError is not null)
@@ -369,11 +445,6 @@ public static class ModEndpoints
         if (tagValidationError is not null)
         {
             return ApiErrors.BadRequest(tagValidationError);
-        }
-
-        if (!StorageService.IsSafeVersion(versionName))
-        {
-            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
         }
 
         var file = form.Files.GetFile("file");
@@ -390,6 +461,41 @@ public static class ModEndpoints
         if (file.Length > MaxModBytes)
         {
             return ApiErrors.BadRequest("Mod files may not exceed 100 MiB.");
+        }
+
+        ModPackageInspection package;
+        try
+        {
+            await using var source = file.OpenReadStream();
+            package = await ModPackageInspector.InspectAsync(source, cancellationToken);
+        }
+        catch (ModPackageValidationException exception)
+        {
+            return ApiErrors.BadRequest(exception.Message);
+        }
+
+        if (versionName.Length == 0)
+        {
+            versionName = package.ManifestVersion;
+        }
+
+        if (!StorageService.IsSafeVersion(versionName))
+        {
+            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
+        }
+
+        if (!string.Equals(versionName, package.ManifestVersion, StringComparison.Ordinal))
+        {
+            return ApiErrors.BadRequest(
+                "The upload version must exactly match manifest.version.");
+        }
+
+        if (await db.Mods.AnyAsync(
+                candidate => candidate.LauncherModId == package.LauncherModId,
+                cancellationToken))
+        {
+            return ApiErrors.Conflict(
+                $"A website mod already uses manifest.id '{package.LauncherModId}'.");
         }
 
         var screenshots = form.Files.GetFiles("screenshots").ToArray();
@@ -418,6 +524,7 @@ public static class ModEndpoints
             Name = name,
             Summary = summary,
             Description = description,
+            LauncherModId = package.LauncherModId,
             AuthorId = userId.Value,
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
@@ -426,6 +533,9 @@ public static class ModEndpoints
         var version = new ModVersion
         {
             Version = versionName,
+            ManifestVersion = package.ManifestVersion,
+            PackageSha256 = package.PackageSha256,
+            ContentSha256 = package.ContentSha256,
             Changelog = "",
             FileSize = file.Length,
             CreatedAtUtc = now
@@ -696,16 +806,6 @@ public static class ModEndpoints
         }
 
         var versionName = form["version"].ToString().Trim();
-        if (!StorageService.IsSafeVersion(versionName))
-        {
-            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
-        }
-
-        if (mod.Versions.Any(version => version.Version == versionName))
-        {
-            return ApiErrors.Conflict("That version is already in the library.");
-        }
-
         var file = form.Files.GetFile("file");
         if (file is null || file.Length == 0)
         {
@@ -722,10 +822,67 @@ public static class ModEndpoints
             return ApiErrors.BadRequest("Mod files may not exceed 100 MiB.");
         }
 
+        ModPackageInspection package;
+        try
+        {
+            await using var source = file.OpenReadStream();
+            package = await ModPackageInspector.InspectAsync(source, cancellationToken);
+        }
+        catch (ModPackageValidationException exception)
+        {
+            return ApiErrors.BadRequest(exception.Message);
+        }
+
+        if (versionName.Length == 0)
+        {
+            versionName = package.ManifestVersion;
+        }
+
+        if (!StorageService.IsSafeVersion(versionName))
+        {
+            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
+        }
+
+        if (!string.Equals(versionName, package.ManifestVersion, StringComparison.Ordinal))
+        {
+            return ApiErrors.BadRequest(
+                "The upload version must exactly match manifest.version.");
+        }
+
+        if (mod.Versions.Any(version => version.Version == versionName))
+        {
+            return ApiErrors.Conflict("That version is already in the library.");
+        }
+
+        if (mod.LauncherModId is null)
+        {
+            if (await db.Mods.AnyAsync(
+                    candidate => candidate.Id != mod.Id &&
+                                 candidate.LauncherModId == package.LauncherModId,
+                    cancellationToken))
+            {
+                return ApiErrors.Conflict(
+                    $"A website mod already uses manifest.id '{package.LauncherModId}'.");
+            }
+
+            mod.LauncherModId = package.LauncherModId;
+        }
+        else if (!string.Equals(
+                     mod.LauncherModId,
+                     package.LauncherModId,
+                     StringComparison.Ordinal))
+        {
+            return ApiErrors.BadRequest(
+                $"Every version of this website mod must use manifest.id '{mod.LauncherModId}'.");
+        }
+
         var now = DateTime.UtcNow;
         var version = new ModVersion
         {
             Version = versionName,
+            ManifestVersion = package.ManifestVersion,
+            PackageSha256 = package.PackageSha256,
+            ContentSha256 = package.ContentSha256,
             Changelog = form["changelog"].ToString(),
             FileSize = file.Length,
             CreatedAtUtc = now
@@ -955,6 +1112,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
+            mod.LauncherModId,
             tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
@@ -976,6 +1134,7 @@ public static class ModEndpoints
             mod.Slug,
             mod.Name,
             mod.Summary,
+            mod.LauncherModId,
             tags = mod.Tags.Select(tag => tag.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray(),
             author = new { mod.Author.Id, mod.Author.Username, mod.Author.School },
             latestVersion = latest?.Version,
@@ -1000,6 +1159,9 @@ public static class ModEndpoints
                 {
                     version.Id,
                     version.Version,
+                    version.ManifestVersion,
+                    version.PackageSha256,
+                    version.ContentSha256,
                     version.Changelog,
                     version.FileSize,
                     version.Downloads,
@@ -1195,6 +1357,15 @@ public static class ModEndpoints
     private static int ParseInt(string value, int fallback) =>
         int.TryParse(value, out var parsed) ? parsed : fallback;
 
+    private static bool IsValidLauncherModId(string? value) =>
+        value is { Length: >= 1 and <= 128 } &&
+        char.IsAsciiLetterOrDigit(value[0]) &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+
+    private static bool IsSha256(string? value) =>
+        value is { Length: 64 } && value.All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
+
     public sealed record PatchModRequest(
         string? Name,
         string? Summary,
@@ -1204,4 +1375,8 @@ public static class ModEndpoints
     public sealed record ReorderScreenshotsRequest(int[]? Ids);
 
     public sealed record CommentRequest(string? Body);
+
+    public sealed record ResolveModsRequest(ResolveModRequest[]? Mods);
+
+    public sealed record ResolveModRequest(string? Id, string? Version, string? ContentSha256);
 }

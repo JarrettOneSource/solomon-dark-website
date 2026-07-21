@@ -30,6 +30,7 @@ public static class LobbyEndpoints
             .RequireRateLimiting("lobby-passwords");
         app.MapGet("/api/lobbies/events", StreamEventsAsync);
         app.MapGet("/api/lobbies", ListAsync);
+        app.MapGet("/api/lobbies/{lobbyId}/join-manifest", JoinManifestAsync);
     }
 
     private static async Task<IResult> AnnounceAsync(
@@ -86,6 +87,13 @@ public static class LobbyEndpoints
             return ApiErrors.BadRequest(gameError);
         }
 
+        var mods = NormalizeMods(request.Mods);
+        if (mods is null)
+        {
+            return ApiErrors.BadRequest(
+                "Active mods must have unique launcher ids and valid versions and content SHA-256 hashes (maximum 128).");
+        }
+
         var friendSteamIds = NormalizeFriendSteamIds(request.FriendSteamIds, hostSteamId);
         if (friendSteamIds is null)
         {
@@ -118,6 +126,7 @@ public static class LobbyEndpoints
         lobby.PasswordSalt = request.Password?.Salt;
         lobby.PasswordHash = request.Password?.Hash;
         lobby.FriendSteamIdsJson = JsonSerializer.Serialize(friendSteamIds, StorageJsonOptions);
+        lobby.ActiveModsJson = JsonSerializer.Serialize(mods, StorageJsonOptions);
         lobby.Players = request.Players;
         lobby.MaxPlayers = request.MaxPlayers;
         lobby.AppId = request.Build!.AppId;
@@ -185,6 +194,50 @@ public static class LobbyEndpoints
         return Results.Ok(await GetListAsync(context, db, cancellationToken));
     }
 
+    private static async Task<IResult> JoinManifestAsync(
+        string lobbyId,
+        HttpContext context,
+        AppDb db,
+        LobbyJoinTicketService tickets,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!TryNormalizeSteamId(lobbyId, out var normalizedLobbyId))
+        {
+            return ApiErrors.BadRequest("A valid Steam lobby id is required.");
+        }
+
+        await DeleteExpiredLobbiesAsync(db, DateTime.UtcNow, cancellationToken);
+        var lobby = await db.Lobbies.AsNoTracking().SingleOrDefaultAsync(
+            candidate => candidate.LobbyId == normalizedLobbyId,
+            cancellationToken);
+        if (lobby is null)
+        {
+            return ApiErrors.NotFound("That lobby is no longer available.");
+        }
+
+        if (lobby.Privacy == "passwordProtected" &&
+            !tickets.TryValidate(
+                lobby.Secret,
+                lobby.LobbyId,
+                context.Request.Query["ticket"].ToString(),
+                out _))
+        {
+            return ApiErrors.Forbidden("A valid lobby join ticket is required.");
+        }
+
+        return Results.Ok(new
+        {
+            lobbyId = lobby.LobbyId,
+            build = new LobbyBuild(
+                lobby.AppId,
+                lobby.ProtocolVersion,
+                lobby.ManifestSha256,
+                lobby.LoaderVersion),
+            mods = ReadMods(lobby.ActiveModsJson)
+        });
+    }
+
     private static async Task<IResult> AuthorizeAsync(
         int id,
         PasswordAuthorizationRequest request,
@@ -231,7 +284,10 @@ public static class LobbyEndpoints
         }
 
         var ticket = tickets.Issue(lobby.Secret, lobby.LobbyId, steamId);
-        var launchUri = $"sdr://join/{lobby.LobbyId}?ticket={Uri.EscapeDataString(ticket.Value)}";
+        var launchUri = BuildLaunchUri(
+            context.Request,
+            lobby.LobbyId,
+            ticket.Value);
         return Results.Ok(new
         {
             lobbyId = lobby.LobbyId,
@@ -320,7 +376,7 @@ public static class LobbyEndpoints
             }
             else
             {
-                items.Add(MapLobby(lobby));
+                items.Add(MapLobby(lobby, context.Request));
             }
         }
         return new LobbyListResponse(items.ToArray(), privateClasses.ToArray(), playerCount);
@@ -343,7 +399,7 @@ public static class LobbyEndpoints
         return TokenService.GetSteamSessionId(principal);
     }
 
-    private static LobbyItem MapLobby(LobbySession lobby)
+    private static LobbyItem MapLobby(LobbySession lobby, HttpRequest request)
     {
         var canJoinDirectly = lobby.Privacy is "public" or "friendsOnly";
         return new LobbyItem(
@@ -375,14 +431,33 @@ public static class LobbyEndpoints
                 lobby.Difficulty,
                 lobby.ElapsedSeconds,
                 lobby.StatusText),
+            ReadMods(lobby.ActiveModsJson),
             lobby.Privacy == "passwordProtected"
                 ? new LobbyPassword(PasswordAlgorithm, PasswordIterations, lobby.PasswordSalt!)
                 : null,
             canJoinDirectly
                 ? new LobbyJoin(
                     lobby.LobbyId,
-                    $"solomondarkrevived://join/{lobby.LobbyId}")
+                    BuildLaunchUri(request, lobby.LobbyId))
                 : null);
+    }
+
+    private static string BuildLaunchUri(
+        HttpRequest request,
+        string lobbyId,
+        string? ticket = null)
+    {
+        var directory = $"{request.Scheme}://{request.Host}{request.PathBase}".TrimEnd('/');
+        var parameters = new List<string>
+        {
+            $"directory={Uri.EscapeDataString(directory)}"
+        };
+        if (ticket is not null)
+        {
+            parameters.Add($"ticket={Uri.EscapeDataString(ticket)}");
+        }
+
+        return $"solomondarkrevived://join/{lobbyId}?{string.Join('&', parameters)}";
     }
 
     private static bool IsFriend(LobbySession lobby, string viewerSteamId)
@@ -464,6 +539,58 @@ public static class LobbyEndpoints
         return null;
     }
 
+    private static LobbyModDescriptor[]? NormalizeMods(LobbyModDescriptor[]? values)
+    {
+        values ??= [];
+        if (values.Length > 128)
+        {
+            return null;
+        }
+
+        var normalized = new List<LobbyModDescriptor>(values.Length);
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            if (value is null)
+            {
+                return null;
+            }
+            var id = value.Id?.Trim();
+            var version = value.Version?.Trim();
+            var contentSha256 = NormalizeHex(value.ContentSha256, 64);
+            if (!IsValidLauncherModId(id) ||
+                !StorageService.IsSafeVersion(version ?? string.Empty) ||
+                contentSha256 is null ||
+                !ids.Add(id!))
+            {
+                return null;
+            }
+
+            normalized.Add(new LobbyModDescriptor(id, version, contentSha256));
+        }
+
+        return normalized
+            .OrderBy(mod => mod.Id, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static LobbyModDescriptor[] ReadMods(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<LobbyModDescriptor[]>(json, StorageJsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static bool IsValidLauncherModId(string? value) =>
+        value is { Length: >= 1 and <= 128 } &&
+        char.IsAsciiLetterOrDigit(value[0]) &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '-');
+
     private static string[]? NormalizeFriendSteamIds(string[]? values, string hostSteamId)
     {
         values ??= [];
@@ -542,7 +669,13 @@ public static class LobbyEndpoints
         int Players,
         int MaxPlayers,
         BuildDescriptor? Build,
-        GameDescriptor? Game);
+        GameDescriptor? Game,
+        LobbyModDescriptor[]? Mods);
+
+    public sealed record LobbyModDescriptor(
+        string? Id,
+        string? Version,
+        string? ContentSha256);
 
     public sealed record PasswordDescriptor(
         string? Algorithm,
@@ -585,6 +718,7 @@ public static class LobbyEndpoints
         DateTime ExpiresAtUtc,
         LobbyBuild Build,
         LobbyGame Game,
+        LobbyModDescriptor[] Mods,
         LobbyPassword? Password,
         LobbyJoin? Join);
     private sealed record LobbyBuild(

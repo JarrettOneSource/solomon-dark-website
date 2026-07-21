@@ -1,0 +1,14 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "example.wave-announcer",
+  "name": "Wave Announcer",
+  "version": "1.0.0",
+  "priority": 100,
+  "runtime": {
+    "apiVersion": "0.2.0",
+    "entryScript": "scripts/main.lua",
+    "requiredCapabilities": [],
+    "optionalCapabilities": ["ui"]
+  },
+  "requiredMods": []
+}

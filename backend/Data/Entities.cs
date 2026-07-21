@@ -18,6 +18,7 @@ public sealed class Mod
     public string Name { get; set; } = string.Empty;
     public string Summary { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? LauncherModId { get; set; }
     public int AuthorId { get; set; }
     public int Downloads { get; set; }
     public DateTime CreatedAtUtc { get; set; }
@@ -49,6 +50,9 @@ public sealed class ModVersion
     public int Id { get; set; }
     public int ModId { get; set; }
     public string Version { get; set; } = string.Empty;
+    public string? ManifestVersion { get; set; }
+    public string? PackageSha256 { get; set; }
+    public string? ContentSha256 { get; set; }
     public string Changelog { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
     public long FileSize { get; set; }
@@ -87,6 +91,7 @@ public sealed class LobbySession
     public string? PasswordSalt { get; set; }
     public string? PasswordHash { get; set; }
     public string FriendSteamIdsJson { get; set; } = "[]";
+    public string ActiveModsJson { get; set; } = "[]";
     public int Players { get; set; }
     public int MaxPlayers { get; set; }
     public long AppId { get; set; }

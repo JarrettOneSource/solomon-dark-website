@@ -79,8 +79,10 @@ export default function ModUpload() {
         <div className="kicker mb-1.5">Acquisitions department</div>
         <h1 className="h-display text-3xl">Contribute a Tome</h1>
         <p className="text-fell mt-2 text-bone-dim">
-          Any zip will do for now — required structure and validation arrive once the
-          cataloguing standards committee stops arguing. (Estimated: several centuries.)
+          Upload a launcher package with <code>manifest.json</code> at the ZIP root. Packages may
+          contain data overlays and Boneyards, sandboxed Lua, or both.{' '}
+          <a href="/mod-package-format.md" className="link-arcane">Read the package format</a>
+          {' '}or <a href="/mod-manifest.schema.json" className="link-arcane">open the JSON Schema</a>.
         </p>
       </Reveal>
 
@@ -145,7 +147,7 @@ export default function ModUpload() {
           <Field label="Tome name">
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Shock Nova Rework" maxLength={60} />
           </Field>
-          <Field label="First version">
+          <Field label="First version" hint="Must exactly match manifest.version.">
             <input className="input" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.0" />
           </Field>
         </div>

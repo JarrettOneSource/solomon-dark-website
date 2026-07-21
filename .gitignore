@@ -16,3 +16,4 @@ backend/wwwroot/
 .env
 *.log
 .DS_Store
+__pycache__/

@@ -1,0 +1,15 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "example.survival-arena",
+  "name": "Survival Arena",
+  "version": "1.0.0",
+  "priority": 100,
+  "overlays": [
+    {
+      "target": "data/levels/survival.boneyard",
+      "source": "files/survival.boneyard",
+      "format": "boneyard"
+    }
+  ],
+  "requiredMods": []
+}

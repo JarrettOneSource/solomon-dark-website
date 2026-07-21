@@ -43,7 +43,7 @@ function AddVersionForm({ slug, onDone }: { slug: string; onDone: () => void }) 
   return (
     <form onSubmit={submit} className="mt-4 space-y-3 border-t border-gold/15 pt-4">
       <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
-        <Field label="Version">
+        <Field label="Version" hint="Must exactly match manifest.version.">
           <input
             className="input"
             value={version}

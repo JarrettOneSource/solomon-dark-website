@@ -37,6 +37,7 @@ export interface ModSummary {
   slug: string
   name: string
   summary: string
+  launcherModId: string | null
   tags: string[]
   author: { id: number; username: string; school: School | null }
   latestVersion: string
@@ -51,6 +52,9 @@ export interface ModSummary {
 export interface ModVersion {
   id: number
   version: string
+  manifestVersion: string | null
+  packageSha256: string | null
+  contentSha256: string | null
   changelog: string
   fileSize: number
   downloads: number
@@ -118,6 +122,12 @@ export interface LobbyJoinInfo {
   launchUri: string
 }
 
+export interface LobbyMod {
+  id: string
+  version: string
+  contentSha256: string
+}
+
 export interface Lobby {
   id: number
   hostPlayer: string
@@ -130,6 +140,7 @@ export interface Lobby {
   expiresAtUtc: string
   build: LobbyBuild
   game: LobbyGame
+  mods: LobbyMod[]
   password: LobbyPasswordInfo | null
   /** Withheld for password lobbies until authorization succeeds. */
   join: LobbyJoinInfo | null
@@ -271,9 +282,6 @@ export const api = {
     downloadUrl: (slug: string) => `/api/mods/${encodeURIComponent(slug)}/download`,
     versionDownloadUrl: (slug: string, versionId: number) =>
       `/api/mods/${encodeURIComponent(slug)}/versions/${versionId}/download`,
-    /** Placeholder scheme until the loader registers its real protocol handler. */
-    installUrl: (slug: string) => `sdr://install/${encodeURIComponent(slug)}`,
-
     comments: {
       list: (slug: string) =>
         request<{ items: ModComment[]; total: number }>(
