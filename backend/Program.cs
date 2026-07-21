@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -251,8 +252,11 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
+var frontendContentTypes = new FileExtensionContentTypeProvider();
+frontendContentTypes.Mappings[".boneyard"] = "application/octet-stream";
 var frontendFiles = new StaticFileOptions
 {
+    ContentTypeProvider = frontendContentTypes,
     OnPrepareResponse = context =>
     {
         if (string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase))

@@ -16,6 +16,7 @@ const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/classes', label: 'Classes' },
   { to: '/mods', label: 'Library' },
+  { to: '/boneyards', label: 'Boneyards' },
   { to: '/about', label: 'About' },
 ]
 
@@ -294,6 +295,7 @@ export default function Shell() {
             <ul className="space-y-2 text-sm">
               <li><Link to="/classes" className="link-arcane">Classes in Session</Link></li>
               <li><Link to="/mods" className="link-arcane">The Library</Link></li>
+              <li><Link to="/boneyards" className="link-arcane">Boneyard Viewer</Link></li>
               <li><Link to="/about" className="link-arcane">The Revival Story</Link></li>
               <li>
                 <a href="https://discord.gg/HGHxZgyM2p" target="_blank" rel="noreferrer" className="link-arcane">

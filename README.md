@@ -1,5 +1,21 @@
 # Solomon Dark Website
 
+## Boneyard viewer
+
+`/boneyards` is a dedicated fullscreen, browser-local viewer for retail
+`.boneyard` files. It decodes the native SyncBuffer and renders the actual
+spawn, terrain polygons, road quads, fence segments, world-object positions,
+and static sprite placements. Files opened from disk never leave the browser.
+
+The parser, scene model, canvas renderer, and UI are separate so the workspace
+can grow into a web editor without replacing the native document model. Run
+its real-fixture contract with:
+
+```bash
+cd frontend
+npm run test:boneyard
+```
+
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website

@@ -306,6 +306,45 @@ body {
   .orb-off { background: #6e2626; box-shadow: 0 0 6px rgb(212 58 58 / 0.4); }
   .orb-veiled { background: #b45fe0; box-shadow: 0 0 8px rgb(180 95 224 / 0.6); }
 
+  .viewer-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2rem;
+    border: 1px solid rgb(200 168 98 / 0.2);
+    border-radius: 3px;
+    padding: 0.35rem 0.65rem;
+    background: #15111b;
+    color: var(--color-bone-dim);
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .viewer-tool:hover {
+    border-color: rgb(200 168 98 / 0.55);
+    background: #201a28;
+    color: var(--color-gold-bright);
+  }
+  .viewer-icon,
+  .viewer-zoom {
+    display: inline-flex;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgb(200 168 98 / 0.18);
+    background: #121018;
+    color: var(--color-bone-dim);
+    font-family: var(--font-mono);
+  }
+  .viewer-icon { width: 2rem; font-size: 1rem; }
+  .viewer-zoom { width: 3.6rem; font-size: 0.62rem; }
+  .viewer-icon:hover,
+  .viewer-zoom:hover { border-color: rgb(65 227 255 / 0.5); color: var(--color-arcane); }
+
   /* gold banner in the style of the game's "FETCHING BONEYARDS" strip */
   .gold-banner {
     display: inline-block;

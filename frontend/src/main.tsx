@@ -32,6 +32,13 @@ import NotFound from './pages/NotFound'
 
 const router = createBrowserRouter([
   {
+    path: '/boneyards',
+    lazy: async () => {
+      const { default: Component } = await import('./pages/BoneyardViewer')
+      return { Component }
+    },
+  },
+  {
     element: <Shell />,
     children: [
       { path: '/', element: <Home /> },
