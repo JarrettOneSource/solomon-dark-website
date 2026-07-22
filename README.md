@@ -20,9 +20,12 @@ npm run test:boneyard
 art lift without applying a Canvas filter to every placed piece on every
 frame: each decoded sprite is brightened once on a sprite-sized cache canvas.
 Painter order is cached per immutable editor document, off-screen pieces are
-culled, and ordinary pieces avoid unnecessary Canvas state stacks. Those are
-performance invariants; putting per-piece `filter` calls back in the stage
-turns a dense retail-generated map into multi-second frames.
+culled, and ordinary pieces avoid unnecessary Canvas state stacks. Pans,
+selection drags, brush strokes, and moving cursor chrome reuse an off-screen
+scene layer; after the pointer settles, the editor restores the exact direct
+render. Those are performance invariants; putting per-piece `filter` calls or
+full-world hover paints back in the stage turns a dense retail-generated map
+into multi-second frames.
 
 The browser benchmark measures file load, hover, pan, and zoom against either
 the bundled sample or a supplied dense `.boneyard`. Build and serve the site in
@@ -43,7 +46,8 @@ npm run benchmark:boneyard
 `CHROME_PATH` can select a Chrome executable; otherwise the benchmark uses
 the installed stable Chrome channel. The assertion budget intentionally
 allows machine variance while still rejecting the former multi-second
-interaction frames.
+interaction frames. Its hover traversal also rejects more than two complete
+world paints: one interaction-layer paint and one settled direct frame.
 
 ## Mod packages
 

@@ -156,7 +156,9 @@ async function exerciseCanvas(page, kind) {
   const x1 = canvas.x + canvas.width * 0.75
 
   const hover = async () => {
-    const steps = 6 * stress
+    // Cross enough dense-map placements to expose repeated full-world paints;
+    // six samples can happen to stay over a single large sprite.
+    const steps = 12 * stress
     for (let i = 0; i < steps; i++) {
       const t = steps === 1 ? 0 : i / (steps - 1)
       await page.mouse.move(x0 + (x1 - x0) * t, centerY + Math.sin(t * Math.PI * 8) * canvas.height * 0.2)
@@ -233,6 +235,16 @@ try {
     const failures = results.flatMap((result) => result.phases
       .filter((phase) => phase.taskMs > budgets[phase.name])
       .map((phase) => `${result.kind} ${phase.name}: ${phase.taskMs} ms > ${budgets[phase.name]} ms`))
+    const editorHover = results
+      .find((result) => result.kind === 'editor')
+      ?.phases.find((phase) => phase.name === 'hover')
+    // A loaded world uses four fillRect calls (void, ground, tint, vignette).
+    // Continuous hover may paint it once into the interaction layer and once
+    // more after the pointer settles, but must not repaint it per hit change.
+    const hoverFillRects = editorHover?.canvasCalls.fillRect ?? 0
+    if (editorHover && hoverFillRects > 8) {
+      failures.push(`editor hover scene paints: ${hoverFillRects} fillRect calls > 8`)
+    }
     if (failures.length > 0) throw new Error(`Boneyard performance budget failed:\n${failures.join('\n')}`)
   }
   console.log(JSON.stringify({ fixture, results }, null, 2))

@@ -75,6 +75,8 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
   const marquee = useRef<{ a: Vec2; b: Vec2 } | null>(null)
   const brushAt = useRef<Vec2 | null>(null)
   const gesture = useRef<Gesture>(null)
+  const previewing = useRef(false)
+  const previewTimer = useRef<number | null>(null)
   // Held spacebar turns any tool into the surveyor's hand.
   const spaceRef = useRef(false)
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -85,6 +87,27 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
 
   const markDirty = useCallback(() => {
     dirty.current = true
+  }, [])
+
+  const stopPreview = useCallback(() => {
+    previewing.current = false
+    if (previewTimer.current !== null) {
+      window.clearTimeout(previewTimer.current)
+      previewTimer.current = null
+    }
+  }, [])
+
+  // Cursor chrome (hover outlines, placement ghosts, draft tips, brush rings)
+  // changes while the world beneath it does not. Keep those motion frames on
+  // the cached scene layer, then restore the exact direct render at rest.
+  const keepPreviewing = useCallback(() => {
+    previewing.current = true
+    if (previewTimer.current !== null) window.clearTimeout(previewTimer.current)
+    previewTimer.current = window.setTimeout(() => {
+      previewTimer.current = null
+      previewing.current = false
+      dirty.current = true
+    }, 120)
   }, [])
 
   // Decoded art must reach the cached gesture layer too, not only the next
@@ -121,29 +144,33 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
   }, [selection, tool, showGrid, styles, markDirty])
 
   const fit = useCallback(() => {
+    stopPreview()
     const b = live.current.doc.meta.bounds
     const { w, h } = size.current
     if (w === 0 || h === 0) return
     const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min((w - 80) / b.w, (h - 80) / b.h)))
     cam.current = { x: b.x + b.w / 2, y: b.y + b.h / 2, zoom }
     markDirty()
-  }, [markDirty])
+  }, [markDirty, stopPreview])
 
   const zoomBy = useCallback((factor: number) => {
+    stopPreview()
     cam.current.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, cam.current.zoom * factor))
     markDirty()
-  }, [markDirty])
+  }, [markDirty, stopPreview])
 
   const zoomTo = useCallback((zoom: number) => {
+    stopPreview()
     cam.current.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom))
     markDirty()
-  }, [markDirty])
+  }, [markDirty, stopPreview])
 
   const panBy = useCallback((dx: number, dy: number) => {
+    stopPreview()
     cam.current.x += dx / cam.current.zoom
     cam.current.y += dy / cam.current.zoom
     markDirty()
-  }, [markDirty])
+  }, [markDirty, stopPreview])
 
   useImperativeHandle(ref, () => ({ fit, zoomBy, panBy }), [fit, zoomBy, panBy])
 
@@ -226,6 +253,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         panning: gesture.current?.kind === 'pan',
         dragging: gesture.current?.kind === 'drag',
         appending: gesture.current?.kind === 'stroke' && s.tool === 'brush',
+        previewing: previewing.current,
       })
       if (zoomRef.current) zoomRef.current.textContent = `${Math.round(cam.current.zoom * 100)}%`
     }
@@ -233,18 +261,20 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      if (previewTimer.current !== null) window.clearTimeout(previewTimer.current)
     }
   }, [fit, markDirty])
 
   // Tool changes clear transient drawing state.
   useEffect(() => {
+    stopPreview()
     draft.current = null
     ghost.current = null
     marquee.current = null
     brushAt.current = null
     gesture.current = null
     markDirty()
-  }, [tool, markDirty])
+  }, [tool, markDirty, stopPreview])
 
   const toWorld = useCallback((e: { clientX: number; clientY: number }): Vec2 => {
     const rect = canvasRef.current!.getBoundingClientRect()
@@ -403,6 +433,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
   }, [placeAt, toWorld, onPlaced])
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    keepPreviewing()
     const s = live.current
     const world = toWorld(e)
     if (coordsRef.current) {
@@ -477,16 +508,17 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         markDirty()
       }
     }
-  }, [dispatch, toWorld, snapped, placeAt, eraseAt, markDirty])
+  }, [dispatch, toWorld, snapped, placeAt, eraseAt, markDirty, keepPreviewing])
 
   const endGesture = useCallback(() => {
     const g = gesture.current
     gesture.current = null
+    stopPreview()
     if (canvasRef.current) canvasRef.current.style.cursor = ''
-    if (!g) return
-    // One more frame off the direct path: gesture frames may come from the
-    // cached scene layer, and the resting stage must be the true render.
+    // A click without a drag can still have painted pointer chrome through
+    // the layer; pointer-up always restores the exact resting frame.
     markDirty()
+    if (!g) return
     if (g.kind === 'drag') {
       dispatch({ type: 'gesture-end' })
     } else if (g.kind === 'marquee') {
@@ -495,7 +527,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
       dispatch({ type: 'gesture-end' })
       if (g.touched) (live.current.tool === 'erase' ? onDeleted : onPlaced)?.()
     }
-  }, [dispatch, markDirty, onPlaced, onDeleted])
+  }, [dispatch, markDirty, onPlaced, onDeleted, stopPreview])
 
   const finishDraft = useCallback(() => {
     const s = live.current
@@ -531,6 +563,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     if (!canvas) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
+      stopPreview()
       const rect = canvas.getBoundingClientRect()
       const px = e.clientX - rect.left
       const py = e.clientY - rect.top
@@ -544,7 +577,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [markDirty])
+  }, [markDirty, stopPreview])
 
   // Draft-line keys live here; the page owns the rest of the keyboard.
   useEffect(() => {
@@ -579,6 +612,8 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         onPointerUp={endGesture}
         onPointerCancel={endGesture}
         onPointerLeave={() => {
+          stopPreview()
+          hover.current = null
           ghost.current = null
           brushAt.current = null
           markDirty()

@@ -67,6 +67,9 @@ export interface StageUI {
   /** True while a scatter-brush stroke is live: placements append into the
    * cached layer instead of forcing full repaints. */
   appending: boolean
+  /** True while pointer-driven chrome is changing. The still world may blit
+   * from the scene layer until the pointer settles. */
+  previewing: boolean
 }
 
 export function worldToScreen(p: Vec2, cam: Camera, w: number, h: number): Vec2 {
@@ -264,12 +267,12 @@ interface WorldPaintUI {
 
 // ---------- the gesture scene layer ----------
 //
-// During camera pans, marquee sweeps, and selection drags the world barely
-// changes frame to frame, yet repainting it costs a thousand draw calls. So
-// those gestures render the world once into an offscreen layer and each frame
-// blits it, painting live only what actually moves: outlines, the held
-// pieces, the gesture chrome. Every at-rest frame still takes the direct
-// path, so a resting stage is pixel-identical to the classic renderer.
+// During camera pans, marquee sweeps, selection drags, and cursor-preview
+// motion the world barely changes frame to frame, yet repainting it costs a
+// thousand draw calls. Those interactions render the world once into an
+// offscreen layer and each frame blits it, painting live only what actually
+// moves: outlines, held pieces, and gesture chrome. The stage returns to the
+// direct path when motion settles, so its resting frame stays pixel-identical.
 
 // Pans glide the viewport, so their layer carries extra painted world at the
 // edges; every other gesture holds the camera still and skips the margin.
@@ -457,7 +460,7 @@ export function drawStage(
       ? 'sans-selection'
       : ui.appending
         ? 'append'
-        : ui.panning || ui.marquee
+        : ui.panning || ui.marquee || ui.previewing
           ? 'world'
           : null
   if (mode) {
