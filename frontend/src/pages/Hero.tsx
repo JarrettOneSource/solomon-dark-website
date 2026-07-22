@@ -343,9 +343,9 @@ export default function Hero() {
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-[300px] w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-60 w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
-            <div className="flex w-full max-w-[320px] flex-col gap-2 sm:h-[300px]">
+            <div className="flex w-full max-w-[320px] flex-col gap-2 sm:h-60">
               <a
                 href="https://discord.gg/HGHxZgyM2p"
                 target="_blank"
@@ -375,17 +375,11 @@ export default function Hero() {
               >
                 Classes in Session
               </Link>
-              <Link
-                to="/about"
-                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
-              >
-                The Revival Story
-              </Link>
             </div>
             <img
               src={art.flourishVert}
               alt=""
-              className="hidden h-[300px] w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+              className="hidden h-60 w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
           </div>
         </div>
