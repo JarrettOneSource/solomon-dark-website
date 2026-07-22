@@ -357,6 +357,9 @@ export default function Hero() {
               >
                 Download the Beta
               </span>
+              <Link to="/mods" className="btn-plaque">
+                The Library
+              </Link>
               <Link to="/classes" className="btn-plaque">
                 Classes in Session
               </Link>
