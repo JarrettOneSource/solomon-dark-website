@@ -5,6 +5,7 @@
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, Selection, SpriteRef, StaticSprite, TerrainPatch, Vec2 } from './model'
 import { entryKey, sameEntry, selectionSet } from './model'
 import { spriteImage, spriteRefFor } from './assets'
+import { liftedSpriteSource } from './lifted-sprite'
 import {
   FENCE_GRATE_TEXTURE,
   GROUND_TEXTURE,
@@ -95,7 +96,7 @@ function drawableFor(kind: 'object' | 'sprite', item: PlacedObject | StaticSprit
   const spr = kind === 'sprite' ? (item as StaticSprite) : null
   return {
     sel: { kind, eid: item.eid },
-    img: img && img.complete && img.naturalWidth > 0 ? img : null,
+    img,
     ref: item.sprite ?? null,
     pos: item.pos,
     rot: spr?.s0 ?? 0,
@@ -103,6 +104,20 @@ function drawableFor(kind: 'object' | 'sprite', item: PlacedObject | StaticSprit
     alpha: spr ? Math.max(0.05, Math.min(1, spr.s2 || 1)) : 1,
     baseline: item.pos.y,
   }
+}
+
+const drawableCache = new WeakMap<EditorDoc, Drawable[]>()
+
+function drawablesFor(doc: EditorDoc): Drawable[] {
+  let drawables = drawableCache.get(doc)
+  if (!drawables) {
+    drawables = [
+      ...doc.objects.map((o) => drawableFor('object', o)),
+      ...doc.sprites.map((s) => drawableFor('sprite', s)),
+    ].sort((a, z) => a.baseline - z.baseline)
+    drawableCache.set(doc, drawables)
+  }
+  return drawables
 }
 
 /** Anchored draw rect in world units, scale applied. The sprite ref carries
@@ -272,50 +287,59 @@ export function drawStage(
   }
 
   // Objects and scenery sprites, painter-sorted together.
-  const drawables: Drawable[] = [
-    ...doc.objects.map((o) => drawableFor('object', o)),
-    ...doc.sprites.map((s) => drawableFor('sprite', s)),
-  ].sort((a, z) => a.baseline - z.baseline)
+  const drawables = drawablesFor(doc)
+  ctx.imageSmoothingEnabled = cam.zoom < 1
 
   for (const d of drawables) {
     const r = anchoredRect(d)
     const s = worldToScreen({ x: r.x, y: r.y }, cam, cssW, cssH)
+    const drawW = r.w * cam.zoom
+    const drawH = r.h * cam.zoom
+    // Rotation can swing a corner beyond the unrotated sprite rectangle, so
+    // rotated scenery gets a conservative margin at the viewport edge.
+    const cullMargin = d.rot === 0 ? 0 : Math.max(drawW, drawH)
+    if (
+      s.x + drawW < -cullMargin || s.y + drawH < -cullMargin
+      || s.x > cssW + cullMargin || s.y > cssH + cullMargin
+    ) continue
     const isSel = selected.has(entryKey(d.sel))
     const isHover = !isSel && sameEntry(ui.hover, d.sel)
 
     // Rooting shadow so pieces sit in the ground instead of on it.
     const foot = worldToScreen(d.pos, cam, cssW, cssH)
-    ctx.save()
     ctx.fillStyle = 'rgba(0,0,0,0.42)'
     ctx.beginPath()
     ctx.ellipse(foot.x, foot.y, (r.w / 2.6) * cam.zoom, Math.max(3, r.w / 7) * cam.zoom, 0, 0, Math.PI * 2)
     ctx.fill()
-    ctx.restore()
 
-    if (d.img) {
-      ctx.imageSmoothingEnabled = cam.zoom < 1
-      ctx.save()
-      ctx.globalAlpha = d.alpha
-      // The game's piece art is authentically near-black; on the site's
-      // darker table it wears the same lift as the palette thumbs.
-      ctx.filter = 'brightness(1.12)'
+    const image = d.img && d.img.complete && d.img.naturalWidth > 0
+      ? liftedSpriteSource(d.img)
+      : null
+    if (image) {
       if (d.rot !== 0 && d.ref) {
+        ctx.save()
+        ctx.globalAlpha = d.alpha
         ctx.translate(foot.x, foot.y)
         ctx.rotate((d.rot * Math.PI) / 180)
         ctx.drawImage(
-          d.img,
+          image,
           -d.ref.anchorX * d.scale * cam.zoom,
           -d.ref.anchorY * d.scale * cam.zoom,
-          r.w * cam.zoom,
-          r.h * cam.zoom,
+          drawW,
+          drawH,
         )
+        ctx.restore()
+      } else if (d.alpha !== 1) {
+        ctx.save()
+        ctx.globalAlpha = d.alpha
+        ctx.drawImage(image, s.x, s.y, drawW, drawH)
+        ctx.restore()
       } else {
-        ctx.drawImage(d.img, s.x, s.y, r.w * cam.zoom, r.h * cam.zoom)
+        ctx.drawImage(image, s.x, s.y, drawW, drawH)
       }
-      ctx.restore()
     } else {
       ctx.fillStyle = 'rgba(200,168,98,0.2)'
-      ctx.fillRect(s.x, s.y, r.w * cam.zoom, r.h * cam.zoom)
+      ctx.fillRect(s.x, s.y, drawW, drawH)
     }
 
     if (isSel || isHover) {
@@ -323,11 +347,11 @@ export function drawStage(
       ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.95)' : 'rgba(230,220,195,0.4)'
       ctx.lineWidth = isSel ? 1.5 : 1
       ctx.setLineDash(isSel ? [] : [4, 3])
-      ctx.strokeRect(s.x - 2, s.y - 2, r.w * cam.zoom + 4, r.h * cam.zoom + 4)
+      ctx.strokeRect(s.x - 2, s.y - 2, drawW + 4, drawH + 4)
       if (isSel) {
         ctx.shadowColor = 'rgba(200,168,98,0.8)'
         ctx.shadowBlur = 10
-        ctx.strokeRect(s.x - 2, s.y - 2, r.w * cam.zoom + 4, r.h * cam.zoom + 4)
+        ctx.strokeRect(s.x - 2, s.y - 2, drawW + 4, drawH + 4)
       }
       ctx.restore()
     }
@@ -349,8 +373,7 @@ export function drawStage(
       const g = worldToScreen({ x: r.x, y: r.y }, cam, cssW, cssH)
       ctx.save()
       ctx.globalAlpha = 0.55
-      ctx.filter = 'brightness(1.12)'
-      ctx.drawImage(img, g.x, g.y, r.w * cam.zoom, r.h * cam.zoom)
+      ctx.drawImage(liftedSpriteSource(img), g.x, g.y, r.w * cam.zoom, r.h * cam.zoom)
       ctx.globalAlpha = 0.9
       const foot = worldToScreen(ui.ghost.pos, cam, cssW, cssH)
       ctx.strokeStyle = 'rgba(65,227,255,0.6)'
@@ -519,10 +542,9 @@ function plantArt(
   if (!img.complete || img.naturalWidth === 0) return false
   const s = worldToScreen(at, cam, w, h)
   ctx.save()
-  ctx.filter = 'brightness(1.12)'
   ctx.translate(s.x, s.y)
   if (mirror) ctx.scale(-1, 1)
-  ctx.drawImage(img, -ref.anchorX * cam.zoom, -ref.anchorY * cam.zoom, ref.w * cam.zoom, ref.h * cam.zoom)
+  ctx.drawImage(liftedSpriteSource(img), -ref.anchorX * cam.zoom, -ref.anchorY * cam.zoom, ref.w * cam.zoom, ref.h * cam.zoom)
   ctx.restore()
   return true
 }
@@ -704,10 +726,7 @@ function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
 
 /** Topmost thing under the cursor, respecting draw order (later = on top). */
 export function pick(doc: EditorDoc, world: Vec2): SelEntry | null {
-  const drawables: Drawable[] = [
-    ...doc.objects.map((o) => drawableFor('object', o)),
-    ...doc.sprites.map((s) => drawableFor('sprite', s)),
-  ].sort((a, z) => a.baseline - z.baseline)
+  const drawables = drawablesFor(doc)
 
   for (let i = drawables.length - 1; i >= 0; i--) {
     const r = anchoredRect(drawables[i])

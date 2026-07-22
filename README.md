@@ -16,6 +16,35 @@ cd frontend
 npm run test:boneyard
 ```
 
+`/boneyard` is the authoring surface. Its large-map renderer keeps the same
+art lift without applying a Canvas filter to every placed piece on every
+frame: each decoded sprite is brightened once on a sprite-sized cache canvas.
+Painter order is cached per immutable editor document, off-screen pieces are
+culled, and ordinary pieces avoid unnecessary Canvas state stacks. Those are
+performance invariants; putting per-piece `filter` calls back in the stage
+turns a dense retail-generated map into multi-second frames.
+
+The browser benchmark measures file load, hover, pan, and zoom against either
+the bundled sample or a supplied dense `.boneyard`. Build and serve the site in
+one terminal, then run the benchmark in another:
+
+```bash
+cd frontend
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4175
+
+BONEYARD_BENCH_URL=http://127.0.0.1:4175 \
+BONEYARD_BENCH_FIXTURE="/path/to/large-map.boneyard" \
+BONEYARD_BENCH_ROUTE=editor \
+BONEYARD_BENCH_ASSERT=1 \
+npm run benchmark:boneyard
+```
+
+`CHROME_PATH` can select a Chrome executable; otherwise the benchmark uses
+the installed stable Chrome channel. The assertion budget intentionally
+allows machine variance while still rejecting the former multi-second
+interaction frames.
+
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website
