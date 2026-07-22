@@ -1,7 +1,7 @@
 // The dig site itself: canvas viewport, camera, pointer tools, status strip.
 // Rendering runs off refs and a dirty flag; React only mounts the chrome.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { PaletteItem } from '../../editor/assets'
 import { findPaletteItem, spriteImage, spriteRefFor } from '../../editor/assets'
@@ -19,6 +19,8 @@ const ZOOM_MAX = 3
 export interface StageHandle {
   fit: () => void
   zoomBy: (factor: number) => void
+  /** Slide the camera by a screen-pixel delta. */
+  panBy: (dx: number, dy: number) => void
 }
 
 interface Props {
@@ -38,11 +40,11 @@ interface Props {
 }
 
 const TOOL_HINT: Record<Tool, string> = {
-  select: 'click holds · drag moves · drag empty ground lassos · shift adds',
+  select: 'click holds · drag moves · drag empty ground lassos · space surveys',
   place: 'click plants · esc or right-click puts it down',
   brush: 'drag to scatter · esc or right-click puts it down',
   erase: 'click or drag to evict',
-  pan: 'drag to survey',
+  pan: 'drag to survey · arrows walk the view when nothing is held',
   road: 'click to lay · double-click or enter ends the road',
   fence: 'click to post · double-click or enter ends the run',
   terrain: 'click to carve · double-click or enter ends the cut',
@@ -73,6 +75,9 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
   const marquee = useRef<{ a: Vec2; b: Vec2 } | null>(null)
   const brushAt = useRef<Vec2 | null>(null)
   const gesture = useRef<Gesture>(null)
+  // Held spacebar turns any tool into the surveyor's hand.
+  const spaceRef = useRef(false)
+  const [spaceHeld, setSpaceHeld] = useState(false)
 
   // Live mirrors so pointer handlers never close over stale props.
   const live = useRef({ doc, selection, tool, activeItem, snap, showGrid, styles })
@@ -118,7 +123,38 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
     markDirty()
   }, [markDirty])
 
-  useImperativeHandle(ref, () => ({ fit, zoomBy }), [fit, zoomBy])
+  const panBy = useCallback((dx: number, dy: number) => {
+    cam.current.x += dx / cam.current.zoom
+    cam.current.y += dy / cam.current.zoom
+    markDirty()
+  }, [markDirty])
+
+  useImperativeHandle(ref, () => ({ fit, zoomBy, panBy }), [fit, zoomBy, panBy])
+
+  // Spacebar: temporary survey from any tool, back the moment it lifts.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+      e.preventDefault()
+      if (!spaceRef.current) {
+        spaceRef.current = true
+        setSpaceHeld(true)
+      }
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      spaceRef.current = false
+      setSpaceHeld(false)
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  }, [])
 
   // Resize, then render loop.
   useEffect(() => {
@@ -255,9 +291,10 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
       return
     }
 
-    // Middle button, right button, or the pan tool, surveys.
-    if (e.button === 1 || e.button === 2 || s.tool === 'pan') {
+    // Middle button, right button, the pan tool, or a held spacebar surveys.
+    if (e.button === 1 || e.button === 2 || s.tool === 'pan' || spaceRef.current) {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, camX: cam.current.x, camY: cam.current.y }
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing'
       return
     }
     if (e.button !== 0) return
@@ -424,6 +461,7 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
   const endGesture = useCallback(() => {
     const g = gesture.current
     gesture.current = null
+    if (canvasRef.current) canvasRef.current.style.cursor = ''
     if (!g) return
     if (g.kind === 'drag') {
       dispatch({ type: 'gesture-end' })
@@ -503,7 +541,9 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
   }, [finishDraft, markDirty])
 
   const cursor =
-    tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'brush' || tool === 'erase' ? 'none' : 'crosshair'
+    spaceHeld || tool === 'pan'
+      ? 'grab'
+      : tool === 'select' ? 'default' : tool === 'brush' || tool === 'erase' ? 'none' : 'crosshair'
 
   return (
     <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden border-y border-gold/15 bg-[#07060a]">

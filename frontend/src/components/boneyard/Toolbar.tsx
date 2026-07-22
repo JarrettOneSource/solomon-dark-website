@@ -61,8 +61,12 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
   ),
   pan: (
     <path
-      d="M8 1l1.8 1.8H8.8v4.4h4.4V6.4L15 8l-1.8 1.6v-.8H8.8v4.4h1L8 15l-1.8-1.8h1V8.8H2.8v.8L1 8l1.8-1.6v.8h4.4V2.8h-1z"
-      fill="currentColor"
+      d="M5.1 7.3V3.7a.85.85 0 011.7 0v2.9M6.8 6.5V2.6a.85.85 0 011.7 0v3.7M8.5 6.4V3a.85.85 0 011.7 0v3.9M10.2 7.5V4.7a.85.85 0 011.7 0v4.1c0 3-1.7 4.7-4.4 4.7-2 0-3.1-.8-4.2-2.8L2 8.9c-.4-.7.5-1.5 1.1-1l1.6 1.4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     />
   ),
   road: (
@@ -297,7 +301,7 @@ const HAND_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'select', icon: 'select', label: 'Select, lasso, move (V)' },
   { tool: 'brush', icon: 'brush', label: 'Scatter brush (P)' },
   { tool: 'erase', icon: 'erase', label: 'Evict, drag sweeps (E)' },
-  { tool: 'pan', icon: 'pan', label: 'Survey the view (H)' },
+  { tool: 'pan', icon: 'pan', label: 'Survey the view (H, or hold Space from any tool)' },
 ]
 
 const DRAW_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [

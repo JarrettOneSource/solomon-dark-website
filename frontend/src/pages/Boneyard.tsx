@@ -185,8 +185,14 @@ export default function Boneyard() {
     return () => clearTimeout(t)
   }, [state.doc, state.dirty, state.draftId])
 
-  // The keyboard: tools, history, housekeeping.
+  // The keyboard: tools, history, housekeeping. Arrows nudge the held
+  // pieces, or walk the camera when the hands are empty.
+  const hasSelection = state.selection.length > 0
   useEffect(() => {
+    const arrow = (dx: number, dy: number, fine: boolean) => {
+      if (hasSelection) dispatch({ type: 'nudge', dx: fine ? Math.sign(dx) : dx, dy: fine ? Math.sign(dy) : dy })
+      else stageRef.current?.panBy(dx * 10, dy * 10)
+    }
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return
@@ -239,15 +245,15 @@ export default function Boneyard() {
             setActiveKey(null)
           }
           break
-        case 'ArrowUp': e.preventDefault(); dispatch({ type: 'nudge', dx: 0, dy: e.shiftKey ? -1 : -16 }); break
-        case 'ArrowDown': e.preventDefault(); dispatch({ type: 'nudge', dx: 0, dy: e.shiftKey ? 1 : 16 }); break
-        case 'ArrowLeft': e.preventDefault(); dispatch({ type: 'nudge', dx: e.shiftKey ? -1 : -16, dy: 0 }); break
-        case 'ArrowRight': e.preventDefault(); dispatch({ type: 'nudge', dx: e.shiftKey ? 1 : 16, dy: 0 }); break
+        case 'ArrowUp': e.preventDefault(); arrow(0, -16, e.shiftKey); break
+        case 'ArrowDown': e.preventDefault(); arrow(0, 16, e.shiftKey); break
+        case 'ArrowLeft': e.preventDefault(); arrow(-16, 0, e.shiftKey); break
+        case 'ArrowRight': e.preventDefault(); arrow(16, 0, e.shiftKey); break
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [tool])
+  }, [tool, hasSelection])
 
   const openDraft = useCallback((id: string) => {
     const doc = loadDraft(id)
