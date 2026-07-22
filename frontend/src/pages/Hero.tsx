@@ -335,20 +335,22 @@ export default function Hero() {
           </p>
 
           {/* menu plaques framed by the gold flourish columns from UI.png.
-              The columns stretch with the stack, so the art always sits at
-              its own proportions instead of hovering beside the buttons. */}
+              The columns keep their natural proportions at a fixed height,
+              and the plaque stack is pinned to that same height, each plaque
+              stretching an equal share so the stack's top and bottom edges
+              land exactly on the art's. */}
           <div className="mt-8 flex items-center justify-center gap-4">
             <img
               src={art.flourishVert}
               alt=""
               className="hidden h-[300px] w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
-            <div className="flex w-full max-w-[320px] flex-col gap-2">
+            <div className="flex w-full max-w-[320px] flex-col gap-2 sm:h-[300px]">
               <a
                 href="https://discord.gg/HGHxZgyM2p"
                 target="_blank"
                 rel="noreferrer"
-                className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]"
+                className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
                 Join the Discord
               </a>
@@ -357,17 +359,26 @@ export default function Hero() {
                 target="_blank"
                 rel="noreferrer"
                 title="Download the mod loader from GitHub"
-                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
                 Download the Mod Loader
               </a>
-              <Link to="/mods" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
+              <Link
+                to="/mods"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
+              >
                 The Library
               </Link>
-              <Link to="/classes" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
+              <Link
+                to="/classes"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
+              >
                 Classes in Session
               </Link>
-              <Link to="/about" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
+              <Link
+                to="/about"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
+              >
                 The Revival Story
               </Link>
             </div>
