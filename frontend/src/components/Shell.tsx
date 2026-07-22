@@ -11,18 +11,18 @@ import { isSfxMuted, toggleSfxMuted } from '../fx/audio'
 import { currentTrack, ensureStarted, isMuted, toggleMuted, uiClick, uiHover, uiPage } from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
+import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 
+// The Boneyard editor left the navbar deliberately: it is a maker's tool,
+// reached from the Library's drafting-table CTA and the footer passages.
 const NAV = [
   { to: '/', label: 'Home', end: true },
-  { to: '/boneyard', label: 'Boneyard' },
   { to: '/classes', label: 'Classes' },
   { to: '/mods', label: 'Library' },
   { to: '/about', label: 'About' },
 ]
 
-// The loader beta is not yet released; download CTAs stay visibly sealed
-// (no hrefs anywhere) until Jarrett breaks the seal.
-const SEALED_TITLE = 'Not yet released — the seal holds.'
+const DOWNLOAD_TITLE = 'Download the mod loader from GitHub'
 
 function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
   return (
@@ -213,13 +213,15 @@ export default function Shell() {
                 }}
               />
             </div>
-            <span
-              aria-disabled="true"
-              title={SEALED_TITLE}
-              className="btn btn-gold hidden !px-3.5 !py-2.5 !text-[11px] sm:inline-flex cursor-not-allowed select-none opacity-45"
+            <a
+              href={MOD_LOADER_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              title={DOWNLOAD_TITLE}
+              className="btn btn-gold hidden !px-3.5 !py-2.5 !text-[11px] sm:inline-flex"
             >
               Download
-            </span>
+            </a>
             {user ? (
               <div className="hidden items-center gap-2 md:flex">
                 <Link
@@ -275,13 +277,15 @@ export default function Shell() {
               ) : (
                 <NavItem to="/login" label="Sign in" />
               )}
-              <span
-                aria-disabled="true"
-                title={SEALED_TITLE}
-                className="btn btn-gold w-fit !text-[11px] cursor-not-allowed select-none opacity-45"
+              <a
+                href={MOD_LOADER_DOWNLOAD_URL}
+                target="_blank"
+                rel="noreferrer"
+                title={DOWNLOAD_TITLE}
+                className="btn btn-gold w-fit !text-[11px]"
               >
                 Download
-              </span>
+              </a>
             </div>
           </nav>
         )}
@@ -319,12 +323,9 @@ export default function Shell() {
                 </a>
               </li>
               <li>
-                <span
-                  className="cursor-not-allowed text-bone-dim/60"
-                  title="Not yet released — the seal holds."
-                >
-                  Mod loader (sealed)
-                </span>
+                <a href={MOD_LOADER_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="link-arcane">
+                  Mod loader ↗
+                </a>
               </li>
               <li>
                 <a href="https://github.com/JayMcArthur/Raptisoft-Solomon" target="_blank" rel="noreferrer" className="link-arcane">

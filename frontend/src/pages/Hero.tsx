@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { art } from '../lib/assets'
+import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 import AmbientHaunts from '../fx/Haunts'
 import { CrawlerStroll } from '../fx/Critters'
 import MenuSolomon from '../fx/MenuSolomon'
@@ -350,13 +351,15 @@ export default function Hero() {
               <a href="https://discord.gg/HGHxZgyM2p" target="_blank" rel="noreferrer" className="btn-plaque btn-plaque-beacon">
                 Join the Discord
               </a>
-              <span
-                aria-disabled="true"
-                title="Not yet released — the seal holds."
-                className="btn-plaque cursor-not-allowed select-none opacity-45"
+              <a
+                href={MOD_LOADER_DOWNLOAD_URL}
+                target="_blank"
+                rel="noreferrer"
+                title="Download the mod loader from GitHub"
+                className="btn-plaque"
               >
-                Download the Beta
-              </span>
+                Download the Mod Loader
+              </a>
               <Link to="/mods" className="btn-plaque">
                 The Library
               </Link>

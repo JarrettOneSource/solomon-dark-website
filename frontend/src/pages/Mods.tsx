@@ -66,9 +66,18 @@ export default function Mods() {
               completely nearly safe.”
             </p>
           </div>
-          <Link to={user ? '/mods/upload' : '/login'} className="btn btn-gold">
-            ✦ Contribute a Tome
-          </Link>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link
+              to="/boneyard"
+              className="btn btn-stone"
+              title="Open the drafting table and lay out an acre of your own"
+            >
+              ⚒ Draft a Boneyard
+            </Link>
+            <Link to={user ? '/mods/upload' : '/login'} className="btn btn-gold">
+              ✦ Contribute a Tome
+            </Link>
+          </div>
         </div>
       </Reveal>
 

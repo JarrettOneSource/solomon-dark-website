@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { art } from '../lib/assets'
+import { MOD_LOADER_DOWNLOAD_URL, MOD_LOADER_REPO_URL } from '../lib/links'
 
 const HALL_OF_FAME = [
   'Basilo, Lord of Ice',
@@ -85,7 +86,11 @@ export default function About() {
             <a href="https://github.com/JayMcArthur/Raptisoft-Solomon" target="_blank" rel="noreferrer">
               the preservation archive
             </a>
-            . The loader’s own code goes public when the seal breaks.
+            {' '}and{' '}
+            <a href={MOD_LOADER_REPO_URL} target="_blank" rel="noreferrer">
+              the loader’s own repository
+            </a>
+            .
           </p>
 
           <div className="panel panel-ornate my-10 p-6 sm:p-8">
@@ -132,13 +137,15 @@ export default function About() {
             <p className="text-fell mt-1 text-sm text-bone-dim">The dead are waiting. They’re patient like that.</p>
           </div>
           <div className="flex flex-none gap-3">
-            <span
-              aria-disabled="true"
-              title="Not yet released — the seal holds."
-              className="btn btn-gold cursor-not-allowed select-none opacity-45"
+            <a
+              href={MOD_LOADER_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              title="Download the mod loader from GitHub"
+              className="btn btn-gold"
             >
               Download
-            </span>
+            </a>
             <Link to="/mods" className="btn btn-stone">
               Browse the Library
             </Link>
