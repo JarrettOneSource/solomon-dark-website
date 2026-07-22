@@ -334,21 +334,22 @@ export default function Hero() {
             left behind.
           </p>
 
-          {/* menu plaques, flanked by the gold flourish columns from UI.png */}
-          <div className="relative mt-8 w-full max-w-[360px]">
+          {/* menu plaques framed by the gold flourish columns from UI.png.
+              The columns stretch with the stack, so the art always sits at
+              its own proportions instead of hovering beside the buttons. */}
+          <div className="mt-8 flex items-center justify-center gap-4">
             <img
               src={art.flourishVert}
               alt=""
-              className="absolute -left-16 top-1/2 hidden h-[105%] -translate-y-1/2 opacity-70 sm:block"
+              className="hidden h-[300px] w-auto object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
             />
-            <img
-              src={art.flourishVert}
-              alt=""
-              className="absolute -right-16 top-1/2 hidden h-[105%] opacity-70 sm:block"
-              style={{ transform: 'translateY(-50%) scaleX(-1)' }}
-            />
-            <div className="flex flex-col gap-2.5">
-              <a href="https://discord.gg/HGHxZgyM2p" target="_blank" rel="noreferrer" className="btn-plaque btn-plaque-beacon">
+            <div className="flex w-full max-w-[320px] flex-col gap-2">
+              <a
+                href="https://discord.gg/HGHxZgyM2p"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-plaque btn-plaque-beacon !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]"
+              >
                 Join the Discord
               </a>
               <a
@@ -356,20 +357,25 @@ export default function Hero() {
                 target="_blank"
                 rel="noreferrer"
                 title="Download the mod loader from GitHub"
-                className="btn-plaque"
+                className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]"
               >
                 Download the Mod Loader
               </a>
-              <Link to="/mods" className="btn-plaque">
+              <Link to="/mods" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
                 The Library
               </Link>
-              <Link to="/classes" className="btn-plaque">
+              <Link to="/classes" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
                 Classes in Session
               </Link>
-              <Link to="/about" className="btn-plaque">
+              <Link to="/about" className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em]">
                 The Revival Story
               </Link>
             </div>
+            <img
+              src={art.flourishVert}
+              alt=""
+              className="hidden h-[300px] w-auto -scale-x-100 object-contain opacity-90 drop-shadow-[0_3px_12px_rgba(0,0,0,.65)] sm:block"
+            />
           </div>
         </div>
       </div>
