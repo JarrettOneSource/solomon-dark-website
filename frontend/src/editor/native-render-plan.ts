@@ -44,6 +44,9 @@ export interface FenceMainLayer {
   kind: 'fence'
   sel: SelEntry
   fence: Polyline
+  part: 'post' | 'body'
+  pieceIndex: number
+  pos: Vec2
   sortKey: number
   sourceOrder: number
 }
@@ -110,8 +113,29 @@ function foregroundFor(object: NativePlacedObject): ObjectSpriteLayer | null {
   return null
 }
 
-function fenceSortKey(fence: Polyline): number {
-  return fence.points.reduce((lowest, point) => Math.max(lowest, point.y), -Infinity)
+function pointAlong(fence: Polyline, t: number): Vec2 {
+  const start = fence.points[0] ?? { x: 0, y: 0 }
+  const end = fence.points[1] ?? start
+  return {
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
+  }
+}
+
+function fenceBodyPositions(fence: Polyline): Vec2[] {
+  // The materializer creates two Puppet leaves for broken grates and gates.
+  // Intact grates and rails create one body whose recovered base position is
+  // the endpoint midpoint (FenceGrate/Rails builders +0x18). Walls also
+  // materialize as one body, represented at their static midpoint here.
+  switch (fence.segmentCode ?? fence.style ?? 0) {
+    case 1: return [pointAlong(fence, 0.28), pointAlong(fence, 0.72)]
+    case 2: return [pointAlong(fence, 0.26), pointAlong(fence, 0.74)]
+    default: return [pointAlong(fence, 0.5)]
+  }
+}
+
+function pointKey(point: Vec2): string {
+  return `${point.x},${point.y}`
 }
 
 /**
@@ -137,14 +161,37 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     const layer = mainObjectLayer(object, sourceOrder)
     return layer ? [layer] : []
   })
-  const fenceMain = doc.fences.map((fence, index): FenceMainLayer => ({
+  const uniquePosts = new Map<string, { fence: Polyline; pos: Vec2 }>()
+  // 0x0064AC90 collects and deduplicates every non-wall endpoint before it
+  // creates any fence bodies, so connected segments share one Puppet post.
+  for (const fence of doc.fences) {
+    if ((fence.segmentCode ?? fence.style ?? 0) === 3) continue
+    for (const pos of fence.points.slice(0, 2)) {
+      if (!uniquePosts.has(pointKey(pos))) uniquePosts.set(pointKey(pos), { fence, pos })
+    }
+  }
+  const fencePosts = [...uniquePosts.values()].map(({ fence, pos }, index): FenceMainLayer => ({
     kind: 'fence',
     sel: { kind: 'fence', eid: fence.eid },
     fence,
-    sortKey: fenceSortKey(fence),
+    part: 'post',
+    pieceIndex: index,
+    pos,
+    sortKey: pos.y,
     sourceOrder: objects.length + index,
   }))
-  const shadows = [...objectMain, ...fenceMain]
+  const bodySourceOrder = objects.length + fencePosts.length
+  const fenceBodies = doc.fences.flatMap((fence, fenceIndex) => fenceBodyPositions(fence).map((pos, pieceIndex): FenceMainLayer => ({
+    kind: 'fence',
+    sel: { kind: 'fence', eid: fence.eid },
+    fence,
+    part: 'body',
+    pieceIndex,
+    pos,
+    sortKey: pos.y,
+    sourceOrder: bodySourceOrder + fenceIndex * 2 + pieceIndex,
+  })))
+  const shadows = [...objectMain, ...fencePosts, ...fenceBodies]
   const main = [...shadows].sort((left, right) => left.sortKey - right.sortKey || left.sourceOrder - right.sourceOrder)
   const foreground = objects.flatMap((object) => {
     const layer = foregroundFor(object)

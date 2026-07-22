@@ -59,11 +59,39 @@ test('keeps compact sprites below shadows and main art and applies the Building 
   ], [compact], [fence]))
 
   assert.deepEqual(plan.compact.map((layer) => layer.atlasEntry), [121])
-  assert.deepEqual(plan.shadows.map((layer) => layer.sel.eid), ['tree', 'building', 'fence'])
-  assert.deepEqual(plan.main.map((layer) => [layer.sel.eid, layer.sortKey]), [
-    ['building', 50],
-    ['tree', 60],
-    ['fence', 90],
+  assert.deepEqual(plan.shadows.map((layer) => [layer.sel.eid, layer.kind === 'fence' ? layer.part : 'object']), [
+    ['tree', 'object'],
+    ['building', 'object'],
+    ['fence', 'post'],
+    ['fence', 'post'],
+    ['fence', 'body'],
+  ])
+  assert.deepEqual(plan.main.map((layer) => [layer.sel.eid, layer.kind === 'fence' ? layer.part : 'object', layer.sortKey]), [
+    ['building', 'object', 50],
+    ['tree', 'object', 60],
+    ['fence', 'post', 70],
+    ['fence', 'body', 80],
+    ['fence', 'post', 90],
+  ])
+})
+
+test('materializes shared Fenceposts once and gives split fence leaves independent depth', () => {
+  const plan = buildNativeRenderPlan(doc([], [], [
+    {
+      eid: 'broken', typeId: NATIVE.fence, segmentCode: 1,
+      points: [{ x: 0, y: 10 }, { x: 100, y: 20 }],
+    },
+    {
+      eid: 'rails', typeId: NATIVE.fence, segmentCode: 4,
+      points: [{ x: 100, y: 20 }, { x: 200, y: 30 }],
+    },
+  ]))
+  const fenceLayers = plan.shadows.filter((layer) => layer.kind === 'fence')
+  assert.equal(fenceLayers.filter((layer) => layer.part === 'post').length, 3)
+  assert.deepEqual(fenceLayers.filter((layer) => layer.part === 'body').map((layer) => [layer.sel.eid, layer.sortKey]), [
+    ['broken', 12.8],
+    ['broken', 17.2],
+    ['rails', 25],
   ])
 })
 
@@ -89,8 +117,8 @@ test('plans every retail story0 placement without mixing compact art into the ma
   }).length
   assert.equal(plan.underlays.length, 50)
   assert.equal(plan.compact.length, 133)
-  assert.equal(plan.shadows.length, 137)
-  assert.equal(plan.main.length, 137)
+  assert.equal(plan.shadows.length, 160)
+  assert.equal(plan.main.length, 160)
   assert.equal(treeForegroundCount, 49)
   assert.equal(plan.foreground.length, treeForegroundCount)
   assert.ok(plan.main.every((layer) => layer.kind !== 'object' || layer.sel.kind === 'object'))

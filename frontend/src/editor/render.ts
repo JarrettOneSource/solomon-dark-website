@@ -159,18 +159,18 @@ function renderSceneFor(doc: EditorDoc): RenderScene {
   let scene = renderSceneCache.get(doc)
   if (!scene) {
     const plan = buildNativeRenderPlan(doc)
-    const owners = new Map<string, MainRenderItem>()
+    const owners = new Map<MainLayer, MainRenderItem>()
     for (const layer of plan.shadows) {
       const item: MainRenderItem = layer.kind === 'object'
         ? { kind: 'object', layer, drawable: drawableForObject(layer) }
         : { kind: 'fence', layer }
-      owners.set(entryKey(layer.sel), item)
+      owners.set(layer, item)
     }
     scene = {
       underlays: plan.underlays.map(drawableForObject),
       compact: plan.compact.map(drawableForCompact),
-      shadows: plan.shadows.map((layer) => owners.get(entryKey(layer.sel))!),
-      main: plan.main.map((layer) => owners.get(entryKey(layer.sel))!),
+      shadows: plan.shadows.map((layer) => owners.get(layer)!),
+      main: plan.main.map((layer) => owners.get(layer)!),
       foreground: plan.foreground.map(drawableForObject),
     }
     renderSceneCache.set(doc, scene)
@@ -796,12 +796,12 @@ function paintPlacementPasses(
   for (const item of scene.shadows) {
     if (!included(item.layer.sel, filter)) continue
     if (item.kind === 'object') drawObjectShadow(ctx, item.drawable, cam, cssW, cssH)
-    else drawFenceShadow(ctx, item.layer.fence, cam, cssW, cssH)
+    else drawFenceShadow(ctx, item.layer, cam, cssW, cssH)
   }
   for (const item of scene.main) {
     if (!included(item.layer.sel, filter)) continue
     if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
-    else drawFence(ctx, item.layer.fence, cam, cssW, cssH)
+    else drawFencePart(ctx, item.layer, cam, cssW, cssH)
   }
   for (const drawable of scene.foreground) {
     if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
@@ -888,19 +888,18 @@ function drawObjectShadow(
 
 function drawFenceShadow(
   ctx: CanvasRenderingContext2D,
-  fence: Polyline,
+  layer: Extract<MainLayer, { kind: 'fence' }>,
   cam: Camera,
   cssW: number,
   cssH: number,
 ) {
-  if (fence.points.length < 2 || (fence.segmentCode ?? fence.style ?? 0) === 3) return
+  if (layer.part !== 'post') return
   const post = FENCE_ART.post
   const postWidth = post?.w ?? 38
-  const foot = (pos: Vec2): Vec2 => post
-    ? { x: pos.x + post.w / 2 - post.anchorX, y: pos.y + post.h - post.anchorY }
-    : pos
-  drawShadowAt(ctx, foot(fence.points[0]), postWidth, cam, cssW, cssH)
-  drawShadowAt(ctx, foot(fence.points[1]), postWidth, cam, cssW, cssH)
+  const foot = post
+    ? { x: layer.pos.x + post.w / 2 - post.anchorX, y: layer.pos.y + post.h - post.anchorY }
+    : layer.pos
+  drawShadowAt(ctx, foot, postWidth, cam, cssW, cssH)
 }
 
 /** The gesture chrome above everything: place ghost, draft path, marquee,
@@ -1099,13 +1098,18 @@ function plantArt(
   return true
 }
 
-function drawFence(
+function drawFencePart(
   ctx: CanvasRenderingContext2D,
-  fence: Polyline,
+  layer: Extract<MainLayer, { kind: 'fence' }>,
   cam: Camera,
   w: number,
   h: number,
 ) {
+  if (layer.part === 'post') {
+    plantArt(ctx, FENCE_ART.post, layer.pos, cam, w, h)
+    return
+  }
+  const { fence, pieceIndex } = layer
   if (fence.points.length < 2) return
   const code = fence.segmentCode ?? fence.style ?? 0
   const a = fence.points[0]
@@ -1145,13 +1149,15 @@ function drawFence(
     }
   } else if (code === 1) {
     // Broken grate: two fallen halves, one leaning from each end.
-    plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h)
-    plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true)
+    if (pieceIndex === 0) plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h)
+    else plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true)
   } else if (code === 2) {
     // Gate: two hinged leaves meeting at the middle, hinge on top.
-    plantArt(ctx, FENCE_ART.gateLeaf, at(0.26), cam, w, h)
-    plantArt(ctx, FENCE_ART.gateLeaf, at(0.74), cam, w, h, true)
-    plantArt(ctx, FENCE_ART.gateHinge, at(0.5), cam, w, h)
+    if (pieceIndex === 0) plantArt(ctx, FENCE_ART.gateLeaf, at(0.26), cam, w, h)
+    else {
+      plantArt(ctx, FENCE_ART.gateLeaf, at(0.74), cam, w, h, true)
+      plantArt(ctx, FENCE_ART.gateHinge, at(0.5), cam, w, h)
+    }
   } else {
     // Intact grate: repeated loose fencegrate quads, exactly as materialized.
     const img = spriteImage(FENCE_GRATE_TEXTURE)
@@ -1174,12 +1180,6 @@ function drawFence(
       ctx.lineWidth = Math.max(1.5, 3 * cam.zoom)
       strokePath(ctx, [worldToScreen(a, cam, w, h), worldToScreen(z, cam, w, h)])
     }
-  }
-
-  // Endpoint posts for the grate family, as the five-code expansion does.
-  if (code !== 3) {
-    plantArt(ctx, FENCE_ART.post, a, cam, w, h)
-    plantArt(ctx, FENCE_ART.post, z, cam, w, h)
   }
 
   ctx.restore()
