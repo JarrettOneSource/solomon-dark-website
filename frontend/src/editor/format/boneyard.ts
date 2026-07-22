@@ -9,7 +9,7 @@ import type {
   StaticSprite,
   TerrainPatch,
   Vec2,
-} from '../model'
+} from '../model.ts'
 
 export interface BoneyardBounds extends Rect {
   left: number
@@ -527,6 +527,7 @@ function decodeObject(typeId: number, chunks: Chunk[], index: number): BoneyardP
   }
   if (!PLACEABLES.has(typeId) || chunks.length !== 3 || chunks[0].payload.length !== 41) return item
   item.pos = { x: readF32(chunks[0].payload, 0), y: readF32(chunks[0].payload, 4) }
+  if (chunks[1].payload.length >= 53) item.sortBias = readF32(chunks[1].payload, 49)
   const subtype = chunks[2].payload
   if (typeId === 2001 && subtype.length === 5) {
     item.variant = subtype[0] | (subtype[1] << 8)
@@ -600,6 +601,9 @@ function encodeObject(item: BoneyardPlacedObject): Chunk[] {
   if (item.raw && chunks[0].payload.length !== 41) return chunks
   writeF32(chunks[0].payload, 0, item.pos.x)
   writeF32(chunks[0].payload, 4, item.pos.y)
+  if (chunks[1].payload.length >= 53 && (item.sortBias !== undefined || !item.raw)) {
+    writeF32(chunks[1].payload, 49, item.sortBias ?? (typeId === 2040 ? -50 : 0))
+  }
   if (typeId === 2001) {
     if (item.raw && item.variant === undefined && item.secondaryVariant === undefined
       && item.secondaryVisible === undefined && item.secondaryVisibleByte === undefined) return chunks

@@ -2,10 +2,12 @@
 // no React in here. World units are game pixels, origin at the plot center,
 // y growing downward, painter-sorted by baseline like the game draws it.
 
-import type { EditorDoc, PlacedObject, Polyline, SelEntry, Selection, SpriteRef, StaticSprite, TerrainPatch, Vec2 } from './model'
+import type { EditorDoc, Polyline, SelEntry, Selection, SpriteRef, TerrainPatch, Vec2 } from './model'
 import { entryKey, sameEntry, selectionSet } from './model'
 import { spriteImage, spriteRefFor } from './assets'
 import { liftedSpriteSource } from './lifted-sprite'
+import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
+import { buildNativeRenderPlan } from './native-render-plan'
 import {
   FENCE_GRATE_TEXTURE,
   GROUND_TEXTURE,
@@ -90,46 +92,90 @@ export const STAGE_TEXTURES: string[] = [
   ...Object.values(FENCE_ART).flatMap((ref) => (ref ? [ref.src] : [])),
 ]
 
-interface Drawable {
+interface SpriteDrawable {
   sel: SelEntry
   img: HTMLImageElement | null
   ref: SpriteRef | null
   pos: Vec2
-  /** Scenery records carry their own transform (s0/s1/s2 = rot/scale/alpha). */
   rot: number
-  scale: number
+  scaleX: number
+  scaleY: number
   alpha: number
-  /** Sort baseline: the feet, not the center. */
-  baseline: number
 }
 
-function drawableFor(kind: 'object' | 'sprite', item: PlacedObject | StaticSprite): Drawable {
-  const img = item.sprite ? spriteImage(item.sprite.src) : null
-  const spr = kind === 'sprite' ? (item as StaticSprite) : null
+interface ObjectRenderItem {
+  kind: 'object'
+  layer: Extract<MainLayer, { kind: 'object' }>
+  drawable: SpriteDrawable
+}
+
+interface FenceRenderItem {
+  kind: 'fence'
+  layer: Extract<MainLayer, { kind: 'fence' }>
+}
+
+type MainRenderItem = ObjectRenderItem | FenceRenderItem
+
+interface RenderScene {
+  underlays: SpriteDrawable[]
+  compact: SpriteDrawable[]
+  shadows: MainRenderItem[]
+  main: MainRenderItem[]
+  foreground: SpriteDrawable[]
+}
+
+function drawableForObject(layer: ObjectSpriteLayer): SpriteDrawable {
+  const ref = spriteRefFor(layer.atlas, layer.atlasEntry) ?? layer.object.sprite ?? null
   return {
-    sel: { kind, eid: item.eid },
-    img,
-    ref: item.sprite ?? null,
-    pos: item.pos,
-    rot: spr?.s0 ?? 0,
-    scale: spr?.s1 && spr.s1 > 0 ? spr.s1 : 1,
-    alpha: spr ? Math.max(0.05, Math.min(1, spr.s2 || 1)) : 1,
-    baseline: item.pos.y,
+    sel: layer.sel,
+    img: ref ? spriteImage(ref.src) : null,
+    ref,
+    pos: layer.pos,
+    rot: 0,
+    scaleX: 1,
+    scaleY: 1,
+    alpha: 1,
   }
 }
 
-const drawableCache = new WeakMap<EditorDoc, Drawable[]>()
-
-function drawablesFor(doc: EditorDoc): Drawable[] {
-  let drawables = drawableCache.get(doc)
-  if (!drawables) {
-    drawables = [
-      ...doc.objects.map((o) => drawableFor('object', o)),
-      ...doc.sprites.map((s) => drawableFor('sprite', s)),
-    ].sort((a, z) => a.baseline - z.baseline)
-    drawableCache.set(doc, drawables)
+function drawableForCompact(layer: CompactSpriteLayer): SpriteDrawable {
+  const ref = spriteRefFor(layer.atlas, layer.atlasEntry) ?? layer.sprite.sprite ?? null
+  const scale = Number.isFinite(layer.sprite.s1) ? Math.max(0, layer.sprite.s1) : 1
+  return {
+    sel: layer.sel,
+    img: ref ? spriteImage(ref.src) : null,
+    ref,
+    pos: layer.pos,
+    rot: Number.isFinite(layer.sprite.s0) ? layer.sprite.s0 : 0,
+    scaleX: scale * ((layer.sprite.flags & 1) !== 0 ? 0.8 : 1),
+    scaleY: scale,
+    alpha: Number.isFinite(layer.sprite.s2) ? Math.max(0, Math.min(1, layer.sprite.s2)) : 1,
   }
-  return drawables
+}
+
+const renderSceneCache = new WeakMap<EditorDoc, RenderScene>()
+
+function renderSceneFor(doc: EditorDoc): RenderScene {
+  let scene = renderSceneCache.get(doc)
+  if (!scene) {
+    const plan = buildNativeRenderPlan(doc)
+    const owners = new Map<string, MainRenderItem>()
+    for (const layer of plan.shadows) {
+      const item: MainRenderItem = layer.kind === 'object'
+        ? { kind: 'object', layer, drawable: drawableForObject(layer) }
+        : { kind: 'fence', layer }
+      owners.set(entryKey(layer.sel), item)
+    }
+    scene = {
+      underlays: plan.underlays.map(drawableForObject),
+      compact: plan.compact.map(drawableForCompact),
+      shadows: plan.shadows.map((layer) => owners.get(entryKey(layer.sel))!),
+      main: plan.main.map((layer) => owners.get(entryKey(layer.sel))!),
+      foreground: plan.foreground.map(drawableForObject),
+    }
+    renderSceneCache.set(doc, scene)
+  }
+  return scene
 }
 
 /** Anchored draw rect in world units, scale applied. The sprite ref carries
@@ -138,19 +184,21 @@ function anchoredRect(d: {
   ref: SpriteRef | null
   img: HTMLImageElement | null
   pos: Vec2
-  scale?: number
+  scaleX?: number
+  scaleY?: number
 }): { x: number; y: number; w: number; h: number } {
-  const k = d.scale && d.scale > 0 ? d.scale : 1
+  const scaleX = d.scaleX ?? 1
+  const scaleY = d.scaleY ?? 1
   if (d.ref) {
     return {
-      x: d.pos.x - d.ref.anchorX * k,
-      y: d.pos.y - d.ref.anchorY * k,
-      w: d.ref.w * k,
-      h: d.ref.h * k,
+      x: d.pos.x - d.ref.anchorX * scaleX,
+      y: d.pos.y - d.ref.anchorY * scaleY,
+      w: d.ref.w * scaleX,
+      h: d.ref.h * scaleY,
     }
   }
-  const w = (d.img?.naturalWidth ?? 48) * k
-  const h = (d.img?.naturalHeight ?? 48) * k
+  const w = (d.img?.naturalWidth ?? 48) * scaleX
+  const h = (d.img?.naturalHeight ?? 48) * scaleY
   return { x: d.pos.x - w / 2, y: d.pos.y - h, w, h }
 }
 
@@ -378,9 +426,9 @@ function layerUsable(mode: SceneLayer['mode'], cam: Camera, doc: EditorDoc, cssW
   return left >= L.wx && top >= L.wy && left + cssW / cam.zoom <= L.wx + lw && top + cssH / cam.zoom <= L.wy + lh
 }
 
-/** Stamp any pieces the stroke added since the layer was painted. Painter
- * order inside the gesture is approximate (new pieces land on top); the
- * direct frame after the stroke restores true sorting. */
+/** Stamp any pieces the stroke added since the layer was painted. Pass order
+ * is preserved, while insertion relative to already-painted pieces remains
+ * approximate until the direct frame at the end of the stroke. */
 function reconcileAppend(cam: Camera, doc: EditorDoc) {
   const L = sceneLayer!
   if (L.doc === doc || !L.painted) return
@@ -390,7 +438,7 @@ function reconcileAppend(cam: Camera, doc: EditorDoc) {
   if (fresh.size > 0) {
     const lw = L.canvas.width / L.dpr
     const lh = L.canvas.height / L.dpr
-    paintDrawables(L.ctx, doc, cam, lw, lh, EMPTY_SET, null, { only: fresh })
+    paintPlacementPasses(L.ctx, doc, cam, lw, lh, { only: fresh })
   }
   L.painted = { objects: doc.objects.length, sprites: doc.sprites.length }
   L.doc = doc
@@ -473,24 +521,19 @@ export function drawStage(
       const view = visibleWorld(cam, cssW, cssH, 256)
       const selected = selectionSet(ui.selection)
       if (mode === 'sans-selection') {
-        // The held pieces travel live above the frozen ground, in the same
-        // kind order the world paints them.
+        // Held pieces travel live above the frozen world while retaining the
+        // retail ordering among the held set.
+        const heldRoads = doc.roads.filter((r) => selected.has(`road:${r.eid}`))
+        drawRoads(ctx, heldRoads, cam, cssW, cssH, view, EMPTY_SET, null)
         for (const t of doc.terrain) {
           if (!selected.has(`terrain:${t.eid}`)) continue
           if (t.points && t.points.length >= 2 && !lineInView(t.points, view)) continue
-          drawTerrain(ctx, t, cam, cssW, cssH, true, false)
+          drawTerrain(ctx, t, cam, cssW, cssH, false, false)
         }
-        const heldRoads = doc.roads.filter((r) => selected.has(`road:${r.eid}`))
-        drawRoads(ctx, heldRoads, cam, cssW, cssH, view, selected, null)
-        for (const f of doc.fences) {
-          if (!selected.has(`fence:${f.eid}`) || !lineInView(f.points, view)) continue
-          drawFence(ctx, f, cam, cssW, cssH, true, false)
-        }
-        paintDrawables(ctx, doc, cam, cssW, cssH, selected, null, { only: selected })
-      } else {
-        lineOverlays(ctx, doc, cam, cssW, cssH, view, selected, ui.hover)
-        paintDrawableOutlines(ctx, doc, cam, cssW, cssH, selected, ui.hover)
+        paintPlacementPasses(ctx, doc, cam, cssW, cssH, { only: selected })
       }
+      lineOverlays(ctx, doc, cam, cssW, cssH, view, selected, ui.hover)
+      paintPlacementOutlines(ctx, doc, cam, cssW, cssH, selected, ui.hover)
       drawTransientOverlays(ctx, ui, cam, cssW, cssH)
       return
     }
@@ -547,8 +590,8 @@ function lineOverlays(
   ctx.restore()
 }
 
-/** Held/hover rectangles for placed pieces, drawn over a blitted layer. */
-function paintDrawableOutlines(
+/** Held/hover rectangles for placed pieces, including their composite art. */
+function paintPlacementOutlines(
   ctx: CanvasRenderingContext2D,
   doc: EditorDoc,
   cam: Camera,
@@ -558,11 +601,32 @@ function paintDrawableOutlines(
   hover: SelEntry | null,
 ) {
   if (selected.size === 0 && !hover) return
-  for (const d of drawablesFor(doc)) {
-    const isSel = selected.has(entryKey(d.sel))
-    const isHover = !isSel && sameEntry(hover, d.sel)
-    if (!isSel && !isHover) continue
+  const scene = renderSceneFor(doc)
+  const drawables = [
+    ...scene.underlays,
+    ...scene.compact,
+    ...scene.main.flatMap((item) => item.kind === 'object' ? [item.drawable] : []),
+    ...scene.foreground,
+  ]
+  const bounds = new Map<string, { sel: SelEntry; x: number; y: number; w: number; h: number }>()
+  for (const d of drawables) {
+    const key = entryKey(d.sel)
+    if (!selected.has(key) && !sameEntry(hover, d.sel)) continue
     const r = anchoredRect(d)
+    const old = bounds.get(key)
+    if (!old) {
+      bounds.set(key, { sel: d.sel, ...r })
+      continue
+    }
+    const right = Math.max(old.x + old.w, r.x + r.w)
+    const bottom = Math.max(old.y + old.h, r.y + r.h)
+    old.x = Math.min(old.x, r.x)
+    old.y = Math.min(old.y, r.y)
+    old.w = right - old.x
+    old.h = bottom - old.y
+  }
+  for (const r of bounds.values()) {
+    const isSel = selected.has(entryKey(r.sel))
     const s = worldToScreen({ x: r.x, y: r.y }, cam, w, h)
     const drawW = r.w * cam.zoom
     const drawH = r.h * cam.zoom
@@ -673,25 +737,25 @@ function paintWorld(
     ctx.restore()
   }
 
-  // Terrain lies lowest: rivers and rises carved into the ground.
-  for (const t of doc.terrain) {
-    if (skip?.has(`terrain:${t.eid}`)) continue
-    if (t.points && t.points.length >= 2 && !lineInView(t.points, view)) continue
-    drawTerrain(ctx, t, cam, cssW, cssH, selected.has(`terrain:${t.eid}`), sameEntry(wui.hover, { kind: 'terrain', eid: t.eid }))
+  // Arena::Render draws roads before terrain.
+  drawRoads(
+    ctx,
+    skip ? doc.roads.filter((road) => !skip.has(`road:${road.eid}`)) : doc.roads,
+    cam,
+    cssW,
+    cssH,
+    view,
+    EMPTY_SET,
+    null,
+  )
+
+  for (const terrain of doc.terrain) {
+    if (skip?.has(`terrain:${terrain.eid}`)) continue
+    if (terrain.points && terrain.points.length >= 2 && !lineInView(terrain.points, view)) continue
+    drawTerrain(ctx, terrain, cam, cssW, cssH, false, false)
   }
 
-  // Roads on the ground, quad by native quad.
-  drawRoads(ctx, skip ? doc.roads.filter((r) => !skip.has(`road:${r.eid}`)) : doc.roads, cam, cssW, cssH, view, selected, wui.hover)
-
-  // Fences: the game's grate and wall art along each segment.
-  for (const f of doc.fences) {
-    if (skip?.has(`fence:${f.eid}`)) continue
-    if (!lineInView(f.points, view)) continue
-    drawFence(ctx, f, cam, cssW, cssH, selected.has(`fence:${f.eid}`), sameEntry(wui.hover, { kind: 'fence', eid: f.eid }))
-  }
-
-  // Objects and scenery sprites, painter-sorted together.
-  paintDrawables(ctx, doc, cam, cssW, cssH, selected, wui.hover, skip ? { skip } : undefined)
+  paintPlacementPasses(ctx, doc, cam, cssW, cssH, skip ? { skip } : undefined)
 
   // Plot boundary: the property line, in gold.
   ctx.save()
@@ -700,84 +764,143 @@ function paintWorld(
   ctx.setLineDash([10, 6])
   ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
   ctx.restore()
+
+  lineOverlays(ctx, doc, cam, cssW, cssH, view, selected, wui.hover)
+  paintPlacementOutlines(ctx, doc, cam, cssW, cssH, selected, wui.hover)
 }
 
-/** The painter-sorted sprite pass, filterable so the layer path can leave
- * held pieces out (skip) or draw exactly the held pieces live (only). */
-function paintDrawables(
+function included(sel: SelEntry, filter?: { only?: Set<string>; skip?: Set<string> }): boolean {
+  if (!filter) return true
+  const key = entryKey(sel)
+  if (filter.only && !filter.only.has(key)) return false
+  return !filter.skip?.has(key)
+}
+
+function paintPlacementPasses(
   ctx: CanvasRenderingContext2D,
   doc: EditorDoc,
   cam: Camera,
   cssW: number,
   cssH: number,
-  selected: Set<string>,
-  hover: SelEntry | null,
   filter?: { only?: Set<string>; skip?: Set<string> },
 ) {
-  const drawables = drawablesFor(doc)
+  const scene = renderSceneFor(doc)
   ctx.imageSmoothingEnabled = cam.zoom < 1
 
-  for (const d of drawables) {
-    if (filter) {
-      const key = entryKey(d.sel)
-      if (filter.only && !filter.only.has(key)) continue
-      if (filter.skip && filter.skip.has(key)) continue
-    }
-    const r = anchoredRect(d)
-    const s = worldToScreen({ x: r.x, y: r.y }, cam, cssW, cssH)
-    const drawW = r.w * cam.zoom
-    const drawH = r.h * cam.zoom
-    // Rotation can swing a corner beyond the unrotated sprite rectangle, so
-    // rotated scenery gets a conservative margin at the viewport edge.
-    const cullMargin = d.rot === 0 ? 0 : Math.max(drawW, drawH)
-    if (
-      s.x + drawW < -cullMargin || s.y + drawH < -cullMargin
-      || s.x > cssW + cullMargin || s.y > cssH + cullMargin
-    ) continue
-    const isSel = selected.has(entryKey(d.sel))
-    const isHover = !isSel && sameEntry(hover, d.sel)
-
-    // Rooting shadow so pieces sit in the ground instead of on it.
-    const foot = worldToScreen(d.pos, cam, cssW, cssH)
-    ctx.fillStyle = 'rgba(0,0,0,0.42)'
-    ctx.beginPath()
-    ctx.ellipse(foot.x, foot.y, (r.w / 2.6) * cam.zoom, Math.max(3, r.w / 7) * cam.zoom, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    const image = d.img && d.img.complete && d.img.naturalWidth > 0
-      ? liftedSpriteSource(d.img)
-      : null
-    if (image) {
-      if (d.rot !== 0 && d.ref) {
-        ctx.save()
-        ctx.globalAlpha = d.alpha
-        ctx.translate(foot.x, foot.y)
-        ctx.rotate((d.rot * Math.PI) / 180)
-        ctx.drawImage(
-          image,
-          -d.ref.anchorX * d.scale * cam.zoom,
-          -d.ref.anchorY * d.scale * cam.zoom,
-          drawW,
-          drawH,
-        )
-        ctx.restore()
-      } else if (d.alpha !== 1) {
-        ctx.save()
-        ctx.globalAlpha = d.alpha
-        ctx.drawImage(image, s.x, s.y, drawW, drawH)
-        ctx.restore()
-      } else {
-        ctx.drawImage(image, s.x, s.y, drawW, drawH)
-      }
-    } else {
-      ctx.fillStyle = 'rgba(200,168,98,0.2)'
-      ctx.fillRect(s.x, s.y, drawW, drawH)
-    }
-
-    if (isSel || isHover) {
-      drawableOutline(ctx, s.x, s.y, drawW, drawH, isSel)
-    }
+  for (const drawable of scene.underlays) {
+    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
   }
+  for (const drawable of scene.compact) {
+    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
+  }
+  for (const item of scene.shadows) {
+    if (!included(item.layer.sel, filter)) continue
+    if (item.kind === 'object') drawObjectShadow(ctx, item.drawable, cam, cssW, cssH)
+    else drawFenceShadow(ctx, item.layer.fence, cam, cssW, cssH)
+  }
+  for (const item of scene.main) {
+    if (!included(item.layer.sel, filter)) continue
+    if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
+    else drawFence(ctx, item.layer.fence, cam, cssW, cssH)
+  }
+  for (const drawable of scene.foreground) {
+    if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
+  }
+}
+
+function drawSprite(
+  ctx: CanvasRenderingContext2D,
+  d: SpriteDrawable,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+  placeholder: boolean,
+) {
+  if (d.alpha <= 0 || d.scaleX <= 0 || d.scaleY <= 0) return
+  const r = anchoredRect(d)
+  const s = worldToScreen({ x: r.x, y: r.y }, cam, cssW, cssH)
+  const drawW = r.w * cam.zoom
+  const drawH = r.h * cam.zoom
+  const cullMargin = d.rot === 0 ? 0 : Math.max(drawW, drawH)
+  if (
+    s.x + drawW < -cullMargin || s.y + drawH < -cullMargin
+    || s.x > cssW + cullMargin || s.y > cssH + cullMargin
+  ) return
+
+  const image = d.img && d.img.complete && d.img.naturalWidth > 0
+    ? liftedSpriteSource(d.img)
+    : null
+  if (image) {
+    if (d.rot !== 0 && d.ref) {
+      const foot = worldToScreen(d.pos, cam, cssW, cssH)
+      ctx.save()
+      ctx.globalAlpha = d.alpha
+      ctx.translate(foot.x, foot.y)
+      ctx.rotate((d.rot * Math.PI) / 180)
+      ctx.drawImage(
+        image,
+        -d.ref.anchorX * d.scaleX * cam.zoom,
+        -d.ref.anchorY * d.scaleY * cam.zoom,
+        drawW,
+        drawH,
+      )
+      ctx.restore()
+    } else if (d.alpha !== 1) {
+      ctx.save()
+      ctx.globalAlpha = d.alpha
+      ctx.drawImage(image, s.x, s.y, drawW, drawH)
+      ctx.restore()
+    } else {
+      ctx.drawImage(image, s.x, s.y, drawW, drawH)
+    }
+  } else if (placeholder) {
+    ctx.fillStyle = 'rgba(200,168,98,0.2)'
+    ctx.fillRect(s.x, s.y, drawW, drawH)
+  }
+}
+
+function drawShadowAt(
+  ctx: CanvasRenderingContext2D,
+  pos: Vec2,
+  width: number,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+) {
+  const foot = worldToScreen(pos, cam, cssW, cssH)
+  ctx.fillStyle = 'rgba(0,0,0,0.42)'
+  ctx.beginPath()
+  ctx.ellipse(foot.x, foot.y, (width / 2.6) * cam.zoom, Math.max(3, width / 7) * cam.zoom, 0, 0, Math.PI * 2)
+  ctx.fill()
+}
+
+function drawObjectShadow(
+  ctx: CanvasRenderingContext2D,
+  drawable: SpriteDrawable,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+) {
+  const rect = anchoredRect(drawable)
+  const foot = { x: rect.x + rect.w / 2, y: rect.y + rect.h }
+  drawShadowAt(ctx, foot, rect.w, cam, cssW, cssH)
+}
+
+function drawFenceShadow(
+  ctx: CanvasRenderingContext2D,
+  fence: Polyline,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+) {
+  if (fence.points.length < 2 || (fence.segmentCode ?? fence.style ?? 0) === 3) return
+  const post = FENCE_ART.post
+  const postWidth = post?.w ?? 38
+  const foot = (pos: Vec2): Vec2 => post
+    ? { x: pos.x + post.w / 2 - post.anchorX, y: pos.y + post.h - post.anchorY }
+    : pos
+  drawShadowAt(ctx, foot(fence.points[0]), postWidth, cam, cssW, cssH)
+  drawShadowAt(ctx, foot(fence.points[1]), postWidth, cam, cssW, cssH)
 }
 
 /** The gesture chrome above everything: place ghost, draft path, marquee,
@@ -799,7 +922,7 @@ function drawTransientOverlays(
       ctx.globalAlpha = 0.55
       ctx.drawImage(liftedSpriteSource(img), g.x, g.y, r.w * cam.zoom, r.h * cam.zoom)
       ctx.globalAlpha = 0.9
-      const foot = worldToScreen(ui.ghost.pos, cam, cssW, cssH)
+      const foot = worldToScreen({ x: r.x + r.w / 2, y: r.y + r.h }, cam, cssW, cssH)
       ctx.strokeStyle = 'rgba(65,227,255,0.6)'
       ctx.lineWidth = 1
       ctx.beginPath()
@@ -982,8 +1105,6 @@ function drawFence(
   cam: Camera,
   w: number,
   h: number,
-  isSel: boolean,
-  isHover: boolean,
 ) {
   if (fence.points.length < 2) return
   const code = fence.segmentCode ?? fence.style ?? 0
@@ -1061,12 +1182,6 @@ function drawFence(
     plantArt(ctx, FENCE_ART.post, z, cam, w, h)
   }
 
-  if (isSel || isHover) {
-    ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.9)' : 'rgba(230,220,195,0.35)'
-    ctx.lineWidth = 1.5
-    ctx.setLineDash([6, 4])
-    strokePath(ctx, fence.points.map((p) => worldToScreen(p, cam, w, h)))
-  }
   ctx.restore()
 }
 
@@ -1153,28 +1268,38 @@ function pointInPolygon(p: Vec2, poly: Vec2[]): boolean {
 
 /** Topmost thing under the cursor, respecting draw order (later = on top). */
 export function pick(doc: EditorDoc, world: Vec2): SelEntry | null {
-  const drawables = drawablesFor(doc)
-
-  for (let i = drawables.length - 1; i >= 0; i--) {
-    const r = anchoredRect(drawables[i])
+  const scene = renderSceneFor(doc)
+  for (let i = scene.foreground.length - 1; i >= 0; i--) {
+    const r = anchoredRect(scene.foreground[i])
     if (world.x >= r.x && world.x <= r.x + r.w && world.y >= r.y && world.y <= r.y + r.h) {
-      return drawables[i].sel
+      return scene.foreground[i].sel
     }
   }
-
-  for (let i = doc.fences.length - 1; i >= 0; i--) {
-    const line = doc.fences[i]
-    for (let j = 1; j < line.points.length; j++) {
-      if (distToSegment(world, line.points[j - 1], line.points[j]) <= 10) {
-        return { kind: 'fence', eid: line.eid }
+  for (let i = scene.main.length - 1; i >= 0; i--) {
+    const item = scene.main[i]
+    if (item.kind === 'object') {
+      const r = anchoredRect(item.drawable)
+      if (world.x >= r.x && world.x <= r.x + r.w && world.y >= r.y && world.y <= r.y + r.h) {
+        return item.layer.sel
+      }
+      continue
+    }
+    for (let j = 1; j < item.layer.fence.points.length; j++) {
+      if (distToSegment(world, item.layer.fence.points[j - 1], item.layer.fence.points[j]) <= 10) {
+        return item.layer.sel
       }
     }
   }
-
-  for (let i = doc.roads.length - 1; i >= 0; i--) {
-    const quad = quadFor(doc.roads[i])
-    if (quad && pointInPolygon(world, [quad[0], quad[2], quad[3], quad[1]])) {
-      return { kind: 'road', eid: doc.roads[i].eid }
+  for (let i = scene.compact.length - 1; i >= 0; i--) {
+    const r = anchoredRect(scene.compact[i])
+    if (world.x >= r.x && world.x <= r.x + r.w && world.y >= r.y && world.y <= r.y + r.h) {
+      return scene.compact[i].sel
+    }
+  }
+  for (let i = scene.underlays.length - 1; i >= 0; i--) {
+    const r = anchoredRect(scene.underlays[i])
+    if (world.x >= r.x && world.x <= r.x + r.w && world.y >= r.y && world.y <= r.y + r.h) {
+      return scene.underlays[i].sel
     }
   }
 
@@ -1187,6 +1312,13 @@ export function pick(doc: EditorDoc, world: Vec2): SelEntry | null {
       if (distToSegment(world, pts[j - 1], pts[j]) <= tol) {
         return { kind: 'terrain', eid: t.eid }
       }
+    }
+  }
+
+  for (let i = doc.roads.length - 1; i >= 0; i--) {
+    const quad = quadFor(doc.roads[i])
+    if (quad && pointInPolygon(world, [quad[0], quad[2], quad[3], quad[1]])) {
+      return { kind: 'road', eid: doc.roads[i].eid }
     }
   }
 

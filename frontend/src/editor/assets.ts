@@ -6,6 +6,7 @@ import type { AtlasEntry } from './manifest'
 import { atlasManifests, classesManifest, paletteManifest } from './manifest'
 import type { SpriteRef } from './model'
 import { NATIVE } from './model'
+import { nativeSpriteAnchor } from './sprite-registration'
 
 // Vite bundles what the glob names; DeadHawg and Bonedit carry the editor.
 // BadGuys stays out of the bundle: its records are secondary effects, not
@@ -26,23 +27,20 @@ export function atlasEntry(atlas: string, id: number): AtlasEntry | null {
   return atlasManifests[atlas]?.entries[id] ?? null
 }
 
-/** Where the sprite's feet are, in png-local pixels. Bottom-centre of the
- * visible art: cursor-true regardless of the bundle's logical cell padding
- * (animation banks pad cells generously; a placed piece should sit under the
- * hand). When the format pass pins the game's exact registration for section
- * 11 bounds, adjust HERE and nowhere else. */
+/** Reconstruct the crop's registration from the native logical canvas. */
 export function spriteRefFor(atlas: string, id: number): SpriteRef | null {
   const e = atlasEntry(atlas, id)
   const src = spriteUrl(atlas, id)
   if (!e || !src) return null
+  const anchor = nativeSpriteAnchor(e.rect.w, e.rect.h, e.origin)
   return {
     atlas,
     entry: id,
     src,
     w: e.rect.w,
     h: e.rect.h,
-    anchorX: e.rect.w / 2,
-    anchorY: e.rect.h,
+    anchorX: anchor.x,
+    anchorY: anchor.y,
   }
 }
 

@@ -59,6 +59,8 @@ export interface PlacedObject {
   rot?: number
   scale?: number
   uid?: number
+  /** Native Puppet +0xA0 render-bucket adjustment. Buildings use -50. */
+  sortBias?: number
   /** Editor rendering hint until the format layer resolves variant art. */
   sprite?: SpriteRef
   raw?: string
@@ -122,7 +124,7 @@ export interface SpriteRef {
   src: string
   w: number
   h: number
-  /** Anchor inside the sprite, world-relative to pos (bottom-center by default). */
+  /** Native logical-canvas registration point inside the cropped sprite. */
   anchorX: number
   anchorY: number
 }

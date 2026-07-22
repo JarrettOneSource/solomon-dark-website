@@ -25,8 +25,10 @@ export class FormatPendingError extends Error {
  * entry, then fall back to the class-catalog variant mapping. */
 function hydrate(doc: EditorDoc): EditorDoc {
   for (const obj of doc.objects as BoneyardPlacedObject[]) {
-    if (obj.sprite) continue
-    const direct = typeof obj.atlasEntry === 'number' ? spriteRefFor('DeadHawg', obj.atlasEntry) : null
+    const directEntry = typeof obj.atlasEntry === 'number'
+      ? obj.atlasEntry
+      : obj.atlasEntries?.[0]
+    const direct = directEntry !== undefined ? spriteRefFor('DeadHawg', directEntry) : null
     if (direct) {
       obj.sprite = direct
       continue
@@ -34,11 +36,14 @@ function hydrate(doc: EditorDoc): EditorDoc {
     const mapping = classVariantEntries(obj.typeId)
     if (mapping && obj.variant !== undefined) {
       const entry = mapping.ids[obj.variant]
-      if (entry !== undefined) obj.sprite = spriteRefFor(mapping.atlas, entry) ?? undefined
+      if (entry !== undefined) {
+        obj.sprite = spriteRefFor(mapping.atlas, entry) ?? undefined
+        continue
+      }
     }
+    if (obj.sprite) obj.sprite = spriteRefFor(obj.sprite.atlas, obj.sprite.entry) ?? undefined
   }
   for (const spr of doc.sprites as BoneyardStaticSprite[]) {
-    if (spr.sprite) continue
     const entry = typeof spr.deadHawgEntry === 'number' ? spr.deadHawgEntry : spr.atlasEntry + STATIC_SPRITE_ATLAS_BASE
     spr.sprite = spriteRefFor('DeadHawg', entry) ?? undefined
   }
@@ -146,7 +151,7 @@ export function importDocValue(value: unknown): EditorDoc {
   if (file?.format !== 'sdr-boneyard-doc' || !file.doc) {
     throw new Error('Not a boneyard draft. Wrong drawer entirely.')
   }
-  return file.doc
+  return hydrate(file.doc)
 }
 
 export function importDocJson(text: string): EditorDoc {

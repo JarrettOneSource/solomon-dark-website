@@ -9,7 +9,12 @@
     "src/boneyard/parser.ts",
     "src/boneyard/parser.test.ts",
     "src/editor/lifted-sprite.ts",
-    "src/editor/lifted-sprite.test.ts"
+    "src/editor/lifted-sprite.test.ts",
+    "src/editor/format/boneyard.ts",
+    "src/editor/model.ts",
+    "src/editor/native-render-plan.ts",
+    "src/editor/native-render-plan.test.ts",
+    "src/editor/sprite-registration.ts"
   ],
   "exclude": []
 }
