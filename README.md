@@ -19,8 +19,9 @@ npm run test:boneyard
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website
-packages may contain data overlays/Boneyards, sandboxed Lua, or both. See the
-[authoring guide](frontend/public/mod-package-format.md),
+packages may contain data overlays/Boneyards, root `images/` art overlays,
+sandboxed Lua, or any combination of those three. See the [authoring
+guide](frontend/public/mod-package-format.md),
 [JSON Schema](frontend/public/mod-manifest.schema.json), and the
 [copyable examples](frontend/public/examples/).
 

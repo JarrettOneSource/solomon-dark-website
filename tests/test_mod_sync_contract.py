@@ -67,16 +67,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "Jwt__Secret": "website-mod-sync-contract-secret-at-least-thirty-two-bytes",
             }
         )
-        build = subprocess.run(
-            [cls.dotnet, "build", str(ROOT / "backend/Server.csproj"), "--nologo"],
-            cwd=ROOT,
-            env=cls.environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        if build.returncode != 0:
-            raise RuntimeError(f"website build failed:\n{build.stdout}")
+        cls.build_server()
         cls.start_server()
 
         status, registered = cls.request(
@@ -91,6 +82,26 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         if status != 201:
             raise RuntimeError(f"test registration failed: {status} {registered}")
         cls.token = registered["token"]
+
+    @classmethod
+    def build_server(cls) -> None:
+        result = subprocess.run(
+            [
+                cls.dotnet,
+                "build",
+                str(ROOT / "backend/Server.csproj"),
+                "--nologo",
+            ],
+            cwd=ROOT,
+            env=cls.environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"website build failed:\n{result.stdout}")
 
     @classmethod
     def start_server(cls) -> None:
@@ -256,6 +267,24 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, lua = self.upload("Lua Only", "1.0.0", lua_zip)
         self.assertEqual(status, 201, lua)
 
+        art_manifest = {
+            "id": "tests.art-only",
+            "name": "Art Only",
+            "version": "1.0.0",
+            "overlays": [
+                {
+                    "target": "images/Skills.png",
+                    "source": "files/Skills.png",
+                }
+            ],
+        }
+        art_zip = package(
+            {"files/Skills.png": b"\x89PNG\r\n\x1a\nart-contract-fixture"},
+            art_manifest,
+        )
+        status, art = self.upload("Art Only", "1.0.0", art_zip)
+        self.assertEqual(status, 201, art)
+
         combined_manifest = {
             "id": "tests.combined",
             "name": "Combined",
@@ -264,6 +293,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 {
                     "target": "data/levels/survival.boneyard",
                     "source": "files/survival.boneyard",
+                },
+                {
+                    "target": "images/Skills.png",
+                    "source": "files/Skills.png",
                 }
             ],
             "runtime": {
@@ -275,6 +308,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         combined_zip = package(
             {
                 "files/survival.boneyard": fixture,
+                "files/Skills.png": b"\x89PNG\r\n\x1a\ncombined-art-contract-fixture",
                 "scripts/main.lua": b"return true\n",
             },
             combined_manifest,
@@ -321,7 +355,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 400)
 
         exact = []
-        for item in (boneyard, lua, combined):
+        for item in (boneyard, lua, art, combined):
             version = item["versions"][0]
             exact.append(
                 {
@@ -333,7 +367,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         status, resolution = self.request("POST", "/api/mods/resolve", json_body={"mods": exact})
         self.assertEqual(status, 200, resolution)
-        self.assertEqual(len(resolution["mods"]), 3)
+        self.assertEqual(len(resolution["mods"]), 4)
         self.assertEqual(resolution["missing"], [])
         self.assertTrue(all(not mod["downloadUrl"].startswith("/") for mod in resolution["mods"]))
 
@@ -442,6 +476,24 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "Unknown Field Rejected",
             "1.0.0",
             package({"scripts/main.lua": b"return true\n"}, unknown_field_manifest),
+        )
+        self.assertEqual(status, 400)
+
+        forbidden_target_manifest = {
+            "id": "tests.forbidden-root-target",
+            "name": "Forbidden Root Target",
+            "version": "1.0.0",
+            "overlays": [
+                {
+                    "target": "SolomonDark.exe",
+                    "source": "files/SolomonDark.exe",
+                }
+            ],
+        }
+        status, _ = self.upload(
+            "Forbidden Root Target",
+            "1.0.0",
+            package({"files/SolomonDark.exe": b"not executable"}, forbidden_target_manifest),
         )
         self.assertEqual(status, 400)
 

@@ -9,6 +9,14 @@
       "target": "data/levels/survival.boneyard",
       "source": "files/survival.boneyard",
       "format": "boneyard"
+    },
+    {
+      "target": "images/Skills.png",
+      "source": "files/Skills.png"
+    },
+    {
+      "target": "images/Skills.bundle",
+      "source": "files/Skills.bundle"
     }
   ],
   "runtime": {

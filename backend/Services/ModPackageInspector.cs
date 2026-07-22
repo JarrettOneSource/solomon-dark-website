@@ -306,13 +306,14 @@ public static partial class ModPackageInspector
 
             var target = ValidateManifestPath(overlay.Target, "Overlay target");
             var allowedDataTarget = target.StartsWith("data/", StringComparison.Ordinal);
+            var allowedImageTarget = target.StartsWith("images/", StringComparison.Ordinal);
             var allowedCustomBoneyard =
                 target.StartsWith("sandbox/DarkCloud/mylevels/", StringComparison.Ordinal) &&
                 target.EndsWith(".boneyard", StringComparison.Ordinal);
-            if (!allowedDataTarget && !allowedCustomBoneyard)
+            if (!allowedDataTarget && !allowedImageTarget && !allowedCustomBoneyard)
             {
                 throw new ModPackageValidationException(
-                    $"Website overlay targets must live under data/, or be custom Boneyards under sandbox/DarkCloud/mylevels/: {overlay.Target}");
+                    $"Website overlay targets must live under data/ or images/, or be custom Boneyards under sandbox/DarkCloud/mylevels/: {overlay.Target}");
             }
 
             if (overlay.Format.Length > MaxStringLength)

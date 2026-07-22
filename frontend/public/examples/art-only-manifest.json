@@ -1,0 +1,18 @@
+{
+  "$schema": "/mod-manifest.schema.json",
+  "id": "example.arcane-skills-art",
+  "name": "Arcane Skills Art",
+  "version": "1.0.0",
+  "priority": 100,
+  "overlays": [
+    {
+      "target": "images/Skills.png",
+      "source": "files/Skills.png"
+    },
+    {
+      "target": "images/Skills.bundle",
+      "source": "files/Skills.bundle"
+    }
+  ],
+  "requiredMods": []
+}
