@@ -2,7 +2,7 @@
 // native classes (real objects with game behaviour) and DeadHawg scenery
 // (static sprites). Search covers labels and drawer titles.
 
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { PALETTE } from '../../editor/assets'
 import type { PaletteItem } from '../../editor/assets'
 
@@ -14,7 +14,9 @@ interface Props {
 
 type Tab = 'classes' | 'scenery'
 
-export default function PaletteRail({ activeKey, onPick, onCollapse }: Props) {
+// Memoized: hundreds of thumbnail buttons must not re-render on every
+// drag frame of the stage next door.
+export default memo(function PaletteRail({ activeKey, onPick, onCollapse }: Props) {
   const [tab, setTab] = useState<Tab>('classes')
   const [query, setQuery] = useState('')
 
@@ -135,4 +137,4 @@ export default function PaletteRail({ activeKey, onPick, onCollapse }: Props) {
       </div>
     </aside>
   )
-}
+})

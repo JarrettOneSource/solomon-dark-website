@@ -2,6 +2,7 @@
 // tool-options pill along the top, and the held-pieces actions opposite.
 // Icons, not letters; the letters live on as keyboard hints.
 
+import { memo } from 'react'
 import type { ReactNode } from 'react'
 import type { Tool, ToolStyles } from '../../editor/render'
 import {
@@ -310,7 +311,8 @@ const DRAW_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'terrain', icon: 'terrain', label: 'Carve terrain (T)' },
 ]
 
-export default function Toolbar(p: Props) {
+// Memoized so stage gestures (which never change these props) skip it.
+export default memo(function Toolbar(p: Props) {
   const options = (() => {
     switch (p.tool) {
       case 'place':
@@ -415,4 +417,4 @@ export default function Toolbar(p: Props) {
       )}
     </>
   )
-}
+})

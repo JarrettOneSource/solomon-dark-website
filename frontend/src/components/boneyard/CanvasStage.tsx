@@ -1,7 +1,7 @@
 // The dig site itself: canvas viewport, camera, pointer tools, status strip.
 // Rendering runs off refs and a dirty flag; React only mounts the chrome.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { PaletteItem } from '../../editor/assets'
 import { findPaletteItem, spriteImage, spriteRefFor } from '../../editor/assets'
@@ -9,7 +9,7 @@ import { STATIC_SPRITE_ATLAS_BASE } from '../../editor/io'
 import type { EditorDoc, SelEntry, Selection, Vec2 } from '../../editor/model'
 import { entryKey, expandSelection, selectionSet } from '../../editor/model'
 import type { Camera, Tool, ToolStyles } from '../../editor/render'
-import { STAGE_TEXTURES, drawStage, pick, pickInRadius, pickInRect, screenToWorld } from '../../editor/render'
+import { STAGE_TEXTURES, drawStage, invalidateSceneLayer, pick, pickInRadius, pickInRect, screenToWorld } from '../../editor/render'
 import type { EditorAction } from '../../editor/store'
 
 const SNAP = 16
@@ -57,7 +57,7 @@ type Gesture =
   | { kind: 'stroke'; last: Vec2; touched: boolean }
   | null
 
-export default forwardRef<StageHandle, Props>(function CanvasStage(
+export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
   { doc, selection, tool, activeItem, snap, showGrid, styles, dispatch, onPlaced, onDeleted, onExitPlace },
   ref,
 ) {
@@ -87,18 +87,34 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
     dirty.current = true
   }, [])
 
+  // Decoded art must reach the cached gesture layer too, not only the next
+  // direct frame.
+  const onAssetReady = useCallback(() => {
+    invalidateSceneLayer()
+    dirty.current = true
+  }, [])
+
   // Every sprite referenced by the doc, and the stage textures, request a
-  // redraw as they decode.
+  // redraw as they decode. This effect re-runs per doc change (it doubles as
+  // the doc-change redraw trigger), so each src is requested exactly once
+  // per mount rather than re-registering load listeners every frame of a
+  // drag.
+  const requestedSrcs = useRef(new Set<string>())
   useEffect(() => {
-    const seen = new Set<string>()
-    for (const o of doc.objects) if (o.sprite && !seen.has(o.sprite.src)) { seen.add(o.sprite.src); spriteImage(o.sprite.src, markDirty) }
-    for (const s of doc.sprites) if (s.sprite && !seen.has(s.sprite.src)) { seen.add(s.sprite.src); spriteImage(s.sprite.src, markDirty) }
+    const req = (src?: string) => {
+      if (src && !requestedSrcs.current.has(src)) {
+        requestedSrcs.current.add(src)
+        spriteImage(src, onAssetReady)
+      }
+    }
+    for (const o of doc.objects) req(o.sprite?.src)
+    for (const s of doc.sprites) req(s.sprite?.src)
     markDirty()
-  }, [doc, markDirty])
+  }, [doc, markDirty, onAssetReady])
 
   useEffect(() => {
-    for (const src of STAGE_TEXTURES) spriteImage(src, markDirty)
-  }, [markDirty])
+    for (const src of STAGE_TEXTURES) spriteImage(src, onAssetReady)
+  }, [onAssetReady])
 
   useEffect(() => {
     markDirty()
@@ -161,7 +177,9 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
     const wrap = wrapRef.current
     const canvas = canvasRef.current
     if (!wrap || !canvas) return
-    const ctx = canvas.getContext('2d')
+    // Opaque backing store: the stage paints every pixel each frame, and an
+    // alpha-less canvas composites measurably faster.
+    const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) return
 
     let first = true
@@ -205,6 +223,9 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
             ? { pos: brushAt.current, radius: s.tool === 'brush' ? s.styles.brushRadius : s.styles.eraseRadius }
             : null,
         showGrid: s.showGrid,
+        panning: gesture.current?.kind === 'pan',
+        dragging: gesture.current?.kind === 'drag',
+        appending: gesture.current?.kind === 'stroke' && s.tool === 'brush',
       })
       if (zoomRef.current) zoomRef.current.textContent = `${Math.round(cam.current.zoom * 100)}%`
     }
@@ -463,11 +484,13 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
     gesture.current = null
     if (canvasRef.current) canvasRef.current.style.cursor = ''
     if (!g) return
+    // One more frame off the direct path: gesture frames may come from the
+    // cached scene layer, and the resting stage must be the true render.
+    markDirty()
     if (g.kind === 'drag') {
       dispatch({ type: 'gesture-end' })
     } else if (g.kind === 'marquee') {
       marquee.current = null
-      markDirty()
     } else if (g.kind === 'stroke') {
       dispatch({ type: 'gesture-end' })
       if (g.touched) (live.current.tool === 'erase' ? onDeleted : onPlaced)?.()
@@ -617,4 +640,4 @@ export default forwardRef<StageHandle, Props>(function CanvasStage(
       </div>
     </div>
   )
-})
+}))

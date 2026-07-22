@@ -162,13 +162,15 @@ export function sceneryLabel(atlas: string, entry: number): string | null {
   return null
 }
 
+let paletteIndex: Map<string, PaletteItem> | null = null
+
 export function findPaletteItem(key: string | null): PaletteItem | null {
   if (!key) return null
-  for (const group of PALETTE) {
-    const hit = group.items.find((i) => i.key === key)
-    if (hit) return hit
+  if (!paletteIndex) {
+    paletteIndex = new Map()
+    for (const group of PALETTE) for (const item of group.items) paletteIndex.set(item.key, item)
   }
-  return null
+  return paletteIndex.get(key) ?? null
 }
 
 /** Shared image cache; the renderer and the palette thumbs both feed on it. */

@@ -214,39 +214,51 @@ export function allEntries(doc: EditorDoc): SelEntry[] {
 }
 
 /** Grow a selection to cover whole groups and whole chains: picking one
- * member holds the lot, which is the entire point of grouping. */
+ * member holds the lot, which is the entire point of grouping. Runs on every
+ * marquee move, so it works from prebuilt lookups instead of nested finds. */
 export function expandSelection(doc: EditorDoc, entries: SelEntry[]): SelEntry[] {
+  if (entries.length === 0) return entries
   const groups = doc.groups ?? {}
-  const chains = new Set<string>()
+  const wantGroups = new Set<string>()
+  const wantChains = new Set<string>()
   const wanted = new Set<string>()
+  let chainByKey: Map<string, string> | null = null
+  const chainOf = (e: SelEntry): string | undefined => {
+    if (!chainByKey) {
+      chainByKey = new Map()
+      for (const r of doc.roads) if (r.chain) chainByKey.set(`road:${r.eid}`, r.chain)
+      for (const f of doc.fences) if (f.chain) chainByKey.set(`fence:${f.eid}`, f.chain)
+    }
+    return chainByKey.get(entryKey(e))
+  }
   for (const e of entries) {
     wanted.add(entryKey(e))
     const g = groups[e.eid]
-    if (g) chains.add(`g:${g}`)
+    if (g) wantGroups.add(g)
     if (e.kind === 'road' || e.kind === 'fence') {
-      const line = (e.kind === 'road' ? doc.roads : doc.fences).find((l) => l.eid === e.eid)
-      if (line?.chain) chains.add(`c:${line.chain}`)
+      const c = chainOf(e)
+      if (c) wantChains.add(c)
     }
   }
-  if (chains.size === 0) return entries
+  if (wantGroups.size === 0 && wantChains.size === 0) return entries
   const out: SelEntry[] = []
   const seen = new Set<string>()
-  const push = (e: SelEntry) => {
-    const k = entryKey(e)
+  const push = (kind: SelKind, id: string) => {
+    const k = `${kind}:${id}`
     if (!seen.has(k)) {
       seen.add(k)
-      out.push(e)
+      out.push({ kind, eid: id })
     }
   }
-  for (const e of allEntries(doc)) {
-    const g = groups[e.eid]
-    let inChain = false
-    if (e.kind === 'road' || e.kind === 'fence') {
-      const line = (e.kind === 'road' ? doc.roads : doc.fences).find((l) => l.eid === e.eid)
-      inChain = !!line?.chain && chains.has(`c:${line.chain}`)
-    }
-    if (wanted.has(entryKey(e)) || (g && chains.has(`g:${g}`)) || inChain) push(e)
+  const grouped = (id: string) => {
+    const g = groups[id]
+    return !!g && wantGroups.has(g)
   }
+  for (const o of doc.objects) if (wanted.has(`object:${o.eid}`) || grouped(o.eid)) push('object', o.eid)
+  for (const s of doc.sprites) if (wanted.has(`sprite:${s.eid}`) || grouped(s.eid)) push('sprite', s.eid)
+  for (const r of doc.roads) if (wanted.has(`road:${r.eid}`) || grouped(r.eid) || (r.chain && wantChains.has(r.chain))) push('road', r.eid)
+  for (const f of doc.fences) if (wanted.has(`fence:${f.eid}`) || grouped(f.eid) || (f.chain && wantChains.has(f.chain))) push('fence', f.eid)
+  for (const t of doc.terrain) if (wanted.has(`terrain:${t.eid}`) || grouped(t.eid)) push('terrain', t.eid)
   return out
 }
 

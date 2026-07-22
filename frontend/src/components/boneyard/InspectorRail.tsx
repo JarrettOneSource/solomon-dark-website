@@ -1,9 +1,10 @@
 // The surveyor's ledger: plot details, or the papers of whatever is held.
 
+import { memo } from 'react'
 import type { Dispatch } from 'react'
 import { sceneryLabel } from '../../editor/assets'
 import type { EditorDoc, Polyline, Selection, TerrainPatch } from '../../editor/model'
-import { NATIVE_LABEL, soleSelection } from '../../editor/model'
+import { NATIVE_LABEL, selectionSet, soleSelection } from '../../editor/model'
 import type { EditorAction } from '../../editor/store'
 import {
   FENCE_STYLE_LABEL,
@@ -108,24 +109,21 @@ function lineLength(points: { x: number; y: number }[]): number {
   )
 }
 
-export default function InspectorRail({ doc, selection, dispatch, onCollapse }: Props) {
+// Memoized, and held-piece lists come from one Set instead of a nested scan:
+// this rail re-renders on every drag frame, since the doc moves under it.
+export default memo(function InspectorRail({ doc, selection, dispatch, onCollapse }: Props) {
   const sole = soleSelection(selection)
   const kinds = new Set(selection.map((e) => e.kind))
   const selObject = sole?.kind === 'object' ? doc.objects.find((o) => o.eid === sole.eid) : null
   const selSprite = sole?.kind === 'sprite' ? doc.sprites.find((s) => s.eid === sole.eid) : null
 
+  const selKeys = kinds.size === 1 ? selectionSet(selection) : null
   const heldRoads: Polyline[] =
-    selection.length > 0 && kinds.size === 1 && kinds.has('road')
-      ? doc.roads.filter((r) => selection.some((e) => e.eid === r.eid))
-      : []
+    selKeys && kinds.has('road') ? doc.roads.filter((r) => selKeys.has(`road:${r.eid}`)) : []
   const heldFences: Polyline[] =
-    selection.length > 0 && kinds.size === 1 && kinds.has('fence')
-      ? doc.fences.filter((f) => selection.some((e) => e.eid === f.eid))
-      : []
+    selKeys && kinds.has('fence') ? doc.fences.filter((f) => selKeys.has(`fence:${f.eid}`)) : []
   const heldTerrain: TerrainPatch[] =
-    selection.length > 0 && kinds.size === 1 && kinds.has('terrain')
-      ? doc.terrain.filter((t) => selection.some((e) => e.eid === t.eid))
-      : []
+    selKeys && kinds.has('terrain') ? doc.terrain.filter((t) => selKeys.has(`terrain:${t.eid}`)) : []
 
   const groups = doc.groups ?? {}
   const anyGrouped = selection.some((e) => groups[e.eid])
@@ -386,4 +384,4 @@ export default function InspectorRail({ doc, selection, dispatch, onCollapse }: 
       </div>
     </aside>
   )
-}
+})

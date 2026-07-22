@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import type { PaletteItem } from '../editor/assets'
 import CanvasStage, { type StageHandle } from '../components/boneyard/CanvasStage'
 import DraftsDrawer from '../components/boneyard/DraftsDrawer'
 import InspectorRail from '../components/boneyard/InspectorRail'
@@ -139,11 +140,22 @@ export default function Boneyard() {
       : activeItem.label
     : null
 
+  // Live mirrors so the memoized rails get callbacks that never change
+  // identity: a gesture on the stage must not re-render the catalogue.
+  const toolRef = useRef(tool)
+  toolRef.current = tool
+  const activeKeyRef = useRef(activeKey)
+  activeKeyRef.current = activeKey
+
+  // Rail widths land in localStorage a beat after the drag settles, not on
+  // every pointer move of the gutter.
   useEffect(() => {
-    localStorage.setItem(RAIL_L_KEY, String(leftW))
+    const t = setTimeout(() => localStorage.setItem(RAIL_L_KEY, String(leftW)), 250)
+    return () => clearTimeout(t)
   }, [leftW])
   useEffect(() => {
-    localStorage.setItem(RAIL_R_KEY, String(rightW))
+    const t = setTimeout(() => localStorage.setItem(RAIL_R_KEY, String(rightW)), 250)
+    return () => clearTimeout(t)
   }, [rightW])
 
   // Rail gutters: drag to size, drag small to tuck away, double-click resets.
@@ -343,6 +355,36 @@ export default function Boneyard() {
     }
   }, [state.doc, say])
 
+  // Stable handlers for the memoized chrome: identity never changes, so
+  // stage gestures re-render only the stage.
+  const onPalettePick = useCallback((item: PaletteItem) => {
+    const t = toolRef.current
+    if (activeKeyRef.current === item.key && (t === 'place' || t === 'brush')) {
+      setActiveKey(null)
+      setTool('select')
+    } else {
+      setActiveKey(item.key)
+      setTool((prev) => (prev === 'brush' ? 'brush' : 'place'))
+    }
+  }, [])
+  const collapseLeft = useCallback(() => setLeftW(0), [])
+  const collapseRight = useCallback(() => setRightW(0), [])
+  const onStyles = useCallback((patch: Partial<ToolStyles>) => setStyles((s) => ({ ...s, ...patch })), [])
+  const onUndo = useCallback(() => dispatch({ type: 'undo' }), [])
+  const onRedo = useCallback(() => dispatch({ type: 'redo' }), [])
+  const onSnap = useCallback(() => setSnap((s) => !s), [])
+  const onGrid = useCallback(() => setGrid((g) => !g), [])
+  const onGroup = useCallback(() => dispatch({ type: 'group-selection' }), [])
+  const onUngroup = useCallback(() => dispatch({ type: 'ungroup-selection' }), [])
+  const onDuplicate = useCallback(() => dispatch({ type: 'duplicate-selection' }), [])
+  const onDelete = useCallback(() => dispatch({ type: 'delete-selection' }), [])
+  const onPlaced = useCallback(() => playSound('poof', 0.1), [])
+  const onDeleted = useCallback(() => playSound('bonecrack', 0.14), [])
+  const onExitPlace = useCallback(() => {
+    setTool('select')
+    setActiveKey(null)
+  }, [])
+
   const publishTitle = !user
     ? 'Publishing wants a signed-in wizard.'
     : !formatReady()
@@ -454,19 +496,7 @@ export default function Boneyard() {
           style={{ gridTemplateColumns: `${leftW}px 5px minmax(0,1fr) 5px ${rightW}px` }}
         >
           {leftW > 0 ? (
-            <PaletteRail
-              activeKey={activeKey}
-              onPick={(item) => {
-                if (activeKey === item.key && (tool === 'place' || tool === 'brush')) {
-                  setActiveKey(null)
-                  setTool('select')
-                } else {
-                  setActiveKey(item.key)
-                  setTool((t) => (t === 'brush' ? 'brush' : 'place'))
-                }
-              }}
-              onCollapse={() => setLeftW(0)}
-            />
+            <PaletteRail activeKey={activeKey} onPick={onPalettePick} onCollapse={collapseLeft} />
           ) : (
             <div className="bg-abyss/40" />
           )}
@@ -488,15 +518,15 @@ export default function Boneyard() {
               selectionGrouped={selectionGrouped}
               placeLabel={placeLabel}
               onTool={setTool}
-              onStyles={(patch) => setStyles((s) => ({ ...s, ...patch }))}
-              onUndo={() => dispatch({ type: 'undo' })}
-              onRedo={() => dispatch({ type: 'redo' })}
-              onSnap={() => setSnap((s) => !s)}
-              onGrid={() => setGrid((g) => !g)}
-              onGroup={() => dispatch({ type: 'group-selection' })}
-              onUngroup={() => dispatch({ type: 'ungroup-selection' })}
-              onDuplicate={() => dispatch({ type: 'duplicate-selection' })}
-              onDelete={() => dispatch({ type: 'delete-selection' })}
+              onStyles={onStyles}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              onSnap={onSnap}
+              onGrid={onGrid}
+              onGroup={onGroup}
+              onUngroup={onUngroup}
+              onDuplicate={onDuplicate}
+              onDelete={onDelete}
             />
             <CanvasStage
               ref={stageRef}
@@ -508,12 +538,9 @@ export default function Boneyard() {
               showGrid={grid}
               styles={styles}
               dispatch={dispatch}
-              onPlaced={() => playSound('poof', 0.1)}
-              onDeleted={() => playSound('bonecrack', 0.14)}
-              onExitPlace={() => {
-                setTool('select')
-                setActiveKey(null)
-              }}
+              onPlaced={onPlaced}
+              onDeleted={onDeleted}
+              onExitPlace={onExitPlace}
             />
           </div>
           <div
@@ -527,7 +554,7 @@ export default function Boneyard() {
               doc={state.doc}
               selection={state.selection}
               dispatch={dispatch}
-              onCollapse={() => setRightW(0)}
+              onCollapse={collapseRight}
             />
           ) : (
             <div className="bg-abyss/40" />

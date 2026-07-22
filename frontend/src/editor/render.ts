@@ -58,6 +58,15 @@ export interface StageUI {
   /** Brush cursor ring, world units. */
   brush: { pos: Vec2; radius: number } | null
   showGrid: boolean
+  /** True while a survey (camera pan) gesture is live: the frame may come
+   * from the cached scene layer instead of a full repaint. */
+  panning: boolean
+  /** True while a selection drag gesture is live: the still world blits from
+   * the layer and only the held pieces paint per frame. */
+  dragging: boolean
+  /** True while a scatter-brush stroke is live: placements append into the
+   * cached layer instead of forcing full repaints. */
+  appending: boolean
 }
 
 export function worldToScreen(p: Vec2, cam: Camera, w: number, h: number): Vec2 {
@@ -144,6 +153,38 @@ function anchoredRect(d: {
 
 const GRID = 32
 
+/** World-space rectangle the camera can currently see, padded so wide
+ * strokes and tall fence art on the fringe still draw. */
+interface ViewRect {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+function visibleWorld(cam: Camera, w: number, h: number, margin: number): ViewRect {
+  const halfW = w / 2 / cam.zoom
+  const halfH = h / 2 / cam.zoom
+  return {
+    x0: cam.x - halfW - margin,
+    y0: cam.y - halfH - margin,
+    x1: cam.x + halfW + margin,
+    y1: cam.y + halfH + margin,
+  }
+}
+
+/** Any point's bounding box touching the view: cheap cull for line work. */
+function lineInView(points: Vec2[], view: ViewRect): boolean {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of points) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  return maxX >= view.x0 && minX <= view.x1 && maxY >= view.y0 && minY <= view.y1
+}
+
 // ---------- world-anchored texture patterns ----------
 
 const patternCache = new WeakMap<HTMLImageElement, CanvasPattern>()
@@ -205,6 +246,204 @@ function tracePolygon(ctx: CanvasRenderingContext2D, pts: Vec2[]) {
 
 // ---------- the stage ----------
 
+// The vignette only depends on the plot's screen rectangle; while the camera
+// holds still (drags, strokes, marquees) the same gradient serves every frame.
+let vignetteKey = ''
+let vignetteGrad: CanvasGradient | null = null
+
+const EMPTY_SET = new Set<string>()
+
+/** What paintWorld knows about selection: the direct path interleaves
+ * outlines exactly as the stage always has; the layer path paints a clean
+ * world and adds outlines on top per frame. */
+interface WorldPaintUI {
+  selected: Set<string>
+  hover: SelEntry | null
+  showGrid: boolean
+}
+
+// ---------- the gesture scene layer ----------
+//
+// During camera pans, marquee sweeps, and selection drags the world barely
+// changes frame to frame, yet repainting it costs a thousand draw calls. So
+// those gestures render the world once into an offscreen layer and each frame
+// blits it, painting live only what actually moves: outlines, the held
+// pieces, the gesture chrome. Every at-rest frame still takes the direct
+// path, so a resting stage is pixel-identical to the classic renderer.
+
+// Pans glide the viewport, so their layer carries extra painted world at the
+// edges; every other gesture holds the camera still and skips the margin.
+const LAYER_MARGIN = 256 // css px of extra world beyond each viewport edge
+
+interface SceneLayer {
+  canvas: HTMLCanvasElement
+  ctx: CanvasRenderingContext2D
+  /** World coordinates of the layer's top-left corner. */
+  wx: number
+  wy: number
+  camX: number
+  camY: number
+  zoom: number
+  dpr: number
+  cssW: number
+  cssH: number
+  showGrid: boolean
+  mode: 'world' | 'sans-selection' | 'append'
+  doc: EditorDoc
+  /** Selection identity plus per-kind eids when mode is sans-selection. */
+  sel: Selection | null
+  selEids: Record<'object' | 'sprite' | 'road' | 'fence' | 'terrain', Set<string>> | null
+  /** How many objects/sprites are already painted in, when mode is append. */
+  painted: { objects: number; sprites: number } | null
+}
+
+let sceneLayer: SceneLayer | null = null
+
+/** Drop the cached layer; the stage calls this when a sprite or texture
+ * finishes decoding so a mid-gesture frame never keeps a stale placeholder. */
+export function invalidateSceneLayer() {
+  sceneLayer = null
+}
+
+function selEidsByKind(sel: Selection): NonNullable<SceneLayer['selEids']> {
+  const out = {
+    object: new Set<string>(),
+    sprite: new Set<string>(),
+    road: new Set<string>(),
+    fence: new Set<string>(),
+    terrain: new Set<string>(),
+  }
+  for (const e of sel) out[e.kind].add(e.eid)
+  return out
+}
+
+/** Unselected entries must be the very same objects the layer was painted
+ * from; gesture-move keeps their identities, so this is a cheap ref walk. */
+function sameUnselected<T extends { eid: string }>(a: T[], b: T[], sel: Set<string>): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i] && !sel.has(b[i].eid)) return false
+  }
+  return true
+}
+
+/** First maxLen entries of b must be the very same objects as a's. */
+function samePrefix<T>(a: T[], b: T[], len: number): boolean {
+  if (a.length < len || b.length < len) return false
+  for (let i = 0; i < len; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function layerUsable(mode: SceneLayer['mode'], cam: Camera, doc: EditorDoc, cssW: number, cssH: number, dpr: number, ui: StageUI): boolean {
+  const L = sceneLayer
+  if (!L || L.mode !== mode || L.zoom !== cam.zoom || L.dpr !== dpr || L.cssW !== cssW || L.cssH !== cssH || L.showGrid !== ui.showGrid) return false
+  if (mode === 'world') {
+    if (L.doc !== doc) return false
+  } else if (mode === 'append') {
+    // A brush stroke only ever appends placed pieces; everything painted so
+    // far must still be exactly the same records, and the camera pinned.
+    if (!L.painted || L.camX !== cam.x || L.camY !== cam.y) return false
+    if (L.doc !== doc) {
+      if (
+        L.doc.meta.bounds !== doc.meta.bounds
+        || L.doc.roads !== doc.roads
+        || L.doc.fences !== doc.fences
+        || L.doc.terrain !== doc.terrain
+        || !samePrefix(L.doc.objects, doc.objects, L.painted.objects)
+        || !samePrefix(L.doc.sprites, doc.sprites, L.painted.sprites)
+      ) return false
+    }
+  } else {
+    if (L.sel !== ui.selection || !L.selEids) return false
+    if (L.doc !== doc) {
+      if (L.doc.meta.bounds !== doc.meta.bounds) return false
+      const se = L.selEids
+      if (
+        !sameUnselected(L.doc.objects, doc.objects, se.object)
+        || !sameUnselected(L.doc.sprites, doc.sprites, se.sprite)
+        || !sameUnselected(L.doc.roads, doc.roads, se.road)
+        || !sameUnselected(L.doc.fences, doc.fences, se.fence)
+        || !sameUnselected(L.doc.terrain, doc.terrain, se.terrain)
+      ) return false
+    }
+  }
+  // The viewport must sit inside the layer's painted world.
+  const left = cam.x - cssW / 2 / cam.zoom
+  const top = cam.y - cssH / 2 / cam.zoom
+  const lw = L.canvas.width / L.dpr / L.zoom
+  const lh = L.canvas.height / L.dpr / L.zoom
+  return left >= L.wx && top >= L.wy && left + cssW / cam.zoom <= L.wx + lw && top + cssH / cam.zoom <= L.wy + lh
+}
+
+/** Stamp any pieces the stroke added since the layer was painted. Painter
+ * order inside the gesture is approximate (new pieces land on top); the
+ * direct frame after the stroke restores true sorting. */
+function reconcileAppend(cam: Camera, doc: EditorDoc) {
+  const L = sceneLayer!
+  if (L.doc === doc || !L.painted) return
+  const fresh = new Set<string>()
+  for (let i = L.painted.objects; i < doc.objects.length; i++) fresh.add(`object:${doc.objects[i].eid}`)
+  for (let i = L.painted.sprites; i < doc.sprites.length; i++) fresh.add(`sprite:${doc.sprites[i].eid}`)
+  if (fresh.size > 0) {
+    const lw = L.canvas.width / L.dpr
+    const lh = L.canvas.height / L.dpr
+    paintDrawables(L.ctx, doc, cam, lw, lh, EMPTY_SET, null, { only: fresh })
+  }
+  L.painted = { objects: doc.objects.length, sprites: doc.sprites.length }
+  L.doc = doc
+}
+
+function renderLayer(mode: SceneLayer['mode'], margin: number, cam: Camera, doc: EditorDoc, cssW: number, cssH: number, dpr: number, ui: StageUI): boolean {
+  const lw = cssW + margin * 2
+  const lh = cssH + margin * 2
+  const pw = Math.round(lw * dpr)
+  const ph = Math.round(lh * dpr)
+  let L = sceneLayer
+  if (!L || L.canvas.width !== pw || L.canvas.height !== ph) {
+    const canvas = document.createElement('canvas')
+    canvas.width = pw
+    canvas.height = ph
+    const lctx = canvas.getContext('2d', { alpha: false })
+    if (!lctx) return false
+    L = sceneLayer = {
+      canvas, ctx: lctx, wx: 0, wy: 0, camX: 0, camY: 0, zoom: 1, dpr: 1, cssW: 0, cssH: 0,
+      showGrid: true, mode: 'world', doc, sel: null, selEids: null, painted: null,
+    }
+  }
+  L.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  const skip = mode === 'sans-selection' ? selectionSet(ui.selection) : undefined
+  paintWorld(L.ctx, lw, lh, cam, doc, { selected: EMPTY_SET, hover: null, showGrid: ui.showGrid }, skip)
+  L.wx = cam.x - lw / 2 / cam.zoom
+  L.wy = cam.y - lh / 2 / cam.zoom
+  L.camX = cam.x
+  L.camY = cam.y
+  L.zoom = cam.zoom
+  L.dpr = dpr
+  L.cssW = cssW
+  L.cssH = cssH
+  L.showGrid = ui.showGrid
+  L.mode = mode
+  L.doc = doc
+  L.sel = mode === 'sans-selection' ? ui.selection : null
+  L.selEids = mode === 'sans-selection' ? selEidsByKind(ui.selection) : null
+  L.painted = mode === 'append' ? { objects: doc.objects.length, sprites: doc.sprites.length } : null
+  return true
+}
+
+function blitLayer(ctx: CanvasRenderingContext2D, cam: Camera, cssW: number, cssH: number) {
+  const L = sceneLayer!
+  const left = cam.x - cssW / 2 / cam.zoom
+  const top = cam.y - cssH / 2 / cam.zoom
+  // Rounded to whole device pixels: a straight memcpy-style blit, and any
+  // half-pixel drift only exists mid-gesture (rest frames draw direct).
+  const sx = (L.wx - left) * cam.zoom * L.dpr
+  const sy = (L.wy - top) * cam.zoom * L.dpr
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.drawImage(L.canvas, Math.round(sx), Math.round(sy))
+  ctx.restore()
+}
+
 export function drawStage(
   ctx: CanvasRenderingContext2D,
   cssW: number,
@@ -213,16 +452,157 @@ export function drawStage(
   doc: EditorDoc,
   ui: StageUI,
 ) {
-  ctx.clearRect(0, 0, cssW, cssH)
+  const mode: SceneLayer['mode'] | null =
+    ui.dragging && ui.selection.length > 0
+      ? 'sans-selection'
+      : ui.appending
+        ? 'append'
+        : ui.panning || ui.marquee
+          ? 'world'
+          : null
+  if (mode) {
+    const dpr = ctx.getTransform().a || 1
+    const margin = ui.panning ? LAYER_MARGIN : 0
+    const usable = layerUsable(mode, cam, doc, cssW, cssH, dpr, ui)
+    if (usable && mode === 'append') reconcileAppend(cam, doc)
+    if (usable || renderLayer(mode, margin, cam, doc, cssW, cssH, dpr, ui)) {
+      blitLayer(ctx, cam, cssW, cssH)
+      const view = visibleWorld(cam, cssW, cssH, 256)
+      const selected = selectionSet(ui.selection)
+      if (mode === 'sans-selection') {
+        // The held pieces travel live above the frozen ground, in the same
+        // kind order the world paints them.
+        for (const t of doc.terrain) {
+          if (!selected.has(`terrain:${t.eid}`)) continue
+          if (t.points && t.points.length >= 2 && !lineInView(t.points, view)) continue
+          drawTerrain(ctx, t, cam, cssW, cssH, true, false)
+        }
+        const heldRoads = doc.roads.filter((r) => selected.has(`road:${r.eid}`))
+        drawRoads(ctx, heldRoads, cam, cssW, cssH, view, selected, null)
+        for (const f of doc.fences) {
+          if (!selected.has(`fence:${f.eid}`) || !lineInView(f.points, view)) continue
+          drawFence(ctx, f, cam, cssW, cssH, true, false)
+        }
+        paintDrawables(ctx, doc, cam, cssW, cssH, selected, null, { only: selected })
+      } else {
+        lineOverlays(ctx, doc, cam, cssW, cssH, view, selected, ui.hover)
+        paintDrawableOutlines(ctx, doc, cam, cssW, cssH, selected, ui.hover)
+      }
+      drawTransientOverlays(ctx, ui, cam, cssW, cssH)
+      return
+    }
+  }
+  paintWorld(ctx, cssW, cssH, cam, doc, { selected: selectionSet(ui.selection), hover: ui.hover, showGrid: ui.showGrid })
+  drawTransientOverlays(ctx, ui, cam, cssW, cssH)
+}
 
-  // The void beyond the plot.
+/** Dashed held/hover strokes for lines, drawn over a blitted layer. Styles
+ * mirror the interleaved ones in drawTerrain/drawRoads/drawFence. */
+function lineOverlays(
+  ctx: CanvasRenderingContext2D,
+  doc: EditorDoc,
+  cam: Camera,
+  w: number,
+  h: number,
+  view: ViewRect,
+  selected: Set<string>,
+  hover: SelEntry | null,
+) {
+  if (selected.size === 0 && !hover) return
+  ctx.save()
+  for (const t of doc.terrain) {
+    const isSel = selected.has(`terrain:${t.eid}`)
+    if (!isSel && !sameEntry(hover, { kind: 'terrain', eid: t.eid })) continue
+    const points = t.points && t.points.length >= 2 ? t.points : null
+    if (!points || !lineInView(points, view)) continue
+    ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.9)' : 'rgba(230,220,195,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 4])
+    strokePath(ctx, points.map((p) => worldToScreen(p, cam, w, h)))
+  }
+  for (const road of doc.roads) {
+    const isSel = selected.has(`road:${road.eid}`)
+    if (!isSel && !sameEntry(hover, { kind: 'road', eid: road.eid })) continue
+    if (!lineInView(road.points, view)) continue
+    const quad = quadFor(road)
+    if (!quad) continue
+    ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.9)' : 'rgba(230,220,195,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash(isSel ? [] : [5, 4])
+    tracePolygon(ctx, [quad[0], quad[2], quad[3], quad[1]].map((p) => worldToScreen(p, cam, w, h)))
+    ctx.stroke()
+  }
+  for (const fence of doc.fences) {
+    const isSel = selected.has(`fence:${fence.eid}`)
+    if (!isSel && !sameEntry(hover, { kind: 'fence', eid: fence.eid })) continue
+    if (!lineInView(fence.points, view)) continue
+    ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.9)' : 'rgba(230,220,195,0.35)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 4])
+    strokePath(ctx, fence.points.map((p) => worldToScreen(p, cam, w, h)))
+  }
+  ctx.restore()
+}
+
+/** Held/hover rectangles for placed pieces, drawn over a blitted layer. */
+function paintDrawableOutlines(
+  ctx: CanvasRenderingContext2D,
+  doc: EditorDoc,
+  cam: Camera,
+  w: number,
+  h: number,
+  selected: Set<string>,
+  hover: SelEntry | null,
+) {
+  if (selected.size === 0 && !hover) return
+  for (const d of drawablesFor(doc)) {
+    const isSel = selected.has(entryKey(d.sel))
+    const isHover = !isSel && sameEntry(hover, d.sel)
+    if (!isSel && !isHover) continue
+    const r = anchoredRect(d)
+    const s = worldToScreen({ x: r.x, y: r.y }, cam, w, h)
+    const drawW = r.w * cam.zoom
+    const drawH = r.h * cam.zoom
+    if (s.x + drawW < 0 || s.y + drawH < 0 || s.x > w || s.y > h) continue
+    drawableOutline(ctx, s.x, s.y, drawW, drawH, isSel)
+  }
+}
+
+function drawableOutline(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, isSel: boolean) {
+  ctx.save()
+  ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.95)' : 'rgba(230,220,195,0.4)'
+  ctx.lineWidth = isSel ? 1.5 : 1
+  ctx.setLineDash(isSel ? [] : [4, 3])
+  ctx.strokeRect(x - 2, y - 2, w + 4, h + 4)
+  if (isSel) {
+    ctx.shadowColor = 'rgba(200,168,98,0.8)'
+    ctx.shadowBlur = 10
+    ctx.strokeRect(x - 2, y - 2, w + 4, h + 4)
+  }
+  ctx.restore()
+}
+
+function paintWorld(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  wui: WorldPaintUI,
+  skip?: Set<string>,
+) {
+  // The void beyond the plot. The context is opaque (alpha: false), and this
+  // covers every pixel, so no clear pass is needed.
   ctx.fillStyle = '#07060a'
   ctx.fillRect(0, 0, cssW, cssH)
 
   const b = doc.meta.bounds
   const tl = worldToScreen({ x: b.x, y: b.y }, cam, cssW, cssH)
   const br = worldToScreen({ x: b.x + b.w, y: b.y + b.h }, cam, cssW, cssH)
-  const selected = selectionSet(ui.selection)
+  const selected = wui.selected
+  // Fence art can tower ~220 world px above its baseline; pad the cull rect
+  // so nothing pops at the fringe.
+  const view = visibleWorld(cam, cssW, cssH, 256)
 
   // Consecrated ground: the arena field itself, sampled from the retail
   // editor's render (the base fill is generated in-game, not a loose file),
@@ -237,18 +617,22 @@ export function drawStage(
     ctx.fillStyle = '#22251f'
     ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
   }
-  const vignette = ctx.createRadialGradient(
-    (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.min(br.x - tl.x, br.y - tl.y) * 0.3,
-    (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.max(br.x - tl.x, br.y - tl.y) * 0.75,
-  )
-  vignette.addColorStop(0, 'rgba(0,0,0,0)')
-  vignette.addColorStop(1, 'rgba(0,0,0,0.22)')
-  ctx.fillStyle = vignette
+  const vigKey = `${tl.x.toFixed(1)},${tl.y.toFixed(1)},${br.x.toFixed(1)},${br.y.toFixed(1)}`
+  if (vigKey !== vignetteKey || !vignetteGrad) {
+    vignetteGrad = ctx.createRadialGradient(
+      (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.min(br.x - tl.x, br.y - tl.y) * 0.3,
+      (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.max(br.x - tl.x, br.y - tl.y) * 0.75,
+    )
+    vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)')
+    vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.22)')
+    vignetteKey = vigKey
+  }
+  ctx.fillStyle = vignetteGrad
   ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
 
   // Survey grid: the step widens as the camera pulls out so the lines stay
   // an honest surveyor's grid instead of vanishing or turning to noise.
-  if (ui.showGrid) {
+  if (wui.showGrid) {
     let step = GRID
     while (step * cam.zoom < 26 && step < 4096) step *= 2
     ctx.save()
@@ -256,41 +640,86 @@ export function drawStage(
     ctx.rect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
     ctx.clip()
     ctx.lineWidth = 1
-    const startWx = Math.ceil(b.x / step) * step
-    for (let wx = startWx; wx <= b.x + b.w; wx += step) {
-      const x = tl.x + (wx - b.x) * cam.zoom
-      const major = wx % (step * 4) === 0
+    // Only the lines crossing the viewport, and one batched stroke per
+    // weight instead of a stroke per line.
+    const wx0 = Math.max(b.x, view.x0)
+    const wx1 = Math.min(b.x + b.w, view.x1)
+    const wy0 = Math.max(b.y, view.y0)
+    const wy1 = Math.min(b.y + b.h, view.y1)
+    const yTop = Math.max(tl.y, 0)
+    const yBot = Math.min(br.y, cssH)
+    const xLeft = Math.max(tl.x, 0)
+    const xRight = Math.min(br.x, cssW)
+    for (const major of [false, true]) {
       ctx.strokeStyle = major ? 'rgba(200, 168, 98, 0.14)' : 'rgba(200, 168, 98, 0.07)'
-      ctx.beginPath(); ctx.moveTo(x, tl.y); ctx.lineTo(x, br.y); ctx.stroke()
-    }
-    const startWy = Math.ceil(b.y / step) * step
-    for (let wy = startWy; wy <= b.y + b.h; wy += step) {
-      const y = tl.y + (wy - b.y) * cam.zoom
-      const major = wy % (step * 4) === 0
-      ctx.strokeStyle = major ? 'rgba(200, 168, 98, 0.14)' : 'rgba(200, 168, 98, 0.07)'
-      ctx.beginPath(); ctx.moveTo(tl.x, y); ctx.lineTo(br.x, y); ctx.stroke()
+      ctx.beginPath()
+      for (let wx = Math.ceil(wx0 / step) * step; wx <= wx1; wx += step) {
+        if ((wx % (step * 4) === 0) !== major) continue
+        const x = tl.x + (wx - b.x) * cam.zoom
+        ctx.moveTo(x, yTop)
+        ctx.lineTo(x, yBot)
+      }
+      for (let wy = Math.ceil(wy0 / step) * step; wy <= wy1; wy += step) {
+        if ((wy % (step * 4) === 0) !== major) continue
+        const y = tl.y + (wy - b.y) * cam.zoom
+        ctx.moveTo(xLeft, y)
+        ctx.lineTo(xRight, y)
+      }
+      ctx.stroke()
     }
     ctx.restore()
   }
 
   // Terrain lies lowest: rivers and rises carved into the ground.
   for (const t of doc.terrain) {
-    drawTerrain(ctx, t, cam, cssW, cssH, selected.has(`terrain:${t.eid}`), sameEntry(ui.hover, { kind: 'terrain', eid: t.eid }))
+    if (skip?.has(`terrain:${t.eid}`)) continue
+    if (t.points && t.points.length >= 2 && !lineInView(t.points, view)) continue
+    drawTerrain(ctx, t, cam, cssW, cssH, selected.has(`terrain:${t.eid}`), sameEntry(wui.hover, { kind: 'terrain', eid: t.eid }))
   }
 
   // Roads on the ground, quad by native quad.
-  drawRoads(ctx, doc.roads, cam, cssW, cssH, selected, ui.hover)
+  drawRoads(ctx, skip ? doc.roads.filter((r) => !skip.has(`road:${r.eid}`)) : doc.roads, cam, cssW, cssH, view, selected, wui.hover)
 
   // Fences: the game's grate and wall art along each segment.
   for (const f of doc.fences) {
-    drawFence(ctx, f, cam, cssW, cssH, selected.has(`fence:${f.eid}`), sameEntry(ui.hover, { kind: 'fence', eid: f.eid }))
+    if (skip?.has(`fence:${f.eid}`)) continue
+    if (!lineInView(f.points, view)) continue
+    drawFence(ctx, f, cam, cssW, cssH, selected.has(`fence:${f.eid}`), sameEntry(wui.hover, { kind: 'fence', eid: f.eid }))
   }
 
   // Objects and scenery sprites, painter-sorted together.
+  paintDrawables(ctx, doc, cam, cssW, cssH, selected, wui.hover, skip ? { skip } : undefined)
+
+  // Plot boundary: the property line, in gold.
+  ctx.save()
+  ctx.strokeStyle = 'rgba(200,168,98,0.4)'
+  ctx.lineWidth = 1.5
+  ctx.setLineDash([10, 6])
+  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+  ctx.restore()
+}
+
+/** The painter-sorted sprite pass, filterable so the layer path can leave
+ * held pieces out (skip) or draw exactly the held pieces live (only). */
+function paintDrawables(
+  ctx: CanvasRenderingContext2D,
+  doc: EditorDoc,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+  selected: Set<string>,
+  hover: SelEntry | null,
+  filter?: { only?: Set<string>; skip?: Set<string> },
+) {
   const drawables = drawablesFor(doc)
   ctx.imageSmoothingEnabled = cam.zoom < 1
 
   for (const d of drawables) {
+    if (filter) {
+      const key = entryKey(d.sel)
+      if (filter.only && !filter.only.has(key)) continue
+      if (filter.skip && filter.skip.has(key)) continue
+    }
     const r = anchoredRect(d)
     const s = worldToScreen({ x: r.x, y: r.y }, cam, cssW, cssH)
     const drawW = r.w * cam.zoom
@@ -303,7 +732,7 @@ export function drawStage(
       || s.x > cssW + cullMargin || s.y > cssH + cullMargin
     ) continue
     const isSel = selected.has(entryKey(d.sel))
-    const isHover = !isSel && sameEntry(ui.hover, d.sel)
+    const isHover = !isSel && sameEntry(hover, d.sel)
 
     // Rooting shadow so pieces sit in the ground instead of on it.
     const foot = worldToScreen(d.pos, cam, cssW, cssH)
@@ -343,28 +772,20 @@ export function drawStage(
     }
 
     if (isSel || isHover) {
-      ctx.save()
-      ctx.strokeStyle = isSel ? 'rgba(240,212,145,0.95)' : 'rgba(230,220,195,0.4)'
-      ctx.lineWidth = isSel ? 1.5 : 1
-      ctx.setLineDash(isSel ? [] : [4, 3])
-      ctx.strokeRect(s.x - 2, s.y - 2, drawW + 4, drawH + 4)
-      if (isSel) {
-        ctx.shadowColor = 'rgba(200,168,98,0.8)'
-        ctx.shadowBlur = 10
-        ctx.strokeRect(s.x - 2, s.y - 2, drawW + 4, drawH + 4)
-      }
-      ctx.restore()
+      drawableOutline(ctx, s.x, s.y, drawW, drawH, isSel)
     }
   }
+}
 
-  // Plot boundary: the property line, in gold.
-  ctx.save()
-  ctx.strokeStyle = 'rgba(200,168,98,0.4)'
-  ctx.lineWidth = 1.5
-  ctx.setLineDash([10, 6])
-  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-  ctx.restore()
-
+/** The gesture chrome above everything: place ghost, draft path, marquee,
+ * brush ring. Shared verbatim by the direct and layered paths. */
+function drawTransientOverlays(
+  ctx: CanvasRenderingContext2D,
+  ui: StageUI,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+) {
   // Ghost of the piece about to be placed.
   if (ui.ghost) {
     const img = spriteImage(ui.ghost.ref.src)
@@ -430,13 +851,16 @@ function drawRoads(
   cam: Camera,
   w: number,
   h: number,
+  view: ViewRect,
   selected: Set<string>,
   hover: SelEntry | null,
 ) {
   if (roads.length === 0) return
-  // Group by texture style so each pattern binds once.
+  // Group by texture style so each pattern binds once; skip what the camera
+  // cannot see.
   const byStyle = new Map<number, Polyline[]>()
   for (const r of roads) {
+    if (!lineInView(r.points, view)) continue
     const style = Math.max(0, Math.min(ROAD_TEXTURES.length - 1, r.style ?? 0))
     const list = byStyle.get(style) ?? []
     list.push(r)
