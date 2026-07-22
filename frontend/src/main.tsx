@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
@@ -29,6 +29,11 @@ import Account from './pages/Account'
 import About from './pages/About'
 import Wizard from './pages/Wizard'
 import NotFound from './pages/NotFound'
+import { Spinner } from './components/ui'
+
+// The Boneyard editor carries its own atlas manifests and sprite pipeline;
+// it loads when someone actually picks up the shovel.
+const Boneyard = lazy(() => import('./pages/Boneyard'))
 
 const router = createBrowserRouter([
   {
@@ -42,6 +47,14 @@ const router = createBrowserRouter([
     element: <Shell />,
     children: [
       { path: '/', element: <Home /> },
+      {
+        path: '/boneyard',
+        element: (
+          <Suspense fallback={<Spinner label="Surveying the grounds…" />}>
+            <Boneyard />
+          </Suspense>
+        ),
+      },
       { path: '/classes', element: <Classes /> },
       { path: '/mods', element: <Mods /> },
       { path: '/mods/upload', element: <ModUpload /> },

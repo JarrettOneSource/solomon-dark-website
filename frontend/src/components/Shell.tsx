@@ -14,9 +14,9 @@ import { art } from '../lib/assets'
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
+  { to: '/boneyard', label: 'Boneyard' },
   { to: '/classes', label: 'Classes' },
   { to: '/mods', label: 'Library' },
-  { to: '/boneyards', label: 'Boneyards' },
   { to: '/about', label: 'About' },
 ]
 
@@ -94,6 +94,10 @@ export default function Shell() {
   const [wandOn, setWandOn] = useState(mouseFxEnabled)
   const location = useLocation()
 
+  // The Boneyard editor takes the whole viewport: no chrome, no wandering
+  // critters, and the wand grounds itself so the pointer stays a pointer.
+  const workshop = location.pathname.startsWith('/boneyard')
+
   useEffect(() => {
     setMenuOpen(false)
     window.scrollTo({ top: 0 })
@@ -137,6 +141,17 @@ export default function Shell() {
       document.removeEventListener('pointerdown', onDown)
     }
   }, [])
+
+  if (workshop) {
+    return (
+      <div className="flex h-dvh flex-col overflow-hidden">
+        <Overlays />
+        <main className="min-h-0 flex-1">
+          <Outlet />
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -293,6 +308,7 @@ export default function Shell() {
           <div>
             <div className="kicker mb-3">Passages</div>
             <ul className="space-y-2 text-sm">
+              <li><Link to="/boneyard" className="link-arcane">The Boneyard</Link></li>
               <li><Link to="/classes" className="link-arcane">Classes in Session</Link></li>
               <li><Link to="/mods" className="link-arcane">The Library</Link></li>
               <li><Link to="/boneyards" className="link-arcane">Boneyard Viewer</Link></li>

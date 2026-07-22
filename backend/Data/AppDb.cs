@@ -14,6 +14,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<LobbySession> Lobbies => Set<LobbySession>();
     public DbSet<SteamLinkAttempt> SteamLinkAttempts => Set<SteamLinkAttempt>();
     public DbSet<CloudSave> CloudSaves => Set<CloudSave>();
+    public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,6 +135,16 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             entity.HasOne(save => save.User)
                 .WithMany()
                 .HasForeignKey(save => save.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BoneyardDraft>(entity =>
+        {
+            entity.Property(draft => draft.Name).HasMaxLength(80);
+            entity.HasIndex(draft => new { draft.UserId, draft.UpdatedAtUtc });
+            entity.HasOne(draft => draft.User)
+                .WithMany()
+                .HasForeignKey(draft => draft.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -67,6 +67,16 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "Jwt__Secret": "website-mod-sync-contract-secret-at-least-thirty-two-bytes",
             }
         )
+        build = subprocess.run(
+            [cls.dotnet, "build", str(ROOT / "backend/Server.csproj"), "--nologo"],
+            cwd=ROOT,
+            env=cls.environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        if build.returncode != 0:
+            raise RuntimeError(f"website build failed:\n{build.stdout}")
         cls.start_server()
 
         status, registered = cls.request(
@@ -91,6 +101,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "--project",
                 str(ROOT / "backend/Server.csproj"),
                 "--no-launch-profile",
+                "--no-build",
             ],
             cwd=ROOT,
             env=cls.environment,

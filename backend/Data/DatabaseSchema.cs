@@ -128,6 +128,20 @@ public static class DatabaseSchema
                 ON ModDownloadEvents (DownloadedAtUtc);
             CREATE INDEX IF NOT EXISTS IX_ModDownloadEvents_ModId_DownloadedAtUtc
                 ON ModDownloadEvents (ModId, DownloadedAtUtc);
+
+            CREATE TABLE IF NOT EXISTS BoneyardDrafts (
+                Id INTEGER NOT NULL CONSTRAINT PK_BoneyardDrafts PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                Name TEXT NOT NULL,
+                DocumentSize INTEGER NOT NULL,
+                CompiledSize INTEGER NULL,
+                CreatedAtUtc TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_BoneyardDrafts_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS IX_BoneyardDrafts_UserId_UpdatedAtUtc
+                ON BoneyardDrafts (UserId, UpdatedAtUtc);
             """,
             cancellationToken);
 

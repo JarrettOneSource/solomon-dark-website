@@ -172,6 +172,23 @@ export interface SteamLinkStart {
   expiresAtUtc: string
 }
 
+/** A Boneyard editor draft as listed (bodies omitted; see BONEYARD_API.md). */
+export interface BoneyardDraftSummary {
+  id: number
+  name: string
+  updatedAt: string
+  documentSize: number
+  compiledSize: number | null
+}
+
+export interface BoneyardDraft extends BoneyardDraftSummary {
+  /** The editor's semantic document; opaque to the server. */
+  document: unknown
+  /** Base64 native container, when one has been compiled. */
+  compiledBoneyard: string | null
+  createdAt: string
+}
+
 export interface Stats {
   matchesLive: number
   wizardsOnline: number
@@ -327,6 +344,22 @@ export const api = {
     link: (returnPath: string) =>
       request<SteamLinkStart>('/api/auth/steam/link', json({ returnPath })),
     unlink: () => request<void>('/api/auth/steam', { method: 'DELETE' }),
+  },
+
+  /** The Boneyard editor's cloud drafts (JWT, owner-only). */
+  boneyards: {
+    list: () => request<BoneyardDraftSummary[]>('/api/boneyards'),
+    create: (name: string) => request<BoneyardDraft>('/api/boneyards', json({ name })),
+    get: (id: number) => request<BoneyardDraft>(`/api/boneyards/${id}`),
+    update: (
+      id: number,
+      patch: { name?: string; document?: unknown; compiledBoneyard?: string | null },
+    ) => request<BoneyardDraft>(`/api/boneyards/${id}`, { ...json(patch), method: 'PUT' }),
+    remove: (id: number) => request<void>(`/api/boneyards/${id}`, { method: 'DELETE' }),
+    publish: (
+      id: number,
+      body: { name: string; slug?: string; summary: string; description: string },
+    ) => request<ModDetail>(`/api/boneyards/${id}/publish`, json(body)),
   },
 
   stats: () => request<Stats>('/api/stats'),

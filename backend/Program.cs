@@ -34,6 +34,7 @@ var storage = new StorageService(storageRoot);
 builder.Services.AddSingleton(storage);
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
+builder.Services.AddScoped<ModPublishingService>();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var generatedJwtSecret = false;
@@ -209,6 +210,18 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDb>();
     await DatabaseSchema.EnsureCurrentAsync(db);
+    if (isDevelopment)
+    {
+        await DevelopmentSeedData.InitializeAsync(
+            db,
+            scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
+            storage,
+            scope.ServiceProvider.GetRequiredService<ModPublishingService>(),
+            Path.Combine(
+                builder.Environment.ContentRootPath,
+                "SeedAssets",
+                "survival.boneyard"));
+    }
 }
 
 app.UseExceptionHandler(errorApp =>
@@ -252,6 +265,8 @@ app.UseStatusCodePages(async statusContext =>
     await context.Response.WriteAsJsonAsync(new { error = message });
 });
 
+// The editor bundle ships a .boneyard asset (the blank plot template); the
+// default provider has no mapping for it and would 404.
 var frontendContentTypes = new FileExtensionContentTypeProvider();
 frontendContentTypes.Mappings[".boneyard"] = "application/octet-stream";
 var frontendFiles = new StaticFileOptions
@@ -286,6 +301,7 @@ app.UseRateLimiter();
 AuthEndpoints.Map(app);
 SteamAuthEndpoints.Map(app);
 ModEndpoints.Map(app);
+BoneyardEndpoints.Map(app);
 LobbyEndpoints.Map(app);
 SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);

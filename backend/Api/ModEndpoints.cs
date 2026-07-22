@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -16,7 +15,7 @@ public static class ModEndpoints
     private const int MaxTagsPerMod = 5;
     private const long UploadRequestLimit = 120L * 1024 * 1024;
     private const string InvalidTagError =
-        "Tags are 2–24 plain characters — letters, numbers, spaces, hyphens. The filing system predates punctuation.";
+        "Tags are 2–24 plain characters: letters, numbers, spaces, hyphens. The filing system predates punctuation.";
     private const string TooManyTagsError =
         "A tome carries at most five tags. The Librarian's patience is finite.";
 
@@ -411,7 +410,7 @@ public static class ModEndpoints
     private static async Task<IResult> CreateAsync(
         HttpContext context,
         AppDb db,
-        StorageService storage,
+        ModPublishingService publisher,
         CancellationToken cancellationToken)
     {
         if (!context.Request.HasFormContentType)
@@ -463,41 +462,6 @@ public static class ModEndpoints
             return ApiErrors.BadRequest("Mod files may not exceed 100 MiB.");
         }
 
-        ModPackageInspection package;
-        try
-        {
-            await using var source = file.OpenReadStream();
-            package = await ModPackageInspector.InspectAsync(source, cancellationToken);
-        }
-        catch (ModPackageValidationException exception)
-        {
-            return ApiErrors.BadRequest(exception.Message);
-        }
-
-        if (versionName.Length == 0)
-        {
-            versionName = package.ManifestVersion;
-        }
-
-        if (!StorageService.IsSafeVersion(versionName))
-        {
-            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
-        }
-
-        if (!string.Equals(versionName, package.ManifestVersion, StringComparison.Ordinal))
-        {
-            return ApiErrors.BadRequest(
-                "The upload version must exactly match manifest.version.");
-        }
-
-        if (await db.Mods.AnyAsync(
-                candidate => candidate.LauncherModId == package.LauncherModId,
-                cancellationToken))
-        {
-            return ApiErrors.Conflict(
-                $"A website mod already uses manifest.id '{package.LauncherModId}'.");
-        }
-
         var screenshots = form.Files.GetFiles("screenshots").ToArray();
         if (screenshots.Length > MaxScreenshotsPerMod)
         {
@@ -511,87 +475,40 @@ public static class ModEndpoints
         }
 
         var userId = TokenService.GetUserId(context.User);
-        if (userId is null || !await db.Users.AnyAsync(user => user.Id == userId.Value, cancellationToken))
+        if (userId is null)
         {
             return ApiErrors.Unauthorized("The Annals could not identify this mod author.");
         }
 
-        var slug = await UniqueSlugAsync(db, name, cancellationToken);
-        var now = DateTime.UtcNow;
-        var mod = new Mod
-        {
-            Slug = slug,
-            Name = name,
-            Summary = summary,
-            Description = description,
-            LauncherModId = package.LauncherModId,
-            AuthorId = userId.Value,
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now,
-            Tags = tags.Select(tag => new ModTag { Name = tag }).ToList()
-        };
-        var version = new ModVersion
-        {
-            Version = versionName,
-            ManifestVersion = package.ManifestVersion,
-            PackageSha256 = package.PackageSha256,
-            ContentSha256 = package.ContentSha256,
-            Changelog = "",
-            FileSize = file.Length,
-            CreatedAtUtc = now
-        };
-        mod.Versions.Add(version);
-
-        var screenshotNames = new List<string>();
         try
         {
-            await using (var source = file.OpenReadStream())
-            {
-                version.FileName = await storage.SaveModFileAsync(
-                    slug,
+            var uploads = screenshots.Select(screenshot => new ModScreenshotUpload(
+                ScreenshotExtension(screenshot.FileName)!,
+                screenshot.OpenReadStream)).ToArray();
+            var slug = await publisher.PublishAsync(
+                new ModPublicationRequest(
+                    userId.Value,
+                    name,
+                    summary,
+                    description,
+                    null,
                     versionName,
-                    source,
-                    cancellationToken);
-            }
-
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-            db.Mods.Add(mod);
-            await db.SaveChangesAsync(cancellationToken);
-
-            for (var index = 0; index < screenshots.Length; index++)
-            {
-                var screenshot = screenshots[index];
-                await using var source = screenshot.OpenReadStream();
-                var fileName = await storage.SaveScreenshotAsync(
-                    mod.Id,
-                    Guid.NewGuid().ToString("N")[..8],
-                    ScreenshotExtension(screenshot.FileName)!,
-                    source,
-                    cancellationToken);
-                screenshotNames.Add(fileName);
-                mod.Screenshots.Add(new ModScreenshot
-                {
-                    FileName = fileName,
-                    SortOrder = index
-                });
-            }
-
-            await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+                    tags,
+                    ""),
+                _ => new ModPackageSource(file.OpenReadStream(), file.Length),
+                uploads,
+                cancellationToken);
+            var created = await LoadModAsync(db, slug, cancellationToken);
+            return Results.Json(ToDetail(created!), statusCode: StatusCodes.Status201Created);
         }
-        catch
+        catch (ModPackageValidationException exception)
         {
-            storage.DeleteModDirectory(slug);
-            foreach (var screenshotName in screenshotNames)
-            {
-                storage.DeleteScreenshot(screenshotName);
-            }
-
-            throw;
+            return ApiErrors.BadRequest(exception.Message);
         }
-
-        var created = await LoadModAsync(db, slug, cancellationToken);
-        return Results.Json(ToDetail(created!), statusCode: StatusCodes.Status201Created);
+        catch (ModPublishingException exception)
+        {
+            return ApiErrors.Error(exception.StatusCode, exception.Message);
+        }
     }
 
     private static async Task<IResult> AddScreenshotsAsync(
@@ -941,9 +858,10 @@ public static class ModEndpoints
             return ApiErrors.BadRequest("Mod names must be 3–60 characters.");
         }
 
-        if (summary is not null && summary.Length > 140)
+        if (summary is not null && summary.Length > ModPublishingService.MaxSummaryLength)
         {
-            return ApiErrors.BadRequest("Summaries may not exceed 140 characters.");
+            return ApiErrors.BadRequest(
+                $"Summaries may not exceed {ModPublishingService.MaxSummaryLength} characters.");
         }
 
         if (request.Description is not null && request.Description.Length > 10_000)
@@ -1090,7 +1008,7 @@ public static class ModEndpoints
             enableRangeProcessing: true);
     }
 
-    private static async Task<Mod?> LoadModAsync(
+    internal static async Task<Mod?> LoadModAsync(
         AppDb db,
         string slug,
         CancellationToken cancellationToken) =>
@@ -1124,7 +1042,7 @@ public static class ModEndpoints
         };
     }
 
-    private static object ToDetail(Mod mod)
+    internal static object ToDetail(Mod mod)
     {
         var latest = LatestVersion(mod);
         var thumbnail = mod.Screenshots.OrderBy(screenshot => screenshot.SortOrder).FirstOrDefault();
@@ -1250,9 +1168,9 @@ public static class ModEndpoints
             return "Mod names must be 3–60 characters.";
         }
 
-        if (summary.Length > 140)
+        if (summary.Length > ModPublishingService.MaxSummaryLength)
         {
-            return "Summaries may not exceed 140 characters.";
+            return $"Summaries may not exceed {ModPublishingService.MaxSummaryLength} characters.";
         }
 
         if (description.Length > 10_000)
@@ -1261,63 +1179,6 @@ public static class ModEndpoints
         }
 
         return null;
-    }
-
-    private static async Task<string> UniqueSlugAsync(
-        AppDb db,
-        string name,
-        CancellationToken cancellationToken)
-    {
-        var baseSlug = Slugify(name);
-        var slug = baseSlug;
-        var suffix = 2;
-        while (await db.Mods.AnyAsync(mod => mod.Slug == slug, cancellationToken))
-        {
-            slug = $"{baseSlug}-{suffix}";
-            suffix++;
-        }
-
-        return slug;
-    }
-
-    private static string Slugify(string name)
-    {
-        var builder = new StringBuilder();
-        var pendingHyphen = false;
-        foreach (var character in name.Normalize(NormalizationForm.FormD))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-
-            if (character is >= 'A' and <= 'Z')
-            {
-                if (pendingHyphen && builder.Length > 0)
-                {
-                    builder.Append('-');
-                }
-
-                builder.Append(char.ToLowerInvariant(character));
-                pendingHyphen = false;
-            }
-            else if (character is >= 'a' and <= 'z' or >= '0' and <= '9')
-            {
-                if (pendingHyphen && builder.Length > 0)
-                {
-                    builder.Append('-');
-                }
-
-                builder.Append(character);
-                pendingHyphen = false;
-            }
-            else
-            {
-                pendingHyphen = true;
-            }
-        }
-
-        return builder.Length == 0 ? "mod" : builder.ToString();
     }
 
     private static string? ScreenshotExtension(string fileName)

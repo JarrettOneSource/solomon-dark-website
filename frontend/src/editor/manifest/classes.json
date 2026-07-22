@@ -1,0 +1,698 @@
+{
+  "evidence": [
+    "Mod Loader/docs/reverse-engineering/native-game-object-catalog.json",
+    "Mod Loader/docs/reverse-engineering/native-asset-object-map.json",
+    "Mod Loader/docs/reverse-engineering/native-atlas-consumers.json",
+    "Mod Loader/docs/reverse-engineering/native-asset-system.md",
+    "Mod Loader/docs/reverse-engineering/boneyard-system.md"
+  ],
+  "classes": [
+    {
+      "id": 2001,
+      "name": "Tree",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            228,
+            229,
+            230,
+            231,
+            232,
+            233,
+            234,
+            235,
+            236,
+            237,
+            238,
+            239,
+            240,
+            241,
+            242
+          ],
+          "role": "bounds and reference sprites"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252,
+            253,
+            254,
+            255,
+            256,
+            257,
+            258,
+            259,
+            260,
+            261,
+            262,
+            263
+          ],
+          "role": "overlay and foreground sprites"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            264,
+            265,
+            266,
+            267,
+            268,
+            269,
+            270,
+            271,
+            272,
+            273,
+            274,
+            275,
+            276,
+            277,
+            278,
+            279,
+            280,
+            281,
+            282
+          ],
+          "role": "visible trunk and canopy sprites"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "main short at +0x140",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            264,
+            265,
+            266,
+            267,
+            268,
+            269,
+            270,
+            271,
+            272,
+            273,
+            274,
+            275,
+            276,
+            277,
+            278,
+            279,
+            280,
+            281,
+            282
+          ],
+          "role": "visible trunk and canopy",
+          "confidence": "verified"
+        },
+        {
+          "selector": "overlay short at +0x142",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            243,
+            244,
+            245,
+            246,
+            247,
+            248,
+            249,
+            250,
+            251,
+            252,
+            253,
+            254,
+            255,
+            256,
+            257,
+            258,
+            259,
+            260,
+            261,
+            262,
+            263
+          ],
+          "role": "conditional overlay and foreground",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": [
+        "The selector relation for DeadHawg entries 228 through 242 is not established."
+      ]
+    },
+    {
+      "id": 2009,
+      "name": "Monument",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176
+          ],
+          "role": "monument sprites"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "short at +0x140",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            156,
+            157,
+            158,
+            159,
+            160,
+            161,
+            162,
+            163,
+            164,
+            165,
+            166,
+            167,
+            168,
+            169,
+            170,
+            171,
+            172,
+            173,
+            174,
+            175,
+            176
+          ],
+          "role": "monument",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": 2029,
+      "name": "Gravestone",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96
+          ],
+          "role": "grave overlay sprites"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113
+          ],
+          "role": "gravestone base sprites"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "main short at +0x140",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            97,
+            98,
+            99,
+            100,
+            101,
+            102,
+            103,
+            104,
+            105,
+            106,
+            107,
+            108,
+            109,
+            110,
+            111,
+            112,
+            113
+          ],
+          "role": "gravestone base",
+          "confidence": "verified"
+        },
+        {
+          "selector": "overlay short at +0x142",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            88,
+            89,
+            90,
+            91,
+            92,
+            93,
+            94,
+            95,
+            96
+          ],
+          "role": "grave overlay",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": 2040,
+      "name": "Building",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            148,
+            149,
+            150,
+            151
+          ],
+          "role": "building base sprites"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            152,
+            153,
+            154,
+            155
+          ],
+          "role": "building upper sprites"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "short at +0x140",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            148,
+            149,
+            150,
+            151
+          ],
+          "role": "building base",
+          "confidence": "verified"
+        },
+        {
+          "selector": "short at +0x140",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            152,
+            153,
+            154,
+            155
+          ],
+          "role": "building upper layer",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": 2061,
+      "name": "Goodie",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            145,
+            146,
+            147
+          ],
+          "role": "placed coffer states"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "BadGuys",
+          "entryIds": [
+            15,
+            33,
+            52,
+            377,
+            378,
+            379,
+            380
+          ],
+          "role": "active indicator and break effects"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "phase + 2 * subtype",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            145,
+            146,
+            147
+          ],
+          "formula": "entry id = 145 + phase + 2 * subtype, with native array bounds normalization",
+          "role": "placed coffer state",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": [
+        "The BadGuys records are secondary effects, not placement variants. Their internal selectors are not mapped here."
+      ]
+    },
+    {
+      "id": 3004,
+      "name": "Road",
+      "confidence": "probable",
+      "artSources": [
+        {
+          "kind": "looseImage",
+          "files": [
+            "road.png",
+            "road2.png",
+            "road3.png",
+            "road4.png",
+            "road5.png"
+          ],
+          "role": "generated road mesh textures"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "texture byte at +0x8C",
+          "filesByVariant": [
+            "road.png",
+            "road2.png",
+            "road3.png",
+            "road4.png",
+            "road5.png"
+          ],
+          "role": "road texture",
+          "confidence": "probable"
+        }
+      ],
+      "unresolved": [
+        "The five loose textures and selector are verified. The zero-based file order is probable."
+      ]
+    },
+    {
+      "id": 3005,
+      "name": "Fence",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "looseImage",
+          "files": [
+            "fencegrate.png"
+          ],
+          "role": "intact grate texture"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            3,
+            7,
+            8,
+            23
+          ],
+          "role": "broken grate, gate, and rail sprites"
+        },
+        {
+          "kind": "generated",
+          "role": "wall mesh"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "segment code byte at +0x44",
+          "role": "derived fence object",
+          "confidence": "verified",
+          "variants": [
+            {
+              "variant": 0,
+              "art": [
+                {
+                  "kind": "looseImage",
+                  "files": [
+                    "fencegrate.png"
+                  ],
+                  "role": "intact grate"
+                }
+              ]
+            },
+            {
+              "variant": 1,
+              "art": [
+                {
+                  "kind": "atlas",
+                  "atlas": "DeadHawg",
+                  "entryIds": [
+                    3
+                  ],
+                  "role": "broken grate halves"
+                }
+              ]
+            },
+            {
+              "variant": 2,
+              "art": [
+                {
+                  "kind": "atlas",
+                  "atlas": "DeadHawg",
+                  "entryIds": [
+                    7,
+                    8
+                  ],
+                  "role": "hinged gate leaves"
+                }
+              ]
+            },
+            {
+              "variant": 3,
+              "art": [
+                {
+                  "kind": "generated",
+                  "role": "wall mesh"
+                }
+              ]
+            },
+            {
+              "variant": 4,
+              "art": [
+                {
+                  "kind": "atlas",
+                  "atlas": "DeadHawg",
+                  "entryIds": [
+                    23
+                  ],
+                  "role": "rail section"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "id": 3006,
+      "name": "Fencepost",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42
+          ],
+          "role": "stone fenceposts"
+        },
+        {
+          "kind": "atlas",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            320,
+            321,
+            322,
+            323,
+            324,
+            325,
+            326,
+            327,
+            328,
+            329,
+            330,
+            331,
+            332,
+            333,
+            334,
+            335,
+            336,
+            337,
+            338,
+            339,
+            340,
+            341,
+            342,
+            343,
+            344,
+            345,
+            346,
+            347
+          ],
+          "role": "wood fenceposts"
+        }
+      ],
+      "variantMappings": [
+        {
+          "selector": "post selector at +0x140 when style +0x144 is zero",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42
+          ],
+          "role": "stone fencepost",
+          "confidence": "verified"
+        },
+        {
+          "selector": "post selector at +0x140 when style +0x144 is nonzero",
+          "atlas": "DeadHawg",
+          "entryIds": [
+            320,
+            321,
+            322,
+            323,
+            324,
+            325,
+            326,
+            327,
+            328,
+            329,
+            330,
+            331,
+            332,
+            333,
+            334,
+            335,
+            336,
+            337,
+            338,
+            339,
+            340,
+            341,
+            342,
+            343,
+            344,
+            345,
+            346,
+            347
+          ],
+          "role": "wood fencepost",
+          "confidence": "verified"
+        }
+      ],
+      "unresolved": [
+        "The exact style and post selector formula within entries 320 through 347 is not established."
+      ]
+    },
+    {
+      "id": 3007,
+      "name": "FenceGrate",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "looseImage",
+          "files": [
+            "fencegrate.png"
+          ],
+          "role": "repeated grate texture"
+        }
+      ],
+      "variantMappings": [],
+      "unresolved": [
+        "FenceGrate has no atlas entry selector. Its renderer repeats the loose texture over generated geometry."
+      ]
+    },
+    {
+      "id": 3009,
+      "name": "Terrain",
+      "confidence": "verified",
+      "artSources": [
+        {
+          "kind": "generated",
+          "role": "vertex and index buffers built by 0x0064F0F0 or 0x0064FA90"
+        }
+      ],
+      "variantMappings": [],
+      "unresolved": [
+        "Terrain has no established atlas entry mapping. Field +0xC0 selects one of two geometry builders; an exact texture binding is not established."
+      ]
+    }
+  ]
+}

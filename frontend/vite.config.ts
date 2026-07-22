@@ -9,6 +9,10 @@ export default defineConfig({
       '/api': 'http://localhost:5210',
       '/uploads': 'http://localhost:5210',
     },
+    // A WSL dev server watching the repo through /mnt/c gets no inotify
+    // events from Windows, so HMR silently serves stale modules. Poll there;
+    // Windows-side dev keeps native watching.
+    watch: process.env.WSL_DISTRO_NAME ? { usePolling: true, interval: 800 } : undefined,
   },
   build: {
     // The backend serves the SPA from wwwroot; `dotnet publish` picks it up.

@@ -12,7 +12,7 @@ import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
 import { playSound } from '../fx/sounds'
 
-/** Marginalia — notes other wizards left in this tome's margins. */
+/** Marginalia: notes other wizards left in this tome's margins. */
 function Marginalia({ mod }: { mod: ModDetailShape }) {
   const { user } = useAuth()
   const comments = useApi(() => api.mods.comments.list(mod.slug), [mod.slug])
@@ -97,7 +97,7 @@ function Marginalia({ mod }: { mod: ModDetailShape }) {
       ) : items.length === 0 ? (
         <div className="mt-5 rounded border border-dashed border-gold/20 px-5 py-8 text-center">
           <p className="text-fell text-sm text-bone-dim">
-            No notes yet. The margins are pristine — suspiciously so.
+            No notes yet. The margins are pristine, suspiciously so.
           </p>
         </div>
       ) : (

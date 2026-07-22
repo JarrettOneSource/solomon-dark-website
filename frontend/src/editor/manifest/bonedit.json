@@ -1,0 +1,1689 @@
+{
+  "atlas": "Bonedit",
+  "pngSize": {
+    "w": 1024,
+    "h": 512
+  },
+  "entries": [
+    {
+      "id": 0,
+      "file": "bonedit/000.png",
+      "rect": {
+        "x": 104,
+        "y": 275,
+        "w": 62,
+        "h": 62
+      },
+      "cell": {
+        "w": 62,
+        "h": 62
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 1,
+      "file": "bonedit/001.png",
+      "rect": {
+        "x": 0,
+        "y": 204,
+        "w": 49,
+        "h": 128
+      },
+      "cell": {
+        "w": 250,
+        "h": 250
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -54
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 2,
+      "file": "bonedit/002.png",
+      "rect": {
+        "x": 181,
+        "y": 69,
+        "w": 27,
+        "h": 29
+      },
+      "cell": {
+        "w": 27,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 3,
+      "file": "bonedit/003.png",
+      "rect": {
+        "x": 209,
+        "y": 422,
+        "w": 62,
+        "h": 62
+      },
+      "cell": {
+        "w": 62,
+        "h": 62
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 4,
+      "file": "bonedit/004.png",
+      "rect": {
+        "x": 444,
+        "y": 0,
+        "w": 200,
+        "h": 200
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 5,
+      "file": "bonedit/005.png",
+      "rect": {
+        "x": 104,
+        "y": 219,
+        "w": 55,
+        "h": 55
+      },
+      "cell": {
+        "w": 55,
+        "h": 55
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 6,
+      "file": "bonedit/006.png",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 103,
+        "h": 36
+      },
+      "cell": {
+        "w": 123,
+        "h": 40
+      },
+      "origin": {
+        "x": -5,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 7,
+      "file": "bonedit/007.png",
+      "rect": {
+        "x": 317,
+        "y": 0,
+        "w": 126,
+        "h": 134
+      },
+      "cell": {
+        "w": 126,
+        "h": 134
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 8,
+      "file": "bonedit/008.png",
+      "rect": {
+        "x": 104,
+        "y": 338,
+        "w": 94,
+        "h": 94
+      },
+      "cell": {
+        "w": 94,
+        "h": 94
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 9,
+      "file": "bonedit/009.png",
+      "rect": {
+        "x": 317,
+        "y": 135,
+        "w": 109,
+        "h": 34
+      },
+      "cell": {
+        "w": 123,
+        "h": 40
+      },
+      "origin": {
+        "x": -2,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 10,
+      "file": "bonedit/010.png",
+      "rect": {
+        "x": 372,
+        "y": 170,
+        "w": 30,
+        "h": 33
+      },
+      "cell": {
+        "w": 30,
+        "h": 33
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 11,
+      "file": "bonedit/011.png",
+      "rect": {
+        "x": 74,
+        "y": 167,
+        "w": 26,
+        "h": 30
+      },
+      "cell": {
+        "w": 26,
+        "h": 30
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 12,
+      "file": "bonedit/012.png",
+      "rect": {
+        "x": 35,
+        "y": 167,
+        "w": 38,
+        "h": 32
+      },
+      "cell": {
+        "w": 38,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 13,
+      "file": "bonedit/013.png",
+      "rect": {
+        "x": 57,
+        "y": 59,
+        "w": 11,
+        "h": 12
+      },
+      "cell": {
+        "w": 11,
+        "h": 12
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 14,
+      "file": "bonedit/014.png",
+      "rect": {
+        "x": 85,
+        "y": 60,
+        "w": 8,
+        "h": 11
+      },
+      "cell": {
+        "w": 8,
+        "h": 11
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 15,
+      "file": "bonedit/015.png",
+      "rect": {
+        "x": 50,
+        "y": 204,
+        "w": 38,
+        "h": 32
+      },
+      "cell": {
+        "w": 38,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 16,
+      "file": "bonedit/016.png",
+      "rect": {
+        "x": 0,
+        "y": 135,
+        "w": 31,
+        "h": 31
+      },
+      "cell": {
+        "w": 31,
+        "h": 31
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 17,
+      "file": "bonedit/017.png",
+      "rect": {
+        "x": 84,
+        "y": 42,
+        "w": 19,
+        "h": 16
+      },
+      "cell": {
+        "w": 19,
+        "h": 16
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 18,
+      "file": "bonedit/018.png",
+      "rect": {
+        "x": 317,
+        "y": 225,
+        "w": 109,
+        "h": 37
+      },
+      "cell": {
+        "w": 109,
+        "h": 37
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 19,
+      "file": "bonedit/019.png",
+      "rect": {
+        "x": 167,
+        "y": 275,
+        "w": 31,
+        "h": 32
+      },
+      "cell": {
+        "w": 31,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 20,
+      "file": "bonedit/020.png",
+      "rect": {
+        "x": 0,
+        "y": 37,
+        "w": 34,
+        "h": 36
+      },
+      "cell": {
+        "w": 34,
+        "h": 36
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 21,
+      "file": "bonedit/021.png",
+      "rect": {
+        "x": 80,
+        "y": 38,
+        "w": 3,
+        "h": 16
+      },
+      "cell": {
+        "w": 3,
+        "h": 16
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 22,
+      "file": "bonedit/022.png",
+      "rect": {
+        "x": 85,
+        "y": 38,
+        "w": 16,
+        "h": 3
+      },
+      "cell": {
+        "w": 16,
+        "h": 3
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 23,
+      "file": "bonedit/023.png",
+      "rect": {
+        "x": 646,
+        "y": 1,
+        "w": 264,
+        "h": 63
+      },
+      "cell": {
+        "w": 264,
+        "h": 63
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 24,
+      "file": "bonedit/024.png",
+      "rect": {
+        "x": 69,
+        "y": 59,
+        "w": 7,
+        "h": 12
+      },
+      "cell": {
+        "w": 7,
+        "h": 36
+      },
+      "origin": {
+        "x": 0,
+        "y": -5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 25,
+      "file": "bonedit/025.png",
+      "rect": {
+        "x": 23,
+        "y": 334,
+        "w": 29,
+        "h": 19
+      },
+      "cell": {
+        "w": 29,
+        "h": 19
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 26,
+      "file": "bonedit/026.png",
+      "rect": {
+        "x": 35,
+        "y": 59,
+        "w": 13,
+        "h": 13
+      },
+      "cell": {
+        "w": 13,
+        "h": 13
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 27,
+      "file": "bonedit/027.png",
+      "rect": {
+        "x": 50,
+        "y": 237,
+        "w": 53,
+        "h": 53
+      },
+      "cell": {
+        "w": 53,
+        "h": 53
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 28,
+      "file": "bonedit/028.png",
+      "rect": {
+        "x": 209,
+        "y": 0,
+        "w": 107,
+        "h": 107
+      },
+      "cell": {
+        "w": 107,
+        "h": 107
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 29,
+      "file": "bonedit/029.png",
+      "rect": {
+        "x": 272,
+        "y": 422,
+        "w": 34,
+        "h": 32
+      },
+      "cell": {
+        "w": 34,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 30,
+      "file": "bonedit/030.png",
+      "rect": {
+        "x": 104,
+        "y": 69,
+        "w": 37,
+        "h": 37
+      },
+      "cell": {
+        "w": 37,
+        "h": 37
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 31,
+      "file": "bonedit/031.png",
+      "rect": {
+        "x": 142,
+        "y": 69,
+        "w": 38,
+        "h": 32
+      },
+      "cell": {
+        "w": 38,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 32,
+      "file": "bonedit/032.png",
+      "rect": {
+        "x": 0,
+        "y": 167,
+        "w": 34,
+        "h": 36
+      },
+      "cell": {
+        "w": 34,
+        "h": 36
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 33,
+      "file": "bonedit/033.png",
+      "rect": {
+        "x": 444,
+        "y": 201,
+        "w": 178,
+        "h": 178
+      },
+      "cell": {
+        "w": 178,
+        "h": 178
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 34,
+      "file": "bonedit/034.png",
+      "rect": {
+        "x": 0,
+        "y": 74,
+        "w": 60,
+        "h": 60
+      },
+      "cell": {
+        "w": 60,
+        "h": 60
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 35,
+      "file": "bonedit/035.png",
+      "rect": {
+        "x": 317,
+        "y": 170,
+        "w": 54,
+        "h": 54
+      },
+      "cell": {
+        "w": 54,
+        "h": 54
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 36,
+      "file": "bonedit/036.png",
+      "rect": {
+        "x": 160,
+        "y": 219,
+        "w": 40,
+        "h": 40
+      },
+      "cell": {
+        "w": 40,
+        "h": 40
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 37,
+      "file": "bonedit/037.png",
+      "rect": {
+        "x": 35,
+        "y": 411,
+        "w": 37,
+        "h": 72
+      },
+      "cell": {
+        "w": 187,
+        "h": 187
+      },
+      "origin": {
+        "x": 0,
+        "y": -17.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 38,
+      "file": "bonedit/038.png",
+      "rect": {
+        "x": 0,
+        "y": 476,
+        "w": 30,
+        "h": 30
+      },
+      "cell": {
+        "w": 30,
+        "h": 30
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 39,
+      "file": "bonedit/039.png",
+      "rect": {
+        "x": 403,
+        "y": 170,
+        "w": 27,
+        "h": 29
+      },
+      "cell": {
+        "w": 27,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 40,
+      "file": "bonedit/040.png",
+      "rect": {
+        "x": 0,
+        "y": 411,
+        "w": 34,
+        "h": 34
+      },
+      "cell": {
+        "w": 34,
+        "h": 34
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 41,
+      "file": "bonedit/041.png",
+      "rect": {
+        "x": 146,
+        "y": 107,
+        "w": 50,
+        "h": 39
+      },
+      "cell": {
+        "w": 50,
+        "h": 39
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 42,
+      "file": "bonedit/042.png",
+      "rect": {
+        "x": 209,
+        "y": 108,
+        "w": 105,
+        "h": 33
+      },
+      "cell": {
+        "w": 105,
+        "h": 33
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 43,
+      "file": "bonedit/043.png",
+      "rect": {
+        "x": 209,
+        "y": 354,
+        "w": 106,
+        "h": 33
+      },
+      "cell": {
+        "w": 106,
+        "h": 33
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 44,
+      "file": "bonedit/044.png",
+      "rect": {
+        "x": 209,
+        "y": 388,
+        "w": 100,
+        "h": 33
+      },
+      "cell": {
+        "w": 123,
+        "h": 40
+      },
+      "origin": {
+        "x": -6.5,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 45,
+      "file": "bonedit/045.png",
+      "rect": {
+        "x": 317,
+        "y": 357,
+        "w": 96,
+        "h": 81
+      },
+      "cell": {
+        "w": 96,
+        "h": 81
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 46,
+      "file": "bonedit/046.png",
+      "rect": {
+        "x": 0,
+        "y": 446,
+        "w": 27,
+        "h": 29
+      },
+      "cell": {
+        "w": 27,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 47,
+      "file": "bonedit/047.png",
+      "rect": {
+        "x": 76,
+        "y": 135,
+        "w": 27,
+        "h": 29
+      },
+      "cell": {
+        "w": 27,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 48,
+      "file": "bonedit/048.png",
+      "rect": {
+        "x": 49,
+        "y": 59,
+        "w": 3,
+        "h": 3
+      },
+      "cell": {
+        "w": 3,
+        "h": 3
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 49,
+      "file": "bonedit/049.png",
+      "rect": {
+        "x": 74,
+        "y": 291,
+        "w": 20,
+        "h": 20
+      },
+      "cell": {
+        "w": 20,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 50,
+      "file": "bonedit/050.png",
+      "rect": {
+        "x": 74,
+        "y": 312,
+        "w": 20,
+        "h": 20
+      },
+      "cell": {
+        "w": 20,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 51,
+      "file": "bonedit/051.png",
+      "rect": {
+        "x": 209,
+        "y": 142,
+        "w": 105,
+        "h": 105
+      },
+      "cell": {
+        "w": 105,
+        "h": 105
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 52,
+      "file": "bonedit/052.png",
+      "rect": {
+        "x": 209,
+        "y": 248,
+        "w": 105,
+        "h": 105
+      },
+      "cell": {
+        "w": 105,
+        "h": 105
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 53,
+      "file": "bonedit/053.png",
+      "rect": {
+        "x": 50,
+        "y": 291,
+        "w": 23,
+        "h": 25
+      },
+      "cell": {
+        "w": 23,
+        "h": 25
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 54,
+      "file": "bonedit/054.png",
+      "rect": {
+        "x": 0,
+        "y": 378,
+        "w": 32,
+        "h": 32
+      },
+      "cell": {
+        "w": 32,
+        "h": 32
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 55,
+      "file": "bonedit/055.png",
+      "rect": {
+        "x": 0,
+        "y": 355,
+        "w": 24,
+        "h": 22
+      },
+      "cell": {
+        "w": 24,
+        "h": 22
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 56,
+      "file": "bonedit/056.png",
+      "rect": {
+        "x": 272,
+        "y": 455,
+        "w": 38,
+        "h": 38
+      },
+      "cell": {
+        "w": 38,
+        "h": 38
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 57,
+      "file": "bonedit/057.png",
+      "rect": {
+        "x": 65,
+        "y": 378,
+        "w": 29,
+        "h": 29
+      },
+      "cell": {
+        "w": 29,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 58,
+      "file": "bonedit/058.png",
+      "rect": {
+        "x": 33,
+        "y": 378,
+        "w": 31,
+        "h": 30
+      },
+      "cell": {
+        "w": 31,
+        "h": 30
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 59,
+      "file": "bonedit/059.png",
+      "rect": {
+        "x": 73,
+        "y": 455,
+        "w": 21,
+        "h": 28
+      },
+      "cell": {
+        "w": 21,
+        "h": 28
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 60,
+      "file": "bonedit/060.png",
+      "rect": {
+        "x": 167,
+        "y": 308,
+        "w": 29,
+        "h": 24
+      },
+      "cell": {
+        "w": 29,
+        "h": 24
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 61,
+      "file": "bonedit/061.png",
+      "rect": {
+        "x": 61,
+        "y": 74,
+        "w": 41,
+        "h": 41
+      },
+      "cell": {
+        "w": 41,
+        "h": 41
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 62,
+      "file": "bonedit/062.png",
+      "rect": {
+        "x": 104,
+        "y": 107,
+        "w": 41,
+        "h": 41
+      },
+      "cell": {
+        "w": 41,
+        "h": 41
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 63,
+      "file": null,
+      "rect": {
+        "x": 53,
+        "y": 59,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": -10,
+        "y": -10
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 64,
+      "file": "bonedit/064.png",
+      "rect": {
+        "x": 47,
+        "y": 355,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 65,
+      "file": "bonedit/065.png",
+      "rect": {
+        "x": 32,
+        "y": 135,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 66,
+      "file": "bonedit/066.png",
+      "rect": {
+        "x": 73,
+        "y": 484,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 67,
+      "file": "bonedit/067.png",
+      "rect": {
+        "x": 25,
+        "y": 355,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 68,
+      "file": "bonedit/068.png",
+      "rect": {
+        "x": 54,
+        "y": 135,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 69,
+      "file": "bonedit/069.png",
+      "rect": {
+        "x": 53,
+        "y": 333,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 70,
+      "file": "bonedit/070.png",
+      "rect": {
+        "x": 35,
+        "y": 37,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 71,
+      "file": "bonedit/071.png",
+      "rect": {
+        "x": 35,
+        "y": 484,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 72,
+      "file": "bonedit/072.png",
+      "rect": {
+        "x": 57,
+        "y": 37,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 73,
+      "file": "bonedit/073.png",
+      "rect": {
+        "x": 69,
+        "y": 355,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 74,
+      "file": "bonedit/074.png",
+      "rect": {
+        "x": 73,
+        "y": 433,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 75,
+      "file": "bonedit/075.png",
+      "rect": {
+        "x": 209,
+        "y": 485,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 76,
+      "file": "bonedit/076.png",
+      "rect": {
+        "x": 0,
+        "y": 333,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 77,
+      "file": "bonedit/077.png",
+      "rect": {
+        "x": 73,
+        "y": 411,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 78,
+      "file": "bonedit/078.png",
+      "rect": {
+        "x": 75,
+        "y": 333,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 79,
+      "file": "bonedit/079.png",
+      "rect": {
+        "x": 104,
+        "y": 0,
+        "w": 104,
+        "h": 68
+      },
+      "cell": {
+        "w": 116,
+        "h": 80
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 80,
+      "file": "bonedit/080.png",
+      "rect": {
+        "x": 104,
+        "y": 433,
+        "w": 104,
+        "h": 68
+      },
+      "cell": {
+        "w": 116,
+        "h": 80
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 81,
+      "file": "bonedit/081.png",
+      "rect": {
+        "x": 317,
+        "y": 263,
+        "w": 113,
+        "h": 93
+      },
+      "cell": {
+        "w": 145,
+        "h": 110
+      },
+      "origin": {
+        "x": 3,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 82,
+      "file": "bonedit/082.png",
+      "rect": {
+        "x": 444,
+        "y": 380,
+        "w": 117,
+        "h": 75
+      },
+      "cell": {
+        "w": 117,
+        "h": 83
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 83,
+      "file": "bonedit/083.png",
+      "rect": {
+        "x": 104,
+        "y": 149,
+        "w": 96,
+        "h": 69
+      },
+      "cell": {
+        "w": 117,
+        "h": 83
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    }
+  ]
+}

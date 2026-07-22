@@ -1,0 +1,6969 @@
+{
+  "atlas": "DeadHawg",
+  "pngSize": {
+    "w": 2048,
+    "h": 2048
+  },
+  "entries": [
+    {
+      "id": 0,
+      "file": "deadhawg/000.png",
+      "rect": {
+        "x": 538,
+        "y": 65,
+        "w": 153,
+        "h": 133
+      },
+      "cell": {
+        "w": 155,
+        "h": 135
+      },
+      "origin": {
+        "x": 1,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 1,
+      "file": "deadhawg/001.png",
+      "rect": {
+        "x": 777,
+        "y": 1896,
+        "w": 222,
+        "h": 111
+      },
+      "cell": {
+        "w": 252,
+        "h": 171
+      },
+      "origin": {
+        "x": -15,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 2,
+      "file": "deadhawg/002.png",
+      "rect": {
+        "x": 1808,
+        "y": 151,
+        "w": 104,
+        "h": 82
+      },
+      "cell": {
+        "w": 104,
+        "h": 82
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 3,
+      "file": "deadhawg/003.png",
+      "rect": {
+        "x": 415,
+        "y": 1497,
+        "w": 60,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 2,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 4,
+      "file": "deadhawg/004.png",
+      "rect": {
+        "x": 662,
+        "y": 1615,
+        "w": 93,
+        "h": 78
+      },
+      "cell": {
+        "w": 93,
+        "h": 79
+      },
+      "origin": {
+        "x": 0,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 5,
+      "file": "deadhawg/005.png",
+      "rect": {
+        "x": 691,
+        "y": 941,
+        "w": 79,
+        "h": 166
+      },
+      "cell": {
+        "w": 79,
+        "h": 166
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 6,
+      "file": "deadhawg/006.png",
+      "rect": {
+        "x": 1658,
+        "y": 858,
+        "w": 252,
+        "h": 198
+      },
+      "cell": {
+        "w": 252,
+        "h": 198
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 7,
+      "file": "deadhawg/007.png",
+      "rect": {
+        "x": 1129,
+        "y": 1889,
+        "w": 84,
+        "h": 96
+      },
+      "cell": {
+        "w": 84,
+        "h": 96
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 8,
+      "file": "deadhawg/008.png",
+      "rect": {
+        "x": 15,
+        "y": 835,
+        "w": 16,
+        "h": 19
+      },
+      "cell": {
+        "w": 16,
+        "h": 19
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 9,
+      "file": "deadhawg/009.png",
+      "rect": {
+        "x": 482,
+        "y": 1486,
+        "w": 128,
+        "h": 128
+      },
+      "cell": {
+        "w": 128,
+        "h": 128
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 10,
+      "file": "deadhawg/010.png",
+      "rect": {
+        "x": 161,
+        "y": 59,
+        "w": 5,
+        "h": 3
+      },
+      "cell": {
+        "w": 5,
+        "h": 3
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 11,
+      "file": "deadhawg/011.png",
+      "rect": {
+        "x": 778,
+        "y": 859,
+        "w": 350,
+        "h": 350
+      },
+      "cell": {
+        "w": 350,
+        "h": 350
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 12,
+      "file": "deadhawg/012.png",
+      "rect": {
+        "x": 1399,
+        "y": 1069,
+        "w": 350,
+        "h": 350
+      },
+      "cell": {
+        "w": 350,
+        "h": 350
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 13,
+      "file": "deadhawg/013.png",
+      "rect": {
+        "x": 1177,
+        "y": 53,
+        "w": 46,
+        "h": 10
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": 7,
+        "y": 110
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 14,
+      "file": "deadhawg/014.png",
+      "rect": {
+        "x": 1380,
+        "y": 551,
+        "w": 235,
+        "h": 236
+      },
+      "cell": {
+        "w": 235,
+        "h": 236
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 15,
+      "file": "deadhawg/015.png",
+      "rect": {
+        "x": 277,
+        "y": 1497,
+        "w": 137,
+        "h": 126
+      },
+      "cell": {
+        "w": 137,
+        "h": 129
+      },
+      "origin": {
+        "x": 0,
+        "y": 1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 16,
+      "file": "deadhawg/016.png",
+      "rect": {
+        "x": 1000,
+        "y": 1896,
+        "w": 119,
+        "h": 119
+      },
+      "cell": {
+        "w": 119,
+        "h": 119
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 17,
+      "file": "deadhawg/017.png",
+      "rect": {
+        "x": 1616,
+        "y": 551,
+        "w": 294,
+        "h": 236
+      },
+      "cell": {
+        "w": 294,
+        "h": 236
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 18,
+      "file": "deadhawg/018.png",
+      "rect": {
+        "x": 777,
+        "y": 1590,
+        "w": 336,
+        "h": 305
+      },
+      "cell": {
+        "w": 336,
+        "h": 336
+      },
+      "origin": {
+        "x": 0,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 19,
+      "file": "deadhawg/019.png",
+      "rect": {
+        "x": 1911,
+        "y": 551,
+        "w": 125,
+        "h": 123
+      },
+      "cell": {
+        "w": 125,
+        "h": 123
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 20,
+      "file": "deadhawg/020.png",
+      "rect": {
+        "x": 1132,
+        "y": 66,
+        "w": 102,
+        "h": 77
+      },
+      "cell": {
+        "w": 102,
+        "h": 77
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 21,
+      "file": "deadhawg/021.png",
+      "rect": {
+        "x": 746,
+        "y": 200,
+        "w": 43,
+        "h": 35
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -0.5,
+        "y": 4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 22,
+      "file": "deadhawg/022.png",
+      "rect": {
+        "x": 425,
+        "y": 34,
+        "w": 25,
+        "h": 25
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 23,
+      "file": "deadhawg/023.png",
+      "rect": {
+        "x": 538,
+        "y": 199,
+        "w": 90,
+        "h": 19
+      },
+      "cell": {
+        "w": 90,
+        "h": 19
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 24,
+      "file": "deadhawg/024.png",
+      "rect": {
+        "x": 17,
+        "y": 240,
+        "w": 20,
+        "h": 17
+      },
+      "cell": {
+        "w": 20,
+        "h": 17
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 25,
+      "file": "deadhawg/025.png",
+      "rect": {
+        "x": 352,
+        "y": 50,
+        "w": 31,
+        "h": 10
+      },
+      "cell": {
+        "w": 31,
+        "h": 10
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 26,
+      "file": "deadhawg/026.png",
+      "rect": {
+        "x": 451,
+        "y": 34,
+        "w": 9,
+        "h": 20
+      },
+      "cell": {
+        "w": 9,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 27,
+      "file": "deadhawg/027.png",
+      "rect": {
+        "x": 277,
+        "y": 958,
+        "w": 153,
+        "h": 136
+      },
+      "cell": {
+        "w": 153,
+        "h": 136
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 28,
+      "file": "deadhawg/028.png",
+      "rect": {
+        "x": 1434,
+        "y": 0,
+        "w": 30,
+        "h": 30
+      },
+      "cell": {
+        "w": 30,
+        "h": 30
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 29,
+      "file": "deadhawg/029.png",
+      "rect": {
+        "x": 277,
+        "y": 1095,
+        "w": 117,
+        "h": 129
+      },
+      "cell": {
+        "w": 117,
+        "h": 129
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 30,
+      "file": "deadhawg/030.png",
+      "rect": {
+        "x": 43,
+        "y": 385,
+        "w": 100,
+        "h": 84
+      },
+      "cell": {
+        "w": 100,
+        "h": 84
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 31,
+      "file": "deadhawg/031.png",
+      "rect": {
+        "x": 1342,
+        "y": 198,
+        "w": 50,
+        "h": 45
+      },
+      "cell": {
+        "w": 59,
+        "h": 47
+      },
+      "origin": {
+        "x": -2.5,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 32,
+      "file": "deadhawg/032.png",
+      "rect": {
+        "x": 157,
+        "y": 59,
+        "w": 3,
+        "h": 3
+      },
+      "cell": {
+        "w": 3,
+        "h": 3
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 33,
+      "file": "deadhawg/033.png",
+      "rect": {
+        "x": 129,
+        "y": 673,
+        "w": 101,
+        "h": 84
+      },
+      "cell": {
+        "w": 101,
+        "h": 84
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 34,
+      "file": "deadhawg/034.png",
+      "rect": {
+        "x": 43,
+        "y": 1304,
+        "w": 94,
+        "h": 97
+      },
+      "cell": {
+        "w": 94,
+        "h": 97
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 35,
+      "file": "deadhawg/035.png",
+      "rect": {
+        "x": 1214,
+        "y": 1889,
+        "w": 87,
+        "h": 76
+      },
+      "cell": {
+        "w": 87,
+        "h": 76
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 36,
+      "file": "deadhawg/036.png",
+      "rect": {
+        "x": 0,
+        "y": 1246,
+        "w": 38,
+        "h": 82
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 37,
+      "file": "deadhawg/037.png",
+      "rect": {
+        "x": 0,
+        "y": 65,
+        "w": 42,
+        "h": 84
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 38,
+      "file": "deadhawg/038.png",
+      "rect": {
+        "x": 232,
+        "y": 1304,
+        "w": 44,
+        "h": 88
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 39,
+      "file": "deadhawg/039.png",
+      "rect": {
+        "x": 185,
+        "y": 1304,
+        "w": 46,
+        "h": 88
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 40,
+      "file": "deadhawg/040.png",
+      "rect": {
+        "x": 138,
+        "y": 1304,
+        "w": 46,
+        "h": 89
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 41,
+      "file": "deadhawg/041.png",
+      "rect": {
+        "x": 431,
+        "y": 598,
+        "w": 44,
+        "h": 88
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 42,
+      "file": "deadhawg/042.png",
+      "rect": {
+        "x": 2003,
+        "y": 675,
+        "w": 42,
+        "h": 85
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -24.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 43,
+      "file": "deadhawg/043.png",
+      "rect": {
+        "x": 0,
+        "y": 1699,
+        "w": 29,
+        "h": 27
+      },
+      "cell": {
+        "w": 29,
+        "h": 27
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 44,
+      "file": "deadhawg/044.png",
+      "rect": {
+        "x": 0,
+        "y": 994,
+        "w": 29,
+        "h": 26
+      },
+      "cell": {
+        "w": 29,
+        "h": 26
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 45,
+      "file": "deadhawg/045.png",
+      "rect": {
+        "x": 246,
+        "y": 323,
+        "w": 25,
+        "h": 27
+      },
+      "cell": {
+        "w": 25,
+        "h": 27
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 46,
+      "file": "deadhawg/046.png",
+      "rect": {
+        "x": 1557,
+        "y": 130,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 47,
+      "file": "deadhawg/047.png",
+      "rect": {
+        "x": 1368,
+        "y": 480,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 48,
+      "file": "deadhawg/048.png",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 49,
+      "file": "deadhawg/049.png",
+      "rect": {
+        "x": 1298,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 50,
+      "file": "deadhawg/050.png",
+      "rect": {
+        "x": 235,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 51,
+      "file": "deadhawg/051.png",
+      "rect": {
+        "x": 1112,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 52,
+      "file": "deadhawg/052.png",
+      "rect": {
+        "x": 1687,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 53,
+      "file": "deadhawg/053.png",
+      "rect": {
+        "x": 585,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 54,
+      "file": "deadhawg/054.png",
+      "rect": {
+        "x": 363,
+        "y": 793,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 55,
+      "file": "deadhawg/055.png",
+      "rect": {
+        "x": 1303,
+        "y": 480,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 56,
+      "file": "deadhawg/056.png",
+      "rect": {
+        "x": 1557,
+        "y": 65,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 57,
+      "file": "deadhawg/057.png",
+      "rect": {
+        "x": 407,
+        "y": 1975,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 58,
+      "file": "deadhawg/058.png",
+      "rect": {
+        "x": 1081,
+        "y": 471,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 59,
+      "file": "deadhawg/059.png",
+      "rect": {
+        "x": 1214,
+        "y": 1966,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 60,
+      "file": "deadhawg/060.png",
+      "rect": {
+        "x": 589,
+        "y": 1965,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 61,
+      "file": "deadhawg/061.png",
+      "rect": {
+        "x": 650,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 62,
+      "file": "deadhawg/062.png",
+      "rect": {
+        "x": 520,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 63,
+      "file": "deadhawg/063.png",
+      "rect": {
+        "x": 1235,
+        "y": 148,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 64,
+      "file": "deadhawg/064.png",
+      "rect": {
+        "x": 65,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 65,
+      "file": "deadhawg/065.png",
+      "rect": {
+        "x": 1302,
+        "y": 1978,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 66,
+      "file": "deadhawg/066.png",
+      "rect": {
+        "x": 1047,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 67,
+      "file": "deadhawg/067.png",
+      "rect": {
+        "x": 1146,
+        "y": 471,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 68,
+      "file": "deadhawg/068.png",
+      "rect": {
+        "x": 981,
+        "y": 143,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 69,
+      "file": "deadhawg/069.png",
+      "rect": {
+        "x": 767,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 70,
+      "file": "deadhawg/070.png",
+      "rect": {
+        "x": 1840,
+        "y": 788,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 71,
+      "file": "deadhawg/071.png",
+      "rect": {
+        "x": 342,
+        "y": 1975,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 72,
+      "file": "deadhawg/072.png",
+      "rect": {
+        "x": 1775,
+        "y": 788,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 73,
+      "file": "deadhawg/073.png",
+      "rect": {
+        "x": 1050,
+        "y": 138,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 74,
+      "file": "deadhawg/074.png",
+      "rect": {
+        "x": 712,
+        "y": 1486,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 75,
+      "file": "deadhawg/075.png",
+      "rect": {
+        "x": 1791,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 76,
+      "file": "deadhawg/076.png",
+      "rect": {
+        "x": 277,
+        "y": 1975,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 77,
+      "file": "deadhawg/077.png",
+      "rect": {
+        "x": 982,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "cell": {
+        "w": 64,
+        "h": 64
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 78,
+      "file": "deadhawg/078.png",
+      "rect": {
+        "x": 742,
+        "y": 33,
+        "w": 18,
+        "h": 24
+      },
+      "cell": {
+        "w": 18,
+        "h": 24
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 79,
+      "file": "deadhawg/079.png",
+      "rect": {
+        "x": 157,
+        "y": 40,
+        "w": 18,
+        "h": 18
+      },
+      "cell": {
+        "w": 18,
+        "h": 18
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 80,
+      "file": "deadhawg/080.png",
+      "rect": {
+        "x": 17,
+        "y": 384,
+        "w": 25,
+        "h": 26
+      },
+      "cell": {
+        "w": 25,
+        "h": 26
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 81,
+      "file": "deadhawg/081.png",
+      "rect": {
+        "x": 0,
+        "y": 967,
+        "w": 29,
+        "h": 26
+      },
+      "cell": {
+        "w": 29,
+        "h": 26
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 82,
+      "file": "deadhawg/082.png",
+      "rect": {
+        "x": 1434,
+        "y": 31,
+        "w": 28,
+        "h": 19
+      },
+      "cell": {
+        "w": 28,
+        "h": 19
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 83,
+      "file": "deadhawg/083.png",
+      "rect": {
+        "x": 15,
+        "y": 855,
+        "w": 27,
+        "h": 18
+      },
+      "cell": {
+        "w": 27,
+        "h": 18
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 84,
+      "file": "deadhawg/084.png",
+      "rect": {
+        "x": 0,
+        "y": 595,
+        "w": 32,
+        "h": 25
+      },
+      "cell": {
+        "w": 32,
+        "h": 25
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 85,
+      "file": "deadhawg/085.png",
+      "rect": {
+        "x": 0,
+        "y": 1643,
+        "w": 29,
+        "h": 20
+      },
+      "cell": {
+        "w": 29,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 86,
+      "file": "deadhawg/086.png",
+      "rect": {
+        "x": 1752,
+        "y": 31,
+        "w": 32,
+        "h": 20
+      },
+      "cell": {
+        "w": 32,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 87,
+      "file": "deadhawg/087.png",
+      "rect": {
+        "x": 17,
+        "y": 212,
+        "w": 24,
+        "h": 27
+      },
+      "cell": {
+        "w": 24,
+        "h": 27
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 88,
+      "file": "deadhawg/088.png",
+      "rect": {
+        "x": 655,
+        "y": 1854,
+        "w": 89,
+        "h": 150
+      },
+      "cell": {
+        "w": 260,
+        "h": 260
+      },
+      "origin": {
+        "x": -2.5,
+        "y": 46
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 89,
+      "file": "deadhawg/089.png",
+      "rect": {
+        "x": 656,
+        "y": 1333,
+        "w": 111,
+        "h": 132
+      },
+      "cell": {
+        "w": 260,
+        "h": 260
+      },
+      "origin": {
+        "x": -1.5,
+        "y": 55
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 90,
+      "file": "deadhawg/090.png",
+      "rect": {
+        "x": 908,
+        "y": 1454,
+        "w": 79,
+        "h": 112
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": -0.5,
+        "y": 54
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 91,
+      "file": "deadhawg/091.png",
+      "rect": {
+        "x": 130,
+        "y": 40,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": -4.5,
+        "y": 5.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 92,
+      "file": "deadhawg/092.png",
+      "rect": {
+        "x": 692,
+        "y": 65,
+        "w": 106,
+        "h": 134
+      },
+      "cell": {
+        "w": 260,
+        "h": 260
+      },
+      "origin": {
+        "x": -4,
+        "y": 55
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 93,
+      "file": "deadhawg/093.png",
+      "rect": {
+        "x": 799,
+        "y": 65,
+        "w": 91,
+        "h": 117
+      },
+      "cell": {
+        "w": 260,
+        "h": 260
+      },
+      "origin": {
+        "x": -4.5,
+        "y": 29.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 94,
+      "file": "deadhawg/094.png",
+      "rect": {
+        "x": 352,
+        "y": 874,
+        "w": 79,
+        "h": 74
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": -0.5,
+        "y": 35
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 95,
+      "file": "deadhawg/095.png",
+      "rect": {
+        "x": 482,
+        "y": 1700,
+        "w": 176,
+        "h": 153
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": 7,
+        "y": 68.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 96,
+      "file": "deadhawg/096.png",
+      "rect": {
+        "x": 43,
+        "y": 1779,
+        "w": 176,
+        "h": 153
+      },
+      "cell": {
+        "w": 260,
+        "h": 320
+      },
+      "origin": {
+        "x": 7,
+        "y": 68.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 97,
+      "file": "deadhawg/097.png",
+      "rect": {
+        "x": 1921,
+        "y": 184,
+        "w": 52,
+        "h": 52
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -1,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 98,
+      "file": "deadhawg/098.png",
+      "rect": {
+        "x": 0,
+        "y": 1050,
+        "w": 34,
+        "h": 36
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3,
+        "y": -6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 99,
+      "file": "deadhawg/099.png",
+      "rect": {
+        "x": 156,
+        "y": 1402,
+        "w": 47,
+        "h": 98
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -20
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 100,
+      "file": "deadhawg/100.png",
+      "rect": {
+        "x": 220,
+        "y": 1779,
+        "w": 53,
+        "h": 43
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 101,
+      "file": "deadhawg/101.png",
+      "rect": {
+        "x": 0,
+        "y": 150,
+        "w": 42,
+        "h": 41
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -1,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 102,
+      "file": "deadhawg/102.png",
+      "rect": {
+        "x": 981,
+        "y": 208,
+        "w": 45,
+        "h": 35
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 103,
+      "file": "deadhawg/103.png",
+      "rect": {
+        "x": 0,
+        "y": 621,
+        "w": 40,
+        "h": 53
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -13.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 104,
+      "file": "deadhawg/104.png",
+      "rect": {
+        "x": 1481,
+        "y": 788,
+        "w": 44,
+        "h": 46
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -12
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 105,
+      "file": "deadhawg/105.png",
+      "rect": {
+        "x": 1380,
+        "y": 788,
+        "w": 44,
+        "h": 53
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 106,
+      "file": "deadhawg/106.png",
+      "rect": {
+        "x": 431,
+        "y": 741,
+        "w": 48,
+        "h": 49
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -8.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 107,
+      "file": "deadhawg/107.png",
+      "rect": {
+        "x": 216,
+        "y": 1604,
+        "w": 54,
+        "h": 52
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 108,
+      "file": "deadhawg/108.png",
+      "rect": {
+        "x": 1526,
+        "y": 788,
+        "w": 42,
+        "h": 58
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -10
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 109,
+      "file": "deadhawg/109.png",
+      "rect": {
+        "x": 433,
+        "y": 1225,
+        "w": 46,
+        "h": 54
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 1,
+        "y": -6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 110,
+      "file": "deadhawg/110.png",
+      "rect": {
+        "x": 1082,
+        "y": 1210,
+        "w": 42,
+        "h": 49
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 1,
+        "y": -10.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 111,
+      "file": "deadhawg/111.png",
+      "rect": {
+        "x": 220,
+        "y": 1883,
+        "w": 48,
+        "h": 48
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -10
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 112,
+      "file": "deadhawg/112.png",
+      "rect": {
+        "x": 712,
+        "y": 1551,
+        "w": 52,
+        "h": 57
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 113,
+      "file": "deadhawg/113.png",
+      "rect": {
+        "x": 0,
+        "y": 434,
+        "w": 40,
+        "h": 47
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -10.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 114,
+      "file": "deadhawg/114.png",
+      "rect": {
+        "x": 1129,
+        "y": 1673,
+        "w": 229,
+        "h": 215
+      },
+      "cell": {
+        "w": 229,
+        "h": 215
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 115,
+      "file": "deadhawg/115.png",
+      "rect": {
+        "x": 1911,
+        "y": 675,
+        "w": 91,
+        "h": 97
+      },
+      "cell": {
+        "w": 91,
+        "h": 97
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 116,
+      "file": "deadhawg/116.png",
+      "rect": {
+        "x": 43,
+        "y": 1091,
+        "w": 218,
+        "h": 212
+      },
+      "cell": {
+        "w": 218,
+        "h": 212
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 117,
+      "file": "deadhawg/117.png",
+      "rect": {
+        "x": 981,
+        "y": 65,
+        "w": 68,
+        "h": 77
+      },
+      "cell": {
+        "w": 68,
+        "h": 77
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 118,
+      "file": "deadhawg/118.png",
+      "rect": {
+        "x": 43,
+        "y": 65,
+        "w": 233,
+        "h": 233
+      },
+      "cell": {
+        "w": 233,
+        "h": 233
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 119,
+      "file": "deadhawg/119.png",
+      "rect": {
+        "x": 659,
+        "y": 1700,
+        "w": 85,
+        "h": 85
+      },
+      "cell": {
+        "w": 85,
+        "h": 85
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 120,
+      "file": "deadhawg/120.png",
+      "rect": {
+        "x": 277,
+        "y": 65,
+        "w": 260,
+        "h": 178
+      },
+      "cell": {
+        "w": 260,
+        "h": 178
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 121,
+      "file": "deadhawg/121.png",
+      "rect": {
+        "x": 128,
+        "y": 1933,
+        "w": 89,
+        "h": 89
+      },
+      "cell": {
+        "w": 89,
+        "h": 89
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 122,
+      "file": "deadhawg/122.png",
+      "rect": {
+        "x": 1575,
+        "y": 0,
+        "w": 62,
+        "h": 62
+      },
+      "cell": {
+        "w": 62,
+        "h": 62
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 123,
+      "file": "deadhawg/123.png",
+      "rect": {
+        "x": 0,
+        "y": 1428,
+        "w": 28,
+        "h": 27
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 124,
+      "file": "deadhawg/124.png",
+      "rect": {
+        "x": 0,
+        "y": 1210,
+        "w": 36,
+        "h": 35
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 125,
+      "file": "deadhawg/125.png",
+      "rect": {
+        "x": 0,
+        "y": 933,
+        "w": 36,
+        "h": 33
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 126,
+      "file": "deadhawg/126.png",
+      "rect": {
+        "x": 0,
+        "y": 751,
+        "w": 32,
+        "h": 31
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 127,
+      "file": "deadhawg/127.png",
+      "rect": {
+        "x": 0,
+        "y": 1975,
+        "w": 25,
+        "h": 29
+      },
+      "cell": {
+        "w": 25,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 128,
+      "file": "deadhawg/128.png",
+      "rect": {
+        "x": 227,
+        "y": 440,
+        "w": 32,
+        "h": 24
+      },
+      "cell": {
+        "w": 32,
+        "h": 24
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 129,
+      "file": "deadhawg/129.png",
+      "rect": {
+        "x": 0,
+        "y": 1779,
+        "w": 29,
+        "h": 28
+      },
+      "cell": {
+        "w": 29,
+        "h": 28
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 130,
+      "file": "deadhawg/130.png",
+      "rect": {
+        "x": 0,
+        "y": 1021,
+        "w": 32,
+        "h": 28
+      },
+      "cell": {
+        "w": 32,
+        "h": 28
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 131,
+      "file": "deadhawg/131.png",
+      "rect": {
+        "x": 0,
+        "y": 2005,
+        "w": 27,
+        "h": 21
+      },
+      "cell": {
+        "w": 27,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 132,
+      "file": "deadhawg/132.png",
+      "rect": {
+        "x": 19,
+        "y": 1592,
+        "w": 22,
+        "h": 24
+      },
+      "cell": {
+        "w": 22,
+        "h": 24
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 133,
+      "file": "deadhawg/133.png",
+      "rect": {
+        "x": 351,
+        "y": 1225,
+        "w": 81,
+        "h": 70
+      },
+      "cell": {
+        "w": 81,
+        "h": 70
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 134,
+      "file": "deadhawg/134.png",
+      "rect": {
+        "x": 1050,
+        "y": 65,
+        "w": 80,
+        "h": 72
+      },
+      "cell": {
+        "w": 80,
+        "h": 72
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 135,
+      "file": "deadhawg/135.png",
+      "rect": {
+        "x": 1433,
+        "y": 480,
+        "w": 64,
+        "h": 56
+      },
+      "cell": {
+        "w": 64,
+        "h": 56
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 136,
+      "file": "deadhawg/136.png",
+      "rect": {
+        "x": 799,
+        "y": 183,
+        "w": 70,
+        "h": 58
+      },
+      "cell": {
+        "w": 70,
+        "h": 58
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 137,
+      "file": "deadhawg/137.png",
+      "rect": {
+        "x": 1211,
+        "y": 471,
+        "w": 80,
+        "h": 62
+      },
+      "cell": {
+        "w": 80,
+        "h": 62
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 138,
+      "file": "deadhawg/138.png",
+      "rect": {
+        "x": 1129,
+        "y": 1986,
+        "w": 69,
+        "h": 59
+      },
+      "cell": {
+        "w": 69,
+        "h": 59
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 139,
+      "file": "deadhawg/139.png",
+      "rect": {
+        "x": 611,
+        "y": 1486,
+        "w": 100,
+        "h": 92
+      },
+      "cell": {
+        "w": 100,
+        "h": 92
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 140,
+      "file": "deadhawg/140.png",
+      "rect": {
+        "x": 189,
+        "y": 299,
+        "w": 56,
+        "h": 74
+      },
+      "cell": {
+        "w": 56,
+        "h": 74
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 141,
+      "file": "deadhawg/141.png",
+      "rect": {
+        "x": 1455,
+        "y": 65,
+        "w": 101,
+        "h": 85
+      },
+      "cell": {
+        "w": 101,
+        "h": 85
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 142,
+      "file": "deadhawg/142.png",
+      "rect": {
+        "x": 352,
+        "y": 0,
+        "w": 72,
+        "h": 49
+      },
+      "cell": {
+        "w": 72,
+        "h": 49
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 143,
+      "file": "deadhawg/143.png",
+      "rect": {
+        "x": 1767,
+        "y": 244,
+        "w": 216,
+        "h": 217
+      },
+      "cell": {
+        "w": 216,
+        "h": 217
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 144,
+      "file": "deadhawg/144.png",
+      "rect": {
+        "x": 832,
+        "y": 0,
+        "w": 81,
+        "h": 55
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -5.5,
+        "y": 6.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 145,
+      "file": "deadhawg/145.png",
+      "rect": {
+        "x": 1695,
+        "y": 164,
+        "w": 77,
+        "h": 55
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 146,
+      "file": "deadhawg/146.png",
+      "rect": {
+        "x": 691,
+        "y": 1272,
+        "w": 71,
+        "h": 46
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 147,
+      "file": "deadhawg/147.png",
+      "rect": {
+        "x": 351,
+        "y": 1296,
+        "w": 76,
+        "h": 64
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -2,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 148,
+      "file": "deadhawg/148.png",
+      "rect": {
+        "x": 43,
+        "y": 759,
+        "w": 231,
+        "h": 331
+      },
+      "cell": {
+        "w": 231,
+        "h": 331
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 149,
+      "file": "deadhawg/149.png",
+      "rect": {
+        "x": 1129,
+        "y": 1403,
+        "w": 213,
+        "h": 269
+      },
+      "cell": {
+        "w": 213,
+        "h": 269
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 150,
+      "file": "deadhawg/150.png",
+      "rect": {
+        "x": 482,
+        "y": 244,
+        "w": 296,
+        "h": 306
+      },
+      "cell": {
+        "w": 315,
+        "h": 313
+      },
+      "origin": {
+        "x": -0.5,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 151,
+      "file": "deadhawg/151.png",
+      "rect": {
+        "x": 43,
+        "y": 1502,
+        "w": 172,
+        "h": 276
+      },
+      "cell": {
+        "w": 180,
+        "h": 279
+      },
+      "origin": {
+        "x": 0,
+        "y": 1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 152,
+      "file": "deadhawg/152.png",
+      "rect": {
+        "x": 1129,
+        "y": 858,
+        "w": 231,
+        "h": 209
+      },
+      "cell": {
+        "w": 231,
+        "h": 331
+      },
+      "origin": {
+        "x": 0,
+        "y": -61
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 153,
+      "file": "deadhawg/153.png",
+      "rect": {
+        "x": 43,
+        "y": 470,
+        "w": 210,
+        "h": 202
+      },
+      "cell": {
+        "w": 213,
+        "h": 269
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -33.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 154,
+      "file": "deadhawg/154.png",
+      "rect": {
+        "x": 1361,
+        "y": 858,
+        "w": 296,
+        "h": 177
+      },
+      "cell": {
+        "w": 315,
+        "h": 313
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -64
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 155,
+      "file": "deadhawg/155.png",
+      "rect": {
+        "x": 277,
+        "y": 1624,
+        "w": 172,
+        "h": 198
+      },
+      "cell": {
+        "w": 180,
+        "h": 279
+      },
+      "origin": {
+        "x": 0,
+        "y": -37.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 156,
+      "file": "deadhawg/156.png",
+      "rect": {
+        "x": 482,
+        "y": 1965,
+        "w": 106,
+        "h": 82
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -17
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 157,
+      "file": "deadhawg/157.png",
+      "rect": {
+        "x": 1235,
+        "y": 65,
+        "w": 106,
+        "h": 82
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -17
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 158,
+      "file": "deadhawg/158.png",
+      "rect": {
+        "x": 277,
+        "y": 1225,
+        "w": 73,
+        "h": 135
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -7.5,
+        "y": -46.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 159,
+      "file": "deadhawg/159.png",
+      "rect": {
+        "x": 277,
+        "y": 1361,
+        "w": 74,
+        "h": 135
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 6,
+        "y": -47.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 160,
+      "file": "deadhawg/160.png",
+      "rect": {
+        "x": 1911,
+        "y": 858,
+        "w": 79,
+        "h": 162
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -38
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 161,
+      "file": "deadhawg/161.png",
+      "rect": {
+        "x": 1398,
+        "y": 1812,
+        "w": 91,
+        "h": 169
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -34.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 162,
+      "file": "deadhawg/162.png",
+      "rect": {
+        "x": 482,
+        "y": 1854,
+        "w": 172,
+        "h": 110
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 3,
+        "y": -34
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 163,
+      "file": "deadhawg/163.png",
+      "rect": {
+        "x": 43,
+        "y": 1402,
+        "w": 112,
+        "h": 99
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 1,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 164,
+      "file": "deadhawg/164.png",
+      "rect": {
+        "x": 1695,
+        "y": 65,
+        "w": 112,
+        "h": 98
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 1,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 165,
+      "file": "deadhawg/165.png",
+      "rect": {
+        "x": 204,
+        "y": 1402,
+        "w": 70,
+        "h": 96
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -1,
+        "y": -27
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 166,
+      "file": "deadhawg/166.png",
+      "rect": {
+        "x": 1342,
+        "y": 151,
+        "w": 71,
+        "h": 46
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 167,
+      "file": "deadhawg/167.png",
+      "rect": {
+        "x": 908,
+        "y": 1210,
+        "w": 173,
+        "h": 153
+      },
+      "cell": {
+        "w": 211,
+        "h": 311
+      },
+      "origin": {
+        "x": -11,
+        "y": -41
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 168,
+      "file": "deadhawg/168.png",
+      "rect": {
+        "x": 482,
+        "y": 1333,
+        "w": 173,
+        "h": 152
+      },
+      "cell": {
+        "w": 211,
+        "h": 311
+      },
+      "origin": {
+        "x": 14,
+        "y": -41.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 169,
+      "file": "deadhawg/169.png",
+      "rect": {
+        "x": 1342,
+        "y": 65,
+        "w": 112,
+        "h": 85
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 19,
+        "y": -22.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 170,
+      "file": "deadhawg/170.png",
+      "rect": {
+        "x": 1808,
+        "y": 65,
+        "w": 112,
+        "h": 85
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -18,
+        "y": -22.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 171,
+      "file": "deadhawg/171.png",
+      "rect": {
+        "x": 277,
+        "y": 874,
+        "w": 74,
+        "h": 83
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": 10,
+        "y": -23.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 172,
+      "file": "deadhawg/172.png",
+      "rect": {
+        "x": 1857,
+        "y": 462,
+        "w": 74,
+        "h": 83
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -8,
+        "y": -23.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 173,
+      "file": "deadhawg/173.png",
+      "rect": {
+        "x": 1921,
+        "y": 65,
+        "w": 67,
+        "h": 118
+      },
+      "cell": {
+        "w": 400,
+        "h": 400
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -30
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 174,
+      "file": "deadhawg/174.png",
+      "rect": {
+        "x": 0,
+        "y": 1140,
+        "w": 36,
+        "h": 69
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -17.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 175,
+      "file": "deadhawg/175.png",
+      "rect": {
+        "x": 0,
+        "y": 1363,
+        "w": 40,
+        "h": 64
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1,
+        "y": -15
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 176,
+      "file": "deadhawg/176.png",
+      "rect": {
+        "x": 1984,
+        "y": 244,
+        "w": 45,
+        "h": 80
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -16
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 177,
+      "file": "deadhawg/177.png",
+      "rect": {
+        "x": 0,
+        "y": 1506,
+        "w": 33,
+        "h": 31
+      },
+      "cell": {
+        "w": 33,
+        "h": 31
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 178,
+      "file": "deadhawg/178.png",
+      "rect": {
+        "x": 246,
+        "y": 351,
+        "w": 21,
+        "h": 21
+      },
+      "cell": {
+        "w": 21,
+        "h": 21
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 179,
+      "file": "deadhawg/179.png",
+      "rect": {
+        "x": 132,
+        "y": 40,
+        "w": 24,
+        "h": 22
+      },
+      "cell": {
+        "w": 24,
+        "h": 22
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 180,
+      "file": "deadhawg/180.png",
+      "rect": {
+        "x": 1302,
+        "y": 1889,
+        "w": 88,
+        "h": 88
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 1,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 181,
+      "file": "deadhawg/181.png",
+      "rect": {
+        "x": 908,
+        "y": 1364,
+        "w": 82,
+        "h": 89
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -2,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 182,
+      "file": "deadhawg/182.png",
+      "rect": {
+        "x": 43,
+        "y": 1933,
+        "w": 84,
+        "h": 86
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 183,
+      "file": "deadhawg/183.png",
+      "rect": {
+        "x": 1911,
+        "y": 773,
+        "w": 83,
+        "h": 78
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3.5,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 184,
+      "file": "deadhawg/184.png",
+      "rect": {
+        "x": 277,
+        "y": 793,
+        "w": 85,
+        "h": 80
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -2.5,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 185,
+      "file": "deadhawg/185.png",
+      "rect": {
+        "x": 1455,
+        "y": 151,
+        "w": 88,
+        "h": 81
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -1,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 186,
+      "file": "deadhawg/186.png",
+      "rect": {
+        "x": 691,
+        "y": 1190,
+        "w": 78,
+        "h": 81
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 5,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 187,
+      "file": "deadhawg/187.png",
+      "rect": {
+        "x": 691,
+        "y": 1108,
+        "w": 81,
+        "h": 81
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 5.5,
+        "y": -1.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 188,
+      "file": "deadhawg/188.png",
+      "rect": {
+        "x": 352,
+        "y": 1361,
+        "w": 84,
+        "h": 81
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 5,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 189,
+      "file": "deadhawg/189.png",
+      "rect": {
+        "x": 991,
+        "y": 1364,
+        "w": 87,
+        "h": 79
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 4.5,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 190,
+      "file": "deadhawg/190.png",
+      "rect": {
+        "x": 990,
+        "y": 471,
+        "w": 90,
+        "h": 79
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 2,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 191,
+      "file": "deadhawg/191.png",
+      "rect": {
+        "x": 574,
+        "y": 1615,
+        "w": 87,
+        "h": 81
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 192,
+      "file": "deadhawg/192.png",
+      "rect": {
+        "x": 144,
+        "y": 385,
+        "w": 82,
+        "h": 83
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -4,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 193,
+      "file": "deadhawg/193.png",
+      "rect": {
+        "x": 43,
+        "y": 673,
+        "w": 85,
+        "h": 85
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3.5,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 194,
+      "file": "deadhawg/194.png",
+      "rect": {
+        "x": 43,
+        "y": 299,
+        "w": 86,
+        "h": 85
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -4,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 195,
+      "file": "deadhawg/195.png",
+      "rect": {
+        "x": 1932,
+        "y": 462,
+        "w": 90,
+        "h": 85
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 196,
+      "file": "deadhawg/196.png",
+      "rect": {
+        "x": 482,
+        "y": 1615,
+        "w": 91,
+        "h": 84
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -2.5,
+        "y": 1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 197,
+      "file": "deadhawg/197.png",
+      "rect": {
+        "x": 891,
+        "y": 65,
+        "w": 89,
+        "h": 85
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 198,
+      "file": "deadhawg/198.png",
+      "rect": {
+        "x": 1767,
+        "y": 462,
+        "w": 89,
+        "h": 87
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 199,
+      "file": "deadhawg/199.png",
+      "rect": {
+        "x": 1131,
+        "y": 144,
+        "w": 89,
+        "h": 89
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -0.5,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 200,
+      "file": "deadhawg/200.png",
+      "rect": {
+        "x": 277,
+        "y": 1823,
+        "w": 147,
+        "h": 151
+      },
+      "cell": {
+        "w": 455,
+        "h": 455
+      },
+      "origin": {
+        "x": 2,
+        "y": -1
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 201,
+      "file": "deadhawg/201.png",
+      "rect": {
+        "x": 0,
+        "y": 515,
+        "w": 28,
+        "h": 79
+      },
+      "cell": {
+        "w": 455,
+        "h": 455
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -109
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 202,
+      "file": "deadhawg/202.png",
+      "rect": {
+        "x": 431,
+        "y": 516,
+        "w": 43,
+        "h": 81
+      },
+      "cell": {
+        "w": 455,
+        "h": 455
+      },
+      "origin": {
+        "x": 13,
+        "y": -151
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 203,
+      "file": "deadhawg/203.png",
+      "rect": {
+        "x": 17,
+        "y": 411,
+        "w": 17,
+        "h": 20
+      },
+      "cell": {
+        "w": 17,
+        "h": 20
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 204,
+      "file": "deadhawg/204.png",
+      "rect": {
+        "x": 1481,
+        "y": 34,
+        "w": 21,
+        "h": 17
+      },
+      "cell": {
+        "w": 21,
+        "h": 17
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 205,
+      "file": "deadhawg/205.png",
+      "rect": {
+        "x": 715,
+        "y": 33,
+        "w": 26,
+        "h": 29
+      },
+      "cell": {
+        "w": 26,
+        "h": 29
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 206,
+      "file": "deadhawg/206.png",
+      "rect": {
+        "x": 254,
+        "y": 573,
+        "w": 17,
+        "h": 18
+      },
+      "cell": {
+        "w": 17,
+        "h": 18
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 207,
+      "file": "deadhawg/207.png",
+      "rect": {
+        "x": 246,
+        "y": 299,
+        "w": 22,
+        "h": 23
+      },
+      "cell": {
+        "w": 22,
+        "h": 23
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 208,
+      "file": "deadhawg/208.png",
+      "rect": {
+        "x": 216,
+        "y": 1502,
+        "w": 58,
+        "h": 38
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0,
+        "y": -3
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 209,
+      "file": "deadhawg/209.png",
+      "rect": {
+        "x": 130,
+        "y": 0,
+        "w": 53,
+        "h": 39
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 210,
+      "file": "deadhawg/210.png",
+      "rect": {
+        "x": 1557,
+        "y": 195,
+        "w": 48,
+        "h": 47
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3,
+        "y": -4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 211,
+      "file": "deadhawg/211.png",
+      "rect": {
+        "x": 216,
+        "y": 1713,
+        "w": 48,
+        "h": 50
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -3,
+        "y": -5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 212,
+      "file": "deadhawg/212.png",
+      "rect": {
+        "x": 1984,
+        "y": 407,
+        "w": 53,
+        "h": 46
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 213,
+      "file": "deadhawg/213.png",
+      "rect": {
+        "x": 1393,
+        "y": 198,
+        "w": 58,
+        "h": 40
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 214,
+      "file": "deadhawg/214.png",
+      "rect": {
+        "x": 407,
+        "y": 1443,
+        "w": 53,
+        "h": 46
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 215,
+      "file": "deadhawg/215.png",
+      "rect": {
+        "x": 431,
+        "y": 1045,
+        "w": 48,
+        "h": 49
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 3,
+        "y": -4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 216,
+      "file": "deadhawg/216.png",
+      "rect": {
+        "x": 1638,
+        "y": 0,
+        "w": 48,
+        "h": 48
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 3,
+        "y": -4
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 217,
+      "file": "deadhawg/217.png",
+      "rect": {
+        "x": 692,
+        "y": 200,
+        "w": 53,
+        "h": 39
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 1.5,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 218,
+      "file": "deadhawg/218.png",
+      "rect": {
+        "x": 0,
+        "y": 1940,
+        "w": 36,
+        "h": 34
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 1,
+        "y": -5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 219,
+      "file": "deadhawg/219.png",
+      "rect": {
+        "x": 0,
+        "y": 263,
+        "w": 35,
+        "h": 31
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 220,
+      "file": "deadhawg/220.png",
+      "rect": {
+        "x": 425,
+        "y": 0,
+        "w": 38,
+        "h": 33
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 221,
+      "file": "deadhawg/221.png",
+      "rect": {
+        "x": 218,
+        "y": 2013,
+        "w": 37,
+        "h": 33
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 222,
+      "file": "deadhawg/222.png",
+      "rect": {
+        "x": 0,
+        "y": 1906,
+        "w": 35,
+        "h": 33
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -6.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 223,
+      "file": "deadhawg/223.png",
+      "rect": {
+        "x": 0,
+        "y": 1664,
+        "w": 36,
+        "h": 34
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -1,
+        "y": -4
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 224,
+      "file": "deadhawg/224.png",
+      "rect": {
+        "x": 0,
+        "y": 1329,
+        "w": 35,
+        "h": 33
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 1.5,
+        "y": -5.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 225,
+      "file": "deadhawg/225.png",
+      "rect": {
+        "x": 1465,
+        "y": 0,
+        "w": 38,
+        "h": 33
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0,
+        "y": -4.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 226,
+      "file": "deadhawg/226.png",
+      "rect": {
+        "x": 0,
+        "y": 482,
+        "w": 37,
+        "h": 32
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -4
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 227,
+      "file": "deadhawg/227.png",
+      "rect": {
+        "x": 0,
+        "y": 675,
+        "w": 35,
+        "h": 32
+      },
+      "cell": {
+        "w": 100,
+        "h": 100
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -3
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 228,
+      "file": "deadhawg/228.png",
+      "rect": {
+        "x": 1050,
+        "y": 203,
+        "w": 48,
+        "h": 40
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 5,
+        "y": 4
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 229,
+      "file": "deadhawg/229.png",
+      "rect": {
+        "x": 715,
+        "y": 0,
+        "w": 51,
+        "h": 32
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -1.5,
+        "y": 6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 230,
+      "file": "deadhawg/230.png",
+      "rect": {
+        "x": 629,
+        "y": 199,
+        "w": 50,
+        "h": 36
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 0,
+        "y": 3
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 231,
+      "file": "deadhawg/231.png",
+      "rect": {
+        "x": 1569,
+        "y": 788,
+        "w": 45,
+        "h": 47
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 14.5,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 232,
+      "file": "deadhawg/232.png",
+      "rect": {
+        "x": 0,
+        "y": 1861,
+        "w": 39,
+        "h": 44
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -3.5,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 233,
+      "file": "deadhawg/233.png",
+      "rect": {
+        "x": 1752,
+        "y": 0,
+        "w": 38,
+        "h": 30
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -6,
+        "y": 8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 234,
+      "file": "deadhawg/234.png",
+      "rect": {
+        "x": 0,
+        "y": 708,
+        "w": 35,
+        "h": 42
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 235,
+      "file": "deadhawg/235.png",
+      "rect": {
+        "x": 0,
+        "y": 2027,
+        "w": 40,
+        "h": 19
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 0,
+        "y": 12.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 236,
+      "file": "deadhawg/236.png",
+      "rect": {
+        "x": 0,
+        "y": 192,
+        "w": 40,
+        "h": 19
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 0,
+        "y": 12.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 237,
+      "file": "deadhawg/237.png",
+      "rect": {
+        "x": 1465,
+        "y": 34,
+        "w": 15,
+        "h": 15
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 238,
+      "file": "deadhawg/238.png",
+      "rect": {
+        "x": 1657,
+        "y": 49,
+        "w": 15,
+        "h": 15
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 239,
+      "file": "deadhawg/239.png",
+      "rect": {
+        "x": 1638,
+        "y": 49,
+        "w": 18,
+        "h": 15
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 240,
+      "file": "deadhawg/240.png",
+      "rect": {
+        "x": 19,
+        "y": 1617,
+        "w": 18,
+        "h": 15
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": 0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 241,
+      "file": "deadhawg/241.png",
+      "rect": {
+        "x": 384,
+        "y": 50,
+        "w": 15,
+        "h": 14
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0.5,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 242,
+      "file": "deadhawg/242.png",
+      "rect": {
+        "x": 400,
+        "y": 50,
+        "w": 16,
+        "h": 14
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 243,
+      "file": "deadhawg/243.png",
+      "rect": {
+        "x": 1750,
+        "y": 1068,
+        "w": 268,
+        "h": 263
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -5,
+        "y": -181.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 244,
+      "file": "deadhawg/244.png",
+      "rect": {
+        "x": 777,
+        "y": 551,
+        "w": 298,
+        "h": 306
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 4,
+        "y": -184
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 245,
+      "file": "deadhawg/245.png",
+      "rect": {
+        "x": 1076,
+        "y": 551,
+        "w": 303,
+        "h": 298
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 8.5,
+        "y": -185
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 246,
+      "file": "deadhawg/246.png",
+      "rect": {
+        "x": 1398,
+        "y": 1420,
+        "w": 274,
+        "h": 391
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -23,
+        "y": -143.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 247,
+      "file": "deadhawg/247.png",
+      "rect": {
+        "x": 482,
+        "y": 551,
+        "w": 294,
+        "h": 389
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": 3,
+        "y": -179.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 248,
+      "file": "deadhawg/248.png",
+      "rect": {
+        "x": 1129,
+        "y": 1068,
+        "w": 268,
+        "h": 334
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -17,
+        "y": -143
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 249,
+      "file": "deadhawg/249.png",
+      "rect": {
+        "x": 482,
+        "y": 941,
+        "w": 208,
+        "h": 391
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -1,
+        "y": -216.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 250,
+      "file": "deadhawg/250.png",
+      "rect": {
+        "x": 990,
+        "y": 244,
+        "w": 312,
+        "h": 226
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -18,
+        "y": -147
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 251,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 44,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 252,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 46,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 253,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 62,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 254,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 50,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 255,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 52,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 256,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 60,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 257,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 48,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 258,
+      "file": null,
+      "rect": {
+        "x": 132,
+        "y": 63,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 259,
+      "file": null,
+      "rect": {
+        "x": 134,
+        "y": 63,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 260,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 42,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 261,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 54,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 262,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 56,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 263,
+      "file": null,
+      "rect": {
+        "x": 130,
+        "y": 58,
+        "w": 1,
+        "h": 1
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -474.5,
+        "y": -474.5
+      },
+      "extras": null,
+      "empty": true
+    },
+    {
+      "id": 264,
+      "file": "deadhawg/264.png",
+      "rect": {
+        "x": 277,
+        "y": 244,
+        "w": 204,
+        "h": 271
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -15,
+        "y": -117.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 265,
+      "file": "deadhawg/265.png",
+      "rect": {
+        "x": 1554,
+        "y": 244,
+        "w": 212,
+        "h": 305
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -11,
+        "y": -133.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 266,
+      "file": "deadhawg/266.png",
+      "rect": {
+        "x": 779,
+        "y": 244,
+        "w": 210,
+        "h": 302
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -14,
+        "y": -133
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 267,
+      "file": "deadhawg/267.png",
+      "rect": {
+        "x": 277,
+        "y": 516,
+        "w": 153,
+        "h": 276
+      },
+      "cell": {
+        "w": 750,
+        "h": 750
+      },
+      "origin": {
+        "x": -17.5,
+        "y": -125
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 268,
+      "file": "deadhawg/268.png",
+      "rect": {
+        "x": 777,
+        "y": 1210,
+        "w": 130,
+        "h": 379
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": 1,
+        "y": -175.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 269,
+      "file": "deadhawg/269.png",
+      "rect": {
+        "x": 1303,
+        "y": 244,
+        "w": 250,
+        "h": 235
+      },
+      "cell": {
+        "w": 950,
+        "h": 950
+      },
+      "origin": {
+        "x": -7,
+        "y": -98.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 270,
+      "file": "deadhawg/270.png",
+      "rect": {
+        "x": 220,
+        "y": 1823,
+        "w": 54,
+        "h": 59
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 0,
+        "y": -10.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 271,
+      "file": "deadhawg/271.png",
+      "rect": {
+        "x": 1666,
+        "y": 788,
+        "w": 52,
+        "h": 54
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 0,
+        "y": -11
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 272,
+      "file": "deadhawg/272.png",
+      "rect": {
+        "x": 395,
+        "y": 1095,
+        "w": 53,
+        "h": 66
+      },
+      "cell": {
+        "w": 512,
+        "h": 512
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 273,
+      "file": "deadhawg/273.png",
+      "rect": {
+        "x": 1056,
+        "y": 1444,
+        "w": 50,
+        "h": 86
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -1,
+        "y": -39
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 274,
+      "file": "deadhawg/274.png",
+      "rect": {
+        "x": 1991,
+        "y": 858,
+        "w": 50,
+        "h": 87
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 1,
+        "y": -40.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 275,
+      "file": "deadhawg/275.png",
+      "rect": {
+        "x": 1984,
+        "y": 325,
+        "w": 46,
+        "h": 81
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 7,
+        "y": -36.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 276,
+      "file": "deadhawg/276.png",
+      "rect": {
+        "x": 425,
+        "y": 1823,
+        "w": 56,
+        "h": 81
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 2,
+        "y": -36.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 277,
+      "file": "deadhawg/277.png",
+      "rect": {
+        "x": 431,
+        "y": 958,
+        "w": 45,
+        "h": 86
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 1.5,
+        "y": -39
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 278,
+      "file": "deadhawg/278.png",
+      "rect": {
+        "x": 0,
+        "y": 295,
+        "w": 36,
+        "h": 88
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": -2,
+        "y": -41
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 279,
+      "file": "deadhawg/279.png",
+      "rect": {
+        "x": 891,
+        "y": 151,
+        "w": 67,
+        "h": 85
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 280,
+      "file": "deadhawg/280.png",
+      "rect": {
+        "x": 991,
+        "y": 1444,
+        "w": 64,
+        "h": 81
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 2,
+        "y": -17.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 281,
+      "file": "deadhawg/281.png",
+      "rect": {
+        "x": 130,
+        "y": 299,
+        "w": 58,
+        "h": 79
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -16.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 282,
+      "file": "deadhawg/282.png",
+      "rect": {
+        "x": 218,
+        "y": 1933,
+        "w": 53,
+        "h": 79
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 4.5,
+        "y": -17.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 283,
+      "file": "deadhawg/283.png",
+      "rect": {
+        "x": 216,
+        "y": 1657,
+        "w": 50,
+        "h": 55
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 3,
+        "y": -8.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 284,
+      "file": "deadhawg/284.png",
+      "rect": {
+        "x": 1498,
+        "y": 480,
+        "w": 47,
+        "h": 56
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1.5,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 285,
+      "file": "deadhawg/285.png",
+      "rect": {
+        "x": 231,
+        "y": 673,
+        "w": 44,
+        "h": 58
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 286,
+      "file": "deadhawg/286.png",
+      "rect": {
+        "x": 432,
+        "y": 874,
+        "w": 45,
+        "h": 58
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -4
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 287,
+      "file": "deadhawg/287.png",
+      "rect": {
+        "x": 1230,
+        "y": 0,
+        "w": 48,
+        "h": 59
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 288,
+      "file": "deadhawg/288.png",
+      "rect": {
+        "x": 415,
+        "y": 1562,
+        "w": 50,
+        "h": 59
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 289,
+      "file": "deadhawg/289.png",
+      "rect": {
+        "x": 1995,
+        "y": 773,
+        "w": 50,
+        "h": 59
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 2,
+        "y": -2.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 290,
+      "file": "deadhawg/290.png",
+      "rect": {
+        "x": 300,
+        "y": 0,
+        "w": 51,
+        "h": 58
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -3
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 291,
+      "file": "deadhawg/291.png",
+      "rect": {
+        "x": 1523,
+        "y": 0,
+        "w": 51,
+        "h": 57
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -3.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 292,
+      "file": "deadhawg/292.png",
+      "rect": {
+        "x": 1616,
+        "y": 788,
+        "w": 49,
+        "h": 56
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 293,
+      "file": "deadhawg/293.png",
+      "rect": {
+        "x": 1989,
+        "y": 119,
+        "w": 52,
+        "h": 54
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1,
+        "y": -6
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 294,
+      "file": "deadhawg/294.png",
+      "rect": {
+        "x": 991,
+        "y": 1526,
+        "w": 54,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -1,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 295,
+      "file": "deadhawg/295.png",
+      "rect": {
+        "x": 464,
+        "y": 0,
+        "w": 55,
+        "h": 54
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 296,
+      "file": "deadhawg/296.png",
+      "rect": {
+        "x": 1719,
+        "y": 788,
+        "w": 55,
+        "h": 57
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -4.5,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 297,
+      "file": "deadhawg/297.png",
+      "rect": {
+        "x": 395,
+        "y": 1162,
+        "w": 54,
+        "h": 60
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -5,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 298,
+      "file": "deadhawg/298.png",
+      "rect": {
+        "x": 1856,
+        "y": 0,
+        "w": 52,
+        "h": 61
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -6,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 299,
+      "file": "deadhawg/299.png",
+      "rect": {
+        "x": 216,
+        "y": 1541,
+        "w": 52,
+        "h": 62
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -5,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 300,
+      "file": "deadhawg/300.png",
+      "rect": {
+        "x": 425,
+        "y": 1905,
+        "w": 52,
+        "h": 62
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -4,
+        "y": -7
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 301,
+      "file": "deadhawg/301.png",
+      "rect": {
+        "x": 931,
+        "y": 0,
+        "w": 50,
+        "h": 61
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -3,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 302,
+      "file": "deadhawg/302.png",
+      "rect": {
+        "x": 1958,
+        "y": 0,
+        "w": 47,
+        "h": 61
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -1.5,
+        "y": -7.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 303,
+      "file": "deadhawg/303.png",
+      "rect": {
+        "x": 714,
+        "y": 1786,
+        "w": 44,
+        "h": 60
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 304,
+      "file": "deadhawg/304.png",
+      "rect": {
+        "x": 437,
+        "y": 1361,
+        "w": 44,
+        "h": 58
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -8
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 305,
+      "file": "deadhawg/305.png",
+      "rect": {
+        "x": 1909,
+        "y": 0,
+        "w": 48,
+        "h": 57
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -1,
+        "y": -8.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 306,
+      "file": "deadhawg/306.png",
+      "rect": {
+        "x": 184,
+        "y": 0,
+        "w": 50,
+        "h": 54
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -1,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 307,
+      "file": "deadhawg/307.png",
+      "rect": {
+        "x": 431,
+        "y": 687,
+        "w": 50,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -2,
+        "y": -9.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 308,
+      "file": "deadhawg/308.png",
+      "rect": {
+        "x": 1363,
+        "y": 0,
+        "w": 51,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -10
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 309,
+      "file": "deadhawg/309.png",
+      "rect": {
+        "x": 1989,
+        "y": 65,
+        "w": 51,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -9.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 310,
+      "file": "deadhawg/310.png",
+      "rect": {
+        "x": 227,
+        "y": 385,
+        "w": 49,
+        "h": 54
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -2.5,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 311,
+      "file": "deadhawg/311.png",
+      "rect": {
+        "x": 428,
+        "y": 793,
+        "w": 52,
+        "h": 54
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -1,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 312,
+      "file": "deadhawg/312.png",
+      "rect": {
+        "x": 1056,
+        "y": 1531,
+        "w": 54,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 1,
+        "y": -9.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 313,
+      "file": "deadhawg/313.png",
+      "rect": {
+        "x": 1425,
+        "y": 788,
+        "w": 55,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 2.5,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 314,
+      "file": "deadhawg/314.png",
+      "rect": {
+        "x": 659,
+        "y": 1786,
+        "w": 54,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 4,
+        "y": -9
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 315,
+      "file": "deadhawg/315.png",
+      "rect": {
+        "x": 352,
+        "y": 1443,
+        "w": 54,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 5,
+        "y": -10
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 316,
+      "file": "deadhawg/316.png",
+      "rect": {
+        "x": 428,
+        "y": 1296,
+        "w": 52,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 6,
+        "y": -10.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 317,
+      "file": "deadhawg/317.png",
+      "rect": {
+        "x": 1974,
+        "y": 184,
+        "w": 52,
+        "h": 49
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 5,
+        "y": -11.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 318,
+      "file": "deadhawg/318.png",
+      "rect": {
+        "x": 1177,
+        "y": 0,
+        "w": 52,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 4,
+        "y": -10
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 319,
+      "file": "deadhawg/319.png",
+      "rect": {
+        "x": 1622,
+        "y": 65,
+        "w": 72,
+        "h": 135
+      },
+      "cell": {
+        "w": 200,
+        "h": 200
+      },
+      "origin": {
+        "x": 0,
+        "y": -0.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 320,
+      "file": "deadhawg/320.png",
+      "rect": {
+        "x": 0,
+        "y": 835,
+        "w": 14,
+        "h": 47
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 321,
+      "file": "deadhawg/321.png",
+      "rect": {
+        "x": 0,
+        "y": 384,
+        "w": 16,
+        "h": 49
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 322,
+      "file": "deadhawg/322.png",
+      "rect": {
+        "x": 254,
+        "y": 521,
+        "w": 18,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 323,
+      "file": "deadhawg/323.png",
+      "rect": {
+        "x": 1279,
+        "y": 0,
+        "w": 18,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 324,
+      "file": "deadhawg/324.png",
+      "rect": {
+        "x": 0,
+        "y": 783,
+        "w": 18,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 325,
+      "file": "deadhawg/325.png",
+      "rect": {
+        "x": 19,
+        "y": 1087,
+        "w": 18,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 326,
+      "file": "deadhawg/326.png",
+      "rect": {
+        "x": 0,
+        "y": 1456,
+        "w": 16,
+        "h": 49
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 327,
+      "file": "deadhawg/327.png",
+      "rect": {
+        "x": 19,
+        "y": 783,
+        "w": 14,
+        "h": 48
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 328,
+      "file": "deadhawg/328.png",
+      "rect": {
+        "x": 870,
+        "y": 183,
+        "w": 16,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 329,
+      "file": "deadhawg/329.png",
+      "rect": {
+        "x": 0,
+        "y": 1727,
+        "w": 18,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 330,
+      "file": "deadhawg/330.png",
+      "rect": {
+        "x": 0,
+        "y": 1538,
+        "w": 18,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 331,
+      "file": "deadhawg/331.png",
+      "rect": {
+        "x": 2025,
+        "y": 0,
+        "w": 20,
+        "h": 53
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 332,
+      "file": "deadhawg/332.png",
+      "rect": {
+        "x": 2006,
+        "y": 0,
+        "w": 18,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 333,
+      "file": "deadhawg/333.png",
+      "rect": {
+        "x": 254,
+        "y": 592,
+        "w": 17,
+        "h": 51
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": -0.5,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 334,
+      "file": "deadhawg/334.png",
+      "rect": {
+        "x": 0,
+        "y": 883,
+        "w": 14,
+        "h": 49
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19.5
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 335,
+      "file": "deadhawg/335.png",
+      "rect": {
+        "x": 0,
+        "y": 212,
+        "w": 16,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 336,
+      "file": "deadhawg/336.png",
+      "rect": {
+        "x": 19,
+        "y": 1538,
+        "w": 18,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 337,
+      "file": "deadhawg/337.png",
+      "rect": {
+        "x": 0,
+        "y": 1087,
+        "w": 18,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 338,
+      "file": "deadhawg/338.png",
+      "rect": {
+        "x": 0,
+        "y": 1808,
+        "w": 18,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 339,
+      "file": "deadhawg/339.png",
+      "rect": {
+        "x": 1504,
+        "y": 0,
+        "w": 18,
+        "h": 52
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 340,
+      "file": "deadhawg/340.png",
+      "rect": {
+        "x": 914,
+        "y": 0,
+        "w": 16,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 341,
+      "file": "deadhawg/341.png",
+      "rect": {
+        "x": 17,
+        "y": 1456,
+        "w": 14,
+        "h": 48
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -19
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 342,
+      "file": "deadhawg/342.png",
+      "rect": {
+        "x": 19,
+        "y": 1808,
+        "w": 16,
+        "h": 48
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 343,
+      "file": "deadhawg/343.png",
+      "rect": {
+        "x": 1415,
+        "y": 0,
+        "w": 18,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 344,
+      "file": "deadhawg/344.png",
+      "rect": {
+        "x": 254,
+        "y": 470,
+        "w": 18,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 345,
+      "file": "deadhawg/345.png",
+      "rect": {
+        "x": 19,
+        "y": 1727,
+        "w": 19,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 346,
+      "file": "deadhawg/346.png",
+      "rect": {
+        "x": 0,
+        "y": 1592,
+        "w": 18,
+        "h": 50
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    },
+    {
+      "id": 347,
+      "file": "deadhawg/347.png",
+      "rect": {
+        "x": 15,
+        "y": 883,
+        "w": 17,
+        "h": 48
+      },
+      "cell": {
+        "w": 150,
+        "h": 150
+      },
+      "origin": {
+        "x": 0.5,
+        "y": -18
+      },
+      "extras": null,
+      "empty": false
+    }
+  ]
+}

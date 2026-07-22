@@ -1,0 +1,1367 @@
+{
+  "atlas": "DeadHawg",
+  "categories": {
+    "graves": [
+      {
+        "id": 88,
+        "label": "grave rubble"
+      },
+      {
+        "id": 89,
+        "label": "grave dirt mound"
+      },
+      {
+        "id": 90,
+        "label": "broken grave slab"
+      },
+      {
+        "id": 91,
+        "label": "grave haze"
+      },
+      {
+        "id": 92,
+        "label": "grave dirt patch"
+      },
+      {
+        "id": 93,
+        "label": "grave rubble scatter"
+      },
+      {
+        "id": 94,
+        "label": "cracked grave slab"
+      },
+      {
+        "id": 95,
+        "label": "open grave"
+      },
+      {
+        "id": 96,
+        "label": "empty grave pit"
+      },
+      {
+        "id": 97,
+        "label": "rounded headstone"
+      },
+      {
+        "id": 98,
+        "label": "stone cross"
+      },
+      {
+        "id": 99,
+        "label": "tall obelisk"
+      },
+      {
+        "id": 100,
+        "label": "broken cross"
+      },
+      {
+        "id": 101,
+        "label": "arched headstone"
+      },
+      {
+        "id": 102,
+        "label": "small headstone"
+      },
+      {
+        "id": 103,
+        "label": "iron grave marker"
+      },
+      {
+        "id": 104,
+        "label": "double headstone"
+      },
+      {
+        "id": 105,
+        "label": "celtic cross"
+      },
+      {
+        "id": 106,
+        "label": "winged headstone"
+      },
+      {
+        "id": 107,
+        "label": "celtic headstone"
+      },
+      {
+        "id": 108,
+        "label": "tall headstone"
+      },
+      {
+        "id": 109,
+        "label": "inscribed headstone"
+      },
+      {
+        "id": 110,
+        "label": "broken headstone"
+      },
+      {
+        "id": 111,
+        "label": "square headstone"
+      },
+      {
+        "id": 112,
+        "label": "arched grave marker"
+      },
+      {
+        "id": 113,
+        "label": "short headstone"
+      }
+    ],
+    "trees": [
+      {
+        "id": 144,
+        "label": "dead stump"
+      },
+      {
+        "id": 228,
+        "label": "tree root outline 0"
+      },
+      {
+        "id": 229,
+        "label": "tree root outline 1"
+      },
+      {
+        "id": 230,
+        "label": "tree root outline 2"
+      },
+      {
+        "id": 231,
+        "label": "tree root outline 3"
+      },
+      {
+        "id": 232,
+        "label": "tree root outline 4"
+      },
+      {
+        "id": 233,
+        "label": "tree root outline 5"
+      },
+      {
+        "id": 234,
+        "label": "tree root outline 6"
+      },
+      {
+        "id": 235,
+        "label": "tree shadow 0"
+      },
+      {
+        "id": 236,
+        "label": "tree shadow 1"
+      },
+      {
+        "id": 237,
+        "label": "tree shadow 2"
+      },
+      {
+        "id": 238,
+        "label": "tree shadow 3"
+      },
+      {
+        "id": 239,
+        "label": "tree shadow 4"
+      },
+      {
+        "id": 240,
+        "label": "tree shadow 5"
+      },
+      {
+        "id": 241,
+        "label": "tree shadow 6"
+      },
+      {
+        "id": 242,
+        "label": "tree shadow 7"
+      },
+      {
+        "id": 243,
+        "label": "autumn canopy"
+      },
+      {
+        "id": 244,
+        "label": "red leaf canopy"
+      },
+      {
+        "id": 245,
+        "label": "dark leaf canopy"
+      },
+      {
+        "id": 246,
+        "label": "willow canopy left"
+      },
+      {
+        "id": 247,
+        "label": "willow canopy center"
+      },
+      {
+        "id": 248,
+        "label": "willow canopy right"
+      },
+      {
+        "id": 249,
+        "label": "fir canopy"
+      },
+      {
+        "id": 250,
+        "label": "sparse canopy"
+      },
+      {
+        "id": 264,
+        "label": "twisted dead oak"
+      },
+      {
+        "id": 265,
+        "label": "forked dead oak"
+      },
+      {
+        "id": 266,
+        "label": "crooked dead oak"
+      },
+      {
+        "id": 267,
+        "label": "broken dead oak"
+      },
+      {
+        "id": 268,
+        "label": "dead pine"
+      },
+      {
+        "id": 269,
+        "label": "white dead oak"
+      }
+    ],
+    "flora": [
+      {
+        "id": 4,
+        "label": "round bramble"
+      },
+      {
+        "id": 114,
+        "label": "autumn leaf bed"
+      },
+      {
+        "id": 115,
+        "label": "autumn leaf cluster"
+      },
+      {
+        "id": 116,
+        "label": "green leaf bed"
+      },
+      {
+        "id": 117,
+        "label": "green leaf cluster"
+      },
+      {
+        "id": 118,
+        "label": "gray leaf bed"
+      },
+      {
+        "id": 119,
+        "label": "gray leaf cluster"
+      },
+      {
+        "id": 270,
+        "label": "square hedge"
+      },
+      {
+        "id": 271,
+        "label": "round shrub"
+      },
+      {
+        "id": 272,
+        "label": "tall shrub"
+      },
+      {
+        "id": 279,
+        "label": "cattail clump left"
+      },
+      {
+        "id": 280,
+        "label": "cattail clump right"
+      },
+      {
+        "id": 281,
+        "label": "grass clump left"
+      },
+      {
+        "id": 282,
+        "label": "grass clump right"
+      }
+    ],
+    "buildings": [
+      {
+        "id": 148,
+        "label": "mausoleum front"
+      },
+      {
+        "id": 149,
+        "label": "stone chapel"
+      },
+      {
+        "id": 150,
+        "label": "tiled crypt"
+      },
+      {
+        "id": 151,
+        "label": "wooden crypt"
+      },
+      {
+        "id": 152,
+        "label": "mausoleum roof"
+      },
+      {
+        "id": 153,
+        "label": "chapel roof"
+      },
+      {
+        "id": 154,
+        "label": "tiled crypt roof"
+      },
+      {
+        "id": 155,
+        "label": "wooden crypt roof"
+      }
+    ],
+    "statues": [
+      {
+        "id": 156,
+        "label": "reclining lion left"
+      },
+      {
+        "id": 157,
+        "label": "reclining lion right"
+      },
+      {
+        "id": 158,
+        "label": "hooded knight left"
+      },
+      {
+        "id": 159,
+        "label": "hooded knight right"
+      },
+      {
+        "id": 160,
+        "label": "robed statue left"
+      },
+      {
+        "id": 161,
+        "label": "robed statue right"
+      },
+      {
+        "id": 162,
+        "label": "winged angel"
+      },
+      {
+        "id": 163,
+        "label": "kneeling mourner left"
+      },
+      {
+        "id": 164,
+        "label": "kneeling mourner right"
+      },
+      {
+        "id": 165,
+        "label": "gargoyle bust"
+      },
+      {
+        "id": 166,
+        "label": "stone reliquary"
+      },
+      {
+        "id": 167,
+        "label": "mounted knight left"
+      },
+      {
+        "id": 168,
+        "label": "mounted knight right"
+      },
+      {
+        "id": 169,
+        "label": "winged archer left"
+      },
+      {
+        "id": 170,
+        "label": "winged archer right"
+      },
+      {
+        "id": 171,
+        "label": "seated mourner left"
+      },
+      {
+        "id": 172,
+        "label": "seated mourner right"
+      },
+      {
+        "id": 173,
+        "label": "standing knight"
+      },
+      {
+        "id": 174,
+        "label": "stone pedestal front"
+      },
+      {
+        "id": 175,
+        "label": "stone pedestal left"
+      },
+      {
+        "id": 176,
+        "label": "stone pedestal right"
+      }
+    ],
+    "fences": [
+      {
+        "id": 3,
+        "label": "broken iron grate"
+      },
+      {
+        "id": 7,
+        "label": "ornate iron gate"
+      },
+      {
+        "id": 8,
+        "label": "gate hinge"
+      },
+      {
+        "id": 23,
+        "label": "iron rail"
+      },
+      {
+        "id": 36,
+        "label": "stone fencepost 0"
+      },
+      {
+        "id": 37,
+        "label": "stone fencepost 1"
+      },
+      {
+        "id": 38,
+        "label": "stone fencepost 2"
+      },
+      {
+        "id": 39,
+        "label": "stone fencepost 3"
+      },
+      {
+        "id": 40,
+        "label": "stone fencepost 4"
+      },
+      {
+        "id": 41,
+        "label": "stone fencepost 5"
+      },
+      {
+        "id": 42,
+        "label": "stone fencepost 6"
+      },
+      {
+        "id": 133,
+        "label": "broken fence pile left"
+      },
+      {
+        "id": 134,
+        "label": "broken fence pile right"
+      },
+      {
+        "id": 320,
+        "label": "wood fencepost 00"
+      },
+      {
+        "id": 321,
+        "label": "wood fencepost 01"
+      },
+      {
+        "id": 322,
+        "label": "wood fencepost 02"
+      },
+      {
+        "id": 323,
+        "label": "wood fencepost 03"
+      },
+      {
+        "id": 324,
+        "label": "wood fencepost 04"
+      },
+      {
+        "id": 325,
+        "label": "wood fencepost 05"
+      },
+      {
+        "id": 326,
+        "label": "wood fencepost 06"
+      },
+      {
+        "id": 327,
+        "label": "wood fencepost 07"
+      },
+      {
+        "id": 328,
+        "label": "wood fencepost 08"
+      },
+      {
+        "id": 329,
+        "label": "wood fencepost 09"
+      },
+      {
+        "id": 330,
+        "label": "wood fencepost 10"
+      },
+      {
+        "id": 331,
+        "label": "wood fencepost 11"
+      },
+      {
+        "id": 332,
+        "label": "wood fencepost 12"
+      },
+      {
+        "id": 333,
+        "label": "wood fencepost 13"
+      },
+      {
+        "id": 334,
+        "label": "wood fencepost 14"
+      },
+      {
+        "id": 335,
+        "label": "wood fencepost 15"
+      },
+      {
+        "id": 336,
+        "label": "wood fencepost 16"
+      },
+      {
+        "id": 337,
+        "label": "wood fencepost 17"
+      },
+      {
+        "id": 338,
+        "label": "wood fencepost 18"
+      },
+      {
+        "id": 339,
+        "label": "wood fencepost 19"
+      },
+      {
+        "id": 340,
+        "label": "wood fencepost 20"
+      },
+      {
+        "id": 341,
+        "label": "wood fencepost 21"
+      },
+      {
+        "id": 342,
+        "label": "wood fencepost 22"
+      },
+      {
+        "id": 343,
+        "label": "wood fencepost 23"
+      },
+      {
+        "id": 344,
+        "label": "wood fencepost 24"
+      },
+      {
+        "id": 345,
+        "label": "wood fencepost 25"
+      },
+      {
+        "id": 346,
+        "label": "wood fencepost 26"
+      },
+      {
+        "id": 347,
+        "label": "wood fencepost 27"
+      }
+    ],
+    "ground": [
+      {
+        "id": 11,
+        "label": "dark moss tile"
+      },
+      {
+        "id": 12,
+        "label": "moss stone tile"
+      },
+      {
+        "id": 20,
+        "label": "oval shadow"
+      },
+      {
+        "id": 27,
+        "label": "ground crack"
+      },
+      {
+        "id": 31,
+        "label": "green moss spot"
+      },
+      {
+        "id": 33,
+        "label": "small dirt patch"
+      },
+      {
+        "id": 34,
+        "label": "round dirt patch"
+      },
+      {
+        "id": 35,
+        "label": "wide dirt patch"
+      },
+      {
+        "id": 120,
+        "label": "large dirt patch"
+      },
+      {
+        "id": 121,
+        "label": "dark dirt patch"
+      },
+      {
+        "id": 122,
+        "label": "small dark patch"
+      },
+      {
+        "id": 123,
+        "label": "square stone tile"
+      },
+      {
+        "id": 124,
+        "label": "diamond stone tile"
+      },
+      {
+        "id": 125,
+        "label": "slanted stone tile"
+      },
+      {
+        "id": 126,
+        "label": "moss stone square"
+      },
+      {
+        "id": 319,
+        "label": "wood plank tile"
+      }
+    ],
+    "props": [
+      {
+        "id": 13,
+        "label": "low rubble"
+      },
+      {
+        "id": 14,
+        "label": "spider cocoon"
+      },
+      {
+        "id": 43,
+        "label": "small rock left"
+      },
+      {
+        "id": 44,
+        "label": "small rock center"
+      },
+      {
+        "id": 45,
+        "label": "small rock right"
+      },
+      {
+        "id": 127,
+        "label": "pebble pair"
+      },
+      {
+        "id": 128,
+        "label": "pebble trio"
+      },
+      {
+        "id": 129,
+        "label": "small pebble pile"
+      },
+      {
+        "id": 130,
+        "label": "round pebble pile"
+      },
+      {
+        "id": 131,
+        "label": "pebble cluster left"
+      },
+      {
+        "id": 132,
+        "label": "pebble cluster right"
+      },
+      {
+        "id": 135,
+        "label": "flat rock left"
+      },
+      {
+        "id": 136,
+        "label": "flat rock center"
+      },
+      {
+        "id": 137,
+        "label": "long flat rock"
+      },
+      {
+        "id": 138,
+        "label": "flat rock right"
+      },
+      {
+        "id": 145,
+        "label": "ornate coffer"
+      },
+      {
+        "id": 146,
+        "label": "stone coffer"
+      },
+      {
+        "id": 147,
+        "label": "broken coffer"
+      },
+      {
+        "id": 273,
+        "label": "signpost fork left"
+      },
+      {
+        "id": 274,
+        "label": "signpost fork right"
+      },
+      {
+        "id": 275,
+        "label": "signpost cross left"
+      },
+      {
+        "id": 276,
+        "label": "signpost cross right"
+      },
+      {
+        "id": 277,
+        "label": "signpost diagonal left"
+      },
+      {
+        "id": 278,
+        "label": "signpost diagonal right"
+      },
+      {
+        "id": 283,
+        "label": "rock pile 00"
+      },
+      {
+        "id": 284,
+        "label": "rock pile 01"
+      },
+      {
+        "id": 285,
+        "label": "rock pile 02"
+      },
+      {
+        "id": 286,
+        "label": "rock pile 03"
+      },
+      {
+        "id": 287,
+        "label": "rock pile 04"
+      },
+      {
+        "id": 288,
+        "label": "rock pile 05"
+      },
+      {
+        "id": 289,
+        "label": "rock pile 06"
+      },
+      {
+        "id": 290,
+        "label": "rock pile 07"
+      },
+      {
+        "id": 291,
+        "label": "rock pile 08"
+      },
+      {
+        "id": 292,
+        "label": "rock pile 09"
+      },
+      {
+        "id": 293,
+        "label": "rock pile 10"
+      },
+      {
+        "id": 294,
+        "label": "rock pile 11"
+      },
+      {
+        "id": 295,
+        "label": "rock pile 12"
+      },
+      {
+        "id": 296,
+        "label": "rock pile 13"
+      },
+      {
+        "id": 297,
+        "label": "rock pile 14"
+      },
+      {
+        "id": 298,
+        "label": "rock pile 15"
+      },
+      {
+        "id": 299,
+        "label": "rock pile 16"
+      },
+      {
+        "id": 300,
+        "label": "rock pile 17"
+      },
+      {
+        "id": 301,
+        "label": "rock pile 18"
+      },
+      {
+        "id": 302,
+        "label": "rock pile 19"
+      },
+      {
+        "id": 303,
+        "label": "rock pile 20"
+      },
+      {
+        "id": 304,
+        "label": "rock pile 21"
+      },
+      {
+        "id": 305,
+        "label": "rock pile 22"
+      },
+      {
+        "id": 306,
+        "label": "rock pile 23"
+      },
+      {
+        "id": 307,
+        "label": "rock pile 24"
+      },
+      {
+        "id": 308,
+        "label": "rock pile 25"
+      },
+      {
+        "id": 309,
+        "label": "rock pile 26"
+      },
+      {
+        "id": 310,
+        "label": "rock pile 27"
+      },
+      {
+        "id": 311,
+        "label": "rock pile 28"
+      },
+      {
+        "id": 312,
+        "label": "rock pile 29"
+      },
+      {
+        "id": 313,
+        "label": "rock pile 30"
+      },
+      {
+        "id": 314,
+        "label": "rock pile 31"
+      },
+      {
+        "id": 315,
+        "label": "rock pile 32"
+      },
+      {
+        "id": 316,
+        "label": "rock pile 33"
+      },
+      {
+        "id": 317,
+        "label": "rock pile 34"
+      },
+      {
+        "id": 318,
+        "label": "rock pile 35"
+      }
+    ],
+    "fx": [
+      {
+        "id": 0,
+        "label": "green spore burst"
+      },
+      {
+        "id": 1,
+        "label": "blind splatter"
+      },
+      {
+        "id": 2,
+        "label": "black impact"
+      },
+      {
+        "id": 5,
+        "label": "white comet"
+      },
+      {
+        "id": 6,
+        "label": "blue vortex"
+      },
+      {
+        "id": 9,
+        "label": "white glow"
+      },
+      {
+        "id": 15,
+        "label": "gray vortex"
+      },
+      {
+        "id": 16,
+        "label": "blue banish ring"
+      },
+      {
+        "id": 17,
+        "label": "glass rupture"
+      },
+      {
+        "id": 18,
+        "label": "white orb"
+      },
+      {
+        "id": 19,
+        "label": "fire burst"
+      },
+      {
+        "id": 25,
+        "label": "white arc"
+      },
+      {
+        "id": 26,
+        "label": "white wisp"
+      },
+      {
+        "id": 28,
+        "label": "white starburst"
+      },
+      {
+        "id": 29,
+        "label": "silk burst"
+      },
+      {
+        "id": 30,
+        "label": "green mist"
+      },
+      {
+        "id": 46,
+        "label": "fire frame 00"
+      },
+      {
+        "id": 47,
+        "label": "fire frame 01"
+      },
+      {
+        "id": 48,
+        "label": "fire frame 02"
+      },
+      {
+        "id": 49,
+        "label": "fire frame 03"
+      },
+      {
+        "id": 50,
+        "label": "fire frame 04"
+      },
+      {
+        "id": 51,
+        "label": "fire frame 05"
+      },
+      {
+        "id": 52,
+        "label": "fire frame 06"
+      },
+      {
+        "id": 53,
+        "label": "fire frame 07"
+      },
+      {
+        "id": 54,
+        "label": "fire frame 08"
+      },
+      {
+        "id": 55,
+        "label": "fire frame 09"
+      },
+      {
+        "id": 56,
+        "label": "fire frame 10"
+      },
+      {
+        "id": 57,
+        "label": "fire frame 11"
+      },
+      {
+        "id": 58,
+        "label": "fire frame 12"
+      },
+      {
+        "id": 59,
+        "label": "fire frame 13"
+      },
+      {
+        "id": 60,
+        "label": "fire frame 14"
+      },
+      {
+        "id": 61,
+        "label": "fire frame 15"
+      },
+      {
+        "id": 62,
+        "label": "fire frame 16"
+      },
+      {
+        "id": 63,
+        "label": "fire frame 17"
+      },
+      {
+        "id": 64,
+        "label": "fire frame 18"
+      },
+      {
+        "id": 65,
+        "label": "fire frame 19"
+      },
+      {
+        "id": 66,
+        "label": "fire frame 20"
+      },
+      {
+        "id": 67,
+        "label": "fire frame 21"
+      },
+      {
+        "id": 68,
+        "label": "fire frame 22"
+      },
+      {
+        "id": 69,
+        "label": "fire frame 23"
+      },
+      {
+        "id": 70,
+        "label": "fire frame 24"
+      },
+      {
+        "id": 71,
+        "label": "fire frame 25"
+      },
+      {
+        "id": 72,
+        "label": "fire frame 26"
+      },
+      {
+        "id": 73,
+        "label": "fire frame 27"
+      },
+      {
+        "id": 74,
+        "label": "fire frame 28"
+      },
+      {
+        "id": 75,
+        "label": "fire frame 29"
+      },
+      {
+        "id": 76,
+        "label": "fire frame 30"
+      },
+      {
+        "id": 77,
+        "label": "fire frame 31"
+      },
+      {
+        "id": 78,
+        "label": "golem debris 00"
+      },
+      {
+        "id": 79,
+        "label": "golem debris 01"
+      },
+      {
+        "id": 80,
+        "label": "golem debris 02"
+      },
+      {
+        "id": 81,
+        "label": "golem debris 03"
+      },
+      {
+        "id": 82,
+        "label": "golem debris 04"
+      },
+      {
+        "id": 83,
+        "label": "golem debris 05"
+      },
+      {
+        "id": 84,
+        "label": "golem debris 06"
+      },
+      {
+        "id": 85,
+        "label": "golem debris 07"
+      },
+      {
+        "id": 86,
+        "label": "golem debris 08"
+      },
+      {
+        "id": 87,
+        "label": "golem debris 09"
+      },
+      {
+        "id": 177,
+        "label": "red leaf mote"
+      },
+      {
+        "id": 178,
+        "label": "green leaf mote"
+      },
+      {
+        "id": 179,
+        "label": "stone mote"
+      },
+      {
+        "id": 180,
+        "label": "fire portal frame 00"
+      },
+      {
+        "id": 181,
+        "label": "fire portal frame 01"
+      },
+      {
+        "id": 182,
+        "label": "fire portal frame 02"
+      },
+      {
+        "id": 183,
+        "label": "fire portal frame 03"
+      },
+      {
+        "id": 184,
+        "label": "fire portal frame 04"
+      },
+      {
+        "id": 185,
+        "label": "fire portal frame 05"
+      },
+      {
+        "id": 186,
+        "label": "fire portal frame 06"
+      },
+      {
+        "id": 187,
+        "label": "fire portal frame 07"
+      },
+      {
+        "id": 188,
+        "label": "fire portal frame 08"
+      },
+      {
+        "id": 189,
+        "label": "fire portal frame 09"
+      },
+      {
+        "id": 190,
+        "label": "fire portal frame 10"
+      },
+      {
+        "id": 191,
+        "label": "fire portal frame 11"
+      },
+      {
+        "id": 192,
+        "label": "fire portal frame 12"
+      },
+      {
+        "id": 193,
+        "label": "fire portal frame 13"
+      },
+      {
+        "id": 194,
+        "label": "fire portal frame 14"
+      },
+      {
+        "id": 195,
+        "label": "fire portal frame 15"
+      },
+      {
+        "id": 196,
+        "label": "fire portal frame 16"
+      },
+      {
+        "id": 197,
+        "label": "fire portal frame 17"
+      },
+      {
+        "id": 198,
+        "label": "fire portal frame 18"
+      },
+      {
+        "id": 199,
+        "label": "fire portal frame 19"
+      },
+      {
+        "id": 200,
+        "label": "earthquake cracks"
+      },
+      {
+        "id": 201,
+        "label": "earthquake crack left"
+      },
+      {
+        "id": 202,
+        "label": "earthquake crack right"
+      },
+      {
+        "id": 203,
+        "label": "white pebble frame 00"
+      },
+      {
+        "id": 204,
+        "label": "white pebble frame 01"
+      },
+      {
+        "id": 205,
+        "label": "white pebble frame 02"
+      },
+      {
+        "id": 206,
+        "label": "white pebble frame 03"
+      },
+      {
+        "id": 207,
+        "label": "white pebble frame 04"
+      },
+      {
+        "id": 208,
+        "label": "dead spider frame 00"
+      },
+      {
+        "id": 209,
+        "label": "dead spider frame 01"
+      },
+      {
+        "id": 210,
+        "label": "dead spider frame 02"
+      },
+      {
+        "id": 211,
+        "label": "dead spider frame 03"
+      },
+      {
+        "id": 212,
+        "label": "dead spider frame 04"
+      },
+      {
+        "id": 213,
+        "label": "dead spider frame 05"
+      },
+      {
+        "id": 214,
+        "label": "dead spider frame 06"
+      },
+      {
+        "id": 215,
+        "label": "dead spider frame 07"
+      },
+      {
+        "id": 216,
+        "label": "dead spider frame 08"
+      },
+      {
+        "id": 217,
+        "label": "dead spider frame 09"
+      },
+      {
+        "id": 218,
+        "label": "dead spider frame 10"
+      },
+      {
+        "id": 219,
+        "label": "dead spider frame 11"
+      },
+      {
+        "id": 220,
+        "label": "dead spider frame 12"
+      },
+      {
+        "id": 221,
+        "label": "dead spider frame 13"
+      },
+      {
+        "id": 222,
+        "label": "dead spider frame 14"
+      },
+      {
+        "id": 223,
+        "label": "dead spider frame 15"
+      },
+      {
+        "id": 224,
+        "label": "dead spider frame 16"
+      },
+      {
+        "id": 225,
+        "label": "dead spider frame 17"
+      },
+      {
+        "id": 226,
+        "label": "dead spider frame 18"
+      },
+      {
+        "id": 227,
+        "label": "dead spider frame 19"
+      }
+    ],
+    "markers": [
+      {
+        "id": 10,
+        "label": "white pixel"
+      },
+      {
+        "id": 21,
+        "label": "metal ring"
+      },
+      {
+        "id": 22,
+        "label": "pentagram"
+      },
+      {
+        "id": 24,
+        "label": "white reticle"
+      },
+      {
+        "id": 32,
+        "label": "white point"
+      }
+    ],
+    "unknown": [
+      {
+        "id": 139,
+        "label": "double shadow mask"
+      },
+      {
+        "id": 140,
+        "label": "narrow shadow mask"
+      },
+      {
+        "id": 141,
+        "label": "round shadow mask"
+      },
+      {
+        "id": 142,
+        "label": "low shadow mask"
+      },
+      {
+        "id": 143,
+        "label": "large round mask"
+      }
+    ]
+  }
+}
