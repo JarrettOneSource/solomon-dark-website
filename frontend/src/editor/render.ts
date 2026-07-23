@@ -33,7 +33,7 @@ export interface Camera {
   zoom: number
 }
 
-export type Tool = 'select' | 'place' | 'brush' | 'erase' | 'pan' | 'road' | 'fence' | 'terrain'
+export type Tool = 'select' | 'place' | 'brush' | 'erase' | 'pan' | 'road' | 'fence' | 'terrain' | 'spawn'
 
 /** Per-tool option state the page owns and the stage reads. */
 export interface ToolStyles {
@@ -59,6 +59,10 @@ export interface StageUI {
   marquee: { a: Vec2; b: Vec2 } | null
   /** Brush cursor ring, world units. */
   brush: { pos: Vec2; radius: number } | null
+  /** The authored player spawn, drawn as a persistent marker. */
+  spawn: { x: number; y: number; facingDeg: number } | null
+  /** Cursor preview while the spawn tool is up. */
+  spawnGhost: Vec2 | null
   showGrid: boolean
   /** True while a survey (camera pan) gesture is live: the frame may come
    * from the cached scene layer instead of a full repaint. */
@@ -968,6 +972,60 @@ function drawTransientOverlays(
     ctx.stroke()
     ctx.restore()
   }
+
+  // The player spawn: a persistent arcane sigil, plus a cursor ghost while
+  // the spawn tool is up.
+  if (ui.spawn) {
+    drawSpawnMarker(ctx, ui.spawn, ui.spawn.facingDeg, cam, cssW, cssH, 1)
+  }
+  if (ui.spawnGhost) {
+    drawSpawnMarker(ctx, ui.spawnGhost, ui.spawn?.facingDeg ?? 0, cam, cssW, cssH, 0.45)
+  }
+}
+
+function drawSpawnMarker(
+  ctx: CanvasRenderingContext2D,
+  pos: Vec2,
+  facingDeg: number,
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+  alpha: number,
+) {
+  const c = worldToScreen(pos, cam, cssW, cssH)
+  const r = Math.max(7, 14 * cam.zoom)
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.strokeStyle = 'rgba(65,227,255,0.9)'
+  ctx.fillStyle = 'rgba(65,227,255,0.10)'
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(c.x, c.y, r * 0.45, 0, Math.PI * 2)
+  ctx.stroke()
+  // Facing arrow. 0° points up-screen; degrees turn clockwise.
+  const rad = ((facingDeg - 90) * Math.PI) / 180
+  const ax = Math.cos(rad)
+  const ay = Math.sin(rad)
+  ctx.beginPath()
+  ctx.moveTo(c.x + ax * r * 0.45, c.y + ay * r * 0.45)
+  ctx.lineTo(c.x + ax * r * 1.55, c.y + ay * r * 1.55)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(c.x + ax * r * 1.55, c.y + ay * r * 1.55)
+  ctx.lineTo(c.x + ax * r * 1.2 - ay * r * 0.28, c.y + ay * r * 1.2 + ax * r * 0.28)
+  ctx.lineTo(c.x + ax * r * 1.2 + ay * r * 0.28, c.y + ay * r * 1.2 - ax * r * 0.28)
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(65,227,255,0.9)'
+  ctx.fill()
+  ctx.font = '600 10px "JetBrains Mono", monospace'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = 'rgba(65,227,255,0.85)'
+  ctx.fillText('SPAWN', c.x, c.y - r - 6)
+  ctx.restore()
 }
 
 function drawRoads(

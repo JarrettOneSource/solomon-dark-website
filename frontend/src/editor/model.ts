@@ -11,6 +11,14 @@ export interface Vec2 {
   y: number
 }
 
+/** Where the wizards materialize. Arena load copies this one point into all
+ * four player slots; facing is degrees. */
+export interface PlayerSpawn {
+  x: number
+  y: number
+  facingDeg: number
+}
+
 export interface Rect {
   x: number
   y: number
@@ -150,6 +158,9 @@ export interface EditorDoc {
    * publishes as a data/wave.txt overlay riding in the same mod package.
    * Absent or empty means the plot ships with the game's stock waves. */
   waves?: import('./waves').WaveDef[]
+  /** Authored player spawn. Absent means the envelope keeps whatever spawn
+   * it already carries (an import's own, or the blank fixture's default). */
+  spawn?: PlayerSpawn
 }
 
 let counter = 0

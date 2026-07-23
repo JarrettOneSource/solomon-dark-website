@@ -1,7 +1,7 @@
 // Editor state: one reducer, snapshot history, and the local draft drawer.
 // Pure module; the page owns it through useReducer.
 
-import type { EditorDoc, PlacedObject, Polyline, SelEntry, Selection, StaticSprite, TerrainPatch, Rect, Vec2 } from './model'
+import type { EditorDoc, PlacedObject, PlayerSpawn, Polyline, SelEntry, Selection, StaticSprite, TerrainPatch, Rect, Vec2 } from './model'
 import { createDoc, eid, entryKey, selectionSet } from './model'
 import { exportDocJson, importDocJson } from './io'
 
@@ -44,6 +44,7 @@ export type EditorAction =
   | { type: 'set-name'; name: string }
   | { type: 'set-bounds'; bounds: Rect }
   | { type: 'set-waves'; waves: import('./waves').WaveDef[] }
+  | { type: 'set-spawn'; spawn: PlayerSpawn | undefined }
   | { type: 'move-item'; sel: SelEntry; pos: Vec2 }
   | { type: 'set-object-props'; eid: string; patch: Partial<Pick<PlacedObject, 'variant' | 'rot' | 'scale'>> }
   | { type: 'set-sprite-props'; eid: string; patch: Partial<Pick<StaticSprite, 's0' | 's1' | 's2' | 'flags'>> }
@@ -354,6 +355,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'set-waves':
       return committed(state, { ...state.doc, waves: action.waves })
+
+    case 'set-spawn':
+      return committed(state, { ...state.doc, spawn: action.spawn })
 
     case 'move-item': {
       const e = action.sel

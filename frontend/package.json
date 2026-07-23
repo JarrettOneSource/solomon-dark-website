@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test:boneyard": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/boneyard/parser.test.ts src/editor/lifted-sprite.test.ts src/editor/native-render-plan.test.ts src/editor/waves.test.ts",
+    "test:boneyard": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/boneyard/parser.test.ts src/editor/lifted-sprite.test.ts src/editor/native-render-plan.test.ts src/editor/waves.test.ts src/editor/spawn-roundtrip.test.ts",
     "benchmark:boneyard": "node tools/benchmark-boneyard.mjs",
     "preview": "vite preview"
   },

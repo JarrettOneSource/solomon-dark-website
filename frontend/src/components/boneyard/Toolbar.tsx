@@ -39,10 +39,17 @@ interface Props {
 
 type IconName =
   | 'select' | 'brush' | 'erase' | 'pan'
-  | 'road' | 'fence' | 'terrain'
+  | 'road' | 'fence' | 'terrain' | 'spawn'
   | 'undo' | 'redo' | 'grid' | 'snap'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
+  spawn: (
+    <>
+      <circle cx="8" cy="9" r="4.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="9" r="1.6" fill="currentColor" />
+      <path d="M8 4.6V1.2M6.2 2.9L8 1.2l1.8 1.7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
   select: <path d="M4 1.8l9.2 7.1-4.3 1 2.2 4.6-2 .9-2.2-4.6L4 13.4z" fill="currentColor" />,
   brush: (
     <>
@@ -309,6 +316,7 @@ const DRAW_TOOLS: { tool: Tool; icon: IconName; label: string }[] = [
   { tool: 'road', icon: 'road', label: 'Lay a road (R)' },
   { tool: 'fence', icon: 'fence', label: 'Run a fence (F)' },
   { tool: 'terrain', icon: 'terrain', label: 'Carve terrain (T)' },
+  { tool: 'spawn', icon: 'spawn', label: 'Set the player spawn (S)' },
 ]
 
 // Memoized so stage gestures (which never change these props) skip it.

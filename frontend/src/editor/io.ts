@@ -4,7 +4,7 @@
 
 import { classVariantEntries, spriteRefFor } from './assets'
 import { FORMAT_READY, STATIC_SPRITE_ATLAS_BASE, newBoneyard, parseBoneyard, serializeBoneyard } from './format/boneyard'
-import type { BoneyardPlacedObject, BoneyardStaticSprite } from './format/boneyard'
+import type { BoneyardDoc, BoneyardPlacedObject, BoneyardStaticSprite } from './format/boneyard'
 import blankFixtureUrl from './format/blank-fixture.boneyard?url'
 import type { EditorDoc } from './model'
 
@@ -52,7 +52,24 @@ function hydrate(doc: EditorDoc): EditorDoc {
 
 export function importNative(bytes: Uint8Array): EditorDoc {
   if (!FORMAT_READY) throw new FormatPendingError()
-  return hydrate(parseBoneyard(bytes))
+  const doc = parseBoneyard(bytes)
+  // Lift the envelope's spawn into the authored field so the marker shows
+  // and edits round-trip; the geometry copy is rewritten at compile time.
+  if (doc.geometry.playerSpawn) {
+    doc.spawn = {
+      x: doc.geometry.playerSpawn.x,
+      y: doc.geometry.playerSpawn.y,
+      facingDeg: doc.geometry.playerSpawnFacingDeg ?? 0,
+    }
+  }
+  return hydrate(doc)
+}
+
+/** Stamp the authored spawn into a doc's native geometry before serializing. */
+function applySpawn(target: BoneyardDoc, spawn: EditorDoc['spawn']) {
+  if (!spawn) return
+  target.geometry.playerSpawn = { x: spawn.x, y: spawn.y }
+  target.geometry.playerSpawnFacingDeg = spawn.facingDeg
 }
 
 export function exportNative(doc: EditorDoc): Uint8Array {
@@ -122,7 +139,10 @@ export async function compileNative(doc: EditorDoc): Promise<Uint8Array> {
   const work = structuredClone(doc)
   linkChains(work)
   const meta = work.meta as EditorDoc['meta'] & { raw?: { file?: string } }
-  if (meta.raw?.file) return serializeBoneyard(work)
+  if (meta.raw?.file) {
+    applySpawn(work as unknown as BoneyardDoc, work.spawn)
+    return serializeBoneyard(work)
+  }
   const base = newBoneyard(work.meta.name || 'Untitled Acre', await blankFixture())
   const b = work.meta.bounds
   base.meta.bounds = { ...base.meta.bounds, x: b.x, y: b.y, w: b.w, h: b.h }
@@ -131,6 +151,7 @@ export async function compileNative(doc: EditorDoc): Promise<Uint8Array> {
   base.fences = work.fences as typeof base.fences
   base.terrain = work.terrain as typeof base.terrain
   base.sprites = work.sprites as typeof base.sprites
+  applySpawn(base, work.spawn)
   return serializeBoneyard(base)
 }
 

@@ -364,6 +364,53 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
             <p className="text-fell mt-1.5 text-[11px] text-bone-dim/60">
               The plot stays centred on the origin, as the stock grounds are.
             </p>
+
+            <div className="mt-4 border-t border-gold/10 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="label !mb-0">Player spawn</span>
+                {doc.spawn && (
+                  <button
+                    type="button"
+                    className="font-mono text-[10px] uppercase text-bone-dim/70 hover:text-blood"
+                    title="Forget the authored spawn; the envelope's own point returns"
+                    onClick={() => dispatch({ type: 'set-spawn', spawn: undefined })}
+                  >
+                    clear
+                  </button>
+                )}
+              </div>
+              {doc.spawn ? (
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <NumField
+                    label="x"
+                    value={doc.spawn.x}
+                    onCommit={(x) => dispatch({ type: 'set-spawn', spawn: { ...doc.spawn!, x } })}
+                  />
+                  <NumField
+                    label="y"
+                    value={doc.spawn.y}
+                    onCommit={(y) => dispatch({ type: 'set-spawn', spawn: { ...doc.spawn!, y } })}
+                  />
+                  <NumField
+                    label="f°"
+                    value={doc.spawn.facingDeg}
+                    step={45}
+                    onCommit={(facingDeg) =>
+                      dispatch({
+                        type: 'set-spawn',
+                        spawn: { ...doc.spawn!, facingDeg: ((facingDeg % 360) + 360) % 360 },
+                      })
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="text-fell mt-1.5 text-[11px] leading-relaxed text-bone-dim/60">
+                  Not placed; the plot keeps its envelope's own spawn point. Take the spawn
+                  tool (S) and click the grounds to set one.
+                </p>
+              )}
+            </div>
+
             <div className="mt-4 space-y-1.5 border-t border-gold/10 pt-3">
               <Row k="Placed pieces" v={doc.objects.length} />
               <Row k="Scenery sprites" v={doc.sprites.length} />

@@ -48,6 +48,7 @@ const TOOL_HINT: Record<Tool, string> = {
   road: 'click to lay · double-click or enter ends the road',
   fence: 'click to post · double-click or enter ends the run',
   terrain: 'click to carve · double-click or enter ends the cut',
+  spawn: 'click sets where the wizards materialize · esc returns to select',
 }
 
 type Gesture =
@@ -71,6 +72,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
   const size = useRef({ w: 0, h: 0 })
   const hover = useRef<SelEntry | null>(null)
   const ghost = useRef<Vec2 | null>(null)
+  const spawnGhost = useRef<Vec2 | null>(null)
   const draft = useRef<Vec2[] | null>(null)
   const marquee = useRef<{ a: Vec2; b: Vec2 } | null>(null)
   const brushAt = useRef<Vec2 | null>(null)
@@ -249,6 +251,8 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
           (s.tool === 'brush' || s.tool === 'erase') && brushAt.current
             ? { pos: brushAt.current, radius: s.tool === 'brush' ? s.styles.brushRadius : s.styles.eraseRadius }
             : null,
+        spawn: s.doc.spawn ?? null,
+        spawnGhost: s.tool === 'spawn' ? spawnGhost.current : null,
         showGrid: s.showGrid,
         panning: gesture.current?.kind === 'pan',
         dragging: gesture.current?.kind === 'drag',
@@ -270,6 +274,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
     stopPreview()
     draft.current = null
     ghost.current = null
+    spawnGhost.current = null
     marquee.current = null
     brushAt.current = null
     gesture.current = null
@@ -380,6 +385,16 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
         markDirty()
         return
       }
+      case 'spawn': {
+        const pt = snapped(world)
+        dispatch({
+          type: 'set-spawn',
+          spawn: { x: pt.x, y: pt.y, facingDeg: s.doc.spawn?.facingDeg ?? 0 },
+        })
+        onPlaced?.()
+        markDirty()
+        return
+      }
       case 'select': {
         const hit = pick(s.doc, world)
         if (hit) {
@@ -485,6 +500,12 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
 
     if (s.tool === 'place') {
       ghost.current = snapped(world)
+      markDirty()
+      return
+    }
+
+    if (s.tool === 'spawn') {
+      spawnGhost.current = snapped(world)
       markDirty()
       return
     }
@@ -615,6 +636,7 @@ export default memo(forwardRef<StageHandle, Props>(function CanvasStage(
           stopPreview()
           hover.current = null
           ghost.current = null
+          spawnGhost.current = null
           brushAt.current = null
           markDirty()
         }}

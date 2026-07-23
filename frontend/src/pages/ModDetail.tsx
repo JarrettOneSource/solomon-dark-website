@@ -443,12 +443,6 @@ export default function ModDetail() {
               v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} ·
               ↓ {formatCount(m.downloads)} total
             </p>
-            <div className="rule-gold my-4" />
-            <p className="text-left text-xs leading-relaxed text-bone-dim">
-              Website Join Game links install an exact host mod set automatically. For standalone
-              or offline play, extract this ZIP as a folder under the loader’s <code>mods</code>{' '}
-              directory and enable it there.
-            </p>
           </div>
 
           {latest && (
@@ -478,21 +472,6 @@ export default function ModDetail() {
           <div className="panel p-6">
             <div className="kicker mb-2">Tome record</div>
             <div className="divide-y divide-gold/10">
-              <RecordRow label="Filed under">
-                {m.tags.length > 0 ? (
-                  <span className="flex flex-wrap justify-end gap-1">
-                    {m.tags.map((tag) => (
-                      <TagBadge
-                        key={tag}
-                        tag={tag}
-                        onClick={() => navigate(`/mods?tag=${encodeURIComponent(tag)}`)}
-                      />
-                    ))}
-                  </span>
-                ) : (
-                  <span className="text-bone-dim/60">unfiled</span>
-                )}
-              </RecordRow>
               <RecordRow label="Author">
                 <Link
                   to={`/wizards/${encodeURIComponent(m.author.username)}`}
@@ -504,20 +483,7 @@ export default function ModDetail() {
               <RecordRow label="Shelved">{formatDate(m.createdAtUtc)}</RecordRow>
               <RecordRow label="Revised">{timeAgo(m.updatedAtUtc)}</RecordRow>
               <RecordRow label="Editions">{m.versions.length}</RecordRow>
-              <RecordRow label="Launcher ID">
-                <span className="font-mono text-xs">{m.launcherModId ?? 'legacy package'}</span>
-              </RecordRow>
-              {latest?.contentSha256 && (
-                <RecordRow label="Content hash">
-                  <span className="font-mono text-xs" title={latest.contentSha256}>
-                    {latest.contentSha256.slice(0, 12)}…
-                  </span>
-                </RecordRow>
-              )}
               <RecordRow label="Downloads">{formatCount(m.downloads)}</RecordRow>
-              <RecordRow label="Shelfmark">
-                <span className="font-mono text-xs">{m.slug}</span>
-              </RecordRow>
             </div>
           </div>
 

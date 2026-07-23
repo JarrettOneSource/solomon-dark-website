@@ -247,6 +247,7 @@ export default function Boneyard() {
         case 'r': case 'R': setTool('road'); break
         case 'f': case 'F': setTool('fence'); break
         case 't': case 'T': setTool('terrain'); break
+        case 's': case 'S': setTool('spawn'); break
         case 'g': case 'G': setSnap((s) => !s); break
         case 'Delete':
         case 'Backspace':
@@ -254,7 +255,7 @@ export default function Boneyard() {
           break
         case 'Escape':
           dispatch({ type: 'select', sel: [] })
-          if (tool === 'place' || tool === 'brush') {
+          if (tool === 'place' || tool === 'brush' || tool === 'spawn') {
             setTool('select')
             setActiveKey(null)
           }
