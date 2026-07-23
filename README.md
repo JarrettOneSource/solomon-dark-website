@@ -111,8 +111,8 @@ and uploads a validated ZIP snapshot to `/api/saves/{slot}`.
 
 Cloud backup turns on automatically when the active Steam ID is linked to an
 SDR account on the Account page. The launcher does not receive the website
-password or store a website bearer token. Unlinked Steam sessions cannot read,
-write, or delete cloud saves.
+password or store a website bearer token. Cloud-save access from both the
+launcher and the Account page remains disabled until that Steam link exists.
 
 Cloud is a backup, not the live save location. Launches continue from local
 disk when the website is unavailable, and cloud snapshots are restored only

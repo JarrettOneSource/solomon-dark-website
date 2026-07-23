@@ -62,6 +62,10 @@ public static class CloudSaveArchiveInspector
                 throw new InvalidDataException("Cloud save archives cannot contain symbolic links.");
             }
         }
+        if (entries.Count > MaxFiles + 1)
+        {
+            throw new InvalidDataException("Cloud save archives contain too many entries.");
+        }
 
         if (!entries.TryGetValue("manifest.json", out var manifestEntry) ||
             manifestEntry.Length is <= 0 or > MaxManifestBytes)
@@ -77,7 +81,8 @@ public static class CloudSaveArchiveInspector
         if (manifest is null ||
             manifest.SchemaVersion != FormatVersion ||
             manifest.Slot != expectedSlot ||
-            manifest.Name?.Length > 40 ||
+            manifest.Name is { } name &&
+                (name.Length > 40 || name.Any(char.IsControl)) ||
             manifest.Files is null ||
             manifest.Files.Count is <= 0 or > MaxFiles)
         {

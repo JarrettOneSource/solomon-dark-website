@@ -475,6 +475,29 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "Content-Type": "application/zip",
         }
 
+        status, rejected = self.request(
+            "PUT",
+            "/api/saves/0",
+            body=archive,
+            headers=website_headers,
+        )
+        self.assertEqual(status, 401, rejected)
+        status, rejected = self.request(
+            "GET",
+            "/api/saves",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(status, 401, rejected)
+
+        steam_id = "76561198000007777"
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            database.execute(
+                "UPDATE Users SET SteamId = ? WHERE Id = ?",
+                (steam_id, self.user_id),
+            )
+            database.commit()
+
         status, uploaded = self.request(
             "PUT",
             "/api/saves/0",
@@ -505,15 +528,6 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(downloaded, archive)
         self.assertEqual(response_headers["Content-Type"], "application/zip")
         self.assertIn("solomon-dark-save-1.zip", response_headers["Content-Disposition"])
-
-        steam_id = "76561198000007777"
-        database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
-            database.execute(
-                "UPDATE Users SET SteamId = ? WHERE Id = ?",
-                (steam_id, self.user_id),
-            )
-            database.commit()
 
         linked_token = self.steam_token(steam_id, self.user_id)
         linked_archive = save_package(1, "Steam-linked Run", files)
@@ -555,6 +569,13 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 401, rejected)
 
+        with sqlite3.connect(database_path) as database:
+            database.execute(
+                "UPDATE Users SET SteamId = ? WHERE Id = ?",
+                (steam_id, self.user_id),
+            )
+            database.commit()
+
         bad_hash = save_package(
             2,
             "Bad Hash",
@@ -590,6 +611,20 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 400, rejected)
         self.assertIn("unsafe", rejected["error"].lower())
 
+        unsafe_name = save_package(
+            5,
+            "unsafe\u0001name",
+            {"solomondark/darkdata.cfg": b"no"},
+        )
+        status, rejected = self.request(
+            "PUT",
+            "/api/saves/5",
+            body=unsafe_name,
+            headers=website_headers,
+        )
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("manifest", rejected["error"].lower())
+
         status, rejected = self.request(
             "PUT",
             "/api/saves/4",
@@ -613,6 +648,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers={"Authorization": f"Bearer {self.token}"},
         )
         self.assertEqual(status, 404)
+        with sqlite3.connect(database_path) as database:
+            database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
+            database.commit()
 
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {

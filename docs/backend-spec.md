@@ -37,10 +37,11 @@ user claim only when that mapping exists, and the response exposes the linked
 account's id and username. The launcher therefore discovers a website link
 without receiving website credentials.
 
-The `cloud-save` policy accepts ordinary website JWTs and Steam sessions with
-that linked-user claim. Every save operation made through a Steam session also
-rechecks that the user still owns the Steam ID, so unlinking takes effect even
-while a previously issued 15-minute session is still valid.
+The `cloud-save` policy accepts website JWTs and Steam sessions with that
+linked-user claim. Every endpoint additionally requires the website account to
+have a current Steam link. Steam-session operations recheck the exact
+user/Steam-ID mapping, so unlinking takes effect even while a previously issued
+15-minute session is still valid.
 
 Cloud saves are local-first backup snapshots. There are eight slots, numbered
 0 through 7:

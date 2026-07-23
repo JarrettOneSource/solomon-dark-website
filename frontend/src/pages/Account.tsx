@@ -262,7 +262,10 @@ export default function Account() {
     if (!loading && !user) navigate('/login', { replace: true })
   }, [user, loading, navigate])
 
-  const saves = useApi(() => api.saves.list(), [user?.id])
+  const saves = useApi(
+    () => user?.steamId ? api.saves.list() : Promise.resolve<CloudSave[]>([]),
+    [user?.id, user?.steamId],
+  )
   // v1: no author filter on the mods API yet — pull a page and filter client-side.
   const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
 
@@ -310,7 +313,11 @@ export default function Account() {
           </p>
         </Reveal>
         <div className="mt-6">
-          {saves.loading ? (
+          {!user.steamId ? (
+            <div className="slab rounded px-5 py-6 text-sm text-bone-dim">
+              Cloud saves are disabled until this account is linked to Steam above.
+            </div>
+          ) : saves.loading ? (
             <Spinner label="Unlocking the vault…" />
           ) : saves.error ? (
             <ErrorNote message={saves.error} />

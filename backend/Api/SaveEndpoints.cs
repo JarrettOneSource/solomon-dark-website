@@ -209,7 +209,9 @@ public static class SaveEndpoints
         if (websiteUserId is not null)
         {
             return await db.Users.AnyAsync(
-                user => user.Id == websiteUserId.Value,
+                user =>
+                    user.Id == websiteUserId.Value &&
+                    user.SteamId != null,
                 cancellationToken)
                 ? websiteUserId
                 : null;
