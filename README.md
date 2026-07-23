@@ -101,3 +101,19 @@ ASP.NET maps `Steam__WebApiKey` to `Steam:WebApiKey`. Never commit the key or ex
 The backend validates launcher tickets through `ISteamUserAuth/AuthenticateUserTicket` for Steam AppID `3362180` with the ticket identity `solomon-dark-directory-v1`. If the key is missing, `POST /api/auth/steam/session` returns `503 Service Unavailable` and authenticated lobby discovery is unavailable.
 
 The domain entered during key registration is the key's administrative association, not a request-origin restriction. Changing the website domain does not require an application change; the key may be regenerated later to keep that registration current.
+
+## Launcher cloud saves
+
+The launcher keeps eight save slots under its own local application-data root;
+it never runs from or writes into the retail game's save directory. After a
+local slot changes, the launcher obtains a short-lived Steam Web API session
+and uploads a validated ZIP snapshot to `/api/saves/{slot}`.
+
+Cloud backup turns on automatically when the active Steam ID is linked to an
+SDR account on the Account page. The launcher does not receive the website
+password or store a website bearer token. Cloud-save access from both the
+launcher and the Account page remains disabled until that Steam link exists.
+
+Cloud is a backup, not the live save location. Launches continue from local
+disk when the website is unavailable, and cloud snapshots are restored only
+after an explicit user action.

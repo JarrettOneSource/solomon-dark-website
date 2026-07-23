@@ -18,12 +18,13 @@ public static class SteamAuthEndpoints
             .RequireRateLimiting("steam-ticket-auth");
         app.MapPost("/api/auth/steam/link", StartLinkAsync).RequireAuthorization();
         app.MapGet("/api/auth/steam/callback", CompleteLinkAsync);
-        app.MapDelete("/api/auth/steam", UnlinkAsync).RequireAuthorization();
+        app.MapDelete("/api/auth/steam", UnlinkAsync).RequireAuthorization("steam-unlink");
     }
 
     private static async Task<IResult> CreateSessionAsync(
         SteamSessionRequest request,
         HttpContext context,
+        AppDb db,
         SteamTicketVerifier verifier,
         TokenService tokens,
         CancellationToken cancellationToken)
@@ -46,12 +47,20 @@ public static class SteamAuthEndpoints
             return ApiErrors.Error(StatusCodes.Status503ServiceUnavailable, verification.Error);
         }
 
-        var session = tokens.CreateSteamSession(verification.SteamId!);
+        var linkedAccount = await db.Users.AsNoTracking()
+            .Where(user => user.SteamId == verification.SteamId)
+            .Select(user => new LinkedAccount(user.Id, user.Username))
+            .SingleOrDefaultAsync(cancellationToken);
+        var session = tokens.CreateSteamSession(
+            verification.SteamId!,
+            linkedAccount?.Id,
+            linkedAccount?.Username);
         return Results.Ok(new
         {
             token = session.Token,
             steamId = session.SteamId,
-            expiresAtUtc = session.ExpiresAtUtc
+            expiresAtUtc = session.ExpiresAtUtc,
+            linkedAccount
         });
     }
 
@@ -161,11 +170,16 @@ public static class SteamAuthEndpoints
         CancellationToken cancellationToken)
     {
         var userId = TokenService.GetUserId(context.User);
-        var user = userId is null
-            ? null
-            : await db.Users.SingleOrDefaultAsync(
+        var steamSessionId = TokenService.GetSteamSessionId(context.User);
+        var user = userId is not null
+            ? await db.Users.SingleOrDefaultAsync(
                 candidate => candidate.Id == userId.Value,
-                cancellationToken);
+                cancellationToken)
+            : steamSessionId is not null
+                ? await db.Users.SingleOrDefaultAsync(
+                    candidate => candidate.SteamId == steamSessionId,
+                    cancellationToken)
+                : null;
         if (user is null)
         {
             return ApiErrors.Unauthorized("The Annals could not identify this bearer.");
@@ -209,4 +223,5 @@ public static class SteamAuthEndpoints
 
     public sealed record StartSteamLinkRequest(string? ReturnPath);
     public sealed record SteamSessionRequest(string? Ticket);
+    private sealed record LinkedAccount(int Id, string Username);
 }

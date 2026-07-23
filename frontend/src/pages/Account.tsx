@@ -191,7 +191,7 @@ async function downloadSave(slot: number, name: string | null) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${(name ?? `slot-${slot}`).replace(/[^\w-]+/g, '_')}.sav`
+  a.download = `${(name ?? `slot-${slot + 1}`).replace(/[^\w-]+/g, '_')}.zip`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -225,7 +225,9 @@ function SaveSlot({ slot, save, onChanged }: { slot: number; save?: CloudSave; o
     <div className="panel panel-ornate flex min-h-36 flex-col p-4">
       <div className="flex items-start justify-between">
         <span className="font-display text-lg text-gold">{ROMAN[slot]}</span>
-        <span className="font-mono text-[10px] text-bone-dim/60">{formatBytes(save.size)}</span>
+        <span className="font-mono text-[10px] text-bone-dim/60">
+          {save.fileCount} files · {formatBytes(save.size)}
+        </span>
       </div>
       <div className="mt-1 truncate font-display text-sm font-bold tracking-wide text-bone" title={save.name ?? undefined}>
         {save.name ?? 'Unnamed run'}
@@ -260,7 +262,10 @@ export default function Account() {
     if (!loading && !user) navigate('/login', { replace: true })
   }, [user, loading, navigate])
 
-  const saves = useApi(() => api.saves.list(), [user?.id])
+  const saves = useApi(
+    () => user?.steamId ? api.saves.list() : Promise.resolve<CloudSave[]>([]),
+    [user?.id, user?.steamId],
+  )
   // v1: no author filter on the mods API yet — pull a page and filter client-side.
   const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
 
@@ -303,12 +308,16 @@ export default function Account() {
           <div className="kicker mb-1.5">Runs on record</div>
           <h2 className="h-display text-xl">Cloud Saves</h2>
           <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-            Eight slots, synced by the game through your SDR account. Portraits of runs
-            past — some heroic, some “utterly predictable.”
+            Eight launcher-owned local saves, backed up here after they change. The
+            launcher always plays from disk; the Annals keep a downloadable ZIP copy.
           </p>
         </Reveal>
         <div className="mt-6">
-          {saves.loading ? (
+          {!user.steamId ? (
+            <div className="slab rounded px-5 py-6 text-sm text-bone-dim">
+              Cloud saves are disabled until this account is linked to Steam above.
+            </div>
+          ) : saves.loading ? (
             <Spinner label="Unlocking the vault…" />
           ) : saves.error ? (
             <ErrorNote message={saves.error} />
@@ -374,8 +383,9 @@ export default function Account() {
                 Syncing from the game
               </div>
               <p className="mt-1 text-sm leading-relaxed text-bone-dim">
-                Sign into the SDR loader with the same mage name and your saves sync
-                here on their own. The Annals handle the paperwork.
+                Link your Steam profile above, then open the launcher while signed into
+                that Steam account. It detects the linkage automatically—no website
+                password is stored in the launcher.
               </p>
             </div>
           </div>

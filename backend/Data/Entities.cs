@@ -128,6 +128,9 @@ public sealed class CloudSave
     public int Slot { get; set; }
     public string? Name { get; set; }
     public long Size { get; set; }
+    public long UncompressedSize { get; set; }
+    public int FileCount { get; set; }
+    public int FormatVersion { get; set; }
     public string Sha256 { get; set; } = string.Empty;
     public DateTime UpdatedAtUtc { get; set; }
 
@@ -168,6 +171,25 @@ public sealed class CrashReport
     public string MetadataJson { get; set; } = "{}";
     public bool HasCrashLog { get; set; }
     public int MinidumpCount { get; set; }
+    public string ArchivePath { get; set; } = string.Empty;
+    public long ArchiveSize { get; set; }
+    public string ArchiveSha256 { get; set; } = string.Empty;
+
+    public User? SubmitterUser { get; set; }
+}
+
+public sealed class DiagnosticLog
+{
+    public int Id { get; set; }
+    public string PublicId { get; set; } = string.Empty;
+    public string ClientLogId { get; set; } = string.Empty;
+    public int? SubmitterUserId { get; set; }
+    public string? SubmitterSteamId { get; set; }
+    public DateTime SubmittedAtUtc { get; set; }
+    public DateTime CapturedAtUtc { get; set; }
+    public string LauncherVersion { get; set; } = string.Empty;
+    public string? LaunchToken { get; set; }
+    public string MetadataJson { get; set; } = "{}";
     public string ArchivePath { get; set; } = string.Empty;
     public long ArchiveSize { get; set; }
     public string ArchiveSha256 { get; set; } = string.Empty;

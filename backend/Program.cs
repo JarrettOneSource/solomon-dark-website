@@ -113,6 +113,16 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(context =>
             TokenService.GetUserId(context.User) is not null ||
             TokenService.GetSteamSessionId(context.User) is not null));
+    options.AddPolicy("steam-unlink", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            TokenService.GetUserId(context.User) is not null ||
+            TokenService.GetSteamSessionId(context.User) is not null));
+    options.AddPolicy("cloud-save", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            TokenService.GetUserId(context.User) is not null ||
+            TokenService.GetLinkedUserId(context.User) is not null));
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -150,6 +160,11 @@ builder.Services.AddRateLimiter(options =>
                 "/api/crash-reports",
                 StringComparison.OrdinalIgnoreCase)
                 ? "Too many crash reports were submitted; try again later."
+            : string.Equals(
+                requestPath,
+                "/api/diagnostics/logs",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many log uploads; try again later."
             : string.Equals(
                 requestPath,
                 "/api/auth/steam/session",
@@ -202,6 +217,19 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("diagnostic-logs", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TokenService.GetSteamSessionId(context.User) ??
+            TokenService.GetUserId(context.User)?.ToString() ??
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
                 AutoReplenishment = true
             }));
     options.AddPolicy("crash-reports", context =>
@@ -330,6 +358,7 @@ LobbyEndpoints.Map(app);
 SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
 CrashReportEndpoints.Map(app);
+DiagnosticLogEndpoints.Map(app);
 
 app.MapMethods(
     "/api/{**path}",

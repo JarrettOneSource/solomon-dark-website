@@ -203,6 +203,9 @@ export interface CloudSave {
   slot: number
   name: string | null
   size: number
+  uncompressedSize: number
+  fileCount: number
+  formatVersion: number
   sha256: string
   updatedAtUtc: string
 }

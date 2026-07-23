@@ -29,6 +29,38 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
+## Launcher cloud saves
+
+`POST /api/auth/steam/session` verifies the launcher ticket and looks up the
+verified Steam ID in `Users.SteamId`. Its short-lived JWT includes a linked
+user claim only when that mapping exists, and the response exposes the linked
+account's id and username. The launcher therefore discovers a website link
+without receiving website credentials.
+
+The `cloud-save` policy accepts website JWTs and Steam sessions with that
+linked-user claim. Every endpoint additionally requires the website account to
+have a current Steam link. Steam-session operations recheck the exact
+user/Steam-ID mapping, so unlinking takes effect even while a previously issued
+15-minute session is still valid.
+
+Cloud saves are local-first backup snapshots. There are eight slots, numbered
+0 through 7:
+
+- `GET /api/saves` lists snapshot metadata.
+- `PUT /api/saves/{slot}` replaces a snapshot with an
+  `application/zip` launcher archive.
+- `GET /api/saves/{slot}` downloads the ZIP.
+- `DELETE /api/saves/{slot}` removes the remote backup only.
+
+Archives are limited to 16 MiB compressed, 64 MiB expanded, and 256 files.
+They contain `manifest.json` plus regular files below
+`savegames/solomondark/`. The manifest has schema version 1, the route slot,
+an optional 40-character name, and the exact size and SHA-256 of every file.
+The server rejects traversal, duplicate paths, links, unlisted files, and
+digest mismatches before replacing the prior snapshot. Stored metadata records
+compressed and expanded sizes, file count, format version, archive SHA-256,
+and the UTC update time.
+
 ## Revision log
 
 - REVISION 9: Adds owner-scoped Boneyard editor drafts, disk-backed autosave,

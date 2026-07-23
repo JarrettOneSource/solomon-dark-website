@@ -10,6 +10,48 @@ public static class DatabaseSchema
         CancellationToken cancellationToken = default)
     {
         await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS CloudSaves (
+                Id INTEGER NOT NULL CONSTRAINT PK_CloudSaves PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                Slot INTEGER NOT NULL,
+                Name TEXT NULL,
+                Size INTEGER NOT NULL,
+                UncompressedSize INTEGER NOT NULL DEFAULT 0,
+                FileCount INTEGER NOT NULL DEFAULT 0,
+                FormatVersion INTEGER NOT NULL DEFAULT 0,
+                Sha256 TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_CloudSaves_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CloudSaves_UserId_Slot
+                ON CloudSaves (UserId, Slot);
+            CREATE INDEX IF NOT EXISTS IX_CloudSaves_UserId
+                ON CloudSaves (UserId);
+            """,
+            cancellationToken);
+
+        if (!await HasColumnAsync(db, "CloudSaves", "UncompressedSize", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN UncompressedSize INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        if (!await HasColumnAsync(db, "CloudSaves", "FileCount", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN FileCount INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        if (!await HasColumnAsync(db, "CloudSaves", "FormatVersion", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN FormatVersion INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+
         if (!await HasColumnAsync(db, "Users", "SteamId", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
@@ -180,6 +222,32 @@ public static class DatabaseSchema
                 ON CrashReports (SubmitterSteamId);
             CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterUserId
                 ON CrashReports (SubmitterUserId);
+
+            CREATE TABLE IF NOT EXISTS DiagnosticLogs (
+                Id INTEGER NOT NULL CONSTRAINT PK_DiagnosticLogs PRIMARY KEY AUTOINCREMENT,
+                PublicId TEXT NOT NULL,
+                ClientLogId TEXT NOT NULL,
+                SubmitterUserId INTEGER NULL,
+                SubmitterSteamId TEXT NULL,
+                SubmittedAtUtc TEXT NOT NULL,
+                CapturedAtUtc TEXT NOT NULL,
+                LauncherVersion TEXT NOT NULL,
+                LaunchToken TEXT NULL,
+                MetadataJson TEXT NOT NULL,
+                ArchivePath TEXT NOT NULL,
+                ArchiveSize INTEGER NOT NULL,
+                ArchiveSha256 TEXT NOT NULL,
+                CONSTRAINT FK_DiagnosticLogs_Users_SubmitterUserId
+                    FOREIGN KEY (SubmitterUserId) REFERENCES Users (Id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_DiagnosticLogs_PublicId
+                ON DiagnosticLogs (PublicId);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_DiagnosticLogs_ClientLogId
+                ON DiagnosticLogs (ClientLogId);
+            CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmittedAtUtc
+                ON DiagnosticLogs (SubmittedAtUtc);
+            CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmitterSteamId
+                ON DiagnosticLogs (SubmitterSteamId);
             """,
             cancellationToken);
 
