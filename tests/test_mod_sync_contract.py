@@ -44,6 +44,26 @@ def content_hash(package_bytes: bytes) -> str:
     return aggregate.hexdigest()
 
 
+def crash_package(metadata: dict[str, object], artifacts: dict[str, bytes]) -> bytes:
+    artifact_details = [
+        {
+            "path": path,
+            "size": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        for path, content in artifacts.items()
+    ]
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "report.json",
+            json.dumps({"report": metadata, "artifactDetails": artifact_details}),
+        )
+        for path, content in artifacts.items():
+            archive.writestr(path, content)
+    return buffer.getvalue()
+
+
 def free_port() -> int:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -312,12 +332,11 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "minidumpCount": 1,
             "artifacts": ["logs/crash.log", "dumps/crash.dmp"],
         }
-        archive_buffer = io.BytesIO()
-        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as crash_archive:
-            crash_archive.writestr("report.json", json.dumps({"report": metadata}))
-            crash_archive.writestr("logs/crash.log", "unhandled exception")
-            crash_archive.writestr("dumps/crash.dmp", b"MDMP")
-        archive = archive_buffer.getvalue()
+        artifacts = {
+            "logs/crash.log": b"unhandled exception",
+            "dumps/crash.dmp": b"MDMP",
+        }
+        archive = crash_package(metadata, artifacts)
 
         status, _ = self.crash_upload(metadata, archive, token=None)
         self.assertEqual(status, 401)
@@ -357,7 +376,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(duplicate["reportId"], receipt["reportId"])
 
         account_metadata = {**metadata, "clientReportId": str(uuid.uuid4())}
-        status, account_receipt = self.crash_upload(account_metadata, archive, self.token)
+        account_archive = crash_package(account_metadata, artifacts)
+        status, account_receipt = self.crash_upload(
+            account_metadata,
+            account_archive,
+            self.token,
+        )
         self.assertEqual(status, 201, account_receipt)
         with sqlite3.connect(database_path) as database:
             account_row = database.execute(
@@ -370,6 +394,32 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNotNone(account_row[0])
         self.assertIsNone(account_row[1])
+
+        null_token_metadata = {
+            **metadata,
+            "clientReportId": str(uuid.uuid4()),
+            "launchToken": None,
+        }
+        status, _ = self.crash_upload(
+            null_token_metadata,
+            crash_package(null_token_metadata, artifacts),
+            self.steam_token("76561198000009998"),
+        )
+        self.assertEqual(status, 400)
+
+        mismatched_metadata = {**metadata, "clientReportId": str(uuid.uuid4())}
+        status, _ = self.crash_upload(
+            mismatched_metadata,
+            archive,
+            self.steam_token("76561198000009997"),
+        )
+        self.assertEqual(status, 400)
+        with sqlite3.connect(database_path) as database:
+            mismatched_count = database.execute(
+                "SELECT COUNT(*) FROM CrashReports WHERE ClientReportId = ?",
+                (mismatched_metadata["clientReportId"],),
+            ).fetchone()[0]
+        self.assertEqual(mismatched_count, 0)
 
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {

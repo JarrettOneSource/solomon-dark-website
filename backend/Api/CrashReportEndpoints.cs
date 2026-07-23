@@ -133,7 +133,7 @@ public static class CrashReportEndpoints
                 cancellationToken);
             if (!IsValidArchive(
                     storage.GetCrashReportPath(stored.RelativePath),
-                    metadata.Artifacts))
+                    metadata))
             {
                 storage.DeleteCrashReport(stored.RelativePath);
                 stored = null;
@@ -182,7 +182,7 @@ public static class CrashReportEndpoints
         {
             return "Crash-report metadata must include a clientReportId.";
         }
-        if (metadata.LaunchToken.Length != 32 ||
+        if (metadata.LaunchToken is not { Length: 32 } ||
             metadata.LaunchToken.Any(character =>
                 character is not (>= '0' and <= '9') and
                 not (>= 'a' and <= 'f')))
@@ -205,19 +205,30 @@ public static class CrashReportEndpoints
             return "Crash-report version or runtime metadata is invalid.";
         }
         if (metadata.MinidumpCount is < 0 or > 16 ||
-            metadata.EnabledMods is null or { Length: > 128 } ||
-            metadata.Artifacts is null or { Length: > 32 })
+            metadata.EnabledMods is not { Length: <= 128 } ||
+            metadata.Artifacts is not { Length: <= 32 })
         {
             return "Crash-report artifact or mod counts are invalid.";
         }
         if (metadata.EnabledMods.Any(mod =>
                 mod is null ||
                 !IsShortValue(mod.Id, 128) ||
-                !IsShortValue(mod.Version, 64)))
+                !IsShortValue(mod.Version, 64)) ||
+            metadata.EnabledMods
+                .Select(mod => mod.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() != metadata.EnabledMods.Length)
         {
             return "Crash-report mod metadata is invalid.";
         }
-        if (metadata.Artifacts.Any(path => !IsArchiveEntryName(path)))
+        if (metadata.Artifacts.Any(path =>
+                !IsArchiveEntryName(path) || path == "report.json") ||
+            metadata.Artifacts.Distinct(StringComparer.Ordinal).Count() !=
+            metadata.Artifacts.Length ||
+            metadata.HasCrashLog != metadata.Artifacts.Contains("logs/crash.log") ||
+            metadata.MinidumpCount != metadata.Artifacts.Count(path =>
+                path.StartsWith("dumps/", StringComparison.Ordinal) &&
+                path.EndsWith(".dmp", StringComparison.OrdinalIgnoreCase)))
         {
             return "Crash-report artifact metadata is invalid.";
         }
@@ -233,23 +244,24 @@ public static class CrashReportEndpoints
         IsShortValue(value, 256) &&
         !value!.StartsWith('/') &&
         !value.Contains('\\') &&
-        !value.Split('/').Contains("..");
+        !value.Split('/').Any(segment => segment is "" or "." or "..");
 
     private static bool IsValidArchive(
         string archivePath,
-        IReadOnlyCollection<string> expectedArtifacts)
+        CrashReportMetadata expectedMetadata)
     {
         try
         {
             using var stream = File.OpenRead(archivePath);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-            if (archive.Entries.Count != expectedArtifacts.Count + 1)
+            if (archive.Entries.Count != expectedMetadata.Artifacts.Length + 1)
             {
                 return false;
             }
 
             var names = new HashSet<string>(StringComparer.Ordinal);
             long totalUncompressedSize = 0;
+            ZipArchiveEntry? reportEntry = null;
             foreach (var entry in archive.Entries)
             {
                 if (!IsArchiveEntryName(entry.FullName) || !names.Add(entry.FullName))
@@ -257,19 +269,57 @@ public static class CrashReportEndpoints
                     return false;
                 }
                 totalUncompressedSize = checked(totalUncompressedSize + entry.Length);
+                if (entry.FullName == "report.json")
+                {
+                    reportEntry = entry;
+                }
             }
 
-            return totalUncompressedSize <= 512L * 1024 * 1024 &&
-                   names.Contains("report.json") &&
-                   expectedArtifacts.All(names.Contains);
+            if (totalUncompressedSize > 512L * 1024 * 1024 ||
+                reportEntry is null ||
+                reportEntry.Length > 256L * 1024 ||
+                !expectedMetadata.Artifacts.All(names.Contains))
+            {
+                return false;
+            }
+
+            using var reportStream = reportEntry.Open();
+            var manifest = JsonSerializer.Deserialize<CrashReportArchiveManifest>(
+                reportStream,
+                JsonOptions);
+            return MetadataMatches(expectedMetadata, manifest?.Report);
         }
         catch (Exception exception) when (exception is InvalidDataException or
                                           IOException or
-                                          OverflowException)
+                                          OverflowException or
+                                          JsonException)
         {
             return false;
         }
     }
+
+    private static bool MetadataMatches(
+        CrashReportMetadata expected,
+        CrashReportMetadata? actual) =>
+        actual is not null &&
+        expected.ClientReportId == actual.ClientReportId &&
+        expected.LaunchToken == actual.LaunchToken &&
+        expected.StartedAtUtc == actual.StartedAtUtc &&
+        expected.CrashedAtUtc == actual.CrashedAtUtc &&
+        expected.ExitCode == actual.ExitCode &&
+        expected.LauncherVersion == actual.LauncherVersion &&
+        expected.LoaderVersion == actual.LoaderVersion &&
+        expected.GameVersion == actual.GameVersion &&
+        expected.RuntimeProfile == actual.RuntimeProfile &&
+        expected.OperatingSystem == actual.OperatingSystem &&
+        expected.ProcessArchitecture == actual.ProcessArchitecture &&
+        expected.DotnetRuntime == actual.DotnetRuntime &&
+        expected.HasCrashLog == actual.HasCrashLog &&
+        expected.MinidumpCount == actual.MinidumpCount &&
+        actual.EnabledMods is not null &&
+        expected.EnabledMods.SequenceEqual(actual.EnabledMods) &&
+        actual.Artifacts is not null &&
+        expected.Artifacts.SequenceEqual(actual.Artifacts);
 
     private static object ToReceipt(CrashReport report) => new
     {
@@ -296,4 +346,6 @@ public static class CrashReportEndpoints
         string[] Artifacts);
 
     private sealed record CrashReportMod(string Id, string Version);
+
+    private sealed record CrashReportArchiveManifest(CrashReportMetadata Report);
 }
