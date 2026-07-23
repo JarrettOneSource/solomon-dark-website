@@ -142,6 +142,41 @@ public static class DatabaseSchema
             );
             CREATE INDEX IF NOT EXISTS IX_BoneyardDrafts_UserId_UpdatedAtUtc
                 ON BoneyardDrafts (UserId, UpdatedAtUtc);
+
+            CREATE TABLE IF NOT EXISTS CrashReports (
+                Id INTEGER NOT NULL CONSTRAINT PK_CrashReports PRIMARY KEY AUTOINCREMENT,
+                PublicId TEXT NOT NULL,
+                ClientReportId TEXT NOT NULL,
+                SubmitterUserId INTEGER NULL,
+                SubmitterSteamId TEXT NULL,
+                SubmittedAtUtc TEXT NOT NULL,
+                CrashedAtUtc TEXT NOT NULL,
+                LaunchToken TEXT NOT NULL,
+                ExitCode INTEGER NULL,
+                LauncherVersion TEXT NOT NULL,
+                LoaderVersion TEXT NOT NULL,
+                GameVersion TEXT NOT NULL,
+                RuntimeProfile TEXT NOT NULL,
+                EnabledModsJson TEXT NOT NULL,
+                MetadataJson TEXT NOT NULL,
+                HasCrashLog INTEGER NOT NULL,
+                MinidumpCount INTEGER NOT NULL,
+                ArchivePath TEXT NOT NULL,
+                ArchiveSize INTEGER NOT NULL,
+                ArchiveSha256 TEXT NOT NULL,
+                CONSTRAINT FK_CrashReports_Users_SubmitterUserId
+                    FOREIGN KEY (SubmitterUserId) REFERENCES Users (Id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CrashReports_PublicId
+                ON CrashReports (PublicId);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CrashReports_ClientReportId
+                ON CrashReports (ClientReportId);
+            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmittedAtUtc
+                ON CrashReports (SubmittedAtUtc);
+            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterSteamId
+                ON CrashReports (SubmitterSteamId);
+            CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterUserId
+                ON CrashReports (SubmitterUserId);
             """,
             cancellationToken);
 

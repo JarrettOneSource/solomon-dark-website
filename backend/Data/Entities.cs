@@ -146,3 +146,29 @@ public sealed class BoneyardDraft
 
     public User User { get; set; } = null!;
 }
+
+public sealed class CrashReport
+{
+    public int Id { get; set; }
+    public string PublicId { get; set; } = string.Empty;
+    public string ClientReportId { get; set; } = string.Empty;
+    public int? SubmitterUserId { get; set; }
+    public string? SubmitterSteamId { get; set; }
+    public DateTime SubmittedAtUtc { get; set; }
+    public DateTime CrashedAtUtc { get; set; }
+    public string LaunchToken { get; set; } = string.Empty;
+    public int? ExitCode { get; set; }
+    public string LauncherVersion { get; set; } = string.Empty;
+    public string LoaderVersion { get; set; } = string.Empty;
+    public string GameVersion { get; set; } = string.Empty;
+    public string RuntimeProfile { get; set; } = string.Empty;
+    public string EnabledModsJson { get; set; } = "[]";
+    public string MetadataJson { get; set; } = "{}";
+    public bool HasCrashLog { get; set; }
+    public int MinidumpCount { get; set; }
+    public string ArchivePath { get; set; } = string.Empty;
+    public long ArchiveSize { get; set; }
+    public string ArchiveSha256 { get; set; } = string.Empty;
+
+    public User? SubmitterUser { get; set; }
+}

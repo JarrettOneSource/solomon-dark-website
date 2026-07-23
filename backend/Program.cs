@@ -108,6 +108,11 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(context =>
             TokenService.GetUserId(context.User) is not null ||
             TokenService.GetSteamSessionId(context.User) is not null));
+    options.AddPolicy("crash-submitter", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            TokenService.GetUserId(context.User) is not null ||
+            TokenService.GetSteamSessionId(context.User) is not null));
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -140,6 +145,11 @@ builder.Services.AddRateLimiter(options =>
                 "/comments",
                 StringComparison.OrdinalIgnoreCase) == true
             ? "The ink must dry before you add another marginal note. Try again in a minute."
+            : string.Equals(
+                requestPath,
+                "/api/crash-reports",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many crash reports were submitted; try again later."
             : string.Equals(
                 requestPath,
                 "/api/auth/steam/session",
@@ -190,6 +200,20 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("crash-reports", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TokenService.GetSteamSessionId(context.User) ??
+            TokenService.GetUserId(context.User)?.ToString() ??
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromHours(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
@@ -305,6 +329,7 @@ BoneyardEndpoints.Map(app);
 LobbyEndpoints.Map(app);
 SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
+CrashReportEndpoints.Map(app);
 
 app.MapMethods(
     "/api/{**path}",

@@ -15,6 +15,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<SteamLinkAttempt> SteamLinkAttempts => Set<SteamLinkAttempt>();
     public DbSet<CloudSave> CloudSaves => Set<CloudSave>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
+    public DbSet<CrashReport> CrashReports => Set<CrashReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -146,6 +147,27 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
                 .WithMany()
                 .HasForeignKey(draft => draft.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CrashReport>(entity =>
+        {
+            entity.Property(report => report.PublicId).HasMaxLength(36);
+            entity.Property(report => report.ClientReportId).HasMaxLength(36);
+            entity.Property(report => report.SubmitterSteamId).HasMaxLength(20);
+            entity.Property(report => report.LaunchToken).HasMaxLength(32);
+            entity.Property(report => report.LauncherVersion).HasMaxLength(64);
+            entity.Property(report => report.LoaderVersion).HasMaxLength(64);
+            entity.Property(report => report.GameVersion).HasMaxLength(32);
+            entity.Property(report => report.RuntimeProfile).HasMaxLength(64);
+            entity.Property(report => report.ArchiveSha256).HasMaxLength(64);
+            entity.HasIndex(report => report.PublicId).IsUnique();
+            entity.HasIndex(report => report.ClientReportId).IsUnique();
+            entity.HasIndex(report => report.SubmittedAtUtc);
+            entity.HasIndex(report => report.SubmitterSteamId);
+            entity.HasOne(report => report.SubmitterUser)
+                .WithMany()
+                .HasForeignKey(report => report.SubmitterUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

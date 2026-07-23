@@ -12,12 +12,14 @@ public sealed partial class StorageService
         ScreenshotsPath = Path.Combine(RootPath, "uploads", "screenshots");
         SavesPath = Path.Combine(RootPath, "saves");
         BoneyardDraftsPath = Path.Combine(RootPath, "drafts", "boneyards");
+        CrashReportsPath = Path.Combine(RootPath, "crash-reports");
 
         Directory.CreateDirectory(RootPath);
         Directory.CreateDirectory(ModsPath);
         Directory.CreateDirectory(ScreenshotsPath);
         Directory.CreateDirectory(SavesPath);
         Directory.CreateDirectory(BoneyardDraftsPath);
+        Directory.CreateDirectory(CrashReportsPath);
     }
 
     public string RootPath { get; }
@@ -26,6 +28,7 @@ public sealed partial class StorageService
     public string ScreenshotsPath { get; }
     public string SavesPath { get; }
     public string BoneyardDraftsPath { get; }
+    public string CrashReportsPath { get; }
 
     public static bool IsSafeVersion(string version) =>
         version.Length <= 64 && SafeVersionRegex().IsMatch(version);
@@ -74,6 +77,53 @@ public sealed partial class StorageService
         await File.WriteAllBytesAsync(temporaryPath, bytes.ToArray(), cancellationToken);
         File.Move(temporaryPath, path, true);
         return Sha256(bytes.Span);
+    }
+
+    public async Task<StoredCrashReportFile> SaveCrashReportAsync(
+        DateTime submittedAtUtc,
+        string publicId,
+        Stream source,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Guid.TryParseExact(publicId, "D", out _))
+        {
+            throw new ArgumentException("Crash report ids must be canonical UUIDs.", nameof(publicId));
+        }
+
+        var relativePath = $"{submittedAtUtc:yyyy/MM}/{publicId}.zip";
+        var path = ResolvePath(CrashReportsPath, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporaryPath = path + ".tmp";
+        try
+        {
+            await using (var destination = new FileStream(
+                             temporaryPath,
+                             FileMode.Create,
+                             FileAccess.Write,
+                             FileShare.None,
+                             81920,
+                             FileOptions.Asynchronous))
+            {
+                await source.CopyToAsync(destination, cancellationToken);
+            }
+
+            var size = new FileInfo(temporaryPath).Length;
+            string sha256;
+            await using (var stored = File.OpenRead(temporaryPath))
+            {
+                sha256 = Convert.ToHexString(await SHA256.HashDataAsync(stored, cancellationToken))
+                    .ToLowerInvariant();
+            }
+            File.Move(temporaryPath, path, overwrite: false);
+            return new StoredCrashReportFile(relativePath, size, sha256);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     public Task SaveBoneyardDraftDocumentAsync(
@@ -129,6 +179,9 @@ public sealed partial class StorageService
     public string GetBoneyardDraftCompiledPath(int userId, int draftId) =>
         ResolveBoneyardDraftPath(userId, draftId, "compiled.boneyard");
 
+    public string GetCrashReportPath(string relativePath) =>
+        ResolvePath(CrashReportsPath, relativePath);
+
     public void DeleteModDirectory(string slug)
     {
         var directory = ResolvePath(ModsPath, slug);
@@ -180,6 +233,15 @@ public sealed partial class StorageService
         if (Directory.Exists(directory))
         {
             Directory.Delete(directory, true);
+        }
+    }
+
+    public void DeleteCrashReport(string relativePath)
+    {
+        var path = ResolvePath(CrashReportsPath, relativePath);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
         }
     }
 
@@ -266,3 +328,8 @@ public sealed partial class StorageService
     [GeneratedRegex("^[a-z0-9-]{1,32}$")]
     private static partial Regex SafeScreenshotTokenRegex();
 }
+
+public sealed record StoredCrashReportFile(
+    string RelativePath,
+    long Size,
+    string Sha256);

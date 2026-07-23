@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import hmac
 import io
 import json
 import os
@@ -58,13 +60,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         if not cls.dotnet:
             raise unittest.SkipTest("dotnet is unavailable")
 
+        cls.jwt_secret = "website-mod-sync-contract-secret-at-least-thirty-two-bytes"
         cls.environment = os.environ.copy()
         cls.environment.update(
             {
                 "ASPNETCORE_ENVIRONMENT": "Production",
                 "ASPNETCORE_URLS": cls.origin,
                 "Storage__Root": cls.temp.name,
-                "Jwt__Secret": "website-mod-sync-contract-secret-at-least-thirty-two-bytes",
+                "Jwt__Secret": cls.jwt_secret,
             }
         )
         cls.build_server()
@@ -228,6 +231,145 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
             },
         )
+
+    @classmethod
+    def steam_token(cls, steam_id: str) -> str:
+        def encode(value: bytes) -> bytes:
+            return base64.urlsafe_b64encode(value).rstrip(b"=")
+
+        header = encode(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+        payload = encode(
+            json.dumps(
+                {
+                    "sub": f"steam:{steam_id}",
+                    "jti": uuid.uuid4().hex,
+                    "sdr_token_type": "steam-directory",
+                    "steam_id": steam_id,
+                    "steam_appid": "3362180",
+                    "exp": int(time.time()) + 900,
+                },
+                separators=(",", ":"),
+            ).encode()
+        )
+        signing_input = header + b"." + payload
+        signature = encode(
+            hmac.new(cls.jwt_secret.encode(), signing_input, hashlib.sha256).digest()
+        )
+        return b".".join((header, payload, signature)).decode()
+
+    @classmethod
+    def crash_upload(
+        cls,
+        metadata: dict[str, object],
+        archive: bytes,
+        token: str | None,
+    ) -> tuple[int, object]:
+        boundary = f"----sdr-crash-{uuid.uuid4().hex}"
+        parts = [
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="metadata"\r\n'
+                "Content-Type: application/json\r\n\r\n"
+                f"{json.dumps(metadata, separators=(',', ':'))}\r\n"
+            ).encode(),
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="archive"; filename="crash-report.zip"\r\n'
+                "Content-Type: application/zip\r\n\r\n"
+            ).encode()
+            + archive
+            + b"\r\n",
+            f"--{boundary}--\r\n".encode(),
+        ]
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
+        return cls.request(
+            "POST",
+            "/api/crash-reports",
+            body=b"".join(parts),
+            headers=headers,
+        )
+
+    def test_crash_reports_are_private_persisted_and_attributed(self) -> None:
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        client_report_id = str(uuid.uuid4())
+        metadata = {
+            "clientReportId": client_report_id,
+            "launchToken": "0123456789abcdef0123456789abcdef",
+            "startedAtUtc": now,
+            "crashedAtUtc": now,
+            "exitCode": -1073741819,
+            "launcherVersion": "0.1.0-contract",
+            "loaderVersion": "0.1.0-contract",
+            "gameVersion": "0.72.5",
+            "runtimeProfile": "release",
+            "operatingSystem": "Windows contract",
+            "processArchitecture": "X64",
+            "dotnetRuntime": ".NET contract",
+            "enabledMods": [{"id": "tests.enabled", "version": "1.0.0"}],
+            "hasCrashLog": True,
+            "minidumpCount": 1,
+            "artifacts": ["logs/crash.log", "dumps/crash.dmp"],
+        }
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as crash_archive:
+            crash_archive.writestr("report.json", json.dumps({"report": metadata}))
+            crash_archive.writestr("logs/crash.log", "unhandled exception")
+            crash_archive.writestr("dumps/crash.dmp", b"MDMP")
+        archive = archive_buffer.getvalue()
+
+        status, _ = self.crash_upload(metadata, archive, token=None)
+        self.assertEqual(status, 401)
+
+        steam_id = "76561198000009999"
+        token = self.steam_token(steam_id)
+        status, receipt = self.crash_upload(metadata, archive, token)
+        self.assertEqual(status, 201, receipt)
+        uuid.UUID(receipt["reportId"])
+        self.assertTrue(receipt["submittedAtUtc"].endswith("Z"))
+
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            row = database.execute(
+                """
+                SELECT SubmitterUserId, SubmitterSteamId, ClientReportId,
+                       ExitCode, ArchivePath, ArchiveSize, ArchiveSha256,
+                       HasCrashLog, MinidumpCount
+                FROM CrashReports
+                WHERE PublicId = ?
+                """,
+                (receipt["reportId"],),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNone(row[0])
+        self.assertEqual(row[1], steam_id)
+        self.assertEqual(row[2], client_report_id)
+        self.assertEqual(row[3], metadata["exitCode"])
+        stored_archive = Path(self.temp.name) / "crash-reports" / row[4]
+        self.assertEqual(stored_archive.read_bytes(), archive)
+        self.assertEqual(row[5], len(archive))
+        self.assertEqual(row[6], hashlib.sha256(archive).hexdigest())
+        self.assertEqual(row[7:], (1, 1))
+
+        status, duplicate = self.crash_upload(metadata, archive, token)
+        self.assertEqual(status, 200, duplicate)
+        self.assertEqual(duplicate["reportId"], receipt["reportId"])
+
+        account_metadata = {**metadata, "clientReportId": str(uuid.uuid4())}
+        status, account_receipt = self.crash_upload(account_metadata, archive, self.token)
+        self.assertEqual(status, 201, account_receipt)
+        with sqlite3.connect(database_path) as database:
+            account_row = database.execute(
+                """
+                SELECT SubmitterUserId, SubmitterSteamId
+                FROM CrashReports
+                WHERE PublicId = ?
+                """,
+                (account_receipt["reportId"],),
+            ).fetchone()
+        self.assertIsNotNone(account_row[0])
+        self.assertIsNone(account_row[1])
 
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {
@@ -598,7 +740,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     row[1]
                     for row in database.execute(f"PRAGMA table_info({table})")
                 }
-                for table in ("Mods", "ModVersions", "Lobbies")
+                for table in ("Mods", "ModVersions", "Lobbies", "CrashReports")
             }
         self.assertIn("LauncherModId", columns["Mods"])
         self.assertTrue(
@@ -606,6 +748,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             <= columns["ModVersions"]
         )
         self.assertIn("ActiveModsJson", columns["Lobbies"])
+        self.assertTrue(
+            {"SubmitterUserId", "SubmitterSteamId", "SubmittedAtUtc", "ArchivePath"}
+            <= columns["CrashReports"]
+        )
 
 
 if __name__ == "__main__":
