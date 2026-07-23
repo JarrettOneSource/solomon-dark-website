@@ -23,6 +23,7 @@ public static class ModEndpoints
     {
         app.MapGet("/api/mods", ListAsync);
         app.MapPost("/api/mods/resolve", ResolveAsync);
+        app.MapPost("/api/mods/updates", UpdatesAsync);
         app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
@@ -129,6 +130,99 @@ public static class ModEndpoints
             mods = resolved,
             missing
         });
+    }
+
+    private static async Task<IResult> UpdatesAsync(
+        UpdateModsRequest request,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var installed = request.Mods ?? [];
+        if (installed.Length > 128)
+        {
+            return ApiErrors.BadRequest("At most 128 installed mods may be checked at once.");
+        }
+
+        var installedVersions = new Dictionary<string, SemanticVersion>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in installed)
+        {
+            if (mod is null ||
+                !IsValidLauncherModId(mod.Id) ||
+                !SemanticVersion.TryParse(mod.Version, out var version))
+            {
+                return ApiErrors.BadRequest(
+                    "Every installed mod must include a valid id and semantic version.");
+            }
+
+            if (!installedVersions.TryAdd(mod.Id!, version!))
+            {
+                return ApiErrors.BadRequest($"The installed mod id is duplicated: {mod.Id}");
+            }
+        }
+
+        if (installed.Length == 0)
+        {
+            return Results.Ok(new { updates = Array.Empty<object>() });
+        }
+
+        var requestedIds = installed.Select(mod => mod!.Id!).ToArray();
+        var candidates = await db.Mods.AsNoTracking()
+            .Where(mod => mod.LauncherModId != null && requestedIds.Contains(mod.LauncherModId))
+            .Include(mod => mod.Versions)
+            .ToArrayAsync(cancellationToken);
+
+        var updates = new List<object>();
+        foreach (var requirement in installed)
+        {
+            var mod = candidates.SingleOrDefault(candidate => string.Equals(
+                candidate.LauncherModId,
+                requirement!.Id,
+                StringComparison.OrdinalIgnoreCase));
+            if (mod is null)
+            {
+                continue;
+            }
+
+            ModVersion? latest = null;
+            SemanticVersion? latestVersion = null;
+            foreach (var candidate in mod.Versions)
+            {
+                if (!SemanticVersion.TryParse(candidate.ManifestVersion, out var candidateVersion) ||
+                    !IsSha256(candidate.ContentSha256) ||
+                    !IsSha256(candidate.PackageSha256))
+                {
+                    continue;
+                }
+
+                var comparison = latestVersion is null
+                    ? 1
+                    : candidateVersion!.CompareTo(latestVersion);
+                if (comparison > 0 ||
+                    comparison == 0 && candidate.Id > latest!.Id)
+                {
+                    latest = candidate;
+                    latestVersion = candidateVersion;
+                }
+            }
+
+            if (latest is null ||
+                latestVersion!.CompareTo(installedVersions[requirement!.Id!]) <= 0)
+            {
+                continue;
+            }
+
+            updates.Add(new
+            {
+                id = mod.LauncherModId,
+                version = latest.ManifestVersion,
+                contentSha256 = latest.ContentSha256,
+                packageSha256 = latest.PackageSha256,
+                downloadUrl = $"api/mods/{mod.Slug}/versions/{latest.Id}/download"
+            });
+        }
+
+        return Results.Ok(new { updates });
     }
 
     private static async Task<IResult> ListAsync(
@@ -1240,4 +1334,8 @@ public static class ModEndpoints
     public sealed record ResolveModsRequest(ResolveModRequest[]? Mods);
 
     public sealed record ResolveModRequest(string? Id, string? Version, string? ContentSha256);
+
+    public sealed record UpdateModsRequest(InstalledModRequest[]? Mods);
+
+    public sealed record InstalledModRequest(string? Id, string? Version);
 }

@@ -927,6 +927,96 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, join_manifest)
         self.assertEqual(join_manifest["mods"], sorted(exact, key=lambda mod: mod["id"]))
 
+    def test_mod_updates_return_only_newer_semantic_versions(self) -> None:
+        mod_id = "tests.update-resolution"
+
+        def upload_version(version: str, slug: str | None = None) -> tuple[int, object]:
+            manifest = {
+                "id": mod_id,
+                "name": "Update Resolution",
+                "version": version,
+                "runtime": {
+                    "apiVersion": "0.2.0",
+                    "entryScript": "scripts/main.lua",
+                },
+            }
+            archive = package(
+                {"scripts/main.lua": f'return "{version}"\n'.encode()},
+                manifest,
+            )
+            return self.upload("Update Resolution", version, archive, slug=slug)
+
+        status, created = upload_version("1.0.0")
+        self.assertEqual(status, 201, created)
+        slug = created["slug"]
+
+        status, version_two = upload_version("2.0.0", slug)
+        self.assertEqual(status, 201, version_two)
+        expected = next(
+            version
+            for version in version_two["versions"]
+            if version["manifestVersion"] == "2.0.0"
+        )
+
+        status, out_of_order = upload_version("1.5.0", slug)
+        self.assertEqual(status, 201, out_of_order)
+
+        status, updates = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={
+                "mods": [
+                    {"id": mod_id, "version": "1.0.0"},
+                    {"id": "tests.not-published", "version": "1.0.0"},
+                ]
+            },
+        )
+        self.assertEqual(status, 200, updates)
+        self.assertEqual(
+            updates,
+            {
+                "updates": [
+                    {
+                        "id": mod_id,
+                        "version": "2.0.0",
+                        "contentSha256": expected["contentSha256"],
+                        "packageSha256": expected["packageSha256"],
+                        "downloadUrl": (
+                            f"api/mods/{slug}/versions/{expected['id']}/download"
+                        ),
+                    }
+                ]
+            },
+        )
+
+        for installed_version in ("2.0.0", "3.0.0", "2.0.0+local"):
+            status, current = self.request(
+                "POST",
+                "/api/mods/updates",
+                json_body={"mods": [{"id": mod_id, "version": installed_version}]},
+            )
+            self.assertEqual(status, 200, current)
+            self.assertEqual(current, {"updates": []})
+
+        status, invalid = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={"mods": [{"id": mod_id, "version": "1.0"}]},
+        )
+        self.assertEqual(status, 400, invalid)
+
+        status, duplicate = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={
+                "mods": [
+                    {"id": mod_id, "version": "1.0.0"},
+                    {"id": mod_id.upper(), "version": "1.0.0"},
+                ]
+            },
+        )
+        self.assertEqual(status, 400, duplicate)
+
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
         native_manifest = {
             "id": "tests.native",
