@@ -143,10 +143,15 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         {
             entity.Property(draft => draft.Name).HasMaxLength(80);
             entity.HasIndex(draft => new { draft.UserId, draft.UpdatedAtUtc });
+            entity.HasIndex(draft => draft.PublishedModId);
             entity.HasOne(draft => draft.User)
                 .WithMany()
                 .HasForeignKey(draft => draft.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(draft => draft.PublishedMod)
+                .WithMany()
+                .HasForeignKey(draft => draft.PublishedModId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<CrashReport>(entity =>

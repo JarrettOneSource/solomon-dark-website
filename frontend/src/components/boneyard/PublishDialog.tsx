@@ -2,7 +2,7 @@
 // into the Library as a Boneyard tome. The Librarian's standards apply,
 // eventually.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { bytesToBase64, compileNative, docFileValue } from '../../editor/io'
 import type { EditorDoc } from '../../editor/model'
@@ -21,9 +21,41 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
   const [name, setName] = useState(doc.meta.name || 'Untitled Acre')
   const [summary, setSummary] = useState('')
   const [description, setDescription] = useState('')
+  const [version, setVersion] = useState('1.0.0')
+  const [changelog, setChangelog] = useState('')
+  const [publishedVersion, setPublishedVersion] = useState<string | null>(null)
+  const [publicationReady, setPublicationReady] = useState(cloudIdFor(draftId) === null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const cloudId = cloudIdFor(draftId)
+    if (cloudId === null) return
+
+    let current = true
+    const loadPublication = async () => {
+      const draft = await api.boneyards.get(cloudId)
+      if (!current) return
+      if (draft.publishedMod !== null) {
+        const mod = await api.mods.get(draft.publishedMod.slug)
+        if (!current) return
+        setName(mod.name)
+        setSummary(mod.summary)
+        setDescription(mod.description)
+        setPublishedVersion(draft.publishedMod.version)
+        setVersion('')
+      }
+      setPublicationReady(true)
+    }
+    loadPublication().catch((reason) => {
+      if (!current) return
+      setError(reason instanceof Error ? reason.message : 'The publication record could not be opened.')
+    })
+    return () => {
+      current = false
+    }
+  }, [draftId])
 
   const submit = async () => {
     setBusy(true)
@@ -49,6 +81,8 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
         name: name.trim(),
         summary: summary.trim(),
         description: description.trim(),
+        version: version.trim(),
+        changelog: changelog.trim(),
       })
       playSound('tomeGet', 0.16)
       navigate(`/mods/${mod.slug}`)
@@ -90,10 +124,30 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
+          <Field
+            label={publishedVersion === null ? 'First version' : 'New version'}
+            hint={publishedVersion === null
+              ? 'Semantic version, such as 1.0.0.'
+              : `Must be newer than v${publishedVersion}.`}
+          >
+            <input
+              className="input"
+              value={version}
+              onChange={(event) => setVersion(event.target.value)}
+              placeholder={publishedVersion === null ? '1.0.0' : '1.1.0'}
+            />
+          </Field>
+          <Field label="Changelog" hint="What changed in this edition.">
+            <textarea
+              className="input min-h-20 resize-y"
+              value={changelog}
+              onChange={(event) => setChangelog(event.target.value)}
+            />
+          </Field>
           {error && <ErrorNote message={error} />}
           <p className="text-fell text-xs text-bone-dim/70">
-            Publishing compiles the plot to a native .boneyard, validates the container,
-            and shelves it as a tome under your name. The draft stays in the Annals.
+            Publishing compiles and validates the native .boneyard, then shelves this semantic
+            version for launcher updates. The draft stays in the Annals.
           </p>
         </div>
 
@@ -105,9 +159,9 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
             type="button"
             className="btn btn-gold"
             onClick={submit}
-            disabled={busy || !name.trim() || !summary.trim()}
+            disabled={busy || !publicationReady || !name.trim() || !summary.trim() || !version.trim()}
           >
-            {busy ? 'Binding…' : 'Publish the plot'}
+            {busy ? 'Binding…' : publishedVersion === null ? 'Publish the plot' : 'Publish new edition'}
           </button>
         </div>
       </div>

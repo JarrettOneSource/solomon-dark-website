@@ -132,13 +132,16 @@ public static class DatabaseSchema
             CREATE TABLE IF NOT EXISTS BoneyardDrafts (
                 Id INTEGER NOT NULL CONSTRAINT PK_BoneyardDrafts PRIMARY KEY AUTOINCREMENT,
                 UserId INTEGER NOT NULL,
+                PublishedModId INTEGER NULL,
                 Name TEXT NOT NULL,
                 DocumentSize INTEGER NOT NULL,
                 CompiledSize INTEGER NULL,
                 CreatedAtUtc TEXT NOT NULL,
                 UpdatedAtUtc TEXT NOT NULL,
                 CONSTRAINT FK_BoneyardDrafts_Users_UserId
-                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE,
+                CONSTRAINT FK_BoneyardDrafts_Mods_PublishedModId
+                    FOREIGN KEY (PublishedModId) REFERENCES Mods (Id) ON DELETE SET NULL
             );
             CREATE INDEX IF NOT EXISTS IX_BoneyardDrafts_UserId_UpdatedAtUtc
                 ON BoneyardDrafts (UserId, UpdatedAtUtc);
@@ -177,6 +180,19 @@ public static class DatabaseSchema
                 ON CrashReports (SubmitterSteamId);
             CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterUserId
                 ON CrashReports (SubmitterUserId);
+            """,
+            cancellationToken);
+
+        if (!await HasColumnAsync(db, "BoneyardDrafts", "PublishedModId", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE BoneyardDrafts ADD COLUMN PublishedModId INTEGER NULL;",
+                cancellationToken);
+        }
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE INDEX IF NOT EXISTS IX_BoneyardDrafts_PublishedModId
+                ON BoneyardDrafts (PublishedModId);
             """,
             cancellationToken);
 

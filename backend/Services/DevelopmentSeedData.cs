@@ -91,12 +91,19 @@ public static class DevelopmentSeedData
                 mod => mod.Slug == SurvivalSlug || mod.LauncherModId == SurvivalSlug,
                 cancellationToken))
         {
+            var draft = await db.BoneyardDrafts.SingleAsync(
+                candidate => candidate.UserId == luthacus.Id &&
+                             candidate.Name == "Survival Recipe Notes",
+                cancellationToken);
             await publisher.PublishBoneyardAsync(
+                draft,
                 luthacus.Id,
                 SurvivalName,
                 SurvivalSlug,
                 SurvivalSummary,
                 SurvivalDescription,
+                "1.0.0",
+                "Published from the Boneyard editor.",
                 survival,
                 cancellationToken);
         }

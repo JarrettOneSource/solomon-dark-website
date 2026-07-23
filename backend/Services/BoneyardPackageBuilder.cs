@@ -6,12 +6,11 @@ namespace SolomonDarkRevived.Services;
 
 internal static class BoneyardPackageBuilder
 {
-    public const string InitialVersion = "1.0.0";
-
     public static MemoryStream Create(
         string launcherModId,
         string name,
         string slug,
+        string version,
         ReadOnlySpan<byte> boneyard)
     {
         var fileName = PortableFileName(name, slug);
@@ -21,7 +20,7 @@ internal static class BoneyardPackageBuilder
         {
             id = launcherModId,
             name,
-            version = InitialVersion,
+            version,
             priority = 100,
             overlays = new[]
             {

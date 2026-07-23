@@ -42,6 +42,8 @@ public static class BoneyardEndpoints
             .Where(draft => draft.UserId == userId.Value)
             .OrderByDescending(draft => draft.UpdatedAtUtc)
             .ThenByDescending(draft => draft.Id)
+            .Include(draft => draft.PublishedMod)
+            .ThenInclude(mod => mod!.Versions)
             .ToArrayAsync(cancellationToken);
         return Results.Ok(drafts.Select(ToSummary).ToArray());
     }
@@ -318,14 +320,22 @@ public static class BoneyardEndpoints
             return ApiErrors.Unauthorized("The Annals could not identify this draft owner.");
         }
 
-        if (request.Name is null || request.Summary is null || request.Description is null)
+        if (request.Name is null ||
+            request.Summary is null ||
+            request.Description is null ||
+            request.Version is null ||
+            request.Changelog is null)
         {
-            return ApiErrors.BadRequest("Publication requires name, summary, and description.");
+            return ApiErrors.BadRequest(
+                "Publication requires name, summary, description, version, and changelog.");
         }
 
-        var draft = await db.BoneyardDrafts.AsNoTracking().SingleOrDefaultAsync(
-            candidate => candidate.Id == id && candidate.UserId == userId.Value,
-            cancellationToken);
+        var draft = await db.BoneyardDrafts
+            .Include(candidate => candidate.PublishedMod)
+            .ThenInclude(mod => mod!.Versions)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == id && candidate.UserId == userId.Value,
+                cancellationToken);
         if (draft is null)
         {
             return ApiErrors.NotFound("That Boneyard draft is not in your folio.");
@@ -348,11 +358,14 @@ public static class BoneyardEndpoints
         try
         {
             var slug = await publisher.PublishBoneyardAsync(
+                draft,
                 userId.Value,
                 request.Name,
                 request.Slug,
                 request.Summary,
                 request.Description,
+                request.Version,
+                request.Changelog,
                 compiled,
                 cancellationToken);
             var mod = await ModEndpoints.LoadModAsync(db, slug, cancellationToken);
@@ -379,9 +392,12 @@ public static class BoneyardEndpoints
         var userId = TokenService.GetUserId(context.User);
         return userId is null
             ? null
-            : await db.BoneyardDrafts.SingleOrDefaultAsync(
-                draft => draft.Id == id && draft.UserId == userId.Value,
-                cancellationToken);
+            : await db.BoneyardDrafts
+                .Include(draft => draft.PublishedMod)
+                .ThenInclude(mod => mod!.Versions)
+                .SingleOrDefaultAsync(
+                    draft => draft.Id == id && draft.UserId == userId.Value,
+                    cancellationToken);
     }
 
     private static string? ValidateDraftName(string? rawName, out string name)
@@ -401,7 +417,8 @@ public static class BoneyardEndpoints
         draft.Name,
         updatedAt = draft.UpdatedAtUtc,
         documentSize = draft.DocumentSize,
-        compiledSize = draft.CompiledSize
+        compiledSize = draft.CompiledSize,
+        publishedMod = PublishedMod(draft)
     };
 
     private static object ToFull(
@@ -416,8 +433,26 @@ public static class BoneyardEndpoints
         documentSize = draft.DocumentSize,
         compiledSize = draft.CompiledSize,
         createdAt = draft.CreatedAtUtc,
-        updatedAt = draft.UpdatedAtUtc
+        updatedAt = draft.UpdatedAtUtc,
+        publishedMod = PublishedMod(draft)
     };
+
+    private static object? PublishedMod(BoneyardDraft draft)
+    {
+        var mod = draft.PublishedMod;
+        var version = mod?.Versions
+            .OrderByDescending(candidate => candidate.CreatedAtUtc)
+            .ThenByDescending(candidate => candidate.Id)
+            .FirstOrDefault();
+        return mod is null || version is null
+            ? null
+            : new
+            {
+                mod.Id,
+                mod.Slug,
+                version = version.Version
+            };
+    }
 
     private static JsonElement JsonDocumentFrom(ReadOnlyMemory<byte> bytes)
     {
@@ -431,5 +466,7 @@ public static class BoneyardEndpoints
         string? Name,
         string? Slug,
         string? Summary,
-        string? Description);
+        string? Description,
+        string? Version,
+        string? Changelog);
 }

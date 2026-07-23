@@ -23,6 +23,7 @@ public static class ModEndpoints
     {
         app.MapGet("/api/mods", ListAsync);
         app.MapPost("/api/mods/resolve", ResolveAsync);
+        app.MapPost("/api/mods/updates", UpdatesAsync);
         app.MapGet("/api/tags", ListTagsAsync);
         app.MapGet("/api/mods/popular", PopularAsync);
         app.MapGet("/api/mods/{slug}", DetailAsync);
@@ -129,6 +130,70 @@ public static class ModEndpoints
             mods = resolved,
             missing
         });
+    }
+
+    private static async Task<IResult> UpdatesAsync(
+        UpdateModsRequest request,
+        AppDb db,
+        CancellationToken cancellationToken)
+    {
+        var installed = request.Mods ?? [];
+        if (installed.Length > 128)
+        {
+            return ApiErrors.BadRequest("At most 128 installed mods may be checked at once.");
+        }
+
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parsedVersions = new Dictionary<string, SemanticVersion>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in installed)
+        {
+            if (mod is null ||
+                !IsValidLauncherModId(mod.Id) ||
+                !SemanticVersion.TryParse(mod.Version, out var parsed))
+            {
+                return ApiErrors.BadRequest(
+                    "Every installed mod must include a valid id and semantic version.");
+            }
+
+            if (!seenIds.Add(mod.Id!))
+            {
+                return ApiErrors.BadRequest($"The installed mod id is duplicated: {mod.Id}");
+            }
+            parsedVersions.Add(mod.Id!, parsed!);
+        }
+
+        var installedIds = installed.Select(mod => mod!.Id!).ToArray();
+        var candidates = await db.Mods.AsNoTracking()
+            .Where(mod => mod.LauncherModId != null && installedIds.Contains(mod.LauncherModId))
+            .Include(mod => mod.Versions)
+            .ToArrayAsync(cancellationToken);
+
+        var updates = new List<object>();
+        foreach (var mod in candidates)
+        {
+            var latest = HighestDownloadableVersion(mod.Versions);
+            if (latest is null ||
+                !SemanticVersion.TryParse(latest.ManifestVersion, out var latestVersion) ||
+                latestVersion!.CompareTo(parsedVersions[mod.LauncherModId!]) <= 0)
+            {
+                continue;
+            }
+
+            updates.Add(new
+            {
+                id = mod.LauncherModId,
+                version = latest.ManifestVersion,
+                contentSha256 = latest.ContentSha256,
+                packageSha256 = latest.PackageSha256,
+                mod.Slug,
+                versionId = latest.Id,
+                latest.FileSize,
+                downloadUrl = $"api/mods/{mod.Slug}/versions/{latest.Id}/download"
+            });
+        }
+
+        return Results.Ok(new { updates });
     }
 
     private static async Task<IResult> ListAsync(
@@ -755,9 +820,10 @@ public static class ModEndpoints
             versionName = package.ManifestVersion;
         }
 
-        if (!StorageService.IsSafeVersion(versionName))
+        if (!SemanticVersion.TryParse(versionName, out var nextVersion))
         {
-            return ApiErrors.BadRequest("Versions must be 1–64 filename-safe characters.");
+            return ApiErrors.BadRequest(
+                "Versions must use semantic versioning, for example 1.2.0 or 1.2.0-beta.1.");
         }
 
         if (!string.Equals(versionName, package.ManifestVersion, StringComparison.Ordinal))
@@ -766,9 +832,11 @@ public static class ModEndpoints
                 "The upload version must exactly match manifest.version.");
         }
 
-        if (mod.Versions.Any(version => version.Version == versionName))
+        var currentVersion = HighestSemanticVersion(mod.Versions);
+        if (nextVersion!.CompareTo(currentVersion) <= 0)
         {
-            return ApiErrors.Conflict("That version is already in the library.");
+            return ApiErrors.Conflict(
+                $"New editions must be newer than v{currentVersion.Value}.");
         }
 
         if (mod.LauncherModId is null)
@@ -931,6 +999,11 @@ public static class ModEndpoints
         }
 
         var screenshotNames = mod.Screenshots.Select(screenshot => screenshot.FileName).ToArray();
+        await db.BoneyardDrafts
+            .Where(draft => draft.PublishedModId == mod.Id)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(draft => draft.PublishedModId, (int?)null),
+                cancellationToken);
         db.Mods.Remove(mod);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -1103,6 +1176,54 @@ public static class ModEndpoints
             .ThenByDescending(version => version.Id)
             .FirstOrDefault();
 
+    private static ModVersion? HighestDownloadableVersion(IEnumerable<ModVersion> versions)
+    {
+        ModVersion? highest = null;
+        SemanticVersion? highestVersion = null;
+        foreach (var version in versions)
+        {
+            if (version.ManifestVersion is null ||
+                version.PackageSha256 is null ||
+                version.ContentSha256 is null)
+            {
+                continue;
+            }
+            if (!SemanticVersion.TryParse(version.ManifestVersion, out var parsed))
+            {
+                throw new InvalidOperationException(
+                    $"Stored mod version is not semantic: {version.ManifestVersion}");
+            }
+            if (highestVersion is null || parsed!.CompareTo(highestVersion) > 0)
+            {
+                highest = version;
+                highestVersion = parsed;
+            }
+        }
+
+        return highest;
+    }
+
+    private static SemanticVersion HighestSemanticVersion(IEnumerable<ModVersion> versions)
+    {
+        SemanticVersion? highest = null;
+        foreach (var version in versions)
+        {
+            if (!SemanticVersion.TryParse(version.Version, out var parsed))
+            {
+                throw new InvalidOperationException(
+                    $"Stored mod version is not semantic: {version.Version}");
+            }
+
+            if (highest is null || parsed!.CompareTo(highest) > 0)
+            {
+                highest = parsed;
+            }
+        }
+
+        return highest ?? throw new InvalidOperationException(
+            "A published mod has no versions.");
+    }
+
     private static string ScreenshotUrl(string fileName) => $"/uploads/screenshots/{fileName}";
 
     private static string? ParseTags(string rawTags, out string[] tags) =>
@@ -1240,4 +1361,8 @@ public static class ModEndpoints
     public sealed record ResolveModsRequest(ResolveModRequest[]? Mods);
 
     public sealed record ResolveModRequest(string? Id, string? Version, string? ContentSha256);
+
+    public sealed record UpdateModsRequest(InstalledModRequest[]? Mods);
+
+    public sealed record InstalledModRequest(string? Id, string? Version);
 }

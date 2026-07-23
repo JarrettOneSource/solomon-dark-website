@@ -600,6 +600,178 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, join_manifest)
         self.assertEqual(join_manifest["mods"], sorted(exact, key=lambda mod: mod["id"]))
 
+    def test_boneyard_editions_and_launcher_updates(self) -> None:
+        headers = {"Authorization": f"Bearer {self.token}"}
+        status, draft = self.request(
+            "POST",
+            "/api/boneyards",
+            headers=headers,
+            json_body={"name": "Versioned Contract Acre"},
+        )
+        self.assertEqual(status, 201, draft)
+
+        status, draft = self.request(
+            "PUT",
+            f"/api/boneyards/{draft['id']}",
+            headers=headers,
+            json_body={
+                "document": {"schemaVersion": 1, "name": "Versioned Contract Acre"},
+                "compiledBoneyard": base64.b64encode(
+                    BONEYARD_FIXTURE.read_bytes()
+                ).decode(),
+            },
+        )
+        self.assertEqual(status, 200, draft)
+
+        publication = {
+            "name": "Versioned Contract Acre",
+            "summary": "A Boneyard revision contract.",
+            "description": "First edition.",
+            "version": "1.0.0",
+            "changelog": "Opened the gates.",
+        }
+        status, first = self.request(
+            "POST",
+            f"/api/boneyards/{draft['id']}/publish",
+            headers=headers,
+            json_body=publication,
+        )
+        self.assertEqual(status, 201, first)
+        self.assertEqual(first["versions"][0]["version"], "1.0.0")
+
+        status, revised = self.request(
+            "POST",
+            f"/api/boneyards/{draft['id']}/publish",
+            headers=headers,
+            json_body={
+                **publication,
+                "description": "Second edition.",
+                "version": "1.1.0",
+                "changelog": "Moved the entrance.",
+            },
+        )
+        self.assertEqual(status, 201, revised)
+        self.assertEqual(revised["slug"], first["slug"])
+        self.assertEqual(revised["launcherModId"], first["launcherModId"])
+        self.assertEqual(
+            [version["version"] for version in revised["versions"]],
+            ["1.1.0", "1.0.0"],
+        )
+
+        status, _ = self.request(
+            "POST",
+            f"/api/boneyards/{draft['id']}/publish",
+            headers=headers,
+            json_body={**publication, "version": "1.0.1"},
+        )
+        self.assertEqual(status, 409)
+
+        status, saved_draft = self.request(
+            "GET",
+            f"/api/boneyards/{draft['id']}",
+            headers=headers,
+        )
+        self.assertEqual(status, 200, saved_draft)
+        self.assertEqual(saved_draft["publishedMod"]["slug"], first["slug"])
+        self.assertEqual(saved_draft["publishedMod"]["version"], "1.1.0")
+
+        status, updates = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={
+                "mods": [
+                    {"id": first["launcherModId"], "version": "1.0.0"},
+                    {"id": "tests.not-on-website", "version": "9.0.0"},
+                ]
+            },
+        )
+        self.assertEqual(status, 200, updates)
+        self.assertEqual(len(updates["updates"]), 1)
+        self.assertEqual(updates["updates"][0]["id"], first["launcherModId"])
+        self.assertEqual(updates["updates"][0]["version"], "1.1.0")
+        self.assertFalse(updates["updates"][0]["downloadUrl"].startswith("/"))
+
+        status, current = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={
+                "mods": [{"id": first["launcherModId"], "version": "1.1.0"}]
+            },
+        )
+        self.assertEqual(status, 200, current)
+        self.assertEqual(current["updates"], [])
+
+    def test_semantic_mod_versions_only_advance(self) -> None:
+        manifest = {
+            "id": "tests.semantic-editions",
+            "name": "Semantic Editions",
+            "version": "1.0.0-beta.2",
+            "runtime": {
+                "apiVersion": "0.2.0",
+                "entryScript": "scripts/main.lua",
+            },
+        }
+        files = {"scripts/main.lua": b"return true\n"}
+        status, created = self.upload(
+            "Semantic Editions",
+            manifest["version"],
+            package(files, manifest),
+        )
+        self.assertEqual(status, 201, created)
+
+        next_manifest = {**manifest, "version": "1.0.0-beta.10"}
+        status, advanced = self.upload(
+            "Semantic Editions",
+            next_manifest["version"],
+            package(files, next_manifest),
+            slug=created["slug"],
+        )
+        self.assertEqual(status, 201, advanced)
+        self.assertEqual(advanced["versions"][0]["version"], "1.0.0-beta.10")
+
+        large_prerelease_manifest = {
+            **manifest,
+            "version": "1.0.0-beta.2147483648",
+        }
+        status, advanced = self.upload(
+            "Semantic Editions",
+            large_prerelease_manifest["version"],
+            package(files, large_prerelease_manifest),
+            slug=created["slug"],
+        )
+        self.assertEqual(status, 201, advanced)
+        self.assertEqual(
+            advanced["versions"][0]["version"],
+            "1.0.0-beta.2147483648",
+        )
+
+        large_core_manifest = {**manifest, "version": "2147483648.0.0"}
+        status, advanced = self.upload(
+            "Semantic Editions",
+            large_core_manifest["version"],
+            package(files, large_core_manifest),
+            slug=created["slug"],
+        )
+        self.assertEqual(status, 201, advanced)
+        self.assertEqual(advanced["versions"][0]["version"], "2147483648.0.0")
+
+        older_manifest = {**manifest, "version": "1.0.0-beta.3"}
+        status, _ = self.upload(
+            "Semantic Editions",
+            older_manifest["version"],
+            package(files, older_manifest),
+            slug=created["slug"],
+        )
+        self.assertEqual(status, 409)
+
+        invalid_manifest = {**manifest, "id": "tests.invalid-version", "version": "version-two"}
+        status, _ = self.upload(
+            "Invalid Version",
+            invalid_manifest["version"],
+            package(files, invalid_manifest),
+        )
+        self.assertEqual(status, 400)
+
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
         native_manifest = {
             "id": "tests.native",
@@ -780,6 +952,21 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 ALTER TABLE ModVersions DROP COLUMN PackageSha256;
                 ALTER TABLE ModVersions DROP COLUMN ContentSha256;
                 ALTER TABLE Lobbies DROP COLUMN ActiveModsJson;
+                DROP INDEX IX_BoneyardDrafts_PublishedModId;
+                DROP TABLE BoneyardDrafts;
+                CREATE TABLE BoneyardDrafts (
+                    Id INTEGER NOT NULL CONSTRAINT PK_BoneyardDrafts PRIMARY KEY AUTOINCREMENT,
+                    UserId INTEGER NOT NULL,
+                    Name TEXT NOT NULL,
+                    DocumentSize INTEGER NOT NULL,
+                    CompiledSize INTEGER NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    CONSTRAINT FK_BoneyardDrafts_Users_UserId
+                        FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+                );
+                CREATE INDEX IX_BoneyardDrafts_UserId_UpdatedAtUtc
+                    ON BoneyardDrafts (UserId, UpdatedAtUtc);
                 """
             )
         type(self).start_server()
@@ -790,7 +977,13 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     row[1]
                     for row in database.execute(f"PRAGMA table_info({table})")
                 }
-                for table in ("Mods", "ModVersions", "Lobbies", "CrashReports")
+                for table in (
+                    "Mods",
+                    "ModVersions",
+                    "Lobbies",
+                    "BoneyardDrafts",
+                    "CrashReports",
+                )
             }
         self.assertIn("LauncherModId", columns["Mods"])
         self.assertTrue(
@@ -798,6 +991,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             <= columns["ModVersions"]
         )
         self.assertIn("ActiveModsJson", columns["Lobbies"])
+        self.assertIn("PublishedModId", columns["BoneyardDrafts"])
         self.assertTrue(
             {"SubmitterUserId", "SubmitterSteamId", "SubmittedAtUtc", "ArchivePath"}
             <= columns["CrashReports"]

@@ -138,6 +138,7 @@ public sealed class BoneyardDraft
 {
     public int Id { get; set; }
     public int UserId { get; set; }
+    public int? PublishedModId { get; set; }
     public string Name { get; set; } = string.Empty;
     public long DocumentSize { get; set; }
     public long? CompiledSize { get; set; }
@@ -145,6 +146,7 @@ public sealed class BoneyardDraft
     public DateTime UpdatedAtUtc { get; set; }
 
     public User User { get; set; } = null!;
+    public Mod? PublishedMod { get; set; }
 }
 
 public sealed class CrashReport

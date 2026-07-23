@@ -179,6 +179,7 @@ export interface BoneyardDraftSummary {
   updatedAt: string
   documentSize: number
   compiledSize: number | null
+  publishedMod: { id: number; slug: string; version: string } | null
 }
 
 export interface BoneyardDraft extends BoneyardDraftSummary {
@@ -358,7 +359,14 @@ export const api = {
     remove: (id: number) => request<void>(`/api/boneyards/${id}`, { method: 'DELETE' }),
     publish: (
       id: number,
-      body: { name: string; slug?: string; summary: string; description: string },
+      body: {
+        name: string
+        slug?: string
+        summary: string
+        description: string
+        version: string
+        changelog: string
+      },
     ) => request<ModDetail>(`/api/boneyards/${id}/publish`, json(body)),
   },
 

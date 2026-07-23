@@ -35,48 +35,88 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
     private const long MaxModBytes = 100L * 1024 * 1024;
     private const int MaxTagsPerMod = 5;
 
-    public Task<string> PublishBoneyardAsync(
+    public async Task<string> PublishBoneyardAsync(
+        BoneyardDraft draft,
         int authorId,
         string name,
         string? slug,
         string summary,
         string description,
+        string version,
+        string changelog,
         ReadOnlyMemory<byte> boneyard,
         CancellationToken cancellationToken = default)
     {
+        if (draft.UserId != authorId)
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status403Forbidden,
+                "Only the draft owner may publish this Boneyard.");
+        }
+
         using (var stream = new MemoryStream(boneyard.ToArray(), writable: false))
         {
             BoneyardFileInspector.Validate(stream, "compiled draft");
         }
 
-        return PublishAsync(
-            new ModPublicationRequest(
+        if (draft.PublishedModId is { } publishedModId)
+        {
+            return await PublishBoneyardRevisionAsync(
+                publishedModId,
                 authorId,
                 name,
                 summary,
                 description,
-                slug,
-                BoneyardPackageBuilder.InitialVersion,
-                ["boneyard"],
-                "Published from the Boneyard editor."),
-            resolvedSlug =>
-            {
-                var package = BoneyardPackageBuilder.Create(
-                    resolvedSlug,
-                    name.Trim(),
-                    resolvedSlug,
-                    boneyard.Span);
-                return new ModPackageSource(package, package.Length);
-            },
-            [],
-            cancellationToken);
+                version,
+                changelog,
+                boneyard,
+                cancellationToken);
+        }
+
+        var mod = await PublishNewAsync(
+                new ModPublicationRequest(
+                    authorId,
+                    name,
+                    summary,
+                    description,
+                    slug,
+                    version,
+                    ["boneyard"],
+                    changelog),
+                resolvedSlug =>
+                {
+                    var package = BoneyardPackageBuilder.Create(
+                        resolvedSlug,
+                        name.Trim(),
+                        resolvedSlug,
+                        version,
+                        boneyard.Span);
+                    return new ModPackageSource(package, package.Length);
+                },
+                [],
+                draft,
+                cancellationToken);
+        return mod.Slug;
     }
 
     public async Task<string> PublishAsync(
         ModPublicationRequest request,
         Func<string, ModPackageSource> createPackage,
         IReadOnlyList<ModScreenshotUpload> screenshots,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        (await PublishNewAsync(
+            request,
+            createPackage,
+            screenshots,
+            publishedDraft: null,
+            cancellationToken)).Slug;
+
+    private async Task<Mod> PublishNewAsync(
+        ModPublicationRequest request,
+        Func<string, ModPackageSource> createPackage,
+        IReadOnlyList<ModScreenshotUpload> screenshots,
+        BoneyardDraft? publishedDraft,
+        CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
         var summary = request.Summary.Trim();
@@ -114,11 +154,11 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
             versionName = package.ManifestVersion;
         }
 
-        if (!StorageService.IsSafeVersion(versionName))
+        if (!SemanticVersion.TryParse(versionName, out _))
         {
             throw new ModPublishingException(
                 StatusCodes.Status400BadRequest,
-                "Versions must be 1-64 filename-safe characters.");
+                "Versions must use semantic versioning, for example 1.2.0 or 1.2.0-beta.1.");
         }
 
         if (!string.Equals(versionName, package.ManifestVersion, StringComparison.Ordinal))
@@ -175,6 +215,10 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
             await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             db.Mods.Add(mod);
             await db.SaveChangesAsync(cancellationToken);
+            if (publishedDraft is not null)
+            {
+                publishedDraft.PublishedModId = mod.Id;
+            }
 
             for (var index = 0; index < screenshots.Count; index++)
             {
@@ -208,7 +252,125 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
             throw;
         }
 
-        return slug;
+        return mod;
+    }
+
+    private async Task<string> PublishBoneyardRevisionAsync(
+        int modId,
+        int authorId,
+        string name,
+        string summary,
+        string description,
+        string versionName,
+        string changelog,
+        ReadOnlyMemory<byte> boneyard,
+        CancellationToken cancellationToken)
+    {
+        name = name.Trim();
+        summary = summary.Trim();
+        versionName = versionName.Trim();
+        ValidateMetadata(name, summary, description);
+        if (!SemanticVersion.TryParse(versionName, out var nextVersion))
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status400BadRequest,
+                "Versions must use semantic versioning, for example 1.2.0 or 1.2.0-beta.1.");
+        }
+
+        var mod = await db.Mods
+            .Include(candidate => candidate.Versions)
+            .SingleOrDefaultAsync(candidate => candidate.Id == modId, cancellationToken);
+        if (mod is null || mod.AuthorId != authorId || string.IsNullOrWhiteSpace(mod.LauncherModId))
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status409Conflict,
+                "The published Boneyard is no longer available to revise.");
+        }
+
+        var currentVersion = HighestSemanticVersion(mod.Versions);
+        if (nextVersion!.CompareTo(currentVersion) <= 0)
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status409Conflict,
+                $"New editions must be newer than v{currentVersion.Value}.");
+        }
+
+        await using var packageStream = BoneyardPackageBuilder.Create(
+            mod.LauncherModId,
+            name,
+            mod.Slug,
+            versionName,
+            boneyard.Span);
+        var packageLength = packageStream.Length;
+        var package = await ModPackageInspector.InspectAsync(packageStream, cancellationToken);
+        if (!string.Equals(package.LauncherModId, mod.LauncherModId, StringComparison.Ordinal) ||
+            !string.Equals(package.ManifestVersion, versionName, StringComparison.Ordinal))
+        {
+            throw new ModPublishingException(
+                StatusCodes.Status400BadRequest,
+                "The Boneyard package identity changed while publishing.");
+        }
+
+        var now = DateTime.UtcNow;
+        var version = new ModVersion
+        {
+            Version = versionName,
+            ManifestVersion = package.ManifestVersion,
+            PackageSha256 = package.PackageSha256,
+            ContentSha256 = package.ContentSha256,
+            Changelog = changelog,
+            FileSize = packageLength,
+            CreatedAtUtc = now
+        };
+
+        try
+        {
+            packageStream.Position = 0;
+            version.FileName = await storage.SaveModFileAsync(
+                mod.Slug,
+                versionName,
+                packageStream,
+                cancellationToken);
+            mod.Name = name;
+            mod.Summary = summary;
+            mod.Description = description;
+            mod.UpdatedAtUtc = now;
+            mod.Versions.Add(version);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            if (version.FileName.Length > 0)
+            {
+                storage.DeleteModFile(version.FileName);
+            }
+            throw;
+        }
+
+        return mod.Slug;
+    }
+
+    private static SemanticVersion HighestSemanticVersion(IEnumerable<ModVersion> versions)
+    {
+        SemanticVersion? highest = null;
+        foreach (var version in versions)
+        {
+            if (!SemanticVersion.TryParse(version.Version, out var parsed))
+            {
+                throw new ModPublishingException(
+                    StatusCodes.Status409Conflict,
+                    $"Stored mod version is not semantic: {version.Version}");
+            }
+
+            if (highest is null || parsed!.CompareTo(highest) > 0)
+            {
+                highest = parsed;
+            }
+        }
+
+        return highest ?? throw new ModPublishingException(
+            StatusCodes.Status409Conflict,
+            "The published Boneyard has no editions.");
     }
 
     public static void ValidateMetadata(string name, string summary, string description)
