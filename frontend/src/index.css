@@ -23,7 +23,6 @@
 
   --font-display: 'Cinzel', 'Times New Roman', serif;
   --font-body: 'Alegreya', Georgia, serif;
-  --font-fell: 'IM Fell English', Georgia, serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
@@ -75,9 +74,10 @@ body {
       0 0 26px rgb(200 168 98 / 0.16);
   }
 
+  /* Flavor text. Once IM Fell English Italic; retired for legibility — the
+   * muted colors at the call sites carry the distinction on their own. */
   .text-fell {
-    font-family: var(--font-fell);
-    font-style: italic;
+    font-family: var(--font-body);
   }
 
   .kicker {
@@ -372,7 +372,6 @@ body {
   }
   .prose-sdr a { color: var(--color-arcane); }
   .prose-sdr blockquote {
-    font-family: var(--font-fell);
     font-style: italic;
     border-left: 2px solid rgb(200 168 98 / 0.5);
     padding-left: 1rem;
