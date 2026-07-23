@@ -64,6 +64,28 @@ def crash_package(metadata: dict[str, object], artifacts: dict[str, bytes]) -> b
     return buffer.getvalue()
 
 
+def save_package(slot: int, name: str, files: dict[str, bytes]) -> bytes:
+    manifest = {
+        "schemaVersion": 1,
+        "slot": slot,
+        "name": name,
+        "files": [
+            {
+                "path": path,
+                "size": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+            for path, content in sorted(files.items())
+        ],
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest, separators=(",", ":")))
+        for path, content in files.items():
+            archive.writestr(f"savegames/{path}", content)
+    return buffer.getvalue()
+
+
 def free_port() -> int:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -105,6 +127,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         if status != 201:
             raise RuntimeError(f"test registration failed: {status} {registered}")
         cls.token = registered["token"]
+        cls.user_id = registered["user"]["id"]
 
     @classmethod
     def build_server(cls) -> None:
@@ -211,6 +234,27 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             return error.code, json.loads(payload) if payload else None
 
     @classmethod
+    def request_bytes(
+        cls,
+        method: str,
+        path: str,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, bytes, dict[str, str]]:
+        request = urllib.request.Request(
+            cls.origin + path,
+            data=body,
+            headers=headers or {},
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.read(), dict(response.headers)
+        except urllib.error.HTTPError as error:
+            return error.code, error.read(), dict(error.headers)
+
+    @classmethod
     def upload(
         cls,
         name: str,
@@ -253,24 +297,22 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
 
     @classmethod
-    def steam_token(cls, steam_id: str) -> str:
+    def steam_token(cls, steam_id: str, linked_user_id: int | None = None) -> str:
         def encode(value: bytes) -> bytes:
             return base64.urlsafe_b64encode(value).rstrip(b"=")
 
         header = encode(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-        payload = encode(
-            json.dumps(
-                {
-                    "sub": f"steam:{steam_id}",
-                    "jti": uuid.uuid4().hex,
-                    "sdr_token_type": "steam-directory",
-                    "steam_id": steam_id,
-                    "steam_appid": "3362180",
-                    "exp": int(time.time()) + 900,
-                },
-                separators=(",", ":"),
-            ).encode()
-        )
+        claims = {
+            "sub": f"steam:{steam_id}",
+            "jti": uuid.uuid4().hex,
+            "sdr_token_type": "steam-directory",
+            "steam_id": steam_id,
+            "steam_appid": "3362180",
+            "exp": int(time.time()) + 900,
+        }
+        if linked_user_id is not None:
+            claims["sdr_linked_user_id"] = str(linked_user_id)
+        payload = encode(json.dumps(claims, separators=(",", ":")).encode())
         signing_input = header + b"." + payload
         signature = encode(
             hmac.new(cls.jwt_secret.encode(), signing_input, hashlib.sha256).digest()
@@ -419,7 +461,158 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM CrashReports WHERE ClientReportId = ?",
                 (mismatched_metadata["clientReportId"],),
             ).fetchone()[0]
-        self.assertEqual(mismatched_count, 0)
+            self.assertEqual(mismatched_count, 0)
+
+    def test_cloud_saves_are_zip_validated_and_require_a_current_steam_link(self) -> None:
+        files = {
+            "solomondark/darkdata.cfg": b"dark-data",
+            "solomondark/savegames/_survival/gamestate.sav": b"game-state",
+            "solomondark/savegames/_survival/Region0._cache": b"region-cache",
+        }
+        archive = save_package(0, "Contract Run", files)
+        website_headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/zip",
+        }
+
+        status, uploaded = self.request(
+            "PUT",
+            "/api/saves/0",
+            body=archive,
+            headers=website_headers,
+        )
+        self.assertEqual(status, 200, uploaded)
+        self.assertEqual(uploaded["name"], "Contract Run")
+        self.assertEqual(uploaded["fileCount"], len(files))
+        self.assertEqual(uploaded["formatVersion"], 1)
+        self.assertEqual(uploaded["uncompressedSize"], sum(map(len, files.values())))
+        self.assertEqual(uploaded["sha256"], hashlib.sha256(archive).hexdigest())
+
+        status, saves = self.request(
+            "GET",
+            "/api/saves",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(status, 200, saves)
+        self.assertEqual([save["slot"] for save in saves], [0])
+
+        status, downloaded, response_headers = self.request_bytes(
+            "GET",
+            "/api/saves/0",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(downloaded, archive)
+        self.assertEqual(response_headers["Content-Type"], "application/zip")
+        self.assertIn("solomon-dark-save-1.zip", response_headers["Content-Disposition"])
+
+        steam_id = "76561198000007777"
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            database.execute(
+                "UPDATE Users SET SteamId = ? WHERE Id = ?",
+                (steam_id, self.user_id),
+            )
+            database.commit()
+
+        linked_token = self.steam_token(steam_id, self.user_id)
+        linked_archive = save_package(1, "Steam-linked Run", files)
+        status, linked_upload = self.request(
+            "PUT",
+            "/api/saves/1",
+            body=linked_archive,
+            headers={
+                "Authorization": f"Bearer {linked_token}",
+                "Content-Type": "application/zip",
+            },
+        )
+        self.assertEqual(status, 200, linked_upload)
+        self.assertEqual(linked_upload["name"], "Steam-linked Run")
+
+        status, _ = self.request(
+            "GET",
+            "/api/saves",
+            headers={"Authorization": f"Bearer {self.steam_token(steam_id)}"},
+        )
+        self.assertEqual(status, 403)
+
+        status, rejected = self.request(
+            "GET",
+            "/api/saves",
+            headers={
+                "Authorization": f"Bearer {self.steam_token('76561198000008888', self.user_id)}"
+            },
+        )
+        self.assertEqual(status, 401, rejected)
+
+        with sqlite3.connect(database_path) as database:
+            database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
+            database.commit()
+        status, rejected = self.request(
+            "GET",
+            "/api/saves",
+            headers={"Authorization": f"Bearer {linked_token}"},
+        )
+        self.assertEqual(status, 401, rejected)
+
+        bad_hash = save_package(
+            2,
+            "Bad Hash",
+            {"solomondark/darkdata.cfg": b"integrity"},
+        )
+        with zipfile.ZipFile(io.BytesIO(bad_hash)) as source:
+            manifest = json.loads(source.read("manifest.json"))
+            manifest["files"][0]["sha256"] = "0" * 64
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as invalid:
+            invalid.writestr("manifest.json", json.dumps(manifest))
+            invalid.writestr("savegames/solomondark/darkdata.cfg", b"integrity")
+        status, rejected = self.request(
+            "PUT",
+            "/api/saves/2",
+            body=buffer.getvalue(),
+            headers=website_headers,
+        )
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("integrity", rejected["error"].lower())
+
+        traversal = save_package(
+            3,
+            "Traversal",
+            {"solomondark/../outside.sav": b"no"},
+        )
+        status, rejected = self.request(
+            "PUT",
+            "/api/saves/3",
+            body=traversal,
+            headers=website_headers,
+        )
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("unsafe", rejected["error"].lower())
+
+        status, rejected = self.request(
+            "PUT",
+            "/api/saves/4",
+            body=archive,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/octet-stream",
+            },
+        )
+        self.assertEqual(status, 415, rejected)
+
+        status, _ = self.request(
+            "DELETE",
+            "/api/saves/0",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(status, 204)
+        status, _ = self.request(
+            "GET",
+            "/api/saves/0",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        self.assertEqual(status, 404)
 
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {
@@ -780,6 +973,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 ALTER TABLE ModVersions DROP COLUMN PackageSha256;
                 ALTER TABLE ModVersions DROP COLUMN ContentSha256;
                 ALTER TABLE Lobbies DROP COLUMN ActiveModsJson;
+                ALTER TABLE CloudSaves DROP COLUMN UncompressedSize;
+                ALTER TABLE CloudSaves DROP COLUMN FileCount;
+                ALTER TABLE CloudSaves DROP COLUMN FormatVersion;
                 """
             )
         type(self).start_server()
@@ -790,7 +986,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     row[1]
                     for row in database.execute(f"PRAGMA table_info({table})")
                 }
-                for table in ("Mods", "ModVersions", "Lobbies", "CrashReports")
+                for table in ("Mods", "ModVersions", "Lobbies", "CloudSaves", "CrashReports")
             }
         self.assertIn("LauncherModId", columns["Mods"])
         self.assertTrue(
@@ -798,6 +994,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             <= columns["ModVersions"]
         )
         self.assertIn("ActiveModsJson", columns["Lobbies"])
+        self.assertTrue(
+            {"UncompressedSize", "FileCount", "FormatVersion"}
+            <= columns["CloudSaves"]
+        )
         self.assertTrue(
             {"SubmitterUserId", "SubmitterSteamId", "SubmittedAtUtc", "ArchivePath"}
             <= columns["CrashReports"]

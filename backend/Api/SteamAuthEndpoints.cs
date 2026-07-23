@@ -24,6 +24,7 @@ public static class SteamAuthEndpoints
     private static async Task<IResult> CreateSessionAsync(
         SteamSessionRequest request,
         HttpContext context,
+        AppDb db,
         SteamTicketVerifier verifier,
         TokenService tokens,
         CancellationToken cancellationToken)
@@ -46,12 +47,20 @@ public static class SteamAuthEndpoints
             return ApiErrors.Error(StatusCodes.Status503ServiceUnavailable, verification.Error);
         }
 
-        var session = tokens.CreateSteamSession(verification.SteamId!);
+        var linkedAccount = await db.Users.AsNoTracking()
+            .Where(user => user.SteamId == verification.SteamId)
+            .Select(user => new LinkedAccount(user.Id, user.Username))
+            .SingleOrDefaultAsync(cancellationToken);
+        var session = tokens.CreateSteamSession(
+            verification.SteamId!,
+            linkedAccount?.Id,
+            linkedAccount?.Username);
         return Results.Ok(new
         {
             token = session.Token,
             steamId = session.SteamId,
-            expiresAtUtc = session.ExpiresAtUtc
+            expiresAtUtc = session.ExpiresAtUtc,
+            linkedAccount
         });
     }
 
@@ -209,4 +218,5 @@ public static class SteamAuthEndpoints
 
     public sealed record StartSteamLinkRequest(string? ReturnPath);
     public sealed record SteamSessionRequest(string? Ticket);
+    private sealed record LinkedAccount(int Id, string Username);
 }

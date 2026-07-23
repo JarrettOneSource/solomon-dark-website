@@ -128,6 +128,9 @@ public sealed class CloudSave
     public int Slot { get; set; }
     public string? Name { get; set; }
     public long Size { get; set; }
+    public long UncompressedSize { get; set; }
+    public int FileCount { get; set; }
+    public int FormatVersion { get; set; }
     public string Sha256 { get; set; } = string.Empty;
     public DateTime UpdatedAtUtc { get; set; }
 

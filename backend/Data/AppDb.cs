@@ -132,6 +132,8 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
 
         modelBuilder.Entity<CloudSave>(entity =>
         {
+            entity.Property(save => save.Name).HasMaxLength(40);
+            entity.Property(save => save.Sha256).HasMaxLength(64);
             entity.HasIndex(save => new { save.UserId, save.Slot }).IsUnique();
             entity.HasOne(save => save.User)
                 .WithMany()

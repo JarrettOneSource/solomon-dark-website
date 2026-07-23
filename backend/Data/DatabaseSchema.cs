@@ -10,6 +10,48 @@ public static class DatabaseSchema
         CancellationToken cancellationToken = default)
     {
         await db.Database.EnsureCreatedAsync(cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS CloudSaves (
+                Id INTEGER NOT NULL CONSTRAINT PK_CloudSaves PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                Slot INTEGER NOT NULL,
+                Name TEXT NULL,
+                Size INTEGER NOT NULL,
+                UncompressedSize INTEGER NOT NULL DEFAULT 0,
+                FileCount INTEGER NOT NULL DEFAULT 0,
+                FormatVersion INTEGER NOT NULL DEFAULT 0,
+                Sha256 TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_CloudSaves_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_CloudSaves_UserId_Slot
+                ON CloudSaves (UserId, Slot);
+            CREATE INDEX IF NOT EXISTS IX_CloudSaves_UserId
+                ON CloudSaves (UserId);
+            """,
+            cancellationToken);
+
+        if (!await HasColumnAsync(db, "CloudSaves", "UncompressedSize", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN UncompressedSize INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        if (!await HasColumnAsync(db, "CloudSaves", "FileCount", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN FileCount INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        if (!await HasColumnAsync(db, "CloudSaves", "FormatVersion", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE CloudSaves ADD COLUMN FormatVersion INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+
         if (!await HasColumnAsync(db, "Users", "SteamId", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
