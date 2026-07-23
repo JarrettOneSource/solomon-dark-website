@@ -115,11 +115,11 @@ public static class CloudSaveArchiveInspector
                 throw new InvalidDataException("The cloud save manifest does not match its files.");
             }
 
-            totalBytes = checked(totalBytes + entry.Length);
-            if (totalBytes > MaxUncompressedBytes)
+            if (entry.Length > MaxUncompressedBytes - totalBytes)
             {
                 throw new InvalidDataException("Cloud saves may not expand beyond 64 MiB.");
             }
+            totalBytes += entry.Length;
 
             using var fileStream = entry.Open();
             var sha256 = Convert.ToHexString(SHA256.HashData(fileStream)).ToLowerInvariant();
