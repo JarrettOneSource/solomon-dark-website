@@ -73,6 +73,19 @@ Run the backend integration contract with a .NET 10 SDK:
 python3 -m unittest tests.test_mod_sync_contract -v
 ```
 
+## Crash reports
+
+The launcher submits crash diagnostics only after explicit user consent. It
+authenticates with a short-lived Steam directory session and posts a bounded
+ZIP plus metadata to `POST /api/crash-reports`. The backend validates that the
+embedded report matches the submitted metadata, stores the archive under the
+private storage root at `crash-reports/<year>/<month>/`, and records the Steam
+or linked website identity, submission/crash times, versions, enabled mods,
+exit code, artifact counts, archive size, and SHA-256 in `CrashReports`.
+
+Crash archives are not exposed by the static-file middleware. They may contain
+minidumps and logs and must be handled as private diagnostics.
+
 ## Steam ticket authentication
 
 The backend requires a standard Steam Web API user key to verify the tickets created by the mod loader. Register a key at [steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey) using a real domain you control.
