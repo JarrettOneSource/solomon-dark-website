@@ -361,7 +361,7 @@ export const api = {
     remove: (id: number) => request<void>(`/api/boneyards/${id}`, { method: 'DELETE' }),
     publish: (
       id: number,
-      body: { name: string; slug?: string; summary: string; description: string },
+      body: { name: string; slug?: string; summary: string; description: string; waveText?: string },
     ) => request<ModDetail>(`/api/boneyards/${id}/publish`, json(body)),
   },
 

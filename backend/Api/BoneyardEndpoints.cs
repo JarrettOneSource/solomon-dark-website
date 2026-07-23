@@ -336,6 +336,20 @@ public static class BoneyardEndpoints
             return ApiErrors.BadRequest("Compile the Boneyard before publishing it.");
         }
 
+        var waveText = string.IsNullOrWhiteSpace(request.WaveText) ? null : request.WaveText;
+        if (waveText is not null)
+        {
+            if (waveText.Length > WaveScheduleValidator.MaxWaveTextBytes)
+            {
+                return ApiErrors.BadRequest("Wave schedules may not exceed 256 KiB.");
+            }
+            var waveError = WaveScheduleValidator.Validate(waveText);
+            if (waveError is not null)
+            {
+                return ApiErrors.BadRequest(waveError);
+            }
+        }
+
         var compiled = await storage.ReadBoneyardDraftCompiledAsync(
             draft.UserId,
             draft.Id,
@@ -354,6 +368,7 @@ public static class BoneyardEndpoints
                 request.Summary,
                 request.Description,
                 compiled,
+                waveText,
                 cancellationToken);
             var mod = await ModEndpoints.LoadModAsync(db, slug, cancellationToken);
             return Results.Json(
@@ -431,5 +446,6 @@ public static class BoneyardEndpoints
         string? Name,
         string? Slug,
         string? Summary,
-        string? Description);
+        string? Description,
+        string? WaveText);
 }

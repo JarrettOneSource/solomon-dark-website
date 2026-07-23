@@ -98,6 +98,7 @@ public static class DevelopmentSeedData
                 SurvivalSummary,
                 SurvivalDescription,
                 survival,
+                waveText: null,
                 cancellationToken);
         }
     }

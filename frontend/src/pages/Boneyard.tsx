@@ -13,6 +13,7 @@ import InspectorRail from '../components/boneyard/InspectorRail'
 import PaletteRail from '../components/boneyard/PaletteRail'
 import PublishDialog from '../components/boneyard/PublishDialog'
 import Toolbar from '../components/boneyard/Toolbar'
+import WavesEditor from '../components/boneyard/WavesEditor'
 import { EmptyState } from '../components/ui'
 import { findPaletteItem } from '../editor/assets'
 import {
@@ -122,6 +123,7 @@ export default function Boneyard() {
   })
   const [chestOpen, setChestOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [wavesOpen, setWavesOpen] = useState(false)
   const [annalsBusy, setAnnalsBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [deskOpen, setDeskOpen] = useState(false)
@@ -384,6 +386,7 @@ export default function Boneyard() {
     setTool('select')
     setActiveKey(null)
   }, [])
+  const onEditWaves = useCallback(() => setWavesOpen(true), [])
 
   const publishTitle = !user
     ? 'Publishing wants a signed-in wizard.'
@@ -555,6 +558,7 @@ export default function Boneyard() {
               selection={state.selection}
               dispatch={dispatch}
               onCollapse={collapseRight}
+              onEditWaves={onEditWaves}
             />
           ) : (
             <div className="bg-abyss/40" />
@@ -599,6 +603,22 @@ export default function Boneyard() {
           onOpenCloud={openCloud}
           onNew={breakNewGround}
           onClose={() => setChestOpen(false)}
+        />
+      )}
+
+      {wavesOpen && (
+        <WavesEditor
+          waves={state.doc.waves ?? []}
+          onKeep={(waves) => {
+            dispatch({ type: 'set-waves', waves })
+            setWavesOpen(false)
+            say(
+              waves.length === 0
+                ? 'The stock waves resume their watch.'
+                : `The schedule holds ${waves.length} wave${waves.length === 1 ? '' : 's'}.`,
+            )
+          }}
+          onClose={() => setWavesOpen(false)}
         />
       )}
 

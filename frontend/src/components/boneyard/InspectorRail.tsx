@@ -19,6 +19,7 @@ interface Props {
   selection: Selection
   dispatch: Dispatch<EditorAction>
   onCollapse?: () => void
+  onEditWaves?: () => void
 }
 
 function NumField({
@@ -111,7 +112,7 @@ function lineLength(points: { x: number; y: number }[]): number {
 
 // Memoized, and held-piece lists come from one Set instead of a nested scan:
 // this rail re-renders on every drag frame, since the doc moves under it.
-export default memo(function InspectorRail({ doc, selection, dispatch, onCollapse }: Props) {
+export default memo(function InspectorRail({ doc, selection, dispatch, onCollapse, onEditWaves }: Props) {
   const sole = soleSelection(selection)
   const kinds = new Set(selection.map((e) => e.kind))
   const selObject = sole?.kind === 'object' ? doc.objects.find((o) => o.eid === sole.eid) : null
@@ -376,10 +377,21 @@ export default memo(function InspectorRail({ doc, selection, dispatch, onCollaps
         <section className="border-t border-gold/10 pt-4">
           <SectionTitle text="The waves" />
           <p className="text-fell mt-1.5 text-[11px] leading-relaxed text-bone-dim/70">
-            {recipes > 0
-              ? `${recipes} spawn ${recipes === 1 ? 'recipe rides' : 'recipes ride'} along untouched. Wave authoring opens when the format layer clears it.`
-              : 'New plots defer to the generator: it writes the waves, you write the scenery. Wave authoring arrives with the format layer.'}
+            {(doc.waves?.length ?? 0) > 0
+              ? `A schedule of ${doc.waves!.length} authored wave${doc.waves!.length === 1 ? '' : 's'} publishes with this plot as data/wave.txt.`
+              : 'The plot plays the stock waves until you author a schedule of your own.'}
+            {recipes > 0 &&
+              ` ${recipes} native spawn ${recipes === 1 ? 'recipe rides' : 'recipes ride'} along untouched.`}
           </p>
+          {onEditWaves && (
+            <button
+              type="button"
+              className="btn btn-stone mt-2 !px-2.5 !py-1.5 !text-[10px]"
+              onClick={onEditWaves}
+            >
+              Edit the waves
+            </button>
+          )}
         </section>
       </div>
     </aside>

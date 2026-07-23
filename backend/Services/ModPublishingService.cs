@@ -42,6 +42,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         string summary,
         string description,
         ReadOnlyMemory<byte> boneyard,
+        string? waveText = null,
         CancellationToken cancellationToken = default)
     {
         using (var stream = new MemoryStream(boneyard.ToArray(), writable: false))
@@ -57,7 +58,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
                 description,
                 slug,
                 BoneyardPackageBuilder.InitialVersion,
-                ["boneyard"],
+                waveText is null ? new[] { "boneyard" } : new[] { "boneyard", "waves" },
                 "Published from the Boneyard editor."),
             resolvedSlug =>
             {
@@ -65,7 +66,8 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
                     resolvedSlug,
                     name.Trim(),
                     resolvedSlug,
-                    boneyard.Span);
+                    boneyard.Span,
+                    waveText);
                 return new ModPackageSource(package, package.Length);
             },
             [],

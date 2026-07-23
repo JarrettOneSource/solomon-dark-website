@@ -43,6 +43,7 @@ export type EditorAction =
   | { type: 'duplicate-selection' }
   | { type: 'set-name'; name: string }
   | { type: 'set-bounds'; bounds: Rect }
+  | { type: 'set-waves'; waves: import('./waves').WaveDef[] }
   | { type: 'move-item'; sel: SelEntry; pos: Vec2 }
   | { type: 'set-object-props'; eid: string; patch: Partial<Pick<PlacedObject, 'variant' | 'rot' | 'scale'>> }
   | { type: 'set-sprite-props'; eid: string; patch: Partial<Pick<StaticSprite, 's0' | 's1' | 's2' | 'flags'>> }
@@ -350,6 +351,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
 
     case 'set-bounds':
       return committed(state, { ...state.doc, meta: { ...state.doc.meta, bounds: action.bounds } })
+
+    case 'set-waves':
+      return committed(state, { ...state.doc, waves: action.waves })
 
     case 'move-item': {
       const e = action.sel

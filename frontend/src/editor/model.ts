@@ -146,6 +146,10 @@ export interface EditorDoc {
   /** Editor-side grouping: eid to group id. Groups select and move as one.
    * Not part of the native format; drafts keep it, compiles ignore it. */
   groups?: Record<string, string>
+  /** Authored survival wave schedule. Not part of the .boneyard bytes: it
+   * publishes as a data/wave.txt overlay riding in the same mod package.
+   * Absent or empty means the plot ships with the game's stock waves. */
+  waves?: import('./waves').WaveDef[]
 }
 
 let counter = 0

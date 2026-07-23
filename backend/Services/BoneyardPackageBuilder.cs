@@ -12,26 +12,38 @@ internal static class BoneyardPackageBuilder
         string launcherModId,
         string name,
         string slug,
-        ReadOnlySpan<byte> boneyard)
+        ReadOnlySpan<byte> boneyard,
+        string? waveText = null)
     {
         var fileName = PortableFileName(name, slug);
         var source = $"files/{fileName}";
         var target = $"sandbox/DarkCloud/mylevels/{fileName}";
+        const string waveSource = "files/data/wave.txt";
+        var overlays = new List<object>
+        {
+            new
+            {
+                target,
+                source,
+                format = "boneyard"
+            }
+        };
+        if (waveText is not null)
+        {
+            overlays.Add(new
+            {
+                target = "data/wave.txt",
+                source = waveSource,
+                format = "plaintext-wave"
+            });
+        }
         var manifest = new
         {
             id = launcherModId,
             name,
             version = InitialVersion,
             priority = 100,
-            overlays = new[]
-            {
-                new
-                {
-                    target,
-                    source,
-                    format = "boneyard"
-                }
-            },
+            overlays,
             requiredMods = Array.Empty<string>()
         };
 
@@ -47,8 +59,19 @@ internal static class BoneyardPackageBuilder
             }
 
             var boneyardEntry = archive.CreateEntry(source, CompressionLevel.Optimal);
-            using var destination = boneyardEntry.Open();
-            destination.Write(boneyard);
+            using (var destination = boneyardEntry.Open())
+            {
+                destination.Write(boneyard);
+            }
+
+            if (waveText is not null)
+            {
+                var waveEntry = archive.CreateEntry(waveSource, CompressionLevel.Optimal);
+                using var waveStream = new StreamWriter(
+                    waveEntry.Open(),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                waveStream.Write(waveText);
+            }
         }
 
         package.Position = 0;

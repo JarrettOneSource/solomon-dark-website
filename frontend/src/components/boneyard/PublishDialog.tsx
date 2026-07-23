@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { bytesToBase64, compileNative, docFileValue } from '../../editor/io'
 import type { EditorDoc } from '../../editor/model'
+import { serializeWaveText, validateWaves } from '../../editor/waves'
 import { cloudIdFor, setCloudId } from '../../editor/store'
 import { playSound } from '../../fx/sounds'
 import { api, ApiError } from '../../lib/api'
@@ -25,6 +26,8 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
+  const waveCount = doc.waves?.length ?? 0
+
   const submit = async () => {
     setBusy(true)
     setError(null)
@@ -33,6 +36,12 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
       // not just the shelf label.
       const title = name.trim() || 'Untitled Acre'
       const pressed: EditorDoc = { ...doc, meta: { ...doc.meta, name: title } }
+      if (waveCount > 0) {
+        const waveProblems = validateWaves(pressed.waves!)
+        if (waveProblems.length > 0) {
+          throw new Error(`The wave schedule has problems: ${waveProblems[0]}`)
+        }
+      }
       const compiled = bytesToBase64(await compileNative(pressed))
       let cloudId = cloudIdFor(draftId)
       if (cloudId === null) {
@@ -49,6 +58,7 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
         name: name.trim(),
         summary: summary.trim(),
         description: description.trim(),
+        ...(waveCount > 0 ? { waveText: serializeWaveText(pressed.waves!) } : {}),
       })
       playSound('tomeGet', 0.16)
       navigate(`/mods/${mod.slug}`)
@@ -94,6 +104,8 @@ export default function PublishDialog({ doc, draftId, onClose }: Props) {
           <p className="text-fell text-xs text-bone-dim/70">
             Publishing compiles the plot to a native .boneyard, validates the container,
             and shelves it as a tome under your name. The draft stays in the Annals.
+            {waveCount > 0 &&
+              ` An authored schedule of ${waveCount} wave${waveCount === 1 ? '' : 's'} ships alongside as data/wave.txt.`}
           </p>
         </div>
 
