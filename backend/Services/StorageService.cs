@@ -13,6 +13,7 @@ public sealed partial class StorageService
         SavesPath = Path.Combine(RootPath, "saves");
         BoneyardDraftsPath = Path.Combine(RootPath, "drafts", "boneyards");
         CrashReportsPath = Path.Combine(RootPath, "crash-reports");
+        DiagnosticLogsPath = Path.Combine(RootPath, "diagnostic-logs");
 
         Directory.CreateDirectory(RootPath);
         Directory.CreateDirectory(ModsPath);
@@ -20,6 +21,7 @@ public sealed partial class StorageService
         Directory.CreateDirectory(SavesPath);
         Directory.CreateDirectory(BoneyardDraftsPath);
         Directory.CreateDirectory(CrashReportsPath);
+        Directory.CreateDirectory(DiagnosticLogsPath);
     }
 
     public string RootPath { get; }
@@ -29,6 +31,7 @@ public sealed partial class StorageService
     public string SavesPath { get; }
     public string BoneyardDraftsPath { get; }
     public string CrashReportsPath { get; }
+    public string DiagnosticLogsPath { get; }
 
     public static bool IsSafeVersion(string version) =>
         version.Length <= 64 && SafeVersionRegex().IsMatch(version);
@@ -79,19 +82,47 @@ public sealed partial class StorageService
         return Sha256(bytes.Span);
     }
 
-    public async Task<StoredCrashReportFile> SaveCrashReportAsync(
+    public Task<StoredCrashReportFile> SaveCrashReportAsync(
         DateTime submittedAtUtc,
         string publicId,
         Stream source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SaveArchiveAsync(
+            CrashReportsPath,
+            "Crash report",
+            submittedAtUtc,
+            publicId,
+            source,
+            cancellationToken);
+
+    public Task<StoredCrashReportFile> SaveDiagnosticLogAsync(
+        DateTime submittedAtUtc,
+        string publicId,
+        Stream source,
+        CancellationToken cancellationToken = default) =>
+        SaveArchiveAsync(
+            DiagnosticLogsPath,
+            "Diagnostic log",
+            submittedAtUtc,
+            publicId,
+            source,
+            cancellationToken);
+
+    private static async Task<StoredCrashReportFile> SaveArchiveAsync(
+        string rootPath,
+        string archiveKind,
+        DateTime submittedAtUtc,
+        string publicId,
+        Stream source,
+        CancellationToken cancellationToken)
     {
         if (!Guid.TryParseExact(publicId, "D", out _))
         {
-            throw new ArgumentException("Crash report ids must be canonical UUIDs.", nameof(publicId));
+            throw new ArgumentException($"{archiveKind} ids must be canonical UUIDs.", nameof(publicId));
         }
 
         var relativePath = $"{submittedAtUtc:yyyy/MM}/{publicId}.zip";
-        var path = ResolvePath(CrashReportsPath, relativePath);
+        var path = ResolvePath(rootPath, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporaryPath = path + ".tmp";
         try
@@ -181,6 +212,18 @@ public sealed partial class StorageService
 
     public string GetCrashReportPath(string relativePath) =>
         ResolvePath(CrashReportsPath, relativePath);
+
+    public string GetDiagnosticLogPath(string relativePath) =>
+        ResolvePath(DiagnosticLogsPath, relativePath);
+
+    public void DeleteDiagnosticLog(string relativePath)
+    {
+        var path = ResolvePath(DiagnosticLogsPath, relativePath);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
 
     public void DeleteModDirectory(string slug)
     {

@@ -157,6 +157,11 @@ builder.Services.AddRateLimiter(options =>
                 ? "Too many crash reports were submitted; try again later."
             : string.Equals(
                 requestPath,
+                "/api/diagnostics/logs",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many log uploads; try again later."
+            : string.Equals(
+                requestPath,
                 "/api/auth/steam/session",
                 StringComparison.OrdinalIgnoreCase)
                 ? "Too many Steam authentication attempts; try again in a minute."
@@ -207,6 +212,19 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("diagnostic-logs", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TokenService.GetSteamSessionId(context.User) ??
+            TokenService.GetUserId(context.User)?.ToString() ??
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
                 AutoReplenishment = true
             }));
     options.AddPolicy("crash-reports", context =>
@@ -335,6 +353,7 @@ LobbyEndpoints.Map(app);
 SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
 CrashReportEndpoints.Map(app);
+DiagnosticLogEndpoints.Map(app);
 
 app.MapMethods(
     "/api/{**path}",

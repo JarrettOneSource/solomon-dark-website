@@ -170,11 +170,16 @@ public static class SteamAuthEndpoints
         CancellationToken cancellationToken)
     {
         var userId = TokenService.GetUserId(context.User);
-        var user = userId is null
-            ? null
-            : await db.Users.SingleOrDefaultAsync(
+        var steamSessionId = TokenService.GetSteamSessionId(context.User);
+        var user = userId is not null
+            ? await db.Users.SingleOrDefaultAsync(
                 candidate => candidate.Id == userId.Value,
-                cancellationToken);
+                cancellationToken)
+            : steamSessionId is not null
+                ? await db.Users.SingleOrDefaultAsync(
+                    candidate => candidate.SteamId == steamSessionId,
+                    cancellationToken)
+                : null;
         if (user is null)
         {
             return ApiErrors.Unauthorized("The Annals could not identify this bearer.");

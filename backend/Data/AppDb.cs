@@ -16,6 +16,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<CloudSave> CloudSaves => Set<CloudSave>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
     public DbSet<CrashReport> CrashReports => Set<CrashReport>();
+    public DbSet<DiagnosticLog> DiagnosticLogs => Set<DiagnosticLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

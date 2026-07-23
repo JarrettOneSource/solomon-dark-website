@@ -219,6 +219,32 @@ public static class DatabaseSchema
                 ON CrashReports (SubmitterSteamId);
             CREATE INDEX IF NOT EXISTS IX_CrashReports_SubmitterUserId
                 ON CrashReports (SubmitterUserId);
+
+            CREATE TABLE IF NOT EXISTS DiagnosticLogs (
+                Id INTEGER NOT NULL CONSTRAINT PK_DiagnosticLogs PRIMARY KEY AUTOINCREMENT,
+                PublicId TEXT NOT NULL,
+                ClientLogId TEXT NOT NULL,
+                SubmitterUserId INTEGER NULL,
+                SubmitterSteamId TEXT NULL,
+                SubmittedAtUtc TEXT NOT NULL,
+                CapturedAtUtc TEXT NOT NULL,
+                LauncherVersion TEXT NOT NULL,
+                LaunchToken TEXT NULL,
+                MetadataJson TEXT NOT NULL,
+                ArchivePath TEXT NOT NULL,
+                ArchiveSize INTEGER NOT NULL,
+                ArchiveSha256 TEXT NOT NULL,
+                CONSTRAINT FK_DiagnosticLogs_Users_SubmitterUserId
+                    FOREIGN KEY (SubmitterUserId) REFERENCES Users (Id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_DiagnosticLogs_PublicId
+                ON DiagnosticLogs (PublicId);
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_DiagnosticLogs_ClientLogId
+                ON DiagnosticLogs (ClientLogId);
+            CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmittedAtUtc
+                ON DiagnosticLogs (SubmittedAtUtc);
+            CREATE INDEX IF NOT EXISTS IX_DiagnosticLogs_SubmitterSteamId
+                ON DiagnosticLogs (SubmitterSteamId);
             """,
             cancellationToken);
 

@@ -175,3 +175,22 @@ public sealed class CrashReport
 
     public User? SubmitterUser { get; set; }
 }
+
+public sealed class DiagnosticLog
+{
+    public int Id { get; set; }
+    public string PublicId { get; set; } = string.Empty;
+    public string ClientLogId { get; set; } = string.Empty;
+    public int? SubmitterUserId { get; set; }
+    public string? SubmitterSteamId { get; set; }
+    public DateTime SubmittedAtUtc { get; set; }
+    public DateTime CapturedAtUtc { get; set; }
+    public string LauncherVersion { get; set; } = string.Empty;
+    public string? LaunchToken { get; set; }
+    public string MetadataJson { get; set; } = "{}";
+    public string ArchivePath { get; set; } = string.Empty;
+    public long ArchiveSize { get; set; }
+    public string ArchiveSha256 { get; set; } = string.Empty;
+
+    public User? SubmitterUser { get; set; }
+}
