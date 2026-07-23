@@ -52,7 +52,7 @@ world paints: one interaction-layer paint and one settled direct frame.
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website
-packages may contain data overlays/Boneyards, root `images/` art overlays,
+packages may contain Boneyards, root `images/` art overlays,
 sandboxed Lua, or any combination of those three. See the [authoring
 guide](frontend/public/mod-package-format.md),
 [JSON Schema](frontend/public/mod-manifest.schema.json), and the

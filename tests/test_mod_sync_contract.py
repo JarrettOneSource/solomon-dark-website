@@ -773,35 +773,40 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 400)
 
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
-        native_manifest = {
-            "id": "tests.native",
-            "name": "Native",
-            "version": "1.0.0",
-            "runtime": {"apiVersion": "0.2.0", "entryDll": "native/mod.dll"},
-        }
-        status, _ = self.upload(
-            "Native Rejected",
-            "1.0.0",
-            package({"native/mod.dll": b"not a dll"}, native_manifest),
-        )
-        self.assertEqual(status, 400)
-
-        lua_with_hidden_dll = {
-            "id": "tests.hidden-native",
-            "name": "Hidden Native",
+        lua_with_invalid_file = {
+            "id": "tests.invalid-package-file",
+            "name": "Invalid Package File",
             "version": "1.0.0",
             "runtime": {"apiVersion": "0.2.0", "entryScript": "scripts/main.lua"},
         }
         status, _ = self.upload(
-            "Hidden Native Rejected",
+            "Invalid Package File",
             "1.0.0",
             package(
                 {
                     "scripts/main.lua": b"return true\n",
-                    "native/hidden.DLL": b"not a dll",
+                    "files/payload.DLL": b"not a dll",
                 },
-                lua_with_hidden_dll,
+                lua_with_invalid_file,
             ),
+        )
+        self.assertEqual(status, 400)
+
+        non_boneyard_data_manifest = {
+            "id": "tests.non-boneyard-data",
+            "name": "Non-Boneyard Data",
+            "version": "1.0.0",
+            "overlays": [
+                {
+                    "target": "data/wave.txt",
+                    "source": "files/wave.txt",
+                }
+            ],
+        }
+        status, _ = self.upload(
+            "Non-Boneyard Data",
+            "1.0.0",
+            package({"files/wave.txt": b"wave data"}, non_boneyard_data_manifest),
         )
         self.assertEqual(status, 400)
 

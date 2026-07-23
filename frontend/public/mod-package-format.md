@@ -1,7 +1,7 @@
 # Solomon Dark Revived mod package format
 
 Website mods are ZIP archives whose root contains `manifest.json`. The ZIP may
-contain data/Boneyard overlays, root `images/` art replacements, sandboxed Lua,
+contain Boneyard overlays, root `images/` art replacements, sandboxed Lua,
 or any combination of those three.
 
 The website validates every upload against this contract. It calculates the
@@ -10,7 +10,7 @@ upload form must exactly match `manifest.version`.
 
 ## Package layouts
 
-### Boneyard or data-overlay only
+### Boneyard only
 
 ```text
 manifest.json
@@ -63,11 +63,10 @@ Use the [combined manifest example](/examples/combined-manifest.json).
 - `version` is the exact version identity used by multiplayer joins.
 - `priority` controls overlay order. Higher-priority mods are applied later.
 - `overlays` copies each `source` under `files/` to its staged-game `target`.
-  Website packages may target files under `data/` or the native root
-  `images/` tree; custom Boneyards may also target
-  `sandbox/DarkCloud/mylevels/*.boneyard`. The `sandbox/` prefix is part of the
-  staged game path; the native path resolver supplies the matching
-  player-profile sandbox root at runtime.
+  Boneyards target `data/levels/*.boneyard` or
+  `sandbox/DarkCloud/mylevels/*.boneyard`; art targets the root `images/` tree.
+  The `sandbox/` prefix is part of the staged game path; the native path
+  resolver supplies the matching player-profile sandbox root at runtime.
 - `runtime.entryScript` names a `.lua` file under `scripts/`.
 - `runtime.apiVersion` declares the Lua API contract used by the script.
 - `requiredCapabilities` and `optionalCapabilities` declare requested sandbox
@@ -96,15 +95,13 @@ The complete machine-readable contract is
 
 ## Distribution and multiplayer
 
-Native DLL entry points are supported for manual local mods but are not
-accepted for website auto-downloads. Website Join Game links, direct Steam
-invites, and manual lobby-ID joins all fetch the host's exact `id` + `version` +
-content-hash set when the configured website can provide it. The launcher
-reuses exact manual installations or its local download cache, downloads only
-missing website packages, verifies package and extracted-content hashes, and
-stages only that set for the join. This session-scoped host set may contain
-Boneyards/data, art, Lua, or any combination; it does not rewrite the player's
-persistent enabled-mod choices.
+Website Join Game links, direct Steam invites, and manual lobby-ID joins all
+fetch the host's exact `id` + `version` + content-hash set when the configured
+website can provide it. The launcher reuses exact manual installations or its
+local download cache, downloads only missing website packages, verifies package
+and extracted-content hashes, and stages only that set for the join. This
+session-scoped host set may contain Boneyards, art, Lua, or any combination; it
+does not rewrite the player's persistent enabled-mod choices.
 
 The website remains optional. If its lobby metadata is unavailable, the
 launcher keeps the locally enabled set. When all players manually install and

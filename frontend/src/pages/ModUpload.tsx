@@ -80,7 +80,7 @@ export default function ModUpload() {
         <h1 className="h-display text-3xl">Contribute a Tome</h1>
         <p className="text-fell mt-2 text-bone-dim">
           Upload a launcher package with <code>manifest.json</code> at the ZIP root. Packages may
-          contain data overlays and Boneyards, sandboxed Lua, or both.{' '}
+          contain Boneyards, sandboxed Lua, art assets, or any combination.{' '}
           <a href="/mod-package-format.md" className="link-arcane">Read the package format</a>
           {' '}or <a href="/mod-manifest.schema.json" className="link-arcane">open the JSON Schema</a>.
         </p>

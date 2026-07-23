@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "/mod-manifest.schema.json",
   "title": "Solomon Dark Revived website mod manifest",
-  "description": "The root manifest for a website-distributed data/Boneyard overlay, images/ art overlay, and/or sandboxed Lua mod.",
+  "description": "The root manifest for a website-distributed Boneyard overlay, images/ art overlay, and/or sandboxed Lua mod.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "version"],
@@ -35,7 +35,7 @@
             "minLength": 1,
             "maxLength": 240,
             "anyOf": [
-              { "pattern": "^data/.+" },
+              { "pattern": "^data/levels/.+\\.boneyard$" },
               { "pattern": "^images/.+" },
               { "pattern": "^sandbox/DarkCloud/mylevels/.+\\.boneyard$" }
             ]

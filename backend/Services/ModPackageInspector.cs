@@ -83,7 +83,7 @@ public static partial class ModPackageInspector
                 if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new ModPackageValidationException(
-                        $"Website-distributed mods may not contain DLL files: {path}");
+                        $"The archive contains a file type outside the mod package contract: {path}");
                 }
 
                 expandedBytes = checked(expandedBytes + entry.Length);
@@ -273,16 +273,10 @@ public static partial class ModPackageInspector
         }
 
         var hasLua = !string.IsNullOrWhiteSpace(manifest.Runtime.EntryScript);
-        if (manifest.Overlays.Count == 0 && !hasLua && string.IsNullOrWhiteSpace(manifest.Runtime.EntryDll))
+        if (manifest.Overlays.Count == 0 && !hasLua)
         {
             throw new ModPackageValidationException(
                 "A mod must define at least one overlay or a Lua runtime entry script.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(manifest.Runtime.EntryDll))
-        {
-            throw new ModPackageValidationException(
-                "Website-distributed mods may not contain native runtime entry points.");
         }
 
         var overlaySources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -305,15 +299,17 @@ public static partial class ModPackageInspector
             }
 
             var target = ValidateManifestPath(overlay.Target, "Overlay target");
-            var allowedDataTarget = target.StartsWith("data/", StringComparison.Ordinal);
+            var allowedStockBoneyard =
+                target.StartsWith("data/levels/", StringComparison.Ordinal) &&
+                target.EndsWith(".boneyard", StringComparison.Ordinal);
             var allowedImageTarget = target.StartsWith("images/", StringComparison.Ordinal);
             var allowedCustomBoneyard =
                 target.StartsWith("sandbox/DarkCloud/mylevels/", StringComparison.Ordinal) &&
                 target.EndsWith(".boneyard", StringComparison.Ordinal);
-            if (!allowedDataTarget && !allowedImageTarget && !allowedCustomBoneyard)
+            if (!allowedStockBoneyard && !allowedImageTarget && !allowedCustomBoneyard)
             {
                 throw new ModPackageValidationException(
-                    $"Website overlay targets must live under data/ or images/, or be custom Boneyards under sandbox/DarkCloud/mylevels/: {overlay.Target}");
+                    $"Website overlays must target Boneyards under data/levels/ or sandbox/DarkCloud/mylevels/, or art under images/: {overlay.Target}");
             }
 
             if (overlay.Format.Length > MaxStringLength)
@@ -502,7 +498,6 @@ public static partial class ModPackageInspector
     {
         public string ApiVersion { get; init; } = string.Empty;
         public string EntryScript { get; init; } = string.Empty;
-        public string EntryDll { get; init; } = string.Empty;
         public List<string> RequiredCapabilities { get; init; } = [];
         public List<string> OptionalCapabilities { get; init; } = [];
         [JsonExtensionData]
