@@ -113,6 +113,11 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(context =>
             TokenService.GetUserId(context.User) is not null ||
             TokenService.GetSteamSessionId(context.User) is not null));
+    options.AddPolicy("steam-unlink", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context =>
+            TokenService.GetUserId(context.User) is not null ||
+            TokenService.GetSteamSessionId(context.User) is not null));
     options.AddPolicy("cloud-save", policy => policy
         .RequireAuthenticatedUser()
         .RequireAssertion(context =>

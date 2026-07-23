@@ -353,6 +353,40 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=headers,
         )
 
+    @classmethod
+    def diagnostic_upload(
+        cls,
+        metadata: dict[str, object],
+        archive: bytes,
+        token: str | None,
+    ) -> tuple[int, object]:
+        boundary = f"----sdr-diagnostic-{uuid.uuid4().hex}"
+        parts = [
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="metadata"\r\n'
+                "Content-Type: application/json\r\n\r\n"
+                f"{json.dumps(metadata, separators=(',', ':'))}\r\n"
+            ).encode(),
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="archive"; filename="diagnostic-log.zip"\r\n'
+                "Content-Type: application/zip\r\n\r\n"
+            ).encode()
+            + archive
+            + b"\r\n",
+            f"--{boundary}--\r\n".encode(),
+        ]
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
+        return cls.request(
+            "POST",
+            "/api/diagnostics/logs",
+            body=b"".join(parts),
+            headers=headers,
+        )
+
     def test_crash_reports_are_private_persisted_and_attributed(self) -> None:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         client_report_id = str(uuid.uuid4())
@@ -462,6 +496,68 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 (mismatched_metadata["clientReportId"],),
             ).fetchone()[0]
             self.assertEqual(mismatched_count, 0)
+
+    def test_diagnostic_logs_are_private_persisted_and_attributed(self) -> None:
+        client_log_id = str(uuid.uuid4())
+        metadata = {
+            "clientLogId": client_log_id,
+            "capturedAtUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "launcherVersion": "0.1.0-contract",
+            "operatingSystem": "Windows contract",
+            "processArchitecture": "X64",
+            "dotnetRuntime": ".NET contract",
+            "launchToken": "0123456789abcdef0123456789abcdef",
+            "artifacts": ["launcher/transcript.txt", "loader/modloader.log"],
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("launcher/transcript.txt", "contract transcript")
+            archive.writestr("loader/modloader.log", "contract loader log")
+        package_bytes = buffer.getvalue()
+
+        status, _ = self.diagnostic_upload(metadata, package_bytes, token=None)
+        self.assertEqual(status, 401)
+
+        steam_id = "76561198000005555"
+        status, receipt = self.diagnostic_upload(
+            metadata,
+            package_bytes,
+            self.steam_token(steam_id),
+        )
+        self.assertEqual(status, 201, receipt)
+        uuid.UUID(receipt["logId"])
+        self.assertTrue(receipt["submittedAtUtc"].endswith(("Z", "+00:00")))
+
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            row = database.execute(
+                """
+                SELECT SubmitterUserId, SubmitterSteamId, ClientLogId,
+                       LauncherVersion, LaunchToken, ArchivePath,
+                       ArchiveSize, ArchiveSha256
+                FROM DiagnosticLogs
+                WHERE PublicId = ?
+                """,
+                (receipt["logId"],),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNone(row[0])
+        self.assertEqual(row[1], steam_id)
+        self.assertEqual(row[2], client_log_id)
+        self.assertEqual(row[3], metadata["launcherVersion"])
+        self.assertEqual(row[4], metadata["launchToken"])
+        stored_archive = Path(self.temp.name) / "diagnostic-logs" / row[5]
+        self.assertEqual(stored_archive.read_bytes(), package_bytes)
+        self.assertEqual(row[6], len(package_bytes))
+        self.assertEqual(row[7], hashlib.sha256(package_bytes).hexdigest())
+
+        status, duplicate = self.diagnostic_upload(
+            metadata,
+            package_bytes,
+            self.steam_token(steam_id),
+        )
+        self.assertEqual(status, 200, duplicate)
+        self.assertEqual(duplicate["logId"], receipt["logId"])
 
     def test_cloud_saves_are_zip_validated_and_require_a_current_steam_link(self) -> None:
         files = {
@@ -997,6 +1093,30 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             + urllib.parse.urlencode({"ticket": tampered}),
         )
         self.assertEqual(status, 403)
+
+    def test_steam_session_can_unlink_its_linked_account(self) -> None:
+        steam_id = "76561198000006666"
+        database_path = Path(self.temp.name) / "sdr.db"
+        with sqlite3.connect(database_path) as database:
+            database.execute(
+                "UPDATE Users SET SteamId = ? WHERE Id = ?",
+                (steam_id, self.user_id),
+            )
+            database.commit()
+
+        status, response = self.request(
+            "DELETE",
+            "/api/auth/steam",
+            headers={"Authorization": f"Bearer {self.steam_token(steam_id)}"},
+        )
+        self.assertEqual(status, 204, response)
+
+        with sqlite3.connect(database_path) as database:
+            linked_steam_id = database.execute(
+                "SELECT SteamId FROM Users WHERE Id = ?",
+                (self.user_id,),
+            ).fetchone()[0]
+        self.assertIsNone(linked_steam_id)
 
     def test_z_database_schema_upgrades_existing_rows(self) -> None:
         type(self).stop_server()

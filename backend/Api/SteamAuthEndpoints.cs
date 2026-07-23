@@ -18,7 +18,7 @@ public static class SteamAuthEndpoints
             .RequireRateLimiting("steam-ticket-auth");
         app.MapPost("/api/auth/steam/link", StartLinkAsync).RequireAuthorization();
         app.MapGet("/api/auth/steam/callback", CompleteLinkAsync);
-        app.MapDelete("/api/auth/steam", UnlinkAsync).RequireAuthorization();
+        app.MapDelete("/api/auth/steam", UnlinkAsync).RequireAuthorization("steam-unlink");
     }
 
     private static async Task<IResult> CreateSessionAsync(
