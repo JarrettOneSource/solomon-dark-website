@@ -71,7 +71,7 @@ export default function About() {
             <li><strong>The Annals</strong> — SDR accounts with cloud saves synced from the loader.</li>
             <li>
               <strong>Steam P2P</strong> — host and invite friends directly, with no
-              website or account in the loop. The fray is built to outlive its caretakers.
+              website or account in the loop.
             </li>
           </ul>
 

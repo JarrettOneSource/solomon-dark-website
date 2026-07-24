@@ -48,7 +48,7 @@ function SchoolPicker() {
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
           Declare a school and your wand follows you around the site — cursor, click,
           and all. Other wizards will see it beside your name. Click your school again
-          to renounce it (the faculty will pretend not to mind).
+          to renounce it.
         </p>
       </Reveal>
       <div className="mt-6 flex flex-wrap gap-3">
@@ -145,7 +145,7 @@ function SteamRegistrar() {
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
           Bind your Steam self to your SDR account. The Registrar uses it to show you
           friends-only classes and to cut join tickets for warded ones. The rite happens
-          on Steam’s own doorstep — no password changes hands here.
+          on Steam’s own doorstep.
         </p>
       </Reveal>
       <div className="mt-6">
@@ -308,8 +308,7 @@ export default function Account() {
           <div className="kicker mb-1.5">Runs on record</div>
           <h2 className="h-display text-xl">Cloud Saves</h2>
           <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-            Eight launcher-owned local saves, backed up here after they change. The
-            launcher always plays from disk; the Annals keep a downloadable ZIP copy.
+            Eight launcher-owned local saves, backed up here after they change.
           </p>
         </Reveal>
         <div className="mt-6">
@@ -384,8 +383,7 @@ export default function Account() {
               </div>
               <p className="mt-1 text-sm leading-relaxed text-bone-dim">
                 Link your Steam profile above, then open the launcher while signed into
-                that Steam account. It detects the linkage automatically—no website
-                password is stored in the launcher.
+                that Steam account — it picks up the linkage on its own.
               </p>
             </div>
           </div>

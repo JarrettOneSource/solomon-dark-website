@@ -63,8 +63,8 @@ export default function Classes() {
         </div>
         <h1 className="h-display text-3xl">Classes in Session</h1>
         <p className="text-fell mt-2 max-w-xl text-bone-dim">
-          Live multiplayer expeditions led by fellow students. Open doors connect at a
-          click; warded ones want a password. Attendance is optional; survival is graded.
+          Live multiplayer expeditions led by fellow students. Attendance is optional;
+          survival is graded.
         </p>
       </Reveal>
 
@@ -97,7 +97,7 @@ export default function Classes() {
             line={
               search || openSeats
                 ? 'Nothing matches. Loosen the filters — or lower your standards.'
-                : 'The faculty deny all knowledge. Host one from the SDR loader — or go rogue over Steam P2P.'
+                : 'The faculty deny all knowledge. Host one from the SDR loader.'
             }
           />
         ) : (
@@ -107,16 +107,13 @@ export default function Classes() {
         <p className="text-fell mt-6 text-center text-xs text-bone-dim/70">
           {user?.steamId ? (
             <>
-              Veiled classes are warded to their host’s Steam circle. When a host counts
-              you among their friends, theirs unmask for you automatically, marked{' '}
-              <span className="text-arcane">Friends</span>.
+              Veiled classes unmask when the host counts you among their Steam friends.
             </>
           ) : user ? (
             <>
-              Veiled classes are warded to their host’s Steam circle. The ones that know
-              you will unmask once the Registrar knows your Steam self —{' '}
+              Veiled classes unmask for the host’s Steam friends —{' '}
               <Link to="/account" className="link-arcane">
-                link it in the Annals
+                link your Steam self in the Annals
               </Link>
               .
             </>
@@ -126,8 +123,7 @@ export default function Classes() {
               <Link to="/login" className="link-arcane">
                 signed-in wizards
               </Link>{' '}
-              the host counts as friends. Steam invites work regardless — no website, no
-              account, no paper trail.
+              the host counts as friends.
             </>
           )}
         </p>

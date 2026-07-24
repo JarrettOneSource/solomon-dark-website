@@ -53,7 +53,7 @@ function AccessBadge({ lobby }: { lobby: Lobby }) {
   }
   if (lobby.access === 'friend') {
     return (
-      <span className="badge badge-arcane" title="Friends Only — visible because the host counts you among theirs">
+      <span className="badge badge-arcane" title="Friends Only — the host counts you among theirs">
         Friends
       </span>
     )

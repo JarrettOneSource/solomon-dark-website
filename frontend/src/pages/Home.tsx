@@ -18,7 +18,7 @@ const FEATURES = [
     icon: skillIcons.door,
     title: 'Classes in Session',
     body:
-      'Live co-op through the SDR loader, with a master list of open matches. Bring a study group — the dead grade on a curve. Prefer privacy? Plain Steam P2P works without the site at all.',
+      'Live co-op through the SDR loader, with a master list of open matches. Bring a study group — the dead grade on a curve.',
     to: '/classes',
     label: 'See who’s in session',
   },
@@ -26,7 +26,7 @@ const FEATURES = [
     icon: skillIcons.book,
     title: 'The Lua Grimoire',
     body:
-      'An embedded Lua runtime exposing the sd.* API. Community tomes install through the loader in one click — browse the shelf, tap, play.',
+      'An embedded Lua runtime exposing the sd.* API. Community tomes install through the loader in one click.',
     to: '/mods',
     label: 'Enter the Library',
   },
@@ -137,7 +137,7 @@ export default function Home() {
           ) : liveLobbies.length === 0 && veiledClasses.length === 0 ? (
             <EmptyState
               title="No classes in session"
-              line="Solomon, for the record, is not resting. Host one from the SDR loader’s multiplayer card."
+              line="Solomon, for the record, is not resting. Host one from the SDR loader."
             />
           ) : (
             <LobbyTable lobbies={liveLobbies} veiled={veiledClasses} onKnock={setKnock} />
@@ -171,11 +171,6 @@ export default function Home() {
                     single day, and fans mirrored it before midnight. This project
                     keeps those builds alive: a mod loader, an embedded Lua runtime,
                     Steam multiplayer, and this hall of records.
-                  </p>
-                  <p>
-                    And because the fray shouldn’t depend on any one website, SDR also
-                    speaks plain Steam P2P — host and invite friends directly, no
-                    account required, even if this place ever goes dark.
                   </p>
                 </div>
                 <Link to="/about" className="btn btn-stone mt-6">
@@ -227,7 +222,7 @@ export default function Home() {
                 not guaranteed.
               </p>
               <Link to="/register" className="btn btn-gold mt-6">
-                Enroll — it’s free
+                Enroll
               </Link>
             </>
           )}

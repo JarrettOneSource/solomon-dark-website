@@ -33,7 +33,7 @@ export default function ModUpload() {
   const pickZip = (f: File | undefined | null) => {
     if (!f) return
     if (!f.name.toLowerCase().endsWith('.zip')) {
-      setError('The Library accepts zips only. Scrolls, at your own risk, later.')
+      setError('The Library accepts zips only.')
       return
     }
     if (f.size > MAX_ZIP_MB * 1024 * 1024) {
@@ -139,7 +139,7 @@ export default function ModUpload() {
           />
           <span className="mt-1.5 block text-xs text-bone-dim/70">
             Up to five — how the Library files it. Boneyard runs tag themselves
-            “boneyard”; the rest is your taxonomy.
+            “boneyard”.
           </span>
         </div>
 

@@ -60,7 +60,7 @@ export default function LobbyPasswordDialog({
               : err.status === 409
                 ? 'The class is full — every seat is taken.'
                 : err.status === 429
-                  ? 'Too many wrong whispers. The wards are listening; wait a moment.'
+                  ? 'Too many wrong whispers — wait a moment.'
                   : err.message,
         )
       } else {
@@ -87,8 +87,7 @@ export default function LobbyPasswordDialog({
           {lobby.game.boneyardName
             ? `Bound for ${lobby.game.boneyardName}. `
             : ''}
-          The door answers only to a password. It never leaves this device — just its
-          sigil, derived and sent.
+          The door answers only to a password.
         </p>
 
         {loading ? null : !user ? (
@@ -108,8 +107,7 @@ export default function LobbyPasswordDialog({
         ) : !user.steamId ? (
           <div className="mt-6">
             <p className="text-sm text-bone-dim">
-              Link your Steam self first — join tickets are bound to a SteamID, and the
-              Registrar hasn’t recorded yours.
+              Link your Steam self first — join tickets are cut to a SteamID.
             </p>
             <div className="mt-4 flex gap-3">
               <Link to="/account" className="btn btn-gold">
