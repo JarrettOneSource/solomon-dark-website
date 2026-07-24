@@ -1251,6 +1251,73 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             <= columns["CrashReports"]
         )
 
+    def test_zz_lobby_event_stream_allows_graceful_shutdown(self) -> None:
+        server_path = ROOT / "backend/bin/Debug/net10.0/Server.dll"
+        self.assertTrue(server_path.is_file())
+
+        with tempfile.TemporaryDirectory(prefix="sdr-website-shutdown-") as storage_root:
+            port = free_port()
+            origin = f"http://127.0.0.1:{port}"
+            environment = self.environment.copy()
+            environment.update(
+                {
+                    "ASPNETCORE_URLS": origin,
+                    "Storage__Root": storage_root,
+                }
+            )
+            server = subprocess.Popen(
+                [self.dotnet, str(server_path)],
+                cwd=ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            stream = None
+            try:
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if server.poll() is not None:
+                        output = server.stdout.read() if server.stdout else ""
+                        self.fail(f"shutdown-contract server exited during startup:\n{output}")
+                    try:
+                        with urllib.request.urlopen(
+                            origin + "/api/stats",
+                            timeout=1,
+                        ) as response:
+                            if response.status == 200:
+                                break
+                    except OSError:
+                        time.sleep(0.1)
+                else:
+                    self.fail("shutdown-contract server did not start")
+
+                stream = urllib.request.urlopen(
+                    origin + "/api/lobbies/events",
+                    timeout=5,
+                )
+                self.assertEqual(stream.headers["Content-Type"], "text/event-stream")
+                self.assertEqual(stream.readline(), b"event: lobbies\n")
+                self.assertTrue(stream.readline().startswith(b"data:"))
+
+                started = time.monotonic()
+                server.terminate()
+                try:
+                    server.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
+                    self.fail("an open lobby event stream blocked graceful shutdown")
+                self.assertLess(time.monotonic() - started, 3)
+            finally:
+                if stream is not None:
+                    stream.close()
+                if server.poll() is None:
+                    server.kill()
+                    server.wait(timeout=5)
+                if server.stdout:
+                    server.stdout.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -302,8 +302,13 @@ public static class LobbyEndpoints
         HttpContext context,
         AppDb db,
         IOptions<HttpJsonOptions> jsonOptions,
-        CancellationToken cancellationToken)
+        IHostApplicationLifetime applicationLifetime,
+        CancellationToken requestCancellationToken)
     {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            requestCancellationToken,
+            applicationLifetime.ApplicationStopping);
+        var cancellationToken = cancellation.Token;
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-cache";
         context.Response.Headers.Vary = "Authorization";
