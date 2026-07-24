@@ -14,7 +14,7 @@ namespace SolomonDarkRevived.Api;
 public static class LobbyEndpoints
 {
     private const int LiveSeconds = 120;
-    private const int MaximumPlayers = 255;
+    private const int MaximumPlayers = 250;
     private const string SecretHeader = "X-SDR-Lobby-Secret";
     private const string PasswordAlgorithm = "pbkdf2-sha256";
     private const int PasswordIterations = 210_000;
@@ -72,7 +72,7 @@ public static class LobbyEndpoints
             request.MaxPlayers is < 2 or > MaximumPlayers ||
             request.Players > request.MaxPlayers)
         {
-            return ApiErrors.BadRequest("Lobby player counts must fit within the supported 2–4 player capacity.");
+            return ApiErrors.BadRequest("Lobby player counts must fit within the supported 2–250 player capacity.");
         }
 
         var buildError = ValidateBuild(request.Build);

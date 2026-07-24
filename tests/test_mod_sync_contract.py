@@ -748,6 +748,38 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
             database.commit()
 
+    def test_lobby_capacity_honors_the_steam_limit(self) -> None:
+        def announce(max_players: int, lobby_suffix: str) -> tuple[int, object]:
+            return self.request(
+                "POST",
+                "/api/lobbies/announce",
+                headers={"X-SDR-Lobby-Secret": lobby_suffix * 64},
+                json_body={
+                    "lobbyId": f"7656119800000010{lobby_suffix}",
+                    "hostSteamId": f"7656119800000020{lobby_suffix}",
+                    "hostPlayer": "Capacity Host",
+                    "privacy": "public",
+                    "friendSteamIds": [],
+                    "players": 1,
+                    "maxPlayers": max_players,
+                    "build": {
+                        "appId": 3362180,
+                        "protocolVersion": 81,
+                        "manifestSha256": "cd" * 32,
+                        "loaderVersion": "contract-test",
+                    },
+                    "game": {"phase": "hub"},
+                    "mods": [],
+                },
+            )
+
+        status, accepted = announce(250, "1")
+        self.assertEqual(status, 200, accepted)
+
+        status, rejected = announce(251, "2")
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("2–250", rejected["error"])
+
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {
             "id": "tests.blank-boneyard",
@@ -916,7 +948,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         status, lobbies = self.request("GET", "/api/lobbies")
         self.assertEqual(status, 200, lobbies)
-        lobby = lobbies["items"][0]
+        lobby = next(
+            item
+            for item in lobbies["items"]
+            if item["join"] is not None
+            and item["join"]["lobbyId"] == "76561198000000001"
+        )
         self.assertEqual(lobby["mods"], sorted(exact, key=lambda mod: mod["id"]))
         self.assertTrue(lobby["join"]["launchUri"].startswith("solomondarkrevived://join/"))
         self.assertIn("directory=http%3A%2F%2F127.0.0.1", lobby["join"]["launchUri"])
