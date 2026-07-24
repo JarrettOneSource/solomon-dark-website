@@ -1,5 +1,23 @@
 # Solomon Dark Website
 
+## Validation
+
+The repository pins its .NET, Node.js, npm, and frontend lint tool versions.
+Run the complete backend build, integration contracts, lint checks, frontend
+tests, and production build from the repository root:
+
+```bash
+./scripts/validate.sh
+```
+
+For lint alone, use the same entrypoint:
+
+```bash
+./scripts/validate.sh lint
+```
+
+Those are the only supported validation entrypoints for agents and CI.
+
 ## Boneyard viewer
 
 `/boneyards` is a dedicated fullscreen, browser-local viewer for retail

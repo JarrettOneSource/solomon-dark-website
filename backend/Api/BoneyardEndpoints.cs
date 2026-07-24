@@ -423,16 +423,16 @@ public static class BoneyardEndpoints
         BoneyardDraft draft,
         JsonElement document,
         byte[]? compiled) => new
-    {
-        draft.Id,
-        draft.Name,
-        document,
-        compiledBoneyard = compiled is null ? null : Convert.ToBase64String(compiled),
-        documentSize = draft.DocumentSize,
-        compiledSize = draft.CompiledSize,
-        createdAt = draft.CreatedAtUtc,
-        updatedAt = draft.UpdatedAtUtc
-    };
+        {
+            draft.Id,
+            draft.Name,
+            document,
+            compiledBoneyard = compiled is null ? null : Convert.ToBase64String(compiled),
+            documentSize = draft.DocumentSize,
+            compiledSize = draft.CompiledSize,
+            createdAt = draft.CreatedAtUtc,
+            updatedAt = draft.UpdatedAtUtc
+        };
 
     private static JsonElement JsonDocumentFrom(ReadOnlyMemory<byte> bytes)
     {
