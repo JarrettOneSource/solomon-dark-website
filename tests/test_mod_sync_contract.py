@@ -1018,6 +1018,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                         "version": "2.0.0",
                         "contentSha256": expected["contentSha256"],
                         "packageSha256": expected["packageSha256"],
+                        "minimumLoaderVersion": None,
                         "downloadUrl": (
                             f"api/mods/{slug}/versions/{expected['id']}/download"
                         ),
@@ -1053,6 +1054,126 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(status, 400, duplicate)
+
+    def test_minimum_loader_gates_resolution_and_updates(self) -> None:
+        mod_id = "tests.beta20-settings"
+        manifest = {
+            "id": mod_id,
+            "name": "Beta 20 Settings",
+            "version": "1.0.0",
+            "minimumLoaderVersion": "0.1.0-beta.20",
+            "enabled": False,
+            "runtime": {
+                "apiVersion": "0.2.0",
+                "entryScript": "scripts/main.lua",
+                "requiredCapabilities": ["settings.self", "settings.list"],
+            },
+            "provides": ["tests.beta20-settings.v1"],
+            "settings": {
+                "version": 1,
+                "entries": [
+                    {
+                        "key": "roster",
+                        "type": "list",
+                        "scope": "host",
+                        "default": [],
+                        "item": {"fields": []},
+                    }
+                ],
+            },
+        }
+        archive = package({"scripts/main.lua": b"return true\n"}, manifest)
+        status, created = self.upload("Beta 20 Settings", "1.0.0", archive)
+        self.assertEqual(status, 201, created)
+        published = created["versions"][0]
+        self.assertEqual(
+            published["minimumLoaderVersion"],
+            "0.1.0-beta.20",
+        )
+        exact = [
+            {
+                "id": mod_id,
+                "version": "1.0.0",
+                "contentSha256": published["contentSha256"],
+            }
+        ]
+
+        for loader_version in (None, "0.1.0-beta.19"):
+            body = {"mods": exact}
+            if loader_version is not None:
+                body["loaderVersion"] = loader_version
+            status, resolution = self.request(
+                "POST",
+                "/api/mods/resolve",
+                json_body=body,
+            )
+            self.assertEqual(status, 200, resolution)
+            self.assertEqual(resolution["mods"], [])
+            self.assertEqual(resolution["missing"], [])
+            self.assertEqual(
+                resolution["incompatible"],
+                [
+                    {
+                        "id": mod_id,
+                        "version": "1.0.0",
+                        "minimumLoaderVersion": "0.1.0-beta.20",
+                    }
+                ],
+            )
+
+            status, updates = self.request(
+                "POST",
+                "/api/mods/updates",
+                json_body={
+                    **(
+                        {"loaderVersion": loader_version}
+                        if loader_version is not None
+                        else {}
+                    ),
+                    "mods": [{"id": mod_id, "version": "0.9.0"}],
+                },
+            )
+            self.assertEqual(status, 200, updates)
+            self.assertEqual(updates, {"updates": []})
+
+        status, resolution = self.request(
+            "POST",
+            "/api/mods/resolve",
+            json_body={"loaderVersion": "0.1.0-beta.20", "mods": exact},
+        )
+        self.assertEqual(status, 200, resolution)
+        self.assertEqual(len(resolution["mods"]), 1)
+        self.assertEqual(
+            resolution["mods"][0]["minimumLoaderVersion"],
+            "0.1.0-beta.20",
+        )
+        self.assertEqual(resolution["incompatible"], [])
+
+        status, updates = self.request(
+            "POST",
+            "/api/mods/updates",
+            json_body={
+                "loaderVersion": "0.1.0-beta.20",
+                "mods": [{"id": mod_id, "version": "0.9.0"}],
+            },
+        )
+        self.assertEqual(status, 200, updates)
+        self.assertEqual(
+            updates["updates"][0]["minimumLoaderVersion"],
+            "0.1.0-beta.20",
+        )
+
+        invalid_manifest = {
+            **manifest,
+            "id": "tests.invalid-minimum-loader",
+            "minimumLoaderVersion": "beta.20",
+        }
+        status, _ = self.upload(
+            "Invalid Minimum Loader",
+            "1.0.0",
+            package({"scripts/main.lua": b"return true\n"}, invalid_manifest),
+        )
+        self.assertEqual(status, 400)
 
     def test_upload_rejects_unsafe_or_inconsistent_packages(self) -> None:
         native_manifest = {

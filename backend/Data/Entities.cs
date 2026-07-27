@@ -51,6 +51,7 @@ public sealed class ModVersion
     public int ModId { get; set; }
     public string Version { get; set; } = string.Empty;
     public string? ManifestVersion { get; set; }
+    public string? MinimumLoaderVersion { get; set; }
     public string? PackageSha256 { get; set; }
     public string? ContentSha256 { get; set; }
     public string Changelog { get; set; } = string.Empty;

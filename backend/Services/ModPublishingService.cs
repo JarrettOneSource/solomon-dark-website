@@ -156,6 +156,7 @@ public sealed class ModPublishingService(AppDb db, StorageService storage)
         {
             Version = versionName,
             ManifestVersion = package.ManifestVersion,
+            MinimumLoaderVersion = package.MinimumLoaderVersion,
             PackageSha256 = package.PackageSha256,
             ContentSha256 = package.ContentSha256,
             Changelog = request.Changelog,

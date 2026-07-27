@@ -80,6 +80,13 @@ public static class DatabaseSchema
                 cancellationToken);
         }
 
+        if (!await HasColumnAsync(db, "ModVersions", "MinimumLoaderVersion", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE ModVersions ADD COLUMN MinimumLoaderVersion TEXT NULL;",
+                cancellationToken);
+        }
+
         if (!await HasColumnAsync(db, "ModVersions", "ContentSha256", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(
