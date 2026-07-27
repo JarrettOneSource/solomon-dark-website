@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Lobby, LobbyGame, LobbyPhase, PrivateClass } from '../lib/api'
 import { formatDuration } from '../lib/format'
 import { PlayerBar } from './ui'
@@ -88,6 +89,34 @@ function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby
   )
 }
 
+function CopyLobbyId({ lobby, compact }: { lobby: Lobby; compact?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const join = lobby.join
+  if (!join) return null
+  const cls = compact
+    ? 'btn btn-stone !px-2.5 !py-1.5 !text-[10px]'
+    : 'btn btn-stone !px-3 !py-2 !text-[10px]'
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(join.lobbyId)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      window.prompt('Lobby ID — copy it for the launcher’s Join box:', join.lobbyId)
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className={cls}
+      title="Copy the Lobby ID — paste it into the launcher’s Join box"
+    >
+      {copied ? 'Copied ✓' : 'Copy ID'}
+    </button>
+  )
+}
+
 export default function LobbyTable({
   lobbies,
   veiled = [],
@@ -146,7 +175,8 @@ export default function LobbyTable({
                 <span className="truncate font-display text-[13px] font-bold tracking-wide text-bone">
                   {lobby.hostPlayer}
                 </span>
-                <span className="ml-auto flex-none">
+                <span className="ml-auto flex flex-none items-center gap-1.5">
+                  <CopyLobbyId lobby={lobby} compact />
                   <JoinAction lobby={lobby} onKnock={onKnock} compact />
                 </span>
               </div>
@@ -258,7 +288,10 @@ export default function LobbyTable({
                     )}
                   </td>
                   <td className="slab rounded-r border-l-0 px-3 py-2">
-                    <JoinAction lobby={lobby} onKnock={onKnock} />
+                    <span className="flex items-center justify-end gap-1.5">
+                      <CopyLobbyId lobby={lobby} />
+                      <JoinAction lobby={lobby} onKnock={onKnock} />
+                    </span>
                   </td>
                 </tr>
               )

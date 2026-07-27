@@ -10,6 +10,7 @@ import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { formatBytes, formatCount, formatDate, timeAgo } from '../lib/format'
 import { art, elementWords } from '../lib/assets'
+import { launcherInstallUri } from '../lib/links'
 import { playSound } from '../fx/sounds'
 
 /** Marginalia: notes other wizards left in this tome's margins. */
@@ -419,15 +420,15 @@ export default function ModDetail() {
         <aside className="space-y-6">
           <div className="panel panel-ornate p-6 text-center">
             <a
-              href={api.mods.downloadUrl(m.slug)}
+              href={launcherInstallUri(m.slug)}
               className="btn btn-gold relative w-full !py-4 !text-sm"
-              title="Downloads the latest mod package"
+              title="Sends this tome to the Solomon Dark launcher, which downloads and installs it"
               onClick={() => {
                 setStamp((k) => k + 1)
                 playSound('tomeGet', 0.3)
               }}
             >
-              ⬩ Download This Tome
+              ⬩ Install via Launcher
               {stamp > 0 && (
                 <img
                   key={stamp}
@@ -438,6 +439,13 @@ export default function ModDetail() {
                   onAnimationEnd={() => setStamp(0)}
                 />
               )}
+            </a>
+            <a
+              href={api.mods.downloadUrl(m.slug)}
+              className="btn btn-stone mt-3 w-full !py-2 !text-[11px]"
+              title="Downloads the raw mod package"
+            >
+              Download the .zip instead
             </a>
             <p className="mt-3 font-mono text-xs text-bone-dim">
               v{latest?.version ?? m.latestVersion} · {latest ? formatBytes(latest.fileSize) : ''} ·
