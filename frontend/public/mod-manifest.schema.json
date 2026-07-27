@@ -21,6 +21,13 @@
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
     },
+    "minimumLoaderVersion": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "enabled": { "type": "boolean" },
     "priority": { "type": "integer", "minimum": -100000, "maximum": 100000 },
     "overlays": {
       "type": "array",
@@ -92,6 +99,28 @@
         "type": "string",
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
       }
+    },
+    "provides": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
+      }
+    },
+    "requires": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Launcher-owned settings declaration. The launcher validates the complete settings schema and values."
     }
   },
   "anyOf": [

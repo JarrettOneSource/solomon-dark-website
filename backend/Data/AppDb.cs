@@ -60,6 +60,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         modelBuilder.Entity<ModVersion>(entity =>
         {
             entity.Property(version => version.ManifestVersion).HasMaxLength(64);
+            entity.Property(version => version.MinimumLoaderVersion).HasMaxLength(64);
             entity.Property(version => version.PackageSha256).HasMaxLength(64);
             entity.Property(version => version.ContentSha256).HasMaxLength(64);
             entity.HasIndex(version => new

@@ -61,6 +61,8 @@ Use the [combined manifest example](/examples/combined-manifest.json).
   the website and must not change between versions.
 - `name` is the in-launcher display name.
 - `version` is the exact version identity used by multiplayer joins.
+- `minimumLoaderVersion` is an optional semantic-version floor. Resolution and
+  automatic updates do not offer that version to an older launcher.
 - `priority` controls overlay order. Higher-priority mods are applied later.
 - `overlays` copies each `source` under `files/` to its staged-game `target`.
   Website packages may target files under `data/` or the native root
@@ -73,6 +75,9 @@ Use the [combined manifest example](/examples/combined-manifest.json).
 - `requiredCapabilities` and `optionalCapabilities` declare requested sandbox
   capabilities.
 - `requiredMods` lists launcher IDs that must be active with this mod.
+- `provides` and `requires` declare Lua runtime contracts.
+- `settings` declares launcher-rendered mod settings. The launcher owns the
+  complete settings schema and value validation.
 
 Paths use `/`, are relative, and must match the case of files inside the ZIP.
 Do not wrap the package in an extra top-level directory.

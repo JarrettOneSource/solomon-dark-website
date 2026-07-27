@@ -90,6 +90,7 @@ public static class ModEndpoints
 
         var resolved = new List<object>();
         var missing = new List<object>();
+        var incompatible = new List<object>();
         foreach (var requirement in required)
         {
             var mod = candidates.SingleOrDefault(candidate => string.Equals(
@@ -111,6 +112,17 @@ public static class ModEndpoints
                 continue;
             }
 
+            if (!SupportsLoader(version, request.LoaderVersion))
+            {
+                incompatible.Add(new
+                {
+                    id = mod.LauncherModId,
+                    version = version.ManifestVersion,
+                    minimumLoaderVersion = version.MinimumLoaderVersion
+                });
+                continue;
+            }
+
             resolved.Add(new
             {
                 id = mod.LauncherModId,
@@ -121,6 +133,7 @@ public static class ModEndpoints
                 mod.Name,
                 versionId = version.Id,
                 version.FileSize,
+                version.MinimumLoaderVersion,
                 downloadUrl = $"api/mods/{mod.Slug}/versions/{version.Id}/download"
             });
         }
@@ -128,7 +141,8 @@ public static class ModEndpoints
         return Results.Ok(new
         {
             mods = resolved,
-            missing
+            missing,
+            incompatible
         });
     }
 
@@ -190,7 +204,8 @@ public static class ModEndpoints
             {
                 if (!SemanticVersion.TryParse(candidate.ManifestVersion, out var candidateVersion) ||
                     !IsSha256(candidate.ContentSha256) ||
-                    !IsSha256(candidate.PackageSha256))
+                    !IsSha256(candidate.PackageSha256) ||
+                    !SupportsLoader(candidate, request.LoaderVersion))
                 {
                     continue;
                 }
@@ -218,6 +233,7 @@ public static class ModEndpoints
                 version = latest.ManifestVersion,
                 contentSha256 = latest.ContentSha256,
                 packageSha256 = latest.PackageSha256,
+                latest.MinimumLoaderVersion,
                 downloadUrl = $"api/mods/{mod.Slug}/versions/{latest.Id}/download"
             });
         }
@@ -892,6 +908,7 @@ public static class ModEndpoints
         {
             Version = versionName,
             ManifestVersion = package.ManifestVersion,
+            MinimumLoaderVersion = package.MinimumLoaderVersion,
             PackageSha256 = package.PackageSha256,
             ContentSha256 = package.ContentSha256,
             Changelog = form["changelog"].ToString(),
@@ -1172,6 +1189,7 @@ public static class ModEndpoints
                     version.Id,
                     version.Version,
                     version.ManifestVersion,
+                    version.MinimumLoaderVersion,
                     version.PackageSha256,
                     version.ContentSha256,
                     version.Changelog,
@@ -1321,6 +1339,18 @@ public static class ModEndpoints
         value is { Length: 64 } && value.All(character =>
             character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
 
+    private static bool SupportsLoader(ModVersion version, string? loaderVersion)
+    {
+        if (string.IsNullOrWhiteSpace(version.MinimumLoaderVersion))
+        {
+            return true;
+        }
+
+        return SemanticVersion.TryParse(loaderVersion, out var current) &&
+               SemanticVersion.TryParse(version.MinimumLoaderVersion, out var minimum) &&
+               current!.CompareTo(minimum) >= 0;
+    }
+
     public sealed record PatchModRequest(
         string? Name,
         string? Summary,
@@ -1331,11 +1361,11 @@ public static class ModEndpoints
 
     public sealed record CommentRequest(string? Body);
 
-    public sealed record ResolveModsRequest(ResolveModRequest[]? Mods);
+    public sealed record ResolveModsRequest(string? LoaderVersion, ResolveModRequest[]? Mods);
 
     public sealed record ResolveModRequest(string? Id, string? Version, string? ContentSha256);
 
-    public sealed record UpdateModsRequest(InstalledModRequest[]? Mods);
+    public sealed record UpdateModsRequest(string? LoaderVersion, InstalledModRequest[]? Mods);
 
     public sealed record InstalledModRequest(string? Id, string? Version);
 }

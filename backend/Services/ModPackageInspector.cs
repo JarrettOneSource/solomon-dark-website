@@ -12,6 +12,7 @@ public sealed record ModPackageInspection(
     string LauncherModId,
     string ManifestName,
     string ManifestVersion,
+    string? MinimumLoaderVersion,
     string PackageSha256,
     string ContentSha256,
     bool HasOverlays,
@@ -126,6 +127,7 @@ public static partial class ModPackageInspector
                 manifest.Id,
                 manifest.Name,
                 manifest.Version,
+                manifest.MinimumLoaderVersion,
                 packageSha256,
                 contentSha256,
                 manifest.Overlays.Count > 0,
@@ -223,8 +225,12 @@ public static partial class ModPackageInspector
         if (manifest.Id is null || manifest.Name is null || manifest.Version is null ||
             manifest.Overlays is null || manifest.Runtime is null ||
             manifest.RequiredMods is null ||
+            manifest.Provides is null ||
+            manifest.Requires is null ||
             manifest.Overlays.Any(overlay => overlay is null) ||
             manifest.RequiredMods.Any(required => required is null) ||
+            manifest.Provides.Any(contract => contract is null) ||
+            manifest.Requires.Any(contract => contract is null) ||
             manifest.Runtime.RequiredCapabilities is null ||
             manifest.Runtime.OptionalCapabilities is null ||
             manifest.Runtime.RequiredCapabilities.Any(capability => capability is null) ||
@@ -258,6 +264,13 @@ public static partial class ModPackageInspector
                 "manifest.version must be 1-64 filename-safe characters.");
         }
 
+        if (manifest.MinimumLoaderVersion is not null &&
+            !SemanticVersion.TryParse(manifest.MinimumLoaderVersion, out _))
+        {
+            throw new ModPackageValidationException(
+                "manifest.minimumLoaderVersion must use semantic versioning.");
+        }
+
         if (manifest.Priority is < -100_000 or > 100_000)
         {
             throw new ModPackageValidationException("manifest.priority is outside the supported range.");
@@ -266,7 +279,9 @@ public static partial class ModPackageInspector
         if (manifest.Overlays.Count > MaxManifestItems ||
             manifest.RequiredMods.Count > MaxManifestItems ||
             manifest.Runtime.RequiredCapabilities.Count > MaxManifestItems ||
-            manifest.Runtime.OptionalCapabilities.Count > MaxManifestItems)
+            manifest.Runtime.OptionalCapabilities.Count > MaxManifestItems ||
+            manifest.Provides.Count > MaxManifestItems ||
+            manifest.Requires.Count > MaxManifestItems)
         {
             throw new ModPackageValidationException(
                 $"Manifest lists may contain at most {MaxManifestItems} entries.");
@@ -351,11 +366,18 @@ public static partial class ModPackageInspector
             manifest.Runtime.OptionalCapabilities,
             "runtime.optionalCapabilities",
             CapabilityRegex());
+        ValidateUniqueStrings(manifest.Provides, "provides", ContractRegex());
+        ValidateUniqueStrings(manifest.Requires, "requires", ContractRegex());
         ValidateUniqueStrings(manifest.RequiredMods, "requiredMods", LauncherModIdRegex());
         if (manifest.RequiredMods.Any(required =>
                 string.Equals(required, manifest.Id, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ModPackageValidationException("A mod may not require itself.");
+        }
+
+        if (manifest.Settings is { ValueKind: not JsonValueKind.Object })
+        {
+            throw new ModPackageValidationException("manifest.settings must be an object.");
         }
     }
 
@@ -481,10 +503,15 @@ public static partial class ModPackageInspector
         public string Id { get; init; } = string.Empty;
         public string Name { get; init; } = string.Empty;
         public string Version { get; init; } = string.Empty;
+        public string? MinimumLoaderVersion { get; init; }
+        public bool Enabled { get; init; }
         public int Priority { get; init; }
         public List<PackageOverlay> Overlays { get; init; } = [];
         public PackageRuntime Runtime { get; init; } = new();
         public List<string> RequiredMods { get; init; } = [];
+        public List<string> Provides { get; init; } = [];
+        public List<string> Requires { get; init; } = [];
+        public JsonElement? Settings { get; init; }
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; init; }
     }
@@ -514,6 +541,9 @@ public static partial class ModPackageInspector
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex CapabilityRegex();
+
+    [GeneratedRegex("^[a-z0-9][a-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ContractRegex();
 
     [GeneratedRegex("^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex WindowsReservedNameRegex();
