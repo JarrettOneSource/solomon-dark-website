@@ -90,7 +90,7 @@ export interface WizardProfile {
 
 export type LobbyPrivacy = 'public' | 'passwordProtected' | 'friendsOnly'
 export type LobbyAccess = 'public' | 'password' | 'friend'
-export type LobbyPhase = 'hub' | 'loading' | 'session' | 'results'
+export type LobbyPhase = 'picking-loadout' | 'hub' | 'loading' | 'session' | 'results'
 
 export interface LobbyBuild {
   appId: number

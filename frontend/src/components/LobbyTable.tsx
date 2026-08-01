@@ -4,6 +4,7 @@ import { formatDuration } from '../lib/format'
 import { PlayerBar } from './ui'
 
 const PHASE: Record<LobbyPhase, { orb: string; text: string; label: string }> = {
+  'picking-loadout': { orb: 'orb-hub', text: 'text-arcane/90', label: 'Picking loadout' },
   hub: { orb: 'orb-hub', text: 'text-arcane/90', label: 'In hub' },
   loading: { orb: 'orb-hub', text: 'text-arcane/90', label: 'Loading in' },
   session: { orb: 'orb-on', text: 'text-moss', label: 'In session' },

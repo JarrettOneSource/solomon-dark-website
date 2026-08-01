@@ -110,7 +110,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             entity.Property(lobby => lobby.PasswordHash).HasMaxLength(64);
             entity.Property(lobby => lobby.ManifestSha256).HasMaxLength(64);
             entity.Property(lobby => lobby.LoaderVersion).HasMaxLength(64);
-            entity.Property(lobby => lobby.Phase).HasMaxLength(12);
+            entity.Property(lobby => lobby.Phase).HasMaxLength(20);
             entity.Property(lobby => lobby.BoneyardId).HasMaxLength(64);
             entity.Property(lobby => lobby.BoneyardName).HasMaxLength(80);
             entity.Property(lobby => lobby.BoneyardSha256).HasMaxLength(64);

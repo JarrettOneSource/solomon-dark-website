@@ -530,9 +530,9 @@ public static class LobbyEndpoints
 
     private static string? ValidateGame(GameDescriptor? game)
     {
-        if (game is null || game.Phase is not ("hub" or "loading" or "session" or "results"))
+        if (game is null || game.Phase is not ("picking-loadout" or "hub" or "loading" or "session" or "results"))
         {
-            return "Game phase must be hub, loading, session, or results.";
+            return "Game phase must be picking-loadout, hub, loading, session, or results.";
         }
         if (game.BoneyardId?.Trim().Length > 64 || game.BoneyardName?.Trim().Length > 80 ||
             (game.BoneyardSha256 is not null && NormalizeHex(game.BoneyardSha256, 64) is null) ||

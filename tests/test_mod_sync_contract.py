@@ -780,6 +780,70 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 400, rejected)
         self.assertIn("2–250", rejected["error"])
 
+    def test_lobby_picking_loadout_status_roundtrips_and_advances(self) -> None:
+        lobby_id = "76561198000000901"
+        secret = "91" * 32
+
+        def announce(phase: str, status_text: str) -> tuple[int, object]:
+            return self.request(
+                "POST",
+                "/api/lobbies/announce",
+                headers={"X-SDR-Lobby-Secret": secret},
+                json_body={
+                    "lobbyId": lobby_id,
+                    "hostSteamId": "76561198000000902",
+                    "hostPlayer": "Loadout Host",
+                    "privacy": "public",
+                    "friendSteamIds": [],
+                    "players": 1,
+                    "maxPlayers": 4,
+                    "build": {
+                        "appId": 3362180,
+                        "protocolVersion": 89,
+                        "manifestSha256": "89" * 32,
+                        "loaderVersion": "loadout-contract",
+                    },
+                    "game": {
+                        "phase": phase,
+                        "statusText": status_text,
+                    },
+                    "mods": [],
+                },
+            )
+
+        for phase, status_text in (
+            ("picking-loadout", "Picking Loadout"),
+            ("hub", "In Hub"),
+            ("session", "In Match"),
+            ("picking-loadout", "Picking Loadout"),
+        ):
+            status, response = announce(phase, status_text)
+            self.assertEqual(status, 200, response)
+            status, lobbies = self.request("GET", "/api/lobbies")
+            self.assertEqual(status, 200, lobbies)
+            lobby = next(
+                item
+                for item in lobbies["items"]
+                if (item.get("join") or {}).get("lobbyId") == lobby_id
+            )
+            self.assertEqual(lobby["game"]["phase"], phase)
+            self.assertEqual(lobby["game"]["statusText"], status_text)
+
+        status, response = self.request(
+            "DELETE",
+            f"/api/lobbies/{lobby_id}",
+            headers={"X-SDR-Lobby-Secret": secret},
+        )
+        self.assertEqual(status, 204, response)
+        status, lobbies = self.request("GET", "/api/lobbies")
+        self.assertEqual(status, 200, lobbies)
+        self.assertFalse(
+            any(
+                (item.get("join") or {}).get("lobbyId") == lobby_id
+                for item in lobbies["items"]
+            )
+        )
+
     def test_package_shapes_exact_resolution_and_lobby_join_manifest(self) -> None:
         boneyard_manifest = {
             "id": "tests.blank-boneyard",
