@@ -33,6 +33,10 @@ import { Spinner } from './components/ui'
 // it loads when someone actually picks up the shovel.
 const Boneyard = lazy(() => import('./pages/Boneyard'))
 
+// The game drags the whole engine bundle in behind it. Nobody reading the
+// Library should be made to download a renderer.
+const Game = lazy(() => import('./pages/Game'))
+
 const router = createBrowserRouter([
   {
     path: '/boneyards',
@@ -57,6 +61,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Spinner label="Surveying the grounds…" />}>
             <Boneyard />
+          </Suspense>
+        ),
+      },
+      {
+        path: '/game',
+        element: (
+          <Suspense fallback={<Spinner label="Opening the gate…" />}>
+            <Game />
           </Suspense>
         ),
       },

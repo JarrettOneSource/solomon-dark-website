@@ -15,6 +15,11 @@ import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 
 // The Boneyard editor left the navbar deliberately: it is a maker's tool,
 // reached from the Library's drafting-table CTA and the footer passages.
+//
+// /game is unlinked on purpose too, and more strictly — no nav entry, no
+// passage, no home-page card. The route exists and works if you type it, but
+// the game announces itself only when the owner decides it is ready to be
+// found.
 const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/classes', label: 'Classes' },
