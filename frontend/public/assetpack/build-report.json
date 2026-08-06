@@ -1,0 +1,17 @@
+{
+  "emittedAssetBytes": {
+    "atlases": 42744038,
+    "boneyards": 5783538,
+    "recipes": 52423,
+    "total": 49008543,
+    "waves": 428544
+  },
+  "schema": "solomon-dark-web-asset-build-report-v1",
+  "sourceCounts": {
+    "boneyards": 4,
+    "bundles": 28,
+    "looseImages": 13,
+    "recipes": 31,
+    "waves": 42
+  }
+}
