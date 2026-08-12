@@ -1,0 +1,35 @@
+[Unit]
+Description=Solomon Dark private browser game sessions
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solomon-dark
+Group=solomon-dark
+WorkingDirectory=/opt/solomon-dark-revived
+ExecStart=/opt/solomon-dark-node-v22.17.0/bin/node /opt/solomon-dark-revived/GameHost/game-session-supervisor.mjs
+EnvironmentFile=/etc/solomon-dark-game.env
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0027
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

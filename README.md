@@ -67,6 +67,46 @@ allows machine variance while still rejecting the former multi-second
 interaction frames. Its hover traversal also rejects more than two complete
 world paints: one interaction-layer paint and one settled direct frame.
 
+## Rebuilt game development
+
+The `/game` route is an ordinary client of the authoritative game host. Start
+both from `frontend/`:
+
+```bash
+npm run dev:game -- --host 127.0.0.1 --port 4178
+```
+
+The launcher starts a separate Node server on an OS-assigned loopback port,
+waits for its readiness message, gives Vite the URL and development credential,
+and shuts both processes down together. This is the real socket and protocol
+boundary the packaged desktop client will supervise; the browser never runs an
+in-tab server. Direct `npm run dev` intentionally leaves `/game` without a
+session unless a trusted launcher supplies `VITE_GAME_SERVER_URL` and
+`VITE_GAME_BOOTSTRAP_CREDENTIAL`.
+
+For a LAN-visible development page, bind Vite to `0.0.0.0` and provide the
+exact origin the browser will use, for example:
+
+```bash
+SDR_GAME_DEV_ORIGIN=http://192.168.1.50:4178 npm run dev:game -- --host 0.0.0.0 --port 4178
+```
+
+The authoritative host remains loopback-only; a browser on another machine is
+not a desktop-local client and therefore needs a separately configured secure
+remote development gateway.
+
+Run only the headless host with `npm run game:host`. Its first stdout line is a
+machine-readable readiness record for a desktop or cloud supervisor. See
+`docs/game-runtime-architecture.md` for the supported solo, peer-hosted,
+browser-provisioned, and dedicated topology.
+
+Production browser sessions use the bundled `GameHost/game-session-supervisor.mjs`.
+The website's `POST /api/game/sessions` adapter authenticates to that
+loopback-only supervisor and returns a one-session `wss` endpoint; the static
+client contains neither the supervisor secret nor a shared gameplay credential.
+The checked-in NFO unit, Caddy route, required environment, expiry policy, and
+release health gates are documented in `ops/nfo/README.md`.
+
 ## Mod packages
 
 Community mod ZIPs require `manifest.json` at the archive root. Website

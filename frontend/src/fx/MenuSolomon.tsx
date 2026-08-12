@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { menuSolomon } from '../lib/assets'
 
 /**
@@ -48,7 +48,7 @@ function draw(ctx: CanvasRenderingContext2D, layers: Layers, phase: number, tick
   ctx.globalAlpha = 1
 }
 
-export default function MenuSolomon() {
+export default function MenuSolomon({ className, style }: { className?: string; style?: CSSProperties }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -133,8 +133,8 @@ export default function MenuSolomon() {
     <canvas
       ref={canvasRef}
       aria-hidden
-      className="pointer-events-none"
-      style={{ width: W, height: H }}
+      className={`pointer-events-none${className ? ` ${className}` : ''}`}
+      style={{ width: W, height: H, ...style }}
     />
   )
 }

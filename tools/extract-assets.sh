@@ -37,6 +37,12 @@ crop Title.png grass-strip        806    0 1024  71
 crop Title.png clouds-purple      807  558  512 218
 crop Title.png clouds-blue       1321  558  512 218
 
+# The title screen needs registration-preserving rectangles (including fully
+# transparent edge pixels) plus the native bitmap-font labels. This companion
+# extractor reads the bundle metadata directly instead of applying -trim.
+python3 "$(dirname "$0")/extract-main-menu-assets.py" "$SRC" "$OUT"
+python3 "$(dirname "$0")/extract-hub-assets.py" "$SRC" "$OUT"
+
 # ---- UI.png (1024x1024): chrome, banners, buttons, ornaments ---------------
 crop UI.png circle-arcane   266 205 276 276
 crop UI.png levelup         280 138 382  55

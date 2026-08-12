@@ -1,0 +1,37 @@
+solomondarker.com {
+	encode zstd gzip
+
+	header {
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self'; upgrade-insecure-requests"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow"
+	}
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	handle /game-sessions/* {
+		reverse_proxy 127.0.0.1:5222
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:5220
+	}
+}
+
+www.solomondarker.com {
+	redir https://solomondarker.com{uri} permanent
+}
+
+solomon.genericproject.xyz {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:5220
+	}
+
+	handle {
+		redir https://solomondarker.com{uri} permanent
+	}
+}

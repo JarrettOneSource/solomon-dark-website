@@ -16,6 +16,11 @@
     <Content Include="SeedAssets/survival.boneyard"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../frontend/dist-game-host/game-session-supervisor.mjs"
+             Link="GameHost/game-session-supervisor.mjs"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('../frontend/dist-game-host/game-session-supervisor.mjs')" />
   </ItemGroup>
 
 </Project>

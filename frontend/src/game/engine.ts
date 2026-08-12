@@ -1,76 +1,107 @@
-/**
- * The seam between the website and the rebuilt game.
- *
- * Everything the browser client needs to start a session goes through
- * `bootGame`. The page never reaches past this module, so the engine can be
- * built, replaced, or version-pinned without the site knowing anything about
- * its internals.
- *
- * The one load-bearing idea here is the transport union below: a session is
- * always a client talking to an authoritative server, and the *only* thing
- * that changes between the three ways to play is where that server lives.
- * Offline is not a second implementation of the game — it is the same server
- * running in-process. Keep it that way; the moment "offline mode" becomes its
- * own code path, the two stop agreeing and the conformance goldens can only
- * ever prove one of them right.
- */
+import {
+  connectGameClientSession,
+  type GameSessionConnector,
+  type GameClientSession,
+} from './client/game-client-session.ts'
+import {
+  connectWebSocketTransport,
+  type GameTransport,
+} from './client/game-transport.ts'
 
-/** Where the authoritative simulation runs for this session. */
-export type Transport =
-  /**
-   * The server runs in this tab (a worker). No network, no website required —
-   * this is what the standalone offline build ships. Co-op still works the
-   * same way it does everywhere else: the empty seats are filled with bots,
-   * which are already modeled as synthetic remote players.
-   */
-  | { kind: 'local'; bots?: number }
-  /** A dedicated server, reached over a WebSocket. */
-  | { kind: 'remote'; url: string }
+/**
+ * The only public seam between a platform shell and the rebuilt game client.
+ * Every session connects to an authoritative server through the complete game
+ * protocol. Desktop solo supplies a URL for the separate server process it
+ * spawned; browser sessions receive a provisioned remote URL. Neither mode
+ * runs authoritative simulation in this client bundle.
+ */
+export type GameEndpoint =
+  | {
+      kind: 'localhost'
+      url: string
+      credential: string
+    }
+  | {
+      kind: 'remote'
+      url: string
+      credential: string
+    }
 
 export interface SessionOptions {
-  /** The surface the renderer draws into. */
-  canvas: HTMLCanvasElement
-  transport: Transport
-  /** Display name for this player. */
+  endpoint: GameEndpoint
   name?: string
-  /** Raised for errors that end the session; the page tears down and reports. */
   onFatal?: (error: Error) => void
+  transportFactory?: (url: string) => Promise<GameTransport>
+  sessionConnector?: GameSessionConnector
 }
 
-export interface GameSession {
-  /** Stop the loop, release GPU/audio resources, close any socket. */
-  destroy(): void
-}
+export interface GameSession extends GameClientSession {}
 
-/**
- * Whether an engine build is present in this bundle.
- *
- * The reconstruction lands as one flip of this constant plus a real
- * `bootGame`. Until then the page shows the reconstruction status instead of
- * a play surface — there is deliberately no stand-in game, because a
- * placeholder that "sort of" plays is the one thing that would make parity
- * regressions invisible.
- */
-export const ENGINE_STATUS: 'not-built' | 'ready' = 'not-built'
+export const ENGINE_STATUS = 'ready' as const
 
-/**
- * Where the standalone offline build is published, once one is.
- *
- * Null until a real artifact exists — the page reads this rather than carrying
- * a hardcoded link, so there is never a download button pointing at a release
- * nobody cut.
- */
+/** Set when the packaged desktop rebuild has a published release artifact. */
 export const OFFLINE_BUILD_URL: string | null = null
 
-/**
- * Start a session and mount it into `options.canvas`.
- *
- * Implementors: this is the whole public surface. Resolve once the first
- * frame has been presented and the session is accepting input.
- */
-export async function bootGame(_options: SessionOptions): Promise<GameSession> {
-  throw new Error(
-    'The Solomon Dark engine is not part of this build yet. ' +
-      'Implement bootGame() and set ENGINE_STATUS to "ready".',
-  )
+export async function bootGame(options: SessionOptions): Promise<GameSession> {
+  validateEndpoint(options.endpoint)
+  const createTransport = options.transportFactory ?? connectWebSocketTransport
+  const transport = await createTransport(options.endpoint.url)
+  const connectSession = options.sessionConnector ?? connectGameClientSession
+  return connectSession({
+    transport,
+    credential: options.endpoint.credential,
+    ...(options.name ? { displayName: options.name } : {}),
+    ...(options.onFatal ? { onFatal: options.onFatal } : {}),
+  })
+}
+
+function validateEndpoint(endpoint: GameEndpoint): void {
+  const url = new URL(endpoint.url)
+  if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+    throw new Error('Game endpoints must use ws or wss.')
+  }
+  const local = isLoopback(url.hostname)
+  if (endpoint.kind === 'localhost') {
+    if (!local || url.protocol !== 'ws:') {
+      throw new Error('A localhost endpoint must be an unencrypted loopback WebSocket.')
+    }
+    return
+  }
+  if (local || isPrivateNetwork(url.hostname)) {
+    throw new Error('Browser remote sessions may not connect to local or private networks.')
+  }
+  if (url.protocol !== 'wss:') throw new Error('Remote game endpoints must use wss.')
+}
+
+function isLoopback(hostname: string): boolean {
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') return true
+  const ipv4 = parseIpv4(hostname)
+  return ipv4?.[0] === 127
+}
+
+function isPrivateNetwork(hostname: string): boolean {
+  const normalized = hostname.toLowerCase()
+  if (normalized.endsWith('.localhost') || normalized.endsWith('.local')) return true
+  if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe8')
+    || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) {
+    return true
+  }
+  const ipv4 = parseIpv4(hostname)
+  if (!ipv4) return false
+  const [first, second] = ipv4
+  return first === 0
+    || first === 10
+    || first === 127
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+}
+
+function parseIpv4(hostname: string): readonly number[] | null {
+  const octets = hostname.split('.')
+  if (octets.length !== 4) return null
+  const parsed = octets.map((octet) => Number(octet))
+  return parsed.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)
+    ? parsed
+    : null
 }

@@ -1,0 +1,22 @@
+.element-vfx {
+  position: absolute;
+  z-index: 0;
+  width: 360px;
+  max-width: none;
+  height: 360px;
+  pointer-events: none;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+}
+
+.element-vfx-held,
+.element-vfx-picker {
+  width: 22.5cqw;
+  height: 40cqh;
+}
+
+.element-vfx-held {
+  width: 45cqw;
+  height: 80cqh;
+}

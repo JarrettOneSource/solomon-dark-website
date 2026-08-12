@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
   },
   "include": [
@@ -14,7 +14,27 @@
     "src/editor/model.ts",
     "src/editor/native-render-plan.ts",
     "src/editor/native-render-plan.test.ts",
-    "src/editor/sprite-registration.ts"
+    "src/editor/sprite-registration.ts",
+    "src/game/create-menu-motion.ts",
+    "src/game/create-menu-motion.test.ts",
+    "src/game/game-asset-readiness.ts",
+    "src/game/game-asset-readiness.test.ts",
+    "src/game/element-vfx-native.ts",
+    "src/game/element-vfx-native.test.ts",
+    "src/game/hub-math.test.ts",
+    "src/game/protocol/game-protocol.ts",
+    "src/game/protocol/game-state.ts",
+    "src/game/protocol/game-protocol.test.ts",
+    "src/game/engine.ts",
+    "src/game/engine.test.ts",
+    "src/game/game-bootstrap.ts",
+    "src/game/client/game-client-session.ts",
+    "src/game/client/game-client-session.test.ts",
+    "src/game/client/game-transport.ts",
+    "src/game/host/hub-host.ts",
+    "src/game/host/hub-host.test.ts",
+    "src/game/core-kernels/hub-player.ts",
+    "src/game/host/hub-snapshot.ts"
   ],
   "exclude": []
 }

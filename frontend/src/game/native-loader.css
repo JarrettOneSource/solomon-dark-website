@@ -1,0 +1,63 @@
+.native-loader-page {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: #000;
+}
+
+.native-loader-stage {
+  position: relative;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  height: min(100dvh, calc(100vw * 9 / 16));
+  overflow: hidden;
+  container-type: size;
+  background: rgb(0 0 84);
+}
+
+.native-loader-canvas {
+  position: absolute;
+  top: calc(50% - 10cqw);
+  left: calc(50% - 15cqw);
+  width: 30cqw;
+  height: 20cqw;
+}
+
+.native-loader-canvas img {
+  position: absolute;
+  display: block;
+  max-width: none;
+}
+
+.native-loader-logo {
+  top: 4.0625%;
+  left: 8.541667%;
+  width: 80.833333%;
+  height: 70.9375%;
+}
+
+.native-loader-url {
+  top: 78.4375%;
+  left: 24.791667%;
+  width: 50.833333%;
+  height: 5.625%;
+}
+
+.native-loader-frame {
+  z-index: 1;
+  top: 82.1875%;
+  left: 26.041667%;
+  width: 47.916667%;
+  height: 16.875%;
+}
+
+.native-loader-fill {
+  z-index: 2;
+  top: 88.125%;
+  left: 30%;
+  width: 40%;
+  height: 5.625%;
+  clip-path: inset(0 100% 0 0);
+}

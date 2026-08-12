@@ -387,6 +387,22 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=headers,
         )
 
+    def test_game_session_provisioning_fails_closed_when_unconfigured(self) -> None:
+        status, response = self.request("POST", "/api/game/sessions")
+        self.assertEqual(status, 400)
+        self.assertEqual(response, {"error": "The game session request is invalid."})
+
+        status, response = self.request(
+            "POST",
+            "/api/game/sessions",
+            headers={"X-Solomon-Dark-Session": "provision"},
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(
+            response,
+            {"error": "A private game session is not available right now."},
+        )
+
     def test_crash_reports_are_private_persisted_and_attributed(self) -> None:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         client_report_id = str(uuid.uuid4())

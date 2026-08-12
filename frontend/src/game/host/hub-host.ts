@@ -1,0 +1,378 @@
+import { timingSafeEqual } from 'node:crypto'
+import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http'
+
+import { WebSocket, WebSocketServer } from 'ws'
+
+import {
+  HUB_INPUT_ACCELERATION,
+  HUB_MOVEMENT_LANE_CAP,
+  HUB_MOVEMENT_RETENTION,
+  HUB_PLAYER_RADIUS,
+  type HubPoint,
+} from '../core-kernels/hub-math.ts'
+import {
+  HUB_FIXED_TICK_SECONDS,
+  HUB_TICK_RATE,
+  addHubPlayer,
+  createHubSimulation,
+  removeHubPlayer,
+  stepHubSimulationTick,
+  type HubPlayerId,
+  type HubSimulationState,
+} from '../core-server/hub-simulation.ts'
+import { createHubSnapshot } from './hub-snapshot.ts'
+import {
+  EMPTY_CONTENT_MANIFEST_SHA256,
+  GAME_PROTOCOL_VERSION,
+  HUB_KERNEL_VERSION,
+  GameProtocolError,
+  decodeClientGameMessage,
+  encodeGameMessage,
+  type GameContentManifest,
+  type ServerDisconnectMessage,
+} from '../protocol/game-protocol.ts'
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
+
+export interface HubHostOptions {
+  allowedOrigins?: readonly string[]
+  bootstrapCredential: string
+  content?: GameContentManifest
+  host?: string
+  maxPlayers?: number
+  port?: number
+  snapshotRate?: number
+  trustedProxy?: boolean
+}
+
+export interface HubHostAddress {
+  host: string
+  port: number
+  url: string
+}
+
+export interface HubHost {
+  address: HubHostAddress
+  close(): Promise<void>
+  playerCount(): number
+  state(): HubSimulationState
+}
+
+interface HostClient {
+  acknowledgedSequence: number
+  activeInput: HubPoint
+  lastReceivedSequence: number
+  playerId: HubPlayerId
+  queuedInputs: Map<number, QueuedClientInput>
+  socket: WebSocket
+}
+
+interface QueuedClientInput {
+  input: HubPoint
+  sequence: number
+  targetTick: number
+}
+
+export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
+  if (!options.bootstrapCredential) throw new Error('Hub host requires a bootstrap credential')
+  const host = options.host ?? '127.0.0.1'
+  const port = options.port ?? 0
+  const maxPlayers = options.maxPlayers ?? 16
+  const snapshotRate = options.snapshotRate ?? 20
+  if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
+    throw new Error('Non-loopback Hub hosts may only run behind an explicitly trusted secure proxy')
+  }
+  if (!LOOPBACK_HOSTS.has(host) && !options.allowedOrigins?.length) {
+    throw new Error('Non-loopback Hub hosts require a nonempty allowedOrigins policy')
+  }
+  if (!Number.isInteger(maxPlayers) || maxPlayers < 1) throw new Error('maxPlayers must be positive')
+  if (!(snapshotRate > 0 && snapshotRate <= HUB_TICK_RATE)) {
+    throw new Error(`snapshotRate must be within 1..${HUB_TICK_RATE}`)
+  }
+
+  let state = createHubSimulation([])
+  let nextPlayerId = 1
+  let closed = false
+  let ticking = false
+  let nextTickAt = performance.now() + HUB_FIXED_TICK_SECONDS * 1000
+  const clients = new Map<WebSocket, HostClient>()
+  const pending = new Set<WebSocket>()
+  const server = createServer((request, response) => {
+    if (request.url === '/health') {
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ status: 'ok', tick: state.tick, players: clients.size }))
+      return
+    }
+    response.writeHead(404)
+    response.end()
+  })
+  const websocketServer = new WebSocketServer({
+    noServer: true,
+    maxPayload: 64 * 1024,
+  })
+
+  server.on('upgrade', (request, socket, head) => {
+    if (!isAllowedUpgrade(request, host, options.allowedOrigins ?? [])) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    if (request.url !== '/game') {
+      socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    websocketServer.handleUpgrade(request, socket, head, (websocket) => {
+      websocketServer.emit('connection', websocket, request)
+    })
+  })
+
+  websocketServer.on('connection', (socket) => {
+    pending.add(socket)
+    const helloDeadline = setTimeout(() => {
+      if (pending.has(socket)) disconnect(socket, 'authentication-failed', 'Handshake timed out.')
+    }, 5000)
+    helloDeadline.unref()
+
+    socket.on('message', (data, binary) => {
+      if (binary) {
+        disconnect(
+          socket,
+          'invalid-message',
+          `Protocol ${GAME_PROTOCOL_VERSION} accepts text messages only.`,
+        )
+        return
+      }
+      let message
+      try {
+        message = decodeClientGameMessage(data.toString())
+      } catch (error) {
+        disconnect(
+          socket,
+          'invalid-message',
+          error instanceof GameProtocolError ? error.message : 'Malformed message.',
+        )
+        return
+      }
+
+      const client = clients.get(socket)
+      if (!client) {
+        if (message.type !== 'client-hello') {
+          disconnect(socket, 'authentication-failed', 'The first message must authenticate.')
+          return
+        }
+        if (message.protocolVersion !== GAME_PROTOCOL_VERSION) {
+          disconnect(
+            socket,
+            'protocol-mismatch',
+            `Protocol ${GAME_PROTOCOL_VERSION} is required.`,
+          )
+          return
+        }
+        if (!credentialsEqual(message.credential, options.bootstrapCredential)) {
+          disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
+          return
+        }
+        if (clients.size >= maxPlayers) {
+          disconnect(socket, 'server-full', 'The session is full.')
+          return
+        }
+        clearTimeout(helloDeadline)
+        pending.delete(socket)
+        const playerId = `player-${nextPlayerId}`
+        nextPlayerId += 1
+        state = addHubPlayer(state, playerId)
+        clients.set(socket, {
+          acknowledgedSequence: 0,
+          activeInput: { x: 0, y: 0 },
+          lastReceivedSequence: 0,
+          playerId,
+          queuedInputs: new Map(),
+          socket,
+        })
+        socket.send(encodeGameMessage({
+          type: 'server-welcome',
+          protocolVersion: GAME_PROTOCOL_VERSION,
+          playerId,
+          resumeToken: `reserved-${playerId}`,
+          serverTickRate: HUB_TICK_RATE,
+          snapshotRate,
+          kernelVersion: HUB_KERNEL_VERSION,
+          kernelParameters: {
+            fixedTickSeconds: HUB_FIXED_TICK_SECONDS,
+            movementAcceleration: HUB_INPUT_ACCELERATION,
+            movementLaneCap: HUB_MOVEMENT_LANE_CAP,
+            movementRetention: HUB_MOVEMENT_RETENTION,
+            playerRadius: HUB_PLAYER_RADIUS,
+          },
+          content: options.content ?? {
+            manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
+            mods: [],
+          },
+          snapshot: createHubSnapshot(state),
+        }))
+        return
+      }
+
+      if (message.type === 'client-input') {
+        if (message.sequence <= client.lastReceivedSequence) return
+        if (message.targetTick > state.tick + HUB_TICK_RATE * 2) {
+          disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
+          return
+        }
+        client.lastReceivedSequence = message.sequence
+        const targetTick = Math.max(state.tick + 1, message.targetTick)
+        const queued = client.queuedInputs.get(targetTick)
+        if (!queued || message.sequence > queued.sequence) {
+          client.queuedInputs.set(targetTick, {
+            input: message.input,
+            sequence: message.sequence,
+            targetTick,
+          })
+        }
+        return
+      }
+      if (message.type === 'client-disconnect') socket.close(1000, 'client disconnect')
+      else disconnect(socket, 'invalid-message', 'The client has already joined.')
+    })
+
+    const release = () => {
+      clearTimeout(helloDeadline)
+      pending.delete(socket)
+      const client = clients.get(socket)
+      if (!client) return
+      clients.delete(socket)
+      state = removeHubPlayer(state, client.playerId)
+    }
+    socket.once('close', release)
+    socket.once('error', release)
+  })
+
+  const ticksPerSnapshot = Math.max(1, Math.round(HUB_TICK_RATE / snapshotRate))
+  const timer = setInterval(() => {
+    if (closed || ticking) return
+    ticking = true
+    try {
+      const now = performance.now()
+      let steps = 0
+      while (now >= nextTickAt && steps < 25) {
+        const inputs: Record<HubPlayerId, HubPoint> = {}
+        const nextTick = state.tick + 1
+        for (const client of clients.values()) {
+          applyQueuedInput(client, nextTick)
+          inputs[client.playerId] = client.activeInput
+        }
+        state = stepHubSimulationTick(state, inputs)
+        nextTickAt += HUB_FIXED_TICK_SECONDS * 1000
+        steps += 1
+        if (state.tick % ticksPerSnapshot === 0) broadcastSnapshot()
+      }
+      if (steps === 25 && now >= nextTickAt) {
+        nextTickAt = now + HUB_FIXED_TICK_SECONDS * 1000
+      }
+    } finally {
+      ticking = false
+    }
+  }, 2)
+
+  function broadcastSnapshot(): void {
+    const snapshot = createHubSnapshot(state)
+    for (const client of clients.values()) {
+      if (client.socket.readyState !== WebSocket.OPEN) continue
+      client.socket.send(encodeGameMessage({
+        type: 'server-snapshot',
+        acknowledgedInputSequence: client.acknowledgedSequence,
+        snapshot,
+      }))
+    }
+  }
+
+  function disconnect(
+    socket: WebSocket,
+    code: ServerDisconnectMessage['code'],
+    reason: string,
+  ): void {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(encodeGameMessage({ type: 'server-disconnect', code, reason }))
+    }
+    socket.close(1008, reason.slice(0, 123))
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, host, () => {
+      server.off('error', reject)
+      resolve()
+    })
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('Hub host did not bind a TCP address')
+
+  return {
+    address: {
+      host,
+      port: address.port,
+      url: `ws://${formatHost(host)}:${address.port}/game`,
+    },
+    async close() {
+      if (closed) return
+      closed = true
+      clearInterval(timer)
+      for (const socket of [...pending, ...clients.keys()]) socket.close(1001, 'server shutdown')
+      websocketServer.close()
+      await closeHttpServer(server)
+    },
+    playerCount: () => clients.size,
+    state: () => state,
+  }
+}
+
+function applyQueuedInput(client: HostClient, nextTick: number): void {
+  let selected: QueuedClientInput | undefined
+  for (const [targetTick, input] of client.queuedInputs) {
+    if (targetTick > nextTick) continue
+    client.queuedInputs.delete(targetTick)
+    if (input.sequence <= client.acknowledgedSequence) continue
+    if (
+      !selected
+      || input.targetTick > selected.targetTick
+      || (input.targetTick === selected.targetTick && input.sequence > selected.sequence)
+    ) selected = input
+  }
+  if (!selected) return
+  client.activeInput = selected.input
+  client.acknowledgedSequence = Math.max(client.acknowledgedSequence, selected.sequence)
+}
+
+function isAllowedUpgrade(
+  request: IncomingMessage,
+  configuredHost: string,
+  allowedOrigins: readonly string[],
+): boolean {
+  const hostHeader = request.headers.host
+  if (!hostHeader) return false
+  const hostname = hostHeader.startsWith('[')
+    ? hostHeader.slice(1, hostHeader.indexOf(']'))
+    : hostHeader.split(':', 1)[0]
+  if (LOOPBACK_HOSTS.has(configuredHost) && !LOOPBACK_HOSTS.has(hostname)) return false
+  const origin = request.headers.origin
+  if (origin === undefined || origin === 'null') return true
+  return allowedOrigins.includes(origin)
+}
+
+function credentialsEqual(actual: string, expected: string): boolean {
+  const actualBytes = Buffer.from(actual)
+  const expectedBytes = Buffer.from(expected)
+  return actualBytes.length === expectedBytes.length
+    && timingSafeEqual(actualBytes, expectedBytes)
+}
+
+function formatHost(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
+}
+
+function closeHttpServer(server: HttpServer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve())
+  })
+}

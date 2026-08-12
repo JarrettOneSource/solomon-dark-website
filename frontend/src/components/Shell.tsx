@@ -102,6 +102,7 @@ export default function Shell() {
   // The Boneyard editor takes the whole viewport: no chrome, no wandering
   // critters, and the wand grounds itself so the pointer stays a pointer.
   const workshop = location.pathname.startsWith('/boneyard')
+  const game = location.pathname === '/game'
 
   useEffect(() => {
     setMenuOpen(false)
@@ -146,6 +147,14 @@ export default function Shell() {
       document.removeEventListener('pointerdown', onDown)
     }
   }, [])
+
+  if (game) {
+    return (
+      <main className="h-dvh overflow-hidden">
+        <Outlet />
+      </main>
+    )
+  }
 
   if (workshop) {
     return (

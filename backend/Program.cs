@@ -35,6 +35,8 @@ builder.Services.AddSingleton(storage);
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
 builder.Services.AddScoped<ModPublishingService>();
+builder.Services.AddHttpClient<GameSessionProvisioner>(client =>
+    client.Timeout = TimeSpan.FromSeconds(5));
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 var generatedJwtSecret = false;
@@ -170,6 +172,11 @@ builder.Services.AddRateLimiter(options =>
                 "/api/auth/steam/session",
                 StringComparison.OrdinalIgnoreCase)
                 ? "Too many Steam authentication attempts; try again in a minute."
+            : string.Equals(
+                requestPath,
+                "/api/game/sessions",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many private game sessions were requested; try again in a minute."
                 : "Too many match announcements; try again in a minute.";
         await context.HttpContext.Response.WriteAsJsonAsync(
             new { error = message },
@@ -242,6 +249,17 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = 5,
                 Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("game-sessions", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 6,
+                Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
@@ -359,6 +377,7 @@ SaveEndpoints.Map(app);
 StatsEndpoints.Map(app);
 CrashReportEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);
+GameSessionEndpoints.Map(app);
 
 app.MapMethods(
     "/api/{**path}",

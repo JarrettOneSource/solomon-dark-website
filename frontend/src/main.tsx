@@ -28,6 +28,7 @@ import About from './pages/About'
 import Wizard from './pages/Wizard'
 import NotFound from './pages/NotFound'
 import { Spinner } from './components/ui'
+import NativeLoader from './game/NativeLoader'
 
 // The Boneyard editor carries its own atlas manifests and sprite pipeline;
 // it loads when someone actually picks up the shovel.
@@ -67,7 +68,7 @@ const router = createBrowserRouter([
       {
         path: '/game',
         element: (
-          <Suspense fallback={<Spinner label="Opening the gate…" />}>
+          <Suspense fallback={<NativeLoader progress={0} />}>
             <Game />
           </Suspense>
         ),
