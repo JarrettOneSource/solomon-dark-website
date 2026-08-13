@@ -1,6 +1,6 @@
 # NFO browser game runtime
 
-The production website and private browser game sessions are separate supervised
+The production website and browser game sessions are separate supervised
 processes from the same release directory:
 
 - `solomon-dark-revived.service` serves the site and provisions a private
@@ -32,10 +32,12 @@ GameSessions__PublicWebSocketOrigin=wss://solomondarker.com
 ```
 
 Never place the supervisor secret or a provisioned session credential in a
-build-time Vite variable. The browser calls `POST /api/game/sessions`; the
-website authenticates to the loopback supervisor and returns one short-lived
-session path and credential. Unclaimed sessions expire after two minutes and
-empty used sessions expire after five minutes.
+build-time Vite variable. `POST /api/game/sessions` retains the private
+provisioning contract. New Game uses `POST /api/game/lobbies`, and `/parties`
+reads `GET /api/game/lobbies`; both are projections of the same live supervisor
+and do not write the Steam launcher lobby database. Joiners receive the guest
+credential only from `POST /api/game/lobbies/{id}/join`. Unclaimed sessions
+expire after two minutes and empty used sessions expire after five minutes.
 
 Deploy the checked-in unit and Caddy site, validate both before reloading, and
 restart the game supervisor together with the website whenever the bundled game
@@ -43,6 +45,9 @@ protocol changes. A release is healthy only when all of these pass:
 
 1. the website and game units are active with zero unexpected restarts;
 2. `http://127.0.0.1:5222/health` reports the release protocol;
-3. `POST /api/game/sessions` returns `no-store` and a same-origin `wss` URL;
-4. that URL completes the protocol handshake and authoritative movement; and
-5. a real browser reaches the Hub without console or page errors.
+3. private provisioning and Web Rebuild Playtest create/list/join responses are
+   `no-store` and return same-origin `wss` URLs where applicable;
+4. a guest may complete Create first without becoming host, then both clients
+   complete the protocol handshake and authoritative movement; and
+5. a real two-browser `/parties` -> `/game?party=<id>` journey reaches one Hub
+   without console or page errors.

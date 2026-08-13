@@ -1,5 +1,12 @@
 import type { GameEndpoint } from './engine.ts'
 
+const GAME_LOBBY_ID = /^[A-Za-z0-9_-]{32}$/
+
+export interface CreatedGameLobby {
+  endpoint: GameEndpoint
+  lobbyId: string
+}
+
 declare global {
   interface Window {
     solomonDarkRuntime?: {
@@ -52,6 +59,75 @@ export async function resolveGameEndpoint(
   return decodeProvisionedGameEndpoint(payload)
 }
 
+export async function createGameLobby(
+  hostPlayer: string,
+  request: typeof fetch = fetch,
+): Promise<CreatedGameLobby> {
+  const response = await request('/api/game/lobbies', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'x-solomon-dark-session': 'create-lobby',
+    },
+    body: JSON.stringify({ hostPlayer }),
+  })
+  const payload = await readJson(response)
+  if (!response.ok) throw new Error(apiError(payload, 'Web rebuild playtests are not available right now.'))
+  return decodeCreatedGameLobby(payload)
+}
+
+export async function joinGameLobby(
+  lobbyId: string,
+  request: typeof fetch = fetch,
+): Promise<GameEndpoint> {
+  const normalized = parseGameLobbyId(lobbyId)
+  if (!normalized) throw new Error('The web playtest lobby link is invalid.')
+  const response = await request(`/api/game/lobbies/${normalized}/join`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      accept: 'application/json',
+      'x-solomon-dark-session': 'join-lobby',
+    },
+  })
+  const payload = await readJson(response)
+  if (!response.ok) throw new Error(apiError(payload, 'That web playtest is no longer available.'))
+  return decodeProvisionedGameEndpoint(payload)
+}
+
+export async function cancelGameLobby(
+  lobby: CreatedGameLobby,
+  request: typeof fetch = fetch,
+): Promise<void> {
+  const response = await request(`/api/game/lobbies/${lobby.lobbyId}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+    headers: {
+      accept: 'application/json',
+      'x-solomon-dark-host-credential': lobby.endpoint.credential,
+    },
+  })
+  if (response.ok || response.status === 404) return
+  const payload = await readJson(response)
+  throw new Error(apiError(payload, 'The web playtest could not be cancelled.'))
+}
+
+export function decodeCreatedGameLobby(value: unknown): CreatedGameLobby {
+  if (!record(value) || typeof value.lobbyId !== 'string' || !parseGameLobbyId(value.lobbyId)) {
+    throw new Error('The game session provisioner returned an invalid lobby.')
+  }
+  return {
+    lobbyId: value.lobbyId as string,
+    endpoint: decodeProvisionedGameEndpoint(value),
+  }
+}
+
+export function parseGameLobbyId(value: string | null | undefined): string | null {
+  return value && GAME_LOBBY_ID.test(value) ? value : null
+}
+
 export function decodeProvisionedGameEndpoint(value: unknown): GameEndpoint {
   if (!record(value) ||
       value.kind !== 'remote' ||
@@ -79,6 +155,10 @@ async function readJson(response: Response): Promise<unknown> {
   } catch {
     throw new Error('The game session provisioner returned an invalid response.')
   }
+}
+
+function apiError(value: unknown, fallback: string): string {
+  return record(value) && typeof value.error === 'string' ? value.error : fallback
 }
 
 function record(value: unknown): value is Record<string, unknown> {

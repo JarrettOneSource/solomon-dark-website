@@ -21,6 +21,7 @@
     "game:host": "node --experimental-strip-types src/game/host/run-game-host.ts",
     "smoke:game": "node tools/smoke-game-runtime.mjs",
     "smoke:game:hub-rooms": "node --experimental-strip-types tools/smoke-hub-rooms.mjs",
+    "smoke:game:lobbies": "node tools/smoke-web-game-lobbies.mjs",
     "smoke:game-audio": "node tools/smoke-game-audio.mjs",
     "smoke:game:devices": "node tools/smoke-game-devices.mjs",
     "smoke:desktop": "xvfb-run -a node tools/smoke-desktop-runtime.mjs",

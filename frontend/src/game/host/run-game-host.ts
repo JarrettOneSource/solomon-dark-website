@@ -21,9 +21,9 @@ const boneyards = createBoneyardCatalog(
 )
 
 const server = await startGameHost({
+  authentication: { kind: 'shared', credential },
   host,
   port,
-  bootstrapCredential: credential,
   boneyards,
   snapshotRate,
   trustedProxy,

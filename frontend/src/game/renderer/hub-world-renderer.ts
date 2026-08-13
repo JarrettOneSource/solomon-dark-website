@@ -31,8 +31,12 @@ interface HubFrameDiagnostics {
   astronomerTelescopeFrame: number
   frameCount: number
   fadeAlpha: number
+  hostPlayerId: string | null
+  localPlayerId: string
   orbSpriteCount: number
+  playerCount: number
   playerMoving: boolean
+  playerPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
   playerX: number
   playerY: number
@@ -126,8 +130,12 @@ export async function createHubWorldRenderer(
     astronomerTelescopeFrame: 0,
     frameCount: 0,
     fadeAlpha: 0,
+    hostPlayerId: options.initialSnapshot.hostPlayerId,
+    localPlayerId: options.playerId,
     orbSpriteCount: 0,
+    playerCount: Object.keys(options.initialSnapshot.players).length,
     playerMoving: false,
+    playerPositions: {},
     playerWalkPose: 0,
     playerX: Number.NaN,
     playerY: Number.NaN,
@@ -163,10 +171,20 @@ export async function createHubWorldRenderer(
     frameDiagnostics.astronomerTelescopeFrame = courtyardScene.astronomerTelescopeFrame
     frameDiagnostics.frameCount = frameCount
     frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
+    frameDiagnostics.hostPlayerId = snapshot.hostPlayerId
+    frameDiagnostics.playerCount = Object.keys(snapshot.players).length
     frameDiagnostics.studentCount = courtyardScene.studentCount
     frameDiagnostics.teacherFrame = courtyardScene.teacherFrame
     frameDiagnostics.tick = snapshot.tick
     frameDiagnostics.transitionPhase = participant?.transition?.phase ?? null
+    for (const playerId of Object.keys(frameDiagnostics.playerPositions)) {
+      if (!snapshot.players[playerId]) delete frameDiagnostics.playerPositions[playerId]
+    }
+    for (const [playerId, state] of Object.entries(snapshot.players)) {
+      const position = frameDiagnostics.playerPositions[playerId] ??= { x: 0, y: 0 }
+      position.x = state.position.x
+      position.y = state.position.y
+    }
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y

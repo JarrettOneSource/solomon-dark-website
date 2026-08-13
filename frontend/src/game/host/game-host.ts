@@ -42,9 +42,15 @@ import { createGameSnapshot } from './game-snapshot.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
+export type GameHostAuthentication =
+  | { kind: 'shared'; credential: string }
+  | { kind: 'reserved-host'; guestCredential: string; hostCredential: string }
+
+type GameHostRole = 'guest' | 'host' | 'shared'
+
 export interface GameHostOptions {
   allowedOrigins?: readonly string[]
-  bootstrapCredential: string
+  authentication: GameHostAuthentication
   boneyards?: BoneyardCatalog
   content?: GameContentManifest
   host?: string
@@ -63,6 +69,7 @@ export interface GameHostAddress {
 export interface GameHost {
   address: GameHostAddress
   close(): Promise<void>
+  hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
   state(): GameSimulationState
@@ -84,7 +91,7 @@ interface QueuedClientInput {
 }
 
 export async function startGameHost(options: GameHostOptions): Promise<GameHost> {
-  if (!options.bootstrapCredential) throw new Error('Game host requires a bootstrap credential')
+  validateAuthentication(options.authentication)
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
@@ -106,6 +113,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let state = createGameSimulation({})
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
+  let reservedHostClaimed = false
   let loadedBoneyard: LoadedBoneyard | null = null
   let closed = false
   let ticking = false
@@ -189,12 +197,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           )
           return
         }
-        if (!credentialsEqual(message.credential, options.bootstrapCredential)) {
+        const role = authenticate(message.credential, options.authentication)
+        if (!role) {
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
+          return
+        }
+        if (role === 'host' && reservedHostClaimed) {
+          disconnect(socket, 'authentication-failed', 'The host credential has already been claimed.')
           return
         }
         if (clients.size >= maxPlayers) {
           disconnect(socket, 'server-full', 'The session is full.')
+          return
+        }
+        if (role === 'guest' && !reservedHostClaimed && clients.size >= maxPlayers - 1) {
+          disconnect(socket, 'server-full', 'The session is reserving its final seat for the host.')
           return
         }
         clearTimeout(helloDeadline)
@@ -202,7 +219,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const playerId = `player-${nextPlayerId}`
         nextPlayerId += 1
         state = addPlayerCharacter(state, playerId, message.character)
-        hostPlayerId ??= playerId
+        if (role === 'host') {
+          reservedHostClaimed = true
+          hostPlayerId = playerId
+        } else if (role === 'shared') {
+          hostPlayerId ??= playerId
+        } else if (reservedHostClaimed) {
+          hostPlayerId ??= playerId
+        }
         clients.set(socket, {
           acknowledgedSequence: 0,
           activeInput: { movement: { x: 0, y: 0 } },
@@ -379,9 +403,34 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       websocketServer.close()
       await closeHttpServer(server)
     },
+    hostPlayerId: () => hostPlayerId,
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     state: () => state,
+  }
+}
+
+function authenticate(
+  credential: string,
+  authentication: GameHostAuthentication,
+): GameHostRole | null {
+  if (authentication.kind === 'shared') {
+    return credentialsEqual(credential, authentication.credential) ? 'shared' : null
+  }
+  if (credentialsEqual(credential, authentication.hostCredential)) return 'host'
+  return credentialsEqual(credential, authentication.guestCredential) ? 'guest' : null
+}
+
+function validateAuthentication(authentication: GameHostAuthentication): void {
+  if (authentication.kind === 'shared') {
+    if (!authentication.credential) throw new Error('Game host requires a shared credential')
+    return
+  }
+  if (!authentication.hostCredential || !authentication.guestCredential) {
+    throw new Error('Game host requires host and guest credentials')
+  }
+  if (credentialsEqual(authentication.hostCredential, authentication.guestCredential)) {
+    throw new Error('Game host host and guest credentials must differ')
   }
 }
 

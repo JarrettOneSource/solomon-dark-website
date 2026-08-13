@@ -150,18 +150,29 @@ function PlayActions({
 }
 
 interface MainMenuSceneProps {
+  displayName: string
   connectSession: (character: PlayerCharacterConfig) => Promise<GameClientSession>
+  initialScreen?: 'create' | 'root'
+  onCancelCreate: () => Promise<void>
+  prepareNewGame: () => Promise<void>
 }
 
-export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
+export default function MainMenuScene({
+  connectSession,
+  displayName,
+  initialScreen = 'root',
+  onCancelCreate,
+  prepareNewGame,
+}: MainMenuSceneProps) {
   const audio = useMemo(() => new GameAudioDirector(GAME_AUDIO_SOURCES), [])
   const stageRef = useRef<HTMLElement>(null)
-  const [screen, setScreen] = useState<MenuScreen>('root')
+  const [screen, setScreen] = useState<MenuScreen>(initialScreen)
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
+  const [preparing, setPreparing] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
@@ -234,6 +245,34 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
   const titleScreen = screen === 'root' || screen === 'play'
 
+  const beginNewGame = async () => {
+    if (preparing || connecting) return
+    setPreparing(true)
+    setConnectionError(null)
+    try {
+      await prepareNewGame()
+      transitionTo('create')
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Web playtest creation failed.')
+    } finally {
+      setPreparing(false)
+    }
+  }
+
+  const leaveCreate = async () => {
+    if (preparing || connecting) return
+    setPreparing(true)
+    setConnectionError(null)
+    try {
+      await onCancelCreate()
+      if (initialScreen !== 'create') transitionTo('play')
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'The web playtest could not be closed.')
+    } finally {
+      setPreparing(false)
+    }
+  }
+
   const startHub = async (
     selectedElement: WizardElement,
     selectedDiscipline: WizardDiscipline,
@@ -244,7 +283,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
     try {
       const nextSession = await connectSession({
         discipline: selectedDiscipline,
-        displayName: 'Helvidius',
+        displayName,
         element: selectedElement,
       })
       setSession(nextSession)
@@ -287,7 +326,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
                 <PlayActions
                   onBack={() => setScreen('root')}
                   onHighlight={setHoveredTitleAction}
-                  onNewGame={() => transitionTo('create')}
+                  onNewGame={() => { void beginNewGame() }}
                   onPress={() => audio.playSound('click')}
                   onPressState={setPressedTitleAction}
                 />
@@ -308,7 +347,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
-            onBack={() => transitionTo('play')}
+            onBack={() => { void leaveCreate() }}
             onStart={startHub}
           />
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
@@ -335,9 +374,9 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
           <div className="main-menu-runtime-status" role="status">Opening the Boneyard…</div>
         ) : null}
 
-        {(connecting || connectionError) && (
+        {(preparing || connecting || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? 'Opening the grounds…'}
+            {connectionError ?? (preparing ? 'Opening the web playtest…' : 'Opening the grounds…')}
           </div>
         )}
 

@@ -49,7 +49,7 @@ test('game session supervisor provisions isolated authenticated game sessions', 
   )
 })
 
-test('game session supervisor enforces capacity and expires unclaimed sessions', async (context) => {
+test('game session supervisor enforces capacity and expires unclaimed sessions and lobbies', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -67,13 +67,78 @@ test('game session supervisor enforces capacity and expires unclaimed sessions',
   assert.equal(full.status, 503)
 
   await waitFor(() => supervisor.sessionCount() === 0)
-  const replacement = await provision(supervisor.address.url)
+  const replacement = await createLobby(supervisor.address.url, 'Patient Wizard')
   assert.match(replacement.path, /^\/game-sessions\/[A-Za-z0-9_-]{32}$/)
+  assert.equal((await listLobbies(supervisor.address.url))[0]?.id, replacement.lobbyId)
+  await waitFor(async () => (await listLobbies(supervisor.address.url)).length === 0)
+})
+
+test('game session supervisor owns discoverable lobby lifecycle and reserved host access', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const created = await createLobby(supervisor.address.url, 'Host Wizard')
+  assert.deepEqual(await listLobbies(supervisor.address.url), [{
+    hostPlayer: 'Host Wizard',
+    id: created.lobbyId,
+    maxPlayers: 16,
+    phase: 'picking-loadout',
+    players: 0,
+    protocol: `solomon-dark/${GAME_PROTOCOL_VERSION}`,
+  }])
+
+  const guestEndpoint = await joinLobby(supervisor.address.url, created.lobbyId)
+  const guest = await join(supervisor.address.url, guestEndpoint, BROWSER_ORIGIN)
+  context.after(() => guest.socket.close())
+  assert.equal(guest.welcome.snapshot.hostPlayerId, null)
+  assert.equal((await listLobbies(supervisor.address.url))[0].phase, 'picking-loadout')
+
+  const creator = await join(supervisor.address.url, created, BROWSER_ORIGIN)
+  context.after(() => creator.socket.close())
+  assert.equal(creator.welcome.snapshot.hostPlayerId, creator.welcome.playerId)
+  await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.phase === 'hub')
+  assert.equal((await listLobbies(supervisor.address.url))[0].players, 2)
+
+  const denied = await fetch(`${supervisor.address.url}/admin/lobbies/${created.lobbyId}`, {
+    method: 'DELETE',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'x-solomon-dark-host-credential': 'wrong-secret',
+    },
+  })
+  assert.equal(denied.status, 403)
+
+  const cancelled = await fetch(`${supervisor.address.url}/admin/lobbies/${created.lobbyId}`, {
+    method: 'DELETE',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'x-solomon-dark-host-credential': created.credential,
+    },
+  })
+  assert.equal(cancelled.status, 204)
+  assert.deepEqual(await listLobbies(supervisor.address.url), [])
 })
 
 interface ProvisionedEndpoint {
   credential: string
   path: string
+}
+
+interface CreatedLobbyEndpoint extends ProvisionedEndpoint {
+  lobbyId: string
+}
+
+interface LobbySummary {
+  hostPlayer: string
+  id: string
+  maxPlayers: number
+  phase: 'picking-loadout' | 'hub' | 'session'
+  players: number
+  protocol: string
 }
 
 async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
@@ -90,6 +155,42 @@ async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
     credential: value.credential as string,
     path: value.path as string,
   }
+}
+
+async function createLobby(supervisorUrl: string, hostPlayer: string): Promise<CreatedLobbyEndpoint> {
+  const response = await fetch(`${supervisorUrl}/admin/lobbies`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ hostPlayer }),
+  })
+  assert.equal(response.status, 201)
+  const value = await response.json() as Record<string, unknown>
+  return {
+    credential: value.credential as string,
+    lobbyId: value.lobbyId as string,
+    path: value.path as string,
+  }
+}
+
+async function joinLobby(supervisorUrl: string, lobbyId: string): Promise<ProvisionedEndpoint> {
+  const response = await fetch(`${supervisorUrl}/admin/lobbies/${lobbyId}/join`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(response.status, 200)
+  return await response.json() as ProvisionedEndpoint
+}
+
+async function listLobbies(supervisorUrl: string): Promise<LobbySummary[]> {
+  const response = await fetch(`${supervisorUrl}/admin/lobbies`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })
+  assert.equal(response.status, 200)
+  const value = await response.json() as { items: LobbySummary[] }
+  return value.items
 }
 
 async function join(
@@ -155,9 +256,9 @@ function nextMessage(
   })
 }
 
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
   const deadline = Date.now() + 3000
-  while (!predicate()) {
+  while (!await predicate()) {
     if (Date.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }

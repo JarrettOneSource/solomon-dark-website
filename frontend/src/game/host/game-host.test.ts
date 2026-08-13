@@ -26,9 +26,10 @@ const SECOND_CHARACTER = {
   displayName: 'Vibia',
   element: 'water',
 } as const
+const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
 
 test('authoritative game host owns two configured player characters and movement', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
@@ -63,7 +64,7 @@ test('authoritative game host owns two configured player characters and movement
 })
 
 test('game host reconnects a new character at the active world spawn', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
 
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
@@ -85,7 +86,7 @@ test('game host reconnects a new character at the active world spawn', async (co
 })
 
 test('game host rejects arbitrary origins and invalid bootstrap credentials', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret' })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION })
   context.after(() => host.close())
 
   await assert.rejects(() => openSocket(host.address.url, 'https://evil.example'))
@@ -107,18 +108,18 @@ test('game host rejects arbitrary origins and invalid bootstrap credentials', as
 
 test('game host is loopback-only by default and requires trusted proxy origins', async () => {
   await assert.rejects(() => startGameHost({
-    bootstrapCredential: 'test-secret',
+    authentication: SHARED_AUTHENTICATION,
     host: '0.0.0.0',
   }), /trusted secure proxy/)
   await assert.rejects(() => startGameHost({
-    bootstrapCredential: 'test-secret',
+    authentication: SHARED_AUTHENTICATION,
     host: '0.0.0.0',
     trustedProxy: true,
   }), /nonempty allowedOrigins/)
 })
 
 test('game host rejects intent targeting implausibly far-future ticks', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
@@ -134,7 +135,7 @@ test('game host rejects intent targeting implausibly far-future ticks', async (c
 })
 
 test('game host applies only the newest character input for a simulation tick', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
@@ -162,7 +163,7 @@ test('game host applies only the newest character input for a simulation tick', 
 })
 
 test('host starts one exact random Boneyard for every connected client', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
@@ -231,7 +232,7 @@ test('host starts one exact random Boneyard for every connected client', async (
 test('host exposes and authoritatively loads a selected mod Boneyard', async (context) => {
   const mod = modBoneyardEntry()
   const host = await startGameHost({
-    bootstrapCredential: 'test-secret',
+    authentication: SHARED_AUTHENTICATION,
     boneyards: createBoneyardCatalog([mod]),
     snapshotRate: 100,
   })
@@ -286,7 +287,7 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
 })
 
 test('host authority transfers to the earliest remaining client', async (context) => {
-  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
@@ -309,6 +310,61 @@ test('host authority transfers to the earliest remaining client', async (context
   const result = await loaded
   assert.equal(result.type, 'server-boneyard-loaded')
   assert.equal(result.boneyard.choice.id, 'default-random')
+})
+
+test('reserved host authority does not depend on loadout completion order', async (context) => {
+  const host = await startGameHost({
+    authentication: {
+      kind: 'reserved-host',
+      guestCredential: 'guest-secret',
+      hostCredential: 'host-secret',
+    },
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+
+  const guest = await join(host.address.url, 'guest-secret', SECOND_CHARACTER)
+  context.after(() => guest.socket.close())
+  assert.equal(guest.welcome.snapshot.hostPlayerId, null)
+  assert.equal(host.hostPlayerId(), null)
+
+  guest.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await new Promise((resolve) => setTimeout(resolve, 25))
+  assert.equal(host.loadedBoneyard(), null)
+
+  const hostAssignment = nextMessage(guest.socket, (message) => (
+    message.type === 'server-snapshot' && message.snapshot.hostPlayerId !== null
+  ))
+  const creator = await join(host.address.url, 'host-secret', FIRST_CHARACTER)
+  context.after(() => creator.socket.close())
+  assert.equal(creator.welcome.snapshot.hostPlayerId, creator.welcome.playerId)
+  assert.equal(host.hostPlayerId(), creator.welcome.playerId)
+  const assigned = await hostAssignment
+  assert.equal(assigned.type, 'server-snapshot')
+  assert.equal(assigned.snapshot.hostPlayerId, creator.welcome.playerId)
+})
+
+test('a later guest inherits authority after the reserved host has left', async (context) => {
+  const host = await startGameHost({
+    authentication: {
+      kind: 'reserved-host',
+      guestCredential: 'guest-secret',
+      hostCredential: 'host-secret',
+    },
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+
+  const creator = await join(host.address.url, 'host-secret', FIRST_CHARACTER)
+  await closeSocket(creator.socket)
+  await waitFor(() => host.hostPlayerId() === null)
+
+  const successor = await join(host.address.url, 'guest-secret', SECOND_CHARACTER)
+  context.after(() => successor.socket.close())
+  assert.equal(successor.welcome.snapshot.hostPlayerId, successor.welcome.playerId)
 })
 
 async function join(
@@ -337,6 +393,14 @@ function closeSocket(socket: WebSocket): Promise<void> {
     socket.once('close', resolve)
     socket.close(1000, 'test disconnect')
   })
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 3000
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('timed out waiting for condition')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
 }
 
 function openSocket(url: string, origin?: string): Promise<WebSocket> {

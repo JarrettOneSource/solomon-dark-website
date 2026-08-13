@@ -210,6 +210,7 @@ export default function HubScene({
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-hub-region={currentRegion}
+      data-is-host={isHost}
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}

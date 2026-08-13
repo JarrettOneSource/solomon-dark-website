@@ -28,6 +28,14 @@ desktop client must still provide local profiles, local saves, solo play, LAN
 or direct joining, hosting, and locally installed content while the website is
 unreachable.
 
+Browser discovery and native-launcher discovery are separate products even
+when they share the `/parties` presentation page. Steam/launcher hosts continue
+to announce through `/api/lobbies` and join through the registered
+`solomondarkrevived://` transport. Discoverable rebuilt-web sessions live only
+under `/api/game/lobbies`, join through an ordinary `/game?party=<id>` URL, and
+are projected directly from the live game-session supervisor. They do not
+create Steam-shaped SQLite lobby records or enter launcher counts.
+
 ## Shared identities and boundaries
 
 The source tree owns four distinct modules:
@@ -55,6 +63,14 @@ nested inside a Hub ambient actor or another world-specific subsystem.
 from the in-world character and from native gameplay-slot ordinals. This keeps
 reconnect, future spectating, and world transitions from leaking connection
 identity into position or actor behavior.
+
+A discoverable browser session also separates control-plane lobby identity
+from participant identity. Creating the lobby reserves host authority but does
+not create a player character. The creator's host credential and the joiners'
+guest credential assign authority when their complete character configurations
+arrive, so a guest that finishes Create first cannot become host by timing.
+After the reserved host has connected, the existing authoritative host handoff
+may select the earliest remaining participant if that host disconnects.
 
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to

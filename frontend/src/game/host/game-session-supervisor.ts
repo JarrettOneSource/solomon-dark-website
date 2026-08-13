@@ -1,5 +1,10 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http'
+import {
+  createServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from 'node:http'
 import type { Duplex } from 'node:stream'
 
 import { WebSocket, WebSocketServer } from 'ws'
@@ -45,11 +50,14 @@ interface SessionRecord {
   activeProxies: number
   closing: boolean
   createdAt: number
-  credential: string
   emptySince: number | null
+  guestCredential: string | null
   hadPlayer: boolean
   host: GameHost
+  hostCredential: string
+  hostPlayer: string | null
   id: string
+  kind: 'lobby' | 'private'
 }
 
 export async function startGameSessionSupervisor(
@@ -86,63 +94,132 @@ export async function startGameSessionSupervisor(
     maxPayload: 64 * 1024,
   })
   const server = createServer((request, response) => {
-    if (request.method === 'GET' && request.url === '/health') {
-      response.writeHead(200, {
-        'cache-control': 'no-store',
-        'content-type': 'application/json',
-      })
-      response.end(JSON.stringify({
+    const path = request.url?.split('?', 1)[0] ?? ''
+    if (request.method === 'GET' && path === '/health') {
+      sendJson(response, 200, {
         status: 'ok',
         protocol: GAME_PROTOCOL_NAME,
         sessions: sessions.size,
-      }))
-      return
-    }
-    if (request.method === 'POST' && request.url === '/admin/sessions') {
-      if (!bearerMatches(request.headers.authorization, options.adminSecret)) {
-        response.writeHead(401, {
-          'cache-control': 'no-store',
-          'content-type': 'application/json',
-        })
-        response.end(JSON.stringify({ error: 'Unauthorized.' }))
-        return
-      }
-      if (sessions.size + provisioning >= maxSessions) {
-        response.writeHead(503, {
-          'cache-control': 'no-store',
-          'content-type': 'application/json',
-          'retry-after': '5',
-        })
-        response.end(JSON.stringify({ error: 'Game session capacity is exhausted.' }))
-        return
-      }
-      provisioning += 1
-      void provisionSession().then((session) => {
-        response.writeHead(201, {
-          'cache-control': 'no-store',
-          'content-type': 'application/json',
-        })
-        response.end(JSON.stringify({
-          credential: session.credential,
-          path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
-          protocol: GAME_PROTOCOL_NAME,
-          sessionId: session.id,
-        }))
-      }).catch(() => {
-        response.writeHead(503, {
-          'cache-control': 'no-store',
-          'content-type': 'application/json',
-          'retry-after': '5',
-        })
-        response.end(JSON.stringify({ error: 'A game session could not be started.' }))
-      }).finally(() => {
-        provisioning -= 1
+        lobbies: [...sessions.values()].filter((session) => session.kind === 'lobby').length,
       })
       return
     }
-    response.writeHead(404)
+    if (!path.startsWith('/admin/')) {
+      response.writeHead(404)
+      response.end()
+      return
+    }
+    if (!bearerMatches(request.headers.authorization, options.adminSecret)) {
+      sendJson(response, 401, { error: 'Unauthorized.' })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/sessions') {
+      provisionIntoResponse(response, 'private', null)
+      return
+    }
+    if (request.method === 'GET' && path === '/admin/lobbies') {
+      const items = [...sessions.values()]
+        .filter((session) => session.kind === 'lobby' && !session.closing)
+        .sort((first, second) => first.createdAt - second.createdAt)
+        .map(lobbySummary)
+      sendJson(response, 200, { items })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/lobbies') {
+      void readJsonObject(request).then((body) => {
+        const hostPlayer = normalizeHostPlayer(body.hostPlayer)
+        if (!hostPlayer) {
+          sendJson(response, 400, { error: 'A valid host player name is required.' })
+          return
+        }
+        provisionIntoResponse(response, 'lobby', hostPlayer)
+      }).catch(() => {
+        sendJson(response, 400, { error: 'A valid JSON request body is required.' })
+      })
+      return
+    }
+    const joinLobbyId = lobbyRouteId(path, '/join')
+    if (request.method === 'POST' && joinLobbyId) {
+      const session = sessions.get(joinLobbyId)
+      if (!session || session.kind !== 'lobby' || session.closing || !session.guestCredential) {
+        sendJson(response, 404, { error: 'That web playtest is no longer available.' })
+        return
+      }
+      const guestLimit = session.host.hostPlayerId() === null
+        ? maxConnectionsPerSession - 1
+        : maxConnectionsPerSession
+      if (session.host.playerCount() >= guestLimit) {
+        sendJson(response, 409, { error: 'That web playtest is full.' })
+        return
+      }
+      sendJson(response, 200, {
+        credential: session.guestCredential,
+        path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+      })
+      return
+    }
+    const cancelLobbyId = lobbyRouteId(path)
+    if (request.method === 'DELETE' && cancelLobbyId) {
+      const session = sessions.get(cancelLobbyId)
+      if (!session || session.kind !== 'lobby' || session.closing) {
+        sendJson(response, 404, { error: 'That web playtest is no longer available.' })
+        return
+      }
+      const suppliedCredential = request.headers['x-solomon-dark-host-credential']
+      if (typeof suppliedCredential !== 'string'
+        || !secretsEqual(suppliedCredential, session.hostCredential)) {
+        sendJson(response, 403, { error: 'The web playtest host credential is invalid.' })
+        return
+      }
+      void closeSession(session).then(() => {
+        response.writeHead(204, { 'cache-control': 'no-store' })
+        response.end()
+      }).catch(() => {
+        sendJson(response, 503, { error: 'The web playtest could not be cancelled.' })
+      })
+      return
+    }
+    response.writeHead(404, { 'cache-control': 'no-store' })
     response.end()
   })
+
+  function provisionIntoResponse(
+    response: ServerResponse,
+    kind: SessionRecord['kind'],
+    hostPlayer: string | null,
+  ): void {
+    if (sessions.size + provisioning >= maxSessions) {
+      sendJson(response, 503, { error: 'Game session capacity is exhausted.' }, { 'retry-after': '5' })
+      return
+    }
+    provisioning += 1
+    void provisionSession(kind, hostPlayer).then((session) => {
+      sendJson(response, 201, {
+        credential: session.hostCredential,
+        path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+        protocol: GAME_PROTOCOL_NAME,
+        ...(kind === 'private' ? { sessionId: session.id } : { lobbyId: session.id }),
+      })
+    }).catch(() => {
+      sendJson(response, 503, { error: 'A game session could not be started.' }, { 'retry-after': '5' })
+    }).finally(() => {
+      provisioning -= 1
+    })
+  }
+
+  function lobbySummary(session: SessionRecord) {
+    const world = session.host.state().world
+    return {
+      id: session.id,
+      hostPlayer: session.hostPlayer,
+      players: session.host.playerCount(),
+      maxPlayers: maxConnectionsPerSession,
+      phase: world.kind === 'boneyard'
+        ? 'session'
+        : session.host.hostPlayerId() === null ? 'picking-loadout' : 'hub',
+      protocol: GAME_PROTOCOL_NAME,
+    }
+  }
 
   server.on('upgrade', (request, socket, head) => {
     if (!originAllowed(request.headers.origin, options.allowedOrigins)) {
@@ -163,12 +240,21 @@ export async function startGameSessionSupervisor(
     proxyUpgrade(request, socket, head, session)
   })
 
-  async function provisionSession(): Promise<SessionRecord> {
+  async function provisionSession(
+    kind: SessionRecord['kind'],
+    hostPlayer: string | null,
+  ): Promise<SessionRecord> {
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
-    const credential = randomBytes(32).toString('base64url')
+    const hostCredential = randomBytes(32).toString('base64url')
+    const guestCredential = kind === 'lobby'
+      ? randomBytes(32).toString('base64url')
+      : null
     const sessionHost = await startGameHost({
-      bootstrapCredential: credential,
+      authentication: guestCredential
+        ? { kind: 'reserved-host', hostCredential, guestCredential }
+        : { kind: 'shared', credential: hostCredential },
+      maxPlayers: maxConnectionsPerSession,
       ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
@@ -176,11 +262,14 @@ export async function startGameSessionSupervisor(
       activeProxies: 0,
       closing: false,
       createdAt: Date.now(),
-      credential,
       emptySince: null,
+      guestCredential,
       hadPlayer: false,
       host: sessionHost,
+      hostCredential,
+      hostPlayer,
       id,
+      kind,
     }
     if (closed) {
       await sessionHost.close()
@@ -304,6 +393,58 @@ export async function startGameSessionSupervisor(
     },
     sessionCount: () => sessions.size,
   }
+}
+
+function lobbyRouteId(path: string, suffix = ''): string | null {
+  const prefix = '/admin/lobbies/'
+  if (!path.startsWith(prefix) || (suffix && !path.endsWith(suffix))) return null
+  const end = suffix ? path.length - suffix.length : path.length
+  const id = path.slice(prefix.length, end)
+  return /^[A-Za-z0-9_-]{32}$/.test(id) ? id : null
+}
+
+function normalizeHostPlayer(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!normalized || normalized.length > 64 || [...normalized].some(isControlCharacter)) {
+    return null
+  }
+  return normalized
+}
+
+function isControlCharacter(value: string): boolean {
+  const code = value.charCodeAt(0)
+  return code < 32 || (code >= 127 && code <= 159)
+}
+
+async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of request) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    size += bytes.length
+    if (size > 4096) throw new Error('request body is too large')
+    chunks.push(bytes)
+  }
+  const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('request body must be an object')
+  }
+  return value as Record<string, unknown>
+}
+
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): void {
+  response.writeHead(status, {
+    'cache-control': 'no-store',
+    'content-type': 'application/json',
+    ...headers,
+  })
+  response.end(JSON.stringify(body))
 }
 
 function sessionIdFromPath(path: string | undefined): string | null {
