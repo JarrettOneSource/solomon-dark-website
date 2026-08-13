@@ -124,6 +124,7 @@ interface FenceRenderItem {
 }
 
 type MainRenderItem = ObjectRenderItem | FenceRenderItem
+type PlacementPaintMode = 'all' | 'runtime-base'
 
 interface RenderScene {
   underlays: SpriteDrawable[]
@@ -185,6 +186,15 @@ function renderSceneFor(doc: EditorDoc): RenderScene {
     renderSceneCache.set(doc, scene)
   }
   return scene
+}
+
+function isActorOccludingMainItem(item: MainRenderItem): boolean {
+  return item.kind === 'object'
+    || (item.layer.fence.segmentCode ?? item.layer.fence.style ?? 0) !== 3
+}
+
+function actorOccludingMainItems(doc: EditorDoc): MainRenderItem[] {
+  return renderSceneFor(doc).main.filter(isActorOccludingMainItem)
 }
 
 /** Anchored draw rect in world units, scale applied. The sprite ref carries
@@ -561,10 +571,7 @@ export function drawNativeBoneyardWorld(
   doc: EditorDoc,
   gateLeaves: readonly NativeGateLeafOverride[] = [],
 ) {
-  const gateOverrides = new Map(gateLeaves.map((leaf) => [
-    `${leaf.fenceEid}:${leaf.side}`,
-    leaf,
-  ]))
+  const gateOverrides = gateOverrideMap(gateLeaves)
   paintWorld(
     ctx,
     cssW,
@@ -576,6 +583,74 @@ export function drawNativeBoneyardWorld(
     true,
     gateOverrides,
   )
+}
+
+export function nativeBoneyardMainLayers(doc: EditorDoc): readonly MainLayer[] {
+  return actorOccludingMainItems(doc).map((item) => item.layer)
+}
+
+export function drawNativeBoneyardBase(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  gateLeaves: readonly NativeGateLeafOverride[] = [],
+) {
+  paintWorld(
+    ctx,
+    cssW,
+    cssH,
+    cam,
+    doc,
+    { selected: EMPTY_SET, hover: null, showGrid: false },
+    undefined,
+    true,
+    gateOverrideMap(gateLeaves),
+    'runtime-base',
+  )
+}
+
+export function drawNativeBoneyardMainBand(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  layerIndexes: readonly number[],
+  gateLeaves: readonly NativeGateLeafOverride[] = [],
+) {
+  ctx.clearRect(0, 0, cssW, cssH)
+  ctx.imageSmoothingEnabled = cam.zoom < 1
+  const items = actorOccludingMainItems(doc)
+  const gateOverrides = gateOverrideMap(gateLeaves)
+  for (const layerIndex of layerIndexes) {
+    const item = items[layerIndex]
+    if (!item) continue
+    if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
+    else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
+  }
+}
+
+export function drawNativeBoneyardForeground(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+) {
+  ctx.clearRect(0, 0, cssW, cssH)
+  ctx.imageSmoothingEnabled = cam.zoom < 1
+  for (const drawable of renderSceneFor(doc).foreground) {
+    drawSprite(ctx, drawable, cam, cssW, cssH, false)
+  }
+}
+
+function gateOverrideMap(gateLeaves: readonly NativeGateLeafOverride[]) {
+  return new Map(gateLeaves.map((leaf) => [
+    `${leaf.fenceEid}:${leaf.side}`,
+    leaf,
+  ]))
 }
 
 /** Dashed held/hover strokes for lines, drawn over a blitted layer. Styles
@@ -695,6 +770,7 @@ function paintWorld(
   skip?: Set<string>,
   runtime = false,
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
+  placementMode: PlacementPaintMode = 'all',
 ) {
   // The void beyond the plot. The context is opaque (alpha: false), and this
   // covers every pixel, so no clear pass is needed.
@@ -805,6 +881,7 @@ function paintWorld(
     cssH,
     skip ? { skip } : undefined,
     gateOverrides,
+    placementMode,
   )
 
   // Plot boundary: the property line, in gold.
@@ -836,6 +913,7 @@ function paintPlacementPasses(
   cssH: number,
   filter?: { only?: Set<string>; skip?: Set<string> },
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
+  mode: PlacementPaintMode = 'all',
 ) {
   const scene = renderSceneFor(doc)
   ctx.imageSmoothingEnabled = cam.zoom < 1
@@ -852,10 +930,12 @@ function paintPlacementPasses(
     else drawFenceShadow(ctx, item.layer, cam, cssW, cssH)
   }
   for (const item of scene.main) {
+    if (mode === 'runtime-base' && isActorOccludingMainItem(item)) continue
     if (!included(item.layer.sel, filter)) continue
     if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
     else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
   }
+  if (mode === 'runtime-base') return
   for (const drawable of scene.foreground) {
     if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
   }

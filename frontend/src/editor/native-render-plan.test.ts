@@ -8,6 +8,7 @@ import { NATIVE } from './model.ts'
 import { nativeGateLeaves } from './native-fence-geometry.ts'
 import { buildNativeRenderPlan, NATIVE_PLACEMENT_PASSES } from './native-render-plan.ts'
 import { nativeSpriteAnchor } from './sprite-registration.ts'
+import { buildBoneyardPainterOrder } from '../game/boneyard-painter-order.ts'
 
 const storyFixture = new URL('../../public/samples/story0.boneyard', import.meta.url)
 
@@ -47,7 +48,38 @@ test('places Gravestone, Tree, and Building component art in their native passes
   ])
 })
 
-test('keeps compact sprites below shadows and main art and applies the Building sort bias', () => {
+test('interleaves every stock main-prop family with actors and keeps proxy art late', () => {
+  const plan = buildNativeRenderPlan(doc([
+    { eid: 'grave', typeId: NATIVE.gravestone, pos: { x: 0, y: 100 }, variant: 0 },
+    { eid: 'tree', typeId: NATIVE.tree, pos: { x: 0, y: 300 }, variant: 0 },
+    { eid: 'monument', typeId: NATIVE.monument, pos: { x: 0, y: 400 }, variant: 0 },
+    { eid: 'goodie', typeId: NATIVE.goodie, pos: { x: 0, y: 500 }, variant: 0 },
+    { eid: 'building', typeId: NATIVE.building, pos: { x: 0, y: 600 }, variant: 0 },
+  ]))
+  const order = buildBoneyardPainterOrder({
+    referenceY: 200,
+    staticLayers: plan.main.map((layer, layerIndex) => ({
+      layerIndex,
+      worldY: layer.worldY,
+      sortBias: layer.sortBias,
+      sourceOrder: layer.sourceOrder,
+    })),
+    dynamicLayers: [{ id: 'player', worldY: 200, sortBias: 0, sourceOrder: 0 }],
+  })
+  const player = order.dynamicLayers[0]
+  const eidsAt = (predicate: (zIndex: number) => boolean) => order.bands
+    .filter((band) => predicate(band.zIndex))
+    .flatMap((band) => band.layerIndexes.map((index) => plan.main[index].sel.eid))
+
+  assert.deepEqual(eidsAt((zIndex) => zIndex < player.zIndex), ['grave'])
+  assert.deepEqual(eidsAt((zIndex) => zIndex > player.zIndex), [
+    'tree', 'monument', 'goodie', 'building',
+  ])
+  assert.deepEqual(plan.underlays.map((layer) => layer.sel.eid), ['grave'])
+  assert.deepEqual(plan.foreground.map((layer) => layer.sel.eid), ['tree', 'building'])
+})
+
+test('keeps compact sprites below shadows and uses each Puppet effective-Y bias', () => {
   const compact: StaticSprite = {
     eid: 'dirt', atlasEntry: 7, pos: { x: 0, y: 500 }, s0: 0, s1: 1, s2: 1, flags: 0,
   }
@@ -68,11 +100,11 @@ test('keeps compact sprites below shadows and main art and applies the Building 
     ['fence', 'body'],
   ])
   assert.deepEqual(plan.main.map((layer) => [layer.sel.eid, layer.kind === 'fence' ? layer.part : 'object', layer.sortKey]), [
-    ['building', 'object', 50],
     ['tree', 'object', 60],
+    ['fence', 'body', 65],
     ['fence', 'post', 70],
-    ['fence', 'body', 80],
     ['fence', 'post', 90],
+    ['building', 'object', 100],
   ])
 })
 
@@ -90,9 +122,9 @@ test('materializes shared Fenceposts once and gives split fence leaves independe
   const fenceLayers = plan.shadows.filter((layer) => layer.kind === 'fence')
   assert.equal(fenceLayers.filter((layer) => layer.part === 'post').length, 3)
   assert.deepEqual(fenceLayers.filter((layer) => layer.part === 'body').map((layer) => [layer.sel.eid, layer.sortKey]), [
-    ['broken', 12.8],
-    ['broken', 17.2],
-    ['rails', 25],
+    ['broken', -2.1999999999999993],
+    ['broken', 2.1999999999999993],
+    ['rails', 10],
   ])
 })
 
@@ -123,7 +155,16 @@ test('materializes native gate sides with endpoint trim and the two-unit center 
   assert.deepEqual(
     plan.shadows.filter((layer) => layer.kind === 'fence' && layer.part === 'body')
       .map((layer) => layer.pos),
-    [{ x: 86.5, y: 40 }, { x: 13.5, y: 40 }],
+    [{ x: 51, y: 40 }, { x: 49, y: 40 }],
+  )
+  assert.deepEqual(
+    plan.main.map((layer) => [layer.kind === 'fence' ? layer.part : 'object', layer.sortKey]),
+    [
+      ['body', 25],
+      ['body', 25],
+      ['post', 40],
+      ['post', 40],
+    ],
   )
 })
 

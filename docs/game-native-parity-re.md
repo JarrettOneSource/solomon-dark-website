@@ -3338,10 +3338,104 @@ Evidence: read-only decompilation context around `0x005D2520` and
 
 Confidence: high for visible ownership and the exact retained/hidden groups.
 
+#### Dynamic actors and scenery share one native painter queue
+
+The reported Fencepost, Tree, and Gravestone failures are one ownership error,
+not three independent sprite defects. `Arena::Render` at `0x0046EC80` gathers
+the main actor manager (`Arena +0x318/+0x324`), the scenery manager
+(`+0x87CC/+0x87D8`), and the transient actor manager (`+0x8B78/+0x8B84`) into
+the same queue at `Arena +0x17C`. All three call insertion routine
+`0x0068C3B0`; flush `0x0068C480` then invokes each object's vtable slot
+`+0x0C`, and common dispatcher `0x00624B40` reaches the class-specific main
+painter at slot `+0x1C`.
+
+The in-view row calculation is exact:
+
+```text
+relative = trunc(object.worldY) + trunc(object.sortBias)
+           - trunc(localPlayer.worldY)
+row      = queue.origin + trunc(relative / 2)
+```
+
+The sort bias is Puppet field `+0xA0`; world Y is `+0x1C`. Rows paint from
+smaller to larger. Entries in the same two-world-unit row retain gather order,
+so main actors precede scenery on an exact row tie. The web runtime violated
+that model by flattening every static pass into one opaque canvas at CSS layer
+`0`, then placing every player and set-piece actor in a separate DOM container
+at CSS layer `1`. A player's `position.y` could only order it against other
+DOM actors; it could never pass behind any canvas-owned prop.
+
+Gate depth has two additional recovered fields. FenceGrate constructor
+`0x005E7FB0` writes float `-15.0` (retail constant `0x00787050`) to Puppet
+sort bias `+0xA0`. FenceGrate_Broken, Gate, and FenceGrate_Rails inherit that
+bias; Wall constructor `0x005F88B0` writes the same value. Fencepost
+constructor `0x005E1E20` retains the base `0.0`. Gate rebuild
+`0x005ED100` does not sort at its hinge: it starts from the moving tip and, if
+that tip is above the hinge-tip midpoint, substitutes the midpoint. Its
+effective key is therefore:
+
+```text
+gateRootY = max(tip.y, (hinge.y + tip.y) / 2)
+gateKey   = gateRootY - 15
+```
+
+For the isolated live gate at Y `3248`, both recovered leaf keys are below the
+post key `3248`; the bodies paint first and the posts cap them. The browser
+instead assigned both leaves the hinge Y with bias `0`, so stable source order
+painted the later-created leaves over the posts.
+
+The adjacent asset audit separates main occlusion from the other native
+passes:
+
+- Tree base art (`0x00608480`), Gravestone base art (`0x0060F0F0`), Monument,
+  Building base, Goodie, Scrub, Fencepost, intact/broken grate, Gate, and rail
+  main art all enter the shared actor/scenery queue. Their bases must be able
+  to paint either below or above a player from the recovered effective key.
+- Gravestone overlay art is slot `+0x2C` (`0x0060F1F0`) and remains an
+  underlay. It does not need a clipping mask; only the base Gravestone joins
+  the shared occlusion queue.
+- Tree secondary art and Building upper art are slot `+0x24` proxy/foreground
+  painters. They remain after the main population rather than being folded
+  into the base sprite.
+- Compact records and the slot-`+0x28` shadow/lighting geometry remain before
+  the main population. Wall is the fence-family exception: its visible mesh
+  is itself the slot-`+0x28` painter and must remain pre-main instead of being
+  promoted into actor occlusion.
+- Solomon Dig's record-13 dirt and body remain one actor-root composition;
+  Lantern remains its own resident. Both must share the world stacking
+  context instead of living in a container that is unconditionally above all
+  scenery.
+
+Implementation consequence: the runtime painter must split static rendering
+into a base canvas, contiguous scenery-main bands separated by live actor
+entries, and the recovered foreground pass. Those transparent bands and DOM
+actors share one stacking context generated from native two-unit rows. Gate
+band membership is recomputed from each authoritative hinge/tip snapshot.
+CSS `z-index` is only the browser mechanism used to realize the native
+painter order; the recovered behavior is world-space occlusion, not a CSS
+layer constant or per-asset special case. The editor keeps the same effective
+keys, including the `-15` fence-body bias, so its static preview does not
+contradict gameplay.
+
+Evidence: retail SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`;
+read-only instruction/decompiler inspection of `0x0046EC80`, `0x0068C3B0`,
+`0x0068C090`, `0x0068C0F0`, `0x0068C480`, `0x0068C1C0`, `0x00624B40`,
+`0x005E7FB0`, `0x005ED100`, `0x005E1E20`, `0x005F88B0`, and the listed
+class painters; the manager/queue recovery in Mod Loader
+`docs/re/world-sprite-render-pipeline.md`; and the prior isolated scenery
+manager/live gate roots recorded above.
+
+Confidence: high for queue ownership, row formula, gather tie order, Puppet
+fields, gate root and bias, Fencepost bias, and the listed virtual-painter
+lanes. The browser does not emulate native off-screen overflow-list sorting;
+off-screen objects produce no pixels, and every visible object uses the
+recovered normal-row path.
+
 ### Validation receipt
 
 The canonical `./scripts/validate.sh` gate passed on 2026-08-13: 23 backend
-contract/integration tests, 145 frontend tests, five desktop-shell tests,
+contract/integration tests, 149 frontend tests, five desktop-shell tests,
 formatting, lint and game architecture boundaries, the production Vite build,
 the standalone game-host build, and the production media-policy check. The
 native-bank generator reproduced SHA-256
@@ -3349,6 +3443,19 @@ native-bank generator reproduced SHA-256
 from the twelve retained `play.boneyard` captures. The Solomon records `2..19`
 extractor reproduced sheet SHA-256
 `659f615074b2b1001cd150594d955432aad5ebb06502af40c1003b1be73bdae0`.
+
+The final occlusion-specific two-client Chromium run synchronized default run
+`e19cdacd5df0a0c6da9e9ed7ac48edd5`, geometry
+`7d5abca59124ec17bcba4a93185d5d032578765dd27971a208a884dcbdaddf49`,
+and four authoritative Gate leaves without page or console errors. On both
+peers the base canvas was the sole opaque world canvas at Z `0`; four
+transparent scenery bands occupied Z `1,4,6,8`; the two actors occupied Z
+`2,3`; and the transparent Tree/Building foreground pass occupied Z `9`.
+That proves the browser was actually interleaving scenery on both sides of the
+actors rather than merely exposing the expected nodes. The host crossed and
+opened the entry Gate from Y `150` to `353.9999840334058`. Captures:
+`/tmp/solomon-dark-boneyard-occlusion-final-20260813.png` and
+`/tmp/solomon-dark-boneyard-occlusion-gate-open-final-20260813.png`.
 
 Two-client production-browser smokes covered both entry branches without page
 or console errors. With only the built-in arena available, the native map icon

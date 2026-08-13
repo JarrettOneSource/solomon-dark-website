@@ -9,6 +9,7 @@ interface PlayerCharacterProps {
   className?: string
   depth: number
   isLocal?: boolean
+  painterRow?: number
   playerId?: string
   scale?: number
   state: PlayerCharacterState
@@ -18,6 +19,7 @@ export default function PlayerCharacter({
   className = '',
   depth,
   isLocal,
+  painterRow,
   playerId,
   scale = 1,
   state,
@@ -50,6 +52,7 @@ export default function PlayerCharacter({
       data-element={element}
       data-local={isLocal === undefined ? undefined : `${isLocal}`}
       data-moving={plan.moving}
+      data-painter-row={painterRow}
       data-player-id={playerId}
       data-walk-pose={plan.robePose}
       aria-label={`${state.config.displayName}, ${element} wizard`}

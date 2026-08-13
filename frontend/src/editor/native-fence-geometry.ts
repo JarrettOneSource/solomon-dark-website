@@ -33,3 +33,11 @@ export function nativeGateLeaf(hinge: Vec2, tip: Vec2): NativeGateLeaf {
     p3: { ...tip },
   }
 }
+
+export function nativeGatePainterRoot(hinge: Vec2, tip: Vec2): Vec2 {
+  const midpoint = {
+    x: (hinge.x + tip.x) / 2,
+    y: (hinge.y + tip.y) / 2,
+  }
+  return tip.y < midpoint.y ? midpoint : { ...tip }
+}

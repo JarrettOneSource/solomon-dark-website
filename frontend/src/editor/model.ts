@@ -67,7 +67,7 @@ export interface PlacedObject {
   rot?: number
   scale?: number
   uid?: number
-  /** Native Puppet +0xA0 render-bucket adjustment. Buildings use -50. */
+  /** Native Puppet +0xA0 render-bucket adjustment. */
   sortBias?: number
   /** Editor rendering hint until the format layer resolves variant art. */
   sprite?: SpriteRef

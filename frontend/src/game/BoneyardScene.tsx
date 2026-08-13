@@ -9,13 +9,23 @@ import {
 
 import { BONEYARD_SPRITE_SOURCES, spriteImage } from '../editor/assets'
 import type { EditorDoc } from '../editor/model'
+import { nativeGatePainterRoot } from '../editor/native-fence-geometry.ts'
+import type { MainLayer } from '../editor/native-render-plan.ts'
 import {
-  drawNativeBoneyardWorld,
+  drawNativeBoneyardBase,
+  drawNativeBoneyardForeground,
+  drawNativeBoneyardMainBand,
+  nativeBoneyardMainLayers,
   STAGE_TEXTURES,
   worldToScreen,
   type Camera,
 } from '../editor/render'
 import { boneyard } from '../lib/assets'
+import {
+  buildBoneyardPainterOrder,
+  type PositionedDynamicLayer,
+} from './boneyard-painter-order.ts'
+import type { BoneyardGateLeafSnapshot } from './core-kernels/boneyard.ts'
 import GameHud from './GameHud'
 import PlayerCharacter from './PlayerCharacter.tsx'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
@@ -44,7 +54,11 @@ export default function BoneyardScene({
   playerId,
 }: BoneyardSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const baseCanvasRef = useRef<HTMLCanvasElement>(null)
+  const foregroundCanvasRef = useRef<HTMLCanvasElement>(null)
+  const mainBandCanvasRefs = useRef(new Map<string, HTMLCanvasElement>())
+  const basePaintStateRef = useRef<{ camera: Camera; document: EditorDoc } | null>(null)
+  const foregroundPaintStateRef = useRef<{ camera: Camera; document: EditorDoc } | null>(null)
   const darknessCanvasRef = useRef<HTMLCanvasElement>(null)
   const digRef = useRef<HTMLSpanElement>(null)
   const keysRef = useRef(new Set<string>())
@@ -57,7 +71,9 @@ export default function BoneyardScene({
       : []
   ), [loaded.runId, snapshot.world])
   const document = useMemo(() => editorDocument(loaded), [loaded])
+  const mainLayers = useMemo(() => nativeBoneyardMainLayers(document), [document])
   const localPlayer = snapshot.players[playerId]
+  const dig = loaded.scene.solomonDig
   const cameraPosition = localPlayer?.position ?? loaded.scene.spawn
   const cameraX = clampCameraAxis(
     cameraPosition.x,
@@ -74,6 +90,42 @@ export default function BoneyardScene({
   const camera = useMemo<Camera>(
     () => ({ x: cameraX, y: cameraY, zoom: NATIVE_BONEYARD_CAMERA_ZOOM }),
     [cameraX, cameraY],
+  )
+  const painterOrder = useMemo(() => {
+    const dynamicLayers = Object.entries(snapshot.players).map(([id, player], sourceOrder) => ({
+      id: `player:${id}`,
+      worldY: player.position.y,
+      sortBias: 0,
+      sourceOrder,
+    }))
+    if (dig) {
+      dynamicLayers.push({
+        id: 'solomon-dig',
+        worldY: dig.position.y,
+        sortBias: 0,
+        sourceOrder: dynamicLayers.length,
+      })
+      dynamicLayers.push({
+        id: 'lantern',
+        worldY: dig.lanternPosition.y,
+        sortBias: 0,
+        sourceOrder: dynamicLayers.length,
+      })
+    }
+    return buildBoneyardPainterOrder({
+      referenceY: cameraPosition.y,
+      staticLayers: mainLayers.map((layer, layerIndex) => ({
+        layerIndex,
+        worldY: runtimeMainWorldY(layer, gateLeaves),
+        sortBias: layer.sortBias,
+        sourceOrder: layer.sourceOrder,
+      })),
+      dynamicLayers,
+    })
+  }, [cameraPosition.y, dig, gateLeaves, mainLayers, snapshot.players])
+  const dynamicPainterLayers = useMemo<Map<string, PositionedDynamicLayer>>(
+    () => new Map(painterOrder.dynamicLayers.map((layer) => [layer.id, layer])),
+    [painterOrder.dynamicLayers],
   )
 
   useLayoutEffect(() => {
@@ -137,23 +189,76 @@ export default function BoneyardScene({
   }, [loaded, onInput])
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const baseCanvas = baseCanvasRef.current
+    const foregroundCanvas = foregroundCanvasRef.current
+    if (!baseCanvas || !foregroundCanvas) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = Math.round(STAGE_WIDTH * dpr)
-    canvas.height = Math.round(STAGE_HEIGHT * dpr)
-    const context = canvas.getContext('2d', { alpha: false })
-    if (!context) return
-    const paint = () => {
-      context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      drawNativeBoneyardWorld(
-        context,
-        STAGE_WIDTH,
-        STAGE_HEIGHT,
-        camera,
-        document,
-        gateLeaves,
-      )
+    const pixelWidth = Math.round(STAGE_WIDTH * dpr)
+    const pixelHeight = Math.round(STAGE_HEIGHT * dpr)
+    const needsResize = (canvas: HTMLCanvasElement) => (
+      canvas.width !== pixelWidth || canvas.height !== pixelHeight
+    )
+    const contextFor = (canvas: HTMLCanvasElement, alpha: boolean) => {
+      if (needsResize(canvas)) {
+        canvas.width = pixelWidth
+        canvas.height = pixelHeight
+      }
+      const context = canvas.getContext('2d', { alpha })
+      context?.setTransform(dpr, 0, 0, dpr, 0, 0)
+      return context
+    }
+    const paint = (forceStatic = false) => {
+      const baseState = basePaintStateRef.current
+      if (
+        forceStatic
+        || needsResize(baseCanvas)
+        || baseState?.camera !== camera
+        || baseState?.document !== document
+      ) {
+        const baseContext = contextFor(baseCanvas, false)
+        if (!baseContext) return
+        drawNativeBoneyardBase(
+          baseContext,
+          STAGE_WIDTH,
+          STAGE_HEIGHT,
+          camera,
+          document,
+        )
+        basePaintStateRef.current = { camera, document }
+      }
+      for (const band of painterOrder.bands) {
+        const canvas = mainBandCanvasRefs.current.get(band.id)
+        if (!canvas) continue
+        const context = contextFor(canvas, true)
+        if (!context) continue
+        drawNativeBoneyardMainBand(
+          context,
+          STAGE_WIDTH,
+          STAGE_HEIGHT,
+          camera,
+          document,
+          band.layerIndexes,
+          gateLeaves,
+        )
+      }
+      const foregroundState = foregroundPaintStateRef.current
+      if (
+        forceStatic
+        || needsResize(foregroundCanvas)
+        || foregroundState?.camera !== camera
+        || foregroundState?.document !== document
+      ) {
+        const foregroundContext = contextFor(foregroundCanvas, true)
+        if (!foregroundContext) return
+        drawNativeBoneyardForeground(
+          foregroundContext,
+          STAGE_WIDTH,
+          STAGE_HEIGHT,
+          camera,
+          document,
+        )
+        foregroundPaintStateRef.current = { camera, document }
+      }
     }
     paint()
     let paintFrame = 0
@@ -161,7 +266,7 @@ export default function BoneyardScene({
       if (paintFrame) return
       paintFrame = requestAnimationFrame(() => {
         paintFrame = 0
-        paint()
+        paint(true)
       })
     }
     const pendingImages: HTMLImageElement[] = []
@@ -175,7 +280,7 @@ export default function BoneyardScene({
       if (paintFrame) cancelAnimationFrame(paintFrame)
       for (const image of pendingImages) image.removeEventListener('load', queuePaint)
     }
-  }, [camera, document, gateLeaves])
+  }, [camera, document, gateLeaves, painterOrder.bands])
 
   useEffect(() => {
     const canvas = darknessCanvasRef.current
@@ -247,7 +352,6 @@ export default function BoneyardScene({
   const frameStyle = { transform: `scale(${stageScale})` } as CSSProperties
   const element = localPlayer?.config.element ?? 'ether'
   const discipline = localPlayer?.config.discipline ?? 'arcane'
-  const dig = loaded.scene.solomonDig
   const digScreen = dig
     ? worldToScreen(dig.position, camera, STAGE_WIDTH, STAGE_HEIGHT)
     : null
@@ -257,6 +361,8 @@ export default function BoneyardScene({
   const lanternScreen = dig
     ? worldToScreen(dig.lanternPosition, camera, STAGE_WIDTH, STAGE_HEIGHT)
     : null
+  const solomonPainter = dynamicPainterLayers.get('solomon-dig')
+  const lanternPainter = dynamicPainterLayers.get('lantern')
 
   return (
     <div
@@ -274,13 +380,34 @@ export default function BoneyardScene({
       )).join('|')}
       data-local-player-x={localPlayer?.position.x}
       data-local-player-y={localPlayer?.position.y}
+      data-painter-band-count={painterOrder.bands.length}
       data-run-id={loaded.runId}
       aria-label={`Boneyard: ${loaded.choice.name}. Move with W A S D or the arrow keys.`}
       tabIndex={0}
     >
       <div className="boneyard-native-frame" style={frameStyle}>
-        <canvas ref={canvasRef} className="boneyard-canvas" aria-hidden />
-        <div className="boneyard-actors">
+        <div className="boneyard-world-stack">
+          <canvas
+            ref={baseCanvasRef}
+            className="boneyard-canvas"
+            data-painter-layer="base"
+            aria-hidden
+          />
+          {painterOrder.bands.map((band) => (
+            <canvas
+              key={band.id}
+              ref={(canvas) => {
+                if (canvas) mainBandCanvasRefs.current.set(band.id, canvas)
+                else mainBandCanvasRefs.current.delete(band.id)
+              }}
+              className="boneyard-main-band"
+              data-main-layer-count={band.layerIndexes.length}
+              data-painter-layer="main"
+              data-painter-row={band.row}
+              style={{ zIndex: band.zIndex }}
+              aria-hidden
+            />
+          ))}
           {dig && digScreen && graveScreen && lanternScreen ? (
             <>
               <span
@@ -293,8 +420,9 @@ export default function BoneyardScene({
                   top: graveScreen.y + 105 * camera.zoom,
                   transform: `scale(${camera.zoom})`,
                   transformOrigin: '0 0',
-                  zIndex: Math.round(dig.position.y) - 1,
+                  zIndex: solomonPainter?.zIndex,
                 }}
+                data-painter-row={solomonPainter?.row}
                 aria-hidden
               />
               <span
@@ -307,8 +435,9 @@ export default function BoneyardScene({
                   top: lanternScreen.y - 22.5 * camera.zoom,
                   transform: `scale(${camera.zoom})`,
                   transformOrigin: '0 0',
-                  zIndex: Math.round(dig.lanternPosition.y),
+                  zIndex: lanternPainter?.zIndex,
                 }}
+                data-painter-row={lanternPainter?.row}
                 aria-hidden
               />
               <span
@@ -320,8 +449,9 @@ export default function BoneyardScene({
                   top: digScreen.y,
                   transform: `scale(${camera.zoom})`,
                   transformOrigin: '0 0',
-                  zIndex: Math.round(dig.position.y),
+                  zIndex: solomonPainter?.zIndex,
                 }}
+                data-painter-row={solomonPainter?.row}
               >
                 <span
                   ref={digRef}
@@ -337,8 +467,9 @@ export default function BoneyardScene({
             <PlayerCharacter
               key={id}
               className="boneyard-player"
-              depth={Math.round(player.position.y)}
+              depth={dynamicPainterLayers.get(`player:${id}`)?.zIndex ?? 1}
               isLocal={id === playerId}
+              painterRow={dynamicPainterLayers.get(`player:${id}`)?.row}
               playerId={id}
               scale={camera.zoom}
               state={{
@@ -347,6 +478,13 @@ export default function BoneyardScene({
               }}
             />
           ))}
+          <canvas
+            ref={foregroundCanvasRef}
+            className="boneyard-foreground"
+            data-painter-layer="foreground"
+            style={{ zIndex: painterOrder.foregroundZIndex }}
+            aria-hidden
+          />
         </div>
         {(loaded.scene.environmentMode === 1 || loaded.scene.environmentMode === 2) ? (
           <canvas
@@ -361,6 +499,23 @@ export default function BoneyardScene({
       </div>
     </div>
   )
+}
+
+function runtimeMainWorldY(
+  layer: MainLayer,
+  gateLeaves: readonly BoneyardGateLeafSnapshot[],
+): number {
+  if (
+    layer.kind !== 'fence'
+    || layer.part !== 'body'
+    || (layer.fence.segmentCode ?? layer.fence.style ?? 0) !== 2
+  ) {
+    return layer.worldY
+  }
+  const leaf = gateLeaves.find((candidate) => (
+    candidate.fenceEid === layer.fence.eid && candidate.side === layer.pieceIndex
+  ))
+  return leaf ? nativeGatePainterRoot(leaf.hinge, leaf.tip).y : layer.worldY
 }
 
 function nativeDirectApertureAlpha(now: number, playerIndex: number): number {

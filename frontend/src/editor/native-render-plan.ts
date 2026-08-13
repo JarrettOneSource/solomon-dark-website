@@ -1,6 +1,6 @@
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
-import { nativeGateLeaves } from './native-fence-geometry.ts'
+import { nativeGateLeaves, nativeGatePainterRoot } from './native-fence-geometry.ts'
 
 export const NATIVE_PLACEMENT_PASSES = ['underlay', 'compact', 'shadow', 'main', 'foreground'] as const
 
@@ -37,6 +37,8 @@ export interface CompactSpriteLayer {
 }
 
 export interface ObjectMainLayer extends ObjectSpriteLayer {
+  worldY: number
+  sortBias: number
   sortKey: number
   sourceOrder: number
 }
@@ -48,6 +50,8 @@ export interface FenceMainLayer {
   part: 'post' | 'body'
   pieceIndex: number
   pos: Vec2
+  worldY: number
+  sortBias: number
   sortKey: number
   sourceOrder: number
 }
@@ -90,9 +94,11 @@ function objectLayer(object: NativePlacedObject, atlasEntry: number): ObjectSpri
 function mainObjectLayer(object: NativePlacedObject, sourceOrder: number): ObjectMainLayer | null {
   const atlasEntry = objectEntry(object)
   if (atlasEntry === undefined) return null
-  const sortBias = object.sortBias ?? (object.typeId === NATIVE.building ? -50 : 0)
+  const sortBias = object.sortBias ?? 0
   return {
     ...objectLayer(object, atlasEntry),
+    worldY: object.pos.y,
+    sortBias,
     sortKey: object.pos.y + sortBias,
     sourceOrder,
   }
@@ -130,7 +136,7 @@ function fenceBodyPositions(fence: Polyline): Vec2[] {
   // materialize as one body, represented at their static midpoint here.
   switch (fence.segmentCode ?? fence.style ?? 0) {
     case 1: return [pointAlong(fence, 0.28), pointAlong(fence, 0.72)]
-    case 2: return nativeGateLeaves(fence.points).map((leaf) => leaf.hinge)
+    case 2: return nativeGateLeaves(fence.points).map((leaf) => nativeGatePainterRoot(leaf.hinge, leaf.tip))
     default: return [pointAlong(fence, 0.5)]
   }
 }
@@ -178,6 +184,8 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     part: 'post',
     pieceIndex: index,
     pos,
+    worldY: pos.y,
+    sortBias: 0,
     sortKey: pos.y,
     sourceOrder: objects.length + index,
   }))
@@ -189,7 +197,9 @@ export function buildNativeRenderPlan(doc: EditorDoc): NativeRenderPlan {
     part: 'body',
     pieceIndex,
     pos,
-    sortKey: pos.y,
+    worldY: pos.y,
+    sortBias: -15,
+    sortKey: pos.y - 15,
     sourceOrder: bodySourceOrder + fenceIndex * 2 + pieceIndex,
   })))
   const shadows = [...objectMain, ...fencePosts, ...fenceBodies]

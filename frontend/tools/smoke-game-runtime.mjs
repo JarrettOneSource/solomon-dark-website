@@ -7,6 +7,8 @@ const CREATE_MENU_TIMEOUT_MS = 30_000
 const expectedModBoneyard = process.env.SDR_GAME_EXPECT_MOD_BONEYARD?.trim()
 const screenshotPath = process.env.SDR_GAME_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-boneyard-smoke.png'
+const gateScreenshotPath = process.env.SDR_GAME_SMOKE_GATE_SCREENSHOT
+  || screenshotPath.replace(/(\.[^.]+)?$/, '-gate-open$1')
 const injectedEndpoint = process.env.SDR_GAME_SMOKE_ENDPOINT?.trim()
 const injectedCredential = process.env.SDR_GAME_SMOKE_CREDENTIAL?.trim()
 if (Boolean(injectedEndpoint) !== Boolean(injectedCredential)) {
@@ -204,6 +206,10 @@ try {
     boneyardReceipt(hostBoneyard),
     boneyardReceipt(clientBoneyard),
   ])
+  const [hostPainterReceipt, clientPainterReceipt] = await Promise.all([
+    boneyardPainterReceipt(page),
+    boneyardPainterReceipt(clientPage),
+  ])
   assert.equal(hostReceipt.runId, clientReceipt.runId)
   assert.equal(hostReceipt.geometrySha256, clientReceipt.geometrySha256)
   assert.equal(hostReceipt.boneyardId, clientReceipt.boneyardId)
@@ -263,6 +269,7 @@ try {
   let gateCrossing = null
   if (!expectedModBoneyard) {
     gateCrossing = await crossEntryGate(page, clientPage)
+    await page.screenshot({ path: gateScreenshotPath })
   }
 
   assert.deepEqual(consoleErrors, [])
@@ -280,7 +287,10 @@ try {
     clientDigFrames: [...new Set(clientDigFrames)],
     hostDigFrames: [...new Set(hostDigFrames)],
     hostReceipt,
+    hostPainterReceipt,
+    clientPainterReceipt,
     gateCrossing,
+    gateScreenshotPath: gateCrossing ? gateScreenshotPath : null,
     screenshotPath,
     orbSpriteCount,
     renderer,
@@ -350,6 +360,55 @@ async function boneyardReceipt(locator) {
     geometrySha256: await locator.getAttribute('data-geometry-sha256'),
     runId: await locator.getAttribute('data-run-id'),
   }
+}
+
+async function boneyardPainterReceipt(page) {
+  const receipt = await page.evaluate(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    const stack = scene?.querySelector('.boneyard-world-stack')
+    const base = stack?.querySelector('.boneyard-canvas')
+    const foreground = stack?.querySelector('.boneyard-foreground')
+    const localPlayer = stack?.querySelector('.boneyard-player[data-local="true"]')
+    const mainBands = [...(stack?.querySelectorAll('.boneyard-main-band') ?? [])]
+    const actors = [...(stack?.querySelectorAll('.boneyard-player') ?? [])]
+    const zIndex = (element) => Number.parseInt(getComputedStyle(element).zIndex, 10)
+    const canvasAlpha = (element) => element instanceof HTMLCanvasElement
+      ? element.getContext('2d')?.getContextAttributes()?.alpha
+      : undefined
+
+    return {
+      actorZIndexes: actors.map(zIndex),
+      bandCount: Number(scene?.getAttribute('data-painter-band-count')),
+      baseAlpha: canvasAlpha(base),
+      baseZIndex: base ? zIndex(base) : Number.NaN,
+      foregroundAlpha: canvasAlpha(foreground),
+      foregroundZIndex: foreground ? zIndex(foreground) : Number.NaN,
+      isolation: stack ? getComputedStyle(stack).isolation : null,
+      localPlayerRow: Number(localPlayer?.getAttribute('data-painter-row')),
+      localPlayerZIndex: localPlayer ? zIndex(localPlayer) : Number.NaN,
+      mainBands: mainBands.map((band) => ({
+        alpha: canvasAlpha(band),
+        layerCount: Number(band.getAttribute('data-main-layer-count')),
+        row: Number(band.getAttribute('data-painter-row')),
+        zIndex: zIndex(band),
+      })),
+    }
+  })
+  assert.equal(receipt.isolation, 'isolate')
+  assert.equal(receipt.baseAlpha, false)
+  assert.equal(receipt.baseZIndex, 0)
+  assert.equal(receipt.bandCount, receipt.mainBands.length)
+  assert.ok(receipt.mainBands.length >= 2, 'expected scenery bands on both sides of live actors')
+  assert.ok(receipt.mainBands.every((band) => band.alpha === true && band.layerCount > 0))
+  assert.equal(receipt.foregroundAlpha, true)
+  assert.equal(receipt.localPlayerRow, 0)
+  assert.ok(receipt.mainBands.some((band) => band.zIndex < receipt.localPlayerZIndex))
+  assert.ok(receipt.mainBands.some((band) => band.zIndex > receipt.localPlayerZIndex))
+  assert.ok(receipt.foregroundZIndex > Math.max(
+    ...receipt.actorZIndexes,
+    ...receipt.mainBands.map((band) => band.zIndex),
+  ))
+  return receipt
 }
 
 async function crossEntryGate(hostPage, clientPage) {

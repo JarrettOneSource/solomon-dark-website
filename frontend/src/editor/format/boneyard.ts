@@ -580,7 +580,7 @@ function defaultCommon(typeId: number, pos: Vec2): [Chunk, Chunk] {
   writeU32(second, 3, typeId === 2061 ? 8196 : 4)
   ;[0, 1, 1, 0, 1, 0].forEach((value, i) => writeF32(second, 8 + i * 4, value))
   ;[1, 1, 1, 1].forEach((value, i) => writeF32(second, 32 + i * 4, value))
-  writeF32(second, 49, typeId === 2040 ? -50 : 0)
+  writeF32(second, 49, 0)
   writeF32(second, 53, 1)
   second.set([1, 0, 0, 1], 57)
   writeU32(second, 61, 1000)
@@ -602,7 +602,7 @@ function encodeObject(item: BoneyardPlacedObject): Chunk[] {
   writeF32(chunks[0].payload, 0, item.pos.x)
   writeF32(chunks[0].payload, 4, item.pos.y)
   if (chunks[1].payload.length >= 53 && (item.sortBias !== undefined || !item.raw)) {
-    writeF32(chunks[1].payload, 49, item.sortBias ?? (typeId === 2040 ? -50 : 0))
+    writeF32(chunks[1].payload, 49, item.sortBias ?? 0)
   }
   if (typeId === 2001) {
     if (item.raw && item.variant === undefined && item.secondaryVariant === undefined
