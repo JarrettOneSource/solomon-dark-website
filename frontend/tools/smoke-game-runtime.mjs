@@ -11,6 +11,15 @@ const injectedCredential = process.env.SDR_GAME_SMOKE_CREDENTIAL?.trim()
 if (Boolean(injectedEndpoint) !== Boolean(injectedCredential)) {
   throw new Error('SDR_GAME_SMOKE_ENDPOINT and SDR_GAME_SMOKE_CREDENTIAL must be set together')
 }
+const runtime = injectedEndpoint && injectedCredential
+  ? {
+      gameEndpoint: {
+        kind: new URL(injectedEndpoint).protocol === 'wss:' ? 'remote' : 'localhost',
+        url: injectedEndpoint,
+        credential: injectedCredential,
+      },
+    }
+  : await provisionProductionRuntime()
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -31,14 +40,7 @@ try {
   clientPage.on('console', (message) => {
     if (message.type() === 'error') clientConsoleErrors.push(message.text())
   })
-  if (injectedEndpoint && injectedCredential) {
-    const runtime = {
-      gameEndpoint: {
-        kind: 'localhost',
-        url: injectedEndpoint,
-        credential: injectedCredential,
-      },
-    }
+  if (runtime) {
     await Promise.all([
       page.addInitScript((configuration) => {
         window.solomonDarkRuntime = configuration
@@ -181,6 +183,26 @@ try {
   }) + '\n')
 } finally {
   await browser.close()
+}
+
+async function provisionProductionRuntime() {
+  const origin = new URL(baseUrl)
+  if (origin.protocol !== 'https:') return null
+
+  const response = await fetch(new URL('/api/game/sessions', origin), {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'x-solomon-dark-session': 'provision',
+    },
+  })
+  const payload = await response.json()
+  assert.equal(response.status, 200, JSON.stringify(payload))
+  assert.equal(response.headers.get('cache-control'), 'no-store')
+  assert.equal(payload.kind, 'remote')
+  assert.equal(new URL(payload.url).protocol, 'wss:')
+  assert.equal(typeof payload.credential, 'string')
+  return { gameEndpoint: payload }
 }
 
 async function enterHub(page, element) {
