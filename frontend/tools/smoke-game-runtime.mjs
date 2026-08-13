@@ -278,6 +278,7 @@ try {
   if (!expectedModBoneyard) assert.equal(hostDigCount, 1)
   const hostDigFrames = hostDigCount ? await sampleDigFrames(page) : []
   const clientDigFrames = clientDigCount ? await sampleDigFrames(clientPage) : []
+  let digIndicatorReceipt = null
   if (hostDigCount) {
     assert.ok(new Set(hostDigFrames).size > 1, `expected host Solomon Dig to animate (${hostDigFrames.join(', ')})`)
     assert.ok(new Set(clientDigFrames).size > 1, `expected client Solomon Dig to animate (${clientDigFrames.join(', ')})`)
@@ -286,8 +287,48 @@ try {
       assert.equal(await runPage.locator('.boneyard-lantern').count(), 1)
       await assertSolomonSetPieceRoots(runPage)
     }
+
+    const hostIndicator = page.getByRole('img', { name: 'Direction to Solomon Dig' })
+    const clientIndicator = clientPage.getByRole('img', { name: 'Direction to Solomon Dig' })
+    assert.equal(await hostIndicator.count(), 0)
+    assert.equal(await clientIndicator.count(), 0)
+    assert.match(await hostBoneyard.getAttribute('aria-label') || '', /Press H to toggle/)
+
+    await page.bringToFront()
+    await page.keyboard.down('h')
+    await hostIndicator.waitFor({ state: 'visible' })
+    assert.equal(await hostIndicator.getAttribute('data-hotkey'), 'H')
+    assert.equal(await clientIndicator.count(), 0)
+
+    await page.keyboard.down('h')
+    await page.waitForTimeout(100)
+    assert.equal(await hostIndicator.count(), 1, 'a repeated keydown must not retrigger the toggle')
+    await page.keyboard.up('h')
+
+    await page.setViewportSize({ width: 1_280, height: 800 })
+    await page.locator('.boneyard-scene[data-viewport-height="1000"]').waitFor()
+    digIndicatorReceipt = await solomonDigIndicatorReceipt(page)
+    assert.ok(digIndicatorReceipt.headingDot > 0)
+    assert.equal(digIndicatorReceipt.viewportWidth, 1_600)
+    assert.equal(digIndicatorReceipt.viewportHeight, 1_000)
+    assert.ok(
+      digIndicatorReceipt.x >= 64
+      && digIndicatorReceipt.x <= digIndicatorReceipt.viewportWidth - 64,
+    )
+    assert.ok(
+      digIndicatorReceipt.y >= 88
+      && digIndicatorReceipt.y <= digIndicatorReceipt.viewportHeight - 120,
+    )
+    await page.screenshot({ path: screenshotPath })
+
+    await page.keyboard.press('h')
+    await page.waitForFunction(() => !document.querySelector('.boneyard-dig-indicator'))
+    assert.equal(await clientIndicator.count(), 0)
+    await page.setViewportSize({ width: 1_600, height: 900 })
+    await page.locator('.boneyard-scene[data-viewport-height="900"]').waitFor()
+  } else {
+    await page.screenshot({ path: screenshotPath })
   }
-  await page.screenshot({ path: screenshotPath })
 
   let gateCrossing = null
   if (!expectedModBoneyard) {
@@ -308,6 +349,7 @@ try {
     clientConsoleErrors,
     clientPageErrors,
     clientDigFrames: [...new Set(clientDigFrames)],
+    digIndicatorReceipt,
     hostDigFrames: [...new Set(hostDigFrames)],
     hostReceipt,
     hostPainterReceipt,
@@ -530,6 +572,31 @@ async function assertSolomonSetPieceRoots(page) {
   assert.deepEqual(roots.lantern, {
     x: roots.grave.x - 55,
     y: roots.grave.y + 73,
+  })
+}
+
+async function solomonDigIndicatorReceipt(page) {
+  return page.evaluate(() => {
+    const indicator = document.querySelector('.boneyard-dig-indicator')
+    const scene = document.querySelector('.boneyard-scene')
+    const dig = document.querySelector('.boneyard-dig-anchor')
+    if (!(indicator instanceof HTMLElement)) throw new Error('Solomon Dig indicator is missing')
+    if (!(scene instanceof HTMLElement)) throw new Error('Boneyard scene is missing')
+    if (!(dig instanceof HTMLElement)) throw new Error('Solomon Dig root is missing')
+
+    const rotationDeg = Number(indicator.dataset.rotationDeg)
+    const rotationRad = rotationDeg * Math.PI / 180
+    const deltaX = Number(dig.dataset.worldX) - Number(scene.dataset.localPlayerX)
+    const deltaY = Number(dig.dataset.worldY) - Number(scene.dataset.localPlayerY)
+    return {
+      headingDot: Math.cos(rotationRad) * deltaX + Math.sin(rotationRad) * deltaY,
+      placement: indicator.dataset.placement,
+      rotationDeg,
+      viewportHeight: Number(scene.dataset.viewportHeight),
+      viewportWidth: Number(scene.dataset.viewportWidth),
+      x: Number.parseFloat(indicator.style.left),
+      y: Number.parseFloat(indicator.style.top),
+    }
   })
 }
 

@@ -9,6 +9,10 @@ import {
 import { spriteImage } from '../editor/assets.ts'
 import { worldToScreen, type Camera } from '../editor/render.ts'
 import { boneyard } from '../lib/assets.ts'
+import {
+  boneyardDigIndicatorLayout,
+  SOLOMON_DIG_HOTKEY_CODE,
+} from './boneyard-dig-indicator.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
@@ -63,6 +67,7 @@ export default function BoneyardScene({
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const darknessCanvasRef = useRef<HTMLCanvasElement>(null)
+  const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
   const inputRef = useRef<BrowserMovementInput | null>(null)
@@ -72,6 +77,28 @@ export default function BoneyardScene({
     gameViewportLayout(1600, 900)
   ))
   const viewportRef = useRef(viewport)
+  const [digIndicatorRunId, setDigIndicatorRunId] = useState<string | null>(null)
+  const dig = loaded.scene.solomonDig
+  const digPosition = dig?.position
+
+  useEffect(() => {
+    const toggleDigIndicator = (event: KeyboardEvent) => {
+      if (
+        event.code !== SOLOMON_DIG_HOTKEY_CODE
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || !dig
+      ) return
+      event.preventDefault()
+      setDigIndicatorRunId((activeRunId) => (
+        activeRunId === loaded.runId ? null : loaded.runId
+      ))
+    }
+    window.addEventListener('keydown', toggleDigIndicator)
+    return () => window.removeEventListener('keydown', toggleDigIndicator)
+  }, [dig, loaded.runId])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -122,6 +149,14 @@ export default function BoneyardScene({
         if (darkness) {
           paintDarkness(darkness, snapshot, camera, viewportRef.current, now)
         }
+        positionDigIndicator(
+          digIndicatorRef.current,
+          snapshot,
+          playerId,
+          digPosition,
+          camera,
+          viewportRef.current,
+        )
         publishSceneDiagnostics(
           sceneRef.current,
           renderer.canvas,
@@ -149,7 +184,7 @@ export default function BoneyardScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [initialSnapshot, loaded, onInput, playerId, samplePresentation])
+  }, [digPosition, initialSnapshot, loaded, onInput, playerId, samplePresentation])
 
   const localPlayer = initialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
@@ -157,7 +192,7 @@ export default function BoneyardScene({
   const gateLeaves = initialSnapshot.world.kind === 'boneyard'
     ? initialSnapshot.world.gateLeaves
     : []
-  const dig = loaded.scene.solomonDig
+  const digIndicatorVisible = Boolean(dig && digIndicatorRunId === loaded.runId)
 
   return (
     <div
@@ -178,7 +213,7 @@ export default function BoneyardScene({
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
       data-viewport-width={viewport.width}
-      aria-label={`Boneyard: ${loaded.choice.name}. Move with W A S D, arrow keys, a controller, or the touch joystick.`}
+      aria-label={`Boneyard: ${loaded.choice.name}. Move with W A S D, arrow keys, a controller, or the touch joystick.${dig ? ' Press H to toggle the Solomon Dig direction arrow.' : ''}`}
       tabIndex={0}
     >
       <div
@@ -201,6 +236,20 @@ export default function BoneyardScene({
         ) : null}
 
         <GameHud element={element} mode="run" />
+        {digIndicatorVisible ? (
+          <div
+            ref={digIndicatorRef}
+            className="boneyard-dig-indicator"
+            data-hotkey="H"
+            data-ready="false"
+            role="img"
+            aria-label="Direction to Solomon Dig"
+          >
+            <svg viewBox="-40 -28 80 56" aria-hidden>
+              <path d="M -35 -9 H 8 V -23 L 36 0 8 23 V 9 H -35 Z" />
+            </svg>
+          </div>
+        ) : null}
         <HubTouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
 
         {dig ? (
@@ -240,6 +289,39 @@ export default function BoneyardScene({
       </div>
     </div>
   )
+}
+
+function positionDigIndicator(
+  indicator: HTMLDivElement | null,
+  snapshot: GameSnapshot,
+  playerId: string,
+  digPosition: { x: number; y: number } | undefined,
+  camera: Camera,
+  viewport: GameViewportLayout,
+): void {
+  const player = snapshot.players[playerId]
+  if (!indicator || !player || !digPosition) return
+  const layout = boneyardDigIndicatorLayout(
+    worldToScreen(
+      player.position,
+      camera,
+      viewport.width,
+      viewport.height,
+    ),
+    worldToScreen(
+      digPosition,
+      camera,
+      viewport.width,
+      viewport.height,
+    ),
+    viewport,
+  )
+  indicator.style.left = `${layout.x}px`
+  indicator.style.top = `${layout.y}px`
+  indicator.style.setProperty('--boneyard-dig-rotation', `${layout.rotationDeg}deg`)
+  indicator.dataset.placement = layout.placement
+  indicator.dataset.rotationDeg = `${layout.rotationDeg}`
+  indicator.dataset.ready = 'true'
 }
 
 function paintDarkness(

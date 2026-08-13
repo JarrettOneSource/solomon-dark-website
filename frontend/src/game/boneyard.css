@@ -40,3 +40,32 @@
   display: block;
   pointer-events: none;
 }
+
+.boneyard-dig-indicator {
+  position: absolute;
+  z-index: 10001;
+  width: 80px;
+  height: 56px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.boneyard-dig-indicator[data-ready='false'] {
+  visibility: hidden;
+}
+
+.boneyard-dig-indicator svg {
+  display: block;
+  width: 80px;
+  height: 56px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px #000) drop-shadow(0 0 4px rgb(246 207 100 / 0.7));
+  transform: rotate(var(--boneyard-dig-rotation));
+}
+
+.boneyard-dig-indicator path {
+  fill: #d6b455;
+  stroke: #2a1c08;
+  stroke-linejoin: round;
+  stroke-width: 3px;
+}
