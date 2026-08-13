@@ -43,9 +43,46 @@ test('client carries character config, predicts input, reconciles, and tears dow
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
-    snapshot: createGameSnapshot(serverState),
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   const session = await connecting
+  assert.equal(session.isHost, true)
+  assert.equal(session.boneyards[0].id, 'default-random')
+  session.startMatch('default-random')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
+  let receivedRunId: string | null = null
+  session.onBoneyard((boneyard) => { receivedRunId = boneyard.runId })
+  transport.receive(encodeGameMessage({
+    type: 'server-boneyard-loaded',
+    boneyard: {
+      choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+      runId: 'run-one',
+      seed: '0123456789abcdef',
+      sourceSha256: '1'.repeat(64),
+      geometrySha256: '2'.repeat(64),
+      scene: {
+        name: 'Random Level',
+        bounds: { x: 0, y: 0, w: 1600, h: 1200 },
+        spawn: { x: 200, y: 150, facingDeg: 180 },
+        objects: [],
+        sprites: [],
+        roads: [],
+        fences: [],
+        terrain: [],
+        solomonDig: {
+          position: { x: 200, y: 390 },
+          frameProgram: [0, 3, 17, 3],
+          ticksPerFrame: 5,
+        },
+      },
+    },
+  }))
+  assert.equal(session.getBoneyard()?.runId, 'run-one')
+  assert.equal(receivedRunId, 'run-one')
   const origin = session.getSnapshot().players['player-1'].position
   assert.deepEqual(session.getSnapshot().players['player-1'].config, CHARACTER)
   let presented = session.getSnapshot()
@@ -63,14 +100,14 @@ test('client carries character config, predicts input, reconciles, and tears dow
   transport.receive(encodeGameMessage({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: createGameSnapshot(serverState),
+    snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   assert.equal(presented.players['player-1'].position.x, origin.x)
   assert.ok(presented.players['player-1'].position.y > origin.y)
   transport.receive(encodeGameMessage({
     type: 'server-snapshot',
     acknowledgedInputSequence: 2,
-    snapshot: createGameSnapshot(serverState),
+    snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   assert.deepEqual(presented.players['player-1'].position, origin)
 
@@ -97,7 +134,8 @@ test('client disables prediction when the shared character kernel does not match
     kernelVersion: 'future-player-character-kernel',
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
-    snapshot: createGameSnapshot(serverState),
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   const session = await connecting
   const origin = session.getSnapshot().players['player-1'].position.x
@@ -107,7 +145,7 @@ test('client disables prediction when the shared character kernel does not match
   transport.receive(encodeGameMessage({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: createGameSnapshot(serverState),
+    snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   assert.equal(presented.players['player-1'].position.x, origin)
   session.destroy()
@@ -130,7 +168,8 @@ test('client rejects a welcome that omits its assigned player', async () => {
     kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
-    snapshot: createGameSnapshot(createGameSimulation({})),
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(createGameSimulation({}), null),
   }))
   await assert.rejects(connecting, /does not contain the assigned player/)
 })

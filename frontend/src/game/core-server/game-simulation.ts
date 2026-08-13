@@ -5,7 +5,15 @@ import {
   type PlayerCharacterInput,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import {
+  createBoneyardWorld,
+  placePlayersInBoneyard,
+  spawnPlayerCharacterInBoneyard,
+  stepBoneyardWorldTick,
+  type BoneyardWorldState,
+} from './boneyard-world.ts'
 import {
   createHubWorld,
   hubSpawnPoint,
@@ -15,11 +23,13 @@ import {
 
 export type PlayerId = string
 
+export type GameWorldState = HubWorldState | BoneyardWorldState
+
 export interface GameSimulationState {
   accumulatorSeconds: number
   players: Readonly<Record<PlayerId, PlayerCharacterState>>
   tick: number
-  world: HubWorldState
+  world: GameWorldState
 }
 
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
@@ -56,7 +66,7 @@ export function addPlayerCharacter(
     ...state,
     players: {
       ...state.players,
-      [playerId]: createPlayerCharacter(config, spawnPointForWorld(state.world)),
+      [playerId]: spawnPlayerForWorld(state.world, config),
     },
   }
 }
@@ -69,6 +79,18 @@ export function removePlayerCharacter(
   const players = { ...state.players }
   delete players[playerId]
   return { ...state, players }
+}
+
+export function enterBoneyardWorld(
+  state: GameSimulationState,
+  loaded: LoadedBoneyard,
+): GameSimulationState {
+  const world = createBoneyardWorld(loaded)
+  return {
+    ...state,
+    players: placePlayersInBoneyard(state.players, world),
+    world,
+  }
 }
 
 export function getPlayerCharacter(
@@ -87,6 +109,15 @@ export function stepGameSimulationTick(
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, state.players, inputs)
+      return {
+        accumulatorSeconds: state.accumulatorSeconds,
+        players: result.players,
+        tick: state.tick + 1,
+        world: result.world,
+      }
+    }
+    case 'boneyard': {
+      const result = stepBoneyardWorldTick(state.world, state.players, inputs)
       return {
         accumulatorSeconds: state.accumulatorSeconds,
         players: result.players,
@@ -128,8 +159,12 @@ export function stepSinglePlayerGameSimulation(
   )
 }
 
-function spawnPointForWorld(world: HubWorldState): Vector2 {
+function spawnPlayerForWorld(
+  world: GameWorldState,
+  config: PlayerCharacterConfig,
+): PlayerCharacterState {
   switch (world.kind) {
-    case 'hub': return hubSpawnPoint()
+    case 'hub': return createPlayerCharacter(config, hubSpawnPoint())
+    case 'boneyard': return spawnPlayerCharacterInBoneyard(config, world)
   }
 }

@@ -17,6 +17,8 @@ const spriteFiles = {
   ...import.meta.glob('../assets/game/boneyard/bonedit/*.png', { eager: true, query: '?url', import: 'default' }),
 } as Record<string, string>
 
+export const BONEYARD_SPRITE_SOURCES = [...new Set(Object.values(spriteFiles))]
+
 export function spriteUrl(atlas: string, id: number): string | null {
   const entry = atlasManifests[atlas]?.entries[id]
   if (!entry || !entry.file) return null

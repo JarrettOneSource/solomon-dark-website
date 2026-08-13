@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets'
+import GameHud from './GameHud'
 import HubTeacher from './HubTeacher'
 import PlayerCharacter from './PlayerCharacter.tsx'
 import {
@@ -40,8 +41,9 @@ import {
   nativeFootstepTicksBetween,
   nativeMovementOccurredBetween,
 } from './game-audio-native.ts'
-import type { GameSnapshot } from './protocol/game-protocol.ts'
+import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
 import type {
+  HubWorldSnapshot,
   ProtocolFountainParticleState,
   ProtocolStudentState,
 } from './protocol/game-state.ts'
@@ -49,10 +51,18 @@ import './hub.css'
 
 interface HubSceneProps {
   audio: GameAudioDirector
+  boneyards: readonly BoneyardChoice[]
   initialSnapshot: GameSnapshot
   onInput: (input: PlayerCharacterInput) => void
+  onStartMatch: (boneyardId: string) => void
   playerId: string
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
+}
+
+type HubGameSnapshot = Omit<GameSnapshot, 'world'> & { world: HubWorldSnapshot }
+
+function isHubSnapshot(snapshot: GameSnapshot): snapshot is HubGameSnapshot {
+  return snapshot.world.kind === 'hub'
 }
 
 const HUB_TEACHER_POSITION = { x: 576.5, y: 710.5 } as const
@@ -140,25 +150,6 @@ function Student({ onPropRef, onRef, reading, student }: StudentProps) {
   )
 }
 
-function HudSlot({ src }: { src: string }) {
-  return <img className="hub-hud-slot" src={src} alt="" />
-}
-
-function InventoryCount({ count, variant }: { count: number; variant: 'blue' | 'red' }) {
-  return (
-    <span
-      className={`hub-hud-count hub-hud-count-${variant}`}
-      style={{
-        backgroundImage: `url("${hub.hud.inventoryDigits}")`,
-        backgroundPosition: `${-count * 8}px 0`,
-      }}
-      aria-hidden
-    />
-  )
-}
-
-const HUB_XP_PROGRESS = 0.45
-
 function renderFountainParticles(
   container: HTMLSpanElement,
   elements: Map<number, HTMLImageElement>,
@@ -191,11 +182,16 @@ function renderFountainParticles(
 
 export default function HubScene({
   audio,
+  boneyards,
   initialSnapshot,
   onInput,
+  onStartMatch,
   playerId,
   subscribe,
 }: HubSceneProps) {
+  if (!isHubSnapshot(initialSnapshot)) {
+    throw new Error('Hub scene requires a Hub snapshot')
+  }
   const sceneRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
   const fountainLayerRef = useRef<HTMLSpanElement>(null)
@@ -209,11 +205,13 @@ export default function HubScene({
   const keysRef = useRef(new Set<string>())
   const studentElementsRef = useRef(new Map<number, HTMLDivElement>())
   const studentPropElementsRef = useRef(new Map<number, Array<HTMLSpanElement | null>>())
-  const snapshotRef = useRef(initialSnapshot)
+  const snapshotRef = useRef<HubGameSnapshot>(initialSnapshot)
   const [playerRoster, setPlayerRoster] = useState({ ...initialSnapshot.players })
   const [studentRoster, setStudentRoster] = useState([
     ...initialSnapshot.world.students,
   ])
+  const [hostPlayerId, setHostPlayerId] = useState(initialSnapshot.hostPlayerId)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [stageScale, setStageScale] = useState(1)
   const [matchReady, setMatchReady] = useState(false)
 
@@ -258,6 +256,8 @@ export default function HubScene({
     window.addEventListener('blur', handleBlur)
 
     const unsubscribe = subscribe((snapshot) => {
+      if (!isHubSnapshot(snapshot)) return
+      const hubWorld = snapshot.world
       const player = snapshot.players[playerId]
       if (player) {
         const moving = nativeMovementOccurredBetween(
@@ -275,8 +275,9 @@ export default function HubScene({
       previousAudioSnapshot = snapshot
       snapshotRef.current = snapshot
       setPlayerRoster({ ...snapshot.players })
+      setHostPlayerId(snapshot.hostPlayerId)
       setStudentRoster((currentRoster) => {
-        const students = snapshot.world.students
+        const students = hubWorld.students
         const rosterChanged = currentRoster.length !== students.length
           || currentRoster.some((student, index) => student.id !== students[index]?.id)
         return rosterChanged ? [...students] : currentRoster
@@ -378,6 +379,15 @@ export default function HubScene({
   }, [audio, initialSnapshot, onInput, playerId, subscribe])
 
   const frameStyle = { transform: `scale(${stageScale})` } as CSSProperties
+  const isHost = hostPlayerId === playerId
+  const beginMatch = () => {
+    if (!isHost) return
+    if (boneyards.length === 1) {
+      onStartMatch(boneyards[0].id)
+      return
+    }
+    setPickerOpen(true)
+  }
   const sceneStyle = {
     '--hub-potion-balloons-sheet': `url("${hub.tent.balloons}")`,
     '--hub-potion-trader-sheet': `url("${hub.npcs.potion}")`,
@@ -548,68 +558,60 @@ export default function HubScene({
           />
         </div>
 
-        <div className="hub-hud" aria-label="Player status">
-          <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
-          <div className="hub-hud-meters">
-            <div className="hub-hud-meter hub-hud-meter-health"><img src={hub.hud.barRed} alt="Health 50 of 50" /></div>
-            <div className="hub-hud-meter hub-hud-meter-mana"><img src={hub.hud.barBlue} alt="Mana 100 of 100" /></div>
-          </div>
-          <img className="hub-hud-primary" src={hub.primary[element]} alt={`${element} primary spell`} />
-          <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
+        <GameHud
+          element={element}
+          mapActive={matchReady}
+          mapLabel={matchReady ? 'Leave match queue' : 'Ready for match'}
+          onMapClick={() => setMatchReady((ready) => !ready)}
+        />
 
-          <div className="hub-hud-secondary" aria-label="Acid Rain, right mouse button">
-            <img className="hub-hud-secondary-ability" src={hub.hud.secondaryAcidRain} alt="Acid Rain" />
-            <img className="hub-hud-secondary-mouse" src={hub.hud.mouseRight} alt="Right mouse button" />
-          </div>
-
-          <div className="hub-hud-loadout" aria-label="Equipped spells">
-            <HudSlot src={hub.hud.npcs.annalist} />
-            <HudSlot src={hub.hud.npcs.perkWitch} />
-            <HudSlot src={hub.hud.npcs.items} />
-            <HudSlot src={hub.hud.npcs.potion} />
-            <HudSlot src={hub.hud.npcs.teacher} />
-          </div>
-
-          <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
-            <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="3 health potions" />
-            <InventoryCount count={3} variant="red" />
-            <img className="hub-hud-backpack" src={hub.hud.backpack} alt="Backpack" />
-            <div
-              className="hub-hud-xp"
-              role="progressbar"
-              aria-label="Experience"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={HUB_XP_PROGRESS * 100}
-            >
-              <img
-                className="hub-hud-xp-fill"
-                src={hub.hud.xpFill}
-                style={{ clipPath: `inset(${HUB_XP_PROGRESS * 100}% 0 0)` }}
-                alt=""
-              />
-              <img className="hub-hud-xp-frame" src={hub.hud.xpFrame} alt="" />
-            </div>
-            <img className="hub-hud-tome" src={hub.hud.tome} alt="Spellbook" />
-            <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="4 mana potions" />
-            <InventoryCount count={4} variant="blue" />
-          </div>
-
-          <button
-            type="button"
-            className="hub-hud-map"
-            aria-label={matchReady ? 'Leave match queue' : 'Ready for match'}
-            aria-pressed={matchReady}
-            onClick={() => setMatchReady((ready) => !ready)}
-          >
-            <img className="hub-hud-map-parchment" src={hub.hud.parchment} alt="" />
-            <img
-              className="hub-hud-map-state"
-              src={matchReady ? hub.hud.mapPlay : hub.hud.mapCompass}
-              alt=""
-            />
-          </button>
+        <div className="hub-match-control">
+          {isHost ? (
+            <button type="button" className="hub-start-match" onClick={beginMatch}>
+              Start Match
+            </button>
+          ) : (
+            <span className="hub-waiting-host">Waiting for host</span>
+          )}
         </div>
+
+        {pickerOpen && isHost && (
+          <div className="hub-boneyard-picker-backdrop" role="presentation">
+            <section
+              className="hub-boneyard-picker"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="hub-boneyard-picker-title"
+            >
+              <h2 id="hub-boneyard-picker-title">Choose a Boneyard</h2>
+              <div className="hub-boneyard-options">
+                {boneyards.map((choice) => (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    className="hub-boneyard-option"
+                    data-boneyard-id={choice.id}
+                    onClick={() => onStartMatch(choice.id)}
+                  >
+                    <strong>{choice.name}</strong>
+                    <span>
+                      {choice.source === 'default'
+                        ? 'A stock-generated random arena'
+                        : choice.modName ?? choice.modId}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="hub-boneyard-cancel"
+                onClick={() => setPickerOpen(false)}
+              >
+                Cancel
+              </button>
+            </section>
+          </div>
+        )}
       </div>
     </div>
   )

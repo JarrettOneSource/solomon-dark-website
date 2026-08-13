@@ -315,12 +315,14 @@ test('Student static collision refreshes on the recovered fifteen-tick cadence',
 
 test('Student population retires and spawns without visible-route teleports', () => {
   let simulation = createGameSimulation()
+  if (simulation.world.kind !== 'hub') throw new Error('expected Hub world')
   const initialIds = new Set(
     simulation.world.studentPopulation.students.map((student) => student.id),
   )
   let highestId = Math.max(...initialIds)
   for (let frame = 0; frame < 2400; frame += 1) {
     simulation = stepSinglePlayerGameSimulation(simulation, { x: 0, y: 0 }, 1 / 100)
+    if (simulation.world.kind !== 'hub') throw new Error('expected Hub world')
     highestId = Math.max(
       highestId,
       ...simulation.world.studentPopulation.students.map((student) => student.id),
@@ -391,6 +393,7 @@ test('the integrated Hub world is deterministic and keeps every actor distinct',
     second = stepSinglePlayerGameSimulation(second, input, 1 / 60)
   }
   assert.deepEqual(first, second)
+  if (first.world.kind !== 'hub') throw new Error('expected Hub world')
   for (
     let index = 0;
     index < first.world.studentPopulation.students.length;

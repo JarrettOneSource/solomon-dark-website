@@ -20,7 +20,7 @@ const CHARACTER = {
 
 test('bootGame accepts a separate localhost server and routes through the shared connector', async () => {
   let connected: GameClientSessionOptions | undefined
-  const session = { playerId: 'p', resumeToken: 'r', destroy() {}, getSnapshot() { throw new Error() }, onSnapshot: () => () => {}, sendInput() {} }
+  const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
     endpoint: {
@@ -59,7 +59,7 @@ test('bootGame bans website remote sessions from local and plaintext endpoints',
 })
 
 test('bootGame accepts any numeric IPv4 loopback address for a desktop-local server', async () => {
-  const session = { playerId: 'p', resumeToken: 'r', destroy() {}, getSnapshot() { throw new Error() }, onSnapshot: () => () => {}, sendInput() {} }
+  const session = inertSession()
   const result = await bootGame({
     character: CHARACTER,
     endpoint: { kind: 'localhost', url: 'ws://127.12.34.56:1234/game', credential: 'x' },
@@ -75,3 +75,19 @@ test('bootGame rejects non-loopback addresses presented as desktop-local servers
     endpoint: { kind: 'localhost', url: 'ws://192.168.1.20:1234/game', credential: 'x' },
   }), /loopback/)
 })
+
+function inertSession() {
+  return {
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
+    isHost: true,
+    playerId: 'p',
+    resumeToken: 'r',
+    destroy() {},
+    getBoneyard: () => null,
+    getSnapshot() { throw new Error() },
+    onBoneyard: () => () => {},
+    onSnapshot: () => () => {},
+    sendInput() {},
+    startMatch() {},
+  }
+}

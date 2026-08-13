@@ -170,6 +170,7 @@ import elementVfxSpark from '../assets/game/element-vfx-spark.png'
 import elementVfxWater from '../assets/game/element-vfx-water.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
+import animSolomonDig from '../assets/game/anim-solomon-dig.png'
 import solomonStand from '../assets/game/solomon-stand.png'
 import animFireball from '../assets/game/anim-fireball.png'
 import animSpellEtherWisp from '../assets/game/anim-spell-ether-wisp.png'
@@ -535,6 +536,10 @@ export const hub = {
       teacher: hubHudNpcTeacher,
     },
   },
+}
+
+export const boneyard = {
+  solomonDig: animSolomonDig,
 }
 
 /** The skeleton death payload, keyed by BadGuys.bundle record number

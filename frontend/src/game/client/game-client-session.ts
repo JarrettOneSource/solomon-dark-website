@@ -13,7 +13,9 @@ import {
   GameProtocolError,
   decodeServerGameMessage,
   encodeGameMessage,
+  type BoneyardChoice,
   type GameSnapshot,
+  type LoadedBoneyard,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import type { GameTransport } from './game-transport.ts'
@@ -28,12 +30,17 @@ export interface GameClientSessionOptions {
 }
 
 export interface GameClientSession {
+  readonly boneyards: readonly BoneyardChoice[]
+  readonly isHost: boolean
   readonly playerId: string
   readonly resumeToken: string
   destroy(): void
+  getBoneyard(): LoadedBoneyard | null
   getSnapshot(): GameSnapshot
+  onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sendInput(input: PlayerCharacterInput): void
+  startMatch(boneyardId: string): void
 }
 
 export type GameSessionConnector = (
@@ -54,10 +61,12 @@ export function connectGameClientSession(
     let destroyed = false
     let welcome: ServerWelcomeMessage | undefined
     let snapshot: GameSnapshot | undefined
+    let loadedBoneyard: LoadedBoneyard | null = null
     let sequence = 0
     let predictionEnabled = false
     let fatalReported = false
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
+    const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
@@ -92,13 +101,18 @@ export function connectGameClientSession(
         return
       }
       if (!welcome || !snapshot) {
-        fail(new Error('The server sent a snapshot before welcoming the client.'))
+        fail(new Error('The server sent game state before welcoming the client.'))
+        return
+      }
+      if (message.type === 'server-boneyard-loaded') {
+        loadedBoneyard = message.boneyard
+        for (const listener of boneyardListeners) listener(message.boneyard)
         return
       }
       pendingInputs = pendingInputs.filter(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
-      snapshot = predictionEnabled
+      snapshot = predictionEnabled && message.snapshot.world.kind === 'hub'
         ? predictLocalPlayer(message.snapshot, welcome.playerId, pendingInputs)
         : message.snapshot
       for (const listener of snapshotListeners) listener(snapshot)
@@ -108,6 +122,13 @@ export function connectGameClientSession(
     })
 
     const session: GameClientSession = {
+      get boneyards() {
+        if (!welcome) throw new Error('game session has not been welcomed')
+        return welcome.boneyards
+      },
+      get isHost() {
+        return !!welcome && snapshot?.hostPlayerId === welcome.playerId
+      },
       get playerId() {
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.playerId
@@ -127,6 +148,10 @@ export function connectGameClientSession(
         }
         options.transport.close(1000, 'session destroyed')
         snapshotListeners.clear()
+        boneyardListeners.clear()
+      },
+      getBoneyard() {
+        return loadedBoneyard
       },
       getSnapshot() {
         if (!snapshot) throw new Error('game session has no snapshot')
@@ -135,6 +160,10 @@ export function connectGameClientSession(
       onSnapshot(listener) {
         snapshotListeners.add(listener)
         return () => snapshotListeners.delete(listener)
+      },
+      onBoneyard(listener) {
+        boneyardListeners.add(listener)
+        return () => boneyardListeners.delete(listener)
       },
       sendInput(nextInput) {
         if (!welcome || !snapshot || destroyed) return
@@ -161,6 +190,16 @@ export function connectGameClientSession(
           input,
           sequence,
           targetTick,
+        }))
+      },
+      startMatch(boneyardId) {
+        if (!welcome || destroyed) return
+        if (!welcome.boneyards.some((choice) => choice.id === boneyardId)) {
+          throw new Error(`Unknown Boneyard: ${boneyardId}`)
+        }
+        options.transport.send(encodeGameMessage({
+          type: 'client-start-match',
+          boneyardId,
         }))
       },
     }
@@ -192,6 +231,7 @@ export function connectGameClientSession(
       removeMessage()
       options.transport.close(1008, error.message.slice(0, 123))
       snapshotListeners.clear()
+      boneyardListeners.clear()
       options.onFatal?.(error)
     }
   })
@@ -223,6 +263,7 @@ function predictLocalPlayer(
         world: { ...source.world, collisionRngState },
       }
     }
+    case 'boneyard': return source
   }
 }
 

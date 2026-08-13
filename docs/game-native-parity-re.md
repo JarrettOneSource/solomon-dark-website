@@ -2585,3 +2585,131 @@ backend build with zero warnings and errors, all `22` backend contracts, the
 canonical lint/boundary gate, all `89` frontend tests, and both production
 frontend builds. The seven Fast Refresh lint notices predate this work and
 remain warnings rather than gate failures.
+## Boneyard construction and presentation — 2026-08-12
+
+### Stock arena materialization
+
+The stock random Boneyard builder is the function at preferred address
+`0x006388B0`. Its recovered body contains 6,165 instructions and directly
+places the road, grave, goodie, building, fence, and Tree populations. Tree
+construction continues through `0x0062CB00`. The loader's existing empty-list
+guard fixes a stock candidate-selection crash, but does not change the normal
+generated output. Reimplementing only the obvious placement loops would omit
+hidden constraints and would not be a parity implementation.
+
+Twelve independently materialized `play.boneyard` files produced by the stock
+builder were recovered from isolated native runtime instances. They are all
+structurally distinct and contain the complete stock mixtures of bounds,
+spawn, scenery, sprites, roads, fences, and terrain. Their observed ranges are
+`88..148` Trees, `246..379` graves, `3..8` goodies, `0..1` buildings,
+`16..79` roads, `15..27` fences, and `196..365` sprites. These files are
+generator outputs, not authored approximations.
+
+Implementation consequence: the clean web host owns a checked, content-hashed
+bank made from these exact stock outputs. A new match obtains a server-authored
+random seed, selects one bank entry, and sends that one immutable scene to all
+peers. This preserves stock-generated geometry and art placement 1:1 while
+keeping selection authoritative and deterministic for a multiplayer run.
+Combat timelines, recipes, and wave data are deliberately omitted from the
+browser payload because they are outside this milestone; no geometry is
+regenerated or retuned during that projection.
+
+Evidence: loader RE notes `docs/reverse-engineering/boneyard-system.md` and
+`docs/reverse-engineering/native-boneyards-and-world.md`; complete headless
+Ghidra inspection of `0x006388B0` and `0x0062CB00`; source hashes and structural
+digests emitted alongside the projected native bank.
+
+Confidence: high that every bank member is an unmodified stock-generator
+materialization and that its serialized geometry is exact. The browser does
+not yet reproduce the stock generator instruction-for-instruction, so its set
+of possible default arenas is the vetted native bank rather than the entire
+native random output space. That distinction is intentional and explicit.
+
+### Painter order and resident art
+
+The native world starts with black, tiles DeadHawg record `21` at logical
+`200 x 200`, and then paints roads, terrain, underlays, compact scenery,
+shadows, the Y-sorted main population, and foreground overlays in that order.
+The existing editor render-plan recovery is the shared authority for record
+mappings, registration points, scale, rotation, color, and painter pass. A
+runtime Boneyard must call that same renderer without editor boundaries, grid,
+selection chrome, or vignette. It must use the extracted DeadHawg, BadGuys,
+Bonedit, and texture assets rather than substitute CSS shapes.
+
+Evidence: the complete render-order reconstruction and bundle record mappings
+in the two Boneyard RE notes above, plus the lossless parser and native render
+plan already exercised by the Website editor.
+
+Confidence: high for static scenery composition and draw order. Dynamic actor
+occlusion against the scenery population remains a separate gameplay-renderer
+milestone and must not be approximated by changing static placements.
+
+### Solomon Dig set piece
+
+`Solomon_Dig` is native type `5009` (`0x1391`). Its constructor is
+`0x00481C20`, fixed update is `0x0048A8B0`, and renderer is `0x004A2610`.
+State `0`, the pre-wave idle/dig state used by this milestone, dispatches to
+`0x004902C0` and draws from the Solomon resident bank at owner offset `+0x1C4`.
+The Solomon bundle builder at `0x004ED980` establishes that this bank is exact
+bundle records `2..19`.
+
+The constructor's state-0 frame program is:
+
+`0,0,0,0,3,4,5,6,7,8,9,10,11,12,13,15,17,17,17,17,16,15,13,11,9,7,5,3,1`
+
+Implementation consequence: the resident loader extracts records `2..19`
+into a registration-preserving sheet and the Boneyard scene advances the
+program on the shared fixed clock. Solomon Dig exists immediately when the
+arena is loaded and keeps animating while combat and waves remain absent.
+
+Evidence: read-only headless decompilation of `0x004A2610`, `0x004902C0`, and
+`0x004ED980`, together with the recovered constructor sequence and Solomon
+bundle metadata.
+
+Confidence: high for owner, record range, state dispatch, and frame sequence.
+The precise native transition timing out of state 0 belongs to the wave system
+and is intentionally not implemented here.
+
+### Multiplayer and mod ownership
+
+The authoritative game host, not a browser, owns Boneyard choice and scene
+materialization. The default choice is always present. Enabled staged mod
+overlays whose portable targets end in `.boneyard` add named choices to the
+catalog; the stage report provides enabled-mod identity, overlay source and
+target, and the resolved staged root. The host validates and parses the staged
+target using the same lossless Boneyard parser used by the editor.
+
+If the catalog contains only the default, Start Match begins immediately. If
+it contains mod choices, Start Match opens a host-only picker. A selected
+choice produces one run identity and one loaded-scene message, followed by the
+Boneyard snapshot; WebSocket ordering ensures every peer installs identical
+content before rendering the transition. Late joiners receive the active
+loaded scene after welcome. Non-host start requests cannot mutate game state.
+
+Confidence: high for the ownership boundary and available stage-report seam.
+Mod-specific scripts and combat behavior are outside this milestone; this
+system loads their Boneyard art and geometry only.
+
+### Validation receipt
+
+The canonical `./scripts/validate.sh` gate passed on 2026-08-12: 22 backend
+contract/integration tests, 90 frontend tests, formatting, lint and game
+architecture boundaries, the production Vite build, and the standalone game
+host build. The native-bank generator reproduced SHA-256
+`9045752d24cb43813014b267b15a0ea279a790170dc6dfc19208dfe017383206`
+from the twelve retained `play.boneyard` captures. The Solomon records `2..19`
+extractor reproduced sheet SHA-256
+`659f615074b2b1001cd150594d955432aad5ebb06502af40c1003b1be73bdae0`.
+
+Two-client production-browser smokes covered both branches without page or
+console errors. The default-only branch skipped the picker and synchronized
+run `0be4f22657b605a087b84509923bf285` with geometry
+`341683b84221010162e94bbfba1c0bab9d5d02dfeda287fc30ec9c9f1daccca0`;
+the host and client each observed multiple Solomon Dig frames. The mod branch
+opened the host-only picker, selected `Contract Arena`, and synchronized run
+`8734ee8683e40e0f64adf5a0bc19ba55`, choice
+`mod:tests.contract:contract-arena:69ed41fc8f04`, and geometry
+`304e332db0d21845fdbca95499bbb1d894230659a3b768ad60c76eb71d7f079e`
+to both peers, again with advancing Dig frames. Captures are
+`/tmp/solomon-dark-boneyard-default-final-0812.png` and
+`/tmp/solomon-dark-boneyard-mod-final-0812.png`.

@@ -1,4 +1,8 @@
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import {
+  createBoneyardCatalog,
+  loadModBoneyardsFromStageReport,
+} from './boneyard-catalog.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
@@ -6,10 +10,15 @@ const allowedOrigins = requiredEnvironment('SDR_GAME_ALLOWED_ORIGINS')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)
+const stageReport = process.env.SDR_GAME_STAGE_REPORT?.trim()
+const boneyards = createBoneyardCatalog(
+  stageReport ? await loadModBoneyardsFromStageReport(stageReport) : [],
+)
 
 const supervisor = await startGameSessionSupervisor({
   adminSecret,
   allowedOrigins,
+  boneyards,
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type AnimationEvent, type KeyboardEvent, 
 import MenuSolomon from '../fx/MenuSolomon'
 import { isMuted, isSfxMuted } from '../fx/audio'
 import { mainMenu } from '../lib/assets'
+import BoneyardScene from './BoneyardScene'
 import CreateMenuScene from './CreateMenuScene'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import { GameAudioDirector } from './game-audio-director.ts'
@@ -14,6 +15,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
+import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import './main-menu.css'
 
 type MenuScreen = 'root' | 'play' | 'create' | 'hub'
@@ -135,6 +137,8 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
+  const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
 
@@ -159,6 +163,18 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
         : 'title'
     audio.setScene(audioScene)
   }, [audio, screen])
+
+  useEffect(() => {
+    if (!session) return
+    setRuntimeSnapshot(session.getSnapshot())
+    setLoadedBoneyard(session.getBoneyard())
+    const removeSnapshot = session.onSnapshot(setRuntimeSnapshot)
+    const removeBoneyard = session.onBoneyard(setLoadedBoneyard)
+    return () => {
+      removeSnapshot()
+      removeBoneyard()
+    }
+  }, [session])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -195,6 +211,8 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
         element: selectedElement,
       })
       setSession(nextSession)
+      setRuntimeSnapshot(nextSession.getSnapshot())
+      setLoadedBoneyard(nextSession.getBoneyard())
       transitionTo('hub')
       return true
     } catch (error) {
@@ -251,14 +269,26 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
             onBack={() => transitionTo('play')}
             onStart={startHub}
           />
-        ) : session ? (
+        ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
+          && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
+          <BoneyardScene
+            boneyard={loadedBoneyard}
+            playerId={session.playerId}
+            initialSnapshot={runtimeSnapshot}
+            onInput={session.sendInput}
+          />
+        ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
           <HubScene
             audio={audio}
+            boneyards={session.boneyards}
             playerId={session.playerId}
-            initialSnapshot={session.getSnapshot()}
+            initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
+            onStartMatch={session.startMatch}
             subscribe={session.onSnapshot}
           />
+        ) : session ? (
+          <div className="main-menu-runtime-status" role="status">Opening the Boneyard…</div>
         ) : null}
 
         {(connecting || connectionError) && (

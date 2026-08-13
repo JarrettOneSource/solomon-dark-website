@@ -64,8 +64,16 @@ export interface HubWorldSnapshot {
   students: readonly ProtocolStudentState[]
 }
 
+export interface BoneyardWorldSnapshot {
+  kind: 'boneyard'
+  runId: string
+}
+
+export type GameWorldSnapshot = HubWorldSnapshot | BoneyardWorldSnapshot
+
 export interface GameSnapshot {
+  hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   tick: number
-  world: HubWorldSnapshot
+  world: GameWorldSnapshot
 }

@@ -15,11 +15,18 @@ import {
   GAME_TICK_RATE,
   addPlayerCharacter,
   createGameSimulation,
+  enterBoneyardWorld,
   removePlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
   type PlayerId,
 } from '../core-server/game-simulation.ts'
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import {
+  createBoneyardCatalog,
+  materializeBoneyard,
+  type BoneyardCatalog,
+} from './boneyard-catalog.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
@@ -37,6 +44,7 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 export interface GameHostOptions {
   allowedOrigins?: readonly string[]
   bootstrapCredential: string
+  boneyards?: BoneyardCatalog
   content?: GameContentManifest
   host?: string
   maxPlayers?: number
@@ -55,6 +63,7 @@ export interface GameHost {
   address: GameHostAddress
   close(): Promise<void>
   playerCount(): number
+  loadedBoneyard(): LoadedBoneyard | null
   state(): GameSimulationState
 }
 
@@ -79,6 +88,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
   const snapshotRate = options.snapshotRate ?? 20
+  const boneyards = options.boneyards ?? createBoneyardCatalog()
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
     throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
   }
@@ -94,6 +104,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   let state = createGameSimulation({})
   let nextPlayerId = 1
+  let hostPlayerId: PlayerId | null = null
+  let loadedBoneyard: LoadedBoneyard | null = null
   let closed = false
   let ticking = false
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
@@ -102,7 +114,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const server = createServer((request, response) => {
     if (request.url === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ status: 'ok', tick: state.tick, players: clients.size }))
+      response.end(JSON.stringify({
+        status: 'ok',
+        tick: state.tick,
+        players: clients.size,
+        scene: state.world.kind,
+      }))
       return
     }
     response.writeHead(404)
@@ -184,6 +201,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const playerId = `player-${nextPlayerId}`
         nextPlayerId += 1
         state = addPlayerCharacter(state, playerId, message.character)
+        hostPlayerId ??= playerId
         clients.set(socket, {
           acknowledgedSequence: 0,
           activeInput: { movement: { x: 0, y: 0 } },
@@ -211,8 +229,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
             mods: [],
           },
-          snapshot: createGameSnapshot(state),
+          boneyards: boneyards.choices,
+          snapshot: createGameSnapshot(state, hostPlayerId),
         }))
+        if (loadedBoneyard) {
+          socket.send(encodeGameMessage({
+            type: 'server-boneyard-loaded',
+            boneyard: loadedBoneyard,
+          }))
+        }
         return
       }
 
@@ -234,6 +259,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         return
       }
+      if (message.type === 'client-start-match') {
+        if (client.playerId !== hostPlayerId || loadedBoneyard) return
+        const selected = materializeBoneyard(boneyards, message.boneyardId)
+        if (!selected) {
+          disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
+          return
+        }
+        loadedBoneyard = selected
+        state = enterBoneyardWorld(state, selected)
+        broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
+        broadcastSnapshot()
+        return
+      }
       if (message.type === 'client-disconnect') socket.close(1000, 'client disconnect')
       else disconnect(socket, 'invalid-message', 'The client has already joined.')
     })
@@ -245,6 +283,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (!client) return
       clients.delete(socket)
       state = removePlayerCharacter(state, client.playerId)
+      if (client.playerId === hostPlayerId) {
+        hostPlayerId = clients.values().next().value?.playerId ?? null
+        broadcastSnapshot()
+      }
     }
     socket.once('close', release)
     socket.once('error', release)
@@ -278,7 +320,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }, 2)
 
   function broadcastSnapshot(): void {
-    const snapshot = createGameSnapshot(state)
+    const snapshot = createGameSnapshot(state, hostPlayerId)
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
       client.socket.send(encodeGameMessage({
@@ -286,6 +328,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         acknowledgedInputSequence: client.acknowledgedSequence,
         snapshot,
       }))
+    }
+  }
+
+  function broadcast(message: Parameters<typeof encodeGameMessage>[0]): void {
+    const encoded = encodeGameMessage(message)
+    for (const client of clients.values()) {
+      if (client.socket.readyState === WebSocket.OPEN) client.socket.send(encoded)
     }
   }
 
@@ -329,6 +378,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       await closeHttpServer(server)
     },
     playerCount: () => clients.size,
+    loadedBoneyard: () => loadedBoneyard,
     state: () => state,
   }
 }

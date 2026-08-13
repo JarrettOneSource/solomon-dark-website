@@ -45,6 +45,13 @@ test('client protocol validates character hello and tick-indexed input messages'
     sequence: 4,
     targetTick: 19,
   })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
 })
 
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
@@ -67,7 +74,11 @@ test('server welcome round-trips content, kernel, character, and world ownership
       manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
       mods: [],
     },
-    snapshot: createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER })),
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(
+      createGameSimulation({ 'player-1': CHARACTER }),
+      'player-1',
+    ),
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
@@ -95,11 +106,14 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     targetTick: 1,
   })), /magnitude/)
 
-  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }))
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: { ...snapshot, world: { ...snapshot.world, kind: 'boneyard' } },
+    snapshot: { ...snapshot, world: { ...snapshot.world, kind: 'unknown' } },
   })), /kind/)
   const malformed = JSON.parse(JSON.stringify(snapshot))
   delete malformed.players['player-1'].config
@@ -111,7 +125,10 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {
-  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }))
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
@@ -123,7 +140,13 @@ test('protocol rejects player ids reserved by ordinary JavaScript records', () =
 })
 
 test('protocol bounds server-controlled world collections', () => {
-  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }))
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  assert.equal(snapshot.world.kind, 'hub')
+  if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  const hubWorld = snapshot.world
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-welcome',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -140,12 +163,42 @@ test('protocol bounds server-controlled world collections', () => {
       playerRadius: 25,
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: {
       ...snapshot,
       world: {
-        ...snapshot.world,
-        students: Array.from({ length: 257 }, () => snapshot.world.students[0]),
+        ...hubWorld,
+        students: Array.from({ length: 257 }, () => hubWorld.students[0]),
       },
     },
   })), /at most 256/)
+})
+
+test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', () => {
+  const message = {
+    type: 'server-boneyard-loaded' as const,
+    boneyard: {
+      choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' as const },
+      runId: 'run-one',
+      seed: '0123456789abcdef',
+      sourceSha256: '1'.repeat(64),
+      geometrySha256: '2'.repeat(64),
+      scene: {
+        name: 'Random Level',
+        bounds: { x: 0, y: 0, w: 1600, h: 1200 },
+        spawn: { x: 200, y: 150, facingDeg: 180 },
+        objects: [],
+        sprites: [],
+        roads: [],
+        fences: [],
+        terrain: [],
+        solomonDig: {
+          position: { x: 200, y: 390 },
+          frameProgram: [0, 3, 17, 3],
+          ticksPerFrame: 5,
+        },
+      },
+    },
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
 })

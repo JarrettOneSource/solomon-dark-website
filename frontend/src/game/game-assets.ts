@@ -1,4 +1,7 @@
+import { BONEYARD_SPRITE_SOURCES } from '../editor/assets'
+import { STAGE_TEXTURES } from '../editor/render'
 import {
+  boneyard,
   createMenu,
   elementVfx,
   hub,
@@ -13,6 +16,9 @@ import { collectAssetSources, loadAssetBatch, type AssetProgress } from './game-
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 
 export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
+  boneyard,
+  boneyardSprites: BONEYARD_SPRITE_SOURCES,
+  boneyardTextures: STAGE_TEXTURES,
   createMenu,
   elementVfx,
   hub,

@@ -546,6 +546,27 @@ export function drawStage(
   drawTransientOverlays(ctx, ui, cam, cssW, cssH)
 }
 
+/** Retail Boneyard world painter: no editor grid, vignette, boundary, or
+ * interaction chrome. Dynamic actors are presented by the game scene. */
+export function drawNativeBoneyardWorld(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+) {
+  paintWorld(
+    ctx,
+    cssW,
+    cssH,
+    cam,
+    doc,
+    { selected: EMPTY_SET, hover: null, showGrid: false },
+    undefined,
+    true,
+  )
+}
+
 /** Dashed held/hover strokes for lines, drawn over a blitted layer. Styles
  * mirror the interleaved ones in drawTerrain/drawRoads/drawFence. */
 function lineOverlays(
@@ -661,10 +682,11 @@ function paintWorld(
   doc: EditorDoc,
   wui: WorldPaintUI,
   skip?: Set<string>,
+  runtime = false,
 ) {
   // The void beyond the plot. The context is opaque (alpha: false), and this
   // covers every pixel, so no clear pass is needed.
-  ctx.fillStyle = '#07060a'
+  ctx.fillStyle = runtime ? '#000' : '#07060a'
   ctx.fillRect(0, 0, cssW, cssH)
 
   const b = doc.meta.bounds
@@ -682,24 +704,28 @@ function paintWorld(
   if (groundPat) {
     ctx.fillStyle = groundPat
     ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-    ctx.fillStyle = 'rgba(8, 12, 8, 0.1)'
-    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+    if (!runtime) {
+      ctx.fillStyle = 'rgba(8, 12, 8, 0.1)'
+      ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+    }
   } else {
     ctx.fillStyle = '#22251f'
     ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
   }
-  const vigKey = `${tl.x.toFixed(1)},${tl.y.toFixed(1)},${br.x.toFixed(1)},${br.y.toFixed(1)}`
-  if (vigKey !== vignetteKey || !vignetteGrad) {
-    vignetteGrad = ctx.createRadialGradient(
-      (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.min(br.x - tl.x, br.y - tl.y) * 0.3,
-      (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.max(br.x - tl.x, br.y - tl.y) * 0.75,
-    )
-    vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)')
-    vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.22)')
-    vignetteKey = vigKey
+  if (!runtime) {
+    const vigKey = `${tl.x.toFixed(1)},${tl.y.toFixed(1)},${br.x.toFixed(1)},${br.y.toFixed(1)}`
+    if (vigKey !== vignetteKey || !vignetteGrad) {
+      vignetteGrad = ctx.createRadialGradient(
+        (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.min(br.x - tl.x, br.y - tl.y) * 0.3,
+        (tl.x + br.x) / 2, (tl.y + br.y) / 2, Math.max(br.x - tl.x, br.y - tl.y) * 0.75,
+      )
+      vignetteGrad.addColorStop(0, 'rgba(0,0,0,0)')
+      vignetteGrad.addColorStop(1, 'rgba(0,0,0,0.22)')
+      vignetteKey = vigKey
+    }
+    ctx.fillStyle = vignetteGrad
+    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
   }
-  ctx.fillStyle = vignetteGrad
-  ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
 
   // Survey grid: the step widens as the camera pulls out so the lines stay
   // an honest surveyor's grid instead of vanishing or turning to noise.
@@ -762,12 +788,14 @@ function paintWorld(
   paintPlacementPasses(ctx, doc, cam, cssW, cssH, skip ? { skip } : undefined)
 
   // Plot boundary: the property line, in gold.
-  ctx.save()
-  ctx.strokeStyle = 'rgba(200,168,98,0.4)'
-  ctx.lineWidth = 1.5
-  ctx.setLineDash([10, 6])
-  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
-  ctx.restore()
+  if (!runtime) {
+    ctx.save()
+    ctx.strokeStyle = 'rgba(200,168,98,0.4)'
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([10, 6])
+    ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+    ctx.restore()
+  }
 
   lineOverlays(ctx, doc, cam, cssW, cssH, view, selected, wui.hover)
   paintPlacementOutlines(ctx, doc, cam, cssW, cssH, selected, wui.hover)

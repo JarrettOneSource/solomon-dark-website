@@ -6,6 +6,18 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type {
+  BoneyardBounds,
+  BoneyardChoice,
+  BoneyardFence,
+  BoneyardObject,
+  BoneyardPoint,
+  BoneyardRoad,
+  BoneyardScene,
+  BoneyardSprite,
+  BoneyardTerrain,
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
+import type {
   GameSnapshot,
   HubWorldSnapshot,
   ProtocolAmbientState,
@@ -14,13 +26,22 @@ import type {
 } from './game-state.ts'
 
 export type { GameSnapshot } from './game-state.ts'
+export type {
+  BoneyardChoice,
+  BoneyardScene,
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 2
+export const GAME_PROTOCOL_VERSION = 3
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-1'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
+const MAX_BONEYARD_CHOICES = 256
+const MAX_BONEYARD_OBJECTS = 8192
+const MAX_BONEYARD_SPRITES = 16384
+const MAX_BONEYARD_STRUCTURES = 8192
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
 const MAX_STUDENT_PROPS = 8
@@ -64,9 +85,15 @@ export interface ClientDisconnectMessage {
   type: 'client-disconnect'
 }
 
+export interface ClientStartMatchMessage {
+  type: 'client-start-match'
+  boneyardId: string
+}
+
 export type ClientGameMessage =
   | ClientHelloMessage
   | ClientInputMessage
+  | ClientStartMatchMessage
   | ClientDisconnectMessage
 
 export interface ServerWelcomeMessage {
@@ -79,6 +106,7 @@ export interface ServerWelcomeMessage {
   kernelVersion: string
   kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
+  boneyards: readonly BoneyardChoice[]
   snapshot: GameSnapshot
 }
 
@@ -86,6 +114,11 @@ export interface ServerSnapshotMessage {
   type: 'server-snapshot'
   acknowledgedInputSequence: number
   snapshot: GameSnapshot
+}
+
+export interface ServerBoneyardLoadedMessage {
+  type: 'server-boneyard-loaded'
+  boneyard: LoadedBoneyard
 }
 
 export type GameDisconnectCode =
@@ -103,6 +136,7 @@ export interface ServerDisconnectMessage {
 export type ServerGameMessage =
   | ServerWelcomeMessage
   | ServerSnapshotMessage
+  | ServerBoneyardLoadedMessage
   | ServerDisconnectMessage
 
 export function encodeGameMessage(message: ClientGameMessage | ServerGameMessage): string {
@@ -138,6 +172,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
     }
   }
+  if (value.type === 'client-start-match') {
+    onlyKeys(value, 'message', ['type', 'boneyardId'])
+    return {
+      type: 'client-start-match',
+      boneyardId: limitedString(value.boneyardId, 'boneyardId', 256),
+    }
+  }
   if (value.type === 'client-disconnect') {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
@@ -158,6 +199,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'kernelVersion',
       'kernelParameters',
       'content',
+      'boneyards',
       'snapshot',
     ])
     return {
@@ -170,6 +212,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       kernelVersion: limitedString(value.kernelVersion, 'kernelVersion', 128),
       kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
+      boneyards: boneyardChoices(value.boneyards),
       snapshot: gameSnapshot(value.snapshot),
     }
   }
@@ -186,6 +229,13 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
         'acknowledgedInputSequence',
       ),
       snapshot: gameSnapshot(value.snapshot),
+    }
+  }
+  if (value.type === 'server-boneyard-loaded') {
+    onlyKeys(value, 'message', ['type', 'boneyard'])
+    return {
+      type: 'server-boneyard-loaded',
+      boneyard: loadedBoneyard(value.boneyard),
     }
   }
   if (value.type === 'server-disconnect') {
@@ -271,6 +321,12 @@ function integer(value: unknown, field: string): number {
 function nonnegativeInteger(value: unknown, field: string): number {
   const result = integer(value, field)
   if (result < 0) throw new GameProtocolError(`${field} must be nonnegative`)
+  return result
+}
+
+function positiveInteger(value: unknown, field: string): number {
+  const result = integer(value, field)
+  if (result < 1) throw new GameProtocolError(`${field} must be positive`)
   return result
 }
 
@@ -362,6 +418,246 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     position: vector(source.position, `${field}.position`),
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
+  }
+}
+
+function optionalFinite(value: unknown, field: string): number | undefined {
+  return value === undefined ? undefined : finite(value, field)
+}
+
+function optionalInteger(value: unknown, field: string): number | undefined {
+  return value === undefined ? undefined : integer(value, field)
+}
+
+function boneyardPoint(value: unknown, field: string): BoneyardPoint {
+  return vector(value, field)
+}
+
+function boneyardChoice(value: unknown, field: string): BoneyardChoice {
+  const source = record(value, field)
+  onlyKeys(source, field, ['id', 'name', 'source', 'modId', 'modName'])
+  const kind = limitedString(source.source, `${field}.source`, 16)
+  if (kind !== 'default' && kind !== 'mod') {
+    throw new GameProtocolError(`${field}.source must be default or mod`)
+  }
+  return {
+    id: limitedString(source.id, `${field}.id`, 256),
+    name: limitedString(source.name, `${field}.name`, 256),
+    source: kind,
+    ...(source.modId === undefined
+      ? {}
+      : { modId: limitedString(source.modId, `${field}.modId`, 128) }),
+    ...(source.modName === undefined
+      ? {}
+      : { modName: limitedString(source.modName, `${field}.modName`, 256) }),
+  }
+}
+
+function boneyardChoices(value: unknown): readonly BoneyardChoice[] {
+  const choices = limitedArray(value, 'boneyards', MAX_BONEYARD_CHOICES).map((choice, index) => (
+    boneyardChoice(choice, `boneyards[${index}]`)
+  ))
+  if (choices.length === 0) throw new GameProtocolError('boneyards must not be empty')
+  return choices
+}
+
+function boneyardObject(value: unknown, field: string): BoneyardObject {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'eid',
+    'typeId',
+    'pos',
+    'variant',
+    'rot',
+    'scale',
+    'sortBias',
+    'atlasEntry',
+    'secondaryAtlasEntry',
+    'secondaryVariant',
+    'secondaryVisible',
+    'overlayAtlasEntry',
+    'overlayVariant',
+    'atlasEntries',
+  ])
+  return {
+    eid: limitedString(source.eid, `${field}.eid`, 128),
+    typeId: integer(source.typeId, `${field}.typeId`),
+    pos: boneyardPoint(source.pos, `${field}.pos`),
+    ...optionalNumberField(source, field, 'variant', optionalInteger),
+    ...optionalNumberField(source, field, 'rot', optionalFinite),
+    ...optionalNumberField(source, field, 'scale', optionalFinite),
+    ...optionalNumberField(source, field, 'sortBias', optionalFinite),
+    ...optionalNumberField(source, field, 'atlasEntry', optionalInteger),
+    ...optionalNumberField(source, field, 'secondaryAtlasEntry', optionalInteger),
+    ...optionalNumberField(source, field, 'secondaryVariant', optionalInteger),
+    ...(source.secondaryVisible === undefined
+      ? {}
+      : { secondaryVisible: boolean(source.secondaryVisible, `${field}.secondaryVisible`) }),
+    ...optionalNumberField(source, field, 'overlayAtlasEntry', optionalInteger),
+    ...optionalNumberField(source, field, 'overlayVariant', optionalInteger),
+    ...(source.atlasEntries === undefined
+      ? {}
+      : {
+          atlasEntries: limitedArray(source.atlasEntries, `${field}.atlasEntries`, 32)
+            .map((entry, index) => integer(entry, `${field}.atlasEntries[${index}]`)),
+        }),
+  }
+}
+
+function boneyardSprite(value: unknown, field: string): BoneyardSprite {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'eid', 'atlasEntry', 'deadHawgEntry', 'pos', 's0', 's1', 's2', 'flags',
+  ])
+  return {
+    eid: limitedString(source.eid, `${field}.eid`, 128),
+    atlasEntry: integer(source.atlasEntry, `${field}.atlasEntry`),
+    ...optionalNumberField(source, field, 'deadHawgEntry', optionalInteger),
+    pos: boneyardPoint(source.pos, `${field}.pos`),
+    s0: finite(source.s0, `${field}.s0`),
+    s1: finite(source.s1, `${field}.s1`),
+    s2: finite(source.s2, `${field}.s2`),
+    flags: integer(source.flags, `${field}.flags`),
+  }
+}
+
+function boneyardLine(
+  value: unknown,
+  field: string,
+  kind: 'road' | 'fence',
+): BoneyardRoad | BoneyardFence {
+  const source = record(value, field)
+  onlyKeys(source, field, kind === 'fence'
+    ? ['eid', 'typeId', 'points', 'style', 'segmentCode']
+    : ['eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale', 'quad'])
+  const common = {
+    eid: limitedString(source.eid, `${field}.eid`, 128),
+    typeId: integer(source.typeId, `${field}.typeId`),
+    points: limitedArray(source.points, `${field}.points`, 256)
+      .map((entry, index) => boneyardPoint(entry, `${field}.points[${index}]`)),
+    ...optionalNumberField(source, field, 'style', optionalInteger),
+  }
+  if (common.points.length < 2) throw new GameProtocolError(`${field}.points needs two points`)
+  if (kind === 'fence') {
+    return {
+      ...common,
+      ...optionalNumberField(source, field, 'segmentCode', optionalInteger),
+    }
+  }
+  return {
+    ...common,
+    ...optionalNumberField(source, field, 'startWidthScale', optionalFinite),
+    ...optionalNumberField(source, field, 'endWidthScale', optionalFinite),
+    ...(source.quad === undefined
+      ? {}
+      : {
+          quad: limitedArray(source.quad, `${field}.quad`, 4)
+            .map((entry, index) => boneyardPoint(entry, `${field}.quad[${index}]`)),
+        }),
+  }
+}
+
+function boneyardTerrain(value: unknown, field: string): BoneyardTerrain {
+  const source = record(value, field)
+  onlyKeys(source, field, ['eid', 'pos', 'points', 'style', 'entry'])
+  return {
+    eid: limitedString(source.eid, `${field}.eid`, 128),
+    pos: boneyardPoint(source.pos, `${field}.pos`),
+    ...(source.points === undefined
+      ? {}
+      : {
+          points: limitedArray(source.points, `${field}.points`, 256)
+            .map((entry, index) => boneyardPoint(entry, `${field}.points[${index}]`)),
+        }),
+    ...optionalNumberField(source, field, 'style', optionalInteger),
+    ...optionalNumberField(source, field, 'entry', optionalInteger),
+  }
+}
+
+function optionalNumberField(
+  source: Record<string, unknown>,
+  field: string,
+  key: string,
+  decode: (value: unknown, field: string) => number | undefined,
+): Record<string, number> {
+  const value = decode(source[key], `${field}.${key}`)
+  return value === undefined ? {} : { [key]: value }
+}
+
+function boneyardScene(value: unknown): BoneyardScene {
+  const source = record(value, 'boneyard.scene')
+  onlyKeys(source, 'boneyard.scene', [
+    'name', 'bounds', 'spawn', 'objects', 'sprites', 'roads', 'fences', 'terrain',
+    'solomonDig',
+  ])
+  const boundsSource = record(source.bounds, 'boneyard.scene.bounds')
+  const spawnSource = record(source.spawn, 'boneyard.scene.spawn')
+  const digSource = record(source.solomonDig, 'boneyard.scene.solomonDig')
+  onlyKeys(boundsSource, 'boneyard.scene.bounds', ['x', 'y', 'w', 'h'])
+  onlyKeys(spawnSource, 'boneyard.scene.spawn', ['x', 'y', 'facingDeg'])
+  onlyKeys(digSource, 'boneyard.scene.solomonDig', [
+    'position', 'frameProgram', 'ticksPerFrame',
+  ])
+  const bounds: BoneyardBounds = {
+    x: finite(boundsSource.x, 'boneyard.scene.bounds.x'),
+    y: finite(boundsSource.y, 'boneyard.scene.bounds.y'),
+    w: positiveFinite(boundsSource.w, 'boneyard.scene.bounds.w'),
+    h: positiveFinite(boundsSource.h, 'boneyard.scene.bounds.h'),
+  }
+  const frameProgram = limitedArray(
+    digSource.frameProgram,
+    'boneyard.scene.solomonDig.frameProgram',
+    256,
+  ).map((frame, index) => {
+    const decoded = nonnegativeInteger(
+      frame,
+      `boneyard.scene.solomonDig.frameProgram[${index}]`,
+    )
+    if (decoded > 17) throw new GameProtocolError('Solomon Dig frame exceeds record bank')
+    return decoded
+  })
+  if (frameProgram.length === 0) throw new GameProtocolError('Solomon Dig frame program is empty')
+  return {
+    name: limitedString(source.name, 'boneyard.scene.name', 256),
+    bounds,
+    spawn: {
+      x: finite(spawnSource.x, 'boneyard.scene.spawn.x'),
+      y: finite(spawnSource.y, 'boneyard.scene.spawn.y'),
+      facingDeg: finite(spawnSource.facingDeg, 'boneyard.scene.spawn.facingDeg'),
+    },
+    objects: limitedArray(source.objects, 'boneyard.scene.objects', MAX_BONEYARD_OBJECTS)
+      .map((entry, index) => boneyardObject(entry, `boneyard.scene.objects[${index}]`)),
+    sprites: limitedArray(source.sprites, 'boneyard.scene.sprites', MAX_BONEYARD_SPRITES)
+      .map((entry, index) => boneyardSprite(entry, `boneyard.scene.sprites[${index}]`)),
+    roads: limitedArray(source.roads, 'boneyard.scene.roads', MAX_BONEYARD_STRUCTURES)
+      .map((entry, index) => boneyardLine(entry, `boneyard.scene.roads[${index}]`, 'road') as BoneyardRoad),
+    fences: limitedArray(source.fences, 'boneyard.scene.fences', MAX_BONEYARD_STRUCTURES)
+      .map((entry, index) => boneyardLine(entry, `boneyard.scene.fences[${index}]`, 'fence') as BoneyardFence),
+    terrain: limitedArray(source.terrain, 'boneyard.scene.terrain', MAX_BONEYARD_STRUCTURES)
+      .map((entry, index) => boneyardTerrain(entry, `boneyard.scene.terrain[${index}]`)),
+    solomonDig: {
+      position: boneyardPoint(digSource.position, 'boneyard.scene.solomonDig.position'),
+      frameProgram,
+      ticksPerFrame: positiveInteger(
+        digSource.ticksPerFrame,
+        'boneyard.scene.solomonDig.ticksPerFrame',
+      ),
+    },
+  }
+}
+
+function loadedBoneyard(value: unknown): LoadedBoneyard {
+  const source = record(value, 'boneyard')
+  onlyKeys(source, 'boneyard', [
+    'choice', 'runId', 'seed', 'sourceSha256', 'geometrySha256', 'scene',
+  ])
+  return {
+    choice: boneyardChoice(source.choice, 'boneyard.choice'),
+    runId: limitedString(source.runId, 'boneyard.runId', 128),
+    seed: limitedString(source.seed, 'boneyard.seed', 128),
+    sourceSha256: sha256(source.sourceSha256, 'boneyard.sourceSha256'),
+    geometrySha256: sha256(source.geometrySha256, 'boneyard.geometrySha256'),
+    scene: boneyardScene(source.scene),
   }
 }
 
@@ -470,7 +766,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
 
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
-  onlyKeys(source, 'snapshot', ['players', 'tick', 'world'])
+  onlyKeys(source, 'snapshot', ['hostPlayerId', 'players', 'tick', 'world'])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
     throw new GameProtocolError(`snapshot.players may contain at most ${MAX_PLAYERS} entries`)
@@ -483,11 +779,31 @@ function gameSnapshot(value: unknown): GameSnapshot {
       `snapshot.players.${playerId}`,
     )
   }
+  const hostPlayerId = source.hostPlayerId === null
+    ? null
+    : validatedPlayerId(source.hostPlayerId, 'snapshot.hostPlayerId')
+  if (hostPlayerId !== null && !players[hostPlayerId]) {
+    throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
+  }
   return {
+    hostPlayerId,
     players,
     tick: nonnegativeInteger(source.tick, 'snapshot.tick'),
-    world: hubWorldSnapshot(source.world, 'snapshot.world'),
+    world: gameWorldSnapshot(source.world, 'snapshot.world'),
   }
+}
+
+function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world'] {
+  const source = record(value, field)
+  if (source.kind === 'hub') return hubWorldSnapshot(source, field)
+  if (source.kind === 'boneyard') {
+    onlyKeys(source, field, ['kind', 'runId'])
+    return {
+      kind: 'boneyard',
+      runId: limitedString(source.runId, `${field}.runId`, 128),
+    }
+  }
+  throw new GameProtocolError(`${field}.kind is not supported`)
 }
 
 function playerCharacterKernelParameters(

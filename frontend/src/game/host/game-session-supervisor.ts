@@ -5,6 +5,7 @@ import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer } from 'ws'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import type { BoneyardCatalog } from './boneyard-catalog.ts'
 import { startGameHost, type GameHost } from './game-host.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
@@ -18,6 +19,7 @@ const DEFAULT_UNCLAIMED_TIMEOUT_MS = 2 * 60 * 1000
 export interface GameSessionSupervisorOptions {
   adminSecret: string
   allowedOrigins: readonly string[]
+  boneyards?: BoneyardCatalog
   host?: string
   idleTimeoutMs?: number
   maxConnectionsPerSession?: number
@@ -167,6 +169,7 @@ export async function startGameSessionSupervisor(
     const credential = randomBytes(32).toString('base64url')
     const sessionHost = await startGameHost({
       bootstrapCredential: credential,
+      ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {

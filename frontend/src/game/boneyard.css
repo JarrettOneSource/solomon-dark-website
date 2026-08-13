@@ -1,0 +1,63 @@
+.boneyard-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  cursor: auto;
+  user-select: none;
+}
+
+.boneyard-scene:focus { outline: none; }
+
+.boneyard-native-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+
+.boneyard-canvas,
+.boneyard-actors {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+}
+
+.boneyard-canvas {
+  display: block;
+}
+
+.boneyard-actors {
+  pointer-events: none;
+}
+
+.boneyard-dig-anchor {
+  position: absolute;
+  z-index: 8000;
+  width: 1px;
+  height: 1px;
+}
+
+.boneyard-solomon-dig {
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  display: block;
+  width: 200px;
+  height: 200px;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  image-rendering: auto;
+}
+
+.boneyard-player {
+  pointer-events: none;
+}
+
+.boneyard-player[data-local='false'] {
+  filter: saturate(0.82) brightness(0.88);
+}

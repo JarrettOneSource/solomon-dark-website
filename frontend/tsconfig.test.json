@@ -41,7 +41,9 @@
     "src/game/client/game-transport.ts",
     "src/game/host/game-host.ts",
     "src/game/host/game-host.test.ts",
-    "src/game/host/game-snapshot.ts"
+    "src/game/host/game-snapshot.ts",
+    "src/game/host/boneyard-catalog.test.ts",
+    "src/game/host/boneyard-catalog.ts"
   ],
   "exclude": []
 }

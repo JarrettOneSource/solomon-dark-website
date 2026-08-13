@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import {
+  createBoneyardCatalog,
+  loadModBoneyardsFromStageReport,
+} from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
 
 const host = process.env.SDR_GAME_HOST?.trim() || '127.0.0.1'
@@ -13,11 +17,16 @@ const allowedOrigins = process.env.SDR_GAME_ALLOWED_ORIGINS
   .filter(Boolean)
 const snapshotRate = parseSnapshotRate(process.env.SDR_GAME_SNAPSHOT_RATE)
 const trustedProxy = process.env.SDR_GAME_TRUSTED_PROXY === '1'
+const stageReport = process.env.SDR_GAME_STAGE_REPORT?.trim()
+const boneyards = createBoneyardCatalog(
+  stageReport ? await loadModBoneyardsFromStageReport(stageReport) : [],
+)
 
 const server = await startGameHost({
   host,
   port,
   bootstrapCredential: credential,
+  boneyards,
   snapshotRate,
   trustedProxy,
   ...(allowedOrigins ? { allowedOrigins } : {}),

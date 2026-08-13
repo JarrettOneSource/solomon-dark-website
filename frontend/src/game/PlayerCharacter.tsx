@@ -6,11 +6,20 @@ import { createPlayerCharacterDrawPlan } from './player-character-presentation.t
 import './player-character.css'
 
 interface PlayerCharacterProps {
+  className?: string
   depth: number
+  isLocal?: boolean
+  playerId?: string
   state: PlayerCharacterState
 }
 
-export default function PlayerCharacter({ depth, state }: PlayerCharacterProps) {
+export default function PlayerCharacter({
+  className = '',
+  depth,
+  isLocal,
+  playerId,
+  state,
+}: PlayerCharacterProps) {
   const plan = createPlayerCharacterDrawPlan(state)
   const headingPosition = `0 ${plan.headingSheetOffsetY}px`
   const fixedRobeTransform = translate(plan.fixedRobeOffset)
@@ -32,10 +41,12 @@ export default function PlayerCharacter({ depth, state }: PlayerCharacterProps) 
 
   return (
     <div
-      className="player-character"
+      className={`player-character ${className}`.trim()}
       data-discipline={state.config.discipline}
       data-element={element}
+      data-local={isLocal === undefined ? undefined : `${isLocal}`}
       data-moving={plan.moving}
+      data-player-id={playerId}
       data-walk-pose={plan.fixedRobePose}
       aria-label={`${state.config.displayName}, ${element} wizard`}
       style={style}
