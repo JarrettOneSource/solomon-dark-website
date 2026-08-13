@@ -299,3 +299,11 @@ mobile displayed its orientation gate. These
 receipts validate the shared client and current Linux package boundary; they
 do not yet qualify minimum physical GPU hardware, Windows/macOS packages,
 encrypted peer transport, or save/resume.
+
+The final integration pass also made touch ownership an explicit acceptance
+contract. Snapshot-driven React renders may replace a joystick callback, but
+only pointer release, pointer cancellation, or actual component unmount may
+clear the held touch vector. A real `800 ms` mobile gesture must cross at least
+`40` world units; the retained receipt crossed `61.89`. This prevents UI render
+frequency from leaking into the authoritative input lifetime without adding
+command polling or a mobile-only simulation path.

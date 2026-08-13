@@ -11,6 +11,11 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
   const baseRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLSpanElement>(null)
   const activePointerRef = useRef<number | null>(null)
+  const inputSinkRef = useRef(onInput)
+
+  useEffect(() => {
+    inputSinkRef.current = onInput
+  }, [onInput])
 
   const update = (event: ReactPointerEvent<HTMLDivElement>) => {
     const base = baseRef.current
@@ -34,7 +39,7 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
     onInput({ x: 0, y: 0 })
   }
 
-  useEffect(() => () => onInput({ x: 0, y: 0 }), [onInput])
+  useEffect(() => () => inputSinkRef.current({ x: 0, y: 0 }), [])
 
   return (
     <div

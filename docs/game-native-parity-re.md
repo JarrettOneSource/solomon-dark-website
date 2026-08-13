@@ -2850,6 +2850,25 @@ navigator waits for a declared default to become visible instead of falling
 through to an unrelated action. This is web input plumbing only; no native
 loadout timing or selection behavior was changed.
 
+### 2026-08-13 touch-input lifecycle receipt
+
+The production-integration device pass exposed a web-only ownership defect in
+the Pointer Events joystick. A recorded `800 ms` gesture retained pointer
+capture from `pointerdown` through `pointerup` with no `pointercancel`, but the
+player asymptotically stopped after moving exactly two world units. The
+authoritative host retained its active command correctly. The actual stop came
+from the joystick's React effect cleanup: each `20 Hz` snapshot re-render gave
+the component a new input-sink function, and the dependency cleanup mistook
+that normal callback replacement for an unmount.
+
+The joystick now updates a sink reference independently and emits its safety
+stop only on real unmount. The browser acceptance test holds one real CDP touch
+gesture across many snapshot-driven parent renders and requires more than `40`
+world units of travel, so a one-tick false positive cannot pass. The corrected
+`844x390` run moved from X `950.64` to `1012.53` (`61.89` units), retained the
+same WebGL resolution and native movement kernel, and emitted no page errors.
+This changes no recovered native behavior; it repairs web input ownership.
+
 ### Physical-GPU presentation-clock diagnosis
 
 The software-rendered number above is not representative of the rebuilt

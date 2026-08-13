@@ -132,13 +132,18 @@ try {
   await mobileCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await mobile.waitForTimeout(150)
   const after = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
-  assert.ok(after > before, `expected touch movement to move the player right (${before} -> ${after})`)
+  const touchDistance = after - before
+  assert.ok(
+    touchDistance > 40,
+    `expected touch input to remain active through parent snapshot renders (${before} -> ${after})`,
+  )
   assert.deepEqual(mobileErrors, [])
   reports.mobileLandscape = {
     before,
     after,
     joystickWidth: joystickBounds.width,
     resolution: Number(await canvas.getAttribute('data-resolution')),
+    touchDistance,
   }
   await mobile.close()
 
