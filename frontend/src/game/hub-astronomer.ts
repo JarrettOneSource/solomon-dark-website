@@ -6,14 +6,17 @@ export interface HubAstronomerMainActorFrame {
   bank: HubAstronomerMainBank
   frame: number
   position: Vector2
+  shadowPosition: Vector2
 }
 
 export interface HubAstronomerAssistantFrame {
   frame: number
   position: Vector2
+  shadowPosition: Vector2
 }
 
 export interface HubAstronomerFrame {
+  active: boolean
   assistants: {
     blue: HubAstronomerAssistantFrame
     brown: HubAstronomerAssistantFrame
@@ -24,9 +27,6 @@ export interface HubAstronomerFrame {
   red: HubAstronomerMainActorFrame
   telescopeFrame: number
 }
-
-export const HUB_ASTRONOMER_ROOT = { x: 1740, y: 911 } as const
-export const HUB_ASTRONOMER_TELESCOPE_ORIGIN = { x: 1467, y: 642 } as const
 
 const CHECKPOINT_TICKS = 512
 const RNG_SEED = 0x5025f0
@@ -65,26 +65,28 @@ interface GesturePulseState {
 
 interface AstronomerState {
   active: boolean
-  bobDirection: -1 | 0 | 1
-  bobPhase: number
   direction: -1 | 1
   gestureTicks: number
-  greenFrame: number
+  greenBounceDegrees: number
+  greenIdleFrame: number
+  greenIngress: number
+  greenPathFrame: number
   holdTicks: number
-  leftBlend: number
-  leftBounce: number
   pulses: readonly [
     GesturePulseState,
     GesturePulseState,
     GesturePulseState,
     GesturePulseState,
   ]
-  redFrame: number
-  rightBlend: number
-  rightBounce: number
+  redBounceDegrees: number
+  redIdleFrame: number
+  redIngress: number
+  redPathFrame: number
   rngState: number
   telescopePosition: number
   transition: number
+  transitionFrameDirection: -1 | 0 | 1
+  transitionFramePhase: number
 }
 
 interface RandomSample {
@@ -100,21 +102,23 @@ const INITIAL_PULSE: GesturePulseState = {
 
 const ASTRONOMER_CHECKPOINTS: AstronomerState[] = [{
   active: false,
-  bobDirection: 0,
-  bobPhase: 0,
   direction: 1,
   gestureTicks: 0,
-  greenFrame: 0,
+  greenBounceDegrees: 0,
+  greenIdleFrame: 0,
+  greenIngress: 0,
+  greenPathFrame: 0,
   holdTicks: 0,
-  leftBlend: 0,
-  leftBounce: 0,
   pulses: [INITIAL_PULSE, INITIAL_PULSE, INITIAL_PULSE, INITIAL_PULSE],
-  redFrame: 0,
-  rightBlend: 1,
-  rightBounce: 0,
+  redBounceDegrees: 0,
+  redIdleFrame: 0,
+  redIngress: 1,
+  redPathFrame: 4,
   rngState: RNG_SEED,
   telescopePosition: 0,
   transition: 0,
+  transitionFrameDirection: 0,
+  transitionFramePhase: 0,
 }]
 
 export function hubAstronomerFrameAt(tick: number): HubAstronomerFrame {
@@ -126,6 +130,10 @@ export function hubAstronomerFrameAt(tick: number): HubAstronomerFrame {
     state = stepAstronomer(state)
   }
   return presentAstronomer(state)
+}
+
+export function hubAstronomerLocalTick(tick: number, createdAtTick: number): number {
+  return Math.max(0, Math.floor(tick - createdAtTick))
 }
 
 function astronomerCheckpoint(index: number): AstronomerState {
@@ -153,11 +161,13 @@ function stepAstronomer(state: AstronomerState): AstronomerState {
   let transition = state.transition
   let holdTicks = state.holdTicks
   let gestureTicks = state.gestureTicks
-  let redFrame = state.redFrame
-  let greenFrame = state.greenFrame
+  let redIdleFrame = state.redIdleFrame
+  let greenIdleFrame = state.greenIdleFrame
+  let redPathFrame = state.redPathFrame
+  let greenPathFrame = state.greenPathFrame
   let telescopePosition = state.telescopePosition
-  let rightBounce = Math.max(0, state.rightBounce - 10)
-  let leftBounce = Math.max(0, state.leftBounce - 10)
+  let redBounceDegrees = Math.max(0, state.redBounceDegrees - 10)
+  let greenBounceDegrees = Math.max(0, state.greenBounceDegrees - 10)
 
   if (!active) {
     const trigger = randomInt(rngState, 50)
@@ -176,14 +186,14 @@ function stepAstronomer(state: AstronomerState): AstronomerState {
   if (active) {
     holdTicks -= 1
     if (holdTicks < 1) {
-      redFrame = 0
-      greenFrame = 0
+      redIdleFrame = 0
+      greenIdleFrame = 0
       if (transition > 0) {
         const previous = transition
         transition = Math.fround(Math.max(0, transition - TRANSITION_STEP))
         if (previous > 0 && transition === 0) {
-          if (direction > 0) leftBounce = 180
-          else rightBounce = 180
+          if (direction > 0) greenBounceDegrees = 180
+          else redBounceDegrees = 180
         }
       }
       if (transition <= 0) {
@@ -203,14 +213,19 @@ function stepAstronomer(state: AstronomerState): AstronomerState {
           telescopePosition = TELESCOPE_POSITION_LIMIT
           active = false
         }
+        if (direction > 0) {
+          redPathFrame = clampInteger(telescopePosition, 0, 4)
+        } else {
+          greenPathFrame = clampInteger(telescopePosition, 0, 4)
+        }
       }
     } else {
       gestureTicks -= 1
       if (gestureTicks < 1) {
         const pose = randomInt(rngState, 4)
         rngState = pose.state
-        if (direction > 0) redFrame = pose.value
-        else greenFrame = pose.value
+        if (direction > 0) redIdleFrame = pose.value
+        else greenIdleFrame = pose.value
         const delay = randomInt(rngState, 15)
         rngState = delay.state
         gestureTicks = delay.value + 15
@@ -218,38 +233,44 @@ function stepAstronomer(state: AstronomerState): AstronomerState {
     }
   }
 
-  const bob = stepBob(state.bobPhase, state.bobDirection, rngState)
-  rngState = bob.rngState
-  const rightBlend = telescopePosition >= 4.5
-    ? Math.fround(Math.max(0, state.rightBlend - ASSISTANT_OUTWARD_STEP))
+  const transitionFrame = stepTransitionFrame(
+    state.transitionFramePhase,
+    state.transitionFrameDirection,
+    rngState,
+  )
+  rngState = transitionFrame.rngState
+  const redIngress = telescopePosition >= 4.5
+    ? Math.fround(Math.max(0, state.redIngress - ASSISTANT_OUTWARD_STEP))
     : Math.fround(Math.min(
         ASSISTANT_BLEND_LIMIT,
-        state.rightBlend + ASSISTANT_INWARD_STEP,
+        state.redIngress + ASSISTANT_INWARD_STEP,
       ))
-  const leftBlend = telescopePosition <= 0.5
-    ? Math.fround(Math.max(0, state.leftBlend - ASSISTANT_OUTWARD_STEP))
+  const greenIngress = telescopePosition <= 0.5
+    ? Math.fround(Math.max(0, state.greenIngress - ASSISTANT_OUTWARD_STEP))
     : Math.fround(Math.min(
         ASSISTANT_BLEND_LIMIT,
-        state.leftBlend + ASSISTANT_INWARD_STEP,
+        state.greenIngress + ASSISTANT_INWARD_STEP,
       ))
 
   return {
     active,
-    bobDirection: bob.direction,
-    bobPhase: bob.phase,
     direction,
     gestureTicks,
-    greenFrame,
+    greenBounceDegrees,
+    greenIdleFrame,
+    greenIngress,
+    greenPathFrame,
     holdTicks,
-    leftBlend,
-    leftBounce,
     pulses: [pulses[0], pulses[1], pulses[2], pulses[3]],
-    redFrame,
-    rightBlend,
-    rightBounce,
+    redBounceDegrees,
+    redIdleFrame,
+    redIngress,
+    redPathFrame,
     rngState,
     telescopePosition,
     transition,
+    transitionFrameDirection: transitionFrame.direction,
+    transitionFramePhase: transitionFrame.phase,
   }
 }
 
@@ -284,7 +305,7 @@ function stepGesturePulse(
   }
 }
 
-function stepBob(
+function stepTransitionFrame(
   phase: number,
   direction: -1 | 0 | 1,
   rngState: number,
@@ -316,105 +337,199 @@ function stepBob(
 
 function presentAstronomer(state: AstronomerState): HubAstronomerFrame {
   const telescopeFrame = clampInteger(state.telescopePosition, 0, TELESCOPE_FRAME_COUNT - 1)
-  const pathFrame = clampInteger(state.telescopePosition, 0, 4)
-  const mainBob = -Math.sin(state.bobPhase) * 12
-  const preparing = state.active && state.holdTicks < 1 && state.transition > 0
-  const moving = state.active && state.holdTicks < 1 && state.transition <= 0
-  const red = mainActorFrame(
-    'red',
-    state,
-    pathFrame,
-    mainBob,
-    preparing,
-    moving,
+  const redIngress = ASSISTANT_BLEND_LIMIT - state.redIngress
+  const greenIngress = ASSISTANT_BLEND_LIMIT - state.greenIngress
+  const grayBob = state.redBounceDegrees > 0
+    ? -sinDegrees(Math.max(0, state.redBounceDegrees - 15)) * 9
+    : -Math.abs(sinDegrees(state.redIngress * 90)) * 2
+  const blueBob = state.redBounceDegrees > 0
+    ? -sinDegrees(Math.min(180, state.redBounceDegrees + 15)) * 12
+    : -Math.abs(sinDegrees(state.redIngress * 120)) * 2
+  const greenBob = state.greenBounceDegrees > 0
+    ? -sinDegrees(Math.min(180, state.greenBounceDegrees + 15)) * 12
+    : -Math.abs(sinDegrees(state.greenIngress * 120)) * 4
+  const grayPosition = point(
+    MAIN_ROOT_RED.x + 65,
+    MAIN_ROOT_RED.y + 35 - 4 * redIngress,
   )
-  const green = mainActorFrame(
-    'green',
-    state,
-    pathFrame,
-    mainBob,
-    preparing,
-    moving,
+  const bluePosition = point(
+    MAIN_ROOT_RED.x + 20 - 4 * redIngress,
+    MAIN_ROOT_RED.y + 75 - 10 * redIngress,
   )
-  const rightDelta = ASSISTANT_BLEND_LIMIT - state.rightBlend
-  const leftDelta = ASSISTANT_BLEND_LIMIT - state.leftBlend
-  const wave = Math.sin(state.bobPhase)
-  const grayBob = state.rightBounce > 0 ? -wave * 9 : -Math.abs(wave) * 2
-  const blueBob = state.rightBounce > 0 ? -wave * 12 : -Math.abs(wave) * 2
-  const leftBob = state.leftBounce > 0 ? -wave * 12 : -Math.abs(wave) * 4
+  const purplePosition = point(
+    MAIN_ROOT_GREEN.x - 55 + 6 * greenIngress,
+    MAIN_ROOT_GREEN.y + 40 - 2 * greenIngress,
+  )
+  const brownPosition = point(
+    MAIN_ROOT_GREEN.x - 10 + 4 * greenIngress,
+    MAIN_ROOT_GREEN.y + 80 - 10 * greenIngress,
+  )
 
   return {
+    active: state.active,
     assistants: {
       blue: {
         frame: pulseFrame(state.pulses[1]),
-        position: worldPosition(
-          MAIN_ROOT_RED.x + 20 - 4 * rightDelta,
-          MAIN_ROOT_RED.y + 75 - 10 * rightDelta + blueBob,
-        ),
+        position: offsetY(bluePosition, blueBob),
+        shadowPosition: bluePosition,
       },
       brown: {
         frame: pulseFrame(state.pulses[3]),
-        position: worldPosition(
-          MAIN_ROOT_GREEN.x - 10 + 4 * leftDelta,
-          MAIN_ROOT_GREEN.y + 80 - 10 * leftDelta + leftBob,
-        ),
+        position: offsetY(brownPosition, greenBob),
+        shadowPosition: brownPosition,
       },
       gray: {
         frame: pulseFrame(state.pulses[0]),
-        position: worldPosition(
-          MAIN_ROOT_RED.x + 65 - 5 * rightDelta,
-          MAIN_ROOT_RED.y + 35 - 4 * rightDelta + grayBob,
-        ),
+        position: offsetY(grayPosition, grayBob),
+        shadowPosition: grayPosition,
       },
       purple: {
         frame: pulseFrame(state.pulses[2]),
-        position: worldPosition(
-          MAIN_ROOT_GREEN.x - 55 + 6 * leftDelta,
-          MAIN_ROOT_GREEN.y + 40 - 2 * leftDelta + leftBob,
-        ),
+        position: offsetY(purplePosition, greenBob),
+        shadowPosition: purplePosition,
       },
     },
-    green,
-    red,
+    green: presentGreenAstronomer(state),
+    red: presentRedAstronomer(state),
     telescopeFrame,
   }
 }
 
-function mainActorFrame(
-  color: 'green' | 'red',
-  state: AstronomerState,
-  pathFrame: number,
-  bob: number,
-  preparing: boolean,
-  moving: boolean,
-): HubAstronomerMainActorFrame {
-  const travels = color === 'red' ? state.direction > 0 : state.direction < 0
-  const root = color === 'red' ? MAIN_ROOT_RED : MAIN_ROOT_GREEN
-  const path = color === 'red' ? RED_PATH : GREEN_PATH
-  const idleFrame = color === 'red' ? state.redFrame : state.greenFrame
-  let bank: HubAstronomerMainBank = 'idle'
-  let frame = idleFrame
-  let position: Vector2 = root
-
-  if (travels && preparing) {
-    const progress = 1 - state.transition
-    const target = color === 'red' ? path[0] : path[4]
-    position = {
-      x: root.x + (target.x - root.x) * progress * progress,
-      y: root.y + (target.y - root.y) * progress * progress,
+function presentGreenAstronomer(state: AstronomerState): HubAstronomerMainActorFrame {
+  const transitionFrame = clampInteger(state.transitionFramePhase, 0, 2)
+  if (!state.active) {
+    if (state.telescopePosition <= 0) {
+      return mainFrame('transition', transitionFrame, MAIN_ROOT_GREEN)
     }
-    bank = 'transition'
-    frame = clampInteger(progress * 3, 0, 2)
-  } else if (travels && moving) {
-    position = path[pathFrame]
-    bank = 'gesture'
-    frame = pathFrame
+    return idleMainFrame(
+      state.greenIdleFrame,
+      MAIN_ROOT_GREEN,
+      state.greenBounceDegrees,
+    )
   }
 
+  if (state.transition <= 0 || state.direction >= 0) {
+    if (
+      (state.telescopePosition <= 0.75 && state.direction < 0)
+      || (state.transition > 0 && state.direction > 0)
+    ) {
+      const position = offsetY(
+        MAIN_ROOT_GREEN,
+        state.telescopePosition / 0.75 * 15,
+      )
+      return state.telescopePosition > 0.75
+        ? mainFrame('gesture', state.greenPathFrame, position)
+        : mainFrame('transition', transitionFrame, position)
+    }
+    if (state.direction >= 0) {
+      return idleMainFrame(
+        state.greenIdleFrame,
+        MAIN_ROOT_GREEN,
+        state.greenBounceDegrees,
+      )
+    }
+    return mainFrame('gesture', state.greenPathFrame, GREEN_PATH[state.greenPathFrame])
+  }
+
+  return movingIdleMainFrame(
+    state.greenIdleFrame,
+    MAIN_ROOT_GREEN,
+    GREEN_PATH[4],
+    state.transition,
+    state.greenBounceDegrees,
+  )
+}
+
+function presentRedAstronomer(state: AstronomerState): HubAstronomerMainActorFrame {
+  const transitionFrame = clampInteger(state.transitionFramePhase, 0, 2)
+  if (!state.active) {
+    if (state.telescopePosition < TELESCOPE_POSITION_LIMIT) {
+      return mainFrame('transition', transitionFrame, MAIN_ROOT_RED)
+    }
+    return idleMainFrame(
+      state.redIdleFrame,
+      MAIN_ROOT_RED,
+      state.redBounceDegrees,
+    )
+  }
+
+  if (state.transition <= 0 || state.direction <= 0) {
+    if (
+      (state.telescopePosition < 4.25 || state.direction <= 0)
+      && (state.transition <= 0 || state.direction >= 0)
+    ) {
+      return state.direction <= 0
+        ? idleMainFrame(
+            state.redIdleFrame,
+            MAIN_ROOT_RED,
+            state.redBounceDegrees,
+          )
+        : mainFrame('gesture', state.redPathFrame, RED_PATH[state.redPathFrame])
+    }
+    const position = offsetY(
+      MAIN_ROOT_RED,
+      (1 - (state.telescopePosition - 4.25) / 0.75) * 10,
+    )
+    return state.telescopePosition < 4.65
+      ? mainFrame('gesture', state.redPathFrame, position)
+      : mainFrame('transition', transitionFrame, position)
+  }
+
+  return movingIdleMainFrame(
+    state.redIdleFrame,
+    MAIN_ROOT_RED,
+    RED_PATH[0],
+    state.transition,
+    state.redBounceDegrees,
+  )
+}
+
+function idleMainFrame(
+  frame: number,
+  root: Vector2,
+  bounceDegrees: number,
+): HubAstronomerMainActorFrame {
+  return {
+    bank: 'idle',
+    frame,
+    position: offsetY(root, -sinDegrees(bounceDegrees) * 12),
+    shadowPosition: point(root.x, root.y),
+  }
+}
+
+function movingIdleMainFrame(
+  frame: number,
+  root: Vector2,
+  target: Vector2,
+  transition: number,
+  bounceDegrees: number,
+): HubAstronomerMainActorFrame {
+  const progress = 1 - transition
+  const shadowPosition = point(
+    root.x + (target.x - root.x) * progress * progress,
+    root.y + (target.y - root.y) * progress * progress,
+  )
+  return {
+    bank: 'idle',
+    frame,
+    position: offsetY(
+      shadowPosition,
+      -sinDegrees(transition * 540) * 4 - sinDegrees(bounceDegrees) * 12,
+    ),
+    shadowPosition,
+  }
+}
+
+function mainFrame(
+  bank: HubAstronomerMainBank,
+  frame: number,
+  position: Vector2,
+): HubAstronomerMainActorFrame {
   return {
     bank,
     frame,
-    position: worldPosition(position.x, position.y + bob),
+    position: point(position.x, position.y),
+    shadowPosition: point(position.x, position.y),
   }
 }
 
@@ -427,11 +542,16 @@ function pulseFrame(pulse: GesturePulseState): number {
   )
 }
 
-function worldPosition(x: number, y: number): Vector2 {
-  return {
-    x: HUB_ASTRONOMER_ROOT.x + x,
-    y: HUB_ASTRONOMER_ROOT.y + y,
-  }
+function point(x: number, y: number): Vector2 {
+  return { x, y }
+}
+
+function offsetY(position: Vector2, amount: number): Vector2 {
+  return point(position.x, position.y + amount)
+}
+
+function sinDegrees(value: number): number {
+  return Math.sin(value * Math.PI / 180)
 }
 
 function randomInt(state: number, range: number): RandomSample {

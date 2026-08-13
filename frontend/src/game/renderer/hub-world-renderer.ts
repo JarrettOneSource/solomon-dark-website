@@ -6,6 +6,7 @@ import {
   HUB_CAMERA_SCALE,
   hubCameraOrigin,
 } from '../core-kernels/hub-math.ts'
+import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
 import {
   HUB_RENDER_HEIGHT,
   HUB_RENDER_WIDTH,
@@ -92,9 +93,9 @@ export async function createHubWorldRenderer(
     throw error
   }
   application.stop()
-  const scene = new HubWorldScene(textures)
-  scene.world.scale.set(HUB_CAMERA_SCALE)
-  application.stage.addChild(scene.world)
+  const scene = new HubWorldScene(textures, options.initialSnapshot.tick)
+  scene.stage.scale.set(HUB_CAMERA_SCALE)
+  application.stage.addChild(scene.stage)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'hub-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
@@ -170,10 +171,8 @@ export async function createHubWorldRenderer(
       frameCount += 1
       scene.update(snapshot)
       const camera = hubCameraOrigin(player.position)
-      scene.world.position.set(
-        -camera.x * HUB_CAMERA_SCALE,
-        -camera.y * HUB_CAMERA_SCALE,
-      )
+      scene.world.position.set(-camera.x, -camera.y)
+      scene.southern.position.copyFrom(hubSouthernCameraTranslation(camera))
       application.render()
       updateFrameDiagnostics(snapshot)
       if (frameCount % DIAGNOSTIC_WINDOW_FRAMES !== 0) return
@@ -194,7 +193,7 @@ export async function createHubWorldRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.stage.removeChild(scene.world)
+      application.stage.removeChild(scene.stage)
       scene.destroy()
       destroyHubWorldTextureFrames(textures)
       application.destroy({ removeView: true })

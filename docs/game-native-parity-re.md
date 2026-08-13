@@ -2521,13 +2521,12 @@ for the seed XP value in the captured save state.
 
 `Courtyard::Present` (`0x0051EB60`) submits the resident actors and then draws
 College flat records `19`, `30`, `31`, `21`, and `22`. They are fixed world
-geometry using the normal Courtyard camera transform; no separate parallax
-owner was found. Records `2`, `20`, `23`, and `25` remain the spawn-roof group
-at the actor boundary. These five records occupy the upper and central
-Courtyard (`y < 583`); they are not the separate southern battlement run. The
-web had flattened `19`, `30`, and `31` into the background and combined
-`21/22` with the spawn roof, so actors could appear on the wrong side of this
-late foreground bank.
+geometry using the normal Courtyard camera transform. Records `2`, `20`, `23`,
+and `25` remain the spawn-roof group at the actor boundary. These five records
+occupy the upper and central Courtyard (`y < 583`); they are not the separate
+southern battlement run. The web had flattened `19`, `30`, and `31` into the
+background and combined `21/22` with the spawn roof, so actors could appear on
+the wrong side of this late foreground bank.
 
 Implementation consequence: the five recovered records become a distinct
 fixed foreground layer submitted after all actors, while the spawn roof keeps
@@ -2539,41 +2538,114 @@ and native/web Courtyard comparison captures.
 
 Confidence: high for record membership, camera ownership, and painter order.
 
+### Courtyard camera-space ownership
+
+`Courtyard::Present` contains two renderer-translation scopes, not one global
+world transform. The first scope at `0x0051F120` adds
+
+```text
+boundsCenter - 1.0 * primaryViewCenter
+```
+
+and restores the previous renderer translation at
+`0x005205CA..0x00520642`. It owns the normal Courtyard painter: the dynamic
+quad/mesh bank at region offsets `+0x8EF8/+0x8EFC`, the base static and
+animated College groups, residents, students, players and NPCs, seals,
+particles, interaction hints and help bubbles, and the five late foreground
+records above. Camera motion by `delta` therefore moves this bank by
+`-1.0 * delta` before the common render scale.
+
+The second scope starts at `0x005206AB` after the first restore and adds
+
+```text
+boundsCenter - 1.25 * primaryViewCenter
+```
+
+using the double `1.25` at `0x00784740`. It owns only the southern battlement
+repeat, College `7`, College `43`, the Astronomer helper, College `505..509`,
+and the final College `529..531` wizard. It then restores the renderer
+translation before `Courtyard::Present` returns. These are the only two reads
+of the primary camera center in the function and no third Courtyard camera
+multiplier was found. Relative to the normal bank, the southern bank receives
+an additional `-0.25 * primaryViewCenter`; camera motion consequently moves it
+at `1.25` times the normal rate. That scoped camera ownership is the native
+effect that looks like parallax when the player walks.
+
+Region camera state is held in the bounds rectangle at
+`+0x8BBC..+0x8BC8`, primary view at `+0x8BCC..+0x8BD8`, expanded view at
+`+0x8BDC..+0x8BE8`, culling view at `+0x8BEC..+0x8BF8`, and render scale at
+`+0x80`. `0x0063ED80` converts a world point with
+`(world - primaryViewOrigin) * scale`; `0x00412AE0/0x00412BE0` save and
+restore the translation stack. The southern painter also derives its own
+camera-dependent extents:
+
+```text
+specialWidth  = 1.25 * boundsWidth  - 0.125 * primaryViewWidth
+specialBottom = 1.25 * boundsHeight - 0.125 * primaryViewHeight
+```
+
+For the authored `2000 x 1024` Courtyard and the existing `1600 x 900` client
+at render scale `1.2`, the primary view is `1333.333... x 750`, producing
+`specialWidth = 2333.333...` and `specialBottom = 1186.25`. The web must keep
+the normal and southern banks as siblings under the same final render scale;
+putting both into one translated world container cannot reproduce the native
+camera response.
+
+Evidence: read-only instruction and decompiler traces of `0x0051EB60`,
+`0x00412AE0`, `0x00412BE0`, `0x004142E0`, `0x0063ED80`, the Region camera
+fields and constructor, plus stock camera-endpoint captures. Working traces
+are `/tmp/sd-lower-hub-decompile-20260813.txt`,
+`/tmp/sd-lower-hub-insns-20260813.txt`, and
+`/tmp/sd-camera-helpers-20260813.txt`.
+
+Mirror verification: a production-WebGL browser differential with camera
+origin moving by `(100,40)` measured the normal Useful Thyngs roof moving by
+`(-120,-48)` screen pixels and both a southern battlement and College `43`
+moving by `(-150,-60)`. These are the exact `1.0 * 1.2` and `1.25 * 1.2`
+screen-space deltas; the opaque normal and battlement samples matched at zero
+pixel error after translation.
+
+Confidence: high for both transform scopes, their membership, the multiplier,
+and the extent formula. The authored Courtyard height is established by the
+shared Region bounds and is `1024`. Treating the last 24 rows as collision-only
+incorrectly reduces `specialBottom` by `30` special-space pixels, placing the
+whole bank `36` screen pixels too high at scale `1.2`; the stock southeast
+camera-endpoint capture rejects that interpretation.
+
 ### Southern Courtyard boundary and Astronomer telescope crew
 
 The castle art across the south edge is a second, later
 `Courtyard::Present` painter block at `0x005207E0..0x005209A7`; it was absent
-from the browser reconstruction. It is ordinary world geometry under the
-Courtyard camera, not a parallax layer. The native loop starts at world X
-`90`, uses bottom baseline Y `1000`, and advances through the following visible
-tile roots:
+from the browser reconstruction. It uses the independent `1.25` camera scope
+above. The native loop starts at special-space X `90`, stops only after X
+reaches `specialWidth`, and uses `specialBottom` as its vertical baseline.
+Its visible roots follow this repeating sequence:
 
-| Slot | College record | Visible world origin | Advance |
+| Slot | College record | Visible special-space origin | Advance |
 | ---: | ---: | ---: | ---: |
-| 0 | 4 | `(90,904)` | `209` |
-| 1 | 4 | `(299,904)` | `209` |
-| 2 | 4 | `(508,904)` | `209` |
-| 3 | 4 | `(717,904)` | `209` |
-| 4 | 44 | `(926,814)` | `179` |
-| 5 | 4, then seam 3 | `(1105,874)`, `(1104,874)` | `209` |
-| 6 | 44 | `(1314,814)` | `179` |
-| 7 | 4, then seam 3 | `(1493,904)`, `(1492,904)` | `209` |
-| 8 | 4 | `(1702,904)` | `209` |
-| 9 | 4 | `(1911,904)` | `209` |
+| 0 | 4 | `(90, specialBottom - 96)` | `209` |
+| 1 | 4 | `(299, specialBottom - 96)` | `209` |
+| 2 | 4 | `(508, specialBottom - 96)` | `209` |
+| 3 | 4 | `(717, specialBottom - 96)` | `209` |
+| 4 | 44 | `(926, specialBottom - 186)` | `179` |
+| 5 | 4, then seam 3 | `(1105, specialBottom - 126)`, `(1104, specialBottom - 126)` | `209` |
+| 6 | 44 | `(1314, specialBottom - 186)` | `179` |
+| 7 | 4, then seam 3 | `(1493, specialBottom - 96)`, `(1492, specialBottom - 96)` | `209` |
 
 College `4` is the `209 x 126` ordinary battlement. Slots 4 and 6 select the
 `181 x 186` logical College `44` tower and advance by `width - 2`; the visible
 crop begins one pixel after its logical origin. The next ordinary slot draws
 College `3` one pixel left as a seam. Slot 5 alone omits the normal `+30`
-vertical correction. This is why a repeated generic wall strip cannot reproduce
-the stock silhouette.
+vertical correction. Ordinary College `4` slots continue after slot 7 until
+the dynamic endpoint is crossed. This is why a fixed `2000`-pixel flattened
+strip both truncates the stock wall and cannot reproduce its camera response.
 
 The same block next submits two source-registered architectural records:
 
-- College `7`, the large southwest circular wooden platform, occupies
-  `(0,593)..(365,1000)`.
-- College `43`, the southeast telescope deck, occupies
-  `(1293,585)..(1823,1000)`.
+- College `7`, the large southwest circular wooden platform, has visible crop
+  origin `(128 / renderScale, specialBottom - 407)` and size `365 x 407`.
+- College `43`, the southeast telescope deck, has visible crop origin
+  `(1843, specialBottom - 415)` and size `530 x 415`.
 
 College `7` had been flattened into `hub-courtyard.png`. That ownership was the
 reported occlusion defect: stock submits the platform after every resident
@@ -2591,19 +2663,47 @@ the brown foreground wizard. The native painter order is therefore:
 1. southern battlements;
 2. College `7` circular platform;
 3. College `43` telescope deck;
-4. five Astronomer wizards and their shadows;
+4. five Astronomer wizards, their shadows, and the sixth wizard's shadow;
 5. one telescope frame from College `505..509`; and
-6. the sixth, brown wizard in front of the telescope.
+6. the sixth, brown wizard sprite in front of the telescope.
 
-The telescope frame union is world rectangle
-`(1467,642)..(1841,934)`. Its five individual registered bounds are
+The telescope source-frame union is registered rectangle
+`(1467,642)..(1841,934)`. Courtyard draws it from special-space anchor
+`(550, specialBottom - 1000)`, so the exported union belongs at
+`(2017, specialBottom - 358)`, not normal-world `(1467,642)`. Its five
+individual registered bounds are
 `(1505,662,336,240)`, `(1530,649,275,278)`, `(1543,647,223,272)`,
 `(1515,642,218,292)`, and `(1467,651,247,263)`. The helper root is
-`(1740,911)`. Its two local main-wizard roots are `(61,-120)` and
-`(-102,-109)`. The first side path at helper offsets `+0x30..+0x80` contains
+`(2150, specialBottom - 190)`, after Courtyard's `(2150,
+specialBottom + 800 - College[43].logicalHeight)` placement and the helper's
+additional Y `10`. Constructor fields `(1740,911)` do not drive presentation;
+they are later used as the helper's positional/audio state. The two local
+main-wizard roots are red `(61,-120)` and green `(-102,-109)`. The side paths
+at helper offsets `+0x30..+0x8C` contain
 `(-45,-110)`, `(-16,-106)`, `(14,-99)`, `(48,-91)`, `(74,-78)`,
 `(-105,-75)`, `(-88,-80)`, `(-65,-85)`, `(-36,-95)`, `(-6,-105)`, and
-`(61,-120)`.
+the two roots above.
+
+Let `redIngress = 3 - helper[+0x118]` and
+`greenIngress = 3 - helper[+0x11C]`. Before per-frame bob, assistant local
+positions are exactly:
+
+```text
+gray   = redRoot   + ( 65, 35 -  4 * redIngress)
+blue   = redRoot   + ( 20 - 4 * redIngress, 75 - 10 * redIngress)
+purple = greenRoot + (-55 + 6 * greenIngress, 40 - 2 * greenIngress)
+brown  = greenRoot + (-10 + 4 * greenIngress, 80 - 10 * greenIngress)
+```
+
+The brown shadow is submitted in the behind-telescope helper pass at the same
+unbobbed base point; only its sprite is submitted by `0x0051DBB0` afterward.
+All Astronomer shadows use the actor base point with no synthetic `(+5,-5)`
+offset. Main-wizard transition presentation is not a linear path-frame swap:
+the travelling actor and shadow receive a squared transition displacement
+between root and path endpoint, while only the actor receives the additional
+`sin(transition * 540 degrees) * -4` vertical arc and side-bounce offset. The
+endpoint branches then select idle, transition, or gesture banks according to
+direction and the `0.75`, `4.25`, and `4.65` telescope thresholds.
 
 The six character banks are not interchangeable decorative sprites:
 
@@ -2624,13 +2724,31 @@ thresholds `4.5` and `0.5`. Four inherited helper pulses independently roll
 `randomInt(200) == 2` and traverse their three-frame banks. A separate bob
 roll uses `randomInt(100) == 3`, step `0.045`, and limit `2.9`.
 
-Implementation consequence: extract the authored southern architecture,
-telescope union, and every named actor bank. Submit them at the recovered
-fixed depths instead of baking them into the panorama. Drive the telescope and
-wizards from a tick-indexed reconstruction of the native state machine. The
-browser uses a fixed local pseudo-random seed so every client can derive the
-same decorative frame from a shared tick; the native process-global RNG seed
-and unrelated-call consumption order are intentionally not claimed portable.
+The helper is constructed as part of each Courtyard instance, and its state is
+then advanced by that instance's own update calls. It does not derive an
+animation phase from an absolute session or host tick. A browser entering or
+re-entering the Hub must therefore begin at the constructor state and advance
+from elapsed local Courtyard ticks; indexing these fields directly by the
+authoritative snapshot tick makes a newly created crew jump into an arbitrary
+middle pose.
+
+Mirror verification: creating the production renderer from authoritative tick
+`17000` still produced telescope frame `0`; local animation checkpoints `369`,
+`381`, `393`, `406`, and `419` then selected telescope frames `0`, `1`, `2`,
+`3`, and `4` with no page or console errors. Exact southeast-clamp receipts are
+`/tmp/hub-camera-southeast-local-000.png` through
+`/tmp/hub-camera-southeast-local-419.png`.
+
+Implementation consequence: extract the individual battlement, seam, tower,
+southwest platform, southeast deck, telescope union, and every named actor
+bank. Assemble the architecture to `specialWidth`, place every member in
+special-space, and submit the whole bank through the recovered `1.25` camera
+transform instead of baking it into the panorama. Drive the telescope and
+wizards from a tick-indexed reconstruction of the native state and presentation
+branches, anchored to the Hub scene's construction tick. The browser uses a
+fixed local pseudo-random seed so the reconstruction remains deterministic;
+the native process-global RNG seed and unrelated-call consumption order are
+intentionally not claimed portable.
 
 Evidence: read-only decompilation of `0x005025F0`, `0x00505950`, `0x0051C790`,
 `0x0051DBB0`, and `0x0051EB60`; College bundle registrations and the generated
@@ -2639,10 +2757,10 @@ native asset/object map; clean stock captures
 `C:/Users/User/AppData/Local/Temp/astronomer-native-south-east-20260813.png`,
 and `C:/Users/User/AppData/Local/Temp/astronomer-native-se-return-20260813.png`.
 
-Confidence: high for ownership, records, geometry, painter order, animation
-thresholds, and frame cadence. The only retained unknown is the exact
-process-global native RNG sequence, which does not change those recovered
-rules.
+Confidence: high for camera ownership, records, special-space geometry,
+painter order, animation thresholds, and frame cadence. The retained unknown
+is the exact process-global native RNG sequence and unrelated-call consumption
+order, which changes incidental pose timing but not any recovered rule.
 
 ### Useful Thyngs trader presentation
 

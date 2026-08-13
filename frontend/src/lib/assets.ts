@@ -86,7 +86,11 @@ import hubCourtyard from '../assets/game/hub-courtyard.png'
 import hubSealCorePulse from '../assets/game/hub-seal-core-pulse.png'
 import hubSealPulse from '../assets/game/hub-seal-pulse.png'
 import hubCourtyardForeground from '../assets/game/hub-courtyard-foreground.png'
-import hubSouthernForeground from '../assets/game/hub-southern-foreground.png'
+import hubSouthernBattlement from '../assets/game/hub-southern-battlement.png'
+import hubSouthernPlatformEast from '../assets/game/hub-southern-platform-east.png'
+import hubSouthernPlatformWest from '../assets/game/hub-southern-platform-west.png'
+import hubSouthernSeam from '../assets/game/hub-southern-seam.png'
+import hubSouthernTower from '../assets/game/hub-southern-tower.png'
 import hubSpawnRoof from '../assets/game/hub-spawn-roof.png'
 import hubAstronomerAssistants from '../assets/game/hub-astronomer-assistants.png'
 import hubAstronomerGreenGesture from '../assets/game/hub-astronomer-green-gesture.png'
@@ -464,8 +468,14 @@ export const hub = {
   },
   foreground: {
     courtyard: hubCourtyardForeground,
-    southern: hubSouthernForeground,
     spawnRoof: hubSpawnRoof,
+  },
+  southern: {
+    battlement: hubSouthernBattlement,
+    platformEast: hubSouthernPlatformEast,
+    platformWest: hubSouthernPlatformWest,
+    seam: hubSouthernSeam,
+    tower: hubSouthernTower,
   },
   astronomer: {
     assistants: hubAstronomerAssistants,

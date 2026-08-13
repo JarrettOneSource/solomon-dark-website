@@ -57,7 +57,11 @@ test('keeps recovered Hub parity art at its native registrations', () => {
     'hub-hud-xp-frame.png': [12, 56],
     'hub-npc-potion.png': [175, 49],
     'hub-spawn-roof.png': [2000, 1024],
-    'hub-southern-foreground.png': [2000, 1024],
+    'hub-southern-battlement.png': [209, 126],
+    'hub-southern-platform-east.png': [530, 415],
+    'hub-southern-platform-west.png': [365, 407],
+    'hub-southern-seam.png': [58, 125],
+    'hub-southern-tower.png': [179, 186],
     'hub-tent-back.png': [2000, 1024],
     'hub-tent-balloons.png': [270, 72],
   }

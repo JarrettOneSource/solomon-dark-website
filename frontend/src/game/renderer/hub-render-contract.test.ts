@@ -27,14 +27,11 @@ test('native painter boundaries sort actors beneath roofs and tent faces', () =>
 test('world overlays submit only their authored alpha bounds', () => {
   const fullArea = 2000 * 1024
   for (const [name, bounds] of Object.entries(HUB_WORLD_LAYER_BOUNDS)) {
-    if (name === 'courtyardForeground' || name === 'southernForeground') continue
+    if (name === 'courtyardForeground') continue
     assert.ok(bounds.width * bounds.height < fullArea * 0.2)
   }
   assert.deepEqual(HUB_WORLD_LAYER_BOUNDS.sealCore, {
     x: 1889, y: 234, width: 111, height: 270,
-  })
-  assert.deepEqual(HUB_WORLD_LAYER_BOUNDS.southernForeground, {
-    x: 0, y: 585, width: 2000, height: 439,
   })
 })
 

@@ -111,6 +111,7 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     courtyard: hub.courtyard,
     seals: hub.seals,
     foreground: hub.foreground,
+    southern: hub.southern,
     fountainParticle: hub.fountainParticle,
     tent: hub.tent,
     player: {

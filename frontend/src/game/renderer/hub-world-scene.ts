@@ -3,8 +3,15 @@ import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
+  HUB_ASTRONOMER_ROOT,
   HUB_ASTRONOMER_TELESCOPE_ORIGIN,
+  HUB_SOUTHERN_EAST_PLATFORM_ORIGIN,
+  HUB_SOUTHERN_EXTENT,
+  HUB_SOUTHERN_WEST_PLATFORM_ORIGIN,
+} from '../hub-camera-presentation.ts'
+import {
   hubAstronomerFrameAt,
+  hubAstronomerLocalTick,
   type HubAstronomerAssistantFrame,
   type HubAstronomerMainActorFrame,
 } from '../hub-astronomer.ts'
@@ -37,7 +44,9 @@ import {
 import type { HubWorldTextures } from './hub-textures.ts'
 
 export class HubWorldScene {
+  readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
   readonly world = new Container({ label: 'college-courtyard' })
+  readonly southern = new Container({ label: 'college-courtyard-southern-bank' })
   private readonly sealGlyphs: Sprite
   private readonly sealCore: Sprite
   private readonly markerSprites: Sprite[] = []
@@ -56,10 +65,14 @@ export class HubWorldScene {
   private readonly textures: HubWorldTextures
   private readonly layerFrameTextures: Texture[] = []
 
-  constructor(textures: HubWorldTextures) {
+  constructor(textures: HubWorldTextures, createdAtTick: number) {
     this.textures = textures
+    this.stage.eventMode = 'none'
     this.world.sortableChildren = true
     this.world.eventMode = 'none'
+    this.southern.sortableChildren = true
+    this.southern.eventMode = 'none'
+    this.stage.addChild(this.world, this.southern)
     this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
     this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
@@ -91,7 +104,7 @@ export class HubWorldScene {
     this.teacher = new HubTeacherView(textures, 576.5, 710.5)
     this.world.addChild(this.teacher.container)
 
-    this.astronomer = new HubAstronomerView(textures)
+    this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
     this.world.addChild(this.worldLayer(textures.base[hub.foreground.spawnRoof], HUB_WORLD_DEPTH.spawnRoof, HUB_WORLD_LAYER_BOUNDS.spawnRoof))
     this.world.addChild(this.worldLayer(textures.base[hub.tent.front], HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
@@ -100,12 +113,8 @@ export class HubWorldScene {
       HUB_WORLD_DEPTH.courtyardForeground,
       HUB_WORLD_LAYER_BOUNDS.courtyardForeground,
     ))
-    this.world.addChild(this.worldLayer(
-      textures.base[hub.foreground.southern],
-      HUB_WORLD_DEPTH.southernForeground,
-      HUB_WORLD_LAYER_BOUNDS.southernForeground,
-    ))
-    this.world.addChild(
+    this.addSouthernArchitecture()
+    this.southern.addChild(
       this.astronomer.behind,
       this.astronomer.telescope,
       this.astronomer.front,
@@ -162,7 +171,7 @@ export class HubWorldScene {
     this.liveStudentIds.clear()
     this.fountain.clear()
     this.liveFountainIds.clear()
-    this.world.destroy({ children: true })
+    this.stage.destroy({ children: true })
     for (const texture of this.layerFrameTextures) texture.destroy(false)
     this.layerFrameTextures.length = 0
   }
@@ -206,6 +215,52 @@ export class HubWorldScene {
     const sprite = new Sprite(texture)
     sprite.position.set(bounds?.x ?? 0, bounds?.y ?? 0)
     sprite.zIndex = zIndex
+    sprite.eventMode = 'none'
+    return sprite
+  }
+
+  private addSouthernArchitecture(): void {
+    let x = 90
+    let slot = 0
+    let previousWasTower = false
+    while (x < HUB_SOUTHERN_EXTENT.x) {
+      if (slot === 4 || slot === 6) {
+        this.southern.addChild(this.southernSprite(
+          hub.southern.tower,
+          x,
+          HUB_SOUTHERN_EXTENT.y - 186,
+        ))
+        x += 179
+        previousWasTower = true
+      } else {
+        const y = HUB_SOUTHERN_EXTENT.y - 126 + (slot === 5 ? 0 : 30)
+        this.southern.addChild(this.southernSprite(hub.southern.battlement, x, y))
+        if (previousWasTower) {
+          this.southern.addChild(this.southernSprite(hub.southern.seam, x - 1, y))
+        }
+        x += 209
+        previousWasTower = false
+      }
+      slot += 1
+    }
+    this.southern.addChild(
+      this.southernSprite(
+        hub.southern.platformWest,
+        HUB_SOUTHERN_WEST_PLATFORM_ORIGIN.x,
+        HUB_SOUTHERN_WEST_PLATFORM_ORIGIN.y,
+      ),
+      this.southernSprite(
+        hub.southern.platformEast,
+        HUB_SOUTHERN_EAST_PLATFORM_ORIGIN.x,
+        HUB_SOUTHERN_EAST_PLATFORM_ORIGIN.y,
+      ),
+    )
+  }
+
+  private southernSprite(source: string, x: number, y: number): Sprite {
+    const sprite = new Sprite(this.textures.base[source])
+    sprite.position.set(x, y)
+    sprite.zIndex = HUB_WORLD_DEPTH.southernForeground
     sprite.eventMode = 'none'
     return sprite
   }
@@ -300,15 +355,19 @@ class HubAstronomerView {
   private readonly purple: Sprite
   private readonly brownShadow: Sprite
   private readonly brown: Sprite
+  private readonly createdAtTick: number
   private readonly textures: HubWorldTextures
   private currentTelescopeFrame = 0
 
-  constructor(textures: HubWorldTextures) {
+  constructor(textures: HubWorldTextures, createdAtTick: number) {
     this.textures = textures
+    this.createdAtTick = createdAtTick
     this.behind.sortableChildren = true
+    this.behind.position.set(HUB_ASTRONOMER_ROOT.x, HUB_ASTRONOMER_ROOT.y)
     this.behind.zIndex = HUB_WORLD_DEPTH.astronomer
     this.behind.eventMode = 'none'
     this.front.zIndex = HUB_WORLD_DEPTH.astronomerFront
+    this.front.position.set(HUB_ASTRONOMER_ROOT.x, HUB_ASTRONOMER_ROOT.y)
     this.front.eventMode = 'none'
 
     const shadow = textures.base[hub.npcs.teacher.shadow]
@@ -320,8 +379,9 @@ class HubAstronomerView {
     this.gray = actorSprite(textures.astronomer.assistants.gray[0], 5)
     this.blueShadow = actorSprite(shadow, 6)
     this.blue = actorSprite(textures.astronomer.assistants.blue[0], 7)
-    this.purpleShadow = actorSprite(shadow, 8)
-    this.purple = actorSprite(textures.astronomer.assistants.purple[0], 9)
+    this.brownShadow = actorSprite(shadow, 8)
+    this.purpleShadow = actorSprite(shadow, 9)
+    this.purple = actorSprite(textures.astronomer.assistants.purple[0], 10)
     this.behind.addChild(
       this.redShadow,
       this.red,
@@ -331,6 +391,7 @@ class HubAstronomerView {
       this.gray,
       this.blueShadow,
       this.blue,
+      this.brownShadow,
       this.purpleShadow,
       this.purple,
     )
@@ -343,13 +404,16 @@ class HubAstronomerView {
     this.telescope.zIndex = HUB_WORLD_DEPTH.astronomerTelescope
     this.telescope.eventMode = 'none'
 
-    this.brownShadow = actorSprite(shadow, 0)
     this.brown = actorSprite(textures.astronomer.assistants.brown[0], 1)
-    this.front.addChild(this.brownShadow, this.brown)
+    this.front.addChild(this.brown)
   }
 
   update(tick: number): void {
-    const frame = hubAstronomerFrameAt(tick)
+    const frame = hubAstronomerFrameAt(hubAstronomerLocalTick(tick, this.createdAtTick))
+    this.redShadow.zIndex = frame.active ? 2 : 0
+    this.red.zIndex = frame.active ? 3 : 1
+    this.greenShadow.zIndex = frame.active ? 0 : 2
+    this.green.zIndex = frame.active ? 1 : 3
     this.currentTelescopeFrame = frame.telescopeFrame
     this.telescope.texture = this.textures.astronomer.telescope[frame.telescopeFrame]
     this.updateMain(this.red, this.redShadow, frame.red, this.textures.astronomer.red)
@@ -374,7 +438,7 @@ class HubAstronomerView {
     )
     this.brown.texture = this.textures.astronomer.assistants.brown[frame.assistants.brown.frame]
     this.brown.position.copyFrom(frame.assistants.brown.position)
-    placeAstronomerShadow(this.brownShadow, frame.assistants.brown.position)
+    placeAstronomerShadow(this.brownShadow, frame.assistants.brown.shadowPosition)
   }
 
   get telescopeFrame(): number {
@@ -389,7 +453,7 @@ class HubAstronomerView {
   ): void {
     actor.texture = textures[frame.bank][frame.frame]
     actor.position.copyFrom(frame.position)
-    placeAstronomerShadow(shadow, frame.position)
+    placeAstronomerShadow(shadow, frame.shadowPosition)
   }
 
   private updateAssistant(
@@ -400,7 +464,7 @@ class HubAstronomerView {
   ): void {
     actor.texture = textures[frame.frame]
     actor.position.copyFrom(frame.position)
-    placeAstronomerShadow(shadow, frame.position)
+    placeAstronomerShadow(shadow, frame.shadowPosition)
   }
 }
 
@@ -505,7 +569,7 @@ function centered(texture: Texture): Sprite {
 }
 
 function placeAstronomerShadow(shadow: Sprite, position: { x: number; y: number }): void {
-  shadow.position.set(position.x + 5, position.y - 5)
+  shadow.position.copyFrom(position)
 }
 
 function colorTint(color: HubColor): number {

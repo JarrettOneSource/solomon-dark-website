@@ -24,10 +24,18 @@ import {
   hubActorDepth,
 } from './hub-depth.ts'
 import {
+  hubAstronomerFrameAt,
+  hubAstronomerLocalTick,
+} from './hub-astronomer.ts'
+import {
   HUB_ASTRONOMER_ROOT,
   HUB_ASTRONOMER_TELESCOPE_ORIGIN,
-  hubAstronomerFrameAt,
-} from './hub-astronomer.ts'
+  HUB_SOUTHERN_CAMERA_FACTOR,
+  HUB_SOUTHERN_EAST_PLATFORM_ORIGIN,
+  HUB_SOUTHERN_EXTENT,
+  HUB_SOUTHERN_WEST_PLATFORM_ORIGIN,
+  hubSouthernCameraTranslation,
+} from './hub-camera-presentation.ts'
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
@@ -123,16 +131,16 @@ test('submits the recovered southern Courtyard stack after every actor', () => {
 })
 
 test('Astronomer reconstructs the native roots, crew, and telescope cycle', () => {
-  assert.deepEqual(HUB_ASTRONOMER_ROOT, { x: 1740, y: 911 })
-  assert.deepEqual(HUB_ASTRONOMER_TELESCOPE_ORIGIN, { x: 1467, y: 642 })
+  assert.deepEqual(HUB_ASTRONOMER_ROOT, { x: 2150, y: 996.25 })
+  assert.deepEqual(HUB_ASTRONOMER_TELESCOPE_ORIGIN, { x: 2017, y: 828.25 })
   const initial = hubAstronomerFrameAt(0)
   assert.equal(initial.telescopeFrame, 0)
-  assert.deepEqual(initial.red.position, { x: 1801, y: 791 })
-  assert.deepEqual(initial.green.position, { x: 1638, y: 802 })
-  assert.deepEqual(initial.assistants.gray.position, { x: 1856, y: 818 })
-  assert.deepEqual(initial.assistants.blue.position, { x: 1813, y: 846 })
-  assert.deepEqual(initial.assistants.purple.position, { x: 1601, y: 836 })
-  assert.deepEqual(initial.assistants.brown.position, { x: 1640, y: 852 })
+  assert.deepEqual(initial.red.position, { x: 61, y: -120 })
+  assert.deepEqual(initial.green.position, { x: -102, y: -109 })
+  assert.deepEqual(initial.assistants.gray.shadowPosition, { x: 126, y: -93 })
+  assert.deepEqual(initial.assistants.blue.shadowPosition, { x: 73, y: -65 })
+  assert.deepEqual(initial.assistants.purple.shadowPosition, { x: -139, y: -75 })
+  assert.deepEqual(initial.assistants.brown.shadowPosition, { x: -100, y: -59 })
 
   const telescopeFrames = new Set<number>()
   const redBanks = new Set<string>()
@@ -153,6 +161,37 @@ test('Astronomer reconstructs the native roots, crew, and telescope cycle', () =
   assert.deepEqual([...greenBanks].sort(), ['gesture', 'idle', 'transition'])
   assert.deepEqual([...assistantFrames].sort(), [0, 1, 2])
   assert.deepEqual(hubAstronomerFrameAt(2048), hubAstronomerFrameAt(2048))
+})
+
+test('Astronomer starts from its local Courtyard construction tick', () => {
+  const createdAtTick = 17_000
+  assert.equal(hubAstronomerLocalTick(createdAtTick - 1, createdAtTick), 0)
+  assert.equal(hubAstronomerLocalTick(createdAtTick, createdAtTick), 0)
+  assert.equal(hubAstronomerLocalTick(createdAtTick + 381.9, createdAtTick), 381)
+  assert.deepEqual(
+    hubAstronomerFrameAt(hubAstronomerLocalTick(createdAtTick, createdAtTick)),
+    hubAstronomerFrameAt(0),
+  )
+})
+
+test('southern Courtyard bank uses the recovered 1.25 camera scope', () => {
+  assert.equal(HUB_SOUTHERN_CAMERA_FACTOR, 1.25)
+  closeTo(HUB_SOUTHERN_EXTENT.x, 2333.333333)
+  closeTo(HUB_SOUTHERN_EXTENT.y, 1186.25)
+  closeTo(HUB_SOUTHERN_WEST_PLATFORM_ORIGIN.x, 106.666667)
+  closeTo(HUB_SOUTHERN_WEST_PLATFORM_ORIGIN.y, 779.25)
+  assert.deepEqual(HUB_SOUTHERN_EAST_PLATFORM_ORIGIN, { x: 1843, y: 771.25 })
+
+  const northWest = hubSouthernCameraTranslation({ x: 0, y: 0 })
+  closeTo(northWest.x, -166.666667)
+  closeTo(northWest.y, -93.75)
+  const moved = hubSouthernCameraTranslation({ x: 100, y: 40 })
+  closeTo(moved.x - northWest.x, -125)
+  closeTo(moved.y - northWest.y, -50)
+
+  const southEast = hubSouthernCameraTranslation({ x: 666.666667, y: 274 })
+  closeTo(southEast.x, -1000)
+  closeTo(southEast.y, -436.25)
 })
 
 test('PotionGuy keeps the inherited stochastic actor pulse separate', () => {

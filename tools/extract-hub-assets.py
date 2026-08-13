@@ -66,12 +66,6 @@ ELEMENT_VFX_RECORDS = {
     "water": tuple(range(271, 283)),
     "air": tuple(range(1836, 1840)),
 }
-SOUTHERN_BATTLEMENT_START_X = 90
-SOUTHERN_BATTLEMENT_BASELINE_Y = 1000
-SOUTHERN_BATTLEMENT_TALL_SLOTS = frozenset((4, 6))
-SOUTHERN_BATTLEMENT_UNRAISED_SLOTS = frozenset((5,))
-
-
 @dataclass(frozen=True)
 class SpriteRecord:
     x: int
@@ -329,49 +323,6 @@ def build_courtyard(atlas: Image.Image, records: list[SpriteRecord]) -> Image.Im
         paste_registered(world, atlas, records[index])
 
     return world
-
-
-def build_southern_foreground(
-    atlas: Image.Image,
-    records: list[SpriteRecord],
-) -> Image.Image:
-    """Build Courtyard::Present's late southern architecture painter."""
-    layer = build_southern_battlement_layer(atlas, records)
-    paste_registered(layer, atlas, records[7])
-    paste_registered(layer, atlas, records[43])
-    return layer
-
-
-def build_southern_battlement_layer(
-    atlas: Image.Image,
-    records: list[SpriteRecord],
-) -> Image.Image:
-    layer = Image.new("RGBA", WORLD_SIZE)
-    x = SOUTHERN_BATTLEMENT_START_X
-    slot = 0
-    previous_was_tall = False
-    while x < WORLD_SIZE[0]:
-        if slot in SOUTHERN_BATTLEMENT_TALL_SLOTS:
-            tower = records[44]
-            paste_registered(
-                layer,
-                atlas,
-                tower,
-                offset=(x - 1, SOUTHERN_BATTLEMENT_BASELINE_Y - tower.logical_height),
-            )
-            x += tower.logical_width - 2
-            previous_was_tall = True
-        else:
-            battlement = records[4]
-            vertical_offset = 0 if slot in SOUTHERN_BATTLEMENT_UNRAISED_SLOTS else 30
-            top = SOUTHERN_BATTLEMENT_BASELINE_Y - battlement.height + vertical_offset
-            paste_registered(layer, atlas, battlement, offset=(x, top))
-            if previous_was_tall:
-                paste_registered(layer, atlas, records[3], offset=(x - 1, top))
-            x += battlement.width
-            previous_was_tall = False
-        slot += 1
-    return layer
 
 
 def build_registered_world_layer(
@@ -831,11 +782,14 @@ def main() -> int:
         output_dir,
         "hub-courtyard-foreground",
     )
-    save(
-        build_southern_foreground(college, college_records),
-        output_dir,
-        "hub-southern-foreground",
-    )
+    for name, index in {
+        "hub-southern-battlement": 4,
+        "hub-southern-seam": 3,
+        "hub-southern-tower": 44,
+        "hub-southern-platform-west": 7,
+        "hub-southern-platform-east": 43,
+    }.items():
+        save(crop(college, college_records[index]), output_dir, name)
     save(
         build_registered_cropped_strip(
             college,
