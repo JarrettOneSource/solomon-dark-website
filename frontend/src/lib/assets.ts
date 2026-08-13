@@ -86,7 +86,16 @@ import hubCourtyard from '../assets/game/hub-courtyard.png'
 import hubSealCorePulse from '../assets/game/hub-seal-core-pulse.png'
 import hubSealPulse from '../assets/game/hub-seal-pulse.png'
 import hubCourtyardForeground from '../assets/game/hub-courtyard-foreground.png'
+import hubSouthernForeground from '../assets/game/hub-southern-foreground.png'
 import hubSpawnRoof from '../assets/game/hub-spawn-roof.png'
+import hubAstronomerAssistants from '../assets/game/hub-astronomer-assistants.png'
+import hubAstronomerGreenGesture from '../assets/game/hub-astronomer-green-gesture.png'
+import hubAstronomerGreenIdle from '../assets/game/hub-astronomer-green-idle.png'
+import hubAstronomerGreenTransition from '../assets/game/hub-astronomer-green-transition.png'
+import hubAstronomerRedGesture from '../assets/game/hub-astronomer-red-gesture.png'
+import hubAstronomerRedIdle from '../assets/game/hub-astronomer-red-idle.png'
+import hubAstronomerRedTransition from '../assets/game/hub-astronomer-red-transition.png'
+import hubAstronomerTelescope from '../assets/game/hub-astronomer-telescope.png'
 import hubTentBack from '../assets/game/hub-tent-back.png'
 import hubTentBalloons from '../assets/game/hub-tent-balloons.png'
 import hubTentFront from '../assets/game/hub-tent-front.png'
@@ -455,7 +464,22 @@ export const hub = {
   },
   foreground: {
     courtyard: hubCourtyardForeground,
+    southern: hubSouthernForeground,
     spawnRoof: hubSpawnRoof,
+  },
+  astronomer: {
+    assistants: hubAstronomerAssistants,
+    green: {
+      gesture: hubAstronomerGreenGesture,
+      idle: hubAstronomerGreenIdle,
+      transition: hubAstronomerGreenTransition,
+    },
+    red: {
+      gesture: hubAstronomerRedGesture,
+      idle: hubAstronomerRedIdle,
+      transition: hubAstronomerRedTransition,
+    },
+    telescope: hubAstronomerTelescope,
   },
   fountainParticle: hubFountainParticle,
   tent: {

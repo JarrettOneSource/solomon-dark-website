@@ -39,6 +39,14 @@ test('reports actual task completions and resolves only after every asset', asyn
 
 test('keeps recovered Hub parity art at its native registrations', () => {
   const dimensions: Readonly<Record<string, readonly [number, number]>> = {
+    'hub-astronomer-assistants.png': [1800, 150],
+    'hub-astronomer-green-gesture.png': [2250, 450],
+    'hub-astronomer-green-idle.png': [1800, 450],
+    'hub-astronomer-green-transition.png': [1350, 450],
+    'hub-astronomer-red-gesture.png': [2250, 450],
+    'hub-astronomer-red-idle.png': [1800, 450],
+    'hub-astronomer-red-transition.png': [1350, 450],
+    'hub-astronomer-telescope.png': [1870, 292],
     'hub-courtyard-foreground.png': [2000, 1024],
     'hub-hud-inventory-digits.png': [80, 14],
     'hub-hud-map-compass.png': [121, 118],
@@ -49,6 +57,7 @@ test('keeps recovered Hub parity art at its native registrations', () => {
     'hub-hud-xp-frame.png': [12, 56],
     'hub-npc-potion.png': [175, 49],
     'hub-spawn-roof.png': [2000, 1024],
+    'hub-southern-foreground.png': [2000, 1024],
     'hub-tent-back.png': [2000, 1024],
     'hub-tent-balloons.png': [270, 72],
   }

@@ -10,7 +10,11 @@ import {
   moveWithHubCollision,
 } from './core-kernels/hub-math.ts'
 import {
+  HUB_ASTRONOMER_DEPTH,
+  HUB_ASTRONOMER_FRONT_DEPTH,
+  HUB_ASTRONOMER_TELESCOPE_DEPTH,
   HUB_COURTYARD_FOREGROUND_DEPTH,
+  HUB_SOUTHERN_FOREGROUND_DEPTH,
   HUB_SPAWN_ROOF_DEPTH,
   HUB_USEFUL_THYNGS_BALLOON_DEPTH,
   HUB_USEFUL_THYNGS_COUNTER_DEPTH,
@@ -19,6 +23,11 @@ import {
   HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   hubActorDepth,
 } from './hub-depth.ts'
+import {
+  HUB_ASTRONOMER_ROOT,
+  HUB_ASTRONOMER_TELESCOPE_ORIGIN,
+  hubAstronomerFrameAt,
+} from './hub-astronomer.ts'
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
@@ -100,9 +109,50 @@ test('sorts each Useful Thyngs painter around PotionGuy', () => {
   assert.ok(HUB_USEFUL_THYNGS_BALLOON_DEPTH < HUB_USEFUL_THYNGS_MARKER_DEPTH)
 })
 
-test('submits the recovered lower Courtyard wall after every actor', () => {
+test('submits the recovered southern Courtyard stack after every actor', () => {
   assert.equal(HUB_COURTYARD_FOREGROUND_DEPTH, 4000)
+  assert.equal(HUB_SOUTHERN_FOREGROUND_DEPTH, 4001)
+  assert.equal(HUB_ASTRONOMER_DEPTH, 4002)
+  assert.equal(HUB_ASTRONOMER_TELESCOPE_DEPTH, 4003)
+  assert.equal(HUB_ASTRONOMER_FRONT_DEPTH, 4004)
   assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH > hubActorDepth(1024))
+  assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH < HUB_SOUTHERN_FOREGROUND_DEPTH)
+  assert.ok(HUB_SOUTHERN_FOREGROUND_DEPTH < HUB_ASTRONOMER_DEPTH)
+  assert.ok(HUB_ASTRONOMER_DEPTH < HUB_ASTRONOMER_TELESCOPE_DEPTH)
+  assert.ok(HUB_ASTRONOMER_TELESCOPE_DEPTH < HUB_ASTRONOMER_FRONT_DEPTH)
+})
+
+test('Astronomer reconstructs the native roots, crew, and telescope cycle', () => {
+  assert.deepEqual(HUB_ASTRONOMER_ROOT, { x: 1740, y: 911 })
+  assert.deepEqual(HUB_ASTRONOMER_TELESCOPE_ORIGIN, { x: 1467, y: 642 })
+  const initial = hubAstronomerFrameAt(0)
+  assert.equal(initial.telescopeFrame, 0)
+  assert.deepEqual(initial.red.position, { x: 1801, y: 791 })
+  assert.deepEqual(initial.green.position, { x: 1638, y: 802 })
+  assert.deepEqual(initial.assistants.gray.position, { x: 1856, y: 818 })
+  assert.deepEqual(initial.assistants.blue.position, { x: 1813, y: 846 })
+  assert.deepEqual(initial.assistants.purple.position, { x: 1601, y: 836 })
+  assert.deepEqual(initial.assistants.brown.position, { x: 1640, y: 852 })
+
+  const telescopeFrames = new Set<number>()
+  const redBanks = new Set<string>()
+  const greenBanks = new Set<string>()
+  const assistantFrames = new Set<number>()
+  for (let tick = 0; tick < 5_000; tick += 1) {
+    const frame = hubAstronomerFrameAt(tick)
+    telescopeFrames.add(frame.telescopeFrame)
+    redBanks.add(frame.red.bank)
+    greenBanks.add(frame.green.bank)
+    assistantFrames.add(frame.assistants.gray.frame)
+    assistantFrames.add(frame.assistants.blue.frame)
+    assistantFrames.add(frame.assistants.purple.frame)
+    assistantFrames.add(frame.assistants.brown.frame)
+  }
+  assert.deepEqual([...telescopeFrames].sort(), [0, 1, 2, 3, 4])
+  assert.deepEqual([...redBanks].sort(), ['gesture', 'idle', 'transition'])
+  assert.deepEqual([...greenBanks].sort(), ['gesture', 'idle', 'transition'])
+  assert.deepEqual([...assistantFrames].sort(), [0, 1, 2])
+  assert.deepEqual(hubAstronomerFrameAt(2048), hubAstronomerFrameAt(2048))
 })
 
 test('PotionGuy keeps the inherited stochastic actor pulse separate', () => {

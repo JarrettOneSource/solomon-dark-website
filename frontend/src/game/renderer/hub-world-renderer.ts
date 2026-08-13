@@ -28,6 +28,7 @@ export interface HubRendererDiagnostics {
 }
 
 interface HubFrameDiagnostics {
+  astronomerTelescopeFrame: number
   frameCount: number
   orbSpriteCount: number
   playerMoving: boolean
@@ -109,6 +110,7 @@ export async function createHubWorldRenderer(
   let frameTimeTotal = 0
   let resolution = initialResolution
   const frameDiagnostics: HubFrameDiagnostics = {
+    astronomerTelescopeFrame: 0,
     frameCount: 0,
     orbSpriteCount: 0,
     playerMoving: false,
@@ -141,6 +143,7 @@ export async function createHubWorldRenderer(
 
   const updateFrameDiagnostics = (snapshot: HubPresentationFrame) => {
     const player = snapshot.players[options.playerId]
+    frameDiagnostics.astronomerTelescopeFrame = scene.astronomerTelescopeFrame
     frameDiagnostics.frameCount = frameCount
     frameDiagnostics.studentCount = scene.studentCount
     frameDiagnostics.teacherFrame = scene.teacherFrame

@@ -3,6 +3,12 @@ import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
+  HUB_ASTRONOMER_TELESCOPE_ORIGIN,
+  hubAstronomerFrameAt,
+  type HubAstronomerAssistantFrame,
+  type HubAstronomerMainActorFrame,
+} from '../hub-astronomer.ts'
+import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
   hubFountainParticleAlpha,
@@ -39,6 +45,7 @@ export class HubWorldScene {
   private readonly liveFountainIds = new Set<number>()
   private readonly statueAura: Sprite
   private readonly statueBody: Sprite
+  private readonly astronomer: HubAstronomerView
   private readonly potion: HubPotionTraderView
   private readonly teacher: HubTeacherView
   private readonly players = new Map<string, HubPlayerView>()
@@ -84,6 +91,8 @@ export class HubWorldScene {
     this.teacher = new HubTeacherView(textures, 576.5, 710.5)
     this.world.addChild(this.teacher.container)
 
+    this.astronomer = new HubAstronomerView(textures)
+
     this.world.addChild(this.worldLayer(textures.base[hub.foreground.spawnRoof], HUB_WORLD_DEPTH.spawnRoof, HUB_WORLD_LAYER_BOUNDS.spawnRoof))
     this.world.addChild(this.worldLayer(textures.base[hub.tent.front], HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
     this.world.addChild(this.worldLayer(
@@ -91,6 +100,16 @@ export class HubWorldScene {
       HUB_WORLD_DEPTH.courtyardForeground,
       HUB_WORLD_LAYER_BOUNDS.courtyardForeground,
     ))
+    this.world.addChild(this.worldLayer(
+      textures.base[hub.foreground.southern],
+      HUB_WORLD_DEPTH.southernForeground,
+      HUB_WORLD_LAYER_BOUNDS.southernForeground,
+    ))
+    this.world.addChild(
+      this.astronomer.behind,
+      this.astronomer.telescope,
+      this.astronomer.front,
+    )
   }
 
   update(snapshot: HubPresentationFrame): void {
@@ -114,6 +133,7 @@ export class HubWorldScene {
     )
     this.potion.update(snapshot.tick)
     this.teacher.update(snapshot.tick / 100)
+    this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
     this.updatePlayers(snapshot)
   }
@@ -128,6 +148,10 @@ export class HubWorldScene {
 
   get teacherFrame(): number {
     return this.teacher.frame
+  }
+
+  get astronomerTelescopeFrame(): number {
+    return this.astronomer.telescopeFrame
   }
 
   destroy(): void {
@@ -260,6 +284,126 @@ export class HubWorldScene {
   }
 }
 
+class HubAstronomerView {
+  readonly behind = new Container({ label: 'astronomer-behind-telescope' })
+  readonly telescope: Sprite
+  readonly front = new Container({ label: 'astronomer-before-telescope' })
+  private readonly redShadow: Sprite
+  private readonly red: Sprite
+  private readonly greenShadow: Sprite
+  private readonly green: Sprite
+  private readonly grayShadow: Sprite
+  private readonly gray: Sprite
+  private readonly blueShadow: Sprite
+  private readonly blue: Sprite
+  private readonly purpleShadow: Sprite
+  private readonly purple: Sprite
+  private readonly brownShadow: Sprite
+  private readonly brown: Sprite
+  private readonly textures: HubWorldTextures
+  private currentTelescopeFrame = 0
+
+  constructor(textures: HubWorldTextures) {
+    this.textures = textures
+    this.behind.sortableChildren = true
+    this.behind.zIndex = HUB_WORLD_DEPTH.astronomer
+    this.behind.eventMode = 'none'
+    this.front.zIndex = HUB_WORLD_DEPTH.astronomerFront
+    this.front.eventMode = 'none'
+
+    const shadow = textures.base[hub.npcs.teacher.shadow]
+    this.redShadow = actorSprite(shadow, 0)
+    this.red = actorSprite(textures.astronomer.red.idle[0], 1)
+    this.greenShadow = actorSprite(shadow, 2)
+    this.green = actorSprite(textures.astronomer.green.idle[0], 3)
+    this.grayShadow = actorSprite(shadow, 4)
+    this.gray = actorSprite(textures.astronomer.assistants.gray[0], 5)
+    this.blueShadow = actorSprite(shadow, 6)
+    this.blue = actorSprite(textures.astronomer.assistants.blue[0], 7)
+    this.purpleShadow = actorSprite(shadow, 8)
+    this.purple = actorSprite(textures.astronomer.assistants.purple[0], 9)
+    this.behind.addChild(
+      this.redShadow,
+      this.red,
+      this.greenShadow,
+      this.green,
+      this.grayShadow,
+      this.gray,
+      this.blueShadow,
+      this.blue,
+      this.purpleShadow,
+      this.purple,
+    )
+
+    this.telescope = new Sprite(textures.astronomer.telescope[0])
+    this.telescope.position.set(
+      HUB_ASTRONOMER_TELESCOPE_ORIGIN.x,
+      HUB_ASTRONOMER_TELESCOPE_ORIGIN.y,
+    )
+    this.telescope.zIndex = HUB_WORLD_DEPTH.astronomerTelescope
+    this.telescope.eventMode = 'none'
+
+    this.brownShadow = actorSprite(shadow, 0)
+    this.brown = actorSprite(textures.astronomer.assistants.brown[0], 1)
+    this.front.addChild(this.brownShadow, this.brown)
+  }
+
+  update(tick: number): void {
+    const frame = hubAstronomerFrameAt(tick)
+    this.currentTelescopeFrame = frame.telescopeFrame
+    this.telescope.texture = this.textures.astronomer.telescope[frame.telescopeFrame]
+    this.updateMain(this.red, this.redShadow, frame.red, this.textures.astronomer.red)
+    this.updateMain(this.green, this.greenShadow, frame.green, this.textures.astronomer.green)
+    this.updateAssistant(
+      this.gray,
+      this.grayShadow,
+      frame.assistants.gray,
+      this.textures.astronomer.assistants.gray,
+    )
+    this.updateAssistant(
+      this.blue,
+      this.blueShadow,
+      frame.assistants.blue,
+      this.textures.astronomer.assistants.blue,
+    )
+    this.updateAssistant(
+      this.purple,
+      this.purpleShadow,
+      frame.assistants.purple,
+      this.textures.astronomer.assistants.purple,
+    )
+    this.brown.texture = this.textures.astronomer.assistants.brown[frame.assistants.brown.frame]
+    this.brown.position.copyFrom(frame.assistants.brown.position)
+    placeAstronomerShadow(this.brownShadow, frame.assistants.brown.position)
+  }
+
+  get telescopeFrame(): number {
+    return this.currentTelescopeFrame
+  }
+
+  private updateMain(
+    actor: Sprite,
+    shadow: Sprite,
+    frame: HubAstronomerMainActorFrame,
+    textures: HubWorldTextures['astronomer']['red'],
+  ): void {
+    actor.texture = textures[frame.bank][frame.frame]
+    actor.position.copyFrom(frame.position)
+    placeAstronomerShadow(shadow, frame.position)
+  }
+
+  private updateAssistant(
+    actor: Sprite,
+    shadow: Sprite,
+    frame: HubAstronomerAssistantFrame,
+    textures: readonly Texture[],
+  ): void {
+    actor.texture = textures[frame.frame]
+    actor.position.copyFrom(frame.position)
+    placeAstronomerShadow(shadow, frame.position)
+  }
+}
+
 class HubPotionTraderView {
   readonly actor = new Container({ label: 'potion-trader' })
   readonly balloons: Sprite
@@ -358,6 +502,10 @@ function centered(texture: Texture): Sprite {
   sprite.anchor.set(0.5)
   sprite.eventMode = 'none'
   return sprite
+}
+
+function placeAstronomerShadow(shadow: Sprite, position: { x: number; y: number }): void {
+  shadow.position.set(position.x + 5, position.y - 5)
 }
 
 function colorTint(color: HubColor): number {

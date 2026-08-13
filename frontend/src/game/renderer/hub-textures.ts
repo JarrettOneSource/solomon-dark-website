@@ -43,8 +43,29 @@ export interface HubPotionTextureFrames {
   balloons: readonly Texture[]
 }
 
+export interface HubAstronomerTextureFrames {
+  assistants: {
+    blue: readonly Texture[]
+    brown: readonly Texture[]
+    gray: readonly Texture[]
+    purple: readonly Texture[]
+  }
+  green: {
+    gesture: readonly Texture[]
+    idle: readonly Texture[]
+    transition: readonly Texture[]
+  }
+  red: {
+    gesture: readonly Texture[]
+    idle: readonly Texture[]
+    transition: readonly Texture[]
+  }
+  telescope: readonly Texture[]
+}
+
 export interface HubWorldTextures {
   assetSources: readonly string[]
+  astronomer: HubAstronomerTextureFrames
   base: Readonly<Record<string, Texture>>
   elementVfx: Readonly<Partial<Record<NativeElementVfxSprite, readonly Texture[]>>>
   players: Readonly<Record<WizardElement, HubActorTextureFrames>>
@@ -110,9 +131,35 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       'horizontal',
     )
   }
+  const assistantFrames = stripFrames(
+    texture(hub.astronomer.assistants),
+    12,
+    150,
+    150,
+    'horizontal',
+  )
 
   return {
     assetSources: sources,
+    astronomer: {
+      assistants: {
+        gray: assistantFrames.slice(0, 3),
+        blue: assistantFrames.slice(3, 6),
+        brown: assistantFrames.slice(6, 9),
+        purple: assistantFrames.slice(9, 12),
+      },
+      green: {
+        gesture: stripFrames(texture(hub.astronomer.green.gesture), 5, 450, 450, 'horizontal'),
+        idle: stripFrames(texture(hub.astronomer.green.idle), 4, 450, 450, 'horizontal'),
+        transition: stripFrames(texture(hub.astronomer.green.transition), 3, 450, 450, 'horizontal'),
+      },
+      red: {
+        gesture: stripFrames(texture(hub.astronomer.red.gesture), 5, 450, 450, 'horizontal'),
+        idle: stripFrames(texture(hub.astronomer.red.idle), 4, 450, 450, 'horizontal'),
+        transition: stripFrames(texture(hub.astronomer.red.transition), 3, 450, 450, 'horizontal'),
+      },
+      telescope: stripFrames(texture(hub.astronomer.telescope), 5, 374, 292, 'horizontal'),
+    },
     base,
     elementVfx: elementTextures,
     players,
@@ -136,6 +183,17 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
 export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   const derived = new Set<Texture>()
   const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))
+  add(textures.astronomer.assistants.blue)
+  add(textures.astronomer.assistants.brown)
+  add(textures.astronomer.assistants.gray)
+  add(textures.astronomer.assistants.purple)
+  add(textures.astronomer.green.gesture)
+  add(textures.astronomer.green.idle)
+  add(textures.astronomer.green.transition)
+  add(textures.astronomer.red.gesture)
+  add(textures.astronomer.red.idle)
+  add(textures.astronomer.red.transition)
+  add(textures.astronomer.telescope)
   for (const player of Object.values(textures.players)) {
     add(player.fixed)
     add(player.head)

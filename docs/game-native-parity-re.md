@@ -2517,15 +2517,17 @@ Confidence: high for records, formula, registration, and screen geometry;
 medium for the exact palette produced by the native digit tint pipeline and
 for the seed XP value in the captured save state.
 
-### Courtyard lower-wall painter order
+### Courtyard late foreground-bank painter order
 
 `Courtyard::Present` (`0x0051EB60`) submits the resident actors and then draws
 College flat records `19`, `30`, `31`, `21`, and `22`. They are fixed world
 geometry using the normal Courtyard camera transform; no separate parallax
 owner was found. Records `2`, `20`, `23`, and `25` remain the spawn-roof group
-at the actor boundary. The web had flattened `19`, `30`, and `31` into the
-background and combined `21/22` with the spawn roof, so actors could appear on
-the wrong side of the bottom castle wall.
+at the actor boundary. These five records occupy the upper and central
+Courtyard (`y < 583`); they are not the separate southern battlement run. The
+web had flattened `19`, `30`, and `31` into the background and combined
+`21/22` with the spawn roof, so actors could appear on the wrong side of this
+late foreground bank.
 
 Implementation consequence: the five recovered records become a distinct
 fixed foreground layer submitted after all actors, while the spawn roof keeps
@@ -2536,6 +2538,111 @@ Evidence: fresh read-only decompilation of `0x0051EB60`, College flat metadata,
 and native/web Courtyard comparison captures.
 
 Confidence: high for record membership, camera ownership, and painter order.
+
+### Southern Courtyard boundary and Astronomer telescope crew
+
+The castle art across the south edge is a second, later
+`Courtyard::Present` painter block at `0x005207E0..0x005209A7`; it was absent
+from the browser reconstruction. It is ordinary world geometry under the
+Courtyard camera, not a parallax layer. The native loop starts at world X
+`90`, uses bottom baseline Y `1000`, and advances through the following visible
+tile roots:
+
+| Slot | College record | Visible world origin | Advance |
+| ---: | ---: | ---: | ---: |
+| 0 | 4 | `(90,904)` | `209` |
+| 1 | 4 | `(299,904)` | `209` |
+| 2 | 4 | `(508,904)` | `209` |
+| 3 | 4 | `(717,904)` | `209` |
+| 4 | 44 | `(926,814)` | `179` |
+| 5 | 4, then seam 3 | `(1105,874)`, `(1104,874)` | `209` |
+| 6 | 44 | `(1314,814)` | `179` |
+| 7 | 4, then seam 3 | `(1493,904)`, `(1492,904)` | `209` |
+| 8 | 4 | `(1702,904)` | `209` |
+| 9 | 4 | `(1911,904)` | `209` |
+
+College `4` is the `209 x 126` ordinary battlement. Slots 4 and 6 select the
+`181 x 186` logical College `44` tower and advance by `width - 2`; the visible
+crop begins one pixel after its logical origin. The next ordinary slot draws
+College `3` one pixel left as a seam. Slot 5 alone omits the normal `+30`
+vertical correction. This is why a repeated generic wall strip cannot reproduce
+the stock silhouette.
+
+The same block next submits two source-registered architectural records:
+
+- College `7`, the large southwest circular wooden platform, occupies
+  `(0,593)..(365,1000)`.
+- College `43`, the southeast telescope deck, occupies
+  `(1293,585)..(1823,1000)`.
+
+College `7` had been flattened into `hub-courtyard.png`. That ownership was the
+reported occlusion defect: stock submits the platform after every resident
+actor, so actors crossing its footprint pass behind it. Both platforms belong
+with the southern battlement layer, after the previous late foreground bank
+and before the telescope crew.
+
+`Astronomer` is the embedded Courtyard helper at `Courtyard + 0x9438`, created
+by `0x005025F0` with vtable `0x00791A70`, updated by `0x00505950`, and rendered
+by `0x0051C790`. `Courtyard::Present` invokes that renderer through vtable slot
+`+0x0C`, then selects College `505..509` from Astronomer float `+0x24`, then
+calls `0x0051DBB0` with the same helper. The last call draws College `529..531`:
+the brown foreground wizard. The native painter order is therefore:
+
+1. southern battlements;
+2. College `7` circular platform;
+3. College `43` telescope deck;
+4. five Astronomer wizards and their shadows;
+5. one telescope frame from College `505..509`; and
+6. the sixth, brown wizard in front of the telescope.
+
+The telescope frame union is world rectangle
+`(1467,642)..(1841,934)`. Its five individual registered bounds are
+`(1505,662,336,240)`, `(1530,649,275,278)`, `(1543,647,223,272)`,
+`(1515,642,218,292)`, and `(1467,651,247,263)`. The helper root is
+`(1740,911)`. Its two local main-wizard roots are `(61,-120)` and
+`(-102,-109)`. The first side path at helper offsets `+0x30..+0x80` contains
+`(-45,-110)`, `(-16,-106)`, `(14,-99)`, `(48,-91)`, `(74,-78)`,
+`(-105,-75)`, `(-88,-80)`, `(-65,-85)`, `(-36,-95)`, `(-6,-105)`, and
+`(61,-120)`.
+
+The six character banks are not interchangeable decorative sprites:
+
+- College `130..133`, `140..142`, and `143..147`: red idle, transition, and
+  gesture poses;
+- College `525..528`, `535..537`, and `538..542`: green idle, transition, and
+  gesture poses;
+- College `134..136`, `137..139`, `532..534`, and `529..531`: gray, blue,
+  purple, and brown three-frame idle helpers.
+
+At `100 Hz`, idle Astronomer state rolls `randomInt(50) == 8`. A hit holds an
+active gesture for `randomInt(100) + 200` ticks, rerolls each main pose every
+`randomInt(15) + 15` ticks, fades transition field `+0x2C` by `0.015` per tick,
+then moves telescope field `+0x24` by direction times `0.08` between its two
+ends. The rendered selector is `trunc(clamp(+0x24, 0, 4))`. Auxiliary ingress
+fields `+0x118/+0x11C` use `0.2` inward and `0.1` outward steps around telescope
+thresholds `4.5` and `0.5`. Four inherited helper pulses independently roll
+`randomInt(200) == 2` and traverse their three-frame banks. A separate bob
+roll uses `randomInt(100) == 3`, step `0.045`, and limit `2.9`.
+
+Implementation consequence: extract the authored southern architecture,
+telescope union, and every named actor bank. Submit them at the recovered
+fixed depths instead of baking them into the panorama. Drive the telescope and
+wizards from a tick-indexed reconstruction of the native state machine. The
+browser uses a fixed local pseudo-random seed so every client can derive the
+same decorative frame from a shared tick; the native process-global RNG seed
+and unrelated-call consumption order are intentionally not claimed portable.
+
+Evidence: read-only decompilation of `0x005025F0`, `0x00505950`, `0x0051C790`,
+`0x0051DBB0`, and `0x0051EB60`; College bundle registrations and the generated
+native asset/object map; clean stock captures
+`C:/Users/User/AppData/Local/Temp/astronomer-native-south-west-20260813.png`,
+`C:/Users/User/AppData/Local/Temp/astronomer-native-south-east-20260813.png`,
+and `C:/Users/User/AppData/Local/Temp/astronomer-native-se-return-20260813.png`.
+
+Confidence: high for ownership, records, geometry, painter order, animation
+thresholds, and frame cadence. The only retained unknown is the exact
+process-global native RNG sequence, which does not change those recovered
+rules.
 
 ### Useful Thyngs trader presentation
 

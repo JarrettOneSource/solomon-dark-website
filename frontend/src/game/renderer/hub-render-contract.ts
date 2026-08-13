@@ -1,5 +1,9 @@
 import {
+  HUB_ASTRONOMER_DEPTH,
+  HUB_ASTRONOMER_FRONT_DEPTH,
+  HUB_ASTRONOMER_TELESCOPE_DEPTH,
   HUB_COURTYARD_FOREGROUND_DEPTH,
+  HUB_SOUTHERN_FOREGROUND_DEPTH,
   HUB_SPAWN_ROOF_DEPTH,
   HUB_USEFUL_THYNGS_BALLOON_DEPTH,
   HUB_USEFUL_THYNGS_COUNTER_DEPTH,
@@ -15,6 +19,9 @@ export const HUB_RENDER_MIN_RESOLUTION = 0.5
 export const HUB_RENDER_MAX_RESOLUTION = 1.5
 
 export const HUB_WORLD_DEPTH = {
+  astronomer: HUB_ASTRONOMER_DEPTH,
+  astronomerFront: HUB_ASTRONOMER_FRONT_DEPTH,
+  astronomerTelescope: HUB_ASTRONOMER_TELESCOPE_DEPTH,
   courtyard: 0,
   sealGlyphs: 10,
   sealCore: 11,
@@ -23,6 +30,7 @@ export const HUB_WORLD_DEPTH = {
   statueAura: hubActorDepth(834) - 1,
   statue: hubActorDepth(834),
   spawnRoof: HUB_SPAWN_ROOF_DEPTH,
+  southernForeground: HUB_SOUTHERN_FOREGROUND_DEPTH,
   usefulThyngsBack: HUB_USEFUL_THYNGS_COUNTER_DEPTH,
   usefulThyngsFront: HUB_USEFUL_THYNGS_FRONT_DEPTH,
   usefulThyngsBalloons: HUB_USEFUL_THYNGS_BALLOON_DEPTH,
@@ -35,6 +43,7 @@ export const HUB_WORLD_LAYER_BOUNDS = {
   sealCore: { x: 1889, y: 234, width: 111, height: 270 },
   sealGlyphs: { x: 675, y: 672, width: 582, height: 302 },
   spawnRoof: { x: 568, y: 0, width: 522, height: 320 },
+  southernForeground: { x: 0, y: 585, width: 2000, height: 439 },
   usefulThyngsBack: { x: 1361, y: 646, width: 63, height: 56 },
   usefulThyngsFront: { x: 1343, y: 479, width: 141, height: 220 },
   usefulThyngsShadow: { x: 1327, y: 507, width: 209, height: 206 },

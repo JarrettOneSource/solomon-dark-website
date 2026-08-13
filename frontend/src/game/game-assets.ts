@@ -107,6 +107,7 @@ export function loadResidentGameAssets(
 
 export function hubGameAssetSources(element: WizardElement): string[] {
   return collectAssetSources({
+    astronomer: hub.astronomer,
     courtyard: hub.courtyard,
     seals: hub.seals,
     foreground: hub.foreground,
