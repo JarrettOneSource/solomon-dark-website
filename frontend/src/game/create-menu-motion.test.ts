@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  CREATE_ENTRY_ANIMATION_MS,
   CREATE_ENTRY_CUPPED_MS,
   CREATE_ENTRY_RAISED_MS,
   CREATE_ENTRY_SETTLED_MS,
@@ -10,7 +11,10 @@ import {
   CREATE_SELECTION_LEFT_SETTLED_MS,
   CREATE_SELECTION_RIGHT_CUPPED_MS,
   CREATE_SELECTION_RIGHT_RAISED_MS,
+  CREATE_SELECTION_ANIMATION_MS,
   CREATE_SELECTION_SETTLED_MS,
+  createDisciplineRevealMotionAt,
+  createElementRevealMotionAt,
   createEntryMotionAt,
   createHandIdleOffsetAt,
   createSelectedElementMotionAt,
@@ -46,6 +50,29 @@ test('entry replays the native pre-open recurrence and hard pose thresholds', ()
   assert.equal(createEntryMotionAt(CREATE_ENTRY_SETTLED_MS).settled, true)
   assert.deepEqual(createEntryMotionAt(10_000).rightOffset, { x: 50, y: 300 })
   assert.equal(createEntryMotionAt(10_000).rightPose, 'fist')
+})
+
+test('elements fan from the raised hand on the inclusive native fixed tick', () => {
+  assert.equal(CREATE_ENTRY_ANIMATION_MS, 2_330)
+  assert.deepEqual(createElementRevealMotionAt('air', CREATE_ENTRY_RAISED_MS - 1), {
+    opacity: 0,
+    position: { x: 775, y: 510 },
+  })
+
+  const first = createElementRevealMotionAt('air', CREATE_ENTRY_RAISED_MS)
+  closeTo(first.opacity, 0.01)
+  closeTo(first.position.x, 778.307679)
+  closeTo(first.position.y, 521.535118)
+
+  const second = createElementRevealMotionAt('air', CREATE_ENTRY_RAISED_MS + 10)
+  closeTo(second.opacity, 0.02)
+  closeTo(second.position.x, 781.350745)
+  closeTo(second.position.y, 532.147427)
+
+  const settled = createElementRevealMotionAt('air', CREATE_ENTRY_ANIMATION_MS)
+  assert.equal(settled.opacity, 1)
+  closeTo(settled.position.x, 816.346, 0.05)
+  closeTo(settled.position.y, 654.189, 0.05)
 })
 
 test('selection closes left with its two-substep recurrence before right opens', () => {
@@ -121,6 +148,26 @@ test('right discipline hand matches every recovered native turning point', () =>
   assert.equal(createSelectionMotionAt(CREATE_SELECTION_RIGHT_RAISED_MS).disciplinesVisible, true)
   assert.equal(createSelectionMotionAt(CREATE_SELECTION_SETTLED_MS - 1).settled, false)
   assert.equal(createSelectionMotionAt(CREATE_SELECTION_SETTLED_MS).settled, true)
+})
+
+test('discipline glyphs slide left from the native fifty-pixel offset', () => {
+  assert.equal(CREATE_SELECTION_ANIMATION_MS, 2_630)
+  assert.deepEqual(
+    createDisciplineRevealMotionAt('arcane', CREATE_SELECTION_RIGHT_RAISED_MS - 1),
+    { x: 1075, y: 460 },
+  )
+  const first = createDisciplineRevealMotionAt('arcane', CREATE_SELECTION_RIGHT_RAISED_MS)
+  closeTo(first.x, 1071.000001)
+  assert.equal(first.y, 460)
+  const second = createDisciplineRevealMotionAt(
+    'arcane',
+    CREATE_SELECTION_RIGHT_RAISED_MS + 10,
+  )
+  closeTo(second.x, 1067.320001)
+
+  const settled = createDisciplineRevealMotionAt('arcane', CREATE_SELECTION_ANIMATION_MS)
+  closeTo(settled.x, 1025, 0.02)
+  assert.equal(settled.y, 460)
 })
 
 test('hand idle drift follows the native 0.5-degree 100 Hz clocks', () => {

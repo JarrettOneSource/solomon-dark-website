@@ -85,19 +85,28 @@ import createStarSmall from '../assets/game/create-star-small.png'
 import hubCourtyard from '../assets/game/hub-courtyard.png'
 import hubSealCorePulse from '../assets/game/hub-seal-core-pulse.png'
 import hubSealPulse from '../assets/game/hub-seal-pulse.png'
+import hubCourtyardForeground from '../assets/game/hub-courtyard-foreground.png'
 import hubSpawnRoof from '../assets/game/hub-spawn-roof.png'
 import hubTentBack from '../assets/game/hub-tent-back.png'
+import hubTentBalloons from '../assets/game/hub-tent-balloons.png'
 import hubTentFront from '../assets/game/hub-tent-front.png'
 import hubTentShadow from '../assets/game/hub-tent-shadow.png'
 import hubHudBackpack from '../assets/game/hub-hud-backpack.png'
 import hubHudBarBlue from '../assets/game/hub-hud-bar-blue.png'
 import hubHudBarRed from '../assets/game/hub-hud-bar-red.png'
 import hubHudHelp from '../assets/game/hub-hud-help.png'
+import hubHudInventoryDigits from '../assets/game/hub-hud-inventory-digits.png'
+import hubHudMapCompass from '../assets/game/hub-hud-map-compass.png'
+import hubHudMapPlay from '../assets/game/hub-hud-map-play.png'
+import hubHudMouseRight from '../assets/game/hub-hud-mouse-right.png'
 import hubHudParchment from '../assets/game/hub-hud-parchment.png'
 import hubHudPotionBlue from '../assets/game/hub-hud-potion-blue.png'
 import hubHudPotionRed from '../assets/game/hub-hud-potion-red.png'
 import hubHudSkull from '../assets/game/hub-hud-skull.png'
+import hubHudSecondaryAcidRain from '../assets/game/hub-hud-secondary-acid-rain.png'
 import hubHudTome from '../assets/game/hub-hud-tome.png'
+import hubHudXpFill from '../assets/game/hub-hud-xp-fill.png'
+import hubHudXpFrame from '../assets/game/hub-hud-xp-frame.png'
 import hubHudNpcAnnalist from '../assets/game/hub-hud-npc-annalist.png'
 import hubHudNpcItems from '../assets/game/hub-hud-npc-items.png'
 import hubHudNpcPerkWitch from '../assets/game/hub-hud-npc-perk-witch.png'
@@ -440,11 +449,13 @@ export const hub = {
     glyphs: hubSealPulse,
   },
   foreground: {
+    courtyard: hubCourtyardForeground,
     spawnRoof: hubSpawnRoof,
   },
   fountainParticle: hubFountainParticle,
   tent: {
     back: hubTentBack,
+    balloons: hubTentBalloons,
     front: hubTentFront,
     shadow: hubTentShadow,
   },
@@ -504,11 +515,18 @@ export const hub = {
     barBlue: hubHudBarBlue,
     barRed: hubHudBarRed,
     help: hubHudHelp,
+    inventoryDigits: hubHudInventoryDigits,
+    mapCompass: hubHudMapCompass,
+    mapPlay: hubHudMapPlay,
+    mouseRight: hubHudMouseRight,
     parchment: hubHudParchment,
     potionBlue: hubHudPotionBlue,
     potionRed: hubHudPotionRed,
     skull: hubHudSkull,
+    secondaryAcidRain: hubHudSecondaryAcidRain,
     tome: hubHudTome,
+    xpFill: hubHudXpFill,
+    xpFrame: hubHudXpFrame,
     npcs: {
       annalist: hubHudNpcAnnalist,
       items: hubHudNpcItems,

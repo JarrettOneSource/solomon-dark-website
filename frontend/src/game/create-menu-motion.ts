@@ -33,20 +33,31 @@ export interface CreateSelectedElementMotion {
   scale: number
 }
 
+export interface CreateElementRevealMotion {
+  opacity: number
+  position: CreateHandOffset
+}
+
 export const CREATE_ENTRY_CUPPED_MS = 1_320
 export const CREATE_ENTRY_RAISED_MS = 1_340
 export const CREATE_ENTRY_SETTLED_MS = 1_400
+export const CREATE_ENTRY_ANIMATION_MS = 2_330
 export const CREATE_SELECTION_LEFT_START_MS = 600
 export const CREATE_SELECTION_LEFT_CUPPED_MS = 910
 export const CREATE_SELECTION_LEFT_SETTLED_MS = 980
 export const CREATE_SELECTION_RIGHT_CUPPED_MS = 1_610
 export const CREATE_SELECTION_RIGHT_RAISED_MS = 1_640
 export const CREATE_SELECTION_SETTLED_MS = 1_680
+export const CREATE_SELECTION_ANIMATION_MS = 2_630
 
 const CREATE_FIXED_TICK_MS = 10
 const CREATE_HAND_PHASE_DEGREES_PER_TICK = 0.5
 const CREATE_HAND_X_AMPLITUDE = 5
 const CREATE_HAND_Y_AMPLITUDE = 2.5
+const CREATE_REVEAL_REMAINDER = Math.fround(0.9200000166893005)
+const CREATE_REVEAL_TICKS = 100
+const CREATE_ELEMENT_REVEAL_ORIGIN: CreateHandOffset = { x: 775, y: 510 }
+const CREATE_DISCIPLINE_REVEAL_OFFSET_X = 50
 
 const ZERO_OFFSET: CreateHandOffset = { x: 0, y: 0 }
 const LEFT_ENTRY_OFFSET: CreateHandOffset = { x: -50, y: 200 }
@@ -60,6 +71,11 @@ const SELECTED_ELEMENT_START: Readonly<Record<WizardElement, CreateHandOffset>> 
   ether: { x: 826.303, y: 369.046 },
   fire: { x: 924.909, y: 515.235 },
   water: { x: 650.644, y: 593.879 },
+}
+const DISCIPLINE_END: Readonly<Record<'arcane' | 'body' | 'mind', CreateHandOffset>> = {
+  arcane: { x: 1025, y: 460 },
+  body: { x: 875, y: 460 },
+  mind: { x: 725, y: 460 },
 }
 const SELECTED_ELEMENT_SPLINE = Object.fromEntries(
   Object.entries(SELECTED_ELEMENT_START).map(([element, start]) => [
@@ -197,6 +213,55 @@ function rightSelectionStateAt(elapsed: number): NativeOpenState {
     51,
     0x51ec7,
   )
+}
+
+function revealTickCount(elapsedMs: number, startMs: number): number {
+  if (elapsedMs < startMs) return 0
+  return Math.min(
+    CREATE_REVEAL_TICKS,
+    Math.floor((elapsedMs - startMs) / CREATE_FIXED_TICK_MS) + 1,
+  )
+}
+
+function revealRemainderAt(ticks: number): number {
+  let remainder = Math.fround(1)
+  for (let tick = 0; tick < ticks; tick += 1) {
+    remainder = Math.fround(remainder * CREATE_REVEAL_REMAINDER)
+  }
+  return remainder
+}
+
+/** Stock five-way picker fan-out from the raised left hand. */
+export function createElementRevealMotionAt(
+  element: WizardElement,
+  elapsedMs: number,
+): CreateElementRevealMotion {
+  const ticks = revealTickCount(Math.max(0, elapsedMs), CREATE_ENTRY_RAISED_MS)
+  const remainder = revealRemainderAt(ticks)
+  const settled = SELECTED_ELEMENT_START[element]
+  return {
+    opacity: ticks / CREATE_REVEAL_TICKS,
+    position: {
+      x: settled.x + (CREATE_ELEMENT_REVEAL_ORIGIN.x - settled.x) * remainder,
+      y: settled.y + (CREATE_ELEMENT_REVEAL_ORIGIN.y - settled.y) * remainder,
+    },
+  }
+}
+
+/** Stock discipline glyph slide from fifty pixels right of its resting X. */
+export function createDisciplineRevealMotionAt(
+  discipline: keyof typeof DISCIPLINE_END,
+  elapsedMs: number,
+): CreateHandOffset {
+  const ticks = revealTickCount(
+    Math.max(0, elapsedMs),
+    CREATE_SELECTION_RIGHT_RAISED_MS,
+  )
+  const settled = DISCIPLINE_END[discipline]
+  return {
+    x: settled.x + CREATE_DISCIPLINE_REVEAL_OFFSET_X * revealRemainderAt(ticks),
+    y: settled.y,
+  }
 }
 
 /** Native Create-state hand drift, sampled on the original 100 Hz update. */

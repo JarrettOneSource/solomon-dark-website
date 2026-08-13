@@ -424,11 +424,12 @@
 
 .create-menu-discipline {
   position: absolute;
-  top: 51.111111%;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
+  transform: translate(-50%, -50%);
+  will-change: top, left;
 }
 
 .create-menu-discipline:hover,
@@ -444,12 +445,11 @@
 .create-menu-discipline img {
   display: block;
   width: 100%;
-  transform: translate(-50%, -50%);
 }
 
-.create-menu-discipline-arcane { left: 64.0625%; width: 13.625%; }
-.create-menu-discipline-body { left: 54.6875%; width: 14.875%; }
-.create-menu-discipline-mind { left: 45.3125%; width: 14.1875%; }
+.create-menu-discipline-arcane { width: 13.625%; }
+.create-menu-discipline-body { width: 14.875%; }
+.create-menu-discipline-mind { width: 14.1875%; }
 
 .create-menu-element {
   position: absolute;
@@ -458,6 +458,8 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+  transform: translate(-50%, -50%);
+  will-change: top, left, opacity;
 }
 
 .create-menu-element:hover,
@@ -484,32 +486,22 @@
 }
 
 .create-menu-element-earth {
-  top: 41%;
-  left: 36.5%;
   width: 9.375%;
 }
 
 .create-menu-element-ether {
-  top: 35.444444%;
-  left: 47.125%;
   width: 9.375%;
 }
 
 .create-menu-element-fire {
-  top: 51.222222%;
-  left: 54.25%;
   width: 7.25%;
 }
 
 .create-menu-element-water {
-  top: 60.888889%;
-  left: 36%;
   width: 9.8125%;
 }
 
 .create-menu-element-air {
-  top: 67.888889%;
-  left: 47.0625%;
   width: 6%;
 }
 

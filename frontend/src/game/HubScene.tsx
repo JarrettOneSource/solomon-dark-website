@@ -8,14 +8,21 @@ import {
   hubColorCss,
   hubFountainParticleAlpha,
   hubMarkerAlpha,
+  hubPotionTraderActorFrameAt,
+  hubPotionTraderBalloonFrameAt,
+  hubPotionTraderBalloonOffsetYAt,
   hubSealColors,
   hubStatueOffsets,
   hubStudentHeadOffset,
   hubStudentPropOffset,
 } from './hub-presentation.ts'
 import {
+  HUB_COURTYARD_FOREGROUND_DEPTH,
   HUB_SPAWN_ROOF_DEPTH,
-  HUB_USEFUL_THYNGS_DEPTH,
+  HUB_USEFUL_THYNGS_BALLOON_DEPTH,
+  HUB_USEFUL_THYNGS_COUNTER_DEPTH,
+  HUB_USEFUL_THYNGS_FRONT_DEPTH,
+  HUB_USEFUL_THYNGS_MARKER_DEPTH,
   HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   hubActorDepth,
 } from './hub-depth.ts'
@@ -137,6 +144,21 @@ function HudSlot({ src }: { src: string }) {
   return <img className="hub-hud-slot" src={src} alt="" />
 }
 
+function InventoryCount({ count, variant }: { count: number; variant: 'blue' | 'red' }) {
+  return (
+    <span
+      className={`hub-hud-count hub-hud-count-${variant}`}
+      style={{
+        backgroundImage: `url("${hub.hud.inventoryDigits}")`,
+        backgroundPosition: `${-count * 8}px 0`,
+      }}
+      aria-hidden
+    />
+  )
+}
+
+const HUB_XP_PROGRESS = 0.45
+
 function renderFountainParticles(
   container: HTMLSpanElement,
   elements: Map<number, HTMLImageElement>,
@@ -180,6 +202,8 @@ export default function HubScene({
   const fountainParticleElementsRef = useRef(new Map<number, HTMLImageElement>())
   const statueAuraRef = useRef<HTMLImageElement>(null)
   const statueBodyRef = useRef<HTMLImageElement>(null)
+  const potionTraderBalloonsRef = useRef<HTMLSpanElement>(null)
+  const potionTraderSpriteRef = useRef<HTMLSpanElement>(null)
   const sealCoreRef = useRef<HTMLSpanElement>(null)
   const sealGlyphsRef = useRef<HTMLSpanElement>(null)
   const keysRef = useRef(new Set<string>())
@@ -191,6 +215,7 @@ export default function HubScene({
     ...initialSnapshot.world.students,
   ])
   const [stageScale, setStageScale] = useState(1)
+  const [matchReady, setMatchReady] = useState(false)
 
   const playTeacherSummon = useCallback((releaseIndex: number) => {
     const player = snapshotRef.current.players[playerId]
@@ -274,6 +299,18 @@ export default function HubScene({
       }
       const ambientState = snapshot.world.ambient
 
+      if (potionTraderSpriteRef.current) {
+        const traderFrame = hubPotionTraderActorFrameAt(snapshot.tick)
+        potionTraderSpriteRef.current.style.backgroundPosition = `${-traderFrame * 35}px 0`
+        potionTraderSpriteRef.current.dataset.frame = `${traderFrame}`
+      }
+      if (potionTraderBalloonsRef.current) {
+        const balloonFrame = hubPotionTraderBalloonFrameAt(snapshot.tick)
+        potionTraderBalloonsRef.current.style.backgroundPosition = `${-balloonFrame * 54}px 0`
+        potionTraderBalloonsRef.current.style.transform = `translateY(${hubPotionTraderBalloonOffsetYAt(snapshot.tick)}px)`
+        potionTraderBalloonsRef.current.dataset.frame = `${balloonFrame}`
+      }
+
       if (worldRef.current) {
         worldRef.current.style.setProperty('--hub-marker-opacity', `${hubMarkerAlpha(ambientState)}`)
       }
@@ -342,6 +379,8 @@ export default function HubScene({
 
   const frameStyle = { transform: `scale(${stageScale})` } as CSSProperties
   const sceneStyle = {
+    '--hub-potion-balloons-sheet': `url("${hub.tent.balloons}")`,
+    '--hub-potion-trader-sheet': `url("${hub.npcs.potion}")`,
     '--hub-student-head-sheet': `url("${hub.npcs.studentHead}")`,
   } as CSSProperties
   const initialPlayer = initialSnapshot.players[playerId]
@@ -394,7 +433,7 @@ export default function HubScene({
           <img
             className="hub-tent-layer hub-tent-back"
             src={hub.tent.back}
-            style={{ zIndex: HUB_USEFUL_THYNGS_DEPTH }}
+            style={{ zIndex: HUB_USEFUL_THYNGS_COUNTER_DEPTH }}
             alt=""
             draggable={false}
           />
@@ -427,7 +466,14 @@ export default function HubScene({
           />
 
           <Actor alt="Perk witch" src={hub.npcs.perkWitch} marker="help" x={1340} y={280} />
-          <Actor alt="Potion trader" src={hub.npcs.potion} marker="help" x={1397} y={664} />
+          <div
+            className="hub-actor hub-potion-trader"
+            style={{ left: 1397, top: 664, zIndex: hubActorDepth(664) }}
+            role="img"
+            aria-label="Potion trader"
+          >
+            <span ref={potionTraderSpriteRef} className="hub-potion-trader-sprite" data-frame="0" />
+          </div>
           <Actor alt="Annalist" src={hub.npcs.annalist} marker="talk" x={895.5} y={455.5} />
           <Actor alt="Items trader" src={hub.npcs.items} marker="help" x={1700.5} y={449.5} />
           <HubTeacher
@@ -475,7 +521,28 @@ export default function HubScene({
           <img
             className="hub-tent-layer hub-tent-front"
             src={hub.tent.front}
-            style={{ zIndex: HUB_USEFUL_THYNGS_DEPTH }}
+            style={{ zIndex: HUB_USEFUL_THYNGS_FRONT_DEPTH }}
+            alt=""
+            draggable={false}
+          />
+          <span
+            ref={potionTraderBalloonsRef}
+            className="hub-tent-balloons"
+            style={{ zIndex: HUB_USEFUL_THYNGS_BALLOON_DEPTH }}
+            data-frame="0"
+            aria-hidden
+          />
+          <img
+            className="hub-actor-marker hub-potion-trader-marker"
+            src={hub.markers.help.right}
+            style={{ zIndex: HUB_USEFUL_THYNGS_MARKER_DEPTH }}
+            alt=""
+            draggable={false}
+          />
+          <img
+            className="hub-courtyard-foreground"
+            src={hub.foreground.courtyard}
+            style={{ zIndex: HUB_COURTYARD_FOREGROUND_DEPTH }}
             alt=""
             draggable={false}
           />
@@ -490,6 +557,11 @@ export default function HubScene({
           <img className="hub-hud-primary" src={hub.primary[element]} alt={`${element} primary spell`} />
           <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
 
+          <div className="hub-hud-secondary" aria-label="Acid Rain, right mouse button">
+            <img className="hub-hud-secondary-ability" src={hub.hud.secondaryAcidRain} alt="Acid Rain" />
+            <img className="hub-hud-secondary-mouse" src={hub.hud.mouseRight} alt="Right mouse button" />
+          </div>
+
           <div className="hub-hud-loadout" aria-label="Equipped spells">
             <HudSlot src={hub.hud.npcs.annalist} />
             <HudSlot src={hub.hud.npcs.perkWitch} />
@@ -500,18 +572,43 @@ export default function HubScene({
 
           <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
             <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="3 health potions" />
-            <span className="hub-hud-count">3</span>
-            <img src={hub.hud.backpack} alt="Backpack" />
-            <span className="hub-hud-inventory-divider" />
-            <img src={hub.hud.tome} alt="Spellbook" />
+            <InventoryCount count={3} variant="red" />
+            <img className="hub-hud-backpack" src={hub.hud.backpack} alt="Backpack" />
+            <div
+              className="hub-hud-xp"
+              role="progressbar"
+              aria-label="Experience"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={HUB_XP_PROGRESS * 100}
+            >
+              <img
+                className="hub-hud-xp-fill"
+                src={hub.hud.xpFill}
+                style={{ clipPath: `inset(${HUB_XP_PROGRESS * 100}% 0 0)` }}
+                alt=""
+              />
+              <img className="hub-hud-xp-frame" src={hub.hud.xpFrame} alt="" />
+            </div>
+            <img className="hub-hud-tome" src={hub.hud.tome} alt="Spellbook" />
             <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="4 mana potions" />
-            <span className="hub-hud-count hub-hud-count-blue">4</span>
+            <InventoryCount count={4} variant="blue" />
           </div>
 
-          <div className="hub-hud-map">
-            <img src={hub.hud.parchment} alt="College map" />
-            <span className="hub-hud-compass">N<span>E</span><span>S</span><span>W</span></span>
-          </div>
+          <button
+            type="button"
+            className="hub-hud-map"
+            aria-label={matchReady ? 'Leave match queue' : 'Ready for match'}
+            aria-pressed={matchReady}
+            onClick={() => setMatchReady((ready) => !ready)}
+          >
+            <img className="hub-hud-map-parchment" src={hub.hud.parchment} alt="" />
+            <img
+              className="hub-hud-map-state"
+              src={matchReady ? hub.hud.mapPlay : hub.hud.mapCompass}
+              alt=""
+            />
+          </button>
         </div>
       </div>
     </div>

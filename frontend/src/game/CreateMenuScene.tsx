@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } f
 import { createMenu } from '../lib/assets'
 import ElementVfx from './ElementVfx'
 import {
-  CREATE_ENTRY_SETTLED_MS,
-  CREATE_SELECTION_SETTLED_MS,
+  CREATE_ENTRY_ANIMATION_MS,
+  CREATE_SELECTION_ANIMATION_MS,
+  createDisciplineRevealMotionAt,
+  createElementRevealMotionAt,
   createEntryMotionAt,
   createHandIdleOffsetAt,
   createSelectedElementMotionAt,
@@ -34,6 +36,9 @@ const HAND_SOURCE: Record<CreateHandPose, string> = {
   raised: createMenu.handRaised,
 }
 
+const ELEMENTS = ['earth', 'ether', 'fire', 'water', 'air'] as const
+const DISCIPLINES = ['arcane', 'body', 'mind'] as const
+
 const FALLING_STARS = Array.from({ length: 50 }, (_, index) => ({
   delay: (index * 0.067) % 1.25,
   duration: 2.6 + (index * 0.19) % 2.1,
@@ -58,6 +63,9 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
   const [motionMs, setMotionMs] = useState(0)
   const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
+  const motionDuration = selectedElement
+    ? CREATE_SELECTION_ANIMATION_MS
+    : CREATE_ENTRY_ANIMATION_MS
   onStartRef.current = onStart
 
   useEffect(() => {
@@ -83,14 +91,11 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
     if (!handsReady) return
 
     const startedAt = performance.now()
-    const duration = selectedElement
-      ? CREATE_SELECTION_SETTLED_MS
-      : CREATE_ENTRY_SETTLED_MS
     let animationFrame = 0
     let previousElapsed = 0
 
     const update = (now: number) => {
-      const elapsed = Math.min(now - startedAt, duration)
+      const elapsed = Math.min(now - startedAt, motionDuration)
       playCreateAudioEvents(
         audio,
         selectedElement
@@ -99,13 +104,13 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
       )
       setMotionMs(elapsed)
       previousElapsed = elapsed
-      if (elapsed < duration) animationFrame = requestAnimationFrame(update)
+      if (elapsed < motionDuration) animationFrame = requestAnimationFrame(update)
     }
 
     setMotionMs(0)
     animationFrame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(animationFrame)
-  }, [audio, handsReady, selectedElement])
+  }, [audio, handsReady, motionDuration, selectedElement])
 
   useEffect(() => () => {
     audio.pauseStream('start-cast')
@@ -183,7 +188,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
       data-element={selectedElement ?? undefined}
       data-hands-ready={handsReady}
       data-finalizing={pendingDiscipline !== null}
-      data-motion-settled={motion.settled}
+      data-motion-settled={motionMs >= motionDuration}
       aria-label="New wizard loadout selection"
     >
       <button
@@ -262,17 +267,24 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
             data-visible={motion.disciplinesVisible}
             aria-label="Choose your discipline"
           >
-            {(['arcane', 'body', 'mind'] as const).map((discipline) => (
-              <button
-                key={discipline}
-                type="button"
-                className={`create-menu-discipline create-menu-discipline-${discipline}`}
-                disabled={pendingDiscipline !== null}
-                onClick={() => selectDiscipline(discipline)}
-              >
-                <img src={createMenu.disciplines[discipline]} alt={discipline} />
-              </button>
-            ))}
+            {DISCIPLINES.map((discipline) => {
+              const position = createDisciplineRevealMotionAt(discipline, motionMs)
+              return (
+                <button
+                  key={discipline}
+                  type="button"
+                  className={`create-menu-discipline create-menu-discipline-${discipline}`}
+                  style={{
+                    left: `${position.x / 16}cqw`,
+                    top: `${position.y / 9}cqh`,
+                  }}
+                  disabled={pendingDiscipline !== null}
+                  onClick={() => selectDiscipline(discipline)}
+                >
+                  <img src={createMenu.disciplines[discipline]} alt={discipline} />
+                </button>
+              )
+            })}
           </div>
           <img
             src={createMenu.chooseDiscipline}
@@ -284,26 +296,25 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
       ) : (
         <>
           <div className="create-menu-elements" data-visible={motion.elementsVisible} aria-label="Choose your element">
-            <button type="button" className="create-menu-element create-menu-element-earth" onClick={() => selectElement('earth')}>
-              <ElementVfx element="earth" variant="picker" />
-              <img src={createMenu.elements.earth} alt="Earth" />
-            </button>
-            <button type="button" className="create-menu-element create-menu-element-ether" onClick={() => selectElement('ether')}>
-              <ElementVfx element="ether" variant="picker" />
-              <img src={createMenu.elements.ether} alt="Ether" />
-            </button>
-            <button type="button" className="create-menu-element create-menu-element-fire" onClick={() => selectElement('fire')}>
-              <ElementVfx element="fire" variant="picker" />
-              <img src={createMenu.elements.fire} alt="Fire" />
-            </button>
-            <button type="button" className="create-menu-element create-menu-element-water" onClick={() => selectElement('water')}>
-              <ElementVfx element="water" variant="picker" />
-              <img src={createMenu.elements.water} alt="Water" />
-            </button>
-            <button type="button" className="create-menu-element create-menu-element-air" onClick={() => selectElement('air')}>
-              <ElementVfx element="air" variant="picker" />
-              <img src={createMenu.elements.air} alt="Air" />
-            </button>
+            {ELEMENTS.map((pickerElement) => {
+              const reveal = createElementRevealMotionAt(pickerElement, motionMs)
+              return (
+                <button
+                  key={pickerElement}
+                  type="button"
+                  className={`create-menu-element create-menu-element-${pickerElement}`}
+                  style={{
+                    left: `${reveal.position.x / 16}cqw`,
+                    opacity: reveal.opacity,
+                    top: `${reveal.position.y / 9}cqh`,
+                  }}
+                  onClick={() => selectElement(pickerElement)}
+                >
+                  <ElementVfx element={pickerElement} variant="picker" />
+                  <img src={createMenu.elements[pickerElement]} alt={pickerElement} />
+                </button>
+              )
+            })}
           </div>
           <img
             src={createMenu.chooseElement}

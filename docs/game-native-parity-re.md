@@ -2341,3 +2341,247 @@ RE lead, not evidence that the system should be patched heuristically.
 
 Later gameplay, trader interaction, combat, and non-default equipment remain
 outside this parity milestone rather than unresolved parts of it.
+
+## 2026-08-12 Hub HUD, loadout reveal, and Useful Thyngs parity
+
+### Courtyard match-start control
+
+The Courtyard match-start control is owned by `FUN_0050DBF0`
+(`0x0050DBF0`). Its fixed parchment is College record `16`, while the state
+overlay is another registered College image: record `18` is the compass and
+record `17` is the play triangle. The three records share a logical
+`121 x 118` registration. Record `17` has a raw `55 x 51` crop at registered
+bounds `(39,34)..(94,85)`; record `18` has an `89 x 88` crop at
+`(15,15)..(104,103)`. Clean native Courtyard captures show both valid states:
+the fresh Hub uses the compass and the selected/ready state uses the triangle.
+
+Implementation consequence: the web control must composite the stock
+registered overlay over College `16`; a CSS-drawn compass and hover-only state
+do not model the native owner. Until the later match scene exists, the web
+button owns a local ready toggle so both recovered visual states remain
+reachable without inventing a transition destination.
+
+Evidence: fresh read-only decompilation of `0x0050DBF0`, stock College image
+records, `/mnt/c/Users/User/AppData/Local/Temp/solomon-stock-hub-fresh.png`,
+and `/mnt/c/Users/User/AppData/Local/Temp/native-hub-air-0811.png`.
+
+Confidence: high for image ownership, registration, and the two visual states;
+the downstream matchmaking transition remains outside the current web scene.
+
+### Courtyard secondary ability and mouse indicator
+
+The selected Air loadout in the clean native Hub presents Acid Rain at the
+lower left. The native skill catalog maps Acid Rain to Skills record `99`, a
+`45 x 43` glyph. `BeltButton::Present` (`0x005D3E10`) uses UI records
+`98..100` for left, middle, and right mouse indicators respectively, so the
+indicator under this secondary ability is UI record `100` (`22 x 31`), not UI
+record `107`. In the `1600 x 900` native client the glyph begins at about
+`(475,837)` and the right-button indicator at `(489,879)`; its lower edge is
+intentionally clipped by the viewport.
+
+The Hub's BeltButton state is intentionally subdued. Near the start of
+`0x005D3E10`, a clear gameplay flag at `gameplay + 0x1ac2` installs RGB
+`(0.25,0.25,0.25)` with alpha `1` before the skill glyph path. Fully opaque
+white pixels from Skills `99` land near value `123` over local Courtyard
+pixels near `59`, confirming quarter-white additive composition rather than an
+opaque white browser image. The mouse record is submitted after the relevant
+draw-state reset and keeps its source color.
+
+Implementation consequence: this is a distinct secondary-ability HUD slot,
+not discipline decoration and not a CSS mouse drawing. The current Air
+loadout presents Skills `99` at quarter-strength additive composition and UI
+`100` at source color, both at their natural sizes and recovered screen
+anchors. A broader mutable secondary-spell loadout remains future work.
+
+Evidence: `Mod Loader/docs/reverse-engineering/native-skills-and-spells.md`,
+read-only decompilation of `0x005D3E10`, scalar value `0.25`, Skills/UI source
+records, native pixel compositing measurements, and
+`/mnt/c/Users/User/AppData/Local/Temp/native-hub-air-0811.png`.
+
+Confidence: high for source records, ownership, size, and placement; the
+native save-state rule choosing Acid Rain was not generalized beyond the
+observed Air loadout.
+
+### Experience meter and inventory digit plaques
+
+`FUN_005C8740` (`0x005C8740`) owns the narrow experience meter between the
+backpack and spellbook. UI record `81` is the `4 x 48` fill and UI record `82`
+is the `12 x 56` frame. The renderer computes the unfilled vertical fraction
+as `1 - (current - lower) / (upper - lower)`, using the progression fields at
+offsets `+0x34`, `+0x38`, and `+0x3c`. The frame is displaced by `(64,4)` from
+the inventory origin; the fill receives a further `(3.5,4)` inset. The exact
+float constants are `64`, `4`, and `3.5`. Template matching places the frame
+at client coordinate `(798,828)` in the clean `1600 x 900` capture.
+
+Potion quantities are also stock bitmaps rather than browser text. Skills
+record `7` is the `79 x 14` `0123456789` strip. The native inventory presents
+each value as an approximately `8 x 14` gold plaque with a dark glyph, the
+inverse/tinted form of that source mask. In the same capture the red and blue
+plaques begin at `(672,885)` and `(923,885)`. The associated natural-size item
+anchors are red potion `(651,833)`, backpack `(734,824)`, spellbook `(814,824)`,
+and blue potion `(903,833)`.
+
+The ten source glyphs are variable-width runs separated by empty columns, not
+ten uniform slices: notably `1` occupies three source columns while `2`, `4`,
+and `5` occupy eight. A fixed eight-pixel partition cuts the left stroke from
+`4` and mixes neighboring antialiasing into other values. The extraction step
+therefore identifies all ten occupied runs, centers each run in an `8 x 14`
+plaque cell, and only then applies the recovered inverse presentation.
+
+Implementation consequence: the web HUD uses fixed native client anchors,
+UI `81/82`, a bottom-clipped fill, and an extracted ten-cell plaque strip.
+Georgia text, the synthetic divider, and flex-distributed inventory geometry
+are removed. The web's existing quantities remain gameplay state; only their
+native presentation changes. The current XP fraction is a scene-state seed
+until progression persistence is implemented.
+
+Evidence: read-only decompilation of `0x005C8740`, scalar dumps for the three
+offset constants, Skills/UI source records, source-column occupancy, and
+pixel/template matching against
+`/mnt/c/Users/User/AppData/Local/Temp/native-hub-air-0811.png`.
+
+Confidence: high for records, formula, registration, and screen geometry;
+medium for the exact palette produced by the native digit tint pipeline and
+for the seed XP value in the captured save state.
+
+### Courtyard lower-wall painter order
+
+`Courtyard::Present` (`0x0051EB60`) submits the resident actors and then draws
+College flat records `19`, `30`, `31`, `21`, and `22`. They are fixed world
+geometry using the normal Courtyard camera transform; no separate parallax
+owner was found. Records `2`, `20`, `23`, and `25` remain the spawn-roof group
+at the actor boundary. The web had flattened `19`, `30`, and `31` into the
+background and combined `21/22` with the spawn roof, so actors could appear on
+the wrong side of the bottom castle wall.
+
+Implementation consequence: the five recovered records become a distinct
+fixed foreground layer submitted after all actors, while the spawn roof keeps
+only its four recovered members. Their depth ordering, not a guessed parallax
+offset, fixes the castle-wall occlusion.
+
+Evidence: fresh read-only decompilation of `0x0051EB60`, College flat metadata,
+and native/web Courtyard comparison captures.
+
+Confidence: high for record membership, camera ownership, and painter order.
+
+### Useful Thyngs trader presentation
+
+The figure behind the Useful Thyngs counter is `PotionGuy`, constructed by
+`0x005023A0`, updated by `0x0050B110`, and presented by `0x0051C1A0` through
+vtable `0x00791844`. Its authored root is `(1397,664)`. The renderer submits
+College record `34` at offset `(10,60)`, then one actor frame from records
+`160..164` at `(x + 10,y)`, then the tent front (College `32`) at `(10,60)`,
+followed by a separately animated balloon/string frame from records `54..58`.
+The auxiliary painter at `0x00502420` submits tent shadow record `33` at
+`(10,60)`.
+
+The help bubble is not confined beneath that tent painter stack. The clean
+native capture shows the right-tail help marker (College `61`) above the tent
+front, centered at approximately actor-root offset `(38,-62)`. With the actor
+root and camera already aligned, this predicts client center `(1381,722)` and
+matches the observed marker. Nesting it in the actor's `1664` stacking context
+lets College `32` at depth `1700` hide it, which is the web absence seen after
+the trader sprite itself was corrected.
+
+Records `160..164` each have a logical `350 x 350` registration and a visible
+`35 x 49` crop at `(153,129)..(188,178)`. Relative to the authored root, that
+places the cropped bitmap at `(-12,-46)`. The selector for this actor bank is
+the inherited NPC idle state at object offset `+0x144`, not PotionGuy's custom
+`+0x174` accumulator. `FUN_00501610` rolls `randomInt(200) == 2` while idle;
+on a hit it chooses angular speed `(randomFloat(3) + 1) * 0.45`, advances a
+`0..180` degree pulse, and selects
+`trunc((4 - 0.01) * sin(phase degrees))`. Thus the figure intermittently moves
+through frames `0..3` and returns, rather than continuously ping-ponging.
+
+PotionGuy's `+0x174` accumulator owns College records `54..58`. It advances by
+`0.05` per `10 ms` fixed tick, reverses at the five-frame bank edges, and holds
+each endpoint for `100` ticks. The registered balloon crop also receives the
+presentation position `(10, 50 + 2 * sin(globalTick * 0.5 degrees))`. Its
+five registered frames share a tight union at logical bounds
+`(1310,466)..(1364,538)`, placing that union at world `(1320,516)` before the
+two-pixel drift. Native template matching independently reproduces the same
+offset relative to College record `32`; reusing the tent's `(10,60)` offset
+puts the balloons ten world pixels too low. The web's generic actor
+registration was therefore wrong, but the more visible defect was painter
+ownership: it placed record `34` above the trader and hid the hands.
+
+Implementation consequence: PotionGuy receives a dedicated registered-frame
+painter. Tent shadow remains behind, record `34` renders immediately below the
+trader, and record `32` renders above it. A deterministic web visual stream
+replays the recovered stochastic NPC pulse without coupling it to gameplay
+RNG, while the independent five-frame balloon strip replays `+0x174` and its
+vertical sine offset from the shared Hub tick. College `61` is a separate
+final interaction-marker painter above the tent kit. `ItemsGuy` is a different
+actor and is not substituted here.
+
+Evidence: fresh read-only decompilation and instruction traces of `0x00501610`,
+`0x005016E0`, `0x005023A0`, `0x00502420`, `0x0050B110`, and `0x0051C1A0`;
+College record geometry; native/web crops
+`/tmp/native-items-tent-3x-019ff840.png` and
+`/tmp/web-items-tent-3x-019ff840.png`; and frame montage
+`/tmp/potion-guy-160-164-montage-019ff840.png`.
+
+Confidence: high for actor identity, both source banks, registration, offsets,
+painter order, pulse formulas, and endpoint holds. The web visual RNG seed is
+intentionally deterministic rather than an attempt to reproduce the stock
+process-wide RNG stream.
+
+### Create-menu element and discipline reveal trajectories
+
+The Create menu does not merely make the choices visible when each hand is
+raised. Element reveal begins at `1340 ms` from a shared origin `(775,510)`.
+On each `10 ms` fixed update its remainder is multiplied by
+`0.9200000166893005`; position progress is `1 - remainder`. Alpha begins at
+zero and advances by `0.01` per update. The first update occurs on the start
+boundary, so the tick count is zero before the boundary and
+`floor((elapsed - start) / 10) + 1` afterward. Settled centers are Ether
+`(826.303,369.046)`, Fire `(924.909,515.235)`, Air `(816.346,654.189)`, Water
+`(650.644,593.879)`, and Earth `(656.798,417.651)`.
+
+Discipline reveal begins at `1640 ms`. Its remainder follows the same `0.92`
+recurrence, but the glyphs are fully opaque and move only on X from
+`settledX + 50 * remainder`. Settled centers are Arcane `(1025,460)`, Body
+`(875,460)`, and Mind `(725,460)`. The native opacity field adjacent to this
+state is not consumed by the discipline glyph painter.
+
+Implementation consequence: pure fixed-tick samplers own both trajectories,
+and the Create animation remains scheduled through `2330 ms` for elements or
+`2630 ms` for disciplines instead of stopping when the hands settle. JSX uses
+the recovered centers rather than top-left approximations; element opacity and
+discipline X motion come from the same elapsed scene clock as the hands.
+
+Evidence: read-only decompilation and scalar recovery for the Create update
+owners, stock `60 fps` captures
+`/mnt/c/Users/User/AppData/Local/Temp/native-create-entry-60fps-0811.mkv` and
+`/mnt/c/Users/User/AppData/Local/Temp/native-water-discipline-60fps-0811.mkv`,
+and frame-by-frame trajectory comparison.
+
+Confidence: high for start times, recurrence, alpha step, origins, settled
+centers, and fixed-tick inclusivity.
+
+### 2026-08-12 parity validation receipt
+
+The isolated web build was exercised at `1600 x 900` after the recovered
+assets, registrations, fixed-tick samplers, and painter ordering were wired.
+The final Hub receipt recorded the Acid Rain control at `(475,837)` with
+`45 x 43` geometry, quarter opacity and additive composition; UI record `100`
+at `(489,879)` with `22 x 31` geometry; the PotionGuy visible crop at native
+screen registration; College record `61` above the tent kit; the inventory
+digit strip; the UI `81/82` XP stack; and the College `17` match-start state.
+The browser reported no console errors, page errors, or failed requests.
+
+The final visual checks used `/tmp/web-parity-hub-final2-019ff840.png`,
+`/tmp/web-parity-hub-final-hud-crop-019ff840.png`, and
+`/tmp/web-parity-useful-final2-2x-019ff840.png` against the corresponding clean
+native captures. The final browser traces observed actor frames `0..3` and
+balloon frames `0..4` as independent streams, and template matching reproduced
+the balloon/tent registration to one client pixel before their intentionally
+different sine phases. Create-menu receipts verified both an in-flight and a
+settled frame for elements and disciplines, including the recovered settled
+centers and the discipline fifty-pixel approach path.
+
+The repository's canonical complete gate, `./scripts/validate.sh`, passed:
+backend build with zero warnings and errors, all `22` backend contracts, the
+canonical lint/boundary gate, all `89` frontend tests, and both production
+frontend builds. The seven Fast Refresh lint notices predate this work and
+remain warnings rather than gate failures.

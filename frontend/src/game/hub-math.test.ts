@@ -10,9 +10,12 @@ import {
   moveWithHubCollision,
 } from './core-kernels/hub-math.ts'
 import {
+  HUB_COURTYARD_FOREGROUND_DEPTH,
   HUB_SPAWN_ROOF_DEPTH,
-  HUB_USEFUL_THYNGS_DEPTH,
-  HUB_USEFUL_THYNGS_ROOT_Y,
+  HUB_USEFUL_THYNGS_BALLOON_DEPTH,
+  HUB_USEFUL_THYNGS_COUNTER_DEPTH,
+  HUB_USEFUL_THYNGS_FRONT_DEPTH,
+  HUB_USEFUL_THYNGS_MARKER_DEPTH,
   HUB_USEFUL_THYNGS_SHADOW_DEPTH,
   hubActorDepth,
 } from './hub-depth.ts'
@@ -21,6 +24,9 @@ import {
   HUB_STATUE_ROOT,
   hubFountainParticleAlpha,
   hubMarkerAlpha,
+  hubPotionTraderActorFrameAt,
+  hubPotionTraderBalloonFrameAt,
+  hubPotionTraderBalloonOffsetYAt,
   hubSealColors,
   hubStatueOffsets,
   hubStudentHeadOffset,
@@ -80,12 +86,51 @@ test('sorts actors through the stock spawn-roof painter boundary', () => {
   assert.ok(hubActorDepth(356) > HUB_SPAWN_ROOF_DEPTH)
 })
 
-test('sorts Useful Thyngs against its registered ground root', () => {
-  assert.equal(HUB_USEFUL_THYNGS_ROOT_Y, 700)
-  assert.equal(HUB_USEFUL_THYNGS_DEPTH, 1700)
+test('sorts each Useful Thyngs painter around PotionGuy', () => {
+  assert.equal(HUB_USEFUL_THYNGS_COUNTER_DEPTH, 1663)
+  assert.equal(hubActorDepth(664), 1664)
+  assert.equal(HUB_USEFUL_THYNGS_FRONT_DEPTH, 1700)
+  assert.equal(HUB_USEFUL_THYNGS_BALLOON_DEPTH, 1701)
+  assert.equal(HUB_USEFUL_THYNGS_MARKER_DEPTH, 1702)
   assert.equal(HUB_USEFUL_THYNGS_SHADOW_DEPTH, 900)
-  assert.ok(hubActorDepth(699) < HUB_USEFUL_THYNGS_DEPTH)
-  assert.ok(hubActorDepth(701) > HUB_USEFUL_THYNGS_DEPTH)
+  assert.ok(HUB_USEFUL_THYNGS_COUNTER_DEPTH < hubActorDepth(664))
+  assert.ok(hubActorDepth(664) < HUB_USEFUL_THYNGS_FRONT_DEPTH)
+  assert.ok(HUB_USEFUL_THYNGS_FRONT_DEPTH < HUB_USEFUL_THYNGS_BALLOON_DEPTH)
+  assert.ok(HUB_USEFUL_THYNGS_BALLOON_DEPTH < HUB_USEFUL_THYNGS_MARKER_DEPTH)
+})
+
+test('submits the recovered lower Courtyard wall after every actor', () => {
+  assert.equal(HUB_COURTYARD_FOREGROUND_DEPTH, 4000)
+  assert.ok(HUB_COURTYARD_FOREGROUND_DEPTH > hubActorDepth(1024))
+})
+
+test('PotionGuy keeps the inherited stochastic actor pulse separate', () => {
+  assert.equal(hubPotionTraderActorFrameAt(-10), 0)
+  assert.equal(hubPotionTraderActorFrameAt(0), 0)
+  const frames = new Set(
+    Array.from({ length: 1_000 }, (_, tick) => hubPotionTraderActorFrameAt(tick)),
+  )
+  assert.deepEqual([...frames].sort(), [0, 1, 2, 3])
+})
+
+test('PotionGuy balloons replay their five-frame clock and vertical drift', () => {
+  assert.equal(hubPotionTraderBalloonFrameAt(-10), 0)
+  assert.equal(hubPotionTraderBalloonFrameAt(0), 0)
+  assert.equal(hubPotionTraderBalloonFrameAt(20), 1)
+  assert.equal(hubPotionTraderBalloonFrameAt(40), 1)
+  assert.equal(hubPotionTraderBalloonFrameAt(60), 2)
+  assert.equal(hubPotionTraderBalloonFrameAt(80), 3)
+  assert.equal(hubPotionTraderBalloonFrameAt(99), 4)
+  assert.equal(hubPotionTraderBalloonFrameAt(100), 4)
+  assert.equal(hubPotionTraderBalloonFrameAt(200), 4)
+  assert.equal(hubPotionTraderBalloonFrameAt(219), 3)
+  assert.equal(hubPotionTraderBalloonFrameAt(239), 2)
+  assert.equal(hubPotionTraderBalloonFrameAt(259), 1)
+  assert.equal(hubPotionTraderBalloonFrameAt(299), 0)
+  assert.equal(hubPotionTraderBalloonFrameAt(399), 0)
+  assert.equal(hubPotionTraderBalloonOffsetYAt(0), 0)
+  assert.ok(Math.abs(hubPotionTraderBalloonOffsetYAt(180) - 2) < 1e-12)
+  assert.ok(Math.abs(hubPotionTraderBalloonOffsetYAt(540) + 2) < 1e-12)
 })
 
 test('camera follows the player and clamps at every Courtyard edge', () => {

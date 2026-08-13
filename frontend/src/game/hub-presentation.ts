@@ -14,6 +14,19 @@ export interface HubColor {
 }
 
 const FOUNTAIN_ALPHA_LIMIT = 0.25
+const POTION_TRADER_ACTOR_CHECKPOINT_TICKS = 512
+const POTION_TRADER_ACTOR_RNG_SEED = 0x50b110
+const POTION_TRADER_ACTOR_TRIGGER_RANGE = 200
+const POTION_TRADER_ACTOR_TRIGGER_VALUE = 2
+const POTION_TRADER_ACTOR_PHASE_LIMIT = 180
+const POTION_TRADER_ACTOR_SPEED_BASE = 1
+const POTION_TRADER_ACTOR_SPEED_RANGE = 3
+const POTION_TRADER_ACTOR_SPEED_SCALE = Math.fround(0.44999998807907104)
+const POTION_TRADER_ACTOR_FRAME_SCALE = 4 - 0.01
+const POTION_TRADER_BALLOON_CHECKPOINT_TICKS = 398
+const POTION_TRADER_BALLOON_FRAME_COUNT = 5
+const POTION_TRADER_BALLOON_FRAME_STEP = Math.fround(0.05)
+const POTION_TRADER_BALLOON_ENDPOINT_HOLD_TICKS = 100
 const SEAL_CORE_TRACK: readonly HubColor[] = [
   { red: 1, green: 1, blue: 1, alpha: 1 },
   { red: 0, green: 1, blue: 1, alpha: 1 },
@@ -24,6 +37,120 @@ const SEAL_GLYPH_TRACK: readonly HubColor[] = [
   { red: 0.75, green: 1, blue: 1, alpha: 1 },
   { red: 1, green: 1, blue: 1, alpha: 1 },
 ]
+
+interface PotionTraderActorState {
+  active: boolean
+  phaseDegrees: number
+  rngState: number
+  speedDegrees: number
+}
+
+interface PotionTraderBalloonState {
+  direction: -1 | 1
+  frame: number
+  holdTicks: number
+}
+
+const POTION_TRADER_ACTOR_CHECKPOINTS: PotionTraderActorState[] = [{
+  active: false,
+  phaseDegrees: 0,
+  rngState: POTION_TRADER_ACTOR_RNG_SEED,
+  speedDegrees: 0,
+}]
+
+const POTION_TRADER_BALLOON_CHECKPOINTS: PotionTraderBalloonState[] = [{
+  direction: 1,
+  frame: 0,
+  holdTicks: 0,
+}]
+
+function nextPotionTraderActorRandom(
+  state: number,
+): { state: number; value: number } {
+  let value = state >>> 0
+  value ^= value << 13
+  value ^= value >>> 17
+  value ^= value << 5
+  value >>>= 0
+  return { state: value || 0x6d2b79f5, value: value / 0x100000000 }
+}
+
+function stepPotionTraderActor(state: PotionTraderActorState): PotionTraderActorState {
+  if (!state.active) {
+    const trigger = nextPotionTraderActorRandom(state.rngState)
+    if (Math.floor(trigger.value * POTION_TRADER_ACTOR_TRIGGER_RANGE)
+      !== POTION_TRADER_ACTOR_TRIGGER_VALUE) {
+      return { ...state, rngState: trigger.state }
+    }
+    const speed = nextPotionTraderActorRandom(trigger.state)
+    return {
+      active: true,
+      phaseDegrees: 0,
+      rngState: speed.state,
+      speedDegrees: Math.fround(
+        (speed.value * POTION_TRADER_ACTOR_SPEED_RANGE + POTION_TRADER_ACTOR_SPEED_BASE)
+          * POTION_TRADER_ACTOR_SPEED_SCALE,
+      ),
+    }
+  }
+
+  const phaseDegrees = Math.fround(state.phaseDegrees + state.speedDegrees)
+  if (phaseDegrees >= POTION_TRADER_ACTOR_PHASE_LIMIT) {
+    return { ...state, active: false, phaseDegrees: 0, speedDegrees: 0 }
+  }
+  return { ...state, phaseDegrees }
+}
+
+function potionTraderActorCheckpoint(index: number): PotionTraderActorState {
+  while (POTION_TRADER_ACTOR_CHECKPOINTS.length <= index) {
+    let state = POTION_TRADER_ACTOR_CHECKPOINTS.at(-1)!
+    for (let tick = 0; tick < POTION_TRADER_ACTOR_CHECKPOINT_TICKS; tick += 1) {
+      state = stepPotionTraderActor(state)
+    }
+    POTION_TRADER_ACTOR_CHECKPOINTS.push(state)
+  }
+  return POTION_TRADER_ACTOR_CHECKPOINTS[index]
+}
+
+function stepPotionTraderBalloon(
+  state: PotionTraderBalloonState,
+): PotionTraderBalloonState {
+  if (state.holdTicks > 0) {
+    return { ...state, holdTicks: state.holdTicks - 1 }
+  }
+
+  let direction = state.direction
+  let frame = Math.fround(
+    state.frame + Math.fround(direction * POTION_TRADER_BALLOON_FRAME_STEP),
+  )
+  let holdTicks = 0
+  if (frame >= POTION_TRADER_BALLOON_FRAME_COUNT) {
+    direction = -1
+    holdTicks = POTION_TRADER_BALLOON_ENDPOINT_HOLD_TICKS
+    frame = Math.fround(
+      frame - POTION_TRADER_BALLOON_FRAME_STEP - POTION_TRADER_BALLOON_FRAME_STEP,
+    )
+  }
+  if (frame < 0) {
+    direction = 1
+    holdTicks = POTION_TRADER_BALLOON_ENDPOINT_HOLD_TICKS
+    frame = Math.fround(
+      POTION_TRADER_BALLOON_FRAME_STEP + frame + POTION_TRADER_BALLOON_FRAME_STEP,
+    )
+  }
+  return { direction, frame, holdTicks }
+}
+
+function potionTraderBalloonCheckpoint(index: number): PotionTraderBalloonState {
+  while (POTION_TRADER_BALLOON_CHECKPOINTS.length <= index) {
+    let state = POTION_TRADER_BALLOON_CHECKPOINTS.at(-1)!
+    for (let tick = 0; tick < POTION_TRADER_BALLOON_CHECKPOINT_TICKS; tick += 1) {
+      state = stepPotionTraderBalloon(state)
+    }
+    POTION_TRADER_BALLOON_CHECKPOINTS.push(state)
+  }
+  return POTION_TRADER_BALLOON_CHECKPOINTS[index]
+}
 
 function interpolateColor(track: readonly HubColor[], phase: number): HubColor {
   const wrapped = ((phase % track.length) + track.length) % track.length
@@ -71,6 +198,42 @@ export function hubFountainParticleAlpha(particle: ProtocolFountainParticleState
 
 export function hubMarkerAlpha(state: ProtocolAmbientState): number {
   return Math.sin(state.markerPhaseDegrees * Math.PI / 180) * 0.25 + 0.75
+}
+
+/** PotionGuy's inherited stochastic NPC gesture pulse. */
+export function hubPotionTraderActorFrameAt(tick: number): number {
+  const fixedTick = Math.max(0, Math.floor(tick))
+  const checkpointIndex = Math.floor(fixedTick / POTION_TRADER_ACTOR_CHECKPOINT_TICKS)
+  let state = potionTraderActorCheckpoint(checkpointIndex)
+  const remainder = fixedTick % POTION_TRADER_ACTOR_CHECKPOINT_TICKS
+  for (let update = 0; update < remainder; update += 1) {
+    state = stepPotionTraderActor(state)
+  }
+  if (!state.active) return 0
+  return Math.trunc(
+    POTION_TRADER_ACTOR_FRAME_SCALE
+      * Math.sin(state.phaseDegrees * Math.PI / 180),
+  )
+}
+
+/** PotionGuy's native five-frame balloon clock with endpoint holds. */
+export function hubPotionTraderBalloonFrameAt(tick: number): number {
+  const fixedTick = Math.max(0, Math.floor(tick))
+  const checkpointIndex = Math.floor(fixedTick / POTION_TRADER_BALLOON_CHECKPOINT_TICKS)
+  let state = potionTraderBalloonCheckpoint(checkpointIndex)
+  const remainder = fixedTick % POTION_TRADER_BALLOON_CHECKPOINT_TICKS
+  for (let update = 0; update < remainder; update += 1) {
+    state = stepPotionTraderBalloon(state)
+  }
+  return Math.max(
+    0,
+    Math.min(POTION_TRADER_BALLOON_FRAME_COUNT - 1, Math.trunc(state.frame)),
+  )
+}
+
+/** Registered balloon bank's two-pixel, half-degree native presentation drift. */
+export function hubPotionTraderBalloonOffsetYAt(tick: number): number {
+  return Math.sin(Math.max(0, Math.floor(tick)) * 0.5 * Math.PI / 180) * 2
 }
 
 export function hubStatueOffsets(state: ProtocolAmbientState): {

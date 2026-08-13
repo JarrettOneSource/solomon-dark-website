@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { collectAssetSources, loadAssetBatch } from './game-asset-readiness.ts'
+
+const GAME_ASSET_ROOT = new URL('../assets/game/', import.meta.url)
+
+function pngDimensions(name: string): readonly [number, number] {
+  const contents = readFileSync(new URL(name, GAME_ASSET_ROOT))
+  assert.equal(contents.subarray(1, 4).toString('ascii'), 'PNG')
+  return [contents.readUInt32BE(16), contents.readUInt32BE(20)]
+}
 
 test('collects a stable unique manifest from nested asset groups', () => {
   assert.deepEqual(
@@ -26,4 +35,24 @@ test('reports actual task completions and resolves only after every asset', asyn
   releases.get('one')?.()
   await loading
   assert.deepEqual(progress, [[0, 2], [1, 2], [2, 2]])
+})
+
+test('keeps recovered Hub parity art at its native registrations', () => {
+  const dimensions: Readonly<Record<string, readonly [number, number]>> = {
+    'hub-courtyard-foreground.png': [2000, 1024],
+    'hub-hud-inventory-digits.png': [80, 14],
+    'hub-hud-map-compass.png': [121, 118],
+    'hub-hud-map-play.png': [121, 118],
+    'hub-hud-mouse-right.png': [22, 31],
+    'hub-hud-secondary-acid-rain.png': [45, 43],
+    'hub-hud-xp-fill.png': [4, 48],
+    'hub-hud-xp-frame.png': [12, 56],
+    'hub-npc-potion.png': [175, 49],
+    'hub-spawn-roof.png': [2000, 1024],
+    'hub-tent-back.png': [2000, 1024],
+    'hub-tent-balloons.png': [270, 72],
+  }
+  for (const [name, expected] of Object.entries(dimensions)) {
+    assert.deepEqual(pngDimensions(name), expected, name)
+  }
 })

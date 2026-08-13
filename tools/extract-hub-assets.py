@@ -217,6 +217,76 @@ def build_registered_strip(
     return strip
 
 
+def build_cropped_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    indices: tuple[int, ...],
+) -> Image.Image:
+    sprites = [crop(atlas, records[index]) for index in indices]
+    frame_sizes = {sprite.size for sprite in sprites}
+    if len(frame_sizes) != 1:
+        raise ValueError(f"cropped animation records have different sizes: {indices}")
+    frame_width, frame_height = frame_sizes.pop()
+    strip = Image.new("RGBA", (frame_width * len(sprites), frame_height))
+    for frame, sprite in enumerate(sprites):
+        strip.alpha_composite(sprite, (frame * frame_width, 0))
+    return strip
+
+
+def build_registered_cropped_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    indices: tuple[int, ...],
+) -> Image.Image:
+    placements = [
+        (*registered_origin(records[index]), records[index])
+        for index in indices
+    ]
+    left = min(origin_x for origin_x, _, _ in placements)
+    top = min(origin_y for _, origin_y, _ in placements)
+    right = max(origin_x + record.width for origin_x, _, record in placements)
+    bottom = max(origin_y + record.height for _, origin_y, record in placements)
+    frame_width = right - left
+    frame_height = bottom - top
+    strip = Image.new("RGBA", (frame_width * len(indices), frame_height))
+    for frame, (origin_x, origin_y, record) in enumerate(placements):
+        strip.alpha_composite(
+            crop(atlas, record),
+            (frame * frame_width + origin_x - left, origin_y - top),
+        )
+    return strip
+
+
+def build_inventory_digit_strip(
+    atlas: Image.Image,
+    record: SpriteRecord,
+) -> Image.Image:
+    source = crop(atlas, record).convert("L")
+    if source.size != (79, 14):
+        raise ValueError(f"inventory digit source has unexpected size: {source.size}")
+
+    glyph_bounds: list[tuple[int, int]] = []
+    glyph_start: int | None = None
+    for x in range(source.width + 1):
+        occupied = x < source.width and source.crop((x, 0, x + 1, source.height)).getbbox() is not None
+        if occupied and glyph_start is None:
+            glyph_start = x
+        elif not occupied and glyph_start is not None:
+            glyph_bounds.append((glyph_start, x))
+            glyph_start = None
+    if len(glyph_bounds) != 10:
+        raise ValueError(f"inventory digit source has {len(glyph_bounds)} glyphs; expected 10")
+
+    mask = Image.new("L", (80, 14))
+    for digit, (left, right) in enumerate(glyph_bounds):
+        glyph = source.crop((left, 0, right, source.height))
+        cell_left = digit * 8 + (8 - glyph.width) // 2
+        mask.paste(glyph, (cell_left, 0))
+    plaque = Image.new("RGB", mask.size, (190, 172, 128))
+    glyph = Image.new("RGB", mask.size, (22, 18, 11))
+    return Image.composite(glyph, plaque, mask).convert("RGBA")
+
+
 def build_courtyard(atlas: Image.Image, records: list[SpriteRecord]) -> Image.Image:
     world = Image.new("RGBA", WORLD_SIZE, (0, 0, 0, 255))
     floor = crop(atlas, records[42])
@@ -224,14 +294,11 @@ def build_courtyard(atlas: Image.Image, records: list[SpriteRecord]) -> Image.Im
         for left in range(0, WORLD_SIZE[0], floor.width):
             world.alpha_composite(floor, (left, top))
 
-    # Native presentation order: registered fixed scenery, the twelve large
-    # Courtyard slices, then the tent and lower-campus markings. The compiled
-    # Courtyard renderer translates the tent kit and chalk seal away from the
-    # registration stored in College.bundle. College[2, 20..23, 25] form the
-    # covered spawn passage and its front rail, and remain in the separate
-    # foreground painter layer produced below. College[43] is a conditional
-    # foreground roof and is not present in the initial hub view.
-    scenery = [6, 7, 19, 24, *range(26, 32)]
+    # Native presentation order keeps College[19, 30, 31, 21, 22] out of this
+    # flattened background. Courtyard::Present submits that lower-wall bank
+    # after actors. College[2, 20, 23, 25] is the independent spawn-roof
+    # boundary. College[43] is conditional and absent from the initial view.
+    scenery = [6, 7, 24, *range(26, 30)]
     for index in scenery:
         paste_registered(world, atlas, records[index])
 
@@ -697,17 +764,24 @@ def main() -> int:
         output_dir,
         "hub-seal-core-pulse",
     )
-    # The stock painter draws this covered passage after actors whose feet are
-    # above y=320. Keep the same source pixels separate from the flattened
-    # Courtyard so Students naturally disappear beneath the roof.
+    # The stock painter draws this covered passage at the y=320 actor boundary.
     save(
         build_registered_world_layer(
             college,
             college_records,
-            (2, 20, 21, 22, 23, 25),
+            (2, 20, 23, 25),
         ),
         output_dir,
         "hub-spawn-roof",
+    )
+    save(
+        build_registered_world_layer(
+            college,
+            college_records,
+            (19, 30, 31, 21, 22),
+        ),
+        output_dir,
+        "hub-courtyard-foreground",
     )
     save(
         build_registered_world_layer(college, college_records, (33,), (10, 60)),
@@ -715,7 +789,7 @@ def main() -> int:
         "hub-tent-shadow",
     )
     save(
-        build_registered_world_layer(college, college_records, (34, 54), (10, 60)),
+        build_registered_world_layer(college, college_records, (34,), (10, 60)),
         output_dir,
         "hub-tent-back",
     )
@@ -723,6 +797,15 @@ def main() -> int:
         build_registered_world_layer(college, college_records, (32,), (10, 60)),
         output_dir,
         "hub-tent-front",
+    )
+    save(
+        build_registered_cropped_strip(
+            college,
+            college_records,
+            tuple(range(54, 59)),
+        ),
+        output_dir,
+        "hub-tent-balloons",
     )
     clothes = Image.open(images_dir / "Clothes.png").convert("RGBA")
     clothes_records = parse_bundle(images_dir / "Clothes.bundle")
@@ -846,7 +929,6 @@ def main() -> int:
         "hub-prop-statue": 39,
         "hub-prop-statue-aura": 41,
         "hub-npc-perk-witch": 520,
-        "hub-npc-potion": 160,
     }
     for name, index in college_assets.items():
         save(crop(college, college_records[index]), output_dir, name)
@@ -864,6 +946,21 @@ def main() -> int:
         output_dir,
         "hub-npc-items",
     )
+    save(
+        build_cropped_strip(college, college_records, tuple(range(160, 165))),
+        output_dir,
+        "hub-npc-potion",
+    )
+    save(
+        registered_sprite(college, college_records[17]),
+        output_dir,
+        "hub-hud-map-play",
+    )
+    save(
+        registered_sprite(college, college_records[18]),
+        output_dir,
+        "hub-hud-map-compass",
+    )
 
     ui = Image.open(images_dir / "UI.png").convert("RGBA")
     ui_records = parse_bundle(images_dir / "UI.bundle")
@@ -873,8 +970,11 @@ def main() -> int:
         "hub-hud-backpack": 47,
         "hub-hud-bar-blue": 40,
         "hub-hud-bar-red": 26,
+        "hub-hud-mouse-right": 100,
         "hub-hud-skull": 42,
         "hub-hud-tome": 48,
+        "hub-hud-xp-fill": 81,
+        "hub-hud-xp-frame": 82,
     }
     for name, index in ui_assets.items():
         save(crop(ui, ui_records[index]), output_dir, name)
@@ -898,6 +998,12 @@ def main() -> int:
         raise ValueError(
             f"Skills.bundle has {len(skills_records)} records; expected 166"
         )
+    save(crop(skills, skills_records[99]), output_dir, "hub-hud-secondary-acid-rain")
+    save(
+        build_inventory_digit_strip(skills, skills_records[7]),
+        output_dir,
+        "hub-hud-inventory-digits",
+    )
     for element, record_index in {
         "ether": 35,
         "fire": 43,
