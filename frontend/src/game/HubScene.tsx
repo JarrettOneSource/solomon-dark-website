@@ -39,11 +39,13 @@ import './hub.css'
 interface HubSceneProps {
   audio: GameAudioDirector
   boneyards: readonly BoneyardChoice[]
+  getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   onInput: (input: PlayerCharacterInput) => void
   onStartMatch: (boneyardId: string) => void
   playerId: string
   samplePresentation: (nowMs?: number) => HubPresentationFrame
+  subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
 
@@ -60,11 +62,13 @@ const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
 export default function HubScene({
   audio,
   boneyards,
+  getPingMs,
   initialSnapshot,
   onInput,
   onStartMatch,
   playerId,
   samplePresentation,
+  subscribePing,
   subscribe,
 }: HubSceneProps) {
   const [hubInitialSnapshot] = useState<HubGameSnapshot>(() => {
@@ -252,8 +256,10 @@ export default function HubScene({
 
         <GameHud
           element={element}
+          getPingMs={getPingMs}
           mapLabel="Enter the Boneyard"
           onMapClick={beginMatch}
+          subscribePing={subscribePing}
         />
 
         {pickerOpen && isHost && (

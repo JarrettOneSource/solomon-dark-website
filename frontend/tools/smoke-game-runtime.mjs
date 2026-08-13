@@ -108,18 +108,26 @@ try {
   assert.ok(initialCanvas, 'expected the mounted WebGL canvas')
 
   const fpsCounter = page.locator('.hub-hud-fps')
-  await page.waitForFunction(() => /^[1-9]\d* FPS$/.test(
-    document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
+  const pingCounter = page.locator('.hub-hud-ping')
+  await page.waitForFunction(() => (
+    /^[1-9]\d* FPS$/.test(document.querySelector('.hub-hud-fps')?.textContent?.trim() || '')
+    && /^\d+ ms$/.test(document.querySelector('.hub-hud-ping')?.textContent?.trim() || '')
   ))
-  const [skullBounds, fpsBounds] = await Promise.all([
+  const [skullBounds, fpsBounds, pingBounds] = await Promise.all([
     page.locator('.hub-hud-skull').boundingBox(),
     fpsCounter.boundingBox(),
+    pingCounter.boundingBox(),
   ])
-  assert.ok(skullBounds && fpsBounds, 'expected the skull and FPS counter to be visible')
+  assert.ok(skullBounds && fpsBounds && pingBounds, 'expected the skull, FPS, and ping to be visible')
   assert.ok(
     fpsBounds.x >= skullBounds.x + skullBounds.width,
     'expected the FPS counter to sit to the right of the skull',
   )
+  assert.ok(
+    pingBounds.x >= fpsBounds.x + fpsBounds.width,
+    'expected ping to sit to the right of the FPS counter',
+  )
+  const hostHubPing = await pingCounter.textContent()
 
   const renderer = await canvas.evaluate((node) => {
     const canvas = node
@@ -191,6 +199,10 @@ try {
   }
 
   await enterHub(clientPage, 'Earth')
+  await clientPage.waitForFunction(() => /^\d+ ms$/.test(
+    document.querySelector('.hub-hud-ping')?.textContent?.trim() || '',
+  ))
+  const clientHubPing = await clientPage.locator('.hub-hud-ping').textContent()
   assert.equal(await clientPage.getByRole('button', { name: 'Start Match' }).count(), 0)
   assert.equal(await page.getByRole('button', { name: 'Start Match' }).count(), 0)
   assert.equal(await clientPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 1)
@@ -231,6 +243,7 @@ try {
     assert.ok(hostReceipt.gateLeafCount >= 2)
   }
 
+  const boneyardPings = []
   for (const runPage of [page, clientPage]) {
     const boneyardCanvas = runPage.locator(
       '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
@@ -249,6 +262,11 @@ try {
       document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
     ))
     assert.match((await runPage.locator('.hub-hud-fps').textContent()) || '', /^[1-9]\d* FPS$/)
+    await runPage.waitForFunction(() => /^\d+ ms$/.test(
+      document.querySelector('.hub-hud-ping')?.textContent?.trim() || '',
+    ))
+    assert.match((await runPage.locator('.hub-hud-ping').textContent()) || '', /^\d+ ms$/)
+    boneyardPings.push(await runPage.locator('.hub-hud-ping').textContent())
     assert.equal(await runPage.getByRole('img', { name: 'Help' }).count(), 0)
     assert.equal(await runPage.getByLabel('Equipped spells').count(), 0)
     assert.equal(await runPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 0)
@@ -344,6 +362,8 @@ try {
     status: 'ok',
     before,
     after,
+    boneyardPings,
+    clientHubPing,
     consoleErrors,
     pageErrors,
     clientConsoleErrors,
@@ -352,6 +372,7 @@ try {
     digIndicatorReceipt,
     hostDigFrames: [...new Set(hostDigFrames)],
     hostReceipt,
+    hostHubPing,
     hostPainterReceipt,
     clientPainterReceipt,
     gateCrossing,

@@ -201,6 +201,42 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
   session.destroy()
 })
 
+test('client measures authenticated WebSocket round trips with its monotonic clock', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const ping = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.deepEqual(ping, { type: 'client-ping', nonce: 1 })
+  assert.equal(session.getPingMs(), null)
+
+  const samples: number[] = []
+  const removePing = session.onPing((pingMs) => samples.push(pingMs))
+  nowMs += 38
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 2 }))
+  assert.equal(session.getPingMs(), null)
+  assert.deepEqual(samples, [])
+
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 1 }))
+  assert.equal(session.getPingMs(), 38)
+  assert.deepEqual(samples, [38])
+
+  removePing()
+  session.destroy()
+  nowMs += 10
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 1 }))
+  assert.deepEqual(samples, [38])
+})
+
 test('client disables prediction when the shared character kernel does not match', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({

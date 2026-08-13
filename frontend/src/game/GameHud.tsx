@@ -6,9 +6,11 @@ const XP_PROGRESS = 0.45
 
 interface GameHudProps {
   element: WizardElement
+  getPingMs: () => number | null
   mapLabel?: string
   mode?: 'hub' | 'run'
   onMapClick?: () => void
+  subscribePing: (listener: (pingMs: number) => void) => () => void
 }
 
 function HudSlot({ src }: { src: string }) {
@@ -63,16 +65,42 @@ function FpsCounter() {
   )
 }
 
+function PingCounter({
+  getPingMs,
+  subscribePing,
+}: Pick<GameHudProps, 'getPingMs' | 'subscribePing'>) {
+  const [pingMs, setPingMs] = useState<number | null>(() => getPingMs())
+
+  useEffect(() => {
+    setPingMs(getPingMs())
+    return subscribePing(setPingMs)
+  }, [getPingMs, subscribePing])
+
+  return (
+    <span
+      className="hub-hud-ping"
+      aria-label={pingMs === null ? 'Measuring network ping' : `${pingMs} milliseconds ping`}
+    >
+      {pingMs ?? '--'} ms
+    </span>
+  )
+}
+
 export default function GameHud({
   element,
+  getPingMs,
   mapLabel = 'Map',
   mode = 'hub',
   onMapClick,
+  subscribePing,
 }: GameHudProps) {
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
-      <FpsCounter />
+      <div className="hub-hud-diagnostics" aria-label="Performance">
+        <FpsCounter />
+        <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
+      </div>
       <div className="hub-hud-meters">
         <div className="hub-hud-meter hub-hud-meter-health">
           <img src={hub.hud.barRed} alt="Health 50 of 50" />

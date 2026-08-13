@@ -39,7 +39,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 7
+export const GAME_PROTOCOL_VERSION = 8
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-2'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -89,6 +89,11 @@ export interface ClientInputMessage {
   targetTick: number
 }
 
+export interface ClientPingMessage {
+  type: 'client-ping'
+  nonce: number
+}
+
 export interface ClientDisconnectMessage {
   type: 'client-disconnect'
 }
@@ -101,6 +106,7 @@ export interface ClientStartMatchMessage {
 export type ClientGameMessage =
   | ClientHelloMessage
   | ClientInputMessage
+  | ClientPingMessage
   | ClientStartMatchMessage
   | ClientDisconnectMessage
 
@@ -129,6 +135,11 @@ export interface ServerBoneyardLoadedMessage {
   boneyard: LoadedBoneyard
 }
 
+export interface ServerPongMessage {
+  type: 'server-pong'
+  nonce: number
+}
+
 export type GameDisconnectCode =
   | 'authentication-failed'
   | 'invalid-message'
@@ -145,6 +156,7 @@ export type ServerGameMessage =
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
+  | ServerPongMessage
   | ServerDisconnectMessage
 
 export function encodeGameMessage(message: ClientGameMessage | ServerGameMessage): string {
@@ -179,6 +191,10 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       sequence: nonnegativeInteger(value.sequence, 'sequence'),
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
     }
+  }
+  if (value.type === 'client-ping') {
+    onlyKeys(value, 'message', ['type', 'nonce'])
+    return { type: 'client-ping', nonce: pingNonce(value.nonce) }
   }
   if (value.type === 'client-start-match') {
     onlyKeys(value, 'message', ['type', 'boneyardId'])
@@ -245,6 +261,10 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       type: 'server-boneyard-loaded',
       boneyard: loadedBoneyard(value.boneyard),
     }
+  }
+  if (value.type === 'server-pong') {
+    onlyKeys(value, 'message', ['type', 'nonce'])
+    return { type: 'server-pong', nonce: pingNonce(value.nonce) }
   }
   if (value.type === 'server-disconnect') {
     onlyKeys(value, 'message', ['type', 'code', 'reason'])
@@ -335,6 +355,12 @@ function nonnegativeInteger(value: unknown, field: string): number {
 function positiveInteger(value: unknown, field: string): number {
   const result = integer(value, field)
   if (result < 1) throw new GameProtocolError(`${field} must be positive`)
+  return result
+}
+
+function pingNonce(value: unknown): number {
+  const result = positiveInteger(value, 'nonce')
+  if (result > 0x7fffffff) throw new GameProtocolError('nonce is out of range')
   return result
 }
 

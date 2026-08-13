@@ -301,6 +301,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         return
       }
+      if (message.type === 'client-ping') {
+        socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+        return
+      }
       if (message.type === 'client-start-match') {
         if (client.playerId !== hostPlayerId || loadedBoneyard) return
         const selected = materializeBoneyard(boneyards, message.boneyardId)

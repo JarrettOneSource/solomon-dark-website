@@ -354,20 +354,24 @@ export default function MainMenuScene({
           && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
           <BoneyardScene
             boneyard={loadedBoneyard}
+            getPingMs={session.getPingMs}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
             samplePresentation={session.sampleBoneyardPresentation}
+            subscribePing={session.onPing}
           />
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
           <HubScene
             audio={audio}
             boneyards={session.boneyards}
+            getPingMs={session.getPingMs}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
             onStartMatch={session.startMatch}
             samplePresentation={session.samplePresentation}
+            subscribePing={session.onPing}
             subscribe={session.onSnapshot}
           />
         ) : session ? (

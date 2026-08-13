@@ -148,6 +148,10 @@ prediction-kernel identity and parameters, and a reserved resume token. The
 v2 snapshot keeps session-owned players at its root and uses a discriminated
 `world` payload, currently `kind: "hub"`; Boneyard extends that world union
 without changing player identity. Unknown or malformed messages fail closed.
+Authenticated clients also measure application-level transport RTT with a
+nonce ping that the host echoes immediately outside the simulation and snapshot
+clocks. The measurement is client-local diagnostics state and never enters an
+authoritative world snapshot.
 
 ## Saves, identity, and content
 

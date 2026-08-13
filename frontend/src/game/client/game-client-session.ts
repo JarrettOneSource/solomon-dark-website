@@ -53,8 +53,10 @@ export interface GameClientSession {
   readonly resumeToken: string
   destroy(): void
   getBoneyard(): LoadedBoneyard | null
+  getPingMs(): number | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
+  onPing(listener: (pingMs: number) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
@@ -84,6 +86,8 @@ interface LocalHubPresentationState {
 }
 
 const STOPPED_INPUT = createIdlePlayerCharacterInput()
+const PING_INTERVAL_MS = 2_000
+const PING_TIMEOUT_MS = 10_000
 
 export function connectGameClientSession(
   options: GameClientSessionOptions,
@@ -97,6 +101,9 @@ export function connectGameClientSession(
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let lastSnapshotReceivedAtMs = 0
+    let latestPingMs: number | null = null
+    let nextPingNonce = 1
+    let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
     let sequence = 0
     let predictionEnabled = false
     let fatalReported = false
@@ -106,6 +113,8 @@ export function connectGameClientSession(
     const now = options.now ?? (() => performance.now())
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
+    const pingListeners = new Set<(pingMs: number) => void>()
+    const pendingPings = new Map<number, number>()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
@@ -151,6 +160,8 @@ export function connectGameClientSession(
         }
         settled = true
         globalThis.clearTimeout(handshakeDeadline)
+        sendPing()
+        pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
         resolve(session)
         return
       }
@@ -161,6 +172,14 @@ export function connectGameClientSession(
       if (message.type === 'server-boneyard-loaded') {
         loadedBoneyard = message.boneyard
         for (const listener of boneyardListeners) listener(message.boneyard)
+        return
+      }
+      if (message.type === 'server-pong') {
+        const sentAtMs = pendingPings.get(message.nonce)
+        if (sentAtMs === undefined) return
+        pendingPings.delete(message.nonce)
+        latestPingMs = Math.max(0, Math.round(now() - sentAtMs))
+        for (const listener of pingListeners) listener(latestPingMs)
         return
       }
       pendingInputs = pendingInputs.filter(
@@ -230,6 +249,7 @@ export function connectGameClientSession(
         if (destroyed) return
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
+        stopPing()
         removeClose()
         removeMessage()
         if (options.transport.readyState === 'open') {
@@ -238,9 +258,13 @@ export function connectGameClientSession(
         options.transport.close(1000, 'session destroyed')
         snapshotListeners.clear()
         boneyardListeners.clear()
+        pingListeners.clear()
       },
       getBoneyard() {
         return loadedBoneyard
+      },
+      getPingMs() {
+        return latestPingMs
       },
       getSnapshot() {
         if (!snapshot) throw new Error('game session has no snapshot')
@@ -253,6 +277,10 @@ export function connectGameClientSession(
       onBoneyard(listener) {
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
+      },
+      onPing(listener) {
+        pingListeners.add(listener)
+        return () => pingListeners.delete(listener)
       },
       sampleBoneyardPresentation(requestedNow = now()) {
         if (!boneyardPresentationTimeline) {
@@ -351,6 +379,24 @@ export function connectGameClientSession(
       character: options.character,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     }))
+
+    function sendPing(): void {
+      if (!welcome || destroyed || options.transport.readyState !== 'open') return
+      const sentAtMs = now()
+      for (const [nonce, pendingAtMs] of pendingPings) {
+        if (sentAtMs - pendingAtMs >= PING_TIMEOUT_MS) pendingPings.delete(nonce)
+      }
+      const nonce = nextPingNonce
+      nextPingNonce = nextPingNonce === 0x7fffffff ? 1 : nextPingNonce + 1
+      pendingPings.set(nonce, sentAtMs)
+      options.transport.send(encodeGameMessage({ type: 'client-ping', nonce }))
+    }
+
+    function stopPing(): void {
+      if (pingTimer !== undefined) globalThis.clearInterval(pingTimer)
+      pingTimer = undefined
+      pendingPings.clear()
+    }
 
     function createPresentationTimeline(
       hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
@@ -484,6 +530,7 @@ export function connectGameClientSession(
         settled = true
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
+        stopPing()
         removeClose()
         removeMessage()
         options.transport.close(1008, error.message.slice(0, 123))
@@ -494,11 +541,13 @@ export function connectGameClientSession(
       fatalReported = true
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
+      stopPing()
       removeClose()
       removeMessage()
       options.transport.close(1008, error.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
+      pingListeners.clear()
       options.onFatal?.(error)
     }
   })

@@ -44,10 +44,17 @@
   object-fit: contain;
 }
 
-.hub-hud-fps {
+.hub-hud-diagnostics {
   position: absolute;
   top: 12px;
   left: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hub-hud-fps,
+.hub-hud-ping {
   color: #d8d4c8;
   font: 12px 'JetBrains Mono', monospace;
   line-height: 1;

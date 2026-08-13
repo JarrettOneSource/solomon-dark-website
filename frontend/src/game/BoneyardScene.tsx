@@ -40,10 +40,12 @@ const grayscaleAlphaMasks = new WeakMap<HTMLImageElement, HTMLCanvasElement>()
 
 interface BoneyardSceneProps {
   boneyard: LoadedBoneyard
+  getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   onInput: (input: PlayerCharacterInput) => void
   playerId: string
   samplePresentation: (nowMs?: number) => GameSnapshot
+  subscribePing: (listener: (pingMs: number) => void) => () => void
 }
 
 interface BoneyardFrameDiagnostics {
@@ -60,10 +62,12 @@ type RendererState = 'loading' | 'ready'
 
 export default function BoneyardScene({
   boneyard: loaded,
+  getPingMs,
   initialSnapshot,
   onInput,
   playerId,
   samplePresentation,
+  subscribePing,
 }: BoneyardSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -254,7 +258,12 @@ export default function BoneyardScene({
           />
         ) : null}
 
-        <GameHud element={element} mode="run" />
+        <GameHud
+          element={element}
+          getPingMs={getPingMs}
+          mode="run"
+          subscribePing={subscribePing}
+        />
         {digIndicatorVisible ? (
           <div
             ref={digIndicatorRef}

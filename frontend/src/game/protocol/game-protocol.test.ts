@@ -23,7 +23,7 @@ const CHARACTER = {
   element: 'ether',
 } as const
 
-test('client protocol validates character hello and tick-indexed input messages', () => {
+test('client protocol validates character hello, input, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -62,6 +62,20 @@ test('client protocol validates character hello and tick-indexed input messages'
   })), {
     type: 'client-start-match',
     boneyardId: 'default-random',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-ping',
+    nonce: 41,
+  })), {
+    type: 'client-ping',
+    nonce: 41,
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-pong',
+    nonce: 41,
+  })), {
+    type: 'server-pong',
+    nonce: 41,
   })
 })
 
@@ -147,6 +161,14 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     sequence: 1,
     targetTick: 1,
   })), /aim|cast/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-ping',
+    nonce: -1,
+  })), /nonce/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-pong',
+    nonce: 4.5,
+  })), /nonce/)
 
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),

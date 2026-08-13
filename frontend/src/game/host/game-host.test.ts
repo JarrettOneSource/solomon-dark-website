@@ -79,6 +79,19 @@ test('authoritative game host owns two configured player characters and movement
   )
 })
 
+test('game host echoes authenticated ping outside the snapshot loop', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 1 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+
+  const pong = nextMessage(client.socket, (message) => (
+    message.type === 'server-pong' && message.nonce === 41
+  ))
+  client.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 41 }))
+  assert.deepEqual(await pong, { type: 'server-pong', nonce: 41 })
+})
+
 test('game host reconnects a new character at the active world spawn', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
