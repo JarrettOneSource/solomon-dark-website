@@ -19,10 +19,7 @@
   transform-origin: 0 0;
 }
 
-.boneyard-world-stack,
-.boneyard-canvas,
-.boneyard-main-band,
-.boneyard-foreground,
+.boneyard-world-renderer,
 .boneyard-darkness {
   position: absolute;
   inset: 0;
@@ -30,69 +27,18 @@
   height: 900px;
 }
 
-.boneyard-world-stack {
-  z-index: 0;
-  isolation: isolate;
-}
-
-.boneyard-canvas {
-  display: block;
+.boneyard-world-renderer {
   z-index: 0;
 }
 
-.boneyard-main-band,
-.boneyard-foreground {
+.boneyard-world-canvas {
   display: block;
-  pointer-events: none;
+  width: 1600px;
+  height: 900px;
 }
 
 .boneyard-darkness {
-  z-index: 1;
+  z-index: 2;
   display: block;
   pointer-events: none;
-}
-
-.boneyard-dig-anchor {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-}
-
-.boneyard-solomon-dig {
-  position: absolute;
-  top: -100px;
-  left: -100px;
-  display: block;
-  width: 200px;
-  height: 200px;
-  background-position: 0 0;
-  background-repeat: no-repeat;
-  image-rendering: auto;
-}
-
-.boneyard-grave-dirt,
-.boneyard-lantern {
-  position: absolute;
-  display: block;
-  background-position: 0 0;
-  background-repeat: no-repeat;
-  image-rendering: auto;
-}
-
-.boneyard-grave-dirt {
-  width: 46px;
-  height: 10px;
-}
-
-.boneyard-lantern {
-  width: 34px;
-  height: 34px;
-}
-
-.boneyard-player {
-  pointer-events: none;
-}
-
-.boneyard-player[data-local='false'] {
-  filter: saturate(0.82) brightness(0.88);
 }

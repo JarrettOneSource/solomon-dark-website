@@ -3550,6 +3550,125 @@ host-only picker. Selecting it synchronized choice
 and environment mode `0` to both peers. Capture:
 `/tmp/solomon-dark-boneyard-mod-picker-main-0813.png`.
 
+### Boneyard presentation ownership and physical-GPU diagnosis — 2026-08-13
+
+Observed smell: the production Boneyard presented at `91.00` average FPS while
+idle and `32.42` average FPS while moving on a Radeon RX 9070 XT, even though
+the title menu in the same headed Chrome process presented at `141.30` FPS.
+An environment-mode-2 arena made the moving result still worse (`11.57`
+average FPS, `9.59` FPS 1%-low, `97.3 ms` p95 frame time). The authoritative
+host remained healthy and no browser errors or JavaScript long tasks explained
+the scene-specific collapse.
+
+The browser ownership trace found that `BoneyardScene` recreated the camera and
+gate-leaf array for every `20 Hz` authoritative snapshot. That invalidated its
+Canvas2D effect and called `drawNativeBoneyardWorld` again. Each snapshot
+therefore regenerated the complete immutable arena: ground, every road and
+terrain stroke, every underlay, compact sprite, shadow, Y-sorted placement,
+fence part, and foreground overlay. A five-second mode-2 sample issued `16,856`
+`drawImage` calls and `44,317` fills. Camera motion made those CPU-generated
+pixels dirty continuously and forced Chrome to raster and upload a new
+`1600 x 900` canvas while React independently moved actor DOM layers.
+
+A one-variable physical-browser probe replaced only that static-world paint
+with a no-op. It left the authoritative session, player input, React actor
+updates, camera calculation, HUD, and the complete mode-2 darkness canvas
+running. Idle presentation rose from `72.00` to `144.00` average FPS
+(`139.37` FPS 1%-low); moving presentation rose from `11.57` to `143.79`
+average FPS (`123.65` FPS 1%-low). Re-enabling the world paint while suppressing
+only darkness did not recover performance. This falsifies the network host,
+the darkness aperture, actor count, and the HUD counter as primary owners of
+the collapse.
+
+Native ownership consequence: the already recovered Arena render plan remains
+the visual authority, but its immutable result must not be tied to the network
+snapshot clock. Static generator output is composed once per loaded run,
+uploaded as tiled PixiJS/WebGL scene textures, and transformed by the display
+camera. Players, Solomon Dig, and authoritative gate leaves remain dynamic
+scene residents. Modes `1` and `2` retain the recovered two-aperture darkness
+composition above the world and below the HUD. React continues to own scene
+lifecycle, accessibility, and HUD only; it does not repaint world geometry.
+
+The adjacency sweep also found that the Boneyard exposed raw `20 Hz` snapshots
+directly while the Courtyard already owned a display-rate presentation
+timeline and a shared keyboard/controller/touch input adapter. The Boneyard
+renderer must consume a display-time frame and the same input boundary rather
+than duplicating a keyboard-only loop. This changes no simulation rule: the
+Node host remains authoritative at `100 Hz`, snapshots remain `20 Hz`, and
+the browser only interpolates presentation between received states.
+
+Acceptance: the corrected Boneyard must sustain at least `100` average display
+FPS in the same physical Chrome/GPU/viewport/sample procedure while moving,
+retain meaningful slow-frame telemetry, advance player and Solomon animation,
+synchronize moving gate leaves across peers, preserve darkness pixels and
+set-piece roots, and emit no browser errors. WebGPU is not required: the
+existing PixiJS WebGL2 boundary has already exceeded this gate in the
+Courtyard, and the controlled Boneyard probe proves that eliminating the
+invalid static repaint is sufficient.
+
+Evidence: headed Windows Chrome `151.0.7922.110`, ANGLE D3D11 renderer
+`AMD Radeon RX 9070 XT`, live production `/game`, actual provisioned Boneyard
+sessions, Chrome DevTools Protocol metrics, instrumented Canvas2D call counts,
+and controlled five-second `requestAnimationFrame` samples at the same
+viewport. Native painter ownership and ordering evidence remains the Ghidra
+and live-runtime evidence cited in the sections above; this diagnosis adds no
+new native behavior claim.
+
+Confidence: high for the web root cause and renderer boundary. The no-op probe
+changes one variable and recovers the display ceiling with darkness still
+active. Confidence remains as documented above for the individual native
+painter passes and the four-percent ambient projection.
+
+Implementation receipt: `BoneyardScene` now mounts a scene-scoped PixiJS
+WebGL2 renderer. The recovered Canvas2D painter composes the immutable arena
+once into at most `1024 x 1024` tiles with a `256`-unit art margin; the tile
+count remains constant while the player and camera move. Moving gates,
+players, their native staff VFX, Solomon Dig, grave dirt, and lantern are
+dynamic GPU residents. A Boneyard-specific presentation timeline interpolates
+players and gate tips at display cadence while leaving collision and gate
+simulation on the authoritative host.
+
+The final headed physical-GPU mode-2 run at `1600 x 900` measured `130.37`
+average FPS idle (`123.46` FPS 1%-low) and `130.93` average FPS moving
+(`122.70` FPS 1%-low). Neither three-second sample contained a frame over
+`10 ms`; movement presented `393` distinct positions. The WebGL renderer
+reported resolution `1`, all `16` pre-occlusion static tiles retained the same paint count,
+and the darkness receipt remained alpha `0` at the player and `245` at the far
+field. This clears the `100` FPS acceptance gate in the qualified environment
+without lowering resolution or removing a native effect.
+
+A fresh two-peer browser smoke retained one WebGL canvas per peer, synchronized
+the same run and geometry, advanced Solomon Dig on both peers, observed every
+player robe walk pose and display-rate Hub movement, crossed the authoritative
+entry gate after aligning with the selected generated gate, and emitted no
+page or console errors. The reusable acceptance harness is
+`tools/measure-boneyard-performance.mjs`; the renderer and darkness invariants
+also live in `tools/smoke-game-runtime.mjs`.
+
+Current-main integration receipt: the later native occlusion reconstruction is
+now part of the same GPU scene rather than a return to stacked DOM canvases.
+The recovered `trunc((worldY + sortBias - localPlayerY) / 2)` queue assigns
+resident scenery textures, players, Solomon Dig, the lantern, and moving Gate
+leaves their display-frame depths. Same-row actors remain before scenery,
+source order remains stable inside each static band, and Tree/Building proxy
+art remains above the complete population. The immutable base, the qualified
+arena's 503 recovered main layers, and foreground are painted and uploaded only
+while the run loads; camera and snapshot updates change transforms and depths
+without repainting those pixels. The authoritative Gate-body root continues to
+follow its live tip/hinge geometry.
+
+A fresh two-peer browser smoke observed four scenery bands on both clients,
+scenery both below and above each local player, foreground above every main or
+dynamic depth, synchronized Gate movement, every robe walk pose, advancing
+Solomon Dig frames, and no page or console errors. The merged physical-GPU
+qualification used headed Chrome `151.0.7922.110`, ANGLE D3D11 on the Radeon RX
+9070 XT, a `1600 x 900` full-resolution canvas, and three-second samples. It
+held `144.00` average FPS idle and moving with a `140.85` FPS 1%-low, zero
+frames over `10 ms`, and 430 distinct moving player positions. The renderer's
+`523` one-time painter operations remained unchanged across both samples. This
+is the deployment acceptance receipt for the combined performance and native
+occlusion implementation.
+
 ## 2026-08-12 GPU Courtyard reconstruction receipt
 
 This renderer migration introduces no new game behavior. It maps the already

@@ -21,6 +21,12 @@ import {
 } from '../protocol/game-protocol.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
+  createBoneyardPresentationTimeline,
+  isBoneyardGameSnapshot,
+  type BoneyardPresentationFrame,
+  type BoneyardPresentationTimeline,
+} from './boneyard-presentation-timeline.ts'
+import {
   createHubPresentationTimeline,
   isHubGameSnapshot,
   type HubPresentationFrame,
@@ -47,6 +53,7 @@ export interface GameClientSession {
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
+  sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   sendInput(input: PlayerCharacterInput): void
   startMatch(boneyardId: string): void
@@ -73,6 +80,7 @@ export function connectGameClientSession(
     let welcome: ServerWelcomeMessage | undefined
     let snapshot: GameSnapshot | undefined
     let presentationTimeline: HubPresentationTimeline | undefined
+    let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let lastSnapshotReceivedAtMs = 0
     let sequence = 0
@@ -118,6 +126,12 @@ export function connectGameClientSession(
             lastSnapshotReceivedAtMs,
             message,
           )
+        } else if (isBoneyardGameSnapshot(snapshot)) {
+          boneyardPresentationTimeline = createBoneyardTimeline(
+            snapshot,
+            lastSnapshotReceivedAtMs,
+            message,
+          )
         }
         settled = true
         globalThis.clearTimeout(handshakeDeadline)
@@ -150,6 +164,20 @@ export function connectGameClientSession(
           )
         } else {
           presentationTimeline.push(snapshot, lastSnapshotReceivedAtMs)
+        }
+      } else if (isBoneyardGameSnapshot(snapshot)) {
+        if (
+          !boneyardPresentationTimeline
+          || previousWorldKind !== 'boneyard'
+          || boneyardPresentationTimeline.latest().world.runId !== snapshot.world.runId
+        ) {
+          boneyardPresentationTimeline = createBoneyardTimeline(
+            snapshot,
+            lastSnapshotReceivedAtMs,
+            welcome,
+          )
+        } else {
+          boneyardPresentationTimeline.push(snapshot, lastSnapshotReceivedAtMs)
         }
       }
       for (const listener of snapshotListeners) listener(snapshot)
@@ -201,6 +229,12 @@ export function connectGameClientSession(
       onBoneyard(listener) {
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
+      },
+      sampleBoneyardPresentation(requestedNow = now()) {
+        if (!boneyardPresentationTimeline) {
+          throw new Error('game session has no Boneyard presentation timeline')
+        }
+        return boneyardPresentationTimeline.sample(requestedNow)
       },
       samplePresentation(requestedNow = now()) {
         if (!welcome || !snapshot || !presentationTimeline) {
@@ -296,6 +330,19 @@ export function connectGameClientSession(
         initialReceivedAtMs: receivedAtMs,
         initialSnapshot: hubSnapshot,
         localPlayerId: server.playerId,
+        serverTickRate: server.serverTickRate,
+        snapshotRate: server.snapshotRate,
+      })
+    }
+
+    function createBoneyardTimeline(
+      boneyardSnapshot: Parameters<typeof createBoneyardPresentationTimeline>[0]['initialSnapshot'],
+      receivedAtMs: number,
+      server: ServerWelcomeMessage,
+    ): BoneyardPresentationTimeline {
+      return createBoneyardPresentationTimeline({
+        initialReceivedAtMs: receivedAtMs,
+        initialSnapshot: boneyardSnapshot,
         serverTickRate: server.serverTickRate,
         snapshotRate: server.snapshotRate,
       })

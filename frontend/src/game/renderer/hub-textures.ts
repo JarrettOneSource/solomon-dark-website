@@ -1,30 +1,22 @@
-import { Rectangle, Texture } from 'pixi.js'
-import { elementVfx, hub, playerCharacter } from '../../lib/assets.ts'
-import {
-  WIZARD_ELEMENTS,
-  type WizardElement,
-} from '../core-kernels/player-character.ts'
+import { Texture } from 'pixi.js'
+import { hub } from '../../lib/assets.ts'
+import { WIZARD_ELEMENTS } from '../core-kernels/player-character.ts'
 import {
   hubGameAssetSources,
   loadGameImage,
   releaseGameImages,
 } from '../game-assets.ts'
 import {
-  NATIVE_ELEMENT_VFX_SPRITES,
-  type NativeElementVfxSprite,
-} from '../element-vfx-native.ts'
+  createPlayerWorldTextures,
+  destroyPlayerWorldTextureFrames,
+  gridFrames,
+  stripFrames,
+  type PlayerWorldTextures,
+} from './world-player-textures.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
-
-export interface HubActorTextureFrames {
-  fixed: readonly Texture[]
-  head: readonly Texture[]
-  robe: readonly (readonly Texture[])[]
-  staffBack: readonly Texture[]
-  staffFront: readonly Texture[]
-}
 
 export interface HubStudentTextureFrames {
   head: readonly Texture[]
@@ -63,12 +55,10 @@ export interface HubAstronomerTextureFrames {
   telescope: readonly Texture[]
 }
 
-export interface HubWorldTextures {
+export interface HubWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   astronomer: HubAstronomerTextureFrames
   base: Readonly<Record<string, Texture>>
-  elementVfx: Readonly<Partial<Record<NativeElementVfxSprite, readonly Texture[]>>>
-  players: Readonly<Record<WizardElement, HubActorTextureFrames>>
   potion: HubPotionTextureFrames
   students: HubStudentTextureFrames
   teacher: HubTeacherTextureFrames
@@ -102,35 +92,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     return result
   }
 
-  const playerTextures = (element: WizardElement): HubActorTextureFrames => ({
-    fixed: stripFrames(texture(playerCharacter.robeFixed[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-    head: stripFrames(texture(playerCharacter.head[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-    robe: gridFrames(texture(playerCharacter.robeDynamic[element]), ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
-    staffBack: stripFrames(texture(playerCharacter.staffBack), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-    staffFront: stripFrames(texture(playerCharacter.staffFront), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-  })
-  const players = {
-    air: playerTextures('air'),
-    earth: playerTextures('earth'),
-    ether: playerTextures('ether'),
-    fire: playerTextures('fire'),
-    water: playerTextures('water'),
-  } satisfies Record<WizardElement, HubActorTextureFrames>
-
-  const elementTextures: Partial<Record<NativeElementVfxSprite, readonly Texture[]>> = {}
-  for (const sprite of ['core', 'ray', 'spark', 'air', 'earth', 'fire', 'water'] as const) {
-    const metrics = NATIVE_ELEMENT_VFX_SPRITES[sprite]
-    const source = sprite === 'core' || sprite === 'ray' || sprite === 'spark'
-      ? elementVfx.common[sprite]
-      : elementVfx.frames[sprite]
-    elementTextures[sprite] = stripFrames(
-      texture(source),
-      metrics.count,
-      metrics.width,
-      metrics.height,
-      'horizontal',
-    )
-  }
+  const playerWorld = createPlayerWorldTextures(texture)
   const assistantFrames = stripFrames(
     texture(hub.astronomer.assistants),
     12,
@@ -140,6 +102,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   )
 
   return {
+    ...playerWorld,
     assetSources: sources,
     astronomer: {
       assistants: {
@@ -161,8 +124,6 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       telescope: stripFrames(texture(hub.astronomer.telescope), 5, 374, 292, 'horizontal'),
     },
     base,
-    elementVfx: elementTextures,
-    players,
     potion: {
       actor: stripFrames(texture(hub.npcs.potion), 5, 35, 49, 'horizontal'),
       balloons: stripFrames(texture(hub.tent.balloons), 5, 54, 72, 'horizontal'),
@@ -194,13 +155,7 @@ export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   add(textures.astronomer.red.idle)
   add(textures.astronomer.red.transition)
   add(textures.astronomer.telescope)
-  for (const player of Object.values(textures.players)) {
-    add(player.fixed)
-    add(player.head)
-    player.robe.forEach(add)
-    add(player.staffBack)
-    add(player.staffFront)
-  }
+  destroyPlayerWorldTextureFrames(textures)
   add(textures.potion.actor)
   add(textures.potion.balloons)
   add(textures.students.head)
@@ -209,41 +164,6 @@ export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   textures.students.walk.forEach(add)
   add(textures.teacher.actor)
   add(textures.teacher.burst)
-  Object.values(textures.elementVfx).forEach(add)
   for (const texture of derived) texture.destroy(false)
   for (const texture of Object.values(textures.base)) texture.destroy(true)
-}
-
-function stripFrames(
-  source: Texture,
-  count: number,
-  width: number,
-  height: number,
-  direction: 'horizontal' | 'vertical',
-): Texture[] {
-  return Array.from({ length: count }, (_, index) => new Texture({
-    source: source.source,
-    frame: new Rectangle(
-      direction === 'horizontal' ? index * width : 0,
-      direction === 'vertical' ? index * height : 0,
-      width,
-      height,
-    ),
-  }))
-}
-
-function gridFrames(
-  source: Texture,
-  columns: number,
-  rows: number,
-  width: number,
-  height: number,
-): Texture[][] {
-  return Array.from({ length: rows }, (_, row) => Array.from(
-    { length: columns },
-    (_, column) => new Texture({
-      source: source.source,
-      frame: new Rectangle(column * width, row * height, width, height),
-    }),
-  ))
 }

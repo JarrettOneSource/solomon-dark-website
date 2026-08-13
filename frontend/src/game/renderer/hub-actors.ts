@@ -13,8 +13,9 @@ import { createPlayerCharacterDrawPlan } from '../player-character-presentation.
 import { HubElementVfx } from './hub-element-vfx.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
+import type { PlayerWorldTextures } from './world-player-textures.ts'
 
-export class HubPlayerView {
+export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly staffBack: Sprite
@@ -23,18 +24,18 @@ export class HubPlayerView {
   private readonly fixed: Sprite
   private readonly staffFront: Sprite
   private readonly head: Sprite
-  private readonly textures: HubWorldTextures
+  private readonly textures: PlayerWorldTextures
   private currentWalkPose = 0
 
   constructor(
     element: WizardElement,
-    textures: HubWorldTextures,
+    textures: PlayerWorldTextures,
   ) {
     this.textures = textures
     const playerTextures = textures.players[element]
     this.container.sortableChildren = true
     this.container.eventMode = 'none'
-    this.shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
+    this.shadow = actorSprite(textures.playerShadow, 0)
     this.shadow.scale.set(1.25)
     this.shadow.alpha = 0.72
     this.staffBack = actorSprite(playerTextures.staffBack[0], 1)
@@ -91,6 +92,10 @@ export class HubPlayerView {
     return this.currentWalkPose
   }
 
+  setDepth(depth: number): void {
+    this.container.zIndex = depth
+  }
+
   get orbSpriteCount(): number {
     return this.orb.sprites.filter((sprite) => sprite.visible).length
   }
@@ -101,6 +106,8 @@ export class HubPlayerView {
     this.container.destroy({ children: true })
   }
 }
+
+export { PlayerWorldView as HubPlayerView }
 
 export class HubStudentView {
   readonly container = new Container({ label: 'student' })

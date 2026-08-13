@@ -136,12 +136,20 @@ try {
 
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   const initialTeacherFrame = await canvas.evaluate((node) => node.__sdrHubFrame.teacherFrame)
-  await page.waitForFunction(
-    (initial) => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.teacherFrame !== initial,
+  const changedTeacherFrame = await page.waitForFunction(
+    (initial) => {
+      const frame = document.querySelector('.hub-world-canvas')
+        ?.__sdrHubFrame.teacherFrame
+      return frame !== initial ? { frame } : null
+    },
     initialTeacherFrame,
     { timeout: 10_000 },
   )
-  const teacherFrames = [initialTeacherFrame, await canvas.evaluate((node) => node.__sdrHubFrame.teacherFrame)]
+  const teacherFrames = [
+    initialTeacherFrame,
+    (await changedTeacherFrame.jsonValue()).frame,
+  ]
+  await changedTeacherFrame.dispose()
 
   const presentationSamples = []
   await page.keyboard.down('d')
@@ -201,6 +209,8 @@ try {
   await Promise.all([
     hostBoneyard.waitFor({ timeout: 30_000 }),
     clientBoneyard.waitFor({ timeout: 30_000 }),
+    page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
+    clientPage.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
   ])
   const [hostReceipt, clientReceipt] = await Promise.all([
     boneyardReceipt(hostBoneyard),
@@ -222,6 +232,19 @@ try {
   }
 
   for (const runPage of [page, clientPage]) {
+    const boneyardCanvas = runPage.locator(
+      '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
+    )
+    assert.equal(await boneyardCanvas.count(), 1)
+    const rendererReceipt = await boneyardCanvas.evaluate((canvas) => {
+      const diagnostics = canvas.__sdrBoneyardFrame
+      return {
+        frameCount: diagnostics?.frameCount,
+        staticPaintCount: diagnostics?.staticPaintCount,
+      }
+    })
+    assert.ok(rendererReceipt.frameCount > 0)
+    assert.ok(rendererReceipt.staticPaintCount > 0)
     await runPage.waitForFunction(() => /^[1-9]\d* FPS$/.test(
       document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
     ))
@@ -365,54 +388,38 @@ async function boneyardReceipt(locator) {
 async function boneyardPainterReceipt(page) {
   const receipt = await page.evaluate(() => {
     const scene = document.querySelector('.boneyard-scene')
-    const stack = scene?.querySelector('.boneyard-world-stack')
-    const base = stack?.querySelector('.boneyard-canvas')
-    const foreground = stack?.querySelector('.boneyard-foreground')
-    const localPlayer = stack?.querySelector('.boneyard-player[data-local="true"]')
-    const mainBands = [...(stack?.querySelectorAll('.boneyard-main-band') ?? [])]
-    const actors = [...(stack?.querySelectorAll('.boneyard-player') ?? [])]
-    const zIndex = (element) => Number.parseInt(getComputedStyle(element).zIndex, 10)
-    const canvasAlpha = (element) => element instanceof HTMLCanvasElement
-      ? element.getContext('2d')?.getContextAttributes()?.alpha
-      : undefined
+    const canvas = scene?.querySelector('.boneyard-world-canvas')
+    const diagnostics = canvas?.__sdrBoneyardFrame
 
     return {
-      actorZIndexes: actors.map(zIndex),
-      bandCount: Number(scene?.getAttribute('data-painter-band-count')),
-      baseAlpha: canvasAlpha(base),
-      baseZIndex: base ? zIndex(base) : Number.NaN,
-      foregroundAlpha: canvasAlpha(foreground),
-      foregroundZIndex: foreground ? zIndex(foreground) : Number.NaN,
-      isolation: stack ? getComputedStyle(stack).isolation : null,
-      localPlayerRow: Number(localPlayer?.getAttribute('data-painter-row')),
-      localPlayerZIndex: localPlayer ? zIndex(localPlayer) : Number.NaN,
-      mainBands: mainBands.map((band) => ({
-        alpha: canvasAlpha(band),
-        layerCount: Number(band.getAttribute('data-main-layer-count')),
-        row: Number(band.getAttribute('data-painter-row')),
-        zIndex: zIndex(band),
-      })),
+      bandCount: diagnostics?.painterBandCount,
+      foregroundZIndex: diagnostics?.foregroundZIndex,
+      localPlayerRow: diagnostics?.localPlayerPainterRow,
+      localPlayerZIndex: diagnostics?.localPlayerZIndex,
+      mainAboveLocal: diagnostics?.mainAboveLocal,
+      mainBelowLocal: diagnostics?.mainBelowLocal,
+      maxDynamicZIndex: diagnostics?.maxDynamicZIndex,
+      maxMainZIndex: diagnostics?.maxMainZIndex,
+      renderer: canvas?.getAttribute('data-game-renderer'),
+      sceneBandCount: Number(scene?.getAttribute('data-painter-band-count')),
+      staticLayerCount: diagnostics?.staticLayerCount,
     }
   })
-  assert.equal(receipt.isolation, 'isolate')
-  assert.equal(receipt.baseAlpha, false)
-  assert.equal(receipt.baseZIndex, 0)
-  assert.equal(receipt.bandCount, receipt.mainBands.length)
-  assert.ok(receipt.mainBands.length >= 2, 'expected scenery bands on both sides of live actors')
-  assert.ok(receipt.mainBands.every((band) => band.alpha === true && band.layerCount > 0))
-  assert.equal(receipt.foregroundAlpha, true)
+  assert.equal(receipt.renderer, 'pixi-webgl')
+  assert.equal(receipt.sceneBandCount, receipt.bandCount)
+  assert.ok(receipt.bandCount >= 2, 'expected scenery bands on both sides of live actors')
+  assert.ok(receipt.staticLayerCount > 0)
   assert.equal(receipt.localPlayerRow, 0)
-  assert.ok(receipt.mainBands.some((band) => band.zIndex < receipt.localPlayerZIndex))
-  assert.ok(receipt.mainBands.some((band) => band.zIndex > receipt.localPlayerZIndex))
-  assert.ok(receipt.foregroundZIndex > Math.max(
-    ...receipt.actorZIndexes,
-    ...receipt.mainBands.map((band) => band.zIndex),
-  ))
+  assert.equal(receipt.mainBelowLocal, true)
+  assert.equal(receipt.mainAboveLocal, true)
+  assert.ok(receipt.foregroundZIndex > receipt.maxDynamicZIndex)
+  assert.ok(receipt.foregroundZIndex > receipt.maxMainZIndex)
   return receipt
 }
 
 async function crossEntryGate(hostPage, clientPage) {
   const scene = hostPage.locator('.boneyard-scene')
+  const alignedX = await alignWithEntryGate(hostPage, scene)
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
   const key = initialY > 1000 ? 'w' : 's'
@@ -427,7 +434,7 @@ async function crossEntryGate(hostPage, clientPage) {
         return Number.isFinite(value) && (value - initialY) * direction > 200
       },
       { direction, initialY },
-      { timeout: 6_000 },
+      { timeout: 8_000 },
     )
   } finally {
     await hostPage.keyboard.up(key)
@@ -444,7 +451,51 @@ async function crossEntryGate(hostPage, clientPage) {
     finalGateState,
     { timeout: 3_000 },
   )
-  return { direction, finalY, initialY }
+  return { alignedX, direction, finalY, initialY }
+}
+
+async function alignWithEntryGate(page, scene) {
+  const initialX = Number(await scene.getAttribute('data-local-player-x'))
+  const gateState = await scene.getAttribute('data-gate-state')
+  const gates = new Map()
+  for (const serialized of gateState?.split('|') || []) {
+    const separator = serialized.lastIndexOf(':')
+    if (separator < 0) continue
+    const id = serialized.slice(0, separator)
+    const [x] = serialized.slice(separator + 1).split(',').map(Number)
+    const gateId = id.slice(0, id.lastIndexOf(':'))
+    if (!Number.isFinite(x) || !gateId) continue
+    const tips = gates.get(gateId) || []
+    tips.push(x)
+    gates.set(gateId, tips)
+  }
+  const centers = [...gates.values()]
+    .filter((tips) => tips.length === 2)
+    .map((tips) => (tips[0] + tips[1]) / 2)
+  assert.ok(centers.length > 0, `expected an entry gate in ${gateState}`)
+  const targetX = centers.reduce((nearest, center) => (
+    Math.abs(center - initialX) < Math.abs(nearest - initialX) ? center : nearest
+  ))
+  const delta = targetX - initialX
+  if (Math.abs(delta) <= 3) return initialX
+  const direction = Math.sign(delta)
+  const key = direction > 0 ? 'd' : 'a'
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(
+      ({ direction, initialX, targetX }) => {
+        const value = Number(document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-local-player-x'))
+        return Number.isFinite(value)
+          && (value - initialX) * direction >= Math.abs(targetX - initialX) - 3
+      },
+      { direction, initialX, targetX },
+      { timeout: 3_000 },
+    )
+  } finally {
+    await page.keyboard.up(key)
+  }
+  return Number(await scene.getAttribute('data-local-player-x'))
 }
 
 async function sampleDigFrames(page) {
@@ -486,15 +537,17 @@ async function sampleDarknessPixels(page) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const sample = await page.evaluate(() => {
       const canvas = document.querySelector('.boneyard-darkness')
-      const player = document.querySelector('.boneyard-player[data-local="true"]')
-      if (!(canvas instanceof HTMLCanvasElement) || !(player instanceof HTMLElement)) return null
+      const world = document.querySelector('.boneyard-world-canvas')
+      if (!(canvas instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) return null
       const context = canvas.getContext('2d')
       if (!context || canvas.width === 0 || canvas.height === 0) return null
+      const diagnostics = world.__sdrBoneyardFrame
+      if (!diagnostics) return null
 
       const scaleX = canvas.width / 1600
       const scaleY = canvas.height / 900
-      const playerX = Number.parseFloat(player.style.left) * scaleX
-      const playerY = Number.parseFloat(player.style.top) * scaleY
+      const playerX = diagnostics.playerScreenX * scaleX
+      const playerY = diagnostics.playerScreenY * scaleY
       const corners = [
         { x: 2 * scaleX, y: 2 * scaleY },
         { x: 1598 * scaleX, y: 2 * scaleY },

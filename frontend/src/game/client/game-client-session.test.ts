@@ -129,6 +129,7 @@ test('client carries character config, predicts input, reconciles, and tears dow
   }))
   assert.equal(session.getSnapshot().world.kind, 'boneyard')
   assert.equal(session.samplePresentation().world.kind, 'hub')
+  assert.equal(session.sampleBoneyardPresentation().world.kind, 'boneyard')
 
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')

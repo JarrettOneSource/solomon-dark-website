@@ -180,7 +180,11 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
     if (!session) return
     setRuntimeSnapshot(session.getSnapshot())
     setLoadedBoneyard(session.getBoneyard())
-    const removeSnapshot = session.onSnapshot(setRuntimeSnapshot)
+    const removeSnapshot = session.onSnapshot((snapshot) => {
+      setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot)
+        ? current
+        : snapshot)
+    })
     const removeBoneyard = session.onBoneyard(setLoadedBoneyard)
     return () => {
       removeSnapshot()
@@ -294,6 +298,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
+            samplePresentation={session.sampleBoneyardPresentation}
           />
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
           <HubScene
@@ -324,4 +329,15 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
       </section>
     </div>
   )
+}
+
+function sameRuntimeScene(
+  current: GameSnapshot | null,
+  next: GameSnapshot,
+): boolean {
+  if (!current || current.world.kind !== next.world.kind) return false
+  if (current.world.kind === 'boneyard' && next.world.kind === 'boneyard') {
+    return current.world.runId === next.world.runId
+  }
+  return current.world.kind === 'hub'
 }

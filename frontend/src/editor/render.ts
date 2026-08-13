@@ -570,6 +570,7 @@ export function drawNativeBoneyardWorld(
   cam: Camera,
   doc: EditorDoc,
   gateLeaves: readonly NativeGateLeafOverride[] = [],
+  skip: ReadonlySet<string> = EMPTY_SET,
 ) {
   const gateOverrides = gateOverrideMap(gateLeaves)
   paintWorld(
@@ -579,7 +580,7 @@ export function drawNativeBoneyardWorld(
     cam,
     doc,
     { selected: EMPTY_SET, hover: null, showGrid: false },
-    undefined,
+    skip.size > 0 ? skip : undefined,
     true,
     gateOverrides,
   )
@@ -767,7 +768,7 @@ function paintWorld(
   cam: Camera,
   doc: EditorDoc,
   wui: WorldPaintUI,
-  skip?: Set<string>,
+  skip?: ReadonlySet<string>,
   runtime = false,
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
   placementMode: PlacementPaintMode = 'all',
@@ -898,7 +899,7 @@ function paintWorld(
   paintPlacementOutlines(ctx, doc, cam, cssW, cssH, selected, wui.hover)
 }
 
-function included(sel: SelEntry, filter?: { only?: Set<string>; skip?: Set<string> }): boolean {
+function included(sel: SelEntry, filter?: { only?: ReadonlySet<string>; skip?: ReadonlySet<string> }): boolean {
   if (!filter) return true
   const key = entryKey(sel)
   if (filter.only && !filter.only.has(key)) return false
@@ -911,7 +912,7 @@ function paintPlacementPasses(
   cam: Camera,
   cssW: number,
   cssH: number,
-  filter?: { only?: Set<string>; skip?: Set<string> },
+  filter?: { only?: ReadonlySet<string>; skip?: ReadonlySet<string> },
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
   mode: PlacementPaintMode = 'all',
 ) {

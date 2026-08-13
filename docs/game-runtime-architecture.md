@@ -151,16 +151,28 @@ There is one composed client, not one DOM client and one canvas client.
 
 - Screen-space menus, Create/loadout, and HUD may remain React/DOM while their
   native-parity receipts continue to pass.
-- The Courtyard world and camera now render through one PixiJS WebGL canvas.
+- The Courtyard and Boneyard worlds and cameras now render through PixiJS
+  WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and
   painter ordering remain renderer-independent inputs.
+- A loaded Boneyard composes its immutable stock-generator output once into
+  bounded GPU tiles and tightly cropped resident main-layer textures. The
+  recovered native effective-Y queue interleaves those main layers with GPU
+  actors; camera motion transforms them and display frames update only their
+  depths. Neither path reruns the Canvas2D native painter at the `20 Hz`
+  snapshot cadence.
+  Players, Solomon Dig, and moving gate leaves remain dynamic GPU residents.
+  The recovered mode-1/2 darkness compositor remains a small screen-space
+  post-process between the world canvas and HUD.
 - Actor presentation is pooled and depth-sorted inside the GPU scene. The old
   per-actor DOM/style painter has been removed; React continues to own menus,
   loadout, HUD, accessibility text, and touch controls.
-- The client presents buffered server snapshots at display cadence and applies
-  bounded local prediction through the shared movement kernel. The `100 Hz`
-  simulation, `20 Hz` transport snapshots, and browser/display refresh remain
-  separate clocks.
+- The client presents buffered server snapshots at display cadence. The Hub
+  applies bounded local prediction through the shared movement kernel;
+  Boneyard presentation interpolates received players and gate leaves without
+  duplicating its authoritative collision simulation. The `100 Hz` simulation,
+  `20 Hz` transport snapshots, and browser/display refresh remain separate
+  clocks.
 - Texture residency is scene-scoped. The Hub keeps every wizard appearance
   available because authenticated remote participants may use different
   elements, while scenes outside the Hub do not retain its GPU textures.
@@ -263,8 +275,8 @@ design:
   supervisor, while the TLS gateway routes opaque session paths to the same
   authoritative host implementation used by development and future desktop
   packaging; and
-- the Hub world uses a pooled PixiJS/WebGL scene, while React retains the HUD,
-  menus, accessibility surface, and Pointer Events joystick.
+- the Hub and Boneyard worlds use PixiJS/WebGL scenes, while React retains the
+  HUD, menus, accessibility surface, and Pointer Events joystick.
 
 Encrypted direct peer hosting, save persistence, combat load recovery, and
 minimum-hardware qualification remain the next product slices. None requires
