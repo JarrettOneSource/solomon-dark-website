@@ -51,3 +51,23 @@ test('game simulation owns fixed-step accumulation independently of its world', 
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
 })
+
+test('the authoritative tick latches footsteps only while native movement is active', () => {
+  let state = createGameSimulation()
+  for (let tick = 1; tick <= 100; tick += 1) {
+    state = stepGameSimulationTick(state, {
+      'local-player': { movement: { x: 1, y: 0 } },
+    })
+    if (tick % 25 === 0) {
+      assert.equal(state.players['local-player'].footstepTick, tick)
+    }
+  }
+
+  for (let tick = 101; tick <= 200; tick += 1) {
+    state = stepGameSimulationTick(state, {
+      'local-player': { movement: { x: 0, y: 0 } },
+    })
+  }
+
+  assert.equal(state.players['local-player'].footstepTick, 100)
+})

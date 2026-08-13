@@ -161,6 +161,7 @@ function interpolatePlayer(
   const discrete = blend < 1 ? older : newer
   return {
     config: { ...discrete.config },
+    footstepTick: discrete.footstepTick,
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
     headingIndex: Math.round(lerpCycle(
       older.headingIndex,

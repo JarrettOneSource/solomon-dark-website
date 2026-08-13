@@ -15,8 +15,7 @@ import {
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
   nativeFootstepCue,
-  nativeFootstepTicksBetween,
-  nativeMovementOccurredBetween,
+  newNativeFootstepTick,
 } from './game-audio-native.ts'
 import {
   HUB_TEACHER_CAST_SECONDS,
@@ -69,24 +68,22 @@ test('emits the selected element and discipline reveal sounds in native order', 
   assert.equal(CREATE_DISCIPLINE_FINALIZE_MS, 880)
 })
 
-test('derives Courtyard footsteps from crossed authoritative 25-tick boundaries', () => {
-  assert.deepEqual(nativeFootstepTicksBetween(24, 25, true), [25])
-  assert.deepEqual(nativeFootstepTicksBetween(24, 76, true), [25, 50, 75])
-  assert.deepEqual(nativeFootstepTicksBetween(24, 76, false), [])
-  assert.deepEqual(nativeFootstepTicksBetween(76, 24, true), [])
+test('consumes each authoritative Courtyard footstep once without gap bursts', () => {
+  assert.equal(newNativeFootstepTick(undefined, { footstepTick: 0 }), undefined)
+  assert.equal(newNativeFootstepTick(
+    { footstepTick: 0 },
+    { footstepTick: 25 },
+  ), 25)
+  assert.equal(newNativeFootstepTick(
+    { footstepTick: 25 },
+    { footstepTick: 25 },
+  ), undefined)
+  assert.equal(newNativeFootstepTick(
+    { footstepTick: 25 },
+    { footstepTick: 75 },
+  ), 75)
   assert.equal(nativeFootstepCue(25, 'player-1'), nativeFootstepCue(25, 'player-1'))
   assert.ok(['step-1', 'step-2'].includes(nativeFootstepCue(50, 'player-1')))
-  assert.equal(nativeMovementOccurredBetween(undefined, {
-    velocity: { x: 0, y: 0 },
-    walkCyclePrimary: 0,
-  }), false)
-  assert.equal(nativeMovementOccurredBetween({
-    velocity: { x: 1, y: 0 },
-    walkCyclePrimary: 0,
-  }, {
-    velocity: { x: 0, y: 0 },
-    walkCyclePrimary: 1,
-  }), true)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

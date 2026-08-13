@@ -71,6 +71,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
       movementAcceleration: 10,
       movementLaneCap: 118.75,
       movementRetention: 0.9,
+      movementThresholdSquared: Math.fround(0.01),
       playerRadius: 25,
     },
     content: {
@@ -163,6 +164,7 @@ test('protocol bounds server-controlled world collections', () => {
       movementAcceleration: 10,
       movementLaneCap: 118.75,
       movementRetention: 0.9,
+      movementThresholdSquared: Math.fround(0.01),
       playerRadius: 25,
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },

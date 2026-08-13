@@ -2317,16 +2317,24 @@ bit-for-bit copies of the stock files. Their registry mapping is recorded in
 
 ### Courtyard movement and Teacher cast
 
-The common actor update at `0x00548B00` gates footsteps on the global 100 Hz
-simulation tick: while an actor is moving and not in its special-surface
-state, every tick divisible by 25 plays one step. Courtyard surface test slot
-`+0x118` resolves to `0x005088F0`, an unconditional false result, so the local
-Courtyard player randomly selects only registry offsets `+0x23B8/+0x23E4`,
-`sounds\\Step\\step1` or `step2`. It never selects `woodstep` there. The
-non-positional call multiplies the region/listener factor by `0.5`; for the
-local listener-source pair that is gain `0.5`. Browser cadence must consume
-crossed multiples of 25 from authoritative `HubSnapshot.tick`, including
-snapshot gaps, instead of using keyboard-repeat or animation-frame timers.
+The common actor update at `0x00548B00` gates its entire movement-owned branch
+on `actor[+0x158]^2 + actor[+0x15C]^2 > 0.01f`. Only after that gate passes can
+the local player (`actor+0x5C == 0`) request a footstep on a global 100 Hz tick
+divisible by 25. Normal release damping remains physically active for 21 ticks
+from steady cardinal movement, then the threshold suppresses MoveStep, gait,
+the surface query, its RNG draw, and sound together. Residual velocity below
+the threshold is not movement and must remain silent. Requested movement still
+owns gait and sound when collision blocks placement.
+
+Courtyard surface test slot `+0x118` resolves to `0x005088F0`, an unconditional
+false result, so the local Courtyard player randomly selects only registry
+offsets `+0x23B8/+0x23E4`, `sounds\\Step\\step1` or `step2`. It never selects
+`woodstep` there. The gain-only call multiplies region slot `+0x100` by `0.5`;
+for the local listener-source pair that is gain `0.5`. Browser cadence must be
+published by the authoritative 100 Hz player simulation at the exact tick of
+the native decision. A client must consume a newly published event once; it
+must not reconstruct old events from velocity snapshots or replay crossed
+tick multiples as an audible burst after a gap.
 
 Teacher update `0x0050B260` calls `Teacher::Cast` (`0x00505560`) once when its
 267-tick charging pose releases, 4.45 s into the native 60 Hz Teacher cycle.
@@ -2372,6 +2380,68 @@ Evidence: fresh read-only Ghidra decompilation and instruction traces for
 `../Mod Loader/docs/reverse-engineering/native-audio-catalog.json`; and the
 stock files under `SolomonDarkAbandonware/music` and
 `SolomonDarkAbandonware/sounds`.
+
+### 2026-08-13 footstep lifecycle correction
+
+The reported mismatch reproduced in the current web kernel without changing
+assets: after movement through tick 100 and release, the snapshot inference
+emitted footsteps at ticks `125`, `150`, `175`, and `200`, while stock emitted
+none of them. The web movement plan kept applying exponentially small deltas,
+and `nativeMovementOccurredBetween` separately treated any residual velocity
+above `0.01` units per second as movement. Both rules contradicted the native
+per-tick squared-displacement gate and made the audible error unbounded.
+
+Fresh read-only analysis used retail `SolomonDark.exe` SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. Instructions `0x0054AD54..0x0054AD7B`
+perform the strict `0.01f` comparison and jump over the movement-owned branch;
+`0x0054AE6E..0x0054AE94` enforce local slot zero and tick modulo 25;
+`0x0054AF92` and `0x0054AFEC` dispatch wood and default-ground sounds.
+Courtyard vtable `0x00792644` maps attenuation slot `+0x100` to `0x005006C0`
+and surface slot `+0x118` to the unconditional-false `0x005088F0`. The durable
+native contract is in
+`../Mod Loader/docs/reverse-engineering/native-audio-events.md`.
+
+Implementation consequence: the shared player kernel must suppress placement
+and gait once the exact native displacement gate fails. The authoritative
+server tick must latch the resulting 25-tick footstep event into replicated
+player state; Hub audio consumes a changed event tick once and retains the
+existing exact Step WAVs, deterministic two-choice approximation, and gain
+`0.5`. Client-side velocity/snapshot-gap inference is removed completely.
+
+Confidence is high for branch ownership, threshold, cadence, local-player
+gate, Courtyard surface choice, assets, and gain. The web still cannot match a
+particular retail run's Step 1/2 sequence because native selection shares its
+RNG stream with unrelated gameplay draws. Special state `actor+0x154 == 2`
+and non-Courtyard region surfaces lead to the separately recovered splash and
+wood branches; their world-material ownership remains outside this Courtyard
+correction rather than being guessed here.
+
+#### Implementation validation receipt
+
+The finished Website tree passed the canonical `./scripts/validate.sh` gate:
+the backend Release build, all 23 Python contract/integration tests, all 147
+frontend tests, all 5 desktop tests, the production frontend/game-host build,
+and the production media CSP check. Protocol version 6 and player-kernel
+version `kernel-2` carry both the strict `0.01f` movement threshold and the
+authoritative `footstepTick` event latch through host, client prediction, and
+presentation snapshots.
+
+A fresh Chromium session exercised real input and the shipped media paths. Its
+first three held-movement footstep dispatches were separated by `239.9 ms` and
+`239.3 ms`, used only the exact `Step 1.wav` / `Step 2.wav` family at gain
+`0.5`, and resolved media starts without console or page errors. Release
+admitted one cadence-phase-dependent tail step, then issued no further
+footstep request for the next `700 ms`; this distinguishes stock's finite
+physical release tail from the former unbounded residual-velocity loop.
+
+The companion Mod Loader report was checked in a fresh NTFS worktree with
+`Verify-Workspace.ps1 -Configuration Debug`: source organization passed for
+721 source/header fragments, the loader plus launcher/UI/updater built with 0
+errors (29 pre-existing C4702 warnings), all 40 mods were listed disabled, and
+the isolated `verify-footsteps-ntfs-20260813` stage completed with the binary
+layout and debug-UI configs present. The verifier ended with `Workspace
+verification passed`; it did not launch or alter the stock game installation.
 
 ### 2026-08-12 implementation validation receipt
 

@@ -1,4 +1,5 @@
 import {
+  PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   createPlayerCharacter,
   type PlayerCharacterConfig,
@@ -109,22 +110,42 @@ export function stepGameSimulationTick(
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, state.players, inputs)
-      return {
-        accumulatorSeconds: state.accumulatorSeconds,
-        players: result.players,
-        tick: state.tick + 1,
-        world: result.world,
-      }
+      return finishGameSimulationTick(state, result)
     }
     case 'boneyard': {
       const result = stepBoneyardWorldTick(state.world, state.players, inputs)
-      return {
-        accumulatorSeconds: state.accumulatorSeconds,
-        players: result.players,
-        tick: state.tick + 1,
-        world: result.world,
-      }
+      return finishGameSimulationTick(state, result)
     }
+  }
+}
+
+function finishGameSimulationTick(
+  previous: GameSimulationState,
+  result: { players: Readonly<Record<PlayerId, PlayerCharacterState>>, world: GameWorldState },
+): GameSimulationState {
+  const tick = previous.tick + 1
+  if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL !== 0) {
+    return {
+      accumulatorSeconds: previous.accumulatorSeconds,
+      players: result.players,
+      tick,
+      world: result.world,
+    }
+  }
+
+  const players: Record<PlayerId, PlayerCharacterState> = {}
+  for (const [playerId, player] of Object.entries(result.players)) {
+    const priorPlayer = previous.players[playerId]
+    players[playerId] = priorPlayer
+      && priorPlayer.walkCyclePrimary !== player.walkCyclePrimary
+      ? { ...player, footstepTick: tick }
+      : player
+  }
+  return {
+    accumulatorSeconds: previous.accumulatorSeconds,
+    players,
+    tick,
+    world: result.world,
   }
 }
 

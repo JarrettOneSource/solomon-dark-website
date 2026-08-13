@@ -11,8 +11,7 @@ import {
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
   nativeFootstepCue,
-  nativeFootstepTicksBetween,
-  nativeMovementOccurredBetween,
+  newNativeFootstepTick,
 } from './game-audio-native.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
@@ -90,16 +89,12 @@ export default function HubScene({
       if (!isHubGameSnapshot(snapshot)) return
       const player = snapshot.players[playerId]
       if (player) {
-        const moving = nativeMovementOccurredBetween(
+        const footstepTick = newNativeFootstepTick(
           previousAudioSnapshot.players[playerId],
           player,
         )
-        for (const tick of nativeFootstepTicksBetween(
-          previousAudioSnapshot.tick,
-          snapshot.tick,
-          moving,
-        )) {
-          audio.playSound(nativeFootstepCue(tick, playerId), { volume: 0.5 })
+        if (footstepTick !== undefined) {
+          audio.playSound(nativeFootstepCue(footstepTick, playerId), { volume: 0.5 })
         }
       }
       previousAudioSnapshot = snapshot

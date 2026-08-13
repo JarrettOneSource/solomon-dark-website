@@ -26,6 +26,7 @@ const CHARACTER = {
 function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
   return {
     config: { ...CHARACTER },
+    footstepTick: 0,
     gaitDegrees: x,
     headingIndex,
     position: { x, y: 200 },

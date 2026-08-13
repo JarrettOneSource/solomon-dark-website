@@ -19,6 +19,7 @@ export interface PlayerCharacterInput {
 
 export interface PlayerCharacterState {
   config: PlayerCharacterConfig
+  footstepTick: number
   gaitDegrees: number
   headingIndex: number
   position: Vector2
@@ -28,6 +29,7 @@ export interface PlayerCharacterState {
 
 export interface PlayerCharacterMovementPlan {
   delta: Vector2
+  movementActive: boolean
   requestedVelocity: Vector2
   retainedVelocity: Vector2
 }
@@ -41,6 +43,8 @@ export const PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS = 0.01
 export const PLAYER_CHARACTER_INPUT_ACCELERATION = 10
 export const PLAYER_CHARACTER_MOVEMENT_LANE_CAP = 118.75
 export const PLAYER_CHARACTER_MOVEMENT_RETENTION = 0.9
+export const PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED = Math.fround(0.01)
+export const PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL = 25
 
 export function createPlayerCharacter(
   config: PlayerCharacterConfig,
@@ -48,6 +52,7 @@ export function createPlayerCharacter(
 ): PlayerCharacterState {
   return {
     config: { ...config },
+    footstepTick: 0,
     gaitDegrees: 0,
     headingIndex: actorHeadingIndex(180),
     position: { ...position },
@@ -79,11 +84,17 @@ export function planPlayerCharacterTick(
     x: Math.fround(accumulated.x * capScale),
     y: Math.fround(accumulated.y * capScale),
   }
+  const requestedDelta = {
+    x: Math.fround(requestedVelocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS),
+    y: Math.fround(requestedVelocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS),
+  }
+  const movementActive = (
+    requestedDelta.x * requestedDelta.x
+    + requestedDelta.y * requestedDelta.y
+  ) > PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED
   return {
-    delta: {
-      x: Math.fround(requestedVelocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS),
-      y: Math.fround(requestedVelocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS),
-    },
+    delta: movementActive ? requestedDelta : { x: 0, y: 0 },
+    movementActive,
     requestedVelocity,
     retainedVelocity: {
       x: Math.fround(requestedVelocity.x * PLAYER_CHARACTER_MOVEMENT_RETENTION),
@@ -108,7 +119,7 @@ export function commitPlayerCharacterTick(
       previous.gaitDegrees
       + requestedDistance * PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT
     ) % 360,
-    headingIndex: requestedSpeed > 0.01
+    headingIndex: plan.movementActive && requestedSpeed > 0.01
       ? actorHeadingIndex(actorHeadingFromVector(
           plan.requestedVelocity.x,
           plan.requestedVelocity.y,

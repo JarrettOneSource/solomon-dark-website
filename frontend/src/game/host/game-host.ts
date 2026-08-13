@@ -7,6 +7,7 @@ import {
   PLAYER_CHARACTER_INPUT_ACCELERATION,
   PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
   PLAYER_CHARACTER_MOVEMENT_RETENTION,
+  PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_RADIUS,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
@@ -223,6 +224,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
             movementLaneCap: PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
             movementRetention: PLAYER_CHARACTER_MOVEMENT_RETENTION,
+            movementThresholdSquared: PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
             playerRadius: PLAYER_CHARACTER_RADIUS,
           },
           content: options.content ?? {

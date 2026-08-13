@@ -4,7 +4,6 @@ import {
 } from './hub-teacher.ts'
 
 export const NATIVE_AUDIO_TICK_MS = 10
-export const NATIVE_FOOTSTEP_TICKS = 25
 
 export type GameAudioScene = 'create' | 'hub' | 'title'
 export type GameMusicCue = 'academy' | 'selection' | 'solomondarktheme'
@@ -195,37 +194,23 @@ export function createSelectionAudioEvents(
   return events
 }
 
-export function nativeFootstepTicksBetween(
-  previousTick: number,
-  currentTick: number,
-  moving: boolean,
-): number[] {
-  if (!moving || currentTick <= previousTick) return []
-  const ticks: number[] = []
-  const first = (Math.floor(previousTick / NATIVE_FOOTSTEP_TICKS) + 1) * NATIVE_FOOTSTEP_TICKS
-  for (let tick = first; tick <= currentTick; tick += NATIVE_FOOTSTEP_TICKS) ticks.push(tick)
-  return ticks
-}
-
 export interface AudioPoint {
   x: number
   y: number
 }
 
-export interface FootstepMovementSample {
-  velocity: AudioPoint
-  walkCyclePrimary: number
+export interface FootstepEventSample {
+  footstepTick: number
 }
 
-export function nativeMovementOccurredBetween(
-  previous: FootstepMovementSample | undefined,
-  current: FootstepMovementSample,
-): boolean {
-  return Math.hypot(current.velocity.x, current.velocity.y) > 0.01
-    || (previous !== undefined && (
-      Math.hypot(previous.velocity.x, previous.velocity.y) > 0.01
-      || previous.walkCyclePrimary !== current.walkCyclePrimary
-    ))
+export function newNativeFootstepTick(
+  previous: FootstepEventSample | undefined,
+  current: FootstepEventSample,
+): number | undefined {
+  if (!previous || current.footstepTick === 0) return undefined
+  return previous.footstepTick === current.footstepTick
+    ? undefined
+    : current.footstepTick
 }
 
 function stableHash(value: string, salt: number): number {

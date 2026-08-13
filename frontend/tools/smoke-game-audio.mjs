@@ -71,7 +71,7 @@ try {
         nextChannel += 1
         this.dataset.audioSmokeChannel = `${channelId}`
       }
-      events.push({
+      const playEvent = {
         at: performance.now(),
         channelId,
         currentTime: this.currentTime,
@@ -80,8 +80,14 @@ try {
         src: this.src,
         type: 'play',
         volume: this.volume,
-      })
-      return NativePlay.call(this)
+      }
+      events.push(playEvent)
+      const playback = NativePlay.call(this)
+      void playback.then(
+        () => events.push({ ...playEvent, at: performance.now(), type: 'started' }),
+        () => {},
+      )
+      return playback
     }
     Object.defineProperties(window, {
       __gameAudioEvents: { value: events },
@@ -105,7 +111,16 @@ try {
 
   await page.getByRole('button', { name: 'Play' }).focus()
   await page.keyboard.press('Enter')
-  await waitForPlay(page, '/game/audio/sfx/click.wav')
+  try {
+    await waitForPlay(page, '/game/audio/sfx/click.wav')
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      audioEvents: await audioEvents(page),
+      consoleErrors,
+      pageErrors,
+    })}\n`)
+    throw error
+  }
 
   const beforeNewGameHover = await playCount(page)
   await page.getByRole('button', { name: 'New Game' }).hover()
@@ -178,21 +193,41 @@ try {
   }
   await waitForPlay(page, '/game/audio/music/academy.mp3')
 
-  await page.keyboard.down('d')
-  await waitForEitherPlay(page, [
+  const footstepSources = [
     '/game/audio/sfx/step/step1.wav',
     '/game/audio/sfx/step/step2.wav',
-  ])
-  await page.waitForTimeout(600)
+  ]
+  const stepCountBeforeMovement = footstepEvents(await audioEvents(page), 'play').length
+  await page.keyboard.down('d')
+  await waitForFootstepCount(page, footstepSources, 'play', stepCountBeforeMovement + 3)
   await page.keyboard.up('d')
 
-  const stepEvents = (await audioEvents(page)).filter((event) => (
-    event.type === 'play'
-    && (sourceMatches(event.src, '/game/audio/sfx/step/step1.wav')
-      || sourceMatches(event.src, '/game/audio/sfx/step/step2.wav'))
-  ))
-  assert.ok(stepEvents.length >= 2, `expected repeated native footsteps, got ${stepEvents.length}`)
-  assert.ok(stepEvents.every((event) => event.volume === 0.5))
+  const stepEventsAtRelease = footstepEvents(await audioEvents(page), 'play')
+  await waitForFootstepCount(page, footstepSources, 'started', stepCountBeforeMovement + 3)
+  const heldStepEvents = stepEventsAtRelease.slice(stepCountBeforeMovement)
+  const heldStepStarts = footstepEvents(await audioEvents(page), 'started')
+    .slice(stepCountBeforeMovement)
+  assert.ok(heldStepEvents.length >= 3, `expected repeated native footsteps, got ${heldStepEvents.length}`)
+  assert.ok(heldStepEvents.every((event) => event.volume === 0.5))
+  const dispatchIntervalsMs = consecutiveIntervals(heldStepEvents.slice(0, 3))
+  const startIntervalsMs = consecutiveIntervals(heldStepStarts.slice(0, 3))
+  assertNativeFootstepIntervals(dispatchIntervalsMs, 'dispatch')
+
+  await page.waitForTimeout(350)
+  const releaseTailEvents = footstepEvents(await audioEvents(page), 'play')
+    .slice(stepEventsAtRelease.length)
+  assert.ok(
+    releaseTailEvents.length <= 1,
+    `native release tail allows at most one phase-dependent step, got ${releaseTailEvents.length}`,
+  )
+  const stepCountAfterReleaseTail = footstepEvents(await audioEvents(page), 'play').length
+  await page.waitForTimeout(700)
+  const stepEvents = footstepEvents(await audioEvents(page), 'play')
+  assert.equal(
+    stepEvents.length,
+    stepCountAfterReleaseTail,
+    'sub-threshold residual velocity must remain silent after the native release tail',
+  )
 
   // A reused direct host may enter the 14.12-second Teacher cycle at any phase.
   await waitForPlay(page, '/game/audio/sfx/summon.wav', 16_000)
@@ -227,6 +262,8 @@ try {
     mutePreferences,
     musicSources: [...new Set(musicSources)],
     playedSources,
+    dispatchIntervalsMs,
+    startIntervalsMs,
     stepCount: stepEvents.length,
     summon: {
       playbackRate: summon.playbackRate,
@@ -255,13 +292,13 @@ async function waitForPlay(page, source, timeout = 5_000) {
   )
 }
 
-async function waitForEitherPlay(page, sources, timeout = 5_000) {
+async function waitForFootstepCount(page, sources, type, count, timeout = 5_000) {
   await page.waitForFunction(
-    (expected) => window.__gameAudioEvents.some((event) => (
-      event.type === 'play'
+    ({ expected, eventType, minimum }) => window.__gameAudioEvents.filter((event) => (
+      event.type === eventType
       && expected.some((source) => window.__gameAudioSourceMatches(event.src, source))
-    )),
-    sources,
+    )).length >= minimum,
+    { expected: sources, eventType: type, minimum: count },
     { timeout },
   )
 }
@@ -285,4 +322,29 @@ function sourceMatches(actual, expected) {
   const suffix = actualName.slice(stem.length, -extension.length)
   return actualName === expectedName
     || (actualName.startsWith(`${stem}-`) && actualName.endsWith(extension) && /^-[\w-]+$/.test(suffix))
+}
+
+function footstepEvents(events, type) {
+  return events.filter((event) => (
+    event.type === type
+    && (sourceMatches(event.src, '/game/audio/sfx/step/step1.wav')
+      || sourceMatches(event.src, '/game/audio/sfx/step/step2.wav'))
+  ))
+}
+
+function consecutiveIntervals(events) {
+  return events.slice(1).map((event, index) => event.at - events[index].at)
+}
+
+function assertNativeFootstepIntervals(intervals, label) {
+  assert.equal(intervals.length, 2)
+  assert.ok(
+    intervals.every((interval) => interval >= 150 && interval <= 400),
+    `expected 250 ms ${label} cadence, got ${intervals.join(', ')}`,
+  )
+  const average = intervals.reduce((total, interval) => total + interval, 0) / intervals.length
+  assert.ok(
+    average >= 200 && average <= 325,
+    `expected 250 ms average ${label} cadence, got ${average}`,
+  )
 }

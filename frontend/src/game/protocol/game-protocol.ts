@@ -33,9 +33,9 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 5
+export const GAME_PROTOCOL_VERSION = 6
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
-export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-1'
+export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-2'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
@@ -64,6 +64,7 @@ export interface PlayerCharacterKernelParameters {
   movementAcceleration: number
   movementLaneCap: number
   movementRetention: number
+  movementThresholdSquared: number
   playerRadius: number
 }
 
@@ -406,6 +407,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
   const source = record(value, field)
   onlyKeys(source, field, [
     'config',
+    'footstepTick',
     'gaitDegrees',
     'headingIndex',
     'position',
@@ -414,6 +416,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
   ])
   return {
     config: playerCharacterConfig(source.config, `${field}.config`),
+    footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     position: vector(source.position, `${field}.position`),
@@ -853,6 +856,7 @@ function playerCharacterKernelParameters(
     'movementAcceleration',
     'movementLaneCap',
     'movementRetention',
+    'movementThresholdSquared',
     'playerRadius',
   ])
   return {
@@ -871,6 +875,10 @@ function playerCharacterKernelParameters(
     movementRetention: positiveFinite(
       source.movementRetention,
       'kernelParameters.movementRetention',
+    ),
+    movementThresholdSquared: positiveFinite(
+      source.movementThresholdSquared,
+      'kernelParameters.movementThresholdSquared',
     ),
     playerRadius: positiveFinite(
       source.playerRadius,

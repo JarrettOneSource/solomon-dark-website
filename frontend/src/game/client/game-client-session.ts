@@ -2,6 +2,7 @@ import {
   PLAYER_CHARACTER_INPUT_ACCELERATION,
   PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
   PLAYER_CHARACTER_MOVEMENT_RETENTION,
+  PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
   type PlayerCharacterConfig,
@@ -362,6 +363,7 @@ function supportsLocalPrediction(welcome: ServerWelcomeMessage): boolean {
     && parameters.movementAcceleration === PLAYER_CHARACTER_INPUT_ACCELERATION
     && parameters.movementLaneCap === PLAYER_CHARACTER_MOVEMENT_LANE_CAP
     && parameters.movementRetention === PLAYER_CHARACTER_MOVEMENT_RETENTION
+    && parameters.movementThresholdSquared === PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED
     && parameters.playerRadius === PLAYER_CHARACTER_RADIUS
 }
 

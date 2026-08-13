@@ -7,6 +7,7 @@ import {
   PLAYER_CHARACTER_INPUT_ACCELERATION,
   PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
   PLAYER_CHARACTER_MOVEMENT_RETENTION,
+  PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_STEADY_SPEED,
   PLAYER_CHARACTER_WALK_CYCLE_DISTANCE_PER_FRAME,
@@ -44,6 +45,7 @@ test('player character planning replays the native fixed-tick movement lane', ()
   assert.equal(PLAYER_CHARACTER_INPUT_ACCELERATION, 10)
   assert.equal(PLAYER_CHARACTER_MOVEMENT_LANE_CAP, 118.75)
   assert.equal(PLAYER_CHARACTER_MOVEMENT_RETENTION, 0.9)
+  assert.equal(PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED, Math.fround(0.01))
 
   const first = planPlayerCharacterTick(
     { velocity: { x: 0, y: 0 } },
@@ -53,6 +55,7 @@ test('player character planning replays the native fixed-tick movement lane', ()
   closeTo(first.delta.x, 0.1)
   assert.equal(first.delta.y, 0)
   assert.deepEqual(first.retainedVelocity, { x: 9, y: 0 })
+  assert.equal(first.movementActive, true)
 
   let player = createPlayerCharacter(CHARACTER, { x: 0, y: 0 })
   for (let tick = 0; tick < 200; tick += 1) {
@@ -74,6 +77,35 @@ test('player character planning replays the native fixed-tick movement lane', ()
   closeTo(player.position.x - steadyStart, 10)
 })
 
+test('normal release stops movement and gait after the native 21-tick tail', () => {
+  let player = createPlayerCharacter(CHARACTER, { x: 0, y: 0 })
+  for (let tick = 0; tick < 200; tick += 1) {
+    const plan = planPlayerCharacterTick(player, { movement: { x: 1, y: 0 } })
+    player = commitPlayerCharacterTick(player, plan, {
+      x: player.position.x + plan.delta.x,
+      y: player.position.y + plan.delta.y,
+    })
+  }
+
+  let activeReleaseTicks = 0
+  for (let tick = 0; tick < 22; tick += 1) {
+    const plan = planPlayerCharacterTick(player, { movement: { x: 0, y: 0 } })
+    if (plan.movementActive) activeReleaseTicks += 1
+    const previousGait = player.gaitDegrees
+    player = commitPlayerCharacterTick(player, plan, {
+      x: player.position.x + plan.delta.x,
+      y: player.position.y + plan.delta.y,
+    })
+    if (tick === 21) {
+      assert.deepEqual(plan.delta, { x: 0, y: 0 })
+      assert.equal(player.gaitDegrees, previousGait)
+      assert.ok(player.velocity.x > 0)
+    }
+  }
+
+  assert.equal(activeReleaseTicks, 21)
+})
+
 test('world resolution cannot rewrite character intent, facing, or gait ownership', () => {
   const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
   const idlePlan = planPlayerCharacterTick(player, { movement: { x: 0, y: 0 } })
@@ -85,6 +117,7 @@ test('world resolution cannot rewrite character intent, facing, or gait ownershi
 
   const intended = {
     delta: { x: 10, y: 0 },
+    movementActive: true,
     requestedVelocity: { x: 100, y: 0 },
     retainedVelocity: { x: 90, y: 0 },
   }

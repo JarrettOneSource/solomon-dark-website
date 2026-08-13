@@ -245,6 +245,7 @@ function kernelParameters() {
     movementAcceleration: 10,
     movementLaneCap: 118.75,
     movementRetention: 0.9,
+    movementThresholdSquared: Math.fround(0.01),
     playerRadius: 25,
   }
 }
