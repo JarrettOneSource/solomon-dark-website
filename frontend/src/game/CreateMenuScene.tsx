@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { createMenu } from '../lib/assets'
 import ElementVfx from './ElementVfx'
 import {
@@ -14,10 +14,18 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
+import {
+  CREATE_DISCIPLINE_FINALIZE_MS,
+  createEntryAudioEvents,
+  createSelectionAudioEvents,
+  type CreateAudioEvent,
+} from './game-audio-native.ts'
 
 interface CreateMenuSceneProps {
+  audio: GameAudioDirector
   onBack: () => void
-  onStart: (element: WizardElement, discipline: WizardDiscipline) => void
+  onStart: (element: WizardElement, discipline: WizardDiscipline) => Promise<boolean>
 }
 
 const HAND_SOURCE: Record<CreateHandPose, string> = {
@@ -35,11 +43,22 @@ const FALLING_STARS = Array.from({ length: 50 }, (_, index) => ({
   y: (5 + index * 29) % 92,
 }))
 
-export default function CreateMenuScene({ onBack, onStart }: CreateMenuSceneProps) {
+function playCreateAudioEvents(audio: GameAudioDirector, events: readonly CreateAudioEvent[]): void {
+  for (const event of events) {
+    if (event.action === 'play-sound') audio.playSound(event.cue)
+    else if (event.action === 'play-stream') audio.playStream(event.cue)
+    else audio.pauseStream(event.cue)
+  }
+}
+
+export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
+  const onStartRef = useRef(onStart)
   const [handsReady, setHandsReady] = useState(false)
   const [motionMs, setMotionMs] = useState(0)
   const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
+  const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
+  onStartRef.current = onStart
 
   useEffect(() => {
     let mounted = true
@@ -68,17 +87,52 @@ export default function CreateMenuScene({ onBack, onStart }: CreateMenuSceneProp
       ? CREATE_SELECTION_SETTLED_MS
       : CREATE_ENTRY_SETTLED_MS
     let animationFrame = 0
+    let previousElapsed = 0
 
     const update = (now: number) => {
       const elapsed = Math.min(now - startedAt, duration)
+      playCreateAudioEvents(
+        audio,
+        selectedElement
+          ? createSelectionAudioEvents(selectedElement, previousElapsed, elapsed)
+          : createEntryAudioEvents(previousElapsed, elapsed),
+      )
       setMotionMs(elapsed)
+      previousElapsed = elapsed
       if (elapsed < duration) animationFrame = requestAnimationFrame(update)
     }
 
     setMotionMs(0)
     animationFrame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(animationFrame)
-  }, [handsReady, selectedElement])
+  }, [audio, handsReady, selectedElement])
+
+  useEffect(() => () => {
+    audio.pauseStream('start-cast')
+    audio.pauseStream('choose-element')
+  }, [audio])
+
+  useEffect(() => {
+    if (!pendingDiscipline || !selectedElement) return
+    const startedAt = performance.now()
+    let animationFrame = 0
+    let active = true
+    const update = (now: number) => {
+      if (now - startedAt < CREATE_DISCIPLINE_FINALIZE_MS) {
+        animationFrame = requestAnimationFrame(update)
+        return
+      }
+      audio.playStream('catch-it')
+      void onStartRef.current(selectedElement, pendingDiscipline).then((started) => {
+        if (active && !started) setPendingDiscipline(null)
+      })
+    }
+    animationFrame = requestAnimationFrame(update)
+    return () => {
+      active = false
+      cancelAnimationFrame(animationFrame)
+    }
+  }, [audio, pendingDiscipline, selectedElement])
 
   useEffect(() => {
     if (!handsReady) return
@@ -104,8 +158,21 @@ export default function CreateMenuScene({ onBack, onStart }: CreateMenuSceneProp
     ? createSelectedElementMotionAt(selectedElement, motionMs)
     : null
   const selectElement = (element: WizardElement) => {
+    if (selectedElement || pendingDiscipline) return
+    audio.playSound('pick-skill')
     setMotionMs(0)
     setSelectedElement(element)
+  }
+
+  const selectDiscipline = (discipline: WizardDiscipline) => {
+    if (!selectedElement || pendingDiscipline) return
+    audio.playSound('pick-skill')
+    setPendingDiscipline(discipline)
+  }
+
+  const playBackPress = (event?: KeyboardEvent<HTMLButtonElement>) => {
+    if (event && (event.repeat || (event.key !== 'Enter' && event.key !== ' '))) return
+    audio.playSound('click')
   }
 
   return (
@@ -115,10 +182,21 @@ export default function CreateMenuScene({ onBack, onStart }: CreateMenuSceneProp
       data-phase={selectedElement ? 'discipline' : 'element'}
       data-element={selectedElement ?? undefined}
       data-hands-ready={handsReady}
+      data-finalizing={pendingDiscipline !== null}
       data-motion-settled={motion.settled}
       aria-label="New wizard loadout selection"
     >
-      <button type="button" className="create-menu-back" aria-label="Back" onClick={onBack}>
+      <button
+        type="button"
+        className="create-menu-back"
+        aria-label="Back"
+        disabled={pendingDiscipline !== null}
+        onClick={onBack}
+        onPointerDown={(event) => {
+          if (event.button === 0) playBackPress()
+        }}
+        onKeyDown={playBackPress}
+      >
         <img src={createMenu.backSkull} alt="" />
       </button>
 
@@ -189,7 +267,8 @@ export default function CreateMenuScene({ onBack, onStart }: CreateMenuSceneProp
                 key={discipline}
                 type="button"
                 className={`create-menu-discipline create-menu-discipline-${discipline}`}
-                onClick={() => onStart(selectedElement, discipline)}
+                disabled={pendingDiscipline !== null}
+                onClick={() => selectDiscipline(discipline)}
               >
                 <img src={createMenu.disciplines[discipline]} alt={discipline} />
               </button>

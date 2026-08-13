@@ -1,7 +1,11 @@
-import { useEffect, useState, type AnimationEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type AnimationEvent, type KeyboardEvent, type ReactNode } from 'react'
 import MenuSolomon from '../fx/MenuSolomon'
+import { isMuted, isSfxMuted } from '../fx/audio'
 import { mainMenu } from '../lib/assets'
 import CreateMenuScene from './CreateMenuScene'
+import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
+import { GameAudioDirector } from './game-audio-director.ts'
+import type { GameAudioScene } from './game-audio-native.ts'
 import HubScene from './HubScene'
 import MainMenuBackdrop from './MainMenuBackdrop'
 import type { GameClientSession } from './client/game-client-session.ts'
@@ -22,6 +26,7 @@ interface MenuButtonProps {
   compact?: boolean
   disabled?: boolean
   onClick?: () => void
+  onPress?: () => void
 }
 
 function MenuButton({
@@ -31,6 +36,7 @@ function MenuButton({
   compact = false,
   disabled = false,
   onClick,
+  onPress,
 }: MenuButtonProps) {
   const corner = compact ? mainMenu.quitCorner : mainMenu.buttonCorner
   const rail = compact ? mainMenu.quitRail : mainMenu.buttonRail
@@ -47,6 +53,14 @@ function MenuButton({
       aria-label={accessibleLabel}
       disabled={disabled}
       onClick={onClick}
+      onPointerDown={(event) => {
+        if (!disabled && event.button === 0) onPress?.()
+      }}
+      onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+        if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+          onPress?.()
+        }
+      }}
     >
       <img src={mainMenu.button} alt="" className="main-menu-button-stone" />
       <img src={mainMenu.buttonHover} alt="" className="main-menu-button-stone main-menu-button-stone-hover" />
@@ -58,29 +72,37 @@ function MenuButton({
   )
 }
 
-function RootActions({ onPlay }: { onPlay: () => void }) {
+function RootActions({ onPlay, onPress }: { onPlay: () => void; onPress: () => void }) {
   return (
     <>
-      <MenuButton accessibleLabel="Play" onClick={onPlay}>
+      <MenuButton accessibleLabel="Play" onClick={onPlay} onPress={onPress}>
         <img src={mainMenu.text.play} alt="" className="main-menu-label-play" />
       </MenuButton>
-      <MenuButton accessibleLabel="Explore the Dark Cloud">
+      <MenuButton accessibleLabel="Explore the Dark Cloud" onPress={onPress}>
         <span className="main-menu-label-two-lines">
           <img src={mainMenu.text.explore} alt="" />
           <img src={mainMenu.text.darkCloud} alt="" />
         </span>
       </MenuButton>
-      <MenuButton accessibleLabel="Settings">
+      <MenuButton accessibleLabel="Settings" onPress={onPress}>
         <img src={mainMenu.text.settings} alt="" className="main-menu-label-settings" />
       </MenuButton>
-      <MenuButton accessibleLabel="Hall of Fame">
+      <MenuButton accessibleLabel="Hall of Fame" onPress={onPress}>
         <img src={mainMenu.text.hall} alt="" className="main-menu-label-hall" />
       </MenuButton>
     </>
   )
 }
 
-function PlayActions({ onBack, onNewGame }: { onBack: () => void; onNewGame: () => void }) {
+function PlayActions({
+  onBack,
+  onNewGame,
+  onPress,
+}: {
+  onBack: () => void
+  onNewGame: () => void
+  onPress: () => void
+}) {
   return (
     <>
       <MenuButton accessibleLabel="Last game unavailable" className="main-menu-button-last-game" disabled>
@@ -89,11 +111,11 @@ function PlayActions({ onBack, onNewGame }: { onBack: () => void; onNewGame: () 
           <img src={mainMenu.text.lastGame} alt="" />
         </span>
       </MenuButton>
-      <MenuButton accessibleLabel="New game" onClick={onNewGame}>
+      <MenuButton accessibleLabel="New game" onClick={onNewGame} onPress={onPress}>
         <img src={mainMenu.text.newGame} alt="" className="main-menu-label-new-game" />
       </MenuButton>
       <MenuButton accessibleLabel="Unavailable" className="main-menu-button-empty" disabled />
-      <MenuButton accessibleLabel="Back" onClick={onBack}>
+      <MenuButton accessibleLabel="Back" onClick={onBack} onPress={onPress}>
         <img src={mainMenu.text.back} alt="" className="main-menu-label-back" />
       </MenuButton>
     </>
@@ -105,6 +127,10 @@ interface MainMenuSceneProps {
 }
 
 export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
+  const audio = useMemo(() => new GameAudioDirector(GAME_AUDIO_SOURCES, {
+    isMusicMuted: isMuted,
+    isSfxMuted,
+  }), [])
   const [screen, setScreen] = useState<MenuScreen>('root')
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
@@ -113,6 +139,26 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   const [connectionError, setConnectionError] = useState<string | null>(null)
 
   useEffect(() => () => session?.destroy(), [session])
+
+  useEffect(() => {
+    const unlock = () => audio.unlock()
+    window.addEventListener('pointerdown', unlock, { capture: true })
+    window.addEventListener('keydown', unlock, { capture: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock, { capture: true })
+      window.removeEventListener('keydown', unlock, { capture: true })
+      audio.destroy()
+    }
+  }, [audio])
+
+  useEffect(() => {
+    const audioScene: GameAudioScene = screen === 'create'
+      ? 'create'
+      : screen === 'hub'
+        ? 'hub'
+        : 'title'
+    audio.setScene(audioScene)
+  }, [audio, screen])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -138,8 +184,8 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   const startHub = async (
     selectedElement: WizardElement,
     selectedDiscipline: WizardDiscipline,
-  ) => {
-    if (connecting) return
+  ): Promise<boolean> => {
+    if (connecting) return false
     setConnecting(true)
     setConnectionError(null)
     try {
@@ -150,8 +196,10 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
       })
       setSession(nextSession)
       transitionTo('hub')
+      return true
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : 'Game server connection failed.')
+      return false
     } finally {
       setConnecting(false)
     }
@@ -174,27 +222,38 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
             <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
               {screen === 'root' ? (
-                <RootActions onPlay={() => setScreen('play')} />
+                <RootActions
+                  onPlay={() => setScreen('play')}
+                  onPress={() => audio.playSound('click')}
+                />
               ) : (
-                <PlayActions onBack={() => setScreen('root')} onNewGame={() => transitionTo('create')} />
+                <PlayActions
+                  onBack={() => setScreen('root')}
+                  onNewGame={() => transitionTo('create')}
+                  onPress={() => audio.playSound('click')}
+                />
               )}
             </nav>
 
             <div className="main-menu-quit">
-              <MenuButton accessibleLabel="Quit" compact>
+              <MenuButton
+                accessibleLabel="Quit"
+                compact
+                onPress={() => audio.playSound('click')}
+              >
                 <img src={mainMenu.text.quit} alt="" className="main-menu-label-quit" />
               </MenuButton>
             </div>
           </>
         ) : screen === 'create' ? (
           <CreateMenuScene
+            audio={audio}
             onBack={() => transitionTo('play')}
-            onStart={(selectedElement, selectedDiscipline) => {
-              void startHub(selectedElement, selectedDiscipline)
-            }}
+            onStart={startHub}
           />
         ) : session ? (
           <HubScene
+            audio={audio}
             playerId={session.playerId}
             initialSnapshot={session.getSnapshot()}
             onInput={session.sendInput}

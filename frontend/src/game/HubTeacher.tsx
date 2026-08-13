@@ -8,27 +8,36 @@ import {
   HUB_TEACHER_RUNE_CENTER,
   hubTeacherFrameAt,
 } from './hub-teacher.ts'
+import { hubTeacherReleasesBetween } from './game-audio-native.ts'
 
 interface HubTeacherProps {
+  onRelease: (releaseIndex: number) => void
   x: number
   y: number
 }
 
-export default function HubTeacher({ x, y }: HubTeacherProps) {
+export default function HubTeacher({ onRelease, x, y }: HubTeacherProps) {
   const frameRef = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const startedAt = performance.now()
+    let previousElapsedSeconds = 0
     let animationFrame = 0
     const update = (now: number) => {
+      const elapsedSeconds = (now - startedAt) / 1000
       const frame = frameRef.current
       if (frame) {
-        frame.style.backgroundPosition = `${-hubTeacherFrameAt((now - startedAt) / 1000) * 150}px 0`
+        frame.style.backgroundPosition = `${-hubTeacherFrameAt(elapsedSeconds) * 150}px 0`
       }
+      for (const releaseIndex of hubTeacherReleasesBetween(
+        previousElapsedSeconds,
+        elapsedSeconds,
+      )) onRelease(releaseIndex)
+      previousElapsedSeconds = elapsedSeconds
       animationFrame = requestAnimationFrame(update)
     }
     animationFrame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(animationFrame)
-  }, [])
+  }, [onRelease])
 
   const actorStyle = {
     left: x,

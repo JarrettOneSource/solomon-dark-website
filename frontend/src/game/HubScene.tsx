@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets'
 import HubTeacher from './HubTeacher'
 import PlayerCharacter from './PlayerCharacter.tsx'
@@ -25,6 +25,14 @@ import {
   hubCameraOrigin,
 } from './core-kernels/hub-math.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
+import {
+  hubTeacherSummonPitch,
+  hubTeacherSummonVolume,
+  nativeFootstepCue,
+  nativeFootstepTicksBetween,
+  nativeMovementOccurredBetween,
+} from './game-audio-native.ts'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type {
   ProtocolFountainParticleState,
@@ -33,11 +41,14 @@ import type {
 import './hub.css'
 
 interface HubSceneProps {
+  audio: GameAudioDirector
   initialSnapshot: GameSnapshot
   onInput: (input: PlayerCharacterInput) => void
   playerId: string
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
+
+const HUB_TEACHER_POSITION = { x: 576.5, y: 710.5 } as const
 
 interface ActorProps {
   alt: string
@@ -157,6 +168,7 @@ function renderFountainParticles(
 }
 
 export default function HubScene({
+  audio,
   initialSnapshot,
   onInput,
   playerId,
@@ -180,6 +192,15 @@ export default function HubScene({
   ])
   const [stageScale, setStageScale] = useState(1)
 
+  const playTeacherSummon = useCallback((releaseIndex: number) => {
+    const player = snapshotRef.current.players[playerId]
+    if (!player) return
+    audio.playSound('summon', {
+      playbackRate: hubTeacherSummonPitch(releaseIndex),
+      volume: hubTeacherSummonVolume(HUB_TEACHER_POSITION, player.position),
+    })
+  }, [audio, playerId])
+
   useLayoutEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
@@ -192,6 +213,7 @@ export default function HubScene({
 
   useEffect(() => {
     const fountainParticleElements = fountainParticleElementsRef.current
+    let previousAudioSnapshot = initialSnapshot
     const movementKeys = new Set(['arrowdown', 'arrowleft', 'arrowright', 'arrowup', 'a', 'd', 's', 'w'])
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
@@ -211,6 +233,21 @@ export default function HubScene({
     window.addEventListener('blur', handleBlur)
 
     const unsubscribe = subscribe((snapshot) => {
+      const player = snapshot.players[playerId]
+      if (player) {
+        const moving = nativeMovementOccurredBetween(
+          previousAudioSnapshot.players[playerId],
+          player,
+        )
+        for (const tick of nativeFootstepTicksBetween(
+          previousAudioSnapshot.tick,
+          snapshot.tick,
+          moving,
+        )) {
+          audio.playSound(nativeFootstepCue(tick, playerId), { volume: 0.5 })
+        }
+      }
+      previousAudioSnapshot = snapshot
       snapshotRef.current = snapshot
       setPlayerRoster({ ...snapshot.players })
       setStudentRoster((currentRoster) => {
@@ -301,7 +338,7 @@ export default function HubScene({
       window.removeEventListener('keyup', handleKeyUp)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [onInput, playerId, subscribe])
+  }, [audio, initialSnapshot, onInput, playerId, subscribe])
 
   const frameStyle = { transform: `scale(${stageScale})` } as CSSProperties
   const sceneStyle = {
@@ -393,7 +430,11 @@ export default function HubScene({
           <Actor alt="Potion trader" src={hub.npcs.potion} marker="help" x={1397} y={664} />
           <Actor alt="Annalist" src={hub.npcs.annalist} marker="talk" x={895.5} y={455.5} />
           <Actor alt="Items trader" src={hub.npcs.items} marker="help" x={1700.5} y={449.5} />
-          <HubTeacher x={576.5} y={710.5} />
+          <HubTeacher
+            x={HUB_TEACHER_POSITION.x}
+            y={HUB_TEACHER_POSITION.y}
+            onRelease={playTeacherSummon}
+          />
 
           {studentRoster.map((student) => (
             <Student

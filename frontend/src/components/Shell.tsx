@@ -8,7 +8,16 @@ import { ATTUNEMENT_KEY } from '../fx/grimoire'
 import SolomonScurry from '../fx/SolomonScurry'
 import { castSpell, mouseFxEnabled, setMouseFxEnabled } from '../fx/bus'
 import { isSfxMuted, toggleSfxMuted } from '../fx/audio'
-import { currentTrack, ensureStarted, isMuted, toggleMuted, uiClick, uiHover, uiPage } from '../fx/jukebox'
+import {
+  currentTrack,
+  ensureStarted,
+  isMuted,
+  startJukeboxLifecycle,
+  toggleMuted,
+  uiClick,
+  uiHover,
+  uiPage,
+} from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
 import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
@@ -107,8 +116,13 @@ export default function Shell() {
   useEffect(() => {
     setMenuOpen(false)
     window.scrollTo({ top: 0 })
-    uiPage()
-  }, [location.pathname])
+    if (!game) uiPage()
+  }, [game, location.pathname])
+
+  useEffect(() => {
+    if (game) return
+    return startJukeboxLifecycle()
+  }, [game])
 
   // A declared School of Magic follows the wizard: click effects + wand tint.
   // Anonymous wanderers get dealt a random school's tint each visit — a taste
@@ -123,9 +137,10 @@ export default function Shell() {
     }
   }, [user, authLoading])
 
-  // The jukebox wakes on the first gesture; interactive elements tick like
-  // the game's own menus (delegated, so every page gets them for free).
+  // The public-site jukebox wakes on the first gesture; delegated UI sounds
+  // cover public pages while /game retains its native scene-owned mapping.
   useEffect(() => {
+    if (game) return
     const unlock = () => ensureStarted()
     let lastHovered: Element | null = null
     const onOver = (e: PointerEvent) => {
@@ -146,7 +161,7 @@ export default function Shell() {
       document.removeEventListener('pointerover', onOver)
       document.removeEventListener('pointerdown', onDown)
     }
-  }, [])
+  }, [game])
 
   if (game) {
     return (

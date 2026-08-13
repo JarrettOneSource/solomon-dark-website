@@ -30,8 +30,9 @@ let audio: HTMLAudioElement | null = null
 let trackName: string | null = null
 let unlocked = false
 let fadeRaf = 0
-let pageFocused = !document.hidden && document.hasFocus()
+let pageFocused = false
 let resumeOnFocus = false
+let pendingUnmute: (() => void) | null = null
 
 export function currentTrack(): string | null {
   return trackName
@@ -82,17 +83,27 @@ function startMusic(track = TRACKS[Math.floor(Math.random() * TRACKS.length)]) {
     void el.play().then(() => {
       if (audio === el && !pageFocused) pauseForFocusLoss()
     }).catch(() => {})
+    clearPendingUnmute()
     const unmute = () => {
       window.removeEventListener('pointerdown', unmute, true)
       window.removeEventListener('keydown', unmute, true)
+      if (pendingUnmute === unmute) pendingUnmute = null
       if (audio !== el || isMuted()) return
       el.muted = false
       if (el.paused) void el.play().catch(() => {})
       fadeTo(MUSIC_VOLUME, 2000)
     }
+    pendingUnmute = unmute
     window.addEventListener('pointerdown', unmute, { once: true, capture: true })
     window.addEventListener('keydown', unmute, { once: true, capture: true })
   })
+}
+
+function clearPendingUnmute() {
+  if (!pendingUnmute) return
+  window.removeEventListener('pointerdown', pendingUnmute, true)
+  window.removeEventListener('keydown', pendingUnmute, true)
+  pendingUnmute = null
 }
 
 function pauseForFocusLoss() {
@@ -114,16 +125,37 @@ function setPageFocused(focused: boolean) {
   else pauseForFocusLoss()
 }
 
-// Strike up as soon as the page opens — audibly if the browser lets us,
-// silently rolling until the first gesture otherwise.
-if (!isMuted()) startMusic()
-
-// Class dismissed while the page is out of focus; it resumes on return.
-document.addEventListener('visibilitychange', () => {
+const handleVisibilityChange = () => {
   setPageFocused(!document.hidden && document.hasFocus())
-})
-window.addEventListener('blur', () => setPageFocused(false))
-window.addEventListener('focus', () => setPageFocused(!document.hidden))
+}
+const handleWindowBlur = () => setPageFocused(false)
+const handleWindowFocus = () => setPageFocused(!document.hidden)
+
+/** Owns the public-site jukebox lifecycle. The /game route never starts it. */
+export function startJukeboxLifecycle(): () => void {
+  pageFocused = !document.hidden && document.hasFocus()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleWindowBlur)
+  window.addEventListener('focus', handleWindowFocus)
+  if (!isMuted()) startMusic()
+
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('blur', handleWindowBlur)
+    window.removeEventListener('focus', handleWindowFocus)
+    clearPendingUnmute()
+    cancelAnimationFrame(fadeRaf)
+    fadeRaf = 0
+    if (audio) {
+      audio.pause()
+      audio.currentTime = 0
+    }
+    audio = null
+    trackName = null
+    unlocked = false
+    resumeOnFocus = false
+  }
+}
 
 /** Call on the first user gesture: unlocks sfx and starts the music. */
 export function ensureStarted() {

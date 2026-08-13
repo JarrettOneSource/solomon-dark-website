@@ -2178,6 +2178,145 @@ moved right to X `997.534` and `997.31`. Both runs reported no page errors.
 The server reconnect regression first failed at the old generated X `1005.64`
 and now passes, preserving the exact failure as a durable test.
 
+## Native audio ownership, cues, and clocks
+
+The stock audio system is scene-owned. It is not the website jukebox and it
+does not assign one generic hover/down sound to every browser button. The
+native `MyApp` constructor builds a 233-entry registry at `0x004EE010` under
+`DAT_008199D8`; the recovered catalog contains 171 `Sound` objects, 40
+`SoundStream` objects, and 22 `SoundLoop` objects. `Sound::Start`
+(`0x00407B70`) creates overlapping one-shots, while positional start
+(`0x00407CD0`) applies a caller-supplied gain. `SoundStream::Play`
+(`0x0040AF70`) owns one persistent channel per registered stream and restarts
+that channel. Music owns two module channels and transitions by name through
+`0x00409CD0`; `Music::Tick` (`0x00409610`) advances the incoming and outgoing
+gains by `1 / transitionTicks` on the already-recovered 100 Hz game clock.
+
+The current scope changes music as follows:
+
+| Owner | Native call site | Module entry | Transition |
+| --- | --- | --- | --- |
+| Title construction | `0x0058D940` | `solomondarktheme`, order 5 | default 100 ticks |
+| Create/loadout construction | `0x00593C30` | `selection`, order 7 | default 100 ticks |
+| Courtyard entry | `0x00508B20` | `academy`, order 6 | explicit 2 ticks |
+
+The default duration comes from `MyApp + 0xC00`, initialized to `100` by
+`0x0040B6B0`. Music therefore crossfades for one second on Title/Create and
+20 ms on Courtyard entry. The source is `music/music.mo3` plus
+`music/music.txt`, not the normalized website playlist. Browser game renders
+must preserve the module start and source level: no silence trimming and no
+loudness normalization. The source module SHA-256 is
+`32bf92cc3191e136b6d186d77d75de48ad28f4bd58acae0c278204455fa57c82`.
+
+### Title buttons
+
+The shared native `Button` stores hover, press, and release sound pointers at
+`+0x80`, `+0x84`, and `+0x88`. Pointer enter (`0x00430AC0`) plays only
+`+0x80`; pointer down (`0x00430890`) and keyboard activation (`0x00430CF0`)
+play `+0x84`; pointer up (`0x00430A40`) plays only `+0x88`. The four Title
+buttons created by `0x0059A9D0` set only `+0x84` to registry offset `+0x18`,
+`sounds\\click`; hover and release are null. The Create back skull is wired
+the same way at `0x0059AD01`. These controls therefore play `click.wav` at
+gain 1 on enabled press/keyboard activation and are silent on hover and
+release. Disabled controls do not play. There is no separate Title select
+cue. The exact source SHA-256 is
+`8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307`.
+
+### Create/loadout sequence
+
+`CreateWizardMenu` owns its sounds from construction through finalization.
+The hover handler at `0x0058BB50` only updates hit state/cursor and is silent.
+The accepted element and discipline branches in the click handler
+`0x0058BCE0` both play registry offset `+0x44`, `sounds\\pickskill`, at gain
+1 immediately. Entry and selection then follow native fixed-update clocks:
+
+- 200 ms after entry starts, countdown `120` reaches `100` and
+  `sounds\\StartCast__Stream` begins;
+- when the left hand reaches raised state at about 1.34 s, StartCast pauses,
+  `sounds\\ChooseElement__Stream` begins, and element hit targets become live;
+- 980 ms after an element click, its hand recurrence settles and plays the
+  element one-shot: Ether `magicmissile`, Fire `throwfire`, Air
+  `lightningstart`, Water `icestart`, or Earth `rockhit`, all at gain 1;
+- on the next 100 Hz tick StartCast restarts, then pauses when the right hand
+  settles at about 1.64 s and ChooseElement restarts as disciplines appear;
+- a discipline click starts the native 50-tick hold/final recurrence; about
+  880 ms later `sounds\\catchit__stream` plays and the Create scene completes.
+
+`SoundStream` restart semantics matter here: the two ChooseElement calls reuse
+and restart the same registered stream, and each StartCast call restarts its
+channel rather than creating overlapping copies. The selected WAVs remain
+bit-for-bit copies of the stock files. Their registry mapping is recorded in
+`../Mod Loader/docs/reverse-engineering/native-audio-catalog.json`.
+
+### Courtyard movement and Teacher cast
+
+The common actor update at `0x00548B00` gates footsteps on the global 100 Hz
+simulation tick: while an actor is moving and not in its special-surface
+state, every tick divisible by 25 plays one step. Courtyard surface test slot
+`+0x118` resolves to `0x005088F0`, an unconditional false result, so the local
+Courtyard player randomly selects only registry offsets `+0x23B8/+0x23E4`,
+`sounds\\Step\\step1` or `step2`. It never selects `woodstep` there. The
+non-positional call multiplies the region/listener factor by `0.5`; for the
+local listener-source pair that is gain `0.5`. Browser cadence must consume
+crossed multiples of 25 from authoritative `HubSnapshot.tick`, including
+snapshot gaps, instead of using keyboard-repeat or animation-frame timers.
+
+Teacher update `0x0050B260` calls `Teacher::Cast` (`0x00505560`) once when its
+267-tick charging pose releases, 4.45 s into the native 60 Hz Teacher cycle.
+That helper plays registry offset `+0x1014`, `sounds\\summon`, at randomized
+pitch `1.0..1.1` and gain `0.25 * attenuation`. Courtyard attenuation slot
+`+0x100`, `0x005006C0`, measures source-to-local-player distance. It returns
+1 through 150 units, falls linearly to 0 at half the active render width, and
+clamps to a minimum of 0.25. `Region` base construction at `0x00652830` gets
+that width from application state at `+0x1DC`; the recovered 1600-wide web
+camera therefore uses an 800-unit radius. The audio release must share the
+Teacher presentation clock so the burst and sound cannot drift.
+
+### Web ownership consequence and open questions
+
+The `/game` route must stop and detach the public-site jukebox and its generic
+pointer sounds. A game audio director owns the three scene music states,
+overlapping native `Sound` one-shots, keyed `SoundStream` channels, autoplay
+unlock, crossfades, and cleanup. Scene components emit recovered semantic
+events; they do not know asset paths or create arbitrary audio timers.
+
+Confidence is high for every registry object, call site, gain, music name,
+transition tick count, Create ordering, footstep cadence/surface choice, and
+Teacher release/attenuation rule above. Global native RNG sequence is not
+reproduced by the web, so equal-probability step choice and Teacher pitch are
+deterministic/testable approximations within the recovered native ranges.
+Browser media decoding and autoplay policy cannot reproduce BASS itself; the
+implementation must preserve the requested scene at time zero and begin it on
+the first permitted user gesture rather than silently skipping the intro.
+
+Evidence: fresh read-only Ghidra decompilation and instruction traces for
+`0x00406DE0`, `0x00407B70`, `0x00407CD0`, `0x00409610`, `0x00409CD0`,
+`0x0040AF70`, `0x00430430`, `0x00430890`, `0x00430A40`, `0x00430AC0`,
+`0x00430CF0`, `0x004EE010`, `0x005006C0`, `0x00505560`, `0x00508B20`,
+`0x00548B00`, `0x0058A820`, `0x0058BB50`, `0x0058BCE0`, `0x0058D940`,
+`0x00593C30`, and `0x0059A9D0`; the durable native reports
+`../Mod Loader/docs/reverse-engineering/native-audio-system.md` and
+`../Mod Loader/docs/reverse-engineering/native-audio-catalog.json`; and the
+stock files under `SolomonDarkAbandonware/music` and
+`SolomonDarkAbandonware/sounds`.
+
+### 2026-08-12 implementation validation receipt
+
+The integrated Website validation gate passed after rebasing onto
+`e94d462`: backend Release build with zero warnings/errors, all 22 Website
+contract/integration tests, frontend lint and game-boundary checks, all 95
+frontend tests, and the production frontend/game-host build. A real Chromium
+run against the authoritative local game host then observed, in order,
+`solomondarktheme`, `selection`, and `academy`; silent Title/Create hovers;
+press and keyboard `click`; both StartCast and ChooseElement stream cycles;
+`pickskill`, the Fire reveal, and `catchit`; repeated 0.5-gain Courtyard
+footsteps on authoritative tick boundaries; and the Teacher `summon` at
+0.0625 gain and pitch 1.075896. No unexpected site music or browser errors
+were observed. The browser receipt is reproducible with
+`npm run smoke:game-audio`. The separate game-runtime Chromium smoke also
+passed with authoritative player movement, all five walking poses, advancing
+robe and Teacher frames, and no page or console errors.
+
 ## Current-scope status
 
 The main-menu, Create/loadout, and non-interactive Hub systems in this ledger
