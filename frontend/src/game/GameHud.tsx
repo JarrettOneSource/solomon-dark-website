@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { hub } from '../lib/assets'
 import type { WizardElement } from './core-kernels/player-character.ts'
 
@@ -27,6 +28,41 @@ function InventoryCount({ count, variant }: { count: number; variant: 'blue' | '
   )
 }
 
+function FpsCounter() {
+  const [fps, setFps] = useState<number | null>(null)
+
+  useEffect(() => {
+    let animationFrame = 0
+    let frameCount = 0
+    let sampleStartedAt = performance.now()
+
+    const sample = (now: number) => {
+      frameCount += 1
+
+      const elapsed = now - sampleStartedAt
+      if (elapsed >= 1_000) {
+        setFps(Math.round(frameCount * 1_000 / elapsed))
+        frameCount = 0
+        sampleStartedAt = now
+      }
+
+      animationFrame = requestAnimationFrame(sample)
+    }
+
+    animationFrame = requestAnimationFrame(sample)
+    return () => cancelAnimationFrame(animationFrame)
+  }, [])
+
+  return (
+    <span
+      className="hub-hud-fps"
+      aria-label={fps === null ? 'Measuring frames per second' : `${fps} frames per second`}
+    >
+      {fps ?? '--'} FPS
+    </span>
+  )
+}
+
 export default function GameHud({
   element,
   mapLabel = 'Map',
@@ -36,6 +72,7 @@ export default function GameHud({
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
+      <FpsCounter />
       <div className="hub-hud-meters">
         <div className="hub-hud-meter hub-hud-meter-health">
           <img src={hub.hud.barRed} alt="Health 50 of 50" />

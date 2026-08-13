@@ -105,6 +105,20 @@ try {
   const initialCanvas = await canvas.elementHandle()
   assert.ok(initialCanvas, 'expected the mounted WebGL canvas')
 
+  const fpsCounter = page.locator('.hub-hud-fps')
+  await page.waitForFunction(() => /^[1-9]\d* FPS$/.test(
+    document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
+  ))
+  const [skullBounds, fpsBounds] = await Promise.all([
+    page.locator('.hub-hud-skull').boundingBox(),
+    fpsCounter.boundingBox(),
+  ])
+  assert.ok(skullBounds && fpsBounds, 'expected the skull and FPS counter to be visible')
+  assert.ok(
+    fpsBounds.x >= skullBounds.x + skullBounds.width,
+    'expected the FPS counter to sit to the right of the skull',
+  )
+
   const renderer = await canvas.evaluate((node) => {
     const canvas = node
     const context = canvas.getContext('webgl2') || canvas.getContext('webgl')
@@ -202,6 +216,10 @@ try {
   }
 
   for (const runPage of [page, clientPage]) {
+    await runPage.waitForFunction(() => /^[1-9]\d* FPS$/.test(
+      document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
+    ))
+    assert.match((await runPage.locator('.hub-hud-fps').textContent()) || '', /^[1-9]\d* FPS$/)
     assert.equal(await runPage.getByRole('img', { name: 'Help' }).count(), 0)
     assert.equal(await runPage.getByLabel('Equipped spells').count(), 0)
     assert.equal(await runPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 0)

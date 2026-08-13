@@ -46,6 +46,16 @@
   object-fit: contain;
 }
 
+.hub-hud-fps {
+  position: absolute;
+  top: 12px;
+  left: 50px;
+  color: #d8d4c8;
+  font: 12px 'JetBrains Mono', monospace;
+  line-height: 1;
+  text-shadow: 0 1px 2px #000, 0 0 4px #000;
+}
+
 .hub-hud-meters {
   position: absolute;
   top: 16px;
