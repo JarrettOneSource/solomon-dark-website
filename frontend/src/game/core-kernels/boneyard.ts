@@ -52,6 +52,8 @@ export interface BoneyardFence {
   points: readonly BoneyardPoint[]
   style?: number
   segmentCode?: number
+  startPostVariant?: number
+  endPostVariant?: number
 }
 
 export interface BoneyardGateLeafSnapshot {

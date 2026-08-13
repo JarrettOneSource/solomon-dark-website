@@ -5,8 +5,8 @@ import {
 
 export const NATIVE_AUDIO_TICK_MS = 10
 
-export type GameAudioScene = 'create' | 'hub' | 'title'
-export type GameMusicCue = 'academy' | 'selection' | 'solomondarktheme'
+export type GameAudioScene = 'boneyard' | 'create' | 'hub' | 'title'
+export type GameMusicCue = 'academy' | 'prelude' | 'selection' | 'solomondarktheme'
 export type GameSoundCue =
   | 'click'
   | 'ice-start'
@@ -42,6 +42,7 @@ interface NativeSoundEntry {
 
 export const NATIVE_MUSIC_MANIFEST = {
   academy: { musicTxtOrder: 101, moduleSubsong: 6, sourceName: 'academy' },
+  prelude: { musicTxtOrder: 0, moduleSubsong: 0, sourceName: 'prelude' },
   selection: { musicTxtOrder: 116, moduleSubsong: 7, sourceName: 'selection' },
   solomondarktheme: {
     musicTxtOrder: 95,
@@ -122,6 +123,7 @@ export const NATIVE_STREAM_MANIFEST = {
 } as const satisfies Readonly<Record<GameStreamCue, NativeSoundEntry>>
 
 export const GAME_SCENE_MUSIC = {
+  boneyard: { cue: 'prelude', transitionTicks: 100 },
   create: { cue: 'selection', transitionTicks: 100 },
   hub: { cue: 'academy', transitionTicks: 2 },
   title: { cue: 'solomondarktheme', transitionTicks: 100 },

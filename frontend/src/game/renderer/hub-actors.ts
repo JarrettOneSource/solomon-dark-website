@@ -96,6 +96,14 @@ export class PlayerWorldView {
     this.container.zIndex = depth
   }
 
+  setWorldTint(tint: number): void {
+    this.staffBack.tint = tint
+    this.robe.tint = tint
+    this.fixed.tint = tint
+    this.staffFront.tint = tint
+    this.head.tint = tint
+  }
+
   get orbSpriteCount(): number {
     return this.orb.sprites.filter((sprite) => sprite.visible).length
   }

@@ -40,14 +40,27 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
       'eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale',
       'quad',
     ])),
-    fences: doc.fences.map((fence) => compact(fence, [
-      'eid', 'typeId', 'points', 'style', 'segmentCode',
-    ])),
+    fences: doc.fences.map(projectFence),
     terrain: doc.terrain.map((terrain) => compact(terrain, [
       'eid', 'pos', 'points', 'style', 'entry',
     ])),
     solomonDig: selectSolomonSetPiece(objects, 0),
   } as unknown as BoneyardScene
+}
+
+function projectFence(fence: BoneyardDoc['fences'][number]): Record<string, unknown> {
+  return compact({
+    ...fence,
+    startPostVariant: explicitPostVariant(fence.startPostVariant),
+    endPostVariant: explicitPostVariant(fence.endPostVariant),
+  }, [
+    'eid', 'typeId', 'points', 'style', 'segmentCode',
+    'startPostVariant', 'endPostVariant',
+  ])
+}
+
+function explicitPostVariant(value: number | undefined): number | undefined {
+  return value === 0xffffffff ? undefined : value
 }
 
 export function materializeSolomonSetPiece(

@@ -28,6 +28,7 @@ test('maps each scene to the recovered module entry and transition clock', () =>
     '32bf92cc3191e136b6d186d77d75de48ad28f4bd58acae0c278204455fa57c82',
   )
   assert.deepEqual(GAME_SCENE_MUSIC, {
+    boneyard: { cue: 'prelude', transitionTicks: 100 },
     create: { cue: 'selection', transitionTicks: 100 },
     hub: { cue: 'academy', transitionTicks: 2 },
     title: { cue: 'solomondarktheme', transitionTicks: 100 },

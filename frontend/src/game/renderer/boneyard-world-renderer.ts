@@ -25,6 +25,7 @@ import {
 } from '../../editor/render.ts'
 import {
   nativeGateLeaf,
+  nativeGateHingeArtPosition,
   nativeGatePainterRoot,
   type NativeGateLeaf,
 } from '../../editor/native-fence-geometry.ts'
@@ -47,6 +48,12 @@ import {
   loadBoneyardWorldTextures,
   type BoneyardWorldTextures,
 } from './boneyard-textures.ts'
+import {
+  nativeBoneyardLightScalar,
+  nativeBoneyardLightTint,
+  nativeLanternLightSource,
+  nativePlayerLightSource,
+} from './boneyard-lighting.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   frameCount: number
@@ -54,10 +61,14 @@ interface BoneyardRendererFrameDiagnostics {
   gateLeafCount: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
+  lanternLightIntensity: number
+  lightSourceCount: number
   mainAboveLocal: boolean
   mainBelowLocal: boolean
   maxDynamicZIndex: number
+  maxMainLightScalar: number
   maxMainZIndex: number
+  minMainLightScalar: number
   painterBandCount: number
   playerCount: number
   playerScreenX: number
@@ -169,6 +180,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
+  canvas.dataset.regionLighting = 'native-object-scalar'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
@@ -184,10 +196,14 @@ export async function createBoneyardWorldRenderer(
     gateLeafCount: 0,
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
+    lanternLightIntensity: 0,
+    lightSourceCount: 0,
     mainAboveLocal: false,
     mainBelowLocal: false,
     maxDynamicZIndex: 0,
+    maxMainLightScalar: 0,
     maxMainZIndex: 0,
+    minMainLightScalar: 0,
     painterBandCount: 0,
     playerCount: 0,
     playerScreenX: Number.NaN,
@@ -225,7 +241,7 @@ export async function createBoneyardWorldRenderer(
       const player = snapshot.players[options.playerId]
       if (!player) return
       frameCount += 1
-      const painter = scene.update(snapshot, options.playerId)
+      const painter = scene.update(snapshot, options.playerId, frameCount)
       const camera = cameraFor(snapshot)
       const worldPosition = boneyardWorldPosition(camera, viewport)
       world.scale.set(BONEYARD_CAMERA_ZOOM)
@@ -237,10 +253,14 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
+      frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
+      frameDiagnostics.lightSourceCount = painter.lightSourceCount
       frameDiagnostics.mainAboveLocal = painter.mainAboveLocal
       frameDiagnostics.mainBelowLocal = painter.mainBelowLocal
       frameDiagnostics.maxDynamicZIndex = painter.maxDynamicZIndex
+      frameDiagnostics.maxMainLightScalar = painter.maxMainLightScalar
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
+      frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = Object.keys(snapshot.players).length
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
@@ -287,7 +307,7 @@ export async function createBoneyardWorldRenderer(
     },
   }
 
-  scene.update(options.initialSnapshot, options.playerId)
+  scene.update(options.initialSnapshot, options.playerId, 0)
   renderer.render(options.initialSnapshot)
   return renderer
 }
@@ -296,10 +316,14 @@ interface BoneyardPainterFrame {
   foregroundZIndex: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
+  lanternLightIntensity: number
+  lightSourceCount: number
   mainAboveLocal: boolean
   mainBelowLocal: boolean
   maxDynamicZIndex: number
+  maxMainLightScalar: number
   maxMainZIndex: number
+  minMainLightScalar: number
   painterBandCount: number
 }
 
@@ -334,7 +358,11 @@ class BoneyardDynamicScene {
       : null
   }
 
-  update(snapshot: GameSnapshot, localPlayerId: string): BoneyardPainterFrame {
+  update(
+    snapshot: GameSnapshot,
+    localPlayerId: string,
+    presentationFrame: number,
+  ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const liveIds = new Set(Object.keys(snapshot.players))
     for (const [playerId, view] of this.players) {
@@ -355,6 +383,47 @@ class BoneyardDynamicScene {
     this.gates.update(snapshot.world.gateLeaves)
     this.solomon?.update(snapshot.tick)
 
+    const dig = this.boneyard.scene.solomonDig
+    const lanternLight = dig
+      ? nativeLanternLightSource(dig.lanternPosition, presentationFrame)
+      : null
+    const lightSources = [
+      ...Object.values(snapshot.players).map(nativePlayerLightSource),
+      ...(lanternLight ? [lanternLight] : []),
+    ]
+    const mainLightScalars: number[] = []
+    for (const [layerIndex, sprite] of this.mainSprites) {
+      const scalar = nativeBoneyardLightScalar(
+        this.mainLayers[layerIndex].pos,
+        lightSources,
+      )
+      sprite.tint = nativeBoneyardLightTint(scalar)
+      mainLightScalars.push(scalar)
+    }
+    for (const [id, view] of this.players) {
+      const player = snapshot.players[id]
+      if (!player) continue
+      view.setWorldTint(nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(player.position, lightSources),
+      ))
+    }
+    for (const leaf of snapshot.world.gateLeaves) {
+      const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
+      this.gates.setTint(
+        leaf.fenceEid,
+        leaf.side,
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(position, lightSources)),
+      )
+    }
+    if (dig) {
+      this.solomon?.setLighting(
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(dig.position, lightSources)),
+        nativeBoneyardLightTint(
+          nativeBoneyardLightScalar(dig.lanternPosition, lightSources),
+        ),
+      )
+    }
+
     const localPlayer = snapshot.players[localPlayerId]
     if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
     const gateLeaves = new Map(snapshot.world.gateLeaves.map((leaf) => [
@@ -367,7 +436,6 @@ class BoneyardDynamicScene {
       sortBias: 0,
       sourceOrder,
     }))
-    const dig = this.boneyard.scene.solomonDig
     if (dig) {
       dynamicLayers.push({
         id: 'solomon-dig',
@@ -418,10 +486,14 @@ class BoneyardDynamicScene {
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
       localPlayerZIndex,
+      lanternLightIntensity: lanternLight?.intensity ?? 0,
+      lightSourceCount: lightSources.length,
       mainAboveLocal: staticDepths.some((depth) => depth > localPlayerZIndex),
       mainBelowLocal: staticDepths.some((depth) => depth < localPlayerZIndex),
       maxDynamicZIndex: Math.max(0, ...order.dynamicLayers.map((layer) => layer.zIndex)),
+      maxMainLightScalar: Math.max(0, ...mainLightScalars),
       maxMainZIndex: Math.max(0, ...staticDepths),
+      minMainLightScalar: Math.min(1, ...mainLightScalars),
       painterBandCount: order.bands.length,
     }
   }
@@ -501,6 +573,11 @@ class BoneyardSolomonView {
     this.lantern.zIndex = depth
   }
 
+  setLighting(digTint: number, lanternTint: number): void {
+    this.dig.tint = digTint
+    this.lantern.tint = lanternTint
+  }
+
   destroy(): void {
     this.root.removeChild(this.digRoot, this.lantern)
     this.digRoot.destroy({ children: true })
@@ -544,6 +621,10 @@ class BoneyardGateViews {
     this.leaves.get(`${fenceEid}:${side}`)?.setDepth(depth)
   }
 
+  setTint(fenceEid: string, side: number, tint: number): void {
+    this.leaves.get(`${fenceEid}:${side}`)?.setTint(tint)
+  }
+
   destroy(): void {
     for (const view of this.leaves.values()) view.destroy()
     this.leaves.clear()
@@ -576,15 +657,17 @@ class BoneyardGateLeafView {
   update(state: BoneyardGateLeafSnapshot): void {
     const leaf = nativeGateLeaf(state.hinge, state.tip)
     this.gateLeaf.position.set(leaf.p0.x, leaf.p0.y)
-    this.hinge.position.set(
-      (leaf.p0.x + leaf.p1.x) / 2 + 1,
-      (leaf.p0.y + leaf.p1.y) / 2 + 7,
-    )
+    const hingeArt = nativeGateHingeArtPosition(leaf)
+    this.hinge.position.set(hingeArt.x, hingeArt.y)
     drawGateLines(this.lines, leaf)
   }
 
   setDepth(depth: number): void {
     this.container.zIndex = depth
+  }
+
+  setTint(tint: number): void {
+    this.container.tint = tint
   }
 
   destroy(): void {
@@ -727,7 +810,7 @@ function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: nu
   const ref = layer.kind === 'object'
     ? spriteRefFor(layer.atlas, layer.atlasEntry)
     : layer.part === 'post'
-      ? requiredSpriteRef(36)
+      ? spriteRefFor('DeadHawg', 36 + (layer.postVariant ?? 0))
       : null
   if (ref) {
     return {

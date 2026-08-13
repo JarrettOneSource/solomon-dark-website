@@ -168,13 +168,15 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   }, [audio])
 
   useEffect(() => {
-    const audioScene: GameAudioScene = screen === 'create'
-      ? 'create'
-      : screen === 'hub'
-        ? 'hub'
-        : 'title'
+    const audioScene: GameAudioScene = runtimeSnapshot?.world.kind === 'boneyard'
+      ? 'boneyard'
+      : screen === 'create'
+        ? 'create'
+        : screen === 'hub'
+          ? 'hub'
+          : 'title'
     audio.setScene(audioScene)
-  }, [audio, screen])
+  }, [audio, runtimeSnapshot?.world.kind, screen])
 
   useEffect(() => {
     if (!session) return

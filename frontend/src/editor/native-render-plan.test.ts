@@ -5,7 +5,12 @@ import test from 'node:test'
 import { parseBoneyard } from './format/boneyard.ts'
 import type { EditorDoc, PlacedObject, Polyline, StaticSprite } from './model.ts'
 import { NATIVE } from './model.ts'
-import { nativeGateLeaves } from './native-fence-geometry.ts'
+import {
+  nativeFenceGrate,
+  nativeGateHingeArtPosition,
+  nativeGateLeaves,
+  NATIVE_FENCE_TEXTURE_REPEAT,
+} from './native-fence-geometry.ts'
 import { buildNativeRenderPlan, NATIVE_PLACEMENT_PASSES } from './native-render-plan.ts'
 import { nativeSpriteAnchor } from './sprite-registration.ts'
 import { buildBoneyardPainterOrder } from '../game/boneyard-painter-order.ts'
@@ -128,6 +133,48 @@ test('materializes shared Fenceposts once and gives split fence leaves independe
   ])
 })
 
+test('applies explicit post selectors after endpoint dedupe in native source order', () => {
+  const plan = buildNativeRenderPlan(doc([], [], [
+    {
+      eid: 'first', typeId: NATIVE.fence, segmentCode: 0,
+      points: [{ x: 0, y: 10 }, { x: 100, y: 20 }],
+      startPostVariant: 2,
+      endPostVariant: 3,
+    },
+    {
+      eid: 'second', typeId: NATIVE.fence, segmentCode: 4,
+      points: [{ x: 100, y: 20 }, { x: 200, y: 30 }],
+      startPostVariant: 5,
+      endPostVariant: 0xffffffff,
+    },
+  ]))
+  assert.deepEqual(
+    plan.shadows
+      .flatMap((layer) => (
+        layer.kind === 'fence' && layer.part === 'post'
+          ? [[layer.pos, layer.postVariant]]
+          : []
+      )),
+    [
+      [{ x: 0, y: 10 }, 2],
+      [{ x: 100, y: 20 }, 5],
+      [{ x: 200, y: 30 }, 0],
+    ],
+  )
+})
+
+test('builds the native inset 52-unit grate quad and texture repeat span', () => {
+  const grate = nativeFenceGrate([{ x: 0, y: 40 }, { x: 100, y: 40 }])
+  assert.deepEqual(grate, {
+    bottomStart: { x: 12, y: 40 },
+    bottomEnd: { x: 88, y: 40 },
+    topStart: { x: 12, y: -12 },
+    topEnd: { x: 88, y: -12 },
+    length: 76,
+    uSpan: 76 / NATIVE_FENCE_TEXTURE_REPEAT,
+  })
+})
+
 test('materializes native gate sides with endpoint trim and the two-unit center gap', () => {
   const leaves = nativeGateLeaves([{ x: 0, y: 40 }, { x: 100, y: 40 }])
   assert.deepEqual(leaves, [
@@ -148,6 +195,7 @@ test('materializes native gate sides with endpoint trim and the two-unit center 
       p3: { x: 49, y: 40 },
     },
   ])
+  assert.deepEqual(nativeGateHingeArtPosition(leaves[0]), { x: 68.75, y: -40 })
   const plan = buildNativeRenderPlan(doc([], [], [{
     eid: 'gate', typeId: NATIVE.fence, segmentCode: 2,
     points: [{ x: 0, y: 40 }, { x: 100, y: 40 }],

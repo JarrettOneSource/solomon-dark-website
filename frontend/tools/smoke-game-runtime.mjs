@@ -436,24 +436,34 @@ async function boneyardPainterReceipt(page) {
     return {
       bandCount: diagnostics?.painterBandCount,
       foregroundZIndex: diagnostics?.foregroundZIndex,
+      lanternLightIntensity: diagnostics?.lanternLightIntensity,
+      lightSourceCount: diagnostics?.lightSourceCount,
       localPlayerRow: diagnostics?.localPlayerPainterRow,
       localPlayerZIndex: diagnostics?.localPlayerZIndex,
       mainAboveLocal: diagnostics?.mainAboveLocal,
       mainBelowLocal: diagnostics?.mainBelowLocal,
       maxDynamicZIndex: diagnostics?.maxDynamicZIndex,
+      maxMainLightScalar: diagnostics?.maxMainLightScalar,
       maxMainZIndex: diagnostics?.maxMainZIndex,
+      minMainLightScalar: diagnostics?.minMainLightScalar,
+      regionLighting: canvas?.getAttribute('data-region-lighting'),
       renderer: canvas?.getAttribute('data-game-renderer'),
       sceneBandCount: Number(scene?.getAttribute('data-painter-band-count')),
       staticLayerCount: diagnostics?.staticLayerCount,
     }
   })
   assert.equal(receipt.renderer, 'pixi-webgl')
+  assert.equal(receipt.regionLighting, 'native-object-scalar')
   assert.equal(receipt.sceneBandCount, receipt.bandCount)
   assert.ok(receipt.bandCount >= 2, 'expected scenery bands on both sides of live actors')
   assert.ok(receipt.staticLayerCount > 0)
   assert.equal(receipt.localPlayerRow, 0)
   assert.equal(receipt.mainBelowLocal, true)
   assert.equal(receipt.mainAboveLocal, true)
+  assert.ok(receipt.lightSourceCount >= 1)
+  assert.ok(receipt.minMainLightScalar >= 0)
+  assert.ok(receipt.maxMainLightScalar <= 1)
+  assert.ok(receipt.minMainLightScalar <= receipt.maxMainLightScalar)
   assert.ok(receipt.foregroundZIndex > receipt.maxDynamicZIndex)
   assert.ok(receipt.foregroundZIndex > receipt.maxMainZIndex)
   return receipt

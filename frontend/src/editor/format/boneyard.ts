@@ -67,9 +67,6 @@ export interface BoneyardRoad extends Polyline {
 export interface BoneyardFence extends Polyline {
   typeId: 3005
   uid?: number
-  startPostVariant?: number
-  endPostVariant?: number
-  segmentCode?: number
 }
 
 export interface BoneyardTerrain extends TerrainPatch {

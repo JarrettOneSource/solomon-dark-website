@@ -102,6 +102,9 @@ export interface Polyline {
   endWidthScale?: number
   /** Fences: 0 grate, 1 broken grate, 2 gate, 3 wall, 4 rails. */
   segmentCode?: number
+  /** Fences: optional shared Fencepost selectors; omitted means native zero. */
+  startPostVariant?: number
+  endPostVariant?: number
   uid?: number
   previousUid?: number
   nextUid?: number

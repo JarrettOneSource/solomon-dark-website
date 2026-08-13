@@ -7,8 +7,12 @@ import { entryKey, sameEntry, selectionSet } from './model'
 import { spriteImage, spriteRefFor } from './assets'
 import { liftedSpriteSource } from './lifted-sprite'
 import {
+  nativeFenceGrate,
   nativeGateLeaf,
+  nativeGateHingeArtPosition,
   nativeGateLeaves,
+  NATIVE_FENCE_GRATE_HEIGHT,
+  NATIVE_FENCE_TEXTURE_REPEAT,
   type NativeGateLeafOverride,
 } from './native-fence-geometry'
 import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
@@ -25,12 +29,18 @@ import {
 // grammar (native-regions-npcs-and-world-props.md): posts at the endpoints,
 // broken-grate halves, hinged gate leaves, and the rail bar.
 const FENCE_ART = {
-  post: spriteRefFor('DeadHawg', 36),
   broken: spriteRefFor('DeadHawg', 3),
   gateLeaf: spriteRefFor('DeadHawg', 7),
   gateHinge: spriteRefFor('DeadHawg', 8),
   rail: spriteRefFor('DeadHawg', 23),
 }
+
+const FENCE_POST_ART = Array.from(
+  { length: 7 },
+  (_, variant) => spriteRefFor('DeadHawg', 36 + variant),
+)
+
+const fencePostArt = (variant: number) => FENCE_POST_ART[variant] ?? null
 
 export interface Camera {
   x: number
@@ -99,6 +109,7 @@ export const STAGE_TEXTURES: string[] = [
   ...TERRAIN_TEXTURES,
   FENCE_GRATE_TEXTURE,
   ...Object.values(FENCE_ART).flatMap((ref) => (ref ? [ref.src] : [])),
+  ...FENCE_POST_ART.flatMap((ref) => (ref ? [ref.src] : [])),
 ]
 
 interface SpriteDrawable {
@@ -1028,7 +1039,7 @@ function drawFenceShadow(
   cssH: number,
 ) {
   if (layer.part !== 'post') return
-  const post = FENCE_ART.post
+  const post = fencePostArt(layer.postVariant ?? 0)
   const postWidth = post?.w ?? 38
   const foot = post
     ? { x: layer.pos.x + post.w / 2 - post.anchorX, y: layer.pos.y + post.h - post.anchorY }
@@ -1295,7 +1306,7 @@ function drawFencePart(
   gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
 ) {
   if (layer.part === 'post') {
-    plantArt(ctx, FENCE_ART.post, layer.pos, cam, w, h)
+    plantArt(ctx, fencePostArt(layer.postVariant ?? 0), layer.pos, cam, w, h)
     return
   }
   const { fence, pieceIndex } = layer
@@ -1347,27 +1358,7 @@ function drawFencePart(
       : nativeGateLeaves(fence.points)[pieceIndex]
     if (leaf) drawGateLeaf(ctx, leaf, cam, w, h)
   } else {
-    // Intact grate: repeated loose fencegrate quads, exactly as materialized.
-    const img = spriteImage(FENCE_GRATE_TEXTURE)
-    if (img.complete && img.naturalWidth > 0) {
-      const tileW = img.naturalWidth
-      const count = Math.max(1, Math.round(len / tileW))
-      const step = len / count
-      for (let i = 0; i < count; i++) {
-        const s = worldToScreen(at((i + 0.5) / count), cam, w, h)
-        ctx.drawImage(
-          img,
-          s.x - (step / 2) * cam.zoom,
-          s.y - img.naturalHeight * cam.zoom,
-          step * cam.zoom,
-          img.naturalHeight * cam.zoom,
-        )
-      }
-    } else {
-      ctx.strokeStyle = '#2c2620'
-      ctx.lineWidth = Math.max(1.5, 3 * cam.zoom)
-      strokePath(ctx, [worldToScreen(a, cam, w, h), worldToScreen(z, cam, w, h)])
-    }
+    drawIntactFenceGrate(ctx, fence, cam, w, h)
   }
 
   ctx.restore()
@@ -1381,10 +1372,7 @@ function drawGateLeaf(
   h: number,
 ) {
   plantArt(ctx, FENCE_ART.gateLeaf, leaf.p0, cam, w, h)
-  plantArt(ctx, FENCE_ART.gateHinge, {
-    x: (leaf.p0.x + leaf.p1.x) / 2 + 1,
-    y: (leaf.p0.y + leaf.p1.y) / 2 + 7,
-  }, cam, w, h)
+  plantArt(ctx, FENCE_ART.gateHinge, nativeGateHingeArtPosition(leaf), cam, w, h)
   ctx.save()
   ctx.strokeStyle = '#000'
   ctx.lineWidth = 3 * cam.zoom
@@ -1403,6 +1391,77 @@ function drawGateLeaf(
     }, cam, w, h),
   ])
   ctx.restore()
+}
+
+function drawIntactFenceGrate(
+  ctx: CanvasRenderingContext2D,
+  fence: Polyline,
+  cam: Camera,
+  w: number,
+  h: number,
+): void {
+  const grate = nativeFenceGrate(fence.points)
+  if (!grate || grate.length === 0) return
+  const image = spriteImage(FENCE_GRATE_TEXTURE)
+  if (!image.complete || image.naturalWidth === 0) {
+    ctx.strokeStyle = '#2c2620'
+    ctx.lineWidth = Math.max(1.5, 3 * cam.zoom)
+    strokePath(ctx, [
+      worldToScreen(grate.bottomStart, cam, w, h),
+      worldToScreen(grate.bottomEnd, cam, w, h),
+    ])
+    return
+  }
+
+  const dx = grate.bottomEnd.x - grate.bottomStart.x
+  const dy = grate.bottomEnd.y - grate.bottomStart.y
+  for (let offset = 0; offset < grate.length; offset += NATIVE_FENCE_TEXTURE_REPEAT) {
+    const pieceLength = Math.min(NATIVE_FENCE_TEXTURE_REPEAT, grate.length - offset)
+    const startT = offset / grate.length
+    const endT = (offset + pieceLength) / grate.length
+    const topStart = worldToScreen({
+      x: grate.bottomStart.x + dx * startT,
+      y: grate.bottomStart.y + dy * startT - NATIVE_FENCE_GRATE_HEIGHT,
+    }, cam, w, h)
+    const topEnd = worldToScreen({
+      x: grate.bottomStart.x + dx * endT,
+      y: grate.bottomStart.y + dy * endT - NATIVE_FENCE_GRATE_HEIGHT,
+    }, cam, w, h)
+    const sourceWidth = image.naturalWidth * pieceLength / NATIVE_FENCE_TEXTURE_REPEAT
+    ctx.save()
+    ctx.imageSmoothingEnabled = false
+    ctx.transform(
+      (topEnd.x - topStart.x) / sourceWidth,
+      (topEnd.y - topStart.y) / sourceWidth,
+      0,
+      NATIVE_FENCE_GRATE_HEIGHT * cam.zoom / image.naturalHeight,
+      topStart.x,
+      topStart.y,
+    )
+    ctx.drawImage(
+      image,
+      0,
+      0,
+      sourceWidth,
+      image.naturalHeight,
+      0,
+      0,
+      sourceWidth,
+      image.naturalHeight,
+    )
+    ctx.restore()
+  }
+
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 3 * cam.zoom
+  strokePath(ctx, [
+    worldToScreen({ x: grate.topStart.x, y: grate.topStart.y + 9 }, cam, w, h),
+    worldToScreen({ x: grate.topEnd.x, y: grate.topEnd.y + 9 }, cam, w, h),
+  ])
+  strokePath(ctx, [
+    worldToScreen({ x: grate.bottomStart.x, y: grate.bottomStart.y - 5 }, cam, w, h),
+    worldToScreen({ x: grate.bottomEnd.x, y: grate.bottomEnd.y - 5 }, cam, w, h),
+  ])
 }
 
 function drawDraftPath(ctx: CanvasRenderingContext2D, ui: StageUI, cam: Camera, w: number, h: number) {

@@ -252,6 +252,8 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
           eid: 'entry-gate',
           points: [{ x: 100, y: 300 }, { x: 300, y: 300 }],
           segmentCode: 2,
+          startPostVariant: 4,
+          endPostVariant: 1,
           typeId: 3005,
         }],
         terrain: [],

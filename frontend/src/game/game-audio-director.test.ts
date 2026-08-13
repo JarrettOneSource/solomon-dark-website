@@ -10,6 +10,7 @@ import type { GameAudioSources } from './game-audio-native.ts'
 const SOURCES = {
   music: {
     academy: 'academy.mp3',
+    prelude: 'prelude.mp3',
     selection: 'selection.mp3',
     solomondarktheme: 'theme.mp3',
   },
@@ -163,6 +164,17 @@ test('crossfades the recovered scene tracks at their native tick durations', asy
   frames.runAt(2_020)
   assert.equal(academy.volume, 1)
   assert.equal(selection.paused, true)
+
+  director.setScene('boneyard')
+  await flushPromises()
+  const prelude = created[3]
+  assert.equal(prelude.src, 'prelude.mp3')
+  frames.runAt(2_520)
+  assert.equal(prelude.volume, 0.5)
+  assert.equal(academy.volume, 0.5)
+  frames.runAt(3_020)
+  assert.equal(prelude.volume, 1)
+  assert.equal(academy.paused, true)
 })
 
 test('holds a blocked scene at its beginning and retries on unlock', async () => {

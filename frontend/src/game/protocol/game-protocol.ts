@@ -538,7 +538,10 @@ function boneyardLine(
 ): BoneyardRoad | BoneyardFence {
   const source = record(value, field)
   onlyKeys(source, field, kind === 'fence'
-    ? ['eid', 'typeId', 'points', 'style', 'segmentCode']
+    ? [
+        'eid', 'typeId', 'points', 'style', 'segmentCode',
+        'startPostVariant', 'endPostVariant',
+      ]
     : ['eid', 'typeId', 'points', 'style', 'startWidthScale', 'endWidthScale', 'quad'])
   const common = {
     eid: limitedString(source.eid, `${field}.eid`, 128),
@@ -552,6 +555,8 @@ function boneyardLine(
     return {
       ...common,
       ...optionalNumberField(source, field, 'segmentCode', optionalInteger),
+      ...optionalNumberField(source, field, 'startPostVariant', optionalInteger),
+      ...optionalNumberField(source, field, 'endPostVariant', optionalInteger),
     }
   }
   return {
