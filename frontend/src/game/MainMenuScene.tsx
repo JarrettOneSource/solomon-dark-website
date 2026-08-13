@@ -247,12 +247,12 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
   return (
     <div className="main-menu-page">
-      <section ref={stageRef} className="main-menu-stage" aria-label="Solomon Dark game menu">
+      <section ref={stageRef} className="main-menu-stage" aria-label="Solomon Darker game menu">
         {titleScreen ? (
           <>
             <MainMenuBackdrop />
 
-            <img src={mainMenu.logo} alt="Solomon Dark" className="main-menu-logo" />
+            <img src={mainMenu.logo} alt="Solomon Darker" className="main-menu-logo" />
             <img src={mainMenu.text.version} alt="Version 0.72 beta" className="main-menu-version" />
 
             <MenuSolomon className="main-menu-solomon" />

@@ -43,7 +43,8 @@
   top: 0;
   left: 27.21875%;
   width: 51.8125%;
-  height: auto;
+  height: 43.888889%;
+  object-fit: contain;
 }
 
 .main-menu-version {

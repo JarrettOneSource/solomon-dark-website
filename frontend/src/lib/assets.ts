@@ -44,7 +44,6 @@ import mainMenuGrave6 from '../assets/game/main-menu-grave-6.png'
 import mainMenuGrave7 from '../assets/game/main-menu-grave-7.png'
 import mainMenuGrave8 from '../assets/game/main-menu-grave-8.png'
 import mainMenuHorizon from '../assets/game/main-menu-horizon.png'
-import mainMenuLogo from '../assets/game/main-menu-logo.png'
 import mainMenuMoon from '../assets/game/main-menu-moon.png'
 import mainMenuQuitCorner from '../assets/game/main-menu-quit-corner.png'
 import mainMenuQuitRail from '../assets/game/main-menu-quit-rail.png'
@@ -382,7 +381,7 @@ export const mainMenu = {
     mainMenuGrave8,
   ],
   horizon: mainMenuHorizon,
-  logo: mainMenuLogo,
+  logo: logoSolomonDark,
   moon: mainMenuMoon,
   quitCorner: mainMenuQuitCorner,
   quitRail: mainMenuQuitRail,
