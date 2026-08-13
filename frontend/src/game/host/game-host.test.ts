@@ -4,7 +4,10 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
-import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
+import type {
+  PlayerCharacterConfig,
+  PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
   decodeServerGameMessage,
@@ -28,6 +31,19 @@ const SECOND_CHARACTER = {
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
 
+function gameplayInput(
+  movement: { x: number; y: number },
+  aim: { x: number; y: number } | null = null,
+  primary = false,
+  secondary = false,
+): PlayerCharacterInput {
+  return {
+    aim,
+    cast: { primary, secondary },
+    movement,
+  }
+}
+
 test('authoritative game host owns two configured player characters and movement', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
@@ -46,7 +62,7 @@ test('authoritative game host owns two configured player characters and movement
   assert.equal(secondState.position.x, HUB_SPAWN.x)
   first.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: gameplayInput({ x: 1, y: 0 }),
     sequence: 1,
     targetTick: first.welcome.snapshot.tick + 1,
   }))
@@ -125,7 +141,7 @@ test('game host rejects intent targeting implausibly far-future ticks', async (c
   context.after(() => client.socket.close())
   client.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: gameplayInput({ x: 1, y: 0 }),
     sequence: 1,
     targetTick: client.welcome.snapshot.tick + 1000,
   }))
@@ -143,13 +159,13 @@ test('game host applies only the newest character input for a simulation tick', 
   const targetTick = client.welcome.snapshot.tick + 1
   client.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: gameplayInput({ x: 1, y: 0 }),
     sequence: 1,
     targetTick,
   }))
   client.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 0, y: 1 } },
+    input: gameplayInput({ x: 0, y: 1 }),
     sequence: 2,
     targetTick,
   }))
@@ -160,6 +176,38 @@ test('game host applies only the newest character input for a simulation tick', 
   const player = message.snapshot.players[client.welcome.playerId]
   assert.equal(player.position.x, origin.x)
   assert.ok(player.position.y > origin.y)
+})
+
+test('game host samples a press before a same-target-tick release', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const targetTick = client.welcome.snapshot.tick + 1
+  const pressed = nextMessage(client.socket, (entry) => (
+    entry.type === 'server-snapshot' && entry.acknowledgedInputSequence === 1
+  ))
+  const released = nextMessage(client.socket, (entry) => (
+    entry.type === 'server-snapshot' && entry.acknowledgedInputSequence === 2
+  ))
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-input',
+    input: gameplayInput({ x: 0, y: 0 }, { x: 300, y: 400 }, true),
+    sequence: 1,
+    targetTick,
+  }))
+  client.socket.send(encodeGameMessage({
+    type: 'client-input',
+    input: gameplayInput({ x: 0, y: 0 }, { x: 300, y: 400 }),
+    sequence: 2,
+    targetTick,
+  }))
+
+  const [pressedSnapshot, releasedSnapshot] = await Promise.all([pressed, released])
+  assert.equal(pressedSnapshot.type, 'server-snapshot')
+  assert.equal(releasedSnapshot.type, 'server-snapshot')
+  assert.equal(releasedSnapshot.snapshot.tick, pressedSnapshot.snapshot.tick + 1)
 })
 
 test('host starts one exact random Boneyard for every connected client', async (context) => {

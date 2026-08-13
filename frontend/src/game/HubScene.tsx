@@ -5,6 +5,10 @@ import type {
 } from './client/hub-presentation-timeline.ts'
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
+import {
+  HUB_CAMERA_SCALE,
+  hubRegionCameraOrigin,
+} from './core-kernels/hub-math.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
@@ -17,9 +21,10 @@ import {
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
-  createBrowserMovementInput,
-  type BrowserMovementInput,
-} from './input/movement-input.ts'
+  createBrowserGameplayInput,
+  type BrowserGameplayInput,
+} from './input/gameplay-input.ts'
+import { projectNativeWorldPointer } from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
 import {
   createHubWorldRenderer,
@@ -71,7 +76,7 @@ export default function HubScene({
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<HubWorldRenderer | null>(null)
-  const inputRef = useRef<BrowserMovementInput | null>(null)
+  const inputRef = useRef<BrowserGameplayInput | null>(null)
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -131,8 +136,26 @@ export default function HubScene({
     let cancelled = false
     let animationFrame = 0
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
-    const input = createBrowserMovementInput({
-      onStop: () => onInput({ movement: { x: 0, y: 0 } }),
+    const input = createBrowserGameplayInput({
+      mouseTarget: host,
+      onInput,
+      projectPointer: (pointer) => {
+        const snapshot = samplePresentation()
+        const player = snapshot.players[playerId]
+        const participant = snapshot.world.participants[playerId]
+        if (!player || !participant) return null
+        return projectNativeWorldPointer(
+          pointer,
+          host.getBoundingClientRect(),
+          viewportRef.current,
+          hubRegionCameraOrigin(
+            participant.region,
+            player.position,
+            viewportRef.current,
+          ),
+          HUB_CAMERA_SCALE,
+        )
+      },
     })
     inputRef.current = input
     setRendererState('loading')
@@ -152,8 +175,7 @@ export default function HubScene({
       renderer.resize(viewportRef.current)
       setRendererState('ready')
       const animate = (now: number) => {
-        const movement = input.sample().movement
-        onInput({ movement })
+        onInput(input.sample().input)
         const snapshot = samplePresentation(now)
         const teacherSeconds = snapshot.tick / 100
         for (const releaseIndex of hubTeacherReleasesBetween(

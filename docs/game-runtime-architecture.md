@@ -95,6 +95,12 @@ dependencies without revisiting this release invariant.
   clocks. Protocol messages identify simulation ticks, not wall-clock time.
 - The server owns actors, collision response, AI, RNG, pause policy, and save
   serialization. Clients submit intent rather than positions.
+- The shared player input record carries normalized movement, a nullable world
+  aim point, and independent primary/secondary held levels. Browser mouse edges
+  publish immediately; the authoritative queue preserves each level transition
+  on its own fixed tick, while unchanged held state and same-level aim updates
+  may coalesce. Spell systems consume this seam later rather than importing DOM
+  button events or browser coordinates.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.

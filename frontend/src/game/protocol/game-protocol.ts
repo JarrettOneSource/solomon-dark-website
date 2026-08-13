@@ -39,7 +39,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 6
+export const GAME_PROTOCOL_VERSION = 7
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-2'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -370,8 +370,17 @@ function sha256(value: unknown, field: string): string {
 
 function playerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
   const source = record(value, field)
-  onlyKeys(source, field, ['movement'])
-  return { movement: unitVector(source.movement, `${field}.movement`) }
+  onlyKeys(source, field, ['aim', 'cast', 'movement'])
+  const cast = record(source.cast, `${field}.cast`)
+  onlyKeys(cast, `${field}.cast`, ['primary', 'secondary'])
+  return {
+    aim: source.aim === null ? null : vector(source.aim, `${field}.aim`),
+    cast: {
+      primary: boolean(cast.primary, `${field}.cast.primary`),
+      secondary: boolean(cast.secondary, `${field}.cast.secondary`),
+    },
+    movement: unitVector(source.movement, `${field}.movement`),
+  }
 }
 
 function unitVector(value: unknown, field: string): Vector2 {

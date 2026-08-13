@@ -17,9 +17,10 @@ import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
-  createBrowserMovementInput,
-  type BrowserMovementInput,
-} from './input/movement-input.ts'
+  createBrowserGameplayInput,
+  type BrowserGameplayInput,
+} from './input/gameplay-input.ts'
+import { projectNativeWorldPointer } from './input/gameplay-pointer.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import {
   createBoneyardWorldRenderer,
@@ -70,7 +71,7 @@ export default function BoneyardScene({
   const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
-  const inputRef = useRef<BrowserMovementInput | null>(null)
+  const inputRef = useRef<BrowserGameplayInput | null>(null)
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -120,8 +121,26 @@ export default function BoneyardScene({
     if (!host) return
     let cancelled = false
     let animationFrame = 0
-    const input = createBrowserMovementInput({
-      onStop: () => onInput({ movement: { x: 0, y: 0 } }),
+    const input = createBrowserGameplayInput({
+      mouseTarget: host,
+      onInput,
+      projectPointer: (pointer) => {
+        const renderer = rendererRef.current
+        if (!renderer) return null
+        const snapshot = samplePresentation()
+        const camera = renderer.camera(snapshot)
+        const viewport = viewportRef.current
+        return projectNativeWorldPointer(
+          pointer,
+          host.getBoundingClientRect(),
+          viewport,
+          {
+            x: camera.x - viewport.width / 2 / camera.zoom,
+            y: camera.y - viewport.height / 2 / camera.zoom,
+          },
+          camera.zoom,
+        )
+      },
     })
     inputRef.current = input
     setRendererState('loading')
@@ -143,8 +162,7 @@ export default function BoneyardScene({
       setRendererState('ready')
       const animate = (now: number) => {
         const snapshot = samplePresentation(now)
-        const movement = input.sample().movement
-        onInput({ movement })
+        onInput(input.sample().input)
         renderer.render(snapshot)
         const camera = renderer.camera(snapshot)
         const darkness = darknessCanvasRef.current

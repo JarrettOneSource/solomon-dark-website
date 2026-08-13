@@ -14,6 +14,11 @@ export interface PlayerCharacterConfig {
 }
 
 export interface PlayerCharacterInput {
+  aim: Vector2 | null
+  cast: {
+    primary: boolean
+    secondary: boolean
+  }
   movement: Vector2
 }
 
@@ -46,6 +51,14 @@ export const PLAYER_CHARACTER_MOVEMENT_RETENTION = 0.9
 export const PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED = Math.fround(0.01)
 export const PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL = 25
 
+export function createIdlePlayerCharacterInput(): PlayerCharacterInput {
+  return {
+    aim: null,
+    cast: { primary: false, secondary: false },
+    movement: { x: 0, y: 0 },
+  }
+}
+
 export function createPlayerCharacter(
   config: PlayerCharacterConfig,
   position: Vector2,
@@ -63,7 +76,7 @@ export function createPlayerCharacter(
 
 export function planPlayerCharacterTick(
   previous: Pick<PlayerCharacterState, 'velocity'>,
-  input: PlayerCharacterInput,
+  input: Pick<PlayerCharacterInput, 'movement'>,
 ): PlayerCharacterMovementPlan {
   const inputLength = Math.hypot(input.movement.x, input.movement.y)
   const direction = inputLength > 0

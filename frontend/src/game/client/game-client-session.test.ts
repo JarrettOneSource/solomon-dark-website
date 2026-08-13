@@ -5,7 +5,10 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
-import { createPlayerCharacter } from '../core-kernels/player-character.ts'
+import {
+  createPlayerCharacter,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -23,6 +26,19 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+
+function gameplayInput(
+  movement: { x: number; y: number },
+  aim: { x: number; y: number } | null = null,
+  primary = false,
+  secondary = false,
+): PlayerCharacterInput {
+  return {
+    aim,
+    cast: { primary, secondary },
+    movement,
+  }
+}
 
 test('client carries character config, publishes authority, and tears down', async () => {
   const transport = new MemoryTransport()
@@ -95,10 +111,10 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.deepEqual(session.getSnapshot().players['player-1'].config, CHARACTER)
   let presented = session.getSnapshot()
   session.onSnapshot((snapshot) => { presented = snapshot })
-  session.sendInput({ movement: { x: 1, y: 0 } })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
   const firstInput = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(firstInput.type, 'client-input')
-  session.sendInput({ movement: { x: 0, y: 1 } })
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
   const replacementInput = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(replacementInput.type, 'client-input')
   assert.equal(
@@ -137,6 +153,54 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(transport.readyState, 'closed')
 })
 
+test('client schedules every cast-level transition on a distinct fixed tick', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+  }))
+  const session = await connecting
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 100, y: 200 }, true))
+  const pressed = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(pressed.type, 'client-input')
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }))
+  const released = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(released.type, 'client-input')
+  if (pressed.type !== 'client-input' || released.type !== 'client-input') {
+    assert.fail('expected client input messages')
+  }
+  assert.equal(released.targetTick, pressed.targetTick + 1)
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  const moved = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(moved.type, 'client-input')
+  if (moved.type !== 'client-input') assert.fail('expected client input message')
+  assert.equal(moved.targetTick, released.targetTick)
+  assert.deepEqual(moved.input, gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+
+  const messageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  assert.equal(transport.sent.length, messageCount)
+  session.destroy()
+})
+
 test('client disables prediction when the shared character kernel does not match', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
@@ -162,7 +226,7 @@ test('client disables prediction when the shared character kernel does not match
   const origin = session.getSnapshot().players['player-1'].position.x
   let presented = session.getSnapshot()
   session.onSnapshot((snapshot) => { presented = snapshot })
-  session.sendInput({ movement: { x: 1, y: 0 } })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
   transport.receive(encodeGameMessage({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
@@ -198,9 +262,9 @@ test('client presents bounded display-rate movement without resending unchanged 
   const session = await connecting
   const origin = session.getSnapshot().players['player-1'].position.x
 
-  session.sendInput({ movement: { x: 1, y: 0 } })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
   const messagesAfterChange = transport.sent.length
-  session.sendInput({ movement: { x: 1, y: 0 } })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
   assert.equal(transport.sent.length, messagesAfterChange)
 
   nowMs += 20
@@ -231,10 +295,10 @@ test('client applies direction changes only to future presentation ticks', async
   receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
   const session = await connecting
 
-  session.sendInput({ movement: { x: 1, y: 0 } })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
   nowMs += 40
   const beforeTurn = session.samplePresentation()
-  session.sendInput({ movement: { x: 0, y: 1 } })
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
   const atTurn = session.samplePresentation()
 
   assert.deepEqual(
@@ -274,7 +338,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   const session = await connecting
   session.samplePresentation()
 
-  session.sendInput({ movement: { x: 0, y: 1 } })
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
   nowMs += 50
   const beforeSnapshot = session.samplePresentation()
   assert.ok(beforeSnapshot.players['player-1'].headingIndex > eastboundPlayer.headingIndex)
@@ -286,7 +350,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   for (let tick = 0; tick < 5; tick += 1) {
     const predicted = predictPlayerCharacterInHub(
       authoritativePlayer,
-      { movement: { x: 1, y: 0 } },
+      gameplayInput({ x: 1, y: 0 }),
       collisionRngState,
       initialSnapshot.world.kind === 'hub'
         ? initialSnapshot.world.participants['player-1']
@@ -370,7 +434,7 @@ test('client predicts the authoritative scripted transition walk without accepti
   const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
   const predicted = predictPlayerCharacterInHub(
     player,
-    { movement: { x: -1, y: 0 } },
+    gameplayInput({ x: -1, y: 0 }),
     123,
     {
       region: 'courtyard',

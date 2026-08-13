@@ -9,6 +9,7 @@ import {
   PLAYER_CHARACTER_MOVEMENT_RETENTION,
   PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_RADIUS,
+  createIdlePlayerCharacterInput,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
@@ -229,7 +230,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         clients.set(socket, {
           acknowledgedSequence: 0,
-          activeInput: { movement: { x: 0, y: 0 } },
+          activeInput: createIdlePlayerCharacterInput(),
           lastReceivedSequence: 0,
           playerId,
           queuedInputs: new Map(),
@@ -273,8 +274,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
           return
         }
+        const pendingTail = newestQueuedInput(client.queuedInputs)
+        const castTransition = !sameCast(
+          pendingTail?.input ?? client.activeInput,
+          message.input,
+        )
+        const targetTick = Math.max(
+          state.tick + 1,
+          message.targetTick,
+          pendingTail
+            ? pendingTail.targetTick + Number(castTransition)
+            : state.tick + 1,
+        )
+        if (targetTick > state.tick + GAME_TICK_RATE * 2) {
+          disconnect(socket, 'invalid-message', 'Input queue extends too far ahead of the server tick.')
+          return
+        }
         client.lastReceivedSequence = message.sequence
-        const targetTick = Math.max(state.tick + 1, message.targetTick)
         const queued = client.queuedInputs.get(targetTick)
         if (!queued || message.sequence > queued.sequence) {
           client.queuedInputs.set(targetTick, {
@@ -449,6 +465,25 @@ function applyQueuedInput(client: HostClient, nextTick: number): void {
   if (!selected) return
   client.activeInput = selected.input
   client.acknowledgedSequence = Math.max(client.acknowledgedSequence, selected.sequence)
+}
+
+function newestQueuedInput(
+  queuedInputs: ReadonlyMap<number, QueuedClientInput>,
+): QueuedClientInput | undefined {
+  let newest: QueuedClientInput | undefined
+  for (const input of queuedInputs.values()) {
+    if (
+      !newest
+      || input.targetTick > newest.targetTick
+      || (input.targetTick === newest.targetTick && input.sequence > newest.sequence)
+    ) newest = input
+  }
+  return newest
+}
+
+function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
+  return first.cast.primary === second.cast.primary
+    && first.cast.secondary === second.cast.secondary
 }
 
 function isAllowedUpgrade(

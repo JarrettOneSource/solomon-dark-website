@@ -1,6 +1,7 @@
 import {
   PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+  createIdlePlayerCharacterInput,
   createPlayerCharacter,
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
@@ -187,7 +188,7 @@ export function stepSinglePlayerGameSimulation(
 ): GameSimulationState {
   return stepGameSimulation(
     source,
-    { [playerId]: { movement } },
+    { [playerId]: { ...createIdlePlayerCharacterInput(), movement } },
     elapsedSeconds,
   )
 }

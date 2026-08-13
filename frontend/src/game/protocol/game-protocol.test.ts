@@ -39,12 +39,20 @@ test('client protocol validates character hello and tick-indexed input messages'
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: {
+      aim: { x: 800, y: 450 },
+      cast: { primary: true, secondary: false },
+      movement: { x: 1, y: 0 },
+    },
     sequence: 4,
     targetTick: 19,
   })), {
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: {
+      aim: { x: 800, y: 450 },
+      cast: { primary: true, secondary: false },
+      movement: { x: 1, y: 0 },
+    },
     sequence: 4,
     targetTick: 19,
   })
@@ -105,10 +113,40 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /element/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-input',
-    input: { movement: { x: 2, y: 0 } },
+    input: {
+      aim: null,
+      cast: { primary: false, secondary: false },
+      movement: { x: 2, y: 0 },
+    },
     sequence: 1,
     targetTick: 1,
   })), /magnitude/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-input',
+    input: {
+      aim: { x: 1, y: Number.POSITIVE_INFINITY },
+      cast: { primary: false, secondary: false },
+      movement: { x: 0, y: 0 },
+    },
+    sequence: 1,
+    targetTick: 1,
+  })), /aim/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-input',
+    input: {
+      aim: null,
+      cast: { primary: 1, secondary: false },
+      movement: { x: 0, y: 0 },
+    },
+    sequence: 1,
+    targetTick: 1,
+  })), /primary/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-input',
+    input: { movement: { x: 0, y: 0 } },
+    sequence: 1,
+    targetTick: 1,
+  })), /aim|cast/)
 
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),

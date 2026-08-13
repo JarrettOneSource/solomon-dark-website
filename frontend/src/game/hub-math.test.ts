@@ -86,6 +86,14 @@ import {
   hubTeacherPhaseAt,
 } from './hub-teacher.ts'
 
+function gameplayInput(movement: { x: number; y: number }) {
+  return {
+    aim: null,
+    cast: { primary: false, secondary: false },
+    movement,
+  }
+}
+
 function closeTo(actual: number, expected: number, epsilon = 0.001): void {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} is not within ${epsilon} of ${expected}`)
 }
@@ -520,16 +528,16 @@ test('a tick-indexed multi-player input recording replays exactly on one pinned 
   let second = createGameSimulation(characters)
   for (let tick = 0; tick < 600; tick += 1) {
     const inputs = {
-      'player-1': { movement: tick < 180
+      'player-1': gameplayInput(tick < 180
         ? { x: 1, y: 0 }
         : tick < 360
           ? { x: 0, y: 1 }
-          : { x: 0, y: 0 } },
-      'player-2': { movement: tick < 240
+          : { x: 0, y: 0 }),
+      'player-2': gameplayInput(tick < 240
         ? { x: -1, y: 1 }
         : tick < 480
           ? { x: 1, y: -1 }
-          : { x: 0, y: 0 } },
+          : { x: 0, y: 0 }),
     }
     first = stepGameSimulationTick(first, inputs)
     second = stepGameSimulationTick(second, inputs)

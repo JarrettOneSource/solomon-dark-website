@@ -5,6 +5,7 @@ import {
   PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
+  createIdlePlayerCharacterInput,
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
@@ -82,7 +83,7 @@ interface LocalHubPresentationState {
   remainderMs: number
 }
 
-const STOPPED_INPUT: PlayerCharacterInput = { movement: { x: 0, y: 0 } }
+const STOPPED_INPUT = createIdlePlayerCharacterInput()
 
 export function connectGameClientSession(
   options: GameClientSessionOptions,
@@ -284,7 +285,17 @@ export function connectGameClientSession(
           throw new Error('game input must contain finite movement coordinates')
         }
         const length = Math.hypot(movement.x, movement.y)
+        if (
+          nextInput.aim
+          && (!Number.isFinite(nextInput.aim.x) || !Number.isFinite(nextInput.aim.y))
+        ) throw new Error('game input must contain finite aim coordinates')
+        if (
+          typeof nextInput.cast.primary !== 'boolean'
+          || typeof nextInput.cast.secondary !== 'boolean'
+        ) throw new Error('game input must contain primary and secondary cast levels')
         const input: PlayerCharacterInput = {
+          aim: nextInput.aim ? { ...nextInput.aim } : null,
+          cast: { ...nextInput.cast },
           movement: length > 1
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
@@ -292,9 +303,22 @@ export function connectGameClientSession(
         if (!sameInput(input, currentInput)) advanceLocalHubPresentation(now())
         currentInput = input
         if (sameInput(input, sentInput)) return
+        const castTransition = !sameCast(input, sentInput)
         sentInput = copyInput(input)
         sequence += 1
-        const targetTick = snapshot.tick + 1
+        const pendingTail = pendingInputs.reduce<PendingInput | undefined>((latest, entry) => (
+          !latest
+          || entry.targetTick > latest.targetTick
+          || (entry.targetTick === latest.targetTick && entry.sequence > latest.sequence)
+            ? entry
+            : latest
+        ), undefined)
+        const targetTick = Math.max(
+          snapshot.tick + 1,
+          pendingTail
+            ? pendingTail.targetTick + Number(castTransition)
+            : snapshot.tick + 1,
+        )
         const pendingAtTick = pendingInputs.findIndex(
           (entry) => entry.targetTick === targetTick,
         )
@@ -528,10 +552,22 @@ function supportsLocalPrediction(welcome: ServerWelcomeMessage): boolean {
 }
 
 function copyInput(input: PlayerCharacterInput): PlayerCharacterInput {
-  return { movement: { ...input.movement } }
+  return {
+    aim: input.aim ? { ...input.aim } : null,
+    cast: { ...input.cast },
+    movement: { ...input.movement },
+  }
 }
 
 function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
-  return first.movement.x === second.movement.x
+  return sameCast(first, second)
+    && first.aim?.x === second.aim?.x
+    && first.aim?.y === second.aim?.y
+    && first.movement.x === second.movement.x
     && first.movement.y === second.movement.y
+}
+
+function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
+  return first.cast.primary === second.cast.primary
+    && first.cast.secondary === second.cast.secondary
 }

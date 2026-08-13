@@ -9,6 +9,14 @@ import {
   stepGameSimulationTick,
 } from './game-simulation.ts'
 
+function gameplayInput(x: number, y: number) {
+  return {
+    aim: null,
+    cast: { primary: false, secondary: false },
+    movement: { x, y },
+  }
+}
+
 test('game simulation owns player characters outside the active world', () => {
   const firstConfig = {
     discipline: 'arcane',
@@ -28,8 +36,8 @@ test('game simulation owns player characters outside the active world', () => {
 
   state = addPlayerCharacter(state, 'second', secondConfig)
   state = stepGameSimulationTick(state, {
-    first: { movement: { x: 1, y: 0 } },
-    second: { movement: { x: 0, y: 1 } },
+    first: gameplayInput(1, 0),
+    second: gameplayInput(0, 1),
   })
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
@@ -61,7 +69,7 @@ test('the authoritative tick latches footsteps only while native movement is act
   let state = createGameSimulation()
   for (let tick = 1; tick <= 100; tick += 1) {
     state = stepGameSimulationTick(state, {
-      'local-player': { movement: { x: 1, y: 0 } },
+      'local-player': gameplayInput(1, 0),
     })
     if (tick % 25 === 0) {
       assert.equal(state.players['local-player'].footstepTick, tick)
@@ -70,7 +78,7 @@ test('the authoritative tick latches footsteps only while native movement is act
 
   for (let tick = 101; tick <= 200; tick += 1) {
     state = stepGameSimulationTick(state, {
-      'local-player': { movement: { x: 0, y: 0 } },
+      'local-player': gameplayInput(0, 0),
     })
   }
 
