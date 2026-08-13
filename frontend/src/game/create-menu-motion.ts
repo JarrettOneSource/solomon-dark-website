@@ -2,9 +2,9 @@ import {
   compileNativeNaturalSpline,
   evaluateNativeNaturalSpline,
 } from './native-natural-spline.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 
 export type CreateHandPose = 'cupped' | 'fist' | 'raised'
-export type CreateWizardElement = 'air' | 'earth' | 'ether' | 'fire' | 'water'
 
 export interface CreateHandOffset {
   x: number
@@ -54,7 +54,7 @@ const LEFT_SELECTED_OFFSET: CreateHandOffset = { x: -125.90988, y: 200 }
 const RIGHT_CLOSED_OFFSET: CreateHandOffset = { x: 50, y: 300 }
 const SELECTED_ELEMENT_END: CreateHandOffset = { x: 450, y: 660 }
 const SELECTED_ELEMENT_MIDDLE: CreateHandOffset = { x: 650, y: 685 }
-const SELECTED_ELEMENT_START: Readonly<Record<CreateWizardElement, CreateHandOffset>> = {
+const SELECTED_ELEMENT_START: Readonly<Record<WizardElement, CreateHandOffset>> = {
   air: { x: 816.346, y: 654.189 },
   earth: { x: 656.798, y: 417.651 },
   ether: { x: 826.303, y: 369.046 },
@@ -66,7 +66,7 @@ const SELECTED_ELEMENT_SPLINE = Object.fromEntries(
     element,
     compileNativeNaturalSpline([start, SELECTED_ELEMENT_MIDDLE, SELECTED_ELEMENT_END]),
   ]),
-) as Record<CreateWizardElement, ReturnType<typeof compileNativeNaturalSpline>>
+) as Record<WizardElement, ReturnType<typeof compileNativeNaturalSpline>>
 
 interface NativeOpenState {
   impulse: CreateHandOffset
@@ -161,7 +161,7 @@ function leftSelectionOffsetAt(elapsed: number): CreateHandOffset {
 
 /** Stock selected-element path, driven by the same recurrence as the left hand. */
 export function createSelectedElementMotionAt(
-  element: CreateWizardElement,
+  element: WizardElement,
   elapsedMs: number,
 ): CreateSelectedElementMotion {
   const elapsed = Math.max(0, elapsedMs)

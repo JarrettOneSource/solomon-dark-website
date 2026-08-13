@@ -5,7 +5,7 @@ import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer } from 'ws'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
-import { startHubHost, type HubHost } from './hub-host.ts'
+import { startGameHost, type GameHost } from './game-host.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 
@@ -46,7 +46,7 @@ interface SessionRecord {
   credential: string
   emptySince: number | null
   hadPlayer: boolean
-  host: HubHost
+  host: GameHost
   id: string
 }
 
@@ -165,7 +165,7 @@ export async function startGameSessionSupervisor(
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
     const credential = randomBytes(32).toString('base64url')
-    const sessionHost = await startHubHost({
+    const sessionHost = await startGameHost({
       bootstrapCredential: credential,
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })

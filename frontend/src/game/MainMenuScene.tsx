@@ -1,10 +1,15 @@
 import { useEffect, useState, type AnimationEvent, type ReactNode } from 'react'
 import MenuSolomon from '../fx/MenuSolomon'
 import { mainMenu } from '../lib/assets'
-import CreateMenuScene, { type WizardDiscipline, type WizardElement } from './CreateMenuScene'
+import CreateMenuScene from './CreateMenuScene'
 import HubScene from './HubScene'
 import MainMenuBackdrop from './MainMenuBackdrop'
 import type { GameClientSession } from './client/game-client-session.ts'
+import type {
+  PlayerCharacterConfig,
+  WizardDiscipline,
+  WizardElement,
+} from './core-kernels/player-character.ts'
 import './main-menu.css'
 
 type MenuScreen = 'root' | 'play' | 'create' | 'hub'
@@ -96,13 +101,11 @@ function PlayActions({ onBack, onNewGame }: { onBack: () => void; onNewGame: () 
 }
 
 interface MainMenuSceneProps {
-  connectSession: () => Promise<GameClientSession>
+  connectSession: (character: PlayerCharacterConfig) => Promise<GameClientSession>
 }
 
 export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   const [screen, setScreen] = useState<MenuScreen>('root')
-  const [element, setElement] = useState<WizardElement>('ether')
-  const [discipline, setDiscipline] = useState<WizardDiscipline>('arcane')
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
@@ -140,9 +143,11 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
     setConnecting(true)
     setConnectionError(null)
     try {
-      const nextSession = await connectSession()
-      setElement(selectedElement)
-      setDiscipline(selectedDiscipline)
+      const nextSession = await connectSession({
+        discipline: selectedDiscipline,
+        displayName: 'Helvidius',
+        element: selectedElement,
+      })
       setSession(nextSession)
       transitionTo('hub')
     } catch (error) {
@@ -190,8 +195,6 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
           />
         ) : session ? (
           <HubScene
-            element={element}
-            discipline={discipline}
             playerId={session.playerId}
             initialSnapshot={session.getSnapshot()}
             onInput={session.sendInput}

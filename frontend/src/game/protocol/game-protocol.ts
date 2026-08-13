@@ -1,16 +1,23 @@
-import type { HubPoint } from '../core-kernels/hub-math.ts'
+import {
+  isWizardDiscipline,
+  isWizardElement,
+  type PlayerCharacterConfig,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import type {
-  HubSnapshot,
+  GameSnapshot,
+  HubWorldSnapshot,
   ProtocolAmbientState,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from './game-state.ts'
 
-export type { HubSnapshot } from './game-state.ts'
+export type { GameSnapshot } from './game-state.ts'
 
-export const GAME_PROTOCOL_VERSION = 1
+export const GAME_PROTOCOL_VERSION = 2
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
-export const HUB_KERNEL_VERSION = 'hub-kernel-1'
+export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-1'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
@@ -30,7 +37,7 @@ export interface GameContentManifest {
   mods: readonly GameContentIdentity[]
 }
 
-export interface HubKernelParameters {
+export interface PlayerCharacterKernelParameters {
   fixedTickSeconds: number
   movementAcceleration: number
   movementLaneCap: number
@@ -42,13 +49,13 @@ export interface ClientHelloMessage {
   type: 'client-hello'
   protocolVersion: number
   credential: string
-  displayName?: string
+  character: PlayerCharacterConfig
   resumeToken?: string
 }
 
 export interface ClientInputMessage {
   type: 'client-input'
-  input: HubPoint
+  input: PlayerCharacterInput
   sequence: number
   targetTick: number
 }
@@ -70,15 +77,15 @@ export interface ServerWelcomeMessage {
   serverTickRate: number
   snapshotRate: number
   kernelVersion: string
-  kernelParameters: HubKernelParameters
+  kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
-  snapshot: HubSnapshot
+  snapshot: GameSnapshot
 }
 
 export interface ServerSnapshotMessage {
   type: 'server-snapshot'
   acknowledgedInputSequence: number
-  snapshot: HubSnapshot
+  snapshot: GameSnapshot
 }
 
 export type GameDisconnectCode =
@@ -105,57 +112,84 @@ export function encodeGameMessage(message: ClientGameMessage | ServerGameMessage
 export function decodeClientGameMessage(payload: string): ClientGameMessage {
   const value = parseObject(payload)
   if (value.type === 'client-hello') {
+    onlyKeys(value, 'message', [
+      'type',
+      'protocolVersion',
+      'credential',
+      'character',
+      'resumeToken',
+    ])
     return {
       type: 'client-hello',
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
-      ...(value.displayName === undefined
-        ? {}
-        : { displayName: limitedString(value.displayName, 'displayName', 64) }),
+      character: playerCharacterConfig(value.character, 'character'),
       ...(value.resumeToken === undefined
         ? {}
         : { resumeToken: limitedString(value.resumeToken, 'resumeToken', 512) }),
     }
   }
   if (value.type === 'client-input') {
+    onlyKeys(value, 'message', ['type', 'input', 'sequence', 'targetTick'])
     return {
       type: 'client-input',
-      input: point(value.input, 'input'),
+      input: playerCharacterInput(value.input, 'input'),
       sequence: nonnegativeInteger(value.sequence, 'sequence'),
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
     }
   }
-  if (value.type === 'client-disconnect') return { type: 'client-disconnect' }
+  if (value.type === 'client-disconnect') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-disconnect' }
+  }
   throw new GameProtocolError('unknown client message type')
 }
 
 export function decodeServerGameMessage(payload: string): ServerGameMessage {
   const value = parseObject(payload)
   if (value.type === 'server-welcome') {
+    onlyKeys(value, 'message', [
+      'type',
+      'protocolVersion',
+      'playerId',
+      'resumeToken',
+      'serverTickRate',
+      'snapshotRate',
+      'kernelVersion',
+      'kernelParameters',
+      'content',
+      'snapshot',
+    ])
     return {
       type: 'server-welcome',
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
-      playerId: limitedString(value.playerId, 'playerId', 128),
+      playerId: validatedPlayerId(value.playerId, 'playerId'),
       resumeToken: limitedString(value.resumeToken, 'resumeToken', 512),
       serverTickRate: positiveFinite(value.serverTickRate, 'serverTickRate'),
       snapshotRate: positiveFinite(value.snapshotRate, 'snapshotRate'),
       kernelVersion: limitedString(value.kernelVersion, 'kernelVersion', 128),
-      kernelParameters: hubKernelParameters(value.kernelParameters),
+      kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
-      snapshot: hubSnapshot(value.snapshot),
+      snapshot: gameSnapshot(value.snapshot),
     }
   }
   if (value.type === 'server-snapshot') {
+    onlyKeys(value, 'message', [
+      'type',
+      'acknowledgedInputSequence',
+      'snapshot',
+    ])
     return {
       type: 'server-snapshot',
       acknowledgedInputSequence: nonnegativeInteger(
         value.acknowledgedInputSequence,
         'acknowledgedInputSequence',
       ),
-      snapshot: hubSnapshot(value.snapshot),
+      snapshot: gameSnapshot(value.snapshot),
     }
   }
   if (value.type === 'server-disconnect') {
+    onlyKeys(value, 'message', ['type', 'code', 'reason'])
     const code = limitedString(value.code, 'code', 64)
     if (![
       'authentication-failed',
@@ -191,6 +225,15 @@ function record(value: unknown, field: string): Record<string, unknown> {
     throw new GameProtocolError(`${field} must be an object`)
   }
   return value as Record<string, unknown>
+}
+
+function onlyKeys(
+  value: Record<string, unknown>,
+  field: string,
+  allowed: readonly string[],
+): void {
+  const unexpected = Object.keys(value).find((key) => !allowed.includes(key))
+  if (unexpected) throw new GameProtocolError(`${field}.${unexpected} is not allowed`)
 }
 
 function array(value: unknown, field: string): readonly unknown[] {
@@ -238,57 +281,112 @@ function boolean(value: unknown, field: string): boolean {
 
 function limitedString(value: unknown, field: string, maximum: number): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > maximum) {
-    throw new GameProtocolError(`${field} must be a nonempty string of at most ${maximum} characters`)
+    throw new GameProtocolError(
+      `${field} must be a nonempty string of at most ${maximum} characters`,
+    )
   }
   return value
 }
 
-function sha256(value: unknown, field: string): string {
-  const result = limitedString(value, field, 64).toLowerCase()
-  if (!/^[0-9a-f]{64}$/.test(result)) throw new GameProtocolError(`${field} must be SHA-256 hex`)
+function validatedPlayerId(value: unknown, field: string): string {
+  const result = limitedString(value, field, 128)
+  if (Object.hasOwn(Object.prototype, result)) {
+    throw new GameProtocolError(`${field} is reserved`)
+  }
   return result
 }
 
-function point(value: unknown, field: string): HubPoint {
-  const source = record(value, field)
-  const x = finite(source.x, `${field}.x`)
-  const y = finite(source.y, `${field}.y`)
-  if (Math.hypot(x, y) > 1.001) throw new GameProtocolError(`${field} magnitude exceeds one`)
-  return { x, y }
-}
-
-function playerState(value: unknown, field: string): ProtocolPlayerState {
-  const source = record(value, field)
-  return {
-    gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
-    headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
-    position: pointUnbounded(source.position, `${field}.position`),
-    velocity: pointUnbounded(source.velocity, `${field}.velocity`),
-    walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
+function sha256(value: unknown, field: string): string {
+  const result = limitedString(value, field, 64).toLowerCase()
+  if (!/^[0-9a-f]{64}$/.test(result)) {
+    throw new GameProtocolError(`${field} must be SHA-256 hex`)
   }
+  return result
 }
 
-function pointUnbounded(value: unknown, field: string): HubPoint {
+function playerCharacterInput(value: unknown, field: string): PlayerCharacterInput {
   const source = record(value, field)
+  onlyKeys(source, field, ['movement'])
+  return { movement: unitVector(source.movement, `${field}.movement`) }
+}
+
+function unitVector(value: unknown, field: string): Vector2 {
+  const result = vector(value, field)
+  if (Math.hypot(result.x, result.y) > 1.001) {
+    throw new GameProtocolError(`${field} magnitude exceeds one`)
+  }
+  return result
+}
+
+function vector(value: unknown, field: string): Vector2 {
+  const source = record(value, field)
+  onlyKeys(source, field, ['x', 'y'])
   return {
     x: finite(source.x, `${field}.x`),
     y: finite(source.y, `${field}.y`),
   }
 }
 
+function playerCharacterConfig(value: unknown, field: string): PlayerCharacterConfig {
+  const source = record(value, field)
+  onlyKeys(source, field, ['discipline', 'displayName', 'element'])
+  const discipline = limitedString(source.discipline, `${field}.discipline`, 32)
+  if (!isWizardDiscipline(discipline)) {
+    throw new GameProtocolError(`${field}.discipline is not supported`)
+  }
+  const element = limitedString(source.element, `${field}.element`, 32)
+  if (!isWizardElement(element)) {
+    throw new GameProtocolError(`${field}.element is not supported`)
+  }
+  return {
+    discipline,
+    displayName: limitedString(source.displayName, `${field}.displayName`, 64),
+    element,
+  }
+}
+
+function playerState(value: unknown, field: string): ProtocolPlayerState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'config',
+    'gaitDegrees',
+    'headingIndex',
+    'position',
+    'velocity',
+    'walkCyclePrimary',
+  ])
+  return {
+    config: playerCharacterConfig(source.config, `${field}.config`),
+    gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
+    headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
+    position: vector(source.position, `${field}.position`),
+    velocity: vector(source.velocity, `${field}.velocity`),
+    walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
+  }
+}
+
 function studentState(value: unknown, field: string): ProtocolStudentState {
   const source = record(value, field)
   const profile = record(source.profile, `${field}.profile`)
-  const props = limitedArray(source.props, `${field}.props`, MAX_STUDENT_PROPS).map((entry, index) => {
+  const props = limitedArray(
+    source.props,
+    `${field}.props`,
+    MAX_STUDENT_PROPS,
+  ).map((entry, index) => {
     const prop = record(entry, `${field}.props[${index}]`)
     return {
       angle: finite(prop.angle, `${field}.props[${index}].angle`),
-      paletteIndex: nonnegativeInteger(prop.paletteIndex, `${field}.props[${index}].paletteIndex`),
+      paletteIndex: nonnegativeInteger(
+        prop.paletteIndex,
+        `${field}.props[${index}].paletteIndex`,
+      ),
       radius: finite(prop.radius, `${field}.props[${index}].radius`),
     }
   })
   const pathStep = integer(source.pathStep, `${field}.pathStep`)
-  if (pathStep !== -1 && pathStep !== 1) throw new GameProtocolError(`${field}.pathStep must be -1 or 1`)
+  if (pathStep !== -1 && pathStep !== 1) {
+    throw new GameProtocolError(`${field}.pathStep must be -1 or 1`)
+  }
   return {
     currentSpeed: finite(source.currentSpeed, `${field}.currentSpeed`),
     desiredSpeed: finite(source.desiredSpeed, `${field}.desiredSpeed`),
@@ -300,7 +398,7 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
     pathCursor: finite(source.pathCursor, `${field}.pathCursor`),
     pathId: nonnegativeInteger(source.pathId, `${field}.pathId`),
     pathStep,
-    position: pointUnbounded(source.position, `${field}.position`),
+    position: vector(source.position, `${field}.position`),
     profile: {
       pushResistance: finite(profile.pushResistance, `${field}.profile.pushResistance`),
       pushStrength: finite(profile.pushStrength, `${field}.profile.pushStrength`),
@@ -316,65 +414,114 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
       `${field}.staticCollisionEnabled`,
     ),
     tick: nonnegativeInteger(source.tick, `${field}.tick`),
-    wander: pointUnbounded(source.wander, `${field}.wander`),
+    wander: vector(source.wander, `${field}.wander`),
   }
 }
 
-function ambientState(value: unknown): ProtocolAmbientState {
-  const source = record(value, 'snapshot.ambient')
+function ambientState(value: unknown, field: string): ProtocolAmbientState {
+  const source = record(value, field)
   return {
     fountainParticles: limitedArray(
       source.fountainParticles,
-      'snapshot.ambient.fountainParticles',
+      `${field}.fountainParticles`,
       MAX_FOUNTAIN_PARTICLES,
-    )
-      .map((entry, index) => {
-        const particle = record(entry, `snapshot.ambient.fountainParticles[${index}]`)
-        return {
-          id: nonnegativeInteger(particle.id, `snapshot.ambient.fountainParticles[${index}].id`),
-          remaining: finite(particle.remaining, `snapshot.ambient.fountainParticles[${index}].remaining`),
-          scale: positiveFinite(particle.scale, `snapshot.ambient.fountainParticles[${index}].scale`),
-        }
-      }),
-    markerPhaseDegrees: finite(source.markerPhaseDegrees, 'snapshot.ambient.markerPhaseDegrees'),
-    nextFountainParticleId: nonnegativeInteger(source.nextFountainParticleId, 'snapshot.ambient.nextFountainParticleId'),
-    rngState: nonnegativeInteger(source.rngState, 'snapshot.ambient.rngState'),
-    sealCorePhase: finite(source.sealCorePhase, 'snapshot.ambient.sealCorePhase'),
-    sealGlyphPhase: finite(source.sealGlyphPhase, 'snapshot.ambient.sealGlyphPhase'),
-    statuePhaseDegrees: finite(source.statuePhaseDegrees, 'snapshot.ambient.statuePhaseDegrees'),
+    ).map((entry, index) => {
+      const particle = record(entry, `${field}.fountainParticles[${index}]`)
+      return {
+        id: nonnegativeInteger(particle.id, `${field}.fountainParticles[${index}].id`),
+        remaining: finite(
+          particle.remaining,
+          `${field}.fountainParticles[${index}].remaining`,
+        ),
+        scale: positiveFinite(
+          particle.scale,
+          `${field}.fountainParticles[${index}].scale`,
+        ),
+      }
+    }),
+    markerPhaseDegrees: finite(source.markerPhaseDegrees, `${field}.markerPhaseDegrees`),
+    nextFountainParticleId: nonnegativeInteger(
+      source.nextFountainParticleId,
+      `${field}.nextFountainParticleId`,
+    ),
+    rngState: nonnegativeInteger(source.rngState, `${field}.rngState`),
+    sealCorePhase: finite(source.sealCorePhase, `${field}.sealCorePhase`),
+    sealGlyphPhase: finite(source.sealGlyphPhase, `${field}.sealGlyphPhase`),
+    statuePhaseDegrees: finite(source.statuePhaseDegrees, `${field}.statuePhaseDegrees`),
   }
 }
 
-function hubSnapshot(value: unknown): HubSnapshot {
+function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, ['ambient', 'collisionRngState', 'kind', 'students'])
+  if (source.kind !== 'hub') throw new GameProtocolError(`${field}.kind is not supported`)
+  return {
+    ambient: ambientState(source.ambient, `${field}.ambient`),
+    collisionRngState: nonnegativeInteger(
+      source.collisionRngState,
+      `${field}.collisionRngState`,
+    ),
+    kind: 'hub',
+    students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
+      (student, index) => studentState(student, `${field}.students[${index}]`),
+    ),
+  }
+}
+
+function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
+  onlyKeys(source, 'snapshot', ['players', 'tick', 'world'])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
     throw new GameProtocolError(`snapshot.players may contain at most ${MAX_PLAYERS} entries`)
   }
   const players: Record<string, ProtocolPlayerState> = {}
-  for (const [playerId, state] of Object.entries(rawPlayers)) {
-    if (!playerId || playerId.length > 128) throw new GameProtocolError('invalid snapshot player id')
-    players[playerId] = playerState(state, `snapshot.players.${playerId}`)
+  for (const [rawPlayerId, state] of Object.entries(rawPlayers)) {
+    const playerId = validatedPlayerId(rawPlayerId, 'snapshot player id')
+    players[playerId] = playerState(
+      state,
+      `snapshot.players.${playerId}`,
+    )
   }
   return {
-    ambient: ambientState(source.ambient),
-    collisionRngState: nonnegativeInteger(source.collisionRngState, 'snapshot.collisionRngState'),
     players,
-    students: limitedArray(source.students, 'snapshot.students', MAX_STUDENTS).map((student, index) => (
-      studentState(student, `snapshot.students[${index}]`)
-    )),
     tick: nonnegativeInteger(source.tick, 'snapshot.tick'),
+    world: hubWorldSnapshot(source.world, 'snapshot.world'),
   }
 }
 
-function hubKernelParameters(value: unknown): HubKernelParameters {
+function playerCharacterKernelParameters(
+  value: unknown,
+): PlayerCharacterKernelParameters {
   const source = record(value, 'kernelParameters')
+  onlyKeys(source, 'kernelParameters', [
+    'fixedTickSeconds',
+    'movementAcceleration',
+    'movementLaneCap',
+    'movementRetention',
+    'playerRadius',
+  ])
   return {
-    fixedTickSeconds: positiveFinite(source.fixedTickSeconds, 'kernelParameters.fixedTickSeconds'),
-    movementAcceleration: positiveFinite(source.movementAcceleration, 'kernelParameters.movementAcceleration'),
-    movementLaneCap: positiveFinite(source.movementLaneCap, 'kernelParameters.movementLaneCap'),
-    movementRetention: positiveFinite(source.movementRetention, 'kernelParameters.movementRetention'),
-    playerRadius: positiveFinite(source.playerRadius, 'kernelParameters.playerRadius'),
+    fixedTickSeconds: positiveFinite(
+      source.fixedTickSeconds,
+      'kernelParameters.fixedTickSeconds',
+    ),
+    movementAcceleration: positiveFinite(
+      source.movementAcceleration,
+      'kernelParameters.movementAcceleration',
+    ),
+    movementLaneCap: positiveFinite(
+      source.movementLaneCap,
+      'kernelParameters.movementLaneCap',
+    ),
+    movementRetention: positiveFinite(
+      source.movementRetention,
+      'kernelParameters.movementRetention',
+    ),
+    playerRadius: positiveFinite(
+      source.playerRadius,
+      'kernelParameters.playerRadius',
+    ),
   }
 }
 
@@ -382,13 +529,18 @@ function contentManifest(value: unknown): GameContentManifest {
   const source = record(value, 'content')
   return {
     manifestSha256: sha256(source.manifestSha256, 'content.manifestSha256'),
-    mods: limitedArray(source.mods, 'content.mods', MAX_CONTENT_MODS).map((entry, index) => {
-      const mod = record(entry, `content.mods[${index}]`)
-      return {
-        id: limitedString(mod.id, `content.mods[${index}].id`, 128),
-        version: limitedString(mod.version, `content.mods[${index}].version`, 64),
-        contentSha256: sha256(mod.contentSha256, `content.mods[${index}].contentSha256`),
-      }
-    }),
+    mods: limitedArray(source.mods, 'content.mods', MAX_CONTENT_MODS).map(
+      (entry, index) => {
+        const mod = record(entry, `content.mods[${index}]`)
+        return {
+          id: limitedString(mod.id, `content.mods[${index}].id`, 128),
+          version: limitedString(mod.version, `content.mods[${index}].version`, 64),
+          contentSha256: sha256(
+            mod.contentSha256,
+            `content.mods[${index}].contentSha256`,
+          ),
+        }
+      },
+    ),
   }
 }

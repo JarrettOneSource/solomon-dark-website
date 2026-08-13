@@ -9,16 +9,16 @@ import {
   createSelectedElementMotionAt,
   createSelectionMotionAt,
   type CreateHandPose,
-  type CreateWizardElement,
 } from './create-menu-motion'
+import type {
+  WizardDiscipline,
+  WizardElement,
+} from './core-kernels/player-character.ts'
 
 interface CreateMenuSceneProps {
   onBack: () => void
   onStart: (element: WizardElement, discipline: WizardDiscipline) => void
 }
-
-export type WizardElement = CreateWizardElement
-export type WizardDiscipline = 'arcane' | 'body' | 'mind'
 
 const HAND_SOURCE: Record<CreateHandPose, string> = {
   cupped: createMenu.handCupped,

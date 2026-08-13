@@ -41,6 +41,21 @@ The source tree owns four distinct modules:
   reconciliation, interpolation, presentation snapshots, and teardown. The web
   and desktop shells use the same client implementation.
 
+The authoritative session owns one identity-keyed collection of
+`PlayerCharacterState` records outside any particular world. A player
+character carries its selected appearance/loadout and the native locomotion
+state that must survive a Hub-to-Boneyard transition. The active world owns
+spawn selection, static geometry, ambient actors, enemies, projectiles, and
+other location rules. It may resolve a character's requested movement, but it
+does not create a second Hub- or match-specific character implementation.
+The session also owns the fixed-step accumulator and tick; neither clock is
+nested inside a Hub ambient actor or another world-specific subsystem.
+
+`PlayerId` identifies the connected participant. It is deliberately distinct
+from the in-world character and from native gameplay-slot ordinals. This keeps
+reconnect, future spectating, and world transitions from leaking connection
+identity into position or actor behavior.
+
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to
 provision a remote instance. Those adapters may differ without creating a
@@ -67,6 +82,10 @@ dependencies without revisiting this release invariant.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.
+- Player-character movement uses a two-phase shared kernel: first plan native
+  intent/velocity, then let the active world resolve collision, then commit the
+  resolved position plus native heading/gait state. Hub and Boneyard geometry
+  therefore vary at the world seam without forking character behavior.
 - A single pinned build on one platform must replay the same input script
   reproducibly. Cross-platform bit-identical floating-point results are useful
   measurements, not a correctness dependency. There is no fixed-point or
@@ -102,8 +121,11 @@ Local Network Access exceptions.
 
 Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
-session content manifest, prediction-kernel identity and parameters, and a
-reserved resume token. Unknown or malformed messages fail closed.
+session content manifest, complete player-character configuration,
+prediction-kernel identity and parameters, and a reserved resume token. The
+v2 snapshot keeps session-owned players at its root and uses a discriminated
+`world` payload, currently `kind: "hub"`; Boneyard extends that world union
+without changing player identity. Unknown or malformed messages fail closed.
 
 ## Saves, identity, and content
 
@@ -133,7 +155,10 @@ There is one composed client, not one DOM client and one canvas client.
   experiment. Native draw plans, blend operations, render offsets, and painter
   ordering remain renderer-independent inputs.
 - The existing Hub DOM painter is migration scaffolding. The simulation,
-  collision, motion, extracted assets, and RE ledger are retained.
+  collision, motion, extracted assets, and RE ledger are retained. Its wizard
+  adapter consumes a renderer-independent player-character draw plan and is
+  not owned by the Hub, so the same equipment/attachment presentation can be
+  mounted by Boneyard before the GPU renderer cutover.
 
 PixiJS and Electron are working choices, not irrevocable commitments. PixiJS
 must prove the recovered world painter load on declared minimum hardware.
@@ -193,16 +218,16 @@ a GPU canvas are the lowest-risk continuation of the current work.
 
 ## Immediate migration sequence
 
-1. Enforce the `core-kernels`, `core-server`, `game-protocol`, and `game-client`
-   boundaries. Generalize the Hub to tick-indexed per-player inputs.
-2. Run the authoritative Hub in a separate Node host behind the versioned protocol and
-   prove two clients share the same courtyard state.
-3. Route `/game` through `bootGame`; make the current Hub DOM code present
-   session snapshots rather than own the simulation.
+1. Extend `GameSimulationState.world` and the v2 snapshot world union with the
+   authoritative Boneyard state; retain root-level player characters.
+2. Implement Boneyard collision as the world-side resolver for the existing
+   player-character movement plan/commit seam.
+3. Recover combat state and rules into focused shared kernels or authoritative
+   world systems according to native ownership; do not pre-invent fields.
 4. Provision the same host remotely for web sessions, then prove the desktop
    child-process packaging path.
-5. Select and migrate the world renderer from measured evidence before adding
-   combat.
+5. Select and migrate the world renderer from measured evidence before the
+   recovered combat painter load makes the DOM scaffolding a constraint.
 
 No menu or Create rewrite, ECS adoption, alternative host language, relay
 network, or speculative orchestration layer belongs in this foundation.
@@ -212,12 +237,14 @@ network, or speculative orchestration layer belongs in this foundation.
 The first vertical slice now exists in source rather than only as a target
 design:
 
-- the native-parity Hub kernels and authoritative world are separated by
-  enforced import fences;
+- session-owned player characters, the native movement kernel, generic actor
+  physics, and the authoritative Hub world are separated by enforced import
+  fences;
 - the versioned protocol validates bounded messages, identifies the content and prediction
   kernel, and carries tick-indexed client intent plus authoritative snapshots;
-- one Node host owns all Hub mutation and supports multiple authenticated
-  clients, while the React Hub only presents session snapshots;
+- one Node game host owns all mutation and supports multiple independently
+  configured authenticated characters, while the React Hub only presents the
+  discriminated world snapshot and every root-level player;
 - the shared client reconciles acknowledged intent and automatically disables
   local prediction if the host advertises a different kernel;
 - `npm run dev:game` supervises a real separate loopback host and the Vite

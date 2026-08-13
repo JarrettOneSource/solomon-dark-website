@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { elementVfx } from '../lib/assets'
-import type { WizardElement } from './CreateMenuScene'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import { loadGameImage } from './game-assets'
 import {
   NATIVE_ELEMENT_VFX_SCALE,

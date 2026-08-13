@@ -7,6 +7,7 @@ import {
   connectWebSocketTransport,
   type GameTransport,
 } from './client/game-transport.ts'
+import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
 
 /**
  * The only public seam between a platform shell and the rebuilt game client.
@@ -28,8 +29,8 @@ export type GameEndpoint =
     }
 
 export interface SessionOptions {
+  character: PlayerCharacterConfig
   endpoint: GameEndpoint
-  name?: string
   onFatal?: (error: Error) => void
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
@@ -48,9 +49,9 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
   const transport = await createTransport(options.endpoint.url)
   const connectSession = options.sessionConnector ?? connectGameClientSession
   return connectSession({
+    character: options.character,
     transport,
     credential: options.endpoint.credential,
-    ...(options.name ? { displayName: options.name } : {}),
     ...(options.onFatal ? { onFatal: options.onFatal } : {}),
   })
 }

@@ -2110,14 +2110,53 @@ for simultaneous native multiplayer joins has not yet been live-traced; shared
 spawn plus the already-recovered actor collision system is the source-backed
 behavior, while a fabricated per-slot offset is not.
 
+### Player character ownership across Hub and Boneyard
+
+The stock runtime does not construct a separate Hub-only wizard. The verified
+`Gameplay_CreatePlayerSlot` path at `0x005CB870` allocates the `0x398`-byte
+player actor into the gameplay-owned slot table. `Gameplay_FinalizePlayerStart`
+at `0x005CFA80` then creates the actor's equipment/visual links before its tail
+chooses either the default Hub region or the selected Boneyard/run. The shared
+`PlayerActorTick` at `0x00548B00` owns movement lanes, walk phases, cast/control
+latches, equipment, and attached visuals independently of that destination.
+
+Implementation consequence: the rebuild owns one scene-independent
+`PlayerCharacterState` per participant at the game-session level. Hub and
+Boneyard state are world-owned data around those characters. The character
+kernel plans native movement, the current world resolves static and dynamic
+collision, and the kernel commits position/facing/gait. Appearance and loadout
+travel with the character. A world must not introduce `HubPlayer` or
+`MatchPlayer` variants, and presentation must consume one shared character draw
+plan rather than duplicating the wizard painter in each scene.
+
+Evidence: durable pseudo-source
+`../Decompiled Game/reverse-engineering/pseudo-source/gameplay/005CB870__Gameplay_CreatePlayerSlot.c`,
+`../Decompiled Game/reverse-engineering/pseudo-source/gameplay/005CFA80__Gameplay_FinalizePlayerStart.c`,
+and
+`../Decompiled Game/reverse-engineering/pseudo-source/gameplay/00548B00__PlayerActorTick.c`;
+the player-slot and shared collision findings above; and complete instructions
+at `0x0054B592..0x0054B73F` for ordinary player movement/presentation state.
+
+Confidence: high for persistent player-actor ownership and the clean rebuild
+seam. The exact Boneyard combat/controller fields, cast transitions, damage,
+death, and respawn lifecycle remain unknown and must be added only as later RE
+recovers them; they are not speculative optional fields in this refactor.
+
 ## 2026-08-12 validation receipt
 
-The corrected Hub passes the repository's canonical `./scripts/validate.sh`
-gate: pinned dependency restore, clean backend build, 20 Website contract and
-integration tests, backend format verification, frontend lint, all 80 frontend
-tests, and the TypeScript/Vite production build. Lint reports seven pre-existing
-Fast Refresh warnings and no errors. Python extractor compilation and diff
-whitespace validation also pass.
+The corrected Hub and shared player-character foundation pass the repository's
+canonical `./scripts/validate.sh` gate: pinned dependency restore, clean backend
+build, 22 Website contract and integration tests, backend format verification,
+frontend lint, all 85 frontend tests, the TypeScript/Vite production build, and
+the standalone game-host bundle. Lint reports seven pre-existing Fast Refresh
+warnings and no errors. Python extractor compilation and diff whitespace
+validation also pass.
+
+The isolated protocol-v2 browser smoke joined the authoritative host, advanced
+the character from X `950.64` to X `1021.96`, exercised fixed-robe frames
+`0..4` and walk poses `0..4`, and emitted no console or page errors. The exact
+Vite and host process tree was stopped afterward and both assigned ports were
+closed.
 
 The final browser smoke loaded every resident image successfully and emitted
 no console or page errors. It found one Teacher-local rune at alpha `0.25`,

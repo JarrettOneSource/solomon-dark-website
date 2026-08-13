@@ -1,0 +1,74 @@
+.player-character {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.player-character-shadow {
+  position: absolute;
+  bottom: -7px;
+  left: 0;
+  width: 50px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.48);
+  filter: blur(5px);
+  transform: translateX(-50%);
+}
+
+.player-character-visual {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.player-character-layer {
+  position: absolute;
+  top: -85px;
+  left: -85px;
+  width: 170px;
+  height: 170px;
+  background-position: 0 -2040px;
+  background-repeat: no-repeat;
+}
+
+.player-character-staff-back {
+  z-index: 1;
+  background-image: var(--player-character-staff-back-sheet);
+}
+
+.player-character-robe-dynamic {
+  z-index: 3;
+  background-image: var(--player-character-robe-dynamic-sheet);
+}
+
+.player-character-robe-fixed {
+  z-index: 4;
+  background-image: var(--player-character-robe-fixed-sheet);
+  will-change: transform;
+}
+
+.player-character-staff-front {
+  z-index: 5;
+  background-image: var(--player-character-staff-front-sheet);
+  will-change: transform;
+}
+
+.player-character-head {
+  z-index: 7;
+  background-image: var(--player-character-head-sheet);
+  will-change: transform;
+}
+
+.player-character-orb-vfx {
+  position: absolute;
+  width: 0;
+  height: 0;
+  will-change: top, left, transform;
+}
+
+.player-character-orb-vfx > .element-vfx {
+  top: 0;
+  left: 0;
+}

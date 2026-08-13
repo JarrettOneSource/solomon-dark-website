@@ -1,29 +1,29 @@
-import type { HubPoint } from './hub-collision.ts'
+import type { Vector2 } from './vector.ts'
 
-export interface HubPhysicsBody {
-  delta: HubPoint
+export interface ActorPhysicsBody {
+  delta: Vector2
   driven?: boolean
   id: string
-  position: HubPoint
+  position: Vector2
   pushEnabled?: boolean
   pushResistance: number
   pushStrength: number
   radius: number
 }
 
-export interface HubPhysicsWorld {
-  canPlace: (bodyId: string, position: HubPoint, radius: number) => boolean
+export interface ActorPhysicsWorld {
+  canPlace: (bodyId: string, position: Vector2, radius: number) => boolean
   move: (
     bodyId: string,
-    position: HubPoint,
-    delta: HubPoint,
+    position: Vector2,
+    delta: Vector2,
     radius: number,
-  ) => HubPoint
+  ) => Vector2
 }
 
-export type HubBodyPairFilter = (
-  mover: Readonly<HubPhysicsBody>,
-  other: Readonly<HubPhysicsBody>,
+export type ActorBodyPairFilter = (
+  mover: Readonly<ActorPhysicsBody>,
+  other: Readonly<ActorPhysicsBody>,
 ) => boolean
 
 const NATIVE_SEPARATION_EPSILON = 0.1
@@ -32,7 +32,7 @@ const NATIVE_WEIGHT_RANGE = 0.99
 const NATIVE_PUSH_FACTOR_MINIMUM = 0
 const NATIVE_PUSH_FACTOR_MAXIMUM = 1
 
-interface WorkingBody extends HubPhysicsBody {
+interface WorkingBody extends ActorPhysicsBody {
   currentPushStrength: number
 }
 
@@ -40,7 +40,7 @@ function separation(
   mover: Readonly<WorkingBody>,
   other: Readonly<WorkingBody>,
   weighted: boolean,
-): HubPoint {
+): Vector2 {
   const dx = mover.position.x - other.position.x
   const dy = mover.position.y - other.position.y
   const distanceSquared = dx * dx + dy * dy
@@ -64,8 +64,8 @@ function separation(
 
 function applyCorrection(
   body: WorkingBody,
-  correction: HubPoint,
-  world: HubPhysicsWorld,
+  correction: Vector2,
+  world: ActorPhysicsWorld,
 ): void {
   if (correction.x === 0 && correction.y === 0) return
   const candidate = {
@@ -80,11 +80,11 @@ function applyCorrection(
  * Root moves use swept world collision. Pair separation uses full-candidate
  * placement, and recursive recipients are marked once per root epoch.
  */
-export function resolveHubActorMotion(
-  sourceBodies: readonly HubPhysicsBody[],
-  world: HubPhysicsWorld,
-  shouldCollide: HubBodyPairFilter,
-): HubPhysicsBody[] {
+export function resolveActorMotion(
+  sourceBodies: readonly ActorPhysicsBody[],
+  world: ActorPhysicsWorld,
+  shouldCollide: ActorBodyPairFilter,
+): ActorPhysicsBody[] {
   const bodies: WorkingBody[] = sourceBodies.map((body) => ({
     ...body,
     currentPushStrength: body.pushStrength,
@@ -94,7 +94,7 @@ export function resolveHubActorMotion(
 
   const moveBody = (
     bodyIndex: number,
-    delta: HubPoint,
+    delta: Vector2,
     epochRecipients: Set<number>,
     recursive: boolean,
   ): void => {

@@ -1,26 +1,27 @@
 import {
-  HUB_INPUT_ACCELERATION,
-  HUB_MOVEMENT_LANE_CAP,
-  HUB_MOVEMENT_RETENTION,
-  HUB_MOVEMENT_TICK_SECONDS,
-  HUB_PLAYER_RADIUS,
-  type HubPoint,
-} from '../core-kernels/hub-math.ts'
-import { predictHubPlayerTick } from '../core-kernels/hub-player.ts'
+  PLAYER_CHARACTER_INPUT_ACCELERATION,
+  PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
+  PLAYER_CHARACTER_MOVEMENT_RETENTION,
+  PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+  PLAYER_CHARACTER_RADIUS,
+  type PlayerCharacterConfig,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
-  HUB_KERNEL_VERSION,
+  PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeServerGameMessage,
   encodeGameMessage,
-  type HubSnapshot,
+  type GameSnapshot,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import type { GameTransport } from './game-transport.ts'
+import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 
 export interface GameClientSessionOptions {
+  character: PlayerCharacterConfig
   credential: string
-  displayName?: string
   onFatal?: (error: Error) => void
   resumeToken?: string
   transport: GameTransport
@@ -30,14 +31,20 @@ export interface GameClientSession {
   readonly playerId: string
   readonly resumeToken: string
   destroy(): void
-  getSnapshot(): HubSnapshot
-  onSnapshot(listener: (snapshot: HubSnapshot) => void): () => void
-  sendInput(input: HubPoint): void
+  getSnapshot(): GameSnapshot
+  onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
+  sendInput(input: PlayerCharacterInput): void
 }
 
 export type GameSessionConnector = (
   options: GameClientSessionOptions,
 ) => Promise<GameClientSession>
+
+interface PendingInput {
+  input: PlayerCharacterInput
+  sequence: number
+  targetTick: number
+}
 
 export function connectGameClientSession(
   options: GameClientSessionOptions,
@@ -46,12 +53,12 @@ export function connectGameClientSession(
     let settled = false
     let destroyed = false
     let welcome: ServerWelcomeMessage | undefined
-    let snapshot: HubSnapshot | undefined
+    let snapshot: GameSnapshot | undefined
     let sequence = 0
     let predictionEnabled = false
     let fatalReported = false
-    const snapshotListeners = new Set<(snapshot: HubSnapshot) => void>()
-    let pendingInputs: Array<{ input: HubPoint; sequence: number; targetTick: number }> = []
+    const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
+    let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
     }, 5000)
@@ -131,16 +138,21 @@ export function connectGameClientSession(
       },
       sendInput(nextInput) {
         if (!welcome || !snapshot || destroyed) return
-        if (!Number.isFinite(nextInput.x) || !Number.isFinite(nextInput.y)) {
-          throw new Error('game input must contain finite coordinates')
+        const movement = nextInput.movement
+        if (!Number.isFinite(movement.x) || !Number.isFinite(movement.y)) {
+          throw new Error('game input must contain finite movement coordinates')
         }
-        const length = Math.hypot(nextInput.x, nextInput.y)
-        const input = length > 1
-          ? { x: nextInput.x / length, y: nextInput.y / length }
-          : { ...nextInput }
+        const length = Math.hypot(movement.x, movement.y)
+        const input: PlayerCharacterInput = {
+          movement: length > 1
+            ? { x: movement.x / length, y: movement.y / length }
+            : { ...movement },
+        }
         sequence += 1
         const targetTick = snapshot.tick + 1
-        const pendingAtTick = pendingInputs.findIndex((entry) => entry.targetTick === targetTick)
+        const pendingAtTick = pendingInputs.findIndex(
+          (entry) => entry.targetTick === targetTick,
+        )
         const pending = { input, sequence, targetTick }
         if (pendingAtTick < 0) pendingInputs.push(pending)
         else pendingInputs[pendingAtTick] = pending
@@ -157,7 +169,7 @@ export function connectGameClientSession(
       type: 'client-hello',
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
-      ...(options.displayName ? { displayName: options.displayName } : {}),
+      character: options.character,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     }))
 
@@ -186,37 +198,40 @@ export function connectGameClientSession(
 }
 
 function predictLocalPlayer(
-  source: HubSnapshot,
+  source: GameSnapshot,
   playerId: string,
-  inputs: readonly { input: HubPoint; sequence: number; targetTick: number }[],
-): HubSnapshot {
+  inputs: readonly PendingInput[],
+): GameSnapshot {
   const authoritative = source.players[playerId]
   if (!authoritative || inputs.length === 0) return source
-  let player = authoritative
-  let collisionRngState = source.collisionRngState
-  for (const pending of inputs) {
-    const predicted = predictHubPlayerTick(
-      player,
-      pending.input,
-      HUB_PLAYER_RADIUS,
-      collisionRngState,
-    )
-    player = predicted.player
-    collisionRngState = predicted.collisionRngState
-  }
-  return {
-    ...source,
-    collisionRngState,
-    players: { ...source.players, [playerId]: player },
+  switch (source.world.kind) {
+    case 'hub': {
+      let player = authoritative
+      let collisionRngState = source.world.collisionRngState
+      for (const pending of inputs) {
+        const predicted = predictPlayerCharacterInHub(
+          player,
+          pending.input,
+          collisionRngState,
+        )
+        player = predicted.player
+        collisionRngState = predicted.collisionRngState
+      }
+      return {
+        ...source,
+        players: { ...source.players, [playerId]: player },
+        world: { ...source.world, collisionRngState },
+      }
+    }
   }
 }
 
 function supportsLocalPrediction(welcome: ServerWelcomeMessage): boolean {
   const parameters = welcome.kernelParameters
-  return welcome.kernelVersion === HUB_KERNEL_VERSION
-    && parameters.fixedTickSeconds === HUB_MOVEMENT_TICK_SECONDS
-    && parameters.movementAcceleration === HUB_INPUT_ACCELERATION
-    && parameters.movementLaneCap === HUB_MOVEMENT_LANE_CAP
-    && parameters.movementRetention === HUB_MOVEMENT_RETENTION
-    && parameters.playerRadius === HUB_PLAYER_RADIUS
+  return welcome.kernelVersion === PLAYER_CHARACTER_KERNEL_VERSION
+    && parameters.fixedTickSeconds === PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS
+    && parameters.movementAcceleration === PLAYER_CHARACTER_INPUT_ACCELERATION
+    && parameters.movementLaneCap === PLAYER_CHARACTER_MOVEMENT_LANE_CAP
+    && parameters.movementRetention === PLAYER_CHARACTER_MOVEMENT_RETENTION
+    && parameters.playerRadius === PLAYER_CHARACTER_RADIUS
 }

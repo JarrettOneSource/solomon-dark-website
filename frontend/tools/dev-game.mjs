@@ -19,7 +19,7 @@ if (isWildcardHost(viteHost) && !configuredOrigin) {
 }
 const host = spawn(
   process.execPath,
-  ['--experimental-strip-types', 'src/game/host/run-hub-host.ts'],
+  ['--experimental-strip-types', 'src/game/host/run-game-host.ts'],
   {
     cwd: frontendRoot,
     env: {

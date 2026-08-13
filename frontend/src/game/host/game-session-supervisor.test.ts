@@ -13,8 +13,13 @@ import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 
 const ADMIN_SECRET = 'supervisor-test-secret-that-is-long-enough'
 const BROWSER_ORIGIN = 'https://solomondarker.com'
+const CHARACTER = {
+  discipline: 'arcane',
+  displayName: 'Helvidius',
+  element: 'ether',
+} as const
 
-test('game session supervisor provisions isolated authenticated Hub sessions', async (context) => {
+test('game session supervisor provisions isolated authenticated game sessions', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -97,6 +102,7 @@ async function join(
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
+    character: CHARACTER,
   }))
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')

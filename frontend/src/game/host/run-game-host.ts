@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
-import { startHubHost } from './hub-host.ts'
+import { startGameHost } from './game-host.ts'
 
 const host = process.env.SDR_GAME_HOST?.trim() || '127.0.0.1'
 const port = parsePort(process.env.SDR_GAME_PORT)
@@ -14,7 +14,7 @@ const allowedOrigins = process.env.SDR_GAME_ALLOWED_ORIGINS
 const snapshotRate = parseSnapshotRate(process.env.SDR_GAME_SNAPSHOT_RATE)
 const trustedProxy = process.env.SDR_GAME_TRUSTED_PROXY === '1'
 
-const server = await startHubHost({
+const server = await startGameHost({
   host,
   port,
   bootstrapCredential: credential,

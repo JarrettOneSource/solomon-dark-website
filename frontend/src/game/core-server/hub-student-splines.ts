@@ -1,4 +1,4 @@
-import type { HubPoint } from '../core-kernels/hub-math.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   compileNativeNaturalSpline,
   evaluateNativeNaturalSpline,
@@ -7,7 +7,7 @@ import {
 
 export interface HubStudentSpline {
   readonly id: number
-  readonly points: readonly HubPoint[]
+  readonly points: readonly Vector2[]
 }
 
 /** Clean-stock Courtyard QuickSpline control points, region path ids 0..17. */
@@ -46,7 +46,7 @@ export const COMPILED_HUB_STUDENT_SPLINES: readonly CompiledHubStudentSpline[] =
 export function evaluateHubStudentSpline(
   splineId: number,
   cursor: number,
-): HubPoint {
+): Vector2 {
   const spline = COMPILED_HUB_STUDENT_SPLINES[splineId]
   if (!spline) throw new Error(`unknown Courtyard Student spline ${splineId}`)
   return evaluateNativeNaturalSpline(spline.native, cursor)
