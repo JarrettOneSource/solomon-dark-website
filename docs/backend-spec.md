@@ -24,10 +24,15 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/auth/*` manages website accounts, JWTs, schools, and Steam links.
 - `/api/mods*`, `/api/tags`, and `/api/users/{username}` provide the Library,
   package validation, downloads, comments, screenshots, and public profiles.
-- `/api/lobbies*` provides the optional Steam lobby directory and join tickets.
+- `/api/lobbies*` provides the optional Steam Search Parties directory and join
+  tickets.
 - `/api/saves*` provides user-scoped cloud save slots.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
+
+`GET /api/lobbies` returns `items`, `privateParties`, and `playerCount`.
+`privateParties` contains player and capacity counts for friends-only parties
+that the current viewer cannot inspect; it does not expose their lobby details.
 
 ## Launcher cloud saves
 

@@ -369,7 +369,7 @@ public static class LobbyEndpoints
             .ThenBy(lobby => lobby.Id)
             .ToArrayAsync(cancellationToken);
         var items = new List<LobbyItem>(lobbies.Length);
-        var privateClasses = new List<PrivateClassItem>();
+        var privateParties = new List<PrivatePartyItem>();
         var playerCount = 0;
         foreach (var lobby in lobbies)
         {
@@ -377,14 +377,14 @@ public static class LobbyEndpoints
             if (lobby.Privacy == "friendsOnly" &&
                 !CanViewFriendsOnlyLobby(lobby, viewerSteamId))
             {
-                privateClasses.Add(new PrivateClassItem(lobby.Players, lobby.MaxPlayers));
+                privateParties.Add(new PrivatePartyItem(lobby.Players, lobby.MaxPlayers));
             }
             else
             {
                 items.Add(MapLobby(lobby, context.Request));
             }
         }
-        return new LobbyListResponse(items.ToArray(), privateClasses.ToArray(), playerCount);
+        return new LobbyListResponse(items.ToArray(), privateParties.ToArray(), playerCount);
     }
 
     private static async Task<string?> ResolveViewerSteamIdAsync(
@@ -706,10 +706,10 @@ public static class LobbyEndpoints
 
     public sealed record PasswordAuthorizationRequest(string? PasswordHash);
 
-    private sealed record PrivateClassItem(int Players, int MaxPlayers);
+    private sealed record PrivatePartyItem(int Players, int MaxPlayers);
     private sealed record LobbyListResponse(
         LobbyItem[] Items,
-        PrivateClassItem[] PrivateClasses,
+        PrivatePartyItem[] PrivateParties,
         int PlayerCount);
     private sealed record LobbyItem(
         int Id,

@@ -123,7 +123,7 @@ function SteamRegistrar() {
   }
 
   const unlink = async () => {
-    if (!window.confirm('Strike your Steam profile from the record? Friends-only classes and warded-lobby tickets will stop working until you relink.')) return
+    if (!window.confirm('Strike your Steam profile from the record? Friends-only parties and warded-lobby tickets will stop working until you relink.')) return
     setBusy(true)
     setError(null)
     try {
@@ -144,7 +144,7 @@ function SteamRegistrar() {
         <h2 className="h-display text-xl">Steam Linkage</h2>
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
           Bind your Steam self to your Solomon Darker account. The Registrar uses it to show you
-          friends-only classes and to cut join tickets for warded ones. The rite happens
+          friends-only parties and to cut join tickets for warded ones. The rite happens
           on Steam’s own doorstep.
         </p>
       </Reveal>

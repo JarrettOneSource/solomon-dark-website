@@ -16,11 +16,11 @@ import { formatCount } from '../lib/format'
 const FEATURES = [
   {
     icon: skillIcons.door,
-    title: 'Classes in Session',
+    title: 'Search Parties',
     body:
-      'Live co-op through the Solomon Darker launcher, with a master list of open matches. Bring a study group — the dead grade on a curve.',
-    to: '/classes',
-    label: 'See who’s in session',
+      'Live co-op through the Solomon Darker launcher, with a master list of every party out hunting Solomon Dark. Bring backup — he’s done for ten of the junior faculty so far.',
+    to: '/parties',
+    label: 'Join the hunt',
   },
   {
     icon: skillIcons.book,
@@ -47,8 +47,8 @@ export default function Home() {
   const [knock, setKnock] = useState<Lobby | null>(null)
 
   const liveLobbies = (lobbies.data?.items ?? []).slice(0, 5)
-  // Veiled classes fill whatever of the five preview rows is left.
-  const veiledClasses = (lobbies.data?.privateClasses ?? []).slice(
+  // Veiled parties fill whatever of the five preview rows is left.
+  const veiledParties = (lobbies.data?.privateParties ?? []).slice(
     0,
     Math.max(0, 5 - liveLobbies.length),
   )
@@ -66,7 +66,7 @@ export default function Home() {
             <StatTile
               icon={skillIcons.door}
               value={stats.data?.matchesLive ?? null}
-              label="Classes in session"
+              label="Parties on the hunt"
               loading={stats.loading}
             />
             <StatTile
@@ -118,29 +118,29 @@ export default function Home() {
         </div>
       </section>
 
-      {/* classes in session */}
+      {/* search parties */}
       <section className="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
         <Reveal>
           <SectionHead
             kicker="Live from the college"
-            title="Classes in Session"
+            title="Search Parties"
             action={
-              <Link to="/classes" className="link-arcane text-xs uppercase tracking-[0.15em]">
-                Join a class →
+              <Link to="/parties" className="link-arcane text-xs uppercase tracking-[0.15em]">
+                Join a party →
               </Link>
             }
           />
           {lobbies.loading ? (
-            <Spinner label="Fetching classes…" />
+            <Spinner label="Scrying for parties…" />
           ) : lobbies.error ? (
             <EmptyState title="The crystal ball is cloudy" line={lobbies.error} />
-          ) : liveLobbies.length === 0 && veiledClasses.length === 0 ? (
+          ) : liveLobbies.length === 0 && veiledParties.length === 0 ? (
             <EmptyState
-              title="No classes in session"
+              title="No parties afield"
               line="Solomon, for the record, is not resting. Host one from the Solomon Darker launcher."
             />
           ) : (
-            <LobbyTable lobbies={liveLobbies} veiled={veiledClasses} onKnock={setKnock} />
+            <LobbyTable lobbies={liveLobbies} veiled={veiledParties} onKnock={setKnock} />
           )}
         </Reveal>
       </section>

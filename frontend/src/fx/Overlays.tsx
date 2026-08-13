@@ -20,7 +20,7 @@ const KONAMI = [
 ]
 
 const AWAY_TITLES = [
-  '☠ The class continues without you…',
+  '☠ The hunt continues without you…',
   '☠ Solomon marks you absent.',
   '☠ The candles gutter…',
 ]

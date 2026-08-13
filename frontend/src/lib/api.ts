@@ -146,16 +146,16 @@ export interface Lobby {
   join: LobbyJoinInfo | null
 }
 
-/** A friends-only class the viewer is not privy to — seat counts and nothing else. */
-export interface PrivateClass {
+/** A friends-only party the viewer is not privy to — seat counts and nothing else. */
+export interface PrivateParty {
   players: number
   maxPlayers: number
 }
 
 export interface LobbyList {
   items: Lobby[]
-  /** Friends-only classes withheld from this viewer (absent on older backends). */
-  privateClasses?: PrivateClass[]
+  /** Friends-only parties withheld from this viewer (absent on older backends). */
+  privateParties?: PrivateParty[]
   playerCount: number
 }
 

@@ -31,7 +31,7 @@ import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
 // found.
 const NAV = [
   { to: '/', label: 'Home', end: true },
-  { to: '/classes', label: 'Classes' },
+  { to: '/parties', label: 'Search Parties' },
   { to: '/mods', label: 'Library' },
   { to: '/about', label: 'About' },
 ]
@@ -342,7 +342,7 @@ export default function Shell() {
             <div className="kicker mb-3">Passages</div>
             <ul className="space-y-2 text-sm">
               <li><Link to="/boneyard" className="link-arcane">The Boneyard</Link></li>
-              <li><Link to="/classes" className="link-arcane">Classes in Session</Link></li>
+              <li><Link to="/parties" className="link-arcane">Search Parties</Link></li>
               <li><Link to="/mods" className="link-arcane">The Library</Link></li>
               <li><Link to="/boneyards" className="link-arcane">Boneyard Viewer</Link></li>
               <li><Link to="/about" className="link-arcane">The Revival Story</Link></li>

@@ -56,9 +56,9 @@ export default function LobbyPasswordDialog({
           err.status === 403
             ? 'The wards reject that password.'
             : err.status === 404
-              ? 'That class has ended or slipped beyond the veil.'
+              ? 'That party has disbanded or slipped beyond the veil.'
               : err.status === 409
-                ? 'The class is full — every seat is taken.'
+                ? 'The party is full — every seat is taken.'
                 : err.status === 429
                   ? 'Too many wrong whispers — wait a moment.'
                   : err.message,
@@ -75,14 +75,14 @@ export default function LobbyPasswordDialog({
       onMouseDown={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`Password for ${lobby.hostPlayer}'s class`}
+      aria-label={`Password for ${lobby.hostPlayer}'s search party`}
     >
       <div
         className="panel panel-ornate w-full max-w-md p-6 sm:p-8"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="kicker mb-1.5">A warded class</div>
-        <h2 className="h-display text-xl">{lobby.hostPlayer}’s expedition</h2>
+        <div className="kicker mb-1.5">A warded party</div>
+        <h2 className="h-display text-xl">{lobby.hostPlayer}’s search party</h2>
         <p className="text-fell mt-2 text-sm text-bone-dim">
           {lobby.game.boneyardName
             ? `Bound for ${lobby.game.boneyardName}. `

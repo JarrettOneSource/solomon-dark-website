@@ -363,10 +363,10 @@ export default function Hero() {
                 The Library
               </Link>
               <Link
-                to="/classes"
+                to="/parties"
                 className="btn-plaque !px-4 !py-2.5 !text-[12px] !tracking-[0.18em] sm:flex sm:flex-1 sm:items-center sm:justify-center"
               >
-                Classes in Session
+                Search Parties
               </Link>
             </div>
             <img

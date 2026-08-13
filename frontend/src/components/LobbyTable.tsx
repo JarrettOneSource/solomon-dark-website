@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Lobby, LobbyGame, LobbyPhase, PrivateClass } from '../lib/api'
+import type { Lobby, LobbyGame, LobbyPhase, PrivateParty } from '../lib/api'
 import { formatDuration } from '../lib/format'
 import { PlayerBar } from './ui'
 
@@ -17,9 +17,9 @@ type Row =
   | { kind: 'listed'; lobby: Lobby }
   | { kind: 'veiled'; players: number; maxPlayers: number; key: string }
 
-// Both lists arrive sorted by attendance; veiled classes take their honest
-// place in that order, with listed (joinable) classes winning ties.
-function mergeRows(lobbies: Lobby[], veiled: PrivateClass[]): Row[] {
+// Both lists arrive sorted by attendance; veiled parties take their honest
+// place in that order, with listed (joinable) parties winning ties.
+function mergeRows(lobbies: Lobby[], veiled: PrivateParty[]): Row[] {
   const rows: Row[] = []
   let i = 0
   let j = 0
@@ -83,7 +83,7 @@ function JoinAction({ lobby, onKnock, compact }: { lobby: Lobby; onKnock: (lobby
       type="button"
       onClick={() => onKnock(lobby)}
       className={cls}
-      title="This class is warded — knock and whisper the password"
+      title="This party is warded — knock and whisper the password"
     >
       Knock
     </button>
@@ -124,7 +124,7 @@ export default function LobbyTable({
   onKnock,
 }: {
   lobbies: Lobby[]
-  veiled?: PrivateClass[]
+  veiled?: PrivateParty[]
   onKnock: (lobby: Lobby) => void
 }) {
   const rows = mergeRows(lobbies, veiled)
@@ -142,7 +142,7 @@ export default function LobbyTable({
                     Veiled
                   </span>
                   <span className="text-fell truncate text-[13px] italic text-bone-dim">
-                    A discreet tutor
+                    Officially, nobody
                   </span>
                   <span className="ml-auto flex-none text-[10px] uppercase tracking-wider text-bone-dim/50">
                     Invitation only
@@ -228,7 +228,7 @@ export default function LobbyTable({
                     </td>
                     <td className="slab border-x-0 px-3 py-2.5">
                       <span className="text-fell text-[13px] italic text-bone-dim">
-                        A discreet tutor
+                        Officially, nobody
                       </span>
                     </td>
                     <td className="slab border-x-0 px-3 py-2.5">

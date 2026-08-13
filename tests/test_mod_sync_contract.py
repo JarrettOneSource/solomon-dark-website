@@ -796,6 +796,57 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 400, rejected)
         self.assertIn("2–250", rejected["error"])
 
+    def test_lobby_directory_uses_private_parties_wire_field(self) -> None:
+        lobby_id = "76561198000000801"
+        secret = "81" * 32
+        status, announced = self.request(
+            "POST",
+            "/api/lobbies/announce",
+            headers={"X-SDR-Lobby-Secret": secret},
+            json_body={
+                "lobbyId": lobby_id,
+                "hostSteamId": "76561198000000802",
+                "hostPlayer": "Friends Only Host",
+                "privacy": "friendsOnly",
+                "friendSteamIds": [],
+                "players": 2,
+                "maxPlayers": 4,
+                "build": {
+                    "appId": 3362180,
+                    "protocolVersion": 81,
+                    "manifestSha256": "81" * 32,
+                    "loaderVersion": "contract-test",
+                },
+                "game": {"phase": "hub"},
+                "mods": [],
+            },
+        )
+        self.assertEqual(status, 200, announced)
+
+        try:
+            status, lobbies = self.request("GET", "/api/lobbies")
+            self.assertEqual(status, 200, lobbies)
+            self.assertEqual(
+                set(lobbies),
+                {"items", "privateParties", "playerCount"},
+            )
+            self.assertIn(
+                {"players": 2, "maxPlayers": 4},
+                lobbies["privateParties"],
+            )
+            self.assertFalse(
+                any(
+                    (item.get("join") or {}).get("lobbyId") == lobby_id
+                    for item in lobbies["items"]
+                )
+            )
+        finally:
+            self.request(
+                "DELETE",
+                f"/api/lobbies/{lobby_id}",
+                headers={"X-SDR-Lobby-Secret": secret},
+            )
+
     def test_lobby_picking_loadout_status_roundtrips_and_advances(self) -> None:
         lobby_id = "76561198000000901"
         secret = "91" * 32

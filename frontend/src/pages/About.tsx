@@ -66,7 +66,7 @@ export default function About() {
             a game that never had it.
           </p>
           <ul>
-            <li><strong>Classes in Session</strong> — a live master list of multiplayer matches.</li>
+            <li><strong>Search Parties</strong> — a live master list of multiplayer manhunts.</li>
             <li><strong>The Library</strong> — community mods, uploaded and versioned.</li>
             <li><strong>The Annals</strong> — Solomon Darker accounts with cloud saves synced from the launcher.</li>
             <li>

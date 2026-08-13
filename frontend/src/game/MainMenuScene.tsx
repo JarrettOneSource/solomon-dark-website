@@ -263,7 +263,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
         {(connecting || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? 'Opening the class…'}
+            {connectionError ?? 'Opening the grounds…'}
           </div>
         )}
 

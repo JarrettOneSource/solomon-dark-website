@@ -8,7 +8,7 @@ import type { Lobby } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useLobbies } from '../lib/useLobbies'
 
-export default function Classes() {
+export default function SearchParties() {
   const [search, setSearch] = useState('')
   const [openSeats, setOpenSeats] = useState(false)
   const [knock, setKnock] = useState<Lobby | null>(null)
@@ -17,7 +17,8 @@ export default function Classes() {
   const [searchParams, setSearchParams] = useSearchParams()
   const consumedDeepLink = useRef(false)
 
-  // sdr hand-off: /classes?lobby=<id> opens the knock dialog for that class.
+  // sdr hand-off: /parties?lobby=<id> (and the legacy /classes alias) opens
+  // the knock dialog for that party.
   useEffect(() => {
     if (consumedDeepLink.current || !data) return
     const wanted = searchParams.get('lobby')
@@ -42,9 +43,9 @@ export default function Classes() {
     return items
   }, [data, search, openSeats])
 
-  // Veiled classes carry nothing searchable and no seat you could claim, so
+  // Veiled parties carry nothing searchable and no seat you could claim, so
   // they only show on the unfiltered view.
-  const veiledAll = data?.privateClasses ?? []
+  const veiledAll = data?.privateParties ?? []
   const veiled = search.trim() || openSeats ? [] : veiledAll
 
   return (
@@ -61,10 +62,11 @@ export default function Classes() {
             live
           </span>
         </div>
-        <h1 className="h-display text-3xl">Classes in Session</h1>
+        <h1 className="h-display text-3xl">Search Parties</h1>
         <p className="text-fell mt-2 max-w-xl text-bone-dim">
-          Live multiplayer expeditions led by fellow students. Attendance is optional;
-          survival is graded.
+          “Find Solomon Dark and bring him to justice. The reputation of the
+          university is counting on you.” — the Archchancellor, to every party
+          below. Enlistment is voluntary; survival is chronicled.
         </p>
       </Reveal>
 
@@ -88,12 +90,12 @@ export default function Classes() {
         </div>
 
         {loading ? (
-          <Spinner label="Fetching classes…" />
+          <Spinner label="Scrying for search parties…" />
         ) : error ? (
           <ErrorNote message={error} />
         ) : filtered.length === 0 && veiled.length === 0 ? (
           <EmptyState
-            title="No classes in session"
+            title="No parties afield"
             line={
               search || openSeats
                 ? 'Nothing matches. Loosen the filters — or lower your standards.'
@@ -107,11 +109,11 @@ export default function Classes() {
         <p className="text-fell mt-6 text-center text-xs text-bone-dim/70">
           {user?.steamId ? (
             <>
-              Veiled classes unmask when the host counts you among their Steam friends.
+              Veiled parties unmask when the host counts you among their Steam friends.
             </>
           ) : user ? (
             <>
-              Veiled classes unmask for the host’s Steam friends —{' '}
+              Veiled parties unmask for the host’s Steam friends —{' '}
               <Link to="/account" className="link-arcane">
                 link your Steam self in the Annals
               </Link>
@@ -119,7 +121,7 @@ export default function Classes() {
             </>
           ) : (
             <>
-              Veiled classes are warded to their host’s Steam circle — they unmask for{' '}
+              Veiled parties are warded to their host’s Steam circle — they unmask for{' '}
               <Link to="/login" className="link-arcane">
                 signed-in wizards
               </Link>{' '}
