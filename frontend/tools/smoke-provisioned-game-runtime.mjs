@@ -39,13 +39,18 @@ try {
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: payload.credential,
+    character: {
+      discipline: 'arcane',
+      displayName: 'Smoke Wizard',
+      element: 'ether',
+    },
   }))
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   const before = welcome.snapshot.players[welcome.playerId].position.x
   socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { x: 1, y: 0 },
+    input: { movement: { x: 1, y: 0 } },
     sequence: 1,
     targetTick: welcome.snapshot.tick + 1,
   }))

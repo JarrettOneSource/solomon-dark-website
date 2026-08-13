@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { hub } from '../lib/assets'
-import type { WizardDiscipline, WizardElement } from './CreateMenuScene'
-import ElementVfx from './ElementVfx'
 import HubTeacher from './HubTeacher'
+import PlayerCharacter from './PlayerCharacter.tsx'
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
@@ -24,14 +23,9 @@ import {
   HUB_CAMERA_SCALE,
   HUB_SPAWN,
   hubCameraOrigin,
-  hubPlayerFixedRobeOffset,
-  hubPlayerFixedRobePose,
-  hubPlayerFrontAttachmentOffset,
-  hubPlayerHeadOffset,
-  hubStaffIsFront,
-  hubStaffOrbOffset,
 } from './core-kernels/hub-math.ts'
-import type { HubSnapshot } from './protocol/game-protocol.ts'
+import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import type { GameSnapshot } from './protocol/game-protocol.ts'
 import type {
   ProtocolFountainParticleState,
   ProtocolStudentState,
@@ -39,12 +33,10 @@ import type {
 import './hub.css'
 
 interface HubSceneProps {
-  discipline: WizardDiscipline
-  element: WizardElement
-  initialSnapshot: HubSnapshot
-  onInput: (input: { x: number; y: number }) => void
+  initialSnapshot: GameSnapshot
+  onInput: (input: PlayerCharacterInput) => void
   playerId: string
-  subscribe: (listener: (snapshot: HubSnapshot) => void) => () => void
+  subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
 
 interface ActorProps {
@@ -165,8 +157,6 @@ function renderFountainParticles(
 }
 
 export default function HubScene({
-  discipline,
-  element,
   initialSnapshot,
   onInput,
   playerId,
@@ -174,12 +164,6 @@ export default function HubScene({
 }: HubSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
-  const playerRef = useRef<HTMLDivElement>(null)
-  const playerLayerRefs = useRef<Array<HTMLSpanElement | null>>([])
-  const playerFixedRobeRef = useRef<HTMLSpanElement>(null)
-  const playerStaffFrontRef = useRef<HTMLSpanElement>(null)
-  const playerHeadRef = useRef<HTMLSpanElement>(null)
-  const playerOrbRef = useRef<HTMLSpanElement>(null)
   const fountainLayerRef = useRef<HTMLSpanElement>(null)
   const fountainParticleElementsRef = useRef(new Map<number, HTMLImageElement>())
   const statueAuraRef = useRef<HTMLImageElement>(null)
@@ -190,7 +174,10 @@ export default function HubScene({
   const studentElementsRef = useRef(new Map<number, HTMLDivElement>())
   const studentPropElementsRef = useRef(new Map<number, Array<HTMLSpanElement | null>>())
   const snapshotRef = useRef(initialSnapshot)
-  const [studentRoster, setStudentRoster] = useState([...initialSnapshot.students])
+  const [playerRoster, setPlayerRoster] = useState({ ...initialSnapshot.players })
+  const [studentRoster, setStudentRoster] = useState([
+    ...initialSnapshot.world.students,
+  ])
   const [stageScale, setStageScale] = useState(1)
 
   useLayoutEffect(() => {
@@ -225,8 +212,9 @@ export default function HubScene({
 
     const unsubscribe = subscribe((snapshot) => {
       snapshotRef.current = snapshot
+      setPlayerRoster({ ...snapshot.players })
       setStudentRoster((currentRoster) => {
-        const students = snapshot.students
+        const students = snapshot.world.students
         const rosterChanged = currentRoster.length !== students.length
           || currentRoster.some((student, index) => student.id !== students[index]?.id)
         return rosterChanged ? [...students] : currentRoster
@@ -239,15 +227,15 @@ export default function HubScene({
         x: Number(keys.has('d') || keys.has('arrowright')) - Number(keys.has('a') || keys.has('arrowleft')),
         y: Number(keys.has('s') || keys.has('arrowdown')) - Number(keys.has('w') || keys.has('arrowup')),
       }
-      onInput(keyboard)
+      onInput({ movement: keyboard })
       const snapshot = snapshotRef.current
-      const { students } = snapshot
+      const { students } = snapshot.world
       const playerState = snapshot.players[playerId]
       if (!playerState) {
         frame = requestAnimationFrame(animate)
         return
       }
-      const ambientState = snapshot.ambient
+      const ambientState = snapshot.world.ambient
 
       if (worldRef.current) {
         worldRef.current.style.setProperty('--hub-marker-opacity', `${hubMarkerAlpha(ambientState)}`)
@@ -274,48 +262,6 @@ export default function HubScene({
       if (statueBodyRef.current) {
         statueBodyRef.current.style.transform = `translate3d(${statue.body.x}px, ${statue.body.y}px, 0)`
       }
-      const moving = Math.hypot(playerState.velocity.x, playerState.velocity.y) > 0.01
-      const player = playerRef.current
-      const fixedRobe = playerFixedRobeRef.current
-      const staffFront = playerStaffFrontRef.current
-      const head = playerHeadRef.current
-      const orb = playerOrbRef.current
-      const backgroundPosition = `0 ${-playerState.headingIndex * 170}px`
-      for (const layer of playerLayerRefs.current) {
-        if (layer) layer.style.backgroundPosition = backgroundPosition
-      }
-      const fixedRobePose = hubPlayerFixedRobePose(playerState.walkCyclePrimary)
-      const fixedRobeOffset = hubPlayerFixedRobeOffset(playerState.gaitDegrees)
-      if (fixedRobe) {
-        fixedRobe.style.backgroundPosition = `${-fixedRobePose * 170}px ${-playerState.headingIndex * 170}px`
-        fixedRobe.style.transform = `translate3d(${fixedRobeOffset.x}px, ${fixedRobeOffset.y}px, 0)`
-      }
-      const frontAttachmentOffset = hubPlayerFrontAttachmentOffset(playerState.gaitDegrees)
-      if (staffFront) {
-        staffFront.style.transform = `translate3d(${frontAttachmentOffset.x}px, ${frontAttachmentOffset.y}px, 0)`
-      }
-      const headOffset = hubPlayerHeadOffset(playerState.headingIndex, playerState.gaitDegrees)
-      if (head) {
-        head.style.transform = `translate3d(${headOffset.x}px, ${headOffset.y}px, 0)`
-      }
-      if (orb) {
-        const offset = hubStaffOrbOffset(playerState.headingIndex)
-        orb.style.left = `${offset.x}px`
-        orb.style.top = `${offset.y}px`
-        const staffOffset = hubStaffIsFront(playerState.headingIndex)
-          ? frontAttachmentOffset
-          : { x: 0, y: 0 }
-        orb.style.transform = `translate3d(${staffOffset.x}px, ${staffOffset.y}px, 0)`
-        orb.style.zIndex = hubStaffIsFront(playerState.headingIndex) ? '6' : '2'
-      }
-      if (player) {
-        player.style.left = `${playerState.position.x}px`
-        player.style.top = `${playerState.position.y}px`
-        player.style.zIndex = `${hubActorDepth(playerState.position.y)}`
-        player.dataset.moving = moving ? 'true' : 'false'
-        player.dataset.walkPose = `${fixedRobePose}`
-      }
-
       for (const student of students) {
         const node = studentElementsRef.current.get(student.id)
         if (node) {
@@ -359,17 +305,15 @@ export default function HubScene({
 
   const frameStyle = { transform: `scale(${stageScale})` } as CSSProperties
   const sceneStyle = {
-    '--hub-player-staff-back-sheet': `url("${hub.player.staffBack}")`,
-    '--hub-player-robe-dynamic-sheet': `url("${hub.player.robeDynamic[element]}")`,
-    '--hub-player-robe-fixed-sheet': `url("${hub.player.robeFixed[element]}")`,
-    '--hub-player-staff-front-sheet': `url("${hub.player.staffFront}")`,
-    '--hub-player-head-sheet': `url("${hub.player.head[element]}")`,
     '--hub-student-head-sheet': `url("${hub.npcs.studentHead}")`,
   } as CSSProperties
   const initialPlayer = initialSnapshot.players[playerId]
+  const localPlayer = playerRoster[playerId] ?? initialPlayer
+  const element = localPlayer?.config.element ?? 'ether'
+  const discipline = localPlayer?.config.discipline ?? 'arcane'
   const initialCamera = hubCameraOrigin(initialPlayer?.position ?? HUB_SPAWN)
-  const initialStatue = hubStatueOffsets(initialSnapshot.ambient)
-  const initialSealColors = hubSealColors(initialSnapshot.ambient)
+  const initialStatue = hubStatueOffsets(initialSnapshot.world.ambient)
+  const initialSealColors = hubSealColors(initialSnapshot.world.ambient)
   const worldStyle = {
     transform: `translate3d(${-initialCamera.x * HUB_CAMERA_SCALE}px, ${-initialCamera.y * HUB_CAMERA_SCALE}px, 0) scale(${HUB_CAMERA_SCALE})`,
   } as CSSProperties
@@ -472,52 +416,13 @@ export default function HubScene({
             />
           ))}
 
-          <div
-            ref={playerRef}
-            className="hub-player"
-            aria-label={`${element} wizard`}
-            style={{
-              left: initialPlayer?.position.x ?? HUB_SPAWN.x,
-              top: initialPlayer?.position.y ?? HUB_SPAWN.y,
-              zIndex: hubActorDepth(initialPlayer?.position.y ?? HUB_SPAWN.y),
-            }}
-          >
-            <span className="hub-player-shadow" />
-            <span className="hub-player-visual">
-              <span
-                ref={(node) => { playerLayerRefs.current[0] = node }}
-                className="hub-player-layer hub-player-staff-back"
-              />
-              <span
-                ref={(node) => { playerLayerRefs.current[1] = node }}
-                className="hub-player-layer hub-player-robe-dynamic"
-              />
-              <span
-                ref={(node) => {
-                  playerLayerRefs.current[2] = node
-                  playerFixedRobeRef.current = node
-                }}
-                className="hub-player-layer hub-player-robe-fixed"
-              />
-              <span
-                ref={(node) => {
-                  playerLayerRefs.current[3] = node
-                  playerStaffFrontRef.current = node
-                }}
-                className="hub-player-layer hub-player-staff-front"
-              />
-              <span
-                ref={(node) => {
-                  playerLayerRefs.current[4] = node
-                  playerHeadRef.current = node
-                }}
-                className="hub-player-layer hub-player-head"
-              />
-              <span ref={playerOrbRef} className="hub-player-orb-vfx" style={{ left: 32.5, top: -1.5 }}>
-                <ElementVfx element={element} variant="staff" />
-              </span>
-            </span>
-          </div>
+          {Object.entries(playerRoster).map(([id, player]) => (
+            <PlayerCharacter
+              key={id}
+              depth={hubActorDepth(player.position.y)}
+              state={player}
+            />
+          ))}
 
           <img
             className="hub-spawn-roof"

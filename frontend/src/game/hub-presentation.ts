@@ -1,4 +1,4 @@
-import type { HubPoint } from './core-kernels/hub-math.ts'
+import type { Vector2 } from './core-kernels/vector.ts'
 import type {
   ProtocolAmbientState,
   ProtocolFountainParticleState,
@@ -74,8 +74,8 @@ export function hubMarkerAlpha(state: ProtocolAmbientState): number {
 }
 
 export function hubStatueOffsets(state: ProtocolAmbientState): {
-  aura: HubPoint
-  body: HubPoint
+  aura: Vector2
+  body: Vector2
 } {
   const wave = -2 * Math.sin(state.statuePhaseDegrees * Math.PI / 180)
   return {
@@ -91,7 +91,7 @@ export function hubStudentPropOffset(
   heading: number,
   prop: ProtocolStudentProp,
   propIndex: number,
-): HubPoint {
+): Vector2 {
   const angle = (heading + prop.angle) * Math.PI / 180
   return {
     x: prop.radius * Math.sin(angle),
@@ -102,7 +102,7 @@ export function hubStudentPropOffset(
 export function hubStudentHeadOffset(student: Pick<
   ProtocolStudentState,
   'gaitDegrees' | 'heading' | 'scale'
->): HubPoint {
+>): Vector2 {
   const gaitRadians = student.gaitDegrees * Math.PI / 180
   const perpendicularRadians = (student.heading + 90) * Math.PI / 180
   const lateral = -Math.cos(gaitRadians) * 0.5 * student.scale

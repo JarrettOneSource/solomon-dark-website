@@ -4,37 +4,37 @@ import { createServer, type IncomingMessage, type Server as HttpServer } from 'n
 import { WebSocket, WebSocketServer } from 'ws'
 
 import {
-  HUB_INPUT_ACCELERATION,
-  HUB_MOVEMENT_LANE_CAP,
-  HUB_MOVEMENT_RETENTION,
-  HUB_PLAYER_RADIUS,
-  type HubPoint,
-} from '../core-kernels/hub-math.ts'
+  PLAYER_CHARACTER_INPUT_ACCELERATION,
+  PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
+  PLAYER_CHARACTER_MOVEMENT_RETENTION,
+  PLAYER_CHARACTER_RADIUS,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
 import {
-  HUB_FIXED_TICK_SECONDS,
-  HUB_TICK_RATE,
-  addHubPlayer,
-  createHubSimulation,
-  removeHubPlayer,
-  stepHubSimulationTick,
-  type HubPlayerId,
-  type HubSimulationState,
-} from '../core-server/hub-simulation.ts'
-import { createHubSnapshot } from './hub-snapshot.ts'
+  GAME_FIXED_TICK_SECONDS,
+  GAME_TICK_RATE,
+  addPlayerCharacter,
+  createGameSimulation,
+  removePlayerCharacter,
+  stepGameSimulationTick,
+  type GameSimulationState,
+  type PlayerId,
+} from '../core-server/game-simulation.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
-  HUB_KERNEL_VERSION,
+  PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeClientGameMessage,
   encodeGameMessage,
   type GameContentManifest,
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
+import { createGameSnapshot } from './game-snapshot.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
-export interface HubHostOptions {
+export interface GameHostOptions {
   allowedOrigins?: readonly string[]
   bootstrapCredential: string
   content?: GameContentManifest
@@ -45,56 +45,58 @@ export interface HubHostOptions {
   trustedProxy?: boolean
 }
 
-export interface HubHostAddress {
+export interface GameHostAddress {
   host: string
   port: number
   url: string
 }
 
-export interface HubHost {
-  address: HubHostAddress
+export interface GameHost {
+  address: GameHostAddress
   close(): Promise<void>
   playerCount(): number
-  state(): HubSimulationState
+  state(): GameSimulationState
 }
 
 interface HostClient {
   acknowledgedSequence: number
-  activeInput: HubPoint
+  activeInput: PlayerCharacterInput
   lastReceivedSequence: number
-  playerId: HubPlayerId
+  playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
   socket: WebSocket
 }
 
 interface QueuedClientInput {
-  input: HubPoint
+  input: PlayerCharacterInput
   sequence: number
   targetTick: number
 }
 
-export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
-  if (!options.bootstrapCredential) throw new Error('Hub host requires a bootstrap credential')
+export async function startGameHost(options: GameHostOptions): Promise<GameHost> {
+  if (!options.bootstrapCredential) throw new Error('Game host requires a bootstrap credential')
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
   const snapshotRate = options.snapshotRate ?? 20
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
-    throw new Error('Non-loopback Hub hosts may only run behind an explicitly trusted secure proxy')
+    throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
   }
   if (!LOOPBACK_HOSTS.has(host) && !options.allowedOrigins?.length) {
-    throw new Error('Non-loopback Hub hosts require a nonempty allowedOrigins policy')
+    throw new Error('Non-loopback game hosts require a nonempty allowedOrigins policy')
   }
-  if (!Number.isInteger(maxPlayers) || maxPlayers < 1) throw new Error('maxPlayers must be positive')
-  if (!(snapshotRate > 0 && snapshotRate <= HUB_TICK_RATE)) {
-    throw new Error(`snapshotRate must be within 1..${HUB_TICK_RATE}`)
+  if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
+    throw new Error('maxPlayers must be positive')
+  }
+  if (!(snapshotRate > 0 && snapshotRate <= GAME_TICK_RATE)) {
+    throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
 
-  let state = createHubSimulation([])
+  let state = createGameSimulation({})
   let nextPlayerId = 1
   let closed = false
   let ticking = false
-  let nextTickAt = performance.now() + HUB_FIXED_TICK_SECONDS * 1000
+  let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
   const pending = new Set<WebSocket>()
   const server = createServer((request, response) => {
@@ -181,10 +183,10 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
         pending.delete(socket)
         const playerId = `player-${nextPlayerId}`
         nextPlayerId += 1
-        state = addHubPlayer(state, playerId)
+        state = addPlayerCharacter(state, playerId, message.character)
         clients.set(socket, {
           acknowledgedSequence: 0,
-          activeInput: { x: 0, y: 0 },
+          activeInput: { movement: { x: 0, y: 0 } },
           lastReceivedSequence: 0,
           playerId,
           queuedInputs: new Map(),
@@ -195,28 +197,28 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
           protocolVersion: GAME_PROTOCOL_VERSION,
           playerId,
           resumeToken: `reserved-${playerId}`,
-          serverTickRate: HUB_TICK_RATE,
+          serverTickRate: GAME_TICK_RATE,
           snapshotRate,
-          kernelVersion: HUB_KERNEL_VERSION,
+          kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
           kernelParameters: {
-            fixedTickSeconds: HUB_FIXED_TICK_SECONDS,
-            movementAcceleration: HUB_INPUT_ACCELERATION,
-            movementLaneCap: HUB_MOVEMENT_LANE_CAP,
-            movementRetention: HUB_MOVEMENT_RETENTION,
-            playerRadius: HUB_PLAYER_RADIUS,
+            fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
+            movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
+            movementLaneCap: PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
+            movementRetention: PLAYER_CHARACTER_MOVEMENT_RETENTION,
+            playerRadius: PLAYER_CHARACTER_RADIUS,
           },
           content: options.content ?? {
             manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
             mods: [],
           },
-          snapshot: createHubSnapshot(state),
+          snapshot: createGameSnapshot(state),
         }))
         return
       }
 
       if (message.type === 'client-input') {
         if (message.sequence <= client.lastReceivedSequence) return
-        if (message.targetTick > state.tick + HUB_TICK_RATE * 2) {
+        if (message.targetTick > state.tick + GAME_TICK_RATE * 2) {
           disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
           return
         }
@@ -242,13 +244,13 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
       const client = clients.get(socket)
       if (!client) return
       clients.delete(socket)
-      state = removeHubPlayer(state, client.playerId)
+      state = removePlayerCharacter(state, client.playerId)
     }
     socket.once('close', release)
     socket.once('error', release)
   })
 
-  const ticksPerSnapshot = Math.max(1, Math.round(HUB_TICK_RATE / snapshotRate))
+  const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
   const timer = setInterval(() => {
     if (closed || ticking) return
     ticking = true
@@ -256,19 +258,19 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
       const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
-        const inputs: Record<HubPlayerId, HubPoint> = {}
+        const inputs: Record<PlayerId, PlayerCharacterInput> = {}
         const nextTick = state.tick + 1
         for (const client of clients.values()) {
           applyQueuedInput(client, nextTick)
           inputs[client.playerId] = client.activeInput
         }
-        state = stepHubSimulationTick(state, inputs)
-        nextTickAt += HUB_FIXED_TICK_SECONDS * 1000
+        state = stepGameSimulationTick(state, inputs)
+        nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
         steps += 1
         if (state.tick % ticksPerSnapshot === 0) broadcastSnapshot()
       }
       if (steps === 25 && now >= nextTickAt) {
-        nextTickAt = now + HUB_FIXED_TICK_SECONDS * 1000
+        nextTickAt = now + GAME_FIXED_TICK_SECONDS * 1000
       }
     } finally {
       ticking = false
@@ -276,7 +278,7 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
   }, 2)
 
   function broadcastSnapshot(): void {
-    const snapshot = createHubSnapshot(state)
+    const snapshot = createGameSnapshot(state)
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
       client.socket.send(encodeGameMessage({
@@ -306,7 +308,9 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
     })
   })
   const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('Hub host did not bind a TCP address')
+  if (!address || typeof address === 'string') {
+    throw new Error('Game host did not bind a TCP address')
+  }
 
   return {
     address: {
@@ -318,7 +322,9 @@ export async function startHubHost(options: HubHostOptions): Promise<HubHost> {
       if (closed) return
       closed = true
       clearInterval(timer)
-      for (const socket of [...pending, ...clients.keys()]) socket.close(1001, 'server shutdown')
+      for (const socket of [...pending, ...clients.keys()]) {
+        socket.close(1001, 'server shutdown')
+      }
       websocketServer.close()
       await closeHttpServer(server)
     },

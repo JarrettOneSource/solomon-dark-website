@@ -21,6 +21,10 @@
     "src/game/game-asset-readiness.test.ts",
     "src/game/element-vfx-native.ts",
     "src/game/element-vfx-native.test.ts",
+    "src/game/core-kernels/actor-physics.test.ts",
+    "src/game/core-kernels/player-character.test.ts",
+    "src/game/core-server/game-simulation.test.ts",
+    "src/game/player-character-presentation.test.ts",
     "src/game/hub-math.test.ts",
     "src/game/protocol/game-protocol.ts",
     "src/game/protocol/game-state.ts",
@@ -31,10 +35,9 @@
     "src/game/client/game-client-session.ts",
     "src/game/client/game-client-session.test.ts",
     "src/game/client/game-transport.ts",
-    "src/game/host/hub-host.ts",
-    "src/game/host/hub-host.test.ts",
-    "src/game/core-kernels/hub-player.ts",
-    "src/game/host/hub-snapshot.ts"
+    "src/game/host/game-host.ts",
+    "src/game/host/game-host.test.ts",
+    "src/game/host/game-snapshot.ts"
   ],
   "exclude": []
 }

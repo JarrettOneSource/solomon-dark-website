@@ -48,7 +48,7 @@ try {
     throw error
   }
 
-  const player = page.getByLabel('fire wizard')
+  const player = page.getByLabel('Helvidius, fire wizard')
   const before = await player.evaluate((node) => Number.parseFloat(getComputedStyle(node).left))
   const teacherFrame = page.locator('.hub-teacher-frame')
   const teacherFrames = []
@@ -61,9 +61,9 @@ try {
   await page.keyboard.down('d')
   for (let sample = 0; sample < 14; sample += 1) {
     presentationSamples.push(await player.evaluate((node) => {
-      const fixedRobe = node.querySelector('.hub-player-robe-fixed')
-      const dynamicRobe = node.querySelector('.hub-player-robe-dynamic')
-      const staffFront = node.querySelector('.hub-player-staff-front')
+      const fixedRobe = node.querySelector('.player-character-robe-fixed')
+      const dynamicRobe = node.querySelector('.player-character-robe-dynamic')
+      const staffFront = node.querySelector('.player-character-staff-front')
       if (!fixedRobe || !dynamicRobe || !staffFront) throw new Error('player presentation layer missing')
       return {
         dynamicRobeX: getComputedStyle(dynamicRobe).backgroundPositionX,

@@ -733,12 +733,12 @@ def main() -> int:
     save(
         build_player_staff_sheet(clothes, clothes_records, front=False),
         output_dir,
-        "hub-player-staff-back",
+        "player-character-staff-back",
     )
     save(
         build_player_staff_sheet(clothes, clothes_records, front=True),
         output_dir,
-        "hub-player-staff-front",
+        "player-character-staff-front",
     )
     for element, (primary, secondary) in PLAYER_PALETTES.items():
         player_layers = build_player_colored_layers(
@@ -748,7 +748,7 @@ def main() -> int:
             secondary,
         )
         for layer_name, sheet in player_layers.items():
-            save(sheet, output_dir, f"hub-player-{layer_name}-{element}")
+            save(sheet, output_dir, f"player-character-{layer_name}-{element}")
 
     bad_guys = Image.open(images_dir / "BadGuys.png").convert("RGBA")
     bad_guys_records = parse_bundle(images_dir / "BadGuys.bundle")
@@ -770,7 +770,7 @@ def main() -> int:
         )
     for name, record_index in {
         "hub-teacher-burst-core": 15,
-        "hub-actor-shadow": 67,
+        "actor-shadow": 67,
         "hub-teacher-burst-column": 81,
         "hub-teacher-burst-flare": 82,
     }.items():

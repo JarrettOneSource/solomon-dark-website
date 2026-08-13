@@ -4,78 +4,85 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import type { PlayerCharacterConfig } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
   decodeServerGameMessage,
   encodeGameMessage,
   type ServerGameMessage,
 } from '../protocol/game-protocol.ts'
-import { startHubHost } from './hub-host.ts'
+import { startGameHost } from './game-host.ts'
 
-test('authoritative Hub host authenticates two clients and owns their movement', async (context) => {
-  const host = await startHubHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+const FIRST_CHARACTER = {
+  discipline: 'arcane',
+  displayName: 'Helvidius',
+  element: 'ether',
+} as const
+const SECOND_CHARACTER = {
+  discipline: 'mind',
+  displayName: 'Vibia',
+  element: 'water',
+} as const
+
+test('authoritative game host owns two configured player characters and movement', async (context) => {
+  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
   context.after(() => host.close())
-  const first = await join(host.address.url, 'test-secret')
-  const second = await join(host.address.url, 'test-secret')
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => first.socket.close())
   context.after(() => second.socket.close())
 
   assert.notEqual(first.welcome.playerId, second.welcome.playerId)
   assert.equal(host.playerCount(), 2)
-  const firstOrigin = first.welcome.snapshot.players[first.welcome.playerId].position.x
-  const secondOrigin = second.welcome.snapshot.players[second.welcome.playerId].position.x
-  assert.equal(firstOrigin, HUB_SPAWN.x)
-  assert.equal(secondOrigin, HUB_SPAWN.x)
+  const firstState = first.welcome.snapshot.players[first.welcome.playerId]
+  const secondState = second.welcome.snapshot.players[second.welcome.playerId]
+  assert.deepEqual(firstState.config, FIRST_CHARACTER)
+  assert.deepEqual(secondState.config, SECOND_CHARACTER)
+  assert.equal(firstState.position.x, HUB_SPAWN.x)
+  assert.equal(secondState.position.x, HUB_SPAWN.x)
   first.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { x: 1, y: 0 },
+    input: { movement: { x: 1, y: 0 } },
     sequence: 1,
     targetTick: first.welcome.snapshot.tick + 1,
   }))
   const snapshot = await nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
     && message.acknowledgedInputSequence === 1
-    && message.snapshot.players[first.welcome.playerId].position.x > firstOrigin
+    && message.snapshot.players[first.welcome.playerId].position.x > firstState.position.x
   ))
   assert.equal(snapshot.type, 'server-snapshot')
-  assert.ok(snapshot.snapshot.players[first.welcome.playerId].position.x > firstOrigin)
-  assert.deepEqual(snapshot.snapshot.players[second.welcome.playerId].velocity, { x: 0, y: 0 })
-  assert.equal(second.welcome.snapshot.players[second.welcome.playerId].position.x, secondOrigin)
+  assert.ok(snapshot.snapshot.players[first.welcome.playerId].position.x > firstState.position.x)
+  assert.deepEqual(
+    snapshot.snapshot.players[second.welcome.playerId].velocity,
+    { x: 0, y: 0 },
+  )
 })
 
-test('Hub host reconnects the first active player at the authored spawn', async (context) => {
-  const host = await startHubHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+test('game host reconnects a new character at the active world spawn', async (context) => {
+  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
   context.after(() => host.close())
 
-  const first = await join(host.address.url, 'test-secret')
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   assert.deepEqual(first.welcome.snapshot.players[first.welcome.playerId].position, HUB_SPAWN)
   await closeSocket(first.socket)
   assert.equal(host.playerCount(), 0)
 
-  const reconnected = await join(host.address.url, 'test-secret')
+  const reconnected = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => reconnected.socket.close())
   assert.notEqual(reconnected.welcome.playerId, first.welcome.playerId)
   assert.deepEqual(
     reconnected.welcome.snapshot.players[reconnected.welcome.playerId].position,
     HUB_SPAWN,
   )
-
-  reconnected.socket.send(encodeGameMessage({
-    type: 'client-input',
-    input: { x: 1, y: 0 },
-    sequence: 1,
-    targetTick: reconnected.welcome.snapshot.tick + 1,
-  }))
-  const snapshot = await nextMessage(reconnected.socket, (message) => (
-    message.type === 'server-snapshot'
-    && message.acknowledgedInputSequence === 1
-    && message.snapshot.players[reconnected.welcome.playerId].position.x > HUB_SPAWN.x
-  ))
-  assert.equal(snapshot.type, 'server-snapshot')
+  assert.deepEqual(
+    reconnected.welcome.snapshot.players[reconnected.welcome.playerId].config,
+    SECOND_CHARACTER,
+  )
 })
 
-test('Hub host rejects arbitrary origins and invalid bootstrap credentials', async (context) => {
-  const host = await startHubHost({ bootstrapCredential: 'test-secret' })
+test('game host rejects arbitrary origins and invalid bootstrap credentials', async (context) => {
+  const host = await startGameHost({ bootstrapCredential: 'test-secret' })
   context.after(() => host.close())
 
   await assert.rejects(() => openSocket(host.address.url, 'https://evil.example'))
@@ -85,6 +92,7 @@ test('Hub host rejects arbitrary origins and invalid bootstrap credentials', asy
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'wrong-secret',
+    character: FIRST_CHARACTER,
   }))
   const message = await nextMessage(socket, (entry) => entry.type === 'server-disconnect')
   assert.deepEqual(message, {
@@ -94,26 +102,26 @@ test('Hub host rejects arbitrary origins and invalid bootstrap credentials', asy
   })
 })
 
-test('Hub host is loopback-only by default and requires a trusted proxy plus origins', async () => {
-  await assert.rejects(() => startHubHost({
+test('game host is loopback-only by default and requires trusted proxy origins', async () => {
+  await assert.rejects(() => startGameHost({
     bootstrapCredential: 'test-secret',
     host: '0.0.0.0',
   }), /trusted secure proxy/)
-  await assert.rejects(() => startHubHost({
+  await assert.rejects(() => startGameHost({
     bootstrapCredential: 'test-secret',
     host: '0.0.0.0',
     trustedProxy: true,
   }), /nonempty allowedOrigins/)
 })
 
-test('Hub host rejects intent targeting implausibly far-future ticks', async (context) => {
-  const host = await startHubHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+test('game host rejects intent targeting implausibly far-future ticks', async (context) => {
+  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
   context.after(() => host.close())
-  const client = await join(host.address.url, 'test-secret')
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
   client.socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { x: 1, y: 0 },
+    input: { movement: { x: 1, y: 0 } },
     sequence: 1,
     targetTick: client.welcome.snapshot.tick + 1000,
   }))
@@ -122,18 +130,24 @@ test('Hub host rejects intent targeting implausibly far-future ticks', async (co
   assert.equal(message.code, 'invalid-message')
 })
 
-test('Hub host applies only the newest intent queued for a simulation tick', async (context) => {
-  const host = await startHubHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
+test('game host applies only the newest character input for a simulation tick', async (context) => {
+  const host = await startGameHost({ bootstrapCredential: 'test-secret', snapshotRate: 100 })
   context.after(() => host.close())
-  const client = await join(host.address.url, 'test-secret')
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   context.after(() => client.socket.close())
   const origin = client.welcome.snapshot.players[client.welcome.playerId].position
   const targetTick = client.welcome.snapshot.tick + 1
   client.socket.send(encodeGameMessage({
-    type: 'client-input', input: { x: 1, y: 0 }, sequence: 1, targetTick,
+    type: 'client-input',
+    input: { movement: { x: 1, y: 0 } },
+    sequence: 1,
+    targetTick,
   }))
   client.socket.send(encodeGameMessage({
-    type: 'client-input', input: { x: 0, y: 1 }, sequence: 2, targetTick,
+    type: 'client-input',
+    input: { movement: { x: 0, y: 1 } },
+    sequence: 2,
+    targetTick,
   }))
   const message = await nextMessage(client.socket, (entry) => (
     entry.type === 'server-snapshot' && entry.acknowledgedInputSequence === 2
@@ -144,12 +158,17 @@ test('Hub host applies only the newest intent queued for a simulation tick', asy
   assert.ok(player.position.y > origin.y)
 })
 
-async function join(url: string, credential: string) {
+async function join(
+  url: string,
+  credential: string,
+  character: PlayerCharacterConfig,
+) {
   const socket = await openSocket(url)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential,
+    character,
   }))
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')

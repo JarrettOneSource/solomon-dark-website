@@ -1,7 +1,4 @@
-export interface HubPoint {
-  x: number
-  y: number
-}
+import type { Vector2 } from './vector.ts'
 
 export interface HubSegment {
   readonly x1: number
@@ -156,7 +153,7 @@ const SEGMENT_COORDINATES: readonly (readonly [number, number, number, number])[
 export const HUB_COURTYARD_SEGMENTS: readonly HubSegment[] =
   SEGMENT_COORDINATES.map(([x1, y1, x2, y2]) => ({ x1, y1, x2, y2 }))
 
-function nearestPointOnSegment(point: HubPoint, segment: HubSegment): HubPoint {
+function nearestPointOnSegment(point: Vector2, segment: HubSegment): Vector2 {
   const segmentX = segment.x2 - segment.x1
   const segmentY = segment.y2 - segment.y1
   const lengthSquared = segmentX * segmentX + segmentY * segmentY
@@ -173,7 +170,7 @@ function nearestPointOnSegment(point: HubPoint, segment: HubSegment): HubPoint {
 }
 
 function circleOverlapsSegment(
-  position: HubPoint,
+  position: Vector2,
   radius: number,
   segment: HubSegment,
 ): boolean {
@@ -184,7 +181,7 @@ function circleOverlapsSegment(
 }
 
 function firstOverlappingSegment(
-  position: HubPoint,
+  position: Vector2,
   radius: number,
   excluded?: HubSegment,
 ): HubSegment | undefined {
@@ -194,10 +191,10 @@ function firstOverlappingSegment(
 }
 
 function separateFromSegment(
-  position: HubPoint,
+  position: Vector2,
   radius: number,
   segment: HubSegment,
-): HubPoint {
+): Vector2 {
   const nearest = nearestPointOnSegment(position, segment)
   const dx = position.x - nearest.x
   const dy = position.y - nearest.y
@@ -213,11 +210,11 @@ function separateFromSegment(
 
 interface SweepResult {
   hit?: HubSegment
-  position: HubPoint
+  position: Vector2
 }
 
 export interface HubCollisionMove {
-  position: HubPoint
+  position: Vector2
   rngState: number
 }
 
@@ -233,14 +230,14 @@ function nativeFallbackSample(state: number): { state: number; value: number } {
 }
 
 function sweepTowardDestination(
-  origin: HubPoint,
-  delta: HubPoint,
+  origin: Vector2,
+  delta: Vector2,
   radius: number,
   slideSurface?: HubSegment,
 ): SweepResult {
   let current = { ...origin }
   const target = { x: origin.x + delta.x, y: origin.y + delta.y }
-  let accepted: HubPoint | undefined
+  let accepted: Vector2 | undefined
   let hit: HubSegment | undefined
 
   for (let iteration = 0; iteration < NATIVE_SWEEP_ITERATIONS; iteration += 1) {
@@ -276,8 +273,8 @@ function sweepTowardDestination(
 }
 
 function sweepStep(
-  origin: HubPoint,
-  delta: HubPoint,
+  origin: Vector2,
+  delta: Vector2,
   radius: number,
   rngState: number,
 ): HubCollisionMove {
@@ -303,22 +300,22 @@ function sweepStep(
   }
 }
 
-export function isHubTraversable(point: HubPoint, radius: number): boolean {
+export function isHubTraversable(point: Vector2, radius: number): boolean {
   return !firstOverlappingSegment(point, radius)
 }
 
 /** Replays the stock controller's collision-triggered two-pass sweep. */
 export function moveWithHubCollision(
-  position: HubPoint,
-  delta: HubPoint,
+  position: Vector2,
+  delta: Vector2,
   radius: number,
-): HubPoint {
+): Vector2 {
   return moveWithHubCollisionState(position, delta, radius, 0x51a7c011).position
 }
 
 export function moveWithHubCollisionState(
-  position: HubPoint,
-  delta: HubPoint,
+  position: Vector2,
+  delta: Vector2,
   radius: number,
   rngState: number,
 ): HubCollisionMove {

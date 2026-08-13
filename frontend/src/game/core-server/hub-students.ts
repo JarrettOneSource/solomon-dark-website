@@ -1,8 +1,8 @@
 import {
-  hubHeadingFromVector,
-  hubHeadingIndex,
-  type HubPoint,
-} from '../core-kernels/hub-math.ts'
+  actorHeadingFromVector,
+  actorHeadingIndex,
+} from '../core-kernels/actor-heading.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   COMPILED_HUB_STUDENT_SPLINES,
   evaluateHubStudentSpline,
@@ -31,7 +31,7 @@ export interface HubStudentState {
   pathCursor: number
   pathId: number
   pathStep: 1 | -1
-  position: HubPoint
+  position: Vector2
   profile: HubStudentPhysicalProfile
   props: readonly HubStudentProp[]
   reading: boolean
@@ -40,16 +40,15 @@ export interface HubStudentState {
   scale: number
   staticCollisionEnabled: boolean
   tick: number
-  wander: HubPoint
+  wander: Vector2
 }
 
 export interface HubStudentRoutePlan {
-  delta: HubPoint
+  delta: Vector2
   state: HubStudentState
 }
 
 export interface HubStudentPopulationState {
-  accumulatorSeconds: number
   nextId: number
   rarePathDenominator: number
   rngState: number
@@ -91,14 +90,14 @@ const NATIVE_STUDENT_DOORWAYS: readonly HubRectangle[] = [
   { x: 1771, y: -11, width: 309, height: 255 },
 ]
 
-function containsPoint(rectangle: HubRectangle, point: HubPoint): boolean {
+function containsPoint(rectangle: HubRectangle, point: Vector2): boolean {
   return point.x >= rectangle.x
     && point.x <= rectangle.x + rectangle.width
     && point.y >= rectangle.y
     && point.y <= rectangle.y + rectangle.height
 }
 
-export function hubStudentStaticCollisionEnabled(position: HubPoint): boolean {
+export function hubStudentStaticCollisionEnabled(position: Vector2): boolean {
   return containsPoint(NATIVE_COLLISION_INSET, position)
     && !NATIVE_STUDENT_DOORWAYS.some((doorway) => containsPoint(doorway, position))
 }
@@ -198,7 +197,7 @@ function createHubStudent(
   state = props.state
   const position = evaluateHubStudentSpline(pathId, 0)
   const next = evaluateHubStudentSpline(pathId, 0.01)
-  const initialHeading = hubHeadingFromVector(next.x - position.x, next.y - position.y)
+  const initialHeading = actorHeadingFromVector(next.x - position.x, next.y - position.y)
   const actorScale = 0.75 + scale.value
   return {
     currentSpeed: desiredSpeed,
@@ -206,7 +205,7 @@ function createHubStudent(
     framePhase: frame.value,
     gaitDegrees: gait.value,
     heading: Number.isFinite(initialHeading) ? initialHeading : heading.value,
-    headingIndex: hubHeadingIndex(initialHeading),
+    headingIndex: actorHeadingIndex(initialHeading),
     id,
     pathCursor: 0,
     pathId,
@@ -249,7 +248,6 @@ function spawnStudent(
 
 export function createHubStudentPopulation(): HubStudentPopulationState {
   let population: HubStudentPopulationState = {
-    accumulatorSeconds: 0,
     nextId: 0,
     rarePathDenominator: NATIVE_RARE_PATH_DENOMINATOR,
     rngState: 0x51d07e57,
@@ -367,7 +365,7 @@ function stepHubStudentTick(
   }
 
   const targetHeading = distance > Number.EPSILON
-    ? hubHeadingFromVector(offset.x, offset.y)
+    ? actorHeadingFromVector(offset.x, offset.y)
     : source.heading
   const turnSteps = source.currentSpeed > 1
     ? NATIVE_FAST_TURN_STEPS
@@ -397,7 +395,7 @@ function stepHubStudentTick(
         NATIVE_SPEED_ACCELERATION,
       ),
       heading,
-      headingIndex: hubHeadingIndex(heading),
+      headingIndex: actorHeadingIndex(heading),
       pathCursor,
       profile: { ...source.profile, pushResistance },
       rngState: state,
@@ -418,7 +416,7 @@ export function planHubStudentRoute(
 
 export function commitHubStudentRoute(
   student: HubStudentState,
-  position: HubPoint,
+  position: Vector2,
 ): HubStudentState {
   const movement = {
     x: position.x - student.position.x,
@@ -430,7 +428,7 @@ export function commitHubStudentRoute(
     ...student,
     framePhase,
     gaitDegrees: (student.gaitDegrees + movedDistance * 6) % 360,
-    headingIndex: hubHeadingIndex(student.heading),
+    headingIndex: actorHeadingIndex(student.heading),
     position,
   }
 }

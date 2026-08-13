@@ -114,30 +114,30 @@ import hubNpcAnnalist from '../assets/game/hub-npc-annalist.png'
 import hubNpcItems from '../assets/game/hub-npc-items.png'
 import hubNpcPerkWitch from '../assets/game/hub-npc-perk-witch.png'
 import hubNpcPotion from '../assets/game/hub-npc-potion.png'
-import hubActorShadow from '../assets/game/hub-actor-shadow.png'
+import actorShadow from '../assets/game/actor-shadow.png'
 import hubTeacherFrames from '../assets/game/hub-teacher-frames.png'
 import hubTeacherRune from '../assets/game/hub-teacher-rune.png'
 import hubTeacherBurstCore from '../assets/game/hub-teacher-burst-core.png'
 import hubTeacherBurstColumn from '../assets/game/hub-teacher-burst-column.png'
 import hubTeacherBurstFlare from '../assets/game/hub-teacher-burst-flare.png'
 import hubTeacherBurstFrames from '../assets/game/hub-teacher-burst-frames.png'
-import hubPlayerStaffBack from '../assets/game/hub-player-staff-back.png'
-import hubPlayerRobeDynamicAir from '../assets/game/hub-player-robe-dynamic-air.png'
-import hubPlayerRobeDynamicEarth from '../assets/game/hub-player-robe-dynamic-earth.png'
-import hubPlayerRobeDynamicEther from '../assets/game/hub-player-robe-dynamic-ether.png'
-import hubPlayerRobeDynamicFire from '../assets/game/hub-player-robe-dynamic-fire.png'
-import hubPlayerRobeDynamicWater from '../assets/game/hub-player-robe-dynamic-water.png'
-import hubPlayerRobeFixedAir from '../assets/game/hub-player-robe-fixed-air.png'
-import hubPlayerRobeFixedEarth from '../assets/game/hub-player-robe-fixed-earth.png'
-import hubPlayerRobeFixedEther from '../assets/game/hub-player-robe-fixed-ether.png'
-import hubPlayerRobeFixedFire from '../assets/game/hub-player-robe-fixed-fire.png'
-import hubPlayerRobeFixedWater from '../assets/game/hub-player-robe-fixed-water.png'
-import hubPlayerStaffFront from '../assets/game/hub-player-staff-front.png'
-import hubPlayerHeadAir from '../assets/game/hub-player-head-air.png'
-import hubPlayerHeadEarth from '../assets/game/hub-player-head-earth.png'
-import hubPlayerHeadEther from '../assets/game/hub-player-head-ether.png'
-import hubPlayerHeadFire from '../assets/game/hub-player-head-fire.png'
-import hubPlayerHeadWater from '../assets/game/hub-player-head-water.png'
+import playerCharacterStaffBack from '../assets/game/player-character-staff-back.png'
+import playerCharacterRobeDynamicAir from '../assets/game/player-character-robe-dynamic-air.png'
+import playerCharacterRobeDynamicEarth from '../assets/game/player-character-robe-dynamic-earth.png'
+import playerCharacterRobeDynamicEther from '../assets/game/player-character-robe-dynamic-ether.png'
+import playerCharacterRobeDynamicFire from '../assets/game/player-character-robe-dynamic-fire.png'
+import playerCharacterRobeDynamicWater from '../assets/game/player-character-robe-dynamic-water.png'
+import playerCharacterRobeFixedAir from '../assets/game/player-character-robe-fixed-air.png'
+import playerCharacterRobeFixedEarth from '../assets/game/player-character-robe-fixed-earth.png'
+import playerCharacterRobeFixedEther from '../assets/game/player-character-robe-fixed-ether.png'
+import playerCharacterRobeFixedFire from '../assets/game/player-character-robe-fixed-fire.png'
+import playerCharacterRobeFixedWater from '../assets/game/player-character-robe-fixed-water.png'
+import playerCharacterStaffFront from '../assets/game/player-character-staff-front.png'
+import playerCharacterHeadAir from '../assets/game/player-character-head-air.png'
+import playerCharacterHeadEarth from '../assets/game/player-character-head-earth.png'
+import playerCharacterHeadEther from '../assets/game/player-character-head-ether.png'
+import playerCharacterHeadFire from '../assets/game/player-character-head-fire.png'
+import playerCharacterHeadWater from '../assets/game/player-character-head-water.png'
 import hubPrimaryAir from '../assets/game/hub-primary-air.png'
 import hubPrimaryEarth from '../assets/game/hub-primary-earth.png'
 import hubPrimaryEther from '../assets/game/hub-primary-ether.png'
@@ -405,6 +405,33 @@ export const elementVfx = {
   },
 }
 
+/** Source-registered wizard equipment shared by every gameplay world. */
+export const playerCharacter = {
+  staffBack: playerCharacterStaffBack,
+  robeDynamic: {
+    air: playerCharacterRobeDynamicAir,
+    earth: playerCharacterRobeDynamicEarth,
+    ether: playerCharacterRobeDynamicEther,
+    fire: playerCharacterRobeDynamicFire,
+    water: playerCharacterRobeDynamicWater,
+  },
+  robeFixed: {
+    air: playerCharacterRobeFixedAir,
+    earth: playerCharacterRobeFixedEarth,
+    ether: playerCharacterRobeFixedEther,
+    fire: playerCharacterRobeFixedFire,
+    water: playerCharacterRobeFixedWater,
+  },
+  staffFront: playerCharacterStaffFront,
+  head: {
+    air: playerCharacterHeadAir,
+    earth: playerCharacterHeadEarth,
+    ether: playerCharacterHeadEther,
+    fire: playerCharacterHeadFire,
+    water: playerCharacterHeadWater,
+  },
+}
+
 /** Source-registered College Courtyard, actors, and fixed native HUD pieces. */
 export const hub = {
   courtyard: hubCourtyard,
@@ -420,31 +447,6 @@ export const hub = {
     back: hubTentBack,
     front: hubTentFront,
     shadow: hubTentShadow,
-  },
-  player: {
-    staffBack: hubPlayerStaffBack,
-    robeDynamic: {
-      air: hubPlayerRobeDynamicAir,
-      earth: hubPlayerRobeDynamicEarth,
-      ether: hubPlayerRobeDynamicEther,
-      fire: hubPlayerRobeDynamicFire,
-      water: hubPlayerRobeDynamicWater,
-    },
-    robeFixed: {
-      air: hubPlayerRobeFixedAir,
-      earth: hubPlayerRobeFixedEarth,
-      ether: hubPlayerRobeFixedEther,
-      fire: hubPlayerRobeFixedFire,
-      water: hubPlayerRobeFixedWater,
-    },
-    staffFront: hubPlayerStaffFront,
-    head: {
-      air: hubPlayerHeadAir,
-      earth: hubPlayerHeadEarth,
-      ether: hubPlayerHeadEther,
-      fire: hubPlayerHeadFire,
-      water: hubPlayerHeadWater,
-    },
   },
   primary: {
     air: hubPrimaryAir,
@@ -477,7 +479,7 @@ export const hub = {
     teacher: {
       frames: hubTeacherFrames,
       rune: hubTeacherRune,
-      shadow: hubActorShadow,
+      shadow: actorShadow,
       burst: {
         core: hubTeacherBurstCore,
         column: hubTeacherBurstColumn,

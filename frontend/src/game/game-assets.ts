@@ -1,4 +1,12 @@
-import { createMenu, elementVfx, hub, loader, mainMenu, menuSolomon } from '../lib/assets'
+import {
+  createMenu,
+  elementVfx,
+  hub,
+  loader,
+  mainMenu,
+  menuSolomon,
+  playerCharacter,
+} from '../lib/assets'
 import { collectAssetSources, loadAssetBatch, type AssetProgress } from './game-asset-readiness'
 
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
@@ -9,6 +17,7 @@ export const GAME_RESIDENT_ASSET_SOURCES = collectAssetSources({
   hub,
   mainMenu,
   menuSolomon,
+  playerCharacter,
 })
 
 const imagePromises = new Map<string, Promise<HTMLImageElement>>()

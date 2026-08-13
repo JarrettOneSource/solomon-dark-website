@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadLoaderAssets, loadResidentGameAssets } from '../game/game-assets'
 import { bootGame, type GameSession } from '../game/engine.ts'
+import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import { resolveGameEndpoint } from '../game/game-bootstrap.ts'
 import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
@@ -49,11 +50,13 @@ export default function Game() {
     return () => { cancelled = true }
   }, [readiness])
 
-  const connectSession = useCallback(async (): Promise<GameSession> => {
+  const connectSession = useCallback(async (
+    character: PlayerCharacterConfig,
+  ): Promise<GameSession> => {
     const endpoint = await resolveGameEndpoint()
     return bootGame({
+      character,
       endpoint,
-      name: 'Helvidius',
       onFatal: (error) => setFatal(error.message),
     })
   }, [])

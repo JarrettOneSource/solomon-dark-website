@@ -1,4 +1,8 @@
-import type { HubPoint } from '../core-kernels/hub-math.ts'
+import type {
+  PlayerCharacterConfig,
+  PlayerCharacterState,
+} from '../core-kernels/player-character.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 
 export interface ProtocolFountainParticleState {
   id: number
@@ -16,12 +20,8 @@ export interface ProtocolAmbientState {
   statuePhaseDegrees: number
 }
 
-export interface ProtocolPlayerState {
-  gaitDegrees: number
-  headingIndex: number
-  position: HubPoint
-  velocity: HubPoint
-  walkCyclePrimary: number
+export interface ProtocolPlayerState extends PlayerCharacterState {
+  config: PlayerCharacterConfig
 }
 
 export interface ProtocolStudentProp {
@@ -41,7 +41,7 @@ export interface ProtocolStudentState {
   pathCursor: number
   pathId: number
   pathStep: 1 | -1
-  position: HubPoint
+  position: Vector2
   profile: {
     pushResistance: number
     pushStrength: number
@@ -54,13 +54,18 @@ export interface ProtocolStudentState {
   scale: number
   staticCollisionEnabled: boolean
   tick: number
-  wander: HubPoint
+  wander: Vector2
 }
 
-export interface HubSnapshot {
+export interface HubWorldSnapshot {
   ambient: ProtocolAmbientState
   collisionRngState: number
-  players: Readonly<Record<string, ProtocolPlayerState>>
+  kind: 'hub'
   students: readonly ProtocolStudentState[]
+}
+
+export interface GameSnapshot {
+  players: Readonly<Record<string, ProtocolPlayerState>>
   tick: number
+  world: HubWorldSnapshot
 }

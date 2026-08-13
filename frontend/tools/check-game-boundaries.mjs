@@ -68,8 +68,14 @@ for (const layer of layers) {
 
 const hubScenePath = join(gameRoot, 'HubScene.tsx')
 const hubScene = await readFile(hubScenePath, 'utf8')
-if (/\b(?:create|step)HubSimulation\b/.test(hubScene) || /from\s+['"].*core-server\//.test(hubScene)) {
+if (/from\s+['"].*core-server\//.test(hubScene)) {
   failures.push('HubScene.tsx must present protocol snapshots and may not import authoritative server code')
+}
+
+const playerCharacterPath = join(gameRoot, 'PlayerCharacter.tsx')
+const playerCharacter = await readFile(playerCharacterPath, 'utf8')
+if (/from\s+['"].*(?:core-server|HubScene|hub-)\b/.test(playerCharacter)) {
+  failures.push('PlayerCharacter.tsx must remain reusable across gameplay worlds')
 }
 
 if (failures.length > 0) {
