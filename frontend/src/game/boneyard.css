@@ -13,8 +13,6 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 1600px;
-  height: 900px;
   overflow: hidden;
   transform-origin: 0 0;
 }
@@ -23,8 +21,8 @@
 .boneyard-darkness {
   position: absolute;
   inset: 0;
-  width: 1600px;
-  height: 900px;
+  width: 100%;
+  height: 100%;
 }
 
 .boneyard-world-renderer {
@@ -33,8 +31,8 @@
 
 .boneyard-world-canvas {
   display: block;
-  width: 1600px;
-  height: 900px;
+  width: 100%;
+  height: 100%;
 }
 
 .boneyard-darkness {

@@ -16,22 +16,33 @@ export const HUB_VIEW_WIDTH = 1600 / HUB_CAMERA_SCALE
 export const HUB_VIEW_HEIGHT = 900 / HUB_CAMERA_SCALE
 export const HUB_SPAWN = { x: 950.64, y: 164.04 }
 
+export interface HubRenderViewport {
+  height: number
+  width: number
+}
+
 export function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
-export function hubCameraOrigin(position: Vector2): Vector2 {
-  return hubRegionCameraOrigin('courtyard', position)
+export function hubCameraOrigin(
+  position: Vector2,
+  viewport?: HubRenderViewport,
+): Vector2 {
+  return hubRegionCameraOrigin('courtyard', position, viewport)
 }
 
 export function hubRegionCameraOrigin(
   region: HubRegionId,
   position: Vector2,
+  viewport: HubRenderViewport = { width: 1600, height: 900 },
 ): Vector2 {
   const definition = HUB_REGION_DEFINITIONS[region]
+  const viewWidth = viewport.width / HUB_CAMERA_SCALE
+  const viewHeight = viewport.height / HUB_CAMERA_SCALE
   return {
-    x: cameraAxisOrigin(position.x, HUB_VIEW_WIDTH, definition.width),
-    y: cameraAxisOrigin(position.y, HUB_VIEW_HEIGHT, definition.height),
+    x: cameraAxisOrigin(position.x, viewWidth, definition.width),
+    y: cameraAxisOrigin(position.y, viewHeight, definition.height),
   }
 }
 

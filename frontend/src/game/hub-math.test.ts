@@ -6,6 +6,7 @@ import {
   HUB_VIEW_HEIGHT,
   HUB_VIEW_WIDTH,
   hubCameraOrigin,
+  hubRegionCameraOrigin,
   isHubTraversable,
   moveWithHubCollision,
 } from './core-kernels/hub-math.ts'
@@ -96,6 +97,17 @@ test('matches the native 1600x900 camera view and spawn origin', () => {
   const spawn = hubCameraOrigin(HUB_SPAWN)
   closeTo(spawn.x, 283.973333)
   closeTo(spawn.y, 0)
+})
+
+test('camera view dimensions follow the logical browser viewport without changing world scale', () => {
+  const viewport = { width: 1600, height: 1000 }
+  const camera = hubRegionCameraOrigin('courtyard', { x: 1000, y: 512 }, viewport)
+
+  closeTo(camera.x, 333.333333)
+  closeTo(camera.y, 95.333333)
+  const narrowRoom = hubRegionCameraOrigin('library', { x: 512, y: 512 }, viewport)
+  closeTo(narrowRoom.x, -154.666667)
+  closeTo(narrowRoom.y, 95.333333)
 })
 
 test('sorts actors through the stock spawn-roof painter boundary', () => {
@@ -192,6 +204,14 @@ test('southern Courtyard bank uses the recovered 1.25 camera scope', () => {
   const southEast = hubSouthernCameraTranslation({ x: 666.666667, y: 274 })
   closeTo(southEast.x, -1000)
   closeTo(southEast.y, -436.25)
+})
+
+test('southern Courtyard translation consumes the dynamic primary-view center', () => {
+  const viewport = { width: 1600 / 1.2, height: 1000 / 1.2 }
+  const translation = hubSouthernCameraTranslation({ x: 100, y: 40 }, viewport)
+
+  closeTo(translation.x, -291.666667)
+  closeTo(translation.y, -154.166667)
 })
 
 test('PotionGuy keeps the inherited stochastic actor pulse separate', () => {

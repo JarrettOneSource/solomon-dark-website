@@ -13,8 +13,6 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 1600px;
-  height: 900px;
   overflow: hidden;
   transform-origin: 0 0;
 }
@@ -24,8 +22,8 @@
   position: absolute;
   inset: 0;
   display: block;
-  width: 1600px;
-  height: 900px;
+  width: 100%;
+  height: 100%;
 }
 
 .hub-world-renderer { background: #000; }
@@ -105,8 +103,8 @@
 }
 
 .hub-hud-secondary-ability {
-  top: 837px;
-  left: 475px;
+  bottom: 20px;
+  left: calc(50% - 325px);
   width: 45px;
   height: 43px;
   opacity: 0.25;
@@ -114,8 +112,8 @@
 }
 
 .hub-hud-secondary-mouse {
-  top: 879px;
-  left: 489px;
+  bottom: -10px;
+  left: calc(50% - 311px);
   width: 22px;
   height: 31px;
 }
@@ -148,16 +146,16 @@
 }
 
 .hub-hud-potion-red {
-  top: 833px;
-  left: 651px;
+  bottom: 17px;
+  left: calc(50% - 149px);
   width: 53px;
   height: 50px;
 }
 
 .hub-hud-backpack {
   position: absolute;
-  top: 824px;
-  left: 734px;
+  bottom: 14px;
+  left: calc(50% - 66px);
   width: 58px;
   height: 62px;
   max-width: none;
@@ -165,35 +163,35 @@
 
 .hub-hud-tome {
   position: absolute;
-  top: 824px;
-  left: 814px;
+  bottom: 14px;
+  left: calc(50% + 14px);
   width: 58px;
   height: 62px;
   max-width: none;
 }
 
 .hub-hud-potion-blue {
-  top: 833px;
-  left: 903px;
+  bottom: 18px;
+  left: calc(50% + 103px);
   width: 50px;
   height: 49px;
 }
 
 .hub-hud-count {
   position: absolute;
-  top: 885px;
+  bottom: 1px;
   width: 8px;
   height: 14px;
   background-repeat: no-repeat;
 }
 
-.hub-hud-count-red { left: 672px; }
-.hub-hud-count-blue { left: 923px; }
+.hub-hud-count-red { left: calc(50% - 128px); }
+.hub-hud-count-blue { left: calc(50% + 123px); }
 
 .hub-hud-xp {
   position: absolute;
-  top: 828px;
-  left: 798px;
+  bottom: 16px;
+  left: calc(50% - 2px);
   width: 12px;
   height: 56px;
 }
@@ -219,8 +217,8 @@
 
 .hub-hud-map {
   position: absolute;
-  top: 766px;
-  left: 1462px;
+  right: 17px;
+  bottom: 16px;
   width: 121px;
   height: 118px;
   padding: 0;

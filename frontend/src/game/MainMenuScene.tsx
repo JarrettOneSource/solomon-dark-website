@@ -247,7 +247,11 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
   return (
     <div className="main-menu-page">
-      <section ref={stageRef} className="main-menu-stage" aria-label="Solomon Darker game menu">
+      <section
+        ref={stageRef}
+        className={`main-menu-stage${screen === 'hub' ? ' main-menu-stage-gameplay' : ''}`}
+        aria-label="Solomon Darker game menu"
+      >
         {titleScreen ? (
           <>
             <MainMenuBackdrop />

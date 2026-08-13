@@ -34,10 +34,16 @@ export const HUB_ASTRONOMER_TELESCOPE_ORIGIN = {
   y: HUB_SOUTHERN_EXTENT.y - 358,
 } as const
 
-export function hubSouthernCameraTranslation(cameraOrigin: Vector2): Vector2 {
+export function hubSouthernCameraTranslation(
+  cameraOrigin: Vector2,
+  view: { height: number; width: number } = {
+    height: HUB_VIEW_HEIGHT,
+    width: HUB_VIEW_WIDTH,
+  },
+): Vector2 {
   const cameraCenter = {
-    x: cameraOrigin.x + HUB_VIEW_WIDTH / 2,
-    y: cameraOrigin.y + HUB_VIEW_HEIGHT / 2,
+    x: cameraOrigin.x + view.width / 2,
+    y: cameraOrigin.y + view.height / 2,
   }
   return {
     x: -cameraOrigin.x - (HUB_SOUTHERN_CAMERA_FACTOR - 1) * cameraCenter.x,

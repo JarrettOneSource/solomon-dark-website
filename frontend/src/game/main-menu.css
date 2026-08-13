@@ -30,6 +30,12 @@
   }
 }
 
+.main-menu-stage.main-menu-stage-gameplay {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+}
+
 .main-menu-backdrop {
   position: absolute;
   inset: 0;

@@ -3,18 +3,10 @@ import test from 'node:test'
 import {
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
-  hubDisplayScale,
   hubWorldDepthForActor,
   initialHubResolution,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
-
-test('display scale follows the limiting viewport axis', () => {
-  assert.equal(hubDisplayScale(1600, 900), 1)
-  assert.equal(hubDisplayScale(1280, 800), 0.8)
-  assert.equal(hubDisplayScale(844, 390), 390 / 900)
-  assert.equal(hubDisplayScale(0, 0), 1)
-})
 
 test('native painter boundaries sort actors beneath roofs and tent faces', () => {
   assert.ok(hubWorldDepthForActor(300) < HUB_WORLD_DEPTH.spawnRoof)

@@ -18,14 +18,14 @@ import {
 } from './input/movement-input.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import {
-  BONEYARD_RENDER_HEIGHT,
-  BONEYARD_RENDER_WIDTH,
-} from './renderer/boneyard-render-contract.ts'
-import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
 } from './renderer/boneyard-world-renderer.ts'
-import { hubDisplayScale } from './renderer/hub-render-contract.ts'
+import {
+  gameViewportLayout,
+  type GameViewportLayout,
+} from './renderer/game-viewport.ts'
+import { initialHubResolution } from './renderer/hub-render-contract.ts'
 import './hub.css'
 import './boneyard.css'
 
@@ -68,19 +68,19 @@ export default function BoneyardScene({
   const inputRef = useRef<BrowserMovementInput | null>(null)
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
-  const [frameTransform, setFrameTransform] = useState<CSSProperties>()
+  const [viewport, setViewport] = useState<GameViewportLayout>(() => (
+    gameViewportLayout(1600, 900)
+  ))
+  const viewportRef = useRef(viewport)
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
     const resize = () => {
-      const scale = hubDisplayScale(scene.clientWidth, scene.clientHeight)
-      const left = (scene.clientWidth - BONEYARD_RENDER_WIDTH * scale) / 2
-      const top = (scene.clientHeight - BONEYARD_RENDER_HEIGHT * scale) / 2
-      setFrameTransform({
-        transform: `translate3d(${left}px, ${top}px, 0) scale(${scale})`,
-      })
-      rendererRef.current?.resize(scale)
+      const next = gameViewportLayout(scene.clientWidth, scene.clientHeight)
+      viewportRef.current = next
+      setViewport((current) => sameViewport(current, next) ? current : next)
+      rendererRef.current?.resize(next)
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -100,9 +100,9 @@ export default function BoneyardScene({
 
     void createBoneyardWorldRenderer({
       boneyard: loaded,
-      host,
       initialSnapshot,
       playerId,
+      viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
@@ -110,10 +110,7 @@ export default function BoneyardScene({
       }
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
-      const scene = sceneRef.current
-      renderer.resize(scene
-        ? hubDisplayScale(scene.clientWidth, scene.clientHeight)
-        : 1)
+      renderer.resize(viewportRef.current)
       setRendererState('ready')
       const animate = (now: number) => {
         const snapshot = samplePresentation(now)
@@ -122,7 +119,9 @@ export default function BoneyardScene({
         renderer.render(snapshot)
         const camera = renderer.camera(snapshot)
         const darkness = darknessCanvasRef.current
-        if (darkness) paintDarkness(darkness, snapshot, camera, now)
+        if (darkness) {
+          paintDarkness(darkness, snapshot, camera, viewportRef.current, now)
+        }
         publishSceneDiagnostics(
           sceneRef.current,
           renderer.canvas,
@@ -176,10 +175,20 @@ export default function BoneyardScene({
       data-local-player-y={localPlayer?.position.y}
       data-renderer-state={rendererError ? 'error' : rendererState}
       data-run-id={loaded.runId}
+      data-viewport-height={viewport.height}
+      data-viewport-scale={viewport.displayScale}
+      data-viewport-width={viewport.width}
       aria-label={`Boneyard: ${loaded.choice.name}. Move with W A S D, arrow keys, a controller, or the touch joystick.`}
       tabIndex={0}
     >
-      <div className="boneyard-native-frame" style={frameTransform}>
+      <div
+        className="boneyard-native-frame"
+        style={{
+          height: viewport.height,
+          transform: `scale(${viewport.displayScale})`,
+          width: viewport.width,
+        } satisfies CSSProperties}
+      >
         <div ref={hostRef} className="boneyard-world-renderer" />
         {(loaded.scene.environmentMode === 1 || loaded.scene.environmentMode === 2) ? (
           <canvas
@@ -237,11 +246,16 @@ function paintDarkness(
   canvas: HTMLCanvasElement,
   snapshot: GameSnapshot,
   camera: Camera,
+  viewport: GameViewportLayout,
   now: number,
 ): void {
   const dpr = window.devicePixelRatio || 1
-  const width = Math.round(BONEYARD_RENDER_WIDTH * dpr)
-  const height = Math.round(BONEYARD_RENDER_HEIGHT * dpr)
+  const resolution = initialHubResolution({
+    devicePixelRatio: dpr,
+    displayScale: viewport.displayScale,
+  })
+  const width = Math.round(viewport.width * resolution)
+  const height = Math.round(viewport.height * resolution)
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width
     canvas.height = height
@@ -250,18 +264,18 @@ function paintDarkness(
   if (!context) return
   const aperture = spriteImage(boneyard.darknessAperture)
   const radial = spriteImage(boneyard.darknessRadial)
-  context.setTransform(dpr, 0, 0, dpr, 0, 0)
+  context.setTransform(resolution, 0, 0, resolution, 0, 0)
   context.globalAlpha = 1
   context.globalCompositeOperation = 'source-over'
-  context.clearRect(0, 0, BONEYARD_RENDER_WIDTH, BONEYARD_RENDER_HEIGHT)
+  context.clearRect(0, 0, viewport.width, viewport.height)
   context.globalCompositeOperation = 'lighter'
   if (aperture.complete && aperture.naturalWidth > 0) {
     Object.values(snapshot.players).forEach((player, index) => {
       const position = worldToScreen(
         player.position,
         camera,
-        BONEYARD_RENDER_WIDTH,
-        BONEYARD_RENDER_HEIGHT,
+        viewport.width,
+        viewport.height,
       )
       context.globalAlpha = nativeDirectApertureAlpha(now, index)
       context.drawImage(
@@ -279,8 +293,8 @@ function paintDarkness(
       const position = worldToScreen(
         player.position,
         camera,
-        BONEYARD_RENDER_WIDTH,
-        BONEYARD_RENDER_HEIGHT,
+        viewport.width,
+        viewport.height,
       )
       const extent = NATIVE_DARKNESS_TARGET_EXTENT * camera.zoom
       context.globalAlpha = nativeTargetApertureAlpha(now, index)
@@ -296,7 +310,13 @@ function paintDarkness(
   context.globalAlpha = NATIVE_DARKNESS_MAX_ALPHA
   context.globalCompositeOperation = 'source-out'
   context.fillStyle = '#000'
-  context.fillRect(0, 0, BONEYARD_RENDER_WIDTH, BONEYARD_RENDER_HEIGHT)
+  context.fillRect(0, 0, viewport.width, viewport.height)
+}
+
+function sameViewport(left: GameViewportLayout, right: GameViewportLayout): boolean {
+  return left.displayScale === right.displayScale
+    && left.height === right.height
+    && left.width === right.width
 }
 
 function publishSceneDiagnostics(

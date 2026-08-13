@@ -25,7 +25,10 @@ import {
   createHubWorldRenderer,
   type HubWorldRenderer,
 } from './renderer/hub-world-renderer.ts'
-import { hubDisplayScale } from './renderer/hub-render-contract.ts'
+import {
+  gameViewportLayout,
+  type GameViewportLayout,
+} from './renderer/game-viewport.ts'
 import './hub.css'
 
 interface HubSceneProps {
@@ -71,7 +74,10 @@ export default function HubScene({
   const inputRef = useRef<BrowserMovementInput | null>(null)
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
-  const [frameTransform, setFrameTransform] = useState<CSSProperties>()
+  const [viewport, setViewport] = useState<GameViewportLayout>(() => (
+    gameViewportLayout(1600, 900)
+  ))
+  const viewportRef = useRef(viewport)
   const [hostPlayerId, setHostPlayerId] = useState(initialSnapshot.hostPlayerId)
   const [currentRegion, setCurrentRegion] = useState<HubRegionId>(
     hubInitialSnapshot.world.participants[playerId]?.region ?? 'courtyard',
@@ -82,11 +88,10 @@ export default function HubScene({
     const scene = sceneRef.current
     if (!scene) return
     const resize = () => {
-      const scale = hubDisplayScale(scene.clientWidth, scene.clientHeight)
-      const left = (scene.clientWidth - 1600 * scale) / 2
-      const top = (scene.clientHeight - 900 * scale) / 2
-      setFrameTransform({ transform: `translate3d(${left}px, ${top}px, 0) scale(${scale})` })
-      rendererRef.current?.resize(scale)
+      const next = gameViewportLayout(scene.clientWidth, scene.clientHeight)
+      viewportRef.current = next
+      setViewport((current) => sameViewport(current, next) ? current : next)
+      rendererRef.current?.resize(next)
     }
     resize()
     const observer = new ResizeObserver(resize)
@@ -132,9 +137,9 @@ export default function HubScene({
     setRendererError(null)
 
     void createHubWorldRenderer({
-      host,
       initialSnapshot: hubInitialSnapshot,
       playerId,
+      viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
@@ -142,10 +147,7 @@ export default function HubScene({
       }
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
-      const scene = sceneRef.current
-      renderer.resize(scene
-        ? hubDisplayScale(scene.clientWidth, scene.clientHeight)
-        : 1)
+      renderer.resize(viewportRef.current)
       setRendererState('ready')
       const animate = (now: number) => {
         const movement = input.sample().movement
@@ -207,11 +209,21 @@ export default function HubScene({
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-hub-region={currentRegion}
+      data-viewport-height={viewport.height}
+      data-viewport-scale={viewport.displayScale}
+      data-viewport-width={viewport.width}
       data-renderer-state={rendererError ? 'error' : rendererState}
       aria-label={HUB_REGION_ACCESSIBILITY[currentRegion]}
       tabIndex={0}
     >
-      <div className="hub-native-frame" style={frameTransform}>
+      <div
+        className="hub-native-frame"
+        style={{
+          height: viewport.height,
+          transform: `scale(${viewport.displayScale})`,
+          width: viewport.width,
+        } satisfies CSSProperties}
+      >
         <div ref={hostRef} className="hub-world-renderer" />
 
         <GameHud
@@ -277,4 +289,10 @@ export default function HubScene({
       </div>
     </div>
   )
+}
+
+function sameViewport(left: GameViewportLayout, right: GameViewportLayout): boolean {
+  return left.displayScale === right.displayScale
+    && left.height === right.height
+    && left.width === right.width
 }

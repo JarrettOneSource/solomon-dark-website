@@ -34,14 +34,10 @@ import {
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import { PlayerWorldView } from './hub-actors.ts'
-import {
-  hubDisplayScale,
-  initialHubResolution,
-} from './hub-render-contract.ts'
+import type { GameViewportLayout } from './game-viewport.ts'
+import { initialHubResolution } from './hub-render-contract.ts'
 import {
   BONEYARD_CAMERA_ZOOM,
-  BONEYARD_RENDER_HEIGHT,
-  BONEYARD_RENDER_WIDTH,
   boneyardCamera,
   boneyardStaticTiles,
   boneyardWorldPosition,
@@ -80,15 +76,15 @@ export interface BoneyardWorldRenderer {
   camera(snapshot: GameSnapshot): Camera
   destroy(): void
   render(snapshot: GameSnapshot): void
-  resize(displayScale: number, devicePixelRatio?: number): void
+  resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
 }
 
 interface BoneyardWorldRendererOptions {
   boneyard: LoadedBoneyard
   devicePixelRatio?: number
-  host: HTMLElement
   initialSnapshot: GameSnapshot
   playerId: string
+  viewport: GameViewportLayout
 }
 
 interface ResidentTexture {
@@ -113,10 +109,10 @@ export async function createBoneyardWorldRenderer(
   ])
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
-  const displayBounds = options.host.getBoundingClientRect()
+  let viewport = options.viewport
   const initialResolution = initialHubResolution({
     devicePixelRatio,
-    displayScale: hubDisplayScale(displayBounds.width, displayBounds.height),
+    displayScale: viewport.displayScale,
   })
   try {
     await application.init({
@@ -124,13 +120,13 @@ export async function createBoneyardWorldRenderer(
       autoDensity: true,
       autoStart: false,
       background: 0x000000,
-      height: BONEYARD_RENDER_HEIGHT,
+      height: viewport.height,
       powerPreference: 'high-performance',
       preference: 'webgl',
       preferWebGLVersion: 2,
       resolution: initialResolution,
       roundPixels: false,
-      width: BONEYARD_RENDER_WIDTH,
+      width: viewport.width,
     })
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
@@ -174,8 +170,10 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
-  canvas.style.width = `${BONEYARD_RENDER_WIDTH}px`
-  canvas.style.height = `${BONEYARD_RENDER_HEIGHT}px`
+  canvas.style.width = `${viewport.width}px`
+  canvas.style.height = `${viewport.height}px`
+  canvas.dataset.viewportHeight = `${viewport.height}`
+  canvas.dataset.viewportWidth = `${viewport.width}`
 
   let destroyed = false
   let frameCount = 0
@@ -214,6 +212,7 @@ export async function createBoneyardWorldRenderer(
     return boneyardCamera(
       snapshot.players[options.playerId]?.position ?? options.boneyard.scene.spawn,
       options.boneyard.scene.bounds,
+      viewport,
     )
   }
 
@@ -228,7 +227,7 @@ export async function createBoneyardWorldRenderer(
       frameCount += 1
       const painter = scene.update(snapshot, options.playerId)
       const camera = cameraFor(snapshot)
-      const worldPosition = boneyardWorldPosition(camera)
+      const worldPosition = boneyardWorldPosition(camera, viewport)
       world.scale.set(BONEYARD_CAMERA_ZOOM)
       world.position.set(worldPosition.x, worldPosition.y)
       application.render()
@@ -245,25 +244,34 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = Object.keys(snapshot.players).length
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
-        + BONEYARD_RENDER_WIDTH / 2
+        + viewport.width / 2
       frameDiagnostics.playerScreenY = (player.position.y - camera.y) * camera.zoom
-        + BONEYARD_RENDER_HEIGHT / 2
+        + viewport.height / 2
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       frameDiagnostics.playerX = player.position.x
       frameDiagnostics.playerY = player.position.y
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
     },
-    resize(displayScale, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
-        displayScale,
+        displayScale: nextViewport.displayScale,
       })
-      if (nextResolution === resolution) return
+      if (
+        nextResolution === resolution
+        && nextViewport.height === viewport.height
+        && nextViewport.width === viewport.width
+      ) return
+      viewport = nextViewport
       resolution = nextResolution
-      application.renderer.resize(BONEYARD_RENDER_WIDTH, BONEYARD_RENDER_HEIGHT, resolution)
+      application.renderer.resize(viewport.width, viewport.height, resolution)
       canvas.dataset.resolution = `${resolution}`
+      canvas.dataset.viewportHeight = `${viewport.height}`
+      canvas.dataset.viewportWidth = `${viewport.width}`
+      canvas.style.width = `${viewport.width}px`
+      canvas.style.height = `${viewport.height}px`
     },
     destroy() {
       if (destroyed) return

@@ -8,12 +8,8 @@ import {
 } from '../core-kernels/hub-math.ts'
 import type { HubRegionId } from '../core-kernels/hub-regions.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
-import {
-  HUB_RENDER_HEIGHT,
-  HUB_RENDER_WIDTH,
-  hubDisplayScale,
-  initialHubResolution,
-} from './hub-render-contract.ts'
+import type { GameViewportLayout } from './game-viewport.ts'
+import { initialHubResolution } from './hub-render-contract.ts'
 import {
   destroyHubWorldTextureFrames,
   loadHubWorldTextures,
@@ -50,16 +46,16 @@ export interface HubWorldRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
   render(snapshot: HubPresentationFrame): void
-  resize(displayScale: number, devicePixelRatio?: number): void
+  resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
 }
 
 interface HubWorldRendererOptions {
   devicePixelRatio?: number
-  host: HTMLElement
   initialSnapshot: HubPresentationFrame
   now?: () => number
   onDiagnostics?: (diagnostics: HubRendererDiagnostics) => void
   playerId: string
+  viewport: GameViewportLayout
 }
 
 const DIAGNOSTIC_WINDOW_FRAMES = 120
@@ -70,10 +66,10 @@ export async function createHubWorldRenderer(
   const textures = await loadHubWorldTextures()
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
-  const displayBounds = options.host.getBoundingClientRect()
+  let viewport = options.viewport
   const initialResolution = initialHubResolution({
     devicePixelRatio,
-    displayScale: hubDisplayScale(displayBounds.width, displayBounds.height),
+    displayScale: viewport.displayScale,
   })
   try {
     await application.init({
@@ -81,13 +77,13 @@ export async function createHubWorldRenderer(
       autoDensity: true,
       autoStart: false,
       background: 0x000000,
-      height: HUB_RENDER_HEIGHT,
+      height: viewport.height,
       powerPreference: 'high-performance',
       preference: 'webgl',
       preferWebGLVersion: 2,
       resolution: initialResolution,
       roundPixels: false,
-      width: HUB_RENDER_WIDTH,
+      width: viewport.width,
     })
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
@@ -105,8 +101,8 @@ export async function createHubWorldRenderer(
   application.stage.addChild(courtyardScene.stage, privateRoomScene.world)
   const fadeCover = new Sprite(Texture.WHITE)
   fadeCover.tint = 0x000000
-  fadeCover.width = HUB_RENDER_WIDTH
-  fadeCover.height = HUB_RENDER_HEIGHT
+  fadeCover.width = viewport.width
+  fadeCover.height = viewport.height
   fadeCover.alpha = 0
   fadeCover.eventMode = 'none'
   application.stage.addChild(fadeCover)
@@ -115,8 +111,10 @@ export async function createHubWorldRenderer(
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.textureSources = JSON.stringify(textures.assetSources)
-  canvas.style.width = `${HUB_RENDER_WIDTH}px`
-  canvas.style.height = `${HUB_RENDER_HEIGHT}px`
+  canvas.style.width = `${viewport.width}px`
+  canvas.style.height = `${viewport.height}px`
+  canvas.dataset.viewportHeight = `${viewport.height}`
+  canvas.dataset.viewportWidth = `${viewport.width}`
 
   const now = options.now ?? (() => performance.now())
   let destroyed = false
@@ -197,10 +195,13 @@ export async function createHubWorldRenderer(
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
       privateRoomScene.world.visible = !inCourtyard
-      const camera = hubRegionCameraOrigin(participant.region, player.position)
+      const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
       if (inCourtyard) {
         courtyardScene.world.position.set(-camera.x, -camera.y)
-        courtyardScene.southern.position.copyFrom(hubSouthernCameraTranslation(camera))
+        courtyardScene.southern.position.copyFrom(hubSouthernCameraTranslation(camera, {
+          height: viewport.height / HUB_CAMERA_SCALE,
+          width: viewport.width / HUB_CAMERA_SCALE,
+        }))
       } else {
         privateRoomScene.world.position.set(
           -camera.x * HUB_CAMERA_SCALE,
@@ -218,15 +219,26 @@ export async function createHubWorldRenderer(
       frameTimeTotal = 0
       publishDiagnostics(snapshot, averageFrameMs)
     },
-    resize(displayScale, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
-        displayScale,
+        displayScale: nextViewport.displayScale,
       })
-      if (nextResolution === resolution) return
+      if (
+        nextResolution === resolution
+        && nextViewport.height === viewport.height
+        && nextViewport.width === viewport.width
+      ) return
+      viewport = nextViewport
       resolution = nextResolution
-      application.renderer.resize(HUB_RENDER_WIDTH, HUB_RENDER_HEIGHT, resolution)
+      application.renderer.resize(viewport.width, viewport.height, resolution)
+      fadeCover.width = viewport.width
+      fadeCover.height = viewport.height
+      canvas.style.width = `${viewport.width}px`
+      canvas.style.height = `${viewport.height}px`
+      canvas.dataset.viewportHeight = `${viewport.height}`
+      canvas.dataset.viewportWidth = `${viewport.width}`
     },
     destroy() {
       if (destroyed) return
