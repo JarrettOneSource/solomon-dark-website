@@ -82,10 +82,15 @@ if (/from\s+['"].*core-server\//.test(hubScene)) {
   failures.push('HubScene.tsx must present protocol snapshots and may not import authoritative server code')
 }
 
-const playerCharacterPath = join(gameRoot, 'PlayerCharacter.tsx')
-const playerCharacter = await readFile(playerCharacterPath, 'utf8')
-if (/from\s+['"].*(?:core-server|HubScene|hub-)\b/.test(playerCharacter)) {
-  failures.push('PlayerCharacter.tsx must remain reusable across gameplay worlds')
+const reusablePlayerPaths = [
+  join(gameRoot, 'player-character-presentation.ts'),
+  join(gameRoot, 'renderer/hub-actors.ts'),
+]
+for (const reusablePlayerPath of reusablePlayerPaths) {
+  const playerSource = await readFile(reusablePlayerPath, 'utf8')
+  if (/from\s+['"].*(?:core-server|HubScene)\b/.test(playerSource)) {
+    failures.push(`${relative(gameRoot, reusablePlayerPath)} must remain reusable across gameplay worlds`)
+  }
 }
 
 if (failures.length > 0) {

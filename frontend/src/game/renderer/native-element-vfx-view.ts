@@ -1,28 +1,36 @@
 import { Container, Sprite } from 'pixi.js'
+
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
   nativeElementVfxPlan,
   type NativeElementVfxColor,
+  type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
-import type { HubWorldTextures } from './hub-textures.ts'
 
-export class HubElementVfx {
-  readonly container = new Container({ label: 'native-element-orb' })
+export type NativeElementVfxTextures = Readonly<
+  Partial<Record<NativeElementVfxSprite, readonly import('pixi.js').Texture[]>>
+>
+
+export class NativeElementVfxView {
+  readonly container = new Container({ label: 'native-element-vfx' })
   readonly sprites: Sprite[] = []
   private readonly element: WizardElement
-  private readonly textures: HubWorldTextures['elementVfx']
+  private readonly textures: NativeElementVfxTextures
+  private lastScale = Number.NaN
+  private lastTick = Number.NaN
 
-  constructor(
-    element: WizardElement,
-    textures: HubWorldTextures['elementVfx'],
-  ) {
+  constructor(element: WizardElement, textures: NativeElementVfxTextures) {
     this.element = element
     this.textures = textures
     this.container.eventMode = 'none'
   }
 
-  update(tick: number): void {
-    const plan = nativeElementVfxPlan(this.element, tick, 1)
+  update(tick: number, scale = 1): void {
+    const integerTick = Math.floor(tick)
+    if (integerTick === this.lastTick && scale === this.lastScale) return
+    this.lastTick = integerTick
+    this.lastScale = scale
+    const plan = nativeElementVfxPlan(this.element, integerTick, scale)
     while (this.sprites.length < plan.length) {
       const sprite = new Sprite()
       sprite.anchor.set(0.5)

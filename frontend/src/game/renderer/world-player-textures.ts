@@ -10,6 +10,7 @@ import {
   type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
+import type { NativeElementVfxTextures } from './native-element-vfx-view.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -24,7 +25,7 @@ export interface PlayerActorTextureFrames {
 }
 
 export interface PlayerWorldTextures {
-  elementVfx: Readonly<Partial<Record<NativeElementVfxSprite, readonly Texture[]>>>
+  elementVfx: NativeElementVfxTextures
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
 }
@@ -81,6 +82,17 @@ export function createPlayerWorldTextures(
     element,
     playerTextures(element),
   ])) as Record<WizardElement, PlayerActorTextureFrames>
+  const elementTextures = createNativeElementVfxTextures(texture)
+  return {
+    elementVfx: elementTextures,
+    playerShadow: texture(hub.npcs.teacher.shadow),
+    players,
+  }
+}
+
+export function createNativeElementVfxTextures(
+  texture: (source: string) => Texture,
+): NativeElementVfxTextures {
   const elementTextures: Partial<Record<NativeElementVfxSprite, readonly Texture[]>> = {}
   for (const sprite of ['core', 'ray', 'spark', 'air', 'earth', 'fire', 'water'] as const) {
     const metrics = NATIVE_ELEMENT_VFX_SPRITES[sprite]
@@ -95,11 +107,7 @@ export function createPlayerWorldTextures(
       'horizontal',
     )
   }
-  return {
-    elementVfx: elementTextures,
-    playerShadow: texture(hub.npcs.teacher.shadow),
-    players,
-  }
+  return elementTextures
 }
 
 export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): void {

@@ -149,8 +149,11 @@ without changing player identity. Unknown or malformed messages fail closed.
 
 There is one composed client, not one DOM client and one canvas client.
 
-- Screen-space menus, Create/loadout, and HUD may remain React/DOM while their
-  native-parity receipts continue to pass.
+- Loader, Title, and Create/loadout pixels render through one scene-scoped
+  PixiJS/WebGL canvas, just like the gameplay worlds. React owns
+  transparent semantic controls, focus, gamepad/touch routing, status text, and
+  the HUD; those overlays are input/accessibility surfaces, not a second visual
+  game renderer.
 - The Courtyard and Boneyard worlds and cameras now render through PixiJS
   WebGL canvases.
   Native draw plans, blend operations, frame selectors, render offsets, and
@@ -164,9 +167,10 @@ There is one composed client, not one DOM client and one canvas client.
   Players, Solomon Dig, and moving gate leaves remain dynamic GPU residents.
   The recovered mode-1/2 darkness compositor remains a small screen-space
   post-process between the world canvas and HUD.
-- Actor presentation is pooled and depth-sorted inside the GPU scene. The old
-  per-actor DOM/style painter has been removed; React continues to own menus,
-  loadout, HUD, accessibility text, and touch controls.
+- Actor and menu presentation is pooled inside the active GPU scene. The old
+  per-actor and per-menu-art DOM/style painters are removed; React continues to
+  own HUD semantics, accessibility text, focusable hit targets, and touch
+  controls.
 - The client presents buffered server snapshots at display cadence. The Hub
   applies bounded local prediction through the shared movement kernel;
   Boneyard presentation interpolates received players and gate leaves without
@@ -275,8 +279,9 @@ design:
   supervisor, while the TLS gateway routes opaque session paths to the same
   authoritative host implementation used by development and future desktop
   packaging; and
-- the Hub and Boneyard worlds use PixiJS/WebGL scenes, while React retains the
-  HUD, menus, accessibility surface, and Pointer Events joystick.
+- the Loader, Title, Create/loadout, Hub, and Boneyard visual scenes use PixiJS/WebGL,
+  while React retains the HUD, semantic menu controls, accessibility surface,
+  and Pointer Events joystick.
 
 Encrypted direct peer hosting, save persistence, combat load recovery, and
 minimum-hardware qualification remain the next product slices. None requires

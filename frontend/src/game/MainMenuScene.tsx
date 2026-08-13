@@ -5,10 +5,7 @@ import {
   useState,
   type AnimationEvent,
   type KeyboardEvent,
-  type ReactNode,
 } from 'react'
-import MenuSolomon from '../fx/MenuSolomon.tsx'
-import { mainMenu } from '../lib/assets.ts'
 import BoneyardScene from './BoneyardScene.tsx'
 import CreateMenuScene from './CreateMenuScene.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
@@ -22,8 +19,9 @@ import { GameAudioDirector } from './game-audio-director.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
 import HubScene from './HubScene.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
-import MainMenuBackdrop from './MainMenuBackdrop.tsx'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
+import TitleMenuPresentation from './TitleMenuPresentation.tsx'
 import './main-menu.css'
 
 type MenuScreen = 'root' | 'play' | 'create' | 'hub'
@@ -31,29 +29,31 @@ type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
   accessibleLabel: string
-  children?: ReactNode
+  action: TitleMenuAction
   className?: string
   compact?: boolean
   defaultFocus?: boolean
   disabled?: boolean
   isBack?: boolean
   onClick?: () => void
+  onHighlight: (action: TitleMenuAction | null) => void
   onPress?: () => void
+  onPressState: (action: TitleMenuAction | null) => void
 }
 
 function MenuButton({
   accessibleLabel,
-  children,
+  action,
   className,
   compact = false,
   defaultFocus = false,
   disabled = false,
   isBack = false,
   onClick,
+  onHighlight,
   onPress,
+  onPressState,
 }: MenuButtonProps) {
-  const corner = compact ? mainMenu.quitCorner : mainMenu.buttonCorner
-  const rail = compact ? mainMenu.quitRail : mainMenu.buttonRail
   const classes = [
     'main-menu-button',
     compact && 'main-menu-button-compact',
@@ -68,72 +68,83 @@ function MenuButton({
       disabled={disabled}
       data-game-back={isBack || undefined}
       data-game-default-focus={defaultFocus || undefined}
-      onClick={onClick}
-      onPointerDown={(event) => {
-        if (!disabled && event.button === 0) onPress?.()
+      onBlur={() => {
+        onHighlight(null)
+        onPressState(null)
       }}
-      onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
-        if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+      onClick={() => {
+        onPressState(null)
+        onClick?.()
+      }}
+      onFocus={() => {
+        if (!disabled) onHighlight(action)
+      }}
+      onPointerCancel={() => onPressState(null)}
+      onPointerDown={(event) => {
+        if (!disabled && event.button === 0) {
+          onPressState(action)
           onPress?.()
         }
       }}
-    >
-      <img src={mainMenu.button} alt="" className="main-menu-button-stone" />
-      <img src={mainMenu.buttonHover} alt="" className="main-menu-button-stone main-menu-button-stone-hover" />
-      <img src={corner} alt="" className="main-menu-button-corner main-menu-button-corner-left" />
-      <img src={corner} alt="" className="main-menu-button-corner main-menu-button-corner-right" />
-      <img src={rail} alt="" className="main-menu-button-rail" />
-      <span className="main-menu-button-label" aria-hidden>{children}</span>
-    </button>
+      onPointerEnter={() => {
+        if (!disabled) onHighlight(action)
+      }}
+      onPointerLeave={() => {
+        onHighlight(null)
+        onPressState(null)
+      }}
+      onPointerUp={() => onPressState(null)}
+      onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+        if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
+          onPressState(action)
+          onPress?.()
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') onPressState(null)
+      }}
+    />
   )
 }
 
-function RootActions({ onPlay, onPress }: { onPlay: () => void; onPress: () => void }) {
+interface ActionGroupProps {
+  onHighlight: (action: TitleMenuAction | null) => void
+  onPress: () => void
+  onPressState: (action: TitleMenuAction | null) => void
+}
+
+function RootActions({
+  onHighlight,
+  onPlay,
+  onPress,
+  onPressState,
+}: ActionGroupProps & { onPlay: () => void }) {
   return (
     <>
-      <MenuButton accessibleLabel="Play" defaultFocus onClick={onPlay} onPress={onPress}>
-        <img src={mainMenu.text.play} alt="" className="main-menu-label-play" />
-      </MenuButton>
-      <MenuButton accessibleLabel="Explore the Dark Cloud" onPress={onPress}>
-        <span className="main-menu-label-two-lines">
-          <img src={mainMenu.text.explore} alt="" />
-          <img src={mainMenu.text.darkCloud} alt="" />
-        </span>
-      </MenuButton>
-      <MenuButton accessibleLabel="Settings" onPress={onPress}>
-        <img src={mainMenu.text.settings} alt="" className="main-menu-label-settings" />
-      </MenuButton>
-      <MenuButton accessibleLabel="Hall of Fame" onPress={onPress}>
-        <img src={mainMenu.text.hall} alt="" className="main-menu-label-hall" />
-      </MenuButton>
+      <MenuButton action="play" accessibleLabel="Play" defaultFocus onClick={onPlay} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="settings" accessibleLabel="Settings" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="hall" accessibleLabel="Hall of Fame" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
 
 function PlayActions({
   onBack,
+  onHighlight,
   onNewGame,
   onPress,
-}: {
+  onPressState,
+}: ActionGroupProps & {
   onBack: () => void
   onNewGame: () => void
-  onPress: () => void
 }) {
   return (
     <>
-      <MenuButton accessibleLabel="Last game unavailable" className="main-menu-button-last-game" disabled>
-        <span className="main-menu-label-last-game">
-          <img src={mainMenu.text.resume} alt="" />
-          <img src={mainMenu.text.lastGame} alt="" />
-        </span>
-      </MenuButton>
-      <MenuButton accessibleLabel="New game" defaultFocus onClick={onNewGame} onPress={onPress}>
-        <img src={mainMenu.text.newGame} alt="" className="main-menu-label-new-game" />
-      </MenuButton>
-      <MenuButton accessibleLabel="Unavailable" className="main-menu-button-empty" disabled />
-      <MenuButton accessibleLabel="Back" isBack onClick={onBack} onPress={onPress}>
-        <img src={mainMenu.text.back} alt="" className="main-menu-label-back" />
-      </MenuButton>
+      <MenuButton action="last-game" accessibleLabel="Last game unavailable" className="main-menu-button-last-game" disabled onHighlight={onHighlight} onPressState={onPressState} />
+      <MenuButton action="new-game" accessibleLabel="New game" defaultFocus onClick={onNewGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="unavailable" accessibleLabel="Unavailable" className="main-menu-button-empty" disabled onHighlight={onHighlight} onPressState={onPressState} />
+      <MenuButton action="back" accessibleLabel="Back" isBack onClick={onBack} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
@@ -153,6 +164,8 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
+  const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
 
   useEffect(() => () => session?.destroy(), [session])
 
@@ -256,39 +269,40 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
       >
         {titleScreen ? (
           <>
-            <MainMenuBackdrop />
-
-            <img src={mainMenu.logo} alt="Solomon Darker" className="main-menu-logo" />
-            <img src={mainMenu.text.version} alt="Version 0.72 beta" className="main-menu-version" />
-
-            <MenuSolomon className="main-menu-solomon" />
-
-            <img src={mainMenu.flourish} alt="" className="main-menu-flourish main-menu-flourish-left" />
-            <img src={mainMenu.flourish} alt="" className="main-menu-flourish main-menu-flourish-right" />
+            <TitleMenuPresentation
+              hoveredAction={hoveredTitleAction}
+              pressedAction={pressedTitleAction}
+              screen={screen === 'play' ? 'play' : 'root'}
+            />
 
             <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
               {screen === 'root' ? (
                 <RootActions
+                  onHighlight={setHoveredTitleAction}
                   onPlay={() => setScreen('play')}
                   onPress={() => audio.playSound('click')}
+                  onPressState={setPressedTitleAction}
                 />
               ) : (
                 <PlayActions
                   onBack={() => setScreen('root')}
+                  onHighlight={setHoveredTitleAction}
                   onNewGame={() => transitionTo('create')}
                   onPress={() => audio.playSound('click')}
+                  onPressState={setPressedTitleAction}
                 />
               )}
             </nav>
 
             <div className="main-menu-quit">
               <MenuButton
+                action="quit"
                 accessibleLabel="Quit"
                 compact
+                onHighlight={setHoveredTitleAction}
                 onPress={() => audio.playSound('click')}
-              >
-                <img src={mainMenu.text.quit} alt="" className="main-menu-label-quit" />
-              </MenuButton>
+                onPressState={setPressedTitleAction}
+              />
             </div>
           </>
         ) : screen === 'create' ? (

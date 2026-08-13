@@ -10,7 +10,7 @@ import type {
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
 import { createPlayerCharacterDrawPlan } from '../player-character-presentation.ts'
-import { HubElementVfx } from './hub-element-vfx.ts'
+import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
@@ -19,7 +19,7 @@ export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
   private readonly shadow: Sprite
   private readonly staffBack: Sprite
-  private readonly orb: HubElementVfx
+  private readonly orb: NativeElementVfxView
   private readonly robe: Sprite
   private readonly fixed: Sprite
   private readonly staffFront: Sprite
@@ -39,7 +39,7 @@ export class PlayerWorldView {
     this.shadow.scale.set(1.25)
     this.shadow.alpha = 0.72
     this.staffBack = actorSprite(playerTextures.staffBack[0], 1)
-    this.orb = new HubElementVfx(element, textures.elementVfx)
+    this.orb = new NativeElementVfxView(element, textures.elementVfx)
     this.orb.container.zIndex = 2
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
     this.fixed = actorSprite(playerTextures.fixed[0], 4)

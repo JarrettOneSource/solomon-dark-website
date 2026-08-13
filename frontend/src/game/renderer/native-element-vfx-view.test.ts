@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { colorToTint } from './hub-element-vfx.ts'
+
+import { colorToTint } from './native-element-vfx-view.ts'
 
 test('native float colors map to Pixi RGB tint values', () => {
   assert.equal(colorToTint([1, 1, 1]), 0xffffff)

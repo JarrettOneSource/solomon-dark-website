@@ -7,6 +7,16 @@ export interface GameViewportLayout {
   width: number
 }
 
+export function fixedGameViewportScale(width: number, height: number): number {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return 1
+  }
+  return Math.min(
+    width / GAME_VIEWPORT_MIN_WIDTH,
+    height / GAME_VIEWPORT_MIN_HEIGHT,
+  )
+}
+
 export function gameViewportLayout(width: number, height: number): GameViewportLayout {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return {
@@ -15,11 +25,7 @@ export function gameViewportLayout(width: number, height: number): GameViewportL
       width: GAME_VIEWPORT_MIN_WIDTH,
     }
   }
-  const displayScale = Math.min(
-    1,
-    width / GAME_VIEWPORT_MIN_WIDTH,
-    height / GAME_VIEWPORT_MIN_HEIGHT,
-  )
+  const displayScale = Math.min(1, fixedGameViewportScale(width, height))
   return {
     displayScale,
     height: height / displayScale,

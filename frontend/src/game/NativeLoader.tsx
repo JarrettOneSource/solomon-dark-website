@@ -1,4 +1,9 @@
-import { loader } from '../lib/assets'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+import {
+  createLoaderRenderer,
+  type LoaderRenderer,
+} from './renderer/loader-renderer.ts'
 import './native-loader.css'
 
 interface NativeLoaderProps {
@@ -6,23 +11,72 @@ interface NativeLoaderProps {
 }
 
 export default function NativeLoader({ progress }: NativeLoaderProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const rendererRef = useRef<LoaderRenderer | null>(null)
+  const progressRef = useRef(progress)
+  const [rendererError, setRendererError] = useState<string | null>(null)
   const boundedProgress = Math.max(0, Math.min(1, progress))
+  progressRef.current = boundedProgress
+
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const resize = () => {
+      rendererRef.current?.resize(host.clientWidth / 480)
+    }
+    resize()
+    const observer = new ResizeObserver(resize)
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    let cancelled = false
+    setRendererError(null)
+    void createLoaderRenderer({
+      displayScale: host.clientWidth / 480,
+    }).then((renderer) => {
+      if (cancelled) {
+        renderer.destroy()
+        return
+      }
+      rendererRef.current = renderer
+      host.replaceChildren(renderer.canvas)
+      renderer.resize(host.clientWidth / 480)
+      renderer.render(progressRef.current)
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setRendererError(error instanceof Error
+          ? error.message
+          : 'The WebGL loader renderer could not start.')
+      }
+    })
+    return () => {
+      cancelled = true
+      rendererRef.current?.destroy()
+      rendererRef.current = null
+      host.replaceChildren()
+    }
+  }, [])
+
+  useEffect(() => {
+    rendererRef.current?.render(boundedProgress)
+  }, [boundedProgress])
 
   return (
-    <div className="native-loader-page" role="status" aria-label={`Loading ${Math.round(boundedProgress * 100)}%`}>
+    <div
+      className="native-loader-page"
+      role="status"
+      aria-label={`Loading ${Math.round(boundedProgress * 100)}%`}
+    >
       <section className="native-loader-stage" aria-hidden>
-        <div className="native-loader-canvas">
-          <img src={loader.logo} alt="" className="native-loader-logo" />
-          <img src={loader.url} alt="" className="native-loader-url" />
-          <img src={loader.frame} alt="" className="native-loader-frame" />
-          <img
-            src={loader.fill}
-            alt=""
-            className="native-loader-fill"
-            style={{ clipPath: `inset(0 ${(1 - boundedProgress) * 100}% 0 0)` }}
-          />
-        </div>
+        <div ref={hostRef} className="native-loader-renderer" />
       </section>
+      {rendererError && (
+        <div className="native-loader-error" role="alert">{rendererError}</div>
+      )}
     </div>
   )
 }

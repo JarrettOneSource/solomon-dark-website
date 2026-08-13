@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
+  fixedGameViewportScale,
   gameViewportLayout,
 } from './game-viewport.ts'
 
@@ -17,6 +18,14 @@ test('the stock viewport is the unchanged responsive identity case', () => {
     height: 900,
     width: 1600,
   })
+})
+
+test('fixed native scenes scale with the limiting viewport axis', () => {
+  assert.equal(fixedGameViewportScale(1600, 900), 1)
+  assert.equal(fixedGameViewportScale(1920, 1080), 1.2)
+  assert.equal(fixedGameViewportScale(1280, 800), 0.8)
+  assert.equal(fixedGameViewportScale(844, 390), 390 / GAME_VIEWPORT_MIN_HEIGHT)
+  assert.equal(fixedGameViewportScale(0, 0), 1)
 })
 
 test('larger browsers expand camera field of view at native scale', () => {
