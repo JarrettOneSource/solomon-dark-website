@@ -58,6 +58,7 @@ class ValidationContractTests(unittest.TestCase):
             "npm --prefix frontend run lint",
             "npm --prefix frontend run test:boneyard",
             "npm --prefix frontend run build",
+            "node frontend/tools/check-production-media-policy.mjs",
         ]
         for command in required_commands:
             with self.subTest(command=command):
@@ -71,7 +72,8 @@ class ValidationContractTests(unittest.TestCase):
                 r"unittest discover.*?"
                 r"run_lint.*?"
                 r"run test:boneyard.*?"
-                r"run build",
+                r"run build.*?"
+                r"check-production-media-policy\.mjs",
                 re.DOTALL,
             ),
         )

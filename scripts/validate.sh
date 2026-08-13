@@ -105,6 +105,9 @@ run_all() {
 
     printf 'Building production frontend\n'
     npm --prefix frontend run build
+
+    printf 'Checking production media policy\n'
+    node frontend/tools/check-production-media-policy.mjs
 }
 
 mode="${1:-all}"
