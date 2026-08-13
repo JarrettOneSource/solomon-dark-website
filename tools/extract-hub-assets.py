@@ -20,6 +20,28 @@ from PIL import Image
 
 
 WORLD_SIZE = (2000, 1024)
+FIXED_ROOM_SPECS = {
+    "mortuary": {
+        "atlas": "Memoratorium",
+        "world_size": (1024, 1024),
+        "art_offset": (27, 57),
+    },
+    "storeroom": {
+        "atlas": "Storage",
+        "world_size": (1075, 800),
+        "art_offset": (0, 72.5),
+    },
+    "library": {
+        "atlas": "Library",
+        "world_size": (1024, 1024),
+        "art_offset": (16, 102.5),
+    },
+    "office": {
+        "atlas": "Office",
+        "world_size": (1024, 1024),
+        "art_offset": (102.5, 102.5),
+    },
+}
 PLAYER_CELL_SIZE = 170
 STUDENT_POSES = 5
 PLAYER_HEADINGS = 24
@@ -192,6 +214,86 @@ def registered_sprite(atlas: Image.Image, record: SpriteRecord) -> Image.Image:
     return canvas
 
 
+def compose_registered_full(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    indices: tuple[int, ...],
+) -> Image.Image:
+    logical_sizes = {
+        (records[index].logical_width, records[index].logical_height)
+        for index in indices
+    }
+    if len(logical_sizes) != 1:
+        raise ValueError(f"composite records have different logical sizes: {indices}")
+    canvas = Image.new("RGBA", logical_sizes.pop())
+    for index in indices:
+        paste_registered(canvas, atlas, records[index])
+    return canvas
+
+
+def room_layer(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    world_size: tuple[int, int],
+    art_offset: tuple[float, float],
+    indices: tuple[int, ...],
+) -> Image.Image:
+    layer = Image.new("RGBA", world_size)
+    offset = (round(art_offset[0]), round(art_offset[1]))
+    for index in indices:
+        paste_registered(layer, atlas, records[index], offset=offset)
+    return layer
+
+
+def room_layer_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    world_size: tuple[int, int],
+    art_offset: tuple[float, float],
+    indices: tuple[int, ...],
+) -> Image.Image:
+    frame_width, frame_height = world_size
+    strip = Image.new("RGBA", (frame_width * len(indices), frame_height))
+    offset_x = round(art_offset[0])
+    offset_y = round(art_offset[1])
+    for frame, index in enumerate(indices):
+        paste_registered(
+            strip,
+            atlas,
+            records[index],
+            offset=(frame * frame_width + offset_x, offset_y),
+        )
+    return strip
+
+
+def build_storeroom_background(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+) -> Image.Image:
+    spec = FIXED_ROOM_SPECS["storeroom"]
+    world = Image.new("RGBA", spec["world_size"], (0, 0, 0, 255))
+    floor = crop(atlas, records[1])
+    top_offset = round(spec["art_offset"][1])
+    for top in range(top_offset, top_offset + 655, floor.height):
+        for left in range(0, 1075, floor.width):
+            world.alpha_composite(floor, (left, top))
+    architecture = room_layer(
+        atlas,
+        records,
+        spec["world_size"],
+        spec["art_offset"],
+        tuple(range(13, 27)),
+    )
+    world.alpha_composite(architecture)
+    # Storage[5] is the compiled center shelving composition.
+    center = crop(atlas, records[5])
+    world.alpha_composite(
+        center,
+        ((world.width - center.width) // 2, (world.height - center.height) // 2),
+    )
+    return world
+
+
 def build_registered_strip(
     atlas: Image.Image,
     records: list[SpriteRecord],
@@ -212,6 +314,31 @@ def build_registered_strip(
             records[index],
             offset=(frame * frame_width, 0),
         )
+    return strip
+
+
+def build_registered_composite_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    frames: tuple[tuple[int, ...], ...],
+) -> Image.Image:
+    logical_sizes = {
+        (records[index].logical_width, records[index].logical_height)
+        for frame in frames
+        for index in frame
+    }
+    if len(logical_sizes) != 1:
+        raise ValueError(f"animation layers have different logical sizes: {frames}")
+    frame_width, frame_height = logical_sizes.pop()
+    strip = Image.new("RGBA", (frame_width * len(frames), frame_height))
+    for frame_index, frame in enumerate(frames):
+        for record_index in frame:
+            paste_registered(
+                strip,
+                atlas,
+                records[record_index],
+                offset=(frame_index * frame_width, 0),
+            )
     return strip
 
 
@@ -741,6 +868,171 @@ def main() -> int:
     if len(college_records) != 543:
         raise ValueError(f"College.bundle has {len(college_records)} records; expected 543")
     save(build_courtyard(college, college_records), output_dir, "hub-courtyard")
+
+    mortuary = Image.open(images_dir / "Memoratorium.png").convert("RGBA")
+    mortuary_records = parse_bundle(images_dir / "Memoratorium.bundle")
+    if len(mortuary_records) != 76:
+        raise ValueError(
+            f"Memoratorium.bundle has {len(mortuary_records)} records; expected 76"
+        )
+    mortuary_spec = FIXED_ROOM_SPECS["mortuary"]
+    save(
+        room_layer(
+            mortuary,
+            mortuary_records,
+            mortuary_spec["world_size"],
+            mortuary_spec["art_offset"],
+            (0,),
+        ),
+        output_dir,
+        "hub-room-mortuary-background",
+    )
+    # Clean-session Painting slots are initialized to portrait id -1 and
+    # render the blank registered easel (record 4). The filled 3+portrait+7
+    # compositor belongs to the later eulogy/persistence slice.
+    save(
+        build_registered_strip(mortuary, mortuary_records, (4,) * 10),
+        output_dir,
+        "hub-room-mortuary-paintings",
+    )
+    save(
+        compose_registered_full(mortuary, mortuary_records, (28, 44)),
+        output_dir,
+        "hub-room-memorator",
+    )
+
+    storage = Image.open(images_dir / "Storage.png").convert("RGBA")
+    storage_records = parse_bundle(images_dir / "Storage.bundle")
+    if len(storage_records) != 27:
+        raise ValueError(f"Storage.bundle has {len(storage_records)} records; expected 27")
+    storage_spec = FIXED_ROOM_SPECS["storeroom"]
+    save(build_storeroom_background(storage, storage_records), output_dir, "hub-room-storeroom-background")
+    save(
+        room_layer_strip(
+            storage,
+            storage_records,
+            storage_spec["world_size"],
+            storage_spec["art_offset"],
+            (2, 3, 4),
+        ),
+        output_dir,
+        "hub-room-storeroom-props",
+    )
+    save(
+        room_layer(
+            storage,
+            storage_records,
+            storage_spec["world_size"],
+            storage_spec["art_offset"],
+            (11, 12),
+        ),
+        output_dir,
+        "hub-room-storeroom-foreground",
+    )
+
+    library = Image.open(images_dir / "Library.png").convert("RGBA")
+    library_records = parse_bundle(images_dir / "Library.bundle")
+    if len(library_records) != 33:
+        raise ValueError(f"Library.bundle has {len(library_records)} records; expected 33")
+    library_spec = FIXED_ROOM_SPECS["library"]
+    library_background = room_layer(
+        library,
+        library_records,
+        library_spec["world_size"],
+        library_spec["art_offset"],
+        (0,),
+    )
+    # The return corridor extends 200 logical pixels below the 819-high room art.
+    paste_registered(library_background, library, library_records[5], offset=(16, 2))
+    save(library_background, output_dir, "hub-room-library-background")
+    save(
+        room_layer(
+            library,
+            library_records,
+            library_spec["world_size"],
+            library_spec["art_offset"],
+            (1, 2, 4),
+        ),
+        output_dir,
+        "hub-room-library-foreground",
+    )
+    save(
+        room_layer_strip(
+            library,
+            library_records,
+            library_spec["world_size"],
+            library_spec["art_offset"],
+            (9, 10, 11),
+        ),
+        output_dir,
+        "hub-room-library-props",
+    )
+    save(
+        build_registered_strip(library, library_records, tuple(range(21, 25))),
+        output_dir,
+        "hub-room-dowser",
+    )
+    save(
+        compose_registered_full(library, library_records, tuple(range(29, 33))),
+        output_dir,
+        "hub-room-librarian",
+    )
+    save(
+        build_registered_strip(library, library_records, tuple(range(25, 29))),
+        output_dir,
+        "hub-room-librarian-frames",
+    )
+
+    office = Image.open(images_dir / "Office.png").convert("RGBA")
+    office_records = parse_bundle(images_dir / "Office.bundle")
+    if len(office_records) != 27:
+        raise ValueError(f"Office.bundle has {len(office_records)} records; expected 27")
+    office_spec = FIXED_ROOM_SPECS["office"]
+    office_background = room_layer(
+        office,
+        office_records,
+        office_spec["world_size"],
+        office_spec["art_offset"],
+        (1,),
+    )
+    paste_registered(office_background, office, office_records[4], offset=(102, 2))
+    save(office_background, output_dir, "hub-room-office-background")
+    save(
+        room_layer(
+            office,
+            office_records,
+            office_spec["world_size"],
+            office_spec["art_offset"],
+            tuple(range(17, 23)),
+        ),
+        output_dir,
+        "hub-room-office-foreground",
+    )
+    save(
+        compose_registered_full(office, office_records, (3,)),
+        output_dir,
+        "hub-room-arch-desk",
+    )
+    save(
+        build_registered_composite_strip(
+            office,
+            office_records,
+            ((7, 10), (8, 11), (9, 12)),
+        ),
+        output_dir,
+        "hub-room-arch-chancellor",
+    )
+    save(
+        room_layer(
+            office,
+            office_records,
+            office_spec["world_size"],
+            office_spec["art_offset"],
+            (5,),
+        ),
+        output_dir,
+        "hub-room-office-prop",
+    )
     # Courtyard::Present draws these independent, additive, animated masks at
     # world (1000, 500), scale 2. They are not Teacher-local painters.
     save(

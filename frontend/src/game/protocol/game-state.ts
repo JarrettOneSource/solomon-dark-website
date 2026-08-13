@@ -5,6 +5,9 @@ import type {
   PlayerCharacterConfig,
   PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import type {
+  HubParticipantState,
+} from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 
 export interface ProtocolFountainParticleState {
@@ -64,6 +67,7 @@ export interface HubWorldSnapshot {
   ambient: ProtocolAmbientState
   collisionRngState: number
   kind: 'hub'
+  participants: Readonly<Record<string, HubParticipantState>>
   students: readonly ProtocolStudentState[]
 }
 

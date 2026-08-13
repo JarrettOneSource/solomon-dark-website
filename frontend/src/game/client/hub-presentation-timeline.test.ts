@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   ProtocolPlayerState,
@@ -45,7 +46,14 @@ function snapshotAt(tick: number, localX: number, remoteX: number): HubGameSnaps
       remote: playerAt(remoteX),
     },
     tick,
-    world: { ...source.world, students: [] },
+    world: {
+      ...source.world,
+      participants: {
+        local: createHubParticipantState(),
+        remote: createHubParticipantState(),
+      },
+      students: [],
+    },
   }
 }
 
@@ -88,6 +96,45 @@ test('interpolates remote state over one network interval while keeping local pr
   const caughtUp = presentation.sample(100)
   assert.equal(caughtUp.tick, 105)
   assert.equal(caughtUp.players.remote.position.x, 30)
+})
+
+test('projects the local native fade cadence while interpolating remote participants', () => {
+  const firstBase = snapshotAt(100, 10, 20)
+  const secondBase = snapshotAt(105, 15, 30)
+  const transition = {
+    destination: 'library',
+    phase: 'outgoing',
+    scriptedSpeed: 0.45,
+    scriptedTarget: { x: 2057.5, y: 460.5 },
+    sourceRegion: 'courtyard',
+  } as const
+  const first: HubGameSnapshot = {
+    ...firstBase,
+    world: {
+      ...firstBase.world,
+      participants: {
+        local: { region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+        remote: { region: 'courtyard', transition: { ...transition, alpha: 0.2 } },
+      },
+    },
+  }
+  const second: HubGameSnapshot = {
+    ...secondBase,
+    world: {
+      ...secondBase.world,
+      participants: {
+        local: { region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+        remote: { region: 'courtyard', transition: { ...transition, alpha: 0.25 } },
+      },
+    },
+  }
+  const presentation = timeline(first)
+  presentation.push(second, INTERVAL_MS)
+
+  const halfway = presentation.sample(75)
+  assert.equal(halfway.world.participants.local.transition?.alpha, 0.275)
+  assert.equal(halfway.world.participants.remote.transition?.alpha, 0.225)
+  assert.equal(halfway.world.participants.local.region, 'courtyard')
 })
 
 test('uses authoritative ticks rather than packet arrival spacing when receipts jitter', () => {

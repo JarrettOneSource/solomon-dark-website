@@ -5,6 +5,7 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
+import { createPlayerCharacter } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -14,6 +15,7 @@ import {
   encodeGameMessage,
 } from '../protocol/game-protocol.ts'
 import { connectGameClientSession } from './game-client-session.ts'
+import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 import type { GameTransport } from './game-transport.ts'
 
 const CHARACTER = {
@@ -215,6 +217,30 @@ test('client presents bounded display-rate movement without resending unchanged 
     atSnapshotBoundary.players['player-1'].position.x,
   )
   session.destroy()
+})
+
+test('client predicts the authoritative scripted transition walk without accepting input', () => {
+  const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
+  const predicted = predictPlayerCharacterInHub(
+    player,
+    { movement: { x: -1, y: 0 } },
+    123,
+    {
+      region: 'courtyard',
+      transition: {
+        alpha: 0.4,
+        destination: 'storeroom',
+        phase: 'outgoing',
+        scriptedSpeed: 0.45,
+        scriptedTarget: { x: 100, y: -1000 },
+        sourceRegion: 'courtyard',
+      },
+    },
+  )
+
+  assert.equal(predicted.player.position.x, 100)
+  assert.ok(predicted.player.position.y < 100)
+  assert.equal(predicted.collisionRngState, 123)
 })
 
 test('client rejects a welcome that omits its assigned player', async () => {

@@ -1495,8 +1495,8 @@ A clean, mod-free stock process exposes its movement controller at region owner
 PID 25336. Its relevant layout is:
 
 - physical extent `2000 x 1100` at `+0xB8/+0xBC`;
-- an owning pointer list at `+0x08`, with count `130` at `+0x10` and the
-  pointer array at `+0x1C`;
+- an owning pointer list at `+0x08`, with count `130` at `+0x10` in the sampled
+  closed-Storeroom-door state and the pointer array at `+0x1C`;
 - a `14 x 8` broad-phase segment grid at `+0xB0`, using `150 x 150` cells;
 - each non-empty `0x2C` broad-phase cell has kind `2` at `+0x0C` and an
   embedded segment pointer list at `+0x14`;
@@ -1506,9 +1506,12 @@ PID 25336. Its relevant layout is:
   (count `+0x28 == 0`).
 
 Every static record is exactly `0x18` bytes: two endpoints followed by a mask
-and callback tag. All 130 Courtyard records have zero mask and zero tag. The
-exact live endpoint inventory is preserved below so the web collision layer can
-be regenerated or audited independently of its TypeScript transcription.
+and callback tag. All 130 records in that live snapshot had zero mask and zero
+tag. The first 129 are the stable Courtyard contour. Record 129 is the separate
+story-owned Storeroom barrier described after the inventory; it must not be
+folded into the neutral Courtyard collision set. The exact live endpoint
+inventory is preserved below so the web collision layer can be regenerated or
+audited independently of its TypeScript transcription.
 
 <details>
 <summary>Native Courtyard segment inventory</summary>
@@ -1647,6 +1650,18 @@ be regenerated or audited independently of its TypeScript transcription.
 | 129 | `(573.5, 180)` | `(681.5, 180)` |
 
 </details>
+
+Record 129 is dynamic. The Courtyard constructor `0x00506490` initializes
+`Courtyard+0x95A0` (barrier-present) and `+0x95A4` (close countdown) to zero,
+so a neutral Hub begins with the Storeroom doorway open and 129 stable contour
+records. The StoreRoom return endpoint `0x00500FE0` arms `+0x95A4 = 200` only
+when the room's story flag `+0x8EA0` is set. Courtyard tick `0x0050C970`
+decrements that counter; at zero `0x005001E0` marks the barrier present, plays
+the story `doorslam__stream`, and registers `(573.5,180)..(681.5,180)` through
+`0x005213C0`. The 130-record live dump therefore captured a later closed-door
+story state, not immutable base geometry. The web port currently has no story
+progression owner, so its neutral Hub must omit this barrier while retaining
+the exact stable 129-record contour.
 
 The movement sequence is recovered from `PlayerActor_MoveStep` at
 `0x00525800` and helpers `0x00521B80`, `0x00522500`, `0x00522B20`,
@@ -3803,3 +3818,253 @@ geometry, painter-order, and lifecycle contracts, and high that the reported
 live symptom was the presentation-clock mismatch. The physical-GPU result is
 one qualification point rather than a minimum-hardware claim. WebGPU is
 intentionally not part of this parity claim.
+
+## Hub private rooms and ordinary region transitions — 2026-08-13
+
+This pass follows the missing-room report past the visible Courtyard portals
+into the native region owner, transition endpoint, cache lifecycle, private
+room collision, fixed-room presentation, participant materialization, and
+audio call graph. The executable remains the clean stock image identified
+above, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The durable G13 state-machine evidence is also recorded in the Mod Loader
+ledger `docs/reverse-engineering/native-session-flow.md`; fixed-room art and
+population ownership are recorded in
+`docs/reverse-engineering/native-regions-npcs-and-world-props.md`.
+
+### Native room graph and owners
+
+`Gameplay_SwitchRegion` at `0x005CDDD0` owns six cached region slots at
+`Gameplay+0x133C..+0x1350`:
+
+| Native id | Room | Stock ordinary-room edges |
+| ---: | --- | --- |
+| `0` | Courtyard | to `1`, `2`, `3`, or `4` |
+| `1` | Mortuary / Memoratorium | to `0` |
+| `2` | Library | to `0` |
+| `3` | StoreRoom | to `0` |
+| `4` | Office | to `0` |
+| `5` | Arena | separate run lifecycle, not an ordinary Hub room edge |
+
+There is no private-room-to-private-room edge. A same-region request is a
+native no-op. An ordinary Hub room selection is local to the participant:
+host and client may simultaneously occupy different private regions, remote
+actors materialize only when their participant region matches, and the shared
+Courtyard simulation plus networking keep advancing while a participant is in
+a private room. The web port must therefore carry a region and transition for
+each participant, not replace the session's one shared `HubWorldState` with a
+global current-room enum.
+
+Confidence: high. Evidence combines the region-vector and switch decompilation,
+the G13 lifecycle capture, and the retained live host-region-`2` /
+client-region-`3` multiplayer trace.
+
+### Portal geometry and scripted approach
+
+Courtyard tick `0x0050C970` tests four authored portal segments. Contact clears
+the normal cast/action path, gives the local actor a scripted movement target,
+and starts the outgoing fade at `+0.01` alpha per native tick:
+
+| Destination | Contact segment endpoints | Scripted target | Speed |
+| --- | --- | --- | ---: |
+| Mortuary `1` | `(179,394)` to `(33,529)` | `(32,363)` | `0.65` |
+| Library `2` | `(1995.5,606.5)` to `(1915.5,443.5)` | `(2057.5,460.5)` | `0.45` |
+| StoreRoom `3` | `(679.5,146.5)` to `(576.5,146.5)` | `(627.5,-1000)` | `0.45` |
+| Office `4` | `(1024.5,881.5)` to `(881.5,881.5)` | `(881.5,-1000)` | `0.45` |
+
+The private-room return is also a physical bottom-edge crossing rather than
+an interact button. StoreRoom, Library, and Office test the exact horizontal
+segment `centerX +/- 100` at `bottomY - 100`; contact scripts the player toward
+`(centerX,bottomY+1000)` at speed `1`, clears casting, and begins the same
+`+0.01` fade. Mortuary tick `0x00509330` deliberately owns different geometry:
+its return segment is `centerX +/- 1000` at `bottomY - 60`, and its scripted
+target preserves the actor's contact X while using `bottomY + 1000`. These are
+the compiled doubles at `0x007DE908 = 100`, `0x007DE938 = 1000`, and
+`0x007849A0 = 60`, not values inferred from the private-room art. The broad
+Mortuary line sits 60 units below the incoming target, so attach does not
+immediately retrigger a return. Mortuary also owns a distinct completed-story
+branch adjacent to this ordinary mechanism.
+
+On incoming attach the player is staged just inside the destination and walks
+into the room while it fades in. Re-entering the Courtyard uses these exact
+stock actor/target pairs:
+
+| Outgoing room | Courtyard actor position | Courtyard scripted target |
+| --- | --- | --- |
+| Mortuary | `(63,413)` | `(123,488)` |
+| Library | `(1990.5,504.5)` | `(1917.5,563.5)` |
+| StoreRoom | `(627.5,98.5)` | `(627.5,198.5)` |
+| Office | `(952.5,67.5)` | `(952.5,157.5)` |
+
+Confidence: high for the segment tests, scripted movement calls, all listed
+constants, and the room-specific private return rules. The return coordinates
+are derived by the native ticks from each room's view bounds, but their exact
+double constants and Mortuary's contact-X ownership are instruction-level
+results.
+
+### Fade, swap, cache, and input lifecycle
+
+The ordinary transition is a region-owned two-sided fade, not a client route
+change:
+
+1. The outgoing region writes `+0.01` to `Region+0x8E4C`; base tick
+   `0x0063EFC0` keeps simulating and integrates `Region+0x8E48` alpha.
+2. At alpha `1`, the region's vtable `+0x128` endpoint writes its target to
+   `Gameplay+0x78`, then the rate is cleared.
+3. On the following `Game::Tick` at `0x005D7EF0`, the pending target is consumed
+   synchronously by `Gameplay_SwitchRegion`.
+4. The outgoing region detaches its player slot, sleeps/writes its cache, and
+   unregisters. The native function publishes the new region id, wakes and
+   attaches the cached incoming object, rebuilds its live world bindings, runs
+   the outgoing post-switch callback, and resets the pending target to `-1`.
+5. The incoming region fades from black with a negative rate. Private attach
+   begins at `-0.025`; StoreRoom keeps that rate, while Library, Office, and
+   Mortuary overwrite it with `-0.01` for their ordinary steady fade. Ordinary
+   Courtyard re-entry also uses `-0.01`. An immediate diagnostic switch can
+   appear to clear Courtyard in one tick when its cached alpha was already
+   zero; that is not the ordinary return-portal clock. The exact constants are
+   `0x0079146C = -0.025` and `0x007914A0 = -0.01`, and the per-room attach
+   overrides are visible at `0x00500BD0`, `0x00500EC0`, `0x005012B0`,
+   `0x005010C0`, and `0x00503F20`.
+
+The six region objects persist across ordinary switches, but their active
+registries and participant bindings do not. The Gameplay-owned local
+controller and durable identity/loadout/progression survive; transient casts,
+targets, effects, queued motion, and mismatched remote actors do not. Ordinary
+Hub switches do not activate the Arena loading input seal. The outgoing world
+continues through the covered fade, while the scripted transition owns player
+motion and rejects ordinary movement until the incoming attach finishes.
+
+Implementation consequence: model the transition as authoritative participant
+state with outgoing/scripted, covered-swap, and incoming phases; swap room
+ownership only while fully black; continue transport and shared Courtyard
+simulation; filter remote players and fixed actors by the viewing
+participant's region; and render one full-stage black cover from the native
+alpha. Do not implement this as a React unmount plus delayed navigation.
+
+Confidence: high. This is instruction-level control flow corroborated by the
+existing G13 transition fixture.
+
+### Fixed-room world, collision, population, and painter ownership
+
+The fixed interiors construct their own region bounds, static collision, and
+camera; they do not reuse Courtyard geometry:
+
+| Room | Native world bounds | Centered primary-art bounds | Fixed normal population |
+| --- | --- | --- | --- |
+| Mortuary | `1024 x 1024` | `970 x 910` at `(27,57)` | Memorator plus ten Painting actors |
+| Library | `1024 x 1024` | `992 x 819` at `(16,102.5)` | Librarian, Dowser, four solid props |
+| StoreRoom | `1075 x 800` | `1075 x 655` at `(0,72.5)` | three solid shelving props |
+| Office | `1024 x 1024` | `819 x 819` at `(102.5,102.5)` | Arch Chancellor plus one solid prop |
+
+Each room builder registers an authored contour chain from the static native
+segment tables: 11 records for Mortuary, 27 for Library, 34 for StoreRoom, and
+48 for Office. Fixed actor collision is separate from those boundaries.
+Recovered centers/radii include Memorator `(628,770,r25)`, Librarian
+`(512,595,r55)`, Dowser `(900,642.5,r25)`, and Arch Chancellor
+`(514,467,r55)`. The ten Mortuary Painting talk actors are centered at
+`(512,697)`, `(350,683)`, `(673,683)`, `(744,540)`, `(590,540)`,
+`(434,540)`, `(279,540)`, `(354,400)`, `(512,400)`, and `(670,400)` with
+actor radius `15` and paired solid radius `40`.
+
+The atlas evidence also rules out a flat room screenshot. Primary room art is
+drawn around the room center, normal actors/props enter the world painter, and
+later registered fragments form foreground occlusion. StoreRoom shelving,
+Library tables/shelves and its bottom exit corridor, Office wall fragments,
+and Mortuary easel/portrait components all preserve that split. The web assets
+may precompose stock-static layers, but the renderer must retain background,
+depth-sorted actor, and foreground ownership so player occlusion follows the
+native order.
+
+A corrective instruction-level compositor pass recovered the exact normal
+ownership that the earlier atlas-consumer inventory could not distinguish:
+
+| Room | Before actors | Depth-sorted entries | After actors |
+| --- | --- | --- | --- |
+| Mortuary | Memoratorium 0 | Memorator default pair 28+44; ten Painting actor passes | room-effect records remain effect-owned |
+| StoreRoom | tiled Storage 1; centered 5; registered 13..26 | shelf rows 2, 3, 4 at native centers `(538,324)`, `(537.5,434)`, `(536,542.5)` | Storage 11..12 |
+| Library | Library 0; extended return corridor 5 | table records 9, 10, 11; Dowser 21; Librarian counter/rails 29..32 plus body 25 | Library 1..2 and the native late-effect pass |
+| Office | Office 1; extended return corridor 4 | solid prop 5; Arch desk 3 plus actor pair 7+10 | Office 17..22 |
+
+The named-NPC base constructor `0x005016E0` initializes its animation selector
+at `Actor+0x144` to zero. `FUN_00747360` converts that float to an integer; it
+does not choose a random frame. `Librarian::Render (0x0051E0E0)` draws Library
+29..32 at the room-view center, then Library `25+frame` at
+`(actor.x, actor.y-57)`, so the ordinary frame is 25 at `(512,538)`.
+`Dowser::Render (0x0051E1F0)` similarly defaults to Library 21.
+`ArchChancellor::Render (0x0051DE40)` draws Office 3, then matching frames from
+7..9 and 10..12 at
+`(actor.x+6, actor.y-100+0.75*(Actor+0x174))`; the normal zero selectors make
+that records 7+10 at `(518,412)`. In normal Mortuary state,
+`Memorator::Render (0x0051E270)` defaults to Memoratorium 28+44 at `(628,770)`.
+
+The ten Mortuary Paintings are not ten unconditional portrait sprites.
+Population setup `0x00515290` creates their ranked slots with
+`DAT_0081A3FC[index] = -1`; `0x00518620` renders that clean-session state with
+blank easel record 4. The Memorator eulogy state machine at `0x00513090` later
+fills a chosen slot from `Region+0x8F14`, at which point the painter layers
+records 3 and 7 around a bundled or external portrait and may add the
+`DAT_0081A3C0` marker treatment. Because the web port does not yet own the
+eulogy/persistent portrait slice, its native-safe default is ten blank easels,
+not ten invented filled portraits.
+
+Storage record 0 and Library record 3 are the small room-effect particles,
+Storage 7..10 and Library 13..20 are interaction-marker banks, and Office
+13..16 is likewise marker-owned. They must not be baked into static room art.
+The web implementation therefore keeps each full-room prop record as its own
+z-sorted sprite and preserves the actor-internal layer order for the
+Librarian, Arch Chancellor, and Memorator. This correction also removes the
+former false claim that Library 25..28 were stock-dormant; only Library record
+12 lacks a retail selection.
+
+Confidence: high for bounds, art offsets, contour-record counts, fixed actor
+centers/radii, and layer ownership. Individual fixed-room dialogue/service
+flows are adjacent G8 systems and are not inferred as part of room traversal.
+
+### Audio negative result
+
+A direct-call sweep of the Courtyard and all four private-room tick, attach,
+and ordinary endpoint functions found no room-switch music dispatch and no
+ordinary portal/door sound dispatch. `doorslam__stream` is called from a
+Courtyard story-boundary state change: a flagged StoreRoom return arms a
+200-tick countdown and then registers the separate 108-pixel doorway barrier.
+It is not emitted by any of the four ordinary portal switches. The Hub retains
+the Academy music owner across private regions.
+Normal actor movement keeps using the common footstep family; a participant
+does not hear Courtyard-only Teacher activity while its viewing region is
+private.
+
+Implementation consequence: keep the existing Academy music uninterrupted,
+keep local movement footsteps active in every Hub room, region-filter remote
+and fixed-actor cues, and add no invented transition sound.
+
+Confidence: high for the negative direct-call result and Academy music
+continuity; no claim is made that every private-room NPC interaction is silent.
+
+### Web parity receipt
+
+The focused browser receipt is `npm run smoke:game:hub-rooms` against the
+isolated authoritative development host. One continuous Playwright session
+walked Courtyard -> StoreRoom -> Courtyard -> Mortuary -> Courtyard -> Office
+-> Courtyard -> Library -> Courtyard through physical portal contact. It
+observed a nonzero intermediate alpha in every outgoing and incoming fade,
+kept the original Pixi canvas mounted, captured each settled room, and
+reported no page or console errors. The settled private positions were
+`(537.5,650)` for StoreRoom, `(512,904)` for Mortuary, and `(512,874)` for
+both Office and Library, matching the recovered attach targets.
+
+`hub-regions.test.ts` separately locks the room graph, portal constants,
+covered-swap tick boundary, incoming fade rates, collision contours, camera,
+participant-local ownership, Mortuary contact-X return, and exact Courtyard
+re-entry placements. Protocol and presentation tests lock the participant
+map, legal edges, local scripted prediction, and native fade projection. The
+complete repository `./scripts/validate.sh` gate passed after the integration.
+
+### Open questions carried forward
+
+- The semantic name of the outgoing region vtable `+0xC8` post-switch callback
+  is still unknown, although its position, argument, and lifecycle effect are
+  bounded.
+- Dialogue, shop, books, dowsing, eulogy, and story-variant room populations
+  remain their own parity slices. This room-system change must preserve their
+  actor and collision seams without fabricating their UI behavior.

@@ -143,6 +143,58 @@ test('protocol rejects player ids reserved by ordinary JavaScript records', () =
   })), /player id.*reserved/)
 })
 
+test('protocol validates participant ownership and the recovered Hub room graph', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  const message = (world: unknown) => JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    snapshot: { ...snapshot, world },
+  })
+
+  assert.throws(() => decodeServerGameMessage(message({
+    ...snapshot.world,
+    participants: {},
+  })), /participants must match snapshot.players exactly/)
+
+  assert.throws(() => decodeServerGameMessage(message({
+    ...snapshot.world,
+    participants: {
+      'player-1': {
+        region: 'mortuary',
+        transition: {
+          alpha: 0.5,
+          destination: 'library',
+          phase: 'outgoing',
+          scriptedSpeed: 1,
+          scriptedTarget: { x: 512, y: 2024 },
+          sourceRegion: 'mortuary',
+        },
+      },
+    },
+  })), /transition is inconsistent/)
+
+  assert.throws(() => decodeServerGameMessage(message({
+    ...snapshot.world,
+    participants: {
+      'player-1': {
+        region: 'courtyard',
+        transition: {
+          alpha: 1.1,
+          destination: 'office',
+          phase: 'outgoing',
+          scriptedSpeed: 0.45,
+          scriptedTarget: { x: 881.5, y: -1000 },
+          sourceRegion: 'courtyard',
+        },
+      },
+    },
+  })), /alpha must be within/)
+})
+
 test('protocol bounds server-controlled world collections', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),

@@ -294,6 +294,7 @@ export class HubWorldScene {
     const live = this.livePlayerIds
     live.clear()
     for (const [playerId, player] of Object.entries(snapshot.players)) {
+      if (snapshot.world.participants[playerId]?.region !== 'courtyard') continue
       live.add(playerId)
       let view = this.players.get(playerId)
       if (view && this.playerElements.get(playerId) !== player.config.element) {

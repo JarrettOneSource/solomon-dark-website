@@ -7,6 +7,13 @@ import type {
   ProtocolStudentProp,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
+import type {
+  HubParticipantState,
+} from '../core-kernels/hub-regions.ts'
+import {
+  HUB_INCOMING_FADE_RATES,
+  HUB_OUTGOING_FADE_RATE,
+} from '../core-kernels/hub-regions.ts'
 
 export type HubGameSnapshot = Omit<GameSnapshot, 'world'> & {
   world: HubWorldSnapshot
@@ -78,18 +85,14 @@ export function createHubPresentationTimeline(
     sample(nowMs) {
       requireFinite(nowMs, 'nowMs')
       const newest = history.at(-1)!
-      if (history.length === 1) return presentationCopy(newest.snapshot)
-
       const elapsedTicks = clamp(
         (nowMs - newest.receivedAtMs) * options.serverTickRate / 1000,
         0,
         intervalTicks,
       )
-      const targetTick = newest.snapshot.tick - intervalTicks + elapsedTicks
-      const [older, newer] = bracketSnapshots(history, targetTick)
-      const span = newer.snapshot.tick - older.snapshot.tick
-      const blend = span <= 0 ? 1 : clamp((targetTick - older.snapshot.tick) / span, 0, 1)
-      const frame = interpolateSnapshot(older.snapshot, newer.snapshot, blend, targetTick)
+      const frame = history.length === 1
+        ? presentationCopy(newest.snapshot)
+        : interpolatedFrame(history, newest, intervalTicks, elapsedTicks)
 
       const localPlayer = newest.snapshot.players[options.localPlayerId]
       if (localPlayer) {
@@ -98,9 +101,48 @@ export function createHubPresentationTimeline(
           [options.localPlayerId]: copyPlayer(localPlayer),
         }
       }
+      const localParticipant = newest.snapshot.world.participants[options.localPlayerId]
+      if (localParticipant) {
+        frame.world = {
+          ...frame.world,
+          participants: {
+            ...frame.world.participants,
+            [options.localPlayerId]: projectLocalParticipant(
+              localParticipant,
+              elapsedTicks,
+            ),
+          },
+        }
+      }
       return frame
     },
   }
+}
+
+function interpolatedFrame(
+  history: readonly TimedSnapshot[],
+  newest: TimedSnapshot,
+  intervalTicks: number,
+  elapsedTicks: number,
+): HubPresentationFrame {
+  const targetTick = newest.snapshot.tick - intervalTicks + elapsedTicks
+  const [older, newer] = bracketSnapshots(history, targetTick)
+  const span = newer.snapshot.tick - older.snapshot.tick
+  const blend = span <= 0 ? 1 : clamp((targetTick - older.snapshot.tick) / span, 0, 1)
+  return interpolateSnapshot(older.snapshot, newer.snapshot, blend, targetTick)
+}
+
+function projectLocalParticipant(
+  participant: HubParticipantState,
+  elapsedTicks: number,
+): HubParticipantState {
+  const result = copyParticipant(participant)
+  if (!result.transition) return result
+  const delta = result.transition.phase === 'outgoing'
+    ? HUB_OUTGOING_FADE_RATE * elapsedTicks
+    : -HUB_INCOMING_FADE_RATES[result.region] * elapsedTicks
+  result.transition.alpha = clamp(result.transition.alpha + delta, 0, 1)
+  return result
 }
 
 export function isHubGameSnapshot(snapshot: GameSnapshot): snapshot is HubGameSnapshot {
@@ -148,9 +190,67 @@ function interpolateSnapshot(
         ? older.world.collisionRngState
         : newer.world.collisionRngState,
       kind: 'hub',
+      participants: interpolateParticipants(
+        older.world.participants,
+        newer.world.participants,
+        blend,
+      ),
       students: interpolateStudents(older.world.students, newer.world.students, blend),
     },
   }
+}
+
+function interpolateParticipants(
+  older: Readonly<Record<string, HubParticipantState>>,
+  newer: Readonly<Record<string, HubParticipantState>>,
+  blend: number,
+): Record<string, HubParticipantState> {
+  const result: Record<string, HubParticipantState> = {}
+  for (const [playerId, olderParticipant] of Object.entries(older)) {
+    const newerParticipant = newer[playerId]
+    result[playerId] = newerParticipant
+      ? interpolateParticipant(olderParticipant, newerParticipant, blend)
+      : copyParticipant(olderParticipant)
+  }
+  if (blend >= 1) {
+    for (const [playerId, participant] of Object.entries(newer)) {
+      if (!result[playerId]) result[playerId] = copyParticipant(participant)
+    }
+    for (const playerId of Object.keys(result)) {
+      if (!newer[playerId]) delete result[playerId]
+    }
+  }
+  return result
+}
+
+function interpolateParticipant(
+  older: HubParticipantState,
+  newer: HubParticipantState,
+  blend: number,
+): HubParticipantState {
+  const first = older.transition
+  const second = newer.transition
+  if (
+    first
+    && second
+    && first.phase === second.phase
+    && first.destination === second.destination
+    && first.sourceRegion === second.sourceRegion
+  ) {
+    return {
+      region: blend < 1 ? older.region : newer.region,
+      transition: {
+        ...second,
+        alpha: lerp(first.alpha, second.alpha, blend),
+        scriptedSpeed: lerp(first.scriptedSpeed, second.scriptedSpeed, blend),
+        scriptedTarget: {
+          x: lerp(first.scriptedTarget.x, second.scriptedTarget.x, blend),
+          y: lerp(first.scriptedTarget.y, second.scriptedTarget.y, blend),
+        },
+      },
+    }
+  }
+  return copyParticipant(blend < 1 ? older : newer)
 }
 
 function interpolatePlayer(
@@ -343,8 +443,26 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
       ambient: interpolateAmbient(snapshot.world.ambient, snapshot.world.ambient, 0),
       collisionRngState: snapshot.world.collisionRngState,
       kind: 'hub',
+      participants: Object.fromEntries(
+        Object.entries(snapshot.world.participants).map(([id, participant]) => [
+          id,
+          copyParticipant(participant),
+        ]),
+      ),
       students: snapshot.world.students.map(copyStudent),
     },
+  }
+}
+
+function copyParticipant(participant: HubParticipantState): HubParticipantState {
+  return {
+    region: participant.region,
+    transition: participant.transition
+      ? {
+          ...participant.transition,
+          scriptedTarget: { ...participant.transition.scriptedTarget },
+        }
+      : null,
   }
 }
 

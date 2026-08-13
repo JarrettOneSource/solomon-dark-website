@@ -16,6 +16,7 @@ export function createGameSnapshot(
           ambient: state.world.ambient,
           collisionRngState: state.world.collisionRngState,
           kind: 'hub',
+          participants: state.world.participants,
           students: state.world.studentPopulation.students,
         },
       }

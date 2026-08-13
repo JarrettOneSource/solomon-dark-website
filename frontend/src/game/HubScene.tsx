@@ -4,6 +4,7 @@ import type {
   HubPresentationFrame,
 } from './client/hub-presentation-timeline.ts'
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
+import type { HubRegionId } from './core-kernels/hub-regions.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
@@ -40,6 +41,13 @@ interface HubSceneProps {
 
 type RendererState = 'loading' | 'ready'
 const HUB_TEACHER_POSITION = { x: 576.5, y: 710.5 } as const
+const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
+  courtyard: 'College courtyard. Move with W A S D, arrow keys, a controller, or the touch joystick.',
+  mortuary: 'College mortuary. Move toward the south doorway to return to the courtyard.',
+  library: 'College library. Move toward the south doorway to return to the courtyard.',
+  storeroom: 'College storeroom. Move toward the south doorway to return to the courtyard.',
+  office: 'Arch Chancellor office. Move toward the south doorway to return to the courtyard.',
+}
 
 export default function HubScene({
   audio,
@@ -65,6 +73,9 @@ export default function HubScene({
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [frameTransform, setFrameTransform] = useState<CSSProperties>()
   const [hostPlayerId, setHostPlayerId] = useState(initialSnapshot.hostPlayerId)
+  const [currentRegion, setCurrentRegion] = useState<HubRegionId>(
+    hubInitialSnapshot.world.participants[playerId]?.region ?? 'courtyard',
+  )
   const [pickerOpen, setPickerOpen] = useState(false)
 
   useLayoutEffect(() => {
@@ -88,7 +99,9 @@ export default function HubScene({
     return subscribe((snapshot) => {
       if (!isHubGameSnapshot(snapshot)) return
       const player = snapshot.players[playerId]
-      if (player) {
+      const previousParticipant = previousAudioSnapshot.world.participants[playerId]
+      const participant = snapshot.world.participants[playerId]
+      if (player && previousParticipant?.region === participant?.region) {
         const footstepTick = newNativeFootstepTick(
           previousAudioSnapshot.players[playerId],
           player,
@@ -98,6 +111,9 @@ export default function HubScene({
         }
       }
       previousAudioSnapshot = snapshot
+      if (participant) setCurrentRegion((region) => (
+        region === participant.region ? region : participant.region
+      ))
       setHostPlayerId((current) => current === snapshot.hostPlayerId
         ? current
         : snapshot.hostPlayerId)
@@ -141,7 +157,7 @@ export default function HubScene({
           teacherSeconds,
         )) {
           const player = snapshot.players[playerId]
-          if (player) {
+          if (player && snapshot.world.participants[playerId]?.region === 'courtyard') {
             audio.playSound('summon', {
               playbackRate: hubTeacherSummonPitch(releaseIndex),
               volume: hubTeacherSummonVolume(HUB_TEACHER_POSITION, player.position),
@@ -174,7 +190,7 @@ export default function HubScene({
 
   const isHost = hostPlayerId === playerId
   const beginMatch = () => {
-    if (!isHost) return
+    if (!isHost || currentRegion !== 'courtyard') return
     if (boneyards.length === 1) {
       onStartMatch(boneyards[0].id)
       return
@@ -190,8 +206,9 @@ export default function HubScene({
       className="hub-scene"
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
+      data-hub-region={currentRegion}
       data-renderer-state={rendererError ? 'error' : rendererState}
-      aria-label="College courtyard. Move with W A S D, arrow keys, a controller, or the touch joystick."
+      aria-label={HUB_REGION_ACCESSIBILITY[currentRegion]}
       tabIndex={0}
     >
       <div className="hub-native-frame" style={frameTransform}>
@@ -244,16 +261,17 @@ export default function HubScene({
         <HubTouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
 
         <div className="hub-world-accessibility sr-only">
-          College courtyard landmarks: Perk witch, Potion trader, Annalist, Items trader,
-          Teacher, fountain, College statue, and Useful Thyngs tent.
+          {currentRegion === 'courtyard'
+            ? 'College courtyard landmarks: Mortuary, Library, Storeroom, Arch Chancellor office, Perk witch, Potion trader, Annalist, Items trader, Teacher, fountain, College statue, and Useful Thyngs tent.'
+            : HUB_REGION_ACCESSIBILITY[currentRegion]}
         </div>
 
         {rendererState === 'loading' && !rendererError && (
-          <div className="hub-renderer-status" role="status">Preparing the courtyard…</div>
+          <div className="hub-renderer-status" role="status">Preparing the College…</div>
         )}
         {rendererError && (
           <div className="hub-renderer-status hub-renderer-error" role="alert">
-            WebGL could not render the courtyard: {rendererError}
+            WebGL could not render the College: {rendererError}
           </div>
         )}
       </div>

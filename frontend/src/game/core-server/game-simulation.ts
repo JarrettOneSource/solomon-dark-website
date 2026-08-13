@@ -16,8 +16,10 @@ import {
   type BoneyardWorldState,
 } from './boneyard-world.ts'
 import {
+  addHubParticipant,
   createHubWorld,
   hubSpawnPoint,
+  removeHubParticipant,
   stepHubWorldTick,
   type HubWorldState,
 } from './hub-world.ts'
@@ -49,7 +51,7 @@ export function createGameSimulation(
     [DEFAULT_PLAYER_ID]: DEFAULT_PLAYER_CHARACTER_CONFIG,
   },
 ): GameSimulationState {
-  const world = createHubWorld()
+  const world = createHubWorld(Object.keys(characters))
   const players: Record<PlayerId, PlayerCharacterState> = {}
   for (const [playerId, config] of Object.entries(characters)) {
     players[playerId] = createPlayerCharacter(config, hubSpawnPoint())
@@ -63,12 +65,16 @@ export function addPlayerCharacter(
   config: PlayerCharacterConfig,
 ): GameSimulationState {
   if (state.players[playerId]) return state
+  const world = state.world.kind === 'hub'
+    ? addHubParticipant(state.world, playerId)
+    : state.world
   return {
     ...state,
     players: {
       ...state.players,
       [playerId]: spawnPlayerForWorld(state.world, config),
     },
+    world,
   }
 }
 
@@ -79,7 +85,13 @@ export function removePlayerCharacter(
   if (!state.players[playerId]) return state
   const players = { ...state.players }
   delete players[playerId]
-  return { ...state, players }
+  return {
+    ...state,
+    players,
+    world: state.world.kind === 'hub'
+      ? removeHubParticipant(state.world, playerId)
+      : state.world,
+  }
 }
 
 export function enterBoneyardWorld(

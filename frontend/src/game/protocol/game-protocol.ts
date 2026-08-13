@@ -4,6 +4,12 @@ import {
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
+import {
+  isHubRegionId,
+  isHubTransitionEdge,
+  type HubParticipantState,
+  type HubRegionId,
+} from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type {
   BoneyardBounds,
@@ -763,8 +769,28 @@ function ambientState(value: unknown, field: string): ProtocolAmbientState {
 
 function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
   const source = record(value, field)
-  onlyKeys(source, field, ['ambient', 'collisionRngState', 'kind', 'students'])
+  onlyKeys(source, field, [
+    'ambient',
+    'collisionRngState',
+    'kind',
+    'participants',
+    'students',
+  ])
   if (source.kind !== 'hub') throw new GameProtocolError(`${field}.kind is not supported`)
+  const rawParticipants = record(source.participants, `${field}.participants`)
+  if (Object.keys(rawParticipants).length > MAX_PLAYERS) {
+    throw new GameProtocolError(
+      `${field}.participants may contain at most ${MAX_PLAYERS} entries`,
+    )
+  }
+  const participants: Record<string, HubParticipantState> = {}
+  for (const [rawPlayerId, state] of Object.entries(rawParticipants)) {
+    const playerId = validatedPlayerId(rawPlayerId, `${field} participant id`)
+    participants[playerId] = hubParticipantState(
+      state,
+      `${field}.participants.${playerId}`,
+    )
+  }
   return {
     ambient: ambientState(source.ambient, `${field}.ambient`),
     collisionRngState: nonnegativeInteger(
@@ -772,6 +798,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
       `${field}.collisionRngState`,
     ),
     kind: 'hub',
+    participants,
     students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
       (student, index) => studentState(student, `${field}.students[${index}]`),
     ),
@@ -799,12 +826,88 @@ function gameSnapshot(value: unknown): GameSnapshot {
   if (hostPlayerId !== null && !players[hostPlayerId]) {
     throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
   }
+  const world = gameWorldSnapshot(source.world, 'snapshot.world')
+  if (world.kind === 'hub') {
+    const participantIds = Object.keys(world.participants).sort()
+    const playerIds = Object.keys(players).sort()
+    if (
+      participantIds.length !== playerIds.length
+      || participantIds.some((id, index) => id !== playerIds[index])
+    ) {
+      throw new GameProtocolError(
+        'snapshot.world.participants must match snapshot.players exactly',
+      )
+    }
+  }
   return {
     hostPlayerId,
     players,
     tick: nonnegativeInteger(source.tick, 'snapshot.tick'),
-    world: gameWorldSnapshot(source.world, 'snapshot.world'),
+    world,
   }
+}
+
+function hubParticipantState(value: unknown, field: string): HubParticipantState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['region', 'transition'])
+  const region = hubRegionId(source.region, `${field}.region`)
+  if (source.transition === null) return { region, transition: null }
+  const transition = record(source.transition, `${field}.transition`)
+  onlyKeys(transition, `${field}.transition`, [
+    'alpha',
+    'destination',
+    'phase',
+    'scriptedSpeed',
+    'scriptedTarget',
+    'sourceRegion',
+  ])
+  const alpha = finite(transition.alpha, `${field}.transition.alpha`)
+  if (alpha < 0 || alpha > 1) {
+    throw new GameProtocolError(`${field}.transition.alpha must be within [0,1]`)
+  }
+  if (transition.phase !== 'outgoing' && transition.phase !== 'incoming') {
+    throw new GameProtocolError(`${field}.transition.phase is not supported`)
+  }
+  const destination = hubRegionId(
+    transition.destination,
+    `${field}.transition.destination`,
+  )
+  const sourceRegion = hubRegionId(
+    transition.sourceRegion,
+    `${field}.transition.sourceRegion`,
+  )
+  if (
+    (transition.phase === 'outgoing' && region !== sourceRegion)
+    || (transition.phase === 'incoming' && region !== destination)
+    || !isHubTransitionEdge(sourceRegion, destination)
+  ) {
+    throw new GameProtocolError(`${field}.transition is inconsistent with its region`)
+  }
+  return {
+    region,
+    transition: {
+      alpha,
+      destination,
+      phase: transition.phase,
+      scriptedSpeed: positiveFinite(
+        transition.scriptedSpeed,
+        `${field}.transition.scriptedSpeed`,
+      ),
+      scriptedTarget: vector(
+        transition.scriptedTarget,
+        `${field}.transition.scriptedTarget`,
+      ),
+      sourceRegion,
+    },
+  }
+}
+
+function hubRegionId(value: unknown, field: string): HubRegionId {
+  const result = limitedString(value, field, 32)
+  if (!isHubRegionId(result)) {
+    throw new GameProtocolError(`${field} is not supported`)
+  }
+  return result
 }
 
 function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world'] {

@@ -261,6 +261,7 @@ export function connectGameClientSession(
             player,
             currentInput,
             collisionRngState,
+            snapshot.world.participants[welcome.playerId],
           )
           player = predicted.player
           collisionRngState = predicted.collisionRngState
@@ -389,6 +390,7 @@ function predictLocalPlayer(
           player,
           pending.input,
           collisionRngState,
+          source.world.participants[playerId],
         )
         player = predicted.player
         collisionRngState = predicted.collisionRngState

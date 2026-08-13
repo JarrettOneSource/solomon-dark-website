@@ -1,11 +1,12 @@
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
-import { Application } from 'pixi.js'
+import { Application, Sprite, Texture } from 'pixi.js'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
   HUB_CAMERA_SCALE,
-  hubCameraOrigin,
+  hubRegionCameraOrigin,
 } from '../core-kernels/hub-math.ts'
+import type { HubRegionId } from '../core-kernels/hub-regions.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
 import {
   HUB_RENDER_HEIGHT,
@@ -17,11 +18,13 @@ import {
   destroyHubWorldTextureFrames,
   loadHubWorldTextures,
 } from './hub-textures.ts'
+import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
   frameCount: number
+  region: HubRegionId
   renderer: string
   resolution: number
   studentCount: number
@@ -31,6 +34,7 @@ export interface HubRendererDiagnostics {
 interface HubFrameDiagnostics {
   astronomerTelescopeFrame: number
   frameCount: number
+  fadeAlpha: number
   orbSpriteCount: number
   playerMoving: boolean
   playerWalkPose: number
@@ -39,6 +43,7 @@ interface HubFrameDiagnostics {
   studentCount: number
   teacherFrame: number
   tick: number
+  transitionPhase: 'incoming' | 'outgoing' | null
 }
 
 export interface HubWorldRenderer {
@@ -93,9 +98,18 @@ export async function createHubWorldRenderer(
     throw error
   }
   application.stop()
-  const scene = new HubWorldScene(textures, options.initialSnapshot.tick)
-  scene.stage.scale.set(HUB_CAMERA_SCALE)
-  application.stage.addChild(scene.stage)
+  const courtyardScene = new HubWorldScene(textures, options.initialSnapshot.tick)
+  const privateRoomScene = new HubPrivateRoomScene(textures)
+  courtyardScene.stage.scale.set(HUB_CAMERA_SCALE)
+  privateRoomScene.world.scale.set(HUB_CAMERA_SCALE)
+  application.stage.addChild(courtyardScene.stage, privateRoomScene.world)
+  const fadeCover = new Sprite(Texture.WHITE)
+  fadeCover.tint = 0x000000
+  fadeCover.width = HUB_RENDER_WIDTH
+  fadeCover.height = HUB_RENDER_HEIGHT
+  fadeCover.alpha = 0
+  fadeCover.eventMode = 'none'
+  application.stage.addChild(fadeCover)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'hub-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
@@ -113,6 +127,7 @@ export async function createHubWorldRenderer(
   const frameDiagnostics: HubFrameDiagnostics = {
     astronomerTelescopeFrame: 0,
     frameCount: 0,
+    fadeAlpha: 0,
     orbSpriteCount: 0,
     playerMoving: false,
     playerWalkPose: 0,
@@ -121,6 +136,7 @@ export async function createHubWorldRenderer(
     studentCount: 0,
     teacherFrame: 0,
     tick: options.initialSnapshot.tick,
+    transitionPhase: null,
   }
   Object.defineProperty(canvas, '__sdrHubFrame', {
     configurable: false,
@@ -135,25 +151,31 @@ export async function createHubWorldRenderer(
     options.onDiagnostics?.({
       averageFrameMs,
       frameCount,
+      region: snapshot.world.participants[options.playerId]?.region ?? 'courtyard',
       renderer: application.renderer.name,
       resolution,
-      studentCount: scene.studentCount,
+      studentCount: courtyardScene.studentCount,
       tick: snapshot.tick,
     })
   }
 
   const updateFrameDiagnostics = (snapshot: HubPresentationFrame) => {
     const player = snapshot.players[options.playerId]
-    frameDiagnostics.astronomerTelescopeFrame = scene.astronomerTelescopeFrame
+    const participant = snapshot.world.participants[options.playerId]
+    frameDiagnostics.astronomerTelescopeFrame = courtyardScene.astronomerTelescopeFrame
     frameDiagnostics.frameCount = frameCount
-    frameDiagnostics.studentCount = scene.studentCount
-    frameDiagnostics.teacherFrame = scene.teacherFrame
+    frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
+    frameDiagnostics.studentCount = courtyardScene.studentCount
+    frameDiagnostics.teacherFrame = courtyardScene.teacherFrame
     frameDiagnostics.tick = snapshot.tick
+    frameDiagnostics.transitionPhase = participant?.transition?.phase ?? null
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y
     frameDiagnostics.playerMoving = Math.hypot(player.velocity.x, player.velocity.y) > 0.01
-    const playerView = scene.player(options.playerId)
+    const playerView = participant?.region === 'courtyard'
+      ? courtyardScene.player(options.playerId)
+      : privateRoomScene.player(options.playerId)
     if (!playerView) return
     frameDiagnostics.playerWalkPose = playerView.walkPose
     frameDiagnostics.orbSpriteCount = playerView.orbSpriteCount
@@ -164,15 +186,31 @@ export async function createHubWorldRenderer(
     render(snapshot) {
       if (destroyed) return
       const player = snapshot.players[options.playerId]
-      if (!player) return
+      const participant = snapshot.world.participants[options.playerId]
+      if (!player || !participant) return
       const frameAt = now()
       frameTimeTotal += Math.max(0, frameAt - previousFrameAt)
       previousFrameAt = frameAt
       frameCount += 1
-      scene.update(snapshot)
-      const camera = hubCameraOrigin(player.position)
-      scene.world.position.set(-camera.x, -camera.y)
-      scene.southern.position.copyFrom(hubSouthernCameraTranslation(camera))
+      courtyardScene.update(snapshot)
+      privateRoomScene.update(snapshot, options.playerId)
+      const inCourtyard = participant.region === 'courtyard'
+      courtyardScene.stage.visible = inCourtyard
+      privateRoomScene.world.visible = !inCourtyard
+      const camera = hubRegionCameraOrigin(participant.region, player.position)
+      if (inCourtyard) {
+        courtyardScene.world.position.set(-camera.x, -camera.y)
+        courtyardScene.southern.position.copyFrom(hubSouthernCameraTranslation(camera))
+      } else {
+        privateRoomScene.world.position.set(
+          -camera.x * HUB_CAMERA_SCALE,
+          -camera.y * HUB_CAMERA_SCALE,
+        )
+      }
+      fadeCover.alpha = participant.transition?.alpha ?? 0
+      canvas.dataset.hubRegion = participant.region
+      canvas.dataset.transitionAlpha = `${fadeCover.alpha}`
+      canvas.dataset.transitionPhase = participant.transition?.phase ?? 'none'
       application.render()
       updateFrameDiagnostics(snapshot)
       if (frameCount % DIAGNOSTIC_WINDOW_FRAMES !== 0) return
@@ -193,15 +231,18 @@ export async function createHubWorldRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.stage.removeChild(scene.stage)
-      scene.destroy()
+      application.stage.removeChild(courtyardScene.stage, privateRoomScene.world, fadeCover)
+      courtyardScene.destroy()
+      privateRoomScene.destroy()
+      fadeCover.destroy()
       destroyHubWorldTextureFrames(textures)
       application.destroy({ removeView: true })
       canvas.remove()
     },
   }
 
-  scene.update(options.initialSnapshot)
+  courtyardScene.update(options.initialSnapshot)
+  privateRoomScene.update(options.initialSnapshot, options.playerId)
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)
   return renderer

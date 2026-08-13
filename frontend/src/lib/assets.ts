@@ -174,6 +174,23 @@ import hubStudentProp1 from '../assets/game/hub-student-prop-1.png'
 import hubStudentProp2 from '../assets/game/hub-student-prop-2.png'
 import hubStudentProp3 from '../assets/game/hub-student-prop-3.png'
 import hubStudentProp4 from '../assets/game/hub-student-prop-4.png'
+import hubRoomMortuaryBackground from '../assets/game/hub-room-mortuary-background.png'
+import hubRoomMortuaryPaintings from '../assets/game/hub-room-mortuary-paintings.png'
+import hubRoomMemorator from '../assets/game/hub-room-memorator.png'
+import hubRoomStoreroomBackground from '../assets/game/hub-room-storeroom-background.png'
+import hubRoomStoreroomForeground from '../assets/game/hub-room-storeroom-foreground.png'
+import hubRoomStoreroomProps from '../assets/game/hub-room-storeroom-props.png'
+import hubRoomLibraryBackground from '../assets/game/hub-room-library-background.png'
+import hubRoomLibraryForeground from '../assets/game/hub-room-library-foreground.png'
+import hubRoomLibrarian from '../assets/game/hub-room-librarian.png'
+import hubRoomLibrarianFrames from '../assets/game/hub-room-librarian-frames.png'
+import hubRoomDowser from '../assets/game/hub-room-dowser.png'
+import hubRoomLibraryProps from '../assets/game/hub-room-library-props.png'
+import hubRoomOfficeBackground from '../assets/game/hub-room-office-background.png'
+import hubRoomOfficeForeground from '../assets/game/hub-room-office-foreground.png'
+import hubRoomArchDesk from '../assets/game/hub-room-arch-desk.png'
+import hubRoomArchChancellor from '../assets/game/hub-room-arch-chancellor.png'
+import hubRoomOfficeProp from '../assets/game/hub-room-office-prop.png'
 import elementVfxAir from '../assets/game/element-vfx-air.png'
 import elementVfxCore from '../assets/game/element-vfx-core.png'
 import elementVfxEarth from '../assets/game/element-vfx-earth.png'
@@ -462,6 +479,33 @@ export const playerCharacter = {
 /** Source-registered College Courtyard, actors, and fixed native HUD pieces. */
 export const hub = {
   courtyard: hubCourtyard,
+  rooms: {
+    mortuary: {
+      background: hubRoomMortuaryBackground,
+      paintings: hubRoomMortuaryPaintings,
+      memorator: hubRoomMemorator,
+    },
+    storeroom: {
+      background: hubRoomStoreroomBackground,
+      foreground: hubRoomStoreroomForeground,
+      props: hubRoomStoreroomProps,
+    },
+    library: {
+      background: hubRoomLibraryBackground,
+      foreground: hubRoomLibraryForeground,
+      librarian: hubRoomLibrarian,
+      librarianFrames: hubRoomLibrarianFrames,
+      dowser: hubRoomDowser,
+      props: hubRoomLibraryProps,
+    },
+    office: {
+      background: hubRoomOfficeBackground,
+      foreground: hubRoomOfficeForeground,
+      desk: hubRoomArchDesk,
+      archChancellor: hubRoomArchChancellor,
+      prop: hubRoomOfficeProp,
+    },
+  },
   seals: {
     core: hubSealCorePulse,
     glyphs: hubSealPulse,

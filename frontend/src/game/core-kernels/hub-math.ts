@@ -2,6 +2,10 @@ import {
   isHubTraversable as isCourtyardTraversable,
   moveWithHubCollision as moveAgainstCourtyardSegments,
 } from './hub-collision.ts'
+import {
+  HUB_REGION_DEFINITIONS,
+  type HubRegionId,
+} from './hub-regions.ts'
 import { PLAYER_CHARACTER_RADIUS } from './player-character.ts'
 import type { Vector2 } from './vector.ts'
 
@@ -17,12 +21,24 @@ export function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 export function hubCameraOrigin(position: Vector2): Vector2 {
-  const halfWidth = HUB_VIEW_WIDTH / 2
-  const halfHeight = HUB_VIEW_HEIGHT / 2
+  return hubRegionCameraOrigin('courtyard', position)
+}
+
+export function hubRegionCameraOrigin(
+  region: HubRegionId,
+  position: Vector2,
+): Vector2 {
+  const definition = HUB_REGION_DEFINITIONS[region]
   return {
-    x: clamp(position.x, halfWidth, HUB_WORLD_WIDTH - halfWidth) - halfWidth,
-    y: clamp(position.y, halfHeight, HUB_WORLD_HEIGHT - halfHeight) - halfHeight,
+    x: cameraAxisOrigin(position.x, HUB_VIEW_WIDTH, definition.width),
+    y: cameraAxisOrigin(position.y, HUB_VIEW_HEIGHT, definition.height),
   }
+}
+
+function cameraAxisOrigin(position: number, viewSize: number, worldSize: number): number {
+  if (worldSize <= viewSize) return (worldSize - viewSize) / 2
+  const halfView = viewSize / 2
+  return clamp(position, halfView, worldSize - halfView) - halfView
 }
 
 export function isHubTraversable(

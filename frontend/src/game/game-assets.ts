@@ -109,6 +109,7 @@ export function hubGameAssetSources(element: WizardElement): string[] {
   return collectAssetSources({
     astronomer: hub.astronomer,
     courtyard: hub.courtyard,
+    rooms: hub.rooms,
     seals: hub.seals,
     foreground: hub.foreground,
     southern: hub.southern,
