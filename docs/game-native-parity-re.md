@@ -2841,22 +2841,40 @@ for the seed XP value in the captured save state.
 
 `Courtyard::Present` (`0x0051EB60`) submits the resident actors and then draws
 College flat records `19`, `30`, `31`, `21`, and `22`. They are fixed world
-geometry using the normal Courtyard camera transform. Records `2`, `20`, `23`,
-and `25` remain the spawn-roof group at the actor boundary. These five records
+geometry using the normal Courtyard camera transform. These five records
 occupy the upper and central Courtyard (`y < 583`); they are not the separate
 southern battlement run. The web had flattened `19`, `30`, and `31` into the
-background and combined `21/22` with the spawn roof, so actors could appear on
-the wrong side of this late foreground bank.
+background and combined `21/22` with unrelated upper-room art, so actors could
+appear on the wrong side of this late foreground bank.
 
 Implementation consequence: the five recovered records become a distinct
-fixed foreground layer submitted after all actors, while the spawn roof keeps
-only its four recovered members. Their depth ordering, not a guessed parallax
-offset, fixes the castle-wall occlusion.
+fixed foreground layer submitted after all actors. Their depth ordering, not a
+guessed parallax offset, fixes the castle-wall occlusion.
 
 Evidence: fresh read-only decompilation of `0x0051EB60`, College flat metadata,
 and native/web Courtyard comparison captures.
 
 Confidence: high for record membership, camera ownership, and painter order.
+
+#### StoreRoom entrance obstacle ownership correction
+
+A later normal live scene ledger disproved the remaining “spawn roof” group.
+College record 2 is base art submitted before the resident world list. Records
+23, 24, 20, and 25 belong to four separate `CollegeObstacle` actors at,
+respectively, `(749.5,162.5)`, `(956,169)`, `(628,215)`, and `(955.5,239.5)`.
+With the local player captured at `(602.408875,243.011703)`, stock drew all four
+obstacles first and the player afterward. The web instead baked record 24 into
+the background and grouped 2/20/23/25 at one `y=320` layer, which made record
+20 at the StoreRoom doorway cover the player from the wrong side.
+
+Implementation consequence: keep record 2 in the base Courtyard, remove record
+24 from that base, and submit 23/24/20/25 as four independent registered
+sprites at their native actor-center depths. There is no monolithic spawn-roof
+asset or depth boundary in this entrance system.
+
+Evidence: clean normal stock `courtyard-storeroom-entry` scene ledger, exact
+`CollegeObstacle` object centers/type ids, registered College record metadata,
+and the matching native screenshot. Confidence: high.
 
 ### Courtyard camera-space ownership
 
@@ -3925,9 +3943,10 @@ This renderer migration introduces no new game behavior. It maps the already
 recovered native presentation contracts into one explicit GPU scene graph:
 
 - the Courtyard raster and two additive seal painters are world roots;
-- the Useful Thyngs kit and spawn roof keep their recovered Y-sorted painter
-  boundaries, so every actor crosses those boundaries through ordinary depth
-  sorting rather than route-specific exceptions;
+- the Useful Thyngs kit keeps its recovered Y-sorted painter boundaries. The
+  then-modeled spawn-roof boundary was superseded by the 2026-08-13 live
+  obstacle ledger above: records 23/24/20/25 now sort independently at their
+  native actor centers;
 - Students remain body-at-constructor-scale, carried props at unscaled local
   translations with scaled glyphs, then an unscaled final head pass;
 - the local wizard keeps the five-pose style-selected robe bank, heading-only
@@ -4216,9 +4235,9 @@ ownership that the earlier atlas-consumer inventory could not distinguish:
 
 | Room | Before actors | Depth-sorted entries | After actors |
 | --- | --- | --- | --- |
-| Mortuary | Memoratorium 0 | Memorator default pair 28+44; ten Painting actor passes | room-effect records remain effect-owned |
+| Mortuary | Memoratorium 0 | directional Memorator pair `28+i` + `44+2i`; ten filled Painting actor passes | additive room-effect records remain effect-owned |
 | StoreRoom | tiled Storage 1; centered 5; registered 13..26 | shelf rows 2, 3, 4 at native centers `(538,324)`, `(537.5,434)`, `(536,542.5)` | Storage 11..12 |
-| Library | Library 0; extended return corridor 5 | table records 9, 10, 11; Dowser 21; Librarian counter/rails 29..32 plus body 25 | Library 1..2 and the native late-effect pass |
+| Library | Library 0; extended return corridor 5 | table records 9, 10, 11; Dowser 21; Librarian counter/rails 29..32 plus body 25 | Library 1..2, the native late-effect pass, then two black exit masks |
 | Office | Office 1; extended return corridor 4 | solid prop 5; Arch desk 3 plus actor pair 7+10 | Office 17..22 |
 
 The named-NPC base constructor `0x005016E0` initializes its animation selector
@@ -4231,19 +4250,31 @@ does not choose a random frame. `Librarian::Render (0x0051E0E0)` draws Library
 7..9 and 10..12 at
 `(actor.x+6, actor.y-100+0.75*(Actor+0x174))`; the normal zero selectors make
 that records 7+10 at `(518,412)`. In normal Mortuary state,
-`Memorator::Render (0x0051E270)` defaults to Memoratorium 28+44 at `(628,770)`.
+`Memorator::Render (0x0051E270)` faces the local player through 16 headings:
+heading `i` selects Memoratorium body `28+i` and head `44+2*i` at `(628,770)`.
+Index 0 faces north and the bank advances clockwise. The ordinary settled
+entrance frame observed in stock was 39+66; 28+44 is only the north-facing
+constructor-zero frame. Memoratorium 27 supplies the question marker centered
+at `(627,742)`.
 
-The ten Mortuary Paintings are not ten unconditional portrait sprites.
-Population setup `0x00515290` creates their ranked slots with
-`DAT_0081A3FC[index] = -1`; `0x00518620` renders that clean-session state with
-blank easel record 4. The Memorator eulogy state machine at `0x00513090` later
-fills a chosen slot from `Region+0x8F14`, at which point the painter layers
-records 3 and 7 around a bundled or external portrait and may add the
-`DAT_0081A3C0` marker treatment. Because the web port does not yet own the
-eulogy/persistent portrait slice, its native-safe default is ten blank easels,
-not ten invented filled portraits.
+The ten Mortuary Paintings are stateful composites, but constructor state is
+not ordinary visible state. Population setup `0x00515290` can transiently set
+`DAT_0081A3FC[index] = -1`, whose render branch is blank easel record 4. A
+fresh normal new-game session with builder selector `Gameplay+0x1CD8 == 0`
+instead reached the player-visible room with portrait ids
+`0,1,2,3,4,5,6,7,8,9` and marker bits `0,1,1,1,0,1,1,0,0,1`. The correct
+ordinary composition is record 3, portrait `14+id`, record 7, and record 8 at
+Painting-relative `(10,15)` for the six marked slots. The Memorator eulogy
+state machine at `0x00513090` and external portraits remain adjacent dynamic
+branches; they do not justify rendering the ordinary room as ten blanks.
 
-Storage record 0 and Library record 3 are the small room-effect particles,
+Memoratorium record 1, Storage record 0, Library record 3, and Office record 2
+are the additive room-effect particles. A normal live presentation emitted 50
+Mortuary flames, 9 StoreRoom flames, 17 Library flames, and 7 Office flames.
+Their presentation loops fix X scale at `0.8`, sample Mortuary Y scale from
+`[0.7,0.9]`, sample sibling-room Y scale from `[0.8,1.2]`, and sample rotation
+from `[-5,+5]` degrees per flame and frame with native blend
+`(source 5, destination 2, operation 1)`.
 Storage 7..10 and Library 13..20 are interaction-marker banks, and Office
 13..16 is likewise marker-owned. They must not be baked into static room art.
 The web implementation therefore keeps each full-room prop record as its own
@@ -4252,9 +4283,53 @@ Librarian, Arch Chancellor, and Memorator. This correction also removes the
 former false claim that Library 25..28 were stock-dormant; only Library record
 12 lacks a retail selection.
 
+The post-browser adjacency sweep recovered the Library's final untextured
+geometry. `Library::Present` sets opaque black after actors/effects and draws
+room-local rectangles `(-496,289,381,121)` and `(115,289,381,121)`. Under the
+`(512,512)` room transform these are world `(16,801)..(397,922)` and
+`(627,801)..(1008,922)`, leaving the exact 230-pixel return corridor. This is a
+late renderer mask, not atlas art and not collision geometry.
+
 Confidence: high for bounds, art offsets, contour-record counts, fixed actor
 centers/radii, and layer ownership. Individual fixed-room dialogue/service
 flows are adjacent G8 systems and are not inferred as part of room traversal.
+
+#### 2026-08-13 deep-audit correction
+
+The reported inaccessible Office exposed a test-model error adjacent to the
+product predicate. Native `FUN_00410B40` accepts circle-to-portal contact at
+distance **less than or equal to** radius, after base collision has resolved
+the actor. The Office line is the north edge of a closed sigil contour, so a
+valid proof must walk from its reachable exterior and slide diagonally into
+the line; the prior unit setup began inside that closed contour. The web must
+use an inclusive portal-contact helper without weakening strict solid-wall
+penetration handling.
+
+All 11 Mortuary, 34 StoreRoom, 27 Library, and 48 Office contour endpoints were
+freshly dumped from the live tables and matched the web arrays and ordering.
+The Mortuary Painting `r15` interaction actors are enclosed by paired `r40`
+solid bodies centered two world units higher, so the existing larger collision
+bodies reproduce physical contact without duplicate response. StoreRoom
+painter capture also confirmed
+that records 11 and 12 are deliberately late foreground at world rectangles
+`(41,607)..(487,727)` and `(589,607)..(1035,727)`, leaving a 102-pixel center
+doorway. They must remain in front of actors outside that gap; a Courtyard-side
+entrance artifact cannot be repaired by moving this native foreground behind
+the player.
+
+Evidence: clean normal stock session, semantic region/player probes, eight
+Mortuary presentation captures, fixed-room scene ledgers, live static-table
+dumps, and Ghidra re-decompilation of Courtyard tick `0x0050C970`, portal helper
+`FUN_00410B40`, and StoreRoom present `0x00519070`. Confidence: high for the
+normal visible state, heading banks, portal predicate/order, all contour
+coordinates, and StoreRoom painter order. External portrait loading and exact
+native presentation RNG stream remain separate unknowns; the observed flame
+anchors, transform envelopes, count, and blend are bounded.
+
+The browser therefore advances each flame from the shared fixed tick and an
+anchor-indexed deterministic hash while keeping those recovered envelopes.
+This is a controlled adaptation for an unknown global native RNG stream, not a
+claim that stock assigns a persistent random seed to each candle.
 
 ### Audio negative result
 
@@ -4278,15 +4353,27 @@ continuity; no claim is made that every private-room NPC interaction is silent.
 
 ### Web parity receipt
 
-The focused browser receipt is `npm run smoke:game:hub-rooms` against the
+The post-audit browser receipt ran `tools/smoke-hub-rooms.mjs` against an
 isolated authoritative development host. One continuous Playwright session
 walked Courtyard -> StoreRoom -> Courtyard -> Mortuary -> Courtyard -> Office
--> Courtyard -> Library -> Courtyard through physical portal contact. It
-observed a nonzero intermediate alpha in every outgoing and incoming fade,
-kept the original Pixi canvas mounted, captured each settled room, and
-reported no page or console errors. The settled private positions were
-`(537.5,650)` for StoreRoom, `(512,904)` for Mortuary, and `(512,874)` for
-both Office and Library, matching the recovered attach targets.
+-> Courtyard -> Library -> Courtyard through physical portal contact. The
+Office approach began on the reachable exterior at `(830,920)` and pressed
+up-right into the sigil endpoint. The run observed a nonzero intermediate
+alpha in every outgoing fade, waited through every covered swap and incoming
+fade, kept the original Pixi canvas mounted, captured each entrance and
+settled room, and reported no page or console errors. The settled private
+positions were `(537.5,650)` for StoreRoom, `(512,904)` for Mortuary, and
+`(512,874)` for both Office and Library, matching the recovered attach targets.
+
+The capture comparison verified the ten ordinary Mortuary portraits, six
+marker urns, directional Memorator/question marker, all private-room flame
+banks, the StoreRoom late-foreground center gap, and the four independent
+Courtyard obstacle depths at the StoreRoom entrance. The focused post-audit
+contract suite passed 50 tests, including SHA-256 locks for every private-room
+contour and exact fixed-body layouts. The complete repository gate then passed
+23 Website/backend contracts, 183 frontend tests, 5 desktop tests, strict
+lint/import-boundary checks, backend build, production frontend build, game
+host build, and production media policy.
 
 `hub-regions.test.ts` separately locks the room graph, portal constants,
 covered-swap tick boundary, incoming fade rates, collision contours, camera,

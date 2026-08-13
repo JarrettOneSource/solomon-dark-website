@@ -1,10 +1,5 @@
 const HUB_ACTOR_DEPTH_BASE = 1000
 
-// College[2] reaches y=320 and is the final stock foreground pass for the
-// covered passage left of the spawn landing. Actors sort against that same
-// painter boundary, so they emerge without route-specific visibility rules.
-export const HUB_SPAWN_ROOF_DEPTH = HUB_ACTOR_DEPTH_BASE + 320
-
 // PotionGuy::Present owns distinct painters: College[34] immediately below
 // the actor, College[32] above it, then the balloon bank.
 export const HUB_USEFUL_THYNGS_COUNTER_DEPTH = HUB_ACTOR_DEPTH_BASE + 663

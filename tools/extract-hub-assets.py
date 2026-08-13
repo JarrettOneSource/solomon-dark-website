@@ -342,6 +342,29 @@ def build_registered_composite_strip(
     return strip
 
 
+def build_mortuary_painting_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+) -> Image.Image:
+    marker_slots = (False, True, True, True, False, True, True, False, False, True)
+    frame_width = records[3].logical_width
+    frame_height = records[3].logical_height
+    strip = Image.new("RGBA", (frame_width * 10, frame_height))
+    marker = registered_sprite(atlas, records[8])
+    for portrait_id, marked in enumerate(marker_slots):
+        frame = Image.new("RGBA", (frame_width, frame_height))
+        paste_registered(frame, atlas, records[3])
+        frame.alpha_composite(crop(atlas, records[14 + portrait_id]), (16, 29))
+        frame.alpha_composite(crop(atlas, records[7]), (15, 28))
+        if marked:
+            # Native submits record 8 at Painting-relative (10, 15). Its
+            # registration inside the actor compositor resolves to this full
+            # logical marker placement.
+            frame.alpha_composite(marker, (35, 46))
+        strip.alpha_composite(frame, (portrait_id * frame_width, 0))
+    return strip
+
+
 def build_cropped_strip(
     atlas: Image.Image,
     records: list[SpriteRecord],
@@ -421,9 +444,10 @@ def build_courtyard(atlas: Image.Image, records: list[SpriteRecord]) -> Image.Im
 
     # Native presentation order keeps College[19, 30, 31, 21, 22] out of this
     # flattened background. Courtyard::Present submits that foreground bank
-    # after actors. College[2, 20, 23, 25] is the independent spawn-roof
-    # boundary. College[7] belongs to the still-later southern architecture.
-    scenery = [6, 24, *range(26, 30)]
+    # after actors. College[20, 23, 24, 25] belong to depth-sorted obstacle
+    # actors; record 2 is pre-actor base art. College[7] belongs to the
+    # still-later southern architecture.
+    scenery = [2, 6, *range(26, 30)]
     for index in scenery:
         paste_registered(world, atlas, records[index])
 
@@ -887,18 +911,29 @@ def main() -> int:
         output_dir,
         "hub-room-mortuary-background",
     )
-    # Clean-session Painting slots are initialized to portrait id -1 and
-    # render the blank registered easel (record 4). The filled 3+portrait+7
-    # compositor belongs to the later eulogy/persistence slice.
     save(
-        build_registered_strip(mortuary, mortuary_records, (4,) * 10),
+        build_mortuary_painting_strip(mortuary, mortuary_records),
         output_dir,
         "hub-room-mortuary-paintings",
     )
     save(
-        compose_registered_full(mortuary, mortuary_records, (28, 44)),
+        build_registered_composite_strip(
+            mortuary,
+            mortuary_records,
+            tuple((28 + heading, 44 + heading * 2) for heading in range(16)),
+        ),
         output_dir,
         "hub-room-memorator",
+    )
+    save(
+        registered_sprite(mortuary, mortuary_records[27]),
+        output_dir,
+        "hub-room-memorator-marker",
+    )
+    save(
+        registered_sprite(mortuary, mortuary_records[1]),
+        output_dir,
+        "hub-room-mortuary-flame",
     )
 
     storage = Image.open(images_dir / "Storage.png").convert("RGBA")
@@ -928,6 +963,11 @@ def main() -> int:
         ),
         output_dir,
         "hub-room-storeroom-foreground",
+    )
+    save(
+        registered_sprite(storage, storage_records[0]),
+        output_dir,
+        "hub-room-storeroom-flame",
     )
 
     library = Image.open(images_dir / "Library.png").convert("RGBA")
@@ -982,6 +1022,11 @@ def main() -> int:
         output_dir,
         "hub-room-librarian-frames",
     )
+    save(
+        registered_sprite(library, library_records[3]),
+        output_dir,
+        "hub-room-library-flame",
+    )
 
     office = Image.open(images_dir / "Office.png").convert("RGBA")
     office_records = parse_bundle(images_dir / "Office.bundle")
@@ -1033,6 +1078,11 @@ def main() -> int:
         output_dir,
         "hub-room-office-prop",
     )
+    save(
+        registered_sprite(office, office_records[2]),
+        output_dir,
+        "hub-room-office-flame",
+    )
     # Courtyard::Present draws these independent, additive, animated masks at
     # world (1000, 500), scale 2. They are not Teacher-local painters.
     save(
@@ -1055,15 +1105,14 @@ def main() -> int:
         output_dir,
         "hub-seal-core-pulse",
     )
-    # The stock painter draws this covered passage at the y=320 actor boundary.
     save(
-        build_registered_world_layer(
+        build_registered_cropped_strip(
             college,
             college_records,
-            (2, 20, 23, 25),
+            (23, 24, 20, 25),
         ),
         output_dir,
-        "hub-spawn-roof",
+        "hub-courtyard-depth-props",
     )
     save(
         build_registered_world_layer(

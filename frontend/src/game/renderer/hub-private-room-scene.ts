@@ -1,28 +1,25 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
-import type { HubRegionId } from '../core-kernels/hub-regions.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { hubMarkerAlpha } from '../hub-presentation.ts'
 import { HubPlayerView } from './hub-actors.ts'
+import {
+  HUB_LIBRARY_EXIT_MASKS,
+  HUB_MEMORATOR_POSITION,
+  HUB_MORTUARY_PAINTINGS,
+  HUB_PRIVATE_ROOM_EFFECT_DEPTH,
+  HUB_PRIVATE_ROOM_FLAME_ANCHORS,
+  HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
+  hubMemoratorHeadingIndex,
+  hubRoomFlameTransform,
+  type PrivateHubRegionId,
+} from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 
-type PrivateHubRegionId = Exclude<HubRegionId, 'courtyard'>
-
-const MORTUARY_PAINTINGS = [
-  [512, 697],
-  [350, 683],
-  [673, 683],
-  [744, 540],
-  [590, 540],
-  [434, 540],
-  [279, 540],
-  [354, 400],
-  [512, 400],
-  [670, 400],
-] as const
-
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
+const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
 const STOREROOM_PROP_DEPTHS = [324, 434, 542.5] as const
 const LIBRARY_PROP_DEPTHS = [788, 678.5, 732.5] as const
 
@@ -33,7 +30,11 @@ export class HubPrivateRoomScene {
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
+  private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
   private readonly textures: HubWorldTextures
+  private memoratorBody!: Sprite
+  private memoratorMarker!: Sprite
+  private memoratorFrames: readonly Texture[] = []
   private activeRegion: PrivateHubRegionId = 'mortuary'
 
   constructor(textures: HubWorldTextures) {
@@ -60,6 +61,7 @@ export class HubPrivateRoomScene {
     if (!localParticipant || localParticipant.region === 'courtyard') return
     this.showRegion(localParticipant.region)
     this.updatePlayers(snapshot, localParticipant.region)
+    this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
   }
 
   player(playerId: string): HubPlayerView | undefined {
@@ -78,22 +80,42 @@ export class HubPrivateRoomScene {
   private createMortuary(): Container {
     const room = this.room('mortuary')
     room.addChild(this.layer(hub.rooms.mortuary.background, 0))
-    room.addChild(this.actor(hub.rooms.mortuary.memorator, 628, 770))
+    this.memoratorFrames = this.horizontalFrames(
+      hub.rooms.mortuary.memorator,
+      MEMORATOR_FRAME.count,
+      MEMORATOR_FRAME.width,
+      MEMORATOR_FRAME.height,
+    )
+    const memorator = new Container({ label: 'college-mortuary-memorator' })
+    memorator.sortableChildren = true
+    memorator.position.set(HUB_MEMORATOR_POSITION.x, HUB_MEMORATOR_POSITION.y)
+    memorator.zIndex = hubWorldDepthForActor(HUB_MEMORATOR_POSITION.y)
+    memorator.eventMode = 'none'
+    this.memoratorBody = new Sprite(this.memoratorFrames[0])
+    this.memoratorBody.anchor.set(0.5)
+    this.memoratorBody.eventMode = 'none'
+    this.memoratorMarker = new Sprite(this.textures.base[hub.rooms.mortuary.memoratorMarker])
+    this.memoratorMarker.anchor.set(0.5)
+    this.memoratorMarker.position.set(-1, -28)
+    this.memoratorMarker.zIndex = 1
+    this.memoratorMarker.eventMode = 'none'
+    memorator.addChild(this.memoratorBody, this.memoratorMarker)
+    room.addChild(memorator)
     const paintingSource = this.textures.base[hub.rooms.mortuary.paintings]
-    for (let index = 0; index < MORTUARY_PAINTINGS.length; index += 1) {
-      const [x, y] = MORTUARY_PAINTINGS[index]
+    for (const painting of HUB_MORTUARY_PAINTINGS) {
       const texture = new Texture({
         source: paintingSource.source,
         frame: new Rectangle(
-          index * MORTUARY_PAINTING_FRAME.width,
+          painting.portraitId * MORTUARY_PAINTING_FRAME.width,
           0,
           MORTUARY_PAINTING_FRAME.width,
           MORTUARY_PAINTING_FRAME.height,
         ),
       })
       this.derivedTextures.push(texture)
-      room.addChild(this.actorTexture(texture, x, y + 5))
+      room.addChild(this.actorTexture(texture, painting.x, painting.y + 5))
     }
+    this.addRoomFlames(room, 'mortuary', hub.rooms.mortuary.flame)
     return room
   }
 
@@ -131,7 +153,21 @@ export class HubPrivateRoomScene {
     })
     this.derivedTextures.push(dowserFrame)
     room.addChild(this.actorTexture(dowserFrame, 900, 642.5))
-    room.addChild(this.layer(hub.rooms.library.foreground, 2_000_000))
+    this.addRoomFlames(room, 'library', hub.rooms.library.flame)
+    room.addChild(this.layer(
+      hub.rooms.library.foreground,
+      HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
+    ))
+    for (const mask of HUB_LIBRARY_EXIT_MASKS) {
+      const sprite = new Sprite(Texture.WHITE)
+      sprite.position.set(mask.x, mask.y)
+      sprite.width = mask.width
+      sprite.height = mask.height
+      sprite.tint = 0x000000
+      sprite.zIndex = HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH
+      sprite.eventMode = 'none'
+      room.addChild(sprite)
+    }
     return room
   }
 
@@ -145,7 +181,11 @@ export class HubPrivateRoomScene {
       800,
       STOREROOM_PROP_DEPTHS,
     )
-    room.addChild(this.layer(hub.rooms.storeroom.foreground, 2_000_000))
+    this.addRoomFlames(room, 'storeroom', hub.rooms.storeroom.flame)
+    room.addChild(this.layer(
+      hub.rooms.storeroom.foreground,
+      HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
+    ))
     return room
   }
 
@@ -171,8 +211,44 @@ export class HubPrivateRoomScene {
     archBody.zIndex = 1
     archChancellor.addChild(desk, archBody)
     room.addChild(archChancellor)
-    room.addChild(this.layer(hub.rooms.office.foreground, 2_000_000))
+    this.addRoomFlames(room, 'office', hub.rooms.office.flame)
+    room.addChild(this.layer(
+      hub.rooms.office.foreground,
+      HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
+    ))
     return room
+  }
+
+  private addRoomFlames(
+    room: Container,
+    region: PrivateHubRegionId,
+    source: string,
+  ): void {
+    const flames = HUB_PRIVATE_ROOM_FLAME_ANCHORS[region].map((position) => {
+      const flame = new Sprite(this.textures.base[source])
+      flame.position.copyFrom(position)
+      flame.zIndex = HUB_PRIVATE_ROOM_EFFECT_DEPTH
+      flame.blendMode = 'add'
+      flame.eventMode = 'none'
+      room.addChild(flame)
+      return flame
+    })
+    this.roomFlames.set(region, flames)
+  }
+
+  private horizontalFrames(
+    source: string,
+    count: number,
+    width: number,
+    height: number,
+  ): readonly Texture[] {
+    const sourceTexture = this.textures.base[source]
+    const frames = Array.from({ length: count }, (_, index) => new Texture({
+      source: sourceTexture.source,
+      frame: new Rectangle(index * width, 0, width, height),
+    }))
+    this.derivedTextures.push(...frames)
+    return frames
   }
 
   private addRoomLayerStrip(
@@ -223,10 +299,6 @@ export class HubPrivateRoomScene {
     return sprite
   }
 
-  private actor(source: string, x: number, y: number): Sprite {
-    return this.actorTexture(this.textures.base[source], x, y)
-  }
-
   private actorTexture(texture: Texture, x: number, y: number): Sprite {
     const sprite = new Sprite(texture)
     sprite.anchor.set(0.5)
@@ -234,6 +306,28 @@ export class HubPrivateRoomScene {
     sprite.zIndex = hubWorldDepthForActor(y)
     sprite.eventMode = 'none'
     return sprite
+  }
+
+  private updateRoomPresentation(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+    region: PrivateHubRegionId,
+  ): void {
+    if (region === 'mortuary') {
+      const player = snapshot.players[localPlayerId]
+      if (player) {
+        this.memoratorBody.texture = this.memoratorFrames[
+          hubMemoratorHeadingIndex(player.position)
+        ]
+      }
+      this.memoratorMarker.alpha = hubMarkerAlpha(snapshot.world.ambient)
+    }
+    const flames = this.roomFlames.get(region) ?? []
+    for (let index = 0; index < flames.length; index += 1) {
+      const transform = hubRoomFlameTransform(region, snapshot.tick, index)
+      flames[index].scale.set(transform.scaleX, transform.scaleY)
+      flames[index].rotation = transform.rotation
+    }
   }
 
   private updatePlayers(

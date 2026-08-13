@@ -92,7 +92,7 @@ const MORTUARY_PAINTINGS = [
   [670, 400],
 ] as const
 
-const HUB_FIXED_ACTORS: readonly RegionPhysicsBody[] = [
+export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly RegionPhysicsBody[] = [
   fixedActor('perk-witch', 'courtyard', 1340, 280, 15),
   fixedActor('potion-trader', 'courtyard', 1397, 664, 30),
   fixedActor('annalist', 'courtyard', 895.5, 455.5, 8),
@@ -217,7 +217,7 @@ export function stepHubWorldTick(
       region: 'courtyard' as const,
       ...student.profile,
     })),
-    ...HUB_FIXED_ACTORS,
+    ...HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   ]
   for (const body of bodies) bodyRegions.set(body.id, body.region)
 

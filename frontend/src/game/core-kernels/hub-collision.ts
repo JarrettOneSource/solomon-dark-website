@@ -187,6 +187,18 @@ export function circleOverlapsHubSegment(
   return dx * dx + dy * dy < radius * radius
 }
 
+/** Native portal contact accepts an actor exactly one radius from the line. */
+export function circleTouchesHubSegment(
+  position: Vector2,
+  radius: number,
+  segment: HubSegment,
+): boolean {
+  const nearest = nearestPointOnHubSegment(position, segment)
+  const dx = nearest.x - position.x
+  const dy = nearest.y - position.y
+  return dx * dx + dy * dy <= radius * radius
+}
+
 function firstOverlappingSegment(
   position: Vector2,
   radius: number,

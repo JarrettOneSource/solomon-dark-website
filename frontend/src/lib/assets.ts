@@ -90,7 +90,7 @@ import hubSouthernPlatformEast from '../assets/game/hub-southern-platform-east.p
 import hubSouthernPlatformWest from '../assets/game/hub-southern-platform-west.png'
 import hubSouthernSeam from '../assets/game/hub-southern-seam.png'
 import hubSouthernTower from '../assets/game/hub-southern-tower.png'
-import hubSpawnRoof from '../assets/game/hub-spawn-roof.png'
+import hubCourtyardDepthProps from '../assets/game/hub-courtyard-depth-props.png'
 import hubAstronomerAssistants from '../assets/game/hub-astronomer-assistants.png'
 import hubAstronomerGreenGesture from '../assets/game/hub-astronomer-green-gesture.png'
 import hubAstronomerGreenIdle from '../assets/game/hub-astronomer-green-idle.png'
@@ -174,18 +174,23 @@ import hubStudentProp2 from '../assets/game/hub-student-prop-2.png'
 import hubStudentProp3 from '../assets/game/hub-student-prop-3.png'
 import hubStudentProp4 from '../assets/game/hub-student-prop-4.png'
 import hubRoomMortuaryBackground from '../assets/game/hub-room-mortuary-background.png'
+import hubRoomMortuaryFlame from '../assets/game/hub-room-mortuary-flame.png'
 import hubRoomMortuaryPaintings from '../assets/game/hub-room-mortuary-paintings.png'
 import hubRoomMemorator from '../assets/game/hub-room-memorator.png'
+import hubRoomMemoratorMarker from '../assets/game/hub-room-memorator-marker.png'
 import hubRoomStoreroomBackground from '../assets/game/hub-room-storeroom-background.png'
+import hubRoomStoreroomFlame from '../assets/game/hub-room-storeroom-flame.png'
 import hubRoomStoreroomForeground from '../assets/game/hub-room-storeroom-foreground.png'
 import hubRoomStoreroomProps from '../assets/game/hub-room-storeroom-props.png'
 import hubRoomLibraryBackground from '../assets/game/hub-room-library-background.png'
+import hubRoomLibraryFlame from '../assets/game/hub-room-library-flame.png'
 import hubRoomLibraryForeground from '../assets/game/hub-room-library-foreground.png'
 import hubRoomLibrarian from '../assets/game/hub-room-librarian.png'
 import hubRoomLibrarianFrames from '../assets/game/hub-room-librarian-frames.png'
 import hubRoomDowser from '../assets/game/hub-room-dowser.png'
 import hubRoomLibraryProps from '../assets/game/hub-room-library-props.png'
 import hubRoomOfficeBackground from '../assets/game/hub-room-office-background.png'
+import hubRoomOfficeFlame from '../assets/game/hub-room-office-flame.png'
 import hubRoomOfficeForeground from '../assets/game/hub-room-office-foreground.png'
 import hubRoomArchDesk from '../assets/game/hub-room-arch-desk.png'
 import hubRoomArchChancellor from '../assets/game/hub-room-arch-chancellor.png'
@@ -481,16 +486,20 @@ export const hub = {
   rooms: {
     mortuary: {
       background: hubRoomMortuaryBackground,
+      flame: hubRoomMortuaryFlame,
       paintings: hubRoomMortuaryPaintings,
       memorator: hubRoomMemorator,
+      memoratorMarker: hubRoomMemoratorMarker,
     },
     storeroom: {
       background: hubRoomStoreroomBackground,
+      flame: hubRoomStoreroomFlame,
       foreground: hubRoomStoreroomForeground,
       props: hubRoomStoreroomProps,
     },
     library: {
       background: hubRoomLibraryBackground,
+      flame: hubRoomLibraryFlame,
       foreground: hubRoomLibraryForeground,
       librarian: hubRoomLibrarian,
       librarianFrames: hubRoomLibrarianFrames,
@@ -499,6 +508,7 @@ export const hub = {
     },
     office: {
       background: hubRoomOfficeBackground,
+      flame: hubRoomOfficeFlame,
       foreground: hubRoomOfficeForeground,
       desk: hubRoomArchDesk,
       archChancellor: hubRoomArchChancellor,
@@ -511,7 +521,7 @@ export const hub = {
   },
   foreground: {
     courtyard: hubCourtyardForeground,
-    spawnRoof: hubSpawnRoof,
+    depthProps: hubCourtyardDepthProps,
   },
   southern: {
     battlement: hubSouthernBattlement,

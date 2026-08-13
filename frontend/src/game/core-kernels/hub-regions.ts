@@ -1,6 +1,6 @@
 import {
   HUB_COURTYARD_SEGMENTS,
-  circleOverlapsHubSegment,
+  circleTouchesHubSegment,
   isTraversableAgainstHubSegments,
   moveWithHubSegmentsCollisionState,
   type HubCollisionMove,
@@ -321,7 +321,7 @@ export function hubPortalAt(
 ): HubPortalDefinition | undefined {
   return HUB_PORTALS.find((portal) => (
     portal.source === region
-      && circleOverlapsHubSegment(position, radius, portal.trigger)
+      && circleTouchesHubSegment(position, radius, portal.trigger)
   ))
 }
 

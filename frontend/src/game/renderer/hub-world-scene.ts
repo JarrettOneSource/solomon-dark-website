@@ -36,6 +36,8 @@ import {
 } from '../hub-teacher.ts'
 import { HubPlayerView, HubStudentView, actorSprite } from './hub-actors.ts'
 import {
+  HUB_COURTYARD_DEPTH_PROP_FRAME,
+  HUB_COURTYARD_DEPTH_PROPS,
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   hubWorldDepthForActor,
@@ -106,7 +108,7 @@ export class HubWorldScene {
 
     this.astronomer = new HubAstronomerView(textures, createdAtTick)
 
-    this.world.addChild(this.worldLayer(textures.base[hub.foreground.spawnRoof], HUB_WORLD_DEPTH.spawnRoof, HUB_WORLD_LAYER_BOUNDS.spawnRoof))
+    this.addCourtyardDepthProps()
     this.world.addChild(this.worldLayer(textures.base[hub.tent.front], HUB_WORLD_DEPTH.usefulThyngsFront, HUB_WORLD_LAYER_BOUNDS.usefulThyngsFront))
     this.world.addChild(this.worldLayer(
       textures.base[hub.foreground.courtyard],
@@ -198,6 +200,30 @@ export class HubWorldScene {
     this.markerSprites.push(marker)
     actor.addChild(shadow, body, marker)
     this.world.addChild(actor)
+  }
+
+  private addCourtyardDepthProps(): void {
+    const source = this.textures.base[hub.foreground.depthProps]
+    for (let index = 0; index < HUB_COURTYARD_DEPTH_PROPS.length; index += 1) {
+      const texture = new Texture({
+        source: source.source,
+        frame: new Rectangle(
+          index * HUB_COURTYARD_DEPTH_PROP_FRAME.width,
+          0,
+          HUB_COURTYARD_DEPTH_PROP_FRAME.width,
+          HUB_COURTYARD_DEPTH_PROP_FRAME.height,
+        ),
+      })
+      this.layerFrameTextures.push(texture)
+      const sprite = new Sprite(texture)
+      sprite.position.set(
+        HUB_COURTYARD_DEPTH_PROP_FRAME.x,
+        HUB_COURTYARD_DEPTH_PROP_FRAME.y,
+      )
+      sprite.zIndex = hubWorldDepthForActor(HUB_COURTYARD_DEPTH_PROPS[index].actorY)
+      sprite.eventMode = 'none'
+      this.world.addChild(sprite)
+    }
   }
 
   private worldLayer(

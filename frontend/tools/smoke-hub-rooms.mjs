@@ -19,7 +19,7 @@ const browser = await chromium.launch({
 
 const allRoomRuns = [
   {
-    approach: { x: 628, y: 330 },
+    approach: { x: 628, y: 230 },
     enterKeys: ['w'],
     region: 'storeroom',
   },
@@ -29,11 +29,9 @@ const allRoomRuns = [
     region: 'mortuary',
   },
   {
-    approach: { x: 953, y: 960 },
-    approachPortalClearance: 50,
-    enterKeys: ['w'],
+    approach: { x: 830, y: 920 },
+    enterKeys: ['d', 'w'],
     region: 'office',
-    via: [{ portalClearance: 150, x: 1300, y: 960 }],
   },
   {
     approach: { x: 1800, y: 650 },
@@ -89,6 +87,8 @@ try {
     )
     assert.equal(await canvas.getAttribute('data-hub-region'), 'courtyard')
     process.stdout.write(`Staged at ${JSON.stringify(await playerPosition(canvas))}.\n`)
+    const entryPath = `${screenshotRoot}-${room.region}-entry.png`
+    await page.screenshot({ path: entryPath })
     const entered = await holdUntilTransition(page, canvas, room.enterKeys, room.region)
     await waitForSettledRegion(page, canvas, room.region)
     process.stdout.write(`Entered ${room.region}.\n`)
@@ -103,6 +103,7 @@ try {
     process.stdout.write(`Returned from ${room.region}.\n`)
     receipts.push({
       entered,
+      entryScreenshotPath: entryPath,
       region: room.region,
       roomPosition,
       routeWaypoints,

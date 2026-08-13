@@ -4,7 +4,6 @@ import {
   HUB_ASTRONOMER_TELESCOPE_DEPTH,
   HUB_COURTYARD_FOREGROUND_DEPTH,
   HUB_SOUTHERN_FOREGROUND_DEPTH,
-  HUB_SPAWN_ROOF_DEPTH,
   HUB_USEFUL_THYNGS_BALLOON_DEPTH,
   HUB_USEFUL_THYNGS_COUNTER_DEPTH,
   HUB_USEFUL_THYNGS_FRONT_DEPTH,
@@ -33,7 +32,6 @@ export const HUB_WORLD_DEPTH = {
   fountain: 980,
   statueAura: hubActorDepth(834) - 1,
   statue: hubActorDepth(834),
-  spawnRoof: HUB_SPAWN_ROOF_DEPTH,
   southernForeground: HUB_SOUTHERN_FOREGROUND_DEPTH,
   usefulThyngsBack: HUB_USEFUL_THYNGS_COUNTER_DEPTH,
   usefulThyngsFront: HUB_USEFUL_THYNGS_FRONT_DEPTH,
@@ -46,11 +44,24 @@ export const HUB_WORLD_LAYER_BOUNDS = {
   courtyardForeground: { x: 0, y: 0, width: 2000, height: 583 },
   sealCore: { x: 1889, y: 234, width: 111, height: 270 },
   sealGlyphs: { x: 675, y: 672, width: 582, height: 302 },
-  spawnRoof: { x: 568, y: 0, width: 522, height: 320 },
   usefulThyngsBack: { x: 1361, y: 646, width: 63, height: 56 },
   usefulThyngsFront: { x: 1343, y: 479, width: 141, height: 220 },
   usefulThyngsShadow: { x: 1327, y: 507, width: 209, height: 206 },
 } as const
+
+export const HUB_COURTYARD_DEPTH_PROP_FRAME = {
+  height: 263,
+  width: 508,
+  x: 582,
+  y: 0,
+} as const
+
+export const HUB_COURTYARD_DEPTH_PROPS = [
+  { actorY: 162.5, record: 23 },
+  { actorY: 169, record: 24 },
+  { actorY: 215, record: 20 },
+  { actorY: 239.5, record: 25 },
+] as const
 
 export interface HubResolutionInputs {
   devicePixelRatio: number

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  HUB_COURTYARD_DEPTH_PROP_FRAME,
+  HUB_COURTYARD_DEPTH_PROPS,
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   hubWorldDepthForActor,
@@ -8,9 +10,18 @@ import {
   spriteFrameIndex,
 } from './hub-render-contract.ts'
 
-test('native painter boundaries sort actors beneath roofs and tent faces', () => {
-  assert.ok(hubWorldDepthForActor(300) < HUB_WORLD_DEPTH.spawnRoof)
-  assert.ok(hubWorldDepthForActor(340) > HUB_WORLD_DEPTH.spawnRoof)
+test('native painter boundaries sort actors around Courtyard props and tent faces', () => {
+  assert.deepEqual(HUB_COURTYARD_DEPTH_PROP_FRAME, {
+    height: 263, width: 508, x: 582, y: 0,
+  })
+  assert.deepEqual(HUB_COURTYARD_DEPTH_PROPS, [
+    { actorY: 162.5, record: 23 },
+    { actorY: 169, record: 24 },
+    { actorY: 215, record: 20 },
+    { actorY: 239.5, record: 25 },
+  ])
+  assert.ok(hubWorldDepthForActor(215) < hubWorldDepthForActor(243.011703))
+  assert.ok(hubWorldDepthForActor(239.5) < hubWorldDepthForActor(243.011703))
   assert.ok(hubWorldDepthForActor(699) < HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(hubWorldDepthForActor(701) > HUB_WORLD_DEPTH.usefulThyngsFront)
   assert.ok(HUB_WORLD_DEPTH.usefulThyngsShadow < HUB_WORLD_DEPTH.courtyard + 1000)

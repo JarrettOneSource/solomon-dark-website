@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import {
   HUB_STOREROOM_STORY_BARRIER,
+  circleOverlapsHubSegment,
+  circleTouchesHubSegment,
 } from '../core-kernels/hub-collision.ts'
 import {
   HUB_PORTALS,
@@ -19,10 +22,12 @@ import {
   hubRegionCameraOrigin,
 } from '../core-kernels/hub-math.ts'
 import {
+  PLAYER_CHARACTER_RADIUS,
   createPlayerCharacter,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   createHubWorld,
   stepHubWorldTick,
   type HubWorldState,
@@ -97,7 +102,7 @@ test('neutral Hub input can reach every ordinary Courtyard portal', () => {
     ['mortuary', { x: 150, y: 540 }, { x: -1, y: -0.4 }],
     ['library', { x: 1900, y: 600 }, { x: 1, y: -0.2 }],
     ['storeroom', { x: 628, y: 230 }, { x: 0, y: -1 }],
-    ['office', { x: 953, y: 810 }, { x: 0, y: 1 }],
+    ['office', { x: 830, y: 920 }, { x: 1, y: -1 }],
   ] as const
 
   for (const [destination, position, movement] of approaches) {
@@ -116,11 +121,69 @@ test('neutral Hub input can reach every ordinary Courtyard portal', () => {
   }
 })
 
-test('private-room collision contours reject their recovered wall segments', () => {
-  for (const region of ['mortuary', 'library', 'storeroom', 'office'] as const) {
-    const segment = HUB_REGION_DEFINITIONS[region].segments[0]
-    assert.equal(isHubRegionTraversable(region, midpoint(segment)), false, region)
+test('portal contact includes the native circle boundary without weakening wall overlap', () => {
+  const office = HUB_PORTALS.find((portal) => portal.destination === 'office')!
+  const boundary = {
+    x: (office.trigger.x1 + office.trigger.x2) / 2,
+    y: office.trigger.y1 + PLAYER_CHARACTER_RADIUS,
   }
+  assert.equal(circleTouchesHubSegment(boundary, PLAYER_CHARACTER_RADIUS, office.trigger), true)
+  assert.equal(circleOverlapsHubSegment(boundary, PLAYER_CHARACTER_RADIUS, office.trigger), false)
+  assert.equal(hubPortalAt('courtyard', boundary)?.destination, 'office')
+})
+
+test('locks every recovered private-room contour endpoint and authored order', () => {
+  const expected = {
+    mortuary: [11, '7fca8ac16cd543f9099373fab2fefe8a81172255b034ed7e7c971b3ccfc5924c'],
+    storeroom: [34, '9dca83231104a899de808ea47deace85406cc208ee29af40c85ab5a2011574bc'],
+    library: [27, '7a85b75585c2d9664c237e7fc0d9b077c4071cc7dfe0c7f5d3942f1a3de7314c'],
+    office: [48, '5d80a995a13f246694cb7b640b82be45ce21a02da05489667922dd29335388d5'],
+  } as const
+
+  for (const [region, [count, digest]] of Object.entries(expected)) {
+    const segments = HUB_REGION_DEFINITIONS[region as HubRegionId].segments
+    assert.equal(segments.length, count, region)
+    assert.equal(
+      createHash('sha256').update(JSON.stringify(segments)).digest('hex'),
+      digest,
+      region,
+    )
+    for (const segment of segments) {
+      assert.equal(isHubRegionTraversable(region as HubRegionId, midpoint(segment)), false, region)
+    }
+  }
+})
+
+test('locks recovered fixed collision bodies in every private room', () => {
+  assert.deepEqual(
+    HUB_FIXED_ACTOR_COLLISION_LAYOUT
+      .filter(({ region }) => region !== 'courtyard')
+      .map(({ id, position, radius, region }) => [id, region, position.x, position.y, radius]),
+    [
+      ['memorator', 'mortuary', 628, 770, 25],
+      ['painting-0', 'mortuary', 512, 695, 40],
+      ['painting-1', 'mortuary', 350, 681, 40],
+      ['painting-2', 'mortuary', 673, 681, 40],
+      ['painting-3', 'mortuary', 744, 538, 40],
+      ['painting-4', 'mortuary', 590, 538, 40],
+      ['painting-5', 'mortuary', 434, 538, 40],
+      ['painting-6', 'mortuary', 279, 538, 40],
+      ['painting-7', 'mortuary', 354, 398, 40],
+      ['painting-8', 'mortuary', 512, 398, 40],
+      ['painting-9', 'mortuary', 670, 398, 40],
+      ['librarian', 'library', 512, 595, 55],
+      ['dowser', 'library', 900, 642.5, 25],
+      ['library-prop-0', 'library', 239.5, 788, 40],
+      ['library-prop-1', 'library', 258.5, 678.5, 40],
+      ['library-prop-2', 'library', 762, 732.5, 40],
+      ['library-prop-3', 'library', 831, 620.5, 40],
+      ['storeroom-prop-0', 'storeroom', 538, 324, 40],
+      ['storeroom-prop-1', 'storeroom', 537.5, 434, 40],
+      ['storeroom-prop-2', 'storeroom', 536, 542.5, 40],
+      ['arch-chancellor', 'office', 514, 467, 55],
+      ['office-prop-0', 'office', 517.5, 681, 40],
+    ],
+  )
 })
 
 test('private-room cameras center narrow rooms within the native 1600x900 view', () => {

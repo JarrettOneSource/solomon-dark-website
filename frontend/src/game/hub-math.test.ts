@@ -16,7 +16,6 @@ import {
   HUB_ASTRONOMER_TELESCOPE_DEPTH,
   HUB_COURTYARD_FOREGROUND_DEPTH,
   HUB_SOUTHERN_FOREGROUND_DEPTH,
-  HUB_SPAWN_ROOF_DEPTH,
   HUB_USEFUL_THYNGS_BALLOON_DEPTH,
   HUB_USEFUL_THYNGS_COUNTER_DEPTH,
   HUB_USEFUL_THYNGS_FRONT_DEPTH,
@@ -108,12 +107,6 @@ test('camera view dimensions follow the logical browser viewport without changin
   const narrowRoom = hubRegionCameraOrigin('library', { x: 512, y: 512 }, viewport)
   closeTo(narrowRoom.x, -154.666667)
   closeTo(narrowRoom.y, 95.333333)
-})
-
-test('sorts actors through the stock spawn-roof painter boundary', () => {
-  assert.equal(HUB_SPAWN_ROOF_DEPTH, 1320)
-  assert.ok(hubActorDepth(209) < HUB_SPAWN_ROOF_DEPTH)
-  assert.ok(hubActorDepth(356) > HUB_SPAWN_ROOF_DEPTH)
 })
 
 test('sorts each Useful Thyngs painter around PotionGuy', () => {
