@@ -59,7 +59,7 @@ export default function About() {
 
           <h2>The resurrection</h2>
           <p>
-            Solomon Dark Revived is a community project that raises the beta from the
+            Solomon Darker is a community project that raises the beta from the
             dead, properly: a mod launcher, an embedded Lua runtime with the{' '}
             <span className="font-mono text-sm">sd.*</span> API for community mods,
             and — the headline act — <strong>Steam multiplayer</strong>, rebuilt into
@@ -68,7 +68,7 @@ export default function About() {
           <ul>
             <li><strong>Classes in Session</strong> — a live master list of multiplayer matches.</li>
             <li><strong>The Library</strong> — community mods, uploaded and versioned.</li>
-            <li><strong>The Annals</strong> — SDR accounts with cloud saves synced from the loader.</li>
+            <li><strong>The Annals</strong> — Solomon Darker accounts with cloud saves synced from the launcher.</li>
             <li>
               <strong>Steam P2P</strong> — host and invite friends directly, with no
               website or account in the loop.
@@ -79,7 +79,7 @@ export default function About() {
           <ul>
             <li><strong>Raptisoft</strong> — for the games. This is a love letter, not a heist.</li>
             <li><strong>The preservation community</strong> — for keeping the builds alive.</li>
-            <li><strong>The SDR modding project</strong> — loader, launcher, Lua runtime, multiplayer.</li>
+            <li><strong>The Solomon Darker project</strong> — loader, launcher, Lua runtime, multiplayer.</li>
           </ul>
           <p>
             Sources:{' '}
@@ -122,7 +122,7 @@ export default function About() {
 
           <h2>The fine print</h2>
           <p>
-            Solomon Dark Revived is a fan preservation project and is not affiliated
+            Solomon Darker is a fan preservation project and is not affiliated
             with or endorsed by Raptisoft. All original game content remains ©
             Raptisoft. If you are Raptisoft and would like anything changed, removed,
             or personally apologized for, we will comply with unseemly haste.

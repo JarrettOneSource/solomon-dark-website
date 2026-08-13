@@ -120,7 +120,7 @@ export default function LobbyPasswordDialog({
           </div>
         ) : step === 'launching' ? (
           <div className="mt-6">
-            <p className="text-sm text-moss">The wards part. Opening the SDR loader…</p>
+            <p className="text-sm text-moss">The wards part. Opening the Solomon Darker launcher…</p>
             {launchUri && (
               <p className="mt-2 text-xs text-bone-dim">
                 Nothing happened?{' '}

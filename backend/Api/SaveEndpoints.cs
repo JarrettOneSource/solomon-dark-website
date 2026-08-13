@@ -23,7 +23,7 @@ public static class SaveEndpoints
         if (userId is null)
         {
             return ApiErrors.Unauthorized(
-                "Link this Steam account to an SDR website account before using cloud saves.");
+                "Link this Steam account to a Solomon Darker website account before using cloud saves.");
         }
 
         var saves = await db.CloudSaves.AsNoTracking()
@@ -92,7 +92,7 @@ public static class SaveEndpoints
         if (userId is null)
         {
             return ApiErrors.Unauthorized(
-                "Link this Steam account to an SDR website account before using cloud saves.");
+                "Link this Steam account to a Solomon Darker website account before using cloud saves.");
         }
 
         var sha256 = await storage.SaveCloudSaveAsync(
@@ -137,7 +137,7 @@ public static class SaveEndpoints
         if (userId is null)
         {
             return ApiErrors.Unauthorized(
-                "Link this Steam account to an SDR website account before using cloud saves.");
+                "Link this Steam account to a Solomon Darker website account before using cloud saves.");
         }
 
         var exists = await db.CloudSaves.AnyAsync(
@@ -172,7 +172,7 @@ public static class SaveEndpoints
         if (userId is null)
         {
             return ApiErrors.Unauthorized(
-                "Link this Steam account to an SDR website account before using cloud saves.");
+                "Link this Steam account to a Solomon Darker website account before using cloud saves.");
         }
 
         var save = await db.CloudSaves.SingleOrDefaultAsync(

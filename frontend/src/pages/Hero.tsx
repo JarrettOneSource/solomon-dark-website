@@ -300,7 +300,7 @@ export default function Hero() {
           <div className="relative w-full max-w-[300px] sm:max-w-[440px]">
             <img
               src={art.logoSolomonDark}
-              alt="Solomon Dark"
+              alt="Solomon Darker"
               className="w-full drop-shadow-[0_6px_24px_rgba(0,0,0,.8)]"
             />
             <div
@@ -317,13 +317,6 @@ export default function Hero() {
                 animation: 'shimmer-move 7s ease 0.7s infinite',
               }}
             />
-          </div>
-
-          <div
-            className="mt-3 font-display text-lg font-bold uppercase tracking-[0.6em] text-arcane sm:text-xl"
-            style={{ textShadow: '0 0 18px rgba(65,227,255,.55)' }}
-          >
-            Revived
           </div>
 
           <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-bone/90">

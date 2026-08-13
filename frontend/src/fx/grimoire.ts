@@ -40,7 +40,7 @@ const CAST_REPLIES: Record<SpellKind, string> = {
 
 const BANNER = String.raw`
       ___
-     /   \      SOLOMON DARK REVIVED
+     /   \      SOLOMON DARKER
     | () () |     the grimoire is open
      \  ^  /
       |||||    Type sd.help() — quietly.

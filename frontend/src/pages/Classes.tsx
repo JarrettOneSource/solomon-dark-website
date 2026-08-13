@@ -97,7 +97,7 @@ export default function Classes() {
             line={
               search || openSeats
                 ? 'Nothing matches. Loosen the filters — or lower your standards.'
-                : 'The faculty deny all knowledge. Host one from the SDR loader.'
+                : 'The faculty deny all knowledge. Host one from the Solomon Darker launcher.'
             }
           />
         ) : (

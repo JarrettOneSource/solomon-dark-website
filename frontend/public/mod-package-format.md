@@ -1,4 +1,4 @@
-# Solomon Dark Revived mod package format
+# Solomon Darker mod package format
 
 Website mods are ZIP archives whose root contains `manifest.json`. The ZIP may
 contain data/Boneyard overlays, root `images/` art replacements, sandboxed Lua,

@@ -138,7 +138,7 @@ export default function BoneyardViewer() {
       }}
     >
       <header className="z-30 flex h-15 flex-none items-center gap-2 border-b border-gold/20 bg-[#0b090f]/95 px-3 shadow-xl backdrop-blur md:gap-4 md:px-4">
-        <Link to="/" className="flex items-center gap-2" aria-label="Return to Solomon Dark">
+        <Link to="/" className="flex items-center gap-2" aria-label="Return to Solomon Darker">
           <img src={art.skullGold} alt="" className="h-7 drop-shadow-[0_0_8px_rgba(200,168,98,.35)]" />
           <span className="hidden font-display text-xs font-bold uppercase tracking-[0.16em] text-gold sm:block">
             Boneyard Viewer

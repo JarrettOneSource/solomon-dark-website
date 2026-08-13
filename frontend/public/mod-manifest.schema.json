@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "/mod-manifest.schema.json",
-  "title": "Solomon Dark Revived website mod manifest",
+  "title": "Solomon Darker website mod manifest",
   "description": "The root manifest for a website-distributed data/Boneyard overlay, images/ art overlay, and/or sandboxed Lua mod.",
   "type": "object",
   "additionalProperties": false,

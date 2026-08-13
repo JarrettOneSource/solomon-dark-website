@@ -143,7 +143,7 @@ function SteamRegistrar() {
         <div className="kicker mb-1.5">The Registrar</div>
         <h2 className="h-display text-xl">Steam Linkage</h2>
         <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-          Bind your Steam self to your SDR account. The Registrar uses it to show you
+          Bind your Steam self to your Solomon Darker account. The Registrar uses it to show you
           friends-only classes and to cut join tickets for warded ones. The rite happens
           on Steam’s own doorstep.
         </p>

@@ -18,7 +18,7 @@ const FEATURES = [
     icon: skillIcons.door,
     title: 'Classes in Session',
     body:
-      'Live co-op through the SDR loader, with a master list of open matches. Bring a study group — the dead grade on a curve.',
+      'Live co-op through the Solomon Darker launcher, with a master list of open matches. Bring a study group — the dead grade on a curve.',
     to: '/classes',
     label: 'See who’s in session',
   },
@@ -34,7 +34,7 @@ const FEATURES = [
     icon: skillIcons.bag,
     title: 'Cloud Saves',
     body:
-      'Your runs, immortalized in the Annals. An SDR account syncs save slots across machines, so no wizard dies of a misplaced hard drive.',
+      'Your runs, immortalized in the Annals. A Solomon Darker account syncs save slots across machines, so no wizard dies of a misplaced hard drive.',
     to: '/account',
     label: 'Open the Annals',
   },
@@ -137,7 +137,7 @@ export default function Home() {
           ) : liveLobbies.length === 0 && veiledClasses.length === 0 ? (
             <EmptyState
               title="No classes in session"
-              line="Solomon, for the record, is not resting. Host one from the SDR loader."
+              line="Solomon, for the record, is not resting. Host one from the Solomon Darker launcher."
             />
           ) : (
             <LobbyTable lobbies={liveLobbies} veiled={veiledClasses} onKnock={setKnock} />
@@ -185,7 +185,7 @@ export default function Home() {
                   ['2015', 'Raptisoft confirms Solomon Dark will never be finished. The tower goes quiet.'],
                   ['2016', 'The unfinished beta escapes for one Halloween. Fans preserve it before midnight.'],
                   ['2022', 'A community archive gathers the surviving builds — 0.71.0, 0.72.0, 0.72.5.'],
-                  ['2026', 'The SDR project awakens: Lua runtime, Steam multiplayer, this site. You are here.'],
+                  ['2026', 'The Solomon Darker project awakens: Lua runtime, Steam multiplayer, this site. You are here.'],
                 ].map(([year, line]) => (
                   <li key={year} className="relative">
                     <span className="absolute -left-[27px] top-1.5 h-2 w-2 rounded-full bg-gold shadow-[0_0_8px_rgba(200,168,98,.8)]" />
@@ -217,7 +217,7 @@ export default function Home() {
             <>
               <h2 className="h-display text-xl">Enroll at the College</h2>
               <p className="text-fell mx-auto mt-3 max-w-md text-bone-dim">
-                An SDR account gets you cloud saves, a place in the Annals, and the
+                A Solomon Darker account gets you cloud saves, a place in the Annals, and the
                 right to contribute tomes to the Library. Tuition is free. Survival is
                 not guaranteed.
               </p>

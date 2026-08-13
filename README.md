@@ -1,4 +1,4 @@
-# Solomon Dark Website
+# Solomon Darker Website
 
 ## Validation
 
@@ -168,7 +168,7 @@ local slot changes, the launcher obtains a short-lived Steam Web API session
 and uploads a validated ZIP snapshot to `/api/saves/{slot}`.
 
 Cloud backup turns on automatically when the active Steam ID is linked to an
-SDR account on the Account page. The launcher does not receive the website
+Solomon Darker account on the Account page. The launcher does not receive the website
 password or store a website bearer token. Cloud-save access from both the
 launcher and the Account page remains disabled until that Steam link exists.
 

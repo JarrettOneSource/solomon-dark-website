@@ -177,10 +177,10 @@ export default function Shell() {
 
       <header className="sticky top-0 z-50 border-b border-gold/15 bg-abyss/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-3" aria-label="Solomon Dark — home">
+          <Link to="/" className="flex items-center gap-3" aria-label="Solomon Darker — home">
             <img src={art.skullGold} alt="" className="h-7 w-auto drop-shadow-[0_0_8px_rgba(200,168,98,.4)]" />
             <span className="font-display text-sm font-bold uppercase tracking-[0.2em] text-gold">
-              Solomon Dark
+              Solomon Darker
             </span>
           </Link>
 
@@ -315,7 +315,7 @@ export default function Shell() {
             <div className="flex items-center gap-3">
               <img src={art.skullGold} alt="" className="h-8" />
               <span className="font-display text-sm font-bold uppercase tracking-[0.18em] text-gold">
-                Solomon Dark Revived
+                Solomon Darker
               </span>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-bone-dim">
