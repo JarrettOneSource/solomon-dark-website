@@ -43,6 +43,41 @@ function assertRect(actual, expected, label, epsilon = 0.05) {
   }
 }
 
+function rectCenter(rect) {
+  assert.ok(rect, 'expected element bounds')
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
+async function touchStart(cdp, x, y) {
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x, y }],
+  })
+}
+
+async function touchMove(cdp, x, y) {
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x, y }],
+  })
+}
+
+async function touchEnd(cdp, type = 'touchEnd') {
+  await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [] })
+}
+
+async function settledPosition(page, readPosition, label) {
+  await page.waitForTimeout(400)
+  const afterTail = await readPosition()
+  await page.waitForTimeout(400)
+  const settled = await readPosition()
+  assert.ok(
+    Math.abs(settled - afterTail) < 1,
+    `${label} remained latched after its movement tail (${afterTail} -> ${settled})`,
+  )
+  return { afterTail, settled }
+}
+
 const reports = {}
 try {
   const deck = await browser.newPage({ viewport: { width: 1280, height: 800 } })
@@ -161,6 +196,7 @@ try {
   mobile.on('pageerror', (error) => mobileErrors.push(error.message))
   await enterHubWithPointer(mobile)
   const joystick = mobile.locator('.hub-touch-joystick')
+  const joystickKnob = mobile.locator('.hub-touch-joystick-knob')
   await joystick.waitFor()
   const joystickBounds = await joystick.boundingBox()
   assert.ok(joystickBounds && joystickBounds.width > 60, 'expected a visible landscape touch joystick')
@@ -185,29 +221,117 @@ try {
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   const centerX = joystickBounds.x + joystickBounds.width / 2
   const centerY = joystickBounds.y + joystickBounds.height / 2
+  const requestedOffset = joystickBounds.width * 0.3
   const mobileCdp = await mobile.context().newCDPSession(mobile)
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: centerX, y: centerY }],
+  await joystick.evaluate((node) => {
+    node.addEventListener('pointerdown', (event) => {
+      window.__sdrLastTouchPointerId = event.pointerId
+    })
   })
-  await mobileCdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove',
-    touchPoints: [{ x: centerX + joystickBounds.width * 0.3, y: centerY }],
-  })
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await mobile.waitForTimeout(50)
+  const heldKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(
+    Math.abs(heldKnobCenter.x - (centerX + requestedOffset)) < 1,
+    `expected scaled joystick knob to follow the touch (${heldKnobCenter.x} vs ${centerX + requestedOffset})`,
+  )
+  assert.ok(Math.abs(heldKnobCenter.y - centerY) < 1)
   await mobile.waitForTimeout(800)
-  await mobileCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await mobile.waitForTimeout(150)
-  const after = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  await touchEnd(mobileCdp)
+  const normalRelease = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'normal touch release',
+  )
+  const releasedKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(Math.abs(releasedKnobCenter.x - centerX) < 1)
+  assert.ok(Math.abs(releasedKnobCenter.y - centerY) < 1)
+  const after = normalRelease.afterTail
   const touchDistance = after - before
   assert.ok(
     touchDistance > 40,
     `expected touch input to remain active through parent snapshot renders (${before} -> ${after})`,
   )
+
+  const cancelBefore = normalRelease.settled
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX - requestedOffset, centerY)
+  await mobile.waitForTimeout(300)
+  const cancelHeld = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  assert.ok(cancelBefore - cancelHeld > 10, 'expected cancellation probe to hold left movement')
+  await touchEnd(mobileCdp, 'touchCancel')
+  const pointerCancel = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'pointer cancellation',
+  )
+  const cancelledKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(Math.abs(cancelledKnobCenter.x - centerX) < 1)
+  assert.ok(Math.abs(cancelledKnobCenter.y - centerY) < 1)
+
+  const lostCaptureBefore = pointerCancel.settled
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await mobile.waitForTimeout(100)
+  const activePointerId = await mobile.evaluate(() => window.__sdrLastTouchPointerId)
+  assert.equal(typeof activePointerId, 'number')
+  await joystick.evaluate((node, pointerId) => node.releasePointerCapture(pointerId), activePointerId)
+  await touchMove(mobileCdp, centerX + joystickBounds.width, centerY)
+  await mobile.waitForTimeout(300)
+  const lostCaptureHeld = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  assert.ok(
+    lostCaptureHeld - lostCaptureBefore > 10,
+    'expected window tracking to retain the active contact after capture loss',
+  )
+  await touchEnd(mobileCdp)
+  const lostCaptureRelease = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'release after pointer-capture loss',
+  )
+  const lostCaptureKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(Math.abs(lostCaptureKnobCenter.x - centerX) < 1)
+  assert.ok(Math.abs(lostCaptureKnobCenter.y - centerY) < 1)
+
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX - requestedOffset, centerY)
+  await mobile.waitForTimeout(200)
+  await mobile.evaluate(() => window.dispatchEvent(new Event('blur')))
+  const focusInterruption = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'focus interruption',
+  )
+  const blurredKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(Math.abs(blurredKnobCenter.x - centerX) < 1)
+  assert.ok(Math.abs(blurredKnobCenter.y - centerY) < 1)
+  await touchEnd(mobileCdp)
+
+  const reuseBefore = focusInterruption.settled
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await mobile.waitForTimeout(300)
+  await touchEnd(mobileCdp)
+  const gestureReuse = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'gesture after focus interruption',
+  )
+  assert.ok(
+    gestureReuse.afterTail - reuseBefore > 10,
+    'expected a new gesture after focus interruption',
+  )
   const hubResolution = Number(await canvas.getAttribute('data-resolution'))
   await mobile.screenshot({ path: mobileHubScreenshotPath })
+
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await mobile.waitForTimeout(200)
   await mobile.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const mobileBoneyard = mobile.locator('.boneyard-scene[data-renderer-state="ready"]')
   await mobileBoneyard.waitFor({ timeout: 30_000 })
+  await touchEnd(mobileCdp)
   const mobileBoneyardCanvas = mobile.locator('.boneyard-world-canvas')
   const mobileBoneyardCanvasBounds = await mobileBoneyardCanvas.boundingBox()
   assertRect(
@@ -230,6 +354,36 @@ try {
   }))
   assert.ok(playerScreen.x >= 0 && playerScreen.x <= mobileBoneyardViewport.width)
   assert.ok(playerScreen.y >= 0 && playerScreen.y <= mobileBoneyardViewport.height)
+  const sceneTeardown = await settledPosition(
+    mobile,
+    () => mobileBoneyardCanvas.evaluate((node) => node.__sdrBoneyardFrame.playerX),
+    'Hub-to-Boneyard joystick teardown',
+  )
+  const boneyardJoystick = mobile.locator('.hub-touch-joystick')
+  const boneyardKnob = mobile.locator('.hub-touch-joystick-knob')
+  const boneyardJoystickBounds = await boneyardJoystick.boundingBox()
+  const boneyardCenter = rectCenter(boneyardJoystickBounds)
+  const boneyardBefore = sceneTeardown.settled
+  await touchStart(mobileCdp, boneyardCenter.x, boneyardCenter.y)
+  await touchMove(
+    mobileCdp,
+    boneyardCenter.x - boneyardJoystickBounds.width * 0.3,
+    boneyardCenter.y,
+  )
+  await mobile.waitForTimeout(300)
+  await touchEnd(mobileCdp)
+  const boneyardRelease = await settledPosition(
+    mobile,
+    () => mobileBoneyardCanvas.evaluate((node) => node.__sdrBoneyardFrame.playerX),
+    'Boneyard touch release',
+  )
+  assert.ok(
+    boneyardBefore - boneyardRelease.afterTail > 10,
+    'expected the Boneyard joystick to own a fresh gesture',
+  )
+  const boneyardKnobCenter = rectCenter(await boneyardKnob.boundingBox())
+  assert.ok(Math.abs(boneyardKnobCenter.x - boneyardCenter.x) < 1)
+  assert.ok(Math.abs(boneyardKnobCenter.y - boneyardCenter.y) < 1)
   await mobile.screenshot({ path: mobileBoneyardScreenshotPath })
   assert.deepEqual(mobileErrors, [])
   reports.mobileLandscape = {
@@ -243,6 +397,15 @@ try {
     },
     stageBounds: mobileStageBounds,
     touchDistance,
+    touchLifecycle: {
+      boneyardRelease,
+      focusInterruption,
+      gestureReuse,
+      lostCaptureRelease,
+      normalRelease,
+      pointerCancel,
+      sceneTeardown,
+    },
     viewport: mobileViewport,
     boneyard: {
       darkness: Boolean(darknessBounds),

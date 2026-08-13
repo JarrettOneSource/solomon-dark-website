@@ -1,4 +1,9 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { joystickVector } from './movement-input.ts'
@@ -9,37 +14,60 @@ interface HubTouchJoystickProps {
 
 export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
   const baseRef = useRef<HTMLDivElement>(null)
-  const knobRef = useRef<HTMLSpanElement>(null)
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
+  const [knobOffset, setKnobOffset] = useState<Vector2>({ x: 0, y: 0 })
 
   useEffect(() => {
     inputSinkRef.current = onInput
   }, [onInput])
 
-  const update = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const base = baseRef.current
-    const knob = knobRef.current
-    if (!base || !knob) return
-    const bounds = base.getBoundingClientRect()
-    const radius = Math.min(bounds.width, bounds.height) * 0.34
-    const movement = joystickVector(
-      { x: event.clientX, y: event.clientY },
-      { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 },
-      radius,
-    )
-    knob.style.transform = `translate(${movement.x * radius}px, ${movement.y * radius}px)`
-    onInput(movement)
-  }
-
-  const release = (event?: ReactPointerEvent<HTMLDivElement>) => {
-    if (event && event.pointerId !== activePointerRef.current) return
+  const release = useCallback((pointerId?: number) => {
+    if (pointerId !== undefined && pointerId !== activePointerRef.current) return
     activePointerRef.current = null
-    if (knobRef.current) knobRef.current.style.transform = 'translate(0, 0)'
-    onInput({ x: 0, y: 0 })
-  }
+    setKnobOffset({ x: 0, y: 0 })
+    inputSinkRef.current({ x: 0, y: 0 })
+  }, [])
 
-  useEffect(() => () => inputSinkRef.current({ x: 0, y: 0 }), [])
+  const update = useCallback((clientX: number, clientY: number) => {
+    const base = baseRef.current
+    if (!base) return
+    const bounds = base.getBoundingClientRect()
+    const inputRadius = Math.min(bounds.width, bounds.height) * 0.34
+    const renderRadius = Math.min(base.offsetWidth, base.offsetHeight) * 0.34
+    const movement = joystickVector(
+      { x: clientX, y: clientY },
+      { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 },
+      inputRadius,
+    )
+    setKnobOffset({ x: movement.x * renderRadius, y: movement.y * renderRadius })
+    inputSinkRef.current(movement)
+  }, [])
+
+  useEffect(() => {
+    const pointerMove = (event: PointerEvent) => {
+      if (event.pointerId === activePointerRef.current) update(event.clientX, event.clientY)
+    }
+    const pointerEnd = (event: PointerEvent) => release(event.pointerId)
+    const blur = () => release()
+    const visibilityChange = () => {
+      if (document.visibilityState === 'hidden') release()
+    }
+    window.addEventListener('pointermove', pointerMove)
+    window.addEventListener('pointerup', pointerEnd)
+    window.addEventListener('pointercancel', pointerEnd)
+    window.addEventListener('blur', blur)
+    document.addEventListener('visibilitychange', visibilityChange)
+    return () => {
+      window.removeEventListener('pointermove', pointerMove)
+      window.removeEventListener('pointerup', pointerEnd)
+      window.removeEventListener('pointercancel', pointerEnd)
+      window.removeEventListener('blur', blur)
+      document.removeEventListener('visibilitychange', visibilityChange)
+      activePointerRef.current = null
+      inputSinkRef.current({ x: 0, y: 0 })
+    }
+  }, [release, update])
 
   return (
     <div
@@ -52,16 +80,13 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
         if (activePointerRef.current !== null) return
         activePointerRef.current = event.pointerId
         event.currentTarget.setPointerCapture(event.pointerId)
-        update(event)
+        update(event.clientX, event.clientY)
       }}
-      onPointerMove={(event) => {
-        if (event.pointerId === activePointerRef.current) update(event)
-      }}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
     >
-      <span ref={knobRef} className="hub-touch-joystick-knob" />
+      <span
+        className="hub-touch-joystick-knob"
+        style={{ transform: `translate(${knobOffset.x}px, ${knobOffset.y}px)` }}
+      />
     </div>
   )
 }
