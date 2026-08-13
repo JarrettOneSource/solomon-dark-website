@@ -95,8 +95,15 @@ The authoritative host remains loopback-only; a browser on another machine is
 not a desktop-local client and therefore needs a separately configured secure
 remote development gateway.
 
-Run only the headless host with `npm run game:host`. Its first stdout line is a
-machine-readable readiness record for a desktop or cloud supervisor. See
+The shared client accepts keyboard (`WASD` or arrows), a standard controller
+(left stick or D-pad, south button to confirm, east button to go back), and a
+Pointer Events joystick on coarse-pointer mobile browsers. The game preserves
+its `1600x900` native stage within wider `16:10` displays such as Steam Deck,
+and asks portrait mobile devices to rotate before play.
+
+Run only the headless host with `SDR_GAME_BOOTSTRAP_CREDENTIAL` set to a strong
+secret and then `npm run game:host`. Its first stdout line is a machine-readable
+readiness record for a desktop or cloud supervisor. See
 `docs/game-runtime-architecture.md` for the supported solo, peer-hosted,
 browser-provisioned, and dedicated topology.
 
@@ -106,6 +113,34 @@ loopback-only supervisor and returns a one-session `wss` endpoint; the static
 client contains neither the supervisor secret nor a shared gameplay credential.
 The checked-in NFO unit, Caddy route, required environment, expiry policy, and
 release health gates are documented in `ops/nfo/README.md`.
+
+### Standalone desktop build
+
+The desktop rebuild packages the same production browser client; it does not
+contain a second renderer or gameplay implementation. Electron serves that
+bundle on an OS-assigned loopback origin, starts the bundled Node `22.17.0`
+runtime as a separate authoritative process, and injects its credentialed
+`ws://127.0.0.1/...` endpoint through an isolated preload.
+
+From `frontend/`:
+
+```bash
+npm run package:desktop:linux
+npm run smoke:desktop
+```
+
+Packaging verifies the official Node archive SHA-256, builds both the cloud
+session supervisor and standalone Hub host, and writes the Linux application
+under `dist-desktop/`. The smoke runs the real packaged Electron app under
+Xvfb, enters the Hub, verifies WebGL and authoritative movement, proves the
+host executable is the bundled Node runtime in a separate process, exits, and
+checks that the child process was reaped. `npm run dev:desktop` exercises the
+same boundary with the development machine's already pinned Node runtime.
+
+The website is not contacted during desktop solo. Encrypted direct peer
+hosting/joining and save persistence are subsequent product slices; the one
+client, protocol, and server bundle are already the shared foundation for
+those modes.
 
 ## Mod packages
 

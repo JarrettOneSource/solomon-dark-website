@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto'
-
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import {
   createBoneyardCatalog,
@@ -10,7 +8,7 @@ import { startGameHost } from './game-host.ts'
 const host = process.env.SDR_GAME_HOST?.trim() || '127.0.0.1'
 const port = parsePort(process.env.SDR_GAME_PORT)
 const credential = process.env.SDR_GAME_BOOTSTRAP_CREDENTIAL?.trim()
-  || randomBytes(32).toString('base64url')
+if (!credential) throw new Error('SDR_GAME_BOOTSTRAP_CREDENTIAL must be configured')
 const allowedOrigins = process.env.SDR_GAME_ALLOWED_ORIGINS
   ?.split(',')
   .map((origin) => origin.trim())
@@ -35,7 +33,6 @@ const server = await startGameHost({
 process.stdout.write(`${JSON.stringify({
   type: 'ready',
   url: server.address.url,
-  bootstrapCredential: credential,
   protocol: GAME_PROTOCOL_NAME,
 })}\n`)
 

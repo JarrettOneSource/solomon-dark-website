@@ -494,12 +494,11 @@ and `1228..1347`.
 This generic renderer is not the authority for the equipped local-player
 robe. The actual local route is
 `0x0054BA80 -> 0x00538B80 -> equipped item vtable +0x20`, with the robe landing
-in `0x00577DA0`. Its five arguments are, exactly, robe object, dynamic frame
-index, fixed frame index, actor scale, and an optional transform pointer. The
-call site builds the dynamic frame as
-`heading + trunc(actor + 0x238) * 24` and the fixed frame as
-`heading + trunc(actor + 0x220) * 24`; the robe renderer uses that same fixed
-frame for all four fixed banks. A clean right-facing runtime snapshot showed
+in `0x00577DA0`. Its five arguments are, exactly, robe object, style-selected
+frame index, fixed-bank frame index, actor scale, and an optional transform
+pointer. The call site builds the style-selected frame as
+`heading + trunc(actor + 0x220) * 24` and the fixed-bank frame as
+`heading + trunc(actor + 0x238) * 24`. A clean right-facing runtime snapshot showed
 heading `6`, actor `+0x220 = 0.0`, and actor `+0x238 = 0.0`, while the gait
 phase at `+0x228` remained independent. That snapshot proves the standing
 frame is `6`, selecting fixed records `1618`, `2434`, `2026`, and `2842`--not
@@ -508,9 +507,9 @@ does not prove that `+0x220` stays zero while walking.
 
 The forced pose-12 interpretation was the anatomy bug: it put a down-facing
 white cuff beside the correctly right-facing staff and body. Pose zero remains
-the correct standing frame, but ordinary walking advances the four fixed robe
-banks through poses `0..4`; only the dynamic robe lane remains on pose zero.
-This is an ownership correction, not a hand-offset or CSS adjustment.
+the correct standing frame. The later instruction-level ABI audit below
+corrects which Clothes banks ordinary walking advances; that correction is an
+ownership result, not a hand-offset or CSS adjustment.
 
 A read-only scan of the only live `Robe` item (`vtable 0x00785704`) in the same
 clean process also recovered style `0`, primary color
@@ -625,15 +624,16 @@ scan code `0x20` (D) for `1.4 s`. The local player moved and faced exactly
 The earlier conclusion drawn from that trace was incomplete. It correctly
 separated `+0x238` from ordinary walking and correctly found a heading-only
 staff call, but it treated the changing `+0x220` as transform-only state even
-though `0x0054BFD4..0x0054BFE6` converts it directly into the fixed robe frame.
+though `0x0054BFD4..0x0054BFE6` converts it directly into the style-selected
+robe/body frame.
 
 The complete stock update at `0x0054B592..0x0054B66E` resolves the three walk
 accumulators. For movement magnitude `distance` in one fixed update:
 
 - `actor +0x220 += distance / 10`, then wraps by subtracting `5` when greater
-  than `5`;
+  than or equal to `5`;
 - `actor +0x224 += distance / 25`, then wraps by subtracting `4` when greater
-  than `4`;
+  than or equal to `4`;
 - `actor +0x228 += distance * 5` without the local wrap in this block.
 
 The constants are the executable doubles at `0x007DE810 = 10`,
@@ -641,47 +641,56 @@ The constants are the executable doubles at `0x007DE810 = 10`,
 `0x007DE970 = 5`. The local renderer `0x0054BA80` consumes these lanes as
 follows:
 
-- `trunc(+0x220)` selects the fixed robe pose at
+- `trunc(+0x220)` selects the style-selected robe/body pose at
   `0x0054BFD4..0x0054BFE6`. Steady float32 travel cycles through `0..4`; the
-  strict `> 5` wrap also makes exact boundary value `5` legal for one update;
+  `>= 5` wrap makes `5` an excluded boundary;
 - `+0x228` drives the half-frequency robe/front-attachment offset at
   `0x0054BB27..0x0054BB7C` and the final head/hat bob at
   `0x0054C35D..0x0054C50B`;
 - `+0x224` is not read anywhere in this local renderer;
-- `+0x238` remains zero during ordinary Hub walking, so the large dynamic robe
-  banks remain on pose zero;
+- `+0x238` remains zero during ordinary Hub walking, so the four large fixed
+  robe banks remain on pose zero;
 - both calls to the equipped attachment compositor, at `0x0054BC2E` and
   `0x0054C071`, receive the quantized heading in `EBP`, not `+0x220`. The staff
   shaft and its two item-owned hand records therefore remain on pose zero and
   move only when their complete depth pass receives the recovered transform.
 
-The four fixed Clothes banks at `1612`, `2428`, `2020`, and `2836` visibly
-contain the walking limb/sleeve and light trim/cuff pieces. Comparing their
-right-facing records for poses `0..4` against the clean direct-stock capture
-`C:\Users\User\AppData\Local\Temp\native-stock-right-stair-clean.mkv` shows
-the same changing lower-body/arm silhouette missing from the web sheet. Thus
-the precise answer to whether the arms animate is split by ownership: the
-robe-owned sleeves, limb pieces, and cuffs cycle through five walk poses; the
-staff item, shaft, and its two hand sprites do not swap walk frames.
+The two style-selected Clothes arrays at records `868..987` and `1228..1347`
+are exactly five poses by 24 headings and contain the ordinary robe/body walk
+cycle. The four fixed arrays at `1612`, `2428`, `2020`, and `2836` are instead
+indexed by `+0x238`, which stays zero in the clean Hub walk trace. The staff
+item, shaft, and its two hand sprites also stay on pose zero; they move with
+their owning painter transforms instead of swapping walk frames.
 
 Implementation consequence: retain the two native-owned authoritative phases
 rather than inventing a client animation clock. The existing `gaitDegrees`
-models `+0x228`; add `walkCyclePrimary` for `+0x220`, advance it by requested
+models `+0x228`; retain `walkCyclePrimary` for `+0x220`, advance it by requested
 distance divided by `10`, and wrap it at `5`. This separate field is necessary
 because `gaitDegrees` is bounded modulo `360`, while the two native phases have
 different periods and cannot be reconstructed from that bounded value after a
-wrap. Emit fixed robe columns `0..5` so the exact legal boundary is preserved,
-although ordinary steady travel uses `0..4`. Keep the dynamic robe, head sheet,
-staff shaft, and both staff-hand banks heading-only, and keep the continuous
-renderer-local transforms already recovered.
+wrap. Emit five columns for the style-selected robe/body sheet and keep the
+four fixed robe arrays, head sheet, staff shaft, and both staff-hand banks
+heading-only. Keep the continuous renderer-local transforms already recovered.
+
+Evidence: fresh no-analysis Ghidra instruction dumps of
+`0x0054BFC7..0x0054BFF1` and decompilation of `Robe_RenderAttachment`
+(`0x00577DA0`). The x86 right-to-left pushes prove that the computed
+`heading + trunc(+0x220) * 24` value is argument 1, while the previously built
+`heading + trunc(+0x238) * 24` value is argument 2. Inside the robe renderer,
+argument 1 indexes the two style-selected arrays and argument 2 indexes all
+four fixed arrays. The update instructions at `0x0054B624..0x0054B643`
+compare literal `5` against the advanced `+0x220` value and subtract on both
+equal and greater results. The exact five-pose size of records `868..987` and
+`1228..1347` independently agrees with that excluded upper boundary.
+
+Confidence: high. Argument ownership, bank lengths, and wrap comparison agree
+at the call site, callee, updater, and serialized Clothes tables. The clean
+right-walk capture is visually consistent with this ownership, but the binary
+evidence is decisive without relying on subjective frame matching.
 
 Unknowns: `+0x224` may feed another presentation or gameplay subsystem outside
 `0x0054BA80`, and non-walk action states can still select other Clothes poses.
 Neither affects ordinary local-player Hub locomotion.
-
-Confidence: high from the exact tick and renderer instruction streams, the
-serialized Clothes records, the clean mod-free runtime trace, and the clean
-native video comparison.
 
 ## Player movement speed
 
@@ -764,11 +773,11 @@ is null there.
 The same live trace showed `actor +0x228` increasing by approximately
 `50 degrees` for every `10 world units` travelled: the gait phase advances by
 `5 degrees per world unit`, or approximately `500 degrees/s` at full speed.
-The phase drives several painter-local transforms in `0x0054BA80`; it does not
-select a new Clothes frame. A 2026-08-12 instruction-level audit corrects the
-earlier conclusion that the finished wizard is moved as one flattened image.
-The stock renderer deliberately preserves relative motion between its item
-passes.
+The phase drives several painter-local transforms in `0x0054BA80`; it is not
+the Clothes frame selector, which is the independent `+0x220` accumulator. A
+2026-08-12 instruction-level audit corrects the earlier conclusion that the
+finished wizard is moved as one flattened image. The stock renderer deliberately
+preserves relative motion between its item passes.
 
 First, `0x0054BB27..0x0054BB7C` computes the value supplied to the robe and
 front-attachment painters. For ordinary Hub movement, with actor scale `s`:
@@ -812,19 +821,17 @@ headPosition = worldPosition + lateral + (0, lift)
 
 The equipment object at loadout slot `+0x18` is invoked under that transform at
 `0x0054C4CC..0x0054C50B`. The robe at slot `+0x1C` and the two attachment depth
-passes are already complete by then. Thus the visible native walk is the
-combination of a fixed pose-0 raster, a half-frequency fixed-robe shift, a
-front-hand/staff registration shift, and the full-frequency head/hat bob. The
-ground shadow remains at the collision root. There is no five-frame player
-walk cycle.
+passes are already complete by then. Thus the visible native walk combines the
+five-frame style-selected robe/body cycle, a half-frequency fixed-bank shift,
+a front-hand/staff registration shift, and the full-frequency head/hat bob.
+The ground shadow remains at the collision root.
 
 Implementation consequence: the web extractor must emit independently owned
-back-attachment, dynamic-robe, fixed-robe, front-attachment, and head sheets.
-The browser must transform those passes independently in stock painter order.
-A single composite sprite or a shared presentation wrapper cannot reproduce
-the native motion and also hides the stock `+1` front-hand registration at the
-normal scale. Keep background X fixed at zero for every sheet; gait changes
-transforms, not source frames.
+back-attachment, style-selected robe/body, fixed-bank robe, front-attachment,
+and head sheets. The browser must select the five-frame robe/body source and
+transform the later passes independently in stock painter order. A single
+composite sprite or a shared presentation wrapper cannot reproduce the native
+motion and also hides the stock `+1` front-hand registration at normal scale.
 
 A browser reproduction of the superseded implementation confirms why its
 motion was effectively absent: while holding D, the player root advanced from
@@ -2177,7 +2184,7 @@ seam. The exact Boneyard combat/controller fields, cast transitions, damage,
 death, and respawn lifecycle remain unknown and must be added only as later RE
 recovers them; they are not speculative optional fields in this refactor.
 
-## 2026-08-12 validation receipt
+### Shared-character validation receipt
 
 The corrected Hub and shared player-character foundation pass the repository's
 canonical `./scripts/validate.sh` gate: pinned dependency restore, clean backend
@@ -2192,6 +2199,31 @@ the character from X `950.64` to X `1021.96`, exercised fixed-robe frames
 `0..4` and walk poses `0..4`, and emitted no console or page errors. The exact
 Vite and host process tree was stopped afterward and both assigned ports were
 closed.
+### Walking-selector correction receipt
+
+The regenerated player art now mirrors the native table shapes: the
+style-selected robe/body sheet is `850x4080` (five poses by 24 headings in
+`170x170` cells), while the four fixed-bank composite is `170x4080`
+(heading-only). The source correction is carried into the isolated GPU-client
+worktree before the world-painter migration so the new renderer cannot
+re-entrench the superseded ABI interpretation.
+
+The prior isolated LAN receipt completed the real Chromium game flow and held
+`D` in the Hub. The authoritative player advanced from X `950.64` to
+`1014.87`; the computed style observed robe/body source X positions `0`,
+`-170`, `-340`, `-510`, and `-680`, while the fixed-bank and staff source X
+positions remained `0`. The browser emitted no page or console errors. The GPU
+renderer must preserve these same source selectors and painter-local
+transforms; changing the renderer does not authorize changing native behavior.
+
+### GPU-client validation receipt
+
+The final corrected Hub passes the repository's canonical
+`./scripts/validate.sh` gate: pinned dependency restore, clean backend build,
+22 Website contract and integration tests, backend format verification,
+frontend lint, all 110 frontend tests, all five desktop-shell tests, the game
+architecture import fence, and the TypeScript/Vite production build. Lint
+reports seven pre-existing Fast Refresh warnings and no errors.
 
 The final browser smoke loaded every resident image successfully and emitted
 no console or page errors. It found one Teacher-local rune at alpha `0.25`,
@@ -2748,3 +2780,106 @@ opened the host-only picker, selected `Contract Arena`, and synchronized run
 to both peers, again with advancing Dig frames. Captures are
 `/tmp/solomon-dark-boneyard-default-final-0812.png` and
 `/tmp/solomon-dark-boneyard-mod-final-0812.png`.
+## 2026-08-12 GPU Courtyard reconstruction receipt
+
+This renderer migration introduces no new game behavior. It maps the already
+recovered native presentation contracts into one explicit GPU scene graph:
+
+- the Courtyard raster and two additive seal painters are world roots;
+- the Useful Thyngs kit and spawn roof keep their recovered Y-sorted painter
+  boundaries, so every actor crosses those boundaries through ordinary depth
+  sorting rather than route-specific exceptions;
+- Students remain body-at-constructor-scale, carried props at unscaled local
+  translations with scaled glyphs, then an unscaled final head pass;
+- the local wizard keeps the five-pose style-selected robe bank, heading-only
+  fixed banks, separate staff front/back pass, head gait transform, and
+  heading-owned orb point; and
+- the Teacher owns exactly its record-13 ring, shadow, one selected pose frame,
+  and release burst. The independent Courtyard seal painters remain registered
+  in the world raster rather than being reattached to the Teacher.
+
+Implementation ownership is now `renderer/hub-world-scene.ts` for the world
+painter, `renderer/hub-actors.ts` for actor composites,
+`renderer/hub-element-vfx.ts` for native per-operation element plans, and
+`client/hub-presentation-timeline.ts` for tick-indexed display sampling. The
+former DOM actor nodes, CSS sprite-sheet offsets, masked full-screen seal
+elements, and per-frame style writes have been removed. This is a clean module
+boundary change, not a reinterpretation of the stock renderer.
+
+The first real Chromium receipt used a WebGL2 context at `1600x900`. It moved
+the authoritative player from X `950.64` to `1199.34`, observed all five robe
+poses `0..4`, thirteen Students, alternating Teacher frames `1/0`, and the
+three simultaneous sprites in the Fire staff orb. All 24 sampled movement
+positions were distinct while networking remained at `20 Hz`; there were no
+page or console errors. A second device receipt proved controller-only loadout
+navigation at Steam Deck `1280x800`, touch movement from X `950.64` to
+`1052.71` at mobile landscape `844x390`, and the portrait orientation gate.
+
+Evidence: `tools/smoke-game-runtime.mjs`,
+`tools/smoke-game-devices.mjs`, the pure render-contract/input/timeline tests,
+and their 2026-08-12 JSON receipts in the active implementation session.
+
+An ordinary-scene SwiftShader trace initially fell to `6.07` average FPS.
+Alpha-bound inspection showed that six sparse Courtyard overlays were each
+submitted as transparent `2000x1024` quads. The retained correction frames
+those same sources to their exact authored nontransparent bounds without
+changing coordinates, tint, blend, or depth. An experimental runtime
+resolution controller reached `43.02` average FPS and `14.20` 1%-low in that
+software renderer, but it was rejected and removed: the production renderer
+does not lower resolution in response to frame rate. SwiftShader remains a
+diagnostic path rather than a physical-GPU acceptance target.
+
+The final browser regression entered the Hub at X `950.64`, moved to
+`1043.83`, and observed all five robe poses (`0..4`), three simultaneous Fire
+orb sprites, alternating Teacher frames, twelve Students, and 24 distinct
+display-rate local-player samples while the transport remained `20 Hz`. The
+final device regression used no scripted DOM focus or pointer activation for
+its Steam Deck leg: standard-controller A presses selected New Game, Earth,
+and Arcane, then the left stick moved the authoritative player from X `950.64`
+to `1012.21` and the D-pad continued to `1082.67`. At `1280x800` the native
+stage occupied exactly `(0,40,1280,720)`. A real CDP touch sequence at mobile
+landscape `844x390` moved X `950.64` to `1013.74` with a `65.835 px` joystick
+and resolution `0.5`; portrait displayed the orientation gate. All legs used
+WebGL and emitted no page errors.
+
+During that final device regression, an early controller press exposed a
+loadout ownership defect: hidden element controls could not receive browser
+autofocus, so the generic navigator selected the visible Back action. The
+loadout now declares explicit element and discipline defaults, and the shared
+navigator waits for a declared default to become visible instead of falling
+through to an unrelated action. This is web input plumbing only; no native
+loadout timing or selection behavior was changed.
+
+### Physical-GPU presentation-clock diagnosis
+
+The software-rendered number above is not representative of the rebuilt
+client. A controlled headed Chrome `150.0.7871.124` run on the Windows host's
+Radeon RX 9070 XT, driving `1920x1080` at `144 Hz`, rendered the new local Hub
+at `144.0` average FPS with a `140.85` FPS 1%-low. The test retained thirteen
+Students, the full `1600x900` WebGL backing store at resolution `1`, all Hub
+animation and VFX, and the authoritative network session. The menu and Hub
+both saturated the display cadence. Hub script work was `0.469 s` across 720
+frames, approximately `0.65 ms` per displayed frame.
+
+The same browser, GPU, viewport, route, loadout, and sampling procedure against
+the pre-migration production release also rendered `144.0` display frames per
+second. That release still had a DOM world with 797 document nodes and no
+WebGL canvas. While moving right for two seconds, it presented 289 display
+frames but changed the local player's rendered X coordinate only 40 times.
+That is the `20 Hz` authoritative snapshot clock exposed directly as visible
+motion. It explains the reported Hub "FPS collapse" even though Chrome's
+actual compositor cadence was healthy.
+
+The correction is the tick-indexed presentation timeline, not a reduced
+resolution, removed effect, skipped render, duplicated client simulation, or
+higher snapshot rate. Remote state remains one snapshot interval behind for
+interpolation, the latest authoritative local state receives bounded shared-
+kernel prediction, and Pixi submits the resulting frame at the display clock.
+The Node host remains authoritative at `100 Hz` and continues transmitting at
+`20 Hz`.
+
+Confidence: high that the GPU scene preserves the documented selector,
+geometry, painter-order, and lifecycle contracts, and high that the reported
+live symptom was the presentation-clock mismatch. The physical-GPU result is
+one qualification point rather than a minimum-hardware claim. WebGPU is
+intentionally not part of this parity claim.

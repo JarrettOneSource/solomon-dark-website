@@ -64,6 +64,7 @@ import {
   HUB_TEACHER_RELEASE_SECONDS,
   HUB_TEACHER_RUNE_ALPHA,
   HUB_TEACHER_RUNE_CENTER,
+  hubTeacherBurstAt,
   hubTeacherFrameAt,
   hubTeacherPhaseAt,
 } from './hub-teacher.ts'
@@ -487,4 +488,9 @@ test('Teacher presentation follows the recovered fixed-tick cast, release, and i
     hubTeacherFrameAt(HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS + 0.01),
     3,
   )
+  assert.equal(hubTeacherBurstAt(0).visible, false)
+  const burst = hubTeacherBurstAt(HUB_TEACHER_CYCLE_SECONDS * 0.33)
+  assert.equal(burst.visible, true)
+  assert.ok(burst.frame >= 0 && burst.frame <= 10)
+  assert.equal(hubTeacherBurstAt(HUB_TEACHER_CYCLE_SECONDS * 0.5).visible, false)
 })

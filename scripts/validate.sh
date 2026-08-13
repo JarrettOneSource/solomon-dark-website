@@ -103,6 +103,9 @@ run_all() {
     printf 'Running frontend tests\n'
     npm --prefix frontend run test:boneyard
 
+    printf 'Running desktop shell tests\n'
+    npm --prefix frontend run test:desktop
+
     printf 'Building production frontend\n'
     npm --prefix frontend run build
 

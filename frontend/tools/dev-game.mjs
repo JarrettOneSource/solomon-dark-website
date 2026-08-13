@@ -27,7 +27,7 @@ const host = spawn(
       SDR_GAME_BOOTSTRAP_CREDENTIAL: credential,
       SDR_GAME_HOST: '127.0.0.1',
       SDR_GAME_PORT: '0',
-      SDR_GAME_SNAPSHOT_RATE: '100',
+      SDR_GAME_SNAPSHOT_RATE: '20',
       SDR_GAME_ALLOWED_ORIGINS: browserOrigin,
     },
     stdio: ['ignore', 'pipe', 'inherit'],

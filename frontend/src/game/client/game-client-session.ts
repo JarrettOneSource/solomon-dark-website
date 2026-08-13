@@ -19,11 +19,18 @@ import {
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import type { GameTransport } from './game-transport.ts'
+import {
+  createHubPresentationTimeline,
+  isHubGameSnapshot,
+  type HubPresentationFrame,
+  type HubPresentationTimeline,
+} from './hub-presentation-timeline.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
 
 export interface GameClientSessionOptions {
   character: PlayerCharacterConfig
   credential: string
+  now?: () => number
   onFatal?: (error: Error) => void
   resumeToken?: string
   transport: GameTransport
@@ -39,6 +46,7 @@ export interface GameClientSession {
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
+  samplePresentation(nowMs?: number): HubPresentationFrame
   sendInput(input: PlayerCharacterInput): void
   startMatch(boneyardId: string): void
 }
@@ -53,6 +61,8 @@ interface PendingInput {
   targetTick: number
 }
 
+const STOPPED_INPUT: PlayerCharacterInput = { movement: { x: 0, y: 0 } }
+
 export function connectGameClientSession(
   options: GameClientSessionOptions,
 ): Promise<GameClientSession> {
@@ -61,10 +71,15 @@ export function connectGameClientSession(
     let destroyed = false
     let welcome: ServerWelcomeMessage | undefined
     let snapshot: GameSnapshot | undefined
+    let presentationTimeline: HubPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
+    let lastSnapshotReceivedAtMs = 0
     let sequence = 0
     let predictionEnabled = false
     let fatalReported = false
+    let currentInput = copyInput(STOPPED_INPUT)
+    let sentInput = copyInput(STOPPED_INPUT)
+    const now = options.now ?? (() => performance.now())
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     let pendingInputs: PendingInput[] = []
@@ -95,6 +110,14 @@ export function connectGameClientSession(
           return
         }
         predictionEnabled = supportsLocalPrediction(message)
+        lastSnapshotReceivedAtMs = now()
+        if (isHubGameSnapshot(snapshot)) {
+          presentationTimeline = createPresentationTimeline(
+            snapshot,
+            lastSnapshotReceivedAtMs,
+            message,
+          )
+        }
         settled = true
         globalThis.clearTimeout(handshakeDeadline)
         resolve(session)
@@ -115,6 +138,20 @@ export function connectGameClientSession(
       snapshot = predictionEnabled && message.snapshot.world.kind === 'hub'
         ? predictLocalPlayer(message.snapshot, welcome.playerId, pendingInputs)
         : message.snapshot
+      lastSnapshotReceivedAtMs = now()
+      if (isHubGameSnapshot(snapshot)) {
+        if (!presentationTimeline) {
+          presentationTimeline = createPresentationTimeline(
+            snapshot,
+            lastSnapshotReceivedAtMs,
+            welcome,
+          )
+        } else {
+          presentationTimeline.push(snapshot, lastSnapshotReceivedAtMs)
+        }
+      } else {
+        presentationTimeline = undefined
+      }
       for (const listener of snapshotListeners) listener(snapshot)
     })
     const removeClose = options.transport.onClose((reason) => {
@@ -165,6 +202,41 @@ export function connectGameClientSession(
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
       },
+      samplePresentation(requestedNow = now()) {
+        if (!welcome || !snapshot || !presentationTimeline || !isHubGameSnapshot(snapshot)) {
+          throw new Error('game session has no Hub presentation timeline')
+        }
+        const frame = presentationTimeline.sample(requestedNow)
+        if (!predictionEnabled) return frame
+        const sourcePlayer = snapshot.players[welcome.playerId]
+        if (!sourcePlayer) return frame
+        const maximumTicks = Math.max(
+          1,
+          Math.ceil(welcome.serverTickRate / welcome.snapshotRate),
+        )
+        const elapsedTicks = Math.min(
+          maximumTicks,
+          Math.max(0, Math.floor(
+            (requestedNow - lastSnapshotReceivedAtMs) * welcome.serverTickRate / 1000,
+          )),
+        )
+        let player = sourcePlayer
+        let collisionRngState = snapshot.world.collisionRngState
+        for (let tick = 0; tick < elapsedTicks; tick += 1) {
+          const predicted = predictPlayerCharacterInHub(
+            player,
+            currentInput,
+            collisionRngState,
+          )
+          player = predicted.player
+          collisionRngState = predicted.collisionRngState
+        }
+        return {
+          ...frame,
+          players: { ...frame.players, [welcome.playerId]: player },
+          world: { ...frame.world, collisionRngState },
+        }
+      },
       sendInput(nextInput) {
         if (!welcome || !snapshot || destroyed) return
         const movement = nextInput.movement
@@ -177,6 +249,9 @@ export function connectGameClientSession(
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
         }
+        currentInput = input
+        if (sameInput(input, sentInput)) return
+        sentInput = copyInput(input)
         sequence += 1
         const targetTick = snapshot.tick + 1
         const pendingAtTick = pendingInputs.findIndex(
@@ -211,6 +286,20 @@ export function connectGameClientSession(
       character: options.character,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
     }))
+
+    function createPresentationTimeline(
+      hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
+      receivedAtMs: number,
+      server: ServerWelcomeMessage,
+    ): HubPresentationTimeline {
+      return createHubPresentationTimeline({
+        initialReceivedAtMs: receivedAtMs,
+        initialSnapshot: hubSnapshot,
+        localPlayerId: server.playerId,
+        serverTickRate: server.serverTickRate,
+        snapshotRate: server.snapshotRate,
+      })
+    }
 
     function fail(error: Error): void {
       if (!settled) {
@@ -275,4 +364,13 @@ function supportsLocalPrediction(welcome: ServerWelcomeMessage): boolean {
     && parameters.movementLaneCap === PLAYER_CHARACTER_MOVEMENT_LANE_CAP
     && parameters.movementRetention === PLAYER_CHARACTER_MOVEMENT_RETENTION
     && parameters.playerRadius === PLAYER_CHARACTER_RADIUS
+}
+
+function copyInput(input: PlayerCharacterInput): PlayerCharacterInput {
+  return { movement: { ...input.movement } }
+}
+
+function sameInput(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
+  return first.movement.x === second.movement.x
+    && first.movement.y === second.movement.y
 }

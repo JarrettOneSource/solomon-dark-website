@@ -1,5 +1,5 @@
-import { BONEYARD_SPRITE_SOURCES } from '../editor/assets'
-import { STAGE_TEXTURES } from '../editor/render'
+import { BONEYARD_SPRITE_SOURCES } from '../editor/assets.ts'
+import { STAGE_TEXTURES } from '../editor/render.ts'
 import {
   boneyard,
   createMenu,
@@ -9,9 +9,14 @@ import {
   mainMenu,
   menuSolomon,
   playerCharacter,
-} from '../lib/assets'
+} from '../lib/assets.ts'
+import type { WizardElement } from './core-kernels/player-character.ts'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
-import { collectAssetSources, loadAssetBatch, type AssetProgress } from './game-asset-readiness'
+import {
+  collectAssetSources,
+  loadAssetBatch,
+  type AssetProgress,
+} from './game-asset-readiness.ts'
 
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 
@@ -98,4 +103,49 @@ export function loadResidentGameAssets(
     (source) => audioSources.has(source) ? loadGameAudio(source) : loadGameImage(source),
     onProgress,
   )
+}
+
+export function hubGameAssetSources(element: WizardElement): string[] {
+  return collectAssetSources({
+    courtyard: hub.courtyard,
+    seals: hub.seals,
+    foreground: hub.foreground,
+    fountainParticle: hub.fountainParticle,
+    tent: hub.tent,
+    player: {
+      staffBack: playerCharacter.staffBack,
+      robeDynamic: playerCharacter.robeDynamic[element],
+      robeFixed: playerCharacter.robeFixed[element],
+      staffFront: playerCharacter.staffFront,
+      head: playerCharacter.head[element],
+    },
+    markers: {
+      help: hub.markers.help.right,
+      talk: hub.markers.talk.right,
+    },
+    props: hub.props,
+    npcs: hub.npcs,
+    elementVfx: elementVfxSources(element),
+  })
+}
+
+export function loadHubGameAssets(
+  element: WizardElement,
+  onProgress: (progress: AssetProgress) => void = () => undefined,
+): Promise<void> {
+  return loadAssetBatch(hubGameAssetSources(element), loadGameImage, onProgress)
+}
+
+export function releaseGameImages(sources: readonly string[]): void {
+  for (const source of sources) imagePromises.delete(source)
+}
+
+function elementVfxSources(element: WizardElement): readonly string[] {
+  switch (element) {
+    case 'air': return [elementVfx.common.core, elementVfx.frames.air]
+    case 'earth': return [elementVfx.common.core, elementVfx.frames.earth]
+    case 'ether': return [elementVfx.common.core, elementVfx.common.ray, elementVfx.common.spark]
+    case 'fire': return [elementVfx.common.core, elementVfx.frames.fire]
+    case 'water': return [elementVfx.common.core, elementVfx.common.ray, elementVfx.frames.water]
+  }
 }

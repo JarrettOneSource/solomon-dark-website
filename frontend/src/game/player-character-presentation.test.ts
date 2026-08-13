@@ -4,9 +4,9 @@ import test from 'node:test'
 import {
   createPlayerCharacterDrawPlan,
   playerCharacterFixedRobeOffset,
-  playerCharacterFixedRobePose,
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
+  playerCharacterRobePose,
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
 } from './player-character-presentation.ts'
@@ -26,8 +26,7 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(playerCharacterStaffIsFront(16), true)
   assert.equal(playerCharacterStaffIsFront(17), false)
 
-  assert.equal(playerCharacterFixedRobePose(4.999), 4)
-  assert.equal(playerCharacterFixedRobePose(5), 5)
+  assert.equal(playerCharacterRobePose(4.999), 4)
   closeTo(playerCharacterFixedRobeOffset(90).x, Math.SQRT1_2)
   closeTo(playerCharacterFixedRobeOffset(180, 2).x, 4)
   closeTo(playerCharacterFrontAttachmentOffset(90).y, 1)
@@ -41,7 +40,7 @@ test('player character draw plan preserves native attachment and gait transforms
     velocity: { x: 90, y: 0 },
     walkCyclePrimary: 2.5,
   })
-  assert.equal(plan.fixedRobePose, 2)
+  assert.equal(plan.robePose, 2)
   assert.equal(plan.headingSheetOffsetY, -1020)
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)

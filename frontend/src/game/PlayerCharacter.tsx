@@ -47,7 +47,7 @@ export default function PlayerCharacter({
       data-local={isLocal === undefined ? undefined : `${isLocal}`}
       data-moving={plan.moving}
       data-player-id={playerId}
-      data-walk-pose={plan.fixedRobePose}
+      data-walk-pose={plan.robePose}
       aria-label={`${state.config.displayName}, ${element} wizard`}
       style={style}
     >
@@ -59,13 +59,15 @@ export default function PlayerCharacter({
         />
         <span
           className="player-character-layer player-character-robe-dynamic"
-          style={{ backgroundPosition: headingPosition }}
+          style={{
+            backgroundPosition:
+              `${-plan.robePose * 170}px ${plan.headingSheetOffsetY}px`,
+          }}
         />
         <span
           className="player-character-layer player-character-robe-fixed"
           style={{
-            backgroundPosition:
-              `${-plan.fixedRobePose * 170}px ${plan.headingSheetOffsetY}px`,
+            backgroundPosition: headingPosition,
             transform: fixedRobeTransform,
           }}
         />

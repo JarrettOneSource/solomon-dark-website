@@ -1,6 +1,6 @@
 # Solomon Dark rebuilt runtime architecture
 
-Status: accepted and implemented foundation, 2026-08-12
+Status: accepted; authoritative, GPU-client, and desktop-solo vertical slices implemented, 2026-08-12
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -151,20 +151,25 @@ There is one composed client, not one DOM client and one canvas client.
 
 - Screen-space menus, Create/loadout, and HUD may remain React/DOM while their
   native-parity receipts continue to pass.
-- World- and camera-space scenes move to a batched GPU canvas after the renderer
-  experiment. Native draw plans, blend operations, render offsets, and painter
-  ordering remain renderer-independent inputs.
-- The existing Hub DOM painter is migration scaffolding. The simulation,
-  collision, motion, extracted assets, and RE ledger are retained. Its wizard
-  adapter consumes a renderer-independent player-character draw plan and is
-  not owned by the Hub, so the same equipment/attachment presentation can be
-  mounted by Boneyard before the GPU renderer cutover.
+- The Courtyard world and camera now render through one PixiJS WebGL canvas.
+  Native draw plans, blend operations, frame selectors, render offsets, and
+  painter ordering remain renderer-independent inputs.
+- Actor presentation is pooled and depth-sorted inside the GPU scene. The old
+  per-actor DOM/style painter has been removed; React continues to own menus,
+  loadout, HUD, accessibility text, and touch controls.
+- The client presents buffered server snapshots at display cadence and applies
+  bounded local prediction through the shared movement kernel. The `100 Hz`
+  simulation, `20 Hz` transport snapshots, and browser/display refresh remain
+  separate clocks.
+- Texture residency is scene-scoped. The Hub keeps every wizard appearance
+  available because authenticated remote participants may use different
+  elements, while scenes outside the Hub do not retain its GPU textures.
 
-PixiJS and Electron are working choices, not irrevocable commitments. PixiJS
-must prove the recovered world painter load on declared minimum hardware.
-Electron must prove the child-process, loopback transport, packaging, and any
-required platform-overlay integration. Stack changes require a failed measured
-gate, not preference.
+WebGL is the production baseline. PixiJS keeps the renderer backend replaceable,
+but WebGPU remains experimental follow-up work rather than a compatibility
+requirement. Electron is the initial desktop shell and does not own simulation:
+it serves the same static bundle and supervises a separately executable pinned
+Node host. Stack changes require a failed measured gate, not preference.
 
 ## Explicit deferrals
 
@@ -175,7 +180,8 @@ gate, not preference.
 - automatic crash restart and seamless multiplayer rejoin;
 - binary or delta snapshots before measured bandwidth requires them;
 - cross-platform fixed-point determinism;
-- final Electron-versus-Tauri and PixiJS-versus-lower-level renderer decisions;
+- WebGPU or a lower-level renderer before a recovered-load WebGL gate fails;
+- replacement of Electron before its package, lifecycle, or platform gates fail;
 - player-count and cloud-capacity promises before native limits and product
   targets are recovered.
 
@@ -216,7 +222,7 @@ A host-language or renderer pivot is justified only by a failed recovered-load
 gate after profiling and focused optimization. Until then, TypeScript/Node and
 a GPU canvas are the lowest-risk continuation of the current work.
 
-## Immediate migration sequence
+## Completed foundation sequence
 
 1. Extend `GameSimulationState.world` and the v2 snapshot world union with the
    authoritative Boneyard state; retain root-level player characters.
@@ -226,8 +232,9 @@ a GPU canvas are the lowest-risk continuation of the current work.
    world systems according to native ownership; do not pre-invent fields.
 4. Provision the same host remotely for web sessions, then prove the desktop
    child-process packaging path.
-5. Select and migrate the world renderer from measured evidence before the
-   recovered combat painter load makes the DOM scaffolding a constraint.
+5. Migrate the Courtyard world to WebGL, preserve the recovered painter plan,
+   and prove keyboard, controller, and touch presentation in real browsers.
+6. Package the same client with a pinned external Node host for desktop solo.
 
 No menu or Create rewrite, ECS adoption, alternative host language, relay
 network, or speculative orchestration layer belongs in this foundation.
@@ -243,20 +250,52 @@ design:
 - the versioned protocol validates bounded messages, identifies the content and prediction
   kernel, and carries tick-indexed client intent plus authoritative snapshots;
 - one Node game host owns all mutation and supports multiple independently
-  configured authenticated characters, while the React Hub only presents the
-  discriminated world snapshot and every root-level player;
+  configured authenticated characters, while the shared client presents every
+  root-level player from interpolated session snapshots;
 - the shared client reconciles acknowledged intent and automatically disables
   local prediction if the host advertises a different kernel;
 - `npm run dev:game` supervises a real separate loopback host and the Vite
   client, with exact child-process teardown; and
-- the static client accepts a platform-injected runtime endpoint, so a future
+- the static client accepts a platform-injected runtime endpoint, so the
   desktop preload and browser provisioner configure the same client bundle
-  without build-time forks; and
+  without build-time forks;
 - the website provisions isolated browser sessions through a loopback-only
   supervisor, while the TLS gateway routes opaque session paths to the same
   authoritative host implementation used by development and future desktop
-  packaging.
+  packaging; and
+- the Hub world uses a pooled PixiJS/WebGL scene, while React retains the HUD,
+  menus, accessibility surface, and Pointer Events joystick.
 
-Electron packaging, encrypted direct peer hosting, save persistence, and the
-measured GPU-renderer migration remain the explicit next product slices. None
-requires replacing this protocol, client, kernel, or server boundary.
+Encrypted direct peer hosting, save persistence, combat load recovery, and
+minimum-hardware qualification remain the next product slices. None requires
+replacing this protocol, client, kernel, renderer plan, or server boundary.
+
+## 2026-08-12 implementation verification
+
+The completed foundation passed the repository's canonical validation from an
+isolated worktree: a warning-free .NET build, 22 Website/backend contracts,
+backend formatting, the architecture import fence, 110 frontend tests, all
+five desktop-shell tests, lint with only seven pre-existing Fast Refresh
+warnings, and the production client plus game-host build. The desktop suite is
+part of that canonical gate, and `npm audit --audit-level=high` reports zero
+vulnerabilities.
+
+The Linux x64 package is relocatable: its stored manifest names the relative
+`solomon-dark` executable rather than the build worktree. A real packaged
+Electron `43.4.0` smoke started the bundled, checksum-pinned Node `22.17.0`
+runtime as a separate authoritative process, served the shared client from an
+ephemeral loopback origin, entered the Hub through WebGL, and moved the player
+from X `950.64` to `1000.89`. The host credential was absent from Electron and
+descendant command lines, and the child host was reaped when the shell exited.
+The client is served with a strict CSP; Pixi's static shader path does not add
+`unsafe-eval`.
+
+A real Chromium browser regression moved the authoritative player from X
+`950.64` to `1043.83` while observing every native robe walk pose and 24
+distinct display-rate samples between `20 Hz` snapshots. Controller-only Steam
+Deck navigation reached the Hub and proved both stick and D-pad movement, a
+real touch-event sequence moved the landscape mobile player, and portrait
+mobile displayed its orientation gate. These
+receipts validate the shared client and current Linux package boundary; they
+do not yet qualify minimum physical GPU hardware, Windows/macOS packages,
+encrypted peer transport, or save/resume.

@@ -5,16 +5,29 @@
   display: grid;
   overflow: hidden;
   place-items: center;
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: #000;
 }
 
 .main-menu-stage {
   position: relative;
-  width: min(100vw, calc(100dvh * 16 / 9));
-  height: min(100dvh, calc(100vw * 9 / 16));
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   container-type: size;
   background: #293044;
+}
+
+.game-orientation-hint { display: none; }
+
+@media (min-aspect-ratio: 16 / 9) {
+  .main-menu-stage {
+    width: auto;
+    height: 100%;
+  }
 }
 
 .main-menu-backdrop {
@@ -672,5 +685,23 @@
   .create-menu-native-flash,
   .create-menu-star {
     animation-play-state: paused;
+  }
+}
+
+@media (orientation: portrait) and (hover: none) and (pointer: coarse) {
+  .main-menu-stage { visibility: hidden; }
+
+  .game-orientation-hint {
+    position: fixed;
+    z-index: 100000;
+    inset: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: grid;
+    padding: 10vw;
+    background: radial-gradient(circle at 50% 42%, #252b3b, #07080d 72%);
+    color: #dfd2a7;
+    font: clamp(22px, 7vw, 42px) 'IM FELL English', Georgia, serif;
+    place-items: center;
+    text-align: center;
   }
 }

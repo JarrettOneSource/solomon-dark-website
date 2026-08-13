@@ -195,6 +195,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
         type="button"
         className="create-menu-back"
         aria-label="Back"
+        data-game-back="true"
         disabled={pendingDiscipline !== null}
         onClick={onBack}
         onPointerDown={(event) => {
@@ -278,6 +279,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
                     left: `${position.x / 16}cqw`,
                     top: `${position.y / 9}cqh`,
                   }}
+                  data-game-default-focus={discipline === 'arcane' || undefined}
                   disabled={pendingDiscipline !== null}
                   onClick={() => selectDiscipline(discipline)}
                 >
@@ -308,6 +310,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
                     opacity: reveal.opacity,
                     top: `${reveal.position.y / 9}cqh`,
                   }}
+                  data-game-default-focus={pickerElement === 'earth' || undefined}
                   onClick={() => selectElement(pickerElement)}
                 >
                   <ElementVfx element={pickerElement} variant="picker" />

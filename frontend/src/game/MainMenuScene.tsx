@@ -1,20 +1,29 @@
-import { useEffect, useMemo, useState, type AnimationEvent, type KeyboardEvent, type ReactNode } from 'react'
-import MenuSolomon from '../fx/MenuSolomon'
-import { isMuted, isSfxMuted } from '../fx/audio'
-import { mainMenu } from '../lib/assets'
-import BoneyardScene from './BoneyardScene'
-import CreateMenuScene from './CreateMenuScene'
-import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
-import { GameAudioDirector } from './game-audio-director.ts'
-import type { GameAudioScene } from './game-audio-native.ts'
-import HubScene from './HubScene'
-import MainMenuBackdrop from './MainMenuBackdrop'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type AnimationEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
+import MenuSolomon from '../fx/MenuSolomon.tsx'
+import { isMuted, isSfxMuted } from '../fx/audio.ts'
+import { mainMenu } from '../lib/assets.ts'
+import BoneyardScene from './BoneyardScene.tsx'
+import CreateMenuScene from './CreateMenuScene.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type {
   PlayerCharacterConfig,
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
+import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
+import { GameAudioDirector } from './game-audio-director.ts'
+import type { GameAudioScene } from './game-audio-native.ts'
+import HubScene from './HubScene.tsx'
+import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
+import MainMenuBackdrop from './MainMenuBackdrop.tsx'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import './main-menu.css'
 
@@ -26,7 +35,9 @@ interface MenuButtonProps {
   children?: ReactNode
   className?: string
   compact?: boolean
+  defaultFocus?: boolean
   disabled?: boolean
+  isBack?: boolean
   onClick?: () => void
   onPress?: () => void
 }
@@ -36,7 +47,9 @@ function MenuButton({
   children,
   className,
   compact = false,
+  defaultFocus = false,
   disabled = false,
+  isBack = false,
   onClick,
   onPress,
 }: MenuButtonProps) {
@@ -54,6 +67,8 @@ function MenuButton({
       className={classes}
       aria-label={accessibleLabel}
       disabled={disabled}
+      data-game-back={isBack || undefined}
+      data-game-default-focus={defaultFocus || undefined}
       onClick={onClick}
       onPointerDown={(event) => {
         if (!disabled && event.button === 0) onPress?.()
@@ -77,7 +92,7 @@ function MenuButton({
 function RootActions({ onPlay, onPress }: { onPlay: () => void; onPress: () => void }) {
   return (
     <>
-      <MenuButton accessibleLabel="Play" onClick={onPlay} onPress={onPress}>
+      <MenuButton accessibleLabel="Play" defaultFocus onClick={onPlay} onPress={onPress}>
         <img src={mainMenu.text.play} alt="" className="main-menu-label-play" />
       </MenuButton>
       <MenuButton accessibleLabel="Explore the Dark Cloud" onPress={onPress}>
@@ -113,11 +128,11 @@ function PlayActions({
           <img src={mainMenu.text.lastGame} alt="" />
         </span>
       </MenuButton>
-      <MenuButton accessibleLabel="New game" onClick={onNewGame} onPress={onPress}>
+      <MenuButton accessibleLabel="New game" defaultFocus onClick={onNewGame} onPress={onPress}>
         <img src={mainMenu.text.newGame} alt="" className="main-menu-label-new-game" />
       </MenuButton>
       <MenuButton accessibleLabel="Unavailable" className="main-menu-button-empty" disabled />
-      <MenuButton accessibleLabel="Back" onClick={onBack} onPress={onPress}>
+      <MenuButton accessibleLabel="Back" isBack onClick={onBack} onPress={onPress}>
         <img src={mainMenu.text.back} alt="" className="main-menu-label-back" />
       </MenuButton>
     </>
@@ -133,6 +148,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
     isMusicMuted: isMuted,
     isSfxMuted,
   }), [])
+  const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>('root')
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
@@ -175,6 +191,12 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
       removeBoneyard()
     }
   }, [session])
+
+  useEffect(() => {
+    if (screen === 'hub' || !stageRef.current) return
+    const navigation = createGamepadMenuNavigation({ root: stageRef.current })
+    return () => navigation.destroy()
+  }, [screen])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -225,7 +247,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
 
   return (
     <div className="main-menu-page">
-      <section className="main-menu-stage" aria-label="Solomon Dark game menu">
+      <section ref={stageRef} className="main-menu-stage" aria-label="Solomon Dark game menu">
         {titleScreen ? (
           <>
             <MainMenuBackdrop />
@@ -285,6 +307,7 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
             onStartMatch={session.startMatch}
+            samplePresentation={session.samplePresentation}
             subscribe={session.onSnapshot}
           />
         ) : session ? (
@@ -303,6 +326,9 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
           aria-hidden
         />
       </section>
+      <div className="game-orientation-hint" role="status">
+        Rotate your device to landscape to enter the College.
+      </div>
     </div>
   )
 }

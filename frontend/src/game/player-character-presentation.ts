@@ -37,13 +37,13 @@ const STAFF_FRONT: readonly boolean[] = [
 
 export interface PlayerCharacterDrawPlan {
   fixedRobeOffset: Vector2
-  fixedRobePose: number
   frontAttachmentOffset: Vector2
   headOffset: Vector2
   headingSheetOffsetY: number
   moving: boolean
   orbOffset: Vector2
   orbZIndex: number
+  robePose: number
   staffFront: boolean
 }
 
@@ -57,7 +57,6 @@ export function createPlayerCharacterDrawPlan(
   const staffFront = playerCharacterStaffIsFront(state.headingIndex)
   return {
     fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
-    fixedRobePose: playerCharacterFixedRobePose(state.walkCyclePrimary),
     frontAttachmentOffset: playerCharacterFrontAttachmentOffset(
       state.gaitDegrees,
       scale,
@@ -71,6 +70,7 @@ export function createPlayerCharacterDrawPlan(
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
     orbOffset: playerCharacterStaffOrbOffset(state.headingIndex),
     orbZIndex: staffFront ? 6 : 2,
+    robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
   }
 }
@@ -83,7 +83,7 @@ export function playerCharacterStaffIsFront(headingIndex: number): boolean {
   return STAFF_FRONT[normalizedIndex(headingIndex, STAFF_FRONT.length)]
 }
 
-export function playerCharacterFixedRobePose(walkCyclePrimary: number): number {
+export function playerCharacterRobePose(walkCyclePrimary: number): number {
   return Math.trunc(walkCyclePrimary)
 }
 

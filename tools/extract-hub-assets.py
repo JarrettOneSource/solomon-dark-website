@@ -23,7 +23,7 @@ WORLD_SIZE = (2000, 1024)
 PLAYER_CELL_SIZE = 170
 STUDENT_POSES = 5
 PLAYER_HEADINGS = 24
-PLAYER_FIXED_ROBE_POSES = 6
+PLAYER_WALK_POSES = 5
 PLAYER_ATTACHMENT_POSE = 0
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
 PLAYER_PALETTES = {
@@ -557,33 +557,34 @@ def build_player_colored_layers(
 ) -> dict[str, Image.Image]:
     """Preserve Wizard_Render's independently selected and transformed passes."""
     layers = {
-        "robe-dynamic": empty_player_sheet(),
-        "robe-fixed": empty_player_sheet(PLAYER_FIXED_ROBE_POSES),
+        "robe-dynamic": empty_player_sheet(PLAYER_WALK_POSES),
+        "robe-fixed": empty_player_sheet(),
         "head": empty_player_sheet(),
     }
 
     for heading in range(PLAYER_HEADINGS):
         row = (0, heading * PLAYER_CELL_SIZE)
 
-        dynamic = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-        paste_player_layer(dynamic, atlas, records[868 + heading], primary)
-        paste_player_layer(dynamic, atlas, records[1228 + heading], secondary)
-        layers["robe-dynamic"].alpha_composite(dynamic, row)
-
-        # Robe_RenderAttachment selects these four banks from trunc(+0x220),
-        # independently of the pose-zero dynamic robe. Stock wraps +0x220 only
-        # when it is greater than 5, so retain the exact legal boundary pose.
-        for pose in range(PLAYER_FIXED_ROBE_POSES):
-            fixed = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-            fixed_offset = pose * PLAYER_HEADINGS + heading
-            paste_player_layer(fixed, atlas, records[1612 + fixed_offset], primary)
-            paste_player_layer(fixed, atlas, records[2428 + fixed_offset], primary)
-            paste_player_layer(fixed, atlas, records[2020 + fixed_offset], secondary)
-            paste_player_layer(fixed, atlas, records[2836 + fixed_offset], secondary)
-            layers["robe-fixed"].alpha_composite(
-                fixed,
+        # The first robe argument is heading + trunc(actor + 0x220) * 24.
+        # These two style-selected arrays are exactly five walk poses.
+        for pose in range(PLAYER_WALK_POSES):
+            dynamic = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            moving_offset = pose * PLAYER_HEADINGS + heading
+            paste_player_layer(dynamic, atlas, records[868 + moving_offset], primary)
+            paste_player_layer(dynamic, atlas, records[1228 + moving_offset], secondary)
+            layers["robe-dynamic"].alpha_composite(
+                dynamic,
                 (pose * PLAYER_CELL_SIZE, row[1]),
             )
+
+        # The second robe argument selects these four banks from actor +0x238,
+        # which remains pose zero throughout ordinary clean Hub locomotion.
+        fixed = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+        paste_player_layer(fixed, atlas, records[1612 + heading], primary)
+        paste_player_layer(fixed, atlas, records[2428 + heading], primary)
+        paste_player_layer(fixed, atlas, records[2020 + heading], secondary)
+        paste_player_layer(fixed, atlas, records[2836 + heading], secondary)
+        layers["robe-fixed"].alpha_composite(fixed, row)
 
         # The loadout slot +0x18 painter runs last under the full gait bob.
         head = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))

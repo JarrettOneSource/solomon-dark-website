@@ -20,6 +20,14 @@ export const HUB_TEACHER_RUNE_ALPHA = 0.25
 
 export type HubTeacherPhase = 'cast' | 'idle' | 'release'
 
+export interface HubTeacherBurstPresentation {
+  column: { alpha: number; scaleX: number; scaleY: number }
+  core: { alpha: number; scale: number }
+  flare: { alpha: number; scale: number }
+  frame: number
+  visible: boolean
+}
+
 const HUB_TEACHER_CAST_TIMER_PER_TICK = 0.075
 
 export function hubTeacherPhaseAt(elapsedSeconds: number): HubTeacherPhase {
@@ -44,4 +52,79 @@ export function hubTeacherFrameAt(elapsedSeconds: number): number {
   }
   if (time < HUB_TEACHER_CAST_SECONDS + HUB_TEACHER_RELEASE_SECONDS) return 2
   return 3
+}
+
+/** Preserve the previously verified native-asset release burst keyframes. */
+export function hubTeacherBurstAt(elapsedSeconds: number): HubTeacherBurstPresentation {
+  const phase = wrappedCycle(elapsedSeconds) / HUB_TEACHER_CYCLE_SECONDS
+  const start = 0.3153
+  const end = 0.3543
+  if (phase < start || phase > end) return hiddenBurst()
+  const progress = (phase - start) / (end - start)
+  const columnPeak = (0.321 - start) / (end - start)
+  const flarePeak = (0.324 - start) / (end - start)
+  const corePeak = (0.32 - start) / (end - start)
+  return {
+    visible: true,
+    frame: Math.min(10, Math.floor(progress * 11)),
+    column: piecewiseVector(progress, columnPeak, 0.35, 0.2, 0.9, 1.08, 1.25, 1.3),
+    flare: piecewiseScalar(progress, flarePeak, 0.2, 1.25, 1.7),
+    core: piecewiseScalar(progress, corePeak, 0.35, 1.35, 0.7),
+  }
+}
+
+function wrappedCycle(elapsedSeconds: number): number {
+  return ((elapsedSeconds % HUB_TEACHER_CYCLE_SECONDS) + HUB_TEACHER_CYCLE_SECONDS)
+    % HUB_TEACHER_CYCLE_SECONDS
+}
+
+function hiddenBurst(): HubTeacherBurstPresentation {
+  return {
+    visible: false,
+    frame: 0,
+    column: { alpha: 0, scaleX: 0.35, scaleY: 0.2 },
+    flare: { alpha: 0, scale: 0.2 },
+    core: { alpha: 0, scale: 0.35 },
+  }
+}
+
+function piecewiseScalar(
+  progress: number,
+  peak: number,
+  start: number,
+  middle: number,
+  end: number,
+): { alpha: number; scale: number } {
+  if (progress <= peak) {
+    const amount = progress / peak
+    return { alpha: amount, scale: start + (middle - start) * amount }
+  }
+  const amount = (progress - peak) / (1 - peak)
+  return { alpha: 1 - amount, scale: middle + (end - middle) * amount }
+}
+
+function piecewiseVector(
+  progress: number,
+  peak: number,
+  startX: number,
+  startY: number,
+  middleX: number,
+  middleY: number,
+  endX: number,
+  endY: number,
+): { alpha: number; scaleX: number; scaleY: number } {
+  if (progress <= peak) {
+    const amount = progress / peak
+    return {
+      alpha: amount * 0.95,
+      scaleX: startX + (middleX - startX) * amount,
+      scaleY: startY + (middleY - startY) * amount,
+    }
+  }
+  const amount = (progress - peak) / (1 - peak)
+  return {
+    alpha: 0.95 * (1 - amount),
+    scaleX: middleX + (endX - middleX) * amount,
+    scaleY: middleY + (endY - middleY) * amount,
+  }
 }

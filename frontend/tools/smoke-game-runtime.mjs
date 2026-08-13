@@ -65,13 +65,17 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
+
+  const scene = page.getByLabel(/College courtyard/)
+  const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   try {
-    await page.getByLabel(/College courtyard/).waitFor({ timeout: 15_000 })
+    await scene.waitFor({ timeout: 30_000 })
+    await canvas.waitFor({ timeout: 30_000 })
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
   } catch (error) {
     process.stderr.write(JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2000),
@@ -82,42 +86,60 @@ try {
     throw error
   }
 
-  const player = page.getByLabel('Helvidius, fire wizard')
-  const before = await player.evaluate((node) => Number.parseFloat(getComputedStyle(node).left))
-  const teacherFrame = page.locator('.hub-teacher-frame')
-  const teacherFrames = []
-  for (let sample = 0; sample < 12; sample += 1) {
-    teacherFrames.push(await teacherFrame.evaluate((node) => getComputedStyle(node).backgroundPositionX))
-    await page.waitForTimeout(50)
-  }
+  const renderer = await canvas.evaluate((node) => {
+    const canvas = node
+    const context = canvas.getContext('webgl2') || canvas.getContext('webgl')
+    return {
+      context: context ? context.constructor.name : null,
+      rendererName: canvas.dataset.rendererName,
+      resolution: Number(canvas.dataset.resolution),
+    }
+  })
+  assert.ok(renderer.context?.includes('WebGL'), `expected a real WebGL context, got ${renderer.context}`)
+  assert.match(renderer.rendererName || '', /webgl/i)
+  assert.ok(renderer.resolution >= 0.5 && renderer.resolution <= 1.5)
+
+  const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  const initialTeacherFrame = await canvas.evaluate((node) => node.__sdrHubFrame.teacherFrame)
+  await page.waitForFunction(
+    (initial) => document.querySelector('.hub-world-canvas')?.__sdrHubFrame.teacherFrame !== initial,
+    initialTeacherFrame,
+    { timeout: 10_000 },
+  )
+  const teacherFrames = [initialTeacherFrame, await canvas.evaluate((node) => node.__sdrHubFrame.teacherFrame)]
 
   const presentationSamples = []
   await page.keyboard.down('d')
-  for (let sample = 0; sample < 14; sample += 1) {
-    presentationSamples.push(await player.evaluate((node) => {
-      const fixedRobe = node.querySelector('.player-character-robe-fixed')
-      const dynamicRobe = node.querySelector('.player-character-robe-dynamic')
-      const staffFront = node.querySelector('.player-character-staff-front')
-      if (!fixedRobe || !dynamicRobe || !staffFront) throw new Error('player presentation layer missing')
-      return {
-        dynamicRobeX: getComputedStyle(dynamicRobe).backgroundPositionX,
-        fixedRobeX: getComputedStyle(fixedRobe).backgroundPositionX,
-        staffFrontX: getComputedStyle(staffFront).backgroundPositionX,
-        walkPose: node.dataset.walkPose,
-      }
-    }))
+  for (let sample = 0; sample < 24; sample += 1) {
+    presentationSamples.push(await canvas.evaluate((node) => ({
+      frame: node.__sdrHubFrame.frameCount,
+      playerX: node.__sdrHubFrame.playerX,
+      tick: node.__sdrHubFrame.tick,
+      walkPose: node.__sdrHubFrame.playerWalkPose,
+    })))
     await page.waitForTimeout(50)
   }
   await page.keyboard.up('d')
-  await page.waitForTimeout(100)
-  const after = await player.evaluate((node) => Number.parseFloat(getComputedStyle(node).left))
+  await page.waitForTimeout(150)
+  const finalFrame = await canvas.evaluate((node) => ({ ...node.__sdrHubFrame }))
+  const after = finalFrame.playerX
+  const studentCount = finalFrame.studentCount
+  const orbSpriteCount = finalFrame.orbSpriteCount
+  const textureSources = JSON.parse(await canvas.getAttribute('data-texture-sources'))
 
   assert.ok(after > before, `expected the authoritative player to move right (${before} -> ${after})`)
-  assert.ok(new Set(teacherFrames).size > 1, `expected the Teacher's casting frames to animate (${teacherFrames.join(', ')})`)
-  assert.ok(new Set(presentationSamples.map(({ walkPose }) => walkPose)).size > 1, 'expected the native robe walk pose to advance')
-  assert.ok(new Set(presentationSamples.map(({ fixedRobeX }) => fixedRobeX)).size > 1, 'expected the fixed robe sheet frame to advance')
-  assert.deepEqual(new Set(presentationSamples.map(({ dynamicRobeX }) => dynamicRobeX)), new Set(['0px']))
-  assert.deepEqual(new Set(presentationSamples.map(({ staffFrontX }) => staffFrontX)), new Set(['0px']))
+  assert.ok(new Set(teacherFrames).size > 1, `expected Teacher casting frames to animate (${teacherFrames.join(', ')})`)
+  assert.ok(new Set(presentationSamples.map(({ walkPose }) => walkPose)).size > 1, 'expected the native five-pose robe walk selector to advance')
+  assert.ok(new Set(presentationSamples.map(({ playerX }) => playerX)).size > 10, 'expected display-rate local presentation between 20 Hz snapshots')
+  assert.ok(presentationSamples.at(-1).frame > presentationSamples[0].frame, 'expected the GPU renderer to keep presenting frames')
+  assert.ok(studentCount > 0, `expected authoritative Students, got ${studentCount}`)
+  assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
+  for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
+    assert.ok(
+      textureSources.some((source) => source.includes(`hub-player-head-${element}`)),
+      `expected the ${element} multiplayer appearance texture to be available`,
+    )
+  }
 
   await enterHub(clientPage, 'Earth')
   await clientPage.getByText('Waiting for host').waitFor({ timeout: 15_000 })
@@ -170,7 +192,6 @@ try {
     before,
     after,
     consoleErrors,
-    fixedRobeFrames: [...new Set(presentationSamples.map(({ fixedRobeX }) => fixedRobeX))],
     pageErrors,
     clientConsoleErrors,
     clientPageErrors,
@@ -178,6 +199,10 @@ try {
     hostDigFrames: [...new Set(hostDigFrames)],
     hostReceipt,
     screenshotPath,
+    orbSpriteCount,
+    renderer,
+    smoothPlayerSamples: new Set(presentationSamples.map(({ playerX }) => playerX)).size,
+    studentCount,
     teacherFrames: [...new Set(teacherFrames)],
     walkPoses: [...new Set(presentationSamples.map(({ walkPose }) => walkPose))],
   }) + '\n')
