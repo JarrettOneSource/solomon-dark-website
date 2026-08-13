@@ -10,7 +10,20 @@ const browser = await chromium.launch({
 })
 
 try {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const context = await browser.newContext({
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: new URL(baseUrl).origin,
+        localStorage: [
+          { name: 'sdr:muted', value: '1' },
+          { name: 'sdr:sfx-muted', value: '1' },
+        ],
+      }],
+    },
+    viewport: { width: 1600, height: 900 },
+  })
+  const page = await context.newPage()
   const pageErrors = []
   const consoleErrors = []
   page.on('pageerror', (error) => pageErrors.push({ message: error.message, stack: error.stack }))
@@ -25,6 +38,16 @@ try {
     let nextChannel = 1
     const NativePlay = HTMLMediaElement.prototype.play
     const NativePause = HTMLMediaElement.prototype.pause
+    const sourceMatches = (actual, expected) => {
+      const actualName = new URL(actual).pathname.split('/').pop()
+      const expectedName = expected.split('/').pop()
+      const extensionAt = expectedName.lastIndexOf('.')
+      const stem = expectedName.slice(0, extensionAt)
+      const extension = expectedName.slice(extensionAt)
+      const suffix = actualName.slice(stem.length, -extension.length)
+      return actualName === expectedName
+        || (actualName.startsWith(`${stem}-`) && actualName.endsWith(extension) && /^-[\w-]+$/.test(suffix))
+    }
     HTMLMediaElement.prototype.pause = function () {
       let channelId = Number(this.dataset.audioSmokeChannel)
       if (!channelId) {
@@ -60,11 +83,19 @@ try {
       })
       return NativePlay.call(this)
     }
-    Object.defineProperty(window, '__gameAudioEvents', { value: events })
+    Object.defineProperties(window, {
+      __gameAudioEvents: { value: events },
+      __gameAudioSourceMatches: { value: sourceMatches },
+    })
   })
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const mutePreferences = await page.evaluate(() => ({
+    music: localStorage.getItem('sdr:muted'),
+    sfx: localStorage.getItem('sdr:sfx-muted'),
+  }))
+  assert.deepEqual(mutePreferences, { music: '1', sfx: '1' })
   await waitForPlay(page, '/game/audio/music/solomondarktheme.mp3')
 
   const beforeHover = await playCount(page)
@@ -157,8 +188,8 @@ try {
 
   const stepEvents = (await audioEvents(page)).filter((event) => (
     event.type === 'play'
-    && (event.src.includes('/game/audio/sfx/step/step1.wav')
-      || event.src.includes('/game/audio/sfx/step/step2.wav'))
+    && (sourceMatches(event.src, '/game/audio/sfx/step/step1.wav')
+      || sourceMatches(event.src, '/game/audio/sfx/step/step2.wav'))
   ))
   assert.ok(stepEvents.length >= 2, `expected repeated native footsteps, got ${stepEvents.length}`)
   assert.ok(stepEvents.every((event) => event.volume === 0.5))
@@ -166,7 +197,7 @@ try {
   // A reused direct host may enter the 14.12-second Teacher cycle at any phase.
   await waitForPlay(page, '/game/audio/sfx/summon.wav', 16_000)
   const summon = (await audioEvents(page)).findLast((event) => (
-    event.type === 'play' && event.src.includes('/game/audio/sfx/summon.wav')
+    event.type === 'play' && sourceMatches(event.src, '/game/audio/sfx/summon.wav')
   ))
   assert.ok(summon)
   assert.ok(summon.volume >= 0.0625 && summon.volume <= 0.25)
@@ -176,17 +207,24 @@ try {
   const playedSources = events
     .filter((event) => event.type === 'play')
     .map((event) => new URL(event.src).pathname)
-  const musicSources = playedSources.filter((source) => source.includes('/audio/music/'))
+  const expectedMusic = [
+    '/game/audio/music/solomondarktheme.mp3',
+    '/game/audio/music/selection.mp3',
+    '/game/audio/music/academy.mp3',
+  ]
+  const musicSources = playedSources.filter((source) => (
+    expectedMusic.some((expected) => sourceMatches(source, expected))
+  ))
   assert.ok(musicSources.length >= 3)
-  assert.ok(
-    musicSources.every((source) => source.includes('/assets/game/audio/music/')),
-    `public-site jukebox contaminated /game: ${musicSources.join(', ')}`,
-  )
+  assert.ok(expectedMusic.every((expected) => (
+    musicSources.some((source) => sourceMatches(source, expected))
+  )))
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
 
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
+    mutePreferences,
     musicSources: [...new Set(musicSources)],
     playedSources,
     stepCount: stepEvents.length,
@@ -210,7 +248,7 @@ async function playCount(page) {
 async function waitForPlay(page, source, timeout = 5_000) {
   await page.waitForFunction(
     (expected) => window.__gameAudioEvents.some((event) => (
-      event.type === 'play' && event.src.includes(expected)
+      event.type === 'play' && window.__gameAudioSourceMatches(event.src, expected)
     )),
     source,
     { timeout },
@@ -220,7 +258,8 @@ async function waitForPlay(page, source, timeout = 5_000) {
 async function waitForEitherPlay(page, sources, timeout = 5_000) {
   await page.waitForFunction(
     (expected) => window.__gameAudioEvents.some((event) => (
-      event.type === 'play' && expected.some((source) => event.src.includes(source))
+      event.type === 'play'
+      && expected.some((source) => window.__gameAudioSourceMatches(event.src, source))
     )),
     sources,
     { timeout },
@@ -230,9 +269,20 @@ async function waitForEitherPlay(page, sources, timeout = 5_000) {
 async function waitForPlayCount(page, source, count, timeout = 5_000) {
   await page.waitForFunction(
     ({ expected, minimum }) => window.__gameAudioEvents.filter((event) => (
-      event.type === 'play' && event.src.includes(expected)
+      event.type === 'play' && window.__gameAudioSourceMatches(event.src, expected)
     )).length >= minimum,
     { expected: source, minimum: count },
     { timeout },
   )
+}
+
+function sourceMatches(actual, expected) {
+  const actualName = new URL(actual, baseUrl).pathname.split('/').pop()
+  const expectedName = expected.split('/').pop()
+  const extensionAt = expectedName.lastIndexOf('.')
+  const stem = expectedName.slice(0, extensionAt)
+  const extension = expectedName.slice(extensionAt)
+  const suffix = actualName.slice(stem.length, -extension.length)
+  return actualName === expectedName
+    || (actualName.startsWith(`${stem}-`) && actualName.endsWith(extension) && /^-[\w-]+$/.test(suffix))
 }

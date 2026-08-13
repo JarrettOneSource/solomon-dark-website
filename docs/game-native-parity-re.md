@@ -2347,6 +2347,12 @@ overlapping native `Sound` one-shots, keyed `SoundStream` channels, autoplay
 unlock, crossfades, and cleanup. Scene components emit recovered semantic
 events; they do not know asset paths or create arbitrary audio timers.
 
+That ownership boundary includes mute state. `/game` must not read or migrate
+the public site's `sdr:muted` or `sdr:sfx-muted` local-storage preferences;
+those keys govern only the public-site jukebox and effects rail. Native game
+music and effects start enabled independently of those preferences. Any future
+game mute control must be game-owned rather than bridged back to site state.
+
 Confidence is high for every registry object, call site, gain, music name,
 transition tick count, Create ordering, footstep cadence/surface choice, and
 Teacher release/attenuation rule above. Global native RNG sequence is not

@@ -66,6 +66,16 @@ for (const layer of layers) {
   }
 }
 
+for (const path of await sourceFiles(gameRoot)) {
+  const source = await readFile(path, 'utf8')
+  if (/from\s+['"][^'"]*\/fx\/(?:audio|jukebox)(?:\.ts)?['"]/.test(source)) {
+    failures.push(`${relative(gameRoot, path)} must not import public-site audio state`)
+  }
+  if (/['"]sdr:(?:muted|sfx-muted)['"]/.test(source)) {
+    failures.push(`${relative(gameRoot, path)} must not read public-site mute preferences`)
+  }
+}
+
 const hubScenePath = join(gameRoot, 'HubScene.tsx')
 const hubScene = await readFile(hubScenePath, 'utf8')
 if (/from\s+['"].*core-server\//.test(hubScene)) {

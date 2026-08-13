@@ -26,8 +26,6 @@ export type GameAudioChannel = Pick<
 export interface GameAudioDirectorOptions {
   cancelFrame?: (handle: number) => void
   createAudio?: (source: string) => GameAudioChannel
-  isMusicMuted?: () => boolean
-  isSfxMuted?: () => boolean
   now?: () => number
   requestFrame?: (callback: FrameRequestCallback) => number
 }
@@ -46,8 +44,6 @@ export class GameAudioDirector {
   private currentMusic: GameAudioChannel | null = null
   private fadeFrame = 0
   private generation = 0
-  private isMusicMuted: () => boolean
-  private isSfxMuted: () => boolean
   private musicScene: GameAudioScene | null = null
   private now: () => number
   private outgoingMusic: GameAudioChannel | null = null
@@ -61,8 +57,6 @@ export class GameAudioDirector {
   ) {
     this.sources = sources
     this.createAudio = options.createAudio ?? ((source) => new Audio(source))
-    this.isMusicMuted = options.isMusicMuted ?? (() => false)
-    this.isSfxMuted = options.isSfxMuted ?? (() => false)
     this.now = options.now ?? (() => performance.now())
     this.requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback))
     this.cancelFrame = options.cancelFrame ?? ((handle) => cancelAnimationFrame(handle))
@@ -80,22 +74,16 @@ export class GameAudioDirector {
     this.musicScene = scene
     this.generation += 1
 
-    if (this.isMusicMuted()) {
-      this.outgoingMusic?.pause()
-      this.outgoingMusic = null
-      return
-    }
     void this.startCurrentMusic(this.generation)
   }
 
   unlock(): void {
-    if (!this.currentMusic || this.isMusicMuted() || !this.currentMusic.paused) return
+    if (!this.currentMusic || !this.currentMusic.paused) return
     this.currentMusic.currentTime = 0
     void this.startCurrentMusic(this.generation)
   }
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
-    if (this.isSfxMuted()) return
     const channel = this.makeChannel(this.sources.sounds[cue])
     channel.volume = clampUnit(options.volume ?? 1)
     channel.playbackRate = options.playbackRate ?? 1
@@ -112,7 +100,6 @@ export class GameAudioDirector {
   }
 
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
-    if (this.isSfxMuted()) return
     let channel = this.streams.get(cue)
     if (!channel) {
       channel = this.makeChannel(this.sources.streams[cue])

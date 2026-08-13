@@ -108,9 +108,7 @@ class FakeFrames {
 }
 
 function fixture(options: {
-  musicMuted?: () => boolean
   rejectSources?: ReadonlySet<string>
-  sfxMuted?: () => boolean
 } = {}) {
   const created: FakeAudio[] = []
   const frames = new FakeFrames()
@@ -122,8 +120,6 @@ function fixture(options: {
       created.push(audio)
       return audio as unknown as GameAudioChannel
     },
-    isMusicMuted: options.musicMuted,
-    isSfxMuted: options.sfxMuted,
     now: frames.now,
     requestFrame: frames.request,
   })
@@ -207,13 +203,4 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   director.destroy()
   assert.equal(created[1].paused, true)
   await flushPromises()
-})
-
-test('honors independent music and effects mute state', () => {
-  const muted = fixture({ musicMuted: () => true, sfxMuted: () => true })
-  muted.director.setScene('title')
-  muted.director.playSound('click')
-  muted.director.playStream('start-cast')
-  assert.equal(muted.created.length, 1)
-  assert.equal(muted.created[0].playCalls, 0)
 })

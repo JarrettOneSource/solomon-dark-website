@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react'
 import MenuSolomon from '../fx/MenuSolomon.tsx'
-import { isMuted, isSfxMuted } from '../fx/audio.ts'
 import { mainMenu } from '../lib/assets.ts'
 import BoneyardScene from './BoneyardScene.tsx'
 import CreateMenuScene from './CreateMenuScene.tsx'
@@ -144,10 +143,7 @@ interface MainMenuSceneProps {
 }
 
 export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
-  const audio = useMemo(() => new GameAudioDirector(GAME_AUDIO_SOURCES, {
-    isMusicMuted: isMuted,
-    isSfxMuted,
-  }), [])
+  const audio = useMemo(() => new GameAudioDirector(GAME_AUDIO_SOURCES), [])
   const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>('root')
   const [fadeState, setFadeState] = useState<FadeState>('idle')
