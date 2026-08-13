@@ -521,6 +521,8 @@
 
 .create-menu-hand-layer-right {
   z-index: 5;
+  top: 23.333333%;
+  left: 55.125%;
 }
 
 .create-menu-hand-layer-right[data-discipline-visible='true'] {
@@ -549,19 +551,9 @@
   left: 4.75%;
 }
 
-.create-menu-scene[data-phase='element'] .create-menu-hand-layer-right {
-  top: 56.444444%;
-  left: 58.25%;
-}
-
 .create-menu-scene[data-phase='discipline'] .create-menu-hand-layer-left {
   top: 23.333333%;
   left: 4.75%;
-}
-
-.create-menu-scene[data-phase='discipline'] .create-menu-hand-layer-right {
-  top: 23.333333%;
-  left: 55.125%;
 }
 
 .create-menu-scene[data-hands-ready='false'] .create-menu-hand-layer {

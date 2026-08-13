@@ -168,6 +168,41 @@ discrete sprite at a time. The native game does not alpha-blend two poses.
 Confidence: high. These are visible at frame cadence in lossless 60 fps capture
 and agree with the decompiled state thresholds.
 
+### Inactive right-hand lifecycle
+
+The Create renderer owns both hands for the full lifetime of the loadout scene;
+the active-hand flag advances a hand's state machine but does not determine
+whether that hand is drawn. In the element phase, the right hand is already
+present as the closed-fist sprite at native base center `(1200,560)` plus its
+inactive travel offset `(50,300)`. It stays visible in that lower-right resting
+position until the left hand finishes closing around the selected element.
+Control then passes to the right-hand state machine, which consumes the same
+travel offset while changing fist to cupped to raised for discipline selection.
+
+Evidence:
+
+- `0x0059BC42`, the recovered right-hand draw path, renders the current discrete
+  pose from the persistent Create object rather than gating the draw on the
+  right-active flag.
+- `%LOCALAPPDATA%/Temp/native-water-discipline-60fps-0811.mkv`, beginning with
+  the first captured element-phase frames, visibly retains the closed right
+  fist at the bottom-right before its discipline-opening motion begins.
+- The read-only Create-state sample documented below records base center
+  `(1200,560)` and travel `(50,300)` as separate renderer inputs. The travel
+  vector must therefore be applied once, not baked into a phase-specific base
+  position and applied again as motion.
+
+Implementation consequence: the web right-hand layer must keep the native
+`(1200,560)` base center in both element and discipline phases. Entry motion
+owns the `(50,300)` closed offset, so phase CSS must not include a second copy.
+The hand remains mounted as a fist before element selection and naturally rises
+when the existing selection state machine starts.
+
+Confidence: high from the complete draw-path recovery, live state fields, and
+lossless stock capture. The allocator-derived idle-phase difference between the
+two hands remains intentionally unspecified; it does not affect visibility,
+base ownership, or transition geometry.
+
 ### Hand transform and idle clocks
 
 Complete instruction recovery of the right-hand draw path at `0x0059BC42`
