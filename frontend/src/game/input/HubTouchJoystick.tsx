@@ -1,10 +1,10 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 
-import type { HubPoint } from '../core-kernels/hub-math.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 import { joystickVector } from './movement-input.ts'
 
 interface HubTouchJoystickProps {
-  onInput: (movement: HubPoint) => void
+  onInput: (movement: Vector2) => void
 }
 
 export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {

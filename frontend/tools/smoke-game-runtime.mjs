@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
+const CREATE_MENU_TIMEOUT_MS = 30_000
 const expectedModBoneyard = process.env.SDR_GAME_EXPECT_MOD_BONEYARD?.trim()
 const screenshotPath = process.env.SDR_GAME_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-boneyard-smoke.png'
@@ -65,7 +66,23 @@ try {
   }
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
+  try {
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: CREATE_MENU_TIMEOUT_MS,
+    })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      create: await page.locator('.create-menu-scene').evaluateAll((nodes) => nodes.map((node) => ({
+        finalizing: node.dataset.finalizing,
+        handsReady: node.dataset.handsReady,
+        motionSettled: node.dataset.motionSettled,
+        phase: node.dataset.phase,
+      }))),
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -85,6 +102,8 @@ try {
     }) + '\n')
     throw error
   }
+  const initialCanvas = await canvas.elementHandle()
+  assert.ok(initialCanvas, 'expected the mounted WebGL canvas')
 
   const renderer = await canvas.evaluate((node) => {
     const canvas = node
@@ -121,6 +140,12 @@ try {
   }
   await page.keyboard.up('d')
   await page.waitForTimeout(150)
+  assert.equal(
+    await initialCanvas.evaluate((node) => node.isConnected),
+    true,
+    'the renderer canvas must remain mounted across authoritative snapshots',
+  )
+  assert.equal(await page.locator('.hub-world-canvas').count(), 1)
   const finalFrame = await canvas.evaluate((node) => ({ ...node.__sdrHubFrame }))
   const after = finalFrame.playerX
   const studentCount = finalFrame.studentCount
@@ -136,7 +161,7 @@ try {
   assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
   for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
     assert.ok(
-      textureSources.some((source) => source.includes(`hub-player-head-${element}`)),
+      textureSources.some((source) => source.includes(`player-character-head-${element}`)),
       `expected the ${element} multiplayer appearance texture to be available`,
     )
   }
@@ -231,11 +256,28 @@ async function provisionProductionRuntime() {
 }
 
 async function enterHub(page, element) {
+  await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
+  try {
+    await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+      timeout: CREATE_MENU_TIMEOUT_MS,
+    })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      create: await page.locator('.create-menu-scene').evaluateAll((nodes) => nodes.map((node) => ({
+        finalizing: node.dataset.finalizing,
+        handsReady: node.dataset.handsReady,
+        motionSettled: node.dataset.motionSettled,
+        phase: node.dataset.phase,
+      }))),
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()

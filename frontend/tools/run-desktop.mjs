@@ -12,7 +12,7 @@ const child = spawn(electron, [resolve('desktop')], {
   env: {
     ...process.env,
     SDR_DESKTOP_CLIENT_ROOT: resolve('../backend/wwwroot'),
-    SDR_DESKTOP_GAME_HOST: resolve('dist-game-host/hub-host.mjs'),
+    SDR_DESKTOP_GAME_HOST: resolve('dist-game-host/game-host.mjs'),
     SDR_DESKTOP_NODE: process.execPath,
   },
   stdio: 'inherit',

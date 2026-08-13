@@ -135,12 +135,13 @@ export function connectGameClientSession(
       pendingInputs = pendingInputs.filter(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
+      const previousWorldKind = snapshot.world.kind
       snapshot = predictionEnabled && message.snapshot.world.kind === 'hub'
         ? predictLocalPlayer(message.snapshot, welcome.playerId, pendingInputs)
         : message.snapshot
       lastSnapshotReceivedAtMs = now()
       if (isHubGameSnapshot(snapshot)) {
-        if (!presentationTimeline) {
+        if (!presentationTimeline || previousWorldKind !== 'hub') {
           presentationTimeline = createPresentationTimeline(
             snapshot,
             lastSnapshotReceivedAtMs,
@@ -149,8 +150,6 @@ export function connectGameClientSession(
         } else {
           presentationTimeline.push(snapshot, lastSnapshotReceivedAtMs)
         }
-      } else {
-        presentationTimeline = undefined
       }
       for (const listener of snapshotListeners) listener(snapshot)
     })
@@ -203,11 +202,11 @@ export function connectGameClientSession(
         return () => boneyardListeners.delete(listener)
       },
       samplePresentation(requestedNow = now()) {
-        if (!welcome || !snapshot || !presentationTimeline || !isHubGameSnapshot(snapshot)) {
+        if (!welcome || !snapshot || !presentationTimeline) {
           throw new Error('game session has no Hub presentation timeline')
         }
         const frame = presentationTimeline.sample(requestedNow)
-        if (!predictionEnabled) return frame
+        if (!predictionEnabled || !isHubGameSnapshot(snapshot)) return frame
         const sourcePlayer = snapshot.players[welcome.playerId]
         if (!sourcePlayer) return frame
         const maximumTicks = Math.max(

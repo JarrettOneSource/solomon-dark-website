@@ -9,8 +9,8 @@ await build({
   },
   bundle: true,
   entryPoints: {
+    'game-host': 'src/game/host/run-game-host.ts',
     'game-session-supervisor': 'src/game/host/run-game-session-supervisor.ts',
-    'hub-host': 'src/game/host/run-hub-host.ts',
   },
   format: 'esm',
   legalComments: 'none',

@@ -1,10 +1,10 @@
-import type { HubPoint } from '../core-kernels/hub-math.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
 
 export type MovementInputDevice = 'gamepad' | 'keyboard' | 'none' | 'touch'
 
 export interface MovementInputSample {
   device: MovementInputDevice
-  movement: HubPoint
+  movement: Vector2
 }
 
 export interface MovementInputState {
@@ -12,13 +12,13 @@ export interface MovementInputState {
   press(code: string): boolean
   release(code: string): boolean
   sample(gamepads?: readonly (GamepadLike | null)[]): MovementInputSample
-  setTouch(movement: HubPoint): void
+  setTouch(movement: Vector2): void
 }
 
 export interface BrowserMovementInput {
   destroy(): void
   sample(): MovementInputSample
-  setTouch(movement: HubPoint): void
+  setTouch(movement: Vector2): void
 }
 
 export interface GamepadLike {
@@ -53,7 +53,7 @@ export const GAMEPAD_MOVEMENT_DEAD_ZONE = 0.2
 
 export function createMovementInputState(): MovementInputState {
   const pressed = new Set<string>()
-  let touch: HubPoint = { x: 0, y: 0 }
+  let touch: Vector2 = { x: 0, y: 0 }
 
   return {
     clear() {
@@ -127,7 +127,7 @@ export function createBrowserMovementInput(
 export function movementFromGamepads(
   gamepads: readonly (GamepadLike | null)[],
   deadZone = GAMEPAD_MOVEMENT_DEAD_ZONE,
-): HubPoint {
+): Vector2 {
   for (const gamepad of gamepads) {
     if (!gamepad?.connected) continue
     const dpad = normalizeMovement({
@@ -144,7 +144,7 @@ export function movementFromGamepads(
   return { x: 0, y: 0 }
 }
 
-export function radialDeadZone(x: number, y: number, deadZone: number): HubPoint {
+export function radialDeadZone(x: number, y: number, deadZone: number): Vector2 {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: 0, y: 0 }
   const clampedDeadZone = Math.min(0.95, Math.max(0, deadZone))
   const magnitude = Math.hypot(x, y)
@@ -156,7 +156,7 @@ export function radialDeadZone(x: number, y: number, deadZone: number): HubPoint
   }
 }
 
-export function normalizeMovement(movement: HubPoint): HubPoint {
+export function normalizeMovement(movement: Vector2): Vector2 {
   if (!Number.isFinite(movement.x) || !Number.isFinite(movement.y)) return { x: 0, y: 0 }
   const magnitude = Math.hypot(movement.x, movement.y)
   if (magnitude <= 1) return { ...movement }
@@ -167,7 +167,7 @@ export function joystickVector(
   pointer: InputPoint,
   center: InputPoint,
   radius: number,
-): HubPoint {
+): Vector2 {
   if (!(radius > 0) || !Number.isFinite(radius)) return { x: 0, y: 0 }
   return normalizeMovement({
     x: (pointer.x - center.x) / radius,

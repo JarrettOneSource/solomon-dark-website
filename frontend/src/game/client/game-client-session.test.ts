@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createGameSimulation } from '../core-server/game-simulation.ts'
+import {
+  createGameSimulation,
+  enterBoneyardWorld,
+} from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -111,6 +114,19 @@ test('client carries character config, predicts input, reconciles, and tears dow
   }))
   assert.deepEqual(presented.players['player-1'].position, origin)
 
+  const loadedBoneyard = session.getBoneyard()
+  assert.ok(loadedBoneyard)
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 2,
+    snapshot: createGameSnapshot(
+      enterBoneyardWorld(serverState, loadedBoneyard),
+      'player-1',
+    ),
+  }))
+  assert.equal(session.getSnapshot().world.kind, 'boneyard')
+  assert.equal(session.samplePresentation().world.kind, 'hub')
+
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
@@ -148,6 +164,52 @@ test('client disables prediction when the shared character kernel does not match
     snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
   assert.equal(presented.players['player-1'].position.x, origin)
+  session.destroy()
+})
+
+test('client presents bounded display-rate movement without resending unchanged input', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+  }))
+  const session = await connecting
+  const origin = session.getSnapshot().players['player-1'].position.x
+
+  session.sendInput({ movement: { x: 1, y: 0 } })
+  const messagesAfterChange = transport.sent.length
+  session.sendInput({ movement: { x: 1, y: 0 } })
+  assert.equal(transport.sent.length, messagesAfterChange)
+
+  nowMs += 20
+  const early = session.samplePresentation()
+  nowMs += 30
+  const atSnapshotBoundary = session.samplePresentation()
+  nowMs += 500
+  const bounded = session.samplePresentation()
+  assert.ok(early.players['player-1'].position.x > origin)
+  assert.ok(atSnapshotBoundary.players['player-1'].position.x > early.players['player-1'].position.x)
+  assert.equal(
+    bounded.players['player-1'].position.x,
+    atSnapshotBoundary.players['player-1'].position.x,
+  )
   session.destroy()
 })
 

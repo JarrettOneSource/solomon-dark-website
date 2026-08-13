@@ -16,7 +16,7 @@ try {
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
-  await page.getByRole('button', { name: /Air/ }).click()
+  await page.getByRole('button', { name: /air/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   const canvas = page.locator('.hub-world-canvas')
@@ -83,7 +83,10 @@ try {
   }
   assert.equal(report.renderer, 'webgl')
   assert.equal(report.worldDomChildren, 1)
-  assert.ok(report.snapshotHertz > 18 && report.snapshotHertz < 22)
+  assert.ok(
+    report.snapshotHertz > 18 && report.snapshotHertz < 22,
+    `expected 20 Hz snapshots: ${JSON.stringify(report)}`,
+  )
   process.stdout.write(`${JSON.stringify(report)}\n`)
 } finally {
   await browser.close()

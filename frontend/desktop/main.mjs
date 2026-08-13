@@ -77,7 +77,7 @@ async function start() {
 
 async function startLocalGameHost(applicationRoot, origin) {
   const node = resolve(process.env.SDR_DESKTOP_NODE || join(applicationRoot, 'runtime', nodeExecutable()))
-  const hostEntry = resolve(process.env.SDR_DESKTOP_GAME_HOST || join(applicationRoot, 'game-host', 'hub-host.mjs'))
+  const hostEntry = resolve(process.env.SDR_DESKTOP_GAME_HOST || join(applicationRoot, 'game-host', 'game-host.mjs'))
   await Promise.all([access(node), access(hostEntry)])
   const credential = randomBytes(32).toString('base64url')
   gameHost = spawn(node, [hostEntry], {

@@ -47,7 +47,7 @@ try {
   assert.deepEqual(health, { status: 'ok' })
 
   const descendants = await processTable()
-  const host = descendants.find((process) => process.command.includes('game-host/hub-host.mjs'))
+  const host = descendants.find((process) => process.command.includes('game-host/game-host.mjs'))
   assert.ok(host, `expected a separate authoritative Node host:\n${JSON.stringify(descendants)}`)
   hostPid = host.pid
   const hostExecutable = await readlink(`/proc/${hostPid}/exe`)
@@ -60,7 +60,7 @@ try {
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
-  await page.getByRole('button', { name: /Ether/ }).click()
+  await page.getByRole('button', { name: /ether/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   const canvas = page.locator('.hub-world-canvas')

@@ -64,7 +64,14 @@ export default function Game() {
   if (fatal) {
     return <div className="game-runtime-error" role="alert">{fatal}</div>
   }
-  return readiness === 'ready'
-    ? <MainMenuScene connectSession={connectSession} />
-    : <NativeLoader progress={progress} />
+  return (
+    <>
+      {readiness === 'ready'
+        ? <MainMenuScene connectSession={connectSession} />
+        : <NativeLoader progress={progress} />}
+      <div className="game-orientation-hint" role="status">
+        Rotate your device to landscape to enter the College.
+      </div>
+    </>
+  )
 }

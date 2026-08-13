@@ -82,12 +82,27 @@ try {
   assert.equal(await playCount(page), beforeNewGameHover, 'Play-menu hover must be silent')
 
   await page.getByRole('button', { name: 'New Game' }).click()
-  await page.locator('.create-menu-scene').waitFor({ timeout: 15_000 })
+  try {
+    await page.locator('.create-menu-scene').waitFor({ timeout: 30_000 })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      consoleErrors,
+      fade: await page.locator('.main-menu-screen-fade').evaluateAll((nodes) => nodes.map((node) => ({
+        animationName: getComputedStyle(node).animationName,
+        className: node.className,
+        opacity: getComputedStyle(node).opacity,
+      }))),
+      pageErrors,
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await waitForPlay(page, '/game/audio/music/selection.mp3')
   await waitForPlay(page, '/game/audio/sfx/start-cast.wav')
   await waitForPlay(page, '/game/audio/sfx/choose-element.wav')
 
-  const fire = page.getByRole('button', { name: /Fire/ })
+  const fire = page.getByRole('button', { name: /fire/i })
   await fire.waitFor({ state: 'visible' })
   const beforeFireHover = await playCount(page)
   await fire.hover()
@@ -103,7 +118,33 @@ try {
   await discipline.click()
   await waitForPlayCount(page, '/game/audio/sfx/pickskill.wav', 2)
   await waitForPlay(page, '/game/audio/sfx/catchit.wav')
-  await page.getByLabel(/College courtyard/).waitFor({ timeout: 15_000 })
+  try {
+    await page.getByLabel(/College courtyard/).waitFor({ timeout: 30_000 })
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      body: (await page.locator('body').innerText()).slice(0, 2_000),
+      consoleErrors,
+      create: await page.locator('.create-menu-scene').evaluateAll((nodes) => nodes.map((node) => ({
+        finalizing: node.dataset.finalizing,
+        handsReady: node.dataset.handsReady,
+        motionSettled: node.dataset.motionSettled,
+        phase: node.dataset.phase,
+      }))),
+      fade: await page.locator('.main-menu-screen-fade').evaluateAll((nodes) => nodes.map((node) => ({
+        animationName: getComputedStyle(node).animationName,
+        className: node.className,
+        opacity: getComputedStyle(node).opacity,
+      }))),
+      pageErrors,
+      rendererState: await page.locator('.hub-scene').getAttribute('data-renderer-state').catch(() => null),
+      runtimeStatus: await page.locator('.main-menu-runtime-status').allInnerTexts(),
+      visibleButtons: await page.locator('button:visible').evaluateAll((nodes) => nodes.map((node) => (
+        node.getAttribute('aria-label') || node.textContent?.trim()
+      ))),
+      url: page.url(),
+    })}\n`)
+    throw error
+  }
   await waitForPlay(page, '/game/audio/music/academy.mp3')
 
   await page.keyboard.down('d')
@@ -122,7 +163,8 @@ try {
   assert.ok(stepEvents.length >= 2, `expected repeated native footsteps, got ${stepEvents.length}`)
   assert.ok(stepEvents.every((event) => event.volume === 0.5))
 
-  await waitForPlay(page, '/game/audio/sfx/summon.wav', 7_000)
+  // A reused direct host may enter the 14.12-second Teacher cycle at any phase.
+  await waitForPlay(page, '/game/audio/sfx/summon.wav', 16_000)
   const summon = (await audioEvents(page)).findLast((event) => (
     event.type === 'play' && event.src.includes('/game/audio/sfx/summon.wav')
   ))

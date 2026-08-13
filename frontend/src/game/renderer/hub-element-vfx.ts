@@ -1,5 +1,5 @@
 import { Container, Sprite } from 'pixi.js'
-import type { WizardElement } from '../CreateMenuScene.tsx'
+import type { WizardElement } from '../core-kernels/player-character.ts'
 import {
   nativeElementVfxPlan,
   type NativeElementVfxColor,

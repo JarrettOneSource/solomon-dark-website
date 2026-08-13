@@ -81,16 +81,20 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     return result
   }
 
-  const players = Object.fromEntries(WIZARD_ELEMENTS.map((element) => [
-    element,
-    {
-      fixed: stripFrames(texture(playerCharacter.robeFixed[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-      head: stripFrames(texture(playerCharacter.head[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-      robe: gridFrames(texture(playerCharacter.robeDynamic[element]), ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
-      staffBack: stripFrames(texture(playerCharacter.staffBack), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-      staffFront: stripFrames(texture(playerCharacter.staffFront), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
-    },
-  ])) as Record<WizardElement, HubActorTextureFrames>
+  const playerTextures = (element: WizardElement): HubActorTextureFrames => ({
+    fixed: stripFrames(texture(playerCharacter.robeFixed[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
+    head: stripFrames(texture(playerCharacter.head[element]), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
+    robe: gridFrames(texture(playerCharacter.robeDynamic[element]), ACTOR_WALK_FRAMES, ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE),
+    staffBack: stripFrames(texture(playerCharacter.staffBack), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
+    staffFront: stripFrames(texture(playerCharacter.staffFront), ACTOR_HEADINGS, ACTOR_FRAME_SIZE, ACTOR_FRAME_SIZE, 'vertical'),
+  })
+  const players = {
+    air: playerTextures('air'),
+    earth: playerTextures('earth'),
+    ether: playerTextures('ether'),
+    fire: playerTextures('fire'),
+    water: playerTextures('water'),
+  } satisfies Record<WizardElement, HubActorTextureFrames>
 
   const elementTextures: Partial<Record<NativeElementVfxSprite, readonly Texture[]>> = {}
   for (const sprite of ['core', 'ray', 'spark', 'air', 'earth', 'fire', 'water'] as const) {

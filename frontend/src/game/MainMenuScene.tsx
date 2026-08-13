@@ -326,9 +326,6 @@ export default function MainMenuScene({ connectSession }: MainMenuSceneProps) {
           aria-hidden
         />
       </section>
-      <div className="game-orientation-hint" role="status">
-        Rotate your device to landscape to enter the College.
-      </div>
     </div>
   )
 }

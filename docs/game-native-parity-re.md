@@ -2870,6 +2870,18 @@ That is the `20 Hz` authoritative snapshot clock exposed directly as visible
 motion. It explains the reported Hub "FPS collapse" even though Chrome's
 actual compositor cadence was healthy.
 
+After rebasing the renderer onto the current Boneyard/session runtime, two
+further headed Windows runs used that same Radeon, a `1600x900` full-resolution
+backing store, and twelve then fourteen Students. The Hub measured `131.18`
+and `130.38` average FPS with `121.46` and `123.46` FPS 1%-lows; the menu in
+the same runs measured `130.40` and `131.60` FPS. The Hub presented 199
+distinct local-player positions during each two-second movement sample and
+retained one canvas across authoritative snapshots. It contained 75 document
+nodes and spent only `0.21 s` of script time in each Hub sample. The common
+menu/Hub cadence shows that the reconstructed Courtyard no longer creates the
+scene-specific collapse; that Chrome session was being paced below the
+display's nominal `144 Hz` before either scene was entered.
+
 The correction is the tick-indexed presentation timeline, not a reduced
 resolution, removed effect, skipped render, duplicated client simulation, or
 higher snapshot rate. Remote state remains one snapshot interval behind for
