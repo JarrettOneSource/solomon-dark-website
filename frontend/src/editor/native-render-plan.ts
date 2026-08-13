@@ -1,5 +1,6 @@
 import type { EditorDoc, PlacedObject, Polyline, SelEntry, StaticSprite, Vec2 } from './model.ts'
 import { NATIVE } from './model.ts'
+import { nativeGateLeaves } from './native-fence-geometry.ts'
 
 export const NATIVE_PLACEMENT_PASSES = ['underlay', 'compact', 'shadow', 'main', 'foreground'] as const
 
@@ -129,7 +130,7 @@ function fenceBodyPositions(fence: Polyline): Vec2[] {
   // materialize as one body, represented at their static midpoint here.
   switch (fence.segmentCode ?? fence.style ?? 0) {
     case 1: return [pointAlong(fence, 0.28), pointAlong(fence, 0.72)]
-    case 2: return [pointAlong(fence, 0.26), pointAlong(fence, 0.74)]
+    case 2: return nativeGateLeaves(fence.points).map((leaf) => leaf.hinge)
     default: return [pointAlong(fence, 0.5)]
   }
 }

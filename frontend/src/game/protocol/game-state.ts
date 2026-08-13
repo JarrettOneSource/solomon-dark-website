@@ -1,4 +1,7 @@
 import type {
+  BoneyardGateLeafSnapshot,
+} from '../core-kernels/boneyard.ts'
+import type {
   PlayerCharacterConfig,
   PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
@@ -65,6 +68,7 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
   runId: string
 }

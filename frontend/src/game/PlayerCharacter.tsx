@@ -10,6 +10,7 @@ interface PlayerCharacterProps {
   depth: number
   isLocal?: boolean
   playerId?: string
+  scale?: number
   state: PlayerCharacterState
 }
 
@@ -18,6 +19,7 @@ export default function PlayerCharacter({
   depth,
   isLocal,
   playerId,
+  scale = 1,
   state,
 }: PlayerCharacterProps) {
   const plan = createPlayerCharacterDrawPlan(state)
@@ -31,6 +33,8 @@ export default function PlayerCharacter({
   const style = {
     left: state.position.x,
     top: state.position.y,
+    transform: `scale(${scale})`,
+    transformOrigin: '0 0',
     zIndex: depth,
     '--player-character-staff-back-sheet': `url("${playerCharacter.staffBack}")`,
     '--player-character-robe-dynamic-sheet': `url("${playerCharacter.robeDynamic[element]}")`,

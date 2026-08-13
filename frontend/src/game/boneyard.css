@@ -20,7 +20,8 @@
 }
 
 .boneyard-canvas,
-.boneyard-actors {
+.boneyard-actors,
+.boneyard-darkness {
   position: absolute;
   inset: 0;
   width: 1600px;
@@ -29,9 +30,17 @@
 
 .boneyard-canvas {
   display: block;
+  z-index: 0;
 }
 
 .boneyard-actors {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.boneyard-darkness {
+  z-index: 2;
+  display: block;
   pointer-events: none;
 }
 
@@ -52,6 +61,25 @@
   background-position: 0 0;
   background-repeat: no-repeat;
   image-rendering: auto;
+}
+
+.boneyard-grave-dirt,
+.boneyard-lantern {
+  position: absolute;
+  display: block;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  image-rendering: auto;
+}
+
+.boneyard-grave-dirt {
+  width: 46px;
+  height: 10px;
+}
+
+.boneyard-lantern {
+  width: 34px;
+  height: 34px;
 }
 
 .boneyard-player {

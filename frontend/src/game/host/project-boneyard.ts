@@ -8,13 +8,23 @@ export const SOLOMON_DIG_FRAME_PROGRAM = [
   17, 17, 17, 16, 15, 13, 11, 9, 7, 5, 3, 1,
 ] as const
 
+const SOLOMON_X_FROM_GRAVE = 10
+const SOLOMON_Y_FROM_GRAVE = 113
+const LANTERN_X_FROM_GRAVE = -55
+const LANTERN_Y_FROM_GRAVE = 73
+
 export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
   const spawn = doc.geometry.playerSpawn
   if (!spawn) throw new Error(`${doc.meta.name}: Boneyard has no player spawn`)
   const facingDeg = doc.geometry.playerSpawnFacingDeg ?? 0
-  const facingRadians = facingDeg * Math.PI / 180
+  const objects = doc.objects.map((object) => compact(object, [
+    'eid', 'typeId', 'pos', 'variant', 'rot', 'scale', 'sortBias',
+    'atlasEntry', 'secondaryAtlasEntry', 'secondaryVariant',
+    'secondaryVisible', 'overlayAtlasEntry', 'overlayVariant', 'atlasEntries',
+  ])) as unknown as BoneyardScene['objects']
   return {
     name: doc.meta.name,
+    environmentMode: doc.meta.header.environmentMode,
     bounds: {
       x: doc.meta.bounds.x,
       y: doc.meta.bounds.y,
@@ -22,11 +32,7 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
       h: doc.meta.bounds.h,
     },
     spawn: { ...spawn, facingDeg },
-    objects: doc.objects.map((object) => compact(object, [
-      'eid', 'typeId', 'pos', 'variant', 'rot', 'scale', 'sortBias',
-      'atlasEntry', 'secondaryAtlasEntry', 'secondaryVariant',
-      'secondaryVisible', 'overlayAtlasEntry', 'overlayVariant', 'atlasEntries',
-    ])),
+    objects,
     sprites: doc.sprites.map((sprite) => compact(sprite, [
       'eid', 'atlasEntry', 'deadHawgEntry', 'pos', 's0', 's1', 's2', 'flags',
     ])),
@@ -40,19 +46,46 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     terrain: doc.terrain.map((terrain) => compact(terrain, [
       'eid', 'pos', 'points', 'style', 'entry',
     ])),
-    solomonDig: {
-      position: {
-        x: spawn.x + Math.sin(facingRadians) * 240,
-        y: spawn.y - Math.cos(facingRadians) * 240,
-      },
-      frameProgram: SOLOMON_DIG_FRAME_PROGRAM,
-      ticksPerFrame: 5,
-    },
+    solomonDig: selectSolomonSetPiece(objects, 0),
   } as unknown as BoneyardScene
+}
+
+export function materializeSolomonSetPiece(
+  scene: BoneyardScene,
+  selection: number,
+): BoneyardScene {
+  return {
+    ...scene,
+    solomonDig: selectSolomonSetPiece(scene.objects, selection),
+  }
 }
 
 export function boneyardGeometrySha256(scene: BoneyardScene): string {
   return createHash('sha256').update(JSON.stringify(scene)).digest('hex')
+}
+
+function selectSolomonSetPiece(
+  objects: BoneyardScene['objects'],
+  selection: number,
+): BoneyardScene['solomonDig'] {
+  const candidates = objects.filter((object) => (
+    object.typeId === 2029 && object.overlayVariant === 8
+  ))
+  if (candidates.length === 0) return null
+  const gravePosition = candidates[selection % candidates.length].pos
+  return {
+    gravePosition: { ...gravePosition },
+    lanternPosition: {
+      x: gravePosition.x + LANTERN_X_FROM_GRAVE,
+      y: gravePosition.y + LANTERN_Y_FROM_GRAVE,
+    },
+    position: {
+      x: gravePosition.x + SOLOMON_X_FROM_GRAVE,
+      y: gravePosition.y + SOLOMON_Y_FROM_GRAVE,
+    },
+    frameProgram: SOLOMON_DIG_FRAME_PROGRAM,
+    ticksPerFrame: 5,
+  }
 }
 
 function compact<T extends object>(

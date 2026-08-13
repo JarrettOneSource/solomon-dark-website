@@ -9,6 +9,7 @@ import type {
   BoneyardBounds,
   BoneyardChoice,
   BoneyardFence,
+  BoneyardGateLeafSnapshot,
   BoneyardObject,
   BoneyardPoint,
   BoneyardRoad,
@@ -32,7 +33,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 3
+export const GAME_PROTOCOL_VERSION = 5
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-1'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -587,38 +588,22 @@ function optionalNumberField(
 function boneyardScene(value: unknown): BoneyardScene {
   const source = record(value, 'boneyard.scene')
   onlyKeys(source, 'boneyard.scene', [
-    'name', 'bounds', 'spawn', 'objects', 'sprites', 'roads', 'fences', 'terrain',
-    'solomonDig',
+    'name', 'environmentMode', 'bounds', 'spawn', 'objects', 'sprites', 'roads',
+    'fences', 'terrain', 'solomonDig',
   ])
   const boundsSource = record(source.bounds, 'boneyard.scene.bounds')
   const spawnSource = record(source.spawn, 'boneyard.scene.spawn')
-  const digSource = record(source.solomonDig, 'boneyard.scene.solomonDig')
   onlyKeys(boundsSource, 'boneyard.scene.bounds', ['x', 'y', 'w', 'h'])
   onlyKeys(spawnSource, 'boneyard.scene.spawn', ['x', 'y', 'facingDeg'])
-  onlyKeys(digSource, 'boneyard.scene.solomonDig', [
-    'position', 'frameProgram', 'ticksPerFrame',
-  ])
   const bounds: BoneyardBounds = {
     x: finite(boundsSource.x, 'boneyard.scene.bounds.x'),
     y: finite(boundsSource.y, 'boneyard.scene.bounds.y'),
     w: positiveFinite(boundsSource.w, 'boneyard.scene.bounds.w'),
     h: positiveFinite(boundsSource.h, 'boneyard.scene.bounds.h'),
   }
-  const frameProgram = limitedArray(
-    digSource.frameProgram,
-    'boneyard.scene.solomonDig.frameProgram',
-    256,
-  ).map((frame, index) => {
-    const decoded = nonnegativeInteger(
-      frame,
-      `boneyard.scene.solomonDig.frameProgram[${index}]`,
-    )
-    if (decoded > 17) throw new GameProtocolError('Solomon Dig frame exceeds record bank')
-    return decoded
-  })
-  if (frameProgram.length === 0) throw new GameProtocolError('Solomon Dig frame program is empty')
   return {
     name: limitedString(source.name, 'boneyard.scene.name', 256),
+    environmentMode: byte(source.environmentMode, 'boneyard.scene.environmentMode'),
     bounds,
     spawn: {
       x: finite(spawnSource.x, 'boneyard.scene.spawn.x'),
@@ -635,14 +620,40 @@ function boneyardScene(value: unknown): BoneyardScene {
       .map((entry, index) => boneyardLine(entry, `boneyard.scene.fences[${index}]`, 'fence') as BoneyardFence),
     terrain: limitedArray(source.terrain, 'boneyard.scene.terrain', MAX_BONEYARD_STRUCTURES)
       .map((entry, index) => boneyardTerrain(entry, `boneyard.scene.terrain[${index}]`)),
-    solomonDig: {
-      position: boneyardPoint(digSource.position, 'boneyard.scene.solomonDig.position'),
-      frameProgram,
-      ticksPerFrame: positiveInteger(
-        digSource.ticksPerFrame,
-        'boneyard.scene.solomonDig.ticksPerFrame',
-      ),
-    },
+    solomonDig: source.solomonDig === null
+      ? null
+      : solomonDigState(source.solomonDig),
+  }
+}
+
+function byte(value: unknown, field: string): number {
+  const result = nonnegativeInteger(value, field)
+  if (result > 255) throw new GameProtocolError(`${field} must be a byte`)
+  return result
+}
+
+function solomonDigState(value: unknown): NonNullable<BoneyardScene['solomonDig']> {
+  const field = 'boneyard.scene.solomonDig'
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'gravePosition', 'lanternPosition', 'position', 'frameProgram', 'ticksPerFrame',
+  ])
+  const frameProgram = limitedArray(
+    source.frameProgram,
+    `${field}.frameProgram`,
+    256,
+  ).map((frame, index) => {
+    const decoded = nonnegativeInteger(frame, `${field}.frameProgram[${index}]`)
+    if (decoded > 17) throw new GameProtocolError('Solomon Dig frame exceeds record bank')
+    return decoded
+  })
+  if (frameProgram.length === 0) throw new GameProtocolError('Solomon Dig frame program is empty')
+  return {
+    gravePosition: boneyardPoint(source.gravePosition, `${field}.gravePosition`),
+    lanternPosition: boneyardPoint(source.lanternPosition, `${field}.lanternPosition`),
+    position: boneyardPoint(source.position, `${field}.position`),
+    frameProgram,
+    ticksPerFrame: positiveInteger(source.ticksPerFrame, `${field}.ticksPerFrame`),
   }
 }
 
@@ -797,13 +808,40 @@ function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world']
   const source = record(value, field)
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
   if (source.kind === 'boneyard') {
-    onlyKeys(source, field, ['kind', 'runId'])
+    onlyKeys(source, field, ['gateLeaves', 'kind', 'runId'])
     return {
+      gateLeaves: limitedArray(
+        source.gateLeaves,
+        `${field}.gateLeaves`,
+        MAX_BONEYARD_STRUCTURES * 2,
+      ).map((leaf, index) => boneyardGateLeafSnapshot(
+        leaf,
+        `${field}.gateLeaves[${index}]`,
+      )),
       kind: 'boneyard',
       runId: limitedString(source.runId, `${field}.runId`, 128),
     }
   }
   throw new GameProtocolError(`${field}.kind is not supported`)
+}
+
+function boneyardGateLeafSnapshot(
+  value: unknown,
+  field: string,
+): BoneyardGateLeafSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, ['fenceEid', 'hinge', 'id', 'side', 'tip'])
+  const side = nonnegativeInteger(source.side, `${field}.side`)
+  if (side !== 0 && side !== 1) {
+    throw new GameProtocolError(`${field}.side must be 0 or 1`)
+  }
+  return {
+    fenceEid: limitedString(source.fenceEid, `${field}.fenceEid`, 128),
+    hinge: boneyardPoint(source.hinge, `${field}.hinge`),
+    id: limitedString(source.id, `${field}.id`, 256),
+    side,
+    tip: boneyardPoint(source.tip, `${field}.tip`),
+  }
 }
 
 function playerCharacterKernelParameters(

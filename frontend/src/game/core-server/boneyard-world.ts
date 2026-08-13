@@ -1,6 +1,12 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type { BoneyardBounds, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
+  applyBoneyardGateContact,
+  createBoneyardGateLeaves,
+  stepBoneyardGateLeaf,
+  type BoneyardGateLeafState,
+} from '../core-kernels/boneyard-gate.ts'
+import {
   PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
   createPlayerCharacter,
@@ -9,10 +15,18 @@ import {
   type PlayerCharacterInput,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
-import type { Vector2 } from '../core-kernels/vector.ts'
+import {
+  createBoneyardCollisionWorld,
+  resolveBoneyardMovement,
+  touchingBoneyardGateLeaves,
+  withBoneyardGateCollision,
+  type BoneyardCollisionWorld,
+} from './boneyard-collision.ts'
 
 export interface BoneyardWorldState {
   bounds: BoneyardBounds
+  collision: BoneyardCollisionWorld
+  gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   runId: string
   spawn: { x: number; y: number; facingDeg: number }
@@ -26,6 +40,8 @@ export interface BoneyardWorldTickResult {
 export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState {
   return {
     bounds: { ...loaded.scene.bounds },
+    collision: createBoneyardCollisionWorld(loaded.scene),
+    gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     runId: loaded.runId,
     spawn: { ...loaded.scene.spawn },
@@ -57,7 +73,7 @@ export function stepBoneyardWorldTick(
   players: Readonly<Record<string, PlayerCharacterState>>,
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
 ): BoneyardWorldTickResult {
-  const nextPlayers = Object.fromEntries(Object.entries(players).map(([playerId, player]) => {
+  const plans = Object.entries(players).map(([playerId, player]) => {
     const plan = planPlayerCharacterTick(
       player,
       inputs[playerId] ?? { movement: { x: 0, y: 0 } },
@@ -66,25 +82,44 @@ export function stepBoneyardWorldTick(
       x: player.position.x + plan.delta.x,
       y: player.position.y + plan.delta.y,
     }
+    return { plan, player, playerId, requested }
+  })
+
+  let gateLeaves = world.gateLeaves
+  for (const { plan, requested } of plans) {
+    const contacts = touchingBoneyardGateLeaves(
+      requested,
+      gateLeaves,
+      PLAYER_CHARACTER_RADIUS,
+    )
+    if (contacts.length === 0) continue
+    const nextLeaves = [...gateLeaves]
+    for (const index of contacts) {
+      nextLeaves[index] = applyBoneyardGateContact(nextLeaves[index], plan.delta)
+    }
+    gateLeaves = nextLeaves
+  }
+  gateLeaves = gateLeaves.map(stepBoneyardGateLeaf)
+  const collision = withBoneyardGateCollision(world.collision, gateLeaves)
+
+  const nextPlayers = Object.fromEntries(plans.map(({ plan, player, playerId, requested }) => {
     return [
       playerId,
       commitPlayerCharacterTick(
         player,
         plan,
-        clampToBounds(requested, world.bounds, PLAYER_CHARACTER_RADIUS),
+        resolveBoneyardMovement(
+          player.position,
+          requested,
+          world.bounds,
+          collision,
+          PLAYER_CHARACTER_RADIUS,
+        ),
       ),
     ]
   }))
-  return { players: nextPlayers, world }
-}
-
-function clampToBounds(
-  point: Vector2,
-  bounds: BoneyardBounds,
-  radius: number,
-): Vector2 {
   return {
-    x: Math.min(bounds.x + bounds.w - radius, Math.max(bounds.x + radius, point.x)),
-    y: Math.min(bounds.y + bounds.h - radius, Math.max(bounds.y + radius, point.y)),
+    players: nextPlayers,
+    world: gateLeaves === world.gateLeaves ? world : { ...world, gateLeaves },
   }
 }

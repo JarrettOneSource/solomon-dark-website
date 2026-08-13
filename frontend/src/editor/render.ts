@@ -6,6 +6,11 @@ import type { EditorDoc, Polyline, SelEntry, Selection, SpriteRef, TerrainPatch,
 import { entryKey, sameEntry, selectionSet } from './model'
 import { spriteImage, spriteRefFor } from './assets'
 import { liftedSpriteSource } from './lifted-sprite'
+import {
+  nativeGateLeaf,
+  nativeGateLeaves,
+  type NativeGateLeafOverride,
+} from './native-fence-geometry'
 import type { CompactSpriteLayer, MainLayer, ObjectSpriteLayer } from './native-render-plan'
 import { buildNativeRenderPlan } from './native-render-plan'
 import {
@@ -554,7 +559,12 @@ export function drawNativeBoneyardWorld(
   cssH: number,
   cam: Camera,
   doc: EditorDoc,
+  gateLeaves: readonly NativeGateLeafOverride[] = [],
 ) {
+  const gateOverrides = new Map(gateLeaves.map((leaf) => [
+    `${leaf.fenceEid}:${leaf.side}`,
+    leaf,
+  ]))
   paintWorld(
     ctx,
     cssW,
@@ -564,6 +574,7 @@ export function drawNativeBoneyardWorld(
     { selected: EMPTY_SET, hover: null, showGrid: false },
     undefined,
     true,
+    gateOverrides,
   )
 }
 
@@ -683,6 +694,7 @@ function paintWorld(
   wui: WorldPaintUI,
   skip?: Set<string>,
   runtime = false,
+  gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
 ) {
   // The void beyond the plot. The context is opaque (alpha: false), and this
   // covers every pixel, so no clear pass is needed.
@@ -785,7 +797,15 @@ function paintWorld(
     drawTerrain(ctx, terrain, cam, cssW, cssH, false, false)
   }
 
-  paintPlacementPasses(ctx, doc, cam, cssW, cssH, skip ? { skip } : undefined)
+  paintPlacementPasses(
+    ctx,
+    doc,
+    cam,
+    cssW,
+    cssH,
+    skip ? { skip } : undefined,
+    gateOverrides,
+  )
 
   // Plot boundary: the property line, in gold.
   if (!runtime) {
@@ -815,6 +835,7 @@ function paintPlacementPasses(
   cssW: number,
   cssH: number,
   filter?: { only?: Set<string>; skip?: Set<string> },
+  gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
 ) {
   const scene = renderSceneFor(doc)
   ctx.imageSmoothingEnabled = cam.zoom < 1
@@ -833,7 +854,7 @@ function paintPlacementPasses(
   for (const item of scene.main) {
     if (!included(item.layer.sel, filter)) continue
     if (item.kind === 'object') drawSprite(ctx, item.drawable, cam, cssW, cssH, true)
-    else drawFencePart(ctx, item.layer, cam, cssW, cssH)
+    else drawFencePart(ctx, item.layer, cam, cssW, cssH, gateOverrides)
   }
   for (const drawable of scene.foreground) {
     if (included(drawable.sel, filter)) drawSprite(ctx, drawable, cam, cssW, cssH, false)
@@ -1190,6 +1211,7 @@ function drawFencePart(
   cam: Camera,
   w: number,
   h: number,
+  gateOverrides?: ReadonlyMap<string, NativeGateLeafOverride>,
 ) {
   if (layer.part === 'post') {
     plantArt(ctx, FENCE_ART.post, layer.pos, cam, w, h)
@@ -1238,12 +1260,11 @@ function drawFencePart(
     if (pieceIndex === 0) plantArt(ctx, FENCE_ART.broken, at(0.28), cam, w, h)
     else plantArt(ctx, FENCE_ART.broken, at(0.72), cam, w, h, true)
   } else if (code === 2) {
-    // Gate: two hinged leaves meeting at the middle, hinge on top.
-    if (pieceIndex === 0) plantArt(ctx, FENCE_ART.gateLeaf, at(0.26), cam, w, h)
-    else {
-      plantArt(ctx, FENCE_ART.gateLeaf, at(0.74), cam, w, h, true)
-      plantArt(ctx, FENCE_ART.gateHinge, at(0.5), cam, w, h)
-    }
+    const override = gateOverrides?.get(`${fence.eid}:${pieceIndex}`)
+    const leaf = override
+      ? nativeGateLeaf(override.hinge, override.tip)
+      : nativeGateLeaves(fence.points)[pieceIndex]
+    if (leaf) drawGateLeaf(ctx, leaf, cam, w, h)
   } else {
     // Intact grate: repeated loose fencegrate quads, exactly as materialized.
     const img = spriteImage(FENCE_GRATE_TEXTURE)
@@ -1268,6 +1289,38 @@ function drawFencePart(
     }
   }
 
+  ctx.restore()
+}
+
+function drawGateLeaf(
+  ctx: CanvasRenderingContext2D,
+  leaf: ReturnType<typeof nativeGateLeaves>[number],
+  cam: Camera,
+  w: number,
+  h: number,
+) {
+  plantArt(ctx, FENCE_ART.gateLeaf, leaf.p0, cam, w, h)
+  plantArt(ctx, FENCE_ART.gateHinge, {
+    x: (leaf.p0.x + leaf.p1.x) / 2 + 1,
+    y: (leaf.p0.y + leaf.p1.y) / 2 + 7,
+  }, cam, w, h)
+  ctx.save()
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 3 * cam.zoom
+  strokePath(ctx, [
+    worldToScreen(leaf.p1, cam, w, h),
+    worldToScreen({ x: leaf.p3.x, y: leaf.p3.y + 32 }, cam, w, h),
+  ])
+  strokePath(ctx, [
+    worldToScreen({
+      x: (leaf.p0.x + leaf.p1.x) / 2,
+      y: (leaf.p0.y + leaf.p1.y) / 2,
+    }, cam, w, h),
+    worldToScreen({
+      x: (leaf.p2.x + leaf.p3.x) / 2,
+      y: (leaf.p2.y + leaf.p3.y) / 2,
+    }, cam, w, h),
+  ])
   ctx.restore()
 }
 

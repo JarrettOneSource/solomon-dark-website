@@ -1,4 +1,5 @@
 import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
 import type { GameSnapshot } from '../protocol/game-state.ts'
 
 export function createGameSnapshot(
@@ -24,6 +25,7 @@ export function createGameSnapshot(
         players: state.players,
         tick: state.tick,
         world: {
+          gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),
           kind: 'boneyard',
           runId: state.world.runId,
         },

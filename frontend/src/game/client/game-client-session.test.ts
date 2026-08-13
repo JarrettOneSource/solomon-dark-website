@@ -69,6 +69,7 @@ test('client carries character config, predicts input, reconciles, and tears dow
       geometrySha256: '2'.repeat(64),
       scene: {
         name: 'Random Level',
+        environmentMode: 2,
         bounds: { x: 0, y: 0, w: 1600, h: 1200 },
         spawn: { x: 200, y: 150, facingDeg: 180 },
         objects: [],
@@ -77,6 +78,8 @@ test('client carries character config, predicts input, reconciles, and tears dow
         fences: [],
         terrain: [],
         solomonDig: {
+          gravePosition: { x: 190, y: 277 },
+          lanternPosition: { x: 135, y: 350 },
           position: { x: 200, y: 390 },
           frameProgram: [0, 3, 17, 3],
           ticksPerFrame: 5,

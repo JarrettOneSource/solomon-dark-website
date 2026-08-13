@@ -67,7 +67,6 @@ export default function HubScene({
   const [frameTransform, setFrameTransform] = useState<CSSProperties>()
   const [hostPlayerId, setHostPlayerId] = useState(initialSnapshot.hostPlayerId)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [matchReady, setMatchReady] = useState(false)
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -205,20 +204,9 @@ export default function HubScene({
 
         <GameHud
           element={element}
-          mapActive={matchReady}
-          mapLabel={matchReady ? 'Leave match queue' : 'Ready for match'}
-          onMapClick={() => setMatchReady((ready) => !ready)}
+          mapLabel="Enter the Boneyard"
+          onMapClick={beginMatch}
         />
-
-        <div className="hub-match-control">
-          {isHost ? (
-            <button type="button" className="hub-start-match" onClick={beginMatch}>
-              Start Match
-            </button>
-          ) : (
-            <span className="hub-waiting-host">Waiting for host</span>
-          )}
-        </div>
 
         {pickerOpen && isHost && (
           <div className="hub-boneyard-picker-backdrop" role="presentation">

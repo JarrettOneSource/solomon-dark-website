@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createGameSimulation } from '../core-server/game-simulation.ts'
+import {
+  createGameSimulation,
+  enterBoneyardWorld,
+} from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -185,14 +188,22 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
       geometrySha256: '2'.repeat(64),
       scene: {
         name: 'Random Level',
+        environmentMode: 2,
         bounds: { x: 0, y: 0, w: 1600, h: 1200 },
         spawn: { x: 200, y: 150, facingDeg: 180 },
         objects: [],
         sprites: [],
         roads: [],
-        fences: [],
+        fences: [{
+          eid: 'entry-gate',
+          points: [{ x: 100, y: 300 }, { x: 300, y: 300 }],
+          segmentCode: 2,
+          typeId: 3005,
+        }],
         terrain: [],
         solomonDig: {
+          gravePosition: { x: 190, y: 277 },
+          lanternPosition: { x: 135, y: 350 },
           position: { x: 200, y: 390 },
           frameProgram: [0, 3, 17, 3],
           ticksPerFrame: 5,
@@ -201,4 +212,31 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     },
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const snapshot = createGameSnapshot(
+    enterBoneyardWorld(
+      createGameSimulation({ 'player-1': CHARACTER }),
+      message.boneyard,
+    ),
+    'player-1',
+  )
+  assert.equal(snapshot.world.kind, 'boneyard')
+  if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(snapshot.world.gateLeaves.length, 2)
+  const snapshotMessage = {
+    acknowledgedInputSequence: 0,
+    snapshot,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(snapshotMessage)),
+    snapshotMessage,
+  )
+
+  const malformed = JSON.parse(encodeGameMessage(snapshotMessage))
+  delete malformed.snapshot.world.gateLeaves[0].tip
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(malformed)),
+    /tip/,
+  )
 })

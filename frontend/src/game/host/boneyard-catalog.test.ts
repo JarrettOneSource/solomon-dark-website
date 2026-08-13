@@ -27,7 +27,24 @@ test('native default bank contains distinct exact materializations and Solomon D
     assert.match(template.geometrySha256, /^[0-9a-f]{64}$/)
     assert.ok(template.scene.objects.length >= 300)
     assert.ok(template.scene.sprites.length >= 190)
-    assert.deepEqual(template.scene.solomonDig.frameProgram, SOLOMON_DIG_FRAME_PROGRAM)
+    const dig = template.scene.solomonDig
+    assert.ok(dig)
+    assert.ok(template.scene.objects.some((object) => (
+      object.typeId === 2029
+      && object.overlayVariant === 8
+      && object.pos.x === dig.gravePosition.x
+      && object.pos.y === dig.gravePosition.y
+    )))
+    assert.deepEqual(dig.position, {
+      x: dig.gravePosition.x + 10,
+      y: dig.gravePosition.y + 113,
+    })
+    assert.deepEqual(dig.lanternPosition, {
+      x: dig.gravePosition.x - 55,
+      y: dig.gravePosition.y + 73,
+    })
+    assert.deepEqual(dig.frameProgram, SOLOMON_DIG_FRAME_PROGRAM)
+    assert.equal(dig.ticksPerFrame, 5)
     assert.equal('recipes' in template.scene, false)
     assert.equal('timeline' in template.scene, false)
   }
@@ -73,7 +90,8 @@ test('stage report exposes every enabled mod Boneyard and ignores non-level art'
   assert.match(entries[0].choice.id, /^mod:tests\.contract:contract-arena:[0-9a-f]{12}$/)
   assert.match(entries[0].sourceSha256, /^[0-9a-f]{64}$/)
   assert.ok(entries[0].scene.spawn)
-  assert.deepEqual(entries[0].scene.solomonDig.frameProgram, SOLOMON_DIG_FRAME_PROGRAM)
+  assert.equal(entries[0].scene.environmentMode, 0)
+  assert.equal(entries[0].scene.solomonDig, null)
 
   const catalog = createBoneyardCatalog(entries)
   assert.equal(catalog.choices.length, 2)

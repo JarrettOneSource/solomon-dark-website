@@ -5,6 +5,7 @@ import test from 'node:test'
 import { parseBoneyard } from './format/boneyard.ts'
 import type { EditorDoc, PlacedObject, Polyline, StaticSprite } from './model.ts'
 import { NATIVE } from './model.ts'
+import { nativeGateLeaves } from './native-fence-geometry.ts'
 import { buildNativeRenderPlan, NATIVE_PLACEMENT_PASSES } from './native-render-plan.ts'
 import { nativeSpriteAnchor } from './sprite-registration.ts'
 
@@ -95,6 +96,37 @@ test('materializes shared Fenceposts once and gives split fence leaves independe
   ])
 })
 
+test('materializes native gate sides with endpoint trim and the two-unit center gap', () => {
+  const leaves = nativeGateLeaves([{ x: 0, y: 40 }, { x: 100, y: 40 }])
+  assert.deepEqual(leaves, [
+    {
+      hinge: { x: 86.5, y: 40 },
+      tip: { x: 51, y: 40 },
+      p0: { x: 86.5, y: -47 },
+      p1: { x: 51, y: -47 },
+      p2: { x: 86.5, y: 40 },
+      p3: { x: 51, y: 40 },
+    },
+    {
+      hinge: { x: 13.5, y: 40 },
+      tip: { x: 49, y: 40 },
+      p0: { x: 13.5, y: -47 },
+      p1: { x: 49, y: -47 },
+      p2: { x: 13.5, y: 40 },
+      p3: { x: 49, y: 40 },
+    },
+  ])
+  const plan = buildNativeRenderPlan(doc([], [], [{
+    eid: 'gate', typeId: NATIVE.fence, segmentCode: 2,
+    points: [{ x: 0, y: 40 }, { x: 100, y: 40 }],
+  }]))
+  assert.deepEqual(
+    plan.shadows.filter((layer) => layer.kind === 'fence' && layer.part === 'body')
+      .map((layer) => layer.pos),
+    [{ x: 86.5, y: 40 }, { x: 13.5, y: 40 }],
+  )
+})
+
 test('suppresses the Tree foreground for native variants six and above', () => {
   const plan = buildNativeRenderPlan(doc([
     { eid: 'tree', typeId: NATIVE.tree, pos: { x: 0, y: 0 }, variant: 6 },
@@ -106,6 +138,8 @@ test('reconstructs native logical-canvas registration from the crop origin', () 
   assert.deepEqual(nativeSpriteAnchor(204, 271, { x: -15, y: -117.5 }), { x: 117, y: 253 })
   assert.deepEqual(nativeSpriteAnchor(268, 263, { x: -5, y: -181.5 }), { x: 139, y: 313 })
   assert.deepEqual(nativeSpriteAnchor(231, 209, { x: 0, y: -61 }), { x: 115.5, y: 165.5 })
+  assert.deepEqual(nativeSpriteAnchor(46, 10, { x: 7, y: 110 }), { x: 16, y: -105 })
+  assert.deepEqual(nativeSpriteAnchor(34, 34, { x: 2.5, y: -5.5 }), { x: 14.5, y: 22.5 })
 })
 
 test('plans every retail story0 placement without mixing compact art into the main queue', () => {

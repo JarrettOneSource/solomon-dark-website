@@ -14,6 +14,7 @@ import {
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
+import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -215,11 +216,16 @@ test('host starts one exact random Boneyard for every connected client', async (
   if (snapshotB.snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(snapshotA.snapshot.world.runId, loadedA.boneyard.runId)
   assert.equal(snapshotB.snapshot.world.runId, loadedA.boneyard.runId)
+  assert.ok(snapshotA.snapshot.world.gateLeaves.length >= 2)
+  assert.deepEqual(
+    snapshotA.snapshot.world.gateLeaves,
+    snapshotB.snapshot.world.gateLeaves,
+  )
   assert.deepEqual(
     snapshotA.snapshot.players[first.welcome.playerId].position,
     { x: loadedA.boneyard.scene.spawn.x, y: loadedA.boneyard.scene.spawn.y },
   )
-  assert.equal(loadedA.boneyard.scene.solomonDig.frameProgram.length, 29)
+  assert.equal(loadedA.boneyard.scene.solomonDig?.frameProgram.length, 29)
 })
 
 test('host exposes and authoritatively loads a selected mod Boneyard', async (context) => {
@@ -376,16 +382,25 @@ function nextMessage(
 function modBoneyardEntry(): ModBoneyardEntry {
   const scene: BoneyardScene = {
     name: 'Contract Arena',
+    environmentMode: 2,
     bounds: { x: 0, y: 0, w: 1800, h: 1200 },
     spawn: { x: 300, y: 200, facingDeg: 180 },
-    objects: [],
+    objects: [{
+      eid: 'solomon-grave',
+      typeId: 2029,
+      pos: { x: 290, y: 327 },
+      variant: 0,
+      overlayVariant: 8,
+    }],
     sprites: [],
     roads: [],
     fences: [],
     terrain: [],
     solomonDig: {
+      gravePosition: { x: 290, y: 327 },
+      lanternPosition: { x: 235, y: 400 },
       position: { x: 300, y: 440 },
-      frameProgram: [0, 3, 17, 3],
+      frameProgram: SOLOMON_DIG_FRAME_PROGRAM,
       ticksPerFrame: 5,
     },
   }

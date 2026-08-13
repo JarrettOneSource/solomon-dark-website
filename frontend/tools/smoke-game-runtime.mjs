@@ -167,10 +167,11 @@ try {
   }
 
   await enterHub(clientPage, 'Earth')
-  await clientPage.getByText('Waiting for host').waitFor({ timeout: 15_000 })
   assert.equal(await clientPage.getByRole('button', { name: 'Start Match' }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Start Match' }).count(), 0)
+  assert.equal(await clientPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 1)
 
-  await page.getByRole('button', { name: 'Start Match' }).click()
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   if (expectedModBoneyard) {
     const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
     await picker.waitFor({ timeout: 15_000 })
@@ -192,21 +193,59 @@ try {
   assert.equal(hostReceipt.runId, clientReceipt.runId)
   assert.equal(hostReceipt.geometrySha256, clientReceipt.geometrySha256)
   assert.equal(hostReceipt.boneyardId, clientReceipt.boneyardId)
+  assert.equal(hostReceipt.gateLeafCount, clientReceipt.gateLeafCount)
   if (expectedModBoneyard) {
     assert.match(await hostBoneyard.getAttribute('aria-label') || '', new RegExp(expectedModBoneyard, 'i'))
   } else {
     assert.equal(hostReceipt.boneyardId, 'default-random')
+    assert.ok(hostReceipt.gateLeafCount >= 2)
   }
 
-  await page.bringToFront()
-  const hostDigFrames = await sampleDigFrames(page)
-  await clientPage.bringToFront()
-  const clientDigFrames = await sampleDigFrames(clientPage)
-  assert.ok(new Set(hostDigFrames).size > 1, `expected host Solomon Dig to animate (${hostDigFrames.join(', ')})`)
-  assert.ok(new Set(clientDigFrames).size > 1, `expected client Solomon Dig to animate (${clientDigFrames.join(', ')})`)
-  assert.equal(await page.getByRole('img', { name: 'Solomon Dig' }).count(), 1)
-  assert.equal(await clientPage.getByRole('img', { name: 'Solomon Dig' }).count(), 1)
+  for (const runPage of [page, clientPage]) {
+    assert.equal(await runPage.getByRole('img', { name: 'Help' }).count(), 0)
+    assert.equal(await runPage.getByLabel('Equipped spells').count(), 0)
+    assert.equal(await runPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 0)
+    assert.equal(await runPage.getByLabel('Inventory shortcuts').count(), 1)
+    const scene = runPage.locator('.boneyard-scene')
+    const environmentMode = await scene.getAttribute('data-environment-mode')
+    assert.equal(await scene.getAttribute('data-camera-zoom'), '1.35')
+    assert.equal(
+      await runPage.locator('.boneyard-darkness[data-native-mask="DeadHawg:18+9"]').count(),
+      environmentMode === '1' || environmentMode === '2' ? 1 : 0,
+    )
+    if (environmentMode === '1' || environmentMode === '2') {
+      const darkness = runPage.locator('.boneyard-darkness')
+      assert.equal(await darkness.getAttribute('data-max-alpha'), '0.96')
+      const pixels = await sampleDarknessPixels(runPage)
+      assert.ok(pixels.centerAlpha < 16, `expected a clear player aperture, got alpha ${pixels.centerAlpha}`)
+      assert.ok(
+        pixels.farAlpha >= 244 && pixels.farAlpha <= 246,
+        `expected the native ambient floor at alpha 245, got ${pixels.farAlpha}`,
+      )
+    }
+  }
+
+  const hostDigCount = await page.getByRole('img', { name: 'Solomon Dig' }).count()
+  const clientDigCount = await clientPage.getByRole('img', { name: 'Solomon Dig' }).count()
+  assert.equal(hostDigCount, clientDigCount)
+  if (!expectedModBoneyard) assert.equal(hostDigCount, 1)
+  const hostDigFrames = hostDigCount ? await sampleDigFrames(page) : []
+  const clientDigFrames = clientDigCount ? await sampleDigFrames(clientPage) : []
+  if (hostDigCount) {
+    assert.ok(new Set(hostDigFrames).size > 1, `expected host Solomon Dig to animate (${hostDigFrames.join(', ')})`)
+    assert.ok(new Set(clientDigFrames).size > 1, `expected client Solomon Dig to animate (${clientDigFrames.join(', ')})`)
+    for (const runPage of [page, clientPage]) {
+      assert.equal(await runPage.locator('.boneyard-grave-dirt').count(), 1)
+      assert.equal(await runPage.locator('.boneyard-lantern').count(), 1)
+      await assertSolomonSetPieceRoots(runPage)
+    }
+  }
   await page.screenshot({ path: screenshotPath })
+
+  let gateCrossing = null
+  if (!expectedModBoneyard) {
+    gateCrossing = await crossEntryGate(page, clientPage)
+  }
 
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
@@ -223,6 +262,7 @@ try {
     clientDigFrames: [...new Set(clientDigFrames)],
     hostDigFrames: [...new Set(hostDigFrames)],
     hostReceipt,
+    gateCrossing,
     screenshotPath,
     orbSpriteCount,
     renderer,
@@ -287,9 +327,47 @@ async function enterHub(page, element) {
 async function boneyardReceipt(locator) {
   return {
     boneyardId: await locator.getAttribute('data-boneyard-id'),
+    environmentMode: await locator.getAttribute('data-environment-mode'),
+    gateLeafCount: Number(await locator.getAttribute('data-gate-leaf-count')),
     geometrySha256: await locator.getAttribute('data-geometry-sha256'),
     runId: await locator.getAttribute('data-run-id'),
   }
+}
+
+async function crossEntryGate(hostPage, clientPage) {
+  const scene = hostPage.locator('.boneyard-scene')
+  const initialY = Number(await scene.getAttribute('data-local-player-y'))
+  const initialGateState = await scene.getAttribute('data-gate-state')
+  const key = initialY > 1000 ? 'w' : 's'
+  const direction = key === 'w' ? -1 : 1
+  await hostPage.bringToFront()
+  await hostPage.keyboard.down(key)
+  try {
+    await hostPage.waitForFunction(
+      ({ direction, initialY }) => {
+        const value = Number(document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-local-player-y'))
+        return Number.isFinite(value) && (value - initialY) * direction > 200
+      },
+      { direction, initialY },
+      { timeout: 6_000 },
+    )
+  } finally {
+    await hostPage.keyboard.up(key)
+  }
+  const finalY = Number(await scene.getAttribute('data-local-player-y'))
+  await hostPage.waitForTimeout(1_500)
+  const finalGateState = await scene.getAttribute('data-gate-state')
+  assert.ok((finalY - initialY) * direction > 200)
+  assert.notEqual(finalGateState, initialGateState)
+
+  await clientPage.waitForFunction(
+    (expected) => document.querySelector('.boneyard-scene')
+      ?.getAttribute('data-gate-state') === expected,
+    finalGateState,
+    { timeout: 3_000 },
+  )
+  return { direction, finalY, initialY }
 }
 
 async function sampleDigFrames(page) {
@@ -300,4 +378,69 @@ async function sampleDigFrames(page) {
     await page.waitForTimeout(60)
   }
   return frames
+}
+
+async function assertSolomonSetPieceRoots(page) {
+  const roots = await page.evaluate(() => {
+    const point = (selector) => {
+      const element = document.querySelector(selector)
+      return {
+        x: Number(element?.getAttribute('data-world-x')),
+        y: Number(element?.getAttribute('data-world-y')),
+      }
+    }
+    return {
+      dig: point('.boneyard-dig-anchor'),
+      grave: point('.boneyard-grave-dirt'),
+      lantern: point('.boneyard-lantern'),
+    }
+  })
+  assert.deepEqual(roots.dig, {
+    x: roots.grave.x + 10,
+    y: roots.grave.y + 113,
+  })
+  assert.deepEqual(roots.lantern, {
+    x: roots.grave.x - 55,
+    y: roots.grave.y + 73,
+  })
+}
+
+async function sampleDarknessPixels(page) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const sample = await page.evaluate(() => {
+      const canvas = document.querySelector('.boneyard-darkness')
+      const player = document.querySelector('.boneyard-player[data-local="true"]')
+      if (!(canvas instanceof HTMLCanvasElement) || !(player instanceof HTMLElement)) return null
+      const context = canvas.getContext('2d')
+      if (!context || canvas.width === 0 || canvas.height === 0) return null
+
+      const scaleX = canvas.width / 1600
+      const scaleY = canvas.height / 900
+      const playerX = Number.parseFloat(player.style.left) * scaleX
+      const playerY = Number.parseFloat(player.style.top) * scaleY
+      const corners = [
+        { x: 2 * scaleX, y: 2 * scaleY },
+        { x: 1598 * scaleX, y: 2 * scaleY },
+        { x: 2 * scaleX, y: 898 * scaleY },
+        { x: 1598 * scaleX, y: 898 * scaleY },
+      ]
+      const farthest = corners.reduce((best, point) => (
+        Math.hypot(point.x - playerX, point.y - playerY)
+          > Math.hypot(best.x - playerX, best.y - playerY)
+          ? point
+          : best
+      ))
+      return {
+        centerAlpha: context.getImageData(
+          Math.round(playerX), Math.round(playerY), 1, 1,
+        ).data[3],
+        farAlpha: context.getImageData(
+          Math.round(farthest.x), Math.round(farthest.y), 1, 1,
+        ).data[3],
+      }
+    })
+    if (sample && sample.centerAlpha < sample.farAlpha) return sample
+    await page.waitForTimeout(50)
+  }
+  throw new Error('darkness canvas did not paint the native player aperture')
 }

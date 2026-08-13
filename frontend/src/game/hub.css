@@ -233,14 +233,6 @@
   outline-offset: -8px;
 }
 
-.hub-match-control {
-  position: absolute;
-  z-index: 20000;
-  right: 24px;
-  bottom: 138px;
-}
-
-.hub-start-match,
 .hub-boneyard-option,
 .hub-boneyard-cancel {
   border: 1px solid #87734d;
@@ -250,18 +242,6 @@
   cursor: pointer;
 }
 
-.hub-start-match {
-  min-width: 176px;
-  padding: 12px 22px;
-  border-radius: 4px;
-  background: linear-gradient(#3d382e, #181711);
-  box-shadow: 0 3px 12px #000, inset 0 0 12px rgb(205 181 119 / 0.14);
-  font-size: 22px;
-  letter-spacing: 0.04em;
-}
-
-.hub-start-match:hover,
-.hub-start-match:focus-visible,
 .hub-boneyard-option:hover,
 .hub-boneyard-option:focus-visible,
 .hub-boneyard-cancel:hover,
@@ -269,19 +249,6 @@
   border-color: #cfb978;
   color: #fff1bd;
   outline: none;
-}
-
-.hub-waiting-host {
-  display: block;
-  min-width: 176px;
-  padding: 10px 16px;
-  border: 1px solid rgb(135 115 77 / 0.45);
-  border-radius: 4px;
-  background: rgb(15 14 11 / 0.82);
-  color: #9f9578;
-  font: 16px 'IM FELL English', Georgia, serif;
-  text-align: center;
-  text-shadow: 0 2px 2px #000;
 }
 
 .hub-boneyard-picker-backdrop {

@@ -54,6 +54,14 @@ export interface BoneyardFence {
   segmentCode?: number
 }
 
+export interface BoneyardGateLeafSnapshot {
+  fenceEid: string
+  hinge: BoneyardPoint
+  id: string
+  side: 0 | 1
+  tip: BoneyardPoint
+}
+
 export interface BoneyardTerrain {
   eid: string
   pos: BoneyardPoint
@@ -63,6 +71,8 @@ export interface BoneyardTerrain {
 }
 
 export interface SolomonDigState {
+  gravePosition: BoneyardPoint
+  lanternPosition: BoneyardPoint
   position: BoneyardPoint
   frameProgram: readonly number[]
   ticksPerFrame: number
@@ -70,6 +80,7 @@ export interface SolomonDigState {
 
 export interface BoneyardScene {
   name: string
+  environmentMode: number
   bounds: BoneyardBounds
   spawn: {
     x: number
@@ -81,7 +92,7 @@ export interface BoneyardScene {
   roads: readonly BoneyardRoad[]
   fences: readonly BoneyardFence[]
   terrain: readonly BoneyardTerrain[]
-  solomonDig: SolomonDigState
+  solomonDig: SolomonDigState | null
 }
 
 export interface BoneyardChoice {

@@ -2746,40 +2746,402 @@ catalog; the stage report provides enabled-mod identity, overlay source and
 target, and the resolved staged root. The host validates and parses the staged
 target using the same lossless Boneyard parser used by the editor.
 
-If the catalog contains only the default, Start Match begins immediately. If
-it contains mod choices, Start Match opens a host-only picker. A selected
-choice produces one run identity and one loaded-scene message, followed by the
-Boneyard snapshot; WebSocket ordering ensures every peer installs identical
-content before rendering the transition. Late joiners receive the active
-loaded scene after welcome. Non-host start requests cannot mutate game state.
+If the catalog contains only the default, the Hub map control begins the match
+immediately. If it contains mod choices, that same map control opens a
+host-only picker. A selected choice produces one run identity and one
+loaded-scene message, followed by the Boneyard snapshot; WebSocket ordering
+ensures every peer installs identical content before rendering the transition.
+Late joiners receive the active loaded scene after welcome. Non-host start
+requests cannot mutate game state. There is no separate Start Match control.
 
 Confidence: high for the ownership boundary and available stage-report seam.
 Mod-specific scripts and combat behavior are outside this milestone; this
 system loads their Boneyard art and geometry only.
 
+### Corrective native ownership pass — 2026-08-13
+
+The first browser implementation exposed six related mismatches: it added a
+text Start Match control, dropped the arena darkness pass, invented Solomon
+Dig's position, approximated the gate, ignored world collision, and reused the
+whole Hub HUD during a run. Each symptom was re-investigated at its native
+owner before changing the browser model.
+
+#### The map control owns run entry
+
+`0x0050DBF0` paints the College `16` map and its `17/18` overlay/hint; it does
+not own a readiness toggle. The control constructs `MapPicker` (vtable
+`0x0079208C`) through `0x0050C730`. When the selected Boneyard path at the
+gameplay owner plus `0x1BDC` is non-empty, the constructor disables its picker
+rectangle and immediately dispatches vtable slot `+0x64`, `0x00509000`. With
+no selected path, it installs the clickable picker rectangle and remains on
+the selection surface. `0x00509000` validates the path, then writes Arena
+transition fields `+0x8EA8 = 1` and `+0x8EAC = 5` and starts the fade. Story
+selection reaches the same transition fields through `0x00508E20`.
+
+Implementation consequence: the existing map icon is the only Hub run-entry
+control. A default-only catalog transitions directly; additional mod
+Boneyards make that click open the host picker. The invented readiness state,
+text button, and waiting copy have no native owner and must be removed.
+
+Evidence: read-only decompilation and instruction traces for `0x0050C730`,
+`0x00509000`, `0x00508E20`, and `0x0050DBF0`, including the `MapPicker`
+vtable dispatch and Arena transition writes.
+
+Confidence: high for control ownership, the direct-versus-picker branch, and
+transition lifecycle. The browser fade itself remains owned by its existing
+scene transport rather than duplicating the stock renderer's fade object.
+
+#### Environment modes 1 and 2 own a two-pass darkness aperture
+
+Arena field `+0x8F20` is the environment mode. The retained exact stock-generator
+outputs contain modes `0`, `1`, and `2`; the isolated stock run used for the
+visual comparison was mode `2`. Arena's main painter tiles the ground for
+modes `1` and `2`, while auxiliary painter `0x00470EE0` owns their persistent
+darkness/light target. Each visible player contributes two additive light
+passes in those modes.
+
+The direct pass draws DeadHawg record `18` (`DeadHawg owner +0xE00`) at the
+player root with color/alpha `random[0.95, 1.0] * 0.25`, or `0.2375..0.25`.
+Record `18` is a `336 x 305` cropped white aperture on a `336 x 336` logical
+canvas with origin `(0, -0.5)`. Renderer blend mode `1` resolves to
+`SRCALPHA, ONE`, so this is an additive light contribution rather than the
+complete aperture.
+
+The second pass is built in a live `256 x 256` light target. DeadHawg record
+`9`, a fully opaque `128 x 128` grayscale radial, is multiplied into that
+target at `(128, 128)` with scale `2.01`; renderer blend mode `2` resolves to
+`ZERO, SRCCOLOR`. That scale makes the source slightly overscan the target
+(`128 * 2.01 = 257.28`) rather than defining its eventual world footprint.
+The target quad's live vertices are `(-128.5, -128.5)`, `(127.5, -128.5)`,
+`(-128.5, 127.5)`, and `(127.5, 127.5)`. It is drawn additively at the player
+with scale `2.025` and its own independently sampled alpha `0.95..1.0`, so its
+world extent is `256 * 2.025 = 518.4`. Nearby authored compact masks and
+static shapes can occlude this target pass, while the direct record-18 pass
+remains unoccluded. The first browser attempts first omitted this target, then
+incorrectly reused record 18's quarter-alpha for it.
+
+The stock backbuffer is not mathematically black outside those two masks. The
+native mode-2 receipts retain low-value terrain and silhouette pixels beyond
+the 518.4-world-unit target, while the HUD remains full intensity. This is a
+world-composition floor rather than a larger third player mask: no third
+player-centered draw exists in `0x00470EE0`, and the nonzero pixels continue
+past the recovered target bounds. A direct live write proved that Arena
+`+0x8F20` is the active mode byte and was restored to `2`, but D3D9
+`PrintWindow` and desktop captures on this machine returned the same cached
+backbuffer hash across the write. They are therefore retained only as a field
+ownership check, not used as differential pixel evidence. Calibrating the
+browser against the independently captured native frame leaves a four-percent
+ambient world floor (a `0.96` maximum darkness alpha). This value is a visual
+projection constant, not a claimed literal recovered from the stock binary.
+
+Arena also owns a `1.35` world-camera zoom. In the live `1600 x 900` run,
+fields `+0x8BCC/+0x8BD0/+0x8BD4/+0x8BD8` held viewport
+`(808.105896, 2881.913574, 1185.185181, 666.666626)`. Both
+`1600 / 1185.185181` and `900 / 666.666626` resolve to `1.35`; the viewport's
+X center matched player X to within `0.000244`. The zoom belongs to the whole
+world painter, not only the light pass: props, actors, set pieces, collision
+positions, and masks share it. On the backbuffer the target therefore spans
+`518.4 * 1.35 = 699.84` pixels, while record 18 spans `336 * 1.35 = 453.6`
+pixels before crop transparency.
+
+Implementation consequence: environment mode must survive scene projection.
+Modes `1` and `2` combine the actual record-18 alpha aperture and scaled
+record-9 radial in a darkness canvas after world and actor painting but before
+HUD painting, once per synchronized visible player. Canvas `lighter` builds
+the summed light alpha and a final `source-out` black fill inverts it into the
+darkness layer, preserving the stock additive overlap instead of multiplying
+the two contributions. The direct pass samples `0.2375..0.25`; the target pass
+samples `0.95..1.0`. The inverted light alpha tops out at `0.96` darkness so
+the native low-value ambient silhouettes survive outside the aperture instead
+of collapsing to browser black. Boneyard world projection uses zoom `1.35` consistently
+for canvas geometry, players, the Solomon set piece, and both masks. Mode `0`
+does not apply the pass.
+
+Evidence: read-only decompilation and instruction traces for auxiliary painter
+`0x00470EE0`, blend dispatcher `0x004208A0`, and target binder `0x004214C0`;
+live rebased target dimensions `0x00BBBF90/94 == 256, 256`; extracted records
+`frontend/src/assets/game/boneyard/deadhawg/018.png` and `009.png`; live Arena
+`+0x8F20 == 2`; live target quad at rebased `0x00BBBEFC`; live viewport fields
+and player root; and native captures
+`C:/sd-native-re-runtime-root/boneyard-re-near-dig.png` and
+`boneyard-re-current.png`. The controlled mode-byte probe read and wrote
+Arena `0x15913F20 + 0x8F20` through `sd.debug.read_u8/write_u8`, restored it to
+`2`, and documented the capture-cache limitation above.
+
+Confidence: high for owner, mode gate, both records, blend states, target
+dimensions and quad, camera zoom, both scales, player multiplicity, and the
+separate alpha ranges. Confidence is medium for the four-percent browser
+ambient projection because it is capture-calibrated rather than a recovered
+stock literal. Occluder ownership is recovered, but its complete compact-mask
+geometry is outside this base fog pass. The stock random alpha flicker is
+visual-only; the browser may sample it from a presentation clock without
+consuming match RNG.
+
+#### Solomon Dig is rooted to a grave set piece
+
+Arena set-piece builder `0x00465920` collects placed type-`2029` Gravestones
+whose overlay selector at `+0x142` is exactly `8`, randomly selects one, and
+uses its root `(gx, gy)` for all three residents:
+
+| Resident | Native type | Root |
+| --- | ---: | --- |
+| grave dirt painter | DeadHawg record `13` | `(gx, gy)` |
+| Lantern | `5010` | `(gx - 55, gy + 73)` |
+| Solomon_Dig | `5009` | `(gx + 10, gy + 113)` |
+
+The offsets are the builder's `130 - 17`, `90 - 17`, `-55`, and `+10`
+constants. Solomon state-0 painter `0x004902C0` independently draws DeadHawg
+record `13` at `(actor.x - 10, actor.y - 113)`, which resolves back to the
+selected grave root. Lantern presentation `0x005E61D0` is equally direct: it
+draws BadGuys record `34` at the Lantern root. That record is a `34 x 34`
+crop on a `49 x 55` logical cell with origin `(2.5, -5.5)`; Lantern tick
+`0x005FF010` registers the actor with Arena's auxiliary presentation list
+rather than advancing a sprite-frame program. A live isolated arena confirmed Lantern
+`(1152.436, 2857.845)` and Solomon_Dig `(1217.436, 2897.845)`, therefore grave
+root `(1207.436, 2784.845)` exactly. The previously used "240 pixels ahead of
+spawn" rule has no stock owner.
+
+The builder's zero-candidate branch falls through without constructing either
+resident; it does not synthesize a grave near the spawn. This matters for mods:
+a mod Boneyard without an overlay-variant-8 Gravestone remains a valid arena,
+but it intentionally has no Solomon intro set piece. Every retained stock
+generated template has at least one qualifying grave, so the default run always
+contains the complete set piece.
+
+Implementation consequence: materialization retains all overlay-variant-8
+grave candidates and selects one with the authoritative run seed. The loaded
+scene carries the selected grave, Lantern, and Solomon roots so every peer
+uses the same set piece. When a mod authors no qualifying grave the scene
+serializes `solomonDig: null` and renders no set piece, matching the stock
+fall-through. Record `13` is painted below Solomon; the recovered
+state-0 frame program continues to animate at five `10 ms` fixed ticks per
+program entry, while Lantern remains the stock static record `34`.
+
+Evidence: read-only decompilation of `0x00465920`, `0x004902C0`,
+`0x005E61D0`, and `0x005FF010`; live
+`sd.world.list_actors()` roots for types `5010` and `5009`, and the extracted
+DeadHawg record `13`, BadGuys record `34`, and Solomon sheet.
+
+Confidence: high for candidate selector, random-choice ownership, all offsets,
+grave record, resident types, and animation cadence. Transition out of the
+dig state remains wave-owned and outside this milestone.
+
+#### A gate is two host-owned, pushable materialized leaves
+
+Fence materializer `0x0064AC90` expands segment code `2` into exactly two
+type-`3012` Gate objects. Both share the same deduplicated endpoint posts and
+receive side bytes `0` and `1`. Builder `0x005F73C0` trims `13.5` world units
+from the selected endpoint for the hinge. Its unswayed tip stops one world
+unit short of the authored midpoint toward that hinge, so the stored length is
+`segmentLength / 2 - 13.5 - 1`; the sampled 150-unit segment produced exact
+leaf lengths of approximately `60.5`. Rebuild `0x005ED100` derives, for hinge
+`H` and tip `T`:
+
+```text
+p0 = H + (0, -87)
+p1 = T + (0, -87)
+p2 = H
+p3 = T
+```
+
+Renderer `0x005ECE40` draws DeadHawg record `7` registered at `p0`, record `8`
+at `midpoint(p0, p1) + (1, 7)`, a three-pixel black line from `p1` to
+`(p3.x, p3.y + 32)`, and another from `midpoint(p0, p1)` to
+`midpoint(p2, p3)`. It performs that composition for each leaf; there is no
+`26%/74%` placement rule and no mirrored second stamp. Builder `0x005F73C0`
+also records each leaf's fixed length and rest heading. It calls signed random
+helper `0x00401310` with maximum `20`, adds that sampled displacement only to
+the unswayed tip's world Y coordinate, then normalizes the displaced tip back
+to the fixed length. The initial gate is therefore slightly irregular rather
+than a perfectly straight static seam.
+
+Collision builder `0x005ED4D0` registers the current live `H -> T` line.
+Contact handler `0x005E39B0` normalizes the incoming contact vector, writes a
+tip velocity of exactly `2` world units per fixed tick in that direction, and
+sets damping to `0.96`. Tick `0x005ED5F0` owns the rest of the lifecycle:
+
+- velocity with squared magnitude at most `0.001` is zeroed and idle damping
+  becomes `0.999`;
+- otherwise the tip advances by its Cartesian velocity and is normalized back
+  to the stored leaf length around the hinge;
+- travel is accepted only while the angular distance from the stored rest
+  heading is at most `60` degrees;
+- crossing that bound restores the old tip, reverses/scales velocity by
+  `-0.5`, and changes damping to `0.98`;
+- the geometry and collision registration are rebuilt, then velocity is
+  multiplied by the active damping; and
+- the interaction sound is rate-limited to one event per `250` native ticks
+  when the contact damping is below `0.98`.
+
+An isolated live mode-2 arena confirmed the materialized ownership rather
+than only the decompiler's field interpretation. Arena's scenery manager held
+`452` entries, with the two leaves at indices `432` and `433`. Their sampled
+state was:
+
+| Side | Hinge | Tip before contact | Rest heading | Idle damping |
+| ---: | --- | --- | ---: | ---: |
+| `0` | `(1763.5, 3248)` | `(1705.3, 3231.6)` | `270` | `0.999` |
+| `1` | `(1640.5, 3248)` | `(1700.7, 3253.6)` | `90` | `0.999` |
+
+With the isolated player rooted immediately below the leaves, an upward input
+hit both moving lines. Write watches at each leaf's `+0x1F8/+0x1FC` velocity
+pair captured the contact writes at rebased `0x006639ED/0x006639F3`
+(preferred `0x005E39ED/0x005E39F3`): each contact installed an approximately
+`(0, -2)` velocity, after which the tick path at rebased
+`0x0066D883/0x0066D888` applied damping. The player crossed the gate instead
+of stopping at a permanent fence wall.
+
+Implementation consequence: gate leaves belong to authoritative Boneyard
+world state. The host deterministically materializes their initial tips from
+the run seed, injects the native magnitude-2 velocity when a radius-25 wizard
+contacts a leaf, advances the exact threshold/damping/bounce lifecycle, and
+collides against the rebuilt moving segments. Snapshots carry the current leaf
+roots to every client. The shared renderer derives the same `p0..p3` geometry
+from those snapshot roots, so art and collision cannot disagree or let each
+browser simulate a different gate.
+
+Evidence: read-only decompilation of `0x0064AC90`, `0x005F73C0`,
+`0x005ED100`, `0x005ECE40`, `0x005ED4D0`, `0x005E39B0`, and
+`0x005ED5F0`; direct constant reads; the isolated Arena scenery-manager dump;
+velocity write watches during controlled player contact; and fresh native
+capture `C:/sd-native-re-runtime-root/boneyard-re-near-dig.png`.
+
+Confidence: high for expansion count, side ownership, hinge trim, one-unit
+center gap, initial randomization axis and bound, geometry, painter
+composition, moving collision line, contact impulse, travel bound, damping,
+bounce, and authoritative lifecycle.
+The exact stock random-number sequence used during fence materialization is
+not exposed to peers; the web uses its run-seeded deterministic stream while
+preserving the recovered distribution and all post-construction dynamics.
+
+#### World collision is authored geometry plus a radius-25 wizard
+
+Live stock state reports the local wizard collision radius at object `+0x30`
+as `25`. Scenery setup does not infer collision from the visible crop:
+
+- Tree setup `0x005F1A40` registers a mask-`4` movement circle at the tree
+  root. The active movement-controller inventory proves radius `12` for main
+  selector `1` and radius `8` for every other generated main selector. The
+  larger `0x0081C2F0/0x0081C480` tables are visual/reference bounds; treating
+  them as movement polygons produces 96 false shapes in the captured arena.
+- Monument setup `0x005E5BB0` registers one of 21 polygons from
+  `0x00819EFC + variant * 0x34`.
+- Building setup `0x005E5BF0` registers one of four polygons from
+  `0x0081B444 + variant * 0x34`.
+- Gravestone setup `0x005F2EB0` registers a mask-`4` root circle for every
+  grave (radius `0` for main selector `1`, otherwise `1`) and additionally
+  registers `(-38,104), (-35,36), (27,35), (31,105)` for overlay selector
+  `7` or greater.
+- Goodie constructor `0x005E3D60` registers a radius-`8` movement circle with
+  mask `0x2004` plus its compact footprint from
+  `(-25.125,-8.625)` through `(25.875,16.875)`. It is pushable scenery; this
+  milestone keeps both primitives blocking without implementing the later
+  push mutation.
+- Fence-family setup registers the derived intact, broken, gate, wall, or rail
+  line/polygon geometry and radius-`10` endpoint posts. The serialized Fence
+  recipe itself is not the collision object.
+
+The exact compact Monument polygons recovered from the initialized retail
+tables are:
+
+| Variants | Local polygon |
+| --- | --- |
+| `0,1` | `(-51,22) (-51,-27) (50,-27) (50,22)` |
+| `2,3` | `(-29,19) (-29,-27) (25,-27) (25,19)` |
+| `4,5` | `(-32,-14) (30,-14) (30,35) (-32,35)` |
+| `6` | `(-21,19) (-21,-17) (20,-17) (20,19)` |
+| `7,8` | `(-48,21) (-48,-23) (49,-23) (49,21)` |
+| `9` | `(-23,18) (-23,-20) (22,-20) (22,18)` |
+| `10` | `(-33.5,22.5) (-33.5,-11.5) (34.5,-11.5) (34.5,22.5)` |
+| `11,12` | `(-68.5,-22.5) (71.5,-22.5) (71.5,33.5) (-68.5,33.5)` |
+| `13,14` | `(-23,-15) (24,-15) (24,19) (-23,19)` |
+| `15,16` | `(-26,-18) (28,-18) (28,17) (-26,17)` |
+| `17` | `(-25,-16) (28,-16) (28,27) (-25,27)` |
+| `18` | `(-11,-10) (11,-10) (11,10) (-11,10)` |
+| `19` | `(-3.5,8.5) (-11.5,-5.5) (5.5,-14.5) (14.5,1.5)` |
+| `20` | `(-2.5,14.5) (-14.5,1.5) (-1.5,-10.5) (12.5,3.5)` |
+
+The Building polygons are the full 12-, 18-, 8-, and 4-point outlines read
+from those same initialized tables; they are retained as code data rather than
+reduced to sprite rectangles.
+
+Implementation consequence: the host materializes collision primitives from
+the immutable loaded scene and owns movement resolution. It sweeps a radius-25
+player circle, resolves penetration/sliding against object polygons, circles,
+and derived fence barriers, then snapshots only the accepted position. Clients
+never run an independent authoritative collision simulation.
+
+Evidence: read-only decompilation of all setup functions above and native
+placement helpers `0x00526150/0x00526390`; initialized table dumps and the
+active movement-controller inventory through the isolated Lua pipe. The exact
+captured mode-2 arena has `96` Tree circles (`69` radius `8`, `27` radius
+`12`), `314` Grave circles (`289` radius `1`, `25` radius `0`), `4` Goodie
+circles at radius `8`, `19` Fencepost circles at radius `10`, and `18` static
+shapes: `14` special-grave plots plus `4` Goodie footprints. A native movement
+attempt also stopped at the fence instead of crossing it.
+
+Confidence: high for object selection rules, exact Monument/Building, grave,
+and Goodie shapes, Tree/Grave/Goodie/post radii, and host ownership. Goodie pushing is
+not required for static Boneyard navigation; until physics is implemented its
+circle may block rather than mutate the authored object root.
+
+#### Run HUD is a different presentation branch
+
+Global HUD painter `0x005D2520` checks the current gameplay player state before
+entering its Hub-only block. The run branch jumps to `LAB_005D3D48`, skipping
+the service/help surfaces, right-side NPC loadout, and the
+`0x0050DBF0`/`0x00500250` map-control pair. Fresh native mode-2 captures show
+the surviving run HUD precisely: skull at top left, health/mana/primary at top
+center, secondary at bottom left, and inventory/belt at bottom center. Help,
+the right-side companion loadout, and the bottom-right map are absent.
+
+Implementation consequence: `GameHud` has an explicit scene mode. Hub mode
+retains the complete current surface; run mode renders only the four stock
+gameplay groups above. HUD is painted after the darkness compositor and is
+therefore never fogged.
+
+Evidence: read-only decompilation context around `0x005D2520` and
+`LAB_005D3D48`, plus fresh native captures
+`C:/sd-native-re-runtime-root/boneyard-re.png` and
+`C:/sd-native-re-runtime-root/boneyard-re-near-dig.png`.
+
+Confidence: high for visible ownership and the exact retained/hidden groups.
+
 ### Validation receipt
 
-The canonical `./scripts/validate.sh` gate passed on 2026-08-12: 22 backend
-contract/integration tests, 90 frontend tests, formatting, lint and game
-architecture boundaries, the production Vite build, and the standalone game
-host build. The native-bank generator reproduced SHA-256
+The canonical `./scripts/validate.sh` gate passed on 2026-08-13: 23 backend
+contract/integration tests, 145 frontend tests, five desktop-shell tests,
+formatting, lint and game architecture boundaries, the production Vite build,
+the standalone game-host build, and the production media-policy check. The
+native-bank generator reproduced SHA-256
 `9045752d24cb43813014b267b15a0ea279a790170dc6dfc19208dfe017383206`
 from the twelve retained `play.boneyard` captures. The Solomon records `2..19`
 extractor reproduced sheet SHA-256
 `659f615074b2b1001cd150594d955432aad5ebb06502af40c1003b1be73bdae0`.
 
-Two-client production-browser smokes covered both branches without page or
-console errors. The default-only branch skipped the picker and synchronized
-run `0be4f22657b605a087b84509923bf285` with geometry
-`341683b84221010162e94bbfba1c0bab9d5d02dfeda287fc30ec9c9f1daccca0`;
-the host and client each observed multiple Solomon Dig frames. The mod branch
-opened the host-only picker, selected `Contract Arena`, and synchronized run
-`8734ee8683e40e0f64adf5a0bc19ba55`, choice
-`mod:tests.contract:contract-arena:69ed41fc8f04`, and geometry
-`304e332db0d21845fdbca95499bbb1d894230659a3b768ad60c76eb71d7f079e`
-to both peers, again with advancing Dig frames. Captures are
-`/tmp/solomon-dark-boneyard-default-final-0812.png` and
-`/tmp/solomon-dark-boneyard-mod-final-0812.png`.
+Two-client production-browser smokes covered both entry branches without page
+or console errors. With only the built-in arena available, the native map icon
+skipped the picker and synchronized default-random mode-2 run
+`eb965ca2f34a995b67500bf59e91434d`, geometry
+`fd18e0c537cff0448780125f7a5ec2ed409e19b41a1987a62776b611298cf32e`,
+and both authoritative gate leaves. The smoke measured the native darkness
+composition (clear local aperture and alpha `245` at the far field), exact
+Solomon Dig/grave offset `(10,113)`, exact grave-lantern offset `(-55,73)`,
+advancing Dig frames on both peers, removal of the Hub help/loadout/map groups,
+and preservation of the run inventory. The current-main WebGL2 Hub rendered at
+resolution `1` before entry. The host crossed the entry gate from Y `150` to
+`351.99998462945223`; the leaves reacted and the settled roots matched on host
+and client. Capture:
+`/tmp/solomon-dark-boneyard-final-main-0813.png`.
+
+With the staged `Contract Arena` mod present, the same map icon opened the
+host-only picker. Selecting it synchronized choice
+`mod:tests.contract:contract-arena:69ed41fc8f04`, run
+`9a0797222407a791b33f22916c15e845`, geometry
+`1cb227b8513509b4bcb104247eb8796f7ae3bc186879ce9123d01f4bd7d39e14`,
+and environment mode `0` to both peers. Capture:
+`/tmp/solomon-dark-boneyard-mod-picker-main-0813.png`.
+
 ## 2026-08-12 GPU Courtyard reconstruction receipt
 
 This renderer migration introduces no new game behavior. It maps the already
