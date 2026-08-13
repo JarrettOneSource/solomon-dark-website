@@ -24,7 +24,7 @@ const CHARACTER = {
   element: 'ether',
 } as const
 
-test('client carries character config, predicts input, reconciles, and tears down', async () => {
+test('client carries character config, publishes authority, and tears down', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
     character: CHARACTER,
@@ -110,8 +110,7 @@ test('client carries character config, predicts input, reconciles, and tears dow
     acknowledgedInputSequence: 0,
     snapshot: createGameSnapshot(serverState, 'player-1'),
   }))
-  assert.equal(presented.players['player-1'].position.x, origin.x)
-  assert.ok(presented.players['player-1'].position.y > origin.y)
+  assert.deepEqual(presented.players['player-1'].position, origin)
   transport.receive(encodeGameMessage({
     type: 'server-snapshot',
     acknowledgedInputSequence: 2,
@@ -219,6 +218,154 @@ test('client presents bounded display-rate movement without resending unchanged 
   session.destroy()
 })
 
+test('client applies direction changes only to future presentation ticks', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+
+  session.sendInput({ movement: { x: 1, y: 0 } })
+  nowMs += 40
+  const beforeTurn = session.samplePresentation()
+  session.sendInput({ movement: { x: 0, y: 1 } })
+  const atTurn = session.samplePresentation()
+
+  assert.deepEqual(
+    atTurn.players['player-1'].position,
+    beforeTurn.players['player-1'].position,
+  )
+  assert.equal(
+    atTurn.players['player-1'].headingIndex,
+    beforeTurn.players['player-1'].headingIndex,
+  )
+  session.destroy()
+})
+
+test('client does not rewind a locally presented turn while acknowledgement is delayed', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const source = createGameSnapshot(serverState, 'player-1')
+  const sourcePlayer = source.players['player-1']
+  const eastboundPlayer = {
+    ...sourcePlayer,
+    headingIndex: 6,
+    velocity: { x: 90, y: 0 },
+  }
+  const initialSnapshot = {
+    ...source,
+    players: { ...source.players, 'player-1': eastboundPlayer },
+    tick: 100,
+  }
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+  session.samplePresentation()
+
+  session.sendInput({ movement: { x: 0, y: 1 } })
+  nowMs += 50
+  const beforeSnapshot = session.samplePresentation()
+  assert.ok(beforeSnapshot.players['player-1'].headingIndex > eastboundPlayer.headingIndex)
+
+  let authoritativePlayer = eastboundPlayer
+  let collisionRngState = initialSnapshot.world.kind === 'hub'
+    ? initialSnapshot.world.collisionRngState
+    : 0
+  for (let tick = 0; tick < 5; tick += 1) {
+    const predicted = predictPlayerCharacterInHub(
+      authoritativePlayer,
+      { movement: { x: 1, y: 0 } },
+      collisionRngState,
+      initialSnapshot.world.kind === 'hub'
+        ? initialSnapshot.world.participants['player-1']
+        : undefined,
+    )
+    authoritativePlayer = predicted.player
+    collisionRngState = predicted.collisionRngState
+  }
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    snapshot: {
+      ...initialSnapshot,
+      players: { ...initialSnapshot.players, 'player-1': authoritativePlayer },
+      tick: 105,
+      world: initialSnapshot.world.kind === 'hub'
+        ? { ...initialSnapshot.world, collisionRngState }
+        : initialSnapshot.world,
+    },
+  }))
+  const afterSnapshot = session.samplePresentation()
+
+  assert.equal(
+    afterSnapshot.players['player-1'].headingIndex,
+    beforeSnapshot.players['player-1'].headingIndex,
+  )
+  assert.deepEqual(
+    afterSnapshot.players['player-1'].position,
+    beforeSnapshot.players['player-1'].position,
+  )
+  session.destroy()
+})
+
+test('client visually absorbs an unpredicted push over one snapshot interval', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialSnapshot = createGameSnapshot(serverState, 'player-1')
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+  const beforePush = session.samplePresentation()
+  const origin = beforePush.players['player-1'].position
+  const pushedX = origin.x + 10
+
+  nowMs += 50
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    snapshot: {
+      ...initialSnapshot,
+      players: {
+        ...initialSnapshot.players,
+        'player-1': {
+          ...initialSnapshot.players['player-1'],
+          position: { x: pushedX, y: origin.y },
+        },
+      },
+      tick: initialSnapshot.tick + 5,
+    },
+  }))
+  const atArrival = session.samplePresentation()
+  nowMs += 25
+  const halfway = session.samplePresentation()
+  nowMs += 25
+  const settled = session.samplePresentation()
+
+  assert.deepEqual(atArrival.players['player-1'].position, origin)
+  assert.ok(Math.abs(halfway.players['player-1'].position.x - (origin.x + 5)) < 0.0001)
+  assert.equal(settled.players['player-1'].position.x, pushedX)
+  assert.equal(settled.players['player-1'].position.y, origin.y)
+  session.destroy()
+})
+
 test('client predicts the authoritative scripted transition walk without accepting input', () => {
   const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
   const predicted = predictPlayerCharacterInHub(
@@ -275,6 +422,25 @@ function kernelParameters() {
     movementThresholdSquared: Math.fround(0.01),
     playerRadius: 25,
   }
+}
+
+function receiveWelcome(
+  transport: MemoryTransport,
+  snapshot: ReturnType<typeof createGameSnapshot>,
+): void {
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    snapshot,
+  }))
 }
 
 class MemoryTransport implements GameTransport {

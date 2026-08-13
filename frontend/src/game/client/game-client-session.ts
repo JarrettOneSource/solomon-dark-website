@@ -19,6 +19,8 @@ import {
   type LoadedBoneyard,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
+import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
+import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   createBoneyardPresentationTimeline,
@@ -64,9 +66,20 @@ export type GameSessionConnector = (
 ) => Promise<GameClientSession>
 
 interface PendingInput {
-  input: PlayerCharacterInput
   sequence: number
   targetTick: number
+}
+
+interface LocalHubPresentationState {
+  collisionRngState: number
+  correction: { x: number; y: number }
+  correctionDurationMs: number
+  correctionStartedAtMs: number
+  lastAdvancedAtMs: number
+  participant: HubParticipantState
+  player: ProtocolPlayerState
+  predictedTicks: number
+  remainderMs: number
 }
 
 const STOPPED_INPUT: PlayerCharacterInput = { movement: { x: 0, y: 0 } }
@@ -86,6 +99,7 @@ export function connectGameClientSession(
     let sequence = 0
     let predictionEnabled = false
     let fatalReported = false
+    let localHubPresentation: LocalHubPresentationState | undefined
     let currentInput = copyInput(STOPPED_INPUT)
     let sentInput = copyInput(STOPPED_INPUT)
     const now = options.now ?? (() => performance.now())
@@ -126,6 +140,7 @@ export function connectGameClientSession(
             lastSnapshotReceivedAtMs,
             message,
           )
+          resetLocalHubPresentation(snapshot, lastSnapshotReceivedAtMs)
         } else if (isBoneyardGameSnapshot(snapshot)) {
           boneyardPresentationTimeline = createBoneyardTimeline(
             snapshot,
@@ -151,10 +166,18 @@ export function connectGameClientSession(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
       const previousWorldKind = snapshot.world.kind
-      snapshot = predictionEnabled && message.snapshot.world.kind === 'hub'
-        ? predictLocalPlayer(message.snapshot, welcome.playerId, pendingInputs)
-        : message.snapshot
-      lastSnapshotReceivedAtMs = now()
+      const receivedAtMs = now()
+      if (isHubGameSnapshot(message.snapshot)) {
+        reconcileLocalHubPresentation(
+          message.snapshot,
+          receivedAtMs,
+          previousWorldKind === 'hub',
+        )
+      } else {
+        localHubPresentation = undefined
+      }
+      snapshot = message.snapshot
+      lastSnapshotReceivedAtMs = receivedAtMs
       if (isHubGameSnapshot(snapshot)) {
         if (!presentationTimeline || previousWorldKind !== 'hub') {
           presentationTimeline = createPresentationTimeline(
@@ -242,34 +265,16 @@ export function connectGameClientSession(
         }
         const frame = presentationTimeline.sample(requestedNow)
         if (!predictionEnabled || !isHubGameSnapshot(snapshot)) return frame
-        const sourcePlayer = snapshot.players[welcome.playerId]
-        if (!sourcePlayer) return frame
-        const maximumTicks = Math.max(
-          1,
-          Math.ceil(welcome.serverTickRate / welcome.snapshotRate),
-        )
-        const elapsedTicks = Math.min(
-          maximumTicks,
-          Math.max(0, Math.floor(
-            (requestedNow - lastSnapshotReceivedAtMs) * welcome.serverTickRate / 1000,
-          )),
-        )
-        let player = sourcePlayer
-        let collisionRngState = snapshot.world.collisionRngState
-        for (let tick = 0; tick < elapsedTicks; tick += 1) {
-          const predicted = predictPlayerCharacterInHub(
-            player,
-            currentInput,
-            collisionRngState,
-            snapshot.world.participants[welcome.playerId],
-          )
-          player = predicted.player
-          collisionRngState = predicted.collisionRngState
-        }
+        advanceLocalHubPresentation(requestedNow)
+        if (!localHubPresentation) return frame
+        const player = displayedLocalPlayer(localHubPresentation, requestedNow)
         return {
           ...frame,
           players: { ...frame.players, [welcome.playerId]: player },
-          world: { ...frame.world, collisionRngState },
+          world: {
+            ...frame.world,
+            collisionRngState: localHubPresentation.collisionRngState,
+          },
         }
       },
       sendInput(nextInput) {
@@ -284,6 +289,7 @@ export function connectGameClientSession(
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
         }
+        if (!sameInput(input, currentInput)) advanceLocalHubPresentation(now())
         currentInput = input
         if (sameInput(input, sentInput)) return
         sentInput = copyInput(input)
@@ -292,7 +298,7 @@ export function connectGameClientSession(
         const pendingAtTick = pendingInputs.findIndex(
           (entry) => entry.targetTick === targetTick,
         )
-        const pending = { input, sequence, targetTick }
+        const pending = { sequence, targetTick }
         if (pendingAtTick < 0) pendingInputs.push(pending)
         else pendingInputs[pendingAtTick] = pending
         options.transport.send(encodeGameMessage({
@@ -349,6 +355,106 @@ export function connectGameClientSession(
       })
     }
 
+    function resetLocalHubPresentation(
+      hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
+      receivedAtMs: number,
+    ): void {
+      if (!predictionEnabled || !welcome) {
+        localHubPresentation = undefined
+        return
+      }
+      const player = hubSnapshot.players[welcome.playerId]
+      const participant = hubSnapshot.world.participants[welcome.playerId]
+      if (!player || !participant) {
+        localHubPresentation = undefined
+        return
+      }
+      localHubPresentation = {
+        collisionRngState: hubSnapshot.world.collisionRngState,
+        correction: { x: 0, y: 0 },
+        correctionDurationMs: 1000 / welcome.snapshotRate,
+        correctionStartedAtMs: receivedAtMs,
+        lastAdvancedAtMs: receivedAtMs,
+        participant: copyParticipant(participant),
+        player: copyPlayer(player),
+        predictedTicks: 0,
+        remainderMs: 0,
+      }
+    }
+
+    function reconcileLocalHubPresentation(
+      hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
+      receivedAtMs: number,
+      previousWasHub: boolean,
+    ): void {
+      if (!predictionEnabled || !welcome) {
+        localHubPresentation = undefined
+        return
+      }
+      const authoritative = hubSnapshot.players[welcome.playerId]
+      const participant = hubSnapshot.world.participants[welcome.playerId]
+      const previous = localHubPresentation
+      if (!authoritative || !participant || !previous || !previousWasHub) {
+        resetLocalHubPresentation(hubSnapshot, receivedAtMs)
+        return
+      }
+      advanceLocalHubPresentation(receivedAtMs)
+      if (previous.participant.region !== participant.region) {
+        resetLocalHubPresentation(hubSnapshot, receivedAtMs)
+        return
+      }
+      const displayed = displayedLocalPlayer(previous, receivedAtMs)
+      localHubPresentation = {
+        collisionRngState: hubSnapshot.world.collisionRngState,
+        correction: {
+          x: displayed.position.x - authoritative.position.x,
+          y: displayed.position.y - authoritative.position.y,
+        },
+        correctionDurationMs: 1000 / welcome.snapshotRate,
+        correctionStartedAtMs: receivedAtMs,
+        lastAdvancedAtMs: receivedAtMs,
+        participant: copyParticipant(participant),
+        player: {
+          ...copyPlayer(authoritative),
+          gaitDegrees: previous.player.gaitDegrees,
+          headingIndex: previous.player.headingIndex,
+          velocity: { ...previous.player.velocity },
+          walkCyclePrimary: previous.player.walkCyclePrimary,
+        },
+        predictedTicks: 0,
+        remainderMs: previous.remainderMs,
+      }
+    }
+
+    function advanceLocalHubPresentation(requestedNow: number): void {
+      if (!welcome || !localHubPresentation) return
+      const state = localHubPresentation
+      const elapsedMs = Math.max(0, requestedNow - state.lastAdvancedAtMs)
+      state.lastAdvancedAtMs = Math.max(state.lastAdvancedAtMs, requestedNow)
+      state.remainderMs += elapsedMs
+      const tickMs = 1000 / welcome.serverTickRate
+      const maximumTicks = Math.max(
+        1,
+        Math.ceil(welcome.serverTickRate / welcome.snapshotRate),
+      )
+      while (
+        state.remainderMs >= tickMs
+        && state.predictedTicks < maximumTicks
+      ) {
+        const predicted = predictPlayerCharacterInHub(
+          state.player,
+          currentInput,
+          state.collisionRngState,
+          state.participant,
+        )
+        state.player = { ...predicted.player, config: { ...state.player.config } }
+        state.collisionRngState = predicted.collisionRngState
+        state.predictedTicks += 1
+        state.remainderMs -= tickMs
+      }
+      if (state.predictedTicks === maximumTicks) state.remainderMs = 0
+    }
+
     function fail(error: Error): void {
       if (!settled) {
         settled = true
@@ -374,34 +480,39 @@ export function connectGameClientSession(
   })
 }
 
-function predictLocalPlayer(
-  source: GameSnapshot,
-  playerId: string,
-  inputs: readonly PendingInput[],
-): GameSnapshot {
-  const authoritative = source.players[playerId]
-  if (!authoritative || inputs.length === 0) return source
-  switch (source.world.kind) {
-    case 'hub': {
-      let player = authoritative
-      let collisionRngState = source.world.collisionRngState
-      for (const pending of inputs) {
-        const predicted = predictPlayerCharacterInHub(
-          player,
-          pending.input,
-          collisionRngState,
-          source.world.participants[playerId],
-        )
-        player = predicted.player
-        collisionRngState = predicted.collisionRngState
-      }
-      return {
-        ...source,
-        players: { ...source.players, [playerId]: player },
-        world: { ...source.world, collisionRngState },
-      }
-    }
-    case 'boneyard': return source
+function displayedLocalPlayer(
+  state: LocalHubPresentationState,
+  requestedNow: number,
+): ProtocolPlayerState {
+  const elapsedMs = Math.max(0, requestedNow - state.correctionStartedAtMs)
+  const remaining = Math.max(0, 1 - elapsedMs / state.correctionDurationMs)
+  return {
+    ...copyPlayer(state.player),
+    position: {
+      x: state.player.position.x + state.correction.x * remaining,
+      y: state.player.position.y + state.correction.y * remaining,
+    },
+  }
+}
+
+function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
+  return {
+    ...player,
+    config: { ...player.config },
+    position: { ...player.position },
+    velocity: { ...player.velocity },
+  }
+}
+
+function copyParticipant(participant: HubParticipantState): HubParticipantState {
+  return {
+    region: participant.region,
+    transition: participant.transition
+      ? {
+          ...participant.transition,
+          scriptedTarget: { ...participant.transition.scriptedTarget },
+        }
+      : null,
   }
 }
 
