@@ -39,6 +39,17 @@ interface BrowserInputTarget {
   removeEventListener(type: string, listener: EventListener): void
 }
 
+interface BrowserVisibilityTarget extends BrowserInputTarget {
+  readonly visibilityState: DocumentVisibilityState
+}
+
+interface BrowserMovementInputOptions {
+  getGamepads?: () => readonly (GamepadLike | null)[]
+  onStop: () => void
+  target?: BrowserInputTarget
+  visibilityTarget?: BrowserVisibilityTarget
+}
+
 const MOVEMENT_CODES = new Set([
   'ArrowDown',
   'ArrowLeft',
@@ -94,10 +105,12 @@ export function createMovementInputState(): MovementInputState {
   }
 }
 
-export function createBrowserMovementInput(
-  target: BrowserInputTarget = window,
-  getGamepads: () => readonly (GamepadLike | null)[] = () => navigator.getGamepads(),
-): BrowserMovementInput {
+export function createBrowserMovementInput({
+  getGamepads = () => navigator.getGamepads(),
+  onStop,
+  target = window,
+  visibilityTarget = document,
+}: BrowserMovementInputOptions): BrowserMovementInput {
   const state = createMovementInputState()
   const keyDown: EventListener = (event) => {
     if (!(event instanceof KeyboardEvent) || !state.press(event.code)) return
@@ -107,17 +120,27 @@ export function createBrowserMovementInput(
     if (!(event instanceof KeyboardEvent) || !state.release(event.code)) return
     event.preventDefault()
   }
-  const blur: EventListener = () => state.clear()
+  const stop = () => {
+    state.clear()
+    onStop()
+  }
+  const visibilityChange: EventListener = () => {
+    if (visibilityTarget.visibilityState === 'hidden') stop()
+  }
   target.addEventListener('keydown', keyDown)
   target.addEventListener('keyup', keyUp)
-  target.addEventListener('blur', blur)
+  target.addEventListener('blur', stop)
+  target.addEventListener('pagehide', stop)
+  visibilityTarget.addEventListener('visibilitychange', visibilityChange)
 
   return {
     destroy() {
-      state.clear()
       target.removeEventListener('keydown', keyDown)
       target.removeEventListener('keyup', keyUp)
-      target.removeEventListener('blur', blur)
+      target.removeEventListener('blur', stop)
+      target.removeEventListener('pagehide', stop)
+      visibilityTarget.removeEventListener('visibilitychange', visibilityChange)
+      stop()
     },
     sample: () => state.sample(getGamepads()),
     setTouch: (movement) => state.setTouch(movement),

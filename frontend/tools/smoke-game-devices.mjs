@@ -19,6 +19,7 @@ async function enterHubWithPointer(page, element = 'Water') {
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
+  await page.locator('.create-menu-scene').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
@@ -64,6 +65,81 @@ async function touchMove(cdp, x, y) {
 
 async function touchEnd(cdp, type = 'touchEnd') {
   await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [] })
+}
+
+async function installLifecycleHarness(page) {
+  await page.addInitScript(() => {
+    const nativeDecode = HTMLImageElement.prototype.decode
+    HTMLImageElement.prototype.decode = function decode() {
+      if (this.src.includes('/create-hand-')) {
+        return Promise.reject(new DOMException('Forced redundant hand decode rejection'))
+      }
+      return nativeDecode.call(this)
+    }
+
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    const nativeCancelAnimationFrame = window.cancelAnimationFrame.bind(window)
+    const animationFrames = new Map()
+    let nextAnimationFrameId = 1
+    let animationFramesPaused = false
+
+    const scheduleAnimationFrame = (id) => {
+      const frame = animationFrames.get(id)
+      if (!frame || animationFramesPaused || frame.nativeId !== null) return
+      frame.nativeId = nativeRequestAnimationFrame((now) => {
+        animationFrames.delete(id)
+        frame.callback(now)
+      })
+    }
+
+    window.requestAnimationFrame = (callback) => {
+      const id = nextAnimationFrameId
+      nextAnimationFrameId += 1
+      animationFrames.set(id, { callback, nativeId: null })
+      scheduleAnimationFrame(id)
+      return id
+    }
+    window.cancelAnimationFrame = (id) => {
+      const frame = animationFrames.get(id)
+      if (frame && frame.nativeId !== null) nativeCancelAnimationFrame(frame.nativeId)
+      animationFrames.delete(id)
+    }
+
+    const visibilityState = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      'visibilityState',
+    ).get
+    const hidden = Object.getOwnPropertyDescriptor(Document.prototype, 'hidden').get
+    let hiddenOverride = null
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => hiddenOverride === null
+        ? visibilityState.call(document)
+        : hiddenOverride ? 'hidden' : 'visible',
+    })
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hiddenOverride === null ? hidden.call(document) : hiddenOverride,
+    })
+
+    window.__sdrTestLifecycle = {
+      pauseAnimationFrames() {
+        animationFramesPaused = true
+        for (const frame of animationFrames.values()) {
+          if (frame.nativeId !== null) nativeCancelAnimationFrame(frame.nativeId)
+          frame.nativeId = null
+        }
+      },
+      resumeAnimationFrames() {
+        animationFramesPaused = false
+        for (const id of animationFrames.keys()) scheduleAnimationFrame(id)
+      },
+      setHidden(value) {
+        hiddenOverride = value
+        document.dispatchEvent(new Event('visibilitychange'))
+      },
+    }
+  })
 }
 
 async function settledPosition(page, readPosition, label) {
@@ -192,6 +268,7 @@ try {
     isMobile: true,
     viewport: { width: 844, height: 390 },
   })
+  await installLifecycleHarness(mobile)
   const mobileErrors = []
   mobile.on('pageerror', (error) => mobileErrors.push(error.message))
   await enterHubWithPointer(mobile)
@@ -322,6 +399,39 @@ try {
     gestureReuse.afterTail - reuseBefore > 10,
     'expected a new gesture after focus interruption',
   )
+
+  const visibilityStart = gestureReuse.settled
+  await touchStart(mobileCdp, centerX, centerY)
+  await touchMove(mobileCdp, centerX + requestedOffset, centerY)
+  await mobile.waitForTimeout(300)
+  const visibilityBefore = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
+  assert.ok(
+    visibilityBefore - visibilityStart > 10,
+    'expected held movement before the visibility-suspension probe',
+  )
+  await mobile.evaluate(() => {
+    window.__sdrTestLifecycle.pauseAnimationFrames()
+    window.__sdrTestLifecycle.setHidden(true)
+  })
+  await new Promise((resolve) => setTimeout(resolve, 1_200))
+  await mobile.evaluate(() => {
+    window.__sdrTestLifecycle.setHidden(false)
+    window.__sdrTestLifecycle.resumeAnimationFrames()
+  })
+  await touchEnd(mobileCdp)
+  const visibilityInterruption = await settledPosition(
+    mobile,
+    () => canvas.evaluate((node) => node.__sdrHubFrame.playerX),
+    'visibility interruption during render suspension',
+  )
+  const visibilitySuspensionTravel = visibilityInterruption.afterTail - visibilityBefore
+  assert.ok(
+    visibilitySuspensionTravel < 30,
+    `hidden render suspension retained authoritative input (${visibilitySuspensionTravel})`,
+  )
+  const visibilityKnobCenter = rectCenter(await joystickKnob.boundingBox())
+  assert.ok(Math.abs(visibilityKnobCenter.x - centerX) < 1)
+  assert.ok(Math.abs(visibilityKnobCenter.y - centerY) < 1)
   const hubResolution = Number(await canvas.getAttribute('data-resolution'))
   await mobile.screenshot({ path: mobileHubScreenshotPath })
 
@@ -405,6 +515,10 @@ try {
       normalRelease,
       pointerCancel,
       sceneTeardown,
+      visibilityInterruption: {
+        ...visibilityInterruption,
+        suspensionTravel: visibilitySuspensionTravel,
+      },
     },
     viewport: mobileViewport,
     boneyard: {

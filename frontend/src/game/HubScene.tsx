@@ -131,7 +131,9 @@ export default function HubScene({
     let cancelled = false
     let animationFrame = 0
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
-    const input = createBrowserMovementInput()
+    const input = createBrowserMovementInput({
+      onStop: () => onInput({ movement: { x: 0, y: 0 } }),
+    })
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -182,7 +184,6 @@ export default function HubScene({
     return () => {
       cancelled = true
       cancelAnimationFrame(animationFrame)
-      onInput({ movement: { x: 0, y: 0 } })
       input.destroy()
       inputRef.current = null
       rendererRef.current?.destroy()

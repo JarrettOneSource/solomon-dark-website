@@ -59,7 +59,6 @@ function playCreateAudioEvents(audio: GameAudioDirector, events: readonly Create
 export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const onStartRef = useRef(onStart)
-  const [handsReady, setHandsReady] = useState(false)
   const [motionMs, setMotionMs] = useState(0)
   const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
@@ -69,27 +68,6 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
   onStartRef.current = onStart
 
   useEffect(() => {
-    let mounted = true
-    const handImages = [
-      createMenu.handFist,
-      createMenu.handCupped,
-      createMenu.handRaised,
-    ].map((source) => {
-      const image = new Image()
-      image.src = source
-      return image.decode()
-    })
-    void Promise.all(handImages).then(() => {
-      if (mounted) setHandsReady(true)
-    })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!handsReady) return
-
     const startedAt = performance.now()
     let animationFrame = 0
     let previousElapsed = 0
@@ -110,7 +88,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
     setMotionMs(0)
     animationFrame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(animationFrame)
-  }, [audio, handsReady, motionDuration, selectedElement])
+  }, [audio, motionDuration, selectedElement])
 
   useEffect(() => () => {
     audio.pauseStream('start-cast')
@@ -140,8 +118,6 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
   }, [audio, pendingDiscipline, selectedElement])
 
   useEffect(() => {
-    if (!handsReady) return
-
     const startedAt = performance.now()
     let animationFrame = 0
 
@@ -154,7 +130,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
 
     animationFrame = requestAnimationFrame(update)
     return () => cancelAnimationFrame(animationFrame)
-  }, [handsReady])
+  }, [])
 
   const motion = selectedElement
     ? createSelectionMotionAt(motionMs)
@@ -186,7 +162,6 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
       className="create-menu-scene"
       data-phase={selectedElement ? 'discipline' : 'element'}
       data-element={selectedElement ?? undefined}
-      data-hands-ready={handsReady}
       data-finalizing={pendingDiscipline !== null}
       data-motion-settled={motionMs >= motionDuration}
       aria-label="New wizard loadout selection"

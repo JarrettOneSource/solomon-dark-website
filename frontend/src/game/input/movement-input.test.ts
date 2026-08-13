@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   GAMEPAD_MOVEMENT_DEAD_ZONE,
+  createBrowserMovementInput,
   createMovementInputState,
   movementFromGamepads,
   normalizeMovement,
@@ -32,6 +33,10 @@ function closeTo(actual: number, expected: number, epsilon = 0.000_001): void {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} is not near ${expected}`)
 }
 
+class FakeVisibilityTarget extends EventTarget {
+  visibilityState: DocumentVisibilityState = 'visible'
+}
+
 test('keyboard input uses physical WASD and arrows with normalized diagonals', () => {
   const input = createMovementInputState()
   assert.equal(input.press('KeyD'), true)
@@ -57,6 +62,46 @@ test('key release and cancellation clear every retained input lane', () => {
   input.clear()
   assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
   assert.equal(input.release('KeyA'), true)
+})
+
+test('browser lifecycle interruption clears local input and publishes an immediate stop', () => {
+  const target = new EventTarget()
+  const visibilityTarget = new FakeVisibilityTarget()
+  let stops = 0
+  const input = createBrowserMovementInput({
+    getGamepads: () => [],
+    onStop: () => { stops += 1 },
+    target,
+    visibilityTarget,
+  })
+
+  input.setTouch({ x: 1, y: 0 })
+  target.dispatchEvent(new Event('blur'))
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+  assert.equal(stops, 1)
+
+  input.setTouch({ x: 0, y: 1 })
+  visibilityTarget.visibilityState = 'visible'
+  visibilityTarget.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(input.sample().device, 'touch')
+  assert.equal(stops, 1)
+
+  visibilityTarget.visibilityState = 'hidden'
+  visibilityTarget.dispatchEvent(new Event('visibilitychange'))
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+  assert.equal(stops, 2)
+
+  input.setTouch({ x: -1, y: 0 })
+  target.dispatchEvent(new Event('pagehide'))
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+  assert.equal(stops, 3)
+
+  input.setTouch({ x: 0, y: -1 })
+  input.destroy()
+  assert.equal(stops, 4)
+  target.dispatchEvent(new Event('blur'))
+  visibilityTarget.dispatchEvent(new Event('visibilitychange'))
+  assert.equal(stops, 4)
 })
 
 test('radial gamepad dead zone removes drift and rescales useful travel continuously', () => {

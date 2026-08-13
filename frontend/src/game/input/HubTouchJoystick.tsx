@@ -57,12 +57,14 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
     window.addEventListener('pointerup', pointerEnd)
     window.addEventListener('pointercancel', pointerEnd)
     window.addEventListener('blur', blur)
+    window.addEventListener('pagehide', blur)
     document.addEventListener('visibilitychange', visibilityChange)
     return () => {
       window.removeEventListener('pointermove', pointerMove)
       window.removeEventListener('pointerup', pointerEnd)
       window.removeEventListener('pointercancel', pointerEnd)
       window.removeEventListener('blur', blur)
+      window.removeEventListener('pagehide', blur)
       document.removeEventListener('visibilitychange', visibilityChange)
       activePointerRef.current = null
       inputSinkRef.current({ x: 0, y: 0 })
