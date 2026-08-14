@@ -5,6 +5,12 @@ import test from 'node:test'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 import {
+  NATIVE_ENEMY_ACTION_PROGRAMS,
+  NATIVE_ENEMY_DEATH_PROGRAMS,
+  nativeEnemyIdleAnimationSample,
+  type NativeEnemyActionProgramName,
+} from './native-enemy-animation.ts'
+import {
   NATIVE_ENEMY_FAMILIES,
   nativeEnemyPresentationPlan,
   type NativeEnemyAtlas,
@@ -14,6 +20,7 @@ import {
 
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
+  DeadHawg: manifest('../../editor/manifest/deadhawg.json'),
   Demon: manifest('../../editor/manifest/demon.json'),
 }
 
@@ -74,6 +81,91 @@ test('representative enemy records retain native registration and joints', () =>
   ])
 })
 
+test('every combat, death, and Coffin child plan resolves to extracted records', () => {
+  const plans: ReturnType<typeof nativeEnemyPresentationPlan>[] = []
+  const actionFamilies: readonly [NativeEnemyFamily, NativeEnemyActionProgramName][] = [
+    ['SKELETON', 'skeleton-claw-a'],
+    ['SKELETON', 'skeleton-claw-b'],
+    ['SKELETON', 'skeleton-weapon'],
+    ['SKELETON', 'skeleton-pike'],
+    ['SKELETONARCHER', 'archer-shot'],
+    ['SKELETONMAGE', 'mage-cast-short'],
+    ['SKELETONMAGE', 'mage-cast-long'],
+    ['IMP', 'imp-contact'],
+    ['ZOMBIE', 'zombie-swipe'],
+    ['WRAITH', 'wraith-drain'],
+    ['DEMON', 'demon-claw'],
+    ['DEMON', 'demon-bomb'],
+    ['COFFIN', 'coffin-open'],
+  ]
+  for (const [family, action] of actionFamilies) {
+    const program = NATIVE_ENEMY_ACTION_PROGRAMS[action]
+    for (let progress = 0; progress <= program.strictEnd + 1; progress += 1) {
+      for (const headingDeg of familyHeadings(family)) {
+        plans.push(nativeEnemyPresentationPlan({
+          ...enemy(family, 7, headingDeg, actionFlags(action)),
+          animation: nativeEnemyIdleAnimationSample({
+            action,
+            actionProgress: progress,
+            impEffectFrame: action === 'imp-contact' ? 9 : -1,
+            state: 'action',
+          }),
+        }, 500))
+      }
+    }
+  }
+  for (const family of NATIVE_ENEMY_FAMILIES) {
+    const death = NATIVE_ENEMY_DEATH_PROGRAMS[family]
+    for (let deathTick = 0; deathTick <= death.durationTicks + 1; deathTick += 1) {
+      plans.push(nativeEnemyPresentationPlan({
+        ...enemy(family, 8, 0, []),
+        animation: nativeEnemyIdleAnimationSample({ deathTick, state: 'death' }),
+      }, 500))
+    }
+  }
+  plans.push(nativeEnemyPresentationPlan({
+    ...enemy('COFFIN', 9, 0, []),
+    animation: nativeEnemyIdleAnimationSample({
+      coffinSecondaryPose: 9,
+      coffinState: 'open',
+      maggots: [
+        {
+          alpha: 1,
+          headingDeg: 340,
+          id: 1,
+          offset: { x: 0, y: 0 },
+          pose: 1,
+          rotationRadians: 0,
+          state: 'bite',
+        },
+        {
+          alpha: 1,
+          headingDeg: 0,
+          id: 2,
+          offset: { x: 0, y: 0 },
+          pose: 0,
+          rotationRadians: 0,
+          state: 'death',
+        },
+      ],
+    }),
+  }, 500))
+
+  const used = new Set<string>()
+  for (const plan of plans) {
+    for (const layer of plan.layers) {
+      const record = manifests[layer.atlas].entries[layer.entry]
+      assert.ok(record && !record.empty && record.file, `${layer.atlas}:${layer.entry}`)
+      statSync(new URL(`../../assets/game/boneyard/${record.file}`, import.meta.url))
+      used.add(`${layer.atlas}:${layer.entry}`)
+    }
+  }
+  assert.ok(used.has('BadGuys:1819'))
+  assert.ok(used.has('DeadHawg:144'))
+  assert.ok(used.has('Demon:61'))
+  assert.ok(used.has('BadGuys:220'))
+})
+
 function manifest(relativePath: string): AtlasManifest {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as AtlasManifest
 }
@@ -122,4 +214,10 @@ function familyHeadings(family: NativeEnemyFamily): readonly number[] {
   return Array.from({ length: count }, (_, facing) => (
     (facing * step - step / 2 + 360) % 360
   ))
+}
+
+function actionFlags(action: NativeEnemyActionProgramName): readonly string[] {
+  if (action === 'skeleton-weapon') return ['FLAG_SWORD']
+  if (action === 'skeleton-pike') return ['FLAG_PIKE']
+  return []
 }

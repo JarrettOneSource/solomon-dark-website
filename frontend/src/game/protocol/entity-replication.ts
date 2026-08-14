@@ -1,5 +1,8 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type {
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+  BoneyardMaggotSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
   ProtocolStudentProp,
@@ -11,8 +14,32 @@ import type {
   ReplicatedEntityKey,
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
+import {
+  BONEYARD_ENEMY_ENTITY_REGISTRATION,
+  BONEYARD_ENEMY_ENTITY_TYPE_ID,
+  boneyardEnemyDescriptor,
+  boneyardEnemySample,
+  materializeBoneyardEnemy,
+} from './boneyard-enemy-replication.ts'
+import {
+  BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION,
+  BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID,
+  boneyardEnemyProjectileDescriptor,
+  boneyardEnemyProjectileSample,
+  materializeBoneyardEnemyProjectile,
+} from './boneyard-enemy-projectile-replication.ts'
+import {
+  BONEYARD_MAGGOT_ENTITY_REGISTRATION,
+  BONEYARD_MAGGOT_ENTITY_TYPE_ID,
+  boneyardMaggotDescriptor,
+  boneyardMaggotSample,
+  materializeBoneyardMaggot,
+} from './boneyard-maggot-replication.ts'
 
 export const REPLICATED_ENTITY_TYPES = {
+  boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
+  boneyardEnemyProjectile: BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID,
+  boneyardMaggot: BONEYARD_MAGGOT_ENTITY_TYPE_ID,
   student: 1,
 } as const
 
@@ -24,7 +51,7 @@ const STUDENT_SAMPLE_LENGTH = 7
 
 export interface ReplicatedEntityBaseline {
   readonly descriptors: ReadonlyMap<string, ReplicatedEntityDescriptor>
-  readonly worldKind: GameSnapshot['world']['kind']
+  readonly worldIdentity: string
 }
 
 export interface ReplicatedEntityTypeRegistration {
@@ -144,6 +171,12 @@ export const REPLICATED_ENTITY_TYPE_REGISTRY: ReadonlyMap<
   ReplicatedEntityTypeRegistration
 > = new Map([
   [studentCodec.typeId, studentCodec],
+  [BONEYARD_ENEMY_ENTITY_REGISTRATION.typeId, BONEYARD_ENEMY_ENTITY_REGISTRATION],
+  [
+    BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION.typeId,
+    BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION,
+  ],
+  [BONEYARD_MAGGOT_ENTITY_REGISTRATION.typeId, BONEYARD_MAGGOT_ENTITY_REGISTRATION],
 ])
 
 export function createReplicatedEntityBaseline(
@@ -151,7 +184,7 @@ export function createReplicatedEntityBaseline(
 ): ReplicatedEntityBaseline {
   return {
     descriptors: descriptorMap(snapshot),
-    worldKind: snapshot.world.kind,
+    worldIdentity: replicatedWorldIdentity(snapshot),
   }
 }
 
@@ -161,17 +194,10 @@ export function createGameSnapshotFrame(
   baseline: ReplicatedEntityBaseline | undefined,
   forceKeyframe = false,
 ): GameSnapshotFrame {
-  if (snapshot.world.kind === 'boneyard') {
-    return {
-      hostPlayerId: snapshot.hostPlayerId,
-      players: snapshot.players,
-      primarySpells: snapshot.primarySpells,
-      tick: snapshot.tick,
-      world: snapshot.world,
-    }
-  }
   const currentDescriptors = descriptorMap(snapshot)
-  const keyframe = forceKeyframe || !baseline || baseline.worldKind !== 'hub'
+  const keyframe = forceKeyframe
+    || !baseline
+    || baseline.worldIdentity !== replicatedWorldIdentity(snapshot)
   const spawned: ReplicatedEntityDescriptor[] = []
   const retired: ReplicatedEntityKey[] = []
   for (const [key, descriptor] of currentDescriptors) {
@@ -183,7 +209,13 @@ export function createGameSnapshotFrame(
       if (!currentDescriptors.has(key)) retired.push([descriptor[0], descriptor[1]])
     }
   }
-  const samples = snapshot.world.students.map((student) => studentCodec.sample(student))
+  const samples = snapshot.world.kind === 'hub'
+    ? snapshot.world.students.map((student) => studentCodec.sample(student))
+    : [
+        ...snapshot.world.enemies.map(boneyardEnemySample),
+        ...snapshot.world.enemyProjectiles.map(boneyardEnemyProjectileSample),
+        ...snapshot.world.maggots.map(boneyardMaggotSample),
+      ]
   const entities: ReplicatedEntityFrame = {
     baselineSequence: keyframe ? 0 : baselineSequence,
     keyframe,
@@ -191,17 +223,35 @@ export function createGameSnapshotFrame(
     samples,
     spawned,
   }
-  return {
+  const common = {
     hostPlayerId: snapshot.hostPlayerId,
     players: snapshot.players,
     primarySpells: snapshot.primarySpells,
+    run: snapshot.run,
     tick: snapshot.tick,
+  }
+  if (snapshot.world.kind === 'hub') {
+    return {
+      ...common,
+      world: {
+        ambient: snapshot.world.ambient,
+        collisionRngState: snapshot.world.collisionRngState,
+        entities,
+        kind: 'hub',
+        participants: snapshot.world.participants,
+      },
+    }
+  }
+  return {
+    ...common,
     world: {
-      ambient: snapshot.world.ambient,
-      collisionRngState: snapshot.world.collisionRngState,
+      encounter: snapshot.world.encounter,
       entities,
-      kind: 'hub',
-      participants: snapshot.world.participants,
+      enemyEvents: snapshot.world.enemyEvents,
+      gateLeaves: snapshot.world.gateLeaves,
+      kind: 'boneyard',
+      runId: snapshot.world.runId,
+      waves: snapshot.world.waves,
     },
   }
 }
@@ -209,6 +259,7 @@ export function createGameSnapshotFrame(
 export class EntityReplicationReconstructor {
   private readonly descriptors = new Map<string, ReplicatedEntityDescriptor>()
   private lastSequence = 0
+  private worldIdentity: string | null = null
 
   reset(snapshot: GameSnapshot, sequence: number): void {
     this.descriptors.clear()
@@ -216,24 +267,18 @@ export class EntityReplicationReconstructor {
       this.descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
     }
     this.lastSequence = sequence
+    this.worldIdentity = replicatedWorldIdentity(snapshot)
   }
 
   apply(frame: GameSnapshotFrame, sequence: number): GameSnapshot {
     if (sequence <= this.lastSequence) {
       throw new EntityReplicationGapError('snapshot sequence is not newer')
     }
-    if (frame.world.kind === 'boneyard') {
-      this.descriptors.clear()
-      this.lastSequence = sequence
-      return {
-        hostPlayerId: frame.hostPlayerId,
-        players: frame.players,
-        primarySpells: frame.primarySpells,
-        tick: frame.tick,
-        world: frame.world,
-      }
-    }
     const entities = frame.world.entities
+    const nextWorldIdentity = replicatedFrameWorldIdentity(frame)
+    if (nextWorldIdentity !== this.worldIdentity && !entities.keyframe) {
+      throw new EntityReplicationGapError('world identity changed without an entity keyframe')
+    }
     if (!entities.keyframe && entities.baselineSequence > this.lastSequence) {
       throw new EntityReplicationGapError('entity baseline has not been applied')
     }
@@ -247,6 +292,9 @@ export class EntityReplicationReconstructor {
       this.descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
     }
     const students: ProtocolStudentState[] = []
+    const enemies: BoneyardEnemySnapshot[] = []
+    const enemyProjectiles: BoneyardEnemyProjectileSnapshot[] = []
+    const maggots: BoneyardMaggotSnapshot[] = []
     for (const sample of entities.samples) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(sample[0])
       const descriptor = this.descriptors.get(entityKey(sample[0], sample[1]))
@@ -254,21 +302,60 @@ export class EntityReplicationReconstructor {
         throw new EntityReplicationGapError('entity sample is missing its descriptor')
       }
       if (sample[0] === REPLICATED_ENTITY_TYPES.student) {
+        if (frame.world.kind !== 'hub') {
+          throw new EntityReplicationGapError('student sample is outside the Hub')
+        }
         students.push(studentCodec.materialize(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardEnemy) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('enemy sample is outside the Boneyard')
+        }
+        enemies.push(materializeBoneyardEnemy(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('enemy projectile sample is outside the Boneyard')
+        }
+        enemyProjectiles.push(materializeBoneyardEnemyProjectile(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('Maggot sample is outside the Boneyard')
+        }
+        maggots.push(materializeBoneyardMaggot(descriptor, sample))
       }
     }
     this.lastSequence = sequence
-    return {
+    this.worldIdentity = nextWorldIdentity
+    const common = {
       hostPlayerId: frame.hostPlayerId,
       players: frame.players,
       primarySpells: frame.primarySpells,
+      run: frame.run,
       tick: frame.tick,
+    }
+    if (frame.world.kind === 'hub') {
+      return {
+        ...common,
+        world: {
+          ambient: frame.world.ambient,
+          collisionRngState: frame.world.collisionRngState,
+          kind: 'hub',
+          participants: frame.world.participants,
+          students,
+        },
+      }
+    }
+    return {
+      ...common,
       world: {
-        ambient: frame.world.ambient,
-        collisionRngState: frame.world.collisionRngState,
-        kind: 'hub',
-        participants: frame.world.participants,
-        students,
+        encounter: frame.world.encounter,
+        enemies,
+        enemyEvents: frame.world.enemyEvents,
+        enemyProjectiles,
+        gateLeaves: frame.world.gateLeaves,
+        kind: 'boneyard',
+        maggots,
+        runId: frame.world.runId,
+        waves: frame.world.waves,
       },
     }
   }
@@ -280,12 +367,38 @@ export class EntityReplicationGapError extends Error {
 
 function descriptorMap(snapshot: GameSnapshot): Map<string, ReplicatedEntityDescriptor> {
   const descriptors = new Map<string, ReplicatedEntityDescriptor>()
-  if (snapshot.world.kind !== 'hub') return descriptors
-  for (const student of snapshot.world.students) {
-    const descriptor = studentCodec.descriptor(student)
-    descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+  if (snapshot.world.kind === 'hub') {
+    for (const student of snapshot.world.students) {
+      const descriptor = studentCodec.descriptor(student)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+  } else {
+    for (const enemy of snapshot.world.enemies) {
+      const descriptor = boneyardEnemyDescriptor(enemy)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const projectile of snapshot.world.enemyProjectiles) {
+      const descriptor = boneyardEnemyProjectileDescriptor(projectile)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const maggot of snapshot.world.maggots) {
+      const descriptor = boneyardMaggotDescriptor(maggot)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
   }
   return descriptors
+}
+
+function replicatedWorldIdentity(snapshot: GameSnapshot): string {
+  return snapshot.world.kind === 'hub'
+    ? 'hub'
+    : `boneyard:${snapshot.world.runId}`
+}
+
+function replicatedFrameWorldIdentity(frame: GameSnapshotFrame): string {
+  return frame.world.kind === 'hub'
+    ? 'hub'
+    : `boneyard:${frame.world.runId}`
 }
 
 function entityKey(typeId: number, entityId: number): string {

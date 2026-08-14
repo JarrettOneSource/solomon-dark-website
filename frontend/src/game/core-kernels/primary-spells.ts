@@ -106,6 +106,15 @@ export type PrimarySpellChannelTransientState =
   | PrimarySpellAirTransientState
   | PrimarySpellWaterTransientState
 
+export interface PrimarySpellChannelEmission {
+  direction: Vector2
+  id: number
+  kind: 'air' | 'water'
+  origin: Vector2
+  ownerId: string
+  worldKey: string
+}
+
 export interface PrimarySpellEarthImpactState {
   ageTicks: number
   birthTick: number
@@ -171,6 +180,11 @@ export interface PrimarySpellSimulationState {
   transients: readonly PrimarySpellTransientState[]
 }
 
+export interface PrimarySpellCastAuthority {
+  availableMana: number
+  eligible: boolean
+}
+
 export interface PrimarySpellTickContext {
   canPlaceProjectile: (
     spell: PrimarySpellProjectileState,
@@ -182,6 +196,7 @@ export interface PrimarySpellTickContext {
     from: Vector2,
     to: Vector2,
   ) => boolean
+  castAuthority: Readonly<Record<string, PrimarySpellCastAuthority>>
   inputs: Readonly<Record<string, PlayerCharacterInput>>
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
@@ -204,6 +219,8 @@ export interface PrimarySpellTickContext {
 }
 
 export interface PrimarySpellTickResult {
+  channelEmissions: readonly PrimarySpellChannelEmission[]
+  manaSpent: Readonly<Record<string, number>>
   players: Readonly<Record<string, PlayerCharacterState>>
   spells: PrimarySpellSimulationState
 }
@@ -212,10 +229,13 @@ export const PRIMARY_CAST_ACTION_END_TICK = 74
 export const PRIMARY_CAST_EMISSION_TICK = 19
 export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 56
 export const PRIMARY_CAST_ETHER_EMISSION_TICK = 15
+export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS = 500
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
+export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 15
+export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 22.5
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
@@ -228,6 +248,13 @@ export const PRIMARY_SPELL_EARTH_CALLED_ROCK_REMOVE_DISTANCE = 5
 export const PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE = Math.fround(
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE + PRIMARY_SPELL_EARTH_CHARGE_STEP,
 )
+export const PRIMARY_SPELL_RANK_ONE_MANA_COSTS = {
+  air: 0.12,
+  earth: 0.12,
+  ether: 6,
+  fire: 12,
+  water: 0.125,
+} as const satisfies Readonly<Record<WizardElement, number>>
 
 const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<0 | 1 | 7 | 8, readonly Vector2[]>> = {
   0: [
@@ -396,18 +423,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       nextId += 1
       continue
     }
-    if (
-      advanced.kind === 'ether'
-      && targets.some((target) => (
-        target.kind === 'enemy'
-        && Math.hypot(
-          target.position.x - advanced.position.x,
-          target.position.y - advanced.position.y,
-        ) < 6
-      ))
-    ) continue
     projectiles.push(advanced)
   }
+  const manaSpent: Record<string, number> = {}
+  const channelEmissions: PrimarySpellChannelEmission[] = []
   const players: Record<string, PlayerCharacterState> = { ...context.players }
 
   for (const spell of projectiles) {
@@ -419,13 +438,25 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   for (const [playerId, player] of Object.entries(context.players)) {
     const previous = context.previousPlayers[playerId] ?? player
     const input = context.inputs[playerId]
+    const authority = context.castAuthority[playerId]
+    const manaCost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[player.config.element]
+    let availableMana = authority?.availableMana ?? 0
+    manaSpent[playerId] = 0
+    const spendMana = (): boolean => {
+      if (availableMana < manaCost) return false
+      availableMana -= manaCost
+      manaSpent[playerId] += manaCost
+      return true
+    }
     const rawHeld = input?.cast.primary === true && input.aim !== null
     const pressed = rawHeld && !previous.primaryCast.held
     const released = !rawHeld && previous.primaryCast.held
     const oneShotPrimary = player.config.element === 'ether' || player.config.element === 'fire'
     const acceptedCast = rawHeld
       && previous.primaryCast.actionTick < 0
-      && (pressed || oneShotPrimary)
+      && (pressed || (oneShotPrimary && previous.primaryCast.castSequence > 0))
+      && authority?.eligible === true
+      && availableMana >= manaCost
     const sustainedPrimary = (
       player.config.element === 'air'
       || player.config.element === 'water'
@@ -453,7 +484,27 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
     const worldKey = context.worldKeyForPlayer(playerId)
 
+    if (authority?.eligible !== true) {
+      if (player.config.element === 'earth') {
+        projectiles = projectiles.filter((spell) => !(
+          spell.kind === 'earth'
+          && spell.ownerId === playerId
+          && spell.phase === 'held'
+        ))
+      }
+      players[playerId] = {
+        ...nextPlayer,
+        primaryCast: {
+          ...nextPlayer.primaryCast,
+          actionTick: -1,
+          channelActive: false,
+        },
+      }
+      continue
+    }
+
     if (acceptedCast) {
+      spendMana()
       switch (player.config.element) {
         case 'air':
         case 'water':
@@ -556,10 +607,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
     ))
 
+    let channelExhausted = false
     if (nextPlayer.primaryCast.channelActive) {
       switch (player.config.element) {
         case 'air': {
           if (!rawHeld) break
+          if (!acceptedCast && !spendMana()) {
+            channelExhausted = true
+            break
+          }
           const emitter = primarySpellEmitter(nextPlayer)
           const air = createAirTransient(
             playerId,
@@ -568,6 +624,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             aimDirection,
             context,
           )
+          channelEmissions.push({
+            direction: { ...aimDirection },
+            id: nextId,
+            kind: 'air',
+            origin: emitter,
+            ownerId: playerId,
+            worldKey,
+          })
           transients = [...transients, {
             ageTicks: 0,
             direction: { ...aimDirection },
@@ -593,7 +657,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         }
         case 'water': {
           if (!rawHeld) break
+          if (!acceptedCast && !spendMana()) {
+            channelExhausted = true
+            break
+          }
           const emitter = primarySpellEmitter(nextPlayer)
+          channelEmissions.push({
+            direction: { ...aimDirection },
+            id: nextId,
+            kind: 'water',
+            origin: emitter,
+            ownerId: playerId,
+            worldKey,
+          })
           const emitted = Array.from(
             { length: WATER_FROST_PARTICLES_PER_TICK },
             (_, variant): PrimarySpellTransientState => {
@@ -629,6 +705,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           break
         }
         case 'earth': {
+          const shouldCharge = acceptedCast || rawHeld || !earthReleaseEligible
+          if (shouldCharge && !acceptedCast && !spendMana()) {
+            channelExhausted = true
+            break
+          }
           projectiles = projectiles.map((spell) => {
             if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
               return spell
@@ -678,6 +759,45 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       }
     }
 
+    if (channelExhausted) {
+      if (player.config.element === 'earth') {
+        if (earthReleaseEligible) {
+          const released = releaseHeldEarthProjectiles(
+            projectiles,
+            playerId,
+            aimDirection,
+            context.canPlaceProjectile,
+            context.tick,
+            nextId,
+          )
+          projectiles = released.projectiles
+          transients = [...transients, ...released.impacts]
+          nextId = released.nextId
+          nextPlayer = {
+            ...nextPlayer,
+            primaryCast: {
+              ...nextPlayer.primaryCast,
+              emissionSequence: nextPlayer.primaryCast.emissionSequence + 1,
+            },
+          }
+        } else {
+          projectiles = projectiles.filter((spell) => !(
+            spell.kind === 'earth'
+            && spell.ownerId === playerId
+            && spell.phase === 'held'
+          ))
+        }
+      }
+      nextPlayer = {
+        ...nextPlayer,
+        primaryCast: {
+          ...nextPlayer.primaryCast,
+          actionTick: -1,
+          channelActive: false,
+        },
+      }
+    }
+
     const shouldEndChannel = nextPlayer.primaryCast.channelActive && (
       player.config.element === 'earth'
         ? !rawHeld && earthReleaseEligible
@@ -686,39 +806,17 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
     if (shouldEndChannel) {
       if (player.config.element === 'earth') {
-        const releasedProjectiles: PrimarySpellProjectileState[] = []
-        for (const spell of projectiles) {
-          if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
-            releasedProjectiles.push(spell)
-            continue
-          }
-          const velocity = {
-            x: aimDirection.x * 3,
-            y: aimDirection.y * 3,
-          }
-          const releasedSpell: PrimarySpellProjectileState = {
-            ...spell,
-            direction: { ...aimDirection },
-            flightTicks: 1,
-            phase: 'flight',
-            position: {
-              x: spell.position.x + velocity.x,
-              y: spell.position.y + velocity.y,
-            },
-            velocity,
-          }
-          if (context.canPlaceProjectile(
-            releasedSpell,
-            releasedSpell.position,
-            releasedSpell.charge * PRIMARY_SPELL_EARTH_RELEASE_COLLISION_RADIUS_SCALE,
-          )) {
-            releasedProjectiles.push(releasedSpell)
-          } else {
-            transients = [...transients, earthImpact(nextId, releasedSpell, context.tick)]
-            nextId += 1
-          }
-        }
-        projectiles = releasedProjectiles
+        const released = releaseHeldEarthProjectiles(
+          projectiles,
+          playerId,
+          aimDirection,
+          context.canPlaceProjectile,
+          context.tick,
+          nextId,
+        )
+        projectiles = released.projectiles
+        transients = [...transients, ...released.impacts]
+        nextId = released.nextId
         nextPlayer = {
           ...nextPlayer,
           primaryCast: {
@@ -756,9 +854,60 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   transients = advancedTransients
 
   return {
+    channelEmissions,
+    manaSpent,
     players,
     spells: { nextId, projectiles, transients },
   }
+}
+
+function releaseHeldEarthProjectiles(
+  projectiles: readonly PrimarySpellProjectileState[],
+  playerId: string,
+  aimDirection: Vector2,
+  canPlaceProjectile: PrimarySpellTickContext['canPlaceProjectile'],
+  tick: number,
+  sourceNextId: number,
+): {
+  impacts: readonly PrimarySpellEarthImpactState[]
+  nextId: number
+  projectiles: PrimarySpellProjectileState[]
+} {
+  const impacts: PrimarySpellEarthImpactState[] = []
+  const releasedProjectiles: PrimarySpellProjectileState[] = []
+  let nextId = sourceNextId
+  for (const spell of projectiles) {
+    if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
+      releasedProjectiles.push(spell)
+      continue
+    }
+    const velocity = {
+      x: aimDirection.x * 3,
+      y: aimDirection.y * 3,
+    }
+    const releasedSpell: PrimarySpellProjectileState = {
+      ...spell,
+      direction: { ...aimDirection },
+      flightTicks: 1,
+      phase: 'flight',
+      position: {
+        x: spell.position.x + velocity.x,
+        y: spell.position.y + velocity.y,
+      },
+      velocity,
+    }
+    if (canPlaceProjectile(
+      releasedSpell,
+      releasedSpell.position,
+      releasedSpell.charge * PRIMARY_SPELL_EARTH_RELEASE_COLLISION_RADIUS_SCALE,
+    )) {
+      releasedProjectiles.push(releasedSpell)
+    } else {
+      impacts.push(earthImpact(nextId, releasedSpell, tick))
+      nextId += 1
+    }
+  }
+  return { impacts, nextId, projectiles: releasedProjectiles }
 }
 
 export function removePrimarySpellOwner(

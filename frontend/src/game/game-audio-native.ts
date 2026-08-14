@@ -9,8 +9,20 @@ import type {
 
 export const NATIVE_AUDIO_TICK_MS = 10
 
-export type GameAudioScene = 'boneyard' | 'create' | 'hub' | 'title'
-export type GameMusicCue = 'academy' | 'prelude' | 'selection' | 'solomondarktheme'
+export type GameAudioScene =
+  | 'boneyard'
+  | 'boneyard-combat'
+  | 'create'
+  | 'game-over'
+  | 'hub'
+  | 'title'
+export type GameMusicCue =
+  | 'academy'
+  | 'combat'
+  | 'death'
+  | 'prelude'
+  | 'selection'
+  | 'solomondarktheme'
 export type GameSoundCue =
   | 'click'
   | 'fireball-hit'
@@ -25,7 +37,7 @@ export type GameSoundCue =
   | 'summon'
   | 'throw-fire'
 export type CreateStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
-export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue
+export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
 export type GameLoopCue =
   | 'gather-rocks-loop'
   | 'ice-loop'
@@ -68,7 +80,7 @@ export const NATIVE_MUSIC_MANIFEST = {
     moduleSubsong: 5,
     sourceName: 'solomondarktheme',
   },
-} as const satisfies Readonly<Record<GameMusicCue, NativeMusicEntry>>
+} as const satisfies Readonly<Partial<Record<GameMusicCue, NativeMusicEntry>>>
 
 export const NATIVE_SOUND_MANIFEST = {
   click: {
@@ -157,6 +169,11 @@ export const NATIVE_LOOP_MANIFEST = {
 } as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 
 export const NATIVE_STREAM_MANIFEST = {
+  'death-guitar': {
+    registryOffset: 118,
+    sourceName: 'sounds\\DeathGuitar__Stream',
+    sourceSha256: '67423fcd66ff8fba55acfb09f4dedb495754bfb962a90dc7ba1cbc0c28e353e8',
+  },
   'catch-it': {
     registryOffset: 0x1344,
     sourceName: 'sounds\\catchit__stream',
@@ -172,7 +189,7 @@ export const NATIVE_STREAM_MANIFEST = {
     sourceName: 'sounds\\StartCast__Stream',
     sourceSha256: 'bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8',
   },
-} as const satisfies Readonly<Record<CreateStreamCue, NativeSoundEntry>>
+} as const satisfies Readonly<Record<CreateStreamCue | 'death-guitar', NativeSoundEntry>>
 
 export const NATIVE_SOLOMON_VOICE_MANIFEST = {
   'solomon-hello-1': {
@@ -209,7 +226,9 @@ export const NATIVE_SOLOMON_VOICE_MANIFEST = {
 
 export const GAME_SCENE_MUSIC = {
   boneyard: { cue: 'prelude', transitionTicks: 100 },
+  'boneyard-combat': { cue: 'combat', transitionTicks: 100 },
   create: { cue: 'selection', transitionTicks: 100 },
+  'game-over': { cue: 'death', transitionTicks: 0 },
   hub: { cue: 'academy', transitionTicks: 2 },
   title: { cue: 'solomondarktheme', transitionTicks: 100 },
 } as const satisfies Readonly<Record<GameAudioScene, {

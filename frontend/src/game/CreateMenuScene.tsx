@@ -41,6 +41,11 @@ interface CreateMenuSceneProps {
   onBack: () => void
   onDisciplineCommit: () => void
   onStart: (element: WizardElement, discipline: WizardDiscipline) => Promise<boolean>
+  retainedLoadoutCanConfirm?: boolean
+  retainedLoadout?: Readonly<{
+    discipline: WizardDiscipline
+    element: WizardElement
+  }>
   viewport: FixedGameViewportLayout
 }
 
@@ -57,13 +62,15 @@ export default function CreateMenuScene({
   onBack,
   onDisciplineCommit,
   onStart,
+  retainedLoadoutCanConfirm = false,
+  retainedLoadout,
   viewport,
 }: CreateMenuSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
   const onStartRef = useRef(onStart)
-  const selectedElementRef = useRef<WizardElement | null>(null)
+  const selectedElementRef = useRef<WizardElement | null>(retainedLoadout?.element ?? null)
   const hoveredActionRef = useRef<CreateMenuAction | null>(null)
   const phaseStartedAtRef = useRef(0)
   const previousPhaseElapsedRef = useRef(0)
@@ -74,7 +81,9 @@ export default function CreateMenuScene({
   const [elementsVisible, setElementsVisible] = useState(false)
   const [disciplinesVisible, setDisciplinesVisible] = useState(false)
   const [motionSettled, setMotionSettled] = useState(false)
-  const [selectedElement, setSelectedElement] = useState<WizardElement | null>(null)
+  const [selectedElement, setSelectedElement] = useState<WizardElement | null>(
+    retainedLoadout?.element ?? null,
+  )
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
   onStartRef.current = onStart
@@ -220,7 +229,13 @@ export default function CreateMenuScene({
   }
 
   const selectDiscipline = (discipline: WizardDiscipline) => {
-    if (!selectedElementRef.current || pendingDiscipline || !disciplinesVisible) return
+    if (
+      !selectedElementRef.current
+      || pendingDiscipline
+      || !disciplinesVisible
+      || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
+      || Boolean(retainedLoadout && discipline !== retainedLoadout.discipline)
+    ) return
     audio.playSound('pick-skill')
     onDisciplineCommit()
     setPendingDiscipline(discipline)
@@ -256,7 +271,11 @@ export default function CreateMenuScene({
       data-element={selectedElement ?? undefined}
       data-finalizing={pendingDiscipline !== null}
       data-motion-settled={motionSettled}
-      aria-label="New wizard loadout selection"
+      data-retained-loadout={Boolean(retainedLoadout) || undefined}
+      data-retained-loadout-can-confirm={retainedLoadout
+        ? retainedLoadoutCanConfirm
+        : undefined}
+      aria-label={retainedLoadout ? 'Confirm retained wizard loadout' : 'New wizard loadout selection'}
     >
       <div ref={hostRef} className="create-menu-renderer" aria-hidden />
       {rendererError && (
@@ -269,7 +288,7 @@ export default function CreateMenuScene({
           className="create-menu-back"
           aria-label="Back"
           data-game-back="true"
-          disabled={pendingDiscipline !== null}
+          disabled={pendingDiscipline !== null || Boolean(retainedLoadout)}
           onBlur={() => highlight(null)}
           onClick={onBack}
           onFocus={() => highlight('back')}
@@ -328,8 +347,15 @@ export default function CreateMenuScene({
               type="button"
               className={`create-menu-discipline create-menu-discipline-${discipline}`}
               aria-label={discipline}
-              data-game-default-focus={discipline === 'arcane' || undefined}
-              disabled={!disciplinesVisible || pendingDiscipline !== null}
+              data-game-default-focus={(retainedLoadout
+                ? discipline === retainedLoadout.discipline
+                : discipline === 'arcane') || undefined}
+              disabled={
+                !disciplinesVisible
+                || pendingDiscipline !== null
+                || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
+                || Boolean(retainedLoadout && discipline !== retainedLoadout.discipline)
+              }
               onBlur={() => highlight(null)}
               onClick={() => selectDiscipline(discipline)}
               onFocus={() => highlight(discipline)}

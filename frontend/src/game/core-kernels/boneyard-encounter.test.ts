@@ -139,6 +139,38 @@ test('turning and speech decay the contact emergence offset by 0.9 per tick', ()
   assert.equal(encounter.transitionOffsetY, 13.5)
 })
 
+test('turning reacquires the nearest remaining player when its target disappears', () => {
+  const encounter = stepSolomonEncounter({
+    ...createSolomonEncounter(DIG, 'turn-target-reacquire'),
+    headingDeg: 180,
+    phase: 'turning',
+    targetPlayerId: 'departed',
+    transitionOffsetY: 6,
+  }, {
+    farther: { position: { x: 1_100, y: 1_000 } },
+    nearest: { position: { x: 1_000, y: 990 } },
+  })
+
+  assert.equal(encounter.targetPlayerId, 'nearest')
+  assert.notEqual(encounter.headingDeg, 180)
+  assert.equal(encounter.transitionOffsetY, 5.4)
+})
+
+test('turning clears a departed target until an eligible player can be reacquired', () => {
+  const waiting = stepSolomonEncounter({
+    ...createSolomonEncounter(DIG, 'turn-target-empty'),
+    phase: 'turning',
+    targetPlayerId: 'departed',
+    transitionOffsetY: 6,
+  }, {})
+  assert.equal(waiting.targetPlayerId, null)
+
+  const resumed = stepSolomonEncounter(waiting, {
+    joined: { position: { x: 1_000, y: 990 } },
+  })
+  assert.equal(resumed.targetPlayerId, 'joined')
+})
+
 test('turning preserves the native raw completion check at the 359-to-zero wrap', () => {
   const encounter = stepSolomonEncounter({
     ...createSolomonEncounter(DIG, 'turn-wrap-seed'),

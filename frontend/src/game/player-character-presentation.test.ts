@@ -4,6 +4,7 @@ import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
 
 import {
   createPlayerCharacterDrawPlan,
+  createPlayerDeathDrawPlan,
   playerCharacterFixedRobeOffset,
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
@@ -11,6 +12,19 @@ import {
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
 } from './player-character-presentation.ts'
+
+test('player death draw plan uses the native four-frame six-facing bank', () => {
+  assert.deepEqual(createPlayerDeathDrawPlan(0, 'alive', 999), {
+    facing: 0,
+    frame: 3,
+    visible: false,
+  })
+  assert.equal(createPlayerDeathDrawPlan(2, 'dying', 152).facing, 1)
+  assert.equal(createPlayerDeathDrawPlan(23, 'dying', 153).facing, 0)
+  assert.equal(createPlayerDeathDrawPlan(6, 'dying', 153).frame, 1)
+  assert.equal(createPlayerDeathDrawPlan(6, 'dying', 156).frame, 2)
+  assert.equal(createPlayerDeathDrawPlan(6, 'spectating', 159).frame, 3)
+})
 
 function closeTo(actual: number, expected: number, epsilon = 0.001): void {
   assert.ok(Math.abs(actual - expected) <= epsilon)

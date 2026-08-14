@@ -165,6 +165,12 @@ import playerCharacterHeadEarth from '../assets/game/player-character-head-earth
 import playerCharacterHeadEther from '../assets/game/player-character-head-ether.png'
 import playerCharacterHeadFire from '../assets/game/player-character-head-fire.png'
 import playerCharacterHeadWater from '../assets/game/player-character-head-water.png'
+import playerCharacterDeathAir from '../assets/game/player-character-death-air.png'
+import playerCharacterDeathAttachment from '../assets/game/player-character-death-attachment.png'
+import playerCharacterDeathEarth from '../assets/game/player-character-death-earth.png'
+import playerCharacterDeathEther from '../assets/game/player-character-death-ether.png'
+import playerCharacterDeathFire from '../assets/game/player-character-death-fire.png'
+import playerCharacterDeathWater from '../assets/game/player-character-death-water.png'
 import hubPrimaryAir from '../assets/game/hub-primary-air.png'
 import hubPrimaryEarth from '../assets/game/hub-primary-earth.png'
 import hubPrimaryEther from '../assets/game/hub-primary-ether.png'
@@ -530,6 +536,14 @@ export const primarySpells = {
 
 /** Source-registered wizard equipment shared by every gameplay world. */
 export const playerCharacter = {
+  death: {
+    air: playerCharacterDeathAir,
+    earth: playerCharacterDeathEarth,
+    ether: playerCharacterDeathEther,
+    fire: playerCharacterDeathFire,
+    water: playerCharacterDeathWater,
+  },
+  deathAttachment: playerCharacterDeathAttachment,
   staffBack: playerCharacterStaffBack,
   robeDynamic: {
     air: playerCharacterRobeDynamicAir,

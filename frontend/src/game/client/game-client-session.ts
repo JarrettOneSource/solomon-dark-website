@@ -17,6 +17,7 @@ import {
   decodeServerGameMessage,
   encodeGameMessage,
   type BoneyardChoice,
+  type BoneyardEnemyEventSnapshot,
   type GameSnapshot,
   type LoadedBoneyard,
   type ServerWelcomeMessage,
@@ -56,11 +57,14 @@ export interface GameClientSession {
   readonly isHost: boolean
   readonly playerId: string
   readonly resumeToken: string
+  acknowledgeGameOver(runId: string, eventId: number): void
+  confirmLoadout(): void
   destroy(): void
   getBoneyard(): LoadedBoneyard | null
   getPingMs(): number | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
+  onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
@@ -117,9 +121,11 @@ export function connectGameClientSession(
     let localHubPresentation: LocalHubPresentationState | undefined
     let currentInput = copyInput(STOPPED_INPUT)
     let sentInput = copyInput(STOPPED_INPUT)
+    let enemyEventCursor: { eventId: number; runId: string } | null = null
     const now = options.now ?? (() => performance.now())
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
+    const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const pendingPings = new Map<number, number>()
     const entityReplication = new EntityReplicationReconstructor()
@@ -146,6 +152,7 @@ export function connectGameClientSession(
         }
         welcome = message
         snapshot = message.snapshot
+        enemyEventCursor = initialEnemyEventCursor(snapshot)
         lastSnapshotSequence = message.snapshotSequence
         entityReplication.reset(snapshot, lastSnapshotSequence)
         if (!snapshot.players[message.playerId]) {
@@ -255,6 +262,7 @@ export function connectGameClientSession(
           boneyardPresentationTimeline.push(snapshot, lastSnapshotReceivedAtMs)
         }
       }
+      publishEnemyEvents(snapshot)
       for (const listener of snapshotListeners) listener(snapshot)
     })
     const removeClose = options.transport.onClose((reason) => {
@@ -262,6 +270,24 @@ export function connectGameClientSession(
     })
 
     const session: GameClientSession = {
+      acknowledgeGameOver(runId, eventId) {
+        if (!welcome || !snapshot || destroyed || !session.isHost) return
+        if (
+          snapshot.run.phase !== 'game-over'
+          || snapshot.run.runId !== runId
+          || snapshot.run.gameOverEventId !== eventId
+        ) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-acknowledge-game-over',
+          eventId,
+          runId,
+        }))
+      },
+      confirmLoadout() {
+        if (!welcome || !snapshot || destroyed || !session.isHost) return
+        if (snapshot.run.phase !== 'loadout') return
+        options.transport.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+      },
       get boneyards() {
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.boneyards
@@ -290,6 +316,7 @@ export function connectGameClientSession(
         options.transport.close(1000, 'session destroyed')
         snapshotListeners.clear()
         boneyardListeners.clear()
+        enemyEventListeners.clear()
         pingListeners.clear()
       },
       getBoneyard() {
@@ -309,6 +336,10 @@ export function connectGameClientSession(
       onBoneyard(listener) {
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
+      },
+      onEnemyEvent(listener) {
+        enemyEventListeners.add(listener)
+        return () => enemyEventListeners.delete(listener)
       },
       onPing(listener) {
         pingListeners.add(listener)
@@ -341,7 +372,10 @@ export function connectGameClientSession(
       sendInput(nextInput) {
         if (!welcome || !snapshot || destroyed) return
         const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
-        const requestedInput = offered ? STOPPED_INPUT : nextInput
+        const lifeState = snapshot.players[welcome.playerId]?.progression.lifeState
+        const requestedInput = offered || lifeState !== 'alive' || snapshot.run.phase === 'game-over'
+          ? STOPPED_INPUT
+          : nextInput
         const movement = requestedInput.movement
         if (!Number.isFinite(movement.x) || !Number.isFinite(movement.y)) {
           throw new Error('game input must contain finite movement coordinates')
@@ -476,6 +510,21 @@ export function connectGameClientSession(
       })
     }
 
+    function publishEnemyEvents(nextSnapshot: GameSnapshot): void {
+      if (!isBoneyardGameSnapshot(nextSnapshot)) {
+        enemyEventCursor = null
+        return
+      }
+      if (enemyEventCursor?.runId !== nextSnapshot.world.runId) {
+        enemyEventCursor = { eventId: 0, runId: nextSnapshot.world.runId }
+      }
+      for (const event of nextSnapshot.world.enemyEvents) {
+        if (event.eventId <= enemyEventCursor.eventId) continue
+        enemyEventCursor = { eventId: event.eventId, runId: event.runId }
+        for (const listener of enemyEventListeners) listener(event)
+      }
+    }
+
     function resetLocalHubPresentation(
       hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
       receivedAtMs: number,
@@ -604,10 +653,21 @@ export function connectGameClientSession(
       options.transport.close(1008, error.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
+      enemyEventListeners.clear()
       pingListeners.clear()
       options.onFatal?.(error)
     }
   })
+}
+
+function initialEnemyEventCursor(
+  snapshot: GameSnapshot,
+): { eventId: number; runId: string } | null {
+  if (!isBoneyardGameSnapshot(snapshot)) return null
+  return {
+    eventId: snapshot.world.enemyEvents.at(-1)?.eventId ?? 0,
+    runId: snapshot.world.runId,
+  }
 }
 
 function displayedLocalPlayer(

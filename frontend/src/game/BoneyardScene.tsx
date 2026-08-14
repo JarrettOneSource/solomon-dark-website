@@ -13,6 +13,7 @@ import {
   boneyardDigIndicatorLayout,
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
+import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
@@ -22,6 +23,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import {
   createBrowserGameplayInput,
@@ -33,6 +35,7 @@ import {
 } from './input/gameplay-pointer.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
@@ -53,9 +56,11 @@ interface BoneyardSceneProps {
   accountUsername: string | null
   audio: GameAudioDirector
   boneyard: LoadedBoneyard
+  canAcknowledgeGameOver: boolean
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
+  onAcknowledgeGameOver: (runId: string, eventId: number) => void
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
   onReady: () => void
@@ -82,9 +87,11 @@ export default function BoneyardScene({
   accountUsername,
   audio,
   boneyard: loaded,
+  canAcknowledgeGameOver,
   getPingMs,
   initialSnapshot,
   inputBlocked,
+  onAcknowledgeGameOver,
   onInput,
   onLoadingError,
   onReady,
@@ -101,11 +108,12 @@ export default function BoneyardScene({
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
-  const lastVoiceEventIdRef = useRef(
-    initialSnapshot.world.kind === 'boneyard'
+  const lastVoiceEventRef = useRef({
+    eventId: initialSnapshot.world.kind === 'boneyard'
       ? (initialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0)
       : 0,
-  )
+    runId: loaded.runId,
+  })
   const inputBlockedRef = useRef(inputBlocked)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
@@ -114,6 +122,10 @@ export default function BoneyardScene({
   onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
+  const [run, setRun] = useState<GameRunLifecycleState>(initialSnapshot.run)
+  const deathEpochRef = useRef(
+    initialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
+  )
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
     gameViewportLayout(1600, 900)
   ))
@@ -121,6 +133,13 @@ export default function BoneyardScene({
   const [digIndicatorRunId, setDigIndicatorRunId] = useState<string | null>(null)
   const dig = loaded.scene.solomonDig
   const digPosition = dig?.position
+
+  useEffect(() => subscribe((snapshot) => {
+    setRun(snapshot.run)
+    const deathEpoch = snapshot.players[playerId]?.progression.deathEpoch ?? 0
+    if (deathEpoch > deathEpochRef.current) audio.playStream('death-guitar')
+    deathEpochRef.current = deathEpoch
+  }), [audio, playerId, subscribe])
 
   useEffect(() => {
     let previousAudioSnapshot = initialSnapshot
@@ -243,13 +262,17 @@ export default function BoneyardScene({
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
         if (snapshot.world.kind === 'boneyard' && snapshot.world.encounter) {
+          if (lastVoiceEventRef.current.runId !== snapshot.world.runId) {
+            audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
+            lastVoiceEventRef.current = { eventId: 0, runId: snapshot.world.runId }
+          }
           const event = newSolomonVoiceEvent(
-            lastVoiceEventIdRef.current,
+            lastVoiceEventRef.current.eventId,
             snapshot.world.encounter.voiceEvents,
           )
           if (event) {
             audio.playStream(event.cue)
-            lastVoiceEventIdRef.current = event.id
+            lastVoiceEventRef.current.eventId = event.id
           }
         }
         onInput(input.sample().input)
@@ -287,6 +310,7 @@ export default function BoneyardScene({
     return () => {
       cancelled = true
       stopPresentationLoop?.()
+      audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       input.destroy()
       inputRef.current = null
       rendererRef.current?.destroy()
@@ -376,6 +400,16 @@ export default function BoneyardScene({
           lane="primary"
           onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
         />
+
+        {run.phase === 'game-over' && run.runId ? (
+          <GameOverOverlay
+            canAcknowledge={canAcknowledgeGameOver}
+            eventId={run.gameOverEventId}
+            gameOverTicks={run.gameOverTicks}
+            onAcknowledge={(eventId) => onAcknowledgeGameOver(run.runId!, eventId)}
+            runId={run.runId}
+          />
+        ) : null}
 
         {dig ? (
           <div className="sr-only">
@@ -560,7 +594,7 @@ function publishSceneDiagnostics(
   }
   const waves = snapshot.world.waves
   scene.dataset.waveEventId = `${waves?.waveEventId ?? 0}`
-  scene.dataset.waveLiveEnemyCount = `${waves?.enemies.length ?? 0}`
+  scene.dataset.waveLiveEnemyCount = `${snapshot.world.enemies.length + snapshot.world.maggots.length}`
   scene.dataset.wavePendingSpawnBudget = `${waves?.pendingSpawnBudget ?? 0}`
   scene.dataset.wavePhase = waves?.phase ?? 'absent'
   scene.dataset.waveScheduleIndex = `${waves?.scheduleIndex ?? 0}`

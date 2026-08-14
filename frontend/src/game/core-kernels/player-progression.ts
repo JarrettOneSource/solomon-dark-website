@@ -5,6 +5,10 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './player-character.ts'
+import {
+  createPlayerCombat,
+  type PlayerCombatComponent,
+} from './player-combat.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from './native-rng.ts'
 
 export const NATIVE_SKILL_ROW_COUNT = 83
@@ -82,16 +86,12 @@ export interface PlayerSkillOffer {
   readonly sequence: number
 }
 
-export interface PlayerProgressionComponent {
-  readonly currentHealth: number
-  readonly currentMana: number
+export interface PlayerProgressionComponent extends PlayerCombatComponent {
   readonly disciplineOfferBias: boolean
   readonly excludeActiveWeldBuildFromOffers: boolean
   readonly experience: number
   readonly forcedOfferSkillIds: readonly number[]
   readonly level: number
-  readonly maximumHealth: number
-  readonly maximumMana: number
   readonly nextThreshold: number
   readonly offerCycle: number
   readonly offerSeed: number
@@ -227,15 +227,12 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
     throw new RangeError('player offer seed must be an integer from 0 through 999999')
   }
   return {
-    currentHealth: 50,
-    currentMana: 100,
+    ...createPlayerCombat(),
     disciplineOfferBias: false,
     excludeActiveWeldBuildFromOffers: false,
     experience: 0,
     forcedOfferSkillIds: Object.freeze([]),
     level: 1,
-    maximumHealth: 50,
-    maximumMana: 100,
     nextThreshold: NATIVE_LEVEL_THRESHOLDS[1],
     offerCycle: 0,
     offerSeed,

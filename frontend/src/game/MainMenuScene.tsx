@@ -21,6 +21,7 @@ import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import { GameAudioDirector } from './game-audio-director.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
+import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
@@ -204,6 +205,8 @@ export default function MainMenuScene({
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
   const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
+  const [runtimeRunPhase, setRuntimeRunPhase] = useState<GameRunPhase>('hub')
+  const [runtimeAudioScene, setRuntimeAudioScene] = useState<GameAudioScene | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
@@ -292,15 +295,16 @@ export default function MainMenuScene({
   }, [audio])
 
   useEffect(() => {
-    const audioScene: GameAudioScene = runtimeSnapshot?.world.kind === 'boneyard'
+    const audioScene: GameAudioScene = runtimeAudioScene
+      ?? (runtimeSnapshot?.world.kind === 'boneyard'
       ? 'boneyard'
       : screen === 'create'
         ? 'create'
         : screen === 'hub'
           ? 'hub'
-          : 'title'
+          : 'title')
     audio.setScene(audioScene)
-  }, [audio, runtimeSnapshot?.world.kind, screen])
+  }, [audio, runtimeAudioScene, runtimeSnapshot?.world.kind, screen])
 
   useEffect(() => {
     if (!session) return
@@ -311,6 +315,8 @@ export default function MainMenuScene({
       : null
     loadedBoneyardRunRef.current = initialBoneyard?.runId ?? null
     setRuntimeSnapshot(initialSnapshot)
+    setRuntimeRunPhase(initialSnapshot.run.phase)
+    setRuntimeAudioScene(gameplayAudioScene(initialSnapshot))
     setRuntimeProgression(initialSnapshot.players[session.playerId]?.progression ?? null)
     setLoadedBoneyard(initialBoneyard)
     if (initialSnapshot.world.kind === 'boneyard') {
@@ -325,6 +331,8 @@ export default function MainMenuScene({
       advanceLoading('materializing_participants')
     }
     const removeSnapshot = session.onSnapshot((snapshot) => {
+      setRuntimeRunPhase(snapshot.run.phase)
+      setRuntimeAudioScene(gameplayAudioScene(snapshot))
       if (snapshot.world.kind === 'boneyard') {
         const enteringRun = activeBoneyardRunRef.current !== snapshot.world.runId
         activeBoneyardRunRef.current = snapshot.world.runId
@@ -341,7 +349,7 @@ export default function MainMenuScene({
       }
       const progression = snapshot.players[session.playerId]?.progression ?? null
       setRuntimeProgression((current) => (
-        current?.revision === progression?.revision ? current : progression
+        sameRuntimeProgression(current, progression) ? current : progression
       ))
       setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot)
         ? current
@@ -362,6 +370,20 @@ export default function MainMenuScene({
       removeBoneyard()
     }
   }, [advanceLoading, beginLoading, session])
+
+  useEffect(() => {
+    if (!session || !runtimeSnapshot) return
+    if (runtimeRunPhase === 'hub' && screen === 'create') {
+      setFadeState('idle')
+      setFadeTarget(null)
+      setScreen('hub')
+      return
+    }
+    if (runtimeRunPhase !== 'loadout') return
+    setFadeState('idle')
+    setFadeTarget(null)
+    setScreen('create')
+  }, [runtimeRunPhase, runtimeSnapshot, screen, session])
 
   useEffect(() => {
     if (!session) return
@@ -452,6 +474,11 @@ export default function MainMenuScene({
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
     if (connecting) return false
+    if (session && runtimeRunPhase === 'loadout') {
+      if (!session.isHost) return false
+      session.confirmLoadout()
+      return true
+    }
     setConnecting(true)
     setConnectionError(null)
     try {
@@ -555,6 +582,10 @@ export default function MainMenuScene({
             onBack={() => { void leaveCreate() }}
             onDisciplineCommit={beginHubLoading}
             onStart={startHub}
+            retainedLoadoutCanConfirm={Boolean(session?.isHost)}
+            retainedLoadout={runtimeRunPhase === 'loadout' && session && runtimeSnapshot
+              ? runtimeSnapshot.players[session.playerId]?.config
+              : undefined}
             viewport={fixedViewport}
           />
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
@@ -563,10 +594,12 @@ export default function MainMenuScene({
             accountUsername={accountUsername}
             audio={audio}
             boneyard={loadedBoneyard}
+            canAcknowledgeGameOver={session.isHost}
             getPingMs={session.getPingMs}
             inputBlocked={loading !== null}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
+            onAcknowledgeGameOver={session.acknowledgeGameOver}
             onInput={session.sendInput}
             onLoadingError={cancelBoneyardLoading}
             onReady={finishBoneyardLoading}
@@ -625,6 +658,14 @@ export default function MainMenuScene({
   )
 }
 
+function gameplayAudioScene(snapshot: GameSnapshot): GameAudioScene | null {
+  if (snapshot.run.phase === 'game-over') return 'game-over'
+  if (snapshot.world.kind !== 'boneyard') return null
+  return snapshot.world.waves?.phase && snapshot.world.waves.phase !== 'dormant'
+    ? 'boneyard-combat'
+    : 'boneyard'
+}
+
 function fixedStageStyle(
   viewport: FixedGameViewportLayout,
   stage: GameViewportBounds,
@@ -652,9 +693,29 @@ function sameRuntimeScene(
   current: GameSnapshot | null,
   next: GameSnapshot,
 ): boolean {
-  if (!current || current.world.kind !== next.world.kind) return false
+  if (
+    !current
+    || current.hostPlayerId !== next.hostPlayerId
+    || current.run.phase !== next.run.phase
+    || current.world.kind !== next.world.kind
+  ) return false
   if (current.world.kind === 'boneyard' && next.world.kind === 'boneyard') {
     return current.world.runId === next.world.runId
   }
   return current.world.kind === 'hub'
+}
+
+function sameRuntimeProgression(
+  current: ProtocolPlayerProgression | null,
+  next: ProtocolPlayerProgression | null,
+): boolean {
+  if (!current || !next) return current === next
+  return current.revision === next.revision
+    && current.currentHealth === next.currentHealth
+    && current.currentMana === next.currentMana
+    && current.deathEpoch === next.deathEpoch
+    && current.deathTick === next.deathTick
+    && current.lifeState === next.lifeState
+    && current.poisonDamagePerTick === next.poisonDamagePerTick
+    && current.poisonTicksRemaining === next.poisonTicksRemaining
 }

@@ -4,6 +4,17 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  damagePlayer,
+  playerCanAcceptInput,
+  playerCanCast,
+  playerDisplayHealth,
+  poisonPlayer,
+  resetPlayerCombatForNewRun,
+  setPlayerSpectating,
+  stepPlayerCombatTick,
+  tryDebitPlayerMana,
+} from '../core-kernels/player-combat.ts'
+import {
   applyPlayerSkillChoice,
   createPlayerProgression,
   createPlayerSkillBook,
@@ -32,6 +43,17 @@ export interface PlayerEntityStore {
   readonly progressions: readonly PlayerProgressionComponent[]
   readonly skillBooks: readonly PlayerSkillBookComponent[]
   readonly statBooks: readonly PlayerStatBookComponent[]
+}
+
+export interface PlayerEntityCombatTickResult {
+  readonly beganDeathEpochPlayerIds: readonly string[]
+  readonly deathBurstPlayerIds: readonly string[]
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityManaDebitResult {
+  readonly accepted: boolean
+  readonly store: PlayerEntityStore
 }
 
 export function createPlayerEntityStore(): PlayerEntityStore {
@@ -169,6 +191,131 @@ export function replacePlayerCharacter(
   return { ...source, locomotions, primaryCasts }
 }
 
+export function damagePlayerEntity(
+  source: PlayerEntityStore,
+  playerId: string,
+  damage: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = damagePlayer(source.progressions[index]!, damage)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function poisonPlayerEntity(
+  source: PlayerEntityStore,
+  playerId: string,
+  damagePerSecond: number,
+  durationSeconds: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = poisonPlayer(
+    source.progressions[index]!,
+    damagePerSecond,
+    durationSeconds,
+  )
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function tryDebitPlayerEntityMana(
+  source: PlayerEntityStore,
+  playerId: string,
+  cost: number,
+): PlayerEntityManaDebitResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { accepted: false, store: source }
+  const debit = tryDebitPlayerMana(source.progressions[index]!, cost)
+  return {
+    accepted: debit.accepted,
+    store: debit.combat === source.progressions[index]
+      ? source
+      : replacePlayerProgression(source, index, debit.combat),
+  }
+}
+
+export function stepPlayerEntityCombatTick(
+  source: PlayerEntityStore,
+): PlayerEntityCombatTickResult {
+  const beganDeathEpochPlayerIds: string[] = []
+  const deathBurstPlayerIds: string[] = []
+  let changed = false
+  const progressions = source.progressions.map((progression, index) => {
+    const result = stepPlayerCombatTick(progression)
+    const playerId = source.identities[index]!.playerId
+    if (result.beganDeathEpoch) beganDeathEpochPlayerIds.push(playerId)
+    if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
+    changed ||= result.combat !== progression
+    return result.combat
+  })
+  return {
+    beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
+    deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
+    store: changed ? { ...source, progressions } : source,
+  }
+}
+
+export function setPlayerEntitySpectating(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = setPlayerSpectating(source.progressions[index]!)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function playerEntityCanAcceptInput(
+  source: PlayerEntityStore,
+  playerId: string,
+): boolean {
+  const progression = playerProgressionAt(source, playerId)
+  return progression ? playerCanAcceptInput(progression) : false
+}
+
+export function playerEntityCanCast(
+  source: PlayerEntityStore,
+  playerId: string,
+): boolean {
+  const progression = playerProgressionAt(source, playerId)
+  return progression ? playerCanCast(progression) : false
+}
+
+export function playerEntityDisplayHealth(
+  source: PlayerEntityStore,
+  playerId: string,
+): number | null {
+  const progression = playerProgressionAt(source, playerId)
+  return progression ? playerDisplayHealth(progression) : null
+}
+
+export function resetPlayerEntitiesForNewRun(
+  source: PlayerEntityStore,
+  placements: Readonly<Record<string, PlayerCharacterState>>,
+): PlayerEntityStore {
+  const placementIds = Object.keys(placements)
+  if (
+    placementIds.length !== source.identities.length
+    || source.identities.some(({ playerId }) => !Object.hasOwn(placements, playerId))
+  ) {
+    throw new Error('new run requires exactly one placement for every player entity')
+  }
+  return {
+    ...source,
+    locomotions: source.identities.map(({ playerId }) => (
+      locomotionComponent(placements[playerId]!)
+    )),
+    primaryCasts: source.identities.map(({ playerId }) => placements[playerId]!.primaryCast),
+    progressions: source.progressions.map(resetPlayerCombatForNewRun),
+  }
+}
+
 export function grantPlayerEntityExperience(
   source: PlayerEntityStore,
   playerId: string,
@@ -207,6 +354,16 @@ export function applyPlayerEntitySkillChoice(
 
 function withoutIndex<T>(source: readonly T[], index: number): T[] {
   return [...source.slice(0, index), ...source.slice(index + 1)]
+}
+
+function replacePlayerProgression(
+  source: PlayerEntityStore,
+  index: number,
+  progression: PlayerProgressionComponent,
+): PlayerEntityStore {
+  const progressions = [...source.progressions]
+  progressions[index] = progression
+  return { ...source, progressions }
 }
 
 function locomotionComponent(character: PlayerCharacterState): PlayerLocomotionComponent {

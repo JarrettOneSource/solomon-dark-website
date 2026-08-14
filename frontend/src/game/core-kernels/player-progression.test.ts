@@ -18,6 +18,18 @@ import {
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
+import {
+  damagePlayer,
+  playerCanAcceptInput,
+  playerCanCast,
+  playerDeathFrameAtTick,
+  playerDisplayHealth,
+  poisonPlayer,
+  resetPlayerCombatForNewRun,
+  setPlayerSpectating,
+  stepPlayerCombatTick,
+  tryDebitPlayerMana,
+} from './player-combat.ts'
 import { createNativeRng, drawNativeInteger } from './native-rng.ts'
 
 const ETHER_ARCANE = {
@@ -88,6 +100,153 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
   assert.equal(progression.offerCycle, 0)
   assert.equal(progression.weldOfferMarker, 9_999)
   assert.deepEqual(progression.forcedOfferSkillIds, [])
+  assert.equal(progression.deathEpoch, 0)
+  assert.equal(progression.deathTick, 0)
+  assert.equal(progression.lifeState, 'alive')
+})
+
+test('player damage preserves internal overkill and arms terminal dispatch only at -10 HP', () => {
+  let progression = createPlayerProgression(0)
+  progression = damagePlayer(progression, 55)
+  assert.equal(progression.currentHealth, -5)
+  assert.equal(playerDisplayHealth(progression), 0)
+  assert.equal(progression.lifeState, 'alive')
+
+  progression = damagePlayer(progression, 5)
+  assert.equal(progression.currentHealth, -10)
+  assert.equal(progression.lifeState, 'lethal-pending')
+  assert.equal(progression.deathEpoch, 0)
+
+  progression = damagePlayer(progression, 7)
+  assert.equal(progression.currentHealth, -17)
+  const transition = stepPlayerCombatTick(progression)
+  assert.equal(transition.combat.lifeState, 'dying')
+  assert.equal(transition.combat.deathEpoch, 1)
+  assert.equal(transition.combat.deathTick, 0)
+  assert.equal(transition.beganDeathEpoch, true)
+  assert.equal(transition.emittedDeathBurst, false)
+})
+
+test('the fixed combat tick recovers exact native HP and MP amounts and caps both resources', () => {
+  const first = stepPlayerCombatTick({
+    ...createPlayerProgression(0),
+    currentHealth: 49.9995,
+    currentMana: 99.95,
+  })
+  assert.equal(first.combat.currentHealth, 50)
+  assert.equal(first.combat.currentMana, 100)
+
+  const second = stepPlayerCombatTick({
+    ...createPlayerProgression(0),
+    currentHealth: 40,
+    currentMana: 80,
+  })
+  assert.ok(Math.abs(second.combat.currentHealth - 40.001) < 1e-12)
+  assert.ok(Math.abs(second.combat.currentMana - 80.1) < 1e-12)
+})
+
+test('authoritative poison applies DPS for its bounded duration and can arm lethal state', () => {
+  let progression = poisonPlayer(createPlayerProgression(0), 10, 2)
+  assert.equal(progression.poisonDamagePerTick, 0.1)
+  assert.equal(progression.poisonTicksRemaining, 200)
+  for (let tick = 0; tick < 200; tick += 1) {
+    progression = stepPlayerCombatTick(progression).combat
+  }
+  assert.ok(Math.abs(progression.currentHealth - 30.2) < 1e-9)
+  assert.equal(progression.poisonDamagePerTick, 0)
+  assert.equal(progression.poisonTicksRemaining, 0)
+
+  progression = poisonPlayer(progression, 1_000, 1)
+  while (progression.lifeState === 'alive') {
+    progression = stepPlayerCombatTick(progression).combat
+  }
+  assert.equal(progression.lifeState, 'lethal-pending')
+  const dying = stepPlayerCombatTick(progression).combat
+  assert.equal(dying.lifeState, 'dying')
+  assert.equal(dying.poisonDamagePerTick, 0)
+  assert.equal(dying.poisonTicksRemaining, 0)
+})
+
+test('mana debit is atomic, affordability checked, and unavailable outside alive play', () => {
+  const initial = createPlayerProgression(0)
+  const paid = tryDebitPlayerMana(initial, 6)
+  assert.equal(paid.accepted, true)
+  assert.equal(paid.combat.currentMana, 94)
+
+  const unaffordable = tryDebitPlayerMana(paid.combat, 95)
+  assert.equal(unaffordable.accepted, false)
+  assert.equal(unaffordable.combat, paid.combat)
+
+  const pending = damagePlayer(paid.combat, 60)
+  const deadDebit = tryDebitPlayerMana(pending, 1)
+  assert.equal(deadDebit.accepted, false)
+  assert.equal(deadDebit.combat, pending)
+  assert.throws(() => tryDebitPlayerMana(initial, -1), RangeError)
+})
+
+test('death ticks own the recovered corpse frame boundaries and the tick-159 burst edge', () => {
+  assert.equal(playerDeathFrameAtTick(0), 0)
+  assert.equal(playerDeathFrameAtTick(149), 0)
+  assert.equal(playerDeathFrameAtTick(150), 0)
+  assert.equal(playerDeathFrameAtTick(152), 0)
+  assert.equal(playerDeathFrameAtTick(153), 1)
+  assert.equal(playerDeathFrameAtTick(155), 1)
+  assert.equal(playerDeathFrameAtTick(156), 2)
+  assert.equal(playerDeathFrameAtTick(158), 2)
+  assert.equal(playerDeathFrameAtTick(159), 3)
+  assert.equal(playerDeathFrameAtTick(500), 3)
+
+  const beforeBurst = {
+    ...createPlayerProgression(0),
+    currentHealth: -10,
+    deathEpoch: 1,
+    deathTick: 158,
+    lifeState: 'dying' as const,
+  }
+  const burst = stepPlayerCombatTick(beforeBurst)
+  assert.equal(burst.combat.deathTick, 159)
+  assert.equal(burst.emittedDeathBurst, true)
+  assert.equal(stepPlayerCombatTick(burst.combat).emittedDeathBurst, false)
+})
+
+test('input and casts stop at lethal pending and remain stopped while dying or spectating', () => {
+  const alive = createPlayerProgression(0)
+  assert.equal(playerCanAcceptInput(alive), true)
+  assert.equal(playerCanCast(alive), true)
+
+  const pending = damagePlayer(alive, 60)
+  assert.equal(playerCanAcceptInput(pending), false)
+  assert.equal(playerCanCast(pending), false)
+
+  const dying = stepPlayerCombatTick(pending).combat
+  const spectating = setPlayerSpectating(dying)
+  assert.equal(spectating.lifeState, 'spectating')
+  assert.equal(playerCanAcceptInput(spectating), false)
+  assert.equal(playerCanCast(spectating), false)
+})
+
+test('level-up refill survives combat state and new-run reset retains progression', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const wounded = {
+    ...createPlayerProgression(12),
+    currentHealth: 4,
+    currentMana: 3,
+  }
+  const leveled = grantPlayerExperience(wounded, skillBook, 100)
+  assert.equal(leveled.currentHealth, leveled.maximumHealth)
+  assert.equal(leveled.currentMana, leveled.maximumMana)
+
+  const dying = stepPlayerCombatTick(damagePlayer(leveled, 75)).combat
+  const reset = resetPlayerCombatForNewRun(setPlayerSpectating(dying))
+  assert.equal(reset.currentHealth, reset.maximumHealth)
+  assert.equal(reset.currentMana, reset.maximumMana)
+  assert.equal(reset.lifeState, 'alive')
+  assert.equal(reset.deathEpoch, 0)
+  assert.equal(reset.deathTick, 0)
+  assert.equal(reset.level, leveled.level)
+  assert.equal(reset.experience, leveled.experience)
+  assert.equal(reset.pendingOffer, leveled.pendingOffer)
+  assert.equal(reset.offerSeed, leveled.offerSeed)
 })
 
 test('the player stat book exposes the immutable native catalog including its internal row', () => {

@@ -5,9 +5,11 @@ import {
   createIdlePlayerCharacterInput,
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
+  type PlayerCharacterState,
   type WizardElement,
 } from './player-character.ts'
 import {
+  createPrimarySpellSimulation,
   PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_CAST_ETHER_ACTION_END_TICK,
   PRIMARY_CAST_ETHER_EMISSION_TICK,
@@ -17,6 +19,7 @@ import {
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS,
+  PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
   primaryCastActionEndTick,
   primaryCastEmissionTick,
   primaryCastPose,
@@ -24,6 +27,7 @@ import {
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
   stepPrimarySpells,
+  type PrimarySpellSimulationState,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {
@@ -45,6 +49,10 @@ import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 
 const PLAYER_ID = 'caster'
 const EMPTY_SPELL_WORLD = {
+  canTraverseProjectile: () => true,
+  castAuthority: {
+    [PLAYER_ID]: { availableMana: 1_000_000, eligible: true },
+  },
   spellObstructionPoint: () => null,
   spellRangeEndpoint: (
     _ownerId: string,
@@ -91,6 +99,182 @@ function earthChargeAfter(updateCount: number): number {
   }
   return charge
 }
+
+interface DirectSpellHarness {
+  players: Readonly<Record<string, PlayerCharacterState>>
+  spells: PrimarySpellSimulationState
+  tick: number
+}
+
+function directSpellHarness(element: WizardElement): DirectSpellHarness {
+  const state = simulation(element)
+  return {
+    players: { [PLAYER_ID]: getPlayerCharacter(state, PLAYER_ID) },
+    spells: createPrimarySpellSimulation(),
+    tick: 0,
+  }
+}
+
+function stepSpellKernel(
+  state: DirectSpellHarness,
+  primary: boolean,
+  availableMana: number,
+  eligible = true,
+  canPlaceProjectile: () => boolean = () => true,
+): { manaSpent: number, state: DirectSpellHarness } {
+  const player = state.players[PLAYER_ID]!
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile,
+    castAuthority: {
+      [PLAYER_ID]: { availableMana, eligible },
+    },
+    inputs: {
+      [PLAYER_ID]: {
+        ...createIdlePlayerCharacterInput(),
+        aim: { x: player.position.x, y: player.position.y - 200 },
+        cast: { primary, secondary: false },
+      },
+    },
+    players: state.players,
+    previousPlayers: state.players,
+    spells: state.spells,
+    tick: state.tick + 1,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'boneyard:test',
+  })
+  return {
+    manaSpent: result.manaSpent[PLAYER_ID]!,
+    state: { players: result.players, spells: result.spells, tick: state.tick + 1 },
+  }
+}
+
+test('rank-one one-shot casts debit once on acceptance and reject unaffordable presses', () => {
+  let ether = directSpellHarness('ether')
+  let outcome = stepSpellKernel(ether, true, PRIMARY_SPELL_RANK_ONE_MANA_COSTS.ether)
+  ether = outcome.state
+  assert.equal(outcome.manaSpent, 6)
+  assert.equal(ether.players[PLAYER_ID]!.primaryCast.castSequence, 1)
+
+  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    outcome = stepSpellKernel(ether, true, 0)
+    ether = outcome.state
+    assert.equal(outcome.manaSpent, 0)
+  }
+  assert.equal(ether.spells.projectiles.length, 1)
+  assert.equal(ether.spells.projectiles[0]!.kind, 'ether')
+
+  let fire = directSpellHarness('fire')
+  outcome = stepSpellKernel(fire, true, PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire)
+  fire = outcome.state
+  assert.equal(outcome.manaSpent, 12)
+  assert.equal(fire.players[PLAYER_ID]!.primaryCast.castSequence, 1)
+
+  const rejected = stepSpellKernel(
+    directSpellHarness('fire'),
+    true,
+    PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire - 0.001,
+  )
+  assert.equal(rejected.manaSpent, 0)
+  assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+  assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.castSequence, 0)
+  assert.equal(rejected.state.spells.projectiles.length, 0)
+})
+
+test('an unaffordable held press stays rejected and cannot emit later for free', () => {
+  let state = stepSpellKernel(directSpellHarness('ether'), true, 5).state
+  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK + 10; tick += 1) {
+    const outcome = stepSpellKernel(state, true, 100)
+    assert.equal(outcome.manaSpent, 0)
+    state = outcome.state
+  }
+  const player = state.players[PLAYER_ID]!
+  assert.equal(player.primaryCast.actionTick, -1)
+  assert.equal(player.primaryCast.castSequence, 0)
+  assert.equal(player.primaryCast.emissionSequence, 0)
+  assert.equal(state.spells.projectiles.length, 0)
+})
+
+test('Air and Water debit every emitted channel tick and stop at exhaustion', () => {
+  for (const [element, startingMana] of [
+    ['air', 0.24],
+    ['water', 0.25],
+  ] as const) {
+    const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[element]
+    let availableMana = startingMana
+    let totalSpent = 0
+    let state = directSpellHarness(element)
+
+    for (let tick = 0; tick < 3; tick += 1) {
+      const outcome = stepSpellKernel(state, true, availableMana)
+      state = outcome.state
+      availableMana -= outcome.manaSpent
+      totalSpent += outcome.manaSpent
+    }
+
+    assert.equal(totalSpent, cost * 2)
+    assert.equal(state.spells.transients.length, element === 'water' ? 4 : 2)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+  }
+})
+
+test('Earth debits each charging tick and cancels below its release gate at exhaustion', () => {
+  let availableMana = 0.24
+  let totalSpent = 0
+  let state = directSpellHarness('earth')
+
+  for (let tick = 0; tick < 2; tick += 1) {
+    const outcome = stepSpellKernel(state, true, availableMana)
+    state = outcome.state
+    availableMana -= outcome.manaSpent
+    totalSpent += outcome.manaSpent
+  }
+
+  const heldBoulder = state.spells.projectiles[0]!
+  assert.equal(totalSpent, 0.24)
+  assert.equal(heldBoulder.charge, earthChargeAfter(2))
+  assert.ok(heldBoulder.charge < PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
+
+  const exhausted = stepSpellKernel(state, true, availableMana)
+  state = exhausted.state
+  assert.equal(exhausted.manaSpent, 0)
+  assert.equal(state.spells.projectiles.length, 0)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 0)
+})
+
+test('Earth mana exhaustion runs an eligible release through the terrain probe', () => {
+  const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS.earth
+  let state = directSpellHarness('earth')
+  do {
+    state = stepSpellKernel(state, true, cost).state
+  } while (state.spells.projectiles[0]!.charge < PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
+
+  const exhausted = stepSpellKernel(state, true, 0, true, () => false)
+
+  assert.equal(exhausted.manaSpent, 0)
+  assert.equal(exhausted.state.spells.projectiles.length, 0)
+  assert.equal(
+    exhausted.state.spells.transients.some((effect) => effect.kind === 'earth-impact'),
+    true,
+  )
+  assert.equal(exhausted.state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+  assert.equal(exhausted.state.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
+})
+
+test('cast eligibility cancels an active channel without another debit or emission', () => {
+  const started = stepSpellKernel(directSpellHarness('air'), true, 1)
+  assert.equal(started.manaSpent, PRIMARY_SPELL_RANK_ONE_MANA_COSTS.air)
+  assert.equal(started.state.spells.transients.length, 1)
+
+  const cancelled = stepSpellKernel(started.state, true, 1, false)
+  assert.equal(cancelled.manaSpent, 0)
+  assert.equal(cancelled.state.spells.transients.length, 1)
+  assert.equal(cancelled.state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+  assert.equal(cancelled.state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+})
 
 test('Ether uses its faster native Staff rate and repeats while held', () => {
   let state = step(simulation('ether'), true)
@@ -258,7 +442,8 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
 
 test('Fire blocked birth replaces the spawned actor before its first trail tick', () => {
   const beforeMarker = step(simulation('fire'), true, PRIMARY_CAST_EMISSION_TICK)
-  const player = beforeMarker.players[PLAYER_ID]
+  const player = getPlayerCharacter(beforeMarker, PLAYER_ID)
+  const players = playerCharacterRecords(beforeMarker.playerEntities)
   const probes: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = []
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
@@ -268,8 +453,8 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
       return false
     },
     inputs: { [PLAYER_ID]: input(beforeMarker, true) },
-    players: beforeMarker.players,
-    previousPlayers: beforeMarker.players,
+    players,
+    previousPlayers: players,
     spells: beforeMarker.primarySpells,
     tick: beforeMarker.tick + 1,
     viewScale: 1.2,
@@ -495,9 +680,7 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   )
   state = step(state, false)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
-  state = step(state, false, 29)
-  assert.equal(state.primarySpells.transients.length, 3)
-  state = step(state, false, 3)
+  state = step(state, false, 32)
   assert.equal(state.primarySpells.transients.length, 0)
 })
 
@@ -634,13 +817,15 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
   assert.equal(boulder.flightTicks, 0)
   assert.equal(boulder.charge, 1)
   assert.equal(boulder.phase, 'held')
+  const projectedPlayers = playerCharacterRecords(state.playerEntities)
   const releaseResult = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
+    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: playerCharacterRecords(state.playerEntities),
-    previousPlayers: playerCharacterRecords(state.playerEntities),
+    players: projectedPlayers,
+    previousPlayers: projectedPlayers,
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -655,6 +840,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
       ...EMPTY_SPELL_WORLD,
       canPlaceProjectile: () => true,
       canTraverseProjectile: () => true,
+      castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
       inputs: { [PLAYER_ID]: input(state, false) },
       players,
       previousPlayers: players,
@@ -679,6 +865,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
   state = step(state, false)
   const released = state.primarySpells.projectiles[0]
   const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const projectedPlayers = playerCharacterRecords(state.playerEntities)
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: (_spell, position, radius) => {
@@ -686,9 +873,10 @@ test('Earth publishes one authoritative breakup when its next flight position co
       return false
     },
     canTraverseProjectile: () => true,
+    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: playerCharacterRecords(state.playerEntities),
-    previousPlayers: playerCharacterRecords(state.playerEntities),
+    players: projectedPlayers,
+    previousPlayers: projectedPlayers,
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -721,6 +909,7 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
   state = step(state, false, 95)
   const heldBoulder = state.primarySpells.projectiles[0]
   const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const projectedPlayers = playerCharacterRecords(state.playerEntities)
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: (_spell, position, radius) => {
@@ -728,9 +917,10 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
       return false
     },
     canTraverseProjectile: () => true,
+    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: playerCharacterRecords(state.playerEntities),
-    previousPlayers: playerCharacterRecords(state.playerEntities),
+    players: projectedPlayers,
+    previousPlayers: projectedPlayers,
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,

@@ -90,6 +90,8 @@ import {
   type NativeTreeOcclusionInput,
 } from './boneyard-tree-occlusion.ts'
 import { NativeEnemyViews } from './native-enemy-view.ts'
+import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
+import { NativeMaggotViews } from './native-maggot-view.ts'
 import {
   nativeEnemyPainterLayer,
   type NativeEnemyVisualSnapshot,
@@ -108,11 +110,25 @@ interface BoneyardRendererFrameDiagnostics {
   enemyCount: number
   enemyFamilies: string
   fadedTreeCount: number
+  enemySamples: readonly Readonly<{
+    action: string | null
+    currentHealth: number
+    id: number
+    lifeState: string
+    maximumHealth: number
+    x: number
+    y: number
+  }>[]
+  enemyProjectileCount: number
   frameCount: number
   foregroundZIndex: number
   gateLeafCount: number
   cameraRenderGroup: boolean
   culledResidentCount: number
+  localPlayerDeathTick: number
+  localPlayerHealth: number
+  localPlayerLifeState: string
+  localPlayerMana: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
@@ -122,6 +138,7 @@ interface BoneyardRendererFrameDiagnostics {
   maxDynamicZIndex: number
   maxMainLightScalar: number
   maxMainZIndex: number
+  maggotCount: number
   minMainLightScalar: number
   minTreeAlpha: number
   minTreeLightScalar: number
@@ -144,6 +161,9 @@ interface BoneyardRendererFrameDiagnostics {
   treeTintMismatchCount: number
   residentCount: number
   regionLightCompositeZIndex: number
+  runGameOverTicks: number
+  runId: string | null
+  runPhase: string
   visibleMainLayerCount: number
   visibleOversizedResidentCount: number
   visibleResidentCount: number
@@ -323,11 +343,17 @@ export async function createBoneyardWorldRenderer(
     enemyCount: 0,
     enemyFamilies: '',
     fadedTreeCount: 0,
+    enemySamples: [],
+    enemyProjectileCount: 0,
     frameCount: 0,
     foregroundZIndex: 0,
     gateLeafCount: 0,
     cameraRenderGroup: world.isRenderGroup,
     culledResidentCount: 0,
+    localPlayerDeathTick: 0,
+    localPlayerHealth: 0,
+    localPlayerLifeState: 'alive',
+    localPlayerMana: 0,
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
@@ -337,6 +363,7 @@ export async function createBoneyardWorldRenderer(
     maxDynamicZIndex: 0,
     maxMainLightScalar: 0,
     maxMainZIndex: 0,
+    maggotCount: 0,
     minMainLightScalar: 0,
     minTreeAlpha: 1,
     minTreeLightScalar: 0,
@@ -359,6 +386,9 @@ export async function createBoneyardWorldRenderer(
     treeTintMismatchCount: 0,
     residentCount: staticWorld.residents.length,
     regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
+    runGameOverTicks: 0,
+    runId: options.initialSnapshot.run.runId,
+    runPhase: options.initialSnapshot.run.phase,
     visibleMainLayerCount: 0,
     visibleOversizedResidentCount: 0,
     visibleResidentCount: 0,
@@ -414,9 +444,23 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.enemyCount = scene.enemyCount
       frameDiagnostics.enemyFamilies = scene.enemyFamilies
       frameDiagnostics.fadedTreeCount = painter.fadedTreeCount
+      frameDiagnostics.enemySamples = snapshot.world.enemies.map((enemy) => ({
+        action: enemy.animation.action,
+        currentHealth: enemy.currentHealth,
+        id: enemy.id,
+        lifeState: enemy.animation.state,
+        maximumHealth: enemy.maximumHealth,
+        x: enemy.position.x,
+        y: enemy.position.y,
+      }))
+      frameDiagnostics.enemyProjectileCount = scene.enemyProjectileCount
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.culledResidentCount = visibility.culledResidentCount
+      frameDiagnostics.localPlayerDeathTick = player.progression.deathTick
+      frameDiagnostics.localPlayerHealth = player.progression.currentHealth
+      frameDiagnostics.localPlayerLifeState = player.progression.lifeState
+      frameDiagnostics.localPlayerMana = player.progression.currentMana
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
@@ -426,6 +470,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxDynamicZIndex = painter.maxDynamicZIndex
       frameDiagnostics.maxMainLightScalar = painter.maxMainLightScalar
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
+      frameDiagnostics.maggotCount = scene.maggotCount
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.minTreeAlpha = painter.minTreeAlpha
       frameDiagnostics.minTreeLightScalar = painter.minTreeLightScalar
@@ -440,6 +485,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       frameDiagnostics.playerX = player.position.x
       frameDiagnostics.playerY = player.position.y
+      frameDiagnostics.runGameOverTicks = snapshot.run.gameOverTicks
+      frameDiagnostics.runId = snapshot.run.runId
+      frameDiagnostics.runPhase = snapshot.run.phase
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
@@ -457,6 +505,8 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.fadedTreeCount = `${painter.fadedTreeCount}`
       canvas.dataset.minTreeAlpha = `${painter.minTreeAlpha}`
       canvas.dataset.minTreeLightScalar = `${painter.minTreeLightScalar}`
+      canvas.dataset.enemyProjectileCount = `${scene.enemyProjectileCount}`
+      canvas.dataset.maggotCount = `${scene.maggotCount}`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -528,6 +578,7 @@ class BoneyardDynamicScene {
   private readonly complexShadows: BoneyardComplexShadowPresentation
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly enemies: NativeEnemyViews
+  private readonly enemyProjectiles: NativeEnemyProjectileViews
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gateShadowDepths = new Map<string, number>()
@@ -538,6 +589,7 @@ class BoneyardDynamicScene {
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
   private readonly players = new Map<string, PlayerWorldView>()
+  private readonly maggots: NativeMaggotViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
@@ -578,6 +630,8 @@ class BoneyardDynamicScene {
     }))
     this.gates = new BoneyardGateViews(root, textures)
     this.enemies = new NativeEnemyViews(root, textures)
+    this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
+    this.maggots = new NativeMaggotViews(root, textures)
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
@@ -618,6 +672,8 @@ class BoneyardDynamicScene {
     )
     this.gates.update(snapshot.world.gateLeaves)
     this.enemies.update(enemySnapshots, snapshot.tick)
+    this.enemyProjectiles.update(snapshot.world.enemyProjectiles)
+    this.maggots.update(snapshot.world.maggots)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
@@ -738,6 +794,16 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(enemy.position, lightSources),
       ))
     }
+    for (const projectile of snapshot.world.enemyProjectiles) {
+      this.enemyProjectiles.setTint(projectile.id, nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(projectile.position, lightSources),
+      ))
+    }
+    for (const maggot of snapshot.world.maggots) {
+      this.maggots.setTint(maggot.id, nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(maggot.position, lightSources),
+      ))
+    }
     for (const leaf of snapshot.world.gateLeaves) {
       const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
       this.gates.setTint(
@@ -776,6 +842,22 @@ class BoneyardDynamicScene {
     }
     for (const enemy of enemySnapshots) {
       dynamicLayers.push(nativeEnemyPainterLayer(enemy, dynamicLayers.length))
+    }
+    for (const projectile of snapshot.world.enemyProjectiles) {
+      dynamicLayers.push({
+        id: `enemy-projectile:${projectile.id}`,
+        worldY: projectile.position.y,
+        sortBias: 0,
+        sourceOrder: dynamicLayers.length,
+      })
+    }
+    for (const maggot of snapshot.world.maggots) {
+      dynamicLayers.push({
+        id: `maggot:${maggot.id}`,
+        worldY: maggot.position.y,
+        sortBias: 0,
+        sourceOrder: dynamicLayers.length,
+      })
     }
     if (dig) {
       dynamicLayers.push({
@@ -847,6 +929,18 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`enemy:${enemy.id}`)?.zIndex ?? 1,
       )
     }
+    for (const projectile of snapshot.world.enemyProjectiles) {
+      this.enemyProjectiles.setDepth(
+        projectile.id,
+        positionedDynamics.get(`enemy-projectile:${projectile.id}`)?.zIndex ?? 1,
+      )
+    }
+    for (const maggot of snapshot.world.maggots) {
+      this.maggots.setDepth(
+        maggot.id,
+        positionedDynamics.get(`maggot:${maggot.id}`)?.zIndex ?? 1,
+      )
+    }
     this.solomon?.setGraveDepth(positionedDynamics.get('solomon-grave')?.zIndex ?? 1)
     this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
@@ -897,6 +991,14 @@ class BoneyardDynamicScene {
     return this.visibleEnemyFamilies
   }
 
+  get enemyProjectileCount(): number {
+    return this.enemyProjectiles.size
+  }
+
+  get maggotCount(): number {
+    return this.maggots.size
+  }
+
   get currentLightSources(): readonly NativeBoneyardLightSource[] {
     return this.lightSources
   }
@@ -921,6 +1023,8 @@ class BoneyardDynamicScene {
     this.complexShadows.destroy()
     this.primarySpells.destroy()
     this.enemies.destroy()
+    this.enemyProjectiles.destroy()
+    this.maggots.destroy()
     this.gates.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()
@@ -1605,10 +1709,7 @@ function requiredTexture(textures: BoneyardWorldTextures, ref: SpriteRef): Textu
 }
 
 function nativeEnemySnapshots(snapshot: GameSnapshot): readonly NativeEnemyVisualSnapshot[] {
-  const world = snapshot.world as typeof snapshot.world & {
-    waves?: { enemies: readonly NativeEnemyVisualSnapshot[] } | null
-  }
-  return world.waves?.enemies ?? []
+  return snapshot.world.kind === 'boneyard' ? snapshot.world.enemies : []
 }
 
 function requireBoneyardSnapshot(snapshot: GameSnapshot, runId: string): asserts snapshot is GameSnapshot & {

@@ -13,7 +13,6 @@ import {
 import {
   BONEYARD_WAVE_DIRECTOR_PHASES,
   BONEYARD_WAVE_ENEMY_TYPES,
-  type BoneyardEnemyState,
   type BoneyardWaveDirectorPhase,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
@@ -39,6 +38,13 @@ import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
+import {
+  GAME_RUN_PHASES,
+  type GameRunLifecycleState,
+  type GameRunPhase,
+} from '../core-kernels/game-run.ts'
+import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
+import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import type {
   BoneyardBounds,
   BoneyardChoice,
@@ -53,8 +59,16 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import type {
+  BoneyardEnemyEventSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
+  BoneyardEnemyAction,
+  BoneyardEnemyAnimationSnapshot,
+  BoneyardEnemyCoffinState,
+  BoneyardEnemyProjectileKind,
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+  BoneyardMaggotSnapshot,
   BoneyardSolomonSnapshot,
   BoneyardWaveSnapshot,
   HubWorldSnapshot,
@@ -62,6 +76,10 @@ import type {
   ProtocolPlayerProgression,
   ProtocolPlayerState,
   ProtocolStudentState,
+} from './game-state.ts'
+import {
+  BONEYARD_ENEMY_EVENT_TYPES,
+  BONEYARD_ENEMY_TERMINAL_OUTPUTS,
 } from './game-state.ts'
 import { REPLICATED_ENTITY_TYPE_REGISTRY } from './entity-replication.ts'
 import type {
@@ -71,14 +89,14 @@ import type {
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
 
-export type { GameSnapshot } from './game-state.ts'
+export type { BoneyardEnemyEventSnapshot, GameSnapshot } from './game-state.ts'
 export type {
   BoneyardChoice,
   BoneyardScene,
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 13
+export const GAME_PROTOCOL_VERSION = 14
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -89,6 +107,9 @@ const MAX_BONEYARD_OBJECTS = 8192
 const MAX_BONEYARD_SPRITES = 16384
 const MAX_BONEYARD_STRUCTURES = 8192
 const MAX_BONEYARD_ENEMIES = 512
+const MAX_BONEYARD_ENEMY_EVENTS = 512
+const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
+const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
@@ -99,6 +120,39 @@ const MAX_REPLICATED_ENTITIES = 8192
 const MAX_REPLICATED_COMPONENTS = 64
 const MAX_PRIMARY_SPELL_PROJECTILES = 4096
 const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
+
+const BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES = {
+  arrow: 0x7da,
+  'demon-bomb': 0x7f7,
+  firebolt: 0x7eb,
+  'guided-missile': 0x7ec,
+  'poison-pool': 0x806,
+} as const satisfies Readonly<Record<BoneyardEnemyProjectileKind, number>>
+
+const BONEYARD_ENEMY_ANIMATION_STATES = ['idle', 'locomotion', 'action', 'death'] as const
+const BONEYARD_ENEMY_ACTIONS = [
+  'skeleton-claw-a',
+  'skeleton-claw-b',
+  'skeleton-weapon',
+  'skeleton-pike',
+  'archer-shot',
+  'mage-cast-short',
+  'mage-cast-long',
+  'imp-contact',
+  'zombie-swipe',
+  'wraith-drain',
+  'demon-claw',
+  'demon-bomb',
+  'coffin-open',
+  'maggot-bite',
+] as const satisfies readonly BoneyardEnemyAction[]
+const BONEYARD_ENEMY_COFFIN_STATES = [
+  'hidden',
+  'closed',
+  'opening',
+  'transition-delay',
+  'open',
+] as const satisfies readonly BoneyardEnemyCoffinState[]
 
 export interface GameContentIdentity {
   id: string
@@ -162,7 +216,19 @@ export interface ClientStartMatchMessage {
   boneyardId: string
 }
 
+export interface ClientAcknowledgeGameOverMessage {
+  type: 'client-acknowledge-game-over'
+  eventId: number
+  runId: string
+}
+
+export interface ClientConfirmLoadoutMessage {
+  type: 'client-confirm-loadout'
+}
+
 export type ClientGameMessage =
+  | ClientAcknowledgeGameOverMessage
+  | ClientConfirmLoadoutMessage
   | ClientHelloMessage
   | ClientInputMessage
   | ClientSelectSkillMessage
@@ -286,6 +352,18 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       type: 'client-start-match',
       boneyardId: limitedString(value.boneyardId, 'boneyardId', 256),
     }
+  }
+  if (value.type === 'client-acknowledge-game-over') {
+    onlyKeys(value, 'message', ['type', 'eventId', 'runId'])
+    return {
+      type: 'client-acknowledge-game-over',
+      eventId: positiveInteger(value.eventId, 'eventId'),
+      runId: limitedString(value.runId, 'runId', 128),
+    }
+  }
+  if (value.type === 'client-confirm-loadout') {
+    onlyKeys(value, 'message', ['type'])
+    return { type: 'client-confirm-loadout' }
   }
   if (value.type === 'client-disconnect') {
     onlyKeys(value, 'message', ['type'])
@@ -618,13 +696,18 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'activeWeldBuildId',
     'currentHealth',
     'currentMana',
+    'deathEpoch',
+    'deathTick',
     'experience',
     'learnedSkills',
     'level',
+    'lifeState',
     'maximumHealth',
     'maximumMana',
     'nextThreshold',
     'pendingOffer',
+    'poisonDamagePerTick',
+    'poisonTicksRemaining',
     'previousThreshold',
     'revision',
   ])
@@ -632,11 +715,18 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
   const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
   const currentMana = finite(source.currentMana, `${field}.currentMana`)
+  const poisonDamagePerTick = finite(
+    source.poisonDamagePerTick,
+    `${field}.poisonDamagePerTick`,
+  )
   if (currentHealth < 0 || currentHealth > maximumHealth) {
     throw new GameProtocolError(`${field}.currentHealth is out of range`)
   }
   if (currentMana < 0 || currentMana > maximumMana) {
     throw new GameProtocolError(`${field}.currentMana is out of range`)
+  }
+  if (poisonDamagePerTick < 0) {
+    throw new GameProtocolError(`${field}.poisonDamagePerTick is out of range`)
   }
   const level = positiveInteger(source.level, `${field}.level`)
   if (level > 75) throw new GameProtocolError(`${field}.level is out of range`)
@@ -674,19 +764,31 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if ((activeWeldBuildId === null) !== (spellWeldingRank === 0)) {
     throw new GameProtocolError(`${field}.activeWeldBuildId does not match Spell Welding`)
   }
+  const lifeState = limitedString(source.lifeState, `${field}.lifeState`, 32)
+  if (!(PLAYER_LIFE_STATES as readonly string[]).includes(lifeState)) {
+    throw new GameProtocolError(`${field}.lifeState is not supported`)
+  }
   return {
     activeWeldBuildId,
     currentHealth,
     currentMana,
+    deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
+    deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
     learnedSkills,
     level,
+    lifeState: lifeState as PlayerLifeState,
     maximumHealth,
     maximumMana,
     nextThreshold: nonnegativeInteger(source.nextThreshold, `${field}.nextThreshold`),
     pendingOffer: source.pendingOffer === null
       ? null
       : playerSkillOffer(source.pendingOffer, `${field}.pendingOffer`, level),
+    poisonDamagePerTick,
+    poisonTicksRemaining: nonnegativeInteger(
+      source.poisonTicksRemaining,
+      `${field}.poisonTicksRemaining`,
+    ),
     previousThreshold: nonnegativeInteger(
       source.previousThreshold,
       `${field}.previousThreshold`,
@@ -1111,7 +1213,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'hostPlayerId', 'players', 'primarySpells', 'tick', 'world',
+    'hostPlayerId', 'players', 'primarySpells', 'run', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -1131,7 +1233,10 @@ function gameSnapshot(value: unknown): GameSnapshot {
   if (hostPlayerId !== null && !players[hostPlayerId]) {
     throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
   }
-  const world = gameWorldSnapshot(source.world, 'snapshot.world')
+  const tick = nonnegativeInteger(source.tick, 'snapshot.tick')
+  const world = gameWorldSnapshot(source.world, 'snapshot.world', tick)
+  const run = gameRunLifecycle(source.run, 'snapshot.run')
+  validateGameRunWorld(run, world, 'snapshot')
   const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'snapshot.primarySpells')
   if (world.kind === 'hub') {
@@ -1150,7 +1255,8 @@ function gameSnapshot(value: unknown): GameSnapshot {
     hostPlayerId,
     players,
     primarySpells,
-    tick: nonnegativeInteger(source.tick, 'snapshot.tick'),
+    run,
+    tick,
     world,
   }
 }
@@ -1158,7 +1264,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'hostPlayerId', 'players', 'primarySpells', 'tick', 'world',
+    'hostPlayerId', 'players', 'primarySpells', 'run', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -1175,7 +1281,10 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   if (hostPlayerId !== null && !players[hostPlayerId]) {
     throw new GameProtocolError('frame.hostPlayerId is not present in frame.players')
   }
-  const world = gameWorldSnapshotFrame(source.world, 'frame.world')
+  const tick = nonnegativeInteger(source.tick, 'frame.tick')
+  const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick)
+  const run = gameRunLifecycle(source.run, 'frame.run')
+  validateGameRunWorld(run, world, 'frame')
   const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'frame.primarySpells')
   if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
@@ -1183,8 +1292,83 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     hostPlayerId,
     players,
     primarySpells,
-    tick: nonnegativeInteger(source.tick, 'frame.tick'),
+    run,
+    tick,
     world,
+  }
+}
+
+function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'eligiblePlayerIds',
+    'gameOverEventId',
+    'gameOverTicks',
+    'lastCompletedRunId',
+    'nextGameOverEventId',
+    'phase',
+    'runId',
+  ])
+  const phase = limitedString(source.phase, `${field}.phase`, 32)
+  if (!(GAME_RUN_PHASES as readonly string[]).includes(phase)) {
+    throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  const eligiblePlayerIds = limitedArray(
+    source.eligiblePlayerIds,
+    `${field}.eligiblePlayerIds`,
+    MAX_PLAYERS,
+  ).map((playerId, index) => validatedPlayerId(
+    playerId,
+    `${field}.eligiblePlayerIds[${index}]`,
+  ))
+  if (eligiblePlayerIds.some((playerId, index) => (
+    index > 0 && playerId <= eligiblePlayerIds[index - 1]!
+  ))) throw new GameProtocolError(`${field}.eligiblePlayerIds must be unique and sorted`)
+  const runId = source.runId === null
+    ? null
+    : limitedString(source.runId, `${field}.runId`, 128)
+  const lastCompletedRunId = source.lastCompletedRunId === null
+    ? null
+    : limitedString(source.lastCompletedRunId, `${field}.lastCompletedRunId`, 128)
+  const gameOverEventId = nonnegativeInteger(
+    source.gameOverEventId,
+    `${field}.gameOverEventId`,
+  )
+  const nextGameOverEventId = positiveInteger(
+    source.nextGameOverEventId,
+    `${field}.nextGameOverEventId`,
+  )
+  if (gameOverEventId >= nextGameOverEventId) {
+    throw new GameProtocolError(`${field}.gameOverEventId is not allocated`)
+  }
+  if ((phase === 'active' || phase === 'game-over') !== (runId !== null)) {
+    throw new GameProtocolError(`${field}.runId does not match phase`)
+  }
+  if ((phase === 'hub' || phase === 'active') && gameOverEventId !== 0) {
+    throw new GameProtocolError(`${field}.gameOverEventId requires a completed run`)
+  }
+  return {
+    eligiblePlayerIds,
+    gameOverEventId,
+    gameOverTicks: nonnegativeInteger(source.gameOverTicks, `${field}.gameOverTicks`),
+    lastCompletedRunId,
+    nextGameOverEventId,
+    phase: phase as GameRunPhase,
+    runId,
+  }
+}
+
+function validateGameRunWorld(
+  run: GameRunLifecycleState,
+  world: GameSnapshot['world'] | GameSnapshotFrame['world'],
+  field: string,
+): void {
+  if (run.phase === 'active' || run.phase === 'game-over') {
+    if (world.kind !== 'boneyard' || world.runId !== run.runId) {
+      throw new GameProtocolError(`${field}.run does not match its Boneyard world`)
+    }
+  } else if (world.kind !== 'hub') {
+    throw new GameProtocolError(`${field}.run requires a Hub world outside a run`)
   }
 }
 
@@ -1541,18 +1725,84 @@ function hubRegionId(value: unknown, field: string): HubRegionId {
   return result
 }
 
-function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world'] {
+function gameWorldSnapshot(
+  value: unknown,
+  field: string,
+  snapshotTick: number,
+): GameSnapshot['world'] {
   const source = record(value, field)
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
   if (source.kind === 'boneyard') {
-    onlyKeys(source, field, ['encounter', 'gateLeaves', 'kind', 'runId', 'waves'])
+    onlyKeys(source, field, [
+      'encounter',
+      'enemies',
+      'enemyEvents',
+      'enemyProjectiles',
+      'gateLeaves',
+      'kind',
+      'maggots',
+      'runId',
+      'waves',
+    ])
     const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
     if ((encounter === null) !== (waves === null)) {
       throw new GameProtocolError(`${field}.encounter and ${field}.waves must share ownership`)
     }
+    const runId = limitedString(source.runId, `${field}.runId`, 128)
+    const enemyEvents = boneyardEnemyEvents(
+      source.enemyEvents,
+      `${field}.enemyEvents`,
+      runId,
+      snapshotTick,
+    )
+    const enemyIds = new Set<number>()
+    const enemies = limitedArray(
+      source.enemies,
+      `${field}.enemies`,
+      MAX_BONEYARD_ENEMIES,
+    ).map((enemy, index) => {
+      const decoded = boneyardEnemySnapshot(enemy, `${field}.enemies[${index}]`)
+      if (enemyIds.has(decoded.id)) {
+        throw new GameProtocolError(`${field}.enemies duplicates id ${decoded.id}`)
+      }
+      enemyIds.add(decoded.id)
+      return decoded
+    })
+    const projectileIds = new Set<number>()
+    const enemyProjectiles = limitedArray(
+      source.enemyProjectiles,
+      `${field}.enemyProjectiles`,
+      MAX_BONEYARD_ENEMY_PROJECTILES,
+    ).map((projectile, index) => {
+      const decoded = boneyardEnemyProjectileSnapshot(
+        projectile,
+        `${field}.enemyProjectiles[${index}]`,
+      )
+      if (projectileIds.has(decoded.id)) {
+        throw new GameProtocolError(`${field}.enemyProjectiles duplicates id ${decoded.id}`)
+      }
+      projectileIds.add(decoded.id)
+      return decoded
+    })
+    const maggotIds = new Set<number>()
+    const maggots = limitedArray(
+      source.maggots,
+      `${field}.maggots`,
+      MAX_BONEYARD_MAGGOTS,
+    ).map((maggot, index) => {
+      const decoded = boneyardMaggotSnapshot(maggot, `${field}.maggots[${index}]`)
+      if (maggotIds.has(decoded.id)) {
+        throw new GameProtocolError(`${field}.maggots duplicates id ${decoded.id}`)
+      }
+      maggotIds.add(decoded.id)
+      return decoded
+    })
     return {
       encounter,
+      enemies,
+      enemyEvents,
+      enemyProjectiles,
       gateLeaves: limitedArray(
         source.gateLeaves,
         `${field}.gateLeaves`,
@@ -1562,7 +1812,8 @@ function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world']
         `${field}.gateLeaves[${index}]`,
       )),
       kind: 'boneyard',
-      runId: limitedString(source.runId, `${field}.runId`, 128),
+      maggots,
+      runId,
       waves,
     }
   }
@@ -1689,7 +1940,6 @@ function boneyardWaveSnapshot(
   if (value === null) return null
   const source = record(value, field)
   onlyKeys(source, field, [
-    'enemies',
     'interwaveDelayTicks',
     'pendingSpawnBudget',
     'phase',
@@ -1702,72 +1952,7 @@ function boneyardWaveSnapshot(
   if (!(BONEYARD_WAVE_DIRECTOR_PHASES as readonly string[]).includes(phase)) {
     throw new GameProtocolError(`${field}.phase is not supported`)
   }
-  const ids = new Set<number>()
-  const enemies = limitedArray(
-    source.enemies,
-    `${field}.enemies`,
-    MAX_BONEYARD_ENEMIES,
-  ).map((enemy, index) => {
-    const enemyField = `${field}.enemies[${index}]`
-    const item = record(enemy, enemyField)
-    onlyKeys(item, enemyField, [
-      'enemyToken',
-      'flags',
-      'headingDeg',
-      'id',
-      'locationPolicy',
-      'nativeTypeId',
-      'position',
-      'spawnTick',
-      'targetPlayerId',
-    ])
-    const enemyToken = limitedString(item.enemyToken, `${enemyField}.enemyToken`, 32)
-    const expectedTypeId = BONEYARD_WAVE_ENEMY_TYPES[
-      enemyToken as keyof typeof BONEYARD_WAVE_ENEMY_TYPES
-    ]
-    if (expectedTypeId === undefined) {
-      throw new GameProtocolError(`${enemyField}.enemyToken is not supported`)
-    }
-    const nativeTypeId = positiveInteger(item.nativeTypeId, `${enemyField}.nativeTypeId`)
-    if (nativeTypeId !== expectedTypeId) {
-      throw new GameProtocolError(`${enemyField}.nativeTypeId does not match enemyToken`)
-    }
-    const id = positiveInteger(item.id, `${enemyField}.id`)
-    if (ids.has(id)) throw new GameProtocolError(`${field}.enemies duplicates id ${id}`)
-    ids.add(id)
-    const headingDeg = finite(item.headingDeg, `${enemyField}.headingDeg`)
-    if (headingDeg < 0 || headingDeg >= 360) {
-      throw new GameProtocolError(`${enemyField}.headingDeg must be within [0,360)`)
-    }
-    if (item.locationPolicy !== 'near-player' && item.locationPolicy !== 'anywhere') {
-      throw new GameProtocolError(`${enemyField}.locationPolicy is not supported`)
-    }
-    const locationPolicy = item.locationPolicy as BoneyardEnemyState['locationPolicy']
-    return {
-      enemyToken: enemyToken as keyof typeof BONEYARD_WAVE_ENEMY_TYPES,
-      flags: limitedArray(
-        item.flags,
-        `${enemyField}.flags`,
-        MAX_BONEYARD_ENEMY_FLAGS,
-      ).map((flag, flagIndex) => limitedString(
-        flag,
-        `${enemyField}.flags[${flagIndex}]`,
-        64,
-      )),
-      headingDeg,
-      id,
-      locationPolicy,
-      nativeTypeId,
-      position: boneyardPoint(item.position, `${enemyField}.position`),
-      spawnTick: nonnegativeInteger(item.spawnTick, `${enemyField}.spawnTick`),
-      targetPlayerId: validatedPlayerId(
-        item.targetPlayerId,
-        `${enemyField}.targetPlayerId`,
-      ),
-    }
-  })
   return {
-    enemies,
     interwaveDelayTicks: nonnegativeInteger(
       source.interwaveDelayTicks,
       `${field}.interwaveDelayTicks`,
@@ -1787,16 +1972,445 @@ function boneyardWaveSnapshot(
   }
 }
 
+function boneyardEnemyEvents(
+  value: unknown,
+  field: string,
+  runId: string,
+  snapshotTick: number,
+): BoneyardEnemyEventSnapshot[] {
+  let previousEventId = 0
+  let previousTick = -1
+  return limitedArray(value, field, MAX_BONEYARD_ENEMY_EVENTS).map((event, index) => {
+    const eventField = `${field}[${index}]`
+    const source = record(event, eventField)
+    const rawType = limitedString(source.type, `${eventField}.type`, 64)
+    if (!(BONEYARD_ENEMY_EVENT_TYPES as readonly string[]).includes(rawType)) {
+      throw new GameProtocolError(`${eventField}.type is not supported`)
+    }
+    const type = rawType as BoneyardEnemyEventSnapshot['type']
+    const payloadKeys = (() => {
+      switch (type) {
+        case 'attack-marker':
+        case 'enemy-spawned':
+        case 'reward': return ['targetPlayerId']
+        case 'coffin-maggot-release': return ['count']
+        case 'enemy-death':
+        case 'enemy-retired': return []
+        case 'enemy-terminal-output': return ['count', 'output']
+        case 'projectile-impact':
+        case 'projectile-retired':
+        case 'projectile-spawned': return ['projectileId', 'targetPlayerId']
+      }
+    })()
+    onlyKeys(source, eventField, [
+      'actorId',
+      'eventId',
+      'runId',
+      'tick',
+      'type',
+      ...payloadKeys,
+    ])
+    const eventRunId = limitedString(source.runId, `${eventField}.runId`, 128)
+    if (eventRunId !== runId) {
+      throw new GameProtocolError(`${eventField}.runId does not match its Boneyard world`)
+    }
+    const eventId = positiveInteger(source.eventId, `${eventField}.eventId`)
+    if (eventId <= previousEventId) {
+      throw new GameProtocolError(`${field} eventIds must increase`)
+    }
+    const tick = nonnegativeInteger(source.tick, `${eventField}.tick`)
+    if (tick < previousTick) {
+      throw new GameProtocolError(`${field} ticks must not decrease`)
+    }
+    if (tick > snapshotTick) {
+      throw new GameProtocolError(`${eventField}.tick exceeds its snapshot tick`)
+    }
+    previousEventId = eventId
+    previousTick = tick
+    const base = {
+      actorId: positiveInteger(source.actorId, `${eventField}.actorId`),
+      eventId,
+      runId,
+      tick,
+      type,
+    }
+    switch (type) {
+      case 'attack-marker':
+      case 'enemy-spawned':
+      case 'reward': return {
+        ...base,
+        targetPlayerId: nullablePlayerId(source.targetPlayerId, `${eventField}.targetPlayerId`),
+      }
+      case 'coffin-maggot-release': return {
+        ...base,
+        count: nonnegativeInteger(source.count, `${eventField}.count`),
+      }
+      case 'enemy-death':
+      case 'enemy-retired': return base
+      case 'enemy-terminal-output': {
+        const output = limitedString(source.output, `${eventField}.output`, 64)
+        if (!(BONEYARD_ENEMY_TERMINAL_OUTPUTS as readonly string[]).includes(output)) {
+          throw new GameProtocolError(`${eventField}.output is not supported`)
+        }
+        return {
+          ...base,
+          output: output as BoneyardEnemyEventSnapshot['output'],
+          ...(source.count === undefined
+            ? {}
+            : { count: nonnegativeInteger(source.count, `${eventField}.count`) }),
+        }
+      }
+      case 'projectile-impact':
+      case 'projectile-retired':
+      case 'projectile-spawned': return {
+        ...base,
+        projectileId: positiveInteger(source.projectileId, `${eventField}.projectileId`),
+        targetPlayerId: nullablePlayerId(source.targetPlayerId, `${eventField}.targetPlayerId`),
+      }
+    }
+  })
+}
+
+function nullablePlayerId(value: unknown, field: string): string | null {
+  return value === null ? null : validatedPlayerId(value, field)
+}
+
+function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'animation',
+    'currentHealth',
+    'enemyToken',
+    'flags',
+    'headingDeg',
+    'id',
+    'maximumHealth',
+    'nativeTypeId',
+    'position',
+    'spawnTick',
+  ])
+  const enemyToken = limitedString(source.enemyToken, `${field}.enemyToken`, 32)
+  const expectedTypeId = BONEYARD_WAVE_ENEMY_TYPES[
+    enemyToken as keyof typeof BONEYARD_WAVE_ENEMY_TYPES
+  ]
+  if (expectedTypeId === undefined) {
+    throw new GameProtocolError(`${field}.enemyToken is not supported`)
+  }
+  const nativeTypeId = positiveInteger(source.nativeTypeId, `${field}.nativeTypeId`)
+  if (nativeTypeId !== expectedTypeId) {
+    throw new GameProtocolError(`${field}.nativeTypeId does not match enemyToken`)
+  }
+  const flags = limitedArray(
+    source.flags,
+    `${field}.flags`,
+    MAX_BONEYARD_ENEMY_FLAGS,
+  ).map((flag, index) => {
+    const decoded = limitedString(flag, `${field}.flags[${index}]`, 64)
+    if (!(BONEYARD_ENEMY_FLAGS as readonly string[]).includes(decoded)) {
+      throw new GameProtocolError(`${field}.flags[${index}] is not supported`)
+    }
+    return decoded
+  })
+  if (new Set(flags).size !== flags.length) {
+    throw new GameProtocolError(`${field}.flags must be unique`)
+  }
+  const headingDeg = finite(source.headingDeg, `${field}.headingDeg`)
+  if (headingDeg < 0 || headingDeg >= 360) {
+    throw new GameProtocolError(`${field}.headingDeg must be within [0,360)`)
+  }
+  const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
+  const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
+  if (currentHealth > maximumHealth) {
+    throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
+  }
+  return {
+    animation: boneyardEnemyAnimation(source.animation, `${field}.animation`),
+    currentHealth,
+    enemyToken: enemyToken as BoneyardEnemySnapshot['enemyToken'],
+    flags,
+    headingDeg,
+    id: positiveInteger(source.id, `${field}.id`),
+    maximumHealth,
+    nativeTypeId,
+    position: boneyardPoint(source.position, `${field}.position`),
+    spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+  }
+}
+
+function boneyardEnemyProjectileSnapshot(
+  value: unknown,
+  field: string,
+): BoneyardEnemyProjectileSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'ageTicks',
+    'contactRadius',
+    'headingDeg',
+    'homing',
+    'id',
+    'kind',
+    'lifetimeTicks',
+    'nativeTypeId',
+    'ownerActorId',
+    'position',
+    'spawnTick',
+  ])
+  const kind = limitedString(source.kind, `${field}.kind`, 32)
+  if (!(kind in BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES)) {
+    throw new GameProtocolError(`${field}.kind is not supported`)
+  }
+  const nativeTypeId = positiveInteger(source.nativeTypeId, `${field}.nativeTypeId`)
+  if (
+    nativeTypeId
+    !== BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES[kind as BoneyardEnemyProjectileKind]
+  ) {
+    throw new GameProtocolError(`${field}.nativeTypeId does not match kind`)
+  }
+  const headingDeg = finite(source.headingDeg, `${field}.headingDeg`)
+  if (headingDeg < 0 || headingDeg >= 360) {
+    throw new GameProtocolError(`${field}.headingDeg must be within [0,360)`)
+  }
+  const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
+  const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+  if (ageTicks > lifetimeTicks) {
+    throw new GameProtocolError(`${field}.ageTicks exceeds lifetimeTicks`)
+  }
+  return {
+    ageTicks,
+    contactRadius: positiveFinite(source.contactRadius, `${field}.contactRadius`),
+    headingDeg,
+    homing: boolean(source.homing, `${field}.homing`),
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: kind as BoneyardEnemyProjectileKind,
+    lifetimeTicks,
+    nativeTypeId: nativeTypeId as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
+    ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    position: boneyardPoint(source.position, `${field}.position`),
+    spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+  }
+}
+
+function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'alpha',
+    'currentHealth',
+    'deathEpoch',
+    'deathTick',
+    'headingDeg',
+    'hitFlash',
+    'id',
+    'maximumHealth',
+    'ownerCoffinActorId',
+    'pose',
+    'position',
+    'spawnTick',
+    'state',
+  ])
+  const state = limitedString(source.state, `${field}.state`, 16)
+  if (state !== 'crawl' && state !== 'bite' && state !== 'death') {
+    throw new GameProtocolError(`${field}.state is not supported`)
+  }
+  const alpha = finite(source.alpha, `${field}.alpha`)
+  if (alpha < 0 || alpha > 1) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,1]`)
+  }
+  const hitFlash = finite(source.hitFlash, `${field}.hitFlash`)
+  if (hitFlash < 0 || hitFlash > 1) {
+    throw new GameProtocolError(`${field}.hitFlash must be within [0,1]`)
+  }
+  const headingDeg = finite(source.headingDeg, `${field}.headingDeg`)
+  if (headingDeg < 0 || headingDeg >= 360) {
+    throw new GameProtocolError(`${field}.headingDeg must be within [0,360)`)
+  }
+  const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
+  const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
+  if (currentHealth > maximumHealth) {
+    throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
+  }
+  return {
+    alpha,
+    currentHealth,
+    deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
+    deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
+    headingDeg,
+    hitFlash,
+    id: positiveInteger(source.id, `${field}.id`),
+    maximumHealth,
+    ownerCoffinActorId: positiveInteger(
+      source.ownerCoffinActorId,
+      `${field}.ownerCoffinActorId`,
+    ),
+    pose: nonnegativeFinite(source.pose, `${field}.pose`),
+    position: boneyardPoint(source.position, `${field}.position`),
+    spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+    state,
+  }
+}
+
+function boneyardEnemyAnimation(
+  value: unknown,
+  field: string,
+): BoneyardEnemyAnimationSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'action',
+    'actionProgress',
+    'alpha',
+    'bodyPose',
+    'coffinPose',
+    'coffinSecondaryPose',
+    'coffinState',
+    'deathEpoch',
+    'deathTick',
+    'demonFrontJointRotationRadians',
+    'demonFrontLimbRotationRadians',
+    'demonRearJointRotationRadians',
+    'demonRearLimbRotationRadians',
+    'effects',
+    'gaitPose',
+    'hitFlash',
+    'impEffectFrame',
+    'maggots',
+    'state',
+    'verticalOffset',
+    'zombieAngularOffsetDeg',
+    'zombieFrontArmPose',
+    'zombieFrontArmRotationRadians',
+    'zombieRearArmPose',
+    'zombieRearArmRotationRadians',
+  ])
+  const state = limitedString(source.state, `${field}.state`, 32)
+  if (!(BONEYARD_ENEMY_ANIMATION_STATES as readonly string[]).includes(state)) {
+    throw new GameProtocolError(`${field}.state is not supported`)
+  }
+  const action = source.action === null
+    ? null
+    : limitedString(source.action, `${field}.action`, 64)
+  if (action !== null && !(BONEYARD_ENEMY_ACTIONS as readonly string[]).includes(action)) {
+    throw new GameProtocolError(`${field}.action is not supported`)
+  }
+  if ((state === 'action') !== (action !== null)) {
+    throw new GameProtocolError(`${field}.action does not match animation state`)
+  }
+  const coffinState = limitedString(source.coffinState, `${field}.coffinState`, 32)
+  if (!(BONEYARD_ENEMY_COFFIN_STATES as readonly string[]).includes(coffinState)) {
+    throw new GameProtocolError(`${field}.coffinState is not supported`)
+  }
+  const alpha = finite(source.alpha, `${field}.alpha`)
+  const hitFlash = finite(source.hitFlash, `${field}.hitFlash`)
+  if (alpha < 0 || alpha > 1 || hitFlash < 0 || hitFlash > 1) {
+    throw new GameProtocolError(`${field} alpha channels must be within [0,1]`)
+  }
+  if (limitedArray(source.effects, `${field}.effects`, 0).length !== 0) {
+    throw new GameProtocolError(`${field}.effects must be empty in protocol 14`)
+  }
+  if (limitedArray(source.maggots, `${field}.maggots`, 0).length !== 0) {
+    throw new GameProtocolError(`${field}.maggots must be empty in protocol 14`)
+  }
+  return {
+    action: action as BoneyardEnemyAction | null,
+    actionProgress: nonnegativeFinite(source.actionProgress, `${field}.actionProgress`),
+    alpha,
+    bodyPose: nonnegativeFinite(source.bodyPose, `${field}.bodyPose`),
+    coffinPose: nonnegativeFinite(source.coffinPose, `${field}.coffinPose`),
+    coffinSecondaryPose: source.coffinSecondaryPose === null
+      ? null
+      : nonnegativeFinite(source.coffinSecondaryPose, `${field}.coffinSecondaryPose`),
+    coffinState: coffinState as BoneyardEnemyCoffinState,
+    deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
+    deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
+    demonFrontJointRotationRadians: finite(
+      source.demonFrontJointRotationRadians,
+      `${field}.demonFrontJointRotationRadians`,
+    ),
+    demonFrontLimbRotationRadians: finite(
+      source.demonFrontLimbRotationRadians,
+      `${field}.demonFrontLimbRotationRadians`,
+    ),
+    demonRearJointRotationRadians: finite(
+      source.demonRearJointRotationRadians,
+      `${field}.demonRearJointRotationRadians`,
+    ),
+    demonRearLimbRotationRadians: finite(
+      source.demonRearLimbRotationRadians,
+      `${field}.demonRearLimbRotationRadians`,
+    ),
+    effects: [],
+    gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
+    hitFlash,
+    impEffectFrame: integer(source.impEffectFrame, `${field}.impEffectFrame`),
+    maggots: [],
+    state: state as BoneyardEnemyAnimationSnapshot['state'],
+    verticalOffset: finite(source.verticalOffset, `${field}.verticalOffset`),
+    zombieAngularOffsetDeg: finite(
+      source.zombieAngularOffsetDeg,
+      `${field}.zombieAngularOffsetDeg`,
+    ),
+    zombieFrontArmPose: nonnegativeFinite(
+      source.zombieFrontArmPose,
+      `${field}.zombieFrontArmPose`,
+    ),
+    zombieFrontArmRotationRadians: finite(
+      source.zombieFrontArmRotationRadians,
+      `${field}.zombieFrontArmRotationRadians`,
+    ),
+    zombieRearArmPose: nonnegativeFinite(
+      source.zombieRearArmPose,
+      `${field}.zombieRearArmPose`,
+    ),
+    zombieRearArmRotationRadians: finite(
+      source.zombieRearArmRotationRadians,
+      `${field}.zombieRearArmRotationRadians`,
+    ),
+  }
+}
+
 function gameWorldSnapshotFrame(
   value: unknown,
   field: string,
+  snapshotTick: number,
 ): GameSnapshotFrame['world'] {
   const source = record(value, field)
-  if (source.kind !== 'hub') {
-    const world = gameWorldSnapshot(source, field)
-    if (world.kind === 'hub') throw new GameProtocolError(`${field}.kind is invalid`)
-    return world
+  if (source.kind === 'boneyard') {
+    onlyKeys(source, field, [
+      'encounter',
+      'entities',
+      'enemyEvents',
+      'gateLeaves',
+      'kind',
+      'runId',
+      'waves',
+    ])
+    const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
+    const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
+    if ((encounter === null) !== (waves === null)) {
+      throw new GameProtocolError(`${field}.encounter and ${field}.waves must share ownership`)
+    }
+    const runId = limitedString(source.runId, `${field}.runId`, 128)
+    return {
+      encounter,
+      entities: replicatedEntityFrame(source.entities, `${field}.entities`),
+      enemyEvents: boneyardEnemyEvents(
+        source.enemyEvents,
+        `${field}.enemyEvents`,
+        runId,
+        snapshotTick,
+      ),
+      gateLeaves: limitedArray(
+        source.gateLeaves,
+        `${field}.gateLeaves`,
+        MAX_BONEYARD_STRUCTURES * 2,
+      ).map((leaf, index) => boneyardGateLeafSnapshot(
+        leaf,
+        `${field}.gateLeaves[${index}]`,
+      )),
+      kind: 'boneyard',
+      runId,
+      waves,
+    }
   }
+  if (source.kind !== 'hub') throw new GameProtocolError(`${field}.kind is not supported`)
   onlyKeys(source, field, [
     'ambient',
     'collisionRngState',

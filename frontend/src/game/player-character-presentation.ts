@@ -32,6 +32,24 @@ export interface PlayerCharacterDrawPlan {
   staffFront: boolean
 }
 
+export interface PlayerDeathDrawPlan {
+  facing: number
+  frame: number
+  visible: boolean
+}
+
+export function createPlayerDeathDrawPlan(
+  headingIndex: number,
+  lifeState: 'alive' | 'lethal-pending' | 'dying' | 'spectating',
+  deathTick: number,
+): PlayerDeathDrawPlan {
+  return {
+    facing: normalizedIndex(Math.floor((headingIndex + 2) / 4), 6),
+    frame: deathTick >= 159 ? 3 : deathTick >= 156 ? 2 : deathTick >= 153 ? 1 : 0,
+    visible: lifeState === 'dying' || lifeState === 'spectating',
+  }
+}
+
 export function createPlayerCharacterDrawPlan(
   state: Pick<
     PlayerCharacterState,

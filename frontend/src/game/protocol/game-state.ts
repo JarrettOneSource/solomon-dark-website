@@ -6,18 +6,19 @@ import type {
   BoneyardSolomonVoiceEvent,
 } from '../core-kernels/boneyard-encounter.ts'
 import type {
-  BoneyardEnemyState,
   BoneyardWaveDirectorPhase,
 } from '../core-kernels/boneyard-wave-director.ts'
 import type {
   PlayerCharacterConfig,
   PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
 export interface ProtocolFountainParticleState {
@@ -57,13 +58,18 @@ export interface ProtocolPlayerProgression {
   activeWeldBuildId: number | null
   currentHealth: number
   currentMana: number
+  deathEpoch: number
+  deathTick: number
   experience: number
   learnedSkills: readonly (readonly [number, number, number])[]
   level: number
   maximumHealth: number
   maximumMana: number
+  lifeState: PlayerLifeState
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
+  poisonDamagePerTick: number
+  poisonTicksRemaining: number
   previousThreshold: number
   revision: number
 }
@@ -96,10 +102,154 @@ export interface HubWorldSnapshot {
 
 export interface BoneyardWorldSnapshot {
   encounter: BoneyardSolomonSnapshot | null
+  enemies: readonly BoneyardEnemySnapshot[]
+  enemyEvents: readonly BoneyardEnemyEventSnapshot[]
+  enemyProjectiles: readonly BoneyardEnemyProjectileSnapshot[]
+  maggots: readonly BoneyardMaggotSnapshot[]
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
   runId: string
   waves: BoneyardWaveSnapshot | null
+}
+
+export const BONEYARD_ENEMY_EVENT_TYPES = [
+  'attack-marker',
+  'coffin-maggot-release',
+  'enemy-death',
+  'enemy-retired',
+  'enemy-spawned',
+  'enemy-terminal-output',
+  'projectile-impact',
+  'projectile-retired',
+  'projectile-spawned',
+  'reward',
+] as const
+
+export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
+  'archer-shatter',
+  'coffin-break',
+  'demon-split',
+  'imp-split',
+  'mage-shatter',
+  'skeleton-shatter',
+  'wraith-fragments',
+  'zombie-collapse',
+] as const
+
+export type BoneyardEnemyEventType = typeof BONEYARD_ENEMY_EVENT_TYPES[number]
+export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS[number]
+
+export interface BoneyardEnemyEventSnapshot {
+  actorId: number
+  count?: number
+  eventId: number
+  output?: BoneyardEnemyTerminalOutput
+  projectileId?: number
+  runId: string
+  targetPlayerId?: string | null
+  tick: number
+  type: BoneyardEnemyEventType
+}
+
+export type BoneyardEnemyProjectileKind =
+  | 'arrow'
+  | 'demon-bomb'
+  | 'firebolt'
+  | 'guided-missile'
+  | 'poison-pool'
+
+export interface BoneyardEnemyProjectileSnapshot {
+  ageTicks: number
+  contactRadius: number
+  headingDeg: number
+  homing: boolean
+  id: number
+  kind: BoneyardEnemyProjectileKind
+  lifetimeTicks: number
+  nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
+  ownerActorId: number
+  position: Vector2
+  spawnTick: number
+}
+
+export interface BoneyardMaggotSnapshot {
+  alpha: number
+  currentHealth: number
+  deathEpoch: number
+  deathTick: number
+  headingDeg: number
+  hitFlash: number
+  id: number
+  maximumHealth: number
+  ownerCoffinActorId: number
+  pose: number
+  position: Vector2
+  spawnTick: number
+  state: 'crawl' | 'bite' | 'death'
+}
+
+export type BoneyardEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
+export type BoneyardEnemyAction =
+  | 'skeleton-claw-a'
+  | 'skeleton-claw-b'
+  | 'skeleton-weapon'
+  | 'skeleton-pike'
+  | 'archer-shot'
+  | 'mage-cast-short'
+  | 'mage-cast-long'
+  | 'imp-contact'
+  | 'zombie-swipe'
+  | 'wraith-drain'
+  | 'demon-claw'
+  | 'demon-bomb'
+  | 'coffin-open'
+  | 'maggot-bite'
+export type BoneyardEnemyCoffinState =
+  | 'hidden'
+  | 'closed'
+  | 'opening'
+  | 'transition-delay'
+  | 'open'
+
+export interface BoneyardEnemyAnimationSnapshot {
+  action: BoneyardEnemyAction | null
+  actionProgress: number
+  alpha: number
+  bodyPose: number
+  coffinPose: number
+  coffinSecondaryPose: number | null
+  coffinState: BoneyardEnemyCoffinState
+  deathEpoch: number
+  deathTick: number
+  demonFrontJointRotationRadians: number
+  demonFrontLimbRotationRadians: number
+  demonRearJointRotationRadians: number
+  demonRearLimbRotationRadians: number
+  effects: readonly []
+  gaitPose: number
+  hitFlash: number
+  impEffectFrame: number
+  maggots: readonly []
+  state: BoneyardEnemyAnimationState
+  verticalOffset: number
+  zombieAngularOffsetDeg: number
+  zombieFrontArmPose: number
+  zombieFrontArmRotationRadians: number
+  zombieRearArmPose: number
+  zombieRearArmRotationRadians: number
+}
+
+export interface BoneyardEnemySnapshot {
+  animation: BoneyardEnemyAnimationSnapshot
+  currentHealth: number
+  enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN'
+  flags: readonly string[]
+  headingDeg: number
+  id: number
+  maximumHealth: number
+  nativeTypeId: number
+  position: Vector2
+  spawnTick: number
 }
 
 export interface BoneyardSolomonSnapshot {
@@ -123,10 +273,7 @@ export interface BoneyardSolomonSnapshot {
   walkCycle: number
 }
 
-export type BoneyardEnemySnapshot = BoneyardEnemyState
-
 export interface BoneyardWaveSnapshot {
-  enemies: readonly BoneyardEnemySnapshot[]
   interwaveDelayTicks: number
   pendingSpawnBudget: number
   phase: BoneyardWaveDirectorPhase
@@ -146,12 +293,23 @@ export interface HubWorldSnapshotFrame {
   participants: Readonly<Record<string, HubParticipantState>>
 }
 
-export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapshot
+export interface BoneyardWorldSnapshotFrame {
+  encounter: BoneyardSolomonSnapshot | null
+  entities: ReplicatedEntityFrame
+  enemyEvents: readonly BoneyardEnemyEventSnapshot[]
+  gateLeaves: readonly BoneyardGateLeafSnapshot[]
+  kind: 'boneyard'
+  runId: string
+  waves: BoneyardWaveSnapshot | null
+}
+
+export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapshotFrame
 
 export interface GameSnapshot {
   hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
+  run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshot
 }
@@ -160,6 +318,7 @@ export interface GameSnapshotFrame {
   hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
+  run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshotFrame
 }

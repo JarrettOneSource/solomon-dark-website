@@ -6,6 +6,11 @@ import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
+import type {
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+  BoneyardMaggotSnapshot,
+} from '../protocol/game-state.ts'
 import {
   createBoneyardPresentationTimeline,
   type BoneyardGameSnapshot,
@@ -33,11 +38,95 @@ function playerAt(x: number): ProtocolPlayerState {
   }
 }
 
+function enemyAt(x: number): BoneyardEnemySnapshot {
+  return {
+    animation: {
+      action: null,
+      actionProgress: 0,
+      alpha: 1,
+      bodyPose: 0,
+      coffinPose: 0,
+      coffinSecondaryPose: null,
+      coffinState: 'closed',
+      deathEpoch: 0,
+      deathTick: 0,
+      demonFrontJointRotationRadians: 0,
+      demonFrontLimbRotationRadians: 0,
+      demonRearJointRotationRadians: 0,
+      demonRearLimbRotationRadians: 0,
+      effects: [],
+      gaitPose: x / 10,
+      hitFlash: 0,
+      impEffectFrame: 0,
+      maggots: [],
+      state: 'locomotion',
+      verticalOffset: 0,
+      zombieAngularOffsetDeg: 0,
+      zombieFrontArmPose: 0,
+      zombieFrontArmRotationRadians: 0,
+      zombieRearArmPose: 0,
+      zombieRearArmRotationRadians: 0,
+    },
+    currentHealth: 6,
+    enemyToken: 'SKELETON',
+    flags: ['FLAG_WEAK'],
+    headingDeg: 90,
+    id: 1,
+    maximumHealth: 6,
+    nativeTypeId: 1001,
+    position: { x, y: 500 },
+    spawnTick: 90,
+  }
+}
+
+function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
+  return {
+    ageTicks: x / 10,
+    contactRadius: 8,
+    headingDeg: 90,
+    homing: false,
+    id: 1,
+    kind: 'arrow',
+    lifetimeTicks: 300,
+    nativeTypeId: 0x7da,
+    ownerActorId: 1,
+    position: { x, y: 475 },
+    spawnTick: 90,
+  }
+}
+
+function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
+  return {
+    alpha: 1,
+    currentHealth: 2,
+    deathEpoch: 0,
+    deathTick: 0,
+    headingDeg: 90,
+    hitFlash,
+    id: 2,
+    maximumHealth: 2,
+    ownerCoffinActorId: 1,
+    pose: x / 100,
+    position: { x, y: 480 },
+    spawnTick: 90,
+    state: 'crawl',
+  }
+}
+
 function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGameSnapshot {
   return {
     hostPlayerId: 'local',
     players: { local: playerAt(playerX) },
     primarySpells: createPrimarySpellSimulation(),
+    run: {
+      eligiblePlayerIds: ['local'],
+      gameOverEventId: 0,
+      gameOverTicks: 0,
+      lastCompletedRunId: null,
+      nextGameOverEventId: 1,
+      phase: 'active',
+      runId: 'run-1',
+    },
     tick,
     world: {
       encounter: {
@@ -62,6 +151,9 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         voiceTicksRemaining: 0,
         walkCycle: tick >= 105 ? 2.5 : 0,
       },
+      enemies: [enemyAt(gateTipX + 300)],
+      enemyEvents: [],
+      enemyProjectiles: [enemyProjectileAt(gateTipX + 200)],
       gateLeaves: [{
         fenceEid: 'gate-1',
         hinge: { x: 50, y: 300 },
@@ -70,19 +162,9 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         tip: { x: gateTipX, y: 300 },
       }],
       kind: 'boneyard',
+      maggots: [maggotAt(gateTipX + 100, tick >= 105 ? 1 : 0)],
       runId: 'run-1',
       waves: {
-        enemies: [{
-          enemyToken: 'SKELETON',
-          flags: ['FLAG_WEAK'],
-          headingDeg: 90,
-          id: 1,
-          locationPolicy: 'near-player',
-          nativeTypeId: 1001,
-          position: { x: gateTipX + 300, y: 500 },
-          spawnTick: 90,
-          targetPlayerId: 'local',
-        }],
         interwaveDelayTicks: 0,
         pendingSpawnBudget: tick >= 105 ? 13 : 14,
         phase: tick >= 105 ? 'spawning' : 'dormant',
@@ -114,7 +196,10 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).world.encounter?.phase, 'digging')
   assert.equal(timeline.sample(75).world.encounter?.transitionOffsetY, 10)
   assert.deepEqual(timeline.sample(75).world.encounter?.voiceEvents, [])
-  assert.equal(timeline.sample(75).world.waves?.enemies[0].position.x, 410)
+  assert.equal(timeline.sample(75).world.enemies[0].position.x, 410)
+  assert.equal(timeline.sample(75).world.enemyProjectiles[0].position.x, 310)
+  assert.equal(timeline.sample(75).world.maggots[0].position.x, 210)
+  assert.equal(timeline.sample(75).world.maggots[0].hitFlash, 0.5)
   assert.equal(timeline.sample(75).world.waves?.phase, 'dormant')
   assert.equal(timeline.sample(100).players.local.position.x, 20)
   assert.equal(timeline.sample(100).players.local.footstepTick, 20)
@@ -143,5 +228,7 @@ test('owns returned state and ignores stale Boneyard snapshots', () => {
   assert.notEqual(frame.world.gateLeaves[0], initial.world.gateLeaves[0])
   assert.notEqual(frame.world.encounter, initial.world.encounter)
   assert.notEqual(frame.world.waves, initial.world.waves)
-  assert.notEqual(frame.world.waves?.enemies[0], initial.world.waves?.enemies[0])
+  assert.notEqual(frame.world.enemies[0], initial.world.enemies[0])
+  assert.notEqual(frame.world.enemyProjectiles[0], initial.world.enemyProjectiles[0])
+  assert.notEqual(frame.world.maggots[0], initial.world.maggots[0])
 })

@@ -4,6 +4,7 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type {
@@ -188,6 +189,17 @@ test('game host rejects pre-populated initial simulation factories', async () =>
     authentication: SHARED_AUTHENTICATION,
     createSimulation: () => createGameSimulation(),
   }), /must start without player characters/)
+})
+
+test('game host enforces the declared snapshot cadence range', async () => {
+  await assert.rejects(() => startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 0.5,
+  }), /snapshotRate must be within 1/)
+  await assert.rejects(() => startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 101,
+  }), /snapshotRate must be within 1/)
 })
 
 test('game host echoes authenticated ping outside the snapshot loop', async (context) => {
@@ -491,6 +503,127 @@ test('persistent host retains its loaded run across an empty interval', async (c
   if (second.welcome.snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(second.welcome.snapshot.world.runId, firstRun.boneyard.runId)
   assert.equal(host.loadedBoneyard()?.runId, firstRun.boneyard.runId)
+})
+
+test('host returns the same multiplayer session from Game Over through loadout to Hub', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const loadedMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  const activeMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'active'
+    && message.snapshot.world.kind === 'boneyard'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [loaded, active] = await Promise.all([loadedMessage, activeMessage])
+  assert.equal(loaded.type, 'server-boneyard-loaded')
+  assert.equal(active.type, 'server-snapshot')
+  const runId = loaded.boneyard.runId
+  assert.equal(active.snapshot.run.runId, runId)
+
+  const gameOverForFirst = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'game-over'
+  ))
+  const gameOverForSecond = nextMessage(second.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'game-over'
+  ))
+  Object.assign(host.state().run, {
+    gameOverEventId: 1,
+    gameOverTicks: BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
+  const [terminalA, terminalB] = await Promise.all([gameOverForFirst, gameOverForSecond])
+  assert.equal(terminalA.type, 'server-snapshot')
+  assert.equal(terminalB.type, 'server-snapshot')
+  assert.equal(terminalA.snapshot.run.runId, runId)
+  assert.equal(terminalA.snapshot.run.gameOverEventId, 1)
+  assert.equal(terminalB.snapshot.run.gameOverEventId, 1)
+
+  second.socket.send(encodeGameMessage({
+    type: 'client-acknowledge-game-over',
+    eventId: 1,
+    runId,
+  }))
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(host.state().run.phase, 'game-over')
+
+  first.socket.send(encodeGameMessage({
+    type: 'client-acknowledge-game-over',
+    eventId: 2,
+    runId,
+  }))
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(host.state().run.phase, 'game-over')
+
+  const loadoutMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'loadout'
+    && message.snapshot.world.kind === 'hub'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-acknowledge-game-over',
+    eventId: 1,
+    runId,
+  }))
+  const loadout = await loadoutMessage
+  assert.equal(loadout.type, 'server-snapshot')
+  assert.equal(loadout.snapshot.run.lastCompletedRunId, runId)
+  assert.ok(loadout.snapshot.players[first.welcome.playerId])
+  assert.ok(loadout.snapshot.players[second.welcome.playerId])
+  assert.equal(host.loadedBoneyard(), null)
+
+  second.socket.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(host.state().run.phase, 'loadout')
+
+  const hubMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'hub'
+  ))
+  first.socket.send(encodeGameMessage({ type: 'client-confirm-loadout' }))
+  const hub = await hubMessage
+  assert.equal(hub.type, 'server-snapshot')
+  assert.equal(hub.snapshot.run.lastCompletedRunId, runId)
+  assert.equal(hub.snapshot.hostPlayerId, first.welcome.playerId)
+  assert.ok(hub.snapshot.players[first.welcome.playerId])
+  assert.ok(hub.snapshot.players[second.welcome.playerId])
+
+  const secondLoadedMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+    && message.boneyard.runId !== runId
+  ))
+  const secondActiveMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'active'
+    && message.snapshot.run.runId !== runId
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [secondLoaded, secondActive] = await Promise.all([
+    secondLoadedMessage,
+    secondActiveMessage,
+  ])
+  assert.equal(secondLoaded.type, 'server-boneyard-loaded')
+  assert.equal(secondActive.type, 'server-snapshot')
+  assert.notEqual(secondLoaded.boneyard.runId, runId)
+  assert.equal(secondActive.snapshot.run.lastCompletedRunId, runId)
+  assert.equal(secondActive.snapshot.run.nextGameOverEventId, 2)
+  assert.equal(host.playerCount(), 2)
 })
 
 test('host exposes and authoritatively loads a selected mod Boneyard', async (context) => {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   PLAYER_CHARACTER_RADIUS,
   type PlayerCharacterState,
@@ -9,10 +10,13 @@ import {
 import {
   boneyardPrimarySpellTargets,
   createBoneyardWorld,
-  retireBoneyardWorldEnemy,
   spawnPlayerCharacterInBoneyard,
   stepBoneyardWorldTick,
 } from './boneyard-world.ts'
+import {
+  damageBoneyardEnemy,
+  stepBoneyardEnemyStore,
+} from './boneyard-enemy-store.ts'
 
 function movementInput(x: number, y: number) {
   return {
@@ -20,6 +24,24 @@ function movementInput(x: number, y: number) {
     cast: { primary: false, secondary: false },
     movement: { x, y },
   }
+}
+
+function stepWorld(
+  world: Parameters<typeof stepBoneyardWorldTick>[0],
+  players: Parameters<typeof stepBoneyardWorldTick>[1],
+  inputs: Parameters<typeof stepBoneyardWorldTick>[2],
+  tick: number,
+) {
+  return stepBoneyardWorldTick(
+    world,
+    players,
+    inputs,
+    Object.fromEntries(Object.keys(players).map((playerId) => [
+      playerId,
+      { alive: true, eligible: true },
+    ])),
+    tick,
+  )
 }
 
 test('a wizard pushes both native gate leaves aside and crosses the opening', () => {
@@ -32,7 +54,7 @@ test('a wizard pushes both native gate leaves aside and crosses the opening', ()
   }, world)
 
   for (let tick = 0; tick < 220; tick += 1) {
-    const result = stepBoneyardWorldTick(
+    const result = stepWorld(
       world,
       { player },
       { player: movementInput(0, 1) },
@@ -78,7 +100,7 @@ test('Boneyard entry retains shared player collision against authored geometry',
   }
 
   for (let tick = 0; tick < 160; tick += 1) {
-    const result = stepBoneyardWorldTick(
+    const result = stepWorld(
       world,
       players,
       {
@@ -102,6 +124,66 @@ test('Boneyard entry retains shared player collision against authored geometry',
   )
 })
 
+test('enemy locomotion resolves against players and peer actors before committing', () => {
+  let world = createBoneyardWorld(gatedBoneyard())
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Collision Target',
+      element: 'fire',
+    }, world),
+    position: { x: 140, y: 250 },
+  }
+  const seeded = stepBoneyardEnemyStore(world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      player: {
+        alive: true,
+        collisionRadius: PLAYER_CHARACTER_RADIUS,
+        connected: true,
+        eligible: true,
+        position: player.position,
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [50, 70].map((x, index) => ({
+      enemyToken: 'SKELETON' as const,
+      flags: [],
+      id: index + 1,
+      locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x, y: 250 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    })),
+    tick: 0,
+  })
+  world = { ...world, enemies: seeded.store }
+
+  for (let tick = 1; tick <= 2; tick += 1) {
+    const result = stepWorld(world, { player }, {}, tick)
+    world = result.world
+    player = result.players.player
+  }
+
+  const [first, second] = world.enemies.actors
+  assert.ok(first && second)
+  assert.ok(
+    Math.hypot(
+      first.position.x - second.position.x,
+      first.position.y - second.position.y,
+    ) >= first.config.collisionRadius + second.config.collisionRadius,
+  )
+  for (const enemy of world.enemies.actors) {
+    assert.ok(
+      Math.hypot(
+        enemy.position.x - player.position.x,
+        enemy.position.y - player.position.y,
+      ) >= enemy.config.collisionRadius + PLAYER_CHARACTER_RADIUS,
+    )
+  }
+})
+
 test('default Boneyard walks through Solomon dialogue, retreat, then authoritative spawns', () => {
   let world = createBoneyardWorld(encounterBoneyard('default'))
   let player = spawnPlayerCharacterInBoneyard({
@@ -110,13 +192,13 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     element: 'ether',
   }, world)
 
-  let result = stepBoneyardWorldTick(world, { player }, {}, 1)
+  let result = stepWorld(world, { player }, {}, 1)
   world = result.world
   player = result.players.player
   assert.equal(world.encounter?.phase, 'turning')
   let tick = 2
   while (world.encounter?.phase === 'turning') {
-    result = stepBoneyardWorldTick(world, { player }, {}, tick)
+    result = stepWorld(world, { player }, {}, tick)
     world = result.world
     player = result.players.player
     tick += 1
@@ -126,7 +208,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
 
   const lockedPosition = { ...player.position }
   for (let lockedTick = 0; lockedTick < 17; lockedTick += 1) {
-    result = stepBoneyardWorldTick(
+    result = stepWorld(
       world,
       { player },
       { player: movementInput(1, 0) },
@@ -139,25 +221,25 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
   assert.deepEqual(player.position, lockedPosition)
 
   while ((world.encounter?.runEventId ?? 0) === 0) {
-    result = stepBoneyardWorldTick(world, { player }, {}, tick)
+    result = stepWorld(world, { player }, {}, tick)
     world = result.world
     player = result.players.player
     tick += 1
     if (tick > 1200) throw new Error('Solomon did not reach the native run edge')
   }
   assert.equal(world.waves?.phase, 'opening')
-  assert.equal(world.waves?.enemies.length, 0)
+  assert.equal(world.enemies.actors.length, 0)
 
-  result = stepBoneyardWorldTick(world, { player }, {}, tick)
+  result = stepWorld(world, { player }, {}, tick)
   world = result.world
-  assert.equal(world.waves?.enemies.length, 10)
-  assert.ok(world.waves?.enemies.every((enemy) => (
-    enemy.enemyToken === 'SKELETON'
-    && enemy.flags.includes('FLAG_WEAK')
-    && enemy.flags.includes('FLAG_HPDOWN')
-    && enemy.flags.includes('FLAG_XPBONUS')
+  assert.equal(world.enemies.actors.length, 10)
+  assert.ok(world.enemies.actors.every((enemy) => (
+    enemy.config.enemyToken === 'SKELETON'
+    && enemy.config.flags.includes('FLAG_WEAK')
+    && enemy.config.flags.includes('FLAG_HPDOWN')
+    && enemy.config.flags.includes('FLAG_XPBONUS')
   )))
-  const firstEnemy = world.waves!.enemies[0]
+  const firstEnemy = world.enemies.actors[0]
   assert.deepEqual(boneyardPrimarySpellTargets(world)[0], {
     airPriority: 0,
     attachment: { x: 0, y: 0 },
@@ -165,9 +247,114 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     kind: 'enemy',
     position: firstEnemy.position,
   })
-  const enemyId = world.waves!.enemies[0].id
-  const retired = retireBoneyardWorldEnemy(world, enemyId)
-  assert.equal(retired.waves?.enemies.length, 9)
+  const enemyId = world.enemies.actors[0].id
+  const damaged = damageBoneyardEnemy(world.enemies, {
+    actorId: enemyId,
+    amount: Number.MAX_SAFE_INTEGER,
+    sourcePlayerId: 'player',
+    tick,
+  })
+  assert.equal(damaged.killed, true)
+  assert.equal(damaged.store.actors[0].lifeState, 'dying')
+
+  const frozenWaves = world.waves
+  for (let noTargetTick = 0; noTargetTick < 600; noTargetTick += 1) {
+    result = stepBoneyardWorldTick(
+      world,
+      { player },
+      {},
+      { player: { alive: false, eligible: false } },
+      tick + noTargetTick + 1,
+    )
+    world = result.world
+    player = result.players.player
+  }
+  assert.deepEqual(world.waves, frozenWaves)
+  assert.equal(world.enemies.actors.length, 10)
+})
+
+test('Solomon ignores dead and ineligible proximity targets', () => {
+  let world = createBoneyardWorld(encounterBoneyard('default'))
+  const player = spawnPlayerCharacterInBoneyard({
+    discipline: 'arcane',
+    displayName: 'Spectator',
+    element: 'ether',
+  }, world)
+
+  let result = stepBoneyardWorldTick(
+    world,
+    { player },
+    {},
+    { player: { alive: false, eligible: false } },
+    1,
+  )
+  world = result.world
+  assert.equal(world.encounter?.phase, 'digging')
+  assert.equal(world.encounter?.targetPlayerId, null)
+
+  result = stepBoneyardWorldTick(
+    world,
+    { player: result.players.player },
+    {},
+    { player: { alive: true, eligible: true } },
+    2,
+  )
+  assert.equal(result.world.encounter?.phase, 'turning')
+  assert.equal(result.world.encounter?.targetPlayerId, 'player')
+})
+
+test('primary spell targets use live authoritative enemy actors and owned Maggots', () => {
+  let world = createBoneyardWorld(gatedBoneyard())
+  let seeded = stepBoneyardEnemyStore(world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'COFFIN',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 250, y: 250 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const coffin = seeded.store.actors[0]
+  assert.ok(coffin)
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  seeded = stepBoneyardEnemyStore({
+    ...seeded.store,
+    actors: [{
+      ...coffin,
+      brain: {
+        ...coffin.brain,
+        phase: 'opening',
+        phaseTicksRemaining: 1,
+      },
+    }],
+  }, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 1,
+  })
+  assert.equal(seeded.store.maggots.length, 20)
+
+  const killed = damageBoneyardEnemy(seeded.store, {
+    actorId: coffin.id,
+    amount: Number.MAX_SAFE_INTEGER,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  world = { ...world, enemies: killed.store }
+
+  assert.deepEqual(
+    boneyardPrimarySpellTargets(world).map(({ id }) => id),
+    world.enemies.maggots.map(({ id }) => `enemy:${id}`),
+  )
 })
 
 test('mod Boneyards retain opaque script ownership instead of receiving retail waves', () => {
@@ -219,7 +406,7 @@ test('Solomon escape intent is clipped by authoritative Boneyard collision', () 
     },
   }
 
-  const result = stepBoneyardWorldTick(escaping, {}, {}, 1)
+  const result = stepWorld(escaping, {}, {}, 1)
 
   assert.ok(result.world.encounter)
   assert.ok(result.world.encounter.position.x < 1007.01)

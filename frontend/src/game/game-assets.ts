@@ -156,6 +156,8 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     fountainParticle: hub.fountainParticle,
     tent: hub.tent,
     player: {
+      death: playerCharacter.death[element],
+      deathAttachment: playerCharacter.deathAttachment,
       staffBack: playerCharacter.staffBack,
       robeDynamic: playerCharacter.robeDynamic[element],
       robeFixed: playerCharacter.robeFixed[element],

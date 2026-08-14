@@ -50,6 +50,8 @@ PLAYER_HEADINGS = 24
 PLAYER_WALK_POSES = 5
 PLAYER_ATTACHMENT_POSES = 10
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
+PLAYER_DEATH_FACINGS = 6
+PLAYER_DEATH_FRAMES = 4
 PLAYER_PALETTES = {
     # Skills_Wizard_GetPrimaryColor (0x00660760) is the descriptor-facing
     # source of truth. Do not run those results through the robe mix again.
@@ -872,6 +874,57 @@ def build_player_staff_sheet(
     return sheet
 
 
+def build_player_death_body_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    primary: tuple[int, int, int],
+    secondary: tuple[int, int, int],
+) -> Image.Image:
+    """Compose Clothes 28..75 using the stock four-frame/six-facing selector."""
+    sheet = Image.new(
+        "RGBA",
+        (
+            PLAYER_CELL_SIZE * PLAYER_DEATH_FRAMES,
+            PLAYER_CELL_SIZE * PLAYER_DEATH_FACINGS,
+        ),
+    )
+    for facing in range(PLAYER_DEATH_FACINGS):
+        for frame in range(PLAYER_DEATH_FRAMES):
+            index = frame * PLAYER_DEATH_FACINGS + facing
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            paste_player_layer(cell, atlas, records[28 + index], primary)
+            paste_player_layer(cell, atlas, records[52 + index], secondary)
+            sheet.alpha_composite(
+                cell,
+                (frame * PLAYER_CELL_SIZE, facing * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_death_attachment_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+) -> Image.Image:
+    """Preserve Clothes 76..99 as the independent terminal attachment pass."""
+    sheet = Image.new(
+        "RGBA",
+        (
+            PLAYER_CELL_SIZE * PLAYER_DEATH_FRAMES,
+            PLAYER_CELL_SIZE * PLAYER_DEATH_FACINGS,
+        ),
+    )
+    for facing in range(PLAYER_DEATH_FACINGS):
+        for frame in range(PLAYER_DEATH_FRAMES):
+            index = frame * PLAYER_DEATH_FACINGS + facing
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            paste_player_layer(cell, atlas, records[76 + index])
+            sheet.alpha_composite(
+                cell,
+                (frame * PLAYER_CELL_SIZE, facing * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
 def build_student_body_sheet(
     college_atlas: Image.Image,
     college_records: list[SpriteRecord],
@@ -1310,6 +1363,11 @@ def main() -> int:
         output_dir,
         "player-character-staff-front",
     )
+    save(
+        build_player_death_attachment_sheet(clothes, clothes_records),
+        output_dir,
+        "player-character-death-attachment",
+    )
     for element, (primary, secondary) in PLAYER_PALETTES.items():
         player_layers = build_player_colored_layers(
             clothes,
@@ -1319,6 +1377,16 @@ def main() -> int:
         )
         for layer_name, sheet in player_layers.items():
             save(sheet, output_dir, f"player-character-{layer_name}-{element}")
+        save(
+            build_player_death_body_sheet(
+                clothes,
+                clothes_records,
+                primary,
+                secondary,
+            ),
+            output_dir,
+            f"player-character-death-{element}",
+        )
 
     bad_guys = Image.open(images_dir / "BadGuys.png").convert("RGBA")
     bad_guys_records = parse_bundle(images_dir / "BadGuys.bundle")

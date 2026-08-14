@@ -227,6 +227,42 @@ export function clipBoneyardSegment(
   ) ?? { ...end }
 }
 
+export function firstBoneyardPathBlockProgress(
+  start: BoneyardPoint,
+  end: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): number | null {
+  if (!canPlaceBoneyardBody(start, bounds, world, radius)) return 0
+  const distance = Math.hypot(end.x - start.x, end.y - start.y)
+  if (distance === 0) {
+    return canPlaceBoneyardBody(end, bounds, world, radius) ? null : 0
+  }
+
+  const sampleCount = Math.max(1, Math.ceil(distance))
+  let lastClearProgress = 0
+  for (let index = 1; index <= sampleCount; index += 1) {
+    const progress = index / sampleCount
+    if (canPlaceBoneyardBody(mix(start, end, progress), bounds, world, radius)) {
+      lastClearProgress = progress
+      continue
+    }
+    let clear = lastClearProgress
+    let blocked = progress
+    for (let iteration = 0; iteration < 10; iteration += 1) {
+      const candidate = (clear + blocked) / 2
+      if (canPlaceBoneyardBody(mix(start, end, candidate), bounds, world, radius)) {
+        clear = candidate
+      } else {
+        blocked = candidate
+      }
+    }
+    return blocked
+  }
+  return null
+}
+
 export function resolveBoneyardMovement(
   start: BoneyardPoint,
   requested: BoneyardPoint,

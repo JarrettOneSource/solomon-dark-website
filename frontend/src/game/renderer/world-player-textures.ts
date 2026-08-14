@@ -20,8 +20,12 @@ const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
 const ACTOR_ATTACHMENT_POSES = 10
+const ACTOR_DEATH_FACINGS = 6
+const ACTOR_DEATH_FRAMES = 4
 
 export interface PlayerActorTextureFrames {
+  death: readonly (readonly Texture[])[]
+  deathAttachment: readonly (readonly Texture[])[]
   fixed: readonly (readonly Texture[])[]
   head: readonly Texture[]
   robe: readonly (readonly Texture[])[]
@@ -74,6 +78,20 @@ export function createPlayerWorldTextures(
   texture: (source: string) => Texture,
 ): PlayerWorldTextures {
   const playerTextures = (element: WizardElement): PlayerActorTextureFrames => ({
+    death: gridFrames(
+      texture(playerCharacter.death[element]),
+      ACTOR_DEATH_FRAMES,
+      ACTOR_DEATH_FACINGS,
+      ACTOR_FRAME_SIZE,
+      ACTOR_FRAME_SIZE,
+    ),
+    deathAttachment: gridFrames(
+      texture(playerCharacter.deathAttachment),
+      ACTOR_DEATH_FRAMES,
+      ACTOR_DEATH_FACINGS,
+      ACTOR_FRAME_SIZE,
+      ACTOR_FRAME_SIZE,
+    ),
     fixed: gridFrames(
       texture(playerCharacter.robeFixed[element]),
       ACTOR_ATTACHMENT_POSES,
@@ -191,6 +209,8 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   const derived = new Set<Texture>()
   const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))
   for (const player of Object.values(textures.players)) {
+    player.death.forEach(add)
+    player.deathAttachment.forEach(add)
     player.fixed.forEach(add)
     add(player.head)
     player.robe.forEach(add)

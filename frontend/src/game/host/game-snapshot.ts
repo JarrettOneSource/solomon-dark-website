@@ -6,11 +6,19 @@ import {
 } from '../core-server/game-simulation.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
+import { playerEntityDisplayHealth } from '../core-server/player-entity-store.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import type {
+  BoneyardEnemyEventSnapshot,
   GameSnapshot,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
+import {
+  projectBoneyardEnemies,
+  projectBoneyardEnemyProjectiles,
+  projectBoneyardMaggots,
+} from './project-boneyard-enemies.ts'
 
 export function createGameSnapshot(
   state: GameSimulationState,
@@ -25,6 +33,7 @@ export function createGameSnapshot(
         hostPlayerId,
         players,
         primarySpells: state.primarySpells,
+        run: state.run,
         tick: state.tick,
         world: {
           ambient: state.world.ambient,
@@ -35,11 +44,13 @@ export function createGameSnapshot(
             .map(protocolStudentState),
         },
       }
-    case 'boneyard':
+    case 'boneyard': {
+      const runId = state.world.runId
       return {
         hostPlayerId,
         players,
         primarySpells: state.primarySpells,
+        run: state.run,
         tick: state.tick,
         world: {
           encounter: state.world.encounter === null ? null : {
@@ -62,15 +73,16 @@ export function createGameSnapshot(
             voiceTicksRemaining: state.world.encounter.voiceTicksRemaining,
             walkCycle: state.world.encounter.walkCycle,
           },
+          enemies: projectBoneyardEnemies(state.world.enemies, state.tick),
+          enemyEvents: state.world.enemyEvents.map((event) => (
+            protocolBoneyardEnemyEvent(event, runId)
+          )),
+          enemyProjectiles: projectBoneyardEnemyProjectiles(state.world.enemies),
+          maggots: projectBoneyardMaggots(state.world.enemies, state.tick),
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),
           kind: 'boneyard',
-          runId: state.world.runId,
+          runId,
           waves: state.world.waves === null ? null : {
-            enemies: state.world.waves.enemies.map((enemy) => ({
-              ...enemy,
-              flags: [...enemy.flags],
-              position: { ...enemy.position },
-            })),
             interwaveDelayTicks: state.world.waves.interwaveDelayTicks,
             pendingSpawnBudget: state.world.waves.pendingSpawnBudget,
             phase: state.world.waves.phase,
@@ -81,6 +93,24 @@ export function createGameSnapshot(
           },
         },
       }
+    }
+  }
+}
+
+function protocolBoneyardEnemyEvent(
+  event: BoneyardEnemySemanticEvent,
+  runId: string,
+): BoneyardEnemyEventSnapshot {
+  return {
+    actorId: event.actorId,
+    eventId: event.eventId,
+    runId,
+    tick: event.tick,
+    type: event.type,
+    ...(event.count === undefined ? {} : { count: event.count }),
+    ...(event.output === undefined ? {} : { output: event.output }),
+    ...(event.projectileId === undefined ? {} : { projectileId: event.projectileId }),
+    ...(event.targetPlayerId === undefined ? {} : { targetPlayerId: event.targetPlayerId }),
   }
 }
 
@@ -103,15 +133,20 @@ function protocolPlayerState(
     ...player,
     progression: {
       activeWeldBuildId: skillBook.activeWeldBuildId,
-      currentHealth: progression.currentHealth,
+      currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
+      deathEpoch: progression.deathEpoch,
+      deathTick: progression.deathTick,
       experience: progression.experience,
       learnedSkills,
       level: progression.level,
       maximumHealth: progression.maximumHealth,
       maximumMana: progression.maximumMana,
+      lifeState: progression.lifeState,
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
+      poisonDamagePerTick: progression.poisonDamagePerTick,
+      poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
     },

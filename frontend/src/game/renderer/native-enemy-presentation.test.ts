@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  NATIVE_ENEMY_ACTION_PROGRAMS,
+  nativeEnemyActionFrame,
+  nativeEnemyIdleAnimationSample,
+} from './native-enemy-animation.ts'
+import {
   nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan,
@@ -198,4 +203,240 @@ test('unknown family tokens fail instead of producing a generic marker', () => {
     }, 100),
     /unsupported native enemy family SPIDER/,
   )
+})
+
+test('action programs fail closed when sampled for the wrong family', () => {
+  assert.throws(
+    () => nativeEnemyPresentationPlan({
+      ...enemy('IMP'),
+      animation: nativeEnemyIdleAnimationSample({
+        action: 'archer-shot',
+        state: 'action',
+      }),
+    }, 100),
+    /action archer-shot is invalid for IMP/,
+  )
+})
+
+test('presentation-facing action sampling preserves exact strict ends and bounded labels', () => {
+  for (const name of [
+    'skeleton-claw-a',
+    'skeleton-claw-b',
+    'skeleton-weapon',
+    'skeleton-pike',
+    'archer-shot',
+    'mage-cast-short',
+    'mage-cast-long',
+  ] as const) {
+    const program = NATIVE_ENEMY_ACTION_PROGRAMS[name]
+    assert.equal(program.provenance, 'native-exact')
+    assert.equal(nativeEnemyActionFrame(name, program.strictEnd).complete, false)
+    assert.equal(nativeEnemyActionFrame(name, program.strictEnd + 1).complete, true)
+  }
+  for (const name of [
+    'imp-contact',
+    'zombie-swipe',
+    'wraith-drain',
+    'demon-claw',
+    'demon-bomb',
+    'coffin-open',
+  ] as const) {
+    assert.equal(NATIVE_ENEMY_ACTION_PROGRAMS[name].provenance, 'bounded-web')
+  }
+})
+
+test('authoritative gait and exact action selectors choose stock component banks', () => {
+  const skeletonWalk = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_SWORD']),
+    animation: nativeEnemyIdleAnimationSample({ gaitPose: 3, state: 'locomotion' }),
+  }, 100)
+  assert.deepEqual(skeletonWalk.layers.slice(0, 3).map((layer) => layer.entry), [
+    1639,
+    1387,
+    1099,
+  ])
+
+  const archerRelease = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER'),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'archer-shot',
+      actionProgress: 13,
+      state: 'action',
+    }),
+  }, 100)
+  assert.deepEqual(archerRelease.layers.slice(0, 2).map((layer) => layer.entry), [1711, 595])
+  assert.equal(archerRelease.actionFrame?.selector, 8)
+  assert.deepEqual(archerRelease.actionFrame?.eventMarkersReached, [13])
+
+  const mageRelease = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONMAGE'),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'mage-cast-short',
+      actionProgress: 25,
+      state: 'action',
+    }),
+  }, 100)
+  assert.deepEqual(mageRelease.layers.slice(0, 2).map((layer) => layer.entry), [1657, 1801])
+})
+
+test('hit presentation preserves body layers and appends additive overlays', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_SWORD']),
+    animation: nativeEnemyIdleAnimationSample({
+      alpha: 0.8,
+      hitFlash: 0.5,
+    }),
+  }, 100)
+  const midpoint = plan.layers.length / 2
+  const body = plan.layers.slice(0, midpoint)
+  const flash = plan.layers.slice(midpoint)
+
+  assert.deepEqual(flash.map((layer) => layer.entry), body.map((layer) => layer.entry))
+  assert.ok(body.every((layer) => layer.blendMode === 'normal' && layer.alpha === 0.8))
+  assert.ok(flash.every((layer) => layer.blendMode === 'add' && layer.alpha === 0.4))
+  assert.ok(flash.every((layer) => layer.role.endsWith('-hit-flash')))
+})
+
+test('all families retain a terminal death plan until authoritative retirement', () => {
+  const expected = {
+    SKELETON: ['BadGuys:121', 'BadGuys:1822'],
+    SKELETONARCHER: ['BadGuys:121', 'BadGuys:1822'],
+    SKELETONMAGE: ['BadGuys:121', 'BadGuys:1822'],
+    IMP: ['BadGuys:419'],
+    ZOMBIE: ['DeadHawg:30', 'DeadHawg:77'],
+    WRAITH: ['BadGuys:121', 'BadGuys:1822'],
+    DEMON: ['Demon:61'],
+    COFFIN: ['DeadHawg:144'],
+  } as const
+  for (const family of Object.keys(expected) as NativeEnemyVisualSnapshot['enemyToken'][]) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy(family),
+      animation: nativeEnemyIdleAnimationSample({
+        deathTick: 10_000,
+        state: 'death',
+      }),
+    }, 100)
+    assert.equal(plan.deathProgram?.provenance, 'bounded-web')
+    assert.deepEqual(
+      plan.layers.map((layer) => `${layer.atlas}:${layer.entry}`),
+      expected[family],
+      family,
+    )
+  }
+})
+
+test('authoritative effect identities replace bounded terminal fallback art', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('DEMON'),
+    animation: nativeEnemyIdleAnimationSample({
+      deathEpoch: 12,
+      effects: [{
+        alpha: 0.6,
+        atlas: 'Demon',
+        blendMode: 'add',
+        entry: 55,
+        id: 9001,
+        offset: { x: 3, y: -7 },
+        role: 'split-primary',
+        rotationRadians: 0.2,
+        scale: 1.5,
+      }],
+      state: 'death',
+    }),
+  }, 100)
+  assert.equal(plan.deathProgram?.name, 'demon-split')
+  assert.deepEqual(plan.layers, [{
+    alpha: 0.6,
+    atlas: 'Demon',
+    blendMode: 'add',
+    entry: 55,
+    offset: { x: 3, y: -7 },
+    role: 'effect:9001:split-primary',
+    rotationRadians: 0.2,
+    scale: 1.5,
+  }])
+})
+
+test('Wraith fade and Zombie articulation are sampled rather than wall-clock driven', () => {
+  const wraith = nativeEnemyPresentationPlan({
+    ...enemy('WRAITH'),
+    animation: nativeEnemyIdleAnimationSample({
+      alpha: 0.25,
+      verticalOffset: -6,
+    }),
+  }, 10_000)
+  assert.equal(wraith.layers[0].alpha, 0.25)
+  assert.deepEqual(wraith.layers[0].offset, { x: 0, y: 9 })
+
+  const zombie = nativeEnemyPresentationPlan({
+    ...enemy('ZOMBIE'),
+    animation: nativeEnemyIdleAnimationSample({
+      gaitPose: 4,
+      state: 'locomotion',
+      zombieAngularOffsetDeg: 20,
+      zombieFrontArmPose: 2,
+      zombieFrontArmRotationRadians: -0.4,
+      zombieRearArmPose: 1,
+      zombieRearArmRotationRadians: 0.25,
+    }),
+  }, 10_000)
+  assert.equal(zombie.facing, 2)
+  assert.equal(zombie.layers[0].entry, 2439)
+  assert.equal(zombie.layers[2].entry, 2115)
+  assert.equal(zombie.layers[2].rotationRadians, 0.25)
+  assert.equal(zombie.layers[3].entry, 2187)
+  assert.equal(zombie.layers[3].rotationRadians, -0.4)
+})
+
+test('Demon joints and Coffin later states consume authoritative articulation samples', () => {
+  const demon = nativeEnemyPresentationPlan({
+    ...enemy('DEMON'),
+    animation: nativeEnemyIdleAnimationSample({
+      bodyPose: 1,
+      demonFrontJointRotationRadians: 0.1,
+      demonFrontLimbRotationRadians: 0.2,
+      demonRearJointRotationRadians: -0.1,
+      demonRearLimbRotationRadians: -0.2,
+    }),
+  }, 100)
+  assert.deepEqual(demon.layers.map((layer) => layer.rotationRadians), [-0.2, -0.1, 0, 0.2, 0.1])
+  assert.equal(demon.layers[2].entry, 37)
+
+  const coffin = nativeEnemyPresentationPlan({
+    ...enemy('COFFIN'),
+    animation: nativeEnemyIdleAnimationSample({
+      coffinSecondaryPose: 9,
+      coffinState: 'open',
+      maggots: [
+        {
+          alpha: 0.75,
+          headingDeg: 0,
+          id: 41,
+          offset: { x: 12, y: -3 },
+          pose: 1,
+          rotationRadians: 0.5,
+          state: 'bite',
+        },
+        {
+          alpha: 1,
+          headingDeg: 0,
+          id: 42,
+          offset: { x: -8, y: 4 },
+          pose: 0,
+          rotationRadians: 0,
+          state: 'death',
+        },
+      ],
+    }),
+  }, 100)
+  assert.deepEqual(
+    coffin.layers.map(({ atlas, entry, role }) => ({ atlas, entry, role })),
+    [
+      { atlas: 'BadGuys', entry: 187, role: 'coffin-open' },
+      { atlas: 'BadGuys', entry: 392, role: 'coffin-secondary' },
+      { atlas: 'BadGuys', entry: 220, role: 'maggot:41:bite' },
+      { atlas: 'DeadHawg', entry: 28, role: 'maggot:42:death' },
+    ],
+  )
+  assert.deepEqual(coffin.layers[2].offset, { x: 12, y: -3 })
 })

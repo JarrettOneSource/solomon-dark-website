@@ -16,6 +16,8 @@ import {
   GAME_FIXED_TICK_SECONDS,
   GAME_TICK_RATE,
   addPlayerCharacter,
+  acknowledgeGameSimulationOver,
+  confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerProgression,
@@ -123,7 +125,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
     throw new Error('maxPlayers must be positive')
   }
-  if (!(snapshotRate > 0 && snapshotRate <= GAME_TICK_RATE)) {
+  if (!(snapshotRate >= 1 && snapshotRate <= GAME_TICK_RATE)) {
     throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
 
@@ -373,7 +375,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-start-match') {
-        if (client.playerId !== hostPlayerId || loadedBoneyard) return
+        if (
+          client.playerId !== hostPlayerId
+          || loadedBoneyard
+          || state.run.phase !== 'hub'
+        ) return
         const selected = materializeBoneyard(boneyards, message.boneyardId)
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
@@ -382,6 +388,31 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = selected
         state = enterBoneyardWorld(state, selected)
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
+        broadcastSnapshot()
+        return
+      }
+      if (message.type === 'client-acknowledge-game-over') {
+        if (client.playerId !== hostPlayerId) return
+        const acknowledged = acknowledgeGameSimulationOver(
+          state,
+          message.runId,
+          message.eventId,
+        )
+        if (!acknowledged) return
+        state = acknowledged
+        loadedBoneyard = null
+        for (const joined of clients.values()) {
+          joined.activeInput = createIdlePlayerCharacterInput()
+          joined.queuedInputs.clear()
+        }
+        broadcastSnapshot()
+        return
+      }
+      if (message.type === 'client-confirm-loadout') {
+        if (client.playerId !== hostPlayerId) return
+        const confirmed = confirmGameSimulationLoadout(state)
+        if (!confirmed) return
+        state = confirmed
         broadcastSnapshot()
         return
       }

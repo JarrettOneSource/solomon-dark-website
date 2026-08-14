@@ -17,6 +17,8 @@ const SOURCES = {
   },
   music: {
     academy: 'academy.mp3',
+    combat: 'combat.mp3',
+    death: 'death.mp3',
     prelude: 'prelude.mp3',
     selection: 'selection.mp3',
     solomondarktheme: 'theme.mp3',
@@ -38,6 +40,7 @@ const SOURCES = {
   streams: {
     'catch-it': 'catch.wav',
     'choose-element': 'choose.wav',
+    'death-guitar': 'death-guitar.wav',
     'solomon-get-him-boys': 'get-him-boys.wav',
     'solomon-hello-1': 'hello-1.wav',
     'solomon-hello-2': 'hello-2.wav',
@@ -190,6 +193,22 @@ test('crossfades the recovered scene tracks at their native tick durations', asy
   frames.runAt(3_020)
   assert.equal(prelude.volume, 1)
   assert.equal(academy.paused, true)
+
+  director.setScene('boneyard-combat')
+  await flushPromises()
+  const combat = created[4]
+  assert.equal(combat.src, 'combat.mp3')
+  frames.runAt(3_520)
+  assert.equal(combat.volume, 0.5)
+  frames.runAt(4_020)
+  assert.equal(combat.volume, 1)
+
+  director.setScene('game-over')
+  await flushPromises()
+  const death = created[5]
+  assert.equal(death.src, 'death.mp3')
+  frames.runAt(4_020)
+  assert.equal(death.volume, 1)
 })
 
 test('holds a blocked scene at its beginning and retries on unlock', async () => {
@@ -225,6 +244,17 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   assert.equal(stream.pauseCalls, 1)
   director.pauseStream('start-cast')
   assert.equal(stream.paused, true)
+  stream.currentTime = 0.5
+  director.stopStream('start-cast')
+  assert.equal(stream.currentTime, 0)
+
+  director.playStream('solomon-hello-1')
+  director.playStream('solomon-laugh-1')
+  const hello = created[3]
+  const laugh = created[4]
+  director.stopStreams(['solomon-hello-1', 'solomon-laugh-1'])
+  assert.equal(hello.paused, true)
+  assert.equal(laugh.paused, true)
 
   created[0].emit('ended')
   director.destroy()

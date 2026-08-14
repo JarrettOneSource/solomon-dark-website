@@ -5,9 +5,9 @@ import type { WaveDef } from './boneyard-wave-schema.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   createBoneyardWaveDirector,
-  retireBoneyardEnemy,
   startBoneyardWaveDirector,
   stepBoneyardWaveDirector,
+  type BoneyardEnemySpawnIntent,
   type BoneyardWaveDirectorState,
 } from './boneyard-wave-director.ts'
 
@@ -15,6 +15,12 @@ const BOUNDS = { x: 0, y: 0, w: 1000, h: 800 }
 const PLAYERS = {
   a: { position: { x: 250, y: 300 } },
   b: { position: { x: 750, y: 500 } },
+}
+
+interface DirectorHarness {
+  liveEnemyCount: number
+  spawnIntents: BoneyardEnemySpawnIntent[]
+  state: BoneyardWaveDirectorState
 }
 
 test('all eight retail wave enemy tokens map to their native type ids', () => {
@@ -30,47 +36,39 @@ test('all eight retail wave enemy tokens map to their native type ids', () => {
   })
 })
 
-test('Solomon run starts the exact ten-plus-five weakened Skeleton opening', () => {
-  let state = startBoneyardWaveDirector(createBoneyardWaveDirector(
-    'opening-seed',
-    [wave({ maxEnemies: 100 })],
-  ))
+test('Solomon run emits the exact ten-plus-five weakened Skeleton opening', () => {
+  const harness = startHarness('opening-seed', [wave({ maxEnemies: 100 })])
+  tick(harness, 0)
 
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 0)
-  assert.equal(state.phase, 'opening')
-  assert.equal(state.enemies.length, 10)
-  assert.equal(state.pendingSpawnBudget, 5)
-  assert.ok(state.enemies.every((enemy) => (
-    enemy.enemyToken === 'SKELETON'
-    && enemy.locationPolicy === 'near-player'
-    && enemy.spawnTick === 0
+  assert.equal(harness.state.phase, 'opening')
+  assert.equal(harness.liveEnemyCount, 10)
+  assert.equal(harness.state.pendingSpawnBudget, 5)
+  assert.deepEqual(harness.spawnIntents.map((intent) => intent.id), [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  ])
+  assert.ok(harness.spawnIntents.every((intent) => (
+    intent.enemyToken === 'SKELETON'
+    && intent.locationPolicy === 'near-player'
+    && intent.spawnTick === 0
+    && !('targetPlayerId' in intent)
   )))
-  for (const enemy of state.enemies) {
-    assert.deepEqual(enemy.flags, [
+  for (const intent of harness.spawnIntents) {
+    assert.deepEqual(intent.flags, [
       'FLAG_WEAK',
       'FLAG_HPDOWN',
       'FLAG_XPBONUS',
     ])
+    assert.equal(Object.isFrozen(intent.flags), true)
+    assert.equal(Object.isFrozen(intent.position), true)
   }
 
-  for (let tick = 1; tick < 500; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
+  harness.spawnIntents.length = 0
+  for (let currentTick = 1; currentTick <= 900; currentTick += 1) {
+    tick(harness, currentTick)
   }
-  assert.equal(state.enemies.length, 10)
-  const expectedCounts = new Map([
-    [500, 11],
-    [600, 12],
-    [700, 13],
-    [800, 14],
-    [900, 15],
-  ])
-  for (let tick = 500; tick <= 900; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
-    const expected = expectedCounts.get(tick)
-    if (expected !== undefined) assert.equal(state.enemies.length, expected)
-  }
-  assert.equal(state.phase, 'opening-threshold')
-  assert.deepEqual(state.enemies.slice(10).map((enemy) => enemy.spawnTick), [
+  assert.equal(harness.liveEnemyCount, 15)
+  assert.equal(harness.state.phase, 'opening-threshold')
+  assert.deepEqual(harness.spawnIntents.map((intent) => intent.spawnTick), [
     500,
     600,
     700,
@@ -79,32 +77,33 @@ test('Solomon run starts the exact ten-plus-five weakened Skeleton opening', () 
   ])
 })
 
-test('opening threshold is strict and Wave1 starts ten ticks after release', () => {
-  let state = completeOpening('opening-release', [wave({ maxEnemies: 100 })])
-  state = retireUntil(state, 4)
-  const held = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 901)
-  assert.equal(held.phase, 'opening-threshold')
-  assert.equal(held.waveOrdinal, 0)
+test('external nonterminal live count strictly gates opening and wave spawning', () => {
+  const harness = completeOpening('opening-release', [wave({ maxEnemies: 100 })])
+  harness.liveEnemyCount = 4
+  tick(harness, 901)
+  assert.equal(harness.state.phase, 'opening-threshold')
+  assert.equal(harness.state.waveOrdinal, 0)
 
-  state = retireBoneyardEnemy(held, held.enemies[0].id)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 902)
-  assert.equal(state.phase, 'spawning')
-  assert.equal(state.waveOrdinal, 1)
-  assert.equal(state.waveEventId, 1)
-  assert.equal(state.spawnDelayTicks, 10)
-  const priorCount = state.enemies.length
-  for (let tick = 903; tick < 912; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
+  harness.liveEnemyCount = 3
+  tick(harness, 902)
+  assert.equal(harness.state.phase, 'spawning')
+  assert.equal(harness.state.waveOrdinal, 1)
+  assert.equal(harness.state.waveEventId, 1)
+  assert.equal(harness.state.spawnDelayTicks, 10)
+
+  harness.spawnIntents.length = 0
+  for (let currentTick = 903; currentTick < 912; currentTick += 1) {
+    tick(harness, currentTick)
   }
-  assert.equal(state.enemies.length, priorCount)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 912)
-  assert.ok(state.enemies.length > priorCount)
-  assert.ok(state.enemies.slice(priorCount).every((enemy) => (
-    enemy.locationPolicy === 'anywhere'
+  assert.equal(harness.spawnIntents.length, 0)
+  tick(harness, 912)
+  assert.ok(harness.spawnIntents.length > 0)
+  assert.ok(harness.spawnIntents.every((intent) => (
+    intent.locationPolicy === 'anywhere'
   )))
 })
 
-test('default Spawner chooses a random event record per actor, not source order', () => {
+test('Spawner samples event records per actor and emits target-neutral intents', () => {
   const schedule = [wave({
     groups: [{ entries: [
       { enemy: 'SKELETON', flags: ['FLAG_WEAK'] },
@@ -113,172 +112,137 @@ test('default Spawner chooses a random event record per actor, not source order'
     maxEnemies: 100,
     spawn: 4,
   })]
-  let state = beginFirstWave('record-sampling', schedule)
-  const firstWaveId = state.nextEnemyId
-  state = stepUntilNewEnemy(state, 2000)
-  const spawned = state.enemies.filter((enemy) => enemy.id >= firstWaveId)
-  assert.ok(spawned.length > schedule[0].spawn)
-  assert.ok(spawned.some((enemy) => enemy.enemyToken === 'SKELETON'))
-  assert.ok(spawned.some((enemy) => enemy.enemyToken === 'SKELETONARCHER'))
-  assert.notDeepEqual(spawned.slice(0, 4).map((enemy) => enemy.enemyToken), [
+  const harness = beginFirstWave('record-sampling', schedule)
+  harness.spawnIntents.length = 0
+  stepUntilIntent(harness, 2000)
+
+  assert.ok(harness.spawnIntents.length > schedule[0]!.spawn)
+  assert.ok(harness.spawnIntents.some((intent) => intent.enemyToken === 'SKELETON'))
+  assert.ok(harness.spawnIntents.some((intent) => intent.enemyToken === 'SKELETONARCHER'))
+  assert.notDeepEqual(harness.spawnIntents.slice(0, 4).map((intent) => intent.enemyToken), [
     'SKELETON',
     'SKELETONARCHER',
     'SKELETON',
     'SKELETONARCHER',
   ])
-  assert.ok(spawned.every((enemy) => (
-    enemy.position.x >= BOUNDS.x
-    && enemy.position.y >= BOUNDS.y
-    && enemy.position.x <= BOUNDS.x + BOUNDS.w
-    && enemy.position.y <= BOUNDS.y + BOUNDS.h
+  assert.ok(harness.spawnIntents.every((intent) => (
+    intent.position.x >= BOUNDS.x
+    && intent.position.y >= BOUNDS.y
+    && intent.position.x <= BOUNDS.x + BOUNDS.w
+    && intent.position.y <= BOUNDS.y + BOUNDS.h
+    && !('targetPlayerId' in intent)
   )))
 })
 
-test('MAXENEMIES round-trips but does not cap the native compiler or Spawner', () => {
+test('MAXENEMIES round-trips but does not cap native compilation or Spawner', () => {
   const schedule = [wave({ maxEnemies: 1, spawn: 20 })]
-  let state = completeOpening('parsed-max-enemies', schedule)
-  assert.equal(state.enemies.length, 15)
-  state = retireUntil(state, 0)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 901)
-  for (let tick = 902; tick <= 911; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
+  const harness = completeOpening('parsed-max-enemies', schedule)
+  harness.liveEnemyCount = 0
+  tick(harness, 901)
+  harness.spawnIntents.length = 0
+  for (let currentTick = 902; currentTick <= 911; currentTick += 1) {
+    tick(harness, currentTick)
   }
-  assert.ok(state.enemies.length > schedule[0].maxEnemies)
-  assert.equal(state.pendingSpawnBudget, 0)
-  assert.equal(state.phase, 'wave-threshold')
+  assert.ok(harness.spawnIntents.length > schedule[0]!.maxEnemies)
+  assert.equal(harness.state.pendingSpawnBudget, 0)
+  assert.equal(harness.state.phase, 'wave-threshold')
 })
 
-test('live enemies never age out and threshold/lull nodes drive signed NEXT', () => {
-  const schedule = [
-    wave({ maxEnemies: 100, next: [1], spawn: 20 }),
-    wave({
-      groups: [{ entries: [{ enemy: 'SKELETONARCHER', flags: [] }] }],
-      next: [-1],
-      spawn: 1,
-    }),
-  ]
-  let state = beginFirstWave('advance-seed', schedule)
-  state = stepUntilNewEnemy(state, 2000)
-  const firstWaveEnemy = state.enemies.find((enemy) => enemy.id > 15)
-  assert.ok(firstWaveEnemy)
-  for (let tick = 2001; tick < 3001; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
-  }
-  assert.equal(state.enemies.some((enemy) => enemy.id === firstWaveEnemy.id), true)
-
-  state = retireUntil(state, 0)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 3001)
-  assert.equal(state.phase, 'wave-lull-delay')
-  assert.equal(state.interwaveDelayTicks, 25)
-  for (let tick = 3002; tick <= 3026; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
-  }
-  assert.equal(state.phase, 'wave-lull')
-  assert.ok(state.lowPopulationTicks > 1)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 3027)
-  assert.equal(state.phase, 'interwave')
-  assert.equal(state.interwaveDelayTicks, 75)
-
-  for (let tick = 3028; tick <= 3052; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
-  }
-  assert.equal(state.nextScheduleIndex, 1)
-  assert.equal(state.scheduleIndex, 0)
-  while (state.phase === 'interwave') {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 4000)
-  }
-  assert.equal(state.phase, 'spawning')
-  assert.equal(state.scheduleIndex, 1)
-  assert.equal(state.waveOrdinal, 2)
-  assert.equal(state.spawnDelayTicks, 10)
-})
-
-test('mode-6 lull uses strict population or the Arena low-population timer', () => {
-  let opening = startBoneyardWaveDirector(createBoneyardWaveDirector(
-    'mode-six-lull',
-    [wave({ maxEnemies: 100 })],
-  ))
-  opening = stepBoneyardWaveDirector(opening, PLAYERS, BOUNDS, 0)
-  const atThreshold = {
-    ...opening,
-    enemies: opening.enemies.slice(0, 4),
+test('mode-6 lull uses strict population or Arena low-population time', () => {
+  const opening = startHarness('mode-six-lull', [wave({ maxEnemies: 100 })])
+  tick(opening, 0)
+  opening.state = {
+    ...opening.state,
     lowPopulationTicks: 0,
     lullThreshold: 4,
-    phase: 'wave-lull' as const,
+    phase: 'wave-lull',
   }
+  opening.liveEnemyCount = 4
 
-  const held = stepBoneyardWaveDirector(atThreshold, PLAYERS, BOUNDS, 1)
-  assert.equal(held.phase, 'wave-lull')
-  assert.equal(held.lowPopulationTicks, 1)
-  const timerReleased = stepBoneyardWaveDirector(held, PLAYERS, BOUNDS, 2)
-  assert.equal(timerReleased.phase, 'interwave')
-  assert.equal(timerReleased.lowPopulationTicks, 2)
+  tick(opening, 1)
+  assert.equal(opening.state.phase, 'wave-lull')
+  assert.equal(opening.state.lowPopulationTicks, 1)
+  tick(opening, 2)
+  assert.equal(opening.state.phase, 'interwave')
+  assert.equal(opening.state.lowPopulationTicks, 2)
 
-  const populationReleased = stepBoneyardWaveDirector({
-    ...atThreshold,
-    enemies: atThreshold.enemies.slice(0, 3),
-  }, PLAYERS, BOUNDS, 1)
-  assert.equal(populationReleased.phase, 'interwave')
-  assert.equal(populationReleased.lowPopulationTicks, 1)
+  const population = startHarness('population-lull', [wave({ maxEnemies: 100 })])
+  population.state = {
+    ...population.state,
+    lowPopulationTicks: 0,
+    lullThreshold: 4,
+    phase: 'wave-lull',
+  }
+  population.liveEnemyCount = 3
+  tick(population, 1)
+  assert.equal(population.state.phase, 'interwave')
+  assert.equal(population.state.lowPopulationTicks, 1)
 })
 
-test('retirement is stable and ignores an unknown combat actor id', () => {
-  let state = startBoneyardWaveDirector(createBoneyardWaveDirector(
-    'retirement-seam',
-    [wave({ maxEnemies: 100 })],
-  ))
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 0)
-  assert.equal(retireBoneyardEnemy(state, 9999), state)
-  const remainingIds = state.enemies.slice(1).map((enemy) => enemy.id)
-  state = retireBoneyardEnemy(state, state.enemies[0].id)
-  assert.deepEqual(state.enemies.map((enemy) => enemy.id), remainingIds)
+test('invalid live-count feedback is rejected at the scheduling boundary', () => {
+  const state = createBoneyardWaveDirector('invalid-live-count', [wave({})])
+  for (const liveEnemyCount of [-1, 1.5, Number.NaN]) {
+    assert.throws(() => stepBoneyardWaveDirector(state, {
+      bounds: BOUNDS,
+      liveEnemyCount,
+      players: PLAYERS,
+      tick: 0,
+    }), /live enemy count/)
+  }
 })
+
+function startHarness(
+  seed: string,
+  schedule: readonly WaveDef[],
+): DirectorHarness {
+  return {
+    liveEnemyCount: 0,
+    spawnIntents: [],
+    state: startBoneyardWaveDirector(createBoneyardWaveDirector(seed, schedule)),
+  }
+}
 
 function completeOpening(
   seed: string,
   schedule: readonly WaveDef[],
-): BoneyardWaveDirectorState {
-  let state = startBoneyardWaveDirector(createBoneyardWaveDirector(seed, schedule))
-  for (let tick = 0; tick <= 900; tick += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick)
+): DirectorHarness {
+  const harness = startHarness(seed, schedule)
+  for (let currentTick = 0; currentTick <= 900; currentTick += 1) {
+    tick(harness, currentTick)
   }
-  assert.equal(state.phase, 'opening-threshold')
-  assert.equal(state.enemies.length, 15)
-  return state
+  assert.equal(harness.state.phase, 'opening-threshold')
+  assert.equal(harness.liveEnemyCount, 15)
+  return harness
 }
 
 function beginFirstWave(
   seed: string,
   schedule: readonly WaveDef[],
-): BoneyardWaveDirectorState {
-  let state = retireUntil(completeOpening(seed, schedule), 0)
-  state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, 901)
-  assert.equal(state.phase, 'spawning')
-  return state
+): DirectorHarness {
+  const harness = completeOpening(seed, schedule)
+  harness.liveEnemyCount = 0
+  tick(harness, 901)
+  assert.equal(harness.state.phase, 'spawning')
+  return harness
 }
 
-function stepUntilNewEnemy(
-  source: BoneyardWaveDirectorState,
-  tick: number,
-): BoneyardWaveDirectorState {
-  const nextId = source.nextEnemyId
-  let state = source
-  for (let offset = 0; offset < 1000 && state.nextEnemyId === nextId; offset += 1) {
-    state = stepBoneyardWaveDirector(state, PLAYERS, BOUNDS, tick + offset)
+function stepUntilIntent(harness: DirectorHarness, startTick: number): void {
+  for (let offset = 0; offset < 1000 && harness.spawnIntents.length === 0; offset += 1) {
+    tick(harness, startTick + offset)
   }
-  if (state.nextEnemyId === nextId) throw new Error('fixture did not spawn an enemy')
-  return state
+  if (harness.spawnIntents.length === 0) throw new Error('fixture emitted no spawn intent')
 }
 
-function retireUntil(
-  source: BoneyardWaveDirectorState,
-  count: number,
-): BoneyardWaveDirectorState {
-  let state = source
-  while (state.enemies.length > count) {
-    state = retireBoneyardEnemy(state, state.enemies[0].id)
-  }
-  return state
+function tick(harness: DirectorHarness, currentTick: number): void {
+  const result = stepBoneyardWaveDirector(harness.state, {
+    bounds: BOUNDS,
+    liveEnemyCount: harness.liveEnemyCount,
+    players: PLAYERS,
+    tick: currentTick,
+  })
+  harness.state = result.director
+  harness.liveEnemyCount += result.spawnIntents.length
+  harness.spawnIntents.push(...result.spawnIntents)
 }
 
 function wave(patch: Partial<WaveDef>): WaveDef {

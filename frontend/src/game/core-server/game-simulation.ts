@@ -17,10 +17,14 @@ import {
   isHubRegionTraversable,
 } from '../core-kernels/hub-regions.ts'
 import {
-  canPlaceBoneyardBody,
-  firstBoneyardLineObstruction,
-  withBoneyardGateCollision,
-} from './boneyard-collision.ts'
+  acknowledgeGameOver,
+  confirmPostRunLoadout,
+  createGameRunLifecycle,
+  startGameRun,
+  stepGameRunLifecycle,
+  synchronizeGameRunParticipants,
+  type GameRunLifecycleState,
+} from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
 import type {
   PlayerProgressionComponent,
@@ -42,6 +46,14 @@ import {
   type BoneyardWorldState,
 } from './boneyard-world.ts'
 import {
+  canPlaceBoneyardBody,
+  firstBoneyardLineObstruction,
+  firstBoneyardPathBlockProgress,
+  withBoneyardGateCollision,
+} from './boneyard-collision.ts'
+import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import type { BoneyardEnemySemanticEvent } from './boneyard-enemy-store.ts'
+import {
   addHubParticipant,
   createHubWorld,
   hubSpawnPoint,
@@ -54,14 +66,22 @@ import {
   addPlayerEntity,
   applyPlayerEntitySkillChoice,
   createPlayerEntityStore,
+  damagePlayerEntity,
   grantPlayerEntityExperience,
   playerCharacterAt,
   playerCharacterRecords,
+  playerEntityCanAcceptInput,
+  playerEntityCanCast,
   playerEntityIndex,
+  poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
   playerStatBookAt,
   removePlayerEntity,
+  resetPlayerEntitiesForNewRun,
+  setPlayerEntitySpectating,
+  stepPlayerEntityCombatTick,
+  tryDebitPlayerEntityMana,
   replacePlayerCharacterRecords,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
@@ -75,6 +95,7 @@ export interface GameSimulationState {
   playerEntities: PlayerEntityStore
   playerOfferRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
+  run: GameRunLifecycleState
   tick: number
   world: GameWorldState
 }
@@ -90,6 +111,8 @@ export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInp
 export const DEFAULT_PLAYER_ID = 'local-player'
 export const GAME_FIXED_TICK_SECONDS = PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS
 export const GAME_TICK_RATE = 1 / GAME_FIXED_TICK_SECONDS
+export const BONEYARD_ENEMY_EVENT_LANE_CAPACITY = 512
+export const BONEYARD_ENEMY_EVENT_RETENTION_TICKS = GAME_TICK_RATE
 export const DEFAULT_PLAYER_CHARACTER_CONFIG: PlayerCharacterConfig = {
   discipline: 'arcane',
   displayName: 'Helvidius',
@@ -130,6 +153,7 @@ export function createGameSimulation(
     playerEntities,
     playerOfferRng,
     primarySpells: createPrimarySpellSimulation(),
+    run: createGameRunLifecycle(),
     tick: 0,
     world,
   }
@@ -145,16 +169,21 @@ export function addPlayerCharacter(
     ? addHubParticipant(state.world, playerId)
     : state.world
   const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
+  const playerEntities = addPlayerEntity(
+    state.playerEntities,
+    playerId,
+    config,
+    spawnPlayerForWorld(state.world, config),
+    draw.value,
+  )
   return {
     ...state,
-    playerEntities: addPlayerEntity(
-      state.playerEntities,
-      playerId,
-      config,
-      spawnPlayerForWorld(state.world, config),
-      draw.value,
-    ),
+    playerEntities,
     playerOfferRng: draw.state,
+    run: synchronizeGameRunParticipants(
+      state.run,
+      playerEntities.identities.map(({ playerId: id }) => id),
+    ),
     world,
   }
 }
@@ -164,10 +193,15 @@ export function removePlayerCharacter(
   playerId: PlayerId,
 ): GameSimulationState {
   if (playerEntityIndex(state.playerEntities, playerId) < 0) return state
+  const playerEntities = removePlayerEntity(state.playerEntities, playerId)
   return {
     ...state,
-    playerEntities: removePlayerEntity(state.playerEntities, playerId),
+    playerEntities,
     primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
+    run: synchronizeGameRunParticipants(
+      state.run,
+      playerEntities.identities.map(({ playerId: id }) => id),
+    ),
     world: state.world.kind === 'hub'
       ? removeHubParticipant(state.world, playerId)
       : state.world,
@@ -179,15 +213,46 @@ export function enterBoneyardWorld(
   loaded: LoadedBoneyard,
 ): GameSimulationState {
   const world = createBoneyardWorld(loaded)
+  const placements = placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world)
   return {
     ...state,
-    playerEntities: replacePlayerCharacterRecords(
-      state.playerEntities,
-      placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world),
-    ),
+    playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
     primarySpells: createPrimarySpellSimulation(),
+    run: startGameRun(
+      state.run,
+      loaded.runId,
+      state.playerEntities.identities.map(({ playerId }) => playerId),
+    ),
     world,
   }
+}
+
+export function acknowledgeGameSimulationOver(
+  state: GameSimulationState,
+  runId: string,
+  eventId: number,
+): GameSimulationState | null {
+  const run = acknowledgeGameOver(state.run, runId, eventId)
+  if (!run) return null
+  const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
+  const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
+    const config = state.playerEntities.configs[index]!
+    return [playerId, createPlayerCharacter(config, hubSpawnPoint())]
+  }))
+  return {
+    ...state,
+    playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
+    primarySpells: createPrimarySpellSimulation(),
+    run,
+    world,
+  }
+}
+
+export function confirmGameSimulationLoadout(
+  state: GameSimulationState,
+): GameSimulationState | null {
+  const run = confirmPostRunLoadout(state.run)
+  return run ? { ...state, run } : null
 }
 
 export function getPlayerCharacter(
@@ -260,6 +325,8 @@ export function stepGameSimulationTick(
   const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => [
     playerId,
     getPlayerProgression(state, playerId).pendingOffer
+      || !playerEntityCanAcceptInput(state.playerEntities, playerId)
+      || (state.run.phase !== 'hub' && state.run.phase !== 'active')
       ? createIdlePlayerCharacterInput()
       : inputs[playerId] ?? createIdlePlayerCharacterInput(),
   ]))
@@ -273,6 +340,13 @@ export function stepGameSimulationTick(
         state.world,
         players,
         activeInputs,
+        Object.fromEntries(Object.keys(players).map((playerId) => {
+          const progression = getPlayerProgression(state, playerId)
+          return [playerId, {
+            alive: progression.lifeState === 'alive',
+            eligible: state.run.eligiblePlayerIds.includes(playerId),
+          }]
+        })),
         state.tick + 1,
       )
       return finishGameSimulationTick(state, result, activeInputs)
@@ -282,10 +356,46 @@ export function stepGameSimulationTick(
 
 function finishGameSimulationTick(
   previous: GameSimulationState,
-  result: { players: Readonly<Record<PlayerId, PlayerCharacterState>>, world: GameWorldState },
+  result: {
+    enemyEvents?: readonly BoneyardEnemySemanticEvent[]
+    playerDamage?: readonly Readonly<{
+      amount: number
+      playerId: string
+      poisonDamage: number
+      poisonDuration: number
+    }>[]
+    players: Readonly<Record<PlayerId, PlayerCharacterState>>
+    rewards?: readonly Readonly<{
+      experience: number
+      playerId: string | null
+    }>[]
+    world: GameWorldState
+  },
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
   const tick = previous.tick + 1
+  let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
+  for (const damage of result.playerDamage ?? []) {
+    playerEntities = damagePlayerEntity(
+      playerEntities,
+      damage.playerId,
+      damage.amount,
+    )
+    playerEntities = poisonPlayerEntity(
+      playerEntities,
+      damage.playerId,
+      damage.poisonDamage,
+      damage.poisonDuration,
+    )
+  }
+  for (const reward of result.rewards ?? []) {
+    if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
+    playerEntities = grantPlayerEntityExperience(
+      playerEntities,
+      reward.playerId,
+      reward.experience,
+    )
+  }
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
     : null
@@ -325,6 +435,14 @@ function finishGameSimulationTick(
     canTraverseProjectile: (spell, from, to) => {
       return spellObstructionPoint(spell.ownerId, from, to) === null
     },
+    castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
+      playerId,
+      {
+        availableMana: playerEntities.progressions[index]!.currentMana,
+        eligible: playerEntityCanCast(playerEntities, playerId)
+          && playerEntities.progressions[index]!.pendingOffer === null,
+      },
+    ])),
     inputs,
     players: result.players,
     previousPlayers: playerCharacterRecords(previous.playerEntities),
@@ -355,33 +473,94 @@ function finishGameSimulationTick(
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
       : `boneyard:${result.world.runId}`,
   })
-  if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL !== 0) {
-    return {
-      accumulatorSeconds: previous.accumulatorSeconds,
-      playerEntities: replacePlayerCharacterRecords(previous.playerEntities, cast.players),
-      playerOfferRng: previous.playerOfferRng,
-      primarySpells: cast.spells,
+  for (const [playerId, cost] of Object.entries(cast.manaSpent)) {
+    if (cost <= 0) continue
+    const debit = tryDebitPlayerEntityMana(playerEntities, playerId, cost)
+    if (!debit.accepted) {
+      throw new Error(`primary spell mana authority diverged for ${playerId}`)
+    }
+    playerEntities = debit.store
+  }
+  let primarySpells = cast.spells
+  let world = result.world
+  if (world.kind === 'boneyard') {
+    const previousEvents = previous.world.kind === 'boneyard'
+      && previous.world.runId === world.runId
+      ? previous.world.enemyEvents
+      : []
+    world = {
+      ...world,
+      enemyEvents: retainBoneyardEnemyEvents(
+        previousEvents,
+        result.enemyEvents ?? [],
+        tick,
+      ),
+    }
+    const boneyardWorld = world
+    const collision = withBoneyardGateCollision(
+      boneyardWorld.collision,
+      boneyardWorld.gateLeaves,
+    )
+    const spellCombat = resolveBoneyardSpellCombat(
+      boneyardWorld.enemies,
+      primarySpells,
+      cast.channelEmissions,
       tick,
-      world: result.world,
+      `boneyard:${boneyardWorld.runId}`,
+      (start, end, radius) => firstBoneyardPathBlockProgress(
+        start,
+        end,
+        boneyardWorld.bounds,
+        collision,
+        radius,
+      ),
+    )
+    primarySpells = spellCombat.spells
+    world = { ...world, enemies: spellCombat.enemies }
+  }
+  const players: Record<PlayerId, PlayerCharacterState> = { ...cast.players }
+  if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL === 0) {
+    for (const [playerId, player] of Object.entries(cast.players)) {
+      const priorPlayer = playerCharacterAt(previous.playerEntities, playerId)
+      players[playerId] = priorPlayer
+        && priorPlayer.walkCyclePrimary !== player.walkCyclePrimary
+        ? { ...player, footstepTick: tick }
+        : player
     }
   }
-
-  const players: Record<PlayerId, PlayerCharacterState> = {}
-  for (const [playerId, player] of Object.entries(cast.players)) {
-    const priorPlayer = playerCharacterAt(previous.playerEntities, playerId)
-    players[playerId] = priorPlayer
-      && priorPlayer.walkCyclePrimary !== player.walkCyclePrimary
-      ? { ...player, footstepTick: tick }
-      : player
+  playerEntities = replacePlayerCharacterRecords(playerEntities, players)
+  const combat = stepPlayerEntityCombatTick(playerEntities)
+  playerEntities = combat.store
+  for (const playerId of combat.deathBurstPlayerIds) {
+    playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
   }
+  const alivePlayerIds = new Set(playerEntities.identities.flatMap(({ playerId }, index) => (
+    playerEntities.progressions[index]!.lifeState === 'alive'
+      || playerEntities.progressions[index]!.lifeState === 'lethal-pending'
+      ? [playerId]
+      : []
+  )))
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
-    playerEntities: replacePlayerCharacterRecords(previous.playerEntities, players),
+    playerEntities,
     playerOfferRng: previous.playerOfferRng,
-    primarySpells: cast.spells,
+    primarySpells,
+    run: stepGameRunLifecycle(previous.run, alivePlayerIds),
     tick,
-    world: result.world,
+    world,
   }
+}
+
+function retainBoneyardEnemyEvents(
+  previous: readonly BoneyardEnemySemanticEvent[],
+  emitted: readonly BoneyardEnemySemanticEvent[],
+  tick: number,
+): readonly BoneyardEnemySemanticEvent[] {
+  const minimumTick = tick - BONEYARD_ENEMY_EVENT_RETENTION_TICKS
+  const retained = [...previous, ...emitted].filter((event) => event.tick >= minimumTick)
+  return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
+    ? retained
+    : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
 }
 
 export function stepGameSimulation(

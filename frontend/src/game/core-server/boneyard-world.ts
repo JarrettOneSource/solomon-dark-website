@@ -1,6 +1,13 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
-import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
-import type { BoneyardBounds, LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import {
+  resolveActorMotion,
+  type ActorPhysicsBody,
+} from '../core-kernels/actor-physics.ts'
+import type {
+  BoneyardBounds,
+  BoneyardPoint,
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
 import {
   createSolomonEncounter,
   isSolomonPlayerLocked,
@@ -27,7 +34,6 @@ import {
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
   createBoneyardWaveDirector,
-  retireBoneyardEnemy,
   startBoneyardWaveDirector,
   stepBoneyardWaveDirector,
   type BoneyardWaveDirectorState,
@@ -35,16 +41,32 @@ import {
 import {
   canPlaceBoneyardBody,
   createBoneyardCollisionWorld,
+  firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
   touchingBoneyardGateLeaves,
   withBoneyardGateCollision,
   type BoneyardCollisionWorld,
 } from './boneyard-collision.ts'
+import {
+  createBoneyardEnemyStore,
+  stepBoneyardEnemyStore,
+  type BoneyardEnemyPlayerDamage,
+  type BoneyardEnemyReward,
+  type BoneyardEnemySemanticEvent,
+  type BoneyardEnemyStore,
+} from './boneyard-enemy-store.ts'
+
+export interface BoneyardPlayerCombatStatus {
+  readonly alive: boolean
+  readonly eligible: boolean
+}
 
 export interface BoneyardWorldState {
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld
   encounter: BoneyardSolomonEncounterState | null
+  enemies: BoneyardEnemyStore
+  enemyEvents: readonly BoneyardEnemySemanticEvent[]
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   runId: string
@@ -54,7 +76,10 @@ export interface BoneyardWorldState {
 }
 
 export interface BoneyardWorldTickResult {
+  enemyEvents: readonly BoneyardEnemySemanticEvent[]
+  playerDamage: readonly BoneyardEnemyPlayerDamage[]
   players: Readonly<Record<string, PlayerCharacterState>>
+  rewards: readonly BoneyardEnemyReward[]
   world: BoneyardWorldState
 }
 
@@ -67,6 +92,8 @@ export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState 
     encounter: ownsRetailEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
       : null,
+    enemies: createBoneyardEnemyStore(loaded.seed),
+    enemyEvents: [],
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     runId: loaded.runId,
@@ -87,13 +114,18 @@ export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState 
 export function boneyardPrimarySpellTargets(
   world: BoneyardWorldState,
 ): readonly PrimarySpellTarget[] {
-  const enemies: PrimarySpellTarget[] = (world.waves?.enemies ?? []).map((enemy) => ({
-    airPriority: 0,
-    attachment: { x: 0, y: 0 },
-    id: `enemy:${enemy.id}`,
-    kind: 'enemy',
-    position: { ...enemy.position },
-  }))
+  const enemies: PrimarySpellTarget[] = [
+    ...world.enemies.actors,
+    ...world.enemies.maggots,
+  ]
+    .filter((enemy) => enemy.lifeState === 'alive')
+    .map((enemy) => ({
+      airPriority: 0,
+      attachment: { x: 0, y: 0 },
+      id: `enemy:${enemy.id}`,
+      kind: 'enemy',
+      position: { ...enemy.position },
+    }))
   return [...enemies, ...world.scenerySpellTargets]
 }
 
@@ -121,6 +153,7 @@ export function stepBoneyardWorldTick(
   world: BoneyardWorldState,
   players: Readonly<Record<string, PlayerCharacterState>>,
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
   tick: number,
 ): BoneyardWorldTickResult {
   const plans = Object.entries(players).map(([playerId, player]) => {
@@ -188,9 +221,13 @@ export function stepBoneyardWorldTick(
       commitPlayerCharacterTick(player, plan, position),
     ]
   }))
+  const livingPlayers = Object.fromEntries(Object.entries(nextPlayers).filter(([playerId]) => {
+    const combat = playerCombat[playerId]
+    return combat?.alive === true && combat.eligible
+  }))
   let encounter = world.encounter === null
     ? null
-    : stepSolomonEncounter(world.encounter, nextPlayers)
+    : stepSolomonEncounter(world.encounter, livingPlayers)
   if (world.encounter?.phase === 'escaping' && encounter !== null) {
     encounter = {
       ...encounter,
@@ -204,55 +241,140 @@ export function stepBoneyardWorldTick(
     }
   }
   let waves = world.waves
+  let wavesStarted = false
   if (waves !== null && encounter !== null) {
     if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
       waves = startBoneyardWaveDirector(waves)
-    } else if (waves.phase !== 'dormant') {
-      const beforeNextEnemyId = waves.nextEnemyId
-      waves = stepBoneyardWaveDirector(
-        waves,
-        nextPlayers,
-        world.bounds,
-        tick,
-      )
-      if (waves.nextEnemyId > beforeNextEnemyId) {
-        waves = {
-          ...waves,
-          enemies: waves.enemies.map((enemy) => {
-            if (enemy.id < beforeNextEnemyId) return enemy
-            const target = nextPlayers[enemy.targetPlayerId]
-            if (!target) return enemy
-            return {
-              ...enemy,
-              position: resolveBoneyardMovement(
-                target.position,
-                enemy.position,
-                world.bounds,
-                collision,
-                PLAYER_CHARACTER_RADIUS,
-              ),
-            }
-          }),
-        }
-      }
+      wavesStarted = true
     }
   }
+  const dynamicBodies = boneyardCombatBodies(nextPlayers, world.enemies)
+  const enemyStep = stepBoneyardEnemyStore(world.enemies, {
+    firstProjectileWorldContact: ({ end, radius, start }) => (
+      firstBoneyardPathBlockProgress(
+        start,
+        end,
+        world.bounds,
+        collision,
+        radius,
+      )
+    ),
+    players: Object.fromEntries(Object.entries(nextPlayers).map(([playerId, player]) => {
+      const combat = playerCombat[playerId]
+      return [playerId, {
+        alive: combat?.alive ?? false,
+        collisionRadius: PLAYER_CHARACTER_RADIUS,
+        connected: true,
+        eligible: combat?.eligible ?? false,
+        position: player.position,
+      }]
+    })),
+    resolveMovement: ({ actorId, delta, position, radius }) => {
+      const moverId = `enemy-${actorId}`
+      if (!dynamicBodies.has(moverId)) {
+        dynamicBodies.set(moverId, enemyCollisionBody(moverId, position, radius))
+      }
+      const resolved = resolveActorMotion(
+        [...dynamicBodies.values()].map((body) => ({
+          ...body,
+          delta: body.id === moverId ? { ...delta } : { x: 0, y: 0 },
+          driven: body.id === moverId,
+        })),
+        {
+          canPlace: (_bodyId, candidate, candidateRadius) => canPlaceBoneyardBody(
+            candidate,
+            world.bounds,
+            collision,
+            candidateRadius,
+          ),
+          move: (_bodyId, current, movement, movementRadius) => resolveBoneyardMovement(
+            current,
+            { x: current.x + movement.x, y: current.y + movement.y },
+            world.bounds,
+            collision,
+            movementRadius,
+          ),
+        },
+        () => true,
+      )
+      for (const body of resolved) dynamicBodies.set(body.id, body)
+      const mover = dynamicBodies.get(moverId)
+      if (!mover) throw new Error(`Boneyard collision lost enemy actor ${actorId}`)
+      return mover.position
+    },
+    resolveSpawnIntents: (liveEnemyCount) => {
+      if (
+        waves === null
+        || encounter === null
+        || wavesStarted
+        || waves.phase === 'dormant'
+        || Object.keys(livingPlayers).length === 0
+      ) return []
+      const result = stepBoneyardWaveDirector(waves, {
+        bounds: world.bounds,
+        liveEnemyCount,
+        players: livingPlayers,
+        tick,
+      })
+      waves = result.director
+      return result.spawnIntents
+    },
+    tick,
+  })
   return {
+    enemyEvents: enemyStep.events,
+    playerDamage: enemyStep.playerDamage,
     players: nextPlayers,
+    rewards: enemyStep.rewards,
     world: {
       ...world,
       encounter,
+      enemies: enemyStep.store,
       gateLeaves,
       waves,
     },
   }
 }
 
-export function retireBoneyardWorldEnemy(
-  world: BoneyardWorldState,
-  enemyId: number,
-): BoneyardWorldState {
-  if (world.waves === null) return world
-  const waves = retireBoneyardEnemy(world.waves, enemyId)
-  return waves === world.waves ? world : { ...world, waves }
+function boneyardCombatBodies(
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+): Map<string, ActorPhysicsBody> {
+  return new Map([
+    ...Object.entries(players).map(([playerId, player]): [string, ActorPhysicsBody] => [
+      `player-${playerId}`,
+      {
+        ...PLAYER_CHARACTER_PHYSICS,
+        delta: { x: 0, y: 0 },
+        driven: false,
+        id: `player-${playerId}`,
+        position: { ...player.position },
+      },
+    ]),
+    ...enemies.actors.map((actor): [string, ActorPhysicsBody] => {
+      const id = `enemy-${actor.id}`
+      return [id, enemyCollisionBody(id, actor.position, actor.config.collisionRadius)]
+    }),
+    ...enemies.maggots.map((maggot): [string, ActorPhysicsBody] => {
+      const id = `enemy-${maggot.id}`
+      return [id, enemyCollisionBody(id, maggot.position, maggot.collisionRadius)]
+    }),
+  ])
+}
+
+function enemyCollisionBody(
+  id: string,
+  position: Readonly<BoneyardPoint>,
+  radius: number,
+): ActorPhysicsBody {
+  return {
+    delta: { x: 0, y: 0 },
+    driven: false,
+    id,
+    position: { ...position },
+    pushEnabled: false,
+    pushResistance: 0,
+    pushStrength: 0,
+    radius,
+  }
 }

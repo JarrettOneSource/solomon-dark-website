@@ -4,7 +4,17 @@ import test from 'node:test'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
-import type { GameSnapshot, ProtocolStudentState } from './game-state.ts'
+import type {
+  BoneyardEnemySnapshot,
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardMaggotSnapshot,
+  GameSnapshot,
+  ProtocolStudentState,
+} from './game-state.ts'
+import type {
+  ReplicatedEntityDescriptor,
+  ReplicatedEntitySample,
+} from './replicated-entity-types.ts'
 import {
   EntityReplicationGapError,
   EntityReplicationReconstructor,
@@ -21,6 +31,46 @@ function hubSnapshot(studentCount: number): GameSnapshot {
       seed: 0x12345678,
     }),
   }), null)
+}
+
+function boneyardSnapshot(runId: string): GameSnapshot {
+  const base = createGameSnapshot(createGameSimulation({
+    wizard: {
+      discipline: 'arcane',
+      displayName: 'Replication Wizard',
+      element: 'fire',
+    },
+  }), 'wizard')
+  return {
+    ...base,
+    run: {
+      eligiblePlayerIds: ['wizard'],
+      gameOverEventId: 0,
+      gameOverTicks: 0,
+      lastCompletedRunId: null,
+      nextGameOverEventId: 1,
+      phase: 'active',
+      runId,
+    },
+    world: {
+      encounter: null,
+      enemies: [enemySnapshot()],
+      enemyEvents: [{
+        actorId: 7,
+        eventId: 1,
+        runId,
+        targetPlayerId: 'wizard',
+        tick: 0,
+        type: 'enemy-spawned',
+      }],
+      enemyProjectiles: [],
+      gateLeaves: [],
+      kind: 'boneyard',
+      maggots: [],
+      runId,
+      waves: null,
+    },
+  }
 }
 
 test('registry gives Students stable static descriptors and compact dynamic samples', () => {
@@ -140,6 +190,186 @@ test('periodic keyframes recover descriptors while invalid deltas fail closed', 
   )
 })
 
+test('Boneyard enemies use compact descriptors and authoritative dynamic samples', () => {
+  assert.equal(REPLICATED_ENTITY_TYPE_REGISTRY.has(REPLICATED_ENTITY_TYPES.boneyardEnemy), true)
+  const initial = boneyardSnapshot('enemy-run')
+  const frame = createGameSnapshotFrame(initial, 0, undefined, true)
+  if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(frame.world.entities.keyframe, true)
+  assert.equal(frame.world.entities.spawned.length, 1)
+  assert.equal(frame.world.entities.spawned[0]!.length, 7)
+  assert.equal(frame.world.entities.samples[0]!.length, 29)
+
+  const reconstructor = new EntityReplicationReconstructor()
+  const reconstructed = reconstructor.apply(frame, 1)
+  if (
+    reconstructed.world.kind !== 'boneyard'
+    || initial.world.kind !== 'boneyard'
+  ) throw new Error('expected Boneyard snapshot')
+  const enemy = reconstructed.world.enemies[0]!
+  assert.equal(enemy.id, 7)
+  assert.equal(enemy.enemyToken, 'SKELETON')
+  assert.deepEqual(enemy.flags, ['FLAG_WEAK'])
+  assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
+  assert.ok(Math.abs(enemy.animation.gaitPose - 2.75) <= 1 / 1024)
+  assert.deepEqual(reconstructed.world.enemyEvents, initial.world.enemyEvents)
+})
+
+test('Boneyard enemy deltas update, retire, and force a keyframe across run nonces', () => {
+  const initial = boneyardSnapshot('enemy-run-a')
+  const baseline = createReplicatedEntityBaseline(initial)
+  const changed = cloneSnapshot(initial)
+  if (changed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  changed.tick += 5
+  changed.world.enemies = [{
+    ...changed.world.enemies[0]!,
+    animation: {
+      ...changed.world.enemies[0]!.animation,
+      action: 'skeleton-claw-a',
+      actionProgress: 4.25,
+      state: 'action',
+    },
+    currentHealth: 2,
+    position: { x: 130.125, y: 450.5 },
+  }]
+  const delta = createGameSnapshotFrame(changed, 10, baseline)
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(delta.world.entities.keyframe, false)
+  assert.deepEqual(delta.world.entities.spawned, [])
+
+  const reconstructor = new EntityReplicationReconstructor()
+  reconstructor.reset(initial, 10)
+  const reconstructed = reconstructor.apply(delta, 11)
+  if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  assert.equal(reconstructed.world.enemies[0]!.currentHealth, 2)
+  assert.equal(reconstructed.world.enemies[0]!.animation.action, 'skeleton-claw-a')
+  assert.equal(reconstructed.world.enemies[0]!.animation.actionProgress, 4.25)
+
+  const retired = cloneSnapshot(changed)
+  if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  retired.world.enemies = []
+  const retiredFrame = createGameSnapshotFrame(
+    retired,
+    11,
+    createReplicatedEntityBaseline(changed),
+  )
+  if (retiredFrame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.deepEqual(retiredFrame.world.entities.retired, [[REPLICATED_ENTITY_TYPES.boneyardEnemy, 7]])
+
+  const nextRun = cloneSnapshot(initial)
+  if (nextRun.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  nextRun.run = { ...nextRun.run, runId: 'enemy-run-b' }
+  nextRun.world.runId = 'enemy-run-b'
+  nextRun.world.enemyEvents = []
+  const resetFrame = createGameSnapshotFrame(nextRun, 11, baseline)
+  if (resetFrame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(resetFrame.world.entities.keyframe, true)
+  assert.equal(resetFrame.world.entities.baselineSequence, 0)
+  assert.equal(resetFrame.world.entities.spawned.length, 1)
+})
+
+test('Boneyard enemy codec rejects family/type mismatches and malformed samples', () => {
+  const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
+    REPLICATED_ENTITY_TYPES.boneyardEnemy,
+  )!
+  const snapshot = boneyardSnapshot('invalid-enemy')
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  const descriptor = frame.world.entities.spawned[0]!
+  const sample = frame.world.entities.samples[0]!
+  const invalidDescriptor: ReplicatedEntityDescriptor = [
+    ...descriptor.slice(0, 3),
+    1004,
+    ...descriptor.slice(4),
+  ] as [number, number, ...number[]]
+  const truncatedSample = sample.slice(0, -1) as [number, number, ...number[]]
+  const mismatchedAction: ReplicatedEntitySample = [
+    ...sample.slice(0, 6),
+    2,
+    0,
+    ...sample.slice(8),
+  ] as [number, number, ...number[]]
+  assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
+  assert.equal(registration.sampleIsValid(truncatedSample), false)
+  assert.equal(registration.sampleIsValid(mismatchedAction), false)
+})
+
+test('Boneyard enemy projectiles replicate motion and exact spawn-retire identity', () => {
+  const initial = boneyardSnapshot('projectile-run')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  initial.world.enemyProjectiles = [enemyProjectileSnapshot()]
+  const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+  if (keyframe.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(keyframe.world.entities.spawned.length, 2)
+  assert.equal(keyframe.world.entities.samples.length, 2)
+
+  const reconstructor = new EntityReplicationReconstructor()
+  const reconstructed = reconstructor.apply(keyframe, 1)
+  if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  assert.deepEqual(reconstructed.world.enemyProjectiles[0], enemyProjectileSnapshot())
+
+  const retired = cloneSnapshot(initial)
+  if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  retired.world.enemyProjectiles = []
+  const delta = createGameSnapshotFrame(
+    retired,
+    1,
+    createReplicatedEntityBaseline(initial),
+  )
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.deepEqual(delta.world.entities.retired, [[
+    REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile,
+    4,
+  ]])
+})
+
+test('Coffin Maggots replicate as independently retiring combat actors', () => {
+  const initial = boneyardSnapshot('maggot-run')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  initial.world.maggots = [maggotSnapshot()]
+  const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+  if (keyframe.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.ok(keyframe.world.entities.spawned.some((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot && entry[1] === 8
+  )))
+  const sample = keyframe.world.entities.samples.find((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot && entry[1] === 8
+  ))!
+  assert.equal(sample.length, 12)
+  assert.equal(sample[9], 768)
+  const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
+    REPLICATED_ENTITY_TYPES.boneyardMaggot,
+  )!
+  assert.equal(registration.sampleIsValid(sample), true)
+  assert.equal(registration.sampleIsValid(
+    sample.slice(0, -1) as [number, number, ...number[]],
+  ), false)
+  const invalidHitFlash: ReplicatedEntitySample = [
+    ...sample.slice(0, 9),
+    1025,
+    ...sample.slice(10),
+  ] as [number, number, ...number[]]
+  assert.equal(registration.sampleIsValid(invalidHitFlash), false)
+
+  const reconstructor = new EntityReplicationReconstructor()
+  const reconstructed = reconstructor.apply(keyframe, 1)
+  if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  assert.deepEqual(reconstructed.world.maggots, [maggotSnapshot()])
+
+  const retired = cloneSnapshot(initial)
+  if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  retired.world.maggots = []
+  const delta = createGameSnapshotFrame(
+    retired,
+    1,
+    createReplicatedEntityBaseline(initial),
+  )
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.ok(delta.world.entities.retired.some(([typeId, id]) => (
+    typeId === REPLICATED_ENTITY_TYPES.boneyardMaggot && id === 8
+  )))
+})
+
 function cloneSnapshot(snapshot: GameSnapshot): GameSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as GameSnapshot
 }
@@ -153,4 +383,79 @@ function cloneSnapshotFrame(
 function cyclicDistance(first: number, second: number, period: number): number {
   const difference = Math.abs(first - second) % period
   return Math.min(difference, period - difference)
+}
+
+function enemySnapshot(): BoneyardEnemySnapshot {
+  return {
+    animation: {
+      action: null,
+      actionProgress: 0,
+      alpha: 1,
+      bodyPose: 2,
+      coffinPose: 0,
+      coffinSecondaryPose: null,
+      coffinState: 'closed',
+      deathEpoch: 0,
+      deathTick: 0,
+      demonFrontJointRotationRadians: 0,
+      demonFrontLimbRotationRadians: 0,
+      demonRearJointRotationRadians: 0,
+      demonRearLimbRotationRadians: 0,
+      effects: [],
+      gaitPose: 2.75,
+      hitFlash: 0.5,
+      impEffectFrame: -1,
+      maggots: [],
+      state: 'locomotion',
+      verticalOffset: 0,
+      zombieAngularOffsetDeg: 0,
+      zombieFrontArmPose: 0,
+      zombieFrontArmRotationRadians: 0,
+      zombieRearArmPose: 0,
+      zombieRearArmRotationRadians: 0,
+    },
+    currentHealth: 5,
+    enemyToken: 'SKELETON',
+    flags: ['FLAG_WEAK'],
+    headingDeg: 90,
+    id: 7,
+    maximumHealth: 5,
+    nativeTypeId: 1001,
+    position: { x: 123.45, y: 456.75 },
+    spawnTick: 12,
+  }
+}
+
+function enemyProjectileSnapshot(): BoneyardEnemyProjectileSnapshot {
+  return {
+    ageTicks: 3,
+    contactRadius: 8,
+    headingDeg: 90,
+    homing: false,
+    id: 4,
+    kind: 'arrow',
+    lifetimeTicks: 300,
+    nativeTypeId: 0x7da,
+    ownerActorId: 7,
+    position: { x: 128, y: 456.75 },
+    spawnTick: 12,
+  }
+}
+
+function maggotSnapshot(): BoneyardMaggotSnapshot {
+  return {
+    alpha: 1,
+    currentHealth: 2,
+    deathEpoch: 0,
+    deathTick: 0,
+    headingDeg: 180,
+    hitFlash: 0.75,
+    id: 8,
+    maximumHealth: 2,
+    ownerCoffinActorId: 7,
+    pose: 1,
+    position: { x: 130, y: 460 },
+    spawnTick: 20,
+    state: 'bite',
+  }
 }

@@ -15,6 +15,10 @@ const baseUrl = process.env.SDR_GAME_WAVES_SMOKE_URL
 const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-solomon-waves.png'
 const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$1')
+const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
+const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
+const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
+const loadoutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-loadout$1')
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
@@ -51,12 +55,19 @@ try {
   assert.ok(hello.renderFrame >= 213 && hello.renderFrame <= 227)
   const mouthPoses = [hello.mouthPose]
   const headings = [hello.heading]
-  await page.waitForFunction((initialPose) => {
+  const changedMouthHandle = await page.waitForFunction((initialPose) => {
     const scene = document.querySelector('.boneyard-scene')
-    return scene?.getAttribute('data-solomon-phase') === 'speaking'
-      && Number(scene.getAttribute('data-solomon-mouth-pose')) !== initialPose
+    const mouthPose = Number(scene?.getAttribute('data-solomon-mouth-pose'))
+    if (
+      scene?.getAttribute('data-solomon-phase') !== 'speaking'
+      || mouthPose === initialPose
+    ) return null
+    return {
+      heading: Number(scene.getAttribute('data-solomon-heading')),
+      mouthPose,
+    }
   }, hello.mouthPose, { timeout: 5_000 })
-  const animatedSpeech = await encounterReceipt(scene)
+  const animatedSpeech = await changedMouthHandle.jsonValue()
   mouthPoses.push(animatedSpeech.mouthPose)
   headings.push(animatedSpeech.heading)
   assert.ok(
@@ -68,41 +79,77 @@ try {
     window.__sdrAudioPlaySources?.some((source) => source.includes(cue))
   ), hello.voiceCue, { timeout: 5_000 })
 
-  await page.waitForFunction(() => (
-    Number(document.querySelector('.boneyard-scene')
-      ?.getAttribute('data-solomon-run-event-id')) === 1
-  ), undefined, { timeout: 15_000 })
-  const runEdge = await encounterReceipt(scene)
-  assert.ok(runEdge.phase === 'escaping' || runEdge.phase === 'gone')
-  await page.screenshot({ path: screenshotPath })
-  await page.waitForFunction(() => {
-    const scene = document.querySelector('.boneyard-scene')
-    return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 10
-      && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
-  }, undefined, { timeout: 5_000 })
-  const opening = await encounterReceipt(scene)
+  const escapeKeys = movementKeys({
+    x: approach.contactPosition.x - loadedBoneyard.scene.solomonDig.position.x,
+    y: approach.contactPosition.y - loadedBoneyard.scene.solomonDig.position.y,
+  })
+  assert.ok(escapeKeys.length > 0, 'expected a movement direction away from Solomon')
+  for (const key of escapeKeys) await page.keyboard.down(key)
+  let opening
+  let runEdge
+  try {
+    await page.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-run-event-id')) === 1
+    ), undefined, { timeout: 15_000 })
+    runEdge = await encounterReceipt(scene)
+    assert.ok(runEdge.phase === 'escaping' || runEdge.phase === 'gone')
+    await page.screenshot({ path: screenshotPath })
+    await page.waitForFunction(() => {
+      const scene = document.querySelector('.boneyard-scene')
+      return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 10
+        && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
+    }, undefined, { timeout: 10_000 })
+    opening = await encounterReceipt(scene)
+  } finally {
+    for (const key of escapeKeys) await page.keyboard.up(key)
+  }
   assert.ok(opening.wavePhase === 'opening' || opening.wavePhase === 'opening-threshold')
   assert.ok(opening.liveEnemies >= 10 && opening.liveEnemies <= 15)
   assert.equal(opening.liveEnemies + opening.pendingSpawnBudget, 15)
   assert.equal(opening.waveOrdinal, 0)
 
-  await page.waitForFunction(() => (
-    Number(document.querySelector('.boneyard-scene')
-      ?.getAttribute('data-solomon-voice-event-id')) === 3
-    && window.__sdrAudioPlaySources?.some(
-      (source) => source.includes('solomon-get-him-boys'),
-    )
-  ), undefined, { timeout: 5_000 })
-  await page.waitForFunction(() => {
-    const scene = document.querySelector('.boneyard-scene')
-    return scene?.getAttribute('data-wave-phase') === 'opening-threshold'
-      && Number(scene.getAttribute('data-wave-live-enemy-count')) === 15
-      && Number(scene.getAttribute('data-wave-pending-spawn-budget')) === 0
-  }, undefined, { timeout: 15_000 })
+  await installEnemyActionProbe(page)
+  const combat = await castUntilEnemyDies(page)
+  await page.screenshot({ path: combatScreenshotPath })
+  const locomotion = await kiteUntilSolomonTaunt(page)
   const taunt = await encounterReceipt(scene)
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
-  assert.equal(taunt.liveEnemies, 15)
-  assert.equal(taunt.wavePhase, 'opening-threshold')
+  assert.equal(taunt.voiceEventId, 3)
+  assert.ok(taunt.liveEnemies >= 9 && taunt.liveEnemies <= 15)
+  const death = await waitForPlayerDeath(page)
+  await page.screenshot({ path: deathScreenshotPath })
+  const gameOver = page.getByRole('button', { name: 'Game over. Continue to loadout.' })
+  await gameOver.waitFor({ timeout: 180_000 })
+  const gameOverFrame = await boneyardFrame(page)
+  assert.equal(gameOverFrame.runPhase, 'game-over')
+  assert.ok(gameOverFrame.runGameOverTicks >= 1_000)
+  await page.screenshot({ path: gameOverScreenshotPath })
+  await gameOver.click()
+  const retainedLoadout = page.locator(
+    '.create-menu-scene[data-retained-loadout="true"][data-motion-settled="true"]',
+  )
+  await retainedLoadout.waitFor({ timeout: 90_000 })
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 30_000 })
+  assert.equal(await retainedLoadout.getAttribute('data-element'), 'fire')
+  await page.screenshot({ path: loadoutScreenshotPath })
+
+  const firstRunId = gameOverFrame.runId
+  await page.locator('.create-menu-discipline-arcane').click()
+  await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 })
+  await page.waitForFunction((priorRunId) => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.runPhase === 'active' && frame.runId !== priorRunId
+  }, firstRunId, { timeout: 30_000 })
+  const secondRun = await boneyardFrame(page)
+  assert.notEqual(secondRun.runId, firstRunId)
+  assert.equal(secondRun.localPlayerHealth, 50)
+  assert.equal(secondRun.localPlayerMana, 100)
+  assert.equal(secondRun.localPlayerLifeState, 'alive')
+  assert.equal(secondRun.enemyCount, 0)
+  assert.equal(await scene.getAttribute('data-solomon-phase'), 'digging')
 
   const audioPlaySources = await page.evaluate(() => (
     [...new Set(window.__sdrAudioPlaySources ?? [])]
@@ -110,18 +157,29 @@ try {
   assert.ok(audioPlaySources.some((source) => source.includes(hello.voiceCue)))
   assert.ok(audioPlaySources.some((source) => source.includes('solomon-laugh-1')))
   assert.ok(audioPlaySources.some((source) => source.includes('solomon-get-him-boys')))
+  assert.ok(audioPlaySources.some((source) => source.includes('throw-fire')))
+  assert.ok(audioPlaySources.some((source) => source.includes('death-guitar')))
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     approach,
     audioPlaySources,
+    combat,
+    combatScreenshotPath,
+    death,
+    deathScreenshotPath,
     errors,
     gateCrossing,
+    gameOverFrame,
+    gameOverScreenshotPath,
     headings: [...new Set(headings)],
     hello,
+    loadoutScreenshotPath,
+    locomotion,
     mouthPoses: [...new Set(mouthPoses)],
     opening,
     runEdge,
     screenshotPath,
+    secondRun,
     speakingScreenshotPath,
     status: 'ok',
     taunt,
@@ -139,6 +197,265 @@ try {
 } finally {
   await page.close()
   await browser.close()
+}
+
+async function kiteUntilSolomonTaunt(page) {
+  const first = await boneyardFrame(page)
+  const actions = new Set()
+  let minimumHealth = first.localPlayerHealth
+  let pulseIndex = 0
+  const fallbackDirections = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ]
+  const deadline = Date.now() + 180_000
+
+  while (Date.now() < deadline) {
+    const frame = await boneyardFrame(page)
+    minimumHealth = Math.min(minimumHealth, frame.localPlayerHealth)
+    for (const enemy of frame.enemySamples) {
+      if (enemy.action) actions.add(enemy.action)
+    }
+    const receipt = await encounterReceipt(page.locator('.boneyard-scene'))
+    const hasTaunt = receipt.voiceEventId === 3
+      && await page.evaluate(() => window.__sdrAudioPlaySources?.some(
+        (source) => source.includes('solomon-get-him-boys'),
+      ))
+    if (hasTaunt) {
+      const movedEnemyIds = await page.evaluate(() => window.__sdrEnemyMovedIds ?? [])
+      assert.ok(movedEnemyIds.length > 0, 'expected authoritative enemy locomotion')
+      return {
+        actions: [...actions],
+        endTick: frame.tick,
+        minimumHealth,
+        movedEnemyIds,
+        startTick: first.tick,
+      }
+    }
+
+    if (frame.localPlayerLifeState === 'alive') {
+      const target = nearestLivingEnemy(frame)
+      const away = target
+        ? { x: frame.playerX - target.x, y: frame.playerY - target.y }
+        : fallbackDirections[pulseIndex % fallbackDirections.length]
+      const keys = movementKeys(away)
+      await pulseMovement(
+        page,
+        keys.length > 0 ? keys : movementKeys(fallbackDirections[pulseIndex % 4]),
+        180,
+      )
+    } else {
+      await page.waitForTimeout(100)
+    }
+    pulseIndex += 1
+  }
+  throw new Error('Solomon did not finish the laugh and taunt while combat was active')
+}
+
+async function castUntilEnemyDies(page) {
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    let before = await boneyardFrame(page)
+    const visibilityDeadline = Date.now() + 60_000
+    while (
+      before.localPlayerLifeState === 'alive'
+      && nearestVisibleLivingEnemy(before) === null
+      && Date.now() < visibilityDeadline
+    ) {
+      await page.waitForTimeout(100)
+      before = await boneyardFrame(page)
+    }
+    assert.equal(before.localPlayerLifeState, 'alive', 'player died before the combat cast')
+    const target = nearestVisibleLivingEnemy(before)
+    assert.ok(target, 'expected a visible opening-wave enemy')
+    const targetHealth = target.currentHealth
+    const targetId = target.id
+    const targetPoint = await enemyScreenPoint(canvas, before, target)
+    await page.bringToFront()
+    await page.mouse.move(targetPoint.x, targetPoint.y)
+    await page.mouse.down({ button: 'left' })
+    await page.waitForTimeout(35)
+    await page.mouse.up({ button: 'left' })
+
+    let accepted
+    try {
+      const acceptedHandle = await page.waitForFunction((manaBefore) => {
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        return frame?.localPlayerMana < manaBefore ? structuredClone(frame) : null
+      }, before.localPlayerMana, { timeout: 30_000 })
+      accepted = await acceptedHandle.jsonValue()
+      await acceptedHandle.dispose()
+    } catch {
+      await page.waitForFunction((tick) => (
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.tick >= tick + 80
+      ), before.tick, { timeout: 60_000 })
+      continue
+    }
+
+    try {
+      const hitHandle = await page.waitForFunction(({ enemyCount, health, id }) => {
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        if (!frame) return null
+        const enemy = frame.enemySamples.find((candidate) => candidate.id === id)
+        if (!enemy && frame.enemyCount < enemyCount) {
+          return { frame: structuredClone(frame), retired: true }
+        }
+        return enemy && (enemy.currentHealth < health || enemy.lifeState === 'death')
+          ? { enemy: { ...enemy }, frame: structuredClone(frame), retired: false }
+          : null
+      }, {
+        enemyCount: before.enemyCount,
+        health: targetHealth,
+        id: targetId,
+      }, { timeout: 60_000 })
+      const hit = await hitHandle.jsonValue()
+      await hitHandle.dispose()
+      assert.ok(hit.retired || hit.enemy?.lifeState === 'death' || hit.enemy?.currentHealth <= 0)
+      return {
+        acceptedTick: accepted.tick,
+        attempt,
+        enemyCountAfter: hit.frame.enemyCount,
+        enemyCountBefore: before.enemyCount,
+        enemyHealthAfter: hit.enemy?.currentHealth ?? null,
+        enemyHealthBefore: targetHealth,
+        enemyLifeState: hit.enemy?.lifeState ?? 'retired',
+        manaAfter: accepted.localPlayerMana,
+        manaBefore: before.localPlayerMana,
+        targetId,
+      }
+    } catch {
+      await page.waitForFunction((tick) => (
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.tick >= tick + 80
+      ), accepted.tick, { timeout: 60_000 })
+    }
+  }
+  throw new Error('Fire casts never contacted an opening-wave enemy')
+}
+
+async function waitForPlayerDeath(page) {
+  const first = await boneyardFrame(page)
+  const actions = new Set()
+  const healthSamples = [first.localPlayerHealth]
+  let lastApproachAt = 0
+  const deadline = Date.now() + 240_000
+
+  while (Date.now() < deadline) {
+    const frame = await boneyardFrame(page)
+    healthSamples.push(frame.localPlayerHealth)
+    for (const enemy of frame.enemySamples) {
+      if (enemy.action) actions.add(enemy.action)
+    }
+    if (frame.runPhase === 'game-over' && frame.localPlayerDeathTick >= 153) {
+      assert.equal(Math.min(...healthSamples), 0)
+      const probedActions = await page.evaluate(() => window.__sdrEnemyActionSamples ?? [])
+      for (const action of probedActions) actions.add(action)
+      assert.ok(actions.size > 0, 'expected an enemy attack animation before player death')
+      return {
+        actions: [...actions],
+        deathTick: frame.localPlayerDeathTick,
+        finalHealth: frame.localPlayerHealth,
+        lifeState: frame.localPlayerLifeState,
+        runGameOverTicks: frame.runGameOverTicks,
+        runId: frame.runId,
+        startHealth: first.localPlayerHealth,
+      }
+    }
+    if (
+      frame.localPlayerLifeState === 'alive'
+      && Date.now() - lastApproachAt >= 2_000
+    ) {
+      const target = nearestLivingEnemy(frame)
+      if (target) {
+        await pulseMovement(page, movementKeys({
+          x: target.x - frame.playerX,
+          y: target.y - frame.playerY,
+        }), 180)
+      } else {
+        await page.waitForTimeout(180)
+      }
+      lastApproachAt = Date.now()
+    } else {
+      await page.waitForTimeout(100)
+    }
+  }
+  throw new Error(`player did not reach terminal death: ${JSON.stringify(await boneyardFrame(page))}`)
+}
+
+async function installEnemyActionProbe(page) {
+  await page.evaluate(() => {
+    const samples = []
+    const origins = new Map()
+    const movedIds = []
+    Object.defineProperty(window, '__sdrEnemyActionSamples', {
+      configurable: true,
+      value: samples,
+    })
+    Object.defineProperty(window, '__sdrEnemyMovedIds', {
+      configurable: true,
+      value: movedIds,
+    })
+    const observe = () => {
+      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      for (const enemy of frame?.enemySamples ?? []) {
+        if (enemy.action && !samples.includes(enemy.action)) samples.push(enemy.action)
+        const origin = origins.get(enemy.id)
+        if (!origin) {
+          origins.set(enemy.id, { x: enemy.x, y: enemy.y })
+        } else if (
+          !movedIds.includes(enemy.id)
+          && Math.hypot(enemy.x - origin.x, enemy.y - origin.y) > 2
+        ) {
+          movedIds.push(enemy.id)
+        }
+      }
+      if (document.querySelector('.boneyard-world-canvas')) requestAnimationFrame(observe)
+    }
+    requestAnimationFrame(observe)
+  })
+}
+
+function nearestLivingEnemy(frame) {
+  return frame.enemySamples
+    .filter((enemy) => enemy.lifeState !== 'death')
+    .toSorted((left, right) => (
+      Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
+      - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+      || left.id - right.id
+    ))[0] ?? null
+}
+
+function nearestVisibleLivingEnemy(frame) {
+  return frame.enemySamples
+    .filter((enemy) => {
+      if (enemy.lifeState === 'death') return false
+      const x = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
+      const y = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
+      return x >= 30 && x <= 1_570 && y >= 30 && y <= 870
+    })
+    .toSorted((left, right) => (
+      Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
+      - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+      || left.id - right.id
+    ))[0] ?? null
+}
+
+async function enemyScreenPoint(canvas, frame, enemy) {
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
+  const logicalX = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
+  const logicalY = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
+  return {
+    x: bounds.x + logicalX / 1_600 * bounds.width,
+    y: bounds.y + logicalY / 900 * bounds.height,
+  }
+}
+
+async function boneyardFrame(page) {
+  return page.locator('.boneyard-world-canvas').evaluate((node) => (
+    structuredClone(node.__sdrBoneyardFrame)
+  ))
 }
 
 function installAudioPlayProbe() {
@@ -327,6 +644,7 @@ async function walkToSolomon(page, scene, boneyardScene) {
   const routeNodes = route.length
   let routeIndex = 1
   let stalledSteps = 0
+  let obstacleEscapeSign = 1
 
   while (Date.now() - startedAt < 240_000) {
     const before = await approachReceipt(scene)
@@ -397,6 +715,15 @@ async function walkToSolomon(page, scene, boneyardScene) {
     } else {
       stalledSteps += 1
       if (stalledSteps >= 6) {
+        if (after.distance < 400) {
+          const radialX = solomon.x - after.playerX
+          const radialY = solomon.y - after.playerY
+          await pulseMovement(page, movementKeys({
+            x: -radialY * obstacleEscapeSign,
+            y: radialX * obstacleEscapeSign,
+          }), 900)
+          obstacleEscapeSign *= -1
+        }
         route = planSolomonPath(
           boneyardScene,
           { x: after.playerX, y: after.playerY },

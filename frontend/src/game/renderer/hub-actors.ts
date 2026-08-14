@@ -9,7 +9,10 @@ import type {
   ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
-import { createPlayerCharacterDrawPlan } from '../player-character-presentation.ts'
+import {
+  createPlayerCharacterDrawPlan,
+  createPlayerDeathDrawPlan,
+} from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
@@ -24,6 +27,8 @@ export class PlayerWorldView {
   private readonly fixed: Sprite
   private readonly staffFront: Sprite
   private readonly head: Sprite
+  private readonly deathBody: Sprite
+  private readonly deathAttachment: Sprite
   private readonly textures: PlayerWorldTextures
   private currentWalkPose = 0
   private currentAttachmentPose = 0
@@ -46,6 +51,8 @@ export class PlayerWorldView {
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.head = actorSprite(playerTextures.head[0], 7)
+    this.deathBody = actorSprite(playerTextures.death[0][0], 3)
+    this.deathAttachment = actorSprite(playerTextures.deathAttachment[0][0], 4)
     this.container.addChild(
       this.shadow,
       this.staffBack,
@@ -54,6 +61,8 @@ export class PlayerWorldView {
       this.fixed,
       this.staffFront,
       this.head,
+      this.deathBody,
+      this.deathAttachment,
     )
   }
 
@@ -70,16 +79,30 @@ export class PlayerWorldView {
     const headOffset = plan.headOffset
     const orbOffset = plan.orbOffset
     const staffFront = plan.staffFront
+    const death = createPlayerDeathDrawPlan(
+      player.headingIndex,
+      player.progression.lifeState,
+      player.progression.deathTick,
+    )
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
+    this.shadow.visible = !death.visible
+    this.staffBack.visible = !death.visible && !staffFront
+    this.orb.container.visible = !death.visible
+    this.robe.visible = !death.visible
+    this.fixed.visible = !death.visible
+    this.staffFront.visible = !death.visible && staffFront
+    this.head.visible = !death.visible
+    this.deathBody.visible = death.visible
+    this.deathAttachment.visible = death.visible
+    this.deathBody.texture = playerTextures.death[death.facing][death.frame]
+    this.deathAttachment.texture = playerTextures.deathAttachment[death.facing][death.frame]
     this.staffBack.texture = playerTextures.staffBack[heading][attachmentPose]
-    this.staffBack.visible = !staffFront
     this.robe.texture = playerTextures.robe[heading][pose]
     this.fixed.texture = playerTextures.fixed[heading][attachmentPose]
     this.fixed.position.set(fixedOffset.x, fixedOffset.y)
     this.staffFront.texture = playerTextures.staffFront[heading][attachmentPose]
-    this.staffFront.visible = staffFront
     this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
     this.head.texture = playerTextures.head[heading]
     this.head.position.set(headOffset.x, headOffset.y)
@@ -109,6 +132,8 @@ export class PlayerWorldView {
     this.fixed.tint = tint
     this.staffFront.tint = tint
     this.head.tint = tint
+    this.deathBody.tint = tint
+    this.deathAttachment.tint = tint
   }
 
   get orbSpriteCount(): number {

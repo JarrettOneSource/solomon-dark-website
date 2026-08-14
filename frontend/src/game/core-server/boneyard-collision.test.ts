@@ -8,6 +8,7 @@ import {
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
   firstBoneyardLineObstruction,
+  firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
@@ -179,6 +180,23 @@ test('clips Water prediction against the nearest Boneyard primitive and arena ed
     ),
     { x: 250, y: 0 },
   )
+})
+
+test('projectile sweeps report the first static-world contact along the path', () => {
+  const progress = firstBoneyardPathBlockProgress(
+    { x: 50, y: 250 },
+    { x: 150, y: 250 },
+    { x: 0, y: 0, w: 500, h: 500 },
+    {
+      circles: [],
+      polygons: [],
+      segments: [{ start: { x: 100, y: 0 }, end: { x: 100, y: 500 }, radius: 0 }],
+    },
+    5,
+  )
+
+  assert.ok(progress !== null)
+  assert.ok(progress > 0.44 && progress < 0.46)
 })
 
 function makeScene(): BoneyardScene {

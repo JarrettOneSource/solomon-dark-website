@@ -1,4 +1,3 @@
-import { actorHeadingFromVector } from './actor-heading.ts'
 import type { BoneyardBounds, BoneyardPoint } from './boneyard.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
@@ -37,16 +36,15 @@ export const BONEYARD_WAVE_DIRECTOR_PHASES = [
 
 export type BoneyardWaveDirectorPhase = typeof BONEYARD_WAVE_DIRECTOR_PHASES[number]
 
-export interface BoneyardEnemyState {
+export interface BoneyardEnemySpawnIntent {
   enemyToken: BoneyardWaveEnemyToken
   flags: readonly string[]
-  headingDeg: number
   id: number
   locationPolicy: BoneyardSpawnLocationPolicy
   nativeTypeId: number
   position: BoneyardPoint
   spawnTick: number
-  targetPlayerId: string
+  waveOrdinal: number
 }
 
 export interface BoneyardWaveDirectorState {
@@ -58,11 +56,10 @@ export interface BoneyardWaveDirectorState {
   burstSpawnRemaining: number
   burstSpreadTicksRemaining: number
   compiledSchedule: readonly BoneyardCompiledWaveSection[]
-  enemies: readonly BoneyardEnemyState[]
   interwaveDelayTicks: number
   lullThreshold: number
   lowPopulationTicks: number
-  nextEnemyId: number
+  nextSpawnIntentId: number
   nextScheduleIndex: number | null
   pendingSpawnBudget: number
   phase: BoneyardWaveDirectorPhase
@@ -79,6 +76,18 @@ export interface BoneyardWaveDirectorState {
 export type BoneyardWavePlayers = Readonly<
   Record<string, { position: BoneyardPoint }>
 >
+
+export interface BoneyardWaveDirectorTickContext {
+  bounds: BoneyardBounds
+  liveEnemyCount: number
+  players: BoneyardWavePlayers
+  tick: number
+}
+
+export interface BoneyardWaveDirectorTickResult {
+  director: BoneyardWaveDirectorState
+  spawnIntents: readonly BoneyardEnemySpawnIntent[]
+}
 
 const SPAWN_RADIUS = 100
 const LULL_RELEASE_TO_NEXT_LABEL_TICKS = (
@@ -102,11 +111,10 @@ export function createBoneyardWaveDirector(
     burstSpawnRemaining: 0,
     burstSpreadTicksRemaining: 0,
     compiledSchedule,
-    enemies: [],
     interwaveDelayTicks: 0,
     lullThreshold: 0,
     lowPopulationTicks: 0,
-    nextEnemyId: 1,
+    nextSpawnIntentId: 1,
     nextScheduleIndex: null,
     pendingSpawnBudget: 0,
     phase: 'dormant',
@@ -135,65 +143,61 @@ export function startBoneyardWaveDirector(
 
 export function stepBoneyardWaveDirector(
   source: BoneyardWaveDirectorState,
-  players: BoneyardWavePlayers,
-  bounds: BoneyardBounds,
-  tick: number,
-): BoneyardWaveDirectorState {
-  if (source.phase === 'dormant') return source
-  const state = stepArenaLowPopulationTimer(source)
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  validateLiveEnemyCount(context.liveEnemyCount)
+  if (source.phase === 'dormant') return tickResult(source)
+  const state = stepArenaLowPopulationTimer(source, context.liveEnemyCount)
   switch (state.phase) {
-    case 'dormant': return state
-    case 'opening': return stepSpawnerGraph(state, players, bounds, tick)
-    case 'opening-threshold': return state.enemies.length < state.populationThreshold
-      ? beginScheduleRow(state, 0)
-      : state
-    case 'spawning': return stepSpawnerGraph(state, players, bounds, tick)
-    case 'wave-threshold': return stepPopulationThreshold(state)
-    case 'wave-lull-delay': return stepLullDelay(state)
-    case 'wave-lull': return stepLullThreshold(state)
-    case 'interwave': return stepInterwave(state)
-  }
-}
-
-export function retireBoneyardEnemy(
-  source: BoneyardWaveDirectorState,
-  enemyId: number,
-): BoneyardWaveDirectorState {
-  if (!source.enemies.some((enemy) => enemy.id === enemyId)) return source
-  return {
-    ...source,
-    enemies: source.enemies.filter((enemy) => enemy.id !== enemyId),
+    case 'dormant': return tickResult(state)
+    case 'opening': return stepSpawnerGraph(state, context)
+    case 'opening-threshold': return tickResult(
+      context.liveEnemyCount < state.populationThreshold
+        ? beginScheduleRow(state, 0)
+        : state,
+    )
+    case 'spawning': return stepSpawnerGraph(state, context)
+    case 'wave-threshold': return tickResult(stepPopulationThreshold(
+      state,
+      context.liveEnemyCount,
+    ))
+    case 'wave-lull-delay': return tickResult(stepLullDelay(state))
+    case 'wave-lull': return tickResult(stepLullThreshold(state, context.liveEnemyCount))
+    case 'interwave': return tickResult(stepInterwave(state))
   }
 }
 
 function stepSpawnerGraph(
   source: BoneyardWaveDirectorState,
-  players: BoneyardWavePlayers,
-  bounds: BoneyardBounds,
-  tick: number,
-): BoneyardWaveDirectorState {
-  if (Object.keys(players).length === 0) return source
+  context: BoneyardWaveDirectorTickContext,
+): BoneyardWaveDirectorTickResult {
+  if (Object.keys(context.players).length === 0) return tickResult(source)
   let state = advanceSpawnerCountdown(source)
-  if (!state.burstStarted && state.spawnCountdown > 0) return state
+  if (!state.burstStarted && state.spawnCountdown > 0) return tickResult(state)
   if (
     state.burstStarted
     && state.spawnCountdown > 0
     && state.burstSpreadTicksRemaining > 0
-  ) return state
+  ) return tickResult(state)
 
+  const spawnIntents: BoneyardEnemySpawnIntent[] = []
   while (state.burstSpawnRemaining > 0) {
-    state = spawnOneEnemy(state, players, bounds, tick)
+    const spawned = spawnOneEnemy(state, context.players, context.bounds, context.tick)
+    state = spawned.director
+    spawnIntents.push(spawned.spawnIntent)
     if (state.burstSpawnRemaining <= 0) {
       state = advanceBurst(state)
-      if (state.phase !== 'opening' && state.phase !== 'spawning') return state
-      if (state.spawnCountdown > 0) return state
+      if (state.phase !== 'opening' && state.phase !== 'spawning') {
+        return { director: state, spawnIntents }
+      }
+      if (state.spawnCountdown > 0) return { director: state, spawnIntents }
       continue
     }
     if (state.burstSpreadTicksRemaining > 0) {
-      return resetSpawnerInterval(state)
+      return { director: resetSpawnerInterval(state), spawnIntents }
     }
   }
-  return finishBursts(state)
+  return { director: finishBursts(state), spawnIntents }
 }
 
 function advanceSpawnerCountdown(
@@ -217,7 +221,7 @@ function spawnOneEnemy(
   players: BoneyardWavePlayers,
   bounds: BoneyardBounds,
   tick: number,
-): BoneyardWaveDirectorState {
+): { director: BoneyardWaveDirectorState; spawnIntent: BoneyardEnemySpawnIntent } {
   const burst = activeBurst(source)
   const entrySample = randomBoneyardWaveInteger(source.rngState, burst.entries.length)
   const entry = burst.entries[entrySample.value]
@@ -233,32 +237,27 @@ function spawnOneEnemy(
     throw new Error(`wave director cannot spawn unknown enemy ${entry.enemy}`)
   }
   return {
-    ...source,
-    activeGroupMemberIndex: entrySample.value,
-    burstStarted: true,
-    burstSpawnRemaining: source.burstSpawnRemaining - 1,
-    enemies: [
-      ...source.enemies,
-      {
-        enemyToken,
-        flags: [...entry.flags],
-        headingDeg: actorHeadingFromVector(
-          placed.target.position.x - placed.position.x,
-          placed.target.position.y - placed.position.y,
-        ),
-        id: source.nextEnemyId,
-        locationPolicy: burst.locationPolicy,
-        nativeTypeId,
-        position: placed.position,
-        spawnTick: tick,
-        targetPlayerId: placed.targetPlayerId,
-      },
-    ],
-    nextEnemyId: source.nextEnemyId + 1,
-    pendingSpawnBudget: source.pendingSpawnBudget - 1,
-    rngState: placed.rngState,
-    spawnCountdown: 0,
-    spawnDelayTicks: 0,
+    director: {
+      ...source,
+      activeGroupMemberIndex: entrySample.value,
+      burstStarted: true,
+      burstSpawnRemaining: source.burstSpawnRemaining - 1,
+      nextSpawnIntentId: source.nextSpawnIntentId + 1,
+      pendingSpawnBudget: source.pendingSpawnBudget - 1,
+      rngState: placed.rngState,
+      spawnCountdown: 0,
+      spawnDelayTicks: 0,
+    },
+    spawnIntent: {
+      enemyToken,
+      flags: Object.freeze([...entry.flags]),
+      id: source.nextSpawnIntentId,
+      locationPolicy: burst.locationPolicy,
+      nativeTypeId,
+      position: Object.freeze({ ...placed.position }),
+      spawnTick: tick,
+      waveOrdinal: source.waveOrdinal,
+    },
   }
 }
 
@@ -325,8 +324,9 @@ function finishBursts(
 
 function stepPopulationThreshold(
   source: BoneyardWaveDirectorState,
+  liveEnemyCount: number,
 ): BoneyardWaveDirectorState {
-  if (source.enemies.length >= source.populationThreshold) return source
+  if (liveEnemyCount >= source.populationThreshold) return source
   return {
     ...source,
     interwaveDelayTicks: NATIVE_PAUSE_NODE_GAP_TICKS,
@@ -352,10 +352,11 @@ function stepLullDelay(
 
 function stepLullThreshold(
   source: BoneyardWaveDirectorState,
+  liveEnemyCount: number,
 ): BoneyardWaveDirectorState {
   if (
     source.lowPopulationTicks <= 1
-    && source.enemies.length >= source.lullThreshold
+    && liveEnemyCount >= source.lullThreshold
   ) return source
   return {
     ...source,
@@ -449,23 +450,27 @@ function placeEnemy(
 ): {
   position: BoneyardPoint
   rngState: number
-  target: { position: BoneyardPoint }
-  targetPlayerId: string
 } {
   const entries = Object.entries(players)
   const playerSample = randomBoneyardWaveInteger(rngState, entries.length)
-  const [targetPlayerId, target] = entries[playerSample.value]
+  const [, placementPlayer] = entries[playerSample.value]
   if (policy === 'near-player') {
     const angleSample = nextBoneyardWaveRandom(playerSample.state)
     const angle = angleSample.value * Math.PI * 2
     return {
       position: {
-        x: clamp(target.position.x + Math.cos(angle) * SPAWN_RADIUS, bounds.x, bounds.x + bounds.w),
-        y: clamp(target.position.y + Math.sin(angle) * SPAWN_RADIUS, bounds.y, bounds.y + bounds.h),
+        x: clamp(
+          placementPlayer.position.x + Math.cos(angle) * SPAWN_RADIUS,
+          bounds.x,
+          bounds.x + bounds.w,
+        ),
+        y: clamp(
+          placementPlayer.position.y + Math.sin(angle) * SPAWN_RADIUS,
+          bounds.y,
+          bounds.y + bounds.h,
+        ),
       },
       rngState: angleSample.state,
-      target,
-      targetPlayerId,
     }
   }
   const xSample = nextBoneyardWaveRandom(playerSample.state)
@@ -476,8 +481,6 @@ function placeEnemy(
       y: bounds.y + ySample.value * bounds.h,
     },
     rngState: ySample.state,
-    target,
-    targetPlayerId,
   }
 }
 
@@ -524,13 +527,24 @@ function validateSchedule(schedule: readonly WaveDef[]): void {
 
 function stepArenaLowPopulationTimer(
   source: BoneyardWaveDirectorState,
+  liveEnemyCount: number,
 ): BoneyardWaveDirectorState {
-  if (source.enemies.length >= 11) return source
+  if (liveEnemyCount >= 11) return source
   let lowPopulationTicks = source.lowPopulationTicks + 1
-  if (lowPopulationTicks > 10 && source.enemies.length === 0) {
+  if (lowPopulationTicks > 10 && liveEnemyCount === 0) {
     lowPopulationTicks = 999_999_999
   }
   return { ...source, lowPopulationTicks }
+}
+
+function tickResult(director: BoneyardWaveDirectorState): BoneyardWaveDirectorTickResult {
+  return { director, spawnIntents: [] }
+}
+
+function validateLiveEnemyCount(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError('wave live enemy count must be a non-negative safe integer')
+  }
 }
 
 function validateEnemyEntry(entry: WaveGroupEntry, waveIndex: number): void {

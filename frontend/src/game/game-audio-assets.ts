@@ -2,6 +2,8 @@ import academy from '../assets/game/audio/music/academy.mp3'
 import selection from '../assets/game/audio/music/selection.mp3'
 import solomonDarkTheme from '../assets/game/audio/music/solomondarktheme.mp3'
 import prelude from '../assets/music/prelude.mp3'
+import combat from '../assets/music/combat.mp3'
+import death from '../assets/music/death.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import click from '../assets/game/audio/sfx/click.wav'
@@ -21,6 +23,7 @@ import iceLoop from '../assets/game/audio/sfx/ice-loop.wav'
 import lightningLoop from '../assets/game/audio/sfx/lightning-loop.wav'
 import rollingStoneLoop from '../assets/game/audio/sfx/rolling-stone-loop.wav'
 import startBoulder from '../assets/game/audio/sfx/start-boulder.wav'
+import deathGuitar from '../assets/game/audio/sfx/death-guitar.wav'
 import solomonGetHimBoys from '../assets/game/audio/voice/solomon-get-him-boys.wav'
 import solomonHello1 from '../assets/game/audio/voice/solomon-hello-1.wav'
 import solomonHello2 from '../assets/game/audio/voice/solomon-hello-2.wav'
@@ -38,6 +41,8 @@ export const GAME_AUDIO_SOURCES = {
   },
   music: {
     academy,
+    combat,
+    death,
     prelude,
     selection,
     solomondarktheme: solomonDarkTheme,
@@ -59,6 +64,7 @@ export const GAME_AUDIO_SOURCES = {
   streams: {
     'catch-it': catchIt,
     'choose-element': chooseElement,
+    'death-guitar': deathGuitar,
     'start-cast': startCast,
     'solomon-get-him-boys': solomonGetHimBoys,
     'solomon-hello-1': solomonHello1,

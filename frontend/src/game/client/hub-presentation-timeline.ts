@@ -191,6 +191,7 @@ function interpolateSnapshot(
       newer.primarySpells,
       blend,
     ),
+    run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
       ambient: interpolateAmbient(older.world.ambient, newer.world.ambient, blend),
@@ -420,6 +421,7 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
       Object.entries(snapshot.players).map(([id, player]) => [id, copyPlayer(player)]),
     ),
     primarySpells: copyPrimarySpellState(snapshot.primarySpells),
+    run: snapshot.run,
     tick: snapshot.tick,
     world: {
       ambient: interpolateAmbient(snapshot.world.ambient, snapshot.world.ambient, 0),

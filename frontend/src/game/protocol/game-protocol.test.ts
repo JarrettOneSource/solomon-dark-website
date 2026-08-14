@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  acknowledgeGameSimulationOver,
+  confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
@@ -12,6 +14,7 @@ import {
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -21,6 +24,7 @@ import {
   decodeClientGameMessage,
   decodeServerGameMessage,
   encodeGameMessage,
+  type LoadedBoneyard,
   type ServerWelcomeMessage,
 } from './game-protocol.ts'
 import { createGameSnapshotFrame } from './entity-replication.ts'
@@ -30,6 +34,28 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+
+function loadedBoneyardFixture(runId: string): LoadedBoneyard {
+  return {
+    choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+    geometrySha256: '2'.repeat(64),
+    runId,
+    scene: {
+      bounds: { h: 1_200, w: 1_600, x: 0, y: 0 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Lifecycle Arena',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 200, y: 150 },
+      sprites: [],
+      terrain: [],
+    },
+    seed: '0123456789abcdef',
+    sourceSha256: '1'.repeat(64),
+  }
+}
 
 test('client protocol validates character hello, input, acknowledgement, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
@@ -70,6 +96,20 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })), {
     type: 'client-start-match',
     boneyardId: 'default-random',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-acknowledge-game-over',
+    eventId: 3,
+    runId: 'run-three',
+  })), {
+    type: 'client-acknowledge-game-over',
+    eventId: 3,
+    runId: 'run-three',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-confirm-loadout',
+  })), {
+    type: 'client-confirm-loadout',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-skill',
@@ -141,17 +181,289 @@ test('server welcome round-trips content, kernel, character, and world ownership
     activeWeldBuildId: null,
     currentHealth: 50,
     currentMana: 100,
+    deathEpoch: 0,
+    deathTick: 0,
     experience: 0,
     learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
     level: 1,
+    lifeState: 'alive',
     maximumHealth: 50,
     maximumMana: 100,
     nextThreshold: 90,
     pendingOffer: null,
+    poisonDamagePerTick: 0,
+    poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
   })
+  assert.deepEqual(welcome.snapshot.run, {
+    eligiblePlayerIds: [],
+    gameOverEventId: 0,
+    gameOverTicks: 0,
+    lastCompletedRunId: null,
+    nextGameOverEventId: 1,
+    phase: 'hub',
+    runId: null,
+  })
   assert.equal(welcome.snapshot.world.kind, 'hub')
+
+  const resumedSnapshot = createGameSnapshot(
+    enterBoneyardWorld(
+      createGameSimulation({ 'player-1': CHARACTER }),
+      loadedBoneyardFixture('maggot-resume'),
+    ),
+    'player-1',
+  )
+  if (resumedSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  resumedSnapshot.world.maggots = [{
+    alpha: 1,
+    currentHealth: 1,
+    deathEpoch: 0,
+    deathTick: 0,
+    headingDeg: 90,
+    hitFlash: 0.6,
+    id: 2,
+    maximumHealth: 2,
+    ownerCoffinActorId: 1,
+    pose: 0.5,
+    position: { x: 200, y: 300 },
+    spawnTick: 10,
+    state: 'crawl',
+  }]
+  const resumedWelcome = {
+    ...welcome,
+    snapshot: resumedSnapshot,
+    snapshotSequence: 2,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(resumedWelcome)),
+    resumedWelcome,
+  )
+
+  const missingHitFlash = JSON.parse(encodeGameMessage(resumedWelcome))
+  delete missingHitFlash.snapshot.world.maggots[0].hitFlash
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingHitFlash)),
+    /hitFlash/,
+  )
+})
+
+test('protocol v14 carries the run-scoped Game Over, loadout, and death lifecycle', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 14)
+  const loaded = loadedBoneyardFixture('run-v14')
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loaded,
+  )
+  const gameOverState = {
+    ...active,
+    run: {
+      ...active.run,
+      gameOverEventId: 1,
+      gameOverTicks: 1_000,
+      nextGameOverEventId: 2,
+      phase: 'game-over' as const,
+    },
+  }
+  const gameOverSnapshot = createGameSnapshot(gameOverState, 'player-1')
+  const dyingPlayer = gameOverSnapshot.players['player-1']!
+  const snapshotWithDeath = {
+    ...gameOverSnapshot,
+    players: {
+      ...gameOverSnapshot.players,
+      'player-1': {
+        ...dyingPlayer,
+        progression: {
+          ...dyingPlayer.progression,
+          currentHealth: 0,
+          deathEpoch: 1,
+          deathTick: 159,
+          lifeState: 'spectating' as const,
+        },
+      },
+    },
+  }
+  const terminalMessage = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshotWithDeath, 0, undefined, true),
+    sequence: 2,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(terminalMessage)),
+    terminalMessage,
+  )
+
+  const loadoutState = acknowledgeGameSimulationOver(gameOverState, 'run-v14', 1)
+  assert.ok(loadoutState)
+  const loadoutSnapshot = createGameSnapshot(loadoutState, 'player-1')
+  const loadoutMessage = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(loadoutSnapshot, 0, undefined, true),
+    sequence: 3,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(loadoutMessage)),
+    loadoutMessage,
+  )
+  assert.equal(loadoutSnapshot.run.phase, 'loadout')
+  assert.equal(loadoutSnapshot.run.lastCompletedRunId, 'run-v14')
+  assert.equal(loadoutSnapshot.world.kind, 'hub')
+
+  const hubState = confirmGameSimulationLoadout(loadoutState)
+  assert.ok(hubState)
+  const hubSnapshot = createGameSnapshot(hubState, 'player-1')
+  assert.equal(hubSnapshot.run.phase, 'hub')
+  assert.equal(hubSnapshot.run.gameOverEventId, 0)
+  assert.equal(hubSnapshot.run.lastCompletedRunId, 'run-v14')
+
+  const missingRun = JSON.parse(encodeGameMessage(terminalMessage))
+  delete missingRun.frame.run
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingRun)),
+    /frame\.run/,
+  )
+
+  const mismatchedWorld = JSON.parse(encodeGameMessage(loadoutMessage))
+  mismatchedWorld.frame.run = terminalMessage.frame.run
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(mismatchedWorld)),
+    /run does not match its Boneyard world/,
+  )
+
+  const unsupportedLifeState = JSON.parse(encodeGameMessage(terminalMessage))
+  unsupportedLifeState.frame.players['player-1'].progression.lifeState = 'ghost'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unsupportedLifeState)),
+    /lifeState is not supported/,
+  )
+})
+
+test('protocol v14 preserves the bounded run-scoped enemy semantic-event lane', () => {
+  const runId = 'enemy-event-protocol-run'
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture(runId),
+  )
+  if (active.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const enemyEvents: BoneyardEnemySemanticEvent[] = [
+    {
+      actorId: 3,
+      eventId: 1,
+      targetPlayerId: 'player-1',
+      tick: 10,
+      type: 'enemy-spawned',
+    },
+    {
+      actorId: 3,
+      eventId: 2,
+      targetPlayerId: 'player-1',
+      tick: 11,
+      type: 'attack-marker',
+    },
+    {
+      actorId: 3,
+      eventId: 3,
+      projectileId: 9,
+      targetPlayerId: 'player-1',
+      tick: 11,
+      type: 'projectile-spawned',
+    },
+    {
+      actorId: 3,
+      eventId: 4,
+      projectileId: 9,
+      targetPlayerId: 'player-1',
+      tick: 12,
+      type: 'projectile-impact',
+    },
+    {
+      actorId: 3,
+      eventId: 5,
+      projectileId: 9,
+      targetPlayerId: 'player-1',
+      tick: 12,
+      type: 'projectile-retired',
+    },
+    { actorId: 3, eventId: 6, tick: 13, type: 'enemy-death' },
+    {
+      actorId: 3,
+      count: 2,
+      eventId: 7,
+      output: 'demon-split',
+      tick: 13,
+      type: 'enemy-terminal-output',
+    },
+    {
+      actorId: 3,
+      eventId: 8,
+      targetPlayerId: 'player-1',
+      tick: 13,
+      type: 'reward',
+    },
+    { actorId: 3, eventId: 9, tick: 20, type: 'enemy-retired' },
+    {
+      actorId: 4,
+      count: 20,
+      eventId: 10,
+      tick: 20,
+      type: 'coffin-maggot-release',
+    },
+  ]
+  const state = {
+    ...active,
+    tick: 20,
+    world: { ...active.world, enemyEvents },
+  }
+  const snapshot = createGameSnapshot(state, 'player-1')
+  if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.ok(snapshot.world.enemyEvents.every((event) => event.runId === runId))
+
+  const welcome: ServerWelcomeMessage = {
+    type: 'server-welcome',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-token',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    kernelParameters: {
+      fixedTickSeconds: 0.01,
+      movementAcceleration: 10,
+      movementLaneCap: 118.75,
+      movementRetention: 0.9,
+      movementThresholdSquared: Math.fround(0.01),
+      playerRadius: 25,
+    },
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [loadedBoneyardFixture(runId).choice],
+    snapshot,
+    snapshotSequence: 1,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 2,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const wrongRun = JSON.parse(encodeGameMessage(message))
+  wrongRun.frame.world.enemyEvents[0].runId = 'another-run'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongRun)),
+    /runId does not match/,
+  )
+
+  const missingProjectile = JSON.parse(encodeGameMessage(message))
+  delete missingProjectile.frame.world.enemyEvents[2].projectileId
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingProjectile)),
+    /projectileId/,
+  )
 })
 
 test('progression snapshots carry the next rank needed by the stock picker label', () => {
@@ -282,6 +594,15 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     offerSequence: 1,
     skillId: 80,
   })), /skillId/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-acknowledge-game-over',
+    eventId: 0,
+    runId: 'run-one',
+  })), /eventId/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-confirm-loadout',
+    runId: 'run-one',
+  })), /message\.runId is not allowed/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-pong',
     nonce: 4.5,
@@ -910,28 +1231,18 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemy = {
-    enemyToken: 'SKELETON',
-    flags: ['FLAG_WEAK'],
-    headingDeg: 90,
-    id: 1,
-    locationPolicy: 'near-player',
-    nativeTypeId: 1001,
-    position: { x: 300, y: 400 },
-    spawnTick: 12,
-    targetPlayerId: 'player-1',
-  }
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
-  invalidType.frame.world.waves.enemies = [{ ...enemy, nativeTypeId: 1004 }]
+  invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidType)),
-    /nativeTypeId does not match/,
+    /invalid registered descriptor shape/,
   )
 
   const duplicateEnemies = JSON.parse(encodeGameMessage(snapshotMessage))
-  duplicateEnemies.frame.world.waves.enemies = [enemy, { ...enemy }]
+  duplicateEnemies.frame.world.entities.spawned = [enemyDescriptor, [...enemyDescriptor]]
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(duplicateEnemies)),
-    /duplicates id 1/,
+    /duplicates 2:1/,
   )
 })

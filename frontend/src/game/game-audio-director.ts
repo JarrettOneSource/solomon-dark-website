@@ -156,6 +156,17 @@ export class GameAudioDirector {
     this.streams.get(cue)?.pause()
   }
 
+  stopStream(cue: GameStreamCue): void {
+    const channel = this.streams.get(cue)
+    if (!channel) return
+    this.stopAndReset(channel)
+    this.streams.delete(cue)
+  }
+
+  stopStreams(cues: readonly GameStreamCue[]): void {
+    for (const cue of cues) this.stopStream(cue)
+  }
+
   destroy(): void {
     this.generation += 1
     this.cancelMusicFade()

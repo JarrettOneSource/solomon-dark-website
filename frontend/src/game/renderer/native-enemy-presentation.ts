@@ -1,4 +1,14 @@
 import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
+import {
+  NATIVE_ENEMY_DEATH_PROGRAMS,
+  nativeEnemyActionFrame,
+  type NativeEnemyActionFrame,
+  type NativeEnemyActionProgramName,
+  type NativeEnemyAnimationSample,
+  type NativeEnemyDeathProgram,
+  type NativeEnemyEffectSample,
+  type NativeEnemySampleAtlas,
+} from './native-enemy-animation.ts'
 
 export const NATIVE_ENEMY_FAMILIES = [
   'SKELETON',
@@ -12,9 +22,10 @@ export const NATIVE_ENEMY_FAMILIES = [
 ] as const
 
 export type NativeEnemyFamily = typeof NATIVE_ENEMY_FAMILIES[number]
-export type NativeEnemyAtlas = 'BadGuys' | 'Demon'
+export type NativeEnemyAtlas = NativeEnemySampleAtlas
 
 export interface NativeEnemyVisualSnapshot {
+  animation?: NativeEnemyAnimationSample
   enemyToken: NativeEnemyFamily
   flags: readonly string[]
   headingDeg: number
@@ -27,6 +38,7 @@ export interface NativeEnemyVisualSnapshot {
 export interface NativeEnemySpriteLayer {
   alpha: number
   atlas: NativeEnemyAtlas
+  blendMode: 'add' | 'normal'
   entry: number
   offset: Readonly<{ x: number; y: number }>
   role: string
@@ -35,6 +47,8 @@ export interface NativeEnemySpriteLayer {
 }
 
 export interface NativeEnemyPresentationPlan {
+  actionFrame: NativeEnemyActionFrame | null
+  deathProgram: NativeEnemyDeathProgram | null
   facing: number
   family: NativeEnemyFamily
   layers: readonly NativeEnemySpriteLayer[]
@@ -54,6 +68,18 @@ const HEADGEAR_BY_FLAG = new Map([
   ['HORNED', 2],
   ['HOODED', 3],
 ] as const)
+const ACTIONS_BY_FAMILY: Readonly<
+  Record<NativeEnemyFamily, readonly NativeEnemyActionProgramName[]>
+> = {
+  SKELETON: ['skeleton-claw-a', 'skeleton-claw-b', 'skeleton-weapon', 'skeleton-pike'],
+  SKELETONARCHER: ['archer-shot'],
+  SKELETONMAGE: ['mage-cast-short', 'mage-cast-long'],
+  IMP: ['imp-contact'],
+  ZOMBIE: ['zombie-swipe'],
+  WRAITH: ['wraith-drain'],
+  DEMON: ['demon-claw', 'demon-bomb'],
+  COFFIN: ['coffin-open'],
+}
 
 export function roundHalfToEven(value: number): number {
   if (!Number.isFinite(value)) throw new Error('native facing value must be finite')
@@ -88,11 +114,38 @@ export function nativeEnemyPresentationPlan(
   if (!isNativeEnemyFamily(family)) {
     throw new Error(`unsupported native enemy family ${String(family)}`)
   }
-  const facing = nativeEnemyFacingBucket(family, enemy.headingDeg)
+  const animation = enemy.animation
+  const sampledHeading = family === 'ZOMBIE'
+    ? enemy.headingDeg + (animation?.zombieAngularOffsetDeg ?? 0)
+    : enemy.headingDeg
+  const facing = nativeEnemyFacingBucket(family, sampledHeading)
   const flags = normalizedFlags(enemy.flags)
   const spawnAgeTicks = Math.max(0, tick - enemy.spawnTick)
-  const layers = familyLayers(enemy, facing, flags, spawnAgeTicks)
+  if (
+    animation?.state === 'action'
+    && animation.action !== null
+    && !ACTIONS_BY_FAMILY[family].includes(animation.action)
+  ) {
+    throw new Error(`native enemy action ${animation.action} is invalid for ${family}`)
+  }
+  const actionFrame = animation?.state === 'action' && animation.action !== null
+    ? nativeEnemyActionFrame(animation.action, animation.actionProgress)
+    : null
+  const deathProgram = animation?.state === 'death'
+    ? NATIVE_ENEMY_DEATH_PROGRAMS[family]
+    : null
+  const baseLayers = animation?.state === 'death'
+    ? animation.effects.length > 0 ? [] : deathLayers(family, animation.deathTick)
+    : familyLayers(enemy, facing, flags, spawnAgeTicks, animation, actionFrame)
+  const sampledLayers = animation
+    ? [...baseLayers, ...effectLayers(animation.effects)]
+    : baseLayers
+  const layers = animation
+    ? applyAuthoritativeSample(sampledLayers, animation)
+    : sampledLayers
   return {
+    actionFrame,
+    deathProgram,
     facing,
     family,
     layers,
@@ -117,19 +170,23 @@ function familyLayers(
   facing: number,
   flags: ReadonlySet<string>,
   spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   switch (enemy.enemyToken) {
-    case 'SKELETON': return skeletonLayers(enemy, facing, flags)
-    case 'SKELETONARCHER': return skeletonArcherLayers(facing, flags)
-    case 'SKELETONMAGE': return skeletonMageLayers(facing, flags)
-    case 'IMP': return impLayers(enemy, facing)
-    case 'ZOMBIE': return zombieLayers(enemy, facing, flags)
+    case 'SKELETON': return skeletonLayers(enemy, facing, flags, animation, actionFrame)
+    case 'SKELETONARCHER': return skeletonArcherLayers(facing, flags, animation, actionFrame)
+    case 'SKELETONMAGE': return skeletonMageLayers(facing, flags, animation, actionFrame)
+    case 'IMP': return impLayers(enemy, facing, animation, actionFrame)
+    case 'ZOMBIE': return zombieLayers(enemy, facing, flags, animation, actionFrame)
     case 'WRAITH': return [layer('BadGuys', 2070 + facing, 'wraith-body', {
       offset: { x: 0, y: 15 },
       scale: 2,
     })]
-    case 'DEMON': return demonLayers(facing)
-    case 'COFFIN': return coffinSpawnLayers(enemy, spawnAgeTicks)
+    case 'DEMON': return demonLayers(facing, animation, actionFrame)
+    case 'COFFIN': return animation
+      ? coffinSampleLayers(animation)
+      : coffinSpawnLayers(enemy, spawnAgeTicks)
   }
 }
 
@@ -137,18 +194,30 @@ function skeletonLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
   flags: ReadonlySet<string>,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const weapon = selectedFlagValue(enemy.flags, WEAPON_BY_FLAG, 0)
   const headgear = selectedFlagValue(enemy.flags, HEADGEAR_BY_FLAG, 0)
   const armored = flags.has('ARMOR') || (
     flags.has('ARMORMAYBE') && visualChoice(enemy, 0, 2) === 1
   )
+  const sampledPose = visualPose(animation, actionFrame)
+  const limbPose = actionFrame?.program.name === 'skeleton-claw-a'
+    || actionFrame?.program.name === 'skeleton-claw-b'
+    ? actionFrame.frameIndex
+    : sampledPose
   const bodyBase = armored
     ? weapon === 0 ? 613 : weapon === 5 ? 991 : 919
     : weapon === 0 ? 1117 : weapon === 5 ? 1405 : 1333
+  const bodyPose = !armored && weapon === 5
+    ? boundedPose(sampledPose, 2)
+    : !armored && weapon !== 0
+      ? boundedPose(sampledPose, 3)
+      : 0
   const result = [
-    layer('BadGuys', 1585 + facing, 'skeleton-limbs'),
-    layer('BadGuys', bodyBase + facing, 'skeleton-body'),
+    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'skeleton-limbs'),
+    layer('BadGuys', bodyBase + bodyPose * 18 + facing, 'skeleton-body'),
   ]
   const weaponBase = weapon === 1
     ? 1045
@@ -158,7 +227,11 @@ function skeletonLayers(
         ? 775
         : null
   if (weaponBase !== null) {
-    result.push(layer('BadGuys', weaponBase + facing, 'skeleton-weapon'))
+    result.push(layer(
+      'BadGuys',
+      weaponBase + boundedPose(sampledPose, 3) * 18 + facing,
+      'skeleton-weapon',
+    ))
   }
   result.push(layer(
     'BadGuys',
@@ -172,12 +245,15 @@ function skeletonLayers(
 function skeletonArcherLayers(
   facing: number,
   sourceFlags: ReadonlySet<string>,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const flags = [...sourceFlags]
   const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
+  const pose = visualPose(animation, actionFrame)
   return [
-    layer('BadGuys', 1585 + facing, 'archer-limbs'),
-    layer('BadGuys', 451 + facing, 'archer-body'),
+    layer('BadGuys', 1585 + boundedPose(pose, 7) * 18 + facing, 'archer-limbs'),
+    layer('BadGuys', 451 + boundedPose(pose, 8) * 18 + facing, 'archer-body'),
     layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'archer-headgear', {
       offset: { x: 0, y: -4 },
     }),
@@ -187,12 +263,15 @@ function skeletonArcherLayers(
 function skeletonMageLayers(
   facing: number,
   sourceFlags: ReadonlySet<string>,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const flags = [...sourceFlags]
   const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
+  const pose = visualPose(animation, actionFrame)
   return [
-    layer('BadGuys', 1585 + facing, 'mage-limbs'),
-    layer('BadGuys', 1729 + facing, 'mage-body'),
+    layer('BadGuys', 1585 + boundedPose(pose, 7) * 18 + facing, 'mage-limbs'),
+    layer('BadGuys', 1729 + boundedPose(pose, 4) * 18 + facing, 'mage-body'),
     layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'mage-headgear', {
       offset: { x: 0, y: -4 },
     }),
@@ -202,44 +281,132 @@ function skeletonMageLayers(
 function impLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const variant = visualChoice(enemy, 1, 4)
-  const upperFrame = visualChoice(enemy, 2, 10)
-  return [
+  const upperFrame = animation?.impEffectFrame ?? visualChoice(enemy, 2, 10)
+  const result = [
     layer('BadGuys', 285 + variant * 12 + facing, 'imp-body'),
-    layer('BadGuys', 333 + upperFrame, 'imp-upper-effect', {
-      alpha: 0,
+    layer('BadGuys', 333 + boundedPose(upperFrame, 9), 'imp-upper-effect', {
+      alpha: animation && animation.impEffectFrame >= 0 ? 1 : 0,
       offset: { x: 0, y: -10 },
     }),
   ]
+  if (actionFrame?.program.name === 'imp-contact') {
+    result.push(layer('BadGuys', 251 + boundedPose(actionFrame.selector, 3), 'imp-contact'))
+  }
+  return result
 }
 
 function zombieLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
   flags: ReadonlySet<string>,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const bodyType = visualChoice(enemy, 3, 3)
   const headRoll = visualChoice(enemy, 4, 8)
   const headType = headRoll < 6 ? 0 : headRoll - 5
   const flyblownSide = flags.has('ROTTEN') ? visualChoice(enemy, 5, 2) : -1
+  const gaitPose = visualPose(animation, null)
+  const actionPose = actionFrame?.program.name === 'zombie-swipe'
+    ? actionFrame.selector
+    : null
+  const rearArmPose = actionPose ?? animation?.zombieRearArmPose ?? 0
+  const frontArmPose = actionPose ?? animation?.zombieFrontArmPose ?? 0
   return [
-    layer('BadGuys', 2365 + facing, 'zombie-base'),
+    layer('BadGuys', 2365 + boundedPose(gaitPose, 7) * 18 + facing, 'zombie-base'),
     layer('BadGuys', 2203 + bodyType * 18 + facing, 'zombie-body'),
-    layer('BadGuys', 2095 + (flyblownSide === 0 ? 18 : 0) + facing, 'zombie-arm-rear'),
-    layer('BadGuys', 2149 + (flyblownSide === 1 ? 18 : 0) + facing, 'zombie-arm-front'),
+    layer(
+      'BadGuys',
+      2095 + boundedPose(rearArmPose + (flyblownSide === 0 ? 1 : 0), 2) * 18 + facing,
+      'zombie-arm-rear',
+      { rotationRadians: animation?.zombieRearArmRotationRadians ?? 0 },
+    ),
+    layer(
+      'BadGuys',
+      2149 + boundedPose(frontArmPose + (flyblownSide === 1 ? 1 : 0), 2) * 18 + facing,
+      'zombie-arm-front',
+      { rotationRadians: animation?.zombieFrontArmRotationRadians ?? 0 },
+    ),
     layer('BadGuys', 2293 + headType * 18 + facing, 'zombie-head'),
   ]
 }
 
-function demonLayers(facing: number): NativeEnemySpriteLayer[] {
+function demonLayers(
+  facing: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+): NativeEnemySpriteLayer[] {
+  const controllerPose = actionFrame && (
+    actionFrame.program.name === 'demon-claw'
+    || actionFrame.program.name === 'demon-bomb'
+  )
+    ? boundedPose(actionFrame.selector, 1)
+    : boundedPose(animation?.bodyPose ?? 0, 1)
   return [
-    layer('Demon', 62 + facing, 'demon-rear-limb'),
-    layer('Demon', 98 + facing, 'demon-rear-joint'),
-    layer('Demon', 19 + facing, 'demon-controller-body'),
-    layer('Demon', 1 + facing, 'demon-front-limb'),
-    layer('Demon', 80 + facing, 'demon-front-joint'),
+    layer('Demon', 62 + facing, 'demon-rear-limb', {
+      rotationRadians: animation?.demonRearLimbRotationRadians ?? 0,
+    }),
+    layer('Demon', 98 + facing, 'demon-rear-joint', {
+      rotationRadians: animation?.demonRearJointRotationRadians ?? 0,
+    }),
+    layer('Demon', 19 + controllerPose * 18 + facing, 'demon-controller-body'),
+    layer('Demon', 1 + facing, 'demon-front-limb', {
+      rotationRadians: animation?.demonFrontLimbRotationRadians ?? 0,
+    }),
+    layer('Demon', 80 + facing, 'demon-front-joint', {
+      rotationRadians: animation?.demonFrontJointRotationRadians ?? 0,
+    }),
   ]
+}
+
+function coffinSampleLayers(
+  animation: NativeEnemyAnimationSample,
+): NativeEnemySpriteLayer[] {
+  if (animation.coffinState === 'hidden') return []
+  const action = animation.state === 'action' && animation.action === 'coffin-open'
+    ? nativeEnemyActionFrame(animation.action, animation.actionProgress)
+    : null
+  const pose = animation.coffinState === 'open'
+    ? 12
+    : action?.selector ?? animation.coffinPose
+  const result = [layer(
+    'BadGuys',
+    175 + boundedPose(pose, 12),
+    `coffin-${animation.coffinState}`,
+  )]
+  if (animation.coffinSecondaryPose !== null) {
+    result.push(layer(
+      'BadGuys',
+      383 + boundedPose(animation.coffinSecondaryPose, 9),
+      'coffin-secondary',
+    ))
+  }
+  for (const maggot of animation.maggots) {
+    if (maggot.state === 'death') {
+      result.push(layer('DeadHawg', 28, `maggot:${maggot.id}:death`, {
+        alpha: maggot.alpha,
+        offset: maggot.offset,
+        rotationRadians: maggot.rotationRadians,
+      }))
+      continue
+    }
+    const facing = nativeEnemyFacingBucket('SKELETON', maggot.headingDeg)
+    result.push(layer(
+      'BadGuys',
+      202 + boundedPose(maggot.pose, 1) * 18 + facing,
+      `maggot:${maggot.id}:${maggot.state}`,
+      {
+        alpha: maggot.alpha,
+        offset: maggot.offset,
+        rotationRadians: maggot.rotationRadians,
+      },
+    ))
+  }
+  return result
 }
 
 function coffinSpawnLayers(
@@ -263,18 +430,113 @@ function coffinSpawnLayers(
   return [layer('BadGuys', 175 + stateFrame, 'coffin-materializing')]
 }
 
+function deathLayers(
+  family: NativeEnemyFamily,
+  sourceDeathTick: number,
+): NativeEnemySpriteLayer[] {
+  const deathTick = Math.max(0, Math.floor(finiteOrZero(sourceDeathTick)))
+  switch (family) {
+    case 'SKELETON':
+    case 'SKELETONARCHER':
+    case 'SKELETONMAGE':
+      return deathTick === 0
+        ? [layer('BadGuys', 86, `${family.toLowerCase()}-shatter-impact`)]
+        : [
+            layer(
+              'BadGuys',
+              113 + boundedPose(Math.floor((deathTick - 1) / 2), 8),
+              `${family.toLowerCase()}-shatter`,
+            ),
+            layer(
+              'BadGuys',
+              1819 + boundedPose(Math.floor((deathTick - 1) / 6), 3),
+              `${family.toLowerCase()}-shatter-secondary`,
+            ),
+          ]
+    case 'IMP':
+      return [layer('BadGuys', 401 + boundedPose(deathTick, 18), 'imp-split')]
+    case 'ZOMBIE':
+      return [
+        layer('DeadHawg', 30, 'zombie-collapse-body'),
+        layer('DeadHawg', 46 + boundedPose(deathTick, 31), 'zombie-collapse-effect'),
+      ]
+    case 'WRAITH':
+      return [
+        layer('BadGuys', 113 + boundedPose(Math.floor(deathTick / 4), 8), 'wraith-dissolve'),
+        layer('BadGuys', 1819 + boundedPose(Math.floor(deathTick / 9), 3), 'wraith-dissolve-core'),
+      ]
+    case 'DEMON':
+      return [layer('Demon', 55 + boundedPose(Math.floor(deathTick / 7), 6), 'demon-split')]
+    case 'COFFIN':
+      return [layer('DeadHawg', 114 + boundedPose(deathTick, 30), 'coffin-break')]
+  }
+}
+
+function effectLayers(
+  effects: readonly NativeEnemyEffectSample[],
+): NativeEnemySpriteLayer[] {
+  return effects.map((effect) => layer(
+    effect.atlas,
+    effect.entry,
+    `effect:${effect.id}:${effect.role}`,
+    {
+      alpha: effect.alpha,
+      blendMode: effect.blendMode,
+      offset: effect.offset,
+      rotationRadians: effect.rotationRadians,
+      scale: effect.scale,
+    },
+  ))
+}
+
+function applyAuthoritativeSample(
+  sourceLayers: readonly NativeEnemySpriteLayer[],
+  animation: NativeEnemyAnimationSample,
+): NativeEnemySpriteLayer[] {
+  const alpha = boundedUnit(animation.alpha)
+  const layers = sourceLayers.map((source) => ({
+    ...source,
+    alpha: source.alpha * alpha,
+    offset: {
+      x: source.offset.x,
+      y: source.offset.y + finiteOrZero(animation.verticalOffset),
+    },
+  }))
+  const hitFlash = boundedUnit(animation.hitFlash)
+  if (hitFlash === 0) return layers
+  return [
+    ...layers,
+    ...layers.filter((source) => source.alpha > 0).map((source) => ({
+      ...source,
+      alpha: source.alpha * hitFlash,
+      blendMode: 'add' as const,
+      role: `${source.role}-hit-flash`,
+    })),
+  ]
+}
+
+function visualPose(
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+): number {
+  if (actionFrame) return actionFrame.selector
+  if (!animation) return 0
+  return animation.state === 'locomotion' ? animation.gaitPose : animation.bodyPose
+}
+
 function layer(
   atlas: NativeEnemyAtlas,
   entry: number,
   role: string,
   options: Partial<Pick<
     NativeEnemySpriteLayer,
-    'alpha' | 'offset' | 'rotationRadians' | 'scale'
+    'alpha' | 'blendMode' | 'offset' | 'rotationRadians' | 'scale'
   >> = {},
 ): NativeEnemySpriteLayer {
   return {
     alpha: options.alpha ?? 1,
     atlas,
+    blendMode: options.blendMode ?? 'normal',
     entry,
     offset: options.offset ?? { x: 0, y: 0 },
     role,
@@ -316,6 +578,18 @@ function visualChoice(
   value = Math.imul(value, 0x846ca68b) >>> 0
   value = (value ^ (value >>> 16)) >>> 0
   return value % count
+}
+
+function boundedPose(value: number, maximum: number): number {
+  return Math.min(maximum, Math.max(0, Math.floor(finiteOrZero(value))))
+}
+
+function boundedUnit(value: number): number {
+  return Math.min(1, Math.max(0, finiteOrZero(value)))
+}
+
+function finiteOrZero(value: number): number {
+  return Number.isFinite(value) ? value : 0
 }
 
 function positiveModulo(value: number, divisor: number): number {

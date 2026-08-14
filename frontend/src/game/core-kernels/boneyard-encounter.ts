@@ -222,11 +222,20 @@ function faceSolomonTarget(
   source: BoneyardSolomonEncounterState,
   players: SolomonContactPlayers,
 ): BoneyardSolomonEncounterState {
-  const target = source.targetPlayerId === null
+  let targetPlayerId = source.targetPlayerId
+  let target = targetPlayerId === null
     ? undefined
-    : players[source.targetPlayerId]
+    : players[targetPlayerId]
   if (!target) {
-    return { ...source, transitionOffsetY: source.transitionOffsetY * 0.9 }
+    targetPlayerId = nearestSolomonPlayerId(source.position, players)
+    target = targetPlayerId === null ? undefined : players[targetPlayerId]
+  }
+  if (!target) {
+    return {
+      ...source,
+      targetPlayerId: null,
+      transitionOffsetY: source.transitionOffsetY * 0.9,
+    }
   }
   const desiredHeading = actorHeadingFromVector(
     target.position.x - source.position.x,
@@ -241,6 +250,7 @@ function faceSolomonTarget(
   const faced = {
     ...source,
     headingDeg,
+    targetPlayerId,
     transitionOffsetY: source.transitionOffsetY * 0.9,
     turnRate: Math.min(SOLOMON_MAX_TURN_RATE, source.turnRate + 0.5),
   }
@@ -254,6 +264,24 @@ function faceSolomonTarget(
     phase: 'speaking',
     rngState: sample.state,
   }, cue)
+}
+
+function nearestSolomonPlayerId(
+  position: BoneyardPoint,
+  players: SolomonContactPlayers,
+): string | null {
+  let nearestId: string | null = null
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY
+  for (const playerId of Object.keys(players).sort()) {
+    const player = players[playerId]!
+    const dx = player.position.x - position.x
+    const dy = player.position.y - position.y
+    const distanceSquared = dx * dx + dy * dy
+    if (distanceSquared >= nearestDistanceSquared) continue
+    nearestDistanceSquared = distanceSquared
+    nearestId = playerId
+  }
+  return nearestId
 }
 
 function stepSolomonHello(

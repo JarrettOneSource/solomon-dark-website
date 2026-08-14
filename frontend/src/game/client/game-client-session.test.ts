@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  acknowledgeGameSimulationOver,
+  confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
@@ -20,6 +22,7 @@ import {
   PLAYER_CHARACTER_KERNEL_VERSION,
   decodeClientGameMessage,
   encodeGameMessage,
+  type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
 import { connectGameClientSession } from './game-client-session.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
@@ -41,6 +44,28 @@ function gameplayInput(
     aim,
     cast: { primary, secondary },
     movement,
+  }
+}
+
+function loadedBoneyardFixture(runId: string): LoadedBoneyard {
+  return {
+    choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+    geometrySha256: '2'.repeat(64),
+    runId,
+    scene: {
+      bounds: { h: 1_200, w: 1_600, x: 0, y: 0 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Lifecycle Arena',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 200, y: 150 },
+      sprites: [],
+      terrain: [],
+    },
+    seed: '0123456789abcdef',
+    sourceSha256: '1'.repeat(64),
   }
 }
 
@@ -148,6 +173,166 @@ test('client carries character config, publishes authority, and tears down', asy
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
+})
+
+test('host client keeps one session through Game Over, loadout, and Hub confirmation', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(hubState, 'player-1'))
+  const session = await connecting
+  const playerId = session.playerId
+  const runId = 'run-lifecycle'
+  const loaded = loadedBoneyardFixture(runId)
+  const activeState = enterBoneyardWorld(hubState, loaded)
+
+  transport.receive(encodeGameMessage({
+    type: 'server-boneyard-loaded',
+    boneyard: loaded,
+  }))
+  receiveSnapshot(transport, createGameSnapshot(activeState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'active')
+  assert.equal(session.getSnapshot().run.runId, runId)
+
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 500, y: 300 }, true))
+  const activeInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(activeInput.type, 'client-input')
+
+  const gameOverState = {
+    ...activeState,
+    run: {
+      ...activeState.run,
+      gameOverEventId: 1,
+      gameOverTicks: 1_000,
+      nextGameOverEventId: 2,
+      phase: 'game-over' as const,
+    },
+  }
+  receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'game-over')
+
+  const beforeStoppedInput = transport.sent.length
+  session.sendInput(gameplayInput({ x: 0, y: 1 }, { x: 600, y: 400 }, true, true))
+  assert.equal(transport.sent.length, beforeStoppedInput + 1)
+  const stoppedInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(stoppedInput.type, 'client-input')
+  if (stoppedInput.type !== 'client-input') assert.fail('expected stopped client input')
+  assert.deepEqual(stoppedInput.input, gameplayInput({ x: 0, y: 0 }))
+
+  const beforeStaleAcknowledgements = transport.sent.length
+  session.acknowledgeGameOver('stale-run', 1)
+  session.acknowledgeGameOver(runId, 2)
+  assert.equal(transport.sent.length, beforeStaleAcknowledgements)
+
+  session.acknowledgeGameOver(runId, 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-acknowledge-game-over',
+    eventId: 1,
+    runId,
+  })
+
+  const loadoutState = acknowledgeGameSimulationOver(gameOverState, runId, 1)
+  assert.ok(loadoutState)
+  receiveSnapshot(transport, createGameSnapshot(loadoutState, playerId), 0)
+  assert.equal(session.playerId, playerId)
+  assert.equal(session.getSnapshot().run.phase, 'loadout')
+  assert.equal(session.getSnapshot().world.kind, 'hub')
+
+  session.confirmLoadout()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-confirm-loadout',
+  })
+
+  const confirmedState = confirmGameSimulationLoadout(loadoutState)
+  assert.ok(confirmedState)
+  receiveSnapshot(transport, createGameSnapshot(confirmedState, playerId), 0)
+  assert.equal(session.playerId, playerId)
+  assert.equal(session.getSnapshot().run.phase, 'hub')
+  assert.equal(session.getSnapshot().run.lastCompletedRunId, runId)
+
+  const beforeInvalidConfirmation = transport.sent.length
+  session.confirmLoadout()
+  assert.equal(transport.sent.length, beforeInvalidConfirmation)
+  session.startMatch('default-random')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
+  session.destroy()
+})
+
+test('client consumes each run-scoped Boneyard enemy event exactly once', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  const firstRunId = 'enemy-events-one'
+  const firstSnapshot = createGameSnapshot(
+    enterBoneyardWorld(hubState, loadedBoneyardFixture(firstRunId)),
+    'player-1',
+  )
+  if (firstSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  firstSnapshot.world.enemyEvents = [{
+    actorId: 4,
+    eventId: 7,
+    runId: firstRunId,
+    tick: 0,
+    type: 'enemy-death',
+  }]
+  receiveWelcome(transport, firstSnapshot)
+  const session = await connecting
+  const received: Parameters<Parameters<typeof session.onEnemyEvent>[0]>[0][] = []
+  session.onEnemyEvent((event) => received.push(event))
+
+  receiveSnapshot(transport, { ...firstSnapshot, tick: 5 }, 0)
+  assert.deepEqual(received, [])
+
+  const impact = {
+    actorId: 4,
+    eventId: 8,
+    projectileId: 12,
+    runId: firstRunId,
+    targetPlayerId: 'player-1',
+    tick: 6,
+    type: 'projectile-impact' as const,
+  }
+  const withImpact = {
+    ...firstSnapshot,
+    tick: 10,
+    world: {
+      ...firstSnapshot.world,
+      enemyEvents: [...firstSnapshot.world.enemyEvents, impact],
+    },
+  }
+  receiveSnapshot(transport, withImpact, 0)
+  receiveSnapshot(transport, { ...withImpact, tick: 15 }, 0)
+  assert.deepEqual(received, [impact])
+
+  const secondRunId = 'enemy-events-two'
+  const secondSnapshot = createGameSnapshot(
+    enterBoneyardWorld(hubState, loadedBoneyardFixture(secondRunId)),
+    'player-1',
+  )
+  if (secondSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  secondSnapshot.world.enemyEvents = [{
+    actorId: 1,
+    eventId: 1,
+    runId: secondRunId,
+    targetPlayerId: 'player-1',
+    tick: 0,
+    type: 'enemy-spawned',
+  }]
+  receiveSnapshot(transport, secondSnapshot, 0)
+  assert.deepEqual(received.at(-1), secondSnapshot.world.enemyEvents[0])
+  assert.equal(received.length, 2)
+  session.destroy()
 })
 
 test('client suppresses gameplay input while a skill offer is pending and submits the exact choice', async () => {
