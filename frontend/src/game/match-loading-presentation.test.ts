@@ -5,6 +5,7 @@ import test from 'node:test'
 
 const component = readFileSync(new URL('./MatchLoadingScreen.tsx', import.meta.url), 'utf8')
 const css = readFileSync(new URL('./match-loading-screen.css', import.meta.url), 'utf8')
+const createScene = readFileSync(new URL('./CreateMenuScene.tsx', import.meta.url), 'utf8')
 const mainScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const hubScene = readFileSync(new URL('./HubScene.tsx', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('./BoneyardScene.tsx', import.meta.url), 'utf8')
@@ -19,7 +20,7 @@ test('uses the exact Mod Loader art and recovered viewport-relative painter', ()
   assert.match(component, /role="progressbar"/)
   assert.match(component, /aria-valuenow=\{loading\.progress \* 100\}/)
   assert.match(component, /shouldPresentMatchLoading/)
-  assert.match(css, /\.match-loading-art[\s\S]*object-fit:\s*cover/)
+  assert.match(css, /\.match-loading-art[\s\S]*object-fit:\s*fill/)
   assert.match(css, /\.match-loading-scrim[\s\S]*height:\s*18%/)
   assert.match(css, /\.match-loading-progress[\s\S]*left:\s*calc\(20% - 0\.5px\)/)
   assert.match(css, /\.match-loading-progress[\s\S]*top:\s*calc\(92\.5% - 0\.5px\)/)
@@ -30,7 +31,17 @@ test('uses the exact Mod Loader art and recovered viewport-relative painter', ()
 })
 
 test('owns both requested transitions through destination renderer readiness', () => {
+  assert.match(createScene, /onDisciplineCommit: \(\) => void/)
+  assert.match(
+    createScene,
+    /const selectDiscipline[\s\S]*onDisciplineCommit\(\)[\s\S]*setPendingDiscipline\(discipline\)/,
+  )
   assert.match(mainScene, /beginLoading\('hub', 'connecting_transport'\)/)
+  assert.equal(
+    mainScene.match(/beginLoading\('hub', 'connecting_transport'\)/g)?.length,
+    1,
+  )
+  assert.match(mainScene, /onDisciplineCommit=\{beginHubLoading\}/)
   assert.match(mainScene, /beginLoading\('boneyard', 'preparing_boneyard'\)/)
   assert.match(mainScene, /advanceLoading\('reading_boneyard'\)/)
   assert.match(mainScene, /advanceLoading\('materializing_participants'\)/)

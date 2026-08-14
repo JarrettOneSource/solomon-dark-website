@@ -39,6 +39,7 @@ import {
 interface CreateMenuSceneProps {
   audio: GameAudioDirector
   onBack: () => void
+  onDisciplineCommit: () => void
   onStart: (element: WizardElement, discipline: WizardDiscipline) => Promise<boolean>
   viewport: FixedGameViewportLayout
 }
@@ -54,6 +55,7 @@ function playCreateAudioEvents(audio: GameAudioDirector, events: readonly Create
 export default function CreateMenuScene({
   audio,
   onBack,
+  onDisciplineCommit,
   onStart,
   viewport,
 }: CreateMenuSceneProps) {
@@ -220,6 +222,7 @@ export default function CreateMenuScene({
   const selectDiscipline = (discipline: WizardDiscipline) => {
     if (!selectedElementRef.current || pendingDiscipline || !disciplinesVisible) return
     audio.playSound('pick-skill')
+    onDisciplineCommit()
     setPendingDiscipline(discipline)
   }
 

@@ -16,7 +16,7 @@ const consoleErrors = []
 const failedResponses = []
 
 try {
-  page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
@@ -149,16 +149,18 @@ async function captureLoading(page, devtools, flow, screenshotPath) {
 
   closeTo(metrics.overlay.x, 0)
   closeTo(metrics.overlay.y, 0)
-  closeTo(metrics.overlay.width, 1600)
+  const viewport = page.viewportSize()
+  assert.ok(viewport, 'missing browser viewport')
+  closeTo(metrics.overlay.width, viewport.width)
   closeTo(metrics.overlay.height, 900)
-  closeTo(metrics.track.x, 319.5)
+  closeTo(metrics.track.x, viewport.width * 0.2 - 0.5)
   closeTo(metrics.track.y, 832)
-  closeTo(metrics.track.width, 960)
+  closeTo(metrics.track.width, viewport.width * 0.6)
   closeTo(metrics.track.height, 8)
-  closeTo(metrics.fill.width, 960 * metrics.progress)
+  closeTo(metrics.fill.width, viewport.width * 0.6 * metrics.progress)
   assert.equal(metrics.art.naturalWidth, 1920)
   assert.equal(metrics.art.naturalHeight, 1080)
-  assert.equal(metrics.art.objectFit, 'cover')
+  assert.equal(metrics.art.objectFit, 'fill')
   assert.match(metrics.art.source, /match-loading-background\.png/)
   assert.equal(metrics.scrim.height, 162)
   assert.match(metrics.scrim.background, /rgba\(0, 0, 0, 0\.7\)/)
@@ -211,6 +213,17 @@ function assertFlowSamples(samples, flow) {
   }
   const first = flowSamples[0]
   const visible = flowSamples.find((sample) => sample.visible)
+  if (flow === 'hub') {
+    assert.equal(typeof first.disciplineCommitAtMs, 'number')
+    const attachDelayMs = first.atMs - first.disciplineCommitAtMs
+    assert.ok(
+      attachDelayMs >= 0 && attachDelayMs <= 150,
+      `hub loading did not attach at discipline commit: ${JSON.stringify({
+        attachDelayMs,
+        flowSamples,
+      })}`,
+    )
+  }
   assert.ok(visible, `${flow} loading never became visible`)
   assert.ok(
     visible.atMs - first.atMs >= 130,
@@ -233,6 +246,13 @@ function distance(first, second) {
 function installLoadingProbe() {
   const samples = []
   Object.defineProperty(window, '__sdrMatchLoadingSamples', { value: samples })
+  let disciplineCommitAtMs = null
+  window.addEventListener('click', (event) => {
+    if (event.target instanceof Element
+      && event.target.closest('.create-menu-discipline')) {
+      disciplineCommitAtMs = performance.now()
+    }
+  }, { capture: true })
   let previousKey = ''
   const sample = () => {
     const loading = document.querySelector('.match-loading-screen')
@@ -240,6 +260,7 @@ function installLoadingProbe() {
       const next = {
         atMs: performance.now(),
         flow: loading.dataset.flow,
+        disciplineCommitAtMs,
         stage: loading.dataset.stage,
         progress: Number(loading.dataset.progress),
         visible: loading.dataset.visible === 'true',
@@ -310,7 +331,10 @@ function installLoadingProbe() {
         ...rect(fill),
         background: getComputedStyle(fill).backgroundColor,
       },
-      topElementClass: document.elementFromPoint(800, 450)?.className,
+      topElementClass: document.elementFromPoint(
+        window.innerWidth / 2,
+        window.innerHeight / 2,
+      )?.className,
       zIndex: getComputedStyle(node).zIndex,
     }
   }

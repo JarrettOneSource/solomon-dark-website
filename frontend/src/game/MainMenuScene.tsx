@@ -245,6 +245,10 @@ export default function MainMenuScene({
   }, [])
 
   const finishHubLoading = useCallback(() => finishLoading('hub'), [finishLoading])
+  const beginHubLoading = useCallback(
+    () => beginLoading('hub', 'connecting_transport'),
+    [beginLoading],
+  )
   const finishBoneyardLoading = useCallback(
     () => finishLoading('boneyard'),
     [finishLoading],
@@ -433,7 +437,6 @@ export default function MainMenuScene({
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
     if (connecting) return false
-    beginLoading('hub', 'connecting_transport')
     setConnecting(true)
     setConnectionError(null)
     try {
@@ -525,6 +528,7 @@ export default function MainMenuScene({
           <CreateMenuScene
             audio={audio}
             onBack={() => { void leaveCreate() }}
+            onDisciplineCommit={beginHubLoading}
             onStart={startHub}
             viewport={fixedViewport}
           />
