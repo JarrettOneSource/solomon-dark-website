@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
+import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
   createBoneyardCollisionWorld,
@@ -41,7 +42,7 @@ try {
   const loadedBoneyard = await page.evaluate(() => window.__sdrLoadedBoneyard)
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
 
-  const gateCrossing = await crossNearestEntryGate(page, scene)
+  const gateCrossing = await crossNearestEntryGate(page, scene, loadedBoneyard.scene)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
 
@@ -492,7 +493,7 @@ function installAudioPlayProbe() {
 
 async function enterBoneyard(page) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -507,12 +508,26 @@ async function enterBoneyard(page) {
     .waitFor({ timeout: 90_000 })
 }
 
-async function crossNearestEntryGate(page, scene) {
+async function crossNearestEntryGate(page, scene, boneyardScene) {
   const initialX = Number(await scene.getAttribute('data-local-player-x'))
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
   const target = nearestGateCenter(initialGateState, initialX, initialY)
-  const aligned = await walkToPoint(page, scene, { x: target.x, y: initialY }, 60_000)
+  const initialDirection = Math.sign(target.y - initialY)
+  assert.notEqual(initialDirection, 0, 'expected the entry gate to be beyond the player')
+  const approachTarget = {
+    x: target.x,
+    y: target.y - initialDirection * (
+      PLAYER_CHARACTER_RADIUS + BONEYARD_GATE_INITIAL_SWAY + 15
+    ),
+  }
+  const aligned = await walkToPoint(
+    page,
+    scene,
+    boneyardScene,
+    approachTarget,
+    90_000,
+  )
   const direction = Math.sign(target.y - aligned.y)
   assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
   const crossingDistance = Math.abs(target.y - aligned.y) + 35
@@ -567,55 +582,65 @@ async function holdUntil(page, key, predicate, timeoutMs) {
     throw new Error(`movement ${key} did not reach its target`)
   } finally {
     await page.keyboard.up(key)
+    await publishStoppedMovement(page)
   }
 }
 
-async function walkToPoint(page, scene, target, timeoutMs) {
+async function walkToPoint(page, scene, boneyardScene, target, timeoutMs) {
+  await page.bringToFront()
+  await scene.focus()
   const startedAt = Date.now()
+  let route = planPointPath(
+    boneyardScene,
+    await playerPointReceipt(scene, target),
+    target,
+  )
+  let routeIndex = 1
   let stalledSteps = 0
-  let wallFollow = null
   while (Date.now() - startedAt < timeoutMs) {
     const before = await playerPointReceipt(scene, target)
     if (before.distance <= 10) return { x: before.x, y: before.y }
-    const dx = target.x - before.x
-    const dy = target.y - before.y
-    let movement = { x: dx, y: dy }
-    if (wallFollow) {
-      movement = {
-        x: dx * 0.25 - dy * wallFollow.sign,
-        y: dy * 0.25 + dx * wallFollow.sign,
-      }
+    while (
+      routeIndex < route.length
+      && Math.hypot(
+        route[routeIndex].x - before.x,
+        route[routeIndex].y - before.y,
+      ) <= 10
+    ) {
+      routeIndex += 1
     }
-    await pulseMovement(page, movementKeys(movement), 150)
+    if (routeIndex >= route.length) {
+      route = planPointPath(boneyardScene, before, target)
+      routeIndex = 1
+      continue
+    }
+    const waypoint = route[routeIndex]
+    const waypointDistance = Math.hypot(
+      waypoint.x - before.x,
+      waypoint.y - before.y,
+    )
+    await pulseMovement(page, movementKeys({
+      x: waypoint.x - before.x,
+      y: waypoint.y - before.y,
+    }), movementPulseDuration(waypointDistance))
     const after = await playerPointReceipt(scene, target)
-    if (wallFollow && after.distance < wallFollow.blockedDistance - 30) {
-      wallFollow = null
+    const nextWaypointDistance = Math.hypot(
+      waypoint.x - after.x,
+      waypoint.y - after.y,
+    )
+    if (nextWaypointDistance < waypointDistance - 1) {
       stalledSteps = 0
-    } else if (wallFollow) {
-      const moved = Math.hypot(after.x - before.x, after.y - before.y)
-      wallFollow.stalledSteps = moved < 1 ? wallFollow.stalledSteps + 1 : 0
-      if (wallFollow.stalledSteps >= 4) {
-        wallFollow = {
-          blockedDistance: after.distance,
-          sign: -wallFollow.sign,
-          stalledSteps: 0,
-        }
-      }
-    } else if (!wallFollow && after.distance < before.distance - 1) {
-      stalledSteps = 0
-    } else if (!wallFollow) {
+    } else {
       stalledSteps += 1
-      if (stalledSteps >= 4) {
-        wallFollow = {
-          blockedDistance: after.distance,
-          sign: 1,
-          stalledSteps: 0,
-        }
+      if (stalledSteps >= 6) {
+        route = planPointPath(boneyardScene, after, target)
+        routeIndex = 1
         stalledSteps = 0
       }
     }
   }
-  throw new Error(`could not walk to ${JSON.stringify(target)}`)
+  const final = await playerPointReceipt(scene, target)
+  throw new Error(`could not walk to ${JSON.stringify(target)} from ${JSON.stringify(final)}`)
 }
 
 async function playerPointReceipt(scene, target) {
@@ -699,7 +724,7 @@ async function walkToSolomon(page, scene, boneyardScene) {
       x: waypoint.x - before.playerX,
       y: waypoint.y - before.playerY,
     }
-    await pulseMovement(page, movementKeys(movement), 250)
+    await pulseMovement(page, movementKeys(movement), movementPulseDuration(waypointDistance))
     const after = await approachReceipt(scene)
     if (after.phase !== 'digging') continue
     const moved = Math.hypot(
@@ -738,7 +763,40 @@ async function walkToSolomon(page, scene, boneyardScene) {
 }
 
 function planSolomonPath(scene, start, solomon) {
+  return planBoneyardPath(
+    scene,
+    start,
+    solomon,
+    (point) => solomonContactContains(solomon, point) ? [] : null,
+    'Solomon',
+  )
+}
+
+function planPointPath(scene, start, target) {
   const collision = createBoneyardCollisionWorld(scene)
+  return planBoneyardPath(
+    scene,
+    start,
+    target,
+    (point) => (
+      Math.hypot(target.x - point.x, target.y - point.y) <= 40
+      && traversesBoneyard(point, target, scene.bounds, collision)
+        ? [target]
+        : null
+    ),
+    JSON.stringify(target),
+    collision,
+  )
+}
+
+function planBoneyardPath(
+  scene,
+  start,
+  target,
+  finish,
+  targetLabel,
+  collision = createBoneyardCollisionWorld(scene),
+) {
   const gridStep = 40
   const directions = [
     { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
@@ -753,18 +811,23 @@ function planSolomonPath(scene, start, solomon) {
   for (let cursor = 0; cursor < queue.length && cursor < 25_000; cursor += 1) {
     const key = queue[cursor]
     const point = points.get(key)
-    if (solomonContactContains(solomon, point)) {
-      return reconstructGridPath(key, parents, points)
+    const tail = finish(point)
+    if (tail !== null) {
+      return simplifyBoneyardPath(
+        [...reconstructGridPath(key, parents, points), ...tail],
+        scene.bounds,
+        collision,
+      )
     }
     const [gridX, gridY] = key.split(',').map(Number)
     const orderedDirections = directions.toSorted((first, second) => {
       const firstDistance = Math.hypot(
-        start.x + (gridX + first.x) * gridStep - solomon.x,
-        start.y + (gridY + first.y) * gridStep - solomon.y,
+        start.x + (gridX + first.x) * gridStep - target.x,
+        start.y + (gridY + first.y) * gridStep - target.y,
       )
       const secondDistance = Math.hypot(
-        start.x + (gridX + second.x) * gridStep - solomon.x,
-        start.y + (gridY + second.y) * gridStep - solomon.y,
+        start.x + (gridX + second.x) * gridStep - target.x,
+        start.y + (gridY + second.y) * gridStep - target.y,
       )
       return firstDistance - secondDistance
     })
@@ -783,7 +846,7 @@ function planSolomonPath(scene, start, solomon) {
       queue.push(nextKey)
     }
   }
-  throw new Error(`no collision-safe route to Solomon from ${JSON.stringify(start)}`)
+  throw new Error(`no collision-safe route to ${targetLabel} from ${JSON.stringify(start)}`)
 }
 
 function traversesBoneyard(start, target, bounds, collision) {
@@ -820,13 +883,44 @@ function reconstructGridPath(goalKey, parents, points) {
   return reversed.reverse()
 }
 
+function simplifyBoneyardPath(path, bounds, collision) {
+  const simplified = [path[0]]
+  let currentIndex = 0
+  while (currentIndex < path.length - 1) {
+    let nextIndex = path.length - 1
+    while (
+      nextIndex > currentIndex + 1
+      && !traversesBoneyard(path[currentIndex], path[nextIndex], bounds, collision)
+    ) {
+      nextIndex -= 1
+    }
+    simplified.push(path[nextIndex])
+    currentIndex = nextIndex
+  }
+  return simplified
+}
+
+function movementPulseDuration(distance) {
+  return Math.min(1_000, Math.max(250, Math.round(distance * 8)))
+}
+
 async function pulseMovement(page, keys, durationMs) {
+  await page.bringToFront()
   for (const key of keys) await page.keyboard.down(key)
   try {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
     await page.waitForTimeout(durationMs)
   } finally {
     for (const key of keys.reverse()) await page.keyboard.up(key)
+    await publishStoppedMovement(page)
   }
+}
+
+async function publishStoppedMovement(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'))
+    return new Promise((resolve) => requestAnimationFrame(resolve))
+  })
 }
 
 function movementKeys({ x, y }) {

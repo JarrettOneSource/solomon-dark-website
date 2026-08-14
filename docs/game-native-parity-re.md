@@ -12756,7 +12756,7 @@ retaining identity, progression books, and loadout preselection.
 
 ### Implementation receipt (2026-08-14)
 
-- Protocol 13 now separates the wave schedule from replicated enemy actors and
+- Protocol 14 now separates the wave schedule from replicated enemy actors and
   carries the bounded run-scoped enemy semantic-event lane.
   The director emits stable spawn intents; `boneyard-enemy-store.ts` owns
   evaluated actor configs, targets, brains, movement, contacts, projectiles,
@@ -12785,7 +12785,10 @@ retaining identity, progression books, and loadout preselection.
   with terrain winning an exact path tie. Enemy arrows, bolts, missiles, and
   bombs likewise compare swept player contact against authoritative world
   contact before damage; stationary PoisonPool ownership remains a separate
-  bounded status lane.
+  bounded status lane. Channel damage consumes one semantic Air/Water emission
+  per authoritative cast tick rather than counting presentation actors, so the
+  two native Water particles still apply one damage tick and Fire/Earth visual
+  transients can never become phantom rays.
 - Player combat now owns 50/100 fresh HP/MP, native recovery, poison, the
   `HP <= -10` lethal edge, corpse frames, once-only death events, input/cast
   suppression, spectator state, and all-dead arbitration. Overlapping poison
@@ -12807,29 +12810,29 @@ retaining identity, progression books, and loadout preselection.
   torn down instead of leaking into the next run.
 - The canonical `./scripts/validate.sh` gate passes on the integrated tree:
   Release backend build, 23 backend/contract tests, formatting, lint and game
-  boundaries, all `456/456` frontend game tests, production frontend/game-host
+  boundaries, all `538/538` frontend game tests, production frontend/game-host
   build, and production-media policy. Standalone lint and production build
   also pass; lint reports only the repository's existing Fast Refresh warnings.
 - A real Chromium single-player journey at `1600 x 900` physically reached
   Solomon, observed `hello-1`, `laugh-1`, and `get-him-boys`, then saw all 15
   opening Skeletons materialize with locomotion and both claw actions. A Fire
-  cast spent mana from `100` to `89.3`, reduced one Skeleton from `2.5` to
+  cast spent mana from `100` to `89.4`, reduced one Skeleton from `2.5` to
   `-1.5`, and retained its death state. Enemy contact drove the player from
   positive HP through display zero, corpse/death audio, Game Over, the retained
   Fire loadout, and a second active run with a different nonce, restored
   `50/100` HP/MP, and no console or page errors. Captures are
-  `/tmp/solomon-dark-solomon-waves-combat.png`,
-  `/tmp/solomon-dark-solomon-waves-death.png`,
-  `/tmp/solomon-dark-solomon-waves-game-over.png`, and
-  `/tmp/solomon-dark-solomon-waves-loadout.png`.
+  `/tmp/solomon-dark-final10-combat.png`,
+  `/tmp/solomon-dark-final10-death.png`,
+  `/tmp/solomon-dark-final10-game-over.png`, and
+  `/tmp/solomon-dark-final10-loadout.png`.
 - A separate real two-client Chromium journey physically crossed the gate and
   triggered Solomon before 15 Skeletons spawned. One player reached spectator
-  while the survivor remained active at 28.543 HP; spectator movement and mana
+  while the survivor remained active at 20.922 HP; spectator movement and mana
   stayed unchanged. After the survivor died, both peers observed the same Game
   Over, only the host could acknowledge it, both received retained loadouts,
   only the host could confirm, and both returned to a two-player Hub with empty
   console/page-error captures. Captures are
-  `/tmp/solomon-dark-multiplayer-first-death.png`,
-  `/tmp/solomon-dark-multiplayer-game-over.png`,
-  `/tmp/solomon-dark-multiplayer-loadout.png`, and
-  `/tmp/solomon-dark-multiplayer-returned-hub.png`.
+  `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-first-death.png`,
+  `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-game-over.png`,
+  `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-loadout.png`,
+  and `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-returned-hub.png`.

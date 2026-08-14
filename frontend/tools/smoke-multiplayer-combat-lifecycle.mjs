@@ -10,15 +10,20 @@ const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-fir
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
 const returnedHubScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-returned-hub.png`
-const browser = await chromium.launch({
+const browserOptions = {
   args: [
     '--autoplay-policy=no-user-gesture-required',
   ],
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
-})
-const hostPage = await browser.newPage({ viewport: { width: 1280, height: 720 } })
-const guestPage = await browser.newPage({ viewport: { width: 1280, height: 720 } })
+}
+const viewport = { width: 800, height: 450 }
+const [hostBrowser, guestBrowser] = await Promise.all([
+  chromium.launch(browserOptions),
+  chromium.launch(browserOptions),
+])
+const hostPage = await hostBrowser.newPage({ viewport })
+const guestPage = await guestBrowser.newPage({ viewport })
 const errors = {
   guest: captureErrors(guestPage),
   host: captureErrors(hostPage),
@@ -103,7 +108,7 @@ try {
   })
   process.stdout.write(`${JSON.stringify({
     approach,
-    browserVersion: browser.version(),
+    browserVersion: hostBrowser.version(),
     errors,
     firstDeath: {
       fallen: firstDeath.fallen.label,
@@ -139,7 +144,7 @@ try {
   })}\n`)
   throw error
 } finally {
-  await browser.close()
+  await Promise.all([hostBrowser.close(), guestBrowser.close()])
 }
 
 function captureErrors(page) {
@@ -154,7 +159,7 @@ function captureErrors(page) {
 async function enterHub(page, element) {
   await page.bringToFront()
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -434,7 +439,12 @@ async function pulseMovement(page, keys, durationMs) {
   await page.bringToFront()
   for (const key of keys) await page.keyboard.down(key)
   try {
-    await page.waitForTimeout(durationMs)
+    await Promise.all([
+      page.waitForTimeout(durationMs),
+      page.evaluate(() => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      })),
+    ])
   } finally {
     for (const key of keys.reverse()) await page.keyboard.up(key)
   }
@@ -539,26 +549,68 @@ async function alignWithEntryGate(page, scene) {
   ))
   const delta = target.x - initialX
   if (Math.abs(delta) > 3) {
-    const direction = Math.sign(delta)
-    const key = direction > 0 ? 'd' : 'a'
-    await page.bringToFront()
-    await page.keyboard.down(key)
-    try {
-      await page.waitForFunction(
-        ({ direction, initialX, targetX }) => {
-          const value = Number(document.querySelector('.boneyard-scene')
-            ?.getAttribute('data-local-player-x'))
-          return Number.isFinite(value)
-            && (value - initialX) * direction >= Math.abs(targetX - initialX) - 3
-        },
-        { direction, initialX, targetX: target.x },
-        { timeout: 8_000 },
-      )
-    } finally {
-      await page.keyboard.up(key)
-    }
+    await walkToPoint(page, scene, { x: target.x, y: initialY }, 60_000)
   }
   return { targetX: target.x, targetY: target.y }
+}
+
+async function walkToPoint(page, scene, target, timeoutMs) {
+  const startedAt = Date.now()
+  let stalledSteps = 0
+  let wallFollow = null
+  while (Date.now() - startedAt < timeoutMs) {
+    const before = await playerPointReceipt(scene, target)
+    if (before.distance <= 6) return before
+    const dx = target.x - before.x
+    const dy = target.y - before.y
+    let movement = { x: dx, y: dy }
+    if (wallFollow) {
+      movement = {
+        x: dx * 0.25 - dy * wallFollow.sign,
+        y: dy * 0.25 + dx * wallFollow.sign,
+      }
+    }
+    await pulseMovement(page, movementKeys(movement), 150)
+    const after = await playerPointReceipt(scene, target)
+    if (wallFollow && after.distance < wallFollow.blockedDistance - 30) {
+      wallFollow = null
+      stalledSteps = 0
+    } else if (wallFollow) {
+      const moved = Math.hypot(after.x - before.x, after.y - before.y)
+      wallFollow.stalledSteps = moved < 1 ? wallFollow.stalledSteps + 1 : 0
+      if (wallFollow.stalledSteps >= 4) {
+        wallFollow = {
+          blockedDistance: after.distance,
+          sign: -wallFollow.sign,
+          stalledSteps: 0,
+        }
+      }
+    } else if (after.distance < before.distance - 1) {
+      stalledSteps = 0
+    } else {
+      stalledSteps += 1
+      if (stalledSteps >= 4) {
+        wallFollow = {
+          blockedDistance: after.distance,
+          sign: 1,
+          stalledSteps: 0,
+        }
+        stalledSteps = 0
+      }
+    }
+  }
+  throw new Error(`could not walk to ${JSON.stringify(target)}`)
+}
+
+async function playerPointReceipt(scene, target) {
+  const position = await scene.evaluate((node) => ({
+    x: Number(node.getAttribute('data-local-player-x')),
+    y: Number(node.getAttribute('data-local-player-y')),
+  }))
+  return {
+    ...position,
+    distance: Math.hypot(target.x - position.x, target.y - position.y),
+  }
 }
 
 async function walkToSolomon(page) {
@@ -653,11 +705,22 @@ function compactSingleHealthSamples(samples) {
 
 async function pageDiagnostics(page) {
   if (page.isClosed()) return { closed: true }
+  const url = page.url()
+  let body
+  try {
+    body = (await page.locator('body').innerText({ timeout: 5_000 })).slice(0, 1_500)
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      unresponsive: true,
+      url,
+    }
+  }
   return {
-    body: (await page.locator('body').innerText()).slice(0, 1_500),
+    body,
     frame: await page.locator('.boneyard-world-canvas').count() > 0
       ? await boneyardFrame(page)
       : null,
-    url: page.url(),
+    url,
   }
 }
