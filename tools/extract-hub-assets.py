@@ -1351,6 +1351,15 @@ def main() -> int:
             output_dir,
             f"element-vfx-{element}",
         )
+    save(
+        build_registered_strip(
+            bad_guys,
+            bad_guys_records,
+            tuple(range(267, 271)),
+        ),
+        output_dir,
+        "primary-spell-fire-particles",
+    )
     for name, record_index in {
         "hub-teacher-burst-core": 15,
         "actor-shadow": 67,

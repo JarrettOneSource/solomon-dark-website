@@ -19,7 +19,12 @@ import {
   primarySpellAimDirection,
   primarySpellEmitterOffset,
   stepPrimarySpells,
+  type PrimarySpellSimulationState,
 } from './primary-spells.ts'
+import {
+  nativeFireParticleLifetimeTicks,
+  nativeFireParticleVariant,
+} from './primary-spell-fire-native.ts'
 import {
   createGameSimulation,
   stepGameSimulationTick,
@@ -97,6 +102,38 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
   assert.equal(fireball.position.x, player.position.x + 8.5)
   assert.equal(fireball.position.y, player.position.y - 62)
   assert.equal(fireball.ageTicks, 1)
+  assert.equal(state.primarySpells.transients.length, 1)
+  assert.deepEqual(state.primarySpells.transients[0], {
+    ageTicks: 0,
+    direction: { x: 0, y: -1 },
+    id: 2,
+    kind: 'fire',
+    origin: { ...fireball.position },
+    ownerId: PLAYER_ID,
+    variant: nativeFireParticleVariant(2),
+    worldKey: 'hub:courtyard',
+  })
+
+  state = step(state, false, 3)
+  assert.equal(state.primarySpells.projectiles[0].ageTicks, 4)
+  assert.deepEqual(
+    state.primarySpells.transients.map(({ ageTicks, id }) => ({ ageTicks, id })),
+    [
+      { ageTicks: 3, id: 2 },
+      { ageTicks: 2, id: 3 },
+      { ageTicks: 1, id: 4 },
+      { ageTicks: 0, id: 5 },
+    ],
+  )
+  assert.deepEqual(
+    state.primarySpells.transients.map(({ origin }) => origin.y),
+    [-62, -66.5, -71, -75.5].map((offset) => player.position.y + offset),
+  )
+
+  const firstLifetime = nativeFireParticleLifetimeTicks(2)
+  state = step(state, false, firstLifetime)
+  assert.equal(state.primarySpells.transients.some(({ id }) => id === 2), false)
+  assert.equal(state.primarySpells.transients.length <= 41, true)
 })
 
 test('one-shot casts retain accepted facing against movement through projectile birth', () => {

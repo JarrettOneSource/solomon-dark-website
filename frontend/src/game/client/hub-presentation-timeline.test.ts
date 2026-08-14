@@ -4,6 +4,7 @@ import test from 'node:test'
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
+import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   ProtocolPlayerState,
@@ -114,7 +115,16 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         worldKey: 'hub:courtyard',
       },
     ],
-    transients: [],
+    transients: [{
+      ageTicks: 2,
+      direction: { x: 0, y: -1 },
+      id: 2,
+      kind: 'fire',
+      origin: { x: 40, y: 50 },
+      ownerId: 'local',
+      variant: nativeFireParticleVariant(2),
+      worldKey: 'hub:courtyard',
+    }],
   } as const
   const newer = {
     nextId: 5,
@@ -143,7 +153,16 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         worldKey: 'hub:courtyard',
       },
     ],
-    transients: [],
+    transients: [{
+      ageTicks: 6,
+      direction: { x: 1, y: 0 },
+      id: 2,
+      kind: 'fire',
+      origin: { x: 400, y: 500 },
+      ownerId: 'local',
+      variant: nativeFireParticleVariant(2),
+      worldKey: 'hub:courtyard',
+    }],
   } as const
 
   const halfway = interpolatePrimarySpellState(older, newer, 0.5)
@@ -151,13 +170,25 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   assert.deepEqual(halfway.projectiles[0].position, { x: 15, y: 25 })
   assert.equal(halfway.projectiles[0].charge, 0.30000000000000004)
   assert.equal(halfway.projectiles[0].phase, 'held')
+  assert.equal(halfway.transients[0].ageTicks, 4)
+  assert.deepEqual(halfway.transients[0].origin, { x: 40, y: 50 })
+  assert.equal(halfway.transients[0].kind, 'fire')
+  if (halfway.transients[0].kind === 'fire') {
+    assert.deepEqual(halfway.transients[0].direction, { x: 0, y: -1 })
+  }
   const caughtUp = interpolatePrimarySpellState(older, newer, 1)
   assert.deepEqual(caughtUp.projectiles.map(({ id }) => id), [1, 4])
   assert.equal(caughtUp.projectiles[0].phase, 'flight')
+  assert.deepEqual(caughtUp.transients[0].origin, { x: 400, y: 500 })
+  assert.equal(caughtUp.transients[0].kind, 'fire')
+  if (caughtUp.transients[0].kind === 'fire') {
+    assert.deepEqual(caughtUp.transients[0].direction, { x: 1, y: 0 })
+  }
 
   const owned = copyPrimarySpellState(newer)
   assert.deepEqual(owned, newer)
   assert.notEqual(owned.projectiles[0].position, newer.projectiles[0].position)
+  assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)
 })
 
 test('interpolates remote state over one network interval while keeping local prediction immediate', () => {

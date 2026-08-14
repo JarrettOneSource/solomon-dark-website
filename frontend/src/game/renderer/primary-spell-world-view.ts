@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container } from 'pixi.js'
 
 import type {
   PrimarySpellProjectileState,
@@ -11,6 +11,10 @@ import {
 } from './earth-boulder-view.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
 import { EtherPrimarySpellView } from './primary-spell-ether-view.ts'
+import {
+  FireParticleSpellView,
+  FirePrimarySpellView,
+} from './primary-spell-fire-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
@@ -64,7 +68,7 @@ export class PrimarySpellWorldView {
                   ray: this.textures.elementVfx.ray[0],
                   spark: this.textures.elementVfx.spark[0],
                 })
-              : new ProjectileSpellView(state, this.textures)
+              : new FirePrimarySpellView(state, this.textures.primarySpells.fire)
         } else {
           view = state.kind === 'earth-impact'
             ? new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
@@ -73,7 +77,9 @@ export class PrimarySpellWorldView {
                   core: this.textures.primarySpells.frost.core,
                   glint: this.textures.primarySpells.frost.over,
                 })
-              : new AirPrimarySpellView(state, this.textures.primarySpells.air)
+              : state.kind === 'air'
+                ? new AirPrimarySpellView(state, this.textures.primarySpells.air)
+                : new FireParticleSpellView(state, this.textures.primarySpells.fire)
         }
         this.views.set(state.id, view)
         this.root.addChild(...view.containers)
@@ -136,88 +142,6 @@ export class PrimarySpellWorldView {
     this.views.clear()
     this.liveIds.clear()
   }
-}
-
-class ProjectileSpellView implements SpellView {
-  readonly container: Container
-  readonly containers: readonly Container[]
-  private readonly extras: Sprite[] = []
-  readonly kind: string
-  private readonly main: Sprite
-  private state: PrimarySpellProjectileState
-  private readonly textures: PlayerWorldTextures
-
-  constructor(state: PrimarySpellProjectileState, textures: PlayerWorldTextures) {
-    this.state = state
-    this.textures = textures
-    this.kind = state.kind
-    this.container = new Container({ label: state.kind })
-    this.containers = [this.container]
-    this.container.eventMode = 'none'
-    this.main = new Sprite(this.texture(state))
-    this.main.anchor.set(0.5)
-    this.main.eventMode = 'none'
-    this.main.blendMode = 'add'
-    this.container.addChild(this.main)
-    if (state.kind === 'fire') {
-      const core = effectSprite(textures.elementVfx.core[0], 0.45, 0.65)
-      const spark = effectSprite(textures.elementVfx.spark[0], 0.32, 0.8)
-      this.extras.push(core, spark)
-      this.container.addChild(core, spark)
-    }
-    this.update(state)
-  }
-
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
-    if (!('position' in state)) return
-    this.state = state
-    this.container.position.set(state.position.x, state.position.y)
-    this.main.texture = this.texture(state)
-    if (state.kind === 'fire') {
-      const phase = state.ageTicks * 0.35
-      this.extras[0]?.position.set(Math.cos(phase) * 5, Math.sin(phase) * 5)
-      this.extras[1]?.position.set(Math.cos(phase + Math.PI) * 8, Math.sin(phase + Math.PI) * 8)
-    }
-  }
-
-  get worldY(): number {
-    return this.state.position.y
-  }
-
-  painterRoots(): readonly SpellPainterRoot[] {
-    return [{ container: this.container, suffix: '', worldY: this.worldY }]
-  }
-
-  setTint(tint: number): void {
-    this.main.tint = tint
-    for (const extra of this.extras) extra.tint = tint
-  }
-
-  destroy(): void {
-    this.container.destroy({ children: true })
-    this.extras.length = 0
-  }
-
-  private texture(state: PrimarySpellProjectileState): Texture {
-    switch (state.kind) {
-      case 'earth': throw new Error('Earth projectiles require EarthBoulderView')
-      case 'ether': throw new Error('Ether projectiles use EtherPrimarySpellView')
-      case 'fire': {
-        const frames = this.textures.primarySpells.fire
-        return frames[Math.floor(state.ageTicks / 3) % frames.length]
-      }
-    }
-  }
-}
-
-function effectSprite(texture: Texture, scale: number, alpha: number): Sprite {
-  const sprite = new Sprite(texture)
-  sprite.anchor.set(0.5)
-  sprite.scale.set(scale)
-  sprite.alpha = alpha
-  sprite.blendMode = 'add'
-  sprite.eventMode = 'none'
-  return sprite
 }
 
 function parsePainterId(id: string): { numericId: number; suffix: string } {

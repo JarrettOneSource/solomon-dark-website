@@ -5,6 +5,10 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
+import {
+  nativeFireParticleLifetimeTicks,
+  nativeFireParticleVariant,
+} from '../core-kernels/primary-spell-fire-native.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -260,6 +264,25 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedImpact.type, 'server-snapshot')
   assert.deepEqual(decodedImpact.frame.primarySpells.transients, [earthImpact])
+  const fireParticle = {
+    ageTicks: 7,
+    direction: { x: 0, y: -1 },
+    id: 1,
+    kind: 'fire',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    variant: nativeFireParticleVariant(1),
+    worldKey: 'hub:courtyard',
+  }
+
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [fireParticle],
+    },
+  }))
 
   assert.throws(() => decodeFrame({
     ...frame,
@@ -370,9 +393,28 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: {
       nextId: 2,
       projectiles: [],
+      transients: [{ ...fireParticle, variant: (fireParticle.variant + 1) % 4 }],
+    },
+  }), /variant does not match its Fire particle id/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
       transients: [{ ...earthImpact, charge: 1.1 }],
     },
   }), /charge must be within/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ...fireParticle,
+        ageTicks: nativeFireParticleLifetimeTicks(fireParticle.id),
+      }],
+    },
+  }), /ageTicks exceeds its Fire particle lifetime/)
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {

@@ -28,6 +28,10 @@ import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  nativeFireParticleLifetimeTicks,
+  nativeFireParticleVariant,
+} from '../core-kernels/primary-spell-fire-native.ts'
 import type {
   BoneyardBounds,
   BoneyardChoice,
@@ -66,7 +70,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 10
+export const GAME_PROTOCOL_VERSION = 11
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-3'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -1105,15 +1109,25 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     'ageTicks', 'direction', 'id', 'kind', 'origin', 'ownerId', 'variant',
     'worldKey',
   ])
-  if (source.kind !== 'air' && source.kind !== 'water') {
+  if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
     throw new GameProtocolError(`${field}.kind is not a transient primary`)
   }
+  const id = positiveInteger(source.id, `${field}.id`)
+  const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const variant = nonnegativeInteger(source.variant, `${field}.variant`)
   if (variant > 3) throw new GameProtocolError(`${field}.variant exceeds the native family`)
+  if (source.kind === 'fire') {
+    if (variant !== nativeFireParticleVariant(id)) {
+      throw new GameProtocolError(`${field}.variant does not match its Fire particle id`)
+    }
+    if (ageTicks >= nativeFireParticleLifetimeTicks(id)) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds its Fire particle lifetime`)
+    }
+  }
   return {
-    ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+    ageTicks,
     direction: unitVector(source.direction, `${field}.direction`),
-    id: positiveInteger(source.id, `${field}.id`),
+    id,
     kind: source.kind,
     origin: vector(source.origin, `${field}.origin`),
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),

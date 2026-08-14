@@ -13,9 +13,13 @@ import {
   waterFrostJetLifetimeTicks,
 } from './primary-spell-water.ts'
 import type { Vector2 } from './vector.ts'
+import {
+  nativeFireParticleLifetimeTicks,
+  nativeFireParticleVariant,
+} from './primary-spell-fire-native.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
-export type PrimarySpellTransientKind = 'air' | 'earth-impact' | 'water'
+export type PrimarySpellTransientKind = 'air' | 'earth-impact' | 'fire' | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
 export interface PrimarySpellProjectileState {
@@ -53,9 +57,21 @@ export interface PrimarySpellEarthImpactState {
   worldKey: string
 }
 
+export interface PrimarySpellFireParticleState {
+  ageTicks: number
+  direction: Vector2
+  id: number
+  kind: 'fire'
+  origin: Vector2
+  ownerId: string
+  variant: number
+  worldKey: string
+}
+
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
   | PrimarySpellEarthImpactState
+  | PrimarySpellFireParticleState
 
 export interface PrimarySpellSimulationState {
   nextId: number
@@ -232,6 +248,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   }
   const players: Record<string, PlayerCharacterState> = { ...context.players }
 
+  for (const spell of projectiles) {
+    if (spell.kind !== 'fire') continue
+    transients = [...transients, createFireParticle(nextId, spell)]
+    nextId += 1
+  }
+
   for (const [playerId, player] of Object.entries(context.players)) {
     const previous = context.previousPlayers[playerId] ?? player
     const input = context.inputs[playerId]
@@ -310,6 +332,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       )
       nextId += 1
       projectiles = [...projectiles, spell]
+      if (spell.kind === 'fire') {
+        transients = [...transients, createFireParticle(nextId, spell)]
+        nextId += 1
+      }
       nextPlayer = {
         ...nextPlayer,
         primaryCast: {
@@ -567,6 +593,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
   switch (effect.kind) {
     case 'air': return PRIMARY_SPELL_AIR_LIFETIME_TICKS
     case 'earth-impact': return PRIMARY_SPELL_EARTH_IMPACT_LIFETIME_TICKS
+    case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
   }
 }
@@ -583,5 +610,21 @@ function earthImpact(
     origin: { ...spell.position },
     ownerId: spell.ownerId,
     worldKey: spell.worldKey,
+  }
+}
+
+function createFireParticle(
+  id: number,
+  fireball: PrimarySpellProjectileState,
+): PrimarySpellFireParticleState {
+  return {
+    ageTicks: 0,
+    direction: { ...fireball.direction },
+    id,
+    kind: 'fire',
+    origin: { ...fireball.position },
+    ownerId: fireball.ownerId,
+    variant: nativeFireParticleVariant(id),
+    worldKey: fireball.worldKey,
   }
 }

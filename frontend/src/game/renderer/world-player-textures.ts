@@ -44,7 +44,11 @@ export interface PlayerWorldTextures {
       litRocks: readonly Texture[]
       rocks: readonly Texture[]
     }
-    fire: readonly Texture[]
+    fire: {
+      core: Texture
+      frames: readonly Texture[]
+      particles: readonly Texture[]
+    }
     frost: {
       core: Texture
       extra: Texture
@@ -124,7 +128,17 @@ export function createPlayerWorldTextures(
         litRocks: primarySpells.earth.litRocks.map(texture),
         rocks: primarySpells.earth.rocks.map(texture),
       },
-      fire: elementTextures.fire,
+      fire: {
+        core: texture(primarySpells.fire.core),
+        frames: elementTextures.fire,
+        particles: stripFrames(
+          texture(primarySpells.fire.particles),
+          4,
+          25,
+          25,
+          'horizontal',
+        ),
+      },
       frost: {
         core: texture(primarySpells.frost.core),
         extra: texture(primarySpells.frost.extra),
@@ -174,6 +188,7 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     player.staffFront.forEach(add)
   }
   Object.values(textures.elementVfx).forEach(add)
+  add(textures.primarySpells.fire.particles)
   for (const texture of derived) texture.destroy(false)
 }
 

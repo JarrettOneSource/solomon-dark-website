@@ -86,6 +86,7 @@ import {
   nativeEnemyPainterLayer,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+import { nativeFireballLightSource } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
@@ -595,6 +596,14 @@ class BoneyardDynamicScene {
     for (const playerId in snapshot.players) {
       lightSourceCandidates.push(nativePlayerLightSource(snapshot.players[playerId]))
     }
+    for (const spell of snapshot.primarySpells.projectiles) {
+      if (
+        spell.kind === 'fire'
+        && spell.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightSourceCandidates.push(nativeFireballLightSource(spell, presentationFrame))
+      }
+    }
     if (lanternLight) lightSourceCandidates.push(lanternLight)
     const lightSources = nativeAcceptedBoneyardLightSources(
       lightSourceCandidates,
@@ -653,6 +662,7 @@ class BoneyardDynamicScene {
     }
     for (const spell of snapshot.primarySpells.projectiles) {
       if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      if (spell.kind === 'fire') continue
       this.primarySpells.setTint(
         `primary-spell:${spell.id}`,
         nativeBoneyardLightTint(nativeBoneyardLightScalar(spell.position, lightSources)),
@@ -660,6 +670,7 @@ class BoneyardDynamicScene {
     }
     for (const effect of snapshot.primarySpells.transients) {
       if (effect.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      if (effect.kind === 'fire') continue
       const lightPosition = effect.kind === 'water'
         ? waterFrostJetPlan(effect).position
         : effect.origin

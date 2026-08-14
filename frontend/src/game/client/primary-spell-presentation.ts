@@ -94,6 +94,16 @@ function interpolateTransient(
   if (older.kind === 'earth-impact' || newer.kind === 'earth-impact') {
     return copyTransient(discrete)
   }
+  if (older.kind === 'fire' && newer.kind === 'fire') {
+    const fire = blend < 1 ? older : newer
+    return {
+      ...fire,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: { ...fire.direction },
+      origin: { ...fire.origin },
+    }
+  }
+  if (older.kind === 'fire' || newer.kind === 'fire') return copyTransient(discrete)
   const channel = blend < 1 ? older : newer
   return {
     ...channel,
