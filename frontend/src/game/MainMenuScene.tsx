@@ -1,9 +1,11 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type AnimationEvent,
+  type CSSProperties,
   type KeyboardEvent,
 } from 'react'
 import BoneyardScene from './BoneyardScene.tsx'
@@ -17,9 +19,17 @@ import type {
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import { GameAudioDirector } from './game-audio-director.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
+import GameFullscreenButton from './GameFullscreenButton.tsx'
 import HubScene from './HubScene.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import {
+  GAME_VIEWPORT_MIN_HEIGHT,
+  GAME_VIEWPORT_MIN_WIDTH,
+  fixedGameStageCssBounds,
+  fixedGameViewportLayout,
+  type FixedGameViewportLayout,
+} from './renderer/game-viewport.ts'
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
 import './main-menu.css'
@@ -177,6 +187,22 @@ export default function MainMenuScene({
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
+  const [fixedViewport, setFixedViewport] = useState(() => (
+    fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
+  ))
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    const resize = () => {
+      const next = fixedGameViewportLayout(stage.clientWidth, stage.clientHeight)
+      setFixedViewport((current) => sameFixedViewport(current, next) ? current : next)
+    }
+    resize()
+    const observer = new ResizeObserver(resize)
+    observer.observe(stage)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => () => session?.destroy(), [session])
 
@@ -244,6 +270,10 @@ export default function MainMenuScene({
   }
 
   const titleScreen = screen === 'root' || screen === 'play'
+  const gameScene = screen === 'hub' && runtimeSnapshot?.world.kind === 'boneyard'
+    ? 'boneyard'
+    : screen
+  const nativeStageStyle = fixedStageStyle(fixedViewport)
 
   const beginNewGame = async () => {
     if (preparing || connecting) return
@@ -300,10 +330,10 @@ export default function MainMenuScene({
   }
 
   return (
-    <div className="main-menu-page">
+    <div className="main-menu-page" data-game-scene={gameScene}>
       <section
         ref={stageRef}
-        className={`main-menu-stage${screen === 'hub' ? ' main-menu-stage-gameplay' : ''}`}
+        className="main-menu-stage"
         aria-label="Solomon Darker game menu"
       >
         {titleScreen ? (
@@ -312,36 +342,39 @@ export default function MainMenuScene({
               hoveredAction={hoveredTitleAction}
               pressedAction={pressedTitleAction}
               screen={screen === 'play' ? 'play' : 'root'}
+              viewport={fixedViewport}
             />
 
-            <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
-              {screen === 'root' ? (
-                <RootActions
-                  onHighlight={setHoveredTitleAction}
-                  onPlay={() => setScreen('play')}
-                  onPress={() => audio.playSound('click')}
-                  onPressState={setPressedTitleAction}
-                />
-              ) : (
-                <PlayActions
-                  onBack={() => setScreen('root')}
-                  onHighlight={setHoveredTitleAction}
-                  onNewGame={() => { void beginNewGame() }}
-                  onPress={() => audio.playSound('click')}
-                  onPressState={setPressedTitleAction}
-                />
-              )}
-            </nav>
+            <div className="main-menu-native-stage" style={nativeStageStyle}>
+              <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
+                {screen === 'root' ? (
+                  <RootActions
+                    onHighlight={setHoveredTitleAction}
+                    onPlay={() => setScreen('play')}
+                    onPress={() => audio.playSound('click')}
+                    onPressState={setPressedTitleAction}
+                  />
+                ) : (
+                  <PlayActions
+                    onBack={() => setScreen('root')}
+                    onHighlight={setHoveredTitleAction}
+                    onNewGame={() => { void beginNewGame() }}
+                    onPress={() => audio.playSound('click')}
+                    onPressState={setPressedTitleAction}
+                  />
+                )}
+              </nav>
 
-            <div className="main-menu-quit">
-              <MenuButton
-                action="quit"
-                accessibleLabel="Quit"
-                compact
-                onHighlight={setHoveredTitleAction}
-                onPress={() => audio.playSound('click')}
-                onPressState={setPressedTitleAction}
-              />
+              <div className="main-menu-quit">
+                <MenuButton
+                  action="quit"
+                  accessibleLabel="Quit"
+                  compact
+                  onHighlight={setHoveredTitleAction}
+                  onPress={() => audio.playSound('click')}
+                  onPressState={setPressedTitleAction}
+                />
+              </div>
             </div>
           </>
         ) : screen === 'create' ? (
@@ -349,6 +382,7 @@ export default function MainMenuScene({
             audio={audio}
             onBack={() => { void leaveCreate() }}
             onStart={startHub}
+            viewport={fixedViewport}
           />
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
           && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
@@ -390,8 +424,29 @@ export default function MainMenuScene({
           aria-hidden
         />
       </section>
+      <GameFullscreenButton />
     </div>
   )
+}
+
+function fixedStageStyle(viewport: FixedGameViewportLayout): CSSProperties {
+  const bounds = fixedGameStageCssBounds(viewport)
+  return {
+    height: `${GAME_VIEWPORT_MIN_HEIGHT}px`,
+    transform: `translate3d(${bounds.x}px, ${bounds.y}px, 0) scale(${viewport.displayScale})`,
+    width: `${GAME_VIEWPORT_MIN_WIDTH}px`,
+  }
+}
+
+function sameFixedViewport(
+  first: FixedGameViewportLayout,
+  second: FixedGameViewportLayout,
+): boolean {
+  return first.displayScale === second.displayScale
+    && first.height === second.height
+    && first.width === second.width
+    && first.nativeStage.x === second.nativeStage.x
+    && first.nativeStage.y === second.nativeStage.y
 }
 
 function sameRuntimeScene(

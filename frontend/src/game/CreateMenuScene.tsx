@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 
 import {
   CREATE_ENTRY_ANIMATION_MS,
@@ -28,12 +28,18 @@ import {
   type CreateMenuAction,
   type CreateMenuRenderer,
 } from './renderer/create-menu-renderer.ts'
-import { fixedGameViewportScale } from './renderer/game-viewport.ts'
+import {
+  fixedGameBottomStageBounds,
+  fixedGameStageCssBounds,
+  type FixedGameViewportLayout,
+  type GameViewportBounds,
+} from './renderer/game-viewport.ts'
 
 interface CreateMenuSceneProps {
   audio: GameAudioDirector
   onBack: () => void
   onStart: (element: WizardElement, discipline: WizardDiscipline) => Promise<boolean>
+  viewport: FixedGameViewportLayout
 }
 
 function playCreateAudioEvents(audio: GameAudioDirector, events: readonly CreateAudioEvent[]): void {
@@ -44,7 +50,12 @@ function playCreateAudioEvents(audio: GameAudioDirector, events: readonly Create
   }
 }
 
-export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSceneProps) {
+export default function CreateMenuScene({
+  audio,
+  onBack,
+  onStart,
+  viewport,
+}: CreateMenuSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
@@ -56,6 +67,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
   const elementButtonsRef = useRef<Partial<Record<WizardElement, HTMLButtonElement>>>({})
   const disciplineButtonsRef = useRef<Partial<Record<WizardDiscipline, HTMLButtonElement>>>({})
   const uiStateRef = useRef({ disciplinesVisible: false, elementsVisible: false, settled: false })
+  const viewportRef = useRef(viewport)
   const [elementsVisible, setElementsVisible] = useState(false)
   const [disciplinesVisible, setDisciplinesVisible] = useState(false)
   const [motionSettled, setMotionSettled] = useState(false)
@@ -63,18 +75,9 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
   onStartRef.current = onStart
+  viewportRef.current = viewport
 
-  useLayoutEffect(() => {
-    const scene = sceneRef.current
-    if (!scene) return
-    const resize = () => {
-      rendererRef.current?.resize(fixedGameViewportScale(scene.clientWidth, scene.clientHeight))
-    }
-    resize()
-    const observer = new ResizeObserver(resize)
-    observer.observe(scene)
-    return () => observer.disconnect()
-  }, [])
+  useEffect(() => rendererRef.current?.resize(viewport), [viewport])
 
   useEffect(() => {
     const host = hostRef.current
@@ -88,7 +91,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
     setRendererError(null)
 
     void createCreateMenuRenderer({
-      displayScale: fixedGameViewportScale(scene.clientWidth, scene.clientHeight),
+      viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
@@ -96,7 +99,7 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
       }
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
-      renderer.resize(fixedGameViewportScale(scene.clientWidth, scene.clientHeight))
+      renderer.resize(viewportRef.current)
       const sceneStartedAt = performance.now()
       phaseStartedAtRef.current = sceneStartedAt
       previousPhaseElapsedRef.current = 0
@@ -230,6 +233,12 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
     hoveredActionRef.current = action
   }
 
+  const nativeTopStageStyle = nativeStageStyle(viewport, viewport.nativeStage)
+  const nativeActionStageStyle = nativeStageStyle(
+    viewport,
+    fixedGameBottomStageBounds(viewport),
+  )
+
   return (
     <div
       ref={sceneRef}
@@ -245,78 +254,94 @@ export default function CreateMenuScene({ audio, onBack, onStart }: CreateMenuSc
         <div className="main-menu-renderer-error" role="alert">{rendererError}</div>
       )}
 
-      <button
-        type="button"
-        className="create-menu-back"
-        aria-label="Back"
-        data-game-back="true"
-        disabled={pendingDiscipline !== null}
-        onBlur={() => highlight(null)}
-        onClick={onBack}
-        onFocus={() => highlight('back')}
-        onPointerDown={(event) => {
-          if (event.button === 0) playBackPress()
-        }}
-        onPointerEnter={() => highlight('back')}
-        onPointerLeave={() => highlight(null)}
-        onKeyDown={playBackPress}
-      />
+      <div className="create-menu-native-stage create-menu-native-top-stage" style={nativeTopStageStyle}>
+        <button
+          type="button"
+          className="create-menu-back"
+          aria-label="Back"
+          data-game-back="true"
+          disabled={pendingDiscipline !== null}
+          onBlur={() => highlight(null)}
+          onClick={onBack}
+          onFocus={() => highlight('back')}
+          onPointerDown={(event) => {
+            if (event.button === 0) playBackPress()
+          }}
+          onPointerEnter={() => highlight('back')}
+          onPointerLeave={() => highlight(null)}
+          onKeyDown={playBackPress}
+        />
 
-      <div className="create-menu-name-semantic" aria-label="Wizard name: Helvidius" />
-
-      <div
-        className="create-menu-elements"
-        data-visible={elementsVisible}
-        aria-label="Choose your element"
-      >
-        {CREATE_ELEMENTS.map((element) => (
-          <button
-            key={element}
-            ref={(node) => {
-              if (node) elementButtonsRef.current[element] = node
-              else delete elementButtonsRef.current[element]
-            }}
-            type="button"
-            className={`create-menu-element create-menu-element-${element}`}
-            aria-label={element}
-            data-game-default-focus={element === 'earth' || undefined}
-            disabled={!elementsVisible || selectedElement !== null}
-            onBlur={() => highlight(null)}
-            onClick={() => selectElement(element)}
-            onFocus={() => highlight(element)}
-            onPointerEnter={() => highlight(element)}
-            onPointerLeave={() => highlight(null)}
-          />
-        ))}
+        <div className="create-menu-name-semantic" aria-label="Wizard name: Helvidius" />
       </div>
 
-      <div
-        className="create-menu-disciplines"
-        data-visible={disciplinesVisible}
-        aria-label="Choose your discipline"
-      >
-        {CREATE_DISCIPLINES.map((discipline) => (
-          <button
-            key={discipline}
-            ref={(node) => {
-              if (node) disciplineButtonsRef.current[discipline] = node
-              else delete disciplineButtonsRef.current[discipline]
-            }}
-            type="button"
-            className={`create-menu-discipline create-menu-discipline-${discipline}`}
-            aria-label={discipline}
-            data-game-default-focus={discipline === 'arcane' || undefined}
-            disabled={!disciplinesVisible || pendingDiscipline !== null}
-            onBlur={() => highlight(null)}
-            onClick={() => selectDiscipline(discipline)}
-            onFocus={() => highlight(discipline)}
-            onPointerEnter={() => highlight(discipline)}
-            onPointerLeave={() => highlight(null)}
-          />
-        ))}
+      <div className="create-menu-native-stage create-menu-native-action-stage" style={nativeActionStageStyle}>
+        <div
+          className="create-menu-elements"
+          data-visible={elementsVisible}
+          aria-label="Choose your element"
+        >
+          {CREATE_ELEMENTS.map((element) => (
+            <button
+              key={element}
+              ref={(node) => {
+                if (node) elementButtonsRef.current[element] = node
+                else delete elementButtonsRef.current[element]
+              }}
+              type="button"
+              className={`create-menu-element create-menu-element-${element}`}
+              aria-label={element}
+              data-game-default-focus={element === 'earth' || undefined}
+              disabled={!elementsVisible || selectedElement !== null}
+              onBlur={() => highlight(null)}
+              onClick={() => selectElement(element)}
+              onFocus={() => highlight(element)}
+              onPointerEnter={() => highlight(element)}
+              onPointerLeave={() => highlight(null)}
+            />
+          ))}
+        </div>
+
+        <div
+          className="create-menu-disciplines"
+          data-visible={disciplinesVisible}
+          aria-label="Choose your discipline"
+        >
+          {CREATE_DISCIPLINES.map((discipline) => (
+            <button
+              key={discipline}
+              ref={(node) => {
+                if (node) disciplineButtonsRef.current[discipline] = node
+                else delete disciplineButtonsRef.current[discipline]
+              }}
+              type="button"
+              className={`create-menu-discipline create-menu-discipline-${discipline}`}
+              aria-label={discipline}
+              data-game-default-focus={discipline === 'arcane' || undefined}
+              disabled={!disciplinesVisible || pendingDiscipline !== null}
+              onBlur={() => highlight(null)}
+              onClick={() => selectDiscipline(discipline)}
+              onFocus={() => highlight(discipline)}
+              onPointerEnter={() => highlight(discipline)}
+              onPointerLeave={() => highlight(null)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
+}
+
+function nativeStageStyle(
+  viewport: FixedGameViewportLayout,
+  stage: GameViewportBounds,
+): CSSProperties {
+  const css = fixedGameStageCssBounds(viewport, stage)
+  return {
+    height: `${stage.height}px`,
+    transform: `translate3d(${css.x}px, ${css.y}px, 0) scale(${viewport.displayScale})`,
+    width: `${stage.width}px`,
+  }
 }
 
 function updateSemanticElementBounds(

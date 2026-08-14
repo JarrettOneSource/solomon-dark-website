@@ -3,12 +3,14 @@ import {
   FillGradient,
   Graphics,
   Sprite,
+  type Application,
   type Texture,
 } from 'pixi.js'
 
 import { mainMenu, menuSolomon } from '../../lib/assets.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
+import type { FixedGameViewportLayout } from './game-viewport.ts'
 import {
   TITLE_CLOUD_HEIGHT,
   TITLE_CLOUD_WIDTH,
@@ -51,12 +53,12 @@ export interface TitleMenuRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
   render(frame: TitleMenuRenderFrame): void
-  resize(displayScale: number, devicePixelRatio?: number): void
+  resize(viewport: FixedGameViewportLayout, devicePixelRatio?: number): void
 }
 
 interface TitleMenuRendererOptions {
   devicePixelRatio?: number
-  displayScale: number
+  viewport: FixedGameViewportLayout
 }
 
 interface GraveRowView {
@@ -83,15 +85,15 @@ export async function createTitleMenuRenderer(
   const textures = await loadGameTextureMap(TITLE_ASSET_SOURCES)
   const resolution = initialHubResolution({
     devicePixelRatio: options.devicePixelRatio ?? window.devicePixelRatio,
-    displayScale: options.displayScale,
+    displayScale: options.viewport.displayScale,
   })
   let gpu
   try {
     gpu = await createGameWebGlApplication({
       className: 'title-menu-canvas',
-      height: TITLE_RENDER_HEIGHT,
+      height: options.viewport.height,
       resolution,
-      width: TITLE_RENDER_WIDTH,
+      width: options.viewport.width,
     })
   } catch (error) {
     textures.destroy()
@@ -104,22 +106,29 @@ export async function createTitleMenuRenderer(
   root.sortableChildren = true
   root.eventMode = 'none'
   application.stage.addChild(root)
+  const backdrop = new Container({ label: 'title-menu-backdrop' })
+  backdrop.sortableChildren = true
+  backdrop.zIndex = 0
+  const nativeStage = new Container({ label: 'title-menu-native-stage' })
+  nativeStage.sortableChildren = true
+  nativeStage.zIndex = 1
+  root.addChild(backdrop, nativeStage)
 
   const gradients: FillGradient[] = []
   const background = new Graphics().rect(
     0, 0, TITLE_RENDER_WIDTH, TITLE_RENDER_HEIGHT,
   ).fill(0x000000)
   background.zIndex = 0
-  root.addChild(background)
+  backdrop.addChild(background)
 
   const cloudBase = tiledSprites(texture(mainMenu.cloudBase), 3, 1)
   const cloudDetail = tiledSprites(texture(mainMenu.cloudDetail), 3, 3)
   const cloudShadow = tiledSprites(texture(mainMenu.cloudShadow), 3, 4)
   const horizon = tiledSprites(texture(mainMenu.horizon), 4, 5)
   const grass = tiledSprites(texture(mainMenu.grass), 4, 15)
-  root.addChild(cloudBase.container)
-  root.addChild(stageSprite(texture(mainMenu.moon), 1304, 101.5, 192, 192, 2))
-  root.addChild(cloudDetail.container, cloudShadow.container, horizon.container)
+  backdrop.addChild(cloudBase.container)
+  backdrop.addChild(stageSprite(texture(mainMenu.moon), 1304, 101.5, 192, 192, 2))
+  backdrop.addChild(cloudDetail.container, cloudShadow.container, horizon.container)
 
   const graveTextures = mainMenu.graves.map(texture)
   const graveWidths = graveTextures.map((graveTexture) => graveTexture.width)
@@ -142,7 +151,7 @@ export async function createTitleMenuRenderer(
   lowerFog.zIndex = 12
   const fog2 = fogGradient(365, TITLE_RENDER_HEIGHT - 365, 0.7, gradients)
   fog2.zIndex = 14
-  root.addChild(
+  backdrop.addChild(
     graveViews[0].container,
     fog0,
     graveViews[1].container,
@@ -156,13 +165,13 @@ export async function createTitleMenuRenderer(
 
   const solomon = createSolomonView(texture)
   solomon.container.zIndex = 20
-  root.addChild(solomon.container)
-  root.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
-  root.addChild(stageSprite(texture(mainMenu.text.version), 1495, 4, 104, 15, 22))
-  root.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
+  nativeStage.addChild(solomon.container)
+  nativeStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
+  nativeStage.addChild(stageSprite(texture(mainMenu.text.version), 1495, 4, 104, 15, 22))
+  nativeStage.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
   const rightFlourish = stageSprite(texture(mainMenu.flourish), 1102, 440, 67, 262, 23)
   rightFlourish.scale.x = -1
-  root.addChild(rightFlourish)
+  nativeStage.addChild(rightFlourish)
 
   const rootButtons = new Container({ label: 'title-root-buttons' })
   const playButtons = new Container({ label: 'title-play-buttons' })
@@ -188,15 +197,16 @@ export async function createTitleMenuRenderer(
   ]
   rootButtons.addChild(...rootButtonViews.map((button) => button.container))
   playButtons.addChild(...playButtonViews.map((button) => button.container))
-  root.addChild(rootButtons, playButtons)
+  nativeStage.addChild(rootButtons, playButtons)
   const quitButton = createQuitButton(texture)
   quitButton.container.zIndex = 24
-  root.addChild(quitButton.container)
+  nativeStage.addChild(quitButton.container)
   const allButtons = [...rootButtonViews, ...playButtonViews, quitButton]
 
   let destroyed = false
   let simulatedTicks = 0
   let currentResolution = resolution
+  let currentViewport = options.viewport
   let solomonTick = 0
   let solomonPhase = 0
   let presentedSimulationTick = -1
@@ -208,6 +218,8 @@ export async function createTitleMenuRenderer(
     graveCounts: graveSimulation.rows.map((row) => row.graves.length),
     screen: 'root' as TitleMenuScreen,
     solomonFrame: 0,
+    viewportHeight: options.viewport.height,
+    viewportWidth: options.viewport.width,
   }
   Object.defineProperty(canvas, '__sdrTitleFrame', {
     configurable: false,
@@ -280,16 +292,23 @@ export async function createTitleMenuRenderer(
       diagnostics.solomonFrame = Math.floor(solomonPhase)
       canvas.dataset.screen = frame.screen
     },
-    resize(displayScale, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
-        displayScale,
+        displayScale: viewport.displayScale,
       })
-      if (nextResolution === currentResolution) return
+      if (nextResolution === currentResolution
+        && viewport.width === currentViewport.width
+        && viewport.height === currentViewport.height
+        && viewport.nativeStage.x === currentViewport.nativeStage.x
+        && viewport.nativeStage.y === currentViewport.nativeStage.y) return
       currentResolution = nextResolution
-      application.renderer.resize(TITLE_RENDER_WIDTH, TITLE_RENDER_HEIGHT, currentResolution)
+      currentViewport = viewport
+      applyTitleViewport(application, backdrop, nativeStage, viewport, currentResolution)
       canvas.dataset.resolution = `${currentResolution}`
+      diagnostics.viewportHeight = viewport.height
+      diagnostics.viewportWidth = viewport.width
     },
     destroy() {
       if (destroyed) return
@@ -302,6 +321,7 @@ export async function createTitleMenuRenderer(
       canvas.remove()
     },
   }
+  applyTitleViewport(application, backdrop, nativeStage, options.viewport, resolution)
   renderer.render({
     elapsedMs: 0,
     hoveredAction: null,
@@ -310,6 +330,29 @@ export async function createTitleMenuRenderer(
     screen: 'root',
   })
   return renderer
+}
+
+function applyTitleViewport(
+  application: Application,
+  backdrop: Container,
+  nativeStage: Container,
+  viewport: FixedGameViewportLayout,
+  resolution: number,
+): void {
+  application.renderer.resize(viewport.width, viewport.height, resolution)
+  const backdropScale = Math.max(
+    viewport.width / TITLE_RENDER_WIDTH,
+    viewport.height / TITLE_RENDER_HEIGHT,
+  )
+  backdrop.scale.set(backdropScale)
+  backdrop.position.set(
+    (viewport.width - TITLE_RENDER_WIDTH * backdropScale) / 2,
+    viewport.height - TITLE_RENDER_HEIGHT * backdropScale,
+  )
+  nativeStage.position.set(viewport.nativeStage.x, viewport.nativeStage.y)
+  const canvas = application.canvas as HTMLCanvasElement
+  canvas.dataset.viewportHeight = `${viewport.height}`
+  canvas.dataset.viewportWidth = `${viewport.width}`
 }
 
 function tiledSprites(texture: Texture, count: number, zIndex: number) {

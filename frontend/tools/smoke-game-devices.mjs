@@ -14,8 +14,8 @@ const browser = await chromium.launch({
   headless: true,
 })
 
-async function enterHubWithPointer(page, element = 'Water') {
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+async function enterHubWithPointer(page, element = 'Water', navigate = true) {
+  if (navigate) await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
@@ -191,12 +191,62 @@ try {
   })
   await deck.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await deck.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const titleCanvas = deck.locator('.title-menu-canvas')
+  await titleCanvas.waitFor()
+  const titleCanvasHandle = await titleCanvas.elementHandle()
+  assert.ok(titleCanvasHandle, 'expected the Steam Deck title canvas')
+  const titleStageBounds = await deck.locator('.main-menu-stage').boundingBox()
+  assertRect(titleStageBounds, { x: 0, y: 0, width: 1280, height: 800 }, 'Steam Deck title stage')
+  assertRect(await titleCanvas.boundingBox(), titleStageBounds, 'Steam Deck title canvas')
+  assertRect(
+    await deck.locator('.main-menu-native-stage').boundingBox(),
+    { x: 0, y: 40, width: 1280, height: 720 },
+    'Steam Deck title native stage',
+  )
+  assert.equal(Number(await titleCanvas.getAttribute('data-viewport-width')), 1600)
+  assert.equal(Number(await titleCanvas.getAttribute('data-viewport-height')), 1000)
+
+  assert.equal(
+    await deck.locator('[data-game-fullscreen]').getAttribute('aria-label'),
+    'Enter fullscreen',
+  )
+  const fullscreenButton = deck.locator('[data-game-fullscreen]')
+  await fullscreenButton.click()
+  await deck.waitForFunction(() => document.fullscreenElement === document.documentElement)
+  assert.equal(await fullscreenButton.getAttribute('aria-label'), 'Exit fullscreen')
+  assert.equal(await titleCanvasHandle.evaluate((node) => node.isConnected), true)
+  await fullscreenButton.click()
+  await deck.waitForFunction(() => document.fullscreenElement === null)
+  assert.equal(await fullscreenButton.getAttribute('aria-label'), 'Enter fullscreen')
+  assert.equal(await titleCanvasHandle.evaluate((node) => node.isConnected), true)
+  await deck.reload({ waitUntil: 'domcontentloaded' })
+  await deck.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+
   await pulseGamepad(deck, 0)
   await pulseGamepad(deck, 0)
   await deck.getByRole('button', { name: 'New Game' }).waitFor()
   await pulseGamepad(deck, 0)
   await pulseGamepad(deck, 0)
   await deck.locator('.create-menu-scene[data-motion-settled="true"]').waitFor()
+  const createCanvas = deck.locator('.create-menu-canvas')
+  const createCanvasHandle = await createCanvas.elementHandle()
+  assert.ok(createCanvasHandle, 'expected the Steam Deck Create canvas')
+  const createFullscreenButton = deck.locator('[data-game-fullscreen]')
+  assertRect(await createCanvas.boundingBox(), titleStageBounds, 'Steam Deck Create canvas')
+  assertRect(
+    await deck.locator('.create-menu-native-top-stage').boundingBox(),
+    { x: 0, y: 40, width: 1280, height: 720 },
+    'Steam Deck Create top stage',
+  )
+  assertRect(
+    await deck.locator('.create-menu-native-action-stage').boundingBox(),
+    { x: 0, y: 80, width: 1280, height: 720 },
+    'Steam Deck Create action stage',
+  )
+  assert.equal(Number(await createCanvas.getAttribute('data-viewport-width')), 1600)
+  assert.equal(Number(await createCanvas.getAttribute('data-viewport-height')), 1000)
+  assert.equal(await createCanvasHandle.evaluate((node) => node.isConnected), true)
+  assert.equal(await createFullscreenButton.getAttribute('aria-label'), 'Enter fullscreen')
   await pulseGamepad(deck, 0)
   await pulseGamepad(deck, 0)
   await deck.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
@@ -271,7 +321,26 @@ try {
   await installLifecycleHarness(mobile)
   const mobileErrors = []
   mobile.on('pageerror', (error) => mobileErrors.push(error.message))
-  await enterHubWithPointer(mobile)
+  await mobile.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await mobile.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const mobileTitleCanvas = mobile.locator('.title-menu-canvas')
+  const mobileTitleStageBounds = await mobile.locator('.main-menu-stage').boundingBox()
+  assertRect(
+    mobileTitleStageBounds,
+    { x: 0, y: 0, width: 844, height: 390 },
+    'mobile title stage',
+  )
+  assertRect(await mobileTitleCanvas.boundingBox(), mobileTitleStageBounds, 'mobile title canvas')
+  assertRect(
+    await mobile.locator('.main-menu-native-stage').boundingBox(),
+    { x: (844 - 1600 * (390 / 900)) / 2, y: 0, width: 1600 * (390 / 900), height: 390 },
+    'mobile title native stage',
+  )
+  assert.ok(
+    Math.abs(Number(await mobileTitleCanvas.getAttribute('data-viewport-width')) - 844 / (390 / 900)) < 0.001,
+  )
+  assert.equal(Number(await mobileTitleCanvas.getAttribute('data-viewport-height')), 900)
+  await enterHubWithPointer(mobile, 'Water', false)
   const joystick = mobile.locator('.hub-touch-joystick')
   const joystickKnob = mobile.locator('.hub-touch-joystick-knob')
   await joystick.waitFor()

@@ -3,6 +3,7 @@ import {
   FillGradient,
   Graphics,
   Sprite,
+  type Application,
   type Texture,
 } from 'pixi.js'
 
@@ -31,8 +32,6 @@ import {
   CREATE_ELEMENT_SIZE,
   CREATE_HAND_CENTERS,
   CREATE_HAND_SIZE,
-  CREATE_RENDER_HEIGHT,
-  CREATE_RENDER_WIDTH,
   CREATE_STARS,
   createEntryFlashAlpha,
   createSelectionFlashAlpha,
@@ -44,6 +43,10 @@ import {
   textureFrom,
 } from './game-webgl.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
+import {
+  fixedGameBottomStageBounds,
+  type FixedGameViewportLayout,
+} from './game-viewport.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { createNativeElementVfxTextures } from './world-player-textures.ts'
 
@@ -63,12 +66,12 @@ export interface CreateMenuRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
   render(frame: CreateMenuRenderFrame): void
-  resize(displayScale: number, devicePixelRatio?: number): void
+  resize(viewport: FixedGameViewportLayout, devicePixelRatio?: number): void
 }
 
 interface CreateMenuRendererOptions {
   devicePixelRatio?: number
-  displayScale: number
+  viewport: FixedGameViewportLayout
 }
 
 interface ElementView {
@@ -96,15 +99,15 @@ export async function createCreateMenuRenderer(
   const textures = await loadGameTextureMap(CREATE_ASSET_SOURCES)
   const resolution = initialHubResolution({
     devicePixelRatio: options.devicePixelRatio ?? window.devicePixelRatio,
-    displayScale: options.displayScale,
+    displayScale: options.viewport.displayScale,
   })
   let gpu
   try {
     gpu = await createGameWebGlApplication({
       className: 'create-menu-canvas',
-      height: CREATE_RENDER_HEIGHT,
+      height: options.viewport.height,
       resolution,
-      width: CREATE_RENDER_WIDTH,
+      width: options.viewport.width,
     })
   } catch (error) {
     textures.destroy()
@@ -120,6 +123,14 @@ export async function createCreateMenuRenderer(
   root.eventMode = 'none'
   root.sortableChildren = true
   application.stage.addChild(root)
+  const nativeTopStage = new Container({ label: 'create-menu-native-top-stage' })
+  nativeTopStage.eventMode = 'none'
+  nativeTopStage.sortableChildren = true
+  nativeTopStage.zIndex = 1
+  const nativeActionStage = new Container({ label: 'create-menu-native-action-stage' })
+  nativeActionStage.eventMode = 'none'
+  nativeActionStage.sortableChildren = true
+  nativeActionStage.zIndex = 1
   const gradients: FillGradient[] = []
 
   const backgroundGradient = new FillGradient({
@@ -133,15 +144,15 @@ export async function createCreateMenuRenderer(
   })
   gradients.push(backgroundGradient)
   const background = new Graphics()
-    .rect(0, 0, CREATE_RENDER_WIDTH, CREATE_RENDER_HEIGHT)
+    .rect(0, 0, options.viewport.width, options.viewport.height)
     .fill(backgroundGradient)
   background.zIndex = 0
-  root.addChild(background)
+  root.addChild(background, nativeTopStage, nativeActionStage)
 
   const wheel = centeredSprite(texture(createMenu.arcaneWheel), 800, 800, 276, 276, 1)
   wheel.scale.set(3)
   wheel.alpha = 0.05
-  root.addChild(wheel)
+  nativeActionStage.addChild(wheel)
 
   const starSprites = CREATE_STARS.map((star) => {
     const starTexture = texture(star.large ? createMenu.stars.large : createMenu.stars.small)
@@ -150,13 +161,13 @@ export async function createCreateMenuRenderer(
     sprite.position.set(star.x, star.y)
     sprite.zIndex = 2
     sprite.visible = false
-    root.addChild(sprite)
+    nativeActionStage.addChild(sprite)
     return sprite
   })
 
   const leftHand = handSprite(texture(createMenu.handFist), false)
   leftHand.zIndex = 3
-  root.addChild(leftHand)
+  nativeActionStage.addChild(leftHand)
 
   const elementViews = Object.fromEntries(CREATE_ELEMENTS.map((element) => {
     const container = new Container({ label: `create-element-${element}` })
@@ -171,19 +182,19 @@ export async function createCreateMenuRenderer(
     highlight.blendMode = 'add'
     highlight.alpha = 0
     container.addChild(vfx.container, glyph, highlight)
-    root.addChild(container)
+    nativeActionStage.addChild(container)
     return [element, { container, glyph, highlight, vfx }] as const
   })) as Record<WizardElement, ElementView>
 
   const heldVfxContainer = new Container({ label: 'create-selected-element' })
   heldVfxContainer.eventMode = 'none'
   heldVfxContainer.zIndex = 4
-  root.addChild(heldVfxContainer)
+  nativeActionStage.addChild(heldVfxContainer)
   const heldVfxViews: Partial<Record<WizardElement, NativeElementVfxView>> = {}
 
   const rightHand = handSprite(texture(createMenu.handFist), true)
   rightHand.zIndex = 5
-  root.addChild(rightHand)
+  nativeActionStage.addChild(rightHand)
 
   const disciplineViews = Object.fromEntries(CREATE_DISCIPLINES.map((discipline) => {
     const container = new Container({ label: `create-discipline-${discipline}` })
@@ -196,31 +207,32 @@ export async function createCreateMenuRenderer(
     highlight.blendMode = 'add'
     highlight.alpha = 0
     container.addChild(glyph, highlight)
-    root.addChild(container)
+    nativeActionStage.addChild(container)
     return [discipline, { container, highlight }] as const
   })) as Record<WizardDiscipline, DisciplineView>
 
   const elementPrompt = stageSprite(texture(createMenu.chooseElement), 620, 793, 361, 92, 7)
   const disciplinePrompt = stageSprite(texture(createMenu.chooseDiscipline), 620, 793, 361, 87, 7)
-  root.addChild(elementPrompt, disciplinePrompt)
+  nativeActionStage.addChild(elementPrompt, disciplinePrompt)
   const name = createNameView(texture, gradients)
   name.zIndex = 8
-  root.addChild(name)
+  nativeTopStage.addChild(name)
   const back = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 8)
   back.alpha = 0.76
   const backHighlight = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 9)
   backHighlight.blendMode = 'add'
   backHighlight.alpha = 0
-  root.addChild(back, backHighlight)
-  root.addChild(stageSprite(texture(createMenu.dice), 1520, 0, 80, 54, 8))
+  nativeTopStage.addChild(back, backHighlight)
+  nativeTopStage.addChild(stageSprite(texture(createMenu.dice), 1520, 0, 80, 54, 8))
   const flash = new Graphics().rect(
-    0, 0, CREATE_RENDER_WIDTH, CREATE_RENDER_HEIGHT,
+    0, 0, options.viewport.width, options.viewport.height,
   ).fill(0xffffff)
-  flash.zIndex = 20
+  flash.zIndex = 2
   flash.alpha = 0
   root.addChild(flash)
 
   let currentResolution = resolution
+  let currentViewport = options.viewport
   let destroyed = false
   let cachedMotion: ReturnType<typeof createEntryMotionAt> | null = null
   let cachedMotionPhase: CreateMenuPhase | null = null
@@ -230,6 +242,8 @@ export async function createCreateMenuRenderer(
     frameCount: 0,
     phase: 'element' as CreateMenuPhase,
     spriteCount: countSprites(root),
+    viewportHeight: options.viewport.height,
+    viewportWidth: options.viewport.width,
   }
   Object.defineProperty(canvas, '__sdrCreateFrame', {
     configurable: false,
@@ -302,16 +316,32 @@ export async function createCreateMenuRenderer(
       canvas.dataset.phase = frame.phase
       canvas.dataset.selectedElement = frame.selectedElement ?? ''
     },
-    resize(displayScale, nextDevicePixelRatio = window.devicePixelRatio) {
+    resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
       const nextResolution = initialHubResolution({
         devicePixelRatio: nextDevicePixelRatio,
-        displayScale,
+        displayScale: viewport.displayScale,
       })
-      if (nextResolution === currentResolution) return
+      if (nextResolution === currentResolution
+        && viewport.width === currentViewport.width
+        && viewport.height === currentViewport.height
+        && viewport.nativeStage.x === currentViewport.nativeStage.x
+        && viewport.nativeStage.y === currentViewport.nativeStage.y) return
       currentResolution = nextResolution
-      application.renderer.resize(CREATE_RENDER_WIDTH, CREATE_RENDER_HEIGHT, currentResolution)
+      currentViewport = viewport
+      applyCreateViewport(
+        application,
+        background,
+        backgroundGradient,
+        flash,
+        nativeTopStage,
+        nativeActionStage,
+        viewport,
+        currentResolution,
+      )
       canvas.dataset.resolution = `${currentResolution}`
+      diagnostics.viewportHeight = viewport.height
+      diagnostics.viewportWidth = viewport.width
     },
     destroy() {
       if (destroyed) return
@@ -327,6 +357,16 @@ export async function createCreateMenuRenderer(
       canvas.remove()
     },
   }
+  applyCreateViewport(
+    application,
+    background,
+    backgroundGradient,
+    flash,
+    nativeTopStage,
+    nativeActionStage,
+    options.viewport,
+    resolution,
+  )
   renderer.render({
     hoveredAction: null,
     phase: 'element',
@@ -336,6 +376,27 @@ export async function createCreateMenuRenderer(
     selectedElement: null,
   })
   return renderer
+}
+
+function applyCreateViewport(
+  application: Application,
+  background: Graphics,
+  backgroundGradient: FillGradient,
+  flash: Graphics,
+  nativeTopStage: Container,
+  nativeActionStage: Container,
+  viewport: FixedGameViewportLayout,
+  resolution: number,
+): void {
+  application.renderer.resize(viewport.width, viewport.height, resolution)
+  background.clear().rect(0, 0, viewport.width, viewport.height).fill(backgroundGradient)
+  flash.clear().rect(0, 0, viewport.width, viewport.height).fill(0xffffff)
+  nativeTopStage.position.set(viewport.nativeStage.x, viewport.nativeStage.y)
+  const actionStage = fixedGameBottomStageBounds(viewport)
+  nativeActionStage.position.set(actionStage.x, actionStage.y)
+  const canvas = application.canvas as HTMLCanvasElement
+  canvas.dataset.viewportHeight = `${viewport.height}`
+  canvas.dataset.viewportWidth = `${viewport.width}`
 }
 
 function updateElementViews(

@@ -14,8 +14,7 @@
 .main-menu-stage {
   position: relative;
   width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
+  height: 100%;
   overflow: hidden;
   container-type: size;
   background: #000;
@@ -23,18 +22,18 @@
 
 .game-orientation-hint { display: none; }
 
-@media (min-aspect-ratio: 16 / 9) {
-  .main-menu-stage {
-    width: auto;
-    height: 100%;
-  }
+.main-menu-native-stage,
+.create-menu-native-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  container-type: size;
+  transform-origin: 0 0;
 }
 
-.main-menu-stage.main-menu-stage-gameplay {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: auto;
-}
+.main-menu-native-stage { z-index: 9; }
+
+.create-menu-native-stage { z-index: 30; }
 
 .title-menu-renderer,
 .create-menu-renderer {
@@ -57,7 +56,6 @@
 
 .main-menu-actions {
   position: absolute;
-  z-index: 9;
   top: 46.777778%;
   left: 42.09375%;
   display: flex;
@@ -88,7 +86,6 @@
 
 .main-menu-quit {
   position: absolute;
-  z-index: 9;
   right: 1.1875%;
   bottom: 1.555556%;
   width: 6.25%;
@@ -134,6 +131,74 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.game-fullscreen-control {
+  position: absolute;
+  z-index: 1000;
+  top: 8px;
+  right: 49px;
+}
+
+.main-menu-page[data-game-scene='root'] .game-fullscreen-control,
+.main-menu-page[data-game-scene='play'] .game-fullscreen-control {
+  top: auto;
+  right: 126px;
+  bottom: 14px;
+}
+
+.main-menu-page[data-game-scene='create'] .game-fullscreen-control {
+  top: 10px;
+  right: 88px;
+}
+
+.game-fullscreen-button {
+  display: grid;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 6px;
+  border: 1px solid rgb(205 177 105 / 0.8);
+  border-radius: 3px;
+  color: #dfca8e;
+  background: rgb(5 6 10 / 0.72);
+  box-shadow: 0 1px 3px #000, inset 0 0 5px rgb(185 151 78 / 0.18);
+  cursor: pointer;
+  place-items: center;
+}
+
+.game-fullscreen-button:hover,
+.game-fullscreen-button:focus-visible,
+.game-fullscreen-button[aria-pressed='true'] {
+  border-color: #f0d58f;
+  color: #fff0b7;
+  background: rgb(18 18 22 / 0.9);
+  outline: none;
+}
+
+.game-fullscreen-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 2;
+}
+
+.game-fullscreen-error {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  padding: 6px 9px;
+  border: 1px solid rgb(205 177 105 / 0.65);
+  color: #f0dca7;
+  font: 13px var(--font-display);
+  text-align: right;
+  background: rgb(7 6 14 / 0.94);
 }
 
 .create-menu-back:focus-visible,

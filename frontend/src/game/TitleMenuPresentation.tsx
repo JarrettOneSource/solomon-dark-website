@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import { fixedGameViewportScale } from './renderer/game-viewport.ts'
+import type { FixedGameViewportLayout } from './renderer/game-viewport.ts'
 import {
   createTitleMenuRenderer,
   type TitleMenuAction,
@@ -13,12 +13,14 @@ interface TitleMenuPresentationProps {
   hoveredAction: TitleMenuAction | null
   pressedAction: TitleMenuAction | null
   screen: TitleMenuScreen
+  viewport: FixedGameViewportLayout
 }
 
 export default function TitleMenuPresentation({
   hoveredAction,
   pressedAction,
   screen,
+  viewport,
 }: TitleMenuPresentationProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<TitleMenuRenderer | null>(null)
@@ -28,23 +30,15 @@ export default function TitleMenuPresentation({
     reducedMotion: false,
     screen,
   })
+  const viewportRef = useRef(viewport)
   const [rendererError, setRendererError] = useState<string | null>(null)
 
   frameRef.current.hoveredAction = hoveredAction
   frameRef.current.pressedAction = pressedAction
   frameRef.current.screen = screen
+  viewportRef.current = viewport
 
-  useLayoutEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-    const resize = () => {
-      rendererRef.current?.resize(fixedGameViewportScale(host.clientWidth, host.clientHeight))
-    }
-    resize()
-    const observer = new ResizeObserver(resize)
-    observer.observe(host)
-    return () => observer.disconnect()
-  }, [])
+  useEffect(() => rendererRef.current?.resize(viewport), [viewport])
 
   useEffect(() => {
     const host = hostRef.current
@@ -58,7 +52,7 @@ export default function TitleMenuPresentation({
     setRendererError(null)
 
     void createTitleMenuRenderer({
-      displayScale: fixedGameViewportScale(host.clientWidth, host.clientHeight),
+      viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
@@ -66,7 +60,7 @@ export default function TitleMenuPresentation({
       }
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
-      renderer.resize(fixedGameViewportScale(host.clientWidth, host.clientHeight))
+      renderer.resize(viewportRef.current)
       const animate = (now: number) => {
         renderer.render({
           ...frameRef.current,
