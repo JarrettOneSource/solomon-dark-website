@@ -205,7 +205,8 @@ import elementVfxFire from '../assets/game/element-vfx-fire.png'
 import elementVfxRay from '../assets/game/element-vfx-ray.png'
 import elementVfxSpark from '../assets/game/element-vfx-spark.png'
 import elementVfxWater from '../assets/game/element-vfx-water.png'
-import primarySpellEarthGlimmer from '../assets/game/primary-spell-earth-glimmer.png'
+import primarySpellEarthAura from '../assets/game/boneyard/badguys/0015.png'
+import primarySpellEarthOpeningFlash from '../assets/game/primary-spell-earth-glimmer.png'
 import primarySpellEarthLitRock0 from '../assets/game/primary-spell-earth-lit-rock-0.png'
 import primarySpellEarthLitRock1 from '../assets/game/primary-spell-earth-lit-rock-1.png'
 import primarySpellEarthLitRock2 from '../assets/game/primary-spell-earth-lit-rock-2.png'
@@ -494,7 +495,7 @@ export const primarySpells = {
     ribbon: primarySpellAirRibbon,
   },
   earth: {
-    glimmer: primarySpellEarthGlimmer,
+    aura: primarySpellEarthAura,
     litRocks: [
       primarySpellEarthLitRock0,
       primarySpellEarthLitRock1,
@@ -506,6 +507,7 @@ export const primarySpells = {
       primarySpellEarthRock2,
       primarySpellEarthRockCenter,
     ],
+    openingFlash: primarySpellEarthOpeningFlash,
   },
   fire: {
     core: elementVfxCore,

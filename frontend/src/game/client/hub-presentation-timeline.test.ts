@@ -91,6 +91,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
     projectiles: [
       {
         ageTicks: 1,
+        assemblyCharge: Math.fround(0.18),
         charge: 0.2,
         direction: { x: 0, y: -1 },
         flightTicks: 0,
@@ -133,6 +134,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
       {
         ...older.projectiles[0],
         ageTicks: 6,
+        assemblyCharge: 0.4,
         charge: 0.4,
         direction: { x: 1, y: 0 },
         flightTicks: 1,
@@ -171,6 +173,10 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   assert.deepEqual(halfway.projectiles[0].position, { x: 15, y: 25 })
   assert.equal(halfway.projectiles[0].charge, 0.30000000000000004)
   assert.equal(halfway.projectiles[0].phase, 'held')
+  assert.equal(halfway.projectiles[0].kind, 'earth')
+  if (halfway.projectiles[0].kind === 'earth') {
+    assert.equal(halfway.projectiles[0].assemblyCharge, Math.fround(0.18))
+  }
   assert.equal(halfway.transients[0].ageTicks, 4)
   assert.equal(halfway.transients[0].kind, 'fire')
   if (halfway.transients[0].kind === 'fire') {
@@ -180,6 +186,10 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   const caughtUp = interpolatePrimarySpellState(older, newer, 1)
   assert.deepEqual(caughtUp.projectiles.map(({ id }) => id), [1, 4])
   assert.equal(caughtUp.projectiles[0].phase, 'flight')
+  assert.equal(caughtUp.projectiles[0].kind, 'earth')
+  if (caughtUp.projectiles[0].kind === 'earth') {
+    assert.equal(caughtUp.projectiles[0].assemblyCharge, 0.4)
+  }
   assert.equal(caughtUp.transients[0].kind, 'fire')
   if (caughtUp.transients[0].kind === 'fire') {
     assert.deepEqual(caughtUp.transients[0].origin, { x: 400, y: 500 })

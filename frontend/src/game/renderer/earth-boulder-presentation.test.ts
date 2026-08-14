@@ -5,11 +5,13 @@ import { Container, Texture } from 'pixi.js'
 
 import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import {
-  EARTH_BOULDER_GLIMMER_RECORD,
-  EARTH_BOULDER_GLIMMER_SCALE,
+  EARTH_BOULDER_AURA_RECORD,
+  EARTH_BOULDER_AURA_SCALE,
   EARTH_BOULDER_DEPTH_PLANE,
   EARTH_BOULDER_DRAW_SCALE_MINIMUM,
   EARTH_BOULDER_MAIN_RECORDS,
+  EARTH_BOULDER_OPENING_FLASH_RECORD,
+  EARTH_BOULDER_OPENING_FLASH_SCALE,
   EARTH_BOULDER_OPENING_FADE_PER_TICK,
   EARTH_BOULDER_LIT_RECORDS,
   earthBoulderImpactPlan,
@@ -25,9 +27,10 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const WORLD_KEY = 'boneyard:test'
 
-function held(ageTicks: number, charge: number, id = 17) {
+function held(ageTicks: number, charge: number, id = 17, assemblyCharge = charge) {
   return earthBoulderPresentationPlan({
     ageTicks,
+    assemblyCharge,
     charge,
     flightTicks: 0,
     id,
@@ -63,6 +66,7 @@ test('Earth freezes its native 3D body orientation on release and depth sorts it
   const heldPlan = held(97, Math.fround(0.3012498915195465))
   const released = earthBoulderPresentationPlan({
     ageTicks: 127,
+    assemblyCharge: Math.fround(0.3012498915195465),
     charge: Math.fround(0.3012498915195465),
     flightTicks: 30,
     id: 17,
@@ -101,19 +105,88 @@ test('main rocks use the native float32 draw-scale floor', () => {
   )))
 })
 
-test('record 86 crossfades away while the real rock body crossfades in', () => {
+test('Earth holds its Rock collection stable between native rebuild buckets', () => {
+  const rebuilt = held(12, Math.fround(0.2001), 17, Math.fround(0.18))
+  const interpolated = held(12.5, Math.fround(0.215), 17, Math.fround(0.18))
+  const nextBucket = held(13, Math.fround(0.22), 17, Math.fround(0.22))
+
+  const storedAssembly = (plan: ReturnType<typeof held>) => plan.rocks.map((rock) => ({
+    local: rock.local,
+    record: rock.record,
+    shellIndex: rock.shellIndex,
+    storedScale: rock.storedScale,
+  }))
+  assert.deepEqual(storedAssembly(interpolated), storedAssembly(rebuilt))
+  assert.equal(rebuilt.rocks.length, 7)
+  assert.equal(nextBucket.rocks.length, 8)
+  assert.equal(
+    rebuilt.rocks.find(({ shellIndex }) => shellIndex === null)?.storedScale,
+    4 * Math.fround(0.18),
+  )
+})
+
+test('record 15 persists while additive record 86 opens and body crossfades in', () => {
   const opening = held(0, Math.fround(0.18))
   const middle = held(10, Math.fround(0.18))
   const mature = held(29, Math.fround(0.18))
 
-  assert.equal(opening.glimmer.record, EARTH_BOULDER_GLIMMER_RECORD)
-  assert.equal(opening.glimmer.alpha, 1)
+  assert.equal(opening.aura.record, EARTH_BOULDER_AURA_RECORD)
+  assert.equal(opening.aura.scale, EARTH_BOULDER_AURA_SCALE * Math.fround(0.18))
+  assert.ok(opening.aura.alpha >= 0.35 && opening.aura.alpha < 0.6)
+  assert.equal(mature.aura.record, EARTH_BOULDER_AURA_RECORD)
+  assert.ok(mature.aura.alpha >= 0.35 && mature.aura.alpha < 0.6)
+  assert.equal(opening.openingFlash.record, EARTH_BOULDER_OPENING_FLASH_RECORD)
+  assert.equal(opening.openingFlash.alpha, 1)
+  assert.equal(opening.openingFlash.scale, EARTH_BOULDER_OPENING_FLASH_SCALE)
+  assert.equal(opening.openingFlash.rotation, 0)
   assert.equal(opening.bodyAlpha, 0)
-  assert.equal(opening.glimmer.scale, EARTH_BOULDER_GLIMMER_SCALE * Math.fround(0.18))
-  assert.equal(middle.glimmer.alpha, 1 - 10 * EARTH_BOULDER_OPENING_FADE_PER_TICK)
+  assert.equal(
+    middle.openingFlash.alpha,
+    1 - 10 * EARTH_BOULDER_OPENING_FADE_PER_TICK,
+  )
+  assert.equal(
+    middle.openingFlash.scale,
+    EARTH_BOULDER_OPENING_FLASH_SCALE * middle.openingFlash.alpha,
+  )
+  assert.equal(middle.openingFlash.rotation, 10 * 6 * Math.PI / 180)
   assert.equal(middle.bodyAlpha, 10 * EARTH_BOULDER_OPENING_FADE_PER_TICK)
-  assert.equal(mature.glimmer.alpha, 0)
+  assert.equal(mature.openingFlash.alpha, 0)
   assert.equal(mature.bodyAlpha, 1)
+})
+
+test('Earth applies the native charge lift, jitter domain, and dynamic painter bias', () => {
+  const plan = held(97, Math.fround(0.3012498915195465))
+
+  assert.ok(Math.hypot(plan.jitter.x, plan.jitter.y) < 3)
+  assert.equal(
+    plan.visualOffset.y,
+    -20 - 32.5 * Math.fround(0.3012498915195465) + plan.jitter.y,
+  )
+  assert.equal(plan.visualOffset.x, plan.jitter.x)
+  assert.equal(
+    plan.sortBias,
+    (20 + 10 * Math.fround(0.3012498915195465))
+      * Math.fround(0.3012498915195465) * 1.5,
+  )
+})
+
+test('Earth advances draw-owned jitter and opening rotation without spinning the shell', () => {
+  const state = {
+    ageTicks: 12,
+    assemblyCharge: Math.fround(0.18),
+    charge: Math.fround(0.2),
+    flightTicks: 0,
+    id: 17,
+    phase: 'held' as const,
+  }
+  const first = earthBoulderPresentationPlan(state, 100)
+  const second = earthBoulderPresentationPlan(state, 101)
+
+  assert.deepEqual(second.rocks, first.rocks)
+  assert.notDeepEqual(second.jitter, first.jitter)
+  assert.ok(Math.abs(
+    second.openingFlash.rotation - first.openingFlash.rotation - 6 * Math.PI / 180,
+  ) < 1e-12)
 })
 
 test('Earth impact uses the exact fragment domains and recurrent angle distribution', () => {
@@ -188,6 +261,7 @@ test('Earth actors publish independent full-suffix painter and light roots', () 
   const fragments = layers.filter(({ id }) => id.startsWith('primary-spell:2:fragment-'))
 
   assert.deepEqual(body?.regionLightPoint, { x: 100, y: 200 })
+  assert.equal(body?.sortBias, 45)
   assert.equal(called?.regionLightPoint, null)
   assert.equal(fragments.length, 30)
   assert.deepEqual(
@@ -252,6 +326,7 @@ function worldFixture(): PrimarySpellSimulationState {
     nextId: 4,
     projectiles: [{
       ageTicks: 30,
+      assemblyCharge: 1,
       charge: 1,
       direction: { x: 0, y: -1 },
       flightTicks: 0,
@@ -297,8 +372,9 @@ function worldTextures(): PlayerWorldTextures {
   return {
     primarySpells: {
       earth: {
-        glimmer: Texture.EMPTY,
+        aura: Texture.EMPTY,
         litRocks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+        openingFlash: Texture.EMPTY,
         rocks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
       },
     },

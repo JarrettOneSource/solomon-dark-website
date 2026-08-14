@@ -3,6 +3,7 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import type {
   PrimarySpellEarthCalledRockState,
   PrimarySpellEarthImpactState,
+  PrimarySpellEarthProjectileState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -15,8 +16,9 @@ import {
 } from './earth-boulder-presentation.ts'
 
 export interface EarthBoulderTextures {
-  glimmer: Texture
+  aura: Texture
   litRocks: readonly Texture[]
+  openingFlash: Texture
   rocks: readonly Texture[]
 }
 
@@ -25,21 +27,29 @@ export class EarthBoulderView {
   readonly containers: readonly Container[]
   readonly kind = 'earth'
   private readonly body = new Container({ label: 'earth-boulder-body' })
-  private readonly glimmer: Sprite
+  private readonly aura: Sprite
+  private readonly openingFlash: Sprite
   private readonly rockSprites: Sprite[] = []
-  private state: PrimarySpellProjectileState
+  private readonly visual = new Container({ label: 'earth-boulder-visual' })
+  private presentationTick = 0
+  private state: PrimarySpellEarthProjectileState
+  private sortBias = 0
   private readonly textures: EarthBoulderTextures
 
-  constructor(state: PrimarySpellProjectileState, textures: EarthBoulderTextures) {
-    if (state.kind !== 'earth') throw new Error('EarthBoulderView requires an Earth projectile')
+  constructor(state: PrimarySpellEarthProjectileState, textures: EarthBoulderTextures) {
     this.state = state
     this.textures = textures
     this.container = new Container({ label: 'earth' })
     this.containers = [this.container]
     this.container.eventMode = 'none'
     this.body.eventMode = 'none'
-    this.glimmer = sprite(textures.glimmer)
-    this.container.addChild(this.glimmer, this.body)
+    this.visual.eventMode = 'none'
+    this.aura = sprite(textures.aura)
+    this.aura.tint = 0xe6ffe6
+    this.openingFlash = sprite(textures.openingFlash)
+    this.openingFlash.blendMode = 'add'
+    this.visual.addChild(this.aura, this.openingFlash, this.body)
+    this.container.addChild(this.visual)
     this.update(state)
   }
 
@@ -47,9 +57,15 @@ export class EarthBoulderView {
     if (!('position' in state) || state.kind !== 'earth') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
-    const plan = earthBoulderPresentationPlan(state)
-    this.glimmer.alpha = plan.glimmer.alpha
-    this.glimmer.scale.set(plan.glimmer.scale)
+    const plan = earthBoulderPresentationPlan(state, this.presentationTick)
+    this.presentationTick += 1
+    this.sortBias = plan.sortBias
+    this.visual.position.set(plan.visualOffset.x, plan.visualOffset.y)
+    this.aura.alpha = plan.aura.alpha
+    this.aura.scale.set(plan.aura.scale)
+    this.openingFlash.alpha = plan.openingFlash.alpha
+    this.openingFlash.rotation = plan.openingFlash.rotation
+    this.openingFlash.scale.set(plan.openingFlash.scale)
     syncSprites(this.body, this.rockSprites, plan.rocks.length, () => (
       sprite(this.textures.rocks[0])
     ))
@@ -71,7 +87,7 @@ export class EarthBoulderView {
     return [{
       container: this.container,
       regionLightPoint: { ...this.state.position },
-      sortBias: 0,
+      sortBias: this.sortBias,
       suffix: '',
       worldY: this.worldY,
     }]
@@ -79,7 +95,8 @@ export class EarthBoulderView {
 
   setTint(suffix: string, tint: number): void {
     if (suffix !== '') return
-    this.glimmer.tint = tint
+    this.aura.tint = multiplyTint(tint, 0xe6ffe6)
+    this.openingFlash.tint = tint
     for (const rock of this.rockSprites) rock.tint = tint
   }
 
@@ -223,6 +240,13 @@ function sprite(texture: Texture): Sprite {
   result.anchor.set(0.5)
   result.eventMode = 'none'
   return result
+}
+
+function multiplyTint(first: number, second: number): number {
+  const channel = (shift: number) => Math.round(
+    ((first >>> shift) & 0xff) * ((second >>> shift) & 0xff) / 0xff,
+  )
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
 function syncSprites(

@@ -249,6 +249,15 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     velocity: { x: 0, y: -3 },
     worldKey: 'hub:courtyard',
   }
+  const boulder = {
+    ...missile,
+    assemblyCharge: Math.fround(0.18),
+    charge: 0.19,
+    flightTicks: 0,
+    kind: 'earth',
+    phase: 'held',
+    velocity: { x: 0, y: 0 },
+  }
   const earthImpactSeed = {
     ageTicks: 3,
     birthTick: 40,
@@ -314,6 +323,34 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedCalledRock.type, 'server-snapshot')
   assert.deepEqual(decodedCalledRock.frame.primarySpells.transients, [calledRock])
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [boulder], transients: [] },
+  }))
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, assemblyCharge: undefined }],
+      transients: [],
+    },
+  }), /assemblyCharge/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, assemblyCharge: 1 }],
+      transients: [],
+    },
+  }), /assemblyCharge is not allowed/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, assemblyCharge: 0.21 }],
+      transients: [],
+    },
+  }), /assemblyCharge/)
 
   assert.throws(() => decodeFrame({
     ...frame,
@@ -361,6 +398,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       nextId: 2,
       projectiles: [{
         ...missile,
+        assemblyCharge: 0.2,
         charge: 0.2,
         kind: 'earth',
         phase: 'held',

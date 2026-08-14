@@ -495,9 +495,13 @@ async function captureHubEarthStage(page, screenshotPath) {
     )
     const plan = earthBoulderPresentationPlan(state)
     return {
+      assemblyCharge: state.assemblyCharge,
+      auraAlpha: plan.aura.alpha,
       bodyAlpha: plan.bodyAlpha,
-      glimmerAlpha: plan.glimmer.alpha,
       mainRockCount: plan.rocks.length,
+      openingFlashAlpha: plan.openingFlash.alpha,
+      sortBias: plan.sortBias,
+      visualOffset: plan.visualOffset,
     }
   }, wire.state)
   const frame = await page.evaluate(() => ({

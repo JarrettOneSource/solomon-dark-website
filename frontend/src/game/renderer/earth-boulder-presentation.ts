@@ -3,11 +3,13 @@ import {
   earthImpactFragmentsAtAge,
 } from '../core-kernels/primary-spell-earth.ts'
 
-export const EARTH_BOULDER_GLIMMER_RECORD = 86
+export const EARTH_BOULDER_AURA_RECORD = 15
+export const EARTH_BOULDER_OPENING_FLASH_RECORD = 86
 export const EARTH_BOULDER_MAIN_RECORDS = [168, 169, 170, 171] as const
 export { EARTH_BOULDER_LIT_RECORDS }
 export const EARTH_BOULDER_OPENING_FADE_PER_TICK = 0.03500000014901161
-export const EARTH_BOULDER_GLIMMER_SCALE = 4.099999904632568
+export const EARTH_BOULDER_AURA_SCALE = 4.099999904632568
+export const EARTH_BOULDER_OPENING_FLASH_SCALE = 2.5
 export const EARTH_BOULDER_DEPTH_PLANE = -40
 export const EARTH_BOULDER_DRAW_SCALE_MINIMUM = Math.fround(0.45)
 
@@ -17,6 +19,7 @@ const ORIENTATION_DEGREES_PER_TICK = 0.75
 
 export interface EarthBoulderPresentationState {
   ageTicks: number
+  assemblyCharge: number
   charge: number
   flightTicks: number
   id: number
@@ -35,14 +38,23 @@ export interface EarthBoulderRockPlan {
 }
 
 export interface EarthBoulderPresentationPlan {
-  bodyAlpha: number
-  glimmer: {
+  aura: {
     alpha: number
-    record: typeof EARTH_BOULDER_GLIMMER_RECORD
+    record: typeof EARTH_BOULDER_AURA_RECORD
+    scale: number
+  }
+  bodyAlpha: number
+  jitter: { x: number, y: number }
+  openingFlash: {
+    alpha: number
+    record: typeof EARTH_BOULDER_OPENING_FLASH_RECORD
+    rotation: number
     scale: number
   }
   orientationTicks: number
   rocks: readonly EarthBoulderRockPlan[]
+  sortBias: number
+  visualOffset: { x: number, y: number }
 }
 
 export interface EarthBoulderImpactState {
@@ -74,19 +86,39 @@ interface Vector3 {
 
 export function earthBoulderPresentationPlan(
   state: EarthBoulderPresentationState,
+  renderTick = state.ageTicks,
 ): EarthBoulderPresentationPlan {
   const openingMix = clamp01(1 - state.ageTicks * EARTH_BOULDER_OPENING_FADE_PER_TICK)
   const orientationTicks = Math.max(0, state.ageTicks - state.flightTicks)
-  const rocks = earthBoulderBody(state.id, state.charge, orientationTicks)
+  const visualTick = Math.max(0, Math.floor(renderTick))
+  const jitterRadius = unitRandom(state.id, 0x3000 + visualTick * 2) * 3
+  const jitterAngle = unitRandom(state.id, 0x3001 + visualTick * 2) * Math.PI * 2
+  const jitter = {
+    x: Math.cos(jitterAngle) * jitterRadius,
+    y: Math.sin(jitterAngle) * jitterRadius,
+  }
+  const rocks = earthBoulderBody(state.id, state.assemblyCharge, orientationTicks)
   return {
+    aura: {
+      alpha: 0.35 + unitRandom(state.id, 0x4000 + visualTick) * 0.25,
+      record: EARTH_BOULDER_AURA_RECORD,
+      scale: EARTH_BOULDER_AURA_SCALE * state.charge,
+    },
     bodyAlpha: 1 - openingMix,
-    glimmer: {
+    jitter,
+    openingFlash: {
       alpha: openingMix,
-      record: EARTH_BOULDER_GLIMMER_RECORD,
-      scale: EARTH_BOULDER_GLIMMER_SCALE * state.charge,
+      record: EARTH_BOULDER_OPENING_FLASH_RECORD,
+      rotation: renderTick * 6 * Math.PI / 180,
+      scale: EARTH_BOULDER_OPENING_FLASH_SCALE * openingMix,
     },
     orientationTicks,
     rocks,
+    sortBias: (20 + 10 * state.charge) * state.charge * 1.5,
+    visualOffset: {
+      x: jitter.x,
+      y: -20 - 32.5 * state.charge + jitter.y,
+    },
   }
 }
 

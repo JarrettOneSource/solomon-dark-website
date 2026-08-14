@@ -40,8 +40,9 @@ export interface PlayerWorldTextures {
       ribbon: Texture
     }
     earth: {
-      glimmer: Texture
+      aura: Texture
       litRocks: readonly Texture[]
+      openingFlash: Texture
       rocks: readonly Texture[]
     }
     fire: {
@@ -124,8 +125,9 @@ export function createPlayerWorldTextures(
         ribbon: texture(primarySpells.air.ribbon),
       },
       earth: {
-        glimmer: texture(primarySpells.earth.glimmer),
+        aura: texture(primarySpells.earth.aura),
         litRocks: primarySpells.earth.litRocks.map(texture),
+        openingFlash: texture(primarySpells.earth.openingFlash),
         rocks: primarySpells.earth.rocks.map(texture),
       },
       fire: {

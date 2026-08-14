@@ -14,7 +14,6 @@ import {
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
-  PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS,
   primaryCastPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
@@ -265,12 +264,14 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(created.ageTicks, 1)
   assert.equal(created.flightTicks, 0)
   assert.equal(created.charge, PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE)
+  assert.equal(created.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
   assert.equal(created.position.x, player.position.x - 32.5)
   assert.equal(created.position.y, player.position.y - 51.5)
   state = step(state, true)
   const constantPose = state.primarySpells.projectiles[0]
   assert.equal(constantPose.ageTicks, 2)
   assert.equal(constantPose.charge, earthChargeAfter(2))
+  assert.equal(constantPose.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
   assert.equal(constantPose.position.x, player.position.x + 8.5)
   assert.equal(constantPose.position.y, player.position.y - 41)
   assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 1)
@@ -280,6 +281,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(thresholdRow.ageTicks, 97)
   assert.equal(thresholdRow.charge, earthChargeAfter(97))
   assert.equal(thresholdRow.charge, 0.3012498915195465)
+  assert.equal(thresholdRow.assemblyCharge, thresholdRow.charge)
   assert.ok(thresholdRow.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
   assert.equal(thresholdRow.phase, 'held')
   assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, true)
@@ -291,12 +293,50 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.velocity.y, -3)
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
+  assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
   assert.equal(state.players[PLAYER_ID].primaryCast.emissionSequence, 1)
   assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
   assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
 })
 
-test('Earth preserves long-held age and applies containment only after release', () => {
+test('Earth resamples world aim while held and freezes the last sample on release', () => {
+  let state = step(simulation('earth'), true)
+  const player = state.players[PLAYER_ID]
+  const eastInput: PlayerCharacterInput = {
+    ...createIdlePlayerCharacterInput(),
+    aim: {
+      x: player.position.x + 200,
+      y: player.position.y - 25 / 1.2,
+    },
+    cast: { primary: true, secondary: false },
+  }
+  state = stepGameSimulationTick(state, { [PLAYER_ID]: eastInput })
+  const retargeted = state.primarySpells.projectiles[0]
+  assert.deepEqual(retargeted.direction, { x: 1, y: 0 })
+  assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+
+  state = step(state, false, 95)
+  state = step(state, false)
+  const released = state.primarySpells.projectiles[0]
+  assert.deepEqual(released.direction, { x: 1, y: 0 })
+  assert.deepEqual(released.velocity, { x: 3, y: 0 })
+
+  const next = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    inputs: { [PLAYER_ID]: input(state, false) },
+    players: state.players,
+    previousPlayers: state.players,
+    spells: state.primarySpells,
+    tick: state.tick + 1,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  const flying = next.spells.projectiles[0]
+  assert.deepEqual(flying.direction, released.direction)
+  assert.deepEqual(flying.velocity, released.velocity)
+})
+
+test('Earth preserves long-held age and has no fixed flight range or timeout', () => {
   let state = step(simulation('earth'), true, 170)
   let boulder = state.primarySpells.projectiles[0]
   assert.equal(boulder.ageTicks, 170)
@@ -325,7 +365,6 @@ test('Earth preserves long-held age and applies containment only after release',
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
-  const releasePosition = releaseResult.spells.projectiles[0].position
   let spells = releaseResult.spells
   let players = releaseResult.players
   let tick = state.tick + 1
@@ -344,25 +383,12 @@ test('Earth preserves long-held age and applies containment only after release',
     players = result.players
     spells = result.spells
   }
-  for (let tick = 1; tick < PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS; tick += 1) {
+  for (let flightTick = 1; flightTick <= 510; flightTick += 1) {
     containmentStep()
   }
-  assert.equal(spells.projectiles[0].flightTicks, 500)
-  containmentStep()
-  assert.equal(spells.projectiles.length, 0)
-  const impact = spells.transients.find((effect) => effect.kind === 'earth-impact')
-  assert.ok(impact)
-  assert.deepEqual(impact, {
-    ageTicks: 0,
-    birthTick: tick,
-    charge: 1,
-    id: impact.id,
-    kind: 'earth-impact',
-    lifetimeTicks: earthImpactLifetimeTicks(impact),
-    origin: { ...releasePosition, y: releasePosition.y - 1_497 },
-    ownerId: PLAYER_ID,
-    worldKey: 'hub:courtyard',
-  })
+  assert.equal(spells.projectiles.length, 1)
+  assert.equal(spells.projectiles[0].flightTicks, 511)
+  assert.equal(spells.transients.some((effect) => effect.kind === 'earth-impact'), false)
 })
 
 test('Earth publishes one authoritative breakup when its next flight position contacts terrain', () => {

@@ -24,10 +24,13 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
-import type {
-  PrimarySpellProjectileState,
-  PrimarySpellSimulationState,
-  PrimarySpellTransientState,
+import {
+  PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+  type PrimarySpellEarthProjectileState,
+  type PrimarySpellProjectilePhase,
+  type PrimarySpellProjectileState,
+  type PrimarySpellSimulationState,
+  type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
   nativeFireParticleLifetimeTicks,
@@ -71,7 +74,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 11
+export const GAME_PROTOCOL_VERSION = 12
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -1046,17 +1049,19 @@ function primarySpellState(value: unknown, field: string): PrimarySpellSimulatio
 
 function primarySpellProjectile(value: unknown, field: string): PrimarySpellProjectileState {
   const source = record(value, field)
-  onlyKeys(source, field, [
-    'ageTicks', 'charge', 'direction', 'flightTicks', 'id', 'kind', 'ownerId',
-    'phase', 'position', 'velocity', 'worldKey',
-  ])
   if (source.kind !== 'earth' && source.kind !== 'ether' && source.kind !== 'fire') {
     throw new GameProtocolError(`${field}.kind is not a projectile primary`)
   }
+  onlyKeys(source, field, [
+    'ageTicks', 'charge', 'direction', 'flightTicks', 'id', 'kind', 'ownerId',
+    'phase', 'position', 'velocity', 'worldKey',
+    ...(source.kind === 'earth' ? ['assemblyCharge'] : []),
+  ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
     throw new GameProtocolError(`${field}.phase is not supported`)
   }
-  if (source.phase === 'held' && source.kind !== 'earth') {
+  const phase: PrimarySpellProjectilePhase = source.phase
+  if (phase === 'held' && source.kind !== 'earth') {
     throw new GameProtocolError(`${field} only permits held Earth actors`)
   }
   const charge = finite(source.charge, `${field}.charge`)
@@ -1065,25 +1070,42 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   }
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
-  if (source.phase === 'held' && flightTicks !== 0) {
+  if (phase === 'held' && flightTicks !== 0) {
     throw new GameProtocolError(`${field}.flightTicks must be zero while held`)
   }
-  if (source.phase === 'flight' && (flightTicks < 1 || flightTicks > ageTicks)) {
+  if (phase === 'flight' && (flightTicks < 1 || flightTicks > ageTicks)) {
     throw new GameProtocolError(`${field}.flightTicks is outside the actor age`)
   }
-  return {
+  const projectile = {
     ageTicks,
     charge,
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     id: positiveInteger(source.id, `${field}.id`),
-    kind: source.kind,
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
-    phase: source.phase,
+    phase,
     position: vector(source.position, `${field}.position`),
     velocity: vector(source.velocity, `${field}.velocity`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
+  if (source.kind === 'earth') {
+    const assemblyCharge = finite(source.assemblyCharge, `${field}.assemblyCharge`)
+    if (
+      assemblyCharge < PRIMARY_SPELL_EARTH_INITIAL_CHARGE
+      || assemblyCharge > charge
+      || Math.floor(30 * assemblyCharge) !== Math.floor(30 * charge)
+    ) {
+      throw new GameProtocolError(
+        `${field}.assemblyCharge is outside the current native rebuild bucket`,
+      )
+    }
+    return {
+      ...projectile,
+      assemblyCharge,
+      kind: 'earth',
+    } satisfies PrimarySpellEarthProjectileState
+  }
+  return { ...projectile, kind: source.kind }
 }
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {

@@ -238,6 +238,10 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
       dimensions: [94, 94],
       sha256: '0a6d5925da9f87d26eadd7d3a8e9bfea71471209163eb44671f9e6174baf7e1e',
     },
+    'boneyard/badguys/0015.png': {
+      dimensions: [38, 37],
+      sha256: '5abc42fa09f09a5fefe3df9281d2102e6b93a48249edb4e21f36f73e1a0011eb',
+    },
     'primary-spell-earth-lit-rock-0.png': {
       dimensions: [37, 33],
       sha256: 'db614042c6ba99a42c4a6c040d2026ef9f5e99bc938a0ce9b3a9d549959a0b58',

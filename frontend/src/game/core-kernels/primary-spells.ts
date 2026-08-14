@@ -33,19 +33,31 @@ export type PrimarySpellTransientKind =
   | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
-export interface PrimarySpellProjectileState {
+interface PrimarySpellProjectileBaseState {
   ageTicks: number
   charge: number
   direction: Vector2
   flightTicks: number
   id: number
-  kind: PrimarySpellProjectileKind
   ownerId: string
   phase: PrimarySpellProjectilePhase
   position: Vector2
   velocity: Vector2
   worldKey: string
 }
+
+export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectileBaseState {
+  assemblyCharge: number
+  kind: 'earth'
+}
+
+export interface PrimarySpellFlightProjectileState extends PrimarySpellProjectileBaseState {
+  kind: 'ether' | 'fire'
+}
+
+export type PrimarySpellProjectileState =
+  | PrimarySpellEarthProjectileState
+  | PrimarySpellFlightProjectileState
 
 export interface PrimarySpellChannelTransientState {
   ageTicks: number
@@ -269,20 +281,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       projectiles.push(advanceProjectile(spell))
       continue
     }
-    if (spell.flightTicks >= PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS) {
-      if (spell.kind === 'earth') {
-        transients = [...transients, earthImpact(nextId, spell, context.tick)]
-        nextId += 1
-      }
+    if (
+      spell.kind !== 'earth'
+      && spell.flightTicks >= PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS
+    ) {
       continue
     }
     const advanced = advanceProjectile(spell)
     if (
-      spell.kind === 'earth'
+      advanced.kind === 'earth'
       && !context.canPlaceProjectile(
-        spell,
+        advanced,
         advanced.position,
-        spell.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
+        advanced.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
       )
     ) {
       transients = [...transients, earthImpact(nextId, advanced, context.tick)]
@@ -341,6 +352,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           const emitter = primarySpellEmitter(nextPlayer)
           projectiles = [...projectiles, {
             ageTicks: 1,
+            assemblyCharge: PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
             charge: PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
             direction: { ...aimDirection },
             flightTicks: 0,
@@ -449,19 +461,25 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               return spell
             }
             const emitter = primarySpellEmitter(nextPlayer)
+            const charge = acceptedPress || (!rawHeld && (
+              spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
+            ))
+              ? spell.charge
+              : Math.min(1, Math.fround(spell.charge + PRIMARY_SPELL_EARTH_CHARGE_STEP))
             return {
               ...spell,
-              charge: acceptedPress || (!rawHeld && (
-                spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
-              ))
-                ? spell.charge
-                : Math.min(1, Math.fround(spell.charge + PRIMARY_SPELL_EARTH_CHARGE_STEP)),
+              assemblyCharge: Math.floor(30 * spell.charge) === Math.floor(30 * charge)
+                ? spell.assemblyCharge
+                : charge,
+              charge,
               direction: { ...aimDirection },
               position: { x: emitter.x, y: emitter.y + 15 },
               worldKey,
             }
           })
-          const heldBoulder = projectiles.find((spell) => (
+          const heldBoulder = projectiles.find((
+            spell,
+          ): spell is PrimarySpellEarthProjectileState => (
             spell.kind === 'earth'
             && spell.ownerId === playerId
             && spell.phase === 'held'
@@ -676,7 +694,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
 
 function earthImpact(
   id: number,
-  spell: PrimarySpellProjectileState,
+  spell: PrimarySpellEarthProjectileState,
   birthTick: number,
 ): PrimarySpellEarthImpactState {
   const seed = {
@@ -694,7 +712,7 @@ function earthImpact(
 }
 
 function earthCalledRockEmits(
-  boulder: PrimarySpellProjectileState,
+  boulder: PrimarySpellEarthProjectileState,
   tick: number,
 ): boolean {
   return boulder.charge < 0.25
@@ -703,7 +721,7 @@ function earthCalledRockEmits(
 
 function createEarthCalledRock(
   id: number,
-  boulder: PrimarySpellProjectileState,
+  boulder: PrimarySpellEarthProjectileState,
 ): PrimarySpellEarthCalledRockState {
   const angle = earthVisualUnitRandom(id, 0x4000) * Math.PI * 2
   const spawnRadius = earthVisualUnitRandom(id, 0x5000)
@@ -736,7 +754,7 @@ function createEarthCalledRock(
 
 function advanceEarthCalledRock(
   rock: PrimarySpellEarthCalledRockState,
-  parent: PrimarySpellProjectileState | undefined,
+  parent: PrimarySpellEarthProjectileState | undefined,
 ): PrimarySpellEarthCalledRockState | null {
   if (rock.falling) {
     const height = Math.fround(rock.height + rock.fallVelocity)
