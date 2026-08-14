@@ -40,6 +40,11 @@ export interface PlayerCharacterMovementPlan {
 }
 
 export const PLAYER_CHARACTER_RADIUS = 25
+export const PLAYER_CHARACTER_PHYSICS = {
+  pushResistance: 10,
+  pushStrength: 12,
+  radius: PLAYER_CHARACTER_RADIUS,
+} as const
 export const PLAYER_CHARACTER_STEADY_SPEED = 100
 export const PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT = 5
 export const PLAYER_CHARACTER_WALK_CYCLE_DISTANCE_PER_FRAME = 10

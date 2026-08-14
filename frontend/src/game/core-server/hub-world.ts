@@ -20,7 +20,7 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import {
-  PLAYER_CHARACTER_RADIUS,
+  PLAYER_CHARACTER_PHYSICS,
   commitPlayerCharacterTick,
   planPlayerCharacterTick,
   type PlayerCharacterInput,
@@ -74,12 +74,6 @@ export interface HubWorldTickResult {
 export interface HubWorldOptions {
   studentPopulation?: HubStudentPopulationState
 }
-
-export const HUB_PLAYER_CHARACTER_PHYSICS = {
-  pushResistance: 10,
-  pushStrength: 12,
-  radius: PLAYER_CHARACTER_RADIUS,
-} as const
 
 interface RegionPhysicsBody extends ActorPhysicsBody {
   region: HubRegionId
@@ -240,7 +234,7 @@ export function stepHubWorldTick(
       id: `player-${playerId}`,
       position: player.position,
       region: participants[playerId].region,
-      ...HUB_PLAYER_CHARACTER_PHYSICS,
+      ...PLAYER_CHARACTER_PHYSICS,
     })
   }
   for (const { delta, state: student } of studentPlans) {

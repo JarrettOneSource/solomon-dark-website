@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardGateLeaves } from '../core-kernels/boneyard-gate.ts'
 import {
+  canPlaceBoneyardBody,
   createBoneyardCollisionWorld,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
@@ -99,6 +100,19 @@ test('blocks a radius-25 wizard against native polygon and circle primitives', (
     25,
   )
   assert.ok(circleAccepted.x < 55.1)
+})
+
+test('full-candidate placement rejects authored collision and arena bounds', () => {
+  const bounds = { x: 0, y: 0, w: 500, h: 500 }
+  const world = {
+    circles: [],
+    polygons: [],
+    segments: [{ start: { x: 220, y: 0 }, end: { x: 220, y: 500 }, radius: 0 }],
+  }
+
+  assert.equal(canPlaceBoneyardBody({ x: 180, y: 250 }, bounds, world, 25), true)
+  assert.equal(canPlaceBoneyardBody({ x: 200, y: 250 }, bounds, world, 25), false)
+  assert.equal(canPlaceBoneyardBody({ x: 24, y: 250 }, bounds, world, 25), false)
 })
 
 function makeScene(): BoneyardScene {

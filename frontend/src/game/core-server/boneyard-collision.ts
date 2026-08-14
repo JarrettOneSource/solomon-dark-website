@@ -141,6 +141,21 @@ export function touchingBoneyardGateLeaves(
   return contacts
 }
 
+export function canPlaceBoneyardBody(
+  position: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): boolean {
+  if (
+    position.x < bounds.x + radius
+    || position.x > bounds.x + bounds.w - radius
+    || position.y < bounds.y + radius
+    || position.y > bounds.y + bounds.h - radius
+  ) return false
+  return firstContact(position, world, radius, position) === null
+}
+
 export function resolveBoneyardMovement(
   start: BoneyardPoint,
   requested: BoneyardPoint,

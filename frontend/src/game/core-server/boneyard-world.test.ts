@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
 import {
   createBoneyardWorld,
   spawnPlayerCharacterInBoneyard,
@@ -32,6 +33,54 @@ test('a wizard pushes both native gate leaves aside and crosses the opening', ()
   assert.ok(world.gateLeaves.every((leaf, index) => (
     leaf.tip.y > initialTips[index].y + 50
   )))
+})
+
+test('Boneyard entry retains shared player collision against authored geometry', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = [{
+    eid: 'east-wall',
+    points: [{ x: 220, y: 0 }, { x: 220, y: 500 }],
+    segmentCode: 0,
+    typeId: 3005,
+  }]
+  let world = createBoneyardWorld(loaded)
+  let players = {
+    first: {
+      ...spawnPlayerCharacterInBoneyard({
+        discipline: 'arcane',
+        displayName: 'First',
+        element: 'fire',
+      }, world),
+      position: { x: 100, y: 250 },
+    },
+    second: {
+      ...spawnPlayerCharacterInBoneyard({
+        discipline: 'mind',
+        displayName: 'Second',
+        element: 'water',
+      }, world),
+      position: { x: 170, y: 250 },
+    },
+  }
+
+  for (let tick = 0; tick < 160; tick += 1) {
+    const result = stepBoneyardWorldTick(world, players, {
+      first: { movement: { x: 1, y: 0 } },
+      second: { movement: { x: 0, y: 0 } },
+    })
+    world = result.world
+    players = result.players
+  }
+
+  assert.ok(players.second.position.x > 170, 'the moving player must displace the idle player')
+  assert.ok(
+    players.second.position.x <= 220 - PLAYER_CHARACTER_RADIUS,
+    'the authored fence must constrain the pushed player',
+  )
+  assert.ok(
+    players.first.position.x < players.second.position.x,
+    'the moving player must not pass through the idle player',
+  )
 })
 
 function gatedBoneyard(): LoadedBoneyard {

@@ -1,4 +1,5 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
+import { resolveActorMotion } from '../core-kernels/actor-physics.ts'
 import type { BoneyardBounds, LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   applyBoneyardGateContact,
@@ -7,6 +8,7 @@ import {
   type BoneyardGateLeafState,
 } from '../core-kernels/boneyard-gate.ts'
 import {
+  PLAYER_CHARACTER_PHYSICS,
   PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
   createPlayerCharacter,
@@ -16,6 +18,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  canPlaceBoneyardBody,
   createBoneyardCollisionWorld,
   resolveBoneyardMovement,
   touchingBoneyardGateLeaves,
@@ -101,21 +104,37 @@ export function stepBoneyardWorldTick(
   }
   gateLeaves = gateLeaves.map(stepBoneyardGateLeaf)
   const collision = withBoneyardGateCollision(world.collision, gateLeaves)
+  const resolvedBodies = resolveActorMotion(
+    plans.map(({ plan, player, playerId }) => ({
+      delta: plan.delta,
+      id: `player-${playerId}`,
+      position: player.position,
+      ...PLAYER_CHARACTER_PHYSICS,
+    })),
+    {
+      canPlace: (_bodyId, position, radius) => (
+        canPlaceBoneyardBody(position, world.bounds, collision, radius)
+      ),
+      move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
+        position,
+        { x: position.x + delta.x, y: position.y + delta.y },
+        world.bounds,
+        collision,
+        radius,
+      ),
+    },
+    () => true,
+  )
+  const resolvedPositions = new Map(
+    resolvedBodies.map((body) => [body.id, body.position]),
+  )
 
-  const nextPlayers = Object.fromEntries(plans.map(({ plan, player, playerId, requested }) => {
+  const nextPlayers = Object.fromEntries(plans.map(({ plan, player, playerId }) => {
+    const position = resolvedPositions.get(`player-${playerId}`)
+    if (!position) throw new Error(`Boneyard world lost player character ${playerId}`)
     return [
       playerId,
-      commitPlayerCharacterTick(
-        player,
-        plan,
-        resolveBoneyardMovement(
-          player.position,
-          requested,
-          world.bounds,
-          collision,
-          PLAYER_CHARACTER_RADIUS,
-        ),
-      ),
+      commitPlayerCharacterTick(player, plan, position),
     ]
   }))
   return {
