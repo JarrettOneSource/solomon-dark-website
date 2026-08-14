@@ -72,7 +72,7 @@ export type {
 
 export const GAME_PROTOCOL_VERSION = 11
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
-export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-3'
+export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256

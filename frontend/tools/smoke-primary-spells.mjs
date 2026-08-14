@@ -197,6 +197,9 @@ try {
     const castFrame = await castPosePromise
     assert.equal(castFrame.playerAttachmentPose, spell.castPose)
     frame ??= await waitForHubSpell(page, spell.kind)
+    const facingWire = await latestWireSpell(page, spell.kind)
+    const expectedHeadingIndex = headingIndex(facingWire.state.direction)
+    assert.equal(frame.playerHeadingIndex, expectedHeadingIndex)
     let earthStages = null
     let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
     if (spell.mode === 'charge') {
@@ -287,7 +290,9 @@ try {
       castPose: castFrame.playerAttachmentPose,
       earthStages,
       element: spell.element,
+      expectedHeadingIndex,
       kind: spell.kind,
+      playerHeadingIndex: frame.playerHeadingIndex,
       primarySpellCount: frame.primarySpellCount,
       primarySpellKinds: frame.primarySpellKinds,
       releaseScreenshotPath,
@@ -343,6 +348,11 @@ async function enterHub(page, element) {
       cause: error,
     })
   }
+}
+
+function headingIndex(direction) {
+  const degrees = (Math.atan2(direction.x, -direction.y) * 180 / Math.PI + 360) % 360
+  return Math.floor((degrees + 7.5) / 15) % 24
 }
 
 async function castEarthInBoneyard(page) {

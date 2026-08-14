@@ -38,6 +38,7 @@ interface HubFrameDiagnostics {
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
+  playerHeadingIndex: number
   playerMoving: boolean
   playerPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
@@ -153,6 +154,7 @@ export async function createHubWorldRenderer(
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
+    playerHeadingIndex: 0,
     playerMoving: false,
     playerPositions: {},
     playerWalkPose: 0,
@@ -229,6 +231,7 @@ export async function createHubWorldRenderer(
     if (!player) return
     frameDiagnostics.playerX = player.position.x
     frameDiagnostics.playerY = player.position.y
+    frameDiagnostics.playerHeadingIndex = player.headingIndex
     frameDiagnostics.playerMoving = Math.hypot(player.velocity.x, player.velocity.y) > 0.01
     const playerView = participant?.region === 'courtyard'
       ? courtyardScene.player(options.playerId)
