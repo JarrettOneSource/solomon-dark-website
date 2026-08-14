@@ -17,6 +17,15 @@ export interface NativeGateLeafOverride {
   tip: Vec2
 }
 
+export interface NativeGateArtCanvasTransform {
+  a: number
+  b: number
+  c: number
+  d: number
+  e: number
+  f: number
+}
+
 export interface NativeFenceGrate {
   bottomEnd: Vec2
   bottomStart: Vec2
@@ -27,6 +36,8 @@ export interface NativeFenceGrate {
 }
 
 const GATE_ART_LIFT = 87
+export const NATIVE_GATE_ART_UVS = [0, 0, 1, 0, 0, 1, 1, 1] as const
+export const NATIVE_GATE_ART_INDICES = [0, 1, 2, 2, 1, 3] as const
 export const NATIVE_FENCE_END_INSET = 12
 export const NATIVE_FENCE_GRATE_HEIGHT = 52
 export const NATIVE_FENCE_TEXTURE_REPEAT = 53.33333121405716
@@ -75,6 +86,36 @@ export function nativeGateLeaf(hinge: Vec2, tip: Vec2): NativeGateLeaf {
     p1: { x: tip.x, y: tip.y - GATE_ART_LIFT },
     p2: { ...hinge },
     p3: { ...tip },
+  }
+}
+
+export function nativeGateArtVertices(
+  leaf: NativeGateLeaf,
+  vertices = new Float32Array(8),
+): Float32Array {
+  vertices[0] = leaf.p0.x
+  vertices[1] = leaf.p0.y
+  vertices[2] = leaf.p1.x
+  vertices[3] = leaf.p1.y
+  vertices[4] = leaf.p2.x
+  vertices[5] = leaf.p2.y
+  vertices[6] = leaf.p3.x
+  vertices[7] = leaf.p3.y
+  return vertices
+}
+
+export function nativeGateArtCanvasTransform(
+  leaf: NativeGateLeaf,
+  sourceWidth: number,
+  sourceHeight: number,
+): NativeGateArtCanvasTransform {
+  return {
+    a: ((leaf.p1.x - leaf.p0.x) + (leaf.p3.x - leaf.p2.x)) / (2 * sourceWidth),
+    b: ((leaf.p1.y - leaf.p0.y) + (leaf.p3.y - leaf.p2.y)) / (2 * sourceWidth),
+    c: ((leaf.p2.x - leaf.p0.x) + (leaf.p3.x - leaf.p1.x)) / (2 * sourceHeight),
+    d: ((leaf.p2.y - leaf.p0.y) + (leaf.p3.y - leaf.p1.y)) / (2 * sourceHeight),
+    e: leaf.p0.x,
+    f: leaf.p0.y,
   }
 }
 

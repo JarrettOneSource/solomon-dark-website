@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -12,6 +13,17 @@ import {
   boneyardVisibleWorldBounds,
   boneyardWorldPosition,
 } from './boneyard-render-contract.ts'
+
+const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
+const editorRenderer = readFileSync(new URL('../../editor/render.ts', import.meta.url), 'utf8')
+
+test('Gate record 7 uses the recovered four-corner consumer in game and editor', () => {
+  assert.match(boneyardRenderer, /private readonly gateLeaf: MeshSimple/)
+  assert.match(boneyardRenderer, /nativeGateArtVertices\(leaf, this\.gateVertices\)/)
+  assert.doesNotMatch(boneyardRenderer, /this\.gateLeaf\.position\.set\(leaf\.p0/)
+  assert.match(editorRenderer, /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h\)/)
+  assert.doesNotMatch(editorRenderer, /plantArt\(ctx, FENCE_ART\.gateLeaf, leaf\.p0/)
+})
 
 test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () => {
   const bounds = { x: -200, y: 100, w: 3200, h: 2400 }

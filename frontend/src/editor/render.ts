@@ -8,6 +8,7 @@ import { spriteImage, spriteRefFor } from './assets'
 import { liftedSpriteSource } from './lifted-sprite'
 import {
   nativeFenceGrate,
+  nativeGateArtCanvasTransform,
   nativeGateLeaf,
   nativeGateHingeArtPosition,
   nativeGateLeaves,
@@ -1297,6 +1298,33 @@ function plantArt(
   return true
 }
 
+function drawGateLeafArt(
+  ctx: CanvasRenderingContext2D,
+  ref: SpriteRef | null,
+  leaf: ReturnType<typeof nativeGateLeaves>[number],
+  cam: Camera,
+  w: number,
+  h: number,
+) {
+  if (!ref) return false
+  const img = spriteImage(ref.src)
+  if (!img.complete || img.naturalWidth === 0) return false
+  const transform = nativeGateArtCanvasTransform(leaf, ref.w, ref.h)
+  const origin = worldToScreen({ x: transform.e, y: transform.f }, cam, w, h)
+  ctx.save()
+  ctx.transform(
+    transform.a * cam.zoom,
+    transform.b * cam.zoom,
+    transform.c * cam.zoom,
+    transform.d * cam.zoom,
+    origin.x,
+    origin.y,
+  )
+  ctx.drawImage(liftedSpriteSource(img), 0, 0, ref.w, ref.h)
+  ctx.restore()
+  return true
+}
+
 function drawFencePart(
   ctx: CanvasRenderingContext2D,
   layer: Extract<MainLayer, { kind: 'fence' }>,
@@ -1371,7 +1399,7 @@ function drawGateLeaf(
   w: number,
   h: number,
 ) {
-  plantArt(ctx, FENCE_ART.gateLeaf, leaf.p0, cam, w, h)
+  drawGateLeafArt(ctx, FENCE_ART.gateLeaf, leaf, cam, w, h)
   plantArt(ctx, FENCE_ART.gateHinge, nativeGateHingeArtPosition(leaf), cam, w, h)
   ctx.save()
   ctx.strokeStyle = '#000'

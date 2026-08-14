@@ -4,6 +4,7 @@ import {
   Application,
   Container,
   Graphics,
+  MeshSimple,
   Sprite,
   Texture,
 } from 'pixi.js'
@@ -24,9 +25,12 @@ import {
   type Camera,
 } from '../../editor/render.ts'
 import {
+  nativeGateArtVertices,
   nativeGateLeaf,
   nativeGateHingeArtPosition,
   nativeGatePainterRoot,
+  NATIVE_GATE_ART_INDICES,
+  NATIVE_GATE_ART_UVS,
   type NativeGateLeaf,
 } from '../../editor/native-fence-geometry.ts'
 import {
@@ -737,7 +741,8 @@ class BoneyardGateViews {
 
 class BoneyardGateLeafView {
   readonly container = new Container({ label: 'gate-leaf' })
-  private readonly gateLeaf: Sprite
+  private readonly gateLeaf: MeshSimple
+  private readonly gateVertices = new Float32Array(8)
   private readonly hinge: Sprite
   private readonly lines = new Graphics()
   private readonly root: Container
@@ -748,8 +753,15 @@ class BoneyardGateLeafView {
     const hingeRef = requiredSpriteRef(8)
     const leafTexture = requiredTexture(textures, leafRef)
     const hingeTexture = requiredTexture(textures, hingeRef)
-    this.gateLeaf = plantedSprite(leafTexture, leafRef, { x: 0, y: 0 })
+    this.gateLeaf = new MeshSimple({
+      texture: leafTexture,
+      vertices: this.gateVertices,
+      uvs: new Float32Array(NATIVE_GATE_ART_UVS),
+      indices: new Uint32Array(NATIVE_GATE_ART_INDICES),
+      topology: 'triangle-list',
+    })
     this.hinge = plantedSprite(hingeTexture, hingeRef, { x: 0, y: 0 })
+    this.gateLeaf.eventMode = 'none'
     this.gateLeaf.zIndex = 0
     this.hinge.zIndex = 1
     this.lines.zIndex = 2
@@ -760,7 +772,7 @@ class BoneyardGateLeafView {
 
   update(state: BoneyardGateLeafSnapshot): void {
     const leaf = nativeGateLeaf(state.hinge, state.tip)
-    this.gateLeaf.position.set(leaf.p0.x, leaf.p0.y)
+    nativeGateArtVertices(leaf, this.gateVertices)
     const hingeArt = nativeGateHingeArtPosition(leaf)
     this.hinge.position.set(hingeArt.x, hingeArt.y)
     drawGateLines(this.lines, leaf)

@@ -7,8 +7,12 @@ import type { EditorDoc, PlacedObject, Polyline, StaticSprite } from './model.ts
 import { NATIVE } from './model.ts'
 import {
   nativeFenceGrate,
+  nativeGateArtCanvasTransform,
+  nativeGateArtVertices,
   nativeGateHingeArtPosition,
   nativeGateLeaves,
+  NATIVE_GATE_ART_INDICES,
+  NATIVE_GATE_ART_UVS,
   NATIVE_FENCE_TEXTURE_REPEAT,
 } from './native-fence-geometry.ts'
 import { buildNativeRenderPlan, NATIVE_PLACEMENT_PASSES } from './native-render-plan.ts'
@@ -214,6 +218,38 @@ test('materializes native gate sides with endpoint trim and the two-unit center 
       ['post', 40],
     ],
   )
+})
+
+test('maps the full Gate ornament UV rectangle onto all four live leaf points', () => {
+  const leaf = nativeGateLeaves([{ x: 10, y: 120 }, { x: 160, y: 120 }])[0]
+
+  assert.deepEqual(Array.from(nativeGateArtVertices(leaf)), [
+    leaf.p0.x, leaf.p0.y,
+    leaf.p1.x, leaf.p1.y,
+    leaf.p2.x, leaf.p2.y,
+    leaf.p3.x, leaf.p3.y,
+  ])
+  assert.deepEqual(NATIVE_GATE_ART_UVS, [
+    0, 0,
+    1, 0,
+    0, 1,
+    1, 1,
+  ])
+  assert.deepEqual(NATIVE_GATE_ART_INDICES, [0, 1, 2, 2, 1, 3])
+})
+
+test('maps every record-7 source corner to the same Gate quad in Canvas2D', () => {
+  const leaf = nativeGateLeaves([{ x: 20, y: 180 }, { x: 170, y: 180 }])[0]
+  const transform = nativeGateArtCanvasTransform(leaf, 84, 96)
+  const apply = (x: number, y: number) => ({
+    x: transform.a * x + transform.c * y + transform.e,
+    y: transform.b * x + transform.d * y + transform.f,
+  })
+
+  assert.deepEqual(apply(0, 0), leaf.p0)
+  assert.deepEqual(apply(84, 0), leaf.p1)
+  assert.deepEqual(apply(0, 96), leaf.p2)
+  assert.deepEqual(apply(84, 96), leaf.p3)
 })
 
 test('suppresses the Tree foreground for native variants six and above', () => {
