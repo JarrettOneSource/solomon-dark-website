@@ -87,7 +87,7 @@ export class PrimarySpellWorldView {
         } else if (state.kind === 'fire') {
           view = new FireParticleSpellView(state, this.textures.primarySpells.fire)
         } else {
-          throw new Error(`Unsupported primary spell presentation: ${state.kind}`)
+          throw new Error('Unsupported primary spell presentation')
         }
         this.views.set(state.id, view)
         this.root.addChild(...view.containers)

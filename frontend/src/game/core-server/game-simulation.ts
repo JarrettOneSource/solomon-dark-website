@@ -10,9 +10,13 @@ import {
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
-import { isHubRegionTraversable } from '../core-kernels/hub-regions.ts'
+import {
+  firstHubRegionLineObstruction,
+  isHubRegionTraversable,
+} from '../core-kernels/hub-regions.ts'
 import {
   canPlaceBoneyardBody,
+  firstBoneyardLineObstruction,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
 import {
@@ -194,6 +198,20 @@ function finishGameSimulationTick(
     spells: previous.primarySpells,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
+    waterObstructionPoint: (playerId, start, end) => {
+      if (result.world.kind === 'boneyard') {
+        return firstBoneyardLineObstruction(
+          start,
+          end,
+          result.world.bounds,
+          boneyardCollision!,
+        )
+      }
+      const region = result.world.participants[playerId]?.region
+      return region === undefined
+        ? null
+        : firstHubRegionLineObstruction(region, start, end)
+    },
     worldKeyForPlayer: (playerId) => result.world.kind === 'hub'
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
       : `boneyard:${result.world.runId}`,

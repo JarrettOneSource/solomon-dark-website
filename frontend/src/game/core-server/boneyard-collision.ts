@@ -5,6 +5,13 @@ import type {
   BoneyardPoint,
   BoneyardScene,
 } from '../core-kernels/boneyard.ts'
+import {
+  lineCapsuleObstruction,
+  lineCircleObstruction,
+  lineSegmentObstruction,
+  nearerLineObstruction,
+  type LineObstruction,
+} from '../core-kernels/line-obstruction.ts'
 
 export interface BoneyardCollisionPolygon {
   points: readonly BoneyardPoint[]
@@ -159,6 +166,61 @@ export function canPlaceBoneyardBody(
   return firstContact(position, world, radius, position) === null
 }
 
+export function firstBoneyardLineObstruction(
+  start: BoneyardPoint,
+  end: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  excludedSourceId?: string,
+): BoneyardPoint | null {
+  let nearest: LineObstruction | null = null
+  const left = bounds.x
+  const right = bounds.x + bounds.w
+  const top = bounds.y
+  const bottom = bounds.y + bounds.h
+  const boundary = [
+    [{ x: left, y: top }, { x: right, y: top }],
+    [{ x: right, y: top }, { x: right, y: bottom }],
+    [{ x: right, y: bottom }, { x: left, y: bottom }],
+    [{ x: left, y: bottom }, { x: left, y: top }],
+  ] as const
+  for (const [edgeStart, edgeEnd] of boundary) {
+    nearest = nearerLineObstruction(
+      nearest,
+      lineSegmentObstruction(start, end, edgeStart, edgeEnd),
+    )
+  }
+  for (const polygon of world.polygons) {
+    if (excludedSourceId !== undefined && polygon.sourceId === excludedSourceId) continue
+    for (let index = 0; index < polygon.points.length; index += 1) {
+      nearest = nearerLineObstruction(nearest, lineSegmentObstruction(
+        start,
+        end,
+        polygon.points[index],
+        polygon.points[(index + 1) % polygon.points.length],
+      ))
+    }
+  }
+  for (const circle of world.circles) {
+    if (excludedSourceId !== undefined && circle.sourceId === excludedSourceId) continue
+    nearest = nearerLineObstruction(
+      nearest,
+      lineCircleObstruction(start, end, circle.center, circle.radius),
+    )
+  }
+  for (const segment of world.segments) {
+    if (excludedSourceId !== undefined && segment.sourceId === excludedSourceId) continue
+    nearest = nearerLineObstruction(nearest, lineCapsuleObstruction(
+      start,
+      end,
+      segment.start,
+      segment.end,
+      segment.radius,
+    ))
+  }
+  return nearest?.point ?? null
+}
+
 /**
  * Returns the first point hit by a point-sized spell segment. The selected
  * scenery actor can be excluded so its own collision does not occlude its
@@ -171,29 +233,13 @@ export function clipBoneyardSegment(
   world: BoneyardCollisionWorld,
   excludedSourceId?: string,
 ): BoneyardPoint {
-  let hitParameter = boundsExitParameter(start, end, bounds)
-  for (const polygon of world.polygons) {
-    if (polygon.sourceId === excludedSourceId) continue
-    hitParameter = Math.min(
-      hitParameter,
-      polygonHitParameter(start, end, polygon.points),
-    )
-  }
-  for (const segment of world.segments) {
-    if (segment.sourceId === excludedSourceId) continue
-    hitParameter = Math.min(
-      hitParameter,
-      capsuleHitParameter(start, end, segment.start, segment.end, segment.radius),
-    )
-  }
-  for (const circle of world.circles) {
-    if (circle.sourceId === excludedSourceId) continue
-    hitParameter = Math.min(
-      hitParameter,
-      circleHitParameter(start, end, circle.center, circle.radius),
-    )
-  }
-  return mix(start, end, Math.max(0, Math.min(1, hitParameter)))
+  return firstBoneyardLineObstruction(
+    start,
+    end,
+    bounds,
+    world,
+    excludedSourceId,
+  ) ?? { ...end }
 }
 
 export function resolveBoneyardMovement(
@@ -423,124 +469,6 @@ function mix(start: BoneyardPoint, end: BoneyardPoint, t: number): BoneyardPoint
     x: start.x + (end.x - start.x) * t,
     y: start.y + (end.y - start.y) * t,
   }
-}
-
-function boundsExitParameter(
-  start: BoneyardPoint,
-  end: BoneyardPoint,
-  bounds: BoneyardBounds,
-): number {
-  const delta = { x: end.x - start.x, y: end.y - start.y }
-  let exit = 1
-  if (delta.x > 0) exit = Math.min(exit, (bounds.x + bounds.w - start.x) / delta.x)
-  else if (delta.x < 0) exit = Math.min(exit, (bounds.x - start.x) / delta.x)
-  if (delta.y > 0) exit = Math.min(exit, (bounds.y + bounds.h - start.y) / delta.y)
-  else if (delta.y < 0) exit = Math.min(exit, (bounds.y - start.y) / delta.y)
-  return exit
-}
-
-function polygonHitParameter(
-  start: BoneyardPoint,
-  end: BoneyardPoint,
-  points: readonly BoneyardPoint[],
-): number {
-  if (pointInPolygon(start, points)) return 0
-  let hit = 1
-  for (let index = 0; index < points.length; index += 1) {
-    hit = Math.min(hit, segmentIntersectionParameter(
-      start,
-      end,
-      points[index],
-      points[(index + 1) % points.length],
-    ))
-  }
-  return hit
-}
-
-function capsuleHitParameter(
-  start: BoneyardPoint,
-  end: BoneyardPoint,
-  capsuleStart: BoneyardPoint,
-  capsuleEnd: BoneyardPoint,
-  radius: number,
-): number {
-  if (radius <= 0) {
-    return segmentIntersectionParameter(start, end, capsuleStart, capsuleEnd)
-  }
-  const capsuleDelta = {
-    x: capsuleEnd.x - capsuleStart.x,
-    y: capsuleEnd.y - capsuleStart.y,
-  }
-  const capsuleLength = Math.hypot(capsuleDelta.x, capsuleDelta.y)
-  if (capsuleLength === 0) {
-    return circleHitParameter(start, end, capsuleStart, radius)
-  }
-  const tangent = {
-    x: capsuleDelta.x / capsuleLength,
-    y: capsuleDelta.y / capsuleLength,
-  }
-  const normal = { x: -tangent.y, y: tangent.x }
-  const rayDelta = { x: end.x - start.x, y: end.y - start.y }
-  const startOffset = { x: start.x - capsuleStart.x, y: start.y - capsuleStart.y }
-  const normalStart = startOffset.x * normal.x + startOffset.y * normal.y
-  const normalDelta = rayDelta.x * normal.x + rayDelta.y * normal.y
-  let hit = Math.min(
-    circleHitParameter(start, end, capsuleStart, radius),
-    circleHitParameter(start, end, capsuleEnd, radius),
-  )
-  if (Math.abs(normalDelta) < 1e-12) return hit
-  for (const side of [-radius, radius]) {
-    const t = (side - normalStart) / normalDelta
-    if (t < 0 || t > hit) continue
-    const point = mix(start, end, t)
-    const along = (point.x - capsuleStart.x) * tangent.x
-      + (point.y - capsuleStart.y) * tangent.y
-    if (along >= 0 && along <= capsuleLength) hit = t
-  }
-  return hit
-}
-
-function circleHitParameter(
-  start: BoneyardPoint,
-  end: BoneyardPoint,
-  center: BoneyardPoint,
-  radius: number,
-): number {
-  if (radius <= 0) return 1
-  const delta = { x: end.x - start.x, y: end.y - start.y }
-  const offset = { x: start.x - center.x, y: start.y - center.y }
-  const a = delta.x * delta.x + delta.y * delta.y
-  const c = offset.x * offset.x + offset.y * offset.y - radius * radius
-  if (c <= 0) return 0
-  if (a === 0) return 1
-  const b = 2 * (offset.x * delta.x + offset.y * delta.y)
-  const discriminant = b * b - 4 * a * c
-  if (discriminant < 0) return 1
-  const t = (-b - Math.sqrt(discriminant)) / (2 * a)
-  return t >= 0 && t <= 1 ? t : 1
-}
-
-function segmentIntersectionParameter(
-  start: BoneyardPoint,
-  end: BoneyardPoint,
-  obstacleStart: BoneyardPoint,
-  obstacleEnd: BoneyardPoint,
-): number {
-  const ray = { x: end.x - start.x, y: end.y - start.y }
-  const obstacle = {
-    x: obstacleEnd.x - obstacleStart.x,
-    y: obstacleEnd.y - obstacleStart.y,
-  }
-  const denominator = cross(ray, obstacle)
-  if (Math.abs(denominator) < 1e-12) return 1
-  const offset = { x: obstacleStart.x - start.x, y: obstacleStart.y - start.y }
-  const t = cross(offset, obstacle) / denominator
-  const u = cross(offset, ray) / denominator
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : 1
-}
-
-function cross(left: BoneyardPoint, right: BoneyardPoint): number {
-  return left.x * right.y - left.y * right.x
 }
 
 function clampToBounds(

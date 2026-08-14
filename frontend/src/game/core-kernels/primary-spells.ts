@@ -12,6 +12,7 @@ import {
   WATER_FROST_PARTICLES_PER_TICK,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
+  waterFrostJetObstructionPoint,
 } from './primary-spell-water.ts'
 import {
   earthImpactLifetimeTicks,
@@ -59,16 +60,28 @@ export type PrimarySpellProjectileState =
   | PrimarySpellEarthProjectileState
   | PrimarySpellFlightProjectileState
 
-export interface PrimarySpellChannelTransientState {
+interface PrimarySpellChannelTransientBase {
   ageTicks: number
   direction: Vector2
   id: number
-  kind: 'air' | 'water'
   origin: Vector2
   ownerId: string
   variant: number
   worldKey: string
 }
+
+export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransientBase {
+  kind: 'air'
+}
+
+export interface PrimarySpellWaterTransientState extends PrimarySpellChannelTransientBase {
+  kind: 'water'
+  obstructionPoint: Vector2 | null
+}
+
+export type PrimarySpellChannelTransientState =
+  | PrimarySpellAirTransientState
+  | PrimarySpellWaterTransientState
 
 export interface PrimarySpellEarthImpactState {
   ageTicks: number
@@ -137,6 +150,11 @@ export interface PrimarySpellTickContext {
   spells: PrimarySpellSimulationState
   tick: number
   viewScale: number
+  waterObstructionPoint: (
+    ownerId: string,
+    start: Vector2,
+    end: Vector2,
+  ) => Vector2 | null
   worldKeyForPlayer: (playerId: string) => string
 }
 
@@ -439,11 +457,18 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 variant,
                 id,
               )
+              const obstructionPoint = waterFrostJetObstructionPoint(
+                born,
+                nextPlayer.position,
+                id,
+                (start, end) => context.waterObstructionPoint(playerId, start, end),
+              )
               return {
                 ageTicks: 0,
                 direction: born.direction,
                 id,
                 kind: 'water',
+                obstructionPoint,
                 origin: born.origin,
                 ownerId: playerId,
                 variant,

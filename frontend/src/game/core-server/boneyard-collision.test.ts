@@ -7,6 +7,7 @@ import {
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
+  firstBoneyardLineObstruction,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
@@ -148,6 +149,36 @@ test('clips spell rays against bounds and scenery while excluding the selected t
     bounds,
     { ...collision, segments: [] },
   ), { x: 190, y: 100 })
+})
+
+test('clips Water prediction against the nearest Boneyard primitive and arena edge', () => {
+  const bounds = { x: 0, y: 0, w: 500, h: 500 }
+  const world = {
+    circles: [{ center: { x: 150, y: 250 }, radius: 10 }],
+    polygons: [{ points: [
+      { x: 300, y: 200 }, { x: 350, y: 200 },
+      { x: 350, y: 300 }, { x: 300, y: 300 },
+    ] }],
+    segments: [{ start: { x: 220, y: 200 }, end: { x: 220, y: 300 }, radius: 5 }],
+  }
+  assert.deepEqual(
+    firstBoneyardLineObstruction(
+      { x: 50, y: 250 },
+      { x: 450, y: 250 },
+      bounds,
+      world,
+    ),
+    { x: 140, y: 250 },
+  )
+  assert.deepEqual(
+    firstBoneyardLineObstruction(
+      { x: 250, y: 100 },
+      { x: 250, y: -100 },
+      bounds,
+      { circles: [], polygons: [], segments: [] },
+    ),
+    { x: 250, y: 0 },
+  )
 })
 
 function makeScene(): BoneyardScene {

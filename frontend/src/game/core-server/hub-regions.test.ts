@@ -11,6 +11,7 @@ import {
   HUB_PORTALS,
   HUB_REGION_DEFINITIONS,
   clipHubRegionSegment,
+  firstHubRegionLineObstruction,
   hubIncomingPlacement,
   hubPortalAt,
   isHubRegionTraversable,
@@ -102,6 +103,22 @@ test('encodes the recovered College room graph, bounds, and ordinary portal cons
     x2: 681.5,
     y2: 180,
   })
+})
+
+test('clips Water prediction to the nearest authored Hub segment', () => {
+  assert.deepEqual(
+    firstHubRegionLineObstruction(
+      'courtyard',
+      { x: 100, y: 50 },
+      { x: 100, y: -50 },
+    ),
+    { x: 100, y: 0 },
+  )
+  assert.equal(firstHubRegionLineObstruction(
+    'courtyard',
+    { x: 100, y: 50 },
+    { x: 100, y: 75 },
+  ), null)
 })
 
 test('neutral Hub input, including north-only input from spawn, reaches every portal', () => {

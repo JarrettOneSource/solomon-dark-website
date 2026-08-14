@@ -209,7 +209,12 @@ test('Air emits one presentation record per held tick for the five-tick contact 
 })
 
 test('Water emits the shipped Enhanced Effects Frost pair while held and lets it decay', () => {
-  let state = step(simulation('water'), true, 4)
+  let state = step(simulation('water'), true)
+  const born = state.primarySpells.transients.filter((effect) => effect.kind === 'water')
+  assert.equal(born.length, 2)
+  assert.equal(born.filter(({ obstructionPoint }) => obstructionPoint !== null).length, 1)
+  assert.equal(born.find(({ id }) => id === 2)?.obstructionPoint?.y, 0)
+  state = step(state, true, 3)
   assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(1, true), 7)
   assert.equal(state.primarySpells.transients.length, 8)
@@ -363,6 +368,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
+    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
   let spells = releaseResult.spells
@@ -378,6 +384,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
       spells,
       tick,
       viewScale: 1.2,
+      waterObstructionPoint: () => null,
       worldKeyForPlayer: () => 'hub:courtyard',
     })
     players = result.players
@@ -407,6 +414,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
+    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
 
@@ -447,6 +455,7 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
+    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
 

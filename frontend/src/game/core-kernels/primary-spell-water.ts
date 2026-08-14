@@ -1,12 +1,14 @@
-import type { PrimarySpellChannelTransientState } from './primary-spells.ts'
+import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
 
 export const WATER_FROST_PARTICLES_PER_TICK = 2
 
-const DEGREES_TO_RADIANS = Math.PI / 180
-const FROST_HEADING_STEP = 65 * DEGREES_TO_RADIANS
-const FROST_SPREAD = 15 * DEGREES_TO_RADIANS
-const FROST_INTRA_TICK_PHASE = FROST_HEADING_STEP / WATER_FROST_PARTICLES_PER_TICK
+const DEGREES_TO_RADIANS = Math.fround(Math.PI) / 180
+const FROST_HEADING_MULTIPLIER = 65
+const FROST_CAST_SPEED = 1 * DEGREES_TO_RADIANS
+const FROST_INTRA_TICK_PHASE = Math.fround(
+  FROST_HEADING_MULTIPLIER / WATER_FROST_PARTICLES_PER_TICK,
+)
 const FROST_JITTER_ANGLE = 45 * DEGREES_TO_RADIANS
 const FROST_JITTER_RADIUS = 10
 const FROST_SPEED = 4
@@ -65,6 +67,7 @@ export interface WaterFrostJetPlan {
 
 export interface WaterFrostJetEmission {
   direction: Vector2
+  jitterRadius: number
   origin: Vector2
 }
 
@@ -86,22 +89,51 @@ export function waterFrostJetEmission(
   id: number,
 ): WaterFrostJetEmission {
   const baseHeading = Math.atan2(baseDirection.x, -baseDirection.y)
+  const phase = Math.fround(
+    Math.fround(tick) + Math.fround(ordinal * FROST_INTRA_TICK_PHASE),
+  )
   const heading = baseHeading + Math.sin(
-    tick * FROST_HEADING_STEP + ordinal * FROST_INTRA_TICK_PHASE,
-  ) * FROST_SPREAD
+    phase * FROST_HEADING_MULTIPLIER * DEGREES_TO_RADIANS,
+  ) * FROST_CAST_SPEED
   const jitterHeading = baseHeading
     + signedWaterFrostBoundedRandom(id, 2, FROST_JITTER_ANGLE)
+  const jitterRadius = waterFrostBoundedRandom(id, 3, FROST_JITTER_RADIUS)
   const jitter = unitForHeading(
     jitterHeading,
-    waterFrostBoundedRandom(id, 3, FROST_JITTER_RADIUS),
+    jitterRadius,
   )
   return {
     direction: float32Vector(unitForHeading(heading, 1)),
+    jitterRadius,
     origin: {
       x: Math.fround(emitter.x + Math.fround(jitter.x)),
       y: Math.fround(emitter.y + Math.fround(jitter.y)),
     },
   }
+}
+
+export function waterFrostJetObstructionPoint(
+  emission: WaterFrostJetEmission,
+  casterPosition: Vector2,
+  id: number,
+  clip: (start: Vector2, end: Vector2) => Vector2 | null,
+): Vector2 | null {
+  if (waterFrostJetKind(id) !== 'normal') return null
+  const velocity = frostVelocity(emission.direction)
+  const predictionSteps = Math.fround(
+    Math.fround(waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP)
+      + emission.jitterRadius,
+  )
+  const predictionEnd = {
+    x: Math.fround(casterPosition.x + Math.fround(velocity.x * predictionSteps)),
+    y: Math.fround(casterPosition.y + Math.fround(velocity.y * predictionSteps)),
+  }
+  const hit = clip(casterPosition, predictionEnd)
+  if (!hit) return null
+  if (distanceSquared(casterPosition, hit) < distanceSquared(casterPosition, emission.origin)) {
+    return null
+  }
+  return float32Vector(hit)
 }
 
 export function waterFrostJetLifetimeTicks(id: number): 32 | 33 {
@@ -115,16 +147,13 @@ export function waterFrostJetLifetimeTicks(id: number): 32 | 33 {
 }
 
 export function waterFrostJetPlan(
-  state: PrimarySpellChannelTransientState,
+  state: PrimarySpellWaterTransientState,
 ): WaterFrostJetPlan {
   const kind = waterFrostJetKind(state.id)
   const fields = waterFrostJetFields(state.id, state.ageTicks, kind)
   const heading = Math.atan2(state.direction.x, -state.direction.y)
-  const velocity = {
-    x: Math.fround(Math.fround(state.direction.x) * FROST_SPEED),
-    y: Math.fround(Math.fround(state.direction.y) * FROST_SPEED),
-  }
-  const position = waterFrostJetPosition(state.origin, velocity, state.ageTicks)
+  const motion = waterFrostJetMotion(state)
+  const { position, velocity } = motion
   const coreColor = color(1 - fields.colorRamp, 1, 1)
   const glintPosition = {
     x: Math.fround(position.x + Math.fround(velocity.x * 3)),
@@ -255,7 +284,7 @@ function waterFrostJetFields(
   }
 }
 
-function waterFrostJetKind(id: number): WaterFrostJetKind {
+export function waterFrostJetKind(id: number): WaterFrostJetKind {
   return (waterFrostHash(id, 0) & 3) === 1 ? 'over' : 'normal'
 }
 
@@ -295,13 +324,57 @@ function float32Vector(vector: Vector2): Vector2 {
   return { x: Math.fround(vector.x), y: Math.fround(vector.y) }
 }
 
-function waterFrostJetPosition(origin: Vector2, velocity: Vector2, ageTicks: number): Vector2 {
-  const position = float32Vector(origin)
-  for (let tick = 0; tick < ageTicks; tick += 1) {
-    position.x = Math.fround(position.x + velocity.x)
-    position.y = Math.fround(position.y + velocity.y)
+function waterFrostJetMotion(state: PrimarySpellWaterTransientState): {
+  position: Vector2
+  velocity: Vector2
+} {
+  const velocity = frostVelocity(state.direction)
+  const obstructionPoint = state.obstructionPoint
+  let pendingDistance = obstructionPoint === null
+    ? null
+    : Math.fround(Math.hypot(
+      obstructionPoint.x - state.origin.x,
+      obstructionPoint.y - state.origin.y,
+    ))
+  let currentVelocity = velocity
+  const position = float32Vector(state.origin)
+  for (let tick = 0; tick < state.ageTicks; tick += 1) {
+    if (pendingDistance !== null && obstructionPoint !== null) {
+      pendingDistance = Math.fround(
+        pendingDistance - Math.hypot(currentVelocity.x, currentVelocity.y),
+      )
+      if (pendingDistance < 0) {
+        position.x = Math.fround(obstructionPoint.x)
+        position.y = Math.fround(obstructionPoint.y)
+        const sign = waterFrostSplaySign(state.id)
+        currentVelocity = {
+          x: Math.fround(-currentVelocity.y * 0.5 * sign),
+          y: Math.fround(currentVelocity.x * 0.5 * sign),
+        }
+        pendingDistance = null
+      }
+    }
+    position.x = Math.fround(position.x + currentVelocity.x)
+    position.y = Math.fround(position.y + currentVelocity.y)
   }
-  return position
+  return { position, velocity: currentVelocity }
+}
+
+function frostVelocity(direction: Vector2): Vector2 {
+  return {
+    x: Math.fround(Math.fround(direction.x) * FROST_SPEED),
+    y: Math.fround(Math.fround(direction.y) * FROST_SPEED),
+  }
+}
+
+function waterFrostSplaySign(id: number): -1 | 1 {
+  return (waterFrostHash(id, 7) & 1) === 0 ? -1 : 1
+}
+
+function distanceSquared(first: Vector2, second: Vector2): number {
+  const dx = first.x - second.x
+  const dy = first.y - second.y
+  return dx * dx + dy * dy
 }
 
 function color(red: number, green: number, blue: number): WaterFrostJetColor {

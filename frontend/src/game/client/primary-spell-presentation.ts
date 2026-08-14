@@ -123,6 +123,25 @@ function interpolateTransient(
     }
   }
   if (older.kind === 'fire' || newer.kind === 'fire') return copyTransient(discrete)
+  if (older.kind === 'water' && newer.kind === 'water') {
+    const water = blend < 1 ? older : newer
+    return {
+      ...water,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: {
+        x: lerp(older.direction.x, newer.direction.x, blend),
+        y: lerp(older.direction.y, newer.direction.y, blend),
+      },
+      obstructionPoint: water.obstructionPoint === null
+        ? null
+        : { ...water.obstructionPoint },
+      origin: {
+        x: lerp(older.origin.x, newer.origin.x, blend),
+        y: lerp(older.origin.y, newer.origin.y, blend),
+      },
+    }
+  }
+  if (older.kind === 'water' || newer.kind === 'water') return copyTransient(discrete)
   const channel = blend < 1 ? older : newer
   return {
     ...channel,
@@ -153,6 +172,16 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   }
   if (effect.kind === 'earth-called-rock') {
     return { ...effect, position: { ...effect.position } }
+  }
+  if (effect.kind === 'water') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      obstructionPoint: effect.obstructionPoint === null
+        ? null
+        : { ...effect.obstructionPoint },
+      origin: { ...effect.origin },
+    }
   }
   return {
     ...effect,

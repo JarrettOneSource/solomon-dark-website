@@ -1197,10 +1197,17 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }
-  onlyKeys(source, field, [
+  const transientKeys = [
     'ageTicks', 'direction', 'id', 'kind', 'origin', 'ownerId', 'variant',
     'worldKey',
-  ])
+  ]
+  onlyKeys(
+    source,
+    field,
+    source.kind === 'water'
+      ? [...transientKeys, 'obstructionPoint']
+      : transientKeys,
+  )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
     throw new GameProtocolError(`${field}.kind is not a transient primary`)
   }
@@ -1216,16 +1223,25 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       throw new GameProtocolError(`${field}.ageTicks exceeds its Fire particle lifetime`)
     }
   }
-  return {
+  const common = {
     ageTicks,
     direction: unitVector(source.direction, `${field}.direction`),
     id,
-    kind: source.kind,
     origin: vector(source.origin, `${field}.origin`),
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
     variant,
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
+  if (source.kind === 'water') {
+    return {
+      ...common,
+      kind: 'water',
+      obstructionPoint: source.obstructionPoint === null
+        ? null
+        : vector(source.obstructionPoint, `${field}.obstructionPoint`),
+    }
+  }
+  return { ...common, kind: source.kind }
 }
 
 function validatePrimarySpellOwners(

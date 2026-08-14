@@ -425,6 +425,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
         variant: 0,
@@ -442,6 +443,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
         variant: 4,
@@ -449,6 +451,23 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       }],
     },
   }), /variant exceeds the native family/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ageTicks: 0,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        variant: 0,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /obstructionPoint must be an object/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {

@@ -8257,10 +8257,13 @@ release -> no new query/particle -> registry 161 loop owner released once
 
 For neutral rank-1 Water, `mWiden == 0`:
 
-- visual spread is `15` degrees;
-- native heading is `casterHeading + sin(worldTick * 65 deg) * 15 deg`;
-- the handler advances the phase by `65 / particleCount` degrees between
-  particles created in the same tick;
+- query half-width/density use `mWiden + 15`, but visual direction does not;
+- native heading is
+  `casterHeading + sin((worldTick + ordinal * 65 / particleCount) * 65 deg)
+  * effectiveWaterCastSpeed`, with neutral effective cast speed `1`, so the
+  rank-1 stream wiggles only about one degree around aim;
+- the handler advances its pre-multiply phase accumulator by
+  `65 / particleCount` between particles created in the same tick;
 - spawn is the exact Staff socket plus radius `U[0,10]` along
   `casterHeading +/- U[0,45 deg]`;
 - velocity is the heading unit vector times exactly `4` world units/tick; and
@@ -8272,8 +8275,10 @@ The intra-tick phase is instruction-closed, not inferred from the visual:
 `0x00784D90` (fresh raw value `65`) by it, and stores the step;
 `0x00543A86`/`0x00543BA3` consume the mutable phase for Over/Normal heading;
 and loop tail `0x005440A2..0x005440AE` decrements the count and adds the stored
-step before the next creation. With the shipped count of two, the second
-particle's sine input is therefore exactly 32.5 degrees ahead of the first.
+step before the next creation. The accumulator is multiplied by `65` only
+after that addition. With the shipped count of two, the second particle is
+therefore `32.5` accumulator units, or `2112.5` degrees modulo the sine,
+ahead of the first -- not merely `32.5` degrees ahead.
 
 The `205` gameplay reach is therefore not visual travel distance. A typical
 particle moves about `128`-`132` world units before expiry. Replacing the
@@ -8285,10 +8290,10 @@ recovered contact distance and point are stored at `+0x50` and `+0x54/+0x58`.
 When the remaining distance crosses zero, update snaps to the point, rotates
 velocity to a randomly signed perpendicular, halves it, and clears the pending
 distance. This is a cosmetic wall-splay/ricochet; it does not own Frost damage.
-The Over creation path deliberately skips this clip setup. The Website does
-not yet expose equivalent transient terrain queries, so unobstructed motion is
-implemented now and wall splay remains an explicit visual unknown rather than
-a fake collision rule.
+The Over creation path deliberately skips this clip setup. The original
+presentation closure implemented only unobstructed motion; the second pass
+below supersedes that limit with an authoritative Hub/Boneyard obstruction
+snapshot and the recovered Normal splay recurrence.
 
 ### Exact update and render equations
 
@@ -8385,19 +8390,21 @@ one-channel rounding error.
   Cold Aura branch guarded by radius `+0x8B0`. Neither is a rank-1 Frost Jet
   frame. Loading them may remain useful for future skills, but the primary
   renderer must never cycle them.
-- Hail, Cold Aura, Harden armor, Permafrost slow, target pushback/damage,
-  terrain wall-splay, and impact/status presentation stay outside this visual
-  correction. Discipline-screen Water orb frames are also a separate renderer
-  family and are not evidence for primary-cast frames.
+- Hail, Cold Aura, Harden armor, Permafrost slow, target pushback/damage, and
+  impact/status presentation stay outside this visual correction.
+  Discipline-screen Water orb frames are also a separate renderer family and
+  are not evidence for primary-cast frames. Base Normal wall-splay is closed by
+  the second pass below.
 
 ### Implementation consequence, regressions, and falsifiers
 
 - The authority emits two independent Water transient identities per held
   tick, matching shipped Enhanced Effects On. It evaluates the native
-  `worldTick * 65 degrees` wiggle plus the `65 / count` intra-tick ordinal at
-  birth, stores the resulting unit direction, and folds radial jitter around
-  the caster's un-wiggled heading into the born origin. This keeps multiple
-  casters on the same native world phase even when their spell IDs interleave.
+  `(worldTick + ordinal * 65 / count) * 65 degrees` phase, scales the sine by
+  neutral effective Water cast speed `1`, stores the resulting unit direction,
+  and folds radial jitter around the caster's un-wiggled heading into the born
+  origin. This keeps multiple casters on the same native world phase even when
+  their spell IDs interleave.
   Deterministic identity-derived samples choose the class split, jitter,
   scales, and lifetime without consuming client-local RNG. This preserves
   native distributions, not the unrecovered retail RNG sequence for a
@@ -8419,10 +8426,10 @@ one-channel rounding error.
   particles; particles or loop crossing world/owner teardown; renderer-local
   random samples diverging between peers; screen/HUD-space drawing; or late
   cores growing by whole multiples and washing the viewport cyan.
-- Explicit unknowns at implementation start are clean-stock On/Off pixel
+- Explicit unknowns at implementation start were clean-stock On/Off pixel
   receipts, exact per-session native RNG sequence, and a browser terrain query
-  for cosmetic Normal wall-splay. None changes the closed unobstructed
-  particle equations or asset ownership above.
+  for cosmetic Normal wall-splay. The second pass below closes the browser
+  terrain owner; retail RNG and clean-stock On/Off pixels remain open.
 
 ### Implementation validation receipt
 
@@ -8446,6 +8453,90 @@ one-channel rounding error.
   clean-stock comparison receipt. The same targeted run observed cast pose,
   Water transients, and start/loop playback before its software-rendered
   one-frame-per-second page timed out awaiting the release-loop pause.
+
+### Second-pass Water adjacency audit and correction boundary
+
+- Fresh reproduction on isolated `origin/main` commit `386467d` used the
+  Water-only Chromium smoke at 1600 x 900. The Hub receipt
+  `/tmp/sdr-water-second-pass-baseline-20260814.7kRohW/solomon-primary-water-hub.png`
+  has SHA-256
+  `4fe8138f1194377f6a0db36dcef5df0084863e77ab3180ac5ee64cd254dc9b09`.
+  Runtime state was otherwise healthy: cast pose `7`, player/aim/wire heading
+  index `8`, 65 live Water transients, one `icestart`, and balanced `iceloop`
+  play/pause ownership. The visible result was nevertheless a broad cyan
+  cone/cloud. This isolates the defect to born particle direction and the
+  still-omitted Normal terrain recurrence, not input, audio, density, asset
+  registration, or teardown.
+- A fresh read-only Ghidra adjacency pass closes the visual-heading operand.
+  `0x00543895..0x005438AF` calls `0x00656580` for Water class index `3` and
+  stores the returned effective cast speed at stack `+0x68`. That helper
+  evaluates
+  `(progression[+0x6AC] * progression[+0x94] + progression[+0x6B0])
+  * progression[+0x6B4 + class*4] + progression[+0x6D4 + class*4]`, clamped
+  at zero. The neutral rank-1 fixture has the established `+0x94 == 1` and no
+  skill/equipment modifiers, hence an amplitude of exactly one degree.
+  `mWiden + 15` instead feeds the wedge query and Enhanced Effects particle
+  count; it never multiplies the visual sine.
+- At both Over `0x00543A86..0x00543AD6` and Normal
+  `0x00543BA3..0x00543C5C`, the handler loads the mutable accumulator,
+  multiplies QWORD `0x00784D90 == 65`, multiplies the runtime float pi at
+  `0x00B4027C`, divides QWORD `0x007DE888 == 180`, takes sine, multiplies the
+  stored effective cast speed, and adds caster heading before
+  `0x00453800`. `0x005439C9..0x005439CC` seeds that accumulator from the
+  current world tick; `0x005439D0..0x005439DA` stores float32
+  `65 / particleCount`; and `0x005440A2..0x005440AE` adds the step between
+  births. Therefore the exact neutral formula is
+  `(tick + ordinal * float32(65/count)) * 65 degrees`, not
+  `tick * 65 degrees + ordinal * 32.5 degrees`.
+- The handler's rank-1 gameplay query remains independent: `0x00641B10`
+  builds a forward wedge with `205` reach and half-width `15`, enumerates all
+  eligible actors, and the per-candidate `0x00524D70` line clip rejects
+  obstructed contacts before status/damage. There is no travel projectile or
+  impact-owned damage. The separate bot/alternate path is Normal-only, uses
+  speed `0.5`, zero widen/push, a reduced count with a minimum of one,
+  opacity multiplier `0.25`, and query mask `2`; those branches must not leak
+  into the ordinary player cast.
+- Constructor/caller/vtable xrefs rule out an omitted base VFX record.
+  `0x00453550` is called only by Water, Water+Air, and the Over constructor;
+  `0x00453840` only by Water. Normal/Over vtables route to shared update
+  `0x00453670` and renders `0x00457720`/`0x00457A00`. The chaining wrapper
+  `0x00453870` belongs to vtable `0x00793D74` and Water+Air construction at
+  `0x00541870`. Hail `0x00454030`/record 32 and Cold Aura
+  `0x0045AF20`/record 14 are learned Water branches. Adjacent record 31 is
+  owned by `Anim_BlizzardBeam` render `0x00458470`, and record 29 by
+  Heartmonger. Rank-1 Water has no source, contact, or terrain sprite beyond
+  records 30/28; its terrain response is the Normal object's own motion.
+- Normal creation predicts from the caster actor position, not the jittered
+  socket: `predictionSteps = float32(lifetime / 0.04 + jitterRadius)` and
+  `predictionEnd = caster + predictionSteps * velocity`. If the nearest
+  `0x00524D70` hit lies in front of the jittered origin, the object stores its
+  remaining distance and hit point. Shared update subtracts current speed;
+  once negative it snaps to the hit, chooses an identity-stable random sign,
+  changes velocity to that signed perpendicular at half speed, clears the
+  pending hit, and then advances once with the new velocity. Rotation remains
+  the born heading while the forward glint follows the new velocity. Over
+  deliberately stores no obstruction.
+- The implementation consequence is authoritative birth-time obstruction:
+  snapshot a nullable hit point on each Normal Water transient from the owning
+  Hub/Boneyard static collision model, then replay the exact motion recurrence
+  in presentation. Screen-space probing or client-local collision would
+  diverge across peers. Remaining unknowns are the retail RNG sequence and a
+  clean-stock Enhanced Effects On/Off pixel pair; neither blocks the recovered
+  formula, class ownership, terrain recurrence, render order, local lighting,
+  or owner/world expiry.
+- Completed WebGL proof uses the Water-only smoke against the restarted
+  authoritative host, not the stale pre-change host. Hub and Boneyard both
+  reported status `ok`, no console/page errors, cast pose `7`, player/wire
+  heading index `8`, 64-65 live Water particles, and balanced ice start/loop
+  play/pause ownership. The exact receipts are
+  `/tmp/sdr-water-second-pass-final-20260814-proof/solomon-primary-water-hub.png`
+  (SHA-256
+  `a0569f0f37dabdf46061b7c4fcdd3dfc10739e0238bd4d45f978ef8a9dbf77b6`)
+  and `.../solomon-primary-water-boneyard-held.png` (SHA-256
+  `e14264cf55f4fa1a1ef08f29d4207da41118cfe3523c609cf3225312c0746c9f`).
+  The wire receipt also round-tripped the Water-only `obstructionPoint`
+  field, and the focused Water/kernel/protocol/collision battery passed 50/50.
+
 ## 2026-08-14 — Earth primary Boulder construction and breakup correction
 
 ### Reported smell, reproduction, and parity boundary

@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { PrimarySpellChannelTransientState } from './primary-spells.ts'
+import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
   multiplyWaterFrostTint,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
+  waterFrostJetObstructionPoint,
   waterFrostJetPlan,
 } from './primary-spell-water.ts'
 
-function state(id: number, ageTicks = 0, variant = 0): PrimarySpellChannelTransientState {
+function state(id: number, ageTicks = 0, variant = 0): PrimarySpellWaterTransientState {
   return {
     ageTicks,
     direction: { x: 0, y: -1 },
     id,
     kind: 'water',
+    obstructionPoint: null,
     origin: { x: 100, y: 200 },
     ownerId: 'caster',
     variant,
@@ -56,8 +58,9 @@ test('birth owns world-tick wiggle while radial jitter stays around the caster h
   const first = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 0, 36)
   const born = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 37)
   const samePhase = waterFrostJetEmission(emitter, { x: 0, y: -1 }, 3, 1, 9001)
-  const firstHeading = Math.sin(3 * 65 * Math.PI / 180) * 15 * Math.PI / 180
-  const expectedHeading = Math.sin((3 * 65 + 32.5) * Math.PI / 180) * 15 * Math.PI / 180
+  const nativePi = Math.fround(Math.PI)
+  const firstHeading = Math.sin(3 * 65 * nativePi / 180) * nativePi / 180
+  const expectedHeading = Math.sin((3 + 32.5) * 65 * nativePi / 180) * nativePi / 180
 
   assert.equal(first.direction.x, Math.fround(Math.sin(firstHeading)))
   assert.equal(first.direction.y, Math.fround(-Math.cos(firstHeading)))
@@ -65,9 +68,61 @@ test('birth owns world-tick wiggle while radial jitter stays around the caster h
   assert.equal(born.direction.y, Math.fround(-Math.cos(expectedHeading)))
   assert.notDeepEqual(first.direction, born.direction)
   assert.deepEqual(born.direction, samePhase.direction)
+  assert.ok(Math.abs(Math.atan2(first.direction.x, -first.direction.y)) <= Math.PI / 180)
+  assert.ok(Math.abs(Math.atan2(born.direction.x, -born.direction.y)) <= Math.PI / 180)
   const jitter = { x: born.origin.x - emitter.x, y: born.origin.y - emitter.y }
   assert.ok(Math.hypot(jitter.x, jitter.y) <= 10)
   assert.ok(Math.abs(Math.atan2(jitter.x, -jitter.y)) <= 45 * Math.PI / 180)
+})
+
+test('Normal snapshots only forward obstruction and replays snap, perpendicular, half-speed splay', () => {
+  const normalId = firstId('normal')
+  const overId = firstId('over')
+  const emission = {
+    direction: { x: 1, y: 0 },
+    jitterRadius: 0,
+    origin: { x: 0, y: 0 },
+  }
+  let clipCalls = 0
+  assert.deepEqual(waterFrostJetObstructionPoint(
+    emission,
+    { x: 0, y: 0 },
+    normalId,
+    (_start, _end) => {
+      clipCalls += 1
+      return { x: 8, y: 0 }
+    },
+  ), { x: 8, y: 0 })
+  assert.equal(waterFrostJetObstructionPoint(
+    emission,
+    { x: 0, y: 0 },
+    overId,
+    () => {
+      clipCalls += 1
+      return { x: 8, y: 0 }
+    },
+  ), null)
+  assert.equal(clipCalls, 1)
+  assert.equal(waterFrostJetObstructionPoint(
+    { ...emission, origin: { x: 10, y: 0 } },
+    { x: 0, y: 0 },
+    normalId,
+    () => ({ x: 5, y: 0 }),
+  ), null)
+
+  const moving = state(normalId, 3)
+  moving.direction = { x: 1, y: 0 }
+  moving.origin = { x: 0, y: 0 }
+  moving.obstructionPoint = { x: 8, y: 0 }
+  const plan = waterFrostJetPlan(moving)
+  assert.equal(plan.position.x, 8)
+  assert.equal(Math.abs(plan.position.y), 2)
+  assert.deepEqual(
+    { x: Math.abs(plan.velocity.x), y: Math.abs(plan.velocity.y) },
+    { x: 0, y: 2 },
+  )
+  assert.equal(plan.heading, Math.PI / 2)
+  assert.equal(Math.abs(plan.draws.at(-1)!.position.y - plan.position.y), 6)
 })
 
 test('Normal uses the native ordinary core, additive half-core, and forward glint', () => {

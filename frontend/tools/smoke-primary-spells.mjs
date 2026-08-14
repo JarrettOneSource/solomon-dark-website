@@ -169,6 +169,7 @@ try {
   const receipts = []
   const errors = []
   let earthPage = null
+  let waterPage = null
 
   for (const spell of selectedSpells) {
     const page = await context.newPage()
@@ -312,13 +313,19 @@ try {
 
     if (spell.kind === 'earth') {
       earthPage = page
+    } else if (spell.kind === 'water' && selectedSpells.length === 1) {
+      waterPage = page
     } else {
       await page.close()
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
   }
 
-  const boneyard = earthPage ? await castEarthInBoneyard(earthPage) : null
+  const boneyard = earthPage
+    ? await castEarthInBoneyard(earthPage)
+    : waterPage
+      ? await castWaterInBoneyard(waterPage)
+      : null
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     boneyard,
@@ -412,12 +419,55 @@ async function castEarthInBoneyard(page) {
   }
 }
 
+async function castWaterInBoneyard(page) {
+  const enter = page.getByRole('button', { name: 'Enter the Boneyard' })
+  await enter.waitFor({ timeout: 10_000 })
+  await enter.click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+    timeout: 30_000,
+  })
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  await canvas.waitFor({ timeout: 30_000 })
+  const eventStart = await audioEventCount(page)
+  const target = await castTarget(canvas, 0.67, 0.38)
+  await page.mouse.move(target.x, target.y)
+  await page.mouse.down({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/ice-start.wav', 'play')
+  const loop = await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'play')
+  assert.equal(loop.loop, true)
+  const held = await waitForBoneyardSpell(page, 'water')
+  const wire = await latestWireSpell(page, 'water')
+  assert.equal(wire.state.obstructionPoint === null || (
+    Number.isFinite(wire.state.obstructionPoint.x)
+      && Number.isFinite(wire.state.obstructionPoint.y)
+  ), true)
+  await page.waitForTimeout(250)
+  const heldScreenshotPath = `${screenshotRoot}/solomon-primary-water-boneyard-held.png`
+  await page.screenshot({ path: heldScreenshotPath })
+  await page.mouse.up({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'pause')
+  return { held, heldScreenshotPath, wire }
+}
+
 async function waitForHubCastPose(page, eventStart, expectedPose) {
-  const handle = await page.waitForFunction(([start, pose]) => (
-    window.__primarySpellPoseEvents.slice(start).find(
-      (event) => event.playerAttachmentPose === pose,
-    ) ?? null
-  ), [eventStart, expectedPose], { timeout: 5_000 })
+  let handle
+  try {
+    handle = await page.waitForFunction(([start, pose]) => (
+      window.__primarySpellPoseEvents.slice(start).find(
+        (event) => event.playerAttachmentPose === pose,
+      ) ?? null
+    ), [eventStart, expectedPose], { timeout: 5_000 })
+  } catch (error) {
+    const diagnostics = await page.evaluate((start) => ({
+      audioEvents: window.__primarySpellAudioEvents,
+      frame: { ...document.querySelector('.hub-world-canvas')?.__sdrHubFrame },
+      poseEvents: window.__primarySpellPoseEvents.slice(start),
+      wireFrames: window.__primarySpellWireFrames.slice(-5),
+    }), eventStart)
+    throw new Error(`Hub cast pose ${expectedPose} was not observed: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
