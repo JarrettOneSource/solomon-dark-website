@@ -8,11 +8,13 @@ import {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { joystickVector } from './movement-input.ts'
 
-interface HubTouchJoystickProps {
+import './touch-joystick.css'
+
+interface TouchJoystickProps {
   onInput: (movement: Vector2) => void
 }
 
-export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
+export default function TouchJoystick({ onInput }: TouchJoystickProps) {
   const baseRef = useRef<HTMLDivElement>(null)
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
@@ -74,7 +76,7 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
   return (
     <div
       ref={baseRef}
-      className="hub-touch-joystick"
+      className="game-touch-joystick"
       role="region"
       aria-label="Movement joystick"
       tabIndex={-1}
@@ -85,9 +87,11 @@ export default function HubTouchJoystick({ onInput }: HubTouchJoystickProps) {
         update(event.clientX, event.clientY)
       }}
     >
+      {/* centering must live in the inline transform: the build folds the CSS
+          `translate` property into `transform`, which inline styles override */}
       <span
-        className="hub-touch-joystick-knob"
-        style={{ transform: `translate(${knobOffset.x}px, ${knobOffset.y}px)` }}
+        className="game-touch-joystick-knob"
+        style={{ transform: `translate(-50%, -50%) translate(${knobOffset.x}px, ${knobOffset.y}px)` }}
       />
     </div>
   )

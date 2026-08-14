@@ -20,7 +20,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
-import HubTouchJoystick from './input/HubTouchJoystick.tsx'
+import TouchJoystick from './input/TouchJoystick.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -321,7 +321,7 @@ export default function HubScene({
           </div>
         )}
 
-        <HubTouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
+        <TouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
 
         <div className="hub-world-accessibility sr-only">
           {currentRegion === 'courtyard'

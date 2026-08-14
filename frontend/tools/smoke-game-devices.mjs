@@ -341,8 +341,8 @@ try {
   )
   assert.equal(Number(await mobileTitleCanvas.getAttribute('data-viewport-height')), 900)
   await enterHubWithPointer(mobile, 'Water', false)
-  const joystick = mobile.locator('.hub-touch-joystick')
-  const joystickKnob = mobile.locator('.hub-touch-joystick-knob')
+  const joystick = mobile.locator('.game-touch-joystick')
+  const joystickKnob = mobile.locator('.game-touch-joystick-knob')
   await joystick.waitFor()
   const joystickBounds = await joystick.boundingBox()
   assert.ok(joystickBounds && joystickBounds.width > 60, 'expected a visible landscape touch joystick')
@@ -538,8 +538,8 @@ try {
     () => mobileBoneyardCanvas.evaluate((node) => node.__sdrBoneyardFrame.playerX),
     'Hub-to-Boneyard joystick teardown',
   )
-  const boneyardJoystick = mobile.locator('.hub-touch-joystick')
-  const boneyardKnob = mobile.locator('.hub-touch-joystick-knob')
+  const boneyardJoystick = mobile.locator('.game-touch-joystick')
+  const boneyardKnob = mobile.locator('.game-touch-joystick-knob')
   const boneyardJoystickBounds = await boneyardJoystick.boundingBox()
   const boneyardCenter = rectCenter(boneyardJoystickBounds)
   const boneyardBefore = sceneTeardown.settled
