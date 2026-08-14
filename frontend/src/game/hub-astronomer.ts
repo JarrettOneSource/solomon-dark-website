@@ -28,6 +28,10 @@ export interface HubAstronomerFrame {
   telescopeFrame: number
 }
 
+export interface HubAstronomerClock {
+  advanceTo(tick: number): HubAstronomerFrame
+}
+
 const CHECKPOINT_TICKS = 512
 const RNG_SEED = 0x5025f0
 const TELESCOPE_FRAME_COUNT = 5
@@ -123,17 +127,46 @@ const ASTRONOMER_CHECKPOINTS: AstronomerState[] = [{
 
 export function hubAstronomerFrameAt(tick: number): HubAstronomerFrame {
   const fixedTick = Math.max(0, Math.floor(tick))
+  return presentAstronomer(astronomerStateAt(fixedTick))
+}
+
+export function hubAstronomerLocalTick(tick: number, createdAtTick: number): number {
+  return Math.max(0, Math.floor(tick - createdAtTick))
+}
+
+/** Advances the Courtyard-owned native state once per elapsed fixed tick. */
+export function createHubAstronomerClock(): HubAstronomerClock {
+  let currentTick = 0
+  let state = ASTRONOMER_CHECKPOINTS[0]
+  let frame = presentAstronomer(state)
+
+  return {
+    advanceTo(tick) {
+      const fixedTick = Math.max(0, Math.floor(tick))
+      if (fixedTick === currentTick) return frame
+      if (fixedTick < currentTick || fixedTick - currentTick >= CHECKPOINT_TICKS) {
+        state = astronomerStateAt(fixedTick)
+        currentTick = fixedTick
+      } else {
+        while (currentTick < fixedTick) {
+          state = stepAstronomer(state)
+          currentTick += 1
+        }
+      }
+      frame = presentAstronomer(state)
+      return frame
+    },
+  }
+}
+
+function astronomerStateAt(fixedTick: number): AstronomerState {
   const checkpointIndex = Math.floor(fixedTick / CHECKPOINT_TICKS)
   let state = astronomerCheckpoint(checkpointIndex)
   const remainder = fixedTick % CHECKPOINT_TICKS
   for (let update = 0; update < remainder; update += 1) {
     state = stepAstronomer(state)
   }
-  return presentAstronomer(state)
-}
-
-export function hubAstronomerLocalTick(tick: number, createdAtTick: number): number {
-  return Math.max(0, Math.floor(tick - createdAtTick))
+  return state
 }
 
 function astronomerCheckpoint(index: number): AstronomerState {

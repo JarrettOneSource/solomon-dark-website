@@ -243,6 +243,11 @@ There is one composed client, not one DOM client and one canvas client.
   duplicating its authoritative collision simulation. The `100 Hz` simulation,
   `20 Hz` transport snapshots, and browser/display refresh remain separate
   clocks.
+- Courtyard-owned cosmetic actors with native fixed-update state retain one
+  scene-local clock. Astronomer and PotionGuy advance only through elapsed
+  integer ticks, while repeated display samples render the current frame
+  without replaying tick history. Their random-access reconstructions are
+  parity/seek oracles, not display-loop painters.
 - Texture residency is scene-scoped. The Hub keeps every wizard appearance
   available because authenticated remote participants may use different
   elements, while scenes outside the Hub do not retain its GPU textures.

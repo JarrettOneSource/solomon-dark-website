@@ -12,6 +12,7 @@ import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
   destroyHubWorldTextureFrames,
+  hubDeferredAnimationTextures,
   loadHubWorldTextures,
 } from './hub-textures.ts'
 import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
@@ -105,6 +106,9 @@ export async function createHubWorldRenderer(
     })
     if (!application.renderer.name.toLowerCase().includes('webgl')) {
       throw new Error('WebGL is unavailable; the CPU canvas fallback is not supported.')
+    }
+    for (const texture of hubDeferredAnimationTextures(textures)) {
+      application.renderer.texture.initSource(texture.source)
     }
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })

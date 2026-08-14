@@ -13,6 +13,16 @@ export interface HubColor {
   red: number
 }
 
+export interface HubPotionTraderFrame {
+  actorFrame: number
+  balloonFrame: number
+  balloonOffsetY: number
+}
+
+export interface HubPotionTraderClock {
+  advanceTo(tick: number): HubPotionTraderFrame
+}
+
 const FOUNTAIN_ALPHA_LIMIT = 0.25
 const POTION_TRADER_ACTOR_CHECKPOINT_TICKS = 512
 const POTION_TRADER_ACTOR_RNG_SEED = 0x50b110
@@ -203,12 +213,62 @@ export function hubMarkerAlpha(state: ProtocolAmbientState): number {
 /** PotionGuy's inherited stochastic NPC gesture pulse. */
 export function hubPotionTraderActorFrameAt(tick: number): number {
   const fixedTick = Math.max(0, Math.floor(tick))
+  return potionTraderActorFrame(potionTraderActorStateAt(fixedTick))
+}
+
+/** PotionGuy's native five-frame balloon clock with endpoint holds. */
+export function hubPotionTraderBalloonFrameAt(tick: number): number {
+  const fixedTick = Math.max(0, Math.floor(tick))
+  return potionTraderBalloonFrame(potionTraderBalloonStateAt(fixedTick))
+}
+
+/** Registered balloon bank's two-pixel, half-degree native presentation drift. */
+export function hubPotionTraderBalloonOffsetYAt(tick: number): number {
+  return Math.sin(Math.max(0, Math.floor(tick)) * 0.5 * Math.PI / 180) * 2
+}
+
+/** Advances both PotionGuy-owned native states once per elapsed fixed tick. */
+export function createHubPotionTraderClock(): HubPotionTraderClock {
+  let currentTick = 0
+  let actorState = POTION_TRADER_ACTOR_CHECKPOINTS[0]
+  let balloonState = POTION_TRADER_BALLOON_CHECKPOINTS[0]
+  let frame = presentPotionTrader(actorState, balloonState, currentTick)
+
+  return {
+    advanceTo(tick) {
+      const fixedTick = Math.max(0, Math.floor(tick))
+      if (fixedTick === currentTick) return frame
+      if (
+        fixedTick < currentTick
+        || fixedTick - currentTick >= POTION_TRADER_BALLOON_CHECKPOINT_TICKS
+      ) {
+        actorState = potionTraderActorStateAt(fixedTick)
+        balloonState = potionTraderBalloonStateAt(fixedTick)
+        currentTick = fixedTick
+      } else {
+        while (currentTick < fixedTick) {
+          actorState = stepPotionTraderActor(actorState)
+          balloonState = stepPotionTraderBalloon(balloonState)
+          currentTick += 1
+        }
+      }
+      frame = presentPotionTrader(actorState, balloonState, currentTick)
+      return frame
+    },
+  }
+}
+
+function potionTraderActorStateAt(fixedTick: number): PotionTraderActorState {
   const checkpointIndex = Math.floor(fixedTick / POTION_TRADER_ACTOR_CHECKPOINT_TICKS)
   let state = potionTraderActorCheckpoint(checkpointIndex)
   const remainder = fixedTick % POTION_TRADER_ACTOR_CHECKPOINT_TICKS
   for (let update = 0; update < remainder; update += 1) {
     state = stepPotionTraderActor(state)
   }
+  return state
+}
+
+function potionTraderActorFrame(state: PotionTraderActorState): number {
   if (!state.active) return 0
   return Math.trunc(
     POTION_TRADER_ACTOR_FRAME_SCALE
@@ -216,24 +276,33 @@ export function hubPotionTraderActorFrameAt(tick: number): number {
   )
 }
 
-/** PotionGuy's native five-frame balloon clock with endpoint holds. */
-export function hubPotionTraderBalloonFrameAt(tick: number): number {
-  const fixedTick = Math.max(0, Math.floor(tick))
+function potionTraderBalloonStateAt(fixedTick: number): PotionTraderBalloonState {
   const checkpointIndex = Math.floor(fixedTick / POTION_TRADER_BALLOON_CHECKPOINT_TICKS)
   let state = potionTraderBalloonCheckpoint(checkpointIndex)
   const remainder = fixedTick % POTION_TRADER_BALLOON_CHECKPOINT_TICKS
   for (let update = 0; update < remainder; update += 1) {
     state = stepPotionTraderBalloon(state)
   }
+  return state
+}
+
+function potionTraderBalloonFrame(state: PotionTraderBalloonState): number {
   return Math.max(
     0,
     Math.min(POTION_TRADER_BALLOON_FRAME_COUNT - 1, Math.trunc(state.frame)),
   )
 }
 
-/** Registered balloon bank's two-pixel, half-degree native presentation drift. */
-export function hubPotionTraderBalloonOffsetYAt(tick: number): number {
-  return Math.sin(Math.max(0, Math.floor(tick)) * 0.5 * Math.PI / 180) * 2
+function presentPotionTrader(
+  actorState: PotionTraderActorState,
+  balloonState: PotionTraderBalloonState,
+  tick: number,
+): HubPotionTraderFrame {
+  return {
+    actorFrame: potionTraderActorFrame(actorState),
+    balloonFrame: potionTraderBalloonFrame(balloonState),
+    balloonOffsetY: hubPotionTraderBalloonOffsetYAt(tick),
+  }
 }
 
 export function hubStatueOffsets(state: ProtocolAmbientState): {

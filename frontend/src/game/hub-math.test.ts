@@ -24,6 +24,7 @@ import {
   hubActorDepth,
 } from './hub-depth.ts'
 import {
+  createHubAstronomerClock,
   hubAstronomerFrameAt,
   hubAstronomerLocalTick,
 } from './hub-astronomer.ts'
@@ -39,6 +40,7 @@ import {
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
+  createHubPotionTraderClock,
   hubFountainParticleAlpha,
   hubMarkerAlpha,
   hubPotionTraderActorFrameAt,
@@ -189,6 +191,23 @@ test('Astronomer starts from its local Courtyard construction tick', () => {
   )
 })
 
+test('Astronomer clock advances native state instead of replaying it on each draw', () => {
+  const clock = createHubAstronomerClock()
+  let frame = clock.advanceTo(0)
+  assert.deepEqual(frame, hubAstronomerFrameAt(0))
+  assert.equal(clock.advanceTo(0.99), frame)
+
+  for (let tick = 1; tick <= 1_025; tick += 1) {
+    frame = clock.advanceTo(tick)
+    assert.deepEqual(frame, hubAstronomerFrameAt(tick))
+  }
+  assert.equal(clock.advanceTo(1_025.99), frame)
+
+  assert.deepEqual(clock.advanceTo(8_193), hubAstronomerFrameAt(8_193))
+  assert.deepEqual(clock.advanceTo(37), hubAstronomerFrameAt(37))
+  assert.deepEqual(clock.advanceTo(2_049), hubAstronomerFrameAt(2_049))
+})
+
 test('southern Courtyard bank uses the recovered 1.25 camera scope', () => {
   assert.equal(HUB_SOUTHERN_CAMERA_FACTOR, 1.25)
   closeTo(HUB_SOUTHERN_EXTENT.x, 2333.333333)
@@ -244,6 +263,35 @@ test('PotionGuy balloons replay their five-frame clock and vertical drift', () =
   assert.equal(hubPotionTraderBalloonOffsetYAt(0), 0)
   assert.ok(Math.abs(hubPotionTraderBalloonOffsetYAt(180) - 2) < 1e-12)
   assert.ok(Math.abs(hubPotionTraderBalloonOffsetYAt(540) + 2) < 1e-12)
+})
+
+test('PotionGuy clock advances both native states once per fixed tick', () => {
+  const clock = createHubPotionTraderClock()
+  let frame = clock.advanceTo(0)
+  assert.deepEqual(frame, {
+    actorFrame: hubPotionTraderActorFrameAt(0),
+    balloonFrame: hubPotionTraderBalloonFrameAt(0),
+    balloonOffsetY: hubPotionTraderBalloonOffsetYAt(0),
+  })
+  assert.equal(clock.advanceTo(0.99), frame)
+
+  for (let tick = 1; tick <= 1_025; tick += 1) {
+    frame = clock.advanceTo(tick)
+    assert.deepEqual(frame, {
+      actorFrame: hubPotionTraderActorFrameAt(tick),
+      balloonFrame: hubPotionTraderBalloonFrameAt(tick),
+      balloonOffsetY: hubPotionTraderBalloonOffsetYAt(tick),
+    })
+  }
+  assert.equal(clock.advanceTo(1_025.99), frame)
+
+  for (const tick of [8_193, 37, 2_049]) {
+    assert.deepEqual(clock.advanceTo(tick), {
+      actorFrame: hubPotionTraderActorFrameAt(tick),
+      balloonFrame: hubPotionTraderBalloonFrameAt(tick),
+      balloonOffsetY: hubPotionTraderBalloonOffsetYAt(tick),
+    })
+  }
 })
 
 test('camera follows the player and clamps at every Courtyard edge', () => {

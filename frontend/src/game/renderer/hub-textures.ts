@@ -141,6 +141,26 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
   }
 }
 
+/** Sources selected only by later ambient animation branches. */
+export function hubDeferredAnimationTextures(
+  textures: HubWorldTextures,
+): readonly Texture[] {
+  return [
+    textures.astronomer.assistants.blue[0],
+    textures.astronomer.green.gesture[0],
+    textures.astronomer.green.idle[0],
+    textures.astronomer.green.transition[0],
+    textures.astronomer.red.gesture[0],
+    textures.astronomer.red.idle[0],
+    textures.astronomer.red.transition[0],
+    textures.astronomer.telescope[0],
+    textures.base[hub.npcs.teacher.burst.column],
+    textures.base[hub.npcs.teacher.burst.core],
+    textures.base[hub.npcs.teacher.burst.flare],
+    textures.teacher.burst[0],
+  ]
+}
+
 export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   const derived = new Set<Texture>()
   const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))

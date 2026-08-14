@@ -10,7 +10,7 @@ import {
   HUB_SOUTHERN_WEST_PLATFORM_ORIGIN,
 } from '../hub-camera-presentation.ts'
 import {
-  hubAstronomerFrameAt,
+  createHubAstronomerClock,
   hubAstronomerLocalTick,
   type HubAstronomerAssistantFrame,
   type HubAstronomerMainActorFrame,
@@ -18,11 +18,9 @@ import {
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
+  createHubPotionTraderClock,
   hubFountainParticleAlpha,
   hubMarkerAlpha,
-  hubPotionTraderActorFrameAt,
-  hubPotionTraderBalloonFrameAt,
-  hubPotionTraderBalloonOffsetYAt,
   hubSealColors,
   hubStatueOffsets,
   type HubColor,
@@ -467,6 +465,7 @@ class HubAstronomerView {
   private readonly purple: Sprite
   private readonly brownShadow: Sprite
   private readonly brown: Sprite
+  private readonly clock = createHubAstronomerClock()
   private readonly createdAtTick: number
   private readonly textures: HubWorldTextures
   private currentTelescopeFrame = 0
@@ -521,7 +520,7 @@ class HubAstronomerView {
   }
 
   update(tick: number): void {
-    const frame = hubAstronomerFrameAt(hubAstronomerLocalTick(tick, this.createdAtTick))
+    const frame = this.clock.advanceTo(hubAstronomerLocalTick(tick, this.createdAtTick))
     this.redShadow.zIndex = frame.active ? 2 : 0
     this.red.zIndex = frame.active ? 3 : 1
     this.greenShadow.zIndex = frame.active ? 0 : 2
@@ -595,6 +594,7 @@ class HubPotionTraderView {
   readonly actor = new Container({ label: 'potion-trader' })
   readonly balloons: Sprite
   readonly marker: Sprite
+  private readonly clock = createHubPotionTraderClock()
   private readonly sprite: Sprite
   private readonly textures: HubWorldTextures
 
@@ -621,9 +621,10 @@ class HubPotionTraderView {
   }
 
   update(tick: number): void {
-    this.sprite.texture = this.textures.potion.actor[hubPotionTraderActorFrameAt(tick)]
-    this.balloons.texture = this.textures.potion.balloons[hubPotionTraderBalloonFrameAt(tick)]
-    this.balloons.position.y = 516 + hubPotionTraderBalloonOffsetYAt(tick)
+    const frame = this.clock.advanceTo(tick)
+    this.sprite.texture = this.textures.potion.actor[frame.actorFrame]
+    this.balloons.texture = this.textures.potion.balloons[frame.balloonFrame]
+    this.balloons.position.y = 516 + frame.balloonOffsetY
   }
 }
 
