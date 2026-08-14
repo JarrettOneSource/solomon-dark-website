@@ -23,6 +23,7 @@ import {
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import type {
   PrimarySpellProjectileState,
   PrimarySpellSimulationState,
@@ -1087,19 +1088,88 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
+  if (source.kind === 'earth-called-rock') {
+    onlyKeys(source, field, [
+      'ageTicks', 'fallVelocity', 'falling', 'height', 'id', 'kind',
+      'lateralMagnitude', 'ownerId', 'parentId', 'position', 'rotation',
+      'rotationStep', 'scale', 'speed', 'targetHeight', 'variant', 'worldKey',
+    ])
+    const fallVelocity = finite(source.fallVelocity, `${field}.fallVelocity`)
+    if (fallVelocity < 0) throw new GameProtocolError(`${field}.fallVelocity is negative`)
+    const lateralMagnitude = finite(source.lateralMagnitude, `${field}.lateralMagnitude`)
+    if (lateralMagnitude < 0 || lateralMagnitude > 4) {
+      throw new GameProtocolError(`${field}.lateralMagnitude is outside [0,4]`)
+    }
+    const rotationStep = finite(source.rotationStep, `${field}.rotationStep`)
+    if (rotationStep < -30 || rotationStep > 30) {
+      throw new GameProtocolError(`${field}.rotationStep is outside [-30,30]`)
+    }
+    const scale = finite(source.scale, `${field}.scale`)
+    if (scale < 0 || scale > 0.75 * 0.75) {
+      throw new GameProtocolError(`${field}.scale exceeds the native called-rock range`)
+    }
+    const speed = finite(source.speed, `${field}.speed`)
+    if (speed < 0 || speed > 5) {
+      throw new GameProtocolError(`${field}.speed is outside [0,5]`)
+    }
+    const variant = nonnegativeInteger(source.variant, `${field}.variant`)
+    if (variant > 2) throw new GameProtocolError(`${field}.variant exceeds the lit-rock bank`)
+    const falling = boolean(source.falling, `${field}.falling`)
+    if (!falling && fallVelocity !== 0) {
+      throw new GameProtocolError(`${field}.fallVelocity must be zero before release`)
+    }
+    const id = positiveInteger(source.id, `${field}.id`)
+    const parentId = positiveInteger(source.parentId, `${field}.parentId`)
+    if (parentId >= id) {
+      throw new GameProtocolError(`${field}.parentId must precede the called-rock identity`)
+    }
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      fallVelocity,
+      falling,
+      height: finite(source.height, `${field}.height`),
+      id,
+      kind: 'earth-called-rock',
+      lateralMagnitude,
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      parentId,
+      position: vector(source.position, `${field}.position`),
+      rotation: finite(source.rotation, `${field}.rotation`),
+      rotationStep,
+      scale,
+      speed,
+      targetHeight: finite(source.targetHeight, `${field}.targetHeight`),
+      variant,
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
   if (source.kind === 'earth-impact') {
     onlyKeys(source, field, [
-      'ageTicks', 'charge', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+      'ageTicks', 'birthTick', 'charge', 'id', 'kind', 'origin', 'ownerId',
+      'lifetimeTicks', 'worldKey',
     ])
     const charge = finite(source.charge, `${field}.charge`)
     if (charge < 0 || charge > 1) {
       throw new GameProtocolError(`${field}.charge must be within [0,1]`)
     }
+    const birthTick = nonnegativeInteger(source.birthTick, `${field}.birthTick`)
+    const id = positiveInteger(source.id, `${field}.id`)
+    const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
+    const expectedLifetime = earthImpactLifetimeTicks({ birthTick, charge, id })
+    if (lifetimeTicks !== expectedLifetime) {
+      throw new GameProtocolError(`${field}.lifetimeTicks does not match the native recurrence`)
+    }
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= lifetimeTicks) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the impact lifetime`)
+    }
     return {
-      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      ageTicks,
+      birthTick,
       charge,
-      id: positiveInteger(source.id, `${field}.id`),
+      id,
       kind: 'earth-impact',
+      lifetimeTicks,
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),

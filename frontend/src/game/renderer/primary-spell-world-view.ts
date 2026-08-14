@@ -6,6 +6,7 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  EarthCalledRockView,
   EarthBoulderImpactView,
   EarthBoulderView,
 } from './earth-boulder-view.ts'
@@ -21,6 +22,7 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellPainterLayer {
   id: string
+  regionLightPoint: { x: number, y: number } | null
   sortBias: number
   sourceOrder: number
   worldY: number
@@ -31,12 +33,14 @@ interface SpellView {
   readonly kind: string
   destroy(): void
   painterRoots(): readonly SpellPainterRoot[]
-  setTint(tint: number): void
+  setTint(suffix: string, tint: number): void
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void
 }
 
 interface SpellPainterRoot {
   container: Container
+  regionLightPoint: { x: number, y: number } | null
+  sortBias: number
   suffix: string
   worldY: number
 }
@@ -59,7 +63,9 @@ export class PrimarySpellWorldView {
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        if ('position' in state) {
+        if (state.kind === 'earth-called-rock') {
+          view = new EarthCalledRockView(state, this.textures.primarySpells.earth)
+        } else if ('position' in state) {
           view = state.kind === 'earth'
             ? new EarthBoulderView(state, this.textures.primarySpells.earth)
             : state.kind === 'ether'
@@ -86,7 +92,9 @@ export class PrimarySpellWorldView {
       }
       view.update(state)
       for (const painterRoot of view.painterRoots()) {
-        painterRoot.container.zIndex = hubWorldDepthForActor(painterRoot.worldY)
+        painterRoot.container.zIndex = hubWorldDepthForActor(
+          painterRoot.worldY + painterRoot.sortBias,
+        )
       }
     }
     for (const [id, view] of this.views) {
@@ -105,7 +113,8 @@ export class PrimarySpellWorldView {
           id: painterRoot.suffix.length > 0
             ? `primary-spell:${id}:${painterRoot.suffix}`
             : `primary-spell:${id}`,
-          sortBias: 0,
+          regionLightPoint: painterRoot.regionLightPoint,
+          sortBias: painterRoot.sortBias,
           sourceOrder: layers.length,
           worldY: painterRoot.worldY,
         })
@@ -122,8 +131,8 @@ export class PrimarySpellWorldView {
   }
 
   setTint(id: string, tint: number): void {
-    const { numericId } = parsePainterId(id)
-    this.views.get(numericId)?.setTint(tint)
+    const { numericId, suffix } = parsePainterId(id)
+    this.views.get(numericId)?.setTint(suffix, tint)
   }
 
   get count(): number {

@@ -8518,13 +8518,32 @@ Called rocks are distinct world animations, not members already sitting in
 the shell. Below charge `0.25`, held tick emits one each tick; later it emits
 when native `randInt(0,2)==1` until full charge. Each chooses lit
 `BadGuys[2008..2010]`, starts on a random direction/radius around the current
-Boulder with upper radius `clamp(50*charge,5,120)`, homes toward that same actor from speed
-`0.1`, multiplies speed by `1.1` per tick to a cap of `5`, and removes inside
-distance `5`. Its scale is `0.75*min(charge,0.75)`, perspective height begins
-at `-2`, initial rotation is `0..360` degrees, and rotation step is
-`-30..30` degrees. If release wins first, the particle enters its fall/removal
-branch. Optional record-18 dust and occasional loose bits are separate sibling
+Boulder with upper radius `clamp(50*charge,5,120)`, and stores that absolute
+world position plus the same Boulder identity. It homes from float32 speed
+`0.1`, multiplies speed by float32 `1.1` per tick to a cap of `5`, and removes
+inside distance `5`. After that homing step, each tick derives the current
+rock-to-parent heading, adds `90` degrees, and applies the fixed per-particle
+`random(0,4)` lateral magnitude; there is no per-tick RNG sample. Its scale is
+`0.75*min(charge,0.75)`, perspective height begins at `-2`, target height is
+`boulder[+0x1E0] - 20 - 20*charge + random(0,5)`, and height approaches that
+target by `1.5` per tick. Initial rotation is `0..360` degrees and its fixed
+step is `-30..30` degrees.
+
+If release wins first, the authoritative actor enters its fall branch: height
+adds fall velocity, velocity adds `1`, positive height forces velocity to
+`0.25`, and removal happens only after height is strictly greater than `10`.
+There is no fixed twelve-tick fall, alpha fade, maximum homing lifetime, or
+license for presentation to reconstruct old births from interpolated Boulder
+age. Optional record-18 dust and occasional loose bits are separate sibling
 actors.
+
+Registration and lighting are also distinct per actor. CalledRock is inserted
+directly in the world animation list; its full draw vslot `0x0045E440`
+bypasses both `Puppet_RenderDispatch (0x00624B40)` and `ZAnimLitObject`, so it
+has no inbound Region-light sample or outbound light. It must publish a direct
+painter root with `regionLightPoint=null`. By contrast, the Boulder body's
+vslot `+0x0C` is `Puppet_RenderDispatch`; its painter root samples Region light
+at Boulder world XY and has no recovered outbound light.
 
 Stock consumes its shared RNG for variants/scales/emission/angles. Those
 samples are cosmetic. The web analogue must use deterministic, isolated hashes
@@ -8545,13 +8564,46 @@ breakup is therefore registered at the advanced contact sample, not the prior
 clear position.
 
 On terminal contact, `0x0060B700` restores saved charge, creates
-`floor(max(8,30*charge))` fragments, and removes the Boulder. Every fragment
-chooses lit `BadGuys[2008..2010]`, receives randomized direction, radial
-placement, rotation, scale, perspective motion and lifetime, is wrapped in a
-world-registered `ZAnimLitObject`, and fades with a base decrement of
-`0.025`/tick. The web authority therefore needs an explicit replicated Earth
-impact phase/event; clients must not infer breakup from a missing sparse
-snapshot.
+`floor(max(8,30*charge))` fragments, and removes the Boulder. Let
+`q=min(charge,1)`, `r=max(8,30*charge)`, and `step=360/r`. A random initial
+angle advances once per fragment by `step+random(-step/3,+step/3)`; direction
+Y is scaled by `0.8`. Every fragment chooses lit `BadGuys[2008..2010]` and
+uses the following recovered constructor/breakup state:
+
+- perspective velocity and retained bounce seed begin at
+  `-(random(0,3)+2)`, then both multiply by
+  `random(0,1.5)*q+0.75`; height is `-random(0,50*q)`;
+- radial placement is `random(0,45*charge)` and speed is
+  `random(0,1.5*charge)+1.5` along the flattened direction;
+- draw scale compares `(random(0,0.75)+0.5)*charge` to exact float32
+  `0.44999998807907104`; the passing branch consumes a second independent
+  `random(0,0.75)` before multiplying by float32 `0.65`, while the failing
+  branch uses the floor. The result is capped at `0.75`;
+- rotation begins at `random(0,360)` with step `random(0,10)+1`.
+
+Base tick `0x00456720` first tests perspective height `+0x38`. Only while that
+motion lane is nonzero does a global tick divisible by three branch directly
+past motion, gravity, rotation, and the base fade. Other active-motion ticks
+add XY velocity, add perspective velocity to height, add float32 `0.4`
+gravity, and advance rotation. Crossing height zero rerolls the `1..11`
+rotation step, damps the perspective velocity/bounce seed by float32 `0.3`,
+conditionally damps XY by float32 `0.65`, and stops motion when perspective
+velocity becomes greater than `-0.75`. Once that stop writes height zero, even
+a tick divisible by three falls through to the base fade. Enhanced Effects
+starts alpha at `10`; subclass tick `0x00457E00` subtracts float32 `0.025`
+after every completed base call. Active every-third ticks therefore lose only
+`0.025`; other active ticks and every settled tick also lose the base float32
+`0.015`, for a two-subtraction total of `0.04`. The visible draw clamps alpha
+to `1` and removal waits for non-positive alpha. The former forty-tick radial
+burst is not native.
+
+Each child is wrapped in its own world-registered `ZAnimLitObject`. The
+wrapper copies child XY, sets native sort offset `-15`, and reaches the child
+through `Puppet_RenderDispatch`, so its independent painter root samples
+inbound Region light at fragment XY. `ZAnimLitObject` has no ZAnimLit
+intensity/range tail and contributes no outbound light. The authority must
+retain the single semantic Earth impact event plus its native global birth
+tick; clients must not infer breakup from a missing sparse snapshot.
 
 The existing terrain colliders are the available authoritative web contact
 surface. Actor damage/contact continuation is not reconstructed here and must
@@ -8562,11 +8614,14 @@ terminates Earth it must use the same semantic impact presentation rather than
 silently deleting the actor.
 
 No direct `BadGuys[67]` shadow draw occurs in `0x0060AC40`; adding a bespoke
-circle would invent stock art. Existing world lighting supplies tint at the
-same actor/painter boundary. Internally, glimmer precedes body rocks; body
-rocks depth-sort by transformed Z; called rocks and breakup fragments remain
-separate world actors. The Earth-specific view must retain that order while
-the shared painter still orders the spell against scenery by world Y.
+circle would invent stock art. Internally, glimmer precedes body rocks and body
+rocks depth-sort by transformed Z. The Boulder body, every CalledRock, and
+every fragment wrapper are separate painter roots, so scenery and other world
+actors can interleave globally by full suffix. Region tint is applied only
+when that root's explicit `regionLightPoint` is non-null: Boulder and fragment
+wrapper use their actual XY; CalledRock remains self-colored. Grouping any of
+those actors under the Boulder/impact parent violates native order and light
+ownership.
 
 ### Audio, interruption, networking, and teardown adjacency
 
@@ -8597,12 +8652,14 @@ the shared painter still orders the spell against scenery by world Y.
    variant/stored-scale lanes, draw-scale floor, unreachable rank-1 depth
    cull, orthographic XY projection, Z sorting, and the reciprocal glimmer/body
    alpha curve.
-2. Called-rock tests must prove the lit 2008..2010 bank, unconditional early
-   cadence, deterministic later seeded cadence, inward distance reduction,
-   speed cap, and no held gather particles after release.
-3. Impact tests must prove one authoritative Earth phase, fragment count
-   `floor(max(8,30*C))`, lit bank only, deterministic distribution/fade, and
-   eventual removal. Containment must impact rather than disappear.
+2. Called-rock tests must prove strict exact-match protocol/copy/interpolation,
+   stable identities, absolute position under a moving Boulder, sparse-snapshot
+   survival, deterministic RNG domains, speed/height/fall recurrence, release,
+   removal, and teardown. Presentation must contain no historical birth loop.
+3. Impact tests must prove one authoritative Earth phase with global birth
+   tick, fragment count `floor(max(8,30*C))`, exact angle/sample domains,
+   modulo-three motion, bounce/fade recurrence, and eventual removal.
+   Containment must impact rather than disappear.
 4. Exact extracted assets and dimensions must be hash-locked. Record 86 must
    be named glimmer; main/lit banks must not be conflated.
 5. Hub and Boneyard real-browser frames must show rocks assembling over the
@@ -8614,8 +8671,10 @@ the shared painter still orders the spell against scenery by world Y.
 
 ### Bounded unknowns and falsifiers
 
-The exact shared native RNG seed/order is intentionally not part of the web
-gameplay model; only recovered distributions are claimed. No clean-stock 2026-
+The exact shared native RNG seed/order and its interleaving with unrelated
+actors are the only remaining fragment/called-rock RNG unknowns; they are
+intentionally not part of the web gameplay model, and only recovered domains
+and recurrences are claimed. No clean-stock 2026-
 08-14 capture was available, and the 2026-07-26 observer frame is not a cadence
 oracle. Actor-hit residual damage, impact camera impulse, impact audio identity,
 and mana/death producers remain unreconstructed in the Website.
@@ -8629,55 +8688,60 @@ shadow; or called rocks/rolling audio surviving owner/world teardown.
 
 ### Implementation and validation receipt
 
-The Earth renderer is now isolated in
-`earth-boulder-presentation.ts` and `earth-boulder-view.ts`. The first owns the
-recovered shell, opening crossfade, called-rock, draw-cull/projection/scale and
-breakup plans; the second owns their Pixi lifecycle. Shared spell view code
-only selects those Earth owners. The authority now publishes an exact-match
-`earth-impact` transient at the velocity-advanced contact sample, and Hub and
-Boneyard feed their existing terrain colliders into the recovered `45*C`
-release and `75*C` flight probes.
+The authority now owns each `earth-called-rock` as stable-ID replicated state
+with absolute XY, parent identity, homing speed, fixed lateral magnitude,
+target height, rotation, release/fall state, and removal. Presentation only
+copies/interpolates that state; the old loop that reconstructed historical
+births from Boulder age is gone. The one semantic `earth-impact` event retains
+the authoritative global birth tick and derived native lifetime, while the
+pure `primary-spell-earth.ts` recurrence produces independently expiring
+`Anim_BoulderBit` state. `earth-boulder-presentation.ts` is consequently only
+the Boulder body and exact fragment presentation, not an authority surrogate.
 
-The focused regression was first run before the presentation module existed
-and failed with `ERR_MODULE_NOT_FOUND`. After implementation, the Earth
-presentation plus primary-spell kernel suite passes 16/16, including 480 held
-orientation ticks proving all 31 rank-1 Rocks remain strictly in front of
-`Z=-40`, orthographic transformed-X/Y registration, float32 `0.45` draw-scale
-floor, frozen release orientation, advanced contact origin, native shell
-counts, called-rock cadence and semantic breakup. `tsc -p tsconfig.test.json
---noEmit`, focused `oxlint`, JSON validation of the durable catalog and the
-324-test Boneyard aggregate also passes. The full canonical
-`./scripts/validate.sh` gate then completed with exit 0 on this exact tree:
-backend build 0 warnings/errors, 23 Website/backend contracts, frontend lint
-and architecture boundaries, all frontend tests, production builds and media
-policy.
+`PrimarySpellWorldView` now exposes an explicit nullable Region-light point
+for every painter root and routes depth/tint by its full suffix. Boulder is one
+Region-lit root at body XY, CalledRock is one untinted direct root, and every
+live fragment is its own `fragment-N` Region-lit root at absolute fragment XY
+with native sort bias `-15`. The Boneyard renderer samples Region light only
+for non-null roots. This lets scenery, players, enemies, called rocks, and
+individual fragments interleave in the global painter rather than inheriting
+one Boulder/impact parent depth or tint.
 
-Final WebGL evidence from the owned `http://127.0.0.1:5197` lane is under
-`/tmp/sdr-earth-proof3-20260814`. The successful focused journey returned
-`status: ok` and `errors: []`:
+The focused authority/protocol/interpolation/presentation suite passes 40/40.
+It pins moving-parent absolute state, fixed lateral magnitude, the simplified
+target `-40-30*C+random(0,5)`, sparse snapshots, release/fall/removal and owner
+teardown; exact fragment count/sample domains and recurrent angle distribution;
+active global-modulo-three skips; sequential float32 `0.015` plus `0.025`
+fade on settled ticks including ticks divisible by three; per-fragment death;
+full-suffix tint/depth; nullable lighting; and unrelated-actor interleaving.
+The canonical `./scripts/validate.sh` gate passes on the corrected tree:
+backend build with 0 warnings/errors, 23 Website/backend contracts, frontend
+lint and architecture boundaries, all 398 frontend tests, all 5 desktop tests,
+production TypeScript/Vite/game-host builds, and production media policy.
+Focused `oxlint`, `git diff --check`, production `npm run build`, and Loader
+catalog JSON validation also pass.
+
+Fresh WebGL evidence was captured from the owned
+`http://127.0.0.1:52983` lane under
+`/tmp/sdr-earth-ownership-proof-20260814`; the journey returned `status: ok`
+and `errors: []`, and its host/server were stopped afterward:
 
 | Frame | Authoritative/presentation state | SHA-256 |
 | --- | --- | --- |
-| `solomon-primary-earth-hub-opening.png` | accurately classified as early assembled shell, not the native opening-glimmer phase: held age 61, charge `0.2562499344`, one projectile, 9 main Rocks, 8 active called Rocks, glimmer alpha 0/body alpha 1 | `05b93845b2cbd19dea62932824656d372322e355a9a4386bacb5335bc0c4ab77` |
-| `solomon-primary-earth-hub-mid.png` | held age 221, charge `0.4562497437`, one projectile, 15 main Rocks, 5 called Rocks | `b2fc1cffbc0f8bb4607cc44d52273efec8a9e160a3dec8584ae592f26a629403` |
-| `solomon-primary-earth-hub-high.png` | held age 576, charge `0.9000088573`, one projectile, 29 main Rocks, 7 called Rocks | `04ce3a309df3e653b10aa6fa93e66adae70b198b0608bfc8d466556915e2f333` |
-| `solomon-primary-earth-boneyard-held.png` | one rendered Earth actor in the Boneyard painter with an assembled rock body; painter bands 5 and max dynamic Z 8 | `8682bac5a4b7913afdebc7361c7f7f631b37c6c4235b1fcb5e5dc1ef23c966dd` |
+| `solomon-primary-earth-hub-opening.png` | early assembled stage (not the opening-glimmer tick): held age 49, charge `0.2412499487`, 9 body rocks, 13 authoritative CalledRocks | `ce5fcb981dfb2ea191d78cc603f7073528a6a458bd0b8a0f624628cdf355ca6f` |
+| `solomon-primary-earth-hub-mid.png` | held age 319, charge `0.5787515044`, 19 body rocks, 9 authoritative CalledRocks | `541baeda11e98fd3bdbe5db755ecaff82808448249eca31afc54b7f9c6431047` |
+| `solomon-primary-earth-hub-high.png` | held age 774, charge 1, all 31 body rocks; no new CalledRock emission at full charge | `8979a3ddcb926caab15a0fb9928917a7bd957214cd63476fb0259d27087f61d5` |
+| `solomon-primary-earth-hub-release.png` | visible 30-fragment breakup from `earth-impact` id 255, birth tick 5664, age 16, lifetime 266 | `bcebb111c2b3b1d0ec12b5cbb81984b9bf609cc005e7b7d3ba55f4b46aa44a35` |
+| `solomon-primary-earth-boneyard-held.png` | Earth body plus 7 authoritative CalledRocks under Boneyard lighting/painter ownership | `a4f7fa7668a27383397ab5f82eb7ee00f3dd33cf05c6b22cebe6990a8771852e` |
+| `solomon-primary-earth-boneyard-release.png` | one semantic impact plus 11 independently falling CalledRocks; 10 painter bands and max dynamic Z 41 | `1e70f385d469300da6c2edefda76b89c22aa74887e83effee0655098721b46ab` |
 
-The same successful journey observed the replicated terminal event at charge
-1 (`earth-impact` id 708, age 6, origin
-`(990.9217794209422,191.16416687936052)`, zero projectiles, one transient),
-which proves the semantic breakup lane and its deterministic 30-fragment plan.
-Headless screenshot readback did not preserve a frame while those fragments
-were visibly resident, so neither `hub-release` nor the Boneyard release image
-is promoted as pixel proof. Two later focused attempts were stopped after the
-same unrelated pre-game failure: Playwright timed out after 30 seconds at
-`tools/smoke-primary-spells.mjs:333` waiting for the `College courtyard` label
-after Create selection. No Earth renderer or page error occurred in either
-attempt. A fresh exact opening-glimmer pixel and fresh breakup pixel therefore
-remain bounded visual-proof gaps. The crossfade itself is closed by static
-instructions, pure regressions and the separately classified 2026-07-26 stock
-observer frame; that historical frame remains composition evidence rather
-than a timing oracle.
+This fresh browser run closes the former breakup-pixel gap and exercises the
+new wire-owned CalledRock lane. The harness itself now counts CalledRocks from
+authoritative transients rather than consulting renderer reconstruction. A
+fresh exact opening-glimmer pixel and a clean-stock side-by-side remain proof
+gaps; static instruction closure and deterministic regressions cover the
+opening recurrence, but those gaps plus the explicitly unrecovered shared-RNG
+sequence still preclude a literal pixel-for-pixel/exact-RNG claim.
 
 ## 2026-08-14 — Mobile fullscreen capability and app-mode boundary
 

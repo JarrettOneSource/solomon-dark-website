@@ -18,9 +18,11 @@ import {
   primaryCastPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
+  removePrimarySpellOwner,
   stepPrimarySpells,
   type PrimarySpellSimulationState,
 } from './primary-spells.ts'
+import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -318,19 +320,23 @@ test('Earth preserves long-held age and applies containment only after release',
     players: state.players,
     previousPlayers: state.players,
     spells: state.primarySpells,
+    tick: state.tick + 1,
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
   const releasePosition = releaseResult.spells.projectiles[0].position
   let spells = releaseResult.spells
   let players = releaseResult.players
+  let tick = state.tick + 1
   const containmentStep = () => {
+    tick += 1
     const result = stepPrimarySpells({
       canPlaceProjectile: () => true,
       inputs: { [PLAYER_ID]: input(state, false) },
       players,
       previousPlayers: players,
       spells,
+      tick,
       viewScale: 1.2,
       worldKeyForPlayer: () => 'hub:courtyard',
     })
@@ -343,12 +349,15 @@ test('Earth preserves long-held age and applies containment only after release',
   assert.equal(spells.projectiles[0].flightTicks, 500)
   containmentStep()
   assert.equal(spells.projectiles.length, 0)
-  assert.equal(spells.transients.length, 1)
-  assert.deepEqual(spells.transients[0], {
+  const impact = spells.transients.find((effect) => effect.kind === 'earth-impact')
+  assert.ok(impact)
+  assert.deepEqual(impact, {
     ageTicks: 0,
+    birthTick: tick,
     charge: 1,
-    id: 2,
+    id: impact.id,
     kind: 'earth-impact',
+    lifetimeTicks: earthImpactLifetimeTicks(impact),
     origin: { ...releasePosition, y: releasePosition.y - 1_497 },
     ownerId: PLAYER_ID,
     worldKey: 'hub:courtyard',
@@ -369,6 +378,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
     players: state.players,
     previousPlayers: state.players,
     spells: state.primarySpells,
+    tick: state.tick + 1,
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
@@ -379,15 +389,19 @@ test('Earth publishes one authoritative breakup when its next flight position co
   }])
   assert.equal(result.spells.projectiles.length, 0)
   assert.notDeepEqual(checked[0].position, released.position)
-  assert.deepEqual(result.spells.transients, [{
+  const impact = result.spells.transients.find((effect) => effect.kind === 'earth-impact')
+  assert.ok(impact)
+  assert.deepEqual(impact, {
     ageTicks: 0,
+    birthTick: state.tick + 1,
     charge: released.charge,
-    id: 2,
+    id: impact.id,
     kind: 'earth-impact',
+    lifetimeTicks: earthImpactLifetimeTicks(impact),
     origin: checked[0].position,
     ownerId: PLAYER_ID,
     worldKey: 'hub:courtyard',
-  }])
+  })
 })
 
 test('Earth uses the native 45-charge release probe before normal 75-charge flight probes', () => {
@@ -404,6 +418,7 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
     players: state.players,
     previousPlayers: state.players,
     spells: state.primarySpells,
+    tick: state.tick + 1,
     viewScale: 1.2,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
@@ -413,8 +428,57 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
     radius: heldBoulder.charge * 45,
   }])
   assert.equal(result.spells.projectiles.length, 0)
-  assert.equal(result.spells.transients[0].kind, 'earth-impact')
-  assert.deepEqual(result.spells.transients[0].origin, checked[0].position)
+  const impact = result.spells.transients.find((effect) => effect.kind === 'earth-impact')
+  assert.ok(impact)
+  assert.deepEqual(impact.origin, checked[0].position)
+})
+
+test('Earth called rocks are authoritative absolute actors under a moving parent', () => {
+  let state = step(simulation('earth'), true)
+  const born = state.primarySpells.transients.find((effect) => effect.kind === 'earth-called-rock')
+  assert.ok(born)
+  assert.equal(born.ageTicks, 0)
+  assert.equal(born.parentId, state.primarySpells.projectiles[0].id)
+  assert.equal(born.height, -2)
+  assert.ok(born.targetHeight >= -40 - 30 * state.primarySpells.projectiles[0].charge)
+  assert.ok(born.targetHeight < -35 - 30 * state.primarySpells.projectiles[0].charge)
+  assert.ok(born.lateralMagnitude >= 0 && born.lateralMagnitude < 4)
+
+  const player = state.players[PLAYER_ID]
+  state = stepGameSimulationTick(state, { [PLAYER_ID]: {
+    ...input(state, true),
+    movement: { x: 1, y: 0 },
+  } })
+  const moved = state.primarySpells.transients.find((effect) => effect.id === born.id)
+  assert.ok(moved?.kind === 'earth-called-rock')
+  assert.equal(moved.ageTicks, 1)
+  assert.notDeepEqual(moved.position, born.position)
+  assert.notDeepEqual(moved.position, state.primarySpells.projectiles[0].position)
+  assert.equal(moved.lateralMagnitude, born.lateralMagnitude)
+  assert.equal(moved.rotationStep, born.rotationStep)
+  assert.equal(moved.speed, Math.fround(Math.fround(0.1) * 1.100000023841858))
+  assert.equal(moved.height, -3.5)
+  assert.ok(state.players[PLAYER_ID].position.x > player.position.x)
+})
+
+test('Earth release switches existing called-rock identities to fall and teardown owns them', () => {
+  let state = step(simulation('earth'), true, 97)
+  const before = state.primarySpells.transients
+    .filter((effect) => effect.kind === 'earth-called-rock')
+  assert.ok(before.length > 0)
+  state = step(state, false)
+  const after = new Map(state.primarySpells.transients
+    .filter((effect) => effect.kind === 'earth-called-rock')
+    .map((effect) => [effect.id, effect]))
+  for (const rock of before) {
+    const released = after.get(rock.id)
+    if (!released) continue
+    assert.equal(released.falling, true)
+    assert.deepEqual(released.position, rock.position)
+  }
+  const removed = removePrimarySpellOwner(state.primarySpells, PLAYER_ID)
+  assert.equal(removed.projectiles.length, 0)
+  assert.equal(removed.transients.length, 0)
 })
 
 test('pins native torso aim, Staff pose schedule, and observed socket banks', () => {

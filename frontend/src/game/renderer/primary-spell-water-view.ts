@@ -57,10 +57,18 @@ export class WaterPrimarySpellView {
   }
 
   painterRoots(): readonly WaterPainterRoot[] {
-    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+    const position = waterFrostJetPlan(this.state).position
+    return [{
+      container: this.container,
+      regionLightPoint: { ...position },
+      sortBias: 0,
+      suffix: '',
+      worldY: this.worldY,
+    }]
   }
 
-  setTint(tint: number): void {
+  setTint(suffix: string, tint: number): void {
+    if (suffix !== '') return
     this.worldTint = tint
     this.update(this.state)
   }
@@ -85,6 +93,8 @@ export class WaterPrimarySpellView {
 
 interface WaterPainterRoot {
   container: Container
+  regionLightPoint: { x: number, y: number } | null
+  sortBias: number
   suffix: string
   worldY: number
 }

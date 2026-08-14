@@ -96,6 +96,8 @@ export class AirPrimarySpellView {
     if (this.plan.body) {
       roots.push({
         container: this.bodyContainer,
+        regionLightPoint: null,
+        sortBias: 0,
         suffix: 'body',
         worldY: this.state.origin.y + this.plan.midpoint.y,
       })
@@ -103,6 +105,8 @@ export class AirPrimarySpellView {
     if (this.plan.sourceCorona) {
       roots.push({
         container: this.sourceCorona.container,
+        regionLightPoint: null,
+        sortBias: 0,
         suffix: 'source',
         worldY: this.state.origin.y + this.plan.sourceCorona.center.y,
       })
@@ -110,6 +114,8 @@ export class AirPrimarySpellView {
     if (this.plan.contactCorona.alpha > 0) {
       roots.push({
         container: this.contactCorona.container,
+        regionLightPoint: null,
+        sortBias: 0,
         suffix: 'contact',
         worldY: this.state.origin.y + this.plan.contactCorona.center.y,
       })
@@ -117,8 +123,9 @@ export class AirPrimarySpellView {
     return roots
   }
 
-  setTint(tint: number): void {
-    for (const container of this.containers) container.tint = tint
+  setTint(suffix: string, tint: number): void {
+    const root = this.painterRoots().find((candidate) => candidate.suffix === suffix)
+    if (root) root.container.tint = tint
   }
 
   destroy(): void {
@@ -128,6 +135,8 @@ export class AirPrimarySpellView {
 
 interface AirPainterRoot {
   container: Container
+  regionLightPoint: { x: number, y: number } | null
+  sortBias: number
   suffix: string
   worldY: number
 }

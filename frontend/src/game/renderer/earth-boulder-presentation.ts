@@ -1,24 +1,19 @@
+import {
+  EARTH_BOULDER_LIT_RECORDS,
+  earthImpactFragmentsAtAge,
+} from '../core-kernels/primary-spell-earth.ts'
+
 export const EARTH_BOULDER_GLIMMER_RECORD = 86
 export const EARTH_BOULDER_MAIN_RECORDS = [168, 169, 170, 171] as const
-export const EARTH_BOULDER_LIT_RECORDS = [2008, 2009, 2010] as const
+export { EARTH_BOULDER_LIT_RECORDS }
 export const EARTH_BOULDER_OPENING_FADE_PER_TICK = 0.03500000014901161
 export const EARTH_BOULDER_GLIMMER_SCALE = 4.099999904632568
-export const EARTH_BOULDER_FRAGMENT_FADE_PER_TICK = 0.02500000037252903
-export const EARTH_BOULDER_FRAGMENT_LIFETIME_TICKS = 40
 export const EARTH_BOULDER_DEPTH_PLANE = -40
 export const EARTH_BOULDER_DRAW_SCALE_MINIMUM = Math.fround(0.45)
 
-const EARTH_INITIAL_CHARGE = Math.fround(0.18)
-const EARTH_CHARGE_STEP = Math.fround(0.00125)
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const ORIENTATION_AXIS = normalize3({ x: 0, y: -0.8, z: 1 })
 const ORIENTATION_DEGREES_PER_TICK = 0.75
-const CALLED_ROCK_REMOVE_DISTANCE = 5
-const CALLED_ROCK_SPEED_START = 0.1
-const CALLED_ROCK_SPEED_MULTIPLIER = 1.1
-const CALLED_ROCK_SPEED_CAP = 5
-const CALLED_ROCK_FALL_TICKS = 12
-const MAX_CALLED_ROCK_TRAVEL_TICKS = 48
 
 export interface EarthBoulderPresentationState {
   ageTicks: number
@@ -39,22 +34,8 @@ export interface EarthBoulderRockPlan {
   transformed: Vector3
 }
 
-export interface EarthCalledRockPlan {
-  alpha: number
-  distance: number
-  falling: boolean
-  position: { x: number, y: number }
-  record: typeof EARTH_BOULDER_LIT_RECORDS[number]
-  rotation: number
-  scale: number
-  spawnDistance: number
-  spawnTick: number
-  speed: number
-}
-
 export interface EarthBoulderPresentationPlan {
   bodyAlpha: number
-  calledRocks: readonly EarthCalledRockPlan[]
   glimmer: {
     alpha: number
     record: typeof EARTH_BOULDER_GLIMMER_RECORD
@@ -66,11 +47,15 @@ export interface EarthBoulderPresentationPlan {
 
 export interface EarthBoulderImpactState {
   ageTicks: number
+  birthTick: number
   charge: number
   id: number
 }
 
 export interface EarthBoulderFragmentPlan {
+  alpha: number
+  height: number
+  index: number
   position: { x: number, y: number }
   record: typeof EARTH_BOULDER_LIT_RECORDS[number]
   rotation: number
@@ -78,7 +63,6 @@ export interface EarthBoulderFragmentPlan {
 }
 
 export interface EarthBoulderImpactPlan {
-  alpha: number
   fragments: readonly EarthBoulderFragmentPlan[]
 }
 
@@ -96,7 +80,6 @@ export function earthBoulderPresentationPlan(
   const rocks = earthBoulderBody(state.id, state.charge, orientationTicks)
   return {
     bodyAlpha: 1 - openingMix,
-    calledRocks: earthCalledRocks(state, orientationTicks),
     glimmer: {
       alpha: openingMix,
       record: EARTH_BOULDER_GLIMMER_RECORD,
@@ -110,30 +93,16 @@ export function earthBoulderPresentationPlan(
 export function earthBoulderImpactPlan(
   state: EarthBoulderImpactState,
 ): EarthBoulderImpactPlan {
-  const count = Math.floor(Math.max(8, 30 * state.charge))
-  const startAngle = unitRandom(state.id, 0x8000) * Math.PI * 2
-  const age = Math.max(0, state.ageTicks)
-  const fragments = Array.from({ length: count }, (_, index) => {
-    const angleJitter = signedRandom(state.id, 0x8100 + index) * Math.PI / count
-    const angle = startAngle + index * Math.PI * 2 / count + angleJitter
-    const direction = { x: Math.cos(angle), y: Math.sin(angle) * 0.8 }
-    const speed = 1.5 + unitRandom(state.id, 0x8200 + index) * state.charge * 1.5
-    const spawnRadius = unitRandom(state.id, 0x8300 + index) * 45 * state.charge
-    const rotationStep = signedRandom(state.id, 0x8400 + index) * 30
-    return {
-      position: {
-        x: direction.x * (spawnRadius + speed * age),
-        y: direction.y * (spawnRadius + speed * age) + age * age * 0.035,
-      },
-      record: EARTH_BOULDER_LIT_RECORDS[randomInt(state.id, 0x8500 + index, 3)],
-      rotation: (unitRandom(state.id, 0x8600 + index) * 360 + rotationStep * age)
-        * Math.PI / 180,
-      scale: 0.75 + unitRandom(state.id, 0x8700 + index) * state.charge * 1.5,
-    }
-  })
   return {
-    alpha: clamp01(1 - age * EARTH_BOULDER_FRAGMENT_FADE_PER_TICK),
-    fragments,
+    fragments: earthImpactFragmentsAtAge(state, state.ageTicks).map((fragment) => ({
+      alpha: clamp01(fragment.alpha),
+      height: fragment.height,
+      index: fragment.index,
+      position: fragment.position,
+      record: fragment.record,
+      rotation: fragment.rotation * Math.PI / 180,
+      scale: fragment.scale,
+    })),
   }
 }
 
@@ -195,71 +164,6 @@ function earthBoulderBody(
   ))
 }
 
-function earthCalledRocks(
-  state: EarthBoulderPresentationState,
-  heldTicks: number,
-): EarthCalledRockPlan[] {
-  const releaseFallTicks = state.phase === 'flight' ? state.flightTicks : 0
-  if (releaseFallTicks > CALLED_ROCK_FALL_TICKS) return []
-  const plans: EarthCalledRockPlan[] = []
-  const lastHeldTick = Math.floor(heldTicks)
-  const firstPossibleActiveTick = Math.max(1, lastHeldTick - MAX_CALLED_ROCK_TRAVEL_TICKS)
-  let charge = chargeAtTick(firstPossibleActiveTick - 1)
-  for (let tick = firstPossibleActiveTick; tick <= lastHeldTick; tick += 1) {
-    charge = Math.min(1, Math.fround(charge + EARTH_CHARGE_STEP))
-    if (charge >= 1) continue
-    const emits = charge < 0.25 || randomInt(state.id, 0x3000 + tick, 3) === 1
-    if (!emits) continue
-    const angle = unitRandom(state.id, 0x4000 + tick) * Math.PI * 2
-    const spawnDistance = unitRandom(state.id, 0x5000 + tick)
-      * Math.max(5, Math.min(120, 50 * charge))
-    let distance = spawnDistance
-    let speed = CALLED_ROCK_SPEED_START
-    const travelTicks = Math.max(0, Math.floor(heldTicks) - tick)
-    let removed = false
-    for (let step = 0; step < travelTicks; step += 1) {
-      if (distance < CALLED_ROCK_REMOVE_DISTANCE) {
-        removed = true
-        break
-      }
-      speed = Math.min(CALLED_ROCK_SPEED_CAP, speed * CALLED_ROCK_SPEED_MULTIPLIER)
-      distance = Math.max(0, distance - speed)
-    }
-    if (removed || (distance < CALLED_ROCK_REMOVE_DISTANCE && releaseFallTicks > 0)) continue
-
-    const tangent = signedRandom(state.id, 0x6000 + tick)
-      * Math.sin(travelTicks * 0.2) * Math.min(3, distance * 0.2)
-    const fallOffset = releaseFallTicks * releaseFallTicks * 0.075
-    plans.push({
-      alpha: releaseFallTicks === 0 ? 1 : clamp01(1 - releaseFallTicks / CALLED_ROCK_FALL_TICKS),
-      distance,
-      falling: releaseFallTicks > 0,
-      position: {
-        x: Math.cos(angle) * distance - Math.sin(angle) * tangent,
-        y: Math.sin(angle) * distance + Math.cos(angle) * tangent + fallOffset,
-      },
-      record: EARTH_BOULDER_LIT_RECORDS[randomInt(state.id, 0x7000 + tick, 3)],
-      rotation: (
-        unitRandom(state.id, 0x7100 + tick) * 360
-        + signedRandom(state.id, 0x7200 + tick) * 30 * (travelTicks + releaseFallTicks)
-      ) * Math.PI / 180,
-      scale: 0.75 * Math.min(charge, 0.75),
-      spawnDistance,
-      spawnTick: tick,
-      speed,
-    })
-  }
-  return plans
-}
-
-function chargeAtTick(tick: number): number {
-  let charge = EARTH_INITIAL_CHARGE
-  for (let age = 0; age < tick; age += 1) {
-    charge = Math.min(1, Math.fround(charge + EARTH_CHARGE_STEP))
-  }
-  return charge
-}
-
 function rotateAroundAxis(point: Vector3, axis: Vector3, angle: number): Vector3 {
   const cosine = Math.cos(angle)
   const sine = Math.sin(angle)
@@ -284,10 +188,6 @@ function normalize3(vector: Vector3): Vector3 {
 
 function unitRandom(id: number, salt: number): number {
   return hash(id, salt) / 0x1_0000_0000
-}
-
-function signedRandom(id: number, salt: number): number {
-  return unitRandom(id, salt) * 2 - 1
 }
 
 function randomInt(id: number, salt: number, exclusiveMax: number): number {

@@ -5,6 +5,7 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   ProtocolPlayerState,
@@ -171,24 +172,83 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   assert.equal(halfway.projectiles[0].charge, 0.30000000000000004)
   assert.equal(halfway.projectiles[0].phase, 'held')
   assert.equal(halfway.transients[0].ageTicks, 4)
-  assert.deepEqual(halfway.transients[0].origin, { x: 40, y: 50 })
   assert.equal(halfway.transients[0].kind, 'fire')
   if (halfway.transients[0].kind === 'fire') {
+    assert.deepEqual(halfway.transients[0].origin, { x: 40, y: 50 })
     assert.deepEqual(halfway.transients[0].direction, { x: 0, y: -1 })
   }
   const caughtUp = interpolatePrimarySpellState(older, newer, 1)
   assert.deepEqual(caughtUp.projectiles.map(({ id }) => id), [1, 4])
   assert.equal(caughtUp.projectiles[0].phase, 'flight')
-  assert.deepEqual(caughtUp.transients[0].origin, { x: 400, y: 500 })
   assert.equal(caughtUp.transients[0].kind, 'fire')
   if (caughtUp.transients[0].kind === 'fire') {
+    assert.deepEqual(caughtUp.transients[0].origin, { x: 400, y: 500 })
     assert.deepEqual(caughtUp.transients[0].direction, { x: 1, y: 0 })
   }
 
   const owned = copyPrimarySpellState(newer)
   assert.deepEqual(owned, newer)
   assert.notEqual(owned.projectiles[0].position, newer.projectiles[0].position)
-  assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)
+  assert.equal(owned.transients[0].kind, 'fire')
+  if (owned.transients[0].kind === 'fire') {
+    assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)
+  }
+})
+
+test('interpolates authoritative called-rock absolute state across sparse snapshots', () => {
+  const rock = {
+    ageTicks: 2,
+    falling: false,
+    fallVelocity: 0,
+    height: -5,
+    id: 2,
+    kind: 'earth-called-rock',
+    lateralMagnitude: 2.5,
+    ownerId: 'local',
+    parentId: 1,
+    position: { x: 100, y: 200 },
+    rotation: 30,
+    rotationStep: 5,
+    scale: 0.2,
+    speed: 0.2,
+    targetHeight: -45,
+    variant: 1,
+    worldKey: 'hub:courtyard',
+  } as const
+  const older = {
+    nextId: 4,
+    projectiles: [],
+    transients: [rock, { ...rock, id: 3, position: { x: 40, y: 50 } }],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 5,
+    projectiles: [],
+    transients: [{
+      ...rock,
+      ageTicks: 7,
+      falling: true,
+      fallVelocity: 1,
+      height: -12.5,
+      position: { x: 112, y: 206 },
+      rotation: 55,
+      speed: 0.8,
+    }, { ...rock, id: 4, position: { x: 300, y: 400 } }],
+  } satisfies PrimarySpellSimulationState
+
+  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  const interpolated = halfway.transients.find(({ id }) => id === 2)
+  assert.ok(interpolated?.kind === 'earth-called-rock')
+  assert.deepEqual(interpolated.position, { x: 106, y: 203 })
+  assert.equal(interpolated.height, -8.75)
+  assert.equal(interpolated.falling, false)
+  assert.deepEqual(halfway.transients.map(({ id }) => id), [2, 3])
+
+  const caughtUp = interpolatePrimarySpellState(older, newer, 1)
+  assert.deepEqual(caughtUp.transients.map(({ id }) => id), [2, 4])
+  const owned = copyPrimarySpellState(newer)
+  const copied = owned.transients[0]
+  assert.ok(copied.kind === 'earth-called-rock')
+  assert.notEqual(copied.position, newer.transients[0].position)
 })
 
 test('interpolates remote state over one network interval while keeping local prediction immediate', () => {

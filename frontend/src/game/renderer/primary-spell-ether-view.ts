@@ -68,10 +68,17 @@ export class EtherPrimarySpellView {
   }
 
   painterRoots(): readonly EtherPainterRoot[] {
-    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+    return [{
+      container: this.container,
+      regionLightPoint: { ...this.state.position },
+      sortBias: 0,
+      suffix: '',
+      worldY: this.worldY,
+    }]
   }
 
-  setTint(tint: number): void {
+  setTint(suffix: string, tint: number): void {
+    if (suffix !== '') return
     this.worldTint = tint
     for (let index = 0; index < this.sprites.length; index += 1) {
       this.sprites[index].tint = multiplyTints(this.nativeTints[index] ?? 0xffffff, tint)
@@ -87,6 +94,8 @@ export class EtherPrimarySpellView {
 
 interface EtherPainterRoot {
   container: Container
+  regionLightPoint: { x: number, y: number } | null
+  sortBias: number
   suffix: string
   worldY: number
 }

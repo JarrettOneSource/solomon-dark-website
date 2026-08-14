@@ -5,6 +5,7 @@ import {
   createGameSimulation,
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
+import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -248,13 +249,37 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     velocity: { x: 0, y: -3 },
     worldKey: 'hub:courtyard',
   }
-  const earthImpact = {
+  const earthImpactSeed = {
     ageTicks: 3,
+    birthTick: 40,
     charge: 0.5,
     id: 1,
     kind: 'earth-impact',
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    worldKey: 'hub:courtyard',
+  }
+  const earthImpact = {
+    ...earthImpactSeed,
+    lifetimeTicks: earthImpactLifetimeTicks(earthImpactSeed),
+  }
+  const calledRock = {
+    ageTicks: 8,
+    falling: true,
+    fallVelocity: 2,
+    height: -12.5,
+    id: 2,
+    kind: 'earth-called-rock',
+    lateralMagnitude: 3.25,
+    ownerId: 'player-1',
+    parentId: 1,
+    position: { x: 760, y: 390 },
+    rotation: 125,
+    rotationStep: -12,
+    scale: 0.2,
+    speed: 0.5,
+    targetHeight: -48,
+    variant: 2,
     worldKey: 'hub:courtyard',
   }
 
@@ -283,6 +308,12 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [fireParticle],
     },
   }))
+  const decodedCalledRock = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 3, projectiles: [], transients: [calledRock] },
+  })
+  assert.equal(decodedCalledRock.type, 'server-snapshot')
+  assert.deepEqual(decodedCalledRock.frame.primarySpells.transients, [calledRock])
 
   assert.throws(() => decodeFrame({
     ...frame,
@@ -415,6 +446,22 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       }],
     },
   }), /ageTicks exceeds its Fire particle lifetime/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 3,
+      projectiles: [],
+      transients: [{ ...calledRock, lateralMagnitude: 5 }],
+    },
+  }), /lateralMagnitude is outside/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...earthImpact, lifetimeTicks: earthImpact.lifetimeTicks + 1 }],
+    },
+  }), /lifetimeTicks does not match/)
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {

@@ -22,6 +22,7 @@ export interface PrimarySpellFireTextures {
 interface FirePainterRoot {
   container: Container
   regionLightPoint: null
+  sortBias: number
   suffix: string
   worldY: number
 }
@@ -64,12 +65,13 @@ export class FirePrimarySpellView {
     return [{
       container: this.container,
       regionLightPoint: plan.regionLightPoint,
+      sortBias: 0,
       suffix: '',
       worldY: plan.worldY,
     }]
   }
 
-  setTint(_tint: number): void {
+  setTint(_suffix: string, _tint: number): void {
     // Native Fireball bypasses the common Puppet Region-light dispatcher.
   }
 
@@ -127,12 +129,13 @@ export class FireParticleSpellView {
     return [{
       container: this.container,
       regionLightPoint: plan.regionLightPoint,
+      sortBias: 0,
       suffix: '',
       worldY: plan.worldY,
     }]
   }
 
-  setTint(_tint: number): void {
+  setTint(_suffix: string, _tint: number): void {
     // Ordinary ZAnim dispatches directly to the self-modulated child draw.
   }
 

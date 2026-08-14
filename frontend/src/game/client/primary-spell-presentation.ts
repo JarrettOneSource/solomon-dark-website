@@ -82,8 +82,9 @@ function interpolateTransient(
 ): PrimarySpellTransientState {
   const discrete = blend < 1 ? older : newer
   if (older.kind === 'earth-impact' && newer.kind === 'earth-impact') {
+    const impact = blend < 1 ? older : newer
     return {
-      ...discrete,
+      ...impact,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       origin: {
         x: lerp(older.origin.x, newer.origin.x, blend),
@@ -92,6 +93,24 @@ function interpolateTransient(
     }
   }
   if (older.kind === 'earth-impact' || newer.kind === 'earth-impact') {
+    return copyTransient(discrete)
+  }
+  if (older.kind === 'earth-called-rock' && newer.kind === 'earth-called-rock') {
+    const rock = blend < 1 ? older : newer
+    return {
+      ...rock,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      fallVelocity: lerp(older.fallVelocity, newer.fallVelocity, blend),
+      height: lerp(older.height, newer.height, blend),
+      position: {
+        x: lerp(older.position.x, newer.position.x, blend),
+        y: lerp(older.position.y, newer.position.y, blend),
+      },
+      rotation: lerp(older.rotation, newer.rotation, blend),
+      speed: lerp(older.speed, newer.speed, blend),
+    }
+  }
+  if (older.kind === 'earth-called-rock' || newer.kind === 'earth-called-rock') {
     return copyTransient(discrete)
   }
   if (older.kind === 'fire' && newer.kind === 'fire') {
@@ -131,6 +150,9 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
   if (effect.kind === 'earth-impact') {
     return { ...effect, origin: { ...effect.origin } }
+  }
+  if (effect.kind === 'earth-called-rock') {
+    return { ...effect, position: { ...effect.position } }
   }
   return {
     ...effect,

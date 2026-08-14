@@ -1,18 +1,29 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { Container, Texture } from 'pixi.js'
+
+import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import {
   EARTH_BOULDER_GLIMMER_RECORD,
   EARTH_BOULDER_GLIMMER_SCALE,
   EARTH_BOULDER_DEPTH_PLANE,
   EARTH_BOULDER_DRAW_SCALE_MINIMUM,
-  EARTH_BOULDER_FRAGMENT_FADE_PER_TICK,
   EARTH_BOULDER_MAIN_RECORDS,
   EARTH_BOULDER_OPENING_FADE_PER_TICK,
   EARTH_BOULDER_LIT_RECORDS,
   earthBoulderImpactPlan,
   earthBoulderPresentationPlan,
 } from './earth-boulder-presentation.ts'
+import {
+  earthImpactFragmentsAtAge,
+  earthImpactLifetimeTicks,
+} from '../core-kernels/primary-spell-earth.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import type { PlayerWorldTextures } from './world-player-textures.ts'
+
+const WORLD_KEY = 'boneyard:test'
 
 function held(ageTicks: number, charge: number, id = 17) {
   return earthBoulderPresentationPlan({
@@ -105,44 +116,191 @@ test('record 86 crossfades away while the real rock body crossfades in', () => {
   assert.equal(mature.bodyAlpha, 1)
 })
 
-test('called rocks use the lit bank, native cadence, and accelerating inward path', () => {
-  const early = held(24, Math.fround(0.21))
-  assert.ok(early.calledRocks.length > 0)
-  assert.ok(early.calledRocks.every((rock) => EARTH_BOULDER_LIT_RECORDS.includes(rock.record)))
-  assert.ok(early.calledRocks.every((rock) => rock.spawnTick <= 24))
-  assert.ok(early.calledRocks.every((rock) => rock.speed <= 5))
-  assert.ok(early.calledRocks.every((rock) => rock.distance <= rock.spawnDistance))
-  assert.ok(early.calledRocks.some((rock) => rock.distance < rock.spawnDistance))
-
-  const late = held(120, Math.fround(0.33))
-  const lateAgain = held(120, Math.fround(0.33))
-  assert.deepEqual(lateAgain.calledRocks, late.calledRocks)
-  assert.ok(late.calledRocks.length < 120)
-
-  const released = earthBoulderPresentationPlan({
-    ageTicks: 130,
-    charge: Math.fround(0.33),
-    flightTicks: 10,
-    id: 17,
-    phase: 'flight',
-  })
-  assert.ok(released.calledRocks.every((rock) => rock.spawnTick <= 120))
-  assert.ok(released.calledRocks.every((rock) => rock.falling))
-})
-
-test('Earth impact scatters the native lit family with the native minimum and fade', () => {
-  const minimum = earthBoulderImpactPlan({ ageTicks: 0, charge: Math.fround(0.18), id: 17 })
-  const full = earthBoulderImpactPlan({ ageTicks: 0, charge: 1, id: 17 })
-  const fading = earthBoulderImpactPlan({ ageTicks: 10, charge: 1, id: 17 })
+test('Earth impact uses the exact fragment domains and recurrent angle distribution', () => {
+  const minimumState = { ageTicks: 0, birthTick: 40, charge: Math.fround(0.18), id: 17 }
+  const fullState = { ageTicks: 0, birthTick: 40, charge: 1, id: 17 }
+  const minimum = earthBoulderImpactPlan(minimumState)
+  const full = earthBoulderImpactPlan(fullState)
 
   assert.equal(minimum.fragments.length, 8)
   assert.equal(full.fragments.length, 30)
   assert.ok(full.fragments.every((fragment) => EARTH_BOULDER_LIT_RECORDS.includes(fragment.record)))
-  assert.deepEqual(earthBoulderImpactPlan({ ageTicks: 0, charge: 1, id: 17 }), full)
-  assert.equal(full.alpha, 1)
-  assert.equal(fading.alpha, 1 - 10 * EARTH_BOULDER_FRAGMENT_FADE_PER_TICK)
-  assert.ok(fading.fragments.some((fragment, index) => (
-    fragment.position.x !== full.fragments[index].position.x
-    || fragment.position.y !== full.fragments[index].position.y
+  assert.deepEqual(earthBoulderImpactPlan(fullState), full)
+  assert.ok(full.fragments.every(({ alpha, height, position, scale }) => (
+    alpha === 1
+    && height <= 0
+    && height >= -50
+    && Math.hypot(position.x, position.y / 0.8) <= 45
+    && scale <= 0.75
   )))
+
+  const directions = full.fragments.map(({ position }) => (
+    Math.atan2(position.y / 0.8, position.x) * 180 / Math.PI + 360
+  ) % 360)
+  for (let index = 1; index < directions.length; index += 1) {
+    const delta = (directions[index] - directions[index - 1] + 360) % 360
+    assert.ok(delta >= 8 && delta <= 16)
+  }
 })
+
+test('Earth fragments obey the global modulo-three motion and two-stage fade', () => {
+  const seed = { birthTick: 2, charge: 1, id: 17 }
+  const born = earthImpactFragmentsAtAge(seed, 0)
+  const skipped = earthImpactFragmentsAtAge(seed, 1)
+  const moved = earthImpactFragmentsAtAge(seed, 2)
+  assert.deepEqual(skipped.map(({ position }) => position), born.map(({ position }) => position))
+  assert.equal(skipped[0].alpha, Math.fround(10 - Math.fround(0.025)))
+  assert.notDeepEqual(moved.map(({ position }) => position), skipped.map(({ position }) => position))
+  assert.equal(
+    moved[0].alpha,
+    Math.fround(Math.fround(skipped[0].alpha - Math.fround(0.015)) - Math.fround(0.025)),
+  )
+
+  let settledAge = 1
+  while (!earthImpactFragmentsAtAge(seed, settledAge).some(({ height }) => height === 0)) {
+    settledAge += 1
+  }
+  while ((seed.birthTick + settledAge + 1) % 3 !== 0) settledAge += 1
+  const settled = earthImpactFragmentsAtAge(seed, settledAge)
+  const next = earthImpactFragmentsAtAge(seed, settledAge + 1)
+  const stopped = settled.find(({ height }) => height === 0)
+  assert.ok(stopped)
+  const stoppedNext = next.find(({ index }) => index === stopped.index)
+  assert.ok(stoppedNext)
+  assert.equal(stoppedNext.height, 0)
+  assert.equal(
+    stoppedNext.alpha,
+    Math.fround(Math.fround(stopped.alpha - Math.fround(0.015)) - Math.fround(0.025)),
+  )
+
+  const lifetimeTicks = earthImpactLifetimeTicks(seed)
+  assert.ok(earthImpactFragmentsAtAge(seed, lifetimeTicks - 1).length > 0)
+  assert.equal(earthImpactFragmentsAtAge(seed, lifetimeTicks).length, 0)
+})
+
+test('Earth actors publish independent full-suffix painter and light roots', () => {
+  const root = new Container()
+  const view = new PrimarySpellWorldView(root, worldTextures())
+  view.update(worldFixture(), WORLD_KEY)
+  const layers = view.painterLayers()
+  const body = layers.find(({ id }) => id === 'primary-spell:1')
+  const called = layers.find(({ id }) => id === 'primary-spell:3')
+  const fragments = layers.filter(({ id }) => id.startsWith('primary-spell:2:fragment-'))
+
+  assert.deepEqual(body?.regionLightPoint, { x: 100, y: 200 })
+  assert.equal(called?.regionLightPoint, null)
+  assert.equal(fragments.length, 30)
+  assert.deepEqual(
+    fragments.map(({ id }) => id),
+    Array.from({ length: 30 }, (_, index) => `primary-spell:2:fragment-${index}`),
+  )
+  assert.ok(fragments.every(({ regionLightPoint, sortBias }) => (
+    regionLightPoint !== null && sortBias === -15
+  )))
+  assert.equal(root.children.length, 32)
+
+  const firstRoot = root.children.find(({ label }) => label === 'earth-impact-fragment-0')
+  const secondRoot = root.children.find(({ label }) => label === 'earth-impact-fragment-1')
+  const calledRoot = root.children.find(({ label }) => label === 'earth-called-rock')
+  assert.ok(firstRoot && secondRoot && calledRoot)
+  view.setTint('primary-spell:2:fragment-0', 0x123456)
+  assert.equal(firstRoot.children[0].tint, 0x123456)
+  assert.equal(secondRoot.children[0].tint, 0xffffff)
+  view.setTint('primary-spell:3', 0x123456)
+  assert.equal(calledRoot.children[0].tint, 0xffffff)
+  view.setDepth('primary-spell:2:fragment-1', 999)
+  assert.equal(secondRoot.zIndex, 999)
+  assert.notEqual(firstRoot.zIndex, 999)
+
+  view.update({ nextId: 4, projectiles: [], transients: [] }, WORLD_KEY)
+  assert.equal(root.children.length, 0)
+  assert.equal(view.count, 0)
+  view.destroy()
+})
+
+test('independent fragment roots interleave with unrelated global painter actors', () => {
+  const root = new Container()
+  const view = new PrimarySpellWorldView(root, worldTextures())
+  view.update(worldFixture(), WORLD_KEY)
+  const fragments = view.painterLayers()
+    .filter(({ id }) => id.startsWith('primary-spell:2:fragment-'))
+    .sort((left, right) => (
+      left.worldY + left.sortBias - right.worldY - right.sortBias
+    ))
+  const low = fragments[0]
+  const high = fragments.at(-1)!
+  assert.ok(high.worldY + high.sortBias - low.worldY - low.sortBias > 4)
+  const enemyY = (
+    low.worldY + low.sortBias + high.worldY + high.sortBias
+  ) / 2
+  const order = buildBoneyardPainterOrder({
+    referenceY: 0,
+    staticLayers: [],
+    dynamicLayers: [
+      ...fragments,
+      { id: 'enemy:test', sortBias: 0, sourceOrder: fragments.length, worldY: enemyY },
+    ],
+  }).dynamicLayers.map(({ id }) => id)
+  assert.ok(order.indexOf(low.id) < order.indexOf('enemy:test'))
+  assert.ok(order.indexOf('enemy:test') < order.indexOf(high.id))
+  view.destroy()
+})
+
+function worldFixture(): PrimarySpellSimulationState {
+  const impactSeed = { birthTick: 40, charge: 1, id: 2 }
+  return {
+    nextId: 4,
+    projectiles: [{
+      ageTicks: 30,
+      charge: 1,
+      direction: { x: 0, y: -1 },
+      flightTicks: 0,
+      id: 1,
+      kind: 'earth',
+      ownerId: 'wizard',
+      phase: 'held',
+      position: { x: 100, y: 200 },
+      velocity: { x: 0, y: 0 },
+      worldKey: WORLD_KEY,
+    }],
+    transients: [{
+      ageTicks: 0,
+      ...impactSeed,
+      kind: 'earth-impact',
+      lifetimeTicks: earthImpactLifetimeTicks(impactSeed),
+      origin: { x: 300, y: 400 },
+      ownerId: 'wizard',
+      worldKey: WORLD_KEY,
+    }, {
+      ageTicks: 4,
+      falling: false,
+      fallVelocity: 0,
+      height: -8,
+      id: 3,
+      kind: 'earth-called-rock',
+      lateralMagnitude: 2,
+      ownerId: 'wizard',
+      parentId: 1,
+      position: { x: 150, y: 250 },
+      rotation: 45,
+      rotationStep: 8,
+      scale: 0.2,
+      speed: 0.3,
+      targetHeight: -50,
+      variant: 1,
+      worldKey: WORLD_KEY,
+    }],
+  }
+}
+
+function worldTextures(): PlayerWorldTextures {
+  return {
+    primarySpells: {
+      earth: {
+        glimmer: Texture.EMPTY,
+        litRocks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+        rocks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+      },
+    },
+  } as PlayerWorldTextures
+}

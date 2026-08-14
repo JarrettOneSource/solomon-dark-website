@@ -12,6 +12,11 @@ import {
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
 } from './primary-spell-water.ts'
+import {
+  earthImpactLifetimeTicks,
+  earthVisualRandomInt,
+  earthVisualUnitRandom,
+} from './primary-spell-earth.ts'
 import type { Vector2 } from './vector.ts'
 import {
   nativeFireParticleLifetimeTicks,
@@ -19,7 +24,12 @@ import {
 } from './primary-spell-fire-native.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
-export type PrimarySpellTransientKind = 'air' | 'earth-impact' | 'fire' | 'water'
+export type PrimarySpellTransientKind =
+  | 'air'
+  | 'earth-called-rock'
+  | 'earth-impact'
+  | 'fire'
+  | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
 export interface PrimarySpellProjectileState {
@@ -49,11 +59,33 @@ export interface PrimarySpellChannelTransientState {
 
 export interface PrimarySpellEarthImpactState {
   ageTicks: number
+  birthTick: number
   charge: number
   id: number
   kind: 'earth-impact'
+  lifetimeTicks: number
   origin: Vector2
   ownerId: string
+  worldKey: string
+}
+
+export interface PrimarySpellEarthCalledRockState {
+  ageTicks: number
+  fallVelocity: number
+  falling: boolean
+  height: number
+  id: number
+  kind: 'earth-called-rock'
+  lateralMagnitude: number
+  ownerId: string
+  parentId: number
+  position: Vector2
+  rotation: number
+  rotationStep: number
+  scale: number
+  speed: number
+  targetHeight: number
+  variant: number
   worldKey: string
 }
 
@@ -70,6 +102,7 @@ export interface PrimarySpellFireParticleState {
 
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
+  | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellFireParticleState
 
@@ -110,7 +143,10 @@ export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
 export const PRIMARY_SPELL_EARTH_RELEASE_COLLISION_RADIUS_SCALE = 45
 export const PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE = 75
-export const PRIMARY_SPELL_EARTH_IMPACT_LIFETIME_TICKS = 40
+export const PRIMARY_SPELL_EARTH_CALLED_ROCK_INITIAL_SPEED = Math.fround(0.1)
+export const PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_MULTIPLIER = 1.100000023841858
+export const PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_CAP = 5
+export const PRIMARY_SPELL_EARTH_CALLED_ROCK_REMOVE_DISTANCE = 5
 export const PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE = Math.fround(
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE + PRIMARY_SPELL_EARTH_CHARGE_STEP,
 )
@@ -215,9 +251,17 @@ export function primarySpellEmitterOffset(
 
 export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpellTickResult {
   let nextId = context.spells.nextId
-  let transients = context.spells.transients
-    .filter((effect) => effect.ageTicks + 1 < transientLifetime(effect))
-    .map((effect) => ({ ...effect, ageTicks: effect.ageTicks + 1 }))
+  const existingCalledRockIds = new Set(context.spells.transients
+    .filter((effect) => effect.kind === 'earth-called-rock')
+    .map((effect) => effect.id))
+  let transients: PrimarySpellTransientState[] = []
+  for (const effect of context.spells.transients) {
+    if (effect.kind === 'earth-called-rock') {
+      transients.push(effect)
+    } else if (effect.ageTicks + 1 < transientLifetime(effect)) {
+      transients.push({ ...effect, ageTicks: effect.ageTicks + 1 })
+    }
+  }
   let projectiles: PrimarySpellProjectileState[] = []
   for (const spell of context.spells.projectiles) {
     if (spell.phase === 'held') {
@@ -226,7 +270,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
     if (spell.flightTicks >= PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS) {
       if (spell.kind === 'earth') {
-        transients = [...transients, earthImpact(nextId, spell)]
+        transients = [...transients, earthImpact(nextId, spell, context.tick)]
         nextId += 1
       }
       continue
@@ -240,7 +284,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         spell.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
       )
     ) {
-      transients = [...transients, earthImpact(nextId, advanced)]
+      transients = [...transients, earthImpact(nextId, advanced, context.tick)]
       nextId += 1
       continue
     }
@@ -418,6 +462,24 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               worldKey,
             }
           })
+          const heldBoulder = projectiles.find((spell) => (
+            spell.kind === 'earth'
+            && spell.ownerId === playerId
+            && spell.phase === 'held'
+          ))
+          if ((rawHeld || !earthReleaseEligible)
+            && heldBoulder
+            && heldBoulder.charge < 1
+            && earthCalledRockEmits(
+              heldBoulder,
+              context.tick,
+            )) {
+            transients = [...transients, createEarthCalledRock(
+              nextId,
+              heldBoulder,
+            )]
+            nextId += 1
+          }
           break
         }
         case 'ether':
@@ -462,7 +524,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           )) {
             releasedProjectiles.push(releasedSpell)
           } else {
-            transients = [...transients, earthImpact(nextId, releasedSpell)]
+            transients = [...transients, earthImpact(nextId, releasedSpell, context.tick)]
             nextId += 1
           }
         }
@@ -487,6 +549,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
     players[playerId] = nextPlayer
   }
+
+  const bouldersById = new Map(projectiles
+    .filter((spell) => spell.kind === 'earth')
+    .map((spell) => [spell.id, spell]))
+  const advancedTransients: PrimarySpellTransientState[] = []
+  for (const effect of transients) {
+    if (effect.kind !== 'earth-called-rock' || !existingCalledRockIds.has(effect.id)) {
+      advancedTransients.push(effect)
+      continue
+    }
+    const advanced = advanceEarthCalledRock(effect, bouldersById.get(effect.parentId))
+    if (advanced) advancedTransients.push(advanced)
+  }
+  transients = advancedTransients
 
   return {
     players,
@@ -592,7 +668,8 @@ function advanceProjectile(
 function transientLifetime(effect: PrimarySpellTransientState): number {
   switch (effect.kind) {
     case 'air': return PRIMARY_SPELL_AIR_LIFETIME_TICKS
-    case 'earth-impact': return PRIMARY_SPELL_EARTH_IMPACT_LIFETIME_TICKS
+    case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
+    case 'earth-impact': return effect.lifetimeTicks
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
   }
@@ -601,15 +678,115 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
 function earthImpact(
   id: number,
   spell: PrimarySpellProjectileState,
+  birthTick: number,
 ): PrimarySpellEarthImpactState {
-  return {
+  const seed = {
     ageTicks: 0,
+    birthTick,
     charge: spell.charge,
     id,
     kind: 'earth-impact',
+    lifetimeTicks: 0,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
     worldKey: spell.worldKey,
+  } satisfies PrimarySpellEarthImpactState
+  return { ...seed, lifetimeTicks: earthImpactLifetimeTicks(seed) }
+}
+
+function earthCalledRockEmits(
+  boulder: PrimarySpellProjectileState,
+  tick: number,
+): boolean {
+  return boulder.charge < 0.25
+    || earthVisualRandomInt(boulder.id, 0x3000 + tick, 3) === 1
+}
+
+function createEarthCalledRock(
+  id: number,
+  boulder: PrimarySpellProjectileState,
+): PrimarySpellEarthCalledRockState {
+  const angle = earthVisualUnitRandom(id, 0x4000) * Math.PI * 2
+  const spawnRadius = earthVisualUnitRandom(id, 0x5000)
+    * Math.max(5, Math.min(120, 50 * boulder.charge))
+  return {
+    ageTicks: 0,
+    falling: false,
+    fallVelocity: 0,
+    height: -2,
+    id,
+    kind: 'earth-called-rock',
+    lateralMagnitude: Math.fround(earthVisualUnitRandom(id, 0x6000) * 4),
+    ownerId: boulder.ownerId,
+    parentId: boulder.id,
+    position: {
+      x: Math.fround(boulder.position.x + Math.cos(angle) * spawnRadius),
+      y: Math.fround(boulder.position.y + Math.sin(angle) * spawnRadius),
+    },
+    rotation: Math.fround(earthVisualUnitRandom(id, 0x7000) * 360),
+    rotationStep: Math.fround((earthVisualUnitRandom(id, 0x7100) * 2 - 1) * 30),
+    scale: Math.fround(0.75 * Math.min(boulder.charge, 0.75)),
+    speed: PRIMARY_SPELL_EARTH_CALLED_ROCK_INITIAL_SPEED,
+    targetHeight: Math.fround(
+      -40 - 30 * boulder.charge + earthVisualUnitRandom(id, 0x7200) * 5,
+    ),
+    variant: earthVisualRandomInt(id, 0x7300, 3),
+    worldKey: boulder.worldKey,
+  }
+}
+
+function advanceEarthCalledRock(
+  rock: PrimarySpellEarthCalledRockState,
+  parent: PrimarySpellProjectileState | undefined,
+): PrimarySpellEarthCalledRockState | null {
+  if (rock.falling) {
+    const height = Math.fround(rock.height + rock.fallVelocity)
+    const accelerated = Math.fround(rock.fallVelocity + 1)
+    const fallVelocity = height > 0 ? Math.fround(0.25) : accelerated
+    if (height > 10) return null
+    return { ...rock, ageTicks: rock.ageTicks + 1, fallVelocity, height }
+  }
+
+  const speed = Math.min(
+    PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_CAP,
+    Math.fround(rock.speed * PRIMARY_SPELL_EARTH_CALLED_ROCK_SPEED_MULTIPLIER),
+  )
+  let position = rock.position
+  let falling = parent?.phase !== 'held'
+  if (!falling && parent) {
+    const dx = parent.position.x - rock.position.x
+    const dy = parent.position.y - rock.position.y
+    const distance = Math.hypot(dx, dy)
+    if (distance < PRIMARY_SPELL_EARTH_CALLED_ROCK_REMOVE_DISTANCE) return null
+    const toward = distance > 0 ? { x: dx / distance, y: dy / distance } : { x: 0, y: 0 }
+    position = {
+      x: Math.fround(rock.position.x + toward.x * speed),
+      y: Math.fround(rock.position.y + toward.y * speed),
+    }
+    const nextDx = parent.position.x - position.x
+    const nextDy = parent.position.y - position.y
+    const nextDistance = Math.hypot(nextDx, nextDy)
+    if (nextDistance > 0) {
+      position = {
+        x: Math.fround(position.x - nextDy / nextDistance * rock.lateralMagnitude),
+        y: Math.fround(position.y + nextDx / nextDistance * rock.lateralMagnitude),
+      }
+    }
+  } else {
+    falling = true
+  }
+
+  const heightDirection = Math.sign(rock.targetHeight - rock.height)
+  return {
+    ...rock,
+    ageTicks: rock.ageTicks + 1,
+    falling,
+    height: heightDirection === 0
+      ? rock.height
+      : Math.fround(rock.height + heightDirection * 1.5),
+    position,
+    rotation: Math.fround(rock.rotation + rock.rotationStep),
+    speed,
   }
 }
 

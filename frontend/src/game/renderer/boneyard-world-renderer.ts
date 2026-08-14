@@ -44,7 +44,6 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
-import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
@@ -660,23 +659,14 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(player.position, lightSources),
       ))
     }
-    for (const spell of snapshot.primarySpells.projectiles) {
-      if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-      if (spell.kind === 'fire') continue
+    for (const layer of this.primarySpells.painterLayers()) {
+      if (!layer.regionLightPoint) continue
       this.primarySpells.setTint(
-        `primary-spell:${spell.id}`,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(spell.position, lightSources)),
-      )
-    }
-    for (const effect of snapshot.primarySpells.transients) {
-      if (effect.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-      if (effect.kind === 'fire') continue
-      const lightPosition = effect.kind === 'water'
-        ? waterFrostJetPlan(effect).position
-        : effect.origin
-      this.primarySpells.setTint(
-        `primary-spell:${effect.id}`,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(lightPosition, lightSources)),
+        layer.id,
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(
+          layer.regionLightPoint,
+          lightSources,
+        )),
       )
     }
     for (const enemy of enemySnapshots) {

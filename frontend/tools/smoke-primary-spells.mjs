@@ -470,7 +470,6 @@ async function captureHubEarthStage(page, screenshotPath) {
     const plan = earthBoulderPresentationPlan(state)
     return {
       bodyAlpha: plan.bodyAlpha,
-      calledRockCount: plan.calledRocks.length,
       glimmerAlpha: plan.glimmer.alpha,
       mainRockCount: plan.rocks.length,
     }
@@ -481,7 +480,7 @@ async function captureHubEarthStage(page, screenshotPath) {
   await page.screenshot({ path: screenshotPath })
   return {
     frame,
-    presentation,
+    presentation: { ...presentation, calledRockCount: wire.calledRockCount },
     wire,
   }
 }
@@ -498,6 +497,10 @@ async function latestWireSpell(page, kind) {
       const state = states.find((candidate) => kinds.includes(candidate.kind))
       if (state) {
         return {
+          calledRockCount: states.filter((candidate) => (
+            candidate.kind === 'earth-called-rock'
+            && candidate.parentId === state.id
+          )).length,
           projectileCount: wire.primarySpells.projectiles.length,
           state,
           tick: wire.tick,
