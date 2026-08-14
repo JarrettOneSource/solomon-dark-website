@@ -1,9 +1,18 @@
-import type { Vec2 } from '../../editor/model.ts'
+import type { SpriteRef, Vec2 } from '../../editor/model.ts'
 
-export interface NativeBoneyardLightSource {
+export interface NativeBoneyardLightSample {
   intensity: number
   position: Vec2
   radius: number
+}
+
+export interface NativeBoneyardLightSource extends NativeBoneyardLightSample {
+  multipleShadows: boolean
+}
+
+export interface NativeSolomonSetPieceLighting {
+  digRootTint: number
+  lanternTint: number
 }
 
 interface NativePlayerLightOwner {
@@ -19,6 +28,9 @@ export const NATIVE_PLAYER_LIGHT_OFFSET = 15
 export const NATIVE_LANTERN_LIGHT_RADIUS = 0.65
 export const NATIVE_LANTERN_LIGHT_MIN_INTENSITY = 0.55
 export const NATIVE_LANTERN_LIGHT_FLICKER = 0.2
+export const NATIVE_REGION_LIGHT_ATLAS = 'DeadHawg'
+export const NATIVE_REGION_LIGHT_ENTRY = 18
+export const NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX = 0.5
 
 const NATIVE_LIGHT_FALLOFF_SQUARED = (
   NATIVE_LIGHT_OUTER_DISTANCE ** 2 - NATIVE_LIGHT_INNER_DISTANCE ** 2
@@ -30,6 +42,7 @@ export function nativePlayerLightSource(
   const heading = player.headingIndex * 15 * Math.PI / 180
   return {
     intensity: 1,
+    multipleShadows: true,
     position: {
       x: player.position.x + Math.sin(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
       y: player.position.y - Math.cos(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
@@ -45,14 +58,38 @@ export function nativeLanternLightSource(
   return {
     intensity: NATIVE_LANTERN_LIGHT_MIN_INTENSITY
       + presentationRandom(presentationFrame) * NATIVE_LANTERN_LIGHT_FLICKER,
+    multipleShadows: false,
     position,
     radius: NATIVE_LANTERN_LIGHT_RADIUS,
   }
 }
 
+export function nativeAcceptedBoneyardLightSources(
+  candidates: readonly NativeBoneyardLightSource[],
+  accepted: NativeBoneyardLightSource[],
+): readonly NativeBoneyardLightSource[] {
+  accepted.length = 0
+  for (const candidate of candidates) {
+    const contained = !candidate.multipleShadows && accepted.some((existing) => {
+      if (
+        existing.intensity < candidate.intensity
+        || existing.radius < candidate.radius
+      ) return false
+      const dx = existing.position.x - candidate.position.x
+      const dy = existing.position.y - candidate.position.y
+      const containmentRadius = (
+        (existing.radius - candidate.radius) * NATIVE_LIGHT_OUTER_DISTANCE
+      )
+      return dx * dx + dy * dy < containmentRadius * containmentRadius
+    })
+    if (!contained) accepted.push(candidate)
+  }
+  return accepted
+}
+
 export function nativeBoneyardLightScalar(
   position: Vec2,
-  sources: readonly NativeBoneyardLightSource[],
+  sources: readonly NativeBoneyardLightSample[],
 ): number {
   let scalar = 0
   for (const source of sources) {
@@ -78,6 +115,44 @@ export function nativeBoneyardLightScalar(
 export function nativeBoneyardLightTint(scalar: number): number {
   const lane = Math.round(Math.max(0, Math.min(1, scalar)) * 255)
   return lane * 0x010101
+}
+
+export function nativeSolomonSetPieceLighting(
+  digPosition: Vec2,
+  lanternPosition: Vec2,
+  sources: readonly NativeBoneyardLightSample[],
+): NativeSolomonSetPieceLighting {
+  return {
+    digRootTint: nativeBoneyardLightTint(
+      nativeBoneyardLightScalar(digPosition, sources),
+    ),
+    lanternTint: nativeBoneyardLightTint(
+      nativeBoneyardLightScalar(lanternPosition, sources),
+    ),
+  }
+}
+
+export function nativeRegionLightStamp(
+  source: NativeBoneyardLightSample,
+  screenPosition: Vec2,
+  sprite: Pick<SpriteRef, 'anchorX' | 'anchorY' | 'h' | 'w'>,
+  zoom: number,
+): {
+  alpha: number
+  anchorX: number
+  anchorY: number
+  scale: number
+  x: number
+  y: number
+} {
+  return {
+    alpha: source.intensity,
+    anchorX: sprite.anchorX / sprite.w,
+    anchorY: sprite.anchorY / sprite.h,
+    scale: source.radius * zoom,
+    x: screenPosition.x,
+    y: screenPosition.y,
+  }
 }
 
 function presentationRandom(frame: number): number {

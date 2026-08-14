@@ -488,6 +488,9 @@ async function boneyardPainterReceipt(page) {
       maxMainLightScalar: diagnostics?.maxMainLightScalar,
       maxMainZIndex: diagnostics?.maxMainZIndex,
       minMainLightScalar: diagnostics?.minMainLightScalar,
+      regionLightComposite: canvas?.getAttribute('data-region-light-composite'),
+      regionLightCompositeZIndex: diagnostics?.regionLightCompositeZIndex,
+      regionLightEntry: canvas?.getAttribute('data-region-light-entry'),
       regionLighting: canvas?.getAttribute('data-region-lighting'),
       renderer: canvas?.getAttribute('data-game-renderer'),
       sceneBandCount: Number(scene?.getAttribute('data-painter-band-count')),
@@ -502,7 +505,11 @@ async function boneyardPainterReceipt(page) {
   })
   assert.equal(receipt.cameraRenderGroup, true)
   assert.equal(receipt.renderer, 'pixi-webgl')
-  assert.equal(receipt.regionLighting, 'native-object-scalar')
+  assert.equal(receipt.regionLighting, 'native-region-field+object-scalar')
+  assert.equal(receipt.regionLightComposite, 'multiply-pre-main')
+  assert.equal(receipt.regionLightEntry, 'DeadHawg:18')
+  assert.ok(receipt.regionLightCompositeZIndex > 0)
+  assert.ok(receipt.regionLightCompositeZIndex < receipt.localPlayerZIndex)
   assert.equal(receipt.sceneBandCount, receipt.bandCount)
   assert.ok(receipt.bandCount >= 2, 'expected scenery bands on both sides of live actors')
   assert.ok(receipt.staticLayerCount > 0)

@@ -58,12 +58,17 @@ import {
   type BoneyardWorldTextures,
 } from './boneyard-textures.ts'
 import {
+  NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
+  nativeAcceptedBoneyardLightSources,
   nativeBoneyardLightScalar,
   nativeBoneyardLightTint,
   nativeLanternLightSource,
   nativePlayerLightSource,
+  nativeSolomonSetPieceLighting,
   type NativeBoneyardLightSource,
+  type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
+import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   frameCount: number
@@ -93,6 +98,7 @@ interface BoneyardRendererFrameDiagnostics {
   staticPaintCount: number
   tick: number
   residentCount: number
+  regionLightCompositeZIndex: number
   visibleMainLayerCount: number
   visibleOversizedResidentCount: number
   visibleResidentCount: number
@@ -224,6 +230,12 @@ export async function createBoneyardWorldRenderer(
     staticWorld.mainResidents,
     staticWorld.foreground,
   )
+  const regionLightField = new BoneyardRegionLightField(
+    world,
+    textures.regionLightGlyph,
+    viewport,
+    initialResolution,
+  )
   const visibility = new BoneyardResidentVisibility(staticWorld.residents)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'boneyard-world-canvas'
@@ -231,7 +243,9 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
-  canvas.dataset.regionLighting = 'native-object-scalar'
+  canvas.dataset.regionLightComposite = 'multiply-pre-main'
+  canvas.dataset.regionLightEntry = 'DeadHawg:18'
+  canvas.dataset.regionLighting = 'native-region-field+object-scalar'
   canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
   canvas.style.width = `${viewport.width}px`
@@ -270,6 +284,7 @@ export async function createBoneyardWorldRenderer(
     staticPaintCount: staticWorld.staticPaintCount,
     tick: options.initialSnapshot.tick,
     residentCount: staticWorld.residents.length,
+    regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
     visibleMainLayerCount: 0,
     visibleOversizedResidentCount: 0,
     visibleResidentCount: 0,
@@ -306,6 +321,12 @@ export async function createBoneyardWorldRenderer(
         options.playerId,
         frameCount,
         visibility.visibleMainResidents,
+      )
+      regionLightField.render(
+        application.renderer,
+        scene.currentLightSources,
+        camera,
+        viewport,
       )
       const worldPosition = boneyardWorldPosition(camera, viewport)
       world.scale.set(BONEYARD_CAMERA_ZOOM)
@@ -355,6 +376,7 @@ export async function createBoneyardWorldRenderer(
       viewport = nextViewport
       resolution = nextResolution
       application.renderer.resize(viewport.width, viewport.height, resolution)
+      regionLightField.resize(viewport, resolution)
       canvas.dataset.resolution = `${resolution}`
       canvas.dataset.viewportHeight = `${viewport.height}`
       canvas.dataset.viewportWidth = `${viewport.width}`
@@ -366,6 +388,7 @@ export async function createBoneyardWorldRenderer(
       destroyed = true
       application.stage.removeChild(world)
       scene.destroy()
+      regionLightField.destroy()
       for (const resident of staticWorld?.residents ?? []) resident.texture.destroy(true)
       staticWorld = null
       world.destroy({ children: true })
@@ -400,6 +423,7 @@ class BoneyardDynamicScene {
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gates: BoneyardGateViews
+  private readonly lightSourceCandidates: NativeBoneyardLightSource[] = []
   private readonly lightSources: NativeBoneyardLightSource[] = []
   private readonly livePlayerIds = new Set<string>()
   private readonly mainLayers: readonly MainLayer[]
@@ -470,12 +494,16 @@ class BoneyardDynamicScene {
     const lanternLight = dig
       ? nativeLanternLightSource(dig.lanternPosition, presentationFrame)
       : null
-    const lightSources = this.lightSources
-    lightSources.length = 0
+    const lightSourceCandidates = this.lightSourceCandidates
+    lightSourceCandidates.length = 0
     for (const playerId in snapshot.players) {
-      lightSources.push(nativePlayerLightSource(snapshot.players[playerId]))
+      lightSourceCandidates.push(nativePlayerLightSource(snapshot.players[playerId]))
     }
-    if (lanternLight) lightSources.push(lanternLight)
+    if (lanternLight) lightSourceCandidates.push(lanternLight)
+    const lightSources = nativeAcceptedBoneyardLightSources(
+      lightSourceCandidates,
+      this.lightSources,
+    )
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
     for (const resident of visibleMainResidents) {
@@ -505,12 +533,11 @@ class BoneyardDynamicScene {
       )
     }
     if (dig) {
-      this.solomon?.setLighting(
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(dig.position, lightSources)),
-        nativeBoneyardLightTint(
-          nativeBoneyardLightScalar(dig.lanternPosition, lightSources),
-        ),
-      )
+      this.solomon?.setLighting(nativeSolomonSetPieceLighting(
+        dig.position,
+        dig.lanternPosition,
+        lightSources,
+      ))
     }
 
     const localPlayer = snapshot.players[localPlayerId]
@@ -603,6 +630,10 @@ class BoneyardDynamicScene {
     return this.players.size
   }
 
+  get currentLightSources(): readonly NativeBoneyardLightSource[] {
+    return this.lightSources
+  }
+
   playerWalkPose(playerId: string): number {
     return this.players.get(playerId)?.walkPose ?? 0
   }
@@ -678,9 +709,9 @@ class BoneyardSolomonView {
     this.lantern.zIndex = depth
   }
 
-  setLighting(digTint: number, lanternTint: number): void {
-    this.dig.tint = digTint
-    this.lantern.tint = lanternTint
+  setLighting(lighting: NativeSolomonSetPieceLighting): void {
+    this.digRoot.tint = lighting.digRootTint
+    this.lantern.tint = lighting.lanternTint
   }
 
   destroy(): void {
