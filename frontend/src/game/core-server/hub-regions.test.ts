@@ -10,6 +10,7 @@ import {
 import {
   HUB_PORTALS,
   HUB_REGION_DEFINITIONS,
+  clipHubRegionSegment,
   hubIncomingPlacement,
   hubPortalAt,
   isHubRegionTraversable,
@@ -256,6 +257,13 @@ test('private-room cameras center narrow rooms within the native 1600x900 view',
   const storeroom = hubRegionCameraOrigin('storeroom', { x: 537.5, y: 400 })
   assert.equal(storeroom.x, (1075 - HUB_VIEW_WIDTH) / 2)
   assert.equal(storeroom.y, 25)
+})
+
+test('clips an untargeted spell ray to the active Region geometry', () => {
+  assert.deepEqual(
+    clipHubRegionSegment('courtyard', { x: 100, y: 900 }, { x: -100, y: 900 }),
+    { x: 0, y: 900 },
+  )
 })
 
 test('each Courtyard door performs the recovered covered swap and private fade-in', () => {

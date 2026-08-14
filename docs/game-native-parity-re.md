@@ -11766,3 +11766,68 @@ report exposed.
   no tick rewind, stable Student ownership, and no browser error. It passed the
   explicit `60 FPS` floor, `20 ms` p99 ceiling, `40 ms` absolute ceiling, and
   zero-multiframe-stall threshold.
+
+## 2026-08-14 — Primary targeting, range, homing, and repeat-cast correction
+
+### Superseded assumptions
+
+- Air's prior fixed `205` endpoint was a Frost Jet constant, not Lightning
+  ownership. Native untargeted Lightning extends by twice the active Region
+  extent and clips to world geometry.
+- Magic Missile's prior direction-locked advance omitted its native target
+  handle, turn accumulator, and per-tick steering.
+- Ether and Fire were press-edge-only. Native input is held-level: a finished
+  one-shot Staff action is queued again while the button remains down.
+
+### Recovered contract
+
+- Lightning refreshes a 30-degree target cone every held tick. Candidates must
+  be live and visible, are ordered by lower native priority then nearest
+  distance, and include both combat actors (base priority `0`) and the Region
+  special-scenery lane. Gravestone type `2029` belongs to that lane and sets
+  priority `1000`, making it the native fallback when no combat actor qualifies.
+  A retained target may survive a
+  missed refresh while it remains alive and within the wider `dot>=0.71`
+  heading gate.
+- A targeted endpoint is the actor attachment plus its world position, clipped
+  against the world, then shifted upward 20 units. Gravestone's attachment is
+  exactly zero. With no target, the endpoint is the clipped Region-length ray.
+  The first Lightning middle control point lies half the source/endpoint
+  distance along the caster's original aim, so an off-axis target produces the
+  stock curved QuickSpline rather than a straight target line.
+- Native chain adjacency is radius `200`, nearest unused actor, with damage
+  multiplied by float32 `0.600000024` per hop. Rank-1 currently has no extra
+  hops, but the authoritative bolt representation preserves per-segment
+  geometry rather than baking rank into presentation.
+- Rank-1 Ether chooses the actor nearest a probe 100 units ahead of its launch
+  socket (squared-distance ceiling `999999`, no LOS requirement). Speed is
+  three units/tick. It moves on the current heading, then steers the next tick
+  with initial turn accumulator `0.01`, turn input `2`, `+0.05` while the
+  accumulator is at most one, `+0.002` above one, and cap `10`. Target loss
+  clears rank-1 homing; there is no native fixed flight timeout.
+- Staff Cast1 rate is float32 `0.075`. Neutral Ether keeps that rate. Neutral
+  Fire applies an additional `0.75`, yielding `0.05625`. The shared native
+  cast-speed helper uses equipment, Faster Caster, and element-class
+  multiplier/flat lanes; it is not a damage scalar. Ether must therefore emit
+  and finish sooner than Fire by default, and both restart while held after
+  their action completes.
+
+### Ownership and implementation boundary
+
+Target acquisition, retention, clipped bolt points, Ether target identity,
+heading, turn accumulator, and one-shot restart all belong to the authoritative
+fixed tick and wire state. Boneyard world construction retains targetable
+Gravestones and exposes active wave enemies; render code consumes the resulting
+semantic geometry/state only. Hub has no target candidates and therefore uses
+its clipped untargeted ray. The implementation will retain the existing
+deterministic cosmetic Lightning/Ether compositors while replacing their
+incorrect gameplay inputs.
+
+Evidence is static instruction/decompile work against retail
+`SolomonDark.exe` SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`:
+Air `0x00529AD0`, `0x0052BA80`, `0x0053F9C0`, `0x00641500`, `0x00641340`;
+Ether `0x0053CFE0`, `0x005E4990`, `0x005FD270`, `0x005E4A80`, `0x005E4B80`,
+`0x00641160`; Staff cadence `0x0044B170`, `0x004486E0`, `0x0052DA80`,
+`0x00656580`. Runtime proof remains pending until the combined five-element
+tree is integrated.

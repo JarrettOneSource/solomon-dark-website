@@ -167,6 +167,21 @@ test('mod Boneyards retain opaque script ownership instead of receiving retail w
   assert.equal(world.waves, null)
 })
 
+test('retains Gravestones as stable lower-priority Lightning targets', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.objects = [
+    { eid: 'grave-7', typeId: 2029, pos: { x: 300, y: 320 }, variant: 2 },
+    { eid: 'tree-2', typeId: 2001, pos: { x: 400, y: 420 }, variant: 0 },
+  ]
+  assert.deepEqual(createBoneyardWorld(loaded).scenerySpellTargets, [{
+    airPriority: 1000,
+    attachment: { x: 0, y: 0 },
+    id: 'scenery:grave-7',
+    kind: 'gravestone',
+    position: { x: 300, y: 320 },
+  }])
+})
+
 test('Solomon escape intent is clipped by authoritative Boneyard collision', () => {
   const loaded = encounterBoneyard('default')
   const world = createBoneyardWorld({

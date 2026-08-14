@@ -278,6 +278,28 @@ export function isHubRegionTraversable(
   )
 }
 
+export function clipHubRegionSegment(
+  region: HubRegionId,
+  start: Vector2,
+  end: Vector2,
+): Vector2 {
+  const definition = HUB_REGION_DEFINITIONS[region]
+  const boundaries: readonly HubSegment[] = [
+    { x1: 0, y1: 0, x2: definition.width, y2: 0 },
+    { x1: definition.width, y1: 0, x2: definition.width, y2: definition.height },
+    { x1: definition.width, y1: definition.height, x2: 0, y2: definition.height },
+    { x1: 0, y1: definition.height, x2: 0, y2: 0 },
+  ]
+  let hit = 1
+  for (const segment of [...definition.segments, ...boundaries]) {
+    hit = Math.min(hit, hubSegmentIntersectionParameter(start, end, segment))
+  }
+  return {
+    x: start.x + (end.x - start.x) * hit,
+    y: start.y + (end.y - start.y) * hit,
+  }
+}
+
 export function moveWithHubRegionCollisionState(
   region: HubRegionId,
   position: Vector2,
@@ -296,4 +318,22 @@ export function moveWithHubRegionCollisionState(
 
 export function isHubRegionId(value: string): value is HubRegionId {
   return (HUB_REGION_IDS as readonly string[]).includes(value)
+}
+
+function hubSegmentIntersectionParameter(
+  start: Vector2,
+  end: Vector2,
+  obstacle: HubSegment,
+): number {
+  const rayX = end.x - start.x
+  const rayY = end.y - start.y
+  const obstacleX = obstacle.x2 - obstacle.x1
+  const obstacleY = obstacle.y2 - obstacle.y1
+  const denominator = rayX * obstacleY - rayY * obstacleX
+  if (Math.abs(denominator) < 1e-12) return 1
+  const offsetX = obstacle.x1 - start.x
+  const offsetY = obstacle.y1 - start.y
+  const t = (offsetX * obstacleY - offsetY * obstacleX) / denominator
+  const u = (offsetX * rayY - offsetY * rayX) / denominator
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : 1
 }

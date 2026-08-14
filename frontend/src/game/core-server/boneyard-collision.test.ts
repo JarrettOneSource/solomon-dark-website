@@ -5,6 +5,7 @@ import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardGateLeaves } from '../core-kernels/boneyard-gate.ts'
 import {
   canPlaceBoneyardBody,
+  clipBoneyardSegment,
   createBoneyardCollisionWorld,
   resolveBoneyardMovement,
   withBoneyardGateCollision,
@@ -38,7 +39,7 @@ test('materializes native props and posts while moving gates remain world-owned'
   assert.equal(world.circles.length, 6)
   assert.deepEqual(world.circles.slice(0, 3), [
     { center: { x: 0, y: 0 }, radius: 12 },
-    { center: { x: 700, y: 700 }, radius: 1 },
+    { center: { x: 700, y: 700 }, radius: 1, sourceId: 'scenery:grave' },
     { center: { x: 1100, y: 1100 }, radius: 8 },
   ])
   assert.equal(world.segments.length, 1)
@@ -113,6 +114,40 @@ test('full-candidate placement rejects authored collision and arena bounds', () 
   assert.equal(canPlaceBoneyardBody({ x: 180, y: 250 }, bounds, world, 25), true)
   assert.equal(canPlaceBoneyardBody({ x: 200, y: 250 }, bounds, world, 25), false)
   assert.equal(canPlaceBoneyardBody({ x: 24, y: 250 }, bounds, world, 25), false)
+})
+
+test('clips spell rays against bounds and scenery while excluding the selected target', () => {
+  const bounds = { x: 0, y: 0, w: 300, h: 200 }
+  const collision = {
+    circles: [{ center: { x: 200, y: 100 }, radius: 10, sourceId: 'grave:selected' }],
+    polygons: [],
+    segments: [{
+      end: { x: 120, y: 180 },
+      radius: 0,
+      sourceId: 'fence:blocker',
+      start: { x: 120, y: 20 },
+    }],
+  }
+  assert.deepEqual(clipBoneyardSegment(
+    { x: 50, y: 100 },
+    { x: 250, y: 100 },
+    bounds,
+    collision,
+    'grave:selected',
+  ), { x: 120, y: 100 })
+  assert.deepEqual(clipBoneyardSegment(
+    { x: 150, y: 100 },
+    { x: 400, y: 100 },
+    bounds,
+    { ...collision, segments: [] },
+    'grave:selected',
+  ), { x: 300, y: 100 })
+  assert.deepEqual(clipBoneyardSegment(
+    { x: 150, y: 100 },
+    { x: 250, y: 100 },
+    bounds,
+    { ...collision, segments: [] },
+  ), { x: 190, y: 100 })
 })
 
 function makeScene(): BoneyardScene {

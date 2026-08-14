@@ -24,6 +24,7 @@ import {
   type PlayerCharacterInput,
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
+import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
   createBoneyardWaveDirector,
   retireBoneyardEnemy,
@@ -47,6 +48,7 @@ export interface BoneyardWorldState {
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   runId: string
+  scenerySpellTargets: readonly PrimarySpellTarget[]
   spawn: { x: number; y: number; facingDeg: number }
   waves: BoneyardWaveDirectorState | null
 }
@@ -68,6 +70,15 @@ export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState 
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     runId: loaded.runId,
+    scenerySpellTargets: loaded.scene.objects
+      .filter(({ typeId }) => typeId === 2029)
+      .map((object) => ({
+        airPriority: 1000,
+        attachment: { x: 0, y: 0 },
+        id: `scenery:${object.eid}`,
+        kind: 'gravestone' as const,
+        position: { ...object.pos },
+      })),
     spawn: { ...loaded.scene.spawn },
     waves: ownsRetailEncounter ? createBoneyardWaveDirector(loaded.seed) : null,
   }
