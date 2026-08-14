@@ -1,10 +1,15 @@
 export const AIR_LIGHTNING_BODY_LIFETIME_TICKS = 2
 export const AIR_LIGHTNING_CONTACT_LIFETIME_TICKS = 5
-export const AIR_LIGHTNING_NORMAL_SAMPLE_SPACING = 30
+export const AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING = 15
 export const AIR_LIGHTNING_SPLINE_DURATION = 2
 export const AIR_LIGHTNING_MAX_PARAMETER_STEP = 0.5
+export const AIR_LIGHTNING_FAST_INVERSE_SQRT_MAGIC = 0x5f3759df
 export const AIR_LIGHTNING_CORONA_CIRCLE_RECORD = 110
 export const AIR_LIGHTNING_CORONA_FORK_RECORDS = [1836, 1837, 1838, 1839] as const
+export const AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS = 1
+export const AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER = 0.75
+export const AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY = 1
+export const AIR_LIGHTNING_CONTACT_LIGHT_INTENSITY_DELTA = Math.fround(-0.05)
 
 const AIR_LIGHTNING_RIBBON_RECORD = 44
 const AIR_LIGHTNING_BASE_WIDTH = 25
@@ -16,6 +21,7 @@ const CONTACT_ALPHA_LEVELS = [1, 0.8, 0.6, 0.4, 0.2] as const
 const CONTACT_OFFSET_RADIUS = 10
 const CORONA_ANGLE_STEP_RADIANS = Math.PI / 180
 const SPLINE_NORMAL_DELTA = 0.001
+const FLOAT_BITS = new DataView(new ArrayBuffer(4))
 
 export interface NativeAirPoint {
   x: number
@@ -56,11 +62,19 @@ export interface NativeAirCoronaPlan {
   forks: readonly NativeAirCoronaFork[]
 }
 
+export interface NativeAirContactLightPlan {
+  intensity: number
+  multipleShadows: false
+  position: NativeAirPoint
+  radius: number
+}
+
 export interface NativeAirLightningPlan {
   body: {
     layers: readonly NativeAirRibbonLayer[]
   } | null
   contactCorona: NativeAirCoronaPlan
+  contactLight: NativeAirContactLightPlan | null
   endpoint: NativeAirPoint
   midpoint: NativeAirPoint
   source: NativeAirPoint
@@ -72,6 +86,20 @@ interface NativeAirLightningInput {
   direction: NativeAirPoint
   id: number
   reach: number
+}
+
+export interface NativeAirContactLightInput {
+  ageTicks: number
+  id: number
+  position: NativeAirPoint
+}
+
+interface NativeAirContactSamples {
+  angle: number
+  lightRadius: number
+  offsetAngle: number
+  offsetRadius: number
+  scale: number
 }
 
 /**
@@ -96,15 +124,12 @@ export function buildNativeAirLightningPlan(
   }
   const points = [source, midpoint, endpoint] as const
   const basePhaseDegrees = -3 * input.id
-  const contactRandom = randomStream(input.id, 0x434f4e54)
-  const contactRadius = contactRandom() * CONTACT_OFFSET_RADIUS
-  const contactDirection = contactRandom() * Math.PI * 2
+  const contactSamples = nativeContactSamples(input.id)
   const contactCenter = {
-    x: endpoint.x + Math.cos(contactDirection) * contactRadius,
-    y: endpoint.y + Math.sin(contactDirection) * contactRadius,
+    x: endpoint.x + Math.cos(contactSamples.offsetAngle) * contactSamples.offsetRadius,
+    y: endpoint.y + Math.sin(contactSamples.offsetAngle) * contactSamples.offsetRadius,
   }
-  const contactScale = 1 + contactRandom() * 0.5
-  const contactAngle = contactRandom() * Math.PI * 2
+  const contactAngle = contactSamples.angle
     + nativeAge * CORONA_ANGLE_STEP_RADIANS
 
   return {
@@ -119,16 +144,45 @@ export function buildNativeAirLightningPlan(
     contactCorona: buildCorona(
       contactCenter,
       CONTACT_ALPHA_LEVELS[nativeAge] ?? 0,
-      contactScale,
+      contactSamples.scale,
       contactAngle,
       randomStream(input.id, 0x46414445 ^ nativeAge),
     ),
+    contactLight: buildNativeAirContactLightPlan({
+      ageTicks: nativeAge,
+      id: input.id,
+      position: contactCenter,
+    }),
     endpoint,
     midpoint,
     source,
     sourceCorona: nativeAge < 1
       ? sourceCorona(input.id, source)
       : null,
+  }
+}
+
+/**
+ * Pure projection of the contact fade's outbound ZAnimLit source. Position is
+ * local to the spell origin, matching the rest of this Air render plan; the
+ * world-light collector owns translation and enrollment.
+ */
+export function buildNativeAirContactLightPlan(
+  input: NativeAirContactLightInput,
+): NativeAirContactLightPlan | null {
+  const nativeAge = Math.max(0, Math.floor(input.ageTicks))
+  if (nativeAge >= AIR_LIGHTNING_CONTACT_LIFETIME_TICKS) return null
+
+  let intensity = Math.fround(AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY)
+  for (let tick = 0; tick < nativeAge; tick += 1) {
+    intensity = Math.fround(intensity + AIR_LIGHTNING_CONTACT_LIGHT_INTENSITY_DELTA)
+  }
+
+  return {
+    intensity: Math.min(intensity, AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY),
+    multipleShadows: false,
+    position: input.position,
+    radius: nativeContactSamples(input.id).lightRadius,
   }
 }
 
@@ -224,23 +278,39 @@ function nativeParameterSamples(
   source: NativeAirPoint,
   midpoint: NativeAirPoint,
 ): Float32Array {
-  const firstLegDistance = Math.hypot(
-    midpoint.x - source.x,
-    midpoint.y - source.y,
+  const deltaX = Math.fround(Math.fround(midpoint.x) - Math.fround(source.x))
+  const deltaY = Math.fround(Math.fround(midpoint.y) - Math.fround(source.y))
+  const squaredDistance = Math.fround(deltaX * deltaX + deltaY * deltaY)
+  const inverseDistance = nativeFastInverseSquareRoot(squaredDistance)
+  const firstLegDistance = Math.fround(1 / inverseDistance)
+  const spacingRatio = Math.fround(
+    firstLegDistance / AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
   )
-  const rawStep = AIR_LIGHTNING_SPLINE_DURATION
-    / (firstLegDistance / AIR_LIGHTNING_NORMAL_SAMPLE_SPACING)
+  const rawStep = Math.fround(AIR_LIGHTNING_SPLINE_DURATION / spacingRatio)
   const step = Math.min(AIR_LIGHTNING_MAX_PARAMETER_STEP, rawStep)
   const samples: number[] = []
-  for (
-    let parameter = 0;
-    parameter < AIR_LIGHTNING_SPLINE_DURATION - step;
-    parameter += step
-  ) {
+  let parameter = Math.fround(0)
+  while (parameter < AIR_LIGHTNING_SPLINE_DURATION - step) {
     samples.push(parameter)
+    parameter = Math.fround(parameter + step)
   }
   samples.push(AIR_LIGHTNING_SPLINE_DURATION)
   return Float32Array.from(samples)
+}
+
+function nativeFastInverseSquareRoot(squaredDistance: number): number {
+  const halfSquaredDistance = Math.fround(squaredDistance * 0.5)
+  FLOAT_BITS.setFloat32(0, squaredDistance, true)
+  const squaredDistanceBits = FLOAT_BITS.getUint32(0, true)
+  FLOAT_BITS.setUint32(
+    0,
+    (AIR_LIGHTNING_FAST_INVERSE_SQRT_MAGIC - (squaredDistanceBits >>> 1)) >>> 0,
+    true,
+  )
+  const estimate = FLOAT_BITS.getFloat32(0, true)
+  return Math.fround(
+    estimate * (1.5 - halfSquaredDistance * estimate * estimate),
+  )
 }
 
 function quickSplinePoint(
@@ -330,6 +400,20 @@ function buildCorona(
         tint: 0xffffff,
       },
     ],
+  }
+}
+
+function nativeContactSamples(id: number): NativeAirContactSamples {
+  const random = randomStream(id, 0x434f4e54)
+  return {
+    offsetRadius: random() * CONTACT_OFFSET_RADIUS,
+    offsetAngle: random() * Math.PI * 2,
+    scale: 1 + random() * 0.5,
+    angle: random() * Math.PI * 2,
+    lightRadius: Math.fround(
+      AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS
+        + random() * AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER,
+    ),
   }
 }
 

@@ -8000,14 +8000,19 @@ world left-button level + world aim
 
 - Skill `24`; sustained handler `0x0053F9C0`; no projectile actor.
 - On press, arm the channel. Every held fixed tick emits a rank-1 reach-`205`
-  procedural bolt from the current cast socket in current aim. Each bolt fades
-  for 10 ticks with `alpha = 1 - 0.1*ageTicks`; release stops new bolts but
-  existing fades finish.
+  presentation record from the current cast socket in current aim. Each record
+  carries a two-tick, non-fading dual-ribbon body and a five-tick endpoint
+  corona; release stops new records while those owners finish independently.
 - Use constant Staff pose `K=0` on the insertion tick and `K=7` for every later
   held tick; do not replay the one-shot Cast 1 pose schedule.
-- Use deterministic jagged world geometry with a bright core and element-tinted
-  glow. This is the browser analogue of native procedural builder `0x00536380`,
-  not a substituted atlas projectile.
+- The body is the native `0x00534510` tessellation over source, midpoint, and
+  endpoint, called independently for white and cyan record-`44` ribbons. With
+  shipped-default Enhanced Effects On it uses 15-unit first-leg cadence, the
+  recovered fast inverse square root, and float32 loop accumulation. Separate
+  record-`110` plus `1836..1839` coronas own source and contact presentation.
+  The full corrected ownership, geometry, light-source mapping, and remaining
+  unknowns are authoritative in **Air primary cast presentation correction —
+  2026-08-14** below; they supersede the original PoC's generic polyline model.
 - On the start edge play registry 54 `sounds/lightningstart.wav` and acquire
   owner-keyed loop 162 `sounds/lightningloop__loop.wav`. Release loses that
   owner exactly once.
@@ -8067,9 +8072,10 @@ world left-button level + world aim
   expires free-flight actors after a named containment horizon. This prevents
   unbounded state and rolling audio but is not a native gameplay claim.
 - Air geometry and seeded Frost placement are deterministic render translations
-  of native procedural families. Their spawn cadence, range, sprite records,
-  lifetime, alpha, and ownership are native; their random samples are web
-  policy until a future pixel-trace campaign closes them.
+  of native procedural families. Air's exact dual-ribbon cadence, records,
+  lifetimes, and ownership are closed by the later correction; both elements'
+  random samples remain deterministic web policy until a pixel trace can
+  recover process-global RNG position.
 - Falsifiers: a spell emitted on mouse-down rather than Ether/Fire's action
   marker; a held Ether/Fire click spawning repeatedly; Air/Water continuing to
   emit or loop after release; sustained casts replaying Staff Cast 1 instead of
@@ -10245,6 +10251,11 @@ by the executable:
   `79d830e17beef1737aefe0eb9a9e22321c2d19a7ccb1337dc436ddb8c7e43f47`)
   and `/tmp/sd-air-ghidra-corona-20260814.log` (SHA-256
   `0896a025f6b3a200d0cf35409ef263e6930b41615685ed3af59ed39455d79854`).
+  The cadence/default-policy and `ZAnimLit` closure used read-only replica
+  `ghidra_project_replicas/slot-06`, the same exact executable, PyGhidra
+  `12.0.3`, and direct instruction/literal reads at
+  `0x0053461C..0x00534756`, `0x00534A8A..0x00535182`,
+  `0x00540072..0x005400F8`, `0x005E03D0`, `0x005FD1D0`, and `0x005E48E0`.
 - Art oracle: retail `images/BadGuys.bundle`, SHA-256
   `a7b13b464e035e2099081ce942db4aa231fc7c20de1ecacbd9d0a590132c88d3`,
   and `images/BadGuys.png`, SHA-256
@@ -10271,7 +10282,8 @@ by the executable:
 - Clean retail source-glow capture was later obtained in a loader-free Wine
   prefix on isolated Xvfb display `:98`, without touching the foreign Windows
   processes. The copied retail setting was `Game.FastCPU=false`, matching the
-  normal `30`-unit tessellation branch. The 132-frame, 60-fps held sequence
+  user-selectable Enhanced Effects Off / `30`-unit tessellation branch; it is
+  not the shipped new-profile default. The 132-frame, 60-fps held sequence
   `/tmp/sdr-stock-vfx-probe.9l2URj/stock-air-held-v2.mp4` has SHA-256
   `bd0fcc847fbc346cb4bd6b88cf602fcf1c679d24c68d91b065f0518da8907f10`;
   frame `stock-air-held-v2-0.25.png` has SHA-256
@@ -10373,22 +10385,46 @@ The tessellator appends all three points to `QuickSpline` (`0x00629EF0`,
 `0x0062BCA0`, coefficient builder `0x0062A9E0`, evaluator `0x0062B2F0`), so
 the middle point is native-significant even though the rank-1 untargeted
 primary supplies a collinear midpoint. Cadence deliberately measures only the
-first source-to-middle leg at `0x0053461C..0x005346DA`, divides that distance by
-normal spacing `30` (`0x005346FF`) or high-detail spacing `15`
-(`0x005346F7`), then computes
+first source-to-middle leg at `0x0053461C..0x005346DA`. It does not call an
+exact square root: `0x0053462A` seeds the Quake estimate with integer magic
+`0x5F3759DF`, and `0x005346C6..0x005346DA` performs one Newton refinement.
+The squared length, half-squared length, inverse estimate, recovered reciprocal
+distance, distance/spacing ratio, step, and every loop increment are rounded
+through native float32 stores. The refined distance is divided by Enhanced
+Effects On spacing `15` (`0x005346F7`) or Off spacing `30`
+(`0x005346FF`), then the builder computes
 `step = splineDuration / (firstLegDistance / spacing)` at
 `0x00534735..0x0053473D`. Float `0.5` at `0x007DE870` caps the step at
 `0x00534741..0x00534756`; it is not a cap of `1`. The loop is strict
 `t < duration - step` at `0x00534AD8..0x00534AEB`, advances by `step` at
-`0x0053516D..0x00535182`, and appends the exact duration endpoint separately.
+`0x0053516D..0x00535182`, stores the new parameter as float32 at the loop head,
+and appends the exact duration endpoint separately.
+
+Global byte `0x00B3BCAD` is the Settings `ENHANCED EFFECTS` control persisted
+under the misleading `Game.FastCPU` key. Loader
+`0x005BB310..0x005BB34F` uses capability byte `0x00B3BCAE` when the key is
+absent; the shipped defaults block omits the key and the recognized Windows
+path initializes the capability to `1`. A new shipped profile therefore uses
+Enhanced Effects On / spacing `15`. The preserved false-profile capture above
+proves Off remains selectable, not that Off is the product default. Because
+the Website has no owner or protocol field for this setting, its fixed policy
+is the shipped default On until such a settings system exists. [instruction;
+runtime support; implementation consequence]
 
 For the current collinear rank-1 path, source is `0`, midpoint is `102.5`, and
-endpoint is `205`. Therefore the first-leg distance is `102.5`, the raw normal
-step is `2 / (102.5 / 30) = 0.585365...`, and the cap makes it exactly `0.5`.
-The strict loop samples `t = 0, 0.5, 1.0`; the final append contributes
-`t = 2.0`. Each layer consequently has exactly four vertex pairs/eight native
-vertices and three neighboring segments/eighteen indices. This reduced count
-is an instruction-derived first-leg cadence, not `ceil(205 / 30)`. [instruction]
+endpoint is `205`. Float32 squared length is `10506.25`; the one-step inverse-
+sqrt path recovers effective first-leg distance `102.67955780029297`, ratio
+`6.845304012298584`, and step `0x3E959773` /
+`0.29217109084129333`. With float32 accumulation, the strict loop plus final
+append yields exactly
+`[0, 0.29217109084129333, 0.5843421816825867, 0.8765132427215576, 1.1686843633651733, 1.460855484008789, 2]`.
+The next candidate `1.7530266046524048` fails the strict
+`t < 2 - step` comparison. Each layer consequently has seven vertex pairs,
+fourteen native textured vertices, six neighboring segments, and thirty-six
+indices (the web plan stores `28` XY floats and `28` UV floats). This is an
+instruction-derived first-leg cadence, not `ceil(205 / 15)`. The explicit Off
+branch remains capped at step `0.5`, producing four pairs/eight vertices/three
+segments/eighteen indices. [instruction]
 
 At every loop sample, progress is `t / 2` and the taper envelope is
 `sin(progress * pi)`. The center combines a normal wave
@@ -10466,13 +10502,22 @@ retain their native registration metadata. These sprites change selection as
 the painter consumes RNG and rotation as the corona angle advances; they are
 not a static halo texture. [asset; instruction]
 
-Each endpoint fade is also parented by `ZAnimLit` (constructor `0x005E03D0`)
-with intensity about `1 + Random(0.75)`, starting value `1`, decay `-0.05`, and
-range `50`. That child follows the fade position and owns native illumination;
-it does not replace either ribbon or corona art. The current web scene has no
-authoritative replicated light-event lane for primary spells, so sprite and
-ribbon parity can be closed here while dynamic light injection remains an
-explicit adjacent-system unknown. [instruction; unknown]
+Each endpoint fade is also parented by `ZAnimLit` (constructor `0x005E03D0`).
+The Air call at `0x00540072..0x005400F8` writes radius `+0x140` as
+`1 + Random(0.75)`, starting intensity `+0x144` as `1`, float32 per-tick
+intensity delta `+0x148` as `-0.05`, and local Multiple Shadows byte `+0x14C`
+as `0`. Tick `0x005FD1D0` follows the fade child's jittered position, performs
+the float32 intensity recurrence, and enrolls the wrapper as a Region light
+provider. Provider `0x005E48E0` passes `min(intensity, 1)`, radius, child
+position, and `localMultipleShadows & globalMultipleShadows` to the Region
+consumer. Air therefore always requests `multipleShadows=false`; its radius is
+`[1,1.75)`, its five renderable intensity values are the float32 recurrence
+from `1` through four additions of `-0.05`, and its light center is exactly the
+same sub-`10`-unit jittered center as the contact corona. Float `50` at
+`0x00784CF8` is written to Puppet `+0xA0`, the painter sort bias; it is not a
+light range. Region's existing light contract expands radius through its
+native `75`-unit inner and `145`-unit outer distance constants, so no invented
+`50`-unit range or web-only decay belongs in the Air plan. [instruction]
 
 ### Pass 2: adjacency sweep
 
@@ -10497,6 +10542,14 @@ explicit adjacent-system unknown. [instruction; unknown]
   Y), never one midpoint-sorted group or a HUD overlay. Grouping them would
   force incorrect occlusion whenever scenery or an actor lies between source
   and endpoint. [instruction; implementation consequence]
+- The three roots do not consume inbound Region tint. `ZAnimSplit` draw vcall
+  `0x005E0230` bypasses the common Puppet local-light dispatcher; `ZAnim` and
+  `ZAnimLit` both use direct child draw vcall `0x005E01E0`. Their child
+  renderers install the recovered lightning RGBA themselves. The outbound
+  `ZAnimLit` contact light above is distinct from tinting the lightning art.
+  A browser API that applies `tintAt(effect.origin)` to all three roots both
+  invents stock tinting and samples the wrong position for the contact source.
+  [instruction; integration consequence]
 - Audio is adjacent but already correctly separated: registry `54`
   `sounds\\lightningstart` fires on the start edge and registry `162`
   `sounds\\lightningloop__loop` is owned for the channel lifetime. Sustained
@@ -10508,12 +10561,15 @@ explicit adjacent-system unknown. [instruction; unknown]
 1. One accepted Air held tick emits exactly one semantic presentation record;
    release emits none.
 2. A record retains for five ticks only to carry the endpoint fade. Its two
-   textured bolt meshes and source glow render only while `ageTicks < 2`.
+   textured bolt meshes render while `ageTicks < 2`; its one-shot source glow
+   renders only while `ageTicks < 1`.
 3. The bolt uses three control points and the recovered first-leg parameter
-   cadence. The current `0 -> 102.5 -> 205` path yields four pairs and three
-   segments per layer at normal detail, plus the native sine envelope, exact
-   BadGuys record `44`, additive blend, white full-width layer, and an
-   independently generated narrower cyan half-alpha layer.
+   cadence. With shipped-default Enhanced Effects On, the current
+   `0 -> 102.5 -> 205` path uses the instruction-exact fast inverse square root
+   and float32 loop to yield seven pairs and six segments per layer, plus the
+   native sine envelope, exact BadGuys record `44`, additive blend, white
+   full-width layer, and an independently generated narrower cyan half-alpha
+   layer.
 4. The endpoint is `origin + direction * 205` inside the current rank-1 PoC
    boundary. Target retention, terrain clipping, chains, contact, status, and
    damage remain excluded until the authoritative host publishes them; the
@@ -10525,10 +10581,15 @@ explicit adjacent-system unknown. [instruction; unknown]
    permitted browser seed so interpolation, replication, reconnect, and visual
    receipts cannot regenerate a different object.
 7. Body, source, and contact are separate direct world painter roots with
-   their own Y keys. Camera transform, Region tint, snapshot removal, and
-   texture ownership continue through the shared renderer contracts. Neither
-   geometry nor sprites own simulation, collision, audio, or replicated
-   lifecycle.
+   their own Y keys. Camera transform, snapshot removal, and texture ownership
+   continue through shared renderer contracts, but native Air art bypasses
+   inbound Region tint. Neither geometry nor sprites own simulation,
+   collision, audio, or replicated lifecycle.
+8. The contact plan exposes its native outbound light source as pure semantic
+   data: the jittered contact position, `[1,1.75)` radius, float32 intensity
+   recurrence, and `multipleShadows=false`. Shared Boneyard/Hub enrollment is
+   an integration responsibility; the Air view must not create a second light
+   model.
 
 The deepest cohesive implementation seam is an Air-specific native render-plan
 module plus Air view. The shared primary renderer may only choose that view;
@@ -10540,20 +10601,28 @@ endpoint placement, and corona alpha/overlap.
 
 ### Unknowns and validation contract
 
-The final Website tree passed `./scripts/validate.sh`: backend build and 23
-contracts, lint/import boundaries, all `320/320` frontend tests (including the
-five focused Air plan/ownership regressions), all `5/5` desktop tests,
-production build, game-host build, and production-media policy. The preserved
-gate log is `/tmp/sdr-air-website-validate-20260814.log`, SHA-256
+The initial Air cutover tree passed `./scripts/validate.sh`: backend build and
+23 contracts, lint/import boundaries, all `320/320` frontend tests (including
+the original five focused Air plan/ownership regressions), all `5/5` desktop
+tests, production build, game-host build, and production-media policy. The
+preserved gate log is `/tmp/sdr-air-website-validate-20260814.log`, SHA-256
 `718c9163678aefd14b1d596a52dc44bbdd354d97d94794732b50ce6c6738d635`.
+The shipped-default cadence/lighting follow-up passed all six focused Air
+tests, `tsc -p tsconfig.test.json --noEmit`, lint/import boundaries, the full
+production `tsc -b` plus Vite/game-host build, and all ten contracts in the
+Loader projectile/spell module. The multi-element integration owner retains
+the canonical rebased full gate.
 No final browser rerun was started while another element owned the constrained
 Playwright lane; the earlier WebGL receipt above remains deliberately partial.
 
 - The exact retail RNG stream position cannot be reconstructed from the
   semantic web snapshot and must not be claimed. The native algorithm and
   domains are recovered; the deterministic seed substitution is explicit.
-- Rank/target/chaining endpoints and the attached `ZAnimLit` contribution are
-  native facts but outside the current rank-1 no-combat Website protocol.
+- Rank/target/chaining endpoints are native facts but outside the current
+  rank-1 no-combat Website protocol. The normal rank-1 `ZAnimLit` source
+  mapping is closed as an Air render-plan output; feeding that output into the
+  shared world-light collector remains deliberately deferred to the renderer
+  integration that owns all element light sources.
 - The optional per-layer branch quad is recovered structurally, but its full
   probability predicate and UV/orientation sequence remain too coupled to the
   active native RNG/texture record to claim pixel-exact browser parity. The
