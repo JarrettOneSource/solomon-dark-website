@@ -59,10 +59,10 @@ test('birth owns world-tick wiggle while radial jitter stays around the caster h
   const firstHeading = Math.sin(3 * 65 * Math.PI / 180) * 15 * Math.PI / 180
   const expectedHeading = Math.sin((3 * 65 + 32.5) * Math.PI / 180) * 15 * Math.PI / 180
 
-  assertNear(first.direction.x, Math.sin(firstHeading))
-  assertNear(first.direction.y, -Math.cos(firstHeading))
-  assertNear(born.direction.x, Math.sin(expectedHeading))
-  assertNear(born.direction.y, -Math.cos(expectedHeading))
+  assert.equal(first.direction.x, Math.fround(Math.sin(firstHeading)))
+  assert.equal(first.direction.y, Math.fround(-Math.cos(firstHeading)))
+  assert.equal(born.direction.x, Math.fround(Math.sin(expectedHeading)))
+  assert.equal(born.direction.y, Math.fround(-Math.cos(expectedHeading)))
   assert.notDeepEqual(first.direction, born.direction)
   assert.deepEqual(born.direction, samePhase.direction)
   const jitter = { x: born.origin.x - emitter.x, y: born.origin.y - emitter.y }
@@ -82,17 +82,22 @@ test('Normal uses the native ordinary core, additive half-core, and forward glin
     ['glint', 'add'],
   ])
   assert.equal(created.draws[0].alpha, 0)
-  assert.equal(created.draws[0].tint, 0x00ffff)
+  assert.deepEqual(created.draws[0].color, { blue: 1, green: 1, red: 0 })
   assert.equal(created.draws[1].alpha, 0.75)
   assert.equal(created.draws[1].scale, created.coreScale * 0.5)
   assert.equal(created.draws[2].alpha, 1)
   assert.equal(created.draws[2].scale, Math.min(created.glintScale, 1))
+  assert.equal(created.coreScale, 0.5249603986740112)
 
   assert.equal(Math.hypot(updated.velocity.x, updated.velocity.y), 4)
   assertNear(updated.position.x - created.position.x, updated.velocity.x)
   assertNear(updated.position.y - created.position.y, updated.velocity.y)
-  assert.equal(updated.draws[0].alpha, 0.05)
-  assert.equal(updated.draws[0].tint, 0xffffff)
+  assert.equal(updated.draws[0].alpha, 0.05000000074505806)
+  assert.deepEqual(updated.draws[0].color, {
+    blue: 1,
+    green: 1,
+    red: 0.03185528516769409,
+  })
   assertNear(
     updated.draws[2].position.x - updated.position.x,
     updated.velocity.x * 3,
@@ -102,6 +107,20 @@ test('Normal uses the native ordinary core, additive half-core, and forward glin
     updated.velocity.y * 3,
   )
   assert.equal(updated.worldY, updated.position.y)
+})
+
+test('uses the QWORD late-life growth and gradual Normal color recurrence', () => {
+  const id = firstId('normal')
+  const beforeGrowth = waterFrostJetPlan(state(id, 6))
+  const firstGrowth = waterFrostJetPlan(state(id, 7))
+  const late = waterFrostJetPlan(state(id, 30))
+
+  assert.equal(beforeGrowth.coreScale, 0.5249603986740112)
+  assert.equal(firstGrowth.coreScale, 0.5349603891372681)
+  assert.equal(firstGrowth.glintScale, 1.2660294771194458)
+  assert.equal(firstGrowth.draws[0].color.red, 0.48185521364212036)
+  assert.equal(late.coreScale, 0.7649601697921753)
+  assert.ok(late.coreScale < 1, 'native Frost cores never grow by whole sprite multiples')
 })
 
 test('Over stays white and omits the Normal additive half-core', () => {
@@ -115,18 +134,64 @@ test('Over stays white and omits the Normal additive half-core', () => {
     ['glint', 'add'],
   ])
   assert.equal(created.draws[0].alpha, 0)
-  assert.equal(created.draws[0].tint, 0xffffff)
+  assert.deepEqual(created.draws[0].color, { blue: 1, green: 1, red: 1 })
   assert.equal(created.draws[1].alpha, 0)
-  assert.equal(updated.draws[0].alpha, 0.0125)
-  assert.equal(updated.draws[1].alpha, 0.037500000000000006)
+  assert.equal(updated.draws[0].alpha, 0.012500000186264515)
+  assert.equal(updated.draws[1].alpha, 0.03750000149011612)
   assert.equal(updated.draws[1].scale, updated.glintScale * 0.25)
 })
 
-test('converts clockwise screen-up heading and composes local color with world light', () => {
+test('replays native float32 construction and non-axis position stores', () => {
+  assert.equal(waterFrostJetPlan(state(11)).coreScale, 0.8136651515960693)
+  assert.equal(waterFrostJetPlan(state(13, 1)).draws[0].color.red, 0.01678556203842163)
+  assert.equal(waterFrostJetPlan(state(104)).lifetime, 1.292313814163208)
+
+  const moving = state(11, 17)
+  moving.origin = { x: 100.123456789, y: 200.987654321 }
+  moving.direction = { x: 0.31622776601683794, y: -0.9486832980505138 }
+  const plan = waterFrostJetPlan(moving)
+  assert.deepEqual(plan.velocity, {
+    x: 1.2649110555648804,
+    y: -3.7947332859039307,
+  })
+  assert.deepEqual(plan.position, {
+    x: 121.62689208984375,
+    y: 136.4770965576172,
+  })
+  assert.deepEqual(plan.draws.at(-1)?.position, {
+    x: 125.42162322998047,
+    y: 125.0928955078125,
+  })
+})
+
+test('shares late-life growth and cuts the Normal additive pass after update 14', () => {
+  const normalId = firstId('normal')
+  const overId = firstId('over')
+  assert.ok(waterFrostJetPlan(state(normalId, 14)).draws.some(({ pass }) => (
+    pass === 'additive-core'
+  )))
+  assert.ok(!waterFrostJetPlan(state(normalId, 15)).draws.some(({ pass }) => (
+    pass === 'additive-core'
+  )))
+  assert.equal(waterFrostJetPlan(state(overId, 7)).coreScale, 0.8224014043807983)
+  assert.equal(waterFrostJetPlan(state(overId, 8)).coreScale, 0.8324013948440552)
+})
+
+test('converts clockwise screen-up heading and composes float color with world light', () => {
   const plan = waterFrostJetPlan(state(firstId('normal')))
-  assert.equal(plan.velocity.x, Math.sin(plan.heading) * 4)
-  assert.equal(plan.velocity.y, -Math.cos(plan.heading) * 4)
+  assert.ok(Math.abs(plan.velocity.x - Math.sin(plan.heading) * 4) < 1e-6)
+  assert.ok(Math.abs(plan.velocity.y + Math.cos(plan.heading) * 4) < 1e-6)
   for (const draw of plan.draws) assert.equal(draw.rotation, plan.heading)
-  assert.equal(multiplyWaterFrostTint(0x804020, 0x00ffff), 0x004020)
-  assert.equal(multiplyWaterFrostTint(0x804020, 0xffffff), 0x804020)
+  assert.equal(
+    multiplyWaterFrostTint(0x804020, { blue: 1, green: 1, red: 0 }),
+    0x004020,
+  )
+  assert.equal(
+    multiplyWaterFrostTint(0x804020, { blue: 1, green: 1, red: 1 }),
+    0x804020,
+  )
+  assert.equal(
+    multiplyWaterFrostTint(0x804020, waterFrostJetPlan(state(1, 5)).draws[0].color),
+    0x2a4020,
+  )
 })

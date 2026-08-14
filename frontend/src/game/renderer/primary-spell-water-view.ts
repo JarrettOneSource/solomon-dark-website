@@ -87,7 +87,7 @@ export class WaterPrimarySpellView {
     sprite.rotation = draw.rotation
     sprite.scale.set(draw.scale)
     sprite.alpha = draw.alpha
-    sprite.tint = multiplyWaterFrostTint(this.worldTint, draw.tint)
+    sprite.tint = multiplyWaterFrostTint(this.worldTint, draw.color)
   }
 }
 

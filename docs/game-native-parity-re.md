@@ -8180,6 +8180,38 @@ foreign staged runtimes. Those processes were not focused, modified, or
 terminated. Clean-stock Water On/Off image evidence remains a required final
 receipt, not something inferred from the instrumented frame.
 
+The first integrated browser receipt exposed a full-courtyard cyan wash and
+triggered an operand-width audit of the raw x87 instructions. The earlier pass
+had read the low four bytes of two eight-byte constants even though opcode
+`DC` explicitly consumes a QWORD. At `0x004537E6`, bytes
+`00 00 00 40 E1 7A 84 3F` decode as double
+`0.009999999776482582`, not float `2`. At `0x004537B1`, bytes
+`00 00 00 40 33 33 B3 3F` decode as double
+`0.07500000298023224`, not float `2`. Constructor instruction
+`0x00453622` also loads the four-byte bound at `0x007845E8`, bytes
+`CD CC CC 3D`, or float32 `0.10000000149011612`; the previous `0.5`
+color-ramp bound was wrong. The corrected values below are instruction- and
+raw-byte-backed; this visual falsifier is why the initial green unit tests were
+not accepted as final evidence.
+
+The complete presentation-constant width audit is:
+
+| Address | Storage | Exact value | Native role |
+| --- | --- | ---: | --- |
+| `0x007849F0` | DWORD | `0.05000000074505806` | lifetime random bound; Normal phase step |
+| `0x00784740` | QWORD | `1.25` | lifetime base |
+| `0x007DE934` | DWORD | `0.75` | additive alpha; core-scale random bound |
+| `0x00784E7C` | DWORD | `0.03999999910593033` | lifetime decrement |
+| `0x007DE808` | QWORD | `0.5` | core base; Over phase factor; wall-splay speed factor |
+| `0x007DE838` | QWORD | `2` | glint-scale base only |
+| `0x007845E8` | DWORD | `0.10000000149011612` | color-ramp random bound |
+| `0x007DE8A0` | QWORD | `0.05000000074505806` | additive-alpha decrement |
+| `0x00784EA8` | QWORD | `0.07500000298023224` | color-ramp decrement |
+| `0x00784E20` | QWORD | `0.949999988079071` | late-life glint shrink |
+| `0x00784D08` | QWORD | `0.009999999776482582` | late-life core growth |
+| `0x00784970` | QWORD | `0.8999999761581421` | Normal glint opacity gate |
+| `0x007DE910` / `0x007DE8F0` | QWORD | `3` / `0.25` | glint offset/Over alpha; Over scale |
+
 ### Pass 1: causal ownership from input to teardown
 
 ```text
@@ -8269,15 +8301,31 @@ a fake collision rule.
 | position `+0x14/+0x18` | registered socket plus radial jitter | `+= velocity` |
 | heading/velocity `+0x2C`, `+0x24/+0x28` | native heading; speed `4` | wall-splay branch above |
 | additive-core alpha `+0x3C` | `0.75` | `-0.05` |
-| main scale `+0x40` | `S0 = 0.5 + U[0,0.75]` | if lifetime `< 1`, `+2` |
+| main scale `+0x40` | `S0 = 0.5 + U[0,0.75]` | if lifetime `< 1`, `+0.009999999776482582` |
 | glint scale `+0x44` | `Q0 = (2 + U[0,1]) * S0` | if lifetime `< 1`, `*0.95` |
-| color ramp `+0x48` | Normal `1 + U[0,0.5]`; Over overrides it to `0` | `max(0, value - 2)` |
+| color ramp `+0x48` | Normal `1 + U[0,0.10000000149011612]`; Over overrides it to `0` | `max(0, value - 0.07500000298023224)` |
 | opacity multiplier `+0x4C` | `1` | unchanged |
 
-The native draw color is `(max(0, 1 - colorRamp), 1, 1)`: Normal's creation
-frame is cyan and its first completed update is white; Over is white from
-construction. Registered full-canvas assets retain native registration and are
-center-anchored. Their deterministic web files are:
+Every persistent field above is rounded on its native `fstp DWORD` store.
+That includes bounded random samples before their constructor additions,
+velocity and every iterative position update, the `L * L` Normal alpha local,
+and both multiply-then-add components of the forward glint position. Replacing
+those recurrences with `origin + velocity * age` is measurably different for
+non-axis-aligned particles.
+
+The native draw color is `(max(0, 1 - colorRamp), 1, 1)`: Normal starts cyan
+and restores red gradually over roughly 14-15 completed updates; Over is white
+from construction. Core scale likewise grows by about `0.01` per late-life
+update, never by whole sprite multiples. Registered full-canvas assets retain
+native registration and are center-anchored. Their deterministic web files are:
+
+Both rank-1 vtables prove that update ownership is shared: Normal
+`0x00784E84 + 0x08` and Over `0x00784EB4 + 0x08` each contain
+`0x00453670`. The adjacent wrapper at `0x00453870`, which subtracts `0.01`
+from core scale after that shared update, belongs instead to
+`Anim_FrostJetEffect_Chaining` (vtable `0x00793D74`, update slot
+`0x00793D7C`; constructor vptr write at `0x00541870`). It is a learned-spell
+class and must not be imported into the ordinary rank-1 Over recurrence.
 
 | Native record | Role | Dimensions | SHA-256 |
 | ---: | --- | ---: | --- |
@@ -8290,8 +8338,9 @@ Normal render `0x00457720` submits, in order:
    `min(L * L, phase)` and the cyan-to-white color;
 2. while `additiveAlpha > 0`, additive record 30 at the same transform, scale
    `0.5 * S`, alpha `additiveAlpha`; and
-3. additive record 28 at `position + 3 * velocity`, scale `min(Q, 1)`, alpha
-   `min(10 * L, 1)`.
+3. when opacity multiplier `M >= 0.8999999761581421`, additive record 28 at
+   `position + 3 * velocity`, scale `min(Q, 1)`, alpha
+   `M * min(10 * L, 1)`.
 
 Over render `0x00457A00` submits no half-core pass:
 
@@ -8305,6 +8354,12 @@ The draw state byte's value `1` maps to `SRCALPHA, ONE`; value `0` restores
 Y and receives the common local-light tint upstream of its virtual draw. The
 camera only applies the normal world-to-screen translation and Hub/Boneyard
 scale; neither sprite scale nor speed is multiplied into simulation state.
+`Text_Draw` at `0x00415130` copies the submitted scale directly into all three
+matrix diagonal entries before `0x00414540` transforms the registered
+pixel-space quad. There is no texture-size normalization. Local float color is
+multiplied by the common Region-light channels before the final byte
+quantization; pre-packing the cyan-to-white red channel can introduce a
+one-channel rounding error.
 
 ### Pass 2: adjacent systems, density setting, and excluded records
 
@@ -8362,7 +8417,8 @@ scale; neither sprite scale nor speed is multiplied into simulation state.
   record 14/32 in rank-1 spray; travel to `205`; one additive sprite per
   effect; Over drawing the Normal half-core; damage lasting with visual
   particles; particles or loop crossing world/owner teardown; renderer-local
-  random samples diverging between peers; or screen/HUD-space drawing.
+  random samples diverging between peers; screen/HUD-space drawing; or late
+  cores growing by whole multiples and washing the viewport cyan.
 - Explicit unknowns at implementation start are clean-stock On/Off pixel
   receipts, exact per-session native RNG sequence, and a browser terrain query
   for cosmetic Normal wall-splay. None changes the closed unobstructed
@@ -10089,6 +10145,9 @@ same stock actor field.
   Boneyard and inspect robe/staff/VFX alignment for local and replicated actors.
 - Measurable acceptance: heading index equals the cast vector's native 24-way
   index throughout the owning interval, with no pre-emission movement turn.
+  The receipt derives that vector from the owning player's replicated
+  `primaryCast.aimDirection`, not a child VFX direction: native Water particles
+  intentionally add Frost Jet wiggle and radial spread after facing is chosen.
 
 
 ## 2026-08-14 — Ether primary Magic Missile presentation ownership

@@ -11,18 +11,22 @@ const FROST_JITTER_ANGLE = 45 * DEGREES_TO_RADIANS
 const FROST_JITTER_RADIUS = 10
 const FROST_SPEED = 4
 const FROST_LIFETIME_BASE = 1.25
-const FROST_LIFETIME_RANDOM = 0.05
-const FROST_LIFETIME_STEP = 0.04
-const FROST_NORMAL_PHASE_STEP = 0.05
-const FROST_OVER_PHASE_STEP = 0.025
+const FROST_LIFETIME_RANDOM = Math.fround(0.05)
+const FROST_LIFETIME_STEP = Math.fround(0.04)
+const FROST_NORMAL_PHASE_STEP = Math.fround(0.05)
+const FROST_OVER_PHASE_STEP = Math.fround(FROST_NORMAL_PHASE_STEP * 0.5)
 const FROST_ADDITIVE_ALPHA = 0.75
-const FROST_ADDITIVE_ALPHA_STEP = 0.05
+const FROST_ADDITIVE_ALPHA_STEP = 0.05000000074505806
 const FROST_CORE_SCALE_BASE = 0.5
-const FROST_CORE_SCALE_RANDOM = 0.75
-const FROST_CORE_GROWTH = 2
+const FROST_CORE_SCALE_RANDOM = Math.fround(0.75)
+const FROST_CORE_GROWTH = 0.009999999776482582
 const FROST_GLINT_SCALE_BASE = 2
 const FROST_GLINT_SCALE_RANDOM = 1
-const FROST_GLINT_SHRINK = 0.95
+const FROST_GLINT_SHRINK = 0.949999988079071
+const FROST_COLOR_RAMP_RANDOM = Math.fround(0.1)
+const FROST_COLOR_RAMP_STEP = 0.07500000298023224
+const FROST_OPACITY_MULTIPLIER = 1
+const FROST_NORMAL_GLINT_OPACITY_GATE = 0.8999999761581421
 const UINT32_RANGE = 0x1_0000_0000
 
 export type WaterFrostJetKind = 'normal' | 'over'
@@ -30,15 +34,21 @@ export type WaterFrostJetBlend = 'add' | 'normal'
 export type WaterFrostJetSprite = 'core' | 'glint'
 export type WaterFrostJetPass = 'additive-core' | 'core' | 'glint'
 
+export interface WaterFrostJetColor {
+  blue: number
+  green: number
+  red: number
+}
+
 export interface WaterFrostJetDraw {
   alpha: number
   blend: WaterFrostJetBlend
+  color: WaterFrostJetColor
   pass: WaterFrostJetPass
   position: Vector2
   rotation: number
   scale: number
   sprite: WaterFrostJetSprite
-  tint: number
 }
 
 export interface WaterFrostJetPlan {
@@ -58,6 +68,16 @@ export interface WaterFrostJetEmission {
   origin: Vector2
 }
 
+interface WaterFrostJetFields {
+  additiveCoreAlpha: number
+  colorRamp: number
+  coreScale: number
+  glintScale: number
+  lifetime: number
+  opacityMultiplier: number
+  phase: number
+}
+
 export function waterFrostJetEmission(
   emitter: Vector2,
   baseDirection: Vector2,
@@ -70,22 +90,27 @@ export function waterFrostJetEmission(
     tick * FROST_HEADING_STEP + ordinal * FROST_INTRA_TICK_PHASE,
   ) * FROST_SPREAD
   const jitterHeading = baseHeading
-    + signedWaterFrostRandom(id, 2) * FROST_JITTER_ANGLE
+    + signedWaterFrostBoundedRandom(id, 2, FROST_JITTER_ANGLE)
   const jitter = unitForHeading(
     jitterHeading,
-    waterFrostRandom(id, 3) * FROST_JITTER_RADIUS,
+    waterFrostBoundedRandom(id, 3, FROST_JITTER_RADIUS),
   )
   return {
-    direction: unitForHeading(heading, 1),
+    direction: float32Vector(unitForHeading(heading, 1)),
     origin: {
-      x: emitter.x + jitter.x,
-      y: emitter.y + jitter.y,
+      x: Math.fround(emitter.x + Math.fround(jitter.x)),
+      y: Math.fround(emitter.y + Math.fround(jitter.y)),
     },
   }
 }
 
 export function waterFrostJetLifetimeTicks(id: number): 32 | 33 {
-  const updates = Math.floor(waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP) + 1
+  let lifetime = waterFrostJetInitialLifetime(id)
+  let updates = 0
+  while (lifetime >= 0) {
+    updates += 1
+    lifetime = Math.fround(lifetime - FROST_LIFETIME_STEP)
+  }
   return updates === 32 ? 32 : 33
 }
 
@@ -93,103 +118,141 @@ export function waterFrostJetPlan(
   state: PrimarySpellChannelTransientState,
 ): WaterFrostJetPlan {
   const kind = waterFrostJetKind(state.id)
-  const initialLifetime = waterFrostJetInitialLifetime(state.id)
-  const lifetime = initialLifetime - state.ageTicks * FROST_LIFETIME_STEP
+  const fields = waterFrostJetFields(state.id, state.ageTicks, kind)
   const heading = Math.atan2(state.direction.x, -state.direction.y)
   const velocity = {
-    x: state.direction.x * FROST_SPEED,
-    y: state.direction.y * FROST_SPEED,
+    x: Math.fround(Math.fround(state.direction.x) * FROST_SPEED),
+    y: Math.fround(Math.fround(state.direction.y) * FROST_SPEED),
   }
-  const position = {
-    x: state.origin.x + velocity.x * state.ageTicks,
-    y: state.origin.y + velocity.y * state.ageTicks,
-  }
-  const firstGrowthUpdate = Math.floor(
-    (initialLifetime - 1) / FROST_LIFETIME_STEP,
-  ) + 1
-  const growthUpdates = Math.max(0, state.ageTicks - firstGrowthUpdate + 1)
-  const initialCoreScale = FROST_CORE_SCALE_BASE
-    + waterFrostRandom(state.id, 4) * FROST_CORE_SCALE_RANDOM
-  const coreScale = initialCoreScale + growthUpdates * FROST_CORE_GROWTH
-  const initialGlintScale = (
-    FROST_GLINT_SCALE_BASE
-    + waterFrostRandom(state.id, 5) * FROST_GLINT_SCALE_RANDOM
-  ) * initialCoreScale
-  const glintScale = initialGlintScale * FROST_GLINT_SHRINK ** growthUpdates
-  const phase = state.ageTicks * (
-    kind === 'normal' ? FROST_NORMAL_PHASE_STEP : FROST_OVER_PHASE_STEP
-  )
-  const colorRamp = kind === 'normal'
-    ? Math.max(0, 1 + waterFrostRandom(state.id, 6) * 0.5 - state.ageTicks * 2)
-    : 0
-  const coreTint = rgb(1 - colorRamp, 1, 1)
+  const position = waterFrostJetPosition(state.origin, velocity, state.ageTicks)
+  const coreColor = color(1 - fields.colorRamp, 1, 1)
   const glintPosition = {
-    x: position.x + velocity.x * 3,
-    y: position.y + velocity.y * 3,
+    x: Math.fround(position.x + Math.fround(velocity.x * 3)),
+    y: Math.fround(position.y + Math.fround(velocity.y * 3)),
   }
   const draws: WaterFrostJetDraw[] = [{
     alpha: kind === 'normal'
-      ? Math.min(lifetime * lifetime, phase)
-      : 0.5 * Math.min(lifetime, phase),
+      ? Math.fround(fields.opacityMultiplier * Math.min(
+        Math.fround(fields.lifetime * fields.lifetime),
+        fields.phase,
+      ))
+      : Math.fround(0.5 * Math.min(fields.lifetime, fields.phase)),
     blend: 'normal',
+    color: coreColor,
     pass: 'core',
     position,
     rotation: heading,
-    scale: coreScale,
+    scale: fields.coreScale,
     sprite: 'core',
-    tint: coreTint,
   }]
 
-  const additiveCoreAlpha = FROST_ADDITIVE_ALPHA
-    - state.ageTicks * FROST_ADDITIVE_ALPHA_STEP
-  if (kind === 'normal' && additiveCoreAlpha > 0) {
+  if (kind === 'normal' && fields.additiveCoreAlpha > 0) {
     draws.push({
-      alpha: additiveCoreAlpha,
+      alpha: fields.additiveCoreAlpha,
       blend: 'add',
+      color: color(1, 1, 1),
       pass: 'additive-core',
       position,
       rotation: heading,
-      scale: coreScale * 0.5,
+      scale: Math.fround(fields.coreScale * 0.5),
       sprite: 'core',
-      tint: 0xffffff,
     })
   }
 
-  draws.push({
-    alpha: kind === 'normal'
-      ? Math.min(lifetime * 10, 1)
-      : Math.min(3 * Math.min(phase * 0.5, lifetime), 1),
-    blend: 'add',
-    pass: 'glint',
-    position: glintPosition,
-    rotation: heading,
-    scale: kind === 'normal' ? Math.min(glintScale, 1) : glintScale * 0.25,
-    sprite: 'glint',
-    tint: 0xffffff,
-  })
+  if (kind === 'over' || fields.opacityMultiplier >= FROST_NORMAL_GLINT_OPACITY_GATE) {
+    draws.push({
+      alpha: kind === 'normal'
+        ? Math.fround(
+          fields.opacityMultiplier * Math.min(fields.lifetime * 10, 1),
+        )
+        : Math.fround(Math.min(3 * Math.min(fields.phase * 0.5, fields.lifetime), 1)),
+      blend: 'add',
+      color: color(1, 1, 1),
+      pass: 'glint',
+      position: glintPosition,
+      rotation: heading,
+      scale: kind === 'normal'
+        ? Math.min(fields.glintScale, 1)
+        : Math.fround(fields.glintScale * 0.25),
+      sprite: 'glint',
+    })
+  }
 
   return {
-    coreScale,
+    coreScale: fields.coreScale,
     draws,
-    glintScale,
+    glintScale: fields.glintScale,
     heading,
     kind,
-    lifetime,
+    lifetime: fields.lifetime,
     position,
     velocity,
     worldY: position.y,
   }
 }
 
-export function multiplyWaterFrostTint(worldTint: number, localTint: number): number {
-  const channel = (shift: number): number => Math.round(
-    ((worldTint >>> shift) & 0xff) * ((localTint >>> shift) & 0xff) / 0xff,
+export function multiplyWaterFrostTint(
+  worldTint: number,
+  localColor: WaterFrostJetColor,
+): number {
+  const channel = (shift: number, multiplier: number): number => Math.round(
+    ((worldTint >>> shift) & 0xff) * multiplier,
   )
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0)
+  return (channel(16, localColor.red) << 16)
+    | (channel(8, localColor.green) << 8)
+    | channel(0, localColor.blue)
 }
 
 function waterFrostJetInitialLifetime(id: number): number {
-  return FROST_LIFETIME_BASE + waterFrostRandom(id, 1) * FROST_LIFETIME_RANDOM
+  return Math.fround(
+    FROST_LIFETIME_BASE
+      + waterFrostBoundedRandom(id, 1, FROST_LIFETIME_RANDOM),
+  )
+}
+
+function waterFrostJetFields(
+  id: number,
+  ageTicks: number,
+  kind: WaterFrostJetKind,
+): WaterFrostJetFields {
+  let lifetime = waterFrostJetInitialLifetime(id)
+  let phase = 0
+  let additiveCoreAlpha = Math.fround(FROST_ADDITIVE_ALPHA)
+  let coreScale = Math.fround(
+    FROST_CORE_SCALE_BASE
+      + waterFrostBoundedRandom(id, 4, FROST_CORE_SCALE_RANDOM),
+  )
+  let glintScale = Math.fround(
+    (FROST_GLINT_SCALE_BASE
+      + waterFrostBoundedRandom(id, 5, FROST_GLINT_SCALE_RANDOM))
+      * coreScale,
+  )
+  let colorRamp = kind === 'normal'
+    ? Math.fround(1 + waterFrostBoundedRandom(id, 6, FROST_COLOR_RAMP_RANDOM))
+    : 0
+  const opacityMultiplier = Math.fround(FROST_OPACITY_MULTIPLIER)
+  const phaseStep = kind === 'normal' ? FROST_NORMAL_PHASE_STEP : FROST_OVER_PHASE_STEP
+
+  for (let tick = 0; tick < ageTicks; tick += 1) {
+    lifetime = Math.fround(lifetime - FROST_LIFETIME_STEP)
+    phase = Math.fround(phase + phaseStep)
+    additiveCoreAlpha = Math.fround(additiveCoreAlpha - FROST_ADDITIVE_ALPHA_STEP)
+    colorRamp = Math.fround(Math.max(0, colorRamp - FROST_COLOR_RAMP_STEP))
+    if (lifetime < 1) {
+      glintScale = Math.fround(glintScale * FROST_GLINT_SHRINK)
+      coreScale = Math.fround(coreScale + FROST_CORE_GROWTH)
+    }
+  }
+
+  return {
+    additiveCoreAlpha,
+    colorRamp,
+    coreScale,
+    glintScale,
+    lifetime,
+    opacityMultiplier,
+    phase,
+  }
 }
 
 function waterFrostJetKind(id: number): WaterFrostJetKind {
@@ -198,6 +261,14 @@ function waterFrostJetKind(id: number): WaterFrostJetKind {
 
 function signedWaterFrostRandom(id: number, salt: number): number {
   return waterFrostRandom(id, salt) * 2 - 1
+}
+
+function signedWaterFrostBoundedRandom(id: number, salt: number, bound: number): number {
+  return Math.fround(signedWaterFrostRandom(id, salt) * Math.fround(bound))
+}
+
+function waterFrostBoundedRandom(id: number, salt: number, bound: number): number {
+  return Math.fround(waterFrostRandom(id, salt) * Math.fround(bound))
 }
 
 function waterFrostRandom(id: number, salt: number): number {
@@ -220,8 +291,23 @@ function unitForHeading(heading: number, magnitude: number): Vector2 {
   }
 }
 
-function rgb(red: number, green: number, blue: number): number {
-  return (Math.round(Math.max(0, Math.min(1, red)) * 0xff) << 16)
-    | (Math.round(Math.max(0, Math.min(1, green)) * 0xff) << 8)
-    | Math.round(Math.max(0, Math.min(1, blue)) * 0xff)
+function float32Vector(vector: Vector2): Vector2 {
+  return { x: Math.fround(vector.x), y: Math.fround(vector.y) }
+}
+
+function waterFrostJetPosition(origin: Vector2, velocity: Vector2, ageTicks: number): Vector2 {
+  const position = float32Vector(origin)
+  for (let tick = 0; tick < ageTicks; tick += 1) {
+    position.x = Math.fround(position.x + velocity.x)
+    position.y = Math.fround(position.y + velocity.y)
+  }
+  return position
+}
+
+function color(red: number, green: number, blue: number): WaterFrostJetColor {
+  return {
+    blue: Math.max(0, Math.min(1, blue)),
+    green: Math.max(0, Math.min(1, green)),
+    red: Math.max(0, Math.min(1, red)),
+  }
 }
