@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { PrimarySpellTransientState } from './primary-spells.ts'
+import type { PrimarySpellChannelTransientState } from './primary-spells.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
   multiplyWaterFrostTint,
@@ -10,7 +10,7 @@ import {
   waterFrostJetPlan,
 } from './primary-spell-water.ts'
 
-function state(id: number, ageTicks = 0, variant = 0): PrimarySpellTransientState {
+function state(id: number, ageTicks = 0, variant = 0): PrimarySpellChannelTransientState {
   return {
     ageTicks,
     direction: { x: 0, y: -1 },

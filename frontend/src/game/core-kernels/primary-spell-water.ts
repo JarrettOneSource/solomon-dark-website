@@ -1,4 +1,4 @@
-import type { PrimarySpellTransientState } from './primary-spells.ts'
+import type { PrimarySpellChannelTransientState } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
 
 export const WATER_FROST_PARTICLES_PER_TICK = 2
@@ -90,7 +90,7 @@ export function waterFrostJetLifetimeTicks(id: number): 32 | 33 {
 }
 
 export function waterFrostJetPlan(
-  state: PrimarySpellTransientState,
+  state: PrimarySpellChannelTransientState,
 ): WaterFrostJetPlan {
   const kind = waterFrostJetKind(state.id)
   const initialLifetime = waterFrostJetInitialLifetime(state.id)

@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellChannelTransientState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -19,11 +20,11 @@ export class WaterPrimarySpellView {
   readonly container: Container
   private readonly additiveCore: Sprite
   private readonly core: Sprite
-  private state: PrimarySpellTransientState
+  private state: PrimarySpellChannelTransientState
   private readonly glint: Sprite
   private worldTint = 0xffffff
 
-  constructor(state: PrimarySpellTransientState, textures: WaterPrimarySpellTextures) {
+  constructor(state: PrimarySpellChannelTransientState, textures: WaterPrimarySpellTextures) {
     this.state = state
     this.container = new Container({ label: 'water' })
     this.container.eventMode = 'none'
