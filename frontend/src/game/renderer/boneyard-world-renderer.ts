@@ -76,6 +76,14 @@ import {
   type NativeBoneyardLightSource,
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
+import {
+  BoneyardComplexShadowPresentation,
+  type BoneyardComplexShadowStaticCaster,
+} from './boneyard-complex-shadow-presentation.ts'
+import {
+  nativeBoneyardConvexSilhouette,
+  type NativeBoneyardComplexShadowCaster,
+} from './boneyard-complex-shadows.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
 import {
   BoneyardTreeOcclusionPresentation,
@@ -91,6 +99,9 @@ import { nativeFireballLightSource } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
+  complexShadowCasterCount: number
+  complexShadowQuadCount: number
+  complexShadowRecordCount: number
   enemyCount: number
   enemyFamilies: string
   fadedTreeCount: number
@@ -153,6 +164,7 @@ interface BoneyardWorldRendererOptions {
 
 interface ResidentTexture extends BoneyardBounds {
   mainLayerIndex: number | null
+  shadowCaster: NativeBoneyardComplexShadowCaster | null
   sprite: Sprite
   texture: Texture
 }
@@ -166,6 +178,7 @@ interface StaticWorldBuild {
   foreground: Container
   mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
+  shadowCasters: readonly BoneyardComplexShadowStaticCaster[]
   staticPaintCount: number
   treeInputs: readonly NativeTreeOcclusionInput[]
   treeResidents: ReadonlyMap<string, TreeResidents>
@@ -267,6 +280,7 @@ export async function createBoneyardWorldRenderer(
     mainLayers,
     staticWorld.mainResidents,
     staticWorld.foreground,
+    staticWorld.shadowCasters,
     staticWorld.treeInputs,
     staticWorld.treeResidents,
     options.initialSnapshot.tick,
@@ -282,6 +296,7 @@ export async function createBoneyardWorldRenderer(
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.complexShadows = 'native-directional-edges'
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
   canvas.dataset.regionLightComposite = 'multiply-pre-main'
@@ -298,6 +313,9 @@ export async function createBoneyardWorldRenderer(
   let frameCount = 0
   let resolution = initialResolution
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
+    complexShadowCasterCount: 0,
+    complexShadowQuadCount: 0,
+    complexShadowRecordCount: 0,
     enemyCount: 0,
     enemyFamilies: '',
     fadedTreeCount: 0,
@@ -386,6 +404,9 @@ export async function createBoneyardWorldRenderer(
       application.render()
 
       frameDiagnostics.frameCount = frameCount
+      frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
+      frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
+      frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
       frameDiagnostics.enemyCount = scene.enemyCount
       frameDiagnostics.enemyFamilies = scene.enemyFamilies
       frameDiagnostics.fadedTreeCount = painter.fadedTreeCount
@@ -425,6 +446,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
       canvas.dataset.enemyCount = `${scene.enemyCount}`
+      canvas.dataset.complexShadowCasterCount = `${painter.complexShadowCasterCount}`
+      canvas.dataset.complexShadowQuadCount = `${painter.complexShadowQuadCount}`
+      canvas.dataset.complexShadowRecordCount = `${painter.complexShadowRecordCount}`
       canvas.dataset.enemyFamilies = scene.enemyFamilies
       canvas.dataset.fadedTreeCount = `${painter.fadedTreeCount}`
       canvas.dataset.minTreeAlpha = `${painter.minTreeAlpha}`
@@ -471,6 +495,9 @@ export async function createBoneyardWorldRenderer(
 }
 
 interface BoneyardPainterFrame {
+  complexShadowCasterCount: number
+  complexShadowQuadCount: number
+  complexShadowRecordCount: number
   fadedTreeCount: number
   foregroundZIndex: number
   localPlayerPainterRow: number
@@ -494,10 +521,12 @@ interface BoneyardPainterFrame {
 
 class BoneyardDynamicScene {
   private readonly boneyard: LoadedBoneyard
+  private readonly complexShadows: BoneyardComplexShadowPresentation
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly enemies: NativeEnemyViews
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
+  private readonly gateShadowDepths = new Map<string, number>()
   private readonly gates: BoneyardGateViews
   private readonly lightSourceCandidates: NativeBoneyardLightSource[] = []
   private readonly lightSources: NativeBoneyardLightSource[] = []
@@ -522,6 +551,7 @@ class BoneyardDynamicScene {
     mainLayers: readonly MainLayer[],
     mainResidents: ReadonlyMap<number, ResidentTexture>,
     foreground: Container,
+    shadowCasters: readonly BoneyardComplexShadowStaticCaster[],
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
     startTick: number,
@@ -532,6 +562,7 @@ class BoneyardDynamicScene {
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.foreground = foreground
+    this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
     this.treeOcclusion = new BoneyardTreeOcclusionPresentation(treeInputs, startTick)
     this.treeResidents = treeResidents
     this.primarySpells = new PrimarySpellWorldView(root, textures)
@@ -761,6 +792,8 @@ class BoneyardDynamicScene {
     })
     let maxMainZIndex = 0
     let minMainZIndex = Number.POSITIVE_INFINITY
+    const gateShadowDepths = this.gateShadowDepths
+    gateShadowDepths.clear()
     for (const band of order.bands) {
       band.layerIndexes.forEach((layerIndex, position) => {
         const depth = band.zIndex + ((position + 1) / (band.layerIndexes.length + 1)) * 0.5
@@ -771,6 +804,7 @@ class BoneyardDynamicScene {
         const layer = this.mainLayers[layerIndex]
         if (isMovingGateBody(layer)) {
           this.gates.setDepth(layer.fence.eid, layer.pieceIndex, depth)
+          gateShadowDepths.set(`${layer.fence.eid}:${layer.pieceIndex}`, depth)
         }
       })
     }
@@ -800,9 +834,18 @@ class BoneyardDynamicScene {
     this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
+    const complexShadows = this.complexShadows.render(
+      lightSources,
+      presentationFrame,
+      snapshot.world.gateLeaves,
+      gateShadowDepths,
+    )
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
     return {
+      complexShadowCasterCount: complexShadows.casterCount,
+      complexShadowQuadCount: complexShadows.quadCount,
+      complexShadowRecordCount: complexShadows.recordCount,
       fadedTreeCount,
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
@@ -858,6 +901,7 @@ class BoneyardDynamicScene {
   }
 
   destroy(): void {
+    this.complexShadows.destroy()
     this.primarySpells.destroy()
     this.enemies.destroy()
     this.gates.destroy()
@@ -1120,6 +1164,7 @@ async function buildStaticWorld(
   root.addChild(base, foreground)
   const residents: ResidentTexture[] = []
   const mainResidents = new Map<number, ResidentTexture>()
+  const shadowCasters: BoneyardComplexShadowStaticCaster[] = []
   const treeMainResidents = new Map<string, ResidentTexture>()
   const treeInputs: NativeTreeOcclusionInput[] = []
   const treeResidents = new Map<string, TreeResidents>()
@@ -1145,6 +1190,9 @@ async function buildStaticWorld(
         root.addChild(resident.sprite)
         residents.push(resident)
         mainResidents.set(layerIndex, resident)
+        if (resident.shadowCaster) {
+          shadowCasters.push({ caster: resident.shadowCaster, depthOwner: resident.sprite })
+        }
         if (layer.kind === 'object' && layer.object.typeId === NATIVE.tree) {
           treeMainResidents.set(layer.object.eid, resident)
         }
@@ -1189,6 +1237,7 @@ async function buildStaticWorld(
     foreground,
     mainResidents,
     residents,
+    shadowCasters,
     staticPaintCount,
     treeInputs,
     treeResidents,
@@ -1251,10 +1300,19 @@ function buildMainLayerResident(
     document,
     [layerIndex],
   )
-  const crop = cropTransparentCanvas(canvas)
-  return crop
-    ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y, layerIndex)
-    : null
+  const crop = cropTransparentCanvas(canvas, true)
+  if (!crop) return null
+  const x = bounds.x + crop.x
+  const y = bounds.y + crop.y
+  const resident = residentTexture(crop.canvas, x, y, layerIndex)
+  resident.shadowCaster = mainLayerShadowCaster(
+    crop.outline ?? [],
+    x,
+    y,
+    layer,
+    layerIndex,
+  )
+  return resident
 }
 
 function buildForegroundLayerResident(
@@ -1332,7 +1390,8 @@ function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: nu
 
 function cropTransparentCanvas(
   canvas: HTMLCanvasElement,
-): { canvas: HTMLCanvasElement; x: number; y: number } | null {
+  includeOutline = false,
+): { canvas: HTMLCanvasElement; outline?: Vec2[]; x: number; y: number } | null {
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
   if (!context) throw new Error('Boneyard texture crop could not acquire Canvas2D.')
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
@@ -1340,13 +1399,26 @@ function cropTransparentCanvas(
   let minY = canvas.height
   let maxX = -1
   let maxY = -1
+  const boundaryPoints: Vec2[] = []
   for (let y = 0; y < canvas.height; y += 1) {
+    let rowMinX = canvas.width
+    let rowMaxX = -1
     for (let x = 0; x < canvas.width; x += 1) {
       if (pixels[(y * canvas.width + x) * 4 + 3] === 0) continue
       minX = Math.min(minX, x)
       minY = Math.min(minY, y)
       maxX = Math.max(maxX, x)
       maxY = Math.max(maxY, y)
+      rowMinX = Math.min(rowMinX, x)
+      rowMaxX = Math.max(rowMaxX, x)
+    }
+    if (includeOutline && rowMaxX >= rowMinX) {
+      boundaryPoints.push(
+        { x: rowMinX, y },
+        { x: rowMaxX + 1, y },
+        { x: rowMinX, y: y + 1 },
+        { x: rowMaxX + 1, y: y + 1 },
+      )
     }
   }
   if (maxX < minX || maxY < minY) return null
@@ -1364,7 +1436,19 @@ function cropTransparentCanvas(
     cropped.width,
     cropped.height,
   )
-  return { canvas: cropped, x: minX, y: minY }
+  return {
+    canvas: cropped,
+    ...(includeOutline
+      ? {
+          outline: nativeBoneyardConvexSilhouette(boundaryPoints).map((point) => ({
+            x: point.x - minX,
+            y: point.y - minY,
+          })),
+        }
+      : {}),
+    x: minX,
+    y: minY,
+  }
 }
 
 function residentTexture(
@@ -1381,12 +1465,33 @@ function residentTexture(
   return {
     h: canvas.height,
     mainLayerIndex,
+    shadowCaster: null,
     sprite,
     texture,
     w: canvas.width,
     x,
     y,
   }
+}
+
+function mainLayerShadowCaster(
+  croppedOutline: readonly Vec2[],
+  x: number,
+  y: number,
+  layer: MainLayer,
+  layerIndex: number,
+): NativeBoneyardComplexShadowCaster | null {
+  const outline = croppedOutline.map((point) => ({
+    x: x + point.x - layer.pos.x,
+    y: y + point.y - layer.pos.y,
+  }))
+  return outline.length < 3
+    ? null
+    : {
+        id: `main:${layerIndex}`,
+        outline,
+        position: { ...layer.pos },
+      }
 }
 
 function isMovingGateBody(layer: MainLayer | undefined): layer is Extract<MainLayer, { kind: 'fence' }> {
