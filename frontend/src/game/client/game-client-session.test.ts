@@ -412,6 +412,62 @@ test('client does not rewind a locally presented turn while acknowledgement is d
   session.destroy()
 })
 
+test('client accepts cast-owned heading and prevents movement prediction from replacing it', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialSnapshot = createGameSnapshot(serverState, 'player-1')
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+
+  session.sendInput(gameplayInput(
+    { x: -1, y: 0 },
+    { x: 900, y: 450 },
+  ))
+  const castHeadingIndex = 8
+  const castRadians = castHeadingIndex * 15 * Math.PI / 180
+  nowMs += 50
+  receiveSnapshot(transport, {
+    ...initialSnapshot,
+    players: {
+      ...initialSnapshot.players,
+      'player-1': {
+        ...initialSnapshot.players['player-1'],
+        headingIndex: castHeadingIndex,
+        primaryCast: {
+          actionTick: 20,
+          aimDirection: {
+            x: Math.sin(castRadians),
+            y: -Math.cos(castRadians),
+          },
+          castSequence: 1,
+          channelActive: false,
+          emissionSequence: 1,
+          held: false,
+        },
+      },
+    },
+    tick: initialSnapshot.tick + 5,
+  }, 0)
+
+  assert.equal(
+    session.samplePresentation().players['player-1'].headingIndex,
+    castHeadingIndex,
+  )
+  nowMs += 20
+  assert.equal(
+    session.samplePresentation().players['player-1'].headingIndex,
+    castHeadingIndex,
+  )
+  session.destroy()
+})
+
 test('client visually absorbs an unpredicted push over one snapshot interval', async () => {
   let nowMs = 1_000
   const transport = new MemoryTransport()

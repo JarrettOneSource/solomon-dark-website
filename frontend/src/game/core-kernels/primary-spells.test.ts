@@ -172,6 +172,8 @@ test('one-shot casts retain accepted facing against movement through projectile 
       state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
     }
     assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
+    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+    state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
     assert.equal(state.players[PLAYER_ID].headingIndex, 18)
   }
 })

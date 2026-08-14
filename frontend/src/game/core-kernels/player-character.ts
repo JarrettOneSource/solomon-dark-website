@@ -110,6 +110,12 @@ export function resetPlayerPrimaryCast(
   }
 }
 
+export function playerPrimaryCastOwnsFacing(
+  cast: PlayerPrimaryCastState,
+): boolean {
+  return cast.actionTick >= 0 || cast.channelActive
+}
+
 export function planPlayerCharacterTick(
   previous: Pick<PlayerCharacterState, 'velocity'>,
   input: Pick<PlayerCharacterInput, 'movement'>,
@@ -168,7 +174,8 @@ export function commitPlayerCharacterTick(
       previous.gaitDegrees
       + requestedDistance * PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT
     ) % 360,
-    headingIndex: plan.movementActive && requestedSpeed > 0.01
+    headingIndex: !playerPrimaryCastOwnsFacing(previous.primaryCast)
+      && plan.movementActive && requestedSpeed > 0.01
       ? actorHeadingIndex(actorHeadingFromVector(
           plan.requestedVelocity.x,
           plan.requestedVelocity.y,

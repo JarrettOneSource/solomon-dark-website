@@ -10068,6 +10068,13 @@ same stock actor field.
   held and otherwise retain their last cast direction until release.
 - Stock behavior preserved: movement continues, but cannot overwrite cast
   facing; robe, staff, socket, VFX origin, and Fire direction read one state.
+- Local prediction is part of that replicated-heading path. On an active cast
+  snapshot, reconciliation must accept the authoritative heading instead of
+  applying the ordinary locomotion "do not rewind a presented turn" rule;
+  subsequent predicted movement ticks must preserve that cast-owned heading.
+  The integrated WebGL receipt exposed this boundary as Ether wire heading `8`
+  versus rendered heading `12` before the correction. This remains replication
+  of actor heading, not client reconstruction from a spell transient.
 - Symptom patch to avoid: no Pixi rotation, CSS transform, element exception,
   or client-only facing override.
 

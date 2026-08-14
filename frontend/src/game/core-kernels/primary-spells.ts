@@ -2,10 +2,11 @@ import {
   actorHeadingFromVector,
   actorHeadingIndex,
 } from './actor-heading.ts'
-import type {
-  PlayerCharacterInput,
-  PlayerCharacterState,
-  PlayerPrimaryCastState,
+import {
+  playerPrimaryCastOwnsFacing,
+  type PlayerCharacterInput,
+  type PlayerCharacterState,
+  type PlayerPrimaryCastState,
 } from './player-character.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
@@ -317,9 +318,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
       : previous.primaryCast.aimDirection
     let primaryCast = advancePrimaryCast(previous.primaryCast, rawHeld, acceptedPress)
-    const castOwnsFacing = (
-      primaryCast.actionTick >= 0 || primaryCast.channelActive
-    )
+    const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
       ...player,
       headingIndex: castOwnsFacing

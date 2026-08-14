@@ -6,6 +6,7 @@ import {
   PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
   createIdlePlayerCharacterInput,
+  playerPrimaryCastOwnsFacing,
   type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
@@ -517,7 +518,9 @@ export function connectGameClientSession(
         player: {
           ...copyPlayer(authoritative),
           gaitDegrees: previous.player.gaitDegrees,
-          headingIndex: previous.player.headingIndex,
+          headingIndex: playerPrimaryCastOwnsFacing(authoritative.primaryCast)
+            ? authoritative.headingIndex
+            : previous.player.headingIndex,
           velocity: { ...previous.player.velocity },
           walkCyclePrimary: previous.player.walkCyclePrimary,
         },
