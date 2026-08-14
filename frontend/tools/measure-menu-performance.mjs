@@ -8,12 +8,17 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
 const screenshotPrefix = process.env.SDR_GAME_PERF_SCREENSHOT_PREFIX?.trim()
+const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
+const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
 const connectedBrowser = Boolean(cdpUrl)
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
   : await chromium.launch({
       executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
       headless: true,
+      args: browserFrameLimitDisabled
+        ? ['--disable-frame-rate-limit', '--disable-gpu-vsync']
+        : [],
     })
 const context = connectedBrowser
   ? browser.contexts()[0]
@@ -21,6 +26,7 @@ const context = connectedBrowser
 assert.ok(context, 'expected a browser context')
 const page = await context.newPage()
 await page.setViewportSize({ width: 1600, height: 900 })
+await page.bringToFront()
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
@@ -43,6 +49,7 @@ try {
     await page.screenshot({ path: `${screenshotPrefix}-loader.png` })
   }
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const presentation = await configureGamePresentation(page, presentationUncapped)
   await page.waitForTimeout(1_000)
   const title = await measureScene(page, sampleMs, '.main-menu-stage')
   if (screenshotPrefix) await page.screenshot({ path: `${screenshotPrefix}-title.png` })
@@ -66,10 +73,18 @@ try {
   }
 
   assert.deepEqual(errors, [])
+  if (!presentation.uncapped) {
+    assert.ok(title.averageFps <= presentation.frameCap + 0.01, JSON.stringify(title))
+    assert.ok(elementPicker.averageFps <= presentation.frameCap + 0.01, JSON.stringify(elementPicker))
+    assert.ok(disciplinePicker.averageFps <= presentation.frameCap + 0.01, JSON.stringify(disciplinePicker))
+  }
   process.stdout.write(`${JSON.stringify({
+    browserFrameLimitDisabled,
     disciplinePicker,
     elementPicker,
     loader,
+    presentationFrameCap: presentation.frameCap,
+    presentationUncapped: presentation.uncapped,
     sampleSeconds: sampleMs / 1_000,
     status: 'ok',
     title,
@@ -111,14 +126,13 @@ async function measureScene(page, duration, sceneSelector) {
   })
   const before = metricMap(await cdp.send('Performance.getMetrics'))
   const samples = await page.evaluate((measurementMs) => new Promise((resolve) => {
+    const presentation = window.__sdrGamePresentation
     const timestamps = []
-    const startedAt = performance.now()
-    const frame = (now) => {
-      timestamps.push(now)
-      if (now - startedAt >= measurementMs) resolve(timestamps)
-      else requestAnimationFrame(frame)
-    }
-    requestAnimationFrame(frame)
+    const unsubscribe = presentation.subscribe((now) => timestamps.push(now))
+    setTimeout(() => {
+      unsubscribe()
+      resolve(timestamps)
+    }, measurementMs)
   }), duration)
   const after = metricMap(await cdp.send('Performance.getMetrics'))
   await cdp.detach()
@@ -166,6 +180,18 @@ async function measureScene(page, duration, sceneSelector) {
     slowFramesOver20Ms: intervals.filter((interval) => interval > 20).length,
     ...runtime,
   }
+}
+
+async function configureGamePresentation(page, uncapped) {
+  return page.evaluate((enabled) => {
+    const presentation = window.__sdrGamePresentation
+    if (!presentation) throw new Error('game presentation controls are unavailable')
+    presentation.setUncapped(enabled)
+    return {
+      frameCap: presentation.frameCap,
+      uncapped: presentation.uncapped,
+    }
+  }, uncapped)
 }
 
 function metricMap(result) {

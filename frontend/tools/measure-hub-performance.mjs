@@ -4,7 +4,8 @@ import { chromium } from 'playwright-core'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 20_000)
-const uncapped = process.env.SDR_GAME_PERF_UNCAPPED === '1'
+const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
+const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
 const requireHardwareGpu = process.env.SDR_GAME_REQUIRE_HARDWARE_GPU === '1'
 const movementCommands = parseMovementCommands(process.env.SDR_GAME_PERF_MOVE_SCRIPT)
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
@@ -19,7 +20,9 @@ const browser = cdpUrl
   : await chromium.launch({
       executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
       headless: true,
-      args: uncapped ? ['--disable-frame-rate-limit', '--disable-gpu-vsync'] : [],
+      args: browserFrameLimitDisabled
+        ? ['--disable-frame-rate-limit', '--disable-gpu-vsync']
+        : [],
     })
 const errors = []
 let page
@@ -31,12 +34,14 @@ try {
   if (!context) throw new Error('CDP browser has no default context')
   page = await context.newPage()
   await page.setViewportSize({ width: 1600, height: 900 })
+  await page.bringToFront()
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text())
   })
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const presentation = await configureGamePresentation(page, presentationUncapped)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 15_000 })
@@ -86,16 +91,19 @@ try {
   snapshotFrames = 0
   const metricsBefore = metricMap(await cdp.send('Performance.getMetrics'))
   const sample = await page.evaluate((duration) => new Promise((resolve) => {
+    const presentation = window.__sdrGamePresentation
     const timestamps = []
     const studentCounts = []
-    const startedAt = performance.now()
-    const frame = (now) => {
+    const unsubscribe = presentation.subscribe((now) => {
       timestamps.push(now)
-      studentCounts.push(document.querySelector('.hub-world-canvas')?.__sdrHubFrame.studentCount ?? -1)
-      if (now - startedAt >= duration) resolve({ studentCounts, timestamps })
-      else requestAnimationFrame(frame)
-    }
-    requestAnimationFrame(frame)
+      studentCounts.push(
+        document.querySelector('.hub-world-canvas')?.__sdrHubFrame.studentCount ?? -1,
+      )
+    })
+    setTimeout(() => {
+      unsubscribe()
+      resolve({ studentCounts, timestamps })
+    }, duration)
   }), sampleMs)
   const frames = sample.timestamps
   const measuredSnapshotBytes = snapshotBytes
@@ -136,13 +144,17 @@ try {
     averageFps: intervals.length * 1000 / elapsedMs,
     browserTaskSeconds: (metricsAfter.TaskDuration ?? 0) - (metricsBefore.TaskDuration ?? 0),
     compositorLayers: layerCount,
+    fastFramesUnderCapInterval: intervals.filter((interval) => interval < 2.5).length,
+    minimumFrameMs: Math.min(...intervals),
     onePercentLowFps: 1000 / slowMean,
     sampleSeconds: elapsedMs / 1000,
     snapshotFrames: measuredSnapshotFrames,
     snapshotHertz: measuredSnapshotFrames * 1000 / elapsedMs,
     snapshotKiBPerSecond: measuredSnapshotBytes / 1024 * 1000 / elapsedMs,
     slowFramesOver20Ms: intervals.filter((interval) => interval > 20).length,
-    uncapped,
+    browserFrameLimitDisabled,
+    presentationFrameCap: presentation.frameCap,
+    presentationUncapped: presentation.uncapped,
     movementReceipt,
     expectedStudentCount: expectedStudentCount ?? null,
     studentArrivalCount: arrivalStudentCount,
@@ -157,11 +169,8 @@ try {
   assert.equal(report.worldDomChildren, 1)
   assert.equal(report.astronomerRenderable, true)
   assert.equal(report.southernArtRenderable, true)
-  assert.ok(report.southernArchitectureCount > 0)
-  assert.equal(
-    report.southernChildCount,
-    report.southernArchitectureCount + 3,
-  )
+  assert.equal(report.southernArchitectureCount, 16)
+  assert.equal(report.southernChildCount, 19)
   assert.equal(
     report.studentVisibleCandidateCount + report.studentOutsideViewCount,
     report.studentCount,
@@ -179,6 +188,12 @@ try {
     report.snapshotHertz > 18 && report.snapshotHertz < 22,
     `expected 20 Hz snapshots: ${JSON.stringify(report)}`,
   )
+  if (!report.presentationUncapped) {
+    assert.ok(
+      report.averageFps <= report.presentationFrameCap + 0.01,
+      `presentation exceeded its cap: ${JSON.stringify(report)}`,
+    )
+  }
   if (process.env.SDR_GAME_PERF_SCREENSHOT) {
     await page.screenshot({ path: process.env.SDR_GAME_PERF_SCREENSHOT })
   }
@@ -203,6 +218,18 @@ function optionalInteger(value, name, minimum, maximum) {
 
 async function studentCount(canvas) {
   return canvas.evaluate((node) => node.__sdrHubFrame.studentCount)
+}
+
+async function configureGamePresentation(page, uncapped) {
+  return page.evaluate((enabled) => {
+    const presentation = window.__sdrGamePresentation
+    if (!presentation) throw new Error('game presentation controls are unavailable')
+    presentation.setUncapped(enabled)
+    return {
+      frameCap: presentation.frameCap,
+      uncapped: presentation.uncapped,
+    }
+  }, uncapped)
 }
 
 async function playerPosition(canvas) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { hub } from '../lib/assets'
 import type { WizardElement } from './core-kernels/player-character.ts'
+import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 
 const XP_PROGRESS = 0.45
 
@@ -34,25 +35,22 @@ function FpsCounter() {
   const [fps, setFps] = useState<number | null>(null)
 
   useEffect(() => {
-    let animationFrame = 0
-    let frameCount = 0
-    let sampleStartedAt = performance.now()
+    let frameIntervals = 0
+    let sampleStartedAt: number | null = null
 
-    const sample = (now: number) => {
-      frameCount += 1
-
+    return subscribeGamePresentationFrames((now) => {
+      if (sampleStartedAt === null) {
+        sampleStartedAt = now
+        return
+      }
+      frameIntervals += 1
       const elapsed = now - sampleStartedAt
       if (elapsed >= 1_000) {
-        setFps(Math.round(frameCount * 1_000 / elapsed))
-        frameCount = 0
+        setFps(Math.round(frameIntervals * 1_000 / elapsed))
+        frameIntervals = 0
         sampleStartedAt = now
       }
-
-      animationFrame = requestAnimationFrame(sample)
-    }
-
-    animationFrame = requestAnimationFrame(sample)
-    return () => cancelAnimationFrame(animationFrame)
+    })
   }, [])
 
   return (

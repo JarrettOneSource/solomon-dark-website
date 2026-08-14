@@ -18,6 +18,7 @@ import {
   nativeFootstepCue,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
+import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
@@ -138,7 +139,7 @@ export default function HubScene({
     const host = hostRef.current
     if (!host) return
     let cancelled = false
-    let animationFrame = 0
+    let stopPresentationLoop: (() => void) | null = null
     let previousTeacherSeconds = hubInitialSnapshot.tick / 100
     const input = createBrowserGameplayInput({
       mouseTarget: host,
@@ -178,7 +179,7 @@ export default function HubScene({
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
-      const animate = (now: number) => {
+      stopPresentationLoop = startGamePresentationLoop((now) => {
         onInput(input.sample().input)
         const snapshot = samplePresentation(now)
         const teacherSeconds = snapshot.tick / 100
@@ -196,9 +197,7 @@ export default function HubScene({
         }
         previousTeacherSeconds = teacherSeconds
         renderer.render(snapshot)
-        animationFrame = requestAnimationFrame(animate)
-      }
-      animationFrame = requestAnimationFrame(animate)
+      })
     }).catch((error: unknown) => {
       if (!cancelled) {
         setRendererError(error instanceof Error
@@ -209,7 +208,7 @@ export default function HubScene({
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(animationFrame)
+      stopPresentationLoop?.()
       input.destroy()
       inputRef.current = null
       rendererRef.current?.destroy()

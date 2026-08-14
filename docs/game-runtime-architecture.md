@@ -540,3 +540,41 @@ circular architecture, animated statue base, telescope, and Wizards. Both runs
 reported all `16` southern architecture sprites, all `19` southern-bank
 children, and no frame over `20 ms`. The scene guard verifies visibility and
 parent ownership, rather than treating `renderable` alone as sufficient.
+
+## Browser presentation rate
+
+All Pixi game scenes submit through one client-local presentation scheduler.
+The scheduler accepts at most `400` frames per second by default. Its internal
+`setGamePresentationUncapped` and `toggleGamePresentationUncapped` controls can
+disable that application cap for profiling now and for a future settings menu;
+the default remains capped. The same controls are exposed to local diagnostics
+as `window.__sdrGamePresentation` together with the accepted frame count. Until
+the settings UI owns this choice, local diagnostics can call
+`window.__sdrGamePresentation.setUncapped(true)` or
+`window.__sdrGamePresentation.toggleUncapped()`.
+
+Display-paced browsers stay on `requestAnimationFrame`. Sustained animation
+opportunities below the `2.5 ms` cap interval select a deadline-aware timer path
+for Chromium's unlimited launch mode. A persistent `MessageChannel` separates
+successive timer tasks so the HTML nested-timer floor cannot reduce a requested
+`400 FPS` ceiling to roughly `200 FPS`; the timestamp gate still rejects every
+early wake and never catches up with a burst.
+
+`SDR_GAME_PERF_UNCAPPED=1` launches benchmark Chromium with its own frame limit
+and GPU synchronization disabled, but deliberately leaves the application's
+`400 FPS` policy active. Adding `SDR_GAME_PRESENTATION_UNCAPPED=1` selects the
+explicit full-send application path. Benchmark reports identify both settings
+and compute FPS from accepted presentation frames rather than raw browser
+callbacks.
+
+This scheduler owns renderer submission and adjacent per-frame presentation
+work only. It does not throttle or accelerate the authoritative `100 Hz`
+simulation, `20 Hz` snapshot production, transport, non-render timers, or
+headless environments. The setting is local and multiplayer-neutral.
+
+On headed Windows Chrome `151.0.7922.138` and the physical Radeon RX 9070 XT,
+the final exact-`16` Hub probe measured `143.54 FPS` in ordinary Chrome,
+`374.16 FPS` with Chromium's frame limit disabled and the application cap on,
+and `1,634.73 FPS` with both limits disabled. Every run retained `20 Hz`
+snapshots, three camera render groups, `16` southern architecture sprites, `19`
+southern-bank children, and the Astronomer ensemble without errors.

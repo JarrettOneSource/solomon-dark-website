@@ -19,6 +19,7 @@ import {
   createSelectionAudioEvents,
   type CreateAudioEvent,
 } from './game-audio-native.ts'
+import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import {
   CREATE_DISCIPLINES,
   CREATE_ELEMENTS,
@@ -84,7 +85,7 @@ export default function CreateMenuScene({
     const scene = sceneRef.current
     if (!host || !scene) return
     let cancelled = false
-    let animationFrame = 0
+    let stopPresentationLoop: (() => void) | null = null
     let previousSemanticPhase: 'discipline' | 'element' | null = null
     let previousSemanticTick = -1
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -104,7 +105,7 @@ export default function CreateMenuScene({
       phaseStartedAtRef.current = sceneStartedAt
       previousPhaseElapsedRef.current = 0
 
-      const animate = (now: number) => {
+      stopPresentationLoop = startGamePresentationLoop((now) => {
         const selected = selectedElementRef.current
         const phase = selected ? 'discipline' : 'element'
         const phaseElapsedMs = now - phaseStartedAtRef.current
@@ -157,9 +158,7 @@ export default function CreateMenuScene({
           sceneElapsedMs: now - sceneStartedAt,
           selectedElement: selected,
         })
-        animationFrame = requestAnimationFrame(animate)
-      }
-      animationFrame = requestAnimationFrame(animate)
+      })
     }).catch((error: unknown) => {
       if (!cancelled) {
         setRendererError(error instanceof Error
@@ -170,7 +169,7 @@ export default function CreateMenuScene({
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(animationFrame)
+      stopPresentationLoop?.()
       rendererRef.current?.destroy()
       rendererRef.current = null
       host.replaceChildren()

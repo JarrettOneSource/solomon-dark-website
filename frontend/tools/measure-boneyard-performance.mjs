@@ -8,14 +8,17 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
 const minimumFps = Number(process.env.SDR_GAME_MIN_FPS || 0)
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
-const uncapped = process.env.SDR_GAME_PERF_UNCAPPED === '1'
+const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
+const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
 const connectedBrowser = Boolean(cdpUrl)
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
   : await chromium.launch({
       executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
       headless: true,
-      args: uncapped ? ['--disable-frame-rate-limit', '--disable-gpu-vsync'] : [],
+      args: browserFrameLimitDisabled
+        ? ['--disable-frame-rate-limit', '--disable-gpu-vsync']
+        : [],
     })
 const context = connectedBrowser
   ? browser.contexts()[0]
@@ -23,6 +26,7 @@ const context = connectedBrowser
 assert.ok(context, 'expected a browser context')
 const page = await context.newPage()
 await page.setViewportSize({ width: 1600, height: 900 })
+await page.bringToFront()
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
@@ -30,7 +34,7 @@ page.on('console', (message) => {
 })
 
 try {
-  await enterBoneyard(page)
+  const presentation = await enterBoneyard(page)
   const canvas = page.locator(
     '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
   )
@@ -137,6 +141,10 @@ try {
     assert.ok(idle.averageFps >= minimumFps, JSON.stringify(idle))
     assert.ok(moving.averageFps >= minimumFps, JSON.stringify(moving))
   }
+  if (!presentation.uncapped) {
+    assert.ok(idle.averageFps <= presentation.frameCap + 0.01, JSON.stringify(idle))
+    assert.ok(moving.averageFps <= presentation.frameCap + 0.01, JSON.stringify(moving))
+  }
   process.stdout.write(`${JSON.stringify({
     idle,
     minimumFps,
@@ -144,7 +152,9 @@ try {
     runtime,
     sampleSeconds: sampleMs / 1000,
     status: 'ok',
-    uncapped,
+    browserFrameLimitDisabled,
+    presentationFrameCap: presentation.frameCap,
+    presentationUncapped: presentation.uncapped,
   })}\n`)
 } finally {
   await page.close()
@@ -154,6 +164,7 @@ try {
 async function enterBoneyard(page) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  const presentation = await configureGamePresentation(page, presentationUncapped)
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]')
@@ -172,6 +183,7 @@ async function enterBoneyard(page) {
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
   await page.waitForTimeout(1_000)
+  return presentation
 }
 
 async function measure(page, duration) {
@@ -179,11 +191,11 @@ async function measure(page, duration) {
   await cdp.send('Performance.enable')
   const before = metricMap(await cdp.send('Performance.getMetrics'))
   const samples = await page.evaluate((measurementMs) => new Promise((resolve) => {
+    const presentation = window.__sdrGamePresentation
     const positions = []
     const residentCounts = []
     const timestamps = []
-    const startedAt = performance.now()
-    const frame = (now) => {
+    const unsubscribe = presentation.subscribe((now) => {
       const diagnostics = document.querySelector('.boneyard-world-canvas')
         ?.__sdrBoneyardFrame
       timestamps.push(now)
@@ -196,10 +208,11 @@ async function measure(page, duration) {
             visible: diagnostics.visibleResidentCount,
           }
         : null)
-      if (now - startedAt >= measurementMs) resolve({ positions, residentCounts, timestamps })
-      else requestAnimationFrame(frame)
-    }
-    requestAnimationFrame(frame)
+    })
+    setTimeout(() => {
+      unsubscribe()
+      resolve({ positions, residentCounts, timestamps })
+    }, measurementMs)
   }), duration)
   const after = metricMap(await cdp.send('Performance.getMetrics'))
   await cdp.detach()
@@ -232,6 +245,18 @@ async function measure(page, duration) {
     slowFramesOver20Ms: intervals.filter((interval) => interval > 20).length,
     startPosition: samples.positions.find(Boolean),
   }
+}
+
+async function configureGamePresentation(page, uncapped) {
+  return page.evaluate((enabled) => {
+    const presentation = window.__sdrGamePresentation
+    if (!presentation) throw new Error('game presentation controls are unavailable')
+    presentation.setUncapped(enabled)
+    return {
+      frameCap: presentation.frameCap,
+      uncapped: presentation.uncapped,
+    }
+  }, uncapped)
 }
 
 function metricMap(result) {

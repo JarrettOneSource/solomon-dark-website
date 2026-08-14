@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import type { FixedGameViewportLayout } from './renderer/game-viewport.ts'
 import {
   createTitleMenuRenderer,
@@ -44,7 +45,7 @@ export default function TitleMenuPresentation({
     const host = hostRef.current
     if (!host) return
     let cancelled = false
-    let animationFrame = 0
+    let stopPresentationLoop: (() => void) | null = null
     const startedAt = performance.now()
     frameRef.current.reducedMotion = window.matchMedia(
       '(prefers-reduced-motion: reduce)',
@@ -61,14 +62,12 @@ export default function TitleMenuPresentation({
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
-      const animate = (now: number) => {
+      stopPresentationLoop = startGamePresentationLoop((now) => {
         renderer.render({
           ...frameRef.current,
           elapsedMs: now - startedAt,
         })
-        animationFrame = requestAnimationFrame(animate)
-      }
-      animationFrame = requestAnimationFrame(animate)
+      })
     }).catch((error: unknown) => {
       if (!cancelled) {
         setRendererError(error instanceof Error
@@ -79,7 +78,7 @@ export default function TitleMenuPresentation({
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(animationFrame)
+      stopPresentationLoop?.()
       rendererRef.current?.destroy()
       rendererRef.current = null
       host.replaceChildren()

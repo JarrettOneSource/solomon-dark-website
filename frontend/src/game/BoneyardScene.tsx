@@ -14,6 +14,7 @@ import {
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
@@ -124,7 +125,7 @@ export default function BoneyardScene({
     const host = hostRef.current
     if (!host) return
     let cancelled = false
-    let animationFrame = 0
+    let stopPresentationLoop: (() => void) | null = null
     const input = createBrowserGameplayInput({
       mouseTarget: host,
       onInput,
@@ -164,7 +165,7 @@ export default function BoneyardScene({
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
-      const animate = (now: number) => {
+      stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
         onInput(input.sample().input)
         renderer.render(snapshot)
@@ -188,9 +189,7 @@ export default function BoneyardScene({
           snapshot,
           playerId,
         )
-        animationFrame = requestAnimationFrame(animate)
-      }
-      animationFrame = requestAnimationFrame(animate)
+      })
     }).catch((error: unknown) => {
       if (!cancelled) {
         setRendererError(error instanceof Error
@@ -201,7 +200,7 @@ export default function BoneyardScene({
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(animationFrame)
+      stopPresentationLoop?.()
       input.destroy()
       inputRef.current = null
       rendererRef.current?.destroy()

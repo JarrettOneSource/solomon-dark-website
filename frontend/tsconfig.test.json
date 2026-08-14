@@ -23,6 +23,8 @@
     "src/game/game-audio-native.test.ts",
     "src/game/game-audio-director.ts",
     "src/game/game-audio-director.test.ts",
+    "src/game/game-presentation-frame-loop.ts",
+    "src/game/game-presentation-frame-loop.test.ts",
     "src/game/element-vfx-native.ts",
     "src/game/element-vfx-native.test.ts",
     "src/game/core-kernels/actor-physics.test.ts",
