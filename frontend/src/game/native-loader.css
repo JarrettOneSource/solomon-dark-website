@@ -10,19 +10,15 @@
 
 .native-loader-stage {
   position: relative;
-  width: min(100vw, calc(100dvh * 16 / 9));
-  height: min(100dvh, calc(100vw * 9 / 16));
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  container-type: size;
   background: rgb(0 0 84);
 }
 
 .native-loader-renderer {
   position: absolute;
-  top: calc(50% - 10cqw);
-  left: calc(50% - 15cqw);
-  width: 30cqw;
-  height: 20cqw;
+  inset: 0;
   overflow: hidden;
 }
 

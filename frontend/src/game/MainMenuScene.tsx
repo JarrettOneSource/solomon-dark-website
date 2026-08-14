@@ -26,9 +26,11 @@ import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
+  fixedGameStageBounds,
   fixedGameStageCssBounds,
   fixedGameViewportLayout,
   type FixedGameViewportLayout,
+  type GameViewportBounds,
 } from './renderer/game-viewport.ts'
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
@@ -273,7 +275,14 @@ export default function MainMenuScene({
   const gameScene = screen === 'hub' && runtimeSnapshot?.world.kind === 'boneyard'
     ? 'boneyard'
     : screen
-  const nativeStageStyle = fixedStageStyle(fixedViewport)
+  const nativeStageStyle = fixedStageStyle(
+    fixedViewport,
+    fixedGameStageBounds(fixedViewport, 'center', 'center'),
+  )
+  const quitStageStyle = fixedStageStyle(
+    fixedViewport,
+    fixedGameStageBounds(fixedViewport, 'right', 'bottom'),
+  )
 
   const beginNewGame = async () => {
     if (preparing || connecting) return
@@ -364,7 +373,9 @@ export default function MainMenuScene({
                   />
                 )}
               </nav>
+            </div>
 
+            <div className="main-menu-native-stage main-menu-quit-stage" style={quitStageStyle}>
               <div className="main-menu-quit">
                 <MenuButton
                   action="quit"
@@ -429,8 +440,11 @@ export default function MainMenuScene({
   )
 }
 
-function fixedStageStyle(viewport: FixedGameViewportLayout): CSSProperties {
-  const bounds = fixedGameStageCssBounds(viewport)
+function fixedStageStyle(
+  viewport: FixedGameViewportLayout,
+  stage: GameViewportBounds,
+): CSSProperties {
+  const bounds = fixedGameStageCssBounds(viewport, stage)
   return {
     height: `${GAME_VIEWPORT_MIN_HEIGHT}px`,
     transform: `translate3d(${bounds.x}px, ${bounds.y}px, 0) scale(${viewport.displayScale})`,

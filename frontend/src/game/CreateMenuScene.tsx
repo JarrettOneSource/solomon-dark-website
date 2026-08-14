@@ -29,7 +29,7 @@ import {
   type CreateMenuRenderer,
 } from './renderer/create-menu-renderer.ts'
 import {
-  fixedGameBottomStageBounds,
+  fixedGameStageBounds,
   fixedGameStageCssBounds,
   type FixedGameViewportLayout,
   type GameViewportBounds,
@@ -233,10 +233,17 @@ export default function CreateMenuScene({
     hoveredActionRef.current = action
   }
 
-  const nativeTopStageStyle = nativeStageStyle(viewport, viewport.nativeStage)
+  const nativeBackStageStyle = nativeStageStyle(
+    viewport,
+    fixedGameStageBounds(viewport, 'left', 'top'),
+  )
+  const nativeNameStageStyle = nativeStageStyle(
+    viewport,
+    fixedGameStageBounds(viewport, 'center', 'top'),
+  )
   const nativeActionStageStyle = nativeStageStyle(
     viewport,
-    fixedGameBottomStageBounds(viewport),
+    fixedGameStageBounds(viewport, 'center', 'bottom'),
   )
 
   return (
@@ -254,7 +261,7 @@ export default function CreateMenuScene({
         <div className="main-menu-renderer-error" role="alert">{rendererError}</div>
       )}
 
-      <div className="create-menu-native-stage create-menu-native-top-stage" style={nativeTopStageStyle}>
+      <div className="create-menu-native-stage create-menu-native-back-stage" style={nativeBackStageStyle}>
         <button
           type="button"
           className="create-menu-back"
@@ -271,7 +278,9 @@ export default function CreateMenuScene({
           onPointerLeave={() => highlight(null)}
           onKeyDown={playBackPress}
         />
+      </div>
 
+      <div className="create-menu-native-stage create-menu-native-name-stage" style={nativeNameStageStyle}>
         <div className="create-menu-name-semantic" aria-label="Wizard name: Helvidius" />
       </div>
 

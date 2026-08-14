@@ -7,6 +7,7 @@
   overflow: hidden;
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
     env(safe-area-inset-bottom) env(safe-area-inset-left);
+  container-type: size;
   background: #000;
   place-items: center;
 }
@@ -28,6 +29,7 @@
   top: 0;
   left: 0;
   container-type: size;
+  pointer-events: none;
   transform-origin: 0 0;
 }
 
@@ -62,6 +64,7 @@
   width: 22.0625%;
   flex-direction: column;
   gap: 0.4375cqw;
+  pointer-events: auto;
   transform: translateX(0.0625cqw);
   animation: main-menu-actions-in 100ms linear both;
 }
@@ -89,6 +92,7 @@
   right: 1.1875%;
   bottom: 1.555556%;
   width: 6.25%;
+  pointer-events: auto;
 }
 
 .main-menu-button-compact { aspect-ratio: 100 / 52; }
@@ -131,6 +135,7 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .game-fullscreen-control {
@@ -143,13 +148,13 @@
 .main-menu-page[data-game-scene='root'] .game-fullscreen-control,
 .main-menu-page[data-game-scene='play'] .game-fullscreen-control {
   top: auto;
-  right: 126px;
-  bottom: 14px;
+  right: calc(7px + min(7.4375cqw, 13.222222cqh));
+  bottom: min(0.875cqw, 1.555556cqh);
 }
 
 .main-menu-page[data-game-scene='create'] .game-fullscreen-control {
-  top: 10px;
-  right: 88px;
+  top: min(0.625cqw, 1.111111cqh);
+  right: calc(8px + min(5cqw, 8.888889cqh));
 }
 
 .game-fullscreen-button {

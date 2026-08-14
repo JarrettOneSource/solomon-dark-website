@@ -42,9 +42,9 @@ import {
   loadGameTextureMap,
   textureFrom,
 } from './game-webgl.ts'
-import { initialHubResolution } from './hub-render-contract.ts'
 import {
-  fixedGameBottomStageBounds,
+  fixedGamePresentationResolution,
+  fixedGameStageBounds,
   type FixedGameViewportLayout,
 } from './game-viewport.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
@@ -97,10 +97,10 @@ export async function createCreateMenuRenderer(
   options: CreateMenuRendererOptions,
 ): Promise<CreateMenuRenderer> {
   const textures = await loadGameTextureMap(CREATE_ASSET_SOURCES)
-  const resolution = initialHubResolution({
-    devicePixelRatio: options.devicePixelRatio ?? window.devicePixelRatio,
-    displayScale: options.viewport.displayScale,
-  })
+  const resolution = fixedGamePresentationResolution(
+    options.devicePixelRatio ?? window.devicePixelRatio,
+    options.viewport.displayScale,
+  )
   let gpu
   try {
     gpu = await createGameWebGlApplication({
@@ -123,14 +123,10 @@ export async function createCreateMenuRenderer(
   root.eventMode = 'none'
   root.sortableChildren = true
   application.stage.addChild(root)
-  const nativeTopStage = new Container({ label: 'create-menu-native-top-stage' })
-  nativeTopStage.eventMode = 'none'
-  nativeTopStage.sortableChildren = true
-  nativeTopStage.zIndex = 1
-  const nativeActionStage = new Container({ label: 'create-menu-native-action-stage' })
-  nativeActionStage.eventMode = 'none'
-  nativeActionStage.sortableChildren = true
-  nativeActionStage.zIndex = 1
+  const nativeActionStage = createStage('create-menu-native-action-stage', 1)
+  const nativeBackStage = createStage('create-menu-native-back-stage', 2)
+  const nativeNameStage = createStage('create-menu-native-name-stage', 2)
+  const nativeDiceStage = createStage('create-menu-native-dice-stage', 2)
   const gradients: FillGradient[] = []
 
   const backgroundGradient = new FillGradient({
@@ -147,7 +143,13 @@ export async function createCreateMenuRenderer(
     .rect(0, 0, options.viewport.width, options.viewport.height)
     .fill(backgroundGradient)
   background.zIndex = 0
-  root.addChild(background, nativeTopStage, nativeActionStage)
+  root.addChild(
+    background,
+    nativeActionStage,
+    nativeBackStage,
+    nativeNameStage,
+    nativeDiceStage,
+  )
 
   const wheel = centeredSprite(texture(createMenu.arcaneWheel), 800, 800, 276, 276, 1)
   wheel.scale.set(3)
@@ -216,18 +218,18 @@ export async function createCreateMenuRenderer(
   nativeActionStage.addChild(elementPrompt, disciplinePrompt)
   const name = createNameView(texture, gradients)
   name.zIndex = 8
-  nativeTopStage.addChild(name)
+  nativeNameStage.addChild(name)
   const back = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 8)
   back.alpha = 0.76
   const backHighlight = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 9)
   backHighlight.blendMode = 'add'
   backHighlight.alpha = 0
-  nativeTopStage.addChild(back, backHighlight)
-  nativeTopStage.addChild(stageSprite(texture(createMenu.dice), 1520, 0, 80, 54, 8))
+  nativeBackStage.addChild(back, backHighlight)
+  nativeDiceStage.addChild(stageSprite(texture(createMenu.dice), 1520, 0, 80, 54, 8))
   const flash = new Graphics().rect(
     0, 0, options.viewport.width, options.viewport.height,
   ).fill(0xffffff)
-  flash.zIndex = 2
+  flash.zIndex = 3
   flash.alpha = 0
   root.addChild(flash)
 
@@ -318,10 +320,10 @@ export async function createCreateMenuRenderer(
     },
     resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
-      const nextResolution = initialHubResolution({
-        devicePixelRatio: nextDevicePixelRatio,
-        displayScale: viewport.displayScale,
-      })
+      const nextResolution = fixedGamePresentationResolution(
+        nextDevicePixelRatio,
+        viewport.displayScale,
+      )
       if (nextResolution === currentResolution
         && viewport.width === currentViewport.width
         && viewport.height === currentViewport.height
@@ -334,8 +336,10 @@ export async function createCreateMenuRenderer(
         background,
         backgroundGradient,
         flash,
-        nativeTopStage,
         nativeActionStage,
+        nativeBackStage,
+        nativeNameStage,
+        nativeDiceStage,
         viewport,
         currentResolution,
       )
@@ -362,8 +366,10 @@ export async function createCreateMenuRenderer(
     background,
     backgroundGradient,
     flash,
-    nativeTopStage,
     nativeActionStage,
+    nativeBackStage,
+    nativeNameStage,
+    nativeDiceStage,
     options.viewport,
     resolution,
   )
@@ -383,20 +389,39 @@ function applyCreateViewport(
   background: Graphics,
   backgroundGradient: FillGradient,
   flash: Graphics,
-  nativeTopStage: Container,
   nativeActionStage: Container,
+  nativeBackStage: Container,
+  nativeNameStage: Container,
+  nativeDiceStage: Container,
   viewport: FixedGameViewportLayout,
   resolution: number,
 ): void {
   application.renderer.resize(viewport.width, viewport.height, resolution)
   background.clear().rect(0, 0, viewport.width, viewport.height).fill(backgroundGradient)
   flash.clear().rect(0, 0, viewport.width, viewport.height).fill(0xffffff)
-  nativeTopStage.position.set(viewport.nativeStage.x, viewport.nativeStage.y)
-  const actionStage = fixedGameBottomStageBounds(viewport)
-  nativeActionStage.position.set(actionStage.x, actionStage.y)
+  const actionBounds = fixedGameStageBounds(viewport, 'center', 'bottom')
+  const backBounds = fixedGameStageBounds(viewport, 'left', 'top')
+  const nameBounds = fixedGameStageBounds(viewport, 'center', 'top')
+  const diceBounds = fixedGameStageBounds(viewport, 'right', 'top')
+  nativeActionStage.position.set(actionBounds.x, actionBounds.y)
+  nativeBackStage.position.set(backBounds.x, backBounds.y)
+  nativeNameStage.position.set(nameBounds.x, nameBounds.y)
+  nativeDiceStage.position.set(diceBounds.x, diceBounds.y)
   const canvas = application.canvas as HTMLCanvasElement
+  canvas.dataset.actionStage = `${actionBounds.x},${actionBounds.y}`
+  canvas.dataset.backStage = `${backBounds.x},${backBounds.y}`
+  canvas.dataset.diceStage = `${diceBounds.x},${diceBounds.y}`
+  canvas.dataset.nameStage = `${nameBounds.x},${nameBounds.y}`
   canvas.dataset.viewportHeight = `${viewport.height}`
   canvas.dataset.viewportWidth = `${viewport.width}`
+}
+
+function createStage(label: string, zIndex: number): Container {
+  const stage = new Container({ label })
+  stage.eventMode = 'none'
+  stage.sortableChildren = true
+  stage.zIndex = zIndex
+  return stage
 }
 
 function updateElementViews(

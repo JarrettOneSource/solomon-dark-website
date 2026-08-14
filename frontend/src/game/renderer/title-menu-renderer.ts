@@ -9,8 +9,11 @@ import {
 
 import { mainMenu, menuSolomon } from '../../lib/assets.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
-import { initialHubResolution } from './hub-render-contract.ts'
-import type { FixedGameViewportLayout } from './game-viewport.ts'
+import {
+  fixedGamePresentationResolution,
+  fixedGameStageBounds,
+  type FixedGameViewportLayout,
+} from './game-viewport.ts'
 import {
   TITLE_CLOUD_HEIGHT,
   TITLE_CLOUD_WIDTH,
@@ -83,10 +86,10 @@ export async function createTitleMenuRenderer(
   options: TitleMenuRendererOptions,
 ): Promise<TitleMenuRenderer> {
   const textures = await loadGameTextureMap(TITLE_ASSET_SOURCES)
-  const resolution = initialHubResolution({
-    devicePixelRatio: options.devicePixelRatio ?? window.devicePixelRatio,
-    displayScale: options.viewport.displayScale,
-  })
+  const resolution = fixedGamePresentationResolution(
+    options.devicePixelRatio ?? window.devicePixelRatio,
+    options.viewport.displayScale,
+  )
   let gpu
   try {
     gpu = await createGameWebGlApplication({
@@ -109,10 +112,11 @@ export async function createTitleMenuRenderer(
   const backdrop = new Container({ label: 'title-menu-backdrop' })
   backdrop.sortableChildren = true
   backdrop.zIndex = 0
-  const nativeStage = new Container({ label: 'title-menu-native-stage' })
-  nativeStage.sortableChildren = true
-  nativeStage.zIndex = 1
-  root.addChild(backdrop, nativeStage)
+  const solomonStage = titleStage('title-menu-solomon-stage', 20)
+  const centerStage = titleStage('title-menu-center-stage', 21)
+  const versionStage = titleStage('title-menu-version-stage', 22)
+  const quitStage = titleStage('title-menu-quit-stage', 24)
+  root.addChild(backdrop, solomonStage, centerStage, versionStage, quitStage)
 
   const gradients: FillGradient[] = []
   const background = new Graphics().rect(
@@ -165,13 +169,13 @@ export async function createTitleMenuRenderer(
 
   const solomon = createSolomonView(texture)
   solomon.container.zIndex = 20
-  nativeStage.addChild(solomon.container)
-  nativeStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
-  nativeStage.addChild(stageSprite(texture(mainMenu.text.version), 1495, 4, 104, 15, 22))
-  nativeStage.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
+  solomonStage.addChild(solomon.container)
+  centerStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
+  versionStage.addChild(stageSprite(texture(mainMenu.text.version), 1495, 4, 104, 15, 22))
+  centerStage.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
   const rightFlourish = stageSprite(texture(mainMenu.flourish), 1102, 440, 67, 262, 23)
   rightFlourish.scale.x = -1
-  nativeStage.addChild(rightFlourish)
+  centerStage.addChild(rightFlourish)
 
   const rootButtons = new Container({ label: 'title-root-buttons' })
   const playButtons = new Container({ label: 'title-play-buttons' })
@@ -197,10 +201,10 @@ export async function createTitleMenuRenderer(
   ]
   rootButtons.addChild(...rootButtonViews.map((button) => button.container))
   playButtons.addChild(...playButtonViews.map((button) => button.container))
-  nativeStage.addChild(rootButtons, playButtons)
+  centerStage.addChild(rootButtons, playButtons)
   const quitButton = createQuitButton(texture)
   quitButton.container.zIndex = 24
-  nativeStage.addChild(quitButton.container)
+  quitStage.addChild(quitButton.container)
   const allButtons = [...rootButtonViews, ...playButtonViews, quitButton]
 
   let destroyed = false
@@ -294,10 +298,10 @@ export async function createTitleMenuRenderer(
     },
     resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
-      const nextResolution = initialHubResolution({
-        devicePixelRatio: nextDevicePixelRatio,
-        displayScale: viewport.displayScale,
-      })
+      const nextResolution = fixedGamePresentationResolution(
+        nextDevicePixelRatio,
+        viewport.displayScale,
+      )
       if (nextResolution === currentResolution
         && viewport.width === currentViewport.width
         && viewport.height === currentViewport.height
@@ -305,7 +309,16 @@ export async function createTitleMenuRenderer(
         && viewport.nativeStage.y === currentViewport.nativeStage.y) return
       currentResolution = nextResolution
       currentViewport = viewport
-      applyTitleViewport(application, backdrop, nativeStage, viewport, currentResolution)
+      applyTitleViewport(
+        application,
+        backdrop,
+        solomonStage,
+        centerStage,
+        versionStage,
+        quitStage,
+        viewport,
+        currentResolution,
+      )
       canvas.dataset.resolution = `${currentResolution}`
       diagnostics.viewportHeight = viewport.height
       diagnostics.viewportWidth = viewport.width
@@ -321,7 +334,16 @@ export async function createTitleMenuRenderer(
       canvas.remove()
     },
   }
-  applyTitleViewport(application, backdrop, nativeStage, options.viewport, resolution)
+  applyTitleViewport(
+    application,
+    backdrop,
+    solomonStage,
+    centerStage,
+    versionStage,
+    quitStage,
+    options.viewport,
+    resolution,
+  )
   renderer.render({
     elapsedMs: 0,
     hoveredAction: null,
@@ -335,7 +357,10 @@ export async function createTitleMenuRenderer(
 function applyTitleViewport(
   application: Application,
   backdrop: Container,
-  nativeStage: Container,
+  solomonStage: Container,
+  centerStage: Container,
+  versionStage: Container,
+  quitStage: Container,
   viewport: FixedGameViewportLayout,
   resolution: number,
 ): void {
@@ -349,10 +374,29 @@ function applyTitleViewport(
     (viewport.width - TITLE_RENDER_WIDTH * backdropScale) / 2,
     viewport.height - TITLE_RENDER_HEIGHT * backdropScale,
   )
-  nativeStage.position.set(viewport.nativeStage.x, viewport.nativeStage.y)
+  const solomonBounds = fixedGameStageBounds(viewport, 'left', 'bottom')
+  const centerBounds = fixedGameStageBounds(viewport, 'center', 'center')
+  const versionBounds = fixedGameStageBounds(viewport, 'right', 'top')
+  const quitBounds = fixedGameStageBounds(viewport, 'right', 'bottom')
+  solomonStage.position.set(solomonBounds.x, solomonBounds.y)
+  centerStage.position.set(centerBounds.x, centerBounds.y)
+  versionStage.position.set(versionBounds.x, versionBounds.y)
+  quitStage.position.set(quitBounds.x, quitBounds.y)
   const canvas = application.canvas as HTMLCanvasElement
+  canvas.dataset.centerStage = `${centerBounds.x},${centerBounds.y}`
+  canvas.dataset.quitStage = `${quitBounds.x},${quitBounds.y}`
+  canvas.dataset.solomonStage = `${solomonBounds.x},${solomonBounds.y}`
+  canvas.dataset.versionStage = `${versionBounds.x},${versionBounds.y}`
   canvas.dataset.viewportHeight = `${viewport.height}`
   canvas.dataset.viewportWidth = `${viewport.width}`
+}
+
+function titleStage(label: string, zIndex: number): Container {
+  const stage = new Container({ label })
+  stage.eventMode = 'none'
+  stage.sortableChildren = true
+  stage.zIndex = zIndex
+  return stage
 }
 
 function tiledSprites(texture: Texture, count: number, zIndex: number) {

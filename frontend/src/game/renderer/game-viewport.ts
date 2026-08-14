@@ -18,6 +18,11 @@ export interface FixedGameViewportLayout extends GameViewportLayout {
   nativeStage: GameViewportBounds
 }
 
+export type GameViewportHorizontalAnchor = 'center' | 'left' | 'right'
+export type GameViewportVerticalAnchor = 'bottom' | 'center' | 'top'
+
+export const FIXED_GAME_MAX_PRESENTATION_RESOLUTION = 1.5
+
 export function fixedGameViewportScale(width: number, height: number): number {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return 1
@@ -49,6 +54,35 @@ export function fixedGameViewportLayout(
   }
 }
 
+export function fixedGameStageBounds(
+  layout: FixedGameViewportLayout,
+  horizontal: GameViewportHorizontalAnchor,
+  vertical: GameViewportVerticalAnchor,
+): GameViewportBounds {
+  return gameViewportAnchoredBounds(
+    layout,
+    GAME_VIEWPORT_MIN_WIDTH,
+    GAME_VIEWPORT_MIN_HEIGHT,
+    horizontal,
+    vertical,
+  )
+}
+
+export function gameViewportAnchoredBounds(
+  viewport: Pick<GameViewportLayout, 'height' | 'width'>,
+  width: number,
+  height: number,
+  horizontal: GameViewportHorizontalAnchor,
+  vertical: GameViewportVerticalAnchor,
+): GameViewportBounds {
+  return {
+    height,
+    width,
+    x: anchoredOffset(viewport.width, width, horizontal),
+    y: anchoredOffset(viewport.height, height, vertical),
+  }
+}
+
 export function fixedGameStageCssBounds(
   layout: FixedGameViewportLayout,
   stage = layout.nativeStage,
@@ -61,13 +95,14 @@ export function fixedGameStageCssBounds(
   }
 }
 
-export function fixedGameBottomStageBounds(
-  layout: FixedGameViewportLayout,
-): GameViewportBounds {
-  return {
-    ...layout.nativeStage,
-    y: layout.height - layout.nativeStage.height,
-  }
+export function fixedGamePresentationResolution(
+  devicePixelRatio: number,
+  displayScale: number,
+): number {
+  return Math.min(
+    FIXED_GAME_MAX_PRESENTATION_RESOLUTION,
+    positiveFiniteOr(devicePixelRatio, 1) * positiveFiniteOr(displayScale, 1),
+  )
 }
 
 export function gameViewportLayout(width: number, height: number): GameViewportLayout {
@@ -88,4 +123,18 @@ export function gameViewportLayout(width: number, height: number): GameViewportL
 
 function validSize(width: number, height: number): boolean {
   return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+}
+
+function anchoredOffset(
+  available: number,
+  extent: number,
+  anchor: GameViewportHorizontalAnchor | GameViewportVerticalAnchor,
+): number {
+  if (anchor === 'left' || anchor === 'top') return 0
+  if (anchor === 'right' || anchor === 'bottom') return available - extent
+  return (available - extent) / 2
+}
+
+function positiveFiniteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback
 }

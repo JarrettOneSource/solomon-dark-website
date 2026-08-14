@@ -8,6 +8,14 @@ const loaderScene = readFileSync(new URL('./NativeLoader.tsx', import.meta.url),
 const loaderStyles = readFileSync(new URL('./native-loader.css', import.meta.url), 'utf8')
 const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 const menuStyles = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
+const loaderRenderer = readFileSync(
+  new URL('./renderer/loader-renderer.ts', import.meta.url),
+  'utf8',
+)
+const titleRenderer = readFileSync(
+  new URL('./renderer/title-menu-renderer.ts', import.meta.url),
+  'utf8',
+)
 
 test('game menu art is presented by the shared WebGL baseline', () => {
   assert.match(mainScene, /TitleMenuPresentation/)
@@ -21,7 +29,7 @@ test('game menu art is presented by the shared WebGL baseline', () => {
 test('fixed menu renderers share the full game viewport and persistent fullscreen control', () => {
   assert.match(mainScene, /fixedGameViewportLayout/)
   assert.match(mainScene, /GameFullscreenButton/)
-  assert.match(createScene, /fixedGameBottomStageBounds/)
+  assert.match(createScene, /fixedGameStageBounds/)
   assert.doesNotMatch(menuStyles, /\.main-menu-stage\s*\{[^}]*aspect-ratio:/s)
 })
 
@@ -30,4 +38,16 @@ test('startup loader exposes total readiness and the representative active item'
   assert.match(loaderScene, /currentItem/)
   assert.match(loaderScene, /items ready/)
   assert.match(loaderStyles, /\.native-loader-status/)
+})
+
+test('edge chrome and the loader consume their recovered screen ownership', () => {
+  assert.match(titleRenderer, /title-menu-solomon-stage/)
+  assert.match(titleRenderer, /title-menu-version-stage/)
+  assert.match(titleRenderer, /title-menu-quit-stage/)
+  assert.match(createScene, /fixedGameStageBounds\(viewport, 'left', 'top'\)/)
+  assert.match(loaderScene, /fixedGameViewportLayout/)
+  assert.match(loaderRenderer, /LOADER_FRAME_BOUNDS/)
+  assert.match(loaderRenderer, /LOADER_FILL_BOUNDS/)
+  assert.doesNotMatch(loaderRenderer, /\.rotation\s*=\s*Math\.PI\s*\/\s*2/)
+  assert.doesNotMatch(loaderStyles, /16\s*\/\s*9/)
 })

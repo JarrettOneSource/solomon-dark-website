@@ -5,6 +5,12 @@ import {
   type LoaderRenderer,
 } from './renderer/loader-renderer.ts'
 import { loaderProgressPercent } from './renderer/loader-render-contract.ts'
+import {
+  GAME_VIEWPORT_MIN_HEIGHT,
+  GAME_VIEWPORT_MIN_WIDTH,
+  fixedGameViewportLayout,
+  type FixedGameViewportLayout,
+} from './renderer/game-viewport.ts'
 import './native-loader.css'
 
 interface NativeLoaderProps {
@@ -22,25 +28,35 @@ export default function NativeLoader({
   stage,
   total,
 }: NativeLoaderProps) {
+  const stageRef = useRef<HTMLElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<LoaderRenderer | null>(null)
   const progressRef = useRef(progress)
+  const viewportRef = useRef(fixedGameViewportLayout(
+    GAME_VIEWPORT_MIN_WIDTH,
+    GAME_VIEWPORT_MIN_HEIGHT,
+  ))
+  const [viewport, setViewport] = useState(viewportRef.current)
   const [rendererError, setRendererError] = useState<string | null>(null)
   const boundedProgress = Math.max(0, Math.min(1, progress))
   const percentage = loaderProgressPercent(boundedProgress)
   progressRef.current = boundedProgress
+  viewportRef.current = viewport
 
   useLayoutEffect(() => {
-    const host = hostRef.current
-    if (!host) return
+    const stage = stageRef.current
+    if (!stage) return
     const resize = () => {
-      rendererRef.current?.resize(host.clientWidth / 480)
+      const next = fixedGameViewportLayout(stage.clientWidth, stage.clientHeight)
+      setViewport((current) => sameViewport(current, next) ? current : next)
     }
     resize()
     const observer = new ResizeObserver(resize)
-    observer.observe(host)
+    observer.observe(stage)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => rendererRef.current?.resize(viewport), [viewport])
 
   useEffect(() => {
     const host = hostRef.current
@@ -48,7 +64,7 @@ export default function NativeLoader({
     let cancelled = false
     setRendererError(null)
     void createLoaderRenderer({
-      displayScale: host.clientWidth / 480,
+      viewport: viewportRef.current,
     }).then((renderer) => {
       if (cancelled) {
         renderer.destroy()
@@ -56,7 +72,7 @@ export default function NativeLoader({
       }
       rendererRef.current = renderer
       host.replaceChildren(renderer.canvas)
-      renderer.resize(host.clientWidth / 480)
+      renderer.resize(viewportRef.current)
       renderer.render(progressRef.current)
     }).catch((error: unknown) => {
       if (!cancelled) {
@@ -79,7 +95,7 @@ export default function NativeLoader({
 
   return (
     <div className="native-loader-page">
-      <section className="native-loader-stage">
+      <section ref={stageRef} className="native-loader-stage">
         <div ref={hostRef} className="native-loader-renderer" aria-hidden />
         <div className="native-loader-status">
           <div
@@ -110,4 +126,13 @@ export default function NativeLoader({
       )}
     </div>
   )
+}
+
+function sameViewport(
+  first: FixedGameViewportLayout,
+  second: FixedGameViewportLayout,
+): boolean {
+  return first.displayScale === second.displayScale
+    && first.height === second.height
+    && first.width === second.width
 }

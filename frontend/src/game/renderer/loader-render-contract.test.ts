@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  LOADER_FILL_BOUNDS,
   LOADER_FILL_CLIP,
-  LOADER_FILL_SIZE,
-  LOADER_FRAME_CENTER,
-  LOADER_FRAME_SIZE,
+  LOADER_FRAME_BOUNDS,
   LOADER_LOGO_BOUNDS,
   LOADER_RENDER_HEIGHT,
   LOADER_RENDER_WIDTH,
@@ -17,9 +16,8 @@ test('loader retains the native virtual canvas and authored registrations', () =
   assert.equal(LOADER_RENDER_WIDTH, 480)
   assert.equal(LOADER_RENDER_HEIGHT, 320)
   assert.deepEqual(LOADER_LOGO_BOUNDS, { height: 227, width: 388, x: 41, y: 13 })
-  assert.deepEqual(LOADER_FRAME_CENTER, { x: 240, y: 290 })
-  assert.deepEqual(LOADER_FRAME_SIZE, { height: 230, width: 54 })
-  assert.deepEqual(LOADER_FILL_SIZE, { height: 192, width: 18 })
+  assert.deepEqual(LOADER_FRAME_BOUNDS, { height: 54, width: 230, x: 125, y: 263 })
+  assert.deepEqual(LOADER_FILL_BOUNDS, { height: 18, width: 192, x: 144, y: 282 })
   assert.deepEqual(LOADER_FILL_CLIP, { height: 18, width: 192, x: 144, y: 282 })
 })
 
