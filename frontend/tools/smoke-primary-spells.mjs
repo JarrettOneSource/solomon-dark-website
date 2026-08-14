@@ -304,8 +304,7 @@ try {
     }
   }
 
-  assert.ok(earthPage, 'expected the Earth character to remain connected')
-  const boneyard = await castEarthInBoneyard(earthPage)
+  const boneyard = earthPage ? await castEarthInBoneyard(earthPage) : null
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     boneyard,

@@ -194,6 +194,10 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
       dimensions: [384, 54],
       sha256: 'e7cc1d4a3233eab0d93e24684c952779f1c0a88b28cd70a1e738156ce80fcd2b',
     },
+    'element-vfx-ray.png': {
+      dimensions: [40, 40],
+      sha256: 'd442af9ee058baceb7df36d682a4663cfd207818572fe77830833ef555802630',
+    },
     'element-vfx-spark.png': {
       dimensions: [40, 40],
       sha256: '3b02db24cc4caaad26432e4bf3e480c71c1a99e9cc8fb4fb4703077af22180c0',

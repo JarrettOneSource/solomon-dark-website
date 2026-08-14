@@ -14,6 +14,7 @@ import {
   EarthBoulderImpactView,
   EarthBoulderView,
 } from './earth-boulder-view.ts'
+import { EtherPrimarySpellView } from './primary-spell-ether-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
@@ -54,7 +55,13 @@ export class PrimarySpellWorldView {
         if ('position' in state) {
           view = state.kind === 'earth'
             ? new EarthBoulderView(state, this.textures.primarySpells.earth)
-            : new ProjectileSpellView(state, this.textures)
+            : state.kind === 'ether'
+              ? new EtherPrimarySpellView(state, {
+                  core: this.textures.elementVfx.core[0],
+                  ray: this.textures.elementVfx.ray[0],
+                  spark: this.textures.elementVfx.spark[0],
+                })
+              : new ProjectileSpellView(state, this.textures)
         } else {
           view = state.kind === 'earth-impact'
             ? new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
@@ -148,10 +155,7 @@ class ProjectileSpellView implements SpellView {
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
     this.main.texture = this.texture(state)
-    if (state.kind === 'ether') {
-      this.main.rotation = Math.atan2(state.direction.y, state.direction.x) + Math.PI / 2
-      this.main.alpha = 0.92
-    } else {
+    if (state.kind === 'fire') {
       const phase = state.ageTicks * 0.35
       this.extras[0]?.position.set(Math.cos(phase) * 5, Math.sin(phase) * 5)
       this.extras[1]?.position.set(Math.cos(phase + Math.PI) * 8, Math.sin(phase + Math.PI) * 8)
@@ -175,7 +179,7 @@ class ProjectileSpellView implements SpellView {
   private texture(state: PrimarySpellProjectileState): Texture {
     switch (state.kind) {
       case 'earth': throw new Error('Earth projectiles require EarthBoulderView')
-      case 'ether': return this.textures.primarySpells.magicMissile
+      case 'ether': throw new Error('Ether projectiles use EtherPrimarySpellView')
       case 'fire': {
         const frames = this.textures.primarySpells.fire
         return frames[Math.floor(state.ageTicks / 3) % frames.length]

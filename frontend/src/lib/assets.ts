@@ -497,7 +497,7 @@ export const primarySpells = {
     over: primarySpellFrostOver,
     spark: primarySpellFrostSpark,
   },
-  magicMissile: primarySpellMagicMissile,
+  etherPierceStreak: primarySpellMagicMissile,
 }
 
 /** Source-registered wizard equipment shared by every gameplay world. */

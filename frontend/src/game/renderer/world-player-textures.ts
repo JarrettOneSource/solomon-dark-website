@@ -46,7 +46,7 @@ export interface PlayerWorldTextures {
       over: Texture
       spark: Texture
     }
-    magicMissile: Texture
+    etherPierceStreak: Texture
   }
 }
 
@@ -121,7 +121,7 @@ export function createPlayerWorldTextures(
         over: texture(primarySpells.frost.over),
         spark: texture(primarySpells.frost.spark),
       },
-      magicMissile: texture(primarySpells.magicMissile),
+      etherPierceStreak: texture(primarySpells.etherPierceStreak),
     },
   }
 }
