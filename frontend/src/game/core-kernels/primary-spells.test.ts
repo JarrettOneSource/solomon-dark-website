@@ -166,21 +166,51 @@ test('Air emits one ten-tick procedural fade per held authority tick', () => {
   assert.equal(state.primarySpells.transients.length, 0)
 })
 
-test('Water emits native-family Frost transients while held and lets them decay', () => {
+test('Water emits the shipped Enhanced Effects Frost pair while held and lets it decay', () => {
   let state = step(simulation('water'), true, 4)
   assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(1, true), 7)
-  assert.equal(state.primarySpells.transients.length, 4)
+  assert.equal(state.primarySpells.transients.length, 8)
   assert.deepEqual(
     state.primarySpells.transients.map((effect) => effect.variant),
-    [1, 2, 3, 0],
+    [0, 1, 0, 1, 0, 1, 0, 1],
   )
   state = step(state, false)
   assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
-  state = step(state, false, 29)
-  assert.equal(state.primarySpells.transients.length, 3)
-  state = step(state, false, 3)
+  state = step(state, false, 32)
   assert.equal(state.primarySpells.transients.length, 0)
+})
+
+test('Water wiggle uses the shared authority tick when player ids interleave', () => {
+  const water = (displayName: string): PlayerCharacterConfig => ({
+    discipline: 'arcane',
+    displayName,
+    element: 'water',
+  })
+  let state = createGameSimulation({
+    'caster-a': water('Caster A'),
+    'caster-b': water('Caster B'),
+  })
+  const heldInputs = (): Readonly<Record<string, PlayerCharacterInput>> => Object.fromEntries(
+    Object.entries(state.players).map(([playerId, player]) => [playerId, {
+      ...createIdlePlayerCharacterInput(),
+      aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary: true, secondary: false },
+    }]),
+  )
+
+  state = stepGameSimulationTick(state, heldInputs())
+  const firstA = state.primarySpells.transients.filter(({ ownerId }) => ownerId === 'caster-a')
+  const firstB = state.primarySpells.transients.filter(({ ownerId }) => ownerId === 'caster-b')
+  assert.deepEqual(firstA.map(({ direction }) => direction), firstB.map(({ direction }) => direction))
+
+  state = stepGameSimulationTick(state, heldInputs())
+  const secondA = state.primarySpells.transients
+    .filter(({ ageTicks, ownerId }) => ageTicks === 0 && ownerId === 'caster-a')
+  const secondB = state.primarySpells.transients
+    .filter(({ ageTicks, ownerId }) => ageTicks === 0 && ownerId === 'caster-b')
+  assert.deepEqual(secondA.map(({ direction }) => direction), secondB.map(({ direction }) => direction))
+  assert.notDeepEqual(firstA[0].direction, secondA[0].direction)
 })
 
 test('Earth honors the native 0.3 latch and releases the same actor at age 98', () => {

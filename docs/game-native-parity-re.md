@@ -8125,6 +8125,252 @@ world left-button level + world aim
   Earth held/released in Boneyard
   `0cb43826eae29c25111fe4512bf80895678c84e40ddc51bce31bf08d8c1d161b` /
   `c90ad2e36757e648fc0a7c634bc52724b3bd456189eb1d19cd1192a43e13de83`.
+
+## 2026-08-14 — Water primary Frost Jet presentation closure
+
+### Reported mismatch and correction boundary
+
+- Reported web behavior: Water looks closer than the other unfinished
+  primaries, but its moving, single-sprite stream still does not resemble the
+  stock cast.
+- Reproduced Website baseline: commit `989aab3` emits one Water transient per
+  held 100 Hz tick. `primary-spell-world-view.ts` cycles four sprites by
+  `id % 4`, moves each sprite linearly through the full `205`-unit gameplay
+  reach, grows it from `0.45` to `1`, and applies one additive fade. The prior
+  browser Water receipt is SHA-256
+  `b1dc67850d95ed11ab021c0251186a8cd76a640f9e694eaad861fa938586f36b`.
+- Native correction boundary: close rank-1 Frost Jet creation, motion, update,
+  draw, blend, tint, density, audio, contact ownership, release, and expiry.
+  Hail, Cold Aura, Harden, Permafrost, damage/status authority, and an
+  Enhanced Effects UI are adjacent evidence only and are not implemented here.
+
+### Evidence and exact provenance
+
+| Evidence class | Exact source | Water consequence | Confidence |
+| --- | --- | --- | --- |
+| Preserved retail image | `SolomonDarkAbandonware/SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Source of every address, constant, vtable, and settings default below. | high |
+| Fresh static pass | read-only headless Ghidra 12.0.3 project `Decompiled Game/ghidra_project/SolomonDark`; handler `0x00543860`, constructors `0x00453550`/`0x00453840`, update `0x00453670`, renders `0x00457720`/`0x00457A00`, settings load `0x005BAB60`, settings builders `0x005D9A50`/`0x005DAEF0` | Closes the two Frost particle classes, field recurrences, all draw passes, option-controlled density, and shipped setting policy. | high |
+| Preserved native runtime | `D:\codex-evidence\spellre-20260804\live\frost-rank1-queue150.raw.txt`, `frost-rank1-real-mouse.raw.txt`, lifecycle records beside them; G2 source commit `1b9d454da60afefa2cb5f01a0f6e8ce829efebe6` | Confirms held-tick contact cadence, start/stop selection, rank-1 reach, and visual lifetime band without turning particles into gameplay projectiles. | high |
+| Preserved instrumented stock frame | `D:\codex-evidence\beta28-release-20260731\acceptance\screenshots\client-b-water-bot-retail-wave.png`, 1606 x 929 RGBA, SHA-256 `116eb2378541aef6c436f20fa03f7d62a5c83b6222b1e50ddffb35fe27f6eb3b` | Visually corroborates a short, layered blue-white spray near the caster rather than a sprite travelling to cone range. The frame is partly occluded and is not treated as clean-stock pixel geometry. | medium |
+| Native sprite registration | `BadGuys.bundle`/`BadGuys.png` from the same retail tree, parsed by `tools/extract-hub-assets.py` | Rank-1 uses registered record 30 (`93 x 145`) and record 28 (`10 x 11`). Records 32 and 14 are learned Hail/Cold Aura branches, not Frost stream variants. | high |
+
+A fresh direct-retail capture was intentionally deferred when read-only process
+inventory found unrelated `SolomonDark.exe` PIDs `18792` and `23472` in two
+foreign staged runtimes. Those processes were not focused, modified, or
+terminated. Clean-stock Water On/Off image evidence remains a required final
+receipt, not something inferred from the instrumented frame.
+
+### Pass 1: causal ownership from input to teardown
+
+```text
+world primary held level + current aim
+  -> PlayerActor sustained dispatcher 0x00548A00
+  -> Water skill 32 handler 0x00543860 each native tick
+  -> exact Staff socket 0x0053B830 + current heading
+  -> rank-1 cone/LOS contact query and independent render-particle creation
+  -> transient world manager / common Y-sorted and locally lit world queue
+  -> Frost virtual update 0x00453670
+  -> Normal render 0x00457720 or Over render 0x00457A00
+  -> lifetime below zero removes each visual independently
+release -> no new query/particle -> registry 161 loop owner released once
+```
+
+- Input and the sustained action own the held lifetime. Water retains the
+  constant Staff action: insertion uses socket bank `K=0`, later held ticks use
+  `K=7`. The emitter follows that exact socket and the aim sampled for the
+  current authoritative tick; each born particle then folds in its native
+  radial jitter. The player-facing consequence is upstream: heading must track
+  the cast direction before socket selection; Water does not own a separate
+  renderer-facing override.
+- `0x00543860` performs gameplay contact immediately. At rank 1 it queries a
+  `205`-unit cone (`180` base plus `25`) through `0x00641B10`, mask `0x1082`,
+  then applies per-target line of sight. There is no Frost projectile radius,
+  flight actor, gravity, pierce, or travel-to-range timer. Multiple targets
+  may be contacted during one held tick.
+- The visible objects are separate `0x5C`-byte transients. `FUN_00401170(4)`
+  selects `Anim_FrostJetEffect_Over` only when it returns `1`, giving a 25%
+  Over / 75% Normal class split. The class decision changes rendering and
+  terrain behavior; it is not a frame selector.
+- Start owns registry 44 `sounds/icestart.wav` and owner-keyed loop 161
+  `sounds/iceloop__loop.wav`. Held ticks do not reacquire the loop. Release,
+  selection change, player removal, world replacement, and presentation/audio
+  teardown must balance it exactly once. Existing particles finish after the
+  loop/contact channel stops.
+- Authoritative simulation owns emission IDs, origin, direction, age, world
+  key, and removal. Snapshots replicate those semantics. Presentation may
+  interpolate a live particle but must not synthesize missed particles or
+  replay historical audio.
+
+### Particle creation, motion, and terrain nuance
+
+For neutral rank-1 Water, `mWiden == 0`:
+
+- visual spread is `15` degrees;
+- native heading is `casterHeading + sin(worldTick * 65 deg) * 15 deg`;
+- the handler advances the phase by `65 / particleCount` degrees between
+  particles created in the same tick;
+- spawn is the exact Staff socket plus radius `U[0,10]` along
+  `casterHeading +/- U[0,45 deg]`;
+- velocity is the heading unit vector times exactly `4` world units/tick; and
+- constructor lifetime is `L0 = 1.25 + U[0,0.05]`, then `L -= 0.04` per
+  update. Removal below zero produces 32-33 completed native updates.
+
+The intra-tick phase is instruction-closed, not inferred from the visual:
+`0x005439D0..0x005439DA` loads the particle count, divides constant double
+`0x00784D90` (fresh raw value `65`) by it, and stores the step;
+`0x00543A86`/`0x00543BA3` consume the mutable phase for Over/Normal heading;
+and loop tail `0x005440A2..0x005440AE` decrements the count and adds the stored
+step before the next creation. With the shipped count of two, the second
+particle's sine input is therefore exactly 32.5 degrees ahead of the first.
+
+The `205` gameplay reach is therefore not visual travel distance. A typical
+particle moves about `128`-`132` world units before expiry. Replacing the
+native spray with a sprite interpolated through `205` is the central current
+web error.
+
+Normal particles predict their path and call world clip `0x00524D70`. A
+recovered contact distance and point are stored at `+0x50` and `+0x54/+0x58`.
+When the remaining distance crosses zero, update snaps to the point, rotates
+velocity to a randomly signed perpendicular, halves it, and clears the pending
+distance. This is a cosmetic wall-splay/ricochet; it does not own Frost damage.
+The Over creation path deliberately skips this clip setup. The Website does
+not yet expose equivalent transient terrain queries, so unobstructed motion is
+implemented now and wall splay remains an explicit visual unknown rather than
+a fake collision rule.
+
+### Exact update and render equations
+
+`Anim_FrostJetEffect` construction/update fields are:
+
+| Field | Construction | Per completed update |
+| --- | --- | --- |
+| lifetime `+0x1C` | `1.25 + U[0,0.05]` | `-0.04`; delete below `0` |
+| opacity phase `+0x20` | `0` | Normal `+0.05`; Over `+0.025` |
+| position `+0x14/+0x18` | registered socket plus radial jitter | `+= velocity` |
+| heading/velocity `+0x2C`, `+0x24/+0x28` | native heading; speed `4` | wall-splay branch above |
+| additive-core alpha `+0x3C` | `0.75` | `-0.05` |
+| main scale `+0x40` | `S0 = 0.5 + U[0,0.75]` | if lifetime `< 1`, `+2` |
+| glint scale `+0x44` | `Q0 = (2 + U[0,1]) * S0` | if lifetime `< 1`, `*0.95` |
+| color ramp `+0x48` | Normal `1 + U[0,0.5]`; Over overrides it to `0` | `max(0, value - 2)` |
+| opacity multiplier `+0x4C` | `1` | unchanged |
+
+The native draw color is `(max(0, 1 - colorRamp), 1, 1)`: Normal's creation
+frame is cyan and its first completed update is white; Over is white from
+construction. Registered full-canvas assets retain native registration and are
+center-anchored. Their deterministic web files are:
+
+| Native record | Role | Dimensions | SHA-256 |
+| ---: | --- | ---: | --- |
+| `BadGuys[30]` | Frost core used by both classes | `93 x 145` | `62aac46ed0f3436cf39023b2c93e8c02b8dee3c0611e74179cc5af92793470b5` |
+| `BadGuys[28]` | forward glint used by both classes | `10 x 11` | `e118b2feb22c5ffd4c5f0981e20044b8df6181ead01c572965143ad959e24d60` |
+
+Normal render `0x00457720` submits, in order:
+
+1. ordinary-alpha record 30 at particle position/heading, scale `S`, alpha
+   `min(L * L, phase)` and the cyan-to-white color;
+2. while `additiveAlpha > 0`, additive record 30 at the same transform, scale
+   `0.5 * S`, alpha `additiveAlpha`; and
+3. additive record 28 at `position + 3 * velocity`, scale `min(Q, 1)`, alpha
+   `min(10 * L, 1)`.
+
+Over render `0x00457A00` submits no half-core pass:
+
+1. ordinary-alpha record 30, scale `S`, alpha
+   `0.5 * min(L, phase)`, white; then
+2. additive record 28 at `position + 3 * velocity`, scale `0.25 * Q`, alpha
+   `min(3 * min(0.5 * phase, L), 1)`.
+
+The draw state byte's value `1` maps to `SRCALPHA, ONE`; value `0` restores
+`SRCALPHA, INVSRCALPHA`. Each particle is a world-queue object at its current
+Y and receives the common local-light tint upstream of its virtual draw. The
+camera only applies the normal world-to-screen translation and Hub/Boneyard
+scale; neither sprite scale nor speed is multiplied into simulation state.
+
+### Pass 2: adjacent systems, density setting, and excluded records
+
+- Global byte `0x00B3BCAD` is the literal `ENHANCED EFFECTS` control. The
+  rank-1 count expression yields one particle per held tick when Off and two
+  when On. This changes only visual density; the cone query still executes
+  once per held tick.
+- Stock persists that byte under the misleading `Game.FastCPU` key.
+  `0x005BB310..0x005BB34F` loads the key with capability byte `0x00B3BCAE` as
+  its fallback. The shipped `DEFAULTS|...|ENDDEFAULTS` block omits
+  `Game.FastCPU`; the recognized Windows path seeds the capability byte to
+  `1`, so a new shipped Windows profile defaults Enhanced Effects On. A
+  preserved user settings sample has `Game.FastCPU=false` and the UI Off,
+  proving it remains user-selectable rather than universally On.
+- Website currently has no gameplay-performance settings owner and no
+  Enhanced Effects control. This correction uses the evidence-backed shipped
+  default, two particles per held tick. Adding a toggle or protocol field is
+  outside scope; density is documented as fixed until that settings system
+  exists.
+- `BadGuys[32]` (`29 x 30`, handler address `0x00543F57`) belongs to the
+  learned Hail branch guarded by progression `+0x8A8`. `BadGuys[14]`
+  (`92 x 91`, handler address `0x00544870` vicinity) belongs to the learned
+  Cold Aura branch guarded by radius `+0x8B0`. Neither is a rank-1 Frost Jet
+  frame. Loading them may remain useful for future skills, but the primary
+  renderer must never cycle them.
+- Hail, Cold Aura, Harden armor, Permafrost slow, target pushback/damage,
+  terrain wall-splay, and impact/status presentation stay outside this visual
+  correction. Discipline-screen Water orb frames are also a separate renderer
+  family and are not evidence for primary-cast frames.
+
+### Implementation consequence, regressions, and falsifiers
+
+- The authority emits two independent Water transient identities per held
+  tick, matching shipped Enhanced Effects On. It evaluates the native
+  `worldTick * 65 degrees` wiggle plus the `65 / count` intra-tick ordinal at
+  birth, stores the resulting unit direction, and folds radial jitter around
+  the caster's un-wiggled heading into the born origin. This keeps multiple
+  casters on the same native world phase even when their spell IDs interleave.
+  Deterministic identity-derived samples choose the class split, jitter,
+  scales, and lifetime without consuming client-local RNG. This preserves
+  native distributions, not the unrecovered retail RNG sequence for a
+  particular session.
+- A Water-specific presentation module owns the field recurrence and ordered
+  sprite passes. The shared world-view factory only routes Water to it; Air's
+  procedural renderer remains independent. The wrong record family, reach
+  interpolation, one-pass additive blend, linear scale, and shared fade are
+  removed from the Water path.
+- Focused regressions must pin two emissions/tick, release/expiry, class split,
+  speed `4`, 32-33 tick lifetime band, registered records 30/28 only, Normal
+  versus Over pass counts/order/blends, exact representative alpha/scale/tint
+  rows, heading conversion, glint lead, stable world Y, lighting tint,
+  identical world-tick wiggle for simultaneous casters despite interleaved
+  spell IDs, and owner/world teardown.
+- Falsifiers include: one particle/tick under the documented default; any
+  record 14/32 in rank-1 spray; travel to `205`; one additive sprite per
+  effect; Over drawing the Normal half-core; damage lasting with visual
+  particles; particles or loop crossing world/owner teardown; renderer-local
+  random samples diverging between peers; or screen/HUD-space drawing.
+- Explicit unknowns at implementation start are clean-stock On/Off pixel
+  receipts, exact per-session native RNG sequence, and a browser terrain query
+  for cosmetic Normal wall-splay. None changes the closed unobstructed
+  particle equations or asset ownership above.
+
+### Implementation validation receipt
+
+- The first complete gate with the focused density regression failed against
+  the superseded implementation at `4 !== 8`, proving that the old authority
+  emitted only one particle per held tick. A later interleaved-two-caster
+  regression failed while heading phase was identity-derived; it now pins the
+  authoritative world-tick phase independently of global spell-ID allocation.
+- `./scripts/validate.sh` passes on the completed Water tree: all 23 Website
+  contracts/backend tests, 322 frontend tests, five desktop tests, frontend
+  lint and game import boundaries, production frontend/game-host builds, and
+  production media policy. The only diagnostics are the pre-existing Fast
+  Refresh and large-chunk warnings.
+- A focused 1600 x 900 WebGL cast receipt was saved at
+  `D:\codex-evidence\primary-spell-water-20260814\web-smoke\solomon-primary-water-hub.png`,
+  SHA-256
+  `76dcb63afdff169d59807e9a553b1b0aed0e9a534ecfd39885bb4d69283d11cb`.
+  It visually confirms the Water-specific registered core/glint path and
+  short local spray, but it predates the final authority-only world-tick phase
+  correction and therefore is not claimed as a final multiplayer-phase or
+  clean-stock comparison receipt. The same targeted run observed cast pose,
+  Water transients, and start/loop playback before its software-rendered
+  one-frame-per-second page timed out awaiting the release-loop pause.
+
 ## 2026-08-14 — Mobile fullscreen capability and app-mode boundary
 
 ### Reported smell and parity question

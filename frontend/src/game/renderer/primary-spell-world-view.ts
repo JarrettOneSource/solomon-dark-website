@@ -8,10 +8,9 @@ import type {
 import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
   PRIMARY_SPELL_AIR_REACH,
-  PRIMARY_SPELL_WATER_LIFETIME_TICKS,
-  PRIMARY_SPELL_WATER_REACH,
 } from '../core-kernels/primary-spells.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
+import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellPainterLayer {
@@ -49,7 +48,12 @@ export class PrimarySpellWorldView {
       if (!view) {
         view = 'position' in state
           ? new ProjectileSpellView(state, this.textures)
-          : new TransientSpellView(state, this.textures)
+          : state.kind === 'water'
+            ? new WaterPrimarySpellView(state, {
+                core: this.textures.primarySpells.frost.core,
+                glint: this.textures.primarySpells.frost.over,
+              })
+            : new TransientSpellView(state)
         this.views.set(state.id, view)
         this.root.addChild(view.container)
       }
@@ -175,71 +179,35 @@ class ProjectileSpellView implements SpellView {
 class TransientSpellView implements SpellView {
   readonly container: Container
   private readonly graphics: Graphics[] = []
-  private readonly sprite: Sprite | null
   private state: PrimarySpellTransientState
 
-  constructor(state: PrimarySpellTransientState, textures: PlayerWorldTextures) {
+  constructor(state: PrimarySpellTransientState) {
     this.state = state
     this.container = new Container({ label: state.kind })
     this.container.eventMode = 'none'
-    if (state.kind === 'air') {
-      const points = lightningPoints(state)
-      const glow = lightningStroke(points, 0x5da9ff, 7)
-      glow.alpha = 0.45
-      glow.blendMode = 'add'
-      const core = lightningStroke(points, 0xeaf8ff, 2)
-      core.blendMode = 'add'
-      this.graphics.push(glow, core)
-      this.sprite = null
-      this.container.addChild(glow, core)
-    } else {
-      const family = [
-        textures.primarySpells.frost.core,
-        textures.primarySpells.frost.over,
-        textures.primarySpells.frost.extra,
-        textures.primarySpells.frost.spark,
-      ]
-      this.sprite = new Sprite(family[state.variant])
-      this.sprite.anchor.set(0.5)
-      this.sprite.blendMode = 'add'
-      this.sprite.eventMode = 'none'
-      this.container.addChild(this.sprite)
-    }
+    const points = lightningPoints(state)
+    const glow = lightningStroke(points, 0x5da9ff, 7)
+    glow.alpha = 0.45
+    glow.blendMode = 'add'
+    const core = lightningStroke(points, 0xeaf8ff, 2)
+    core.blendMode = 'add'
+    this.graphics.push(glow, core)
+    this.container.addChild(glow, core)
     this.update(state)
   }
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state)) return
     this.state = state
-    if (state.kind === 'air') {
-      this.container.position.set(state.origin.x, state.origin.y)
-      this.container.alpha = Math.max(0, 1 - state.ageTicks / PRIMARY_SPELL_AIR_LIFETIME_TICKS)
-      return
-    }
-    const angle = Math.atan2(state.direction.y, state.direction.x)
-      + (state.variant - 1.5) * 0.08
-    const progress = Math.min(1, state.ageTicks / (PRIMARY_SPELL_WATER_LIFETIME_TICKS - 1))
-    const distance = PRIMARY_SPELL_WATER_REACH * progress
-    this.container.position.set(
-      state.origin.x + Math.cos(angle) * distance,
-      state.origin.y + Math.sin(angle) * distance,
-    )
-    this.container.alpha = Math.max(0, 1 - progress * 0.85)
-    if (this.sprite) {
-      this.sprite.rotation = angle + Math.PI / 2
-      this.sprite.scale.set(0.45 + progress * 0.55)
-    }
+    this.container.position.set(state.origin.x, state.origin.y)
+    this.container.alpha = Math.max(0, 1 - state.ageTicks / PRIMARY_SPELL_AIR_LIFETIME_TICKS)
   }
 
   get worldY(): number {
-    if (this.state.kind === 'air') {
-      return this.state.origin.y + this.state.direction.y * PRIMARY_SPELL_AIR_REACH * 0.5
-    }
-    return this.container.position.y
+    return this.state.origin.y + this.state.direction.y * PRIMARY_SPELL_AIR_REACH * 0.5
   }
 
   setTint(tint: number): void {
-    if (this.sprite) this.sprite.tint = tint
     for (const graphic of this.graphics) graphic.tint = tint
   }
 

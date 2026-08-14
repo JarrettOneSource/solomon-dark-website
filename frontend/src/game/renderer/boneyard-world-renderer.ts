@@ -44,6 +44,7 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
+import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
@@ -659,9 +660,12 @@ class BoneyardDynamicScene {
     }
     for (const effect of snapshot.primarySpells.transients) {
       if (effect.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      const lightPosition = effect.kind === 'water'
+        ? waterFrostJetPlan(effect).position
+        : effect.origin
       this.primarySpells.setTint(
         `primary-spell:${effect.id}`,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(effect.origin, lightSources)),
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(lightPosition, lightSources)),
       )
     }
     for (const enemy of enemySnapshots) {

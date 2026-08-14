@@ -7,6 +7,11 @@ import type {
   PlayerCharacterState,
   PlayerPrimaryCastState,
 } from './player-character.ts'
+import {
+  WATER_FROST_PARTICLES_PER_TICK,
+  waterFrostJetEmission,
+  waterFrostJetLifetimeTicks,
+} from './primary-spell-water.ts'
 import type { Vector2 } from './vector.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
@@ -49,6 +54,7 @@ export interface PrimarySpellTickContext {
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
   spells: PrimarySpellSimulationState
+  tick: number
   viewScale: number
   worldKeyForPlayer: (playerId: string) => string
 }
@@ -63,7 +69,6 @@ export const PRIMARY_CAST_EMISSION_TICK = 19
 export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 10
 export const PRIMARY_SPELL_WATER_REACH = 205
-export const PRIMARY_SPELL_WATER_LIFETIME_TICKS = 33
 export const PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS = 500
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
@@ -179,7 +184,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     ))
     .map(advanceProjectile)
   let transients = context.spells.transients
-    .filter((effect) => effect.ageTicks + 1 < transientLifetime(effect.kind))
+    .filter((effect) => effect.ageTicks + 1 < transientLifetime(effect))
     .map((effect) => ({ ...effect, ageTicks: effect.ageTicks + 1 }))
   const players: Record<string, PlayerCharacterState> = { ...context.players }
 
@@ -279,21 +284,50 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
     if (nextPlayer.primaryCast.channelActive) {
       switch (player.config.element) {
-        case 'air':
-        case 'water': {
+        case 'air': {
           if (!rawHeld) break
           const emitter = primarySpellEmitter(nextPlayer)
           transients = [...transients, {
             ageTicks: 0,
             direction: { ...aimDirection },
             id: nextId,
-            kind: player.config.element,
+            kind: 'air',
             origin: emitter,
             ownerId: playerId,
             variant: nextId % 4,
             worldKey,
           }]
           nextId += 1
+          break
+        }
+        case 'water': {
+          if (!rawHeld) break
+          const emitter = primarySpellEmitter(nextPlayer)
+          const emitted = Array.from(
+            { length: WATER_FROST_PARTICLES_PER_TICK },
+            (_, variant): PrimarySpellTransientState => {
+              const id = nextId + variant
+              const born = waterFrostJetEmission(
+                emitter,
+                aimDirection,
+                context.tick,
+                variant,
+                id,
+              )
+              return {
+                ageTicks: 0,
+                direction: born.direction,
+                id,
+                kind: 'water',
+                origin: born.origin,
+                ownerId: playerId,
+                variant,
+                worldKey,
+              }
+            },
+          )
+          transients = [...transients, ...emitted]
+          nextId += WATER_FROST_PARTICLES_PER_TICK
           break
         }
         case 'earth': {
@@ -472,8 +506,8 @@ function advanceProjectile(
   }
 }
 
-function transientLifetime(kind: PrimarySpellTransientKind): number {
-  return kind === 'air'
+function transientLifetime(effect: PrimarySpellTransientState): number {
+  return effect.kind === 'air'
     ? PRIMARY_SPELL_AIR_LIFETIME_TICKS
-    : PRIMARY_SPELL_WATER_LIFETIME_TICKS
+    : waterFrostJetLifetimeTicks(effect.id)
 }

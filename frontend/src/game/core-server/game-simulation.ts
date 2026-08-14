@@ -172,6 +172,7 @@ function finishGameSimulationTick(
     players: result.players,
     previousPlayers: previous.players,
     spells: previous.primarySpells,
+    tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
     worldKeyForPlayer: (playerId) => result.world.kind === 'hub'
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
