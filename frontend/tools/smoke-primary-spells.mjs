@@ -63,6 +63,13 @@ const browser = await chromium.launch({
 try {
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
   await context.addInitScript(() => {
+    // This is a visual/state acceptance run, not a frame-rate benchmark. Pace
+    // headless SwiftShader so full-resolution Water particles cannot starve I/O.
+    window.requestAnimationFrame = (callback) => window.setTimeout(
+      () => callback(performance.now()),
+      1_000 / 30,
+    )
+    window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
     const events = []
     const poseEvents = []
     const wireFrames = []
@@ -136,6 +143,7 @@ try {
           : null
       if (frame?.primarySpells) {
         wireFrames.push({
+          players: frame.players,
           primarySpells: frame.primarySpells,
           tick: frame.tick,
         })
@@ -177,11 +185,10 @@ try {
     await page.mouse.move(target.x, target.y)
     await page.mouse.down({ button: 'left' })
     const castPosePromise = waitForHubCastPose(page, poseEventStart, spell.castPose)
-    let frame = null
     let opening = null
 
     if (spell.mode === 'charge') {
-      frame = await waitForHubSpell(page, spell.kind)
+      await waitForHubSpell(page, spell.kind)
       const openingScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-opening.png`
       opening = {
         ...await captureHubEarthStage(page, openingScreenshotPath),
@@ -196,10 +203,11 @@ try {
 
     const castFrame = await castPosePromise
     assert.equal(castFrame.playerAttachmentPose, spell.castPose)
-    frame ??= await waitForHubSpell(page, spell.kind)
+    if (spell.mode !== 'charge') await waitForHubSpell(page, spell.kind)
     const facingWire = await latestWireSpell(page, spell.kind)
-    const expectedHeadingIndex = headingIndex(facingWire.state.direction)
-    assert.equal(frame.playerHeadingIndex, expectedHeadingIndex)
+    const expectedHeadingIndex = headingIndex(facingWire.castAimDirection)
+    assert.equal(facingWire.playerHeadingIndex, expectedHeadingIndex)
+    const facingFrame = await waitForHubFacing(page, spell.kind, expectedHeadingIndex)
     let earthStages = null
     let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
     if (spell.mode === 'charge') {
@@ -292,13 +300,14 @@ try {
       element: spell.element,
       expectedHeadingIndex,
       kind: spell.kind,
-      playerHeadingIndex: frame.playerHeadingIndex,
-      primarySpellCount: frame.primarySpellCount,
-      primarySpellKinds: frame.primarySpellKinds,
+      playerHeadingIndex: facingFrame.playerHeadingIndex,
+      primarySpellCount: facingFrame.primarySpellCount,
+      primarySpellKinds: facingFrame.primarySpellKinds,
       releaseScreenshotPath,
       screenshotPath,
       spellEvents,
-      tick: frame.tick,
+      tick: facingFrame.tick,
+      wirePlayerHeadingIndex: facingWire.playerHeadingIndex,
     })
 
     if (spell.kind === 'earth') {
@@ -444,6 +453,23 @@ async function waitForHubSpell(page, kind) {
   return result
 }
 
+async function waitForHubFacing(page, kind, expectedHeadingIndex) {
+  const handle = await page.waitForFunction(
+    ([expectedKind, heading]) => {
+      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      return frame?.primarySpellKinds?.includes(expectedKind)
+        && frame.playerHeadingIndex === heading
+        ? { ...frame, playerPositions: { ...frame.playerPositions } }
+        : null
+    },
+    [kind, expectedHeadingIndex],
+    { timeout: 10_000 },
+  )
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
 async function waitForBoneyardSpell(page, kind) {
   const expectedKinds = Array.isArray(kind) ? kind : [kind]
   const handle = await page.waitForFunction(
@@ -496,12 +522,16 @@ async function latestWireSpell(page, kind) {
       ]
       const state = states.find((candidate) => kinds.includes(candidate.kind))
       if (state) {
+        const player = wire.players[state.ownerId]
+        if (!player) throw new Error(`No wire player owns primary spell ${state.id}`)
         return {
+          castAimDirection: player.primaryCast.aimDirection,
           calledRockCount: states.filter((candidate) => (
             candidate.kind === 'earth-called-rock'
             && candidate.parentId === state.id
           )).length,
           projectileCount: wire.primarySpells.projectiles.length,
+          playerHeadingIndex: player.headingIndex,
           state,
           tick: wire.tick,
           transientCount: wire.primarySpells.transients.length,
