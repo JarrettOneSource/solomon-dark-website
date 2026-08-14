@@ -14,12 +14,13 @@ import {
   spriteImage,
   spriteRefFor,
 } from '../../editor/assets.ts'
-import type { EditorDoc, SpriteRef, Vec2 } from '../../editor/model.ts'
-import type { MainLayer } from '../../editor/native-render-plan.ts'
+import { NATIVE, type EditorDoc, type SpriteRef, type Vec2 } from '../../editor/model.ts'
+import type { MainLayer, ObjectSpriteLayer } from '../../editor/native-render-plan.ts'
 import {
   drawNativeBoneyardBase,
-  drawNativeBoneyardForeground,
+  drawNativeBoneyardForegroundBand,
   drawNativeBoneyardMainBand,
+  nativeBoneyardForegroundLayers,
   nativeBoneyardMainLayers,
   STAGE_TEXTURES,
   type Camera,
@@ -74,6 +75,10 @@ import {
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
+import {
+  BoneyardTreeOcclusionPresentation,
+  type NativeTreeOcclusionInput,
+} from './boneyard-tree-occlusion.ts'
 import { NativeEnemyViews } from './native-enemy-view.ts'
 import {
   nativeEnemyPainterLayer,
@@ -84,6 +89,7 @@ import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 interface BoneyardRendererFrameDiagnostics {
   enemyCount: number
   enemyFamilies: string
+  fadedTreeCount: number
   frameCount: number
   foregroundZIndex: number
   gateLeafCount: number
@@ -99,6 +105,8 @@ interface BoneyardRendererFrameDiagnostics {
   maxMainLightScalar: number
   maxMainZIndex: number
   minMainLightScalar: number
+  minTreeAlpha: number
+  minTreeLightScalar: number
   painterBandCount: number
   playerCount: number
   primarySpellCount: number
@@ -112,6 +120,10 @@ interface BoneyardRendererFrameDiagnostics {
   staticLayerCount: number
   staticPaintCount: number
   tick: number
+  treeAlphaMismatchCount: number
+  treeCount: number
+  treeForegroundResidentCount: number
+  treeTintMismatchCount: number
   residentCount: number
   regionLightCompositeZIndex: number
   visibleMainLayerCount: number
@@ -141,11 +153,18 @@ interface ResidentTexture extends BoneyardBounds {
   texture: Texture
 }
 
+interface TreeResidents {
+  foreground: ResidentTexture
+  main: ResidentTexture
+}
+
 interface StaticWorldBuild {
   foreground: Container
   mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
   staticPaintCount: number
+  treeInputs: readonly NativeTreeOcclusionInput[]
+  treeResidents: ReadonlyMap<string, TreeResidents>
 }
 
 class BoneyardResidentVisibility {
@@ -244,6 +263,9 @@ export async function createBoneyardWorldRenderer(
     mainLayers,
     staticWorld.mainResidents,
     staticWorld.foreground,
+    staticWorld.treeInputs,
+    staticWorld.treeResidents,
+    options.initialSnapshot.tick,
   )
   const regionLightField = new BoneyardRegionLightField(
     world,
@@ -274,6 +296,7 @@ export async function createBoneyardWorldRenderer(
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
     enemyCount: 0,
     enemyFamilies: '',
+    fadedTreeCount: 0,
     frameCount: 0,
     foregroundZIndex: 0,
     gateLeafCount: 0,
@@ -289,6 +312,8 @@ export async function createBoneyardWorldRenderer(
     maxMainLightScalar: 0,
     maxMainZIndex: 0,
     minMainLightScalar: 0,
+    minTreeAlpha: 1,
+    minTreeLightScalar: 0,
     painterBandCount: 0,
     playerCount: 0,
     primarySpellCount: 0,
@@ -302,6 +327,10 @@ export async function createBoneyardWorldRenderer(
     staticLayerCount: mainLayers.length,
     staticPaintCount: staticWorld.staticPaintCount,
     tick: options.initialSnapshot.tick,
+    treeAlphaMismatchCount: 0,
+    treeCount: staticWorld.treeInputs.length,
+    treeForegroundResidentCount: staticWorld.treeResidents.size,
+    treeTintMismatchCount: 0,
     residentCount: staticWorld.residents.length,
     regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
     visibleMainLayerCount: 0,
@@ -355,6 +384,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.enemyCount = scene.enemyCount
       frameDiagnostics.enemyFamilies = scene.enemyFamilies
+      frameDiagnostics.fadedTreeCount = painter.fadedTreeCount
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.culledResidentCount = visibility.culledResidentCount
@@ -368,6 +398,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxMainLightScalar = painter.maxMainLightScalar
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
+      frameDiagnostics.minTreeAlpha = painter.minTreeAlpha
+      frameDiagnostics.minTreeLightScalar = painter.minTreeLightScalar
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = scene.playerCount
       frameDiagnostics.primarySpellCount = scene.primarySpellCount
@@ -381,11 +413,18 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerY = player.position.y
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
+      frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
+      frameDiagnostics.treeCount = painter.treeCount
+      frameDiagnostics.treeForegroundResidentCount = painter.treeForegroundResidentCount
+      frameDiagnostics.treeTintMismatchCount = painter.treeTintMismatchCount
       frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
       canvas.dataset.enemyCount = `${scene.enemyCount}`
       canvas.dataset.enemyFamilies = scene.enemyFamilies
+      canvas.dataset.fadedTreeCount = `${painter.fadedTreeCount}`
+      canvas.dataset.minTreeAlpha = `${painter.minTreeAlpha}`
+      canvas.dataset.minTreeLightScalar = `${painter.minTreeLightScalar}`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -428,6 +467,7 @@ export async function createBoneyardWorldRenderer(
 }
 
 interface BoneyardPainterFrame {
+  fadedTreeCount: number
   foregroundZIndex: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
@@ -439,7 +479,13 @@ interface BoneyardPainterFrame {
   maxMainLightScalar: number
   maxMainZIndex: number
   minMainLightScalar: number
+  minTreeAlpha: number
+  minTreeLightScalar: number
   painterBandCount: number
+  treeAlphaMismatchCount: number
+  treeCount: number
+  treeForegroundResidentCount: number
+  treeTintMismatchCount: number
 }
 
 class BoneyardDynamicScene {
@@ -461,6 +507,8 @@ class BoneyardDynamicScene {
   private readonly solomon: BoneyardSolomonView | null
   private readonly staticPainterLayers: StaticPainterLayer[]
   private readonly textures: BoneyardWorldTextures
+  private readonly treeOcclusion: BoneyardTreeOcclusionPresentation
+  private readonly treeResidents: ReadonlyMap<string, TreeResidents>
   private visibleEnemyFamilies = ''
 
   constructor(
@@ -470,6 +518,9 @@ class BoneyardDynamicScene {
     mainLayers: readonly MainLayer[],
     mainResidents: ReadonlyMap<number, ResidentTexture>,
     foreground: Container,
+    treeInputs: readonly NativeTreeOcclusionInput[],
+    treeResidents: ReadonlyMap<string, TreeResidents>,
+    startTick: number,
   ) {
     this.boneyard = boneyard
     this.root = root
@@ -477,6 +528,8 @@ class BoneyardDynamicScene {
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.foreground = foreground
+    this.treeOcclusion = new BoneyardTreeOcclusionPresentation(treeInputs, startTick)
+    this.treeResidents = treeResidents
     this.primarySpells = new PrimarySpellWorldView(root, textures)
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
       layerIndex,
@@ -518,6 +571,8 @@ class BoneyardDynamicScene {
       view.destroy()
       this.players.delete(playerId)
     }
+    const localPlayer = snapshot.players[localPlayerId]
+    if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
     this.primarySpells.update(
       snapshot.primarySpells,
       `boneyard:${snapshot.world.runId}`,
@@ -555,6 +610,37 @@ class BoneyardDynamicScene {
       resident.sprite.tint = nativeBoneyardLightTint(scalar)
       maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
       minMainLightScalar = Math.min(minMainLightScalar, scalar)
+    }
+    const treePresentations = this.treeOcclusion.update(
+      snapshot.tick,
+      localPlayer.position,
+    )
+    let fadedTreeCount = 0
+    let minTreeAlpha = 1
+    let minTreeLightScalar = 1
+    let treeAlphaMismatchCount = 0
+    let treeTintMismatchCount = 0
+    for (const presentation of treePresentations) {
+      const tree = this.treeResidents.get(presentation.eid)
+      if (!tree) continue
+      const scalar = nativeBoneyardLightScalar(
+        presentation.position,
+        lightSources,
+      )
+      const tint = nativeBoneyardLightTint(scalar)
+      tree.main.sprite.alpha = presentation.alpha
+      tree.foreground.sprite.alpha = presentation.alpha
+      tree.main.sprite.tint = tint
+      tree.foreground.sprite.tint = tint
+      if (presentation.alpha < 1) fadedTreeCount += 1
+      minTreeAlpha = Math.min(minTreeAlpha, presentation.alpha)
+      minTreeLightScalar = Math.min(minTreeLightScalar, scalar)
+      if (tree.main.sprite.alpha !== tree.foreground.sprite.alpha) {
+        treeAlphaMismatchCount += 1
+      }
+      if (tree.main.sprite.tint !== tree.foreground.sprite.tint) {
+        treeTintMismatchCount += 1
+      }
     }
     for (const [id, view] of this.players) {
       const player = snapshot.players[id]
@@ -599,8 +685,6 @@ class BoneyardDynamicScene {
       ))
     }
 
-    const localPlayer = snapshot.players[localPlayerId]
-    if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
     const gateLeaves = this.gateLeaves
     gateLeaves.clear()
     for (const leaf of snapshot.world.gateLeaves) {
@@ -697,6 +781,7 @@ class BoneyardDynamicScene {
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
     return {
+      fadedTreeCount,
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
       localPlayerZIndex,
@@ -708,7 +793,13 @@ class BoneyardDynamicScene {
       maxMainLightScalar,
       maxMainZIndex,
       minMainLightScalar: visibleMainResidents.length > 0 ? minMainLightScalar : 0,
+      minTreeAlpha,
+      minTreeLightScalar: treePresentations.length > 0 ? minTreeLightScalar : 0,
       painterBandCount: order.bands.length,
+      treeAlphaMismatchCount,
+      treeCount: treePresentations.length,
+      treeForegroundResidentCount: this.treeResidents.size,
+      treeTintMismatchCount,
     }
   }
 
@@ -1012,6 +1103,9 @@ async function buildStaticWorld(
   root.addChild(base, foreground)
   const residents: ResidentTexture[] = []
   const mainResidents = new Map<number, ResidentTexture>()
+  const treeMainResidents = new Map<string, ResidentTexture>()
+  const treeInputs: NativeTreeOcclusionInput[] = []
+  const treeResidents = new Map<string, TreeResidents>()
   let staticPaintCount = 0
   try {
     residents.push(...await buildTiledStaticLayer(
@@ -1034,24 +1128,54 @@ async function buildStaticWorld(
         root.addChild(resident.sprite)
         residents.push(resident)
         mainResidents.set(layerIndex, resident)
+        if (layer.kind === 'object' && layer.object.typeId === NATIVE.tree) {
+          treeMainResidents.set(layer.object.eid, resident)
+        }
       }
       if (layerIndex % 12 === 11) await nextFrame()
     }
 
-    residents.push(...await buildTiledStaticLayer(
-      document,
-      foreground,
-      true,
-      (context, width, height, camera) => {
-        drawNativeBoneyardForeground(context, width, height, camera, document)
-        staticPaintCount += 1
-      },
-    ))
+    const foregroundLayers = nativeBoneyardForegroundLayers(document)
+    for (let layerIndex = 0; layerIndex < foregroundLayers.length; layerIndex += 1) {
+      const layer = foregroundLayers[layerIndex]
+      const resident = buildForegroundLayerResident(document, layer, layerIndex)
+      staticPaintCount += 1
+      if (resident) {
+        foreground.addChild(resident.sprite)
+        residents.push(resident)
+        if (layer.object.typeId === NATIVE.tree) {
+          const main = treeMainResidents.get(layer.object.eid)
+          if (!main) {
+            throw new Error(`Tree ${layer.object.eid} has foreground art without main art.`)
+          }
+          const object = layer.object as typeof layer.object & {
+            secondaryVariant?: number
+            secondaryVisible?: boolean
+          }
+          treeInputs.push({
+            eid: object.eid,
+            mainVariant: object.variant ?? 0,
+            position: { ...object.pos },
+            secondaryVariant: object.secondaryVariant ?? layer.atlasEntry - 243,
+            secondaryVisible: object.secondaryVisible !== false,
+          })
+          treeResidents.set(object.eid, { foreground: resident, main })
+        }
+      }
+      if (layerIndex % 12 === 11) await nextFrame()
+    }
   } catch (error) {
     for (const resident of residents) resident.texture.destroy(true)
     throw error
   }
-  return { foreground, mainResidents, residents, staticPaintCount }
+  return {
+    foreground,
+    mainResidents,
+    residents,
+    staticPaintCount,
+    treeInputs,
+    treeResidents,
+  }
 }
 
 async function buildTiledStaticLayer(
@@ -1114,6 +1238,48 @@ function buildMainLayerResident(
   return crop
     ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y, layerIndex)
     : null
+}
+
+function buildForegroundLayerResident(
+  document: EditorDoc,
+  layer: ObjectSpriteLayer,
+  layerIndex: number,
+): ResidentTexture | null {
+  const bounds = objectLayerCaptureBounds(layer)
+  const canvas = documentNodeCanvas(bounds.w, bounds.h)
+  const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
+  if (!context) throw new Error('Boneyard foreground layer could not acquire Canvas2D.')
+  drawNativeBoneyardForegroundBand(
+    context,
+    bounds.w,
+    bounds.h,
+    {
+      x: bounds.x + bounds.w / 2,
+      y: bounds.y + bounds.h / 2,
+      zoom: 1,
+    },
+    document,
+    [layerIndex],
+  )
+  const crop = cropTransparentCanvas(canvas)
+  return crop
+    ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y)
+    : null
+}
+
+function objectLayerCaptureBounds(
+  layer: ObjectSpriteLayer,
+): { h: number; w: number; x: number; y: number } {
+  const ref = spriteRefFor(layer.atlas, layer.atlasEntry)
+  if (!ref) {
+    throw new Error(`Missing ${layer.atlas}:${layer.atlasEntry} foreground art.`)
+  }
+  return {
+    x: Math.floor(layer.pos.x - ref.anchorX) - 1,
+    y: Math.floor(layer.pos.y - ref.anchorY) - 1,
+    w: Math.ceil(ref.w) + 2,
+    h: Math.ceil(ref.h) + 2,
+  }
 }
 
 function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: number; y: number } {

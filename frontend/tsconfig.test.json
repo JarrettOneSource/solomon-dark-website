@@ -68,6 +68,8 @@
     "src/game/renderer/boneyard-solomon-render.test.ts",
     "src/game/renderer/title-menu-render-contract.ts",
     "src/game/renderer/title-menu-render-contract.test.ts",
+    "src/game/renderer/boneyard-tree-occlusion.ts",
+    "src/game/renderer/boneyard-tree-occlusion.test.ts",
     "src/game/client/game-transport.ts",
     "src/game/host/game-host.ts",
     "src/game/host/game-host.test.ts",

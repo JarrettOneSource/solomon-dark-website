@@ -26,10 +26,16 @@ try {
   const page = await context.newPage()
   const pageErrors = []
   const consoleErrors = []
+  const failedResponses = []
   page.on('pageerror', (error) => pageErrors.push({ message: error.message, stack: error.stack }))
   page.on('console', (message) => {
     if (message.type() === 'error') {
       consoleErrors.push({ location: message.location(), text: message.text() })
+    }
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      failedResponses.push({ status: response.status(), url: response.url() })
     }
   })
 
@@ -77,6 +83,8 @@ try {
         currentTime: this.currentTime,
         loop: this.loop,
         playbackRate: this.playbackRate,
+        semanticFootstepTick: document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-last-footstep-tick') ?? null,
         src: this.src,
         type: 'play',
         volume: this.volume,
@@ -201,6 +209,7 @@ try {
   await page.keyboard.down('d')
   await waitForFootstepCount(page, footstepSources, 'play', stepCountBeforeMovement + 3)
   await page.keyboard.up('d')
+  await nextPresentationFrame(page)
 
   const stepEventsAtRelease = footstepEvents(await audioEvents(page), 'play')
   await waitForFootstepCount(page, footstepSources, 'started', stepCountBeforeMovement + 3)
@@ -238,6 +247,77 @@ try {
   assert.ok(summon.volume >= 0.0625 && summon.volume <= 0.25)
   assert.ok(summon.playbackRate >= 1 && summon.playbackRate < 1.1)
 
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
+    timeout: 30_000,
+  })
+  await waitForPlay(page, '/game/audio/music/prelude.mp3', 10_000)
+
+  const boneyardStepCountBeforeMovement = footstepEvents(
+    await audioEvents(page),
+    'play',
+  ).length
+  await page.keyboard.down('d')
+  await waitForFootstepCount(
+    page,
+    footstepSources,
+    'play',
+    boneyardStepCountBeforeMovement + 6,
+  )
+  await page.keyboard.up('d')
+  await nextPresentationFrame(page)
+
+  const boneyardStepEventsAtRelease = footstepEvents(await audioEvents(page), 'play')
+  await waitForFootstepCount(
+    page,
+    footstepSources,
+    'started',
+    boneyardStepCountBeforeMovement + 6,
+  )
+  const heldBoneyardSteps = boneyardStepEventsAtRelease.slice(
+    boneyardStepCountBeforeMovement,
+  )
+  const heldBoneyardStarts = footstepEvents(await audioEvents(page), 'started')
+    .slice(boneyardStepCountBeforeMovement)
+  assert.ok(
+    heldBoneyardSteps.length >= 6,
+    `expected repeated Boneyard footsteps, got ${heldBoneyardSteps.length}`,
+  )
+  assert.ok(heldBoneyardSteps.every((event) => event.volume === 0.5))
+  assert.ok(heldBoneyardSteps.every((event) => event.playbackRate === 1))
+  const boneyardSemanticTicks = heldBoneyardSteps
+    .slice(0, 6)
+    .map((event) => Number(event.semanticFootstepTick))
+  assert.ok(boneyardSemanticTicks.every(Number.isSafeInteger))
+  assert.deepEqual(
+    boneyardSemanticTicks.slice(1).map((tick, index) => (
+      tick - boneyardSemanticTicks[index]
+    )),
+    [25, 25, 25, 25, 25],
+  )
+  const boneyardDispatchIntervalsMs = consecutiveIntervals(heldBoneyardSteps.slice(0, 6))
+  const boneyardStartIntervalsMs = consecutiveIntervals(heldBoneyardStarts.slice(0, 6))
+  assertBoneyardFootstepDelivery(boneyardDispatchIntervalsMs)
+
+  await page.waitForTimeout(350)
+  const boneyardReleaseTail = footstepEvents(await audioEvents(page), 'play')
+    .slice(boneyardStepEventsAtRelease.length)
+  assert.ok(
+    boneyardReleaseTail.length <= 1,
+    `Boneyard native release tail allows at most one step, got ${boneyardReleaseTail.length}`,
+  )
+  const boneyardStepCountAfterRelease = footstepEvents(
+    await audioEvents(page),
+    'play',
+  ).length
+  await page.waitForTimeout(700)
+  const allStepEvents = footstepEvents(await audioEvents(page), 'play')
+  assert.equal(
+    allStepEvents.length,
+    boneyardStepCountAfterRelease,
+    'Boneyard sub-threshold residual velocity must remain silent',
+  )
+
   const events = await audioEvents(page)
   const playedSources = events
     .filter((event) => event.type === 'play')
@@ -246,6 +326,7 @@ try {
     '/game/audio/music/solomondarktheme.mp3',
     '/game/audio/music/selection.mp3',
     '/game/audio/music/academy.mp3',
+    '/game/audio/music/prelude.mp3',
   ]
   const musicSources = playedSources.filter((source) => (
     expectedMusic.some((expected) => sourceMatches(source, expected))
@@ -255,6 +336,7 @@ try {
     musicSources.some((source) => sourceMatches(source, expected))
   )))
   assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(failedResponses, [])
   assert.deepEqual(pageErrors, [])
 
   process.stdout.write(`${JSON.stringify({
@@ -265,6 +347,12 @@ try {
     dispatchIntervalsMs,
     startIntervalsMs,
     stepCount: stepEvents.length,
+    boneyard: {
+      dispatchIntervalsMs: boneyardDispatchIntervalsMs,
+      semanticTicks: boneyardSemanticTicks,
+      startIntervalsMs: boneyardStartIntervalsMs,
+      stepCount: allStepEvents.length - boneyardStepCountBeforeMovement,
+    },
     summon: {
       playbackRate: summon.playbackRate,
       volume: summon.volume,
@@ -276,6 +364,10 @@ try {
 
 async function audioEvents(page) {
   return page.evaluate(() => window.__gameAudioEvents)
+}
+
+async function nextPresentationFrame(page) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())))
 }
 
 async function playCount(page) {
@@ -346,5 +438,18 @@ function assertNativeFootstepIntervals(intervals, label) {
   assert.ok(
     average >= 200 && average <= 325,
     `expected 250 ms average ${label} cadence, got ${average}`,
+  )
+}
+
+function assertBoneyardFootstepDelivery(intervals) {
+  assert.equal(intervals.length, 5)
+  assert.ok(
+    intervals.every((interval) => interval >= 0 && interval <= 750),
+    `expected bounded Boneyard delivery jitter, got ${intervals.join(', ')}`,
+  )
+  const average = intervals.reduce((total, interval) => total + interval, 0) / intervals.length
+  assert.ok(
+    average >= 175 && average <= 325,
+    `expected 250 ms average Boneyard delivery cadence, got ${average}`,
   )
 }

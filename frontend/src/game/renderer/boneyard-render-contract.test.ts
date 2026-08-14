@@ -25,6 +25,16 @@ test('Gate record 7 uses the recovered four-corner consumer in game and editor',
   assert.doesNotMatch(editorRenderer, /plantArt\(ctx, FENCE_ART\.gateLeaf, leaf\.p0/)
 })
 
+test('Tree foreground stays per-object and shares native alpha and root tint', () => {
+  assert.match(editorRenderer, /export function nativeBoneyardForegroundLayers/)
+  assert.match(editorRenderer, /export function drawNativeBoneyardForegroundBand/)
+  assert.doesNotMatch(boneyardRenderer, /drawNativeBoneyardForeground\(context/)
+  assert.match(boneyardRenderer, /tree\.main\.sprite\.alpha = presentation\.alpha/)
+  assert.match(boneyardRenderer, /tree\.foreground\.sprite\.alpha = presentation\.alpha/)
+  assert.match(boneyardRenderer, /tree\.main\.sprite\.tint = tint/)
+  assert.match(boneyardRenderer, /tree\.foreground\.sprite\.tint = tint/)
+})
+
 test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () => {
   const bounds = { x: -200, y: 100, w: 3200, h: 2400 }
 

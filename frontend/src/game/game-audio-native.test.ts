@@ -27,6 +27,15 @@ import {
   HUB_TEACHER_CYCLE_SECONDS,
 } from './hub-teacher.ts'
 
+const boneyardSceneSource = readFileSync(
+  new URL('./BoneyardScene.tsx', import.meta.url),
+  'utf8',
+)
+const mainMenuSceneSource = readFileSync(
+  new URL('./MainMenuScene.tsx', import.meta.url),
+  'utf8',
+)
+
 test('maps each scene to the recovered module entry and transition clock', () => {
   assert.equal(
     NATIVE_MUSIC_MODULE_SHA256,
@@ -150,6 +159,17 @@ test('consumes only the newest unseen Solomon cue after sparse snapshots', () =>
   assert.deepEqual(newSolomonVoiceEvent(1, events), events[2])
   assert.equal(newSolomonVoiceEvent(3, events), null)
   assert.equal(newSolomonVoiceEvent(0, []), null)
+})
+
+test('gives Boneyard the same local authoritative footstep owner', () => {
+  assert.match(mainMenuSceneSource, /<BoneyardScene[\s\S]*?audio=\{audio\}/)
+  assert.match(boneyardSceneSource, /let previousAudioSnapshot = initialSnapshot/)
+  assert.match(boneyardSceneSource, /snapshot\.players\[playerId\]/)
+  assert.match(boneyardSceneSource, /newNativeFootstepTick\(/)
+  assert.match(
+    boneyardSceneSource,
+    /audio\.playSound\(nativeFootstepCue\(footstepTick, playerId\), \{ volume: 0\.5 \}\)/,
+  )
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

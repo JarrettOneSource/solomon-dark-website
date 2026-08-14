@@ -143,6 +143,7 @@ interface RenderScene {
   compact: SpriteDrawable[]
   shadows: MainRenderItem[]
   main: MainRenderItem[]
+  foregroundLayers: ObjectSpriteLayer[]
   foreground: SpriteDrawable[]
 }
 
@@ -193,6 +194,7 @@ function renderSceneFor(doc: EditorDoc): RenderScene {
       compact: plan.compact.map(drawableForCompact),
       shadows: plan.shadows.map((layer) => owners.get(layer)!),
       main: plan.main.map((layer) => owners.get(layer)!),
+      foregroundLayers: plan.foreground,
       foreground: plan.foreground.map(drawableForObject),
     }
     renderSceneCache.set(doc, scene)
@@ -602,6 +604,12 @@ export function nativeBoneyardMainLayers(doc: EditorDoc): readonly MainLayer[] {
   return actorOccludingMainItems(doc).map((item) => item.layer)
 }
 
+export function nativeBoneyardForegroundLayers(
+  doc: EditorDoc,
+): readonly ObjectSpriteLayer[] {
+  return renderSceneFor(doc).foregroundLayers
+}
+
 export function drawNativeBoneyardBase(
   ctx: CanvasRenderingContext2D,
   cssW: number,
@@ -652,9 +660,30 @@ export function drawNativeBoneyardForeground(
   cam: Camera,
   doc: EditorDoc,
 ) {
+  drawNativeBoneyardForegroundBand(
+    ctx,
+    cssW,
+    cssH,
+    cam,
+    doc,
+    renderSceneFor(doc).foreground.map((_, layerIndex) => layerIndex),
+  )
+}
+
+export function drawNativeBoneyardForegroundBand(
+  ctx: CanvasRenderingContext2D,
+  cssW: number,
+  cssH: number,
+  cam: Camera,
+  doc: EditorDoc,
+  layerIndexes: readonly number[],
+) {
   ctx.clearRect(0, 0, cssW, cssH)
   ctx.imageSmoothingEnabled = cam.zoom < 1
-  for (const drawable of renderSceneFor(doc).foreground) {
+  const foreground = renderSceneFor(doc).foreground
+  for (const layerIndex of layerIndexes) {
+    const drawable = foreground[layerIndex]
+    if (!drawable) continue
     drawSprite(ctx, drawable, cam, cssW, cssH, false)
   }
 }

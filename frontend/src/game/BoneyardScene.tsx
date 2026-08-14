@@ -14,9 +14,13 @@ import {
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
-import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import { newSolomonVoiceEvent } from './game-audio-native.ts'
+import {
+  nativeFootstepCue,
+  newSolomonVoiceEvent,
+  newNativeFootstepTick,
+} from './game-audio-native.ts'
+import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
@@ -97,6 +101,26 @@ export default function BoneyardScene({
   const [digIndicatorRunId, setDigIndicatorRunId] = useState<string | null>(null)
   const dig = loaded.scene.solomonDig
   const digPosition = dig?.position
+
+  useEffect(() => {
+    let previousAudioSnapshot = initialSnapshot
+    return subscribe((snapshot) => {
+      if (
+        snapshot.world.kind !== 'boneyard'
+        || snapshot.world.runId !== loaded.runId
+      ) return
+      const player = snapshot.players[playerId]
+      const footstepTick = player
+        ? newNativeFootstepTick(previousAudioSnapshot.players[playerId], player)
+        : undefined
+      if (footstepTick !== undefined) {
+        const scene = sceneRef.current
+        if (scene) scene.dataset.lastFootstepTick = `${footstepTick}`
+        audio.playSound(nativeFootstepCue(footstepTick, playerId), { volume: 0.5 })
+      }
+      previousAudioSnapshot = snapshot
+    })
+  }, [audio, initialSnapshot, loaded.runId, playerId, subscribe])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {
