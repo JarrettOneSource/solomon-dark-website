@@ -26,6 +26,7 @@ export interface BrowserGameplayInputSample {
 export interface BrowserGameplayInput {
   destroy(): void
   sample(): BrowserGameplayInputSample
+  setBlocked(blocked: boolean): void
   setTouch(movement: Vector2): void
 }
 
@@ -49,6 +50,7 @@ export function createBrowserGameplayInput({
   let aim: Vector2 | null = null
   let cast = { primary: false, secondary: false }
   let capturedPointer: Vector2 | null = null
+  let blocked = false
   let destroyed = false
 
   const movement = createBrowserMovementInput({
@@ -64,6 +66,12 @@ export function createBrowserGameplayInput({
   })
 
   const sample = (): BrowserGameplayInputSample => {
+    if (blocked) {
+      return {
+        device: 'none',
+        input: createIdlePlayerCharacterInput(),
+      }
+    }
     if (capturedPointer && (cast.primary || cast.secondary)) {
       aim = projectPointer(capturedPointer) ?? aim
     }
@@ -79,6 +87,7 @@ export function createBrowserGameplayInput({
   }
   const publish = () => onInput(sample().input)
   const mouseDown: EventListener = (event) => {
+    if (blocked) return
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
     if (!mouse || !lane) return
@@ -91,6 +100,7 @@ export function createBrowserGameplayInput({
     publish()
   }
   const mouseMove: EventListener = (event) => {
+    if (blocked) return
     if (!cast.primary && !cast.secondary) return
     const mouse = mouseEvent(event)
     if (!mouse) return
@@ -100,6 +110,7 @@ export function createBrowserGameplayInput({
     publish()
   }
   const mouseUp: EventListener = (event) => {
+    if (blocked) return
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
     if (!mouse || !lane || !cast[lane]) return
@@ -127,7 +138,14 @@ export function createBrowserGameplayInput({
       movement.destroy()
     },
     sample,
-    setTouch: (nextMovement) => movement.setTouch(nextMovement),
+    setBlocked(nextBlocked) {
+      if (blocked === nextBlocked) return
+      blocked = nextBlocked
+      movement.setBlocked(nextBlocked)
+    },
+    setTouch(nextMovement) {
+      if (!blocked) movement.setTouch(nextMovement)
+    },
   }
 }
 

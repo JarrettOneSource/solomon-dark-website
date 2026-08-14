@@ -104,6 +104,34 @@ test('browser lifecycle interruption clears local input and publishes an immedia
   assert.equal(stops, 4)
 })
 
+test('browser movement blocking clears retained state and ignores barrier-time touch', () => {
+  const target = new EventTarget()
+  let stops = 0
+  const input = createBrowserMovementInput({
+    getGamepads: () => [],
+    onStop: () => { stops += 1 },
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  input.setTouch({ x: 1, y: 0 })
+  assert.equal(input.sample().device, 'touch')
+  input.setBlocked(true)
+  assert.equal(stops, 1)
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+
+  input.setTouch({ x: 0, y: -1 })
+  input.setBlocked(true)
+  assert.equal(stops, 1)
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+
+  input.setBlocked(false)
+  assert.deepEqual(input.sample(), { device: 'none', movement: { x: 0, y: 0 } })
+  input.setTouch({ x: 0, y: 1 })
+  assert.deepEqual(input.sample(), { device: 'touch', movement: { x: 0, y: 1 } })
+  input.destroy()
+})
+
 test('radial gamepad dead zone removes drift and rescales useful travel continuously', () => {
   assert.deepEqual(radialDeadZone(0.1, 0, GAMEPAD_MOVEMENT_DEAD_ZONE), { x: 0, y: 0 })
   const justOutside = radialDeadZone(0.3, 0, GAMEPAD_MOVEMENT_DEAD_ZONE)

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -20,9 +21,19 @@ import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import { GameAudioDirector } from './game-audio-director.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
+import type { GameConnectionStage } from './engine.ts'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import HubScene from './HubScene.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
+import MatchLoadingScreen from './MatchLoadingScreen.tsx'
+import {
+  advanceMatchLoading,
+  beginMatchLoading,
+  completeMatchLoading,
+  type MatchLoadingFlow,
+  type MatchLoadingStage,
+  type MatchLoadingState,
+} from './match-loading.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
@@ -164,7 +175,10 @@ function PlayActions({
 
 interface MainMenuSceneProps {
   displayName: string
-  connectSession: (character: PlayerCharacterConfig) => Promise<GameClientSession>
+  connectSession: (
+    character: PlayerCharacterConfig,
+    onProgress: (stage: GameConnectionStage) => void,
+  ) => Promise<GameClientSession>
   initialScreen?: 'create' | 'root'
   onCancelCreate: () => Promise<void>
   prepareNewGame: () => Promise<void>
@@ -185,6 +199,10 @@ export default function MainMenuScene({
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
+  const activeBoneyardRunRef = useRef<string | null>(null)
+  const loadedBoneyardRunRef = useRef<string | null>(null)
+  const [loading, setLoading] = useState<MatchLoadingState | null>(null)
+  const loadingRef = useRef<MatchLoadingState | null>(null)
   const [preparing, setPreparing] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -193,6 +211,49 @@ export default function MainMenuScene({
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
   ))
+
+  const beginLoading = useCallback((
+    flow: MatchLoadingFlow,
+    stage: MatchLoadingStage,
+  ) => {
+    const next = beginMatchLoading(flow, stage)
+    loadingRef.current = next
+    setLoading(next)
+  }, [])
+
+  const advanceLoading = useCallback((stage: MatchLoadingStage) => {
+    const current = loadingRef.current
+    if (!current) return
+    const next = advanceMatchLoading(current, stage)
+    if (next === current) return
+    loadingRef.current = next
+    setLoading(next)
+  }, [])
+
+  const cancelLoading = useCallback((flow: MatchLoadingFlow) => {
+    if (loadingRef.current?.flow !== flow) return
+    loadingRef.current = null
+    setLoading(null)
+  }, [])
+
+  const finishLoading = useCallback((flow: MatchLoadingFlow) => {
+    const current = loadingRef.current
+    if (current?.flow !== flow) return
+    loadingRef.current = completeMatchLoading(current)
+    setLoading(null)
+    loadingRef.current = null
+  }, [])
+
+  const finishHubLoading = useCallback(() => finishLoading('hub'), [finishLoading])
+  const finishBoneyardLoading = useCallback(
+    () => finishLoading('boneyard'),
+    [finishLoading],
+  )
+  const cancelHubLoading = useCallback(() => cancelLoading('hub'), [cancelLoading])
+  const cancelBoneyardLoading = useCallback(
+    () => cancelLoading('boneyard'),
+    [cancelLoading],
+  )
 
   useLayoutEffect(() => {
     const stage = stageRef.current
@@ -233,19 +294,59 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (!session) return
-    setRuntimeSnapshot(session.getSnapshot())
-    setLoadedBoneyard(session.getBoneyard())
+    const initialSnapshot = session.getSnapshot()
+    const initialBoneyard = session.getBoneyard()
+    activeBoneyardRunRef.current = initialSnapshot.world.kind === 'boneyard'
+      ? initialSnapshot.world.runId
+      : null
+    loadedBoneyardRunRef.current = initialBoneyard?.runId ?? null
+    setRuntimeSnapshot(initialSnapshot)
+    setLoadedBoneyard(initialBoneyard)
+    if (initialSnapshot.world.kind === 'boneyard') {
+      if (loadingRef.current?.flow !== 'boneyard') {
+        beginLoading('boneyard', initialBoneyard
+          ? 'materializing_participants'
+          : 'reading_boneyard')
+      } else if (initialBoneyard) {
+        advanceLoading('materializing_participants')
+      }
+    } else if (loadingRef.current?.flow === 'hub') {
+      advanceLoading('materializing_participants')
+    }
     const removeSnapshot = session.onSnapshot((snapshot) => {
+      if (snapshot.world.kind === 'boneyard') {
+        const enteringRun = activeBoneyardRunRef.current !== snapshot.world.runId
+        activeBoneyardRunRef.current = snapshot.world.runId
+        if (loadingRef.current?.flow === 'boneyard') {
+          advanceLoading('materializing_participants')
+        } else if (enteringRun) {
+          beginLoading('boneyard', 'materializing_participants')
+        }
+      } else {
+        activeBoneyardRunRef.current = null
+        if (loadingRef.current?.flow === 'hub') {
+          advanceLoading('materializing_participants')
+        }
+      }
       setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot)
         ? current
         : snapshot)
     })
-    const removeBoneyard = session.onBoneyard(setLoadedBoneyard)
+    const removeBoneyard = session.onBoneyard((nextBoneyard) => {
+      const enteringRun = loadedBoneyardRunRef.current !== nextBoneyard.runId
+      loadedBoneyardRunRef.current = nextBoneyard.runId
+      setLoadedBoneyard(nextBoneyard)
+      if (loadingRef.current?.flow === 'boneyard') {
+        advanceLoading('reading_boneyard')
+      } else if (enteringRun) {
+        beginLoading('boneyard', 'reading_boneyard')
+      }
+    })
     return () => {
       removeSnapshot()
       removeBoneyard()
     }
-  }, [session])
+  }, [advanceLoading, beginLoading, session])
 
   useEffect(() => {
     if (!session) return
@@ -332,24 +433,41 @@ export default function MainMenuScene({
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
     if (connecting) return false
+    beginLoading('hub', 'connecting_transport')
     setConnecting(true)
     setConnectionError(null)
     try {
-      const nextSession = await connectSession({
-        discipline: selectedDiscipline,
-        displayName,
-        element: selectedElement,
-      })
+      const nextSession = await connectSession(
+        {
+          discipline: selectedDiscipline,
+          displayName,
+          element: selectedElement,
+        },
+        advanceLoading,
+      )
       setSession(nextSession)
       setRuntimeSnapshot(nextSession.getSnapshot())
       setLoadedBoneyard(nextSession.getBoneyard())
-      transitionTo('hub')
+      advanceLoading('materializing_participants')
+      setScreen('hub')
       return true
     } catch (error) {
+      cancelLoading('hub')
       setConnectionError(error instanceof Error ? error.message : 'Game server connection failed.')
       return false
     } finally {
       setConnecting(false)
+    }
+  }
+
+  const startBoneyard = (boneyardId: string) => {
+    if (!session || loadingRef.current) return
+    beginLoading('boneyard', 'preparing_boneyard')
+    try {
+      session.startMatch(boneyardId)
+    } catch (error) {
+      cancelLoading('boneyard')
+      setConnectionError(error instanceof Error ? error.message : 'The Boneyard could not be opened.')
     }
   }
 
@@ -416,9 +534,12 @@ export default function MainMenuScene({
             audio={audio}
             boneyard={loadedBoneyard}
             getPingMs={session.getPingMs}
+            inputBlocked={loading !== null}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
+            onLoadingError={cancelBoneyardLoading}
+            onReady={finishBoneyardLoading}
             samplePresentation={session.sampleBoneyardPresentation}
             subscribePing={session.onPing}
             subscribe={session.onSnapshot}
@@ -428,21 +549,22 @@ export default function MainMenuScene({
             audio={audio}
             boneyards={session.boneyards}
             getPingMs={session.getPingMs}
+            inputBlocked={loading !== null}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
-            onStartMatch={session.startMatch}
+            onLoadingError={cancelHubLoading}
+            onReady={finishHubLoading}
+            onStartMatch={startBoneyard}
             samplePresentation={session.samplePresentation}
             subscribePing={session.onPing}
             subscribe={session.onSnapshot}
           />
-        ) : session ? (
-          <div className="main-menu-runtime-status" role="status">Opening the Boneyard…</div>
         ) : null}
 
-        {(preparing || connecting || connectionError) && (
+        {(preparing || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? (preparing ? 'Opening the web playtest…' : 'Opening the grounds…')}
+            {connectionError ?? 'Opening the web playtest…'}
           </div>
         )}
 
@@ -452,6 +574,7 @@ export default function MainMenuScene({
           aria-hidden
         />
       </section>
+      {loading && <MatchLoadingScreen loading={loading} />}
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>

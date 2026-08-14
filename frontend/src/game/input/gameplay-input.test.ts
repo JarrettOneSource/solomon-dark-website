@@ -156,3 +156,53 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
   input.destroy()
   assert.deepEqual(published.at(-1), expectedInput(null, false, false))
 })
+
+test('blocking owns input immediately and drops barrier-time state', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  input.setTouch({ x: 1, y: 0 })
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30))
+  assert.equal(input.sample().device, 'touch')
+  assert.equal(input.sample().input.cast.primary, true)
+
+  input.setBlocked(true)
+  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, false),
+  })
+
+  const publishedAtBarrier = published.length
+  input.setTouch({ x: 0, y: -1 })
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 40, 50))
+  assert.equal(published.length, publishedAtBarrier)
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, false),
+  })
+
+  input.setBlocked(false)
+  assert.deepEqual(input.sample(), {
+    device: 'none',
+    input: expectedInput(null, false, false),
+  })
+  input.setTouch({ x: 0, y: 1 })
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 60, 70))
+  assert.equal(input.sample().device, 'touch')
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 60, y: 70 },
+    cast: { primary: false, secondary: true },
+    movement: { x: 0, y: 1 },
+  })
+  input.destroy()
+})

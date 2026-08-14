@@ -25,6 +25,7 @@ import loaderFill from '../assets/game/loader-fill.png'
 import loaderFrame from '../assets/game/loader-frame.png'
 import loaderLogo from '../assets/game/loader-logo.png'
 import loaderUrl from '../assets/game/loader-url.png'
+import matchLoadingBackground from '../assets/game/match-loading-background.png'
 import mainMenuButton from '../assets/game/main-menu-button.png'
 import mainMenuButtonCorner from '../assets/game/main-menu-button-corner.png'
 import mainMenuButtonHover from '../assets/game/main-menu-button-hover.png'
@@ -369,6 +370,11 @@ export const loader = {
   frame: loaderFrame,
   logo: loaderLogo,
   url: loaderUrl,
+}
+
+/** Loader-owned match transition art shared by Hub and Boneyard entry. */
+export const matchLoading = {
+  background: matchLoadingBackground,
 }
 
 /** Fixed layers and bitmap-font labels used by the stock returning-player menu. */

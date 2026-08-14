@@ -39,6 +39,37 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.deepEqual(connected?.character, CHARACTER)
 })
 
+test('bootGame reports concrete transport and welcome milestones in order', async () => {
+  const trace: string[] = []
+  const session = inertSession()
+  const result = await bootGame({
+    character: CHARACTER,
+    endpoint: {
+      kind: 'localhost',
+      url: 'ws://127.0.0.1:1234/game',
+      credential: 'secret',
+    },
+    onProgress: (stage) => trace.push(stage),
+    transportFactory: async () => {
+      trace.push('transport-open')
+      return inertTransport
+    },
+    sessionConnector: async () => {
+      trace.push('welcome-received')
+      return session
+    },
+  })
+
+  assert.equal(result, session)
+  assert.deepEqual(trace, [
+    'connecting_transport',
+    'transport-open',
+    'authenticating_session',
+    'welcome-received',
+    'receiving_host_checkpoint',
+  ])
+})
+
 test('bootGame bans website remote sessions from local and plaintext endpoints', async () => {
   await assert.rejects(() => bootGame({
     character: CHARACTER,

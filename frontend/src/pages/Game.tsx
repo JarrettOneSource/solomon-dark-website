@@ -6,7 +6,12 @@ import {
   loadGameStartupAssets,
 } from '../game/game-assets'
 import { assetDisplayName } from '../game/game-asset-readiness.ts'
-import { bootGame, type GameEndpoint, type GameSession } from '../game/engine.ts'
+import {
+  bootGame,
+  type GameConnectionStage,
+  type GameEndpoint,
+  type GameSession,
+} from '../game/engine.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import {
   cancelGameLobby,
@@ -98,6 +103,7 @@ export default function Game() {
 
   const connectSession = useCallback(async (
     character: PlayerCharacterConfig,
+    onProgress: (stage: GameConnectionStage) => void,
   ): Promise<GameSession> => {
     const endpoint = lobbyId
       ? await joinGameLobby(lobbyId)
@@ -107,6 +113,7 @@ export default function Game() {
       character,
       endpoint,
       onFatal: (error) => setFatal(error.message),
+      onProgress,
     })
     if (lobbyId) navigate('/game', { replace: true })
     hostedLobby.current = null

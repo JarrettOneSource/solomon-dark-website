@@ -50,7 +50,10 @@ interface BoneyardSceneProps {
   boneyard: LoadedBoneyard
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
+  inputBlocked: boolean
   onInput: (input: PlayerCharacterInput) => void
+  onLoadingError: () => void
+  onReady: () => void
   playerId: string
   samplePresentation: (nowMs?: number) => GameSnapshot
   subscribePing: (listener: (pingMs: number) => void) => () => void
@@ -74,7 +77,10 @@ export default function BoneyardScene({
   boneyard: loaded,
   getPingMs,
   initialSnapshot,
+  inputBlocked,
   onInput,
+  onLoadingError,
+  onReady,
   playerId,
   samplePresentation,
   subscribePing,
@@ -92,6 +98,12 @@ export default function BoneyardScene({
       ? (initialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0)
       : 0,
   )
+  const inputBlockedRef = useRef(inputBlocked)
+  const onLoadingErrorRef = useRef(onLoadingError)
+  const onReadyRef = useRef(onReady)
+  inputBlockedRef.current = inputBlocked
+  onLoadingErrorRef.current = onLoadingError
+  onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -125,7 +137,8 @@ export default function BoneyardScene({
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {
       if (
-        event.code !== SOLOMON_DIG_HOTKEY_CODE
+        inputBlocked
+        || event.code !== SOLOMON_DIG_HOTKEY_CODE
         || event.repeat
         || event.altKey
         || event.ctrlKey
@@ -139,7 +152,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', toggleDigIndicator)
     return () => window.removeEventListener('keydown', toggleDigIndicator)
-  }, [dig, loaded.runId])
+  }, [dig, inputBlocked, loaded.runId])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -155,6 +168,10 @@ export default function BoneyardScene({
     observer.observe(scene)
     return () => observer.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    inputRef.current?.setBlocked(inputBlocked)
+  }, [inputBlocked])
 
   useEffect(() => {
     const host = hostRef.current
@@ -182,6 +199,7 @@ export default function BoneyardScene({
         )
       },
     })
+    input.setBlocked(inputBlockedRef.current)
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -200,6 +218,7 @@ export default function BoneyardScene({
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
+      onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
         if (snapshot.world.kind === 'boneyard' && snapshot.world.encounter) {
@@ -237,6 +256,7 @@ export default function BoneyardScene({
       })
     }).catch((error: unknown) => {
       if (!cancelled) {
+        onLoadingErrorRef.current()
         setRendererError(error instanceof Error
           ? error.message
           : 'The WebGL renderer could not start.')

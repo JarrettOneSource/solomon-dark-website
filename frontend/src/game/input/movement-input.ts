@@ -18,6 +18,7 @@ export interface MovementInputState {
 export interface BrowserMovementInput {
   destroy(): void
   sample(): MovementInputSample
+  setBlocked(blocked: boolean): void
   setTouch(movement: Vector2): void
 }
 
@@ -112,12 +113,13 @@ export function createBrowserMovementInput({
   visibilityTarget = document,
 }: BrowserMovementInputOptions): BrowserMovementInput {
   const state = createMovementInputState()
+  let blocked = false
   const keyDown: EventListener = (event) => {
-    if (!(event instanceof KeyboardEvent) || !state.press(event.code)) return
+    if (blocked || !(event instanceof KeyboardEvent) || !state.press(event.code)) return
     event.preventDefault()
   }
   const keyUp: EventListener = (event) => {
-    if (!(event instanceof KeyboardEvent) || !state.release(event.code)) return
+    if (blocked || !(event instanceof KeyboardEvent) || !state.release(event.code)) return
     event.preventDefault()
   }
   const stop = () => {
@@ -142,8 +144,17 @@ export function createBrowserMovementInput({
       visibilityTarget.removeEventListener('visibilitychange', visibilityChange)
       stop()
     },
-    sample: () => state.sample(getGamepads()),
-    setTouch: (movement) => state.setTouch(movement),
+    sample: () => blocked
+      ? { device: 'none', movement: { x: 0, y: 0 } }
+      : state.sample(getGamepads()),
+    setBlocked(nextBlocked) {
+      if (blocked === nextBlocked) return
+      blocked = nextBlocked
+      if (blocked) stop()
+    },
+    setTouch(movement) {
+      if (!blocked) state.setTouch(movement)
+    },
   }
 }
 

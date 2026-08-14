@@ -42,7 +42,10 @@ interface HubSceneProps {
   boneyards: readonly BoneyardChoice[]
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
+  inputBlocked: boolean
   onInput: (input: PlayerCharacterInput) => void
+  onLoadingError: () => void
+  onReady: () => void
   onStartMatch: (boneyardId: string) => void
   playerId: string
   samplePresentation: (nowMs?: number) => HubPresentationFrame
@@ -65,7 +68,10 @@ export default function HubScene({
   boneyards,
   getPingMs,
   initialSnapshot,
+  inputBlocked,
   onInput,
+  onLoadingError,
+  onReady,
   onStartMatch,
   playerId,
   samplePresentation,
@@ -82,6 +88,12 @@ export default function HubScene({
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
+  const inputBlockedRef = useRef(inputBlocked)
+  const onLoadingErrorRef = useRef(onLoadingError)
+  const onReadyRef = useRef(onReady)
+  inputBlockedRef.current = inputBlocked
+  onLoadingErrorRef.current = onLoadingError
+  onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -108,6 +120,10 @@ export default function HubScene({
     observer.observe(scene)
     return () => observer.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    inputRef.current?.setBlocked(inputBlocked)
+  }, [inputBlocked])
 
   useEffect(() => {
     let previousAudioSnapshot = hubInitialSnapshot
@@ -162,6 +178,7 @@ export default function HubScene({
         )
       },
     })
+    input.setBlocked(inputBlockedRef.current)
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -179,6 +196,7 @@ export default function HubScene({
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
+      onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
         onInput(input.sample().input)
         const snapshot = samplePresentation(now)
@@ -200,6 +218,7 @@ export default function HubScene({
       })
     }).catch((error: unknown) => {
       if (!cancelled) {
+        onLoadingErrorRef.current()
         setRendererError(error instanceof Error
           ? error.message
           : 'The WebGL renderer could not start.')

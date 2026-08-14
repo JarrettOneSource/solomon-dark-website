@@ -32,11 +32,17 @@ export interface SessionOptions {
   character: PlayerCharacterConfig
   endpoint: GameEndpoint
   onFatal?: (error: Error) => void
+  onProgress?: (stage: GameConnectionStage) => void
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
 }
 
 export interface GameSession extends GameClientSession {}
+
+export type GameConnectionStage =
+  | 'authenticating_session'
+  | 'connecting_transport'
+  | 'receiving_host_checkpoint'
 
 export const ENGINE_STATUS = 'ready' as const
 
@@ -46,14 +52,18 @@ export const OFFLINE_BUILD_URL: string | null = null
 export async function bootGame(options: SessionOptions): Promise<GameSession> {
   validateEndpoint(options.endpoint)
   const createTransport = options.transportFactory ?? connectWebSocketTransport
+  options.onProgress?.('connecting_transport')
   const transport = await createTransport(options.endpoint.url)
   const connectSession = options.sessionConnector ?? connectGameClientSession
-  return connectSession({
+  options.onProgress?.('authenticating_session')
+  const session = await connectSession({
     character: options.character,
     transport,
     credential: options.endpoint.credential,
     ...(options.onFatal ? { onFatal: options.onFatal } : {}),
   })
+  options.onProgress?.('receiving_host_checkpoint')
+  return session
 }
 
 function validateEndpoint(endpoint: GameEndpoint): void {
