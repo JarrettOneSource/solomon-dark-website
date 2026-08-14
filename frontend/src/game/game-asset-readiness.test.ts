@@ -186,6 +186,9 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
     'audio/sfx/throw-fire.wav': {
       sha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
     },
+    'audio/sfx/fireball-hit.wav': {
+      sha256: '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
+    },
     'element-vfx-core.png': {
       dimensions: [27, 26],
       sha256: 'dc85c8e39483f4256ec7b28240d33a15b6966c0e997554598f19091d7a4c189f',
@@ -201,6 +204,10 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
     'primary-spell-fire-particles.png': {
       dimensions: [100, 25],
       sha256: '08a272090c4fd14b41a4f6ff990d4a1bb25ff1cf729f3e08098c8c35066cbd3c',
+    },
+    'primary-spell-fire-impact.png': {
+      dimensions: [320, 80],
+      sha256: '0110a11af20da5053e63f0b0563e9deb2fa6ab63cf846e60645a13869271093d',
     },
     'element-vfx-spark.png': {
       dimensions: [40, 40],

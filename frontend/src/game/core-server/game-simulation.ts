@@ -192,6 +192,19 @@ function finishGameSimulationTick(
       const region = result.world.participants[spell.ownerId]?.region
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
+    canTraverseProjectile: (spell, from, to) => {
+      if (result.world.kind === 'boneyard') {
+        return firstBoneyardLineObstruction(
+          from,
+          to,
+          result.world.bounds,
+          boneyardCollision!,
+        ) === null
+      }
+      const region = result.world.participants[spell.ownerId]?.region
+      if (region === undefined) return false
+      return firstHubRegionLineObstruction(region, from, to) === null
+    },
     inputs,
     players: result.players,
     previousPlayers: previous.players,

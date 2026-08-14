@@ -33,6 +33,7 @@ import {
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
@@ -1192,6 +1193,23 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       id,
       kind: 'earth-impact',
       lifetimeTicks,
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'fire-impact') {
+    onlyKeys(source, field, [
+      'ageTicks', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= NATIVE_FIRE_IMPACT_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Fire impact lifetime`)
+    }
+    return {
+      ageTicks,
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'fire-impact',
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),

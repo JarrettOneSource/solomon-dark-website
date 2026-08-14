@@ -1,4 +1,5 @@
 import type {
+  PrimarySpellFireImpactState,
   PrimarySpellFireParticleState,
   PrimarySpellProjectileState,
 } from '../core-kernels/primary-spells.ts'
@@ -14,6 +15,10 @@ export const NATIVE_FIREBALL_FRAME_COUNT = 12
 export const NATIVE_FIREBALL_TICKS_PER_FRAME = 3
 export const NATIVE_FIRE_PARTICLE_FRAME_FIRST = 267
 export const NATIVE_FIRE_PARTICLE_DEPTH_BIAS = 30
+export const NATIVE_FIRE_IMPACT_FRAME_FIRST = 251
+export const NATIVE_FIRE_IMPACT_FRAME_COUNT = 4
+export const NATIVE_FIRE_IMPACT_TICKS_PER_FRAME = 4
+export const NATIVE_FIRE_IMPACT_DEPTH_BIAS = 50
 
 export interface NativeFireballDraw {
   alpha: number
@@ -45,6 +50,27 @@ export interface NativeFireParticlePlan {
   rotation: number
   scale: number
   tint: number
+  worldY: number
+}
+
+export interface NativeFireImpactDraw {
+  alpha: number
+  blend: 'add' | 'normal'
+  frame: number
+  pass: 'burst' | 'core'
+  rotation: number
+  scaleX: number
+  scaleY: number
+  tint: number
+  x: number
+  y: number
+}
+
+export interface NativeFireImpactPlan {
+  draws: readonly NativeFireImpactDraw[]
+  frameIndex: number
+  position: { x: number; y: number }
+  regionLightPoint: null
   worldY: number
 }
 
@@ -130,6 +156,68 @@ export function nativeFireParticlePlan(
     ) * 1.25 * 0.95 ** ageTicks,
     tint: colorTint(red, greenBlue, greenBlue),
     worldY: position.y + NATIVE_FIRE_PARTICLE_DEPTH_BIAS,
+  }
+}
+
+export function nativeFireImpactPlan(
+  state: PrimarySpellFireImpactState,
+): NativeFireImpactPlan {
+  const ageTicks = state.ageTicks
+  const frameIndex = Math.floor(ageTicks / NATIVE_FIRE_IMPACT_TICKS_PER_FRAME)
+  const scale = 1 + nativeFirePresentationRandom(state.id, 0, 9) * 0.1
+  const angularMagnitude = 0.5 + nativeFirePresentationRandom(state.id, 0, 11)
+  const angularDirection = nativeFirePresentationRandom(state.id, 0, 13) < 0.5 ? -1 : 1
+  const rotation = (
+    nativeFirePresentationRandom(state.id, 0, 10) * 360
+    + angularDirection * angularMagnitude * ageTicks
+  ) * Math.PI / 180
+  const position = {
+    x: state.origin.x,
+    y: state.origin.y - 10 - ageTicks,
+  }
+  return {
+    draws: [
+      {
+        alpha: 0.5 * (1 - ageTicks / 16),
+        blend: 'normal',
+        frame: NATIVE_FIREBALL_CORE_RECORD,
+        pass: 'core',
+        rotation: 0,
+        scaleX: 5 * scale,
+        scaleY: 5 * scale,
+        tint: 0xff8000,
+        x: 0,
+        y: 0,
+      },
+      {
+        alpha: 1,
+        blend: 'add',
+        frame: NATIVE_FIRE_IMPACT_FRAME_FIRST + frameIndex,
+        pass: 'burst',
+        rotation,
+        scaleX: scale,
+        scaleY: scale,
+        tint: 0xffffbf,
+        x: 0,
+        y: 0,
+      },
+    ],
+    frameIndex,
+    position,
+    regionLightPoint: null,
+    worldY: position.y + NATIVE_FIRE_IMPACT_DEPTH_BIAS,
+  }
+}
+
+export function nativeFireImpactLightSource(
+  state: PrimarySpellFireImpactState,
+): NativeBoneyardLightSource {
+  const plan = nativeFireImpactPlan(state)
+  return {
+    intensity: Math.max(0, 1 - state.ageTicks * 0.04),
+    multipleShadows: false,
+    position: plan.position,
+    radius: 1.5,
   }
 }
 

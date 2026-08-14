@@ -1,4 +1,5 @@
 export const NATIVE_FIRE_PARTICLE_FRAME_COUNT = 4
+export const NATIVE_FIRE_IMPACT_LIFETIME_TICKS = 16
 export const NATIVE_FIRE_ENHANCED_EFFECTS = true
 export const NATIVE_FIRE_PARTICLE_BASE_FADE_MIN = 0.05
 export const NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE = 0.05
@@ -17,6 +18,10 @@ export function nativeFireParticleVariant(id: number): number {
   return Math.floor(
     nativeFirePresentationRandom(id, 0, 6) * NATIVE_FIRE_PARTICLE_FRAME_COUNT,
   )
+}
+
+export function nativeFireImpactPitch(id: number): number {
+  return 0.9 + nativeFirePresentationRandom(id, 0, 12) * 0.2
 }
 
 export function nativeFirePresentationRandom(

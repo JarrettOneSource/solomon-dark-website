@@ -95,7 +95,10 @@ import {
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
 import { buildNativeAirContactLightSource } from './primary-spell-air-native.ts'
-import { nativeFireballLightSource } from './primary-spell-fire-native.ts'
+import {
+  nativeFireballLightSource,
+  nativeFireImpactLightSource,
+} from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
@@ -637,6 +640,13 @@ class BoneyardDynamicScene {
       }
     }
     for (const effect of snapshot.primarySpells.transients) {
+      if (
+        effect.kind === 'fire-impact'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightSourceCandidates.push(nativeFireImpactLightSource(effect))
+        continue
+      }
       if (
         effect.kind !== 'air'
         || effect.worldKey !== `boneyard:${snapshot.world.runId}`

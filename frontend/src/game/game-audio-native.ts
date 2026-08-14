@@ -13,6 +13,7 @@ export type GameAudioScene = 'boneyard' | 'create' | 'hub' | 'title'
 export type GameMusicCue = 'academy' | 'prelude' | 'selection' | 'solomondarktheme'
 export type GameSoundCue =
   | 'click'
+  | 'fireball-hit'
   | 'ice-start'
   | 'lightning-start'
   | 'magic-missile'
@@ -74,6 +75,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
     sourceSha256: '8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307',
+  },
+  'fireball-hit': {
+    registryOffset: 0x540,
+    sourceName: 'sounds\\fireballhit',
+    sourceSha256: '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   },
   'ice-start': {
     registryOffset: 0x7a8,

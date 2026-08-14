@@ -5,6 +5,7 @@ import prelude from '../assets/music/prelude.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import click from '../assets/game/audio/sfx/click.wav'
+import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import lightningStart from '../assets/game/audio/sfx/lightning-start.wav'
 import magicMissile from '../assets/game/audio/sfx/magic-missile.wav'
@@ -43,6 +44,7 @@ export const GAME_AUDIO_SOURCES = {
   },
   sounds: {
     click,
+    'fireball-hit': fireballHit,
     'ice-start': iceStart,
     'lightning-start': lightningStart,
     'magic-missile': magicMissile,

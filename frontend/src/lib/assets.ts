@@ -219,6 +219,7 @@ import primarySpellFrostExtra from '../assets/game/primary-spell-frost-extra.png
 import primarySpellFrostOver from '../assets/game/primary-spell-frost-over.png'
 import primarySpellFrostSpark from '../assets/game/primary-spell-frost-spark.png'
 import primarySpellFireParticles from '../assets/game/primary-spell-fire-particles.png'
+import primarySpellFireImpact from '../assets/game/primary-spell-fire-impact.png'
 import primarySpellMagicMissile from '../assets/game/primary-spell-magic-missile.png'
 import primarySpellAirRibbon from '../assets/game/boneyard/badguys/0044.png'
 import primarySpellAirCircle from '../assets/game/boneyard/badguys/0110.png'
@@ -512,6 +513,7 @@ export const primarySpells = {
   fire: {
     core: elementVfxCore,
     frames: elementVfxFire,
+    impact: primarySpellFireImpact,
     particles: primarySpellFireParticles,
   },
   frost: {

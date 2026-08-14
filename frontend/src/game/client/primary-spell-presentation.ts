@@ -113,6 +113,17 @@ function interpolateTransient(
   if (older.kind === 'earth-called-rock' || newer.kind === 'earth-called-rock') {
     return copyTransient(discrete)
   }
+  if (older.kind === 'fire-impact' && newer.kind === 'fire-impact') {
+    const impact = blend < 1 ? older : newer
+    return {
+      ...impact,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: { ...impact.origin },
+    }
+  }
+  if (older.kind === 'fire-impact' || newer.kind === 'fire-impact') {
+    return copyTransient(discrete)
+  }
   if (older.kind === 'fire' && newer.kind === 'fire') {
     const fire = blend < 1 ? older : newer
     return {
@@ -167,7 +178,7 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
-  if (effect.kind === 'earth-impact') {
+  if (effect.kind === 'earth-impact' || effect.kind === 'fire-impact') {
     return { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'earth-called-rock') {

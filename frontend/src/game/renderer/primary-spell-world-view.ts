@@ -13,6 +13,7 @@ import {
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
 import { EtherPrimarySpellView } from './primary-spell-ether-view.ts'
 import {
+  FireImpactSpellView,
   FireParticleSpellView,
   FirePrimarySpellView,
 } from './primary-spell-fire-view.ts'
@@ -77,6 +78,8 @@ export class PrimarySpellWorldView {
               : new FirePrimarySpellView(state, this.textures.primarySpells.fire)
         } else if (state.kind === 'earth-impact') {
           view = new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
+        } else if (state.kind === 'fire-impact') {
+          view = new FireImpactSpellView(state, this.textures.primarySpells.fire)
         } else if (state.kind === 'water') {
           view = new WaterPrimarySpellView(state, {
             core: this.textures.primarySpells.frost.core,

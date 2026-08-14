@@ -21,6 +21,7 @@ import {
 } from './primary-spell-earth.ts'
 import type { Vector2 } from './vector.ts'
 import {
+  NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from './primary-spell-fire-native.ts'
@@ -31,6 +32,7 @@ export type PrimarySpellTransientKind =
   | 'earth-called-rock'
   | 'earth-impact'
   | 'fire'
+  | 'fire-impact'
   | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
@@ -126,10 +128,20 @@ export interface PrimarySpellFireParticleState {
   worldKey: string
 }
 
+export interface PrimarySpellFireImpactState {
+  ageTicks: number
+  id: number
+  kind: 'fire-impact'
+  origin: Vector2
+  ownerId: string
+  worldKey: string
+}
+
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
+  | PrimarySpellFireImpactState
   | PrimarySpellFireParticleState
 
 export interface PrimarySpellSimulationState {
@@ -143,6 +155,11 @@ export interface PrimarySpellTickContext {
     spell: PrimarySpellProjectileState,
     position: Vector2,
     radius: number,
+  ) => boolean
+  canTraverseProjectile: (
+    spell: PrimarySpellProjectileState,
+    from: Vector2,
+    to: Vector2,
   ) => boolean
   inputs: Readonly<Record<string, PlayerCharacterInput>>
   players: Readonly<Record<string, PlayerCharacterState>>
@@ -169,6 +186,7 @@ export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS = 500
+export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
@@ -300,9 +318,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       continue
     }
     if (
-      spell.kind !== 'earth'
-      && spell.flightTicks >= PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS
+      spell.kind === 'fire'
+      && spell.ageTicks % 5 === 0
+      && !context.canTraverseProjectile(
+        spell,
+        spell.position,
+        {
+          x: spell.position.x + spell.velocity.x * 5,
+          y: spell.position.y + spell.velocity.y * 5,
+        },
+      )
     ) {
+      transients = [...transients, fireImpact(nextId, spell)]
+      nextId += 1
       continue
     }
     const advanced = advanceProjectile(spell)
@@ -396,7 +424,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && previous.primaryCast.actionTick !== PRIMARY_CAST_EMISSION_TICK
       && (player.config.element === 'ether' || player.config.element === 'fire')
     ) {
-      const spell = createOneShotProjectile(
+      const born = createOneShotProjectile(
         nextId,
         playerId,
         nextPlayer,
@@ -404,10 +432,31 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         worldKey,
       )
       nextId += 1
-      projectiles = [...projectiles, spell]
-      if (spell.kind === 'fire') {
-        transients = [...transients, createFireParticle(nextId, spell)]
-        nextId += 1
+      if (born.kind === 'fire') {
+        const initialClear = context.canTraverseProjectile(
+          born,
+          nextPlayer.position,
+          born.position,
+        )
+        const firstLookaheadClear = initialClear && context.canTraverseProjectile(
+          born,
+          born.position,
+          {
+            x: born.position.x + born.velocity.x * 5,
+            y: born.position.y + born.velocity.y * 5,
+          },
+        )
+        if (initialClear && firstLookaheadClear) {
+          const spell = advanceProjectile(born)
+          projectiles = [...projectiles, spell]
+          transients = [...transients, createFireParticle(nextId, spell)]
+          nextId += 1
+        } else {
+          transients = [...transients, fireImpact(nextId, born)]
+          nextId += 1
+        }
+      } else {
+        projectiles = [...projectiles, advanceProjectile(born)]
       }
       nextPlayer = {
         ...nextPlayer,
@@ -676,15 +725,15 @@ function createOneShotProjectile(
   }
   const velocity = { x: direction.x * speed, y: direction.y * speed }
   return {
-    ageTicks: 1,
+    ageTicks: 0,
     charge: 1,
     direction: { ...direction },
-    flightTicks: 1,
+    flightTicks: 0,
     id,
     kind,
     ownerId,
     phase: 'flight',
-    position: { x: spawn.x + velocity.x, y: spawn.y + velocity.y },
+    position: spawn,
     velocity,
     worldKey,
   }
@@ -713,6 +762,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
+    case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
   }
 }
@@ -734,6 +784,20 @@ function earthImpact(
     worldKey: spell.worldKey,
   } satisfies PrimarySpellEarthImpactState
   return { ...seed, lifetimeTicks: earthImpactLifetimeTicks(seed) }
+}
+
+function fireImpact(
+  id: number,
+  spell: PrimarySpellProjectileState,
+): PrimarySpellFireImpactState {
+  return {
+    ageTicks: 0,
+    id,
+    kind: 'fire-impact',
+    origin: { ...spell.position },
+    ownerId: spell.ownerId,
+    worldKey: spell.worldKey,
+  }
 }
 
 function earthCalledRockEmits(

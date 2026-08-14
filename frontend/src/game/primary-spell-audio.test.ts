@@ -12,7 +12,7 @@ import {
   stepGameSimulationTick,
   type GameSimulationState,
 } from './core-server/game-simulation.ts'
-import type { GameAudioDirector } from './game-audio-director.ts'
+import type { GameAudioDirector, PlaySoundOptions } from './game-audio-director.ts'
 import type { GameLoopCue, GameSoundCue } from './game-audio-native.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
@@ -21,11 +21,13 @@ const PLAYER_ID = 'caster'
 
 class RecordingAudio {
   readonly sounds: GameSoundCue[] = []
+  readonly soundOptions: PlaySoundOptions[] = []
   readonly starts: Array<[GameLoopCue, string]> = []
   readonly stops: Array<[GameLoopCue, string]> = []
 
-  playSound(cue: GameSoundCue): void {
+  playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
     this.sounds.push(cue)
+    this.soundOptions.push(options)
   }
 
   startLoop(cue: GameLoopCue, owner: string): void {
@@ -113,6 +115,44 @@ test('consumes the Fire release once from its authoritative marker sequence', ()
   synchronizer.update(emitted)
   synchronizer.update(emitted)
   assert.deepEqual(audio.sounds, ['throw-fire'])
+})
+
+test('plays each semantic Fire impact once without replaying an initial snapshot', () => {
+  const initial = simulation('fire')
+  const player = initial.players[PLAYER_ID]
+  const impact = {
+    ageTicks: 4,
+    id: 1,
+    kind: 'fire-impact',
+    origin: { x: player.position.x, y: player.position.y - 50 },
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  } as const
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(initial, PLAYER_ID),
+  )
+  const impacted = createGameSnapshot({
+    ...initial,
+    primarySpells: { nextId: 2, projectiles: [], transients: [impact] },
+  }, PLAYER_ID)
+  synchronizer.update(impacted)
+  synchronizer.update(impacted)
+  assert.deepEqual(audio.sounds, ['fireball-hit'])
+  assert.equal(audio.soundOptions[0].playbackRate! >= 0.9, true)
+  assert.equal(audio.soundOptions[0].playbackRate! < 1.1, true)
+  assert.equal(audio.soundOptions[0].volume! > 0, true)
+
+  const reconnectAudio = new RecordingAudio()
+  const reconnect = new PrimarySpellAudioSynchronizer(
+    reconnectAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    impacted,
+  )
+  reconnect.update(impacted)
+  assert.deepEqual(reconnectAudio.sounds, [])
 })
 
 test('consumes Water start once and balances its held loop on release', () => {

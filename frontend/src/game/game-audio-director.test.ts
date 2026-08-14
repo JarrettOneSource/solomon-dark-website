@@ -23,6 +23,7 @@ const SOURCES = {
   },
   sounds: {
     click: 'click.wav',
+    'fireball-hit': 'fireball-hit.wav',
     'ice-start': 'ice.wav',
     'lightning-start': 'lightning.wav',
     'magic-missile': 'magic.wav',

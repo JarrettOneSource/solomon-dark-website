@@ -48,6 +48,7 @@ export interface PlayerWorldTextures {
     fire: {
       core: Texture
       frames: readonly Texture[]
+      impacts: readonly Texture[]
       particles: readonly Texture[]
     }
     frost: {
@@ -133,6 +134,13 @@ export function createPlayerWorldTextures(
       fire: {
         core: texture(primarySpells.fire.core),
         frames: elementTextures.fire,
+        impacts: stripFrames(
+          texture(primarySpells.fire.impact),
+          4,
+          80,
+          80,
+          'horizontal',
+        ),
         particles: stripFrames(
           texture(primarySpells.fire.particles),
           4,
@@ -190,6 +198,7 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     player.staffFront.forEach(add)
   }
   Object.values(textures.elementVfx).forEach(add)
+  add(textures.primarySpells.fire.impacts)
   add(textures.primarySpells.fire.particles)
   for (const texture of derived) texture.destroy(false)
 }

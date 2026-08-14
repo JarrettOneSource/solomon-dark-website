@@ -74,6 +74,7 @@ copy_sfx ChooseElement__Stream.wav choose-element.wav 04c30a7b387bb5173bebe181a4
 copy_sfx StartCast__Stream.wav start-cast.wav bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8
 copy_sfx magicmissile.wav magic-missile.wav a7765b778d5cc49546c5e7e7822f38aac6a3edd8636d91e4ae92ec78611ac567
 copy_sfx throwfire.wav throw-fire.wav b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0
+copy_sfx fireballhit.wav fireball-hit.wav 9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738
 copy_sfx lightningstart.wav lightning-start.wav 1542ec3ab4e41624b5e8d073000a02bb36a3f8c733bf709835768f095494dceb
 copy_sfx lightningloop__loop.wav lightning-loop.wav 4bdd74a6734206d1212c52d623d0b7fe994bf4beeaa2119d34f3d1fad7d68281
 copy_sfx icestart.wav ice-start.wav 28cfda1e9d59f39dfacfd808cdb267465592ae5ce0d34a9aa4495a3f659b9694
@@ -86,4 +87,4 @@ copy_sfx summon.wav summon.wav 3c910b3918c0f45558123464301ed423974bf2356dfb8934c
 copy_sfx Step/step1.wav step/step1.wav ded73389ae0481167c73a904f95c1dc12c89c7e807b5815bb65b8a786582322a
 copy_sfx Step/step2.wav step/step2.wav 62c9ef1c7dfd68762dc32aca8d718e385821c102f4ada11502f93bf23ae50dba
 
-printf 'Extracted 3 native game tracks and 18 exact native WAV cues.\n'
+printf 'Extracted 3 native game tracks and 19 exact native WAV cues.\n'

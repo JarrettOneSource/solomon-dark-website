@@ -1,21 +1,26 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellFireImpactState,
   PrimarySpellFireParticleState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_FIREBALL_FRAME_FIRST,
+  NATIVE_FIRE_IMPACT_FRAME_FIRST,
   NATIVE_FIRE_PARTICLE_FRAME_FIRST,
   nativeFireballPlan,
+  nativeFireImpactPlan,
   nativeFireParticlePlan,
   type NativeFireballDraw,
+  type NativeFireImpactDraw,
 } from './primary-spell-fire-native.ts'
 
 export interface PrimarySpellFireTextures {
   core: Texture
   frames: readonly Texture[]
+  impacts: readonly Texture[]
   particles: readonly Texture[]
 }
 
@@ -141,6 +146,67 @@ export class FireParticleSpellView {
 
   destroy(): void {
     this.container.destroy({ children: true })
+  }
+}
+
+export class FireImpactSpellView {
+  readonly container: Container
+  readonly containers: readonly Container[]
+  private readonly burst: Sprite
+  private readonly core: Sprite
+  readonly kind = 'fire-impact'
+  private state: PrimarySpellFireImpactState
+  private readonly textures: PrimarySpellFireTextures
+
+  constructor(state: PrimarySpellFireImpactState, textures: PrimarySpellFireTextures) {
+    this.state = state
+    this.textures = textures
+    this.container = new Container({ label: 'fire-impact' })
+    this.containers = [this.container]
+    this.container.eventMode = 'none'
+    this.core = fireSprite(textures.core, 'normal')
+    this.burst = fireSprite(textures.impacts[0], 'add')
+    this.container.addChild(this.core, this.burst)
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (!('origin' in state) || state.kind !== 'fire-impact') return
+    this.state = state
+    const plan = nativeFireImpactPlan(state)
+    this.container.position.set(plan.position.x, plan.position.y)
+    this.apply(this.core, plan.draws[0])
+    this.apply(this.burst, plan.draws[1])
+    this.burst.texture = this.textures.impacts[
+      plan.draws[1].frame - NATIVE_FIRE_IMPACT_FRAME_FIRST
+    ]
+  }
+
+  painterRoots(): readonly FirePainterRoot[] {
+    const plan = nativeFireImpactPlan(this.state)
+    return [{
+      container: this.container,
+      regionLightPoint: plan.regionLightPoint,
+      sortBias: 0,
+      suffix: '',
+      worldY: plan.worldY,
+    }]
+  }
+
+  setTint(_suffix: string, _tint: number): void {
+    // ZAnimLit's direct child trampoline bypasses common Region-light tint.
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
+  }
+
+  private apply(sprite: Sprite, draw: NativeFireImpactDraw): void {
+    sprite.position.set(draw.x, draw.y)
+    sprite.rotation = draw.rotation
+    sprite.scale.set(draw.scaleX, draw.scaleY)
+    sprite.alpha = draw.alpha
+    sprite.tint = draw.tint
   }
 }
 

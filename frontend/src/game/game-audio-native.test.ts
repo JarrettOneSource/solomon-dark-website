@@ -94,6 +94,11 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
 
 test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST.click.registryOffset, 0x18)
+  assert.equal(NATIVE_SOUND_MANIFEST['fireball-hit'].registryOffset, 0x540)
+  assert.equal(
+    NATIVE_SOUND_MANIFEST['fireball-hit'].sourceSha256,
+    '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
+  )
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)

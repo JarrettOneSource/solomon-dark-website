@@ -7,15 +7,19 @@ import {
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import type {
+  PrimarySpellFireImpactState,
   PrimarySpellFireParticleState,
   PrimarySpellProjectileState,
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_FIREBALL_CORE_RECORD,
   NATIVE_FIREBALL_FRAME_FIRST,
+  NATIVE_FIRE_IMPACT_FRAME_FIRST,
   NATIVE_FIRE_PARTICLE_FRAME_FIRST,
   nativeFireballLightSource,
   nativeFireballPlan,
+  nativeFireImpactLightSource,
+  nativeFireImpactPlan,
   nativeFireParticlePlan,
 } from './primary-spell-fire-native.ts'
 
@@ -48,6 +52,17 @@ function particle(id: number, ageTicks: number): PrimarySpellFireParticleState {
     ownerId: 'caster',
     variant: nativeFireParticleVariant(id),
     worldKey: 'hub:courtyard',
+  }
+}
+
+function impact(id: number, ageTicks: number): PrimarySpellFireImpactState {
+  return {
+    ageTicks,
+    id,
+    kind: 'fire-impact',
+    origin: { x: 400, y: 300 },
+    ownerId: 'caster',
+    worldKey: 'boneyard:run',
   }
 }
 
@@ -124,4 +139,33 @@ test('pins outbound Fireball light and self-lit inbound render paths', () => {
   assert.equal(source.intensity, 0.75)
   assert.equal(source.multipleShadows, false)
   assert.equal(source.radius >= 1 && source.radius < 1.25, true)
+})
+
+test('pins exact Fire impact frame clock, recurrence, blend order, and light ownership', () => {
+  assert.equal(nativeFireImpactPlan(impact(41, 0)).frameIndex, 0)
+  assert.equal(nativeFireImpactPlan(impact(41, 3)).frameIndex, 0)
+  assert.equal(nativeFireImpactPlan(impact(41, 4)).frameIndex, 1)
+  assert.equal(nativeFireImpactPlan(impact(41, 15)).frameIndex, 3)
+
+  const atBirth = nativeFireImpactPlan(impact(41, 0))
+  const afterOne = nativeFireImpactPlan(impact(41, 1))
+  assert.deepEqual(atBirth.draws.map(({ blend, frame, pass }) => ({ blend, frame, pass })), [
+    { blend: 'normal', frame: NATIVE_FIREBALL_CORE_RECORD, pass: 'core' },
+    { blend: 'add', frame: NATIVE_FIRE_IMPACT_FRAME_FIRST, pass: 'burst' },
+  ])
+  assert.equal(atBirth.draws[0].alpha, 0.5)
+  assert.equal(afterOne.draws[0].alpha, 0.5 * (1 - 1 / 16))
+  assert.equal(afterOne.position.x, atBirth.position.x)
+  assert.equal(afterOne.position.y, atBirth.position.y - 1)
+  assert.equal(afterOne.draws[1].rotation - atBirth.draws[1].rotation !== 0, true)
+  assert.equal(atBirth.draws[0].scaleX >= 5 && atBirth.draws[0].scaleX < 5.5, true)
+  assert.equal(atBirth.draws[1].scaleX >= 1 && atBirth.draws[1].scaleX < 1.1, true)
+  assert.equal(atBirth.regionLightPoint, null)
+  assert.equal(atBirth.worldY, atBirth.position.y + 50)
+
+  const light = nativeFireImpactLightSource(impact(41, 15))
+  assert.deepEqual(light.position, { x: 400, y: 275 })
+  assert.equal(light.radius, 1.5)
+  assert.equal(light.intensity, 0.4)
+  assert.equal(light.multipleShadows, false)
 })

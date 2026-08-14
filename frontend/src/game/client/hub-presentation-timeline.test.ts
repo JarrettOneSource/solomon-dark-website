@@ -205,6 +205,36 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   }
 })
 
+test('interpolates Fire impact age while retaining its semantic contact origin', () => {
+  const older = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{
+      ageTicks: 2,
+      id: 1,
+      kind: 'fire-impact',
+      origin: { x: 100, y: 200 },
+      ownerId: 'local',
+      worldKey: 'hub:courtyard',
+    }],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{ ...older.transients[0], ageTicks: 7 }],
+  } satisfies PrimarySpellSimulationState
+
+  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  assert.equal(halfway.transients[0].kind, 'fire-impact')
+  assert.equal(halfway.transients[0].ageTicks, 4.5)
+  assert.deepEqual(halfway.transients[0].origin, { x: 100, y: 200 })
+  assert.notEqual(halfway.transients[0].origin, older.transients[0].origin)
+
+  const owned = copyPrimarySpellState(newer)
+  assert.deepEqual(owned, newer)
+  assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)
+})
+
 test('interpolates authoritative called-rock absolute state across sparse snapshots', () => {
   const rock = {
     ageTicks: 2,

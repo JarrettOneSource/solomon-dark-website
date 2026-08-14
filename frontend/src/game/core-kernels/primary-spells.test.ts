@@ -14,6 +14,8 @@ import {
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
+  PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+  PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS,
   primaryCastPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
@@ -134,6 +136,150 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
   state = step(state, false, firstLifetime)
   assert.equal(state.primarySpells.transients.some(({ id }) => id === 2), false)
   assert.equal(state.primarySpells.transients.length <= 41, true)
+})
+
+test('Fire blocked birth replaces the spawned actor before its first trail tick', () => {
+  const beforeMarker = step(simulation('fire'), true, PRIMARY_CAST_EMISSION_TICK)
+  const player = beforeMarker.players[PLAYER_ID]
+  const probes: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = []
+  const result = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: (_spell, from, to) => {
+      probes.push({ from, to })
+      return false
+    },
+    inputs: { [PLAYER_ID]: input(beforeMarker, true) },
+    players: beforeMarker.players,
+    previousPlayers: beforeMarker.players,
+    spells: beforeMarker.primarySpells,
+    tick: beforeMarker.tick + 1,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+
+  assert.equal(result.spells.projectiles.length, 0)
+  assert.equal(result.players[PLAYER_ID].primaryCast.emissionSequence, 1)
+  assert.deepEqual(probes, [{
+    from: player.position,
+    to: {
+      x: player.position.x + 8.5,
+      y: player.position.y - 57.5,
+    },
+  }])
+  assert.deepEqual(result.spells.transients, [{
+    ageTicks: 0,
+    id: 2,
+    kind: 'fire-impact',
+    origin: probes[0].to,
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  }])
+})
+
+test('Fire terrain lookahead contacts before movement and emits no final particle', () => {
+  const fireball = {
+    ageTicks: 5,
+    charge: 1,
+    direction: { x: 1, y: 0 },
+    flightTicks: 5,
+    id: 1,
+    kind: 'fire',
+    ownerId: PLAYER_ID,
+    phase: 'flight',
+    position: { x: 100, y: 200 },
+    velocity: { x: 4.5, y: 0 },
+    worldKey: 'hub:courtyard',
+  } as const
+  const probes: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = []
+  const result = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: (_spell, from, to) => {
+      probes.push({ from, to })
+      return false
+    },
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: { nextId: 2, projectiles: [fireball], transients: [] },
+    tick: 50,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+
+  assert.deepEqual(probes, [{
+    from: { x: 100, y: 200 },
+    to: { x: 122.5, y: 200 },
+  }])
+  assert.equal(result.spells.projectiles.length, 0)
+  assert.deepEqual(result.spells.transients, [{
+    ageTicks: 0,
+    id: 2,
+    kind: 'fire-impact',
+    origin: { x: 100, y: 200 },
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  }])
+
+  let impactState = result.spells
+  for (let age = 1; age < PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS; age += 1) {
+    impactState = stepPrimarySpells({
+      canPlaceProjectile: () => true,
+      canTraverseProjectile: () => true,
+      inputs: {},
+      players: {},
+      previousPlayers: {},
+      spells: impactState,
+      tick: 50 + age,
+      viewScale: 1.2,
+      worldKeyForPlayer: () => 'hub:courtyard',
+    }).spells
+    assert.equal(impactState.transients[0]?.ageTicks, age)
+  }
+  impactState = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: impactState,
+    tick: 50 + PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells
+  assert.equal(impactState.transients.length, 0)
+})
+
+test('Fire has no distance or PoC flight-time range cap', () => {
+  const ageTicks = PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS + 5
+  const result = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: {
+      nextId: 2,
+      projectiles: [{
+        ageTicks,
+        charge: 1,
+        direction: { x: 1, y: 0 },
+        flightTicks: ageTicks,
+        id: 1,
+        kind: 'fire',
+        ownerId: PLAYER_ID,
+        phase: 'flight',
+        position: { x: 100, y: 200 },
+        velocity: { x: 4.5, y: 0 },
+        worldKey: 'hub:courtyard',
+      }],
+      transients: [],
+    },
+    tick: 600,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  assert.equal(result.spells.projectiles[0].ageTicks, ageTicks + 1)
+  assert.equal(result.spells.projectiles[0].position.x, 104.5)
 })
 
 test('one-shot casts retain accepted facing against movement through projectile birth', () => {
@@ -362,6 +508,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
   assert.equal(boulder.phase, 'held')
   const releaseResult = stepPrimarySpells({
     canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
     players: state.players,
     previousPlayers: state.players,
@@ -378,6 +525,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     tick += 1
     const result = stepPrimarySpells({
       canPlaceProjectile: () => true,
+      canTraverseProjectile: () => true,
       inputs: { [PLAYER_ID]: input(state, false) },
       players,
       previousPlayers: players,
@@ -408,6 +556,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
       checked.push({ position, radius })
       return false
     },
+    canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
     players: state.players,
     previousPlayers: state.players,
@@ -449,6 +598,7 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
       checked.push({ position, radius })
       return false
     },
+    canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
     players: state.players,
     previousPlayers: state.players,

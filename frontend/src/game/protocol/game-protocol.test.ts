@@ -7,6 +7,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
+  NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
@@ -308,6 +309,14 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     variant: nativeFireParticleVariant(1),
     worldKey: 'hub:courtyard',
   }
+  const fireImpact = {
+    ageTicks: 8,
+    id: 1,
+    kind: 'fire-impact',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    worldKey: 'hub:courtyard',
+  }
 
   assert.doesNotThrow(() => decodeFrame({
     ...frame,
@@ -317,6 +326,16 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [fireParticle],
     },
   }))
+  const decodedFireImpact = decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [fireImpact],
+    },
+  })
+  assert.equal(decodedFireImpact.type, 'server-snapshot')
+  assert.deepEqual(decodedFireImpact.frame.primarySpells.transients, [fireImpact])
   const decodedCalledRock = decodeFrame({
     ...frame,
     primarySpells: { nextId: 3, projectiles: [], transients: [calledRock] },
@@ -503,6 +522,17 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       }],
     },
   }), /ageTicks exceeds its Fire particle lifetime/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ...fireImpact,
+        ageTicks: NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
+      }],
+    },
+  }), /ageTicks exceeds the Fire impact lifetime/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {

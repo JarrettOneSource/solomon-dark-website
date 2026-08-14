@@ -2,6 +2,7 @@ import type { GameSnapshot } from './protocol/game-state.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import type { GameLoopCue } from './game-audio-native.ts'
 import { hubAudioAttenuation } from './game-audio-native.ts'
+import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
   'gather-rocks-loop',
@@ -60,6 +61,23 @@ export class PrimarySpellAudioSynchronizer {
               break
           }
         }
+      }
+      const previousFireImpacts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'fire-impact')
+        .map((effect) => effect.id))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'fire-impact'
+          || effect.worldKey !== listenerWorldKey
+          || previousFireImpacts.has(effect.id)
+        ) continue
+        this.audio.playSound('fireball-hit', {
+          playbackRate: nativeFireImpactPitch(effect.id),
+          volume: hubAudioAttenuation(Math.hypot(
+            effect.origin.x - listener.position.x,
+            effect.origin.y - listener.position.y,
+          )),
+        })
       }
     }
     this.syncLoops(snapshot)

@@ -1355,6 +1355,15 @@ def main() -> int:
         build_registered_strip(
             bad_guys,
             bad_guys_records,
+            tuple(range(251, 255)),
+        ),
+        output_dir,
+        "primary-spell-fire-impact",
+    )
+    save(
+        build_registered_strip(
+            bad_guys,
+            bad_guys_records,
             tuple(range(267, 271)),
         ),
         output_dir,
