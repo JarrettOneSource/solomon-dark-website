@@ -69,9 +69,16 @@ import {
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
+import { NativeEnemyViews } from './native-enemy-view.ts'
+import {
+  nativeEnemyPainterLayer,
+  type NativeEnemyVisualSnapshot,
+} from './native-enemy-presentation.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
+  enemyCount: number
+  enemyFamilies: string
   frameCount: number
   foregroundZIndex: number
   gateLeafCount: number
@@ -260,6 +267,8 @@ export async function createBoneyardWorldRenderer(
   let frameCount = 0
   let resolution = initialResolution
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
+    enemyCount: 0,
+    enemyFamilies: '',
     frameCount: 0,
     foregroundZIndex: 0,
     gateLeafCount: 0,
@@ -339,6 +348,8 @@ export async function createBoneyardWorldRenderer(
       application.render()
 
       frameDiagnostics.frameCount = frameCount
+      frameDiagnostics.enemyCount = scene.enemyCount
+      frameDiagnostics.enemyFamilies = scene.enemyFamilies
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.culledResidentCount = visibility.culledResidentCount
@@ -368,6 +379,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
+      canvas.dataset.enemyCount = `${scene.enemyCount}`
+      canvas.dataset.enemyFamilies = scene.enemyFamilies
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -427,6 +440,7 @@ interface BoneyardPainterFrame {
 class BoneyardDynamicScene {
   private readonly boneyard: LoadedBoneyard
   private readonly dynamicLayers: DynamicPainterLayer[] = []
+  private readonly enemies: NativeEnemyViews
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gates: BoneyardGateViews
@@ -442,6 +456,7 @@ class BoneyardDynamicScene {
   private readonly solomon: BoneyardSolomonView | null
   private readonly staticPainterLayers: StaticPainterLayer[]
   private readonly textures: BoneyardWorldTextures
+  private visibleEnemyFamilies = ''
 
   constructor(
     boneyard: LoadedBoneyard,
@@ -465,6 +480,7 @@ class BoneyardDynamicScene {
       sourceOrder: layer.sourceOrder,
     }))
     this.gates = new BoneyardGateViews(root, textures)
+    this.enemies = new NativeEnemyViews(root, textures)
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
@@ -477,6 +493,7 @@ class BoneyardDynamicScene {
     visibleMainResidents: readonly ResidentTexture[],
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
+    const enemySnapshots = nativeEnemySnapshots(snapshot)
     const livePlayerIds = this.livePlayerIds
     livePlayerIds.clear()
     for (const playerId in snapshot.players) {
@@ -501,6 +518,10 @@ class BoneyardDynamicScene {
       `boneyard:${snapshot.world.runId}`,
     )
     this.gates.update(snapshot.world.gateLeaves)
+    this.enemies.update(enemySnapshots, snapshot.tick)
+    this.visibleEnemyFamilies = [...new Set(
+      enemySnapshots.map((enemy) => enemy.enemyToken),
+    )].sort().join(',')
     this.solomon?.update(snapshot.tick)
 
     const dig = this.boneyard.scene.solomonDig
@@ -551,6 +572,11 @@ class BoneyardDynamicScene {
         nativeBoneyardLightTint(nativeBoneyardLightScalar(effect.origin, lightSources)),
       )
     }
+    for (const enemy of enemySnapshots) {
+      this.enemies.setTint(enemy.id, nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(enemy.position, lightSources),
+      ))
+    }
     for (const leaf of snapshot.world.gateLeaves) {
       const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
       this.gates.setTint(
@@ -587,6 +613,9 @@ class BoneyardDynamicScene {
     }
     for (const layer of this.primarySpells.painterLayers()) {
       dynamicLayers.push({ ...layer, sourceOrder: dynamicLayers.length })
+    }
+    for (const enemy of enemySnapshots) {
+      dynamicLayers.push(nativeEnemyPainterLayer(enemy, dynamicLayers.length))
     }
     if (dig) {
       dynamicLayers.push({
@@ -641,6 +670,12 @@ class BoneyardDynamicScene {
         positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
     }
+    for (const enemy of enemySnapshots) {
+      this.enemies.setDepth(
+        enemy.id,
+        positionedDynamics.get(`enemy:${enemy.id}`)?.zIndex ?? 1,
+      )
+    }
     this.solomon?.setDigDepth(positionedDynamics.get('solomon-dig')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
@@ -666,6 +701,14 @@ class BoneyardDynamicScene {
     return this.players.size
   }
 
+  get enemyCount(): number {
+    return this.enemies.size
+  }
+
+  get enemyFamilies(): string {
+    return this.visibleEnemyFamilies
+  }
+
   get currentLightSources(): readonly NativeBoneyardLightSource[] {
     return this.lightSources
   }
@@ -688,6 +731,7 @@ class BoneyardDynamicScene {
 
   destroy(): void {
     this.primarySpells.destroy()
+    this.enemies.destroy()
     this.gates.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()
@@ -1175,6 +1219,13 @@ function requiredTexture(textures: BoneyardWorldTextures, ref: SpriteRef): Textu
   const texture = textures.base[ref.src]
   if (!texture) throw new Error(`Boneyard texture was not loaded: ${ref.src}`)
   return texture
+}
+
+function nativeEnemySnapshots(snapshot: GameSnapshot): readonly NativeEnemyVisualSnapshot[] {
+  const world = snapshot.world as typeof snapshot.world & {
+    waves?: { enemies: readonly NativeEnemyVisualSnapshot[] } | null
+  }
+  return world.waves?.enemies ?? []
 }
 
 function requireBoneyardSnapshot(snapshot: GameSnapshot, runId: string): asserts snapshot is GameSnapshot & {

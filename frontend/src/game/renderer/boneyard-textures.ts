@@ -15,6 +15,7 @@ import {
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
+import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
@@ -36,10 +37,14 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     return ref ? [ref.src] : []
   })
   fenceSources.push(regionLightRef.src)
-  const fenceSourceSet = new Set(fenceSources)
+  const liftedSourceSet = new Set([
+    ...fenceSources,
+    ...NATIVE_ENEMY_ASSET_SOURCES,
+  ])
   const sources = [...new Set([
     ...playerWorldAssetSources(),
     ...fenceSources,
+    ...NATIVE_ENEMY_ASSET_SOURCES,
     boneyard.graveDirt,
     boneyard.lantern,
     boneyard.solomonDig,
@@ -60,7 +65,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     for (const [source, image] of images) {
       loaded.push([
         source,
-        Texture.from(fenceSourceSet.has(source) ? liftedSpriteSource(image) : image, true),
+        Texture.from(liftedSourceSet.has(source) ? liftedSpriteSource(image) : image, true),
       ])
     }
   } catch (error) {

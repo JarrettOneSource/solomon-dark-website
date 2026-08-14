@@ -28,9 +28,9 @@ CONTACT_ROOT = TOOLS_DIR / "out"
 SHARED_PARSER_PATH = SOLOMON_DARK_DIR / "Mod Loader" / "tools" / "extract_bundles.py"
 
 # Goodie renders its placed sprite from DeadHawg, but its native render/tick path
-# also owns BadGuys indicator and effect sprites. Keep that atlas available to the
-# editor rather than silently omitting a class-owned art source.
-ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys")
+# also owns BadGuys indicator and effect sprites. Survival actors consume those
+# records plus the Lesser Demon's dedicated articulated atlas.
+ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys", "Demon")
 
 THUMB_SIZE = 80
 LABEL_HEIGHT = 18
