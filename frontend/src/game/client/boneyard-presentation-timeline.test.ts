@@ -3,6 +3,8 @@ import test from 'node:test'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 
+import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import {
   createBoneyardPresentationTimeline,
@@ -14,6 +16,8 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'fire',
 } as const
+const PROGRESSION = createGameSnapshot(createGameSimulation(), null)
+  .players['local-player']!.progression
 
 function playerAt(x: number): ProtocolPlayerState {
   return {
@@ -23,6 +27,7 @@ function playerAt(x: number): ProtocolPlayerState {
     headingIndex: 0,
     position: { x, y: 200 },
     primaryCast: createIdlePlayerPrimaryCast(),
+    progression: PROGRESSION,
     velocity: { x: 100, y: 0 },
     walkCyclePrimary: x / 10 % 5,
   }

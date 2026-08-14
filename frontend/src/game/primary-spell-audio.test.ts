@@ -11,6 +11,7 @@ import {
 } from './core-kernels/primary-spells.ts'
 import {
   createGameSimulation,
+  getPlayerCharacter,
   removePlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
@@ -53,7 +54,7 @@ function simulation(element: WizardElement): GameSimulationState {
 }
 
 function castInput(state: GameSimulationState, primary: boolean): PlayerCharacterInput {
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
@@ -122,7 +123,7 @@ test('consumes the Fire release once from its authoritative marker sequence', ()
 
 test('plays each semantic Fire impact once without replaying an initial snapshot', () => {
   const initial = simulation('fire')
-  const player = initial.players[PLAYER_ID]
+  const player = getPlayerCharacter(initial, PLAYER_ID)
   const impact = {
     ageTicks: 4,
     id: 1,
@@ -227,7 +228,7 @@ test('stops Earth gathering at full charge without ending the held cast', () => 
   const boulder = state.primarySpells.projectiles[0]
   assert.equal(boulder.charge, 1)
   assert.equal(boulder.phase, 'held')
-  assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, true)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, true)
   assert.deepEqual(audio.sounds, ['start-boulder'])
   assert.deepEqual(audio.starts, [['gather-rocks-loop', 'primary-player:caster']])
   assert.deepEqual(audio.stops, [['gather-rocks-loop', 'primary-player:caster']])

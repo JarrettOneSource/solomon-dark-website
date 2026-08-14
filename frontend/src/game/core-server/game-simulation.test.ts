@@ -6,6 +6,7 @@ import {
   addPlayerCharacter,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerCharacter,
   removePlayerCharacter,
   stepGameSimulation,
   stepGameSimulationTick,
@@ -44,16 +45,17 @@ test('game simulation owns player characters outside the active world', () => {
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
   if (state.world.kind !== 'hub') throw new Error('expected Hub world')
-  assert.deepEqual(state.players.first.config, firstConfig)
-  assert.deepEqual(state.players.second.config, secondConfig)
+  assert.equal('players' in state, false)
+  assert.deepEqual(getPlayerCharacter(state, 'first').config, firstConfig)
+  assert.deepEqual(getPlayerCharacter(state, 'second').config, secondConfig)
   assert.deepEqual(Object.keys(state.world.participants).sort(), ['first', 'second'])
-  assert.ok(state.players.first.position.x > state.players.second.position.x)
-  assert.ok(state.players.second.position.y > state.players.first.position.y)
+  assert.ok(getPlayerCharacter(state, 'first').position.x > getPlayerCharacter(state, 'second').position.x)
+  assert.ok(getPlayerCharacter(state, 'second').position.y > getPlayerCharacter(state, 'first').position.y)
 
   state = removePlayerCharacter(state, 'first')
   if (state.world.kind !== 'hub') throw new Error('expected Hub world')
-  assert.equal(state.players.first, undefined)
-  assert.deepEqual(state.players.second.config, secondConfig)
+  assert.throws(() => getPlayerCharacter(state, 'first'), /no player character/)
+  assert.deepEqual(getPlayerCharacter(state, 'second').config, secondConfig)
   assert.deepEqual(Object.keys(state.world.participants), ['second'])
 })
 
@@ -74,7 +76,7 @@ test('the authoritative tick latches footsteps only while native movement is act
       'local-player': gameplayInput(1, 0),
     })
     if (tick % 25 === 0) {
-      assert.equal(state.players['local-player'].footstepTick, tick)
+      assert.equal(getPlayerCharacter(state).footstepTick, tick)
     }
   }
 
@@ -84,7 +86,7 @@ test('the authoritative tick latches footsteps only while native movement is act
     })
   }
 
-  assert.equal(state.players['local-player'].footstepTick, 100)
+  assert.equal(getPlayerCharacter(state).footstepTick, 100)
 })
 
 test('disconnect and world replacement clean spell actors and cast ownership', () => {
@@ -95,13 +97,16 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   } as const
   let state = createGameSimulation({ caster: earth })
   const cast = (primary: boolean) => ({
-    aim: { x: state.players.caster.position.x, y: state.players.caster.position.y - 200 },
+    aim: {
+      x: getPlayerCharacter(state, 'caster').position.x,
+      y: getPlayerCharacter(state, 'caster').position.y - 200,
+    },
     cast: { primary, secondary: false },
     movement: { x: 0, y: 0 },
   })
   state = stepGameSimulationTick(state, { caster: cast(true) })
   assert.equal(state.primarySpells.projectiles.length, 1)
-  assert.equal(state.players.caster.primaryCast.channelActive, true)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.channelActive, true)
   state = removePlayerCharacter(state, 'caster')
   assert.deepEqual(state.primarySpells.projectiles, [])
 
@@ -112,8 +117,8 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   assert.equal(state.primarySpells.projectiles.length, 1)
   state = enterBoneyardWorld(state, emptyBoneyard())
   assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
-  assert.equal(state.players.caster.primaryCast.actionTick, -1)
-  assert.equal(state.players.caster.primaryCast.channelActive, false)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.actionTick, -1)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.channelActive, false)
 })
 
 test('Boneyard Air falls back to a Gravestone and publishes the native curved segment', () => {
@@ -133,7 +138,7 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
     variant: 0,
   }]
   state = enterBoneyardWorld(state, loaded)
-  const player = state.players.caster
+  const player = getPlayerCharacter(state, 'caster')
   state = stepGameSimulationTick(state, { caster: {
     aim: { x: 250, y: 50 },
     cast: { primary: true, secondary: false },
@@ -143,14 +148,14 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
   const bolt = state.primarySpells.transients[0]
   assert.equal(bolt.kind, 'air')
   assert.equal(bolt.targetId, 'scenery:grave-target')
-  assert.equal(state.players.caster.primaryCast.targetId, bolt.targetId)
+  assert.equal(getPlayerCharacter(state, 'caster').primaryCast.targetId, bolt.targetId)
   assert.deepEqual(bolt.endpoint, { x: 250, y: 80 })
   assert.equal(bolt.midpoint.x, bolt.origin.x)
   assert.notDeepEqual(bolt.midpoint, {
     x: (bolt.origin.x + bolt.endpoint.x) / 2,
     y: (bolt.origin.y + bolt.endpoint.y) / 2,
   })
-  assert.deepEqual(player.position, state.players.caster.position)
+  assert.deepEqual(player.position, getPlayerCharacter(state, 'caster').position)
 })
 
 function emptyBoneyard(): LoadedBoneyard {

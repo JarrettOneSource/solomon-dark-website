@@ -30,6 +30,7 @@ import {
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
+import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   createHubWorldRenderer,
   type HubWorldRenderer,
@@ -52,6 +53,7 @@ interface HubSceneProps {
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
   playerId: string
+  progression: ProtocolPlayerProgression
   samplePresentation: (nowMs?: number) => HubPresentationFrame
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
@@ -79,6 +81,7 @@ export default function HubScene({
   onReady,
   onStartMatch,
   playerId,
+  progression,
   samplePresentation,
   subscribePing,
   subscribe,
@@ -296,6 +299,7 @@ export default function HubScene({
           mapLabel="Enter the Boneyard"
           onMapClick={beginMatch}
           playerId={playerId}
+          progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
         />

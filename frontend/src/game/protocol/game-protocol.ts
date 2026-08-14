@@ -59,6 +59,7 @@ import type {
   BoneyardWaveSnapshot,
   HubWorldSnapshot,
   ProtocolAmbientState,
+  ProtocolPlayerProgression,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from './game-state.ts'
@@ -134,6 +135,13 @@ export interface ClientInputMessage {
   targetTick: number
 }
 
+export interface ClientSelectSkillMessage {
+  type: 'client-select-skill'
+  choiceIndex: number
+  offerSequence: number
+  skillId: number
+}
+
 export interface ClientPingMessage {
   type: 'client-ping'
   nonce: number
@@ -157,6 +165,7 @@ export interface ClientStartMatchMessage {
 export type ClientGameMessage =
   | ClientHelloMessage
   | ClientInputMessage
+  | ClientSelectSkillMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
   | ClientStartMatchMessage
@@ -244,6 +253,19 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       input: playerCharacterInput(value.input, 'input'),
       sequence: nonnegativeInteger(value.sequence, 'sequence'),
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
+    }
+  }
+  if (value.type === 'client-select-skill') {
+    onlyKeys(value, 'message', ['type', 'choiceIndex', 'offerSequence', 'skillId'])
+    const choiceIndex = nonnegativeInteger(value.choiceIndex, 'choiceIndex')
+    const skillId = nonnegativeInteger(value.skillId, 'skillId')
+    if (choiceIndex > 3) throw new GameProtocolError('choiceIndex is out of range')
+    if (skillId < 8 || skillId > 79) throw new GameProtocolError('skillId is out of range')
+    return {
+      type: 'client-select-skill',
+      choiceIndex,
+      offerSequence: nonnegativeInteger(value.offerSequence, 'offerSequence'),
+      skillId,
     }
   }
   if (value.type === 'client-ping') {
@@ -525,6 +547,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     'headingIndex',
     'position',
     'primaryCast',
+    'progression',
     'velocity',
     'walkCyclePrimary',
   ])
@@ -540,6 +563,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
       `${field}.primaryCast`,
       config.element,
     ),
+    progression: playerProgression(source.progression, `${field}.progression`),
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
   }
@@ -585,6 +609,135 @@ function playerPrimaryCastState(
     ),
     held: boolean(source.held, `${field}.held`),
     targetId,
+  }
+}
+
+function playerProgression(value: unknown, field: string): ProtocolPlayerProgression {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'activeWeldBuildId',
+    'currentHealth',
+    'currentMana',
+    'experience',
+    'learnedSkills',
+    'level',
+    'maximumHealth',
+    'maximumMana',
+    'nextThreshold',
+    'pendingOffer',
+    'previousThreshold',
+    'revision',
+  ])
+  const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
+  const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
+  const currentHealth = finite(source.currentHealth, `${field}.currentHealth`)
+  const currentMana = finite(source.currentMana, `${field}.currentMana`)
+  if (currentHealth < 0 || currentHealth > maximumHealth) {
+    throw new GameProtocolError(`${field}.currentHealth is out of range`)
+  }
+  if (currentMana < 0 || currentMana > maximumMana) {
+    throw new GameProtocolError(`${field}.currentMana is out of range`)
+  }
+  const level = positiveInteger(source.level, `${field}.level`)
+  if (level > 75) throw new GameProtocolError(`${field}.level is out of range`)
+  const experience = nonnegativeInteger(source.experience, `${field}.experience`)
+  if (experience > 10_000_000) {
+    throw new GameProtocolError(`${field}.experience is out of range`)
+  }
+  const learnedSkills = limitedArray(
+    source.learnedSkills,
+    `${field}.learnedSkills`,
+    83,
+  ).map((entry, index) => {
+    const raw = array(entry, `${field}.learnedSkills[${index}]`)
+    if (raw.length !== 3) {
+      throw new GameProtocolError(`${field}.learnedSkills[${index}] must have three fields`)
+    }
+    const skillId = nonnegativeInteger(raw[0], `${field}.learnedSkills[${index}][0]`)
+    const permanentRank = nonnegativeInteger(raw[1], `${field}.learnedSkills[${index}][1]`)
+    const effectiveRank = nonnegativeInteger(raw[2], `${field}.learnedSkills[${index}][2]`)
+    if (skillId > 82 || permanentRank > 255 || effectiveRank > 255) {
+      throw new GameProtocolError(`${field}.learnedSkills[${index}] is out of range`)
+    }
+    return [skillId, permanentRank, effectiveRank] as const
+  })
+  if (learnedSkills.some((entry, index) => index > 0 && entry[0] <= learnedSkills[index - 1]![0])) {
+    throw new GameProtocolError(`${field}.learnedSkills must be unique and sorted`)
+  }
+  const activeWeldBuildId = source.activeWeldBuildId === null
+    ? null
+    : integer(source.activeWeldBuildId, `${field}.activeWeldBuildId`)
+  if (activeWeldBuildId !== null && (activeWeldBuildId < 1000 || activeWeldBuildId > 1009)) {
+    throw new GameProtocolError(`${field}.activeWeldBuildId is out of range`)
+  }
+  const spellWeldingRank = learnedSkills.find(([skillId]) => skillId === 52)?.[1] ?? 0
+  if ((activeWeldBuildId === null) !== (spellWeldingRank === 0)) {
+    throw new GameProtocolError(`${field}.activeWeldBuildId does not match Spell Welding`)
+  }
+  return {
+    activeWeldBuildId,
+    currentHealth,
+    currentMana,
+    experience,
+    learnedSkills,
+    level,
+    maximumHealth,
+    maximumMana,
+    nextThreshold: nonnegativeInteger(source.nextThreshold, `${field}.nextThreshold`),
+    pendingOffer: source.pendingOffer === null
+      ? null
+      : playerSkillOffer(source.pendingOffer, `${field}.pendingOffer`, level),
+    previousThreshold: nonnegativeInteger(
+      source.previousThreshold,
+      `${field}.previousThreshold`,
+    ),
+    revision: nonnegativeInteger(source.revision, `${field}.revision`),
+  }
+}
+
+function playerSkillOffer(value: unknown, field: string, playerLevel: number) {
+  const source = record(value, field)
+  onlyKeys(source, field, ['level', 'options', 'sequence'])
+  const level = positiveInteger(source.level, `${field}.level`)
+  if (level > playerLevel) throw new GameProtocolError(`${field}.level is ahead of the player`)
+  const options = limitedArray(source.options, `${field}.options`, 4)
+  if (options.length !== 3 && options.length !== 4) {
+    throw new GameProtocolError(`${field}.options must contain three or four choices`)
+  }
+  return {
+    level,
+    options: options.map((option, index) => {
+      const optionField = `${field}.options[${index}]`
+      const row = record(option, optionField)
+      onlyKeys(row, optionField, ['skillId', 'targetRank', 'weldBuildId'])
+      const skillId = nonnegativeInteger(row.skillId, `${optionField}.skillId`)
+      if (skillId < 8 || skillId > 79) {
+        throw new GameProtocolError(`${optionField}.skillId is out of range`)
+      }
+      const targetRank = positiveInteger(row.targetRank, `${optionField}.targetRank`)
+      if (targetRank > 255) {
+        throw new GameProtocolError(`${optionField}.targetRank is out of range`)
+      }
+      const weldBuildId = row.weldBuildId === undefined
+        ? undefined
+        : integer(row.weldBuildId, `${optionField}.weldBuildId`)
+      if (skillId === 52) {
+        if (targetRank !== 1 || weldBuildId === undefined) {
+          throw new GameProtocolError(`${optionField} is not a valid Spell Welding choice`)
+        }
+        if (weldBuildId < 1000 || weldBuildId > 1009) {
+          throw new GameProtocolError(`${optionField}.weldBuildId is out of range`)
+        }
+      } else if (weldBuildId !== undefined) {
+        throw new GameProtocolError(`${optionField}.weldBuildId requires Spell Welding`)
+      }
+      return {
+        skillId,
+        targetRank,
+        ...(weldBuildId === undefined ? {} : { weldBuildId }),
+      }
+    }),
+    sequence: nonnegativeInteger(source.sequence, `${field}.sequence`),
   }
 }
 

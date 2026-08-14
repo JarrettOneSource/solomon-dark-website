@@ -32,6 +32,7 @@ import {
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
@@ -59,6 +60,7 @@ interface BoneyardSceneProps {
   onLoadingError: () => void
   onReady: () => void
   playerId: string
+  progression: ProtocolPlayerProgression
   samplePresentation: (nowMs?: number) => GameSnapshot
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
@@ -87,6 +89,7 @@ export default function BoneyardScene({
   onLoadingError,
   onReady,
   playerId,
+  progression,
   samplePresentation,
   subscribePing,
   subscribe,
@@ -347,6 +350,7 @@ export default function BoneyardScene({
           initialSnapshot={initialSnapshot}
           mode="run"
           playerId={playerId}
+          progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
         />

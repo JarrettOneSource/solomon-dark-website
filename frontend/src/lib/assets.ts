@@ -122,6 +122,9 @@ import hubHudSecondaryAcidRain from '../assets/game/hub-hud-secondary-acid-rain.
 import hubHudTome from '../assets/game/hub-hud-tome.png'
 import hubHudXpFill from '../assets/game/hub-hud-xp-fill.png'
 import hubHudXpFrame from '../assets/game/hub-hud-xp-frame.png'
+import skillPickerFontsAtlas from '../assets/game/skill-picker-fonts-atlas.png'
+import skillPickerSkillsAtlas from '../assets/game/skill-picker-skills-atlas.png'
+import skillPickerUiAtlas from '../assets/game/skill-picker-ui-atlas.png'
 import hubHudNpcAnnalist from '../assets/game/hub-hud-npc-annalist.png'
 import hubHudNpcItems from '../assets/game/hub-hud-npc-items.png'
 import hubHudNpcPerkWitch from '../assets/game/hub-hud-npc-perk-witch.png'
@@ -701,6 +704,13 @@ export const hub = {
       teacher: hubHudNpcTeacher,
     },
   },
+}
+
+/** Exact stock UI, Skills, and Fonts atlases used by the mandatory level-up picker. */
+export const skillPicker = {
+  fontsAtlas: skillPickerFontsAtlas,
+  skillsAtlas: skillPickerSkillsAtlas,
+  uiAtlas: skillPickerUiAtlas,
 }
 
 export const boneyard = {

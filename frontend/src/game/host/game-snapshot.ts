@@ -1,8 +1,14 @@
-import type { GameSimulationState } from '../core-server/game-simulation.ts'
+import {
+  gameSimulationPlayerRecords,
+  getPlayerProgression,
+  getPlayerSkillBook,
+  type GameSimulationState,
+} from '../core-server/game-simulation.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
 import type {
   GameSnapshot,
+  ProtocolPlayerState,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
 
@@ -10,11 +16,14 @@ export function createGameSnapshot(
   state: GameSimulationState,
   hostPlayerId: string | null,
 ): GameSnapshot {
+  const players = Object.fromEntries(Object.entries(gameSimulationPlayerRecords(state)).map(
+    ([playerId, player]) => [playerId, protocolPlayerState(state, playerId, player)],
+  ))
   switch (state.world.kind) {
     case 'hub':
       return {
         hostPlayerId,
-        players: state.players,
+        players,
         primarySpells: state.primarySpells,
         tick: state.tick,
         world: {
@@ -29,7 +38,7 @@ export function createGameSnapshot(
     case 'boneyard':
       return {
         hostPlayerId,
-        players: state.players,
+        players,
         primarySpells: state.primarySpells,
         tick: state.tick,
         world: {
@@ -72,6 +81,40 @@ export function createGameSnapshot(
           },
         },
       }
+  }
+}
+
+function protocolPlayerState(
+  state: GameSimulationState,
+  playerId: string,
+  player: Omit<ProtocolPlayerState, 'progression'>,
+): ProtocolPlayerState {
+  const progression = getPlayerProgression(state, playerId)
+  const skillBook = getPlayerSkillBook(state, playerId)
+  const learnedSkills: Array<readonly [number, number, number]> = []
+  for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
+    const permanentRank = skillBook.permanentRanks[skillId] ?? 0
+    const effectiveRank = skillBook.effectiveRanks[skillId] ?? 0
+    if (permanentRank > 0 || effectiveRank > 0) {
+      learnedSkills.push([skillId, permanentRank, effectiveRank])
+    }
+  }
+  return {
+    ...player,
+    progression: {
+      activeWeldBuildId: skillBook.activeWeldBuildId,
+      currentHealth: progression.currentHealth,
+      currentMana: progression.currentMana,
+      experience: progression.experience,
+      learnedSkills,
+      level: progression.level,
+      maximumHealth: progression.maximumHealth,
+      maximumMana: progression.maximumMana,
+      nextThreshold: progression.nextThreshold,
+      pendingOffer: progression.pendingOffer,
+      previousThreshold: progression.previousThreshold,
+      revision: progression.revision,
+    },
   }
 }
 

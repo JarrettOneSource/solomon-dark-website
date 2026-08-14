@@ -18,7 +18,10 @@ import {
   addPlayerCharacter,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerProgression,
+  grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
   type PlayerId,
@@ -61,6 +64,7 @@ export interface GameHostOptions {
   content?: GameContentManifest
   createSimulation?: () => GameSimulationState
   host?: string
+  initialPlayerExperience?: number
   maxPlayers?: number
   port?: number
   resetWhenEmpty?: boolean
@@ -233,6 +237,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const playerId = `player-${nextPlayerId}`
         nextPlayerId += 1
         state = addPlayerCharacter(state, playerId, message.character)
+        if (options.initialPlayerExperience) {
+          state = grantGameSimulationPlayerExperience(
+            state,
+            playerId,
+            options.initialPlayerExperience,
+          )
+        }
         if (role === 'host') {
           reservedHostClaimed = true
           hostPlayerId = playerId
@@ -292,6 +303,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
       if (message.type === 'client-input') {
         if (message.sequence <= client.lastReceivedSequence) return
+        if (getPlayerProgression(state, client.playerId).pendingOffer) {
+          client.lastReceivedSequence = message.sequence
+          client.acknowledgedSequence = message.sequence
+          client.activeInput = createIdlePlayerCharacterInput()
+          client.queuedInputs.clear()
+          return
+        }
         if (message.targetTick > state.tick + GAME_TICK_RATE * 2) {
           disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
           return
@@ -321,6 +339,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             targetTick,
           })
         }
+        return
+      }
+      if (message.type === 'client-select-skill') {
+        const selected = selectGameSimulationPlayerSkill(state, client.playerId, message)
+        if (!selected) {
+          disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
+          return
+        }
+        state = selected
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        broadcastSnapshot()
         return
       }
       if (message.type === 'client-ping') {
@@ -504,7 +534,7 @@ function createInitialSimulation(
   if (state.world.kind !== 'hub') {
     throw new Error('Game hosts must start in the Hub')
   }
-  if (Object.keys(state.players).length !== 0) {
+  if (state.playerEntities.entityIds.length !== 0) {
     throw new Error('Game hosts must start without player characters')
   }
   if (Object.keys(state.world.participants).length !== 0) {

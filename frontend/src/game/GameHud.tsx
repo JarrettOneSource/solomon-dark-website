@@ -3,11 +3,10 @@ import { hub } from '../lib/assets'
 import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
+import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
-
-const XP_PROGRESS = 0.45
 
 interface GameHudProps {
   accountUsername: string | null
@@ -19,6 +18,7 @@ interface GameHudProps {
   mode?: 'hub' | 'run'
   onMapClick?: () => void
   playerId: string
+  progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
@@ -103,9 +103,18 @@ export default function GameHud({
   mode = 'hub',
   onMapClick,
   playerId,
+  progression,
   subscribePing,
   subscribeSnapshot,
 }: GameHudProps) {
+  const xpSpan = progression.nextThreshold - progression.previousThreshold
+  const xpProgress = xpSpan > 0
+    ? Math.max(0, Math.min(1, (
+        progression.experience - progression.previousThreshold
+      ) / xpSpan))
+    : 1
+  const healthProgress = progression.currentHealth / progression.maximumHealth
+  const manaProgress = progression.currentMana / progression.maximumMana
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
@@ -122,10 +131,18 @@ export default function GameHud({
       </div>
       <div className="hub-hud-meters">
         <div className="hub-hud-meter hub-hud-meter-health">
-          <img src={hub.hud.barRed} alt="Health 50 of 50" />
+          <img
+            src={hub.hud.barRed}
+            style={{ clipPath: `inset(0 ${(1 - healthProgress) * 100}% 0 0)` }}
+            alt={`Health ${progression.currentHealth} of ${progression.maximumHealth}`}
+          />
         </div>
         <div className="hub-hud-meter hub-hud-meter-mana">
-          <img src={hub.hud.barBlue} alt="Mana 100 of 100" />
+          <img
+            src={hub.hud.barBlue}
+            style={{ clipPath: `inset(0 ${(1 - manaProgress) * 100}% 0 0)` }}
+            alt={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
+          />
         </div>
       </div>
       <img className="hub-hud-primary" src={hub.primary[element]} alt={`${element} primary spell`} />
@@ -158,12 +175,12 @@ export default function GameHud({
           aria-label="Experience"
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-valuenow={XP_PROGRESS * 100}
+          aria-valuenow={xpProgress * 100}
         >
           <img
             className="hub-hud-xp-fill"
             src={hub.hud.xpFill}
-            style={{ clipPath: `inset(${XP_PROGRESS * 100}% 0 0)` }}
+            style={{ clipPath: `inset(${(1 - xpProgress) * 100}% 0 0)` }}
             alt=""
           />
           <img className="hub-hud-xp-frame" src={hub.hud.xpFrame} alt="" />

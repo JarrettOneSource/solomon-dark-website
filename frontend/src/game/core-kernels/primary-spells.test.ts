@@ -37,9 +37,11 @@ import {
 } from './primary-spell-targeting.ts'
 import {
   createGameSimulation,
+  getPlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 
 const PLAYER_ID = 'caster'
 const EMPTY_SPELL_WORLD = {
@@ -62,7 +64,7 @@ function simulation(element: WizardElement): GameSimulationState {
 }
 
 function input(state: GameSimulationState, primary: boolean): PlayerCharacterInput {
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
@@ -92,10 +94,10 @@ function earthChargeAfter(updateCount: number): number {
 
 test('Ether uses its faster native Staff rate and repeats while held', () => {
   let state = step(simulation('ether'), true)
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 0)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 0)
   assert.equal(state.primarySpells.projectiles.length, 0)
   state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   const missile = state.primarySpells.projectiles[0]
   assert.equal(player.primaryCast.actionTick, PRIMARY_CAST_ETHER_EMISSION_TICK)
   assert.equal(player.primaryCast.emissionSequence, 1)
@@ -111,17 +113,17 @@ test('Ether uses its faster native Staff rate and repeats while held', () => {
     true,
     PRIMARY_CAST_ETHER_ACTION_END_TICK - PRIMARY_CAST_ETHER_EMISSION_TICK,
   )
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, -1)
   state = step(state, true)
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 0)
-  assert.equal(state.players[PLAYER_ID].primaryCast.castSequence, 2)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 0)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.castSequence, 2)
   state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
-  assert.equal(state.players[PLAYER_ID].primaryCast.emissionSequence, 2)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence, 2)
 })
 
 test('Ether snapshots the forward-probe target and steers after its first movement', () => {
   const initial = simulation('ether')
-  const player = initial.players[PLAYER_ID]
+  const player = getPlayerCharacter(initial, PLAYER_ID)
   const target: PrimarySpellTarget = {
     airPriority: 0,
     attachment: { x: 0, y: 0 },
@@ -129,8 +131,8 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     kind: 'enemy',
     position: { x: player.position.x + 100, y: player.position.y - 140 },
   }
-  let players = initial.players
-  let previousPlayers = initial.players
+  let players = playerCharacterRecords(initial.playerEntities)
+  let previousPlayers = playerCharacterRecords(initial.playerEntities)
   let spells = initial.primarySpells
   for (let tick = 1; tick <= PRIMARY_CAST_ETHER_EMISSION_TICK + 1; tick += 1) {
     const result = stepPrimarySpells({
@@ -212,7 +214,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
 
 test('Fire emits its one 4.5-unit missile from the native pushed socket', () => {
   let state = step(simulation('fire'), true, 20)
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   const fireball = state.primarySpells.projectiles[0]
   assert.equal(fireball.kind, 'fire')
   assert.equal(fireball.velocity.x, 0)
@@ -406,7 +408,7 @@ test('Fire has no distance or PoC flight-time range cap', () => {
 test('one-shot casts retain accepted facing against movement through projectile birth', () => {
   for (const element of ['ether', 'fire'] as const) {
     let state = simulation(element)
-    const start = state.players[PLAYER_ID]
+    const start = getPlayerCharacter(state, PLAYER_ID)
     const eastAim = {
       x: start.position.x + 200,
       y: start.position.y - 25 / 1.2,
@@ -418,7 +420,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
     })
 
     state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(true) })
-    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).headingIndex, 6)
 
     const emissionTick = primaryCastEmissionTick(element)
     const actionEndTick = primaryCastActionEndTick(element)
@@ -427,8 +429,8 @@ test('one-shot casts retain accepted facing against movement through projectile 
     }
 
     const projectile = state.primarySpells.projectiles[0]
-    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, emissionTick)
-    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, emissionTick)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).headingIndex, 6)
     assert.ok(projectile.velocity.x > 0)
     assert.ok(Math.abs(projectile.velocity.y) < 0.000001)
 
@@ -439,20 +441,20 @@ test('one-shot casts retain accepted facing against movement through projectile 
     ) {
       state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
     }
-    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
-    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, -1)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).headingIndex, 6)
     state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
-    assert.equal(state.players[PLAYER_ID].headingIndex, 18)
+    assert.equal(getPlayerCharacter(state, PLAYER_ID).headingIndex, 18)
   }
 })
 
 test('Air emits one presentation record per held tick for the five-tick contact fade', () => {
   let state = step(simulation('air'), true)
-  let player = state.players[PLAYER_ID]
+  let player = getPlayerCharacter(state, PLAYER_ID)
   assert.equal(player.primaryCast.channelActive, true)
   assert.equal(player.primaryCast.actionTick, 0)
   assert.equal(primaryCastPose(player.primaryCast.actionTick, true), 0)
-  assert.equal(state.players[PLAYER_ID].primaryCast.castSequence, 1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.castSequence, 1)
   assert.equal(state.primarySpells.transients.length, 1)
   assert.equal(state.primarySpells.transients[0].kind, 'air')
   assert.deepEqual(state.primarySpells.transients[0].origin, {
@@ -460,7 +462,7 @@ test('Air emits one presentation record per held tick for the five-tick contact 
     y: player.position.y - 66.5,
   })
   state = step(state, true)
-  player = state.players[PLAYER_ID]
+  player = getPlayerCharacter(state, PLAYER_ID)
   assert.equal(player.primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(player.primaryCast.actionTick, true), 7)
   assert.equal(state.primarySpells.transients.length, 2)
@@ -469,7 +471,7 @@ test('Air emits one presentation record per held tick for the five-tick contact 
     y: player.position.y - 56,
   })
   state = step(state, false)
-  assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
   assert.equal(state.primarySpells.transients.length, 2)
   state = step(state, false, 3)
   assert.equal(state.primarySpells.transients.length, 1)
@@ -484,7 +486,7 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   assert.equal(born.filter(({ obstructionPoint }) => obstructionPoint !== null).length, 1)
   assert.equal(born.find(({ id }) => id === 2)?.obstructionPoint?.y, 0)
   state = step(state, true, 3)
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(1, true), 7)
   assert.equal(state.primarySpells.transients.length, 8)
   assert.deepEqual(
@@ -492,8 +494,10 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
     [0, 1, 0, 1, 0, 1, 0, 1],
   )
   state = step(state, false)
-  assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
-  state = step(state, false, 32)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
+  state = step(state, false, 29)
+  assert.equal(state.primarySpells.transients.length, 3)
+  state = step(state, false, 3)
   assert.equal(state.primarySpells.transients.length, 0)
 })
 
@@ -508,7 +512,7 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
     'caster-b': water('Caster B'),
   })
   const heldInputs = (): Readonly<Record<string, PlayerCharacterInput>> => Object.fromEntries(
-    Object.entries(state.players).map(([playerId, player]) => [playerId, {
+    Object.entries(playerCharacterRecords(state.playerEntities)).map(([playerId, player]) => [playerId, {
       ...createIdlePlayerCharacterInput(),
       aim: { x: player.position.x, y: player.position.y - 200 },
       cast: { primary: true, secondary: false },
@@ -532,7 +536,7 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
 test('Earth honors the native 0.3 latch and releases the same actor at age 98', () => {
   let state = step(simulation('earth'), true)
   const created = state.primarySpells.projectiles[0]
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   assert.equal(created.kind, 'earth')
   assert.equal(created.phase, 'held')
   assert.equal(created.ageTicks, 1)
@@ -548,7 +552,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(constantPose.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
   assert.equal(constantPose.position.x, player.position.x + 8.5)
   assert.equal(constantPose.position.y, player.position.y - 41)
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 1)
 
   state = step(state, false, 95)
   const thresholdRow = state.primarySpells.projectiles[0]
@@ -558,7 +562,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(thresholdRow.assemblyCharge, thresholdRow.charge)
   assert.ok(thresholdRow.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
   assert.equal(thresholdRow.phase, 'held')
-  assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, true)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, true)
 
   state = step(state, false)
   const released = state.primarySpells.projectiles[0]
@@ -568,14 +572,14 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
   assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
-  assert.equal(state.players[PLAYER_ID].primaryCast.emissionSequence, 1)
-  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
-  assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence, 1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, -1)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
 })
 
 test('Earth resamples world aim while held and freezes the last sample on release', () => {
   let state = step(simulation('earth'), true)
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   const eastInput: PlayerCharacterInput = {
     ...createIdlePlayerCharacterInput(),
     aim: {
@@ -587,7 +591,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
   state = stepGameSimulationTick(state, { [PLAYER_ID]: eastInput })
   const retargeted = state.primarySpells.projectiles[0]
   assert.deepEqual(retargeted.direction, { x: 1, y: 0 })
-  assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+  assert.equal(getPlayerCharacter(state, PLAYER_ID).headingIndex, 6)
 
   state = step(state, false, 95)
   state = step(state, false)
@@ -599,8 +603,8 @@ test('Earth resamples world aim while held and freezes the last sample on releas
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: state.players,
-    previousPlayers: state.players,
+    players: playerCharacterRecords(state.playerEntities),
+    previousPlayers: playerCharacterRecords(state.playerEntities),
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -635,8 +639,8 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: state.players,
-    previousPlayers: state.players,
+    players: playerCharacterRecords(state.playerEntities),
+    previousPlayers: playerCharacterRecords(state.playerEntities),
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -683,8 +687,8 @@ test('Earth publishes one authoritative breakup when its next flight position co
     },
     canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: state.players,
-    previousPlayers: state.players,
+    players: playerCharacterRecords(state.playerEntities),
+    previousPlayers: playerCharacterRecords(state.playerEntities),
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -725,8 +729,8 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
     },
     canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
-    players: state.players,
-    previousPlayers: state.players,
+    players: playerCharacterRecords(state.playerEntities),
+    previousPlayers: playerCharacterRecords(state.playerEntities),
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
@@ -754,7 +758,7 @@ test('Earth called rocks are authoritative absolute actors under a moving parent
   assert.ok(born.targetHeight < -35 - 30 * state.primarySpells.projectiles[0].charge)
   assert.ok(born.lateralMagnitude >= 0 && born.lateralMagnitude < 4)
 
-  const player = state.players[PLAYER_ID]
+  const player = getPlayerCharacter(state, PLAYER_ID)
   state = stepGameSimulationTick(state, { [PLAYER_ID]: {
     ...input(state, true),
     movement: { x: 1, y: 0 },
@@ -768,7 +772,7 @@ test('Earth called rocks are authoritative absolute actors under a moving parent
   assert.equal(moved.rotationStep, born.rotationStep)
   assert.equal(moved.speed, Math.fround(Math.fround(0.1) * 1.100000023841858))
   assert.equal(moved.height, -3.5)
-  assert.ok(state.players[PLAYER_ID].position.x > player.position.x)
+  assert.ok(getPlayerCharacter(state, PLAYER_ID).position.x > player.position.x)
 })
 
 test('Earth release switches existing called-rock identities to fall and teardown owns them', () => {

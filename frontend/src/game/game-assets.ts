@@ -11,6 +11,7 @@ import {
   menuSolomon,
   playerCharacter,
   primarySpells,
+  skillPicker,
 } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
@@ -40,6 +41,7 @@ export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
   menuSolomon,
   playerCharacter,
   primarySpells,
+  skillPicker,
 })
 export const GAME_RESIDENT_AUDIO_SOURCES = collectAssetSources(GAME_AUDIO_SOURCES)
 export const GAME_RESIDENT_ASSET_SOURCES = [

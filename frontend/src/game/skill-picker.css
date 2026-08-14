@@ -1,0 +1,47 @@
+.skill-picker-stage {
+  z-index: 80;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.skill-picker-renderer,
+.skill-picker-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 1600px !important;
+  height: 900px !important;
+  pointer-events: none;
+}
+
+.skill-picker-actions {
+  position: absolute;
+  inset: 0;
+}
+
+.skill-picker-action {
+  position: absolute;
+  top: 302.5px;
+  width: 200px;
+  height: 295px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.skill-picker-action:focus { outline: none; }
+
+.skill-picker-action:disabled { cursor: default; }
+
+.skill-picker-error {
+  position: absolute;
+  top: 760px;
+  left: 50%;
+  margin: 0;
+  color: #d8d4c8;
+  font: 18px serif;
+  transform: translateX(-50%);
+}

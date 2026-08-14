@@ -25,6 +25,7 @@ import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import HubScene from './HubScene.tsx'
+import SkillPicker from './SkillPicker.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import MatchLoadingScreen from './MatchLoadingScreen.tsx'
 import {
@@ -36,6 +37,7 @@ import {
   type MatchLoadingState,
 } from './match-loading.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
@@ -201,6 +203,7 @@ export default function MainMenuScene({
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<GameSnapshot | null>(null)
+  const [runtimeProgression, setRuntimeProgression] = useState<ProtocolPlayerProgression | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
@@ -308,6 +311,7 @@ export default function MainMenuScene({
       : null
     loadedBoneyardRunRef.current = initialBoneyard?.runId ?? null
     setRuntimeSnapshot(initialSnapshot)
+    setRuntimeProgression(initialSnapshot.players[session.playerId]?.progression ?? null)
     setLoadedBoneyard(initialBoneyard)
     if (initialSnapshot.world.kind === 'boneyard') {
       if (loadingRef.current?.flow !== 'boneyard') {
@@ -335,6 +339,10 @@ export default function MainMenuScene({
           advanceLoading('materializing_participants')
         }
       }
+      const progression = snapshot.players[session.playerId]?.progression ?? null
+      setRuntimeProgression((current) => (
+        current?.revision === progression?.revision ? current : progression
+      ))
       setRuntimeSnapshot((current) => sameRuntimeScene(current, snapshot)
         ? current
         : snapshot)
@@ -457,6 +465,9 @@ export default function MainMenuScene({
       )
       setSession(nextSession)
       setRuntimeSnapshot(nextSession.getSnapshot())
+      setRuntimeProgression(
+        nextSession.getSnapshot().players[nextSession.playerId]?.progression ?? null,
+      )
       setLoadedBoneyard(nextSession.getBoneyard())
       advanceLoading('materializing_participants')
       setScreen('hub')
@@ -559,6 +570,7 @@ export default function MainMenuScene({
             onInput={session.sendInput}
             onLoadingError={cancelBoneyardLoading}
             onReady={finishBoneyardLoading}
+            progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             samplePresentation={session.sampleBoneyardPresentation}
             subscribePing={session.onPing}
             subscribe={session.onSnapshot}
@@ -571,6 +583,7 @@ export default function MainMenuScene({
             getPingMs={session.getPingMs}
             inputBlocked={loading !== null}
             playerId={session.playerId}
+            progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
             onLoadingError={cancelHubLoading}
@@ -579,6 +592,15 @@ export default function MainMenuScene({
             samplePresentation={session.samplePresentation}
             subscribePing={session.onPing}
             subscribe={session.onSnapshot}
+          />
+        ) : null}
+
+        {screen === 'hub' && session && runtimeProgression?.pendingOffer ? (
+          <SkillPicker
+            audio={audio}
+            offer={runtimeProgression.pendingOffer}
+            onSelect={session.selectSkill}
+            style={nativeStageStyle}
           />
         ) : null}
 

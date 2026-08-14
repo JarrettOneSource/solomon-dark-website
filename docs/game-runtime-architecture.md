@@ -49,13 +49,17 @@ The source tree owns four distinct modules:
   reconciliation, interpolation, presentation snapshots, and teardown. The web
   and desktop shells use the same client implementation.
 
-The authoritative session owns one identity-keyed collection of
-`PlayerCharacterState` records outside any particular world. A player
-character carries its selected appearance/loadout and the native locomotion
-state that must survive a Hub-to-Boneyard transition. The active world owns
-spawn selection, static geometry, ambient actors, enemies, projectiles, and
-other location rules. It may resolve a character's requested movement, but it
-does not create a second Hub- or match-specific character implementation.
+The authoritative session owns players in one dense ECS outside any particular
+world. Stable player-entity IDs index separate identity, character-config,
+locomotion, primary-cast, progression, skill-book, and stat-book component
+stores. A whole
+`PlayerCharacterState` is only a short-lived system or protocol projection; it
+is not a second authoritative player record. The active world owns spawn
+selection, static geometry, ambient actors, enemies, projectiles, and other
+location rules. It may query player locomotion, resolve requested movement,
+and commit locomotion components, but it neither owns nor clones player
+progression. Hub-to-Boneyard placement resets the location-facing locomotion
+slice while retaining the same player entity and progression books.
 The session also owns the fixed-step accumulator and tick; neither clock is
 nested inside a Hub ambient actor or another world-specific subsystem.
 
@@ -145,12 +149,23 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `9` welcomes a client with one complete snapshot plus its sequence.
+Protocol `11` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. The Hub world carries a compact replicated-entity
 lane; Boneyard currently carries its small world payload directly until its
 first replicated enemy family exists. Unknown or malformed messages fail
 closed.
+
+Each player projection includes level/XP thresholds, a monotonic progression
+revision, compact nonzero permanent/effective rank rows, and at most one
+ordered pending skill offer. Immutable stat metadata, descriptions, caps, and
+native icon records are content-versioned client/server assets rather than
+repeated in every snapshot. Each offer option carries its authoritative next
+rank so the client can render the stock rank suffix without reconstructing or
+mutating book state. A skill-choice command names both the offer
+sequence and skill ID; the host accepts it only for that connection's current
+authoritative offer. While a choice is pending the server ignores normal player
+input, matching the mandatory native pause boundary.
 
 Each client acknowledges the newest complete snapshot sequence it has
 reconstructed. The host computes entity spawn, retire, and dynamic samples
@@ -267,8 +282,10 @@ Node host. Stack changes require a failed measured gate, not preference.
 - automatic crash restart and seamless multiplayer rejoin;
 - a binary entity wire codec, compression, or per-client spatial interest sets
   until a declared product load crosses the measured adoption gate;
-- a general ECS dependency until several large entity families demonstrably
-  need shared component-membership queries;
+- a third-party/general-purpose ECS dependency. The focused dense player ECS is
+  implemented because native progression introduces independently owned
+  components with different lifetimes; other entity families keep their
+  existing stores until shared membership queries justify a common library;
 - cross-platform fixed-point determinism;
 - WebGPU or a lower-level renderer before a recovered-load WebGL gate fails;
 - replacement of Electron before its package, lifecycle, or platform gates fail;
@@ -316,7 +333,7 @@ a GPU canvas are the lowest-risk continuation of the current work.
 ## Completed foundation sequence
 
 1. Extend `GameSimulationState.world` and the v2 snapshot world union with the
-   authoritative Boneyard state; retain root-level player characters.
+   authoritative Boneyard state; retain session-owned player entities.
 2. Implement Boneyard collision as the world-side resolver for the existing
    player-character movement plan/commit seam.
 3. Recover combat state and rules into focused shared kernels or authoritative
@@ -327,8 +344,10 @@ a GPU canvas are the lowest-risk continuation of the current work.
    and prove keyboard, controller, and touch presentation in real browsers.
 6. Package the same client with a pinned external Node host for desktop solo.
 
-No menu or Create rewrite, ECS adoption, alternative host language, relay
-network, or speculative orchestration layer belongs in this foundation.
+No further menu/Create rewrite, general-purpose ECS adoption, alternative host
+language, relay network, or speculative orchestration layer belongs in this
+foundation. The later focused player-ECS cutover is an evidence-driven
+progression slice, not a broad entity-framework commitment.
 
 ## Foundation implementation receipt
 

@@ -96,6 +96,64 @@ test('authoritative game host owns two configured player characters and movement
   )
 })
 
+test('game host pauses a leveling player and authoritatively books the offered skill', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    initialPlayerExperience: 100,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+
+  const playerId = client.welcome.playerId
+  const initial = client.welcome.snapshot.players[playerId]
+  const offer = initial.progression.pendingOffer
+  assert.equal(initial.progression.level, 2)
+  assert.equal(initial.progression.experience, 100)
+  assert.equal(offer?.level, 2)
+  assert.equal(offer?.options.length, 3)
+  assert.ok(offer)
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-input',
+    input: gameplayInput({ x: 1, y: 0 }),
+    sequence: 1,
+    targetTick: client.welcome.snapshot.tick + 1,
+  }))
+  const paused = await nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.acknowledgedInputSequence === 1
+  ))
+  assert.equal(paused.type, 'server-snapshot')
+  assert.deepEqual(paused.snapshot.players[playerId].position, initial.position)
+  assert.deepEqual(paused.snapshot.players[playerId].velocity, { x: 0, y: 0 })
+
+  const choiceIndex = 0
+  const skillId = offer.options[choiceIndex]!.skillId
+  const previousRank = initial.progression.learnedSkills
+    .find(([learnedSkillId]) => learnedSkillId === skillId)?.[1] ?? 0
+  const selectedSnapshot = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.pendingOffer === null
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-select-skill',
+    choiceIndex,
+    offerSequence: offer.sequence,
+    skillId,
+  }))
+  const selected = await selectedSnapshot
+  assert.equal(selected.type, 'server-snapshot')
+  const booked = selected.snapshot.players[playerId].progression
+  assert.equal(booked.level, 2)
+  assert.equal(booked.experience, 100)
+  assert.deepEqual(
+    booked.learnedSkills.find(([learnedSkillId]) => learnedSkillId === skillId),
+    [skillId, previousRank + 1, previousRank + 1],
+  )
+})
+
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {
   let factoryCalls = 0
   const host = await startGameHost({

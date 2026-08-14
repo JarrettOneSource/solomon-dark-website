@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
+import { createGameSimulation } from './core-server/game-simulation.ts'
+import { createGameSnapshot } from './host/game-snapshot.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 import {
   allyHudIdentityPresentation,
@@ -13,6 +15,9 @@ import {
   NATIVE_ALLY_FONT,
   type AllyHudRow,
 } from './ally-hud.ts'
+
+const PROGRESSION = createGameSnapshot(createGameSimulation(), null)
+  .players['local-player']!.progression
 
 function player(displayName: string): ProtocolPlayerState {
   return {
@@ -26,6 +31,7 @@ function player(displayName: string): ProtocolPlayerState {
     headingIndex: 0,
     position: { x: 0, y: 0 },
     primaryCast: createIdlePlayerPrimaryCast(),
+    progression: PROGRESSION,
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
   }

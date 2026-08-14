@@ -21,6 +21,12 @@ import {
   firstBoneyardLineObstruction,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
+import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
+import type {
+  PlayerProgressionComponent,
+  PlayerSkillBookComponent,
+  PlayerStatBookComponent,
+} from '../core-kernels/player-progression.ts'
 import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
@@ -44,6 +50,21 @@ import {
   type HubWorldState,
 } from './hub-world.ts'
 import type { HubStudentPopulationState } from './hub-students.ts'
+import {
+  addPlayerEntity,
+  applyPlayerEntitySkillChoice,
+  createPlayerEntityStore,
+  grantPlayerEntityExperience,
+  playerCharacterAt,
+  playerCharacterRecords,
+  playerEntityIndex,
+  playerProgressionAt,
+  playerSkillBookAt,
+  playerStatBookAt,
+  removePlayerEntity,
+  replacePlayerCharacterRecords,
+  type PlayerEntityStore,
+} from './player-entity-store.ts'
 
 export type PlayerId = string
 
@@ -51,7 +72,8 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 
 export interface GameSimulationState {
   accumulatorSeconds: number
-  players: Readonly<Record<PlayerId, PlayerCharacterState>>
+  playerEntities: PlayerEntityStore
+  playerOfferRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
   tick: number
   world: GameWorldState
@@ -59,6 +81,8 @@ export interface GameSimulationState {
 
 export interface GameSimulationOptions {
   hubStudentPopulation?: HubStudentPopulationState
+  initialPlayerExperience?: number
+  playerOfferRngSeed?: number
 }
 
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
@@ -81,13 +105,30 @@ export function createGameSimulation(
   const world = createHubWorld(Object.keys(characters), {
     studentPopulation: options.hubStudentPopulation,
   })
-  const players: Record<PlayerId, PlayerCharacterState> = {}
+  let playerEntities = createPlayerEntityStore()
+  let playerOfferRng = createNativeRng(options.playerOfferRngSeed ?? 0)
   for (const [playerId, config] of Object.entries(characters)) {
-    players[playerId] = createPlayerCharacter(config, hubSpawnPoint())
+    const draw = drawNativeInteger(playerOfferRng, 1_000_000)
+    playerOfferRng = draw.state
+    playerEntities = addPlayerEntity(
+      playerEntities,
+      playerId,
+      config,
+      createPlayerCharacter(config, hubSpawnPoint()),
+      draw.value,
+    )
+    if (options.initialPlayerExperience) {
+      playerEntities = grantPlayerEntityExperience(
+        playerEntities,
+        playerId,
+        options.initialPlayerExperience,
+      )
+    }
   }
   return {
     accumulatorSeconds: 0,
-    players,
+    playerEntities,
+    playerOfferRng,
     primarySpells: createPrimarySpellSimulation(),
     tick: 0,
     world,
@@ -99,16 +140,21 @@ export function addPlayerCharacter(
   playerId: PlayerId,
   config: PlayerCharacterConfig,
 ): GameSimulationState {
-  if (state.players[playerId]) return state
+  if (playerEntityIndex(state.playerEntities, playerId) >= 0) return state
   const world = state.world.kind === 'hub'
     ? addHubParticipant(state.world, playerId)
     : state.world
+  const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
   return {
     ...state,
-    players: {
-      ...state.players,
-      [playerId]: spawnPlayerForWorld(state.world, config),
-    },
+    playerEntities: addPlayerEntity(
+      state.playerEntities,
+      playerId,
+      config,
+      spawnPlayerForWorld(state.world, config),
+      draw.value,
+    ),
+    playerOfferRng: draw.state,
     world,
   }
 }
@@ -117,12 +163,10 @@ export function removePlayerCharacter(
   state: GameSimulationState,
   playerId: PlayerId,
 ): GameSimulationState {
-  if (!state.players[playerId]) return state
-  const players = { ...state.players }
-  delete players[playerId]
+  if (playerEntityIndex(state.playerEntities, playerId) < 0) return state
   return {
     ...state,
-    players,
+    playerEntities: removePlayerEntity(state.playerEntities, playerId),
     primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
     world: state.world.kind === 'hub'
       ? removeHubParticipant(state.world, playerId)
@@ -137,7 +181,10 @@ export function enterBoneyardWorld(
   const world = createBoneyardWorld(loaded)
   return {
     ...state,
-    players: placePlayersInBoneyard(state.players, world),
+    playerEntities: replacePlayerCharacterRecords(
+      state.playerEntities,
+      placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world),
+    ),
     primarySpells: createPrimarySpellSimulation(),
     world,
   }
@@ -147,28 +194,88 @@ export function getPlayerCharacter(
   state: GameSimulationState,
   playerId = DEFAULT_PLAYER_ID,
 ): PlayerCharacterState {
-  const player = state.players[playerId]
+  const player = playerCharacterAt(state.playerEntities, playerId)
   if (!player) throw new Error(`game simulation has no player character ${playerId}`)
   return player
+}
+
+export function getPlayerProgression(
+  state: GameSimulationState,
+  playerId = DEFAULT_PLAYER_ID,
+): PlayerProgressionComponent {
+  const progression = playerProgressionAt(state.playerEntities, playerId)
+  if (!progression) throw new Error(`game simulation has no player progression ${playerId}`)
+  return progression
+}
+
+export function getPlayerSkillBook(
+  state: GameSimulationState,
+  playerId = DEFAULT_PLAYER_ID,
+): PlayerSkillBookComponent {
+  const skillBook = playerSkillBookAt(state.playerEntities, playerId)
+  if (!skillBook) throw new Error(`game simulation has no player skill book ${playerId}`)
+  return skillBook
+}
+
+export function getPlayerStatBook(
+  state: GameSimulationState,
+  playerId = DEFAULT_PLAYER_ID,
+): PlayerStatBookComponent {
+  const statBook = playerStatBookAt(state.playerEntities, playerId)
+  if (!statBook) throw new Error(`game simulation has no player stat book ${playerId}`)
+  return statBook
+}
+
+export function gameSimulationPlayerRecords(
+  state: GameSimulationState,
+): Readonly<Record<PlayerId, PlayerCharacterState>> {
+  return playerCharacterRecords(state.playerEntities)
+}
+
+export function grantGameSimulationPlayerExperience(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  amount: number,
+): GameSimulationState {
+  return {
+    ...state,
+    playerEntities: grantPlayerEntityExperience(state.playerEntities, playerId, amount),
+  }
+}
+
+export function selectGameSimulationPlayerSkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  selection: { choiceIndex: number; offerSequence: number; skillId: number },
+): GameSimulationState | null {
+  const playerEntities = applyPlayerEntitySkillChoice(state.playerEntities, playerId, selection)
+  return playerEntities ? { ...state, playerEntities } : null
 }
 
 export function stepGameSimulationTick(
   state: GameSimulationState,
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
+  const players = playerCharacterRecords(state.playerEntities)
+  const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => [
+    playerId,
+    getPlayerProgression(state, playerId).pendingOffer
+      ? createIdlePlayerCharacterInput()
+      : inputs[playerId] ?? createIdlePlayerCharacterInput(),
+  ]))
   switch (state.world.kind) {
     case 'hub': {
-      const result = stepHubWorldTick(state.world, state.players, inputs)
-      return finishGameSimulationTick(state, result, inputs)
+      const result = stepHubWorldTick(state.world, players, activeInputs)
+      return finishGameSimulationTick(state, result, activeInputs)
     }
     case 'boneyard': {
       const result = stepBoneyardWorldTick(
         state.world,
-        state.players,
-        inputs,
+        players,
+        activeInputs,
         state.tick + 1,
       )
-      return finishGameSimulationTick(state, result, inputs)
+      return finishGameSimulationTick(state, result, activeInputs)
     }
   }
 }
@@ -220,7 +327,7 @@ function finishGameSimulationTick(
     },
     inputs,
     players: result.players,
-    previousPlayers: previous.players,
+    previousPlayers: playerCharacterRecords(previous.playerEntities),
     spells: previous.primarySpells,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
@@ -251,7 +358,8 @@ function finishGameSimulationTick(
   if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL !== 0) {
     return {
       accumulatorSeconds: previous.accumulatorSeconds,
-      players: cast.players,
+      playerEntities: replacePlayerCharacterRecords(previous.playerEntities, cast.players),
+      playerOfferRng: previous.playerOfferRng,
       primarySpells: cast.spells,
       tick,
       world: result.world,
@@ -260,7 +368,7 @@ function finishGameSimulationTick(
 
   const players: Record<PlayerId, PlayerCharacterState> = {}
   for (const [playerId, player] of Object.entries(cast.players)) {
-    const priorPlayer = previous.players[playerId]
+    const priorPlayer = playerCharacterAt(previous.playerEntities, playerId)
     players[playerId] = priorPlayer
       && priorPlayer.walkCyclePrimary !== player.walkCyclePrimary
       ? { ...player, footstepTick: tick }
@@ -268,7 +376,8 @@ function finishGameSimulationTick(
   }
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
-    players,
+    playerEntities: replacePlayerCharacterRecords(previous.playerEntities, players),
+    playerOfferRng: previous.playerOfferRng,
     primarySpells: cast.spells,
     tick,
     world: result.world,

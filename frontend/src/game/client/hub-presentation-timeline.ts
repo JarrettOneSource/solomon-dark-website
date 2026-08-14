@@ -285,6 +285,7 @@ function interpolatePlayer(
       ...discrete.primaryCast,
       aimDirection: { ...discrete.primaryCast.aimDirection },
     },
+    progression: discrete.progression,
     velocity: {
       x: lerp(older.velocity.x, newer.velocity.x, blend),
       y: lerp(older.velocity.y, newer.velocity.y, blend),

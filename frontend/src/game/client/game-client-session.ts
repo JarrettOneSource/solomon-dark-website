@@ -65,6 +65,7 @@ export interface GameClientSession {
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
+  selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendInput(input: PlayerCharacterInput): void
   startMatch(boneyardId: string): void
 }
@@ -339,22 +340,24 @@ export function connectGameClientSession(
       },
       sendInput(nextInput) {
         if (!welcome || !snapshot || destroyed) return
-        const movement = nextInput.movement
+        const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
+        const requestedInput = offered ? STOPPED_INPUT : nextInput
+        const movement = requestedInput.movement
         if (!Number.isFinite(movement.x) || !Number.isFinite(movement.y)) {
           throw new Error('game input must contain finite movement coordinates')
         }
         const length = Math.hypot(movement.x, movement.y)
         if (
-          nextInput.aim
-          && (!Number.isFinite(nextInput.aim.x) || !Number.isFinite(nextInput.aim.y))
+          requestedInput.aim
+          && (!Number.isFinite(requestedInput.aim.x) || !Number.isFinite(requestedInput.aim.y))
         ) throw new Error('game input must contain finite aim coordinates')
         if (
-          typeof nextInput.cast.primary !== 'boolean'
-          || typeof nextInput.cast.secondary !== 'boolean'
+          typeof requestedInput.cast.primary !== 'boolean'
+          || typeof requestedInput.cast.secondary !== 'boolean'
         ) throw new Error('game input must contain primary and secondary cast levels')
         const input: PlayerCharacterInput = {
-          aim: nextInput.aim ? { ...nextInput.aim } : null,
-          cast: { ...nextInput.cast },
+          aim: requestedInput.aim ? { ...requestedInput.aim } : null,
+          cast: { ...requestedInput.cast },
           movement: length > 1
             ? { x: movement.x / length, y: movement.y / length }
             : { ...movement },
@@ -389,6 +392,23 @@ export function connectGameClientSession(
           input,
           sequence,
           targetTick,
+        }))
+      },
+      selectSkill(choiceIndex, offerSequence, skillId) {
+        if (!welcome || !snapshot || destroyed) return
+        const offer = snapshot.players[welcome.playerId]?.progression.pendingOffer
+        const option = offer?.options[choiceIndex]
+        if (
+          !offer
+          || offer.sequence !== offerSequence
+          || option?.skillId !== skillId
+        ) throw new Error('The selected skill is not in the current offer.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-select-skill',
+          choiceIndex,
+          offerSequence,
+          skillId,
         }))
       },
       startMatch(boneyardId) {
@@ -550,7 +570,11 @@ export function connectGameClientSession(
           state.collisionRngState,
           state.participant,
         )
-        state.player = { ...predicted.player, config: { ...state.player.config } }
+        state.player = {
+          ...predicted.player,
+          config: { ...state.player.config },
+          progression: state.player.progression,
+        }
         state.collisionRngState = predicted.collisionRngState
         state.predictedTicks += 1
         state.remainderMs -= tickMs
@@ -606,6 +630,16 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     ...player,
     config: { ...player.config },
     position: { ...player.position },
+    progression: {
+      ...player.progression,
+      learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
+      pendingOffer: player.progression.pendingOffer
+        ? {
+            ...player.progression.pendingOffer,
+            options: player.progression.pendingOffer.options.map((option) => ({ ...option })),
+          }
+        : null,
+    },
     velocity: { ...player.velocity },
   }
 }

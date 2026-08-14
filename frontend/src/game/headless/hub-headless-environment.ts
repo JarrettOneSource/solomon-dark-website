@@ -3,6 +3,8 @@ import { createHubStudentFixturePopulation } from '../core-server/hub-student-fi
 import type { HubStudentRouteEndBehavior } from '../core-server/hub-students.ts'
 import {
   createGameSimulation,
+  gameSimulationPlayerRecords,
+  getPlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
@@ -93,8 +95,8 @@ export class HubHeadlessEnvironment {
       throw new RangeError('observation target does not contain the environment stride')
     }
     target.fill(0, offset, offset + this.observationLength)
-    const player = this.simulation.players[HEADLESS_PLAYER_ID]
-    if (!player || this.simulation.world.kind !== 'hub') {
+    const player = getPlayerCharacter(this.simulation, HEADLESS_PLAYER_ID)
+    if (this.simulation.world.kind !== 'hub') {
       throw new Error('headless environment lost its Hub agent')
     }
     const store = this.simulation.world.studentPopulation.store
@@ -149,7 +151,7 @@ function authoritativeHashState(simulation: GameSimulationState): unknown {
   const population = simulation.world.studentPopulation
   return {
     accumulatorSeconds: simulation.accumulatorSeconds,
-    players: simulation.players,
+    players: gameSimulationPlayerRecords(simulation),
     tick: simulation.tick,
     world: {
       ambient: simulation.world.ambient,

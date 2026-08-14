@@ -38,6 +38,34 @@ export interface ProtocolAmbientState {
 
 export interface ProtocolPlayerState extends PlayerCharacterState {
   config: PlayerCharacterConfig
+  progression: ProtocolPlayerProgression
+}
+
+export interface ProtocolPlayerSkillOfferOption {
+  skillId: number
+  targetRank: number
+  weldBuildId?: number
+}
+
+export interface ProtocolPlayerSkillOffer {
+  level: number
+  options: readonly ProtocolPlayerSkillOfferOption[]
+  sequence: number
+}
+
+export interface ProtocolPlayerProgression {
+  activeWeldBuildId: number | null
+  currentHealth: number
+  currentMana: number
+  experience: number
+  learnedSkills: readonly (readonly [number, number, number])[]
+  level: number
+  maximumHealth: number
+  maximumMana: number
+  nextThreshold: number
+  pendingOffer: ProtocolPlayerSkillOffer | null
+  previousThreshold: number
+  revision: number
 }
 
 export interface ProtocolStudentProp {

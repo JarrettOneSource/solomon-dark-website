@@ -16,6 +16,7 @@ export interface GameTextureMap {
 }
 
 interface GameWebGlApplicationOptions {
+  backgroundAlpha?: number
   className: string
   height: number
   resolution: number
@@ -23,6 +24,7 @@ interface GameWebGlApplicationOptions {
 }
 
 export async function createGameWebGlApplication({
+  backgroundAlpha = 1,
   className,
   height,
   resolution,
@@ -35,6 +37,7 @@ export async function createGameWebGlApplication({
       autoDensity: true,
       autoStart: false,
       background: 0x000000,
+      backgroundAlpha,
       height,
       powerPreference: 'high-performance',
       preference: 'webgl',

@@ -122,6 +122,7 @@ function inertSession() {
     onSnapshot: () => () => {},
     sampleBoneyardPresentation() { throw new Error() },
     samplePresentation() { throw new Error() },
+    selectSkill() {},
     sendInput() {},
     startMatch() {},
   }

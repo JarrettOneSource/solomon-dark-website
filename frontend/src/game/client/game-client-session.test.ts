@@ -150,6 +150,49 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(transport.readyState, 'closed')
 })
 
+test('client suppresses gameplay input while a skill offer is pending and submits the exact choice', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation(
+    { 'player-1': CHARACTER },
+    { initialPlayerExperience: 100 },
+  )
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  const initial = session.getSnapshot().players['player-1']
+  const offer = initial.progression.pendingOffer
+  assert.ok(offer)
+
+  const sentBeforeInput = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 900, y: 450 }, true))
+  assert.equal(transport.sent.length, sentBeforeInput)
+  nowMs += 100
+  assert.deepEqual(
+    session.samplePresentation().players['player-1'].position,
+    initial.position,
+  )
+
+  const option = offer.options[0]!
+  assert.throws(
+    () => session.selectSkill(0, offer.sequence + 1, option.skillId),
+    /not in the current offer/,
+  )
+  session.selectSkill(0, offer.sequence, option.skillId)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-skill',
+    choiceIndex: 0,
+    offerSequence: offer.sequence,
+    skillId: option.skillId,
+  })
+  session.destroy()
+})
+
 test('client schedules every cast-level transition on a distinct fixed tick', async () => {
   const transport = new MemoryTransport()
   const connecting = connectGameClientSession({
@@ -388,7 +431,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
         ? initialSnapshot.world.participants['player-1']
         : undefined,
     )
-    authoritativePlayer = predicted.player
+    authoritativePlayer = { ...predicted.player, progression: authoritativePlayer.progression }
     collisionRngState = predicted.collisionRngState
   }
   receiveSnapshot(transport, {

@@ -72,6 +72,17 @@ test('client protocol validates character hello, input, acknowledgement, and pin
     boneyardId: 'default-random',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-select-skill',
+    choiceIndex: 2,
+    offerSequence: 7,
+    skillId: 48,
+  })), {
+    type: 'client-select-skill',
+    choiceIndex: 2,
+    offerSequence: 7,
+    skillId: 48,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
     sequence: 12,
@@ -126,7 +137,83 @@ test('server welcome round-trips content, kernel, character, and world ownership
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
+  assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
+    activeWeldBuildId: null,
+    currentHealth: 50,
+    currentMana: 100,
+    experience: 0,
+    learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
+    level: 1,
+    maximumHealth: 50,
+    maximumMana: 100,
+    nextThreshold: 90,
+    pendingOffer: null,
+    previousThreshold: 0,
+    revision: 0,
+  })
   assert.equal(welcome.snapshot.world.kind, 'hub')
+})
+
+test('progression snapshots carry the next rank needed by the stock picker label', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': {
+      discipline: 'arcane',
+      displayName: 'Helvidius',
+      element: 'fire',
+    } }, { initialPlayerExperience: 100 }),
+    'player-1',
+  )
+  const pendingOffer = snapshot.players['player-1']!.progression.pendingOffer
+  assert.ok(pendingOffer)
+  assert.ok(pendingOffer.options.every(({ skillId, targetRank }) => {
+    const learned = snapshot.players['player-1']!.progression.learnedSkills
+      .find(([learnedSkillId]) => learnedSkillId === skillId)
+    return targetRank === (learned?.[1] ?? 0) + 1
+  }))
+
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const malformed = JSON.parse(JSON.stringify(frame))
+  delete malformed.players['player-1'].progression.pendingOffer.options[0].targetRank
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: malformed,
+    sequence: 2,
+  })), /targetRank/)
+
+  const missingWeldBuild = JSON.parse(JSON.stringify(frame))
+  missingWeldBuild.players['player-1'].progression.pendingOffer.options[0] = {
+    skillId: 52,
+    targetRank: 1,
+  }
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: missingWeldBuild,
+    sequence: 2,
+  })), /Spell Welding/)
+
+  const invalidWeldBuild = JSON.parse(JSON.stringify(frame))
+  invalidWeldBuild.players['player-1'].progression.pendingOffer.options[0] = {
+    skillId: 52,
+    targetRank: 1,
+    weldBuildId: 1010,
+  }
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: invalidWeldBuild,
+    sequence: 2,
+  })), /weldBuildId/)
+
+  const misplacedWeldBuild = JSON.parse(JSON.stringify(frame))
+  misplacedWeldBuild.players['player-1'].progression.pendingOffer.options[0].weldBuildId = 1000
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: misplacedWeldBuild,
+    sequence: 2,
+  })), /requires Spell Welding/)
 })
 
 test('protocol rejects legacy, malformed, and unsupported discriminated payloads', () => {
@@ -183,6 +270,18 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-ping',
     nonce: -1,
   })), /nonce/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-select-skill',
+    choiceIndex: 4,
+    offerSequence: 1,
+    skillId: 48,
+  })), /choiceIndex/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-select-skill',
+    choiceIndex: 0,
+    offerSequence: 1,
+    skillId: 80,
+  })), /skillId/)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-pong',
     nonce: 4.5,
