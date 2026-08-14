@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -8,6 +10,7 @@ import {
   NATIVE_MUSIC_MODULE_SHA256,
   NATIVE_LOOP_MANIFEST,
   NATIVE_SOUND_MANIFEST,
+  NATIVE_SOLOMON_VOICE_MANIFEST,
   NATIVE_STREAM_MANIFEST,
   createEntryAudioEvents,
   createSelectionAudioEvents,
@@ -16,6 +19,7 @@ import {
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
   nativeFootstepCue,
+  newSolomonVoiceEvent,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
 import {
@@ -34,6 +38,49 @@ test('maps each scene to the recovered module entry and transition clock', () =>
     hub: { cue: 'academy', transitionTicks: 2 },
     title: { cue: 'solomondarktheme', transitionTicks: 100 },
   })
+})
+
+test('maps the stock Solomon dialogue files and authoritative PCM durations', () => {
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(NATIVE_SOLOMON_VOICE_MANIFEST).map(
+      ([cue, entry]) => [cue, entry.durationTicks],
+    )),
+    {
+      'solomon-hello-1': 783,
+      'solomon-hello-2': 570,
+      'solomon-hello-3': 554,
+      'solomon-hello-4': 735,
+      'solomon-laugh-1': 247,
+      'solomon-get-him-boys': 245,
+    },
+  )
+  assert.equal(
+    NATIVE_SOLOMON_VOICE_MANIFEST['solomon-get-him-boys'].sourceName,
+    'voices\\SAY_GETHIMBOYS.wav',
+  )
+})
+
+test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
+  const filenames = {
+    'solomon-get-him-boys': 'solomon-get-him-boys.wav',
+    'solomon-hello-1': 'solomon-hello-1.wav',
+    'solomon-hello-2': 'solomon-hello-2.wav',
+    'solomon-hello-3': 'solomon-hello-3.wav',
+    'solomon-hello-4': 'solomon-hello-4.wav',
+    'solomon-laugh-1': 'solomon-laugh-1.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(filenames)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/voice/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOLOMON_VOICE_MANIFEST[
+        cue as keyof typeof NATIVE_SOLOMON_VOICE_MANIFEST
+      ].sourceSha256,
+    )
+  }
 })
 
 test('keeps native registry offsets on the browser cue manifest', () => {
@@ -91,6 +138,18 @@ test('consumes each authoritative Courtyard footstep once without gap bursts', (
   ), 75)
   assert.equal(nativeFootstepCue(25, 'player-1'), nativeFootstepCue(25, 'player-1'))
   assert.ok(['step-1', 'step-2'].includes(nativeFootstepCue(50, 'player-1')))
+})
+
+test('consumes only the newest unseen Solomon cue after sparse snapshots', () => {
+  const events = [
+    { cue: 'solomon-hello-3' as const, id: 1 },
+    { cue: 'solomon-laugh-1' as const, id: 2 },
+    { cue: 'solomon-get-him-boys' as const, id: 3 },
+  ]
+  assert.deepEqual(newSolomonVoiceEvent(0, events), events[2])
+  assert.deepEqual(newSolomonVoiceEvent(1, events), events[2])
+  assert.equal(newSolomonVoiceEvent(3, events), null)
+  assert.equal(newSolomonVoiceEvent(0, []), null)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

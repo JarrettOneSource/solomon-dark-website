@@ -150,7 +150,12 @@ export function stepGameSimulationTick(
       return finishGameSimulationTick(state, result, inputs)
     }
     case 'boneyard': {
-      const result = stepBoneyardWorldTick(state.world, state.players, inputs)
+      const result = stepBoneyardWorldTick(
+        state.world,
+        state.players,
+        inputs,
+        state.tick + 1,
+      )
       return finishGameSimulationTick(state, result, inputs)
     }
   }

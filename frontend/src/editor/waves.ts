@@ -6,49 +6,34 @@
 // GROUP/FORMATION monster lines of `TOKEN[:FLAG|FLAG]`. Bare tokens without
 // flags appear throughout the stock schedule and are valid.
 
-export interface WaveGroupEntry {
-  enemy: string
-  flags: string[]
-}
+import {
+  BONEYARD_WAVE_ENEMY_TYPES,
+  BONEYARD_WAVE_IGNORED_SOURCE_FLAGS,
+} from '../game/core-kernels/boneyard-wave-schema.ts'
+import type {
+  WaveDef,
+  WaveGroup,
+  WaveGroupEntry,
+} from '../game/core-kernels/boneyard-wave-schema.ts'
 
-export interface WaveGroup {
-  entries: WaveGroupEntry[]
-}
-
-export interface WaveDef {
-  /** Exact spawn budget for the wave (SPAWN). Must be positive. */
-  spawn: number
-  /** Per-spawn delay range in ticks (SPAWNDELAY min-max). */
-  spawnDelay: [number, number]
-  /** Burst window range in ticks (WAVEDELAY min-max). */
-  waveDelay: [number, number]
-  /** Population gate for wave advancement (MAXENEMIES). */
-  maxEnemies: number
-  /** ZOMBIEWAVE marker line. */
-  zombieWave?: boolean
-  /** Candidate follow-up waves as 0-based schedule indexes (NEXT). */
-  next: number[]
-  /** GROUP blocks; the spawner picks among them. */
-  groups: WaveGroup[]
-}
+export type { WaveDef, WaveGroup, WaveGroupEntry }
 
 /** The eight enemy tokens the retail schedule uses, with native type ids
  * matching the loader's TryResolveWaveEnemyType table. */
 export const WAVE_ENEMIES: { token: string; typeId: number; label: string }[] = [
-  { token: 'SKELETON', typeId: 1001, label: 'Skeleton' },
-  { token: 'SKELETONARCHER', typeId: 1002, label: 'Skeleton Archer' },
-  { token: 'SKELETONMAGE', typeId: 1003, label: 'Skeleton Mage' },
-  { token: 'IMP', typeId: 1004, label: 'Imp' },
-  { token: 'ZOMBIE', typeId: 1006, label: 'Zombie' },
-  { token: 'WRAITH', typeId: 1007, label: 'Wraith' },
-  { token: 'DEMON', typeId: 1009, label: 'Demon' },
-  { token: 'COFFIN', typeId: 1013, label: 'Coffin' },
+  { token: 'SKELETON', typeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON, label: 'Skeleton' },
+  { token: 'SKELETONARCHER', typeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETONARCHER, label: 'Skeleton Archer' },
+  { token: 'SKELETONMAGE', typeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETONMAGE, label: 'Skeleton Mage' },
+  { token: 'IMP', typeId: BONEYARD_WAVE_ENEMY_TYPES.IMP, label: 'Imp' },
+  { token: 'ZOMBIE', typeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE, label: 'Zombie' },
+  { token: 'WRAITH', typeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH, label: 'Wraith' },
+  { token: 'DEMON', typeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON, label: 'Demon' },
+  { token: 'COFFIN', typeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, label: 'Coffin' },
 ]
 
 const ENEMY_TOKENS = new Set(WAVE_ENEMIES.map((e) => e.token))
 
-/** Every modifier WaveFlag_ParseModifiers (0x0062E070) recognizes. Unknown
- * flags are logged and skipped by the retail parser, so this list is closed. */
+/** Every modifier WaveFlag_ParseModifiers (0x0062E070) applies. */
 export const WAVE_FLAGS: string[] = [
   'FLAG_HPUP',
   'FLAG_HPDOWN',
@@ -95,7 +80,11 @@ export const WAVE_FLAGS: string[] = [
   'FLAG_MORESKELETONS',
 ]
 
-const FLAG_TOKENS = new Set(WAVE_FLAGS)
+/** Stock schedule tokens which the retail parser logs and deliberately
+ * ignores. They remain valid source syntax and must survive round trips. */
+export const WAVE_IGNORED_FLAGS = BONEYARD_WAVE_IGNORED_SOURCE_FLAGS
+
+const FLAG_TOKENS = new Set([...WAVE_FLAGS, ...WAVE_IGNORED_FLAGS])
 
 /** The loader rejects schedules whose distinct-enemy-type count per wave
  * exceeds its composition row limit. */
@@ -111,7 +100,7 @@ export function defaultWave(index: number, count: number): WaveDef {
     spawnDelay: [50, 300],
     waveDelay: [100, 300],
     maxEnemies: 40,
-    next: [count > 0 ? Math.min(index + 1, count) : 0],
+    next: [index + 1 < count ? 1 : 0],
     groups: [{ entries: [{ enemy: 'SKELETON', flags: ['FLAG_WEAK'] }] }],
   }
 }
@@ -208,8 +197,13 @@ export function parseWaveText(text: string): WaveDef[] {
         .map((part) => part.trim())
         .filter((part) => part.length > 0)
         .map((part) => {
+          if (!/^-?\d+$/.test(part)) {
+            throw new Error(`Invalid NEXT value at line ${lineNumber}.`)
+          }
           const n = Number(part)
-          if (!Number.isInteger(n) || n < 0) throw new Error(`Invalid NEXT value at line ${lineNumber}.`)
+          if (!Number.isSafeInteger(n)) {
+            throw new Error(`Invalid NEXT value at line ${lineNumber}.`)
+          }
           return n
         })
       return
@@ -302,8 +296,9 @@ export function validateWaves(waves: WaveDef[]): string[] {
       }
     }
     for (const next of wave.next) {
-      if (!Number.isInteger(next) || next < 0 || next >= waves.length) {
-        problems.push(`${at}: NEXT points at wave ${next}, which is not on the schedule (0-${waves.length - 1}).`)
+      const target = index + next
+      if (!Number.isInteger(next) || target < 0 || target >= waves.length) {
+        problems.push(`${at}: relative NEXT ${next} resolves to wave ${target}, which is not on the schedule (0-${waves.length - 1}).`)
       }
     }
   })

@@ -2,6 +2,14 @@ import type {
   BoneyardGateLeafSnapshot,
 } from '../core-kernels/boneyard.ts'
 import type {
+  BoneyardSolomonPhase,
+  BoneyardSolomonVoiceEvent,
+} from '../core-kernels/boneyard-encounter.ts'
+import type {
+  BoneyardEnemyState,
+  BoneyardWaveDirectorPhase,
+} from '../core-kernels/boneyard-wave-director.ts'
+import type {
   PlayerCharacterConfig,
   PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
@@ -59,9 +67,45 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  encounter: BoneyardSolomonSnapshot | null
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
   runId: string
+  waves: BoneyardWaveSnapshot | null
+}
+
+export interface BoneyardSolomonSnapshot {
+  acceleration: number
+  digFrame: number
+  escapeSpeed: number
+  headingDeg: number
+  lifetimeTicksRemaining: number
+  mouthPose: number
+  mouthPoseTicksRemaining: number
+  motion: number
+  phase: BoneyardSolomonPhase
+  phaseTicksRemaining: number
+  position: Vector2
+  runEventId: number
+  targetPlayerId: string | null
+  transitionOffsetY: number
+  turnRate: number
+  voiceEvents: readonly BoneyardSolomonVoiceEvent[]
+  voiceTicksRemaining: number
+  walkCycle: number
+}
+
+export type BoneyardEnemySnapshot = BoneyardEnemyState
+
+export interface BoneyardWaveSnapshot {
+  enemies: readonly BoneyardEnemySnapshot[]
+  interwaveDelayTicks: number
+  pendingSpawnBudget: number
+  phase: BoneyardWaveDirectorPhase
+  scheduleIndex: number
+  spawnDelayTicks: number
+  waveEventId: number
+  waveOrdinal: number
 }
 
 export type GameWorldSnapshot = HubWorldSnapshot | BoneyardWorldSnapshot

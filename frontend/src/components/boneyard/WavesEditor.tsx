@@ -229,18 +229,18 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
                     className="input !w-20 !px-2 !py-1 font-mono !text-xs"
                     value={wave.spawn}
                     min={1}
-                    title="Exact number of enemies the wave spawns"
+                    title="Native group-cost budget consumed by the wave compiler"
                     onChange={(e) => patchWave(wi, { spawn: Math.round(Number(e.target.value)) || 0 })}
                   />
                 </label>
                 <label className="flex items-center gap-1.5">
-                  <span className="w-24 shrink-0 font-mono text-[10px] uppercase text-bone-dim/70">Max enemies</span>
+                  <span className="w-24 shrink-0 font-mono text-[10px] uppercase text-bone-dim/70">Max enemies*</span>
                   <input
                     type="number"
                     className="input !w-20 !px-2 !py-1 font-mono !text-xs"
                     value={wave.maxEnemies}
                     min={1}
-                    title="Population gate before the wave may advance"
+                    title="Stock wave.txt field retained for round-trip parity; the retail compiler parses but does not consume it"
                     onChange={(e) => patchWave(wi, { maxEnemies: Math.round(Number(e.target.value)) || 0 })}
                   />
                 </label>
@@ -255,18 +255,18 @@ export default function WavesEditor({ waves: initial, onKeep, onClose }: Props) 
                   onChange={(waveDelay) => patchWave(wi, { waveDelay })}
                 />
                 <label className="flex items-center gap-1.5 lg:col-span-2">
-                  <span className="w-24 shrink-0 font-mono text-[10px] uppercase text-bone-dim/70">Next waves</span>
+                  <span className="w-24 shrink-0 font-mono text-[10px] uppercase text-bone-dim/70">Next offsets</span>
                   <input
                     className="input !px-2 !py-1 font-mono !text-xs"
                     value={wave.next.join(',')}
-                    placeholder="e.g. 1 or 2,3"
-                    title="Comma-separated wave numbers that may follow this one (waves count from 0)"
+                    placeholder="e.g. 1 or -3,0,1"
+                    title="Comma-separated signed offsets from this wave; 1 means the next row and -1 means the previous row"
                     onChange={(e) =>
                       patchWave(wi, {
                         next: e.target.value
                           .split(',')
                           .map((part) => part.trim())
-                          .filter((part) => /^\d+$/.test(part))
+                          .filter((part) => /^-?\d+$/.test(part))
                           .map(Number),
                       })
                     }

@@ -1,5 +1,8 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type {
+  BoneyardEnemySnapshot,
+  BoneyardSolomonSnapshot,
+  BoneyardWaveSnapshot,
   BoneyardWorldSnapshot,
   GameSnapshot,
   ProtocolPlayerState,
@@ -38,6 +41,7 @@ interface TimedSnapshot {
 
 const MAX_BUFFERED_SNAPSHOTS = 8
 const WALK_FRAME_COUNT = 5
+const SOLOMON_WALK_FRAME_COUNT = 6
 const HEADING_COUNT = 24
 const FULL_CIRCLE = 360
 
@@ -134,6 +138,11 @@ function interpolateSnapshot(
     ),
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
+      encounter: interpolateSolomon(
+        older.world.encounter,
+        newer.world.encounter,
+        blend,
+      ),
       gateLeaves: interpolateGateLeaves(
         older.world.gateLeaves,
         newer.world.gateLeaves,
@@ -141,6 +150,7 @@ function interpolateSnapshot(
       ),
       kind: 'boneyard',
       runId: newer.world.runId,
+      waves: interpolateWaves(older.world.waves, newer.world.waves, blend),
     },
   }
 }
@@ -225,9 +235,11 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
     primarySpells: copyPrimarySpellState(snapshot.primarySpells),
     tick: snapshot.tick,
     world: {
+      encounter: copySolomon(snapshot.world.encounter),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
       kind: 'boneyard',
       runId: snapshot.world.runId,
+      waves: copyWaves(snapshot.world.waves),
     },
   }
 }
@@ -250,6 +262,112 @@ function copyGateLeaf(leaf: BoneyardGateLeafSnapshot): BoneyardGateLeafSnapshot 
     ...leaf,
     hinge: { ...leaf.hinge },
     tip: { ...leaf.tip },
+  }
+}
+
+function interpolateSolomon(
+  older: BoneyardSolomonSnapshot | null,
+  newer: BoneyardSolomonSnapshot | null,
+  blend: number,
+): BoneyardSolomonSnapshot | null {
+  if (older === null || newer === null) {
+    return copySolomon(blend < 1 ? older : newer)
+  }
+  const discrete = blend < 1 ? older : newer
+  return {
+    ...copySolomon(discrete)!,
+    acceleration: lerp(older.acceleration, newer.acceleration, blend),
+    headingDeg: lerpCycle(older.headingDeg, newer.headingDeg, blend, FULL_CIRCLE),
+    motion: lerp(older.motion, newer.motion, blend),
+    position: {
+      x: lerp(older.position.x, newer.position.x, blend),
+      y: lerp(older.position.y, newer.position.y, blend),
+    },
+    transitionOffsetY: lerp(
+      older.transitionOffsetY,
+      newer.transitionOffsetY,
+      blend,
+    ),
+    walkCycle: lerpCycle(
+      older.walkCycle,
+      newer.walkCycle,
+      blend,
+      SOLOMON_WALK_FRAME_COUNT,
+    ),
+  }
+}
+
+function interpolateWaves(
+  older: BoneyardWaveSnapshot | null,
+  newer: BoneyardWaveSnapshot | null,
+  blend: number,
+): BoneyardWaveSnapshot | null {
+  if (older === null || newer === null) {
+    return copyWaves(blend < 1 ? older : newer)
+  }
+  const discrete = blend < 1 ? older : newer
+  return {
+    ...copyWaves(discrete)!,
+    enemies: interpolateEnemies(older.enemies, newer.enemies, blend),
+  }
+}
+
+function interpolateEnemies(
+  older: readonly BoneyardEnemySnapshot[],
+  newer: readonly BoneyardEnemySnapshot[],
+  blend: number,
+): BoneyardEnemySnapshot[] {
+  const newerById = new Map(newer.map((enemy) => [enemy.id, enemy]))
+  const enemies = older.map((olderEnemy) => {
+    const newerEnemy = newerById.get(olderEnemy.id)
+    if (!newerEnemy) return copyEnemy(olderEnemy)
+    const discrete = blend < 1 ? olderEnemy : newerEnemy
+    return {
+      ...copyEnemy(discrete),
+      headingDeg: lerpCycle(
+        olderEnemy.headingDeg,
+        newerEnemy.headingDeg,
+        blend,
+        FULL_CIRCLE,
+      ),
+      position: {
+        x: lerp(olderEnemy.position.x, newerEnemy.position.x, blend),
+        y: lerp(olderEnemy.position.y, newerEnemy.position.y, blend),
+      },
+    }
+  })
+  if (blend >= 1) {
+    const knownIds = new Set(enemies.map((enemy) => enemy.id))
+    for (const enemy of newer) {
+      if (!knownIds.has(enemy.id)) enemies.push(copyEnemy(enemy))
+    }
+    return enemies.filter((enemy) => newerById.has(enemy.id))
+  }
+  return enemies
+}
+
+function copySolomon(
+  encounter: BoneyardSolomonSnapshot | null,
+): BoneyardSolomonSnapshot | null {
+  return encounter === null ? null : {
+    ...encounter,
+    position: { ...encounter.position },
+    voiceEvents: encounter.voiceEvents.map((event) => ({ ...event })),
+  }
+}
+
+function copyWaves(waves: BoneyardWaveSnapshot | null): BoneyardWaveSnapshot | null {
+  return waves === null ? null : {
+    ...waves,
+    enemies: waves.enemies.map(copyEnemy),
+  }
+}
+
+function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
+  return {
+    ...enemy,
+    flags: [...enemy.flags],
+    position: { ...enemy.position },
   }
 }
 

@@ -20,6 +20,12 @@ import iceLoop from '../assets/game/audio/sfx/ice-loop.wav'
 import lightningLoop from '../assets/game/audio/sfx/lightning-loop.wav'
 import rollingStoneLoop from '../assets/game/audio/sfx/rolling-stone-loop.wav'
 import startBoulder from '../assets/game/audio/sfx/start-boulder.wav'
+import solomonGetHimBoys from '../assets/game/audio/voice/solomon-get-him-boys.wav'
+import solomonHello1 from '../assets/game/audio/voice/solomon-hello-1.wav'
+import solomonHello2 from '../assets/game/audio/voice/solomon-hello-2.wav'
+import solomonHello3 from '../assets/game/audio/voice/solomon-hello-3.wav'
+import solomonHello4 from '../assets/game/audio/voice/solomon-hello-4.wav'
+import solomonLaugh1 from '../assets/game/audio/voice/solomon-laugh-1.wav'
 import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
@@ -52,5 +58,11 @@ export const GAME_AUDIO_SOURCES = {
     'catch-it': catchIt,
     'choose-element': chooseElement,
     'start-cast': startCast,
+    'solomon-get-him-boys': solomonGetHimBoys,
+    'solomon-hello-1': solomonHello1,
+    'solomon-hello-2': solomonHello2,
+    'solomon-hello-3': solomonHello3,
+    'solomon-hello-4': solomonHello4,
+    'solomon-laugh-1': solomonLaugh1,
   },
 } as const satisfies GameAudioSources

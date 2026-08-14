@@ -2,6 +2,10 @@ import {
   HUB_TEACHER_CAST_SECONDS,
   HUB_TEACHER_CYCLE_SECONDS,
 } from './hub-teacher.ts'
+import type {
+  BoneyardSolomonVoiceCue,
+  BoneyardSolomonVoiceEvent,
+} from './core-kernels/boneyard-encounter.ts'
 
 export const NATIVE_AUDIO_TICK_MS = 10
 
@@ -19,7 +23,8 @@ export type GameSoundCue =
   | 'step-2'
   | 'summon'
   | 'throw-fire'
-export type GameStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
+export type CreateStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
+export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue
 export type GameLoopCue =
   | 'gather-rocks-loop'
   | 'ice-loop'
@@ -43,6 +48,12 @@ interface NativeMusicEntry {
 
 interface NativeSoundEntry {
   registryOffset: number
+  sourceName: string
+  sourceSha256: string
+}
+
+interface NativeVoiceEntry {
+  durationTicks: number
   sourceName: string
   sourceSha256: string
 }
@@ -155,7 +166,40 @@ export const NATIVE_STREAM_MANIFEST = {
     sourceName: 'sounds\\StartCast__Stream',
     sourceSha256: 'bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8',
   },
-} as const satisfies Readonly<Record<GameStreamCue, NativeSoundEntry>>
+} as const satisfies Readonly<Record<CreateStreamCue, NativeSoundEntry>>
+
+export const NATIVE_SOLOMON_VOICE_MANIFEST = {
+  'solomon-hello-1': {
+    durationTicks: 783,
+    sourceName: 'voices\\SAY_SOLOMON_HELLO1.wav',
+    sourceSha256: 'dd460115df4f6880d7e067fc1c8c93492413f103ea9b94855f11e955293a564d',
+  },
+  'solomon-hello-2': {
+    durationTicks: 570,
+    sourceName: 'voices\\SAY_SOLOMON_HELLO2.wav',
+    sourceSha256: '2e4702214f3aad252eb46e9000a8ef6bdec1dd95964d312cfbc1168a59a4bd94',
+  },
+  'solomon-hello-3': {
+    durationTicks: 554,
+    sourceName: 'voices\\SAY_SOLOMON_HELLO3.wav',
+    sourceSha256: '07693b871183c7d7d14fb4472aaa2ede983ebe5447bbcf031aee93649f909df2',
+  },
+  'solomon-hello-4': {
+    durationTicks: 735,
+    sourceName: 'voices\\SAY_SOLOMON_HELLO4.wav',
+    sourceSha256: 'a2748ccc9fbe13c2ae80e238ea8dd5a170b1dd7e2b2c7fa050a0073470ce52a2',
+  },
+  'solomon-laugh-1': {
+    durationTicks: 247,
+    sourceName: 'voices\\SAY_SOLOMON_LAUGH1.wav',
+    sourceSha256: '26463c3f557378c5409fe8b37c49c9f5585dee26ffc16face1db0770a08d5716',
+  },
+  'solomon-get-him-boys': {
+    durationTicks: 245,
+    sourceName: 'voices\\SAY_GETHIMBOYS.wav',
+    sourceSha256: 'c26e56af5c5036bdfdda8dee9c5ba8270a75156b45c0afe9f00c83b850b34541',
+  },
+} as const satisfies Readonly<Record<BoneyardSolomonVoiceCue, NativeVoiceEntry>>
 
 export const GAME_SCENE_MUSIC = {
   boneyard: { cue: 'prelude', transitionTicks: 100 },
@@ -170,9 +214,9 @@ export const GAME_SCENE_MUSIC = {
 export type CreateWizardElement = 'air' | 'earth' | 'ether' | 'fire' | 'water'
 
 export type CreateAudioEvent =
-  | { action: 'pause-stream'; cue: GameStreamCue }
+  | { action: 'pause-stream'; cue: CreateStreamCue }
   | { action: 'play-sound'; cue: GameSoundCue }
-  | { action: 'play-stream'; cue: GameStreamCue }
+  | { action: 'play-stream'; cue: CreateStreamCue }
 
 export const CREATE_ENTRY_START_CAST_MS = 200
 export const CREATE_ENTRY_CHOOSE_ELEMENT_MS = 1_340
@@ -248,6 +292,14 @@ export function newNativeFootstepTick(
   return previous.footstepTick === current.footstepTick
     ? undefined
     : current.footstepTick
+}
+
+export function newSolomonVoiceEvent(
+  lastSeenEventId: number,
+  current: readonly BoneyardSolomonVoiceEvent[],
+): BoneyardSolomonVoiceEvent | null {
+  const latest = current.at(-1)
+  return latest && latest.id > lastSeenEventId ? latest : null
 }
 
 function stableHash(value: string, salt: number): number {

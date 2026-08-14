@@ -53,6 +53,12 @@ try {
   thirdPage.on('console', (message) => {
     if (message.type() === 'error') thirdConsoleErrors.push(message.text())
   })
+  if (process.env.SDR_GAME_SMOKE_PROVE_WAVES === '1') {
+    await Promise.all([
+      page.addInitScript(installAudioPlayProbe),
+      clientPage.addInitScript(installAudioPlayProbe),
+    ])
+  }
   if (runtime) {
     await Promise.all([
       page.addInitScript((configuration) => {
@@ -442,10 +448,19 @@ try {
     await page.screenshot({ path: screenshotPath })
   }
 
+  let encounterReceipt = null
   let gateCrossing = null
   if (!expectedModBoneyard) {
     gateCrossing = await crossEntryGate(page, clientPage)
     await page.screenshot({ path: gateScreenshotPath })
+    if (process.env.SDR_GAME_SMOKE_PROVE_WAVES === '1') {
+      encounterReceipt = await proveSolomonEncounter(
+        page,
+        clientPage,
+        process.env.SDR_GAME_SMOKE_ENCOUNTER_SCREENSHOT
+          || gateScreenshotPath.replace(/(\.[^.]+)?$/, '-solomon-waves$1'),
+      )
+    }
   }
 
   assert.deepEqual(consoleErrors, [])
@@ -477,6 +492,7 @@ try {
     hostSingleAllyReceipt,
     hostPainterReceipt,
     clientPainterReceipt,
+    encounterReceipt,
     gateCrossing,
     gateScreenshotPath: gateCrossing ? gateScreenshotPath : null,
     screenshotPath,
@@ -491,6 +507,16 @@ try {
   }) + '\n')
 } finally {
   await browser.close()
+}
+
+function installAudioPlayProbe() {
+  const sources = []
+  const nativePlay = HTMLMediaElement.prototype.play
+  Object.defineProperty(window, '__sdrAudioPlaySources', { value: sources })
+  HTMLMediaElement.prototype.play = function play() {
+    sources.push(this.currentSrc || this.src)
+    return nativePlay.call(this)
+  }
 }
 
 async function provisionProductionRuntime() {
@@ -670,22 +696,25 @@ async function boneyardPainterReceipt(page) {
 async function crossEntryGate(hostPage, clientPage) {
   const scene = hostPage.locator('.boneyard-scene')
   const clientScene = clientPage.locator('.boneyard-scene')
-  const alignedX = await alignWithEntryGate(hostPage, scene)
+  const gate = await alignWithEntryGate(hostPage, scene)
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
   const initialClientGateState = await clientScene.getAttribute('data-gate-state')
-  const key = initialY > 1000 ? 'w' : 's'
-  const direction = key === 'w' ? -1 : 1
+  const direction = Math.sign(gate.targetY - initialY)
+  assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
+  const key = direction < 0 ? 'w' : 's'
+  const crossingDistance = Math.abs(gate.targetY - initialY) + 35
   await hostPage.bringToFront()
   await hostPage.keyboard.down(key)
   try {
     await hostPage.waitForFunction(
-      ({ direction, initialY }) => {
+      ({ crossingDistance, direction, initialY }) => {
         const value = Number(document.querySelector('.boneyard-scene')
           ?.getAttribute('data-local-player-y'))
-        return Number.isFinite(value) && (value - initialY) * direction > 200
+        return Number.isFinite(value)
+          && (value - initialY) * direction > crossingDistance
       },
-      { direction, initialY },
+      { crossingDistance, direction, initialY },
       { timeout: 8_000 },
     )
   } finally {
@@ -694,7 +723,7 @@ async function crossEntryGate(hostPage, clientPage) {
   const finalY = Number(await scene.getAttribute('data-local-player-y'))
   await hostPage.waitForTimeout(1_500)
   const finalGateState = await scene.getAttribute('data-gate-state')
-  assert.ok((finalY - initialY) * direction > 200)
+  assert.ok((finalY - initialY) * direction > crossingDistance)
   assert.notEqual(finalGateState, initialGateState)
 
   await clientPage.bringToFront()
@@ -704,33 +733,256 @@ async function crossEntryGate(hostPage, clientPage) {
     initialClientGateState,
     { timeout: 5_000 },
   )
-  return { alignedX, direction, finalY, initialY }
+  return { alignedX: gate.playerX, direction, finalY, initialY, targetY: gate.targetY }
+}
+
+async function proveSolomonEncounter(hostPage, clientPage, wavesScreenshotPath) {
+  const hostScene = hostPage.locator('.boneyard-scene')
+  const clientScene = clientPage.locator('.boneyard-scene')
+  const initial = await solomonEncounterReceipt(hostScene)
+  assert.equal(initial.phase, 'digging')
+  assert.equal(initial.wavePhase, 'dormant')
+  assert.equal(initial.liveEnemies, 0)
+
+  const approach = await walkToSolomon(hostPage, hostScene)
+  assert.notEqual(approach.phase, 'digging')
+
+  await Promise.all([
+    hostPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-voice-event-id')) >= 1
+    ), undefined, { timeout: 15_000 }),
+    clientPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-voice-event-id')) >= 1
+    ), undefined, { timeout: 15_000 }),
+  ])
+  const [hostHello, clientHello] = await Promise.all([
+    solomonEncounterReceipt(hostScene),
+    solomonEncounterReceipt(clientScene),
+  ])
+  assert.equal(hostHello.phase, 'speaking')
+  assert.match(hostHello.voiceCue, /^solomon-hello-[1-4]$/)
+  assert.equal(clientHello.voiceCue, hostHello.voiceCue)
+
+  const mouthPoses = []
+  const headings = []
+  for (let sample = 0; sample < 20; sample += 1) {
+    const current = await solomonEncounterReceipt(hostScene)
+    mouthPoses.push(current.mouthPose)
+    headings.push(current.heading)
+    await hostPage.waitForTimeout(100)
+  }
+  assert.ok(new Set(mouthPoses).size > 1, `expected speaking mouth animation (${mouthPoses.join(', ')})`)
+
+  await Promise.all([
+    hostPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-run-event-id')) === 1
+    ), undefined, { timeout: 15_000 }),
+    clientPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-run-event-id')) === 1
+    ), undefined, { timeout: 15_000 }),
+  ])
+  await hostPage.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    return Number(scene?.getAttribute('data-wave-live-enemy-count')) >= 10
+      && window.__sdrAudioPlaySources?.some((source) => source.includes('solomon-laugh-1'))
+  }, undefined, { timeout: 5_000 })
+  const [hostOpening, clientOpening] = await Promise.all([
+    solomonEncounterReceipt(hostScene),
+    solomonEncounterReceipt(clientScene),
+  ])
+  assert.equal(hostOpening.phase, 'escaping')
+  assert.equal(hostOpening.voiceCue, 'solomon-laugh-1')
+  assert.equal(hostOpening.wavePhase, 'opening')
+  assert.equal(hostOpening.liveEnemies, 10)
+  assert.equal(hostOpening.pendingSpawnBudget, 5)
+  assert.equal(hostOpening.waveOrdinal, 0)
+  assert.equal(clientOpening.liveEnemies, hostOpening.liveEnemies)
+  assert.equal(clientOpening.runEventId, hostOpening.runEventId)
+  await hostPage.screenshot({ path: wavesScreenshotPath })
+
+  await Promise.all([
+    hostPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-voice-event-id')) === 3
+      && window.__sdrAudioPlaySources?.some(
+        (source) => source.includes('solomon-get-him-boys'),
+      )
+    ), undefined, { timeout: 5_000 }),
+    clientPage.waitForFunction(() => (
+      Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-voice-event-id')) === 3
+    ), undefined, { timeout: 5_000 }),
+  ])
+  const hostTaunt = await solomonEncounterReceipt(hostScene)
+  assert.equal(hostTaunt.voiceCue, 'solomon-get-him-boys')
+  assert.equal(hostTaunt.liveEnemies, 10)
+
+  const audioPlaySources = await hostPage.evaluate(() => (
+    [...new Set(window.__sdrAudioPlaySources ?? [])]
+  ))
+  assert.ok(audioPlaySources.some((source) => source.includes(hostHello.voiceCue)))
+  assert.ok(audioPlaySources.some((source) => source.includes('solomon-laugh-1')))
+  assert.ok(audioPlaySources.some((source) => source.includes('solomon-get-him-boys')))
+  return {
+    approach,
+    audioPlaySources,
+    clientHello,
+    clientOpening,
+    headings: [...new Set(headings)],
+    hostHello,
+    hostOpening,
+    hostTaunt,
+    mouthPoses: [...new Set(mouthPoses)],
+  }
+}
+
+async function walkToSolomon(page, scene) {
+  await page.bringToFront()
+  await scene.focus()
+  const startedAt = Date.now()
+  const samples = []
+  let stalledSteps = 0
+  let wallFollow = null
+
+  while (Date.now() - startedAt < 120_000) {
+    const before = await solomonApproachReceipt(scene)
+    samples.push(before)
+    if (before.phase !== 'digging') {
+      return {
+        contactPosition: { x: before.playerX, y: before.playerY },
+        phase: before.phase,
+        samples: samples.length,
+        startPosition: { x: samples[0].playerX, y: samples[0].playerY },
+      }
+    }
+
+    const dx = before.solomonX - before.playerX
+    const dy = before.solomonY - before.playerY
+    let movement = { x: dx, y: dy }
+    if (wallFollow) {
+      movement = {
+        x: dx * 0.25 - dy * wallFollow.sign,
+        y: dy * 0.25 + dx * wallFollow.sign,
+      }
+      wallFollow.steps += 1
+    }
+    await pulseMovement(page, movementKeys(movement), 150)
+
+    const after = await solomonApproachReceipt(scene)
+    if (after.phase !== 'digging') continue
+    if (wallFollow && after.distance < wallFollow.blockedDistance - 30) {
+      wallFollow = null
+      stalledSteps = 0
+    } else if (wallFollow?.steps >= 50) {
+      wallFollow = {
+        blockedDistance: after.distance,
+        sign: -wallFollow.sign,
+        steps: 0,
+      }
+    } else if (!wallFollow && after.distance < before.distance - 1) {
+      stalledSteps = 0
+    } else if (!wallFollow) {
+      stalledSteps += 1
+      if (stalledSteps >= 4) {
+        wallFollow = {
+          blockedDistance: after.distance,
+          sign: 1,
+          steps: 0,
+        }
+        stalledSteps = 0
+      }
+    }
+  }
+  throw new Error(`could not walk to Solomon: ${JSON.stringify(samples.at(-1))}`)
+}
+
+async function pulseMovement(page, keys, durationMs) {
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    await page.waitForTimeout(durationMs)
+  } finally {
+    for (const key of keys.reverse()) await page.keyboard.up(key)
+  }
+}
+
+function movementKeys({ x, y }) {
+  const keys = []
+  const scale = Math.max(Math.abs(x), Math.abs(y), 1)
+  if (Math.abs(x) / scale >= 0.25) keys.push(x > 0 ? 'd' : 'a')
+  if (Math.abs(y) / scale >= 0.25) keys.push(y > 0 ? 's' : 'w')
+  return keys
+}
+
+async function solomonApproachReceipt(scene) {
+  return scene.evaluate((node) => {
+    const playerX = Number(node.getAttribute('data-local-player-x'))
+    const playerY = Number(node.getAttribute('data-local-player-y'))
+    const solomonX = Number(node.getAttribute('data-solomon-x'))
+    const solomonY = Number(node.getAttribute('data-solomon-y'))
+    return {
+      distance: Math.hypot(solomonX - playerX, solomonY - playerY),
+      phase: node.getAttribute('data-solomon-phase'),
+      playerX,
+      playerY,
+      solomonX,
+      solomonY,
+    }
+  })
+}
+
+async function solomonEncounterReceipt(scene) {
+  return scene.evaluate((node) => ({
+    heading: Number(node.getAttribute('data-solomon-heading')),
+    liveEnemies: Number(node.getAttribute('data-wave-live-enemy-count')),
+    mouthPose: Number(node.getAttribute('data-solomon-mouth-pose')),
+    pendingSpawnBudget: Number(node.getAttribute('data-wave-pending-spawn-budget')),
+    phase: node.getAttribute('data-solomon-phase'),
+    runEventId: Number(node.getAttribute('data-solomon-run-event-id')),
+    voiceCue: node.getAttribute('data-solomon-voice-cue'),
+    voiceEventId: Number(node.getAttribute('data-solomon-voice-event-id')),
+    waveOrdinal: Number(node.getAttribute('data-wave-ordinal')),
+    wavePhase: node.getAttribute('data-wave-phase'),
+    waveScheduleIndex: Number(node.getAttribute('data-wave-schedule-index')),
+    waveSpawnDelayTicks: Number(node.getAttribute('data-wave-spawn-delay-ticks')),
+  }))
 }
 
 async function alignWithEntryGate(page, scene) {
   const initialX = Number(await scene.getAttribute('data-local-player-x'))
+  const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const gateState = await scene.getAttribute('data-gate-state')
   const gates = new Map()
   for (const serialized of gateState?.split('|') || []) {
     const separator = serialized.lastIndexOf(':')
     if (separator < 0) continue
     const id = serialized.slice(0, separator)
-    const [x] = serialized.slice(separator + 1).split(',').map(Number)
+    const [x, y] = serialized.slice(separator + 1).split(',').map(Number)
     const gateId = id.slice(0, id.lastIndexOf(':'))
-    if (!Number.isFinite(x) || !gateId) continue
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !gateId) continue
     const tips = gates.get(gateId) || []
-    tips.push(x)
+    tips.push({ x, y })
     gates.set(gateId, tips)
   }
   const centers = [...gates.values()]
     .filter((tips) => tips.length === 2)
-    .map((tips) => (tips[0] + tips[1]) / 2)
+    .map((tips) => ({
+      x: (tips[0].x + tips[1].x) / 2,
+      y: (tips[0].y + tips[1].y) / 2,
+    }))
   assert.ok(centers.length > 0, `expected an entry gate in ${gateState}`)
-  const targetX = centers.reduce((nearest, center) => (
-    Math.abs(center - initialX) < Math.abs(nearest - initialX) ? center : nearest
+  const target = centers.reduce((nearest, center) => (
+    Math.hypot(center.x - initialX, center.y - initialY)
+      < Math.hypot(nearest.x - initialX, nearest.y - initialY)
+      ? center
+      : nearest
   ))
+  const targetX = target.x
   const delta = targetX - initialX
-  if (Math.abs(delta) <= 3) return initialX
+  if (Math.abs(delta) <= 3) return { playerX: initialX, targetX, targetY: target.y }
   const direction = Math.sign(delta)
   const key = direction > 0 ? 'd' : 'a'
   await page.keyboard.down(key)
@@ -748,7 +1000,11 @@ async function alignWithEntryGate(page, scene) {
   } finally {
     await page.keyboard.up(key)
   }
-  return Number(await scene.getAttribute('data-local-player-x'))
+  return {
+    playerX: Number(await scene.getAttribute('data-local-player-x')),
+    targetX,
+    targetY: target.y,
+  }
 }
 
 async function sampleDigFrames(page) {

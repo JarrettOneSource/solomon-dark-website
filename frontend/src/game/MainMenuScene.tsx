@@ -413,6 +413,7 @@ export default function MainMenuScene({
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
           && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
           <BoneyardScene
+            audio={audio}
             boneyard={loadedBoneyard}
             getPingMs={session.getPingMs}
             playerId={session.playerId}

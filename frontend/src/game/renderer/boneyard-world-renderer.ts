@@ -38,9 +38,14 @@ import {
   type DynamicPainterLayer,
   type StaticPainterLayer,
 } from '../boneyard-painter-order.ts'
-import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
+import type {
+  BoneyardGateLeafSnapshot,
+  SolomonDigState,
+} from '../core-kernels/boneyard.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
+import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
+import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
@@ -522,7 +527,7 @@ class BoneyardDynamicScene {
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
-    this.solomon?.update(snapshot.tick)
+    this.solomon?.update(snapshot.world.encounter, snapshot.tick)
 
     const dig = this.boneyard.scene.solomonDig
     const lanternLight = dig
@@ -586,8 +591,9 @@ class BoneyardDynamicScene {
       )
     }
     if (dig) {
+      const solomonPosition = snapshot.world.encounter?.position ?? dig.position
       this.solomon?.setLighting(nativeSolomonSetPieceLighting(
-        dig.position,
+        solomonPosition,
         dig.lanternPosition,
         lightSources,
       ))
@@ -619,11 +625,19 @@ class BoneyardDynamicScene {
     }
     if (dig) {
       dynamicLayers.push({
-        id: 'solomon-dig',
+        id: 'solomon-grave',
         worldY: dig.position.y,
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
       })
+      if (snapshot.world.encounter?.phase !== 'gone') {
+        dynamicLayers.push({
+          id: 'solomon-actor',
+          worldY: snapshot.world.encounter?.position.y ?? dig.position.y,
+          sortBias: 0,
+          sourceOrder: dynamicLayers.length,
+        })
+      }
       dynamicLayers.push({
         id: 'lantern',
         worldY: dig.lanternPosition.y,
@@ -676,7 +690,8 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`enemy:${enemy.id}`)?.zIndex ?? 1,
       )
     }
-    this.solomon?.setDigDepth(positionedDynamics.get('solomon-dig')?.zIndex ?? 1)
+    this.solomon?.setGraveDepth(positionedDynamics.get('solomon-grave')?.zIndex ?? 1)
+    this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
@@ -740,15 +755,17 @@ class BoneyardDynamicScene {
 }
 
 class BoneyardSolomonView {
-  private readonly dig: Sprite
-  private readonly digRoot = new Container({ label: 'solomon-dig' })
+  private readonly actorRoot = new Container({ label: 'solomon-actor' })
+  private readonly body: Sprite
+  private readonly clipMask = new Graphics()
+  private readonly digState: SolomonDigState
   private readonly graveDirt: Sprite
   private readonly lantern: Sprite
-  private readonly program: readonly number[]
+  private readonly mouth: Sprite
   private readonly root: Container
+  private readonly shadow: Sprite
   private readonly textures: BoneyardWorldTextures
-  private readonly ticksPerFrame: number
-  private currentFrame = 0
+  private currentFrame = 2
 
   constructor(
     boneyard: LoadedBoneyard,
@@ -758,40 +775,95 @@ class BoneyardSolomonView {
     const state = boneyard.scene.solomonDig!
     this.root = root
     this.textures = textures
-    this.program = state.frameProgram
-    this.ticksPerFrame = state.ticksPerFrame
+    this.digState = state
     this.graveDirt = new Sprite(textures.graveDirt)
     this.graveDirt.position.set(
       state.gravePosition.x - 16,
       state.gravePosition.y + 105,
     )
-    this.graveDirt.zIndex = 0
     this.lantern = new Sprite(textures.lantern)
     this.lantern.position.set(
       state.lanternPosition.x - 14.5,
       state.lanternPosition.y - 22.5,
     )
-    this.dig = new Sprite(textures.solomonDig[0])
-    this.dig.anchor.set(0.5)
-    this.dig.position.set(state.position.x, state.position.y)
-    this.dig.zIndex = 1
-    this.digRoot.sortableChildren = true
-    this.digRoot.addChild(this.graveDirt, this.dig)
-    root.addChild(this.digRoot, this.lantern)
+    this.body = new Sprite(textures.solomonDig[0])
+    this.body.anchor.set(0.5)
+    this.mouth = new Sprite(textures.solomonDialogueMouth[0][0])
+    this.mouth.anchor.set(0.5)
+    this.mouth.zIndex = 1
+    this.mouth.visible = false
+    this.shadow = plantedSprite(
+      textures.solomonShadow,
+      requiredSpriteRef(13),
+      { x: -10, y: -113 },
+    )
+    this.actorRoot.position.set(state.position.x, state.position.y)
+    this.actorRoot.sortableChildren = true
+    this.actorRoot.addChild(this.shadow, this.body, this.mouth, this.clipMask)
+    root.addChild(this.graveDirt, this.actorRoot, this.lantern)
   }
 
-  update(tick: number): void {
-    const programIndex = Math.floor(tick / this.ticksPerFrame) % this.program.length
-    this.currentFrame = this.program[programIndex]
-    this.dig.texture = this.textures.solomonDig[this.currentFrame]
+  update(encounter: BoneyardSolomonSnapshot | null, tick: number): void {
+    if (encounter === null) {
+      const programIndex = Math.floor(tick / this.digState.ticksPerFrame)
+        % this.digState.frameProgram.length
+      const frame = this.digState.frameProgram[programIndex]
+      this.currentFrame = frame + 2
+      this.body.texture = this.textures.solomonDig[frame]
+      this.actorRoot.position.set(this.digState.position.x, this.digState.position.y)
+      this.actorRoot.visible = true
+      this.body.mask = null
+      this.mouth.mask = null
+      this.clipMask.clear()
+      this.mouth.visible = false
+      this.shadow.visible = true
+      return
+    }
+    const visual = boneyardSolomonVisualState(encounter, this.digState, tick)
+    this.currentFrame = visual.nativeBodyRecord
+    this.actorRoot.position.set(
+      encounter.position.x,
+      encounter.position.y,
+    )
+    this.actorRoot.visible = visual.visible
+    if (!visual.visible) return
+    this.body.position.y = visual.offsetY
+    this.mouth.position.y = visual.offsetY
+    if (visual.clipBottomWorldY === null) {
+      this.body.mask = null
+      this.mouth.mask = null
+      this.clipMask.clear()
+    } else {
+      const clipLeft = this.digState.position.x - encounter.position.x - 1000
+      const clipTop = visual.clipBottomWorldY - encounter.position.y - 1000
+      this.clipMask.clear().rect(clipLeft, clipTop, 2000, 1000).fill(0xffffff)
+      this.body.mask = this.clipMask
+      this.mouth.mask = this.clipMask
+    }
+    this.shadow.visible = visual.shadowVisible
+    if (visual.bodyBank === 'dig') {
+      this.body.texture = this.textures.solomonDig[visual.bodyPose]
+    } else if (visual.bodyBank === 'dialogue') {
+      this.body.texture = this.textures.solomonDialogueBody[visual.direction]
+    } else {
+      this.body.texture = this.textures.solomonWalk[visual.bodyPose][visual.direction]
+    }
+    this.mouth.visible = visual.mouthPose !== null
+    if (visual.mouthPose !== null) {
+      this.mouth.texture = this.textures.solomonDialogueMouth[visual.mouthPose][visual.direction]
+    }
   }
 
   get frame(): number {
     return this.currentFrame
   }
 
-  setDigDepth(depth: number): void {
-    this.digRoot.zIndex = depth
+  setActorDepth(depth: number): void {
+    this.actorRoot.zIndex = depth
+  }
+
+  setGraveDepth(depth: number): void {
+    this.graveDirt.zIndex = depth
   }
 
   setLanternDepth(depth: number): void {
@@ -799,13 +871,15 @@ class BoneyardSolomonView {
   }
 
   setLighting(lighting: NativeSolomonSetPieceLighting): void {
-    this.digRoot.tint = lighting.digRootTint
+    this.body.tint = lighting.digRootTint
+    this.mouth.tint = lighting.digRootTint
     this.lantern.tint = lighting.lanternTint
   }
 
   destroy(): void {
-    this.root.removeChild(this.digRoot, this.lantern)
-    this.digRoot.destroy({ children: true })
+    this.root.removeChild(this.graveDirt, this.actorRoot, this.lantern)
+    this.graveDirt.destroy()
+    this.actorRoot.destroy({ children: true })
     this.lantern.destroy()
   }
 }

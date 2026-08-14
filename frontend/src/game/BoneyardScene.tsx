@@ -15,6 +15,8 @@ import {
 } from './boneyard-dig-indicator.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
+import type { GameAudioDirector } from './game-audio-director.ts'
+import { newSolomonVoiceEvent } from './game-audio-native.ts'
 import GameHud from './GameHud.tsx'
 import HubTouchJoystick from './input/HubTouchJoystick.tsx'
 import {
@@ -40,6 +42,7 @@ const NATIVE_DARKNESS_MAX_ALPHA = 0.96
 const grayscaleAlphaMasks = new WeakMap<HTMLImageElement, HTMLCanvasElement>()
 
 interface BoneyardSceneProps {
+  audio: GameAudioDirector
   boneyard: LoadedBoneyard
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
@@ -63,6 +66,7 @@ interface BoneyardFrameDiagnostics {
 type RendererState = 'loading' | 'ready'
 
 export default function BoneyardScene({
+  audio,
   boneyard: loaded,
   getPingMs,
   initialSnapshot,
@@ -79,6 +83,11 @@ export default function BoneyardScene({
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
+  const lastVoiceEventIdRef = useRef(
+    initialSnapshot.world.kind === 'boneyard'
+      ? (initialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0)
+      : 0,
+  )
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
@@ -169,6 +178,16 @@ export default function BoneyardScene({
       setRendererState('ready')
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
+        if (snapshot.world.kind === 'boneyard' && snapshot.world.encounter) {
+          const event = newSolomonVoiceEvent(
+            lastVoiceEventIdRef.current,
+            snapshot.world.encounter.voiceEvents,
+          )
+          if (event) {
+            audio.playStream(event.cue)
+            lastVoiceEventIdRef.current = event.id
+          }
+        }
         onInput(input.sample().input)
         renderer.render(snapshot)
         const camera = renderer.camera(snapshot)
@@ -208,7 +227,7 @@ export default function BoneyardScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [digPosition, initialSnapshot, loaded, onInput, playerId, samplePresentation])
+  }, [audio, digPosition, initialSnapshot, loaded, onInput, playerId, samplePresentation])
 
   const localPlayer = initialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
@@ -452,7 +471,33 @@ function publishSceneDiagnostics(
     scene.dataset.localPlayerX = `${player.position.x}`
     scene.dataset.localPlayerY = `${player.position.y}`
   }
-  if (digReceipt && diagnostics) digReceipt.dataset.frame = `${diagnostics.solomonFrame}`
+  const encounter = snapshot.world.encounter
+  const latestVoiceEvent = encounter?.voiceEvents.at(-1)
+  scene.dataset.solomonPhase = encounter?.phase ?? 'absent'
+  scene.dataset.solomonRunEventId = `${encounter?.runEventId ?? 0}`
+  scene.dataset.solomonVoiceCue = latestVoiceEvent?.cue ?? 'none'
+  scene.dataset.solomonVoiceEventId = `${latestVoiceEvent?.id ?? 0}`
+  if (encounter) {
+    scene.dataset.solomonHeading = `${encounter.headingDeg}`
+    scene.dataset.solomonMouthPose = `${encounter.mouthPose}`
+    scene.dataset.solomonWalkCycle = `${encounter.walkCycle}`
+    scene.dataset.solomonX = `${encounter.position.x}`
+    scene.dataset.solomonY = `${encounter.position.y}`
+  }
+  const waves = snapshot.world.waves
+  scene.dataset.waveEventId = `${waves?.waveEventId ?? 0}`
+  scene.dataset.waveLiveEnemyCount = `${waves?.enemies.length ?? 0}`
+  scene.dataset.wavePendingSpawnBudget = `${waves?.pendingSpawnBudget ?? 0}`
+  scene.dataset.wavePhase = waves?.phase ?? 'absent'
+  scene.dataset.waveScheduleIndex = `${waves?.scheduleIndex ?? 0}`
+  scene.dataset.waveSpawnDelayTicks = `${waves?.spawnDelayTicks ?? 0}`
+  scene.dataset.waveOrdinal = `${waves?.waveOrdinal ?? 0}`
+  if (digReceipt) {
+    digReceipt.dataset.frame = `${diagnostics?.solomonFrame ?? 0}`
+    digReceipt.dataset.phase = encounter?.phase ?? 'absent'
+    digReceipt.dataset.worldX = `${encounter?.position.x ?? digReceipt.dataset.worldX}`
+    digReceipt.dataset.worldY = `${encounter?.position.y ?? digReceipt.dataset.worldY}`
+  }
 }
 
 function gateState(leaves: readonly {

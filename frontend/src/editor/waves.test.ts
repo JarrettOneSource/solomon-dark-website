@@ -27,7 +27,7 @@ const schedule: WaveDef[] = [
     waveDelay: [80, 220],
     maxEnemies: 55,
     zombieWave: true,
-    next: [0, 1],
+    next: [-1, 0],
     groups: [{ entries: [{ enemy: 'ZOMBIE', flags: ['FLAG_ROTTEN'] }] }],
   },
 ]
@@ -76,11 +76,41 @@ test('the stock dialect parses: FORMATION, WAVE:0 suffixes, comments, no ENDWAVE
   assert.deepEqual(parsed[1].groups, [{ entries: [{ enemy: 'IMP', flags: [] }] }])
 })
 
+test('signed NEXT offsets preserve the retail late-wave loops', () => {
+  const parsed = parseWaveText([
+    'WAVE',
+    '\tNEXT:-3,0,1',
+    '\tSPAWN:5',
+    '\tSPAWNDELAY:1-2',
+    '\tWAVEDELAY:1-2',
+    '\tMAXENEMIES:10',
+    '\tGROUP',
+    '\t\tIMP',
+  ].join('\n'))
+  assert.deepEqual(parsed[0].next, [-3, 0, 1])
+  assert.match(serializeWaveText(parsed), /\tNEXT:-3,0,1\n/)
+})
+
 test('unknown enemy tokens are rejected like the loader rejects them', () => {
   assert.throws(
     () => parseWaveText('WAVE\n\tSPAWN:5\n\tGROUP\n\t\tDRAGON:FLAG_WEAK\n'),
     /Unknown enemy token/,
   )
+})
+
+test('retail ignored flag tokens survive round trip without becoming validation errors', () => {
+  const parsed = parseWaveText([
+    'WAVE',
+    '\tNEXT:0',
+    '\tSPAWN:1',
+    '\tSPAWNDELAY:1-1',
+    '\tWAVEDELAY:1-1',
+    '\tMAXENEMIES:1',
+    '\tGROUP',
+    '\t\tDEMON:FLAG_IGNITE|FLAG_IMMORTALIZE',
+  ].join('\n'))
+  assert.deepEqual(validateWaves(parsed), [])
+  assert.match(serializeWaveText(parsed), /FLAG_IGNITE\|FLAG_IMMORTALIZE/)
 })
 
 test('validation mirrors the loader acceptance rules', () => {
@@ -101,4 +131,15 @@ test('validation mirrors the loader acceptance rules', () => {
   assert.ok(problems.some((p) => p.includes('MAXENEMIES')))
   assert.ok(problems.some((p) => p.includes('enemy line')))
   assert.ok(problems.some((p) => p.includes('NEXT')))
+})
+
+test('NEXT validation resolves signed offsets relative to the current wave', () => {
+  const rows = Array.from({ length: 4 }, (_, index): WaveDef => ({
+    ...schedule[0],
+    next: index === 3 ? [-3, 0] : [1],
+  }))
+  assert.deepEqual(validateWaves(rows), [])
+  assert.ok(validateWaves(rows.map((wave, index) => (
+    index === 0 ? { ...wave, next: [-1] } : wave
+  ))).some((problem) => problem.includes('relative NEXT -1')))
 })

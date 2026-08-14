@@ -500,6 +500,9 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   assert.equal(snapshot.world.kind, 'boneyard')
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(snapshot.world.gateLeaves.length, 2)
+  assert.equal(snapshot.world.encounter?.acceleration, 0)
+  assert.equal(snapshot.world.encounter?.digFrame, 0)
+  assert.equal(snapshot.world.encounter?.transitionOffsetY, 0)
   const snapshotMessage = {
     acknowledgedInputSequence: 0,
     frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
@@ -516,5 +519,62 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(malformed)),
     /tip/,
+  )
+
+  const invalidPhase = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidPhase.frame.world.encounter.phase = 'monologuing'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidPhase)),
+    /encounter\.phase/,
+  )
+
+  const invalidCue = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidCue.frame.world.encounter.voiceEvents = [{ id: 1, cue: 'solomon-improvised' }]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidCue)),
+    /voiceEvents\[0\]\.cue/,
+  )
+
+  const exactNativeHeading = JSON.parse(encodeGameMessage(snapshotMessage))
+  exactNativeHeading.frame.world.encounter.headingDeg = 360
+  const decodedHeading = decodeServerGameMessage(JSON.stringify(exactNativeHeading))
+  assert.equal(
+    decodedHeading.type === 'server-snapshot'
+      && decodedHeading.frame.world.kind === 'boneyard'
+      ? decodedHeading.frame.world.encounter?.headingDeg
+      : null,
+    360,
+  )
+
+  const invalidDigFrame = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidDigFrame.frame.world.encounter.digFrame = 18
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDigFrame)),
+    /encounter\.digFrame/,
+  )
+
+  const enemy = {
+    enemyToken: 'SKELETON',
+    flags: ['FLAG_WEAK'],
+    headingDeg: 90,
+    id: 1,
+    locationPolicy: 'near-player',
+    nativeTypeId: 1001,
+    position: { x: 300, y: 400 },
+    spawnTick: 12,
+    targetPlayerId: 'player-1',
+  }
+  const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidType.frame.world.waves.enemies = [{ ...enemy, nativeTypeId: 1004 }]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidType)),
+    /nativeTypeId does not match/,
+  )
+
+  const duplicateEnemies = JSON.parse(encodeGameMessage(snapshotMessage))
+  duplicateEnemies.frame.world.waves.enemies = [enemy, { ...enemy }]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicateEnemies)),
+    /duplicates id 1/,
   )
 })

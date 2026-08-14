@@ -5,6 +5,18 @@ import {
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
+  BONEYARD_SOLOMON_PHASES,
+  BONEYARD_SOLOMON_VOICE_CUES,
+  type BoneyardSolomonPhase,
+  type BoneyardSolomonVoiceCue,
+} from '../core-kernels/boneyard-encounter.ts'
+import {
+  BONEYARD_WAVE_DIRECTOR_PHASES,
+  BONEYARD_WAVE_ENEMY_TYPES,
+  type BoneyardEnemyState,
+  type BoneyardWaveDirectorPhase,
+} from '../core-kernels/boneyard-wave-director.ts'
+import {
   isHubRegionId,
   isHubTransitionEdge,
   type HubParticipantState,
@@ -32,6 +44,8 @@ import type {
 import type {
   GameSnapshot,
   GameSnapshotFrame,
+  BoneyardSolomonSnapshot,
+  BoneyardWaveSnapshot,
   HubWorldSnapshot,
   ProtocolAmbientState,
   ProtocolPlayerState,
@@ -62,6 +76,9 @@ const MAX_BONEYARD_CHOICES = 256
 const MAX_BONEYARD_OBJECTS = 8192
 const MAX_BONEYARD_SPRITES = 16384
 const MAX_BONEYARD_STRUCTURES = 8192
+const MAX_BONEYARD_ENEMIES = 512
+const MAX_BONEYARD_ENEMY_FLAGS = 64
+const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
 const MAX_STUDENT_PROPS = 8
@@ -375,6 +392,12 @@ function finite(value: unknown, field: string): number {
 function positiveFinite(value: unknown, field: string): number {
   const result = finite(value, field)
   if (result <= 0) throw new GameProtocolError(`${field} must be positive`)
+  return result
+}
+
+function nonnegativeFinite(value: unknown, field: string): number {
+  const result = finite(value, field)
+  if (result < 0) throw new GameProtocolError(`${field} must be nonnegative`)
   return result
 }
 
@@ -1160,8 +1183,14 @@ function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world']
   const source = record(value, field)
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
   if (source.kind === 'boneyard') {
-    onlyKeys(source, field, ['gateLeaves', 'kind', 'runId'])
+    onlyKeys(source, field, ['encounter', 'gateLeaves', 'kind', 'runId', 'waves'])
+    const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
+    const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
+    if ((encounter === null) !== (waves === null)) {
+      throw new GameProtocolError(`${field}.encounter and ${field}.waves must share ownership`)
+    }
     return {
+      encounter,
       gateLeaves: limitedArray(
         source.gateLeaves,
         `${field}.gateLeaves`,
@@ -1172,9 +1201,228 @@ function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world']
       )),
       kind: 'boneyard',
       runId: limitedString(source.runId, `${field}.runId`, 128),
+      waves,
     }
   }
   throw new GameProtocolError(`${field}.kind is not supported`)
+}
+
+function boneyardSolomonSnapshot(
+  value: unknown,
+  field: string,
+): BoneyardSolomonSnapshot | null {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'acceleration',
+    'digFrame',
+    'escapeSpeed',
+    'headingDeg',
+    'lifetimeTicksRemaining',
+    'mouthPose',
+    'mouthPoseTicksRemaining',
+    'motion',
+    'phase',
+    'phaseTicksRemaining',
+    'position',
+    'runEventId',
+    'targetPlayerId',
+    'transitionOffsetY',
+    'turnRate',
+    'voiceEvents',
+    'voiceTicksRemaining',
+    'walkCycle',
+  ])
+  const phase = limitedString(source.phase, `${field}.phase`, 32)
+  if (!(BONEYARD_SOLOMON_PHASES as readonly string[]).includes(phase)) {
+    throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  const headingDeg = finite(source.headingDeg, `${field}.headingDeg`)
+  if (headingDeg < 0 || headingDeg > 360) {
+    throw new GameProtocolError(`${field}.headingDeg must be within [0,360]`)
+  }
+  const mouthPose = nonnegativeInteger(source.mouthPose, `${field}.mouthPose`)
+  if (mouthPose >= 3) {
+    throw new GameProtocolError(`${field}.mouthPose must be within [0,3)`)
+  }
+  const digFrame = nonnegativeInteger(source.digFrame, `${field}.digFrame`)
+  if (digFrame >= 18) {
+    throw new GameProtocolError(`${field}.digFrame must be within [0,18)`)
+  }
+  const transitionOffsetY = nonnegativeFinite(
+    source.transitionOffsetY,
+    `${field}.transitionOffsetY`,
+  )
+  if (transitionOffsetY > 15) {
+    throw new GameProtocolError(`${field}.transitionOffsetY must be within [0,15]`)
+  }
+  const turnRate = nonnegativeFinite(source.turnRate, `${field}.turnRate`)
+  if (turnRate > 10) {
+    throw new GameProtocolError(`${field}.turnRate must be within [0,10]`)
+  }
+  const walkCycle = nonnegativeFinite(source.walkCycle, `${field}.walkCycle`)
+  if (walkCycle > 6) {
+    throw new GameProtocolError(`${field}.walkCycle must be within [0,6]`)
+  }
+  let previousVoiceEventId = 0
+  const voiceEvents = limitedArray(
+    source.voiceEvents,
+    `${field}.voiceEvents`,
+    MAX_BONEYARD_VOICE_EVENTS,
+  ).map((event, index) => {
+    const eventField = `${field}.voiceEvents[${index}]`
+    const item = record(event, eventField)
+    onlyKeys(item, eventField, ['cue', 'id'])
+    const cue = limitedString(item.cue, `${eventField}.cue`, 64)
+    if (!(BONEYARD_SOLOMON_VOICE_CUES as readonly string[]).includes(cue)) {
+      throw new GameProtocolError(`${eventField}.cue is not supported`)
+    }
+    const id = positiveInteger(item.id, `${eventField}.id`)
+    if (id <= previousVoiceEventId) {
+      throw new GameProtocolError(`${field}.voiceEvents ids must increase`)
+    }
+    previousVoiceEventId = id
+    return { cue: cue as BoneyardSolomonVoiceCue, id }
+  })
+  return {
+    acceleration: finite(source.acceleration, `${field}.acceleration`),
+    digFrame,
+    escapeSpeed: nonnegativeFinite(source.escapeSpeed, `${field}.escapeSpeed`),
+    headingDeg,
+    lifetimeTicksRemaining: nonnegativeInteger(
+      source.lifetimeTicksRemaining,
+      `${field}.lifetimeTicksRemaining`,
+    ),
+    mouthPose,
+    mouthPoseTicksRemaining: nonnegativeInteger(
+      source.mouthPoseTicksRemaining,
+      `${field}.mouthPoseTicksRemaining`,
+    ),
+    motion: finite(source.motion, `${field}.motion`),
+    phase: phase as BoneyardSolomonPhase,
+    phaseTicksRemaining: nonnegativeInteger(
+      source.phaseTicksRemaining,
+      `${field}.phaseTicksRemaining`,
+    ),
+    position: boneyardPoint(source.position, `${field}.position`),
+    runEventId: nonnegativeInteger(source.runEventId, `${field}.runEventId`),
+    targetPlayerId: source.targetPlayerId === null
+      ? null
+      : validatedPlayerId(source.targetPlayerId, `${field}.targetPlayerId`),
+    transitionOffsetY,
+    turnRate,
+    voiceEvents,
+    voiceTicksRemaining: nonnegativeInteger(
+      source.voiceTicksRemaining,
+      `${field}.voiceTicksRemaining`,
+    ),
+    walkCycle,
+  }
+}
+
+function boneyardWaveSnapshot(
+  value: unknown,
+  field: string,
+): BoneyardWaveSnapshot | null {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'enemies',
+    'interwaveDelayTicks',
+    'pendingSpawnBudget',
+    'phase',
+    'scheduleIndex',
+    'spawnDelayTicks',
+    'waveEventId',
+    'waveOrdinal',
+  ])
+  const phase = limitedString(source.phase, `${field}.phase`, 32)
+  if (!(BONEYARD_WAVE_DIRECTOR_PHASES as readonly string[]).includes(phase)) {
+    throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  const ids = new Set<number>()
+  const enemies = limitedArray(
+    source.enemies,
+    `${field}.enemies`,
+    MAX_BONEYARD_ENEMIES,
+  ).map((enemy, index) => {
+    const enemyField = `${field}.enemies[${index}]`
+    const item = record(enemy, enemyField)
+    onlyKeys(item, enemyField, [
+      'enemyToken',
+      'flags',
+      'headingDeg',
+      'id',
+      'locationPolicy',
+      'nativeTypeId',
+      'position',
+      'spawnTick',
+      'targetPlayerId',
+    ])
+    const enemyToken = limitedString(item.enemyToken, `${enemyField}.enemyToken`, 32)
+    const expectedTypeId = BONEYARD_WAVE_ENEMY_TYPES[
+      enemyToken as keyof typeof BONEYARD_WAVE_ENEMY_TYPES
+    ]
+    if (expectedTypeId === undefined) {
+      throw new GameProtocolError(`${enemyField}.enemyToken is not supported`)
+    }
+    const nativeTypeId = positiveInteger(item.nativeTypeId, `${enemyField}.nativeTypeId`)
+    if (nativeTypeId !== expectedTypeId) {
+      throw new GameProtocolError(`${enemyField}.nativeTypeId does not match enemyToken`)
+    }
+    const id = positiveInteger(item.id, `${enemyField}.id`)
+    if (ids.has(id)) throw new GameProtocolError(`${field}.enemies duplicates id ${id}`)
+    ids.add(id)
+    const headingDeg = finite(item.headingDeg, `${enemyField}.headingDeg`)
+    if (headingDeg < 0 || headingDeg >= 360) {
+      throw new GameProtocolError(`${enemyField}.headingDeg must be within [0,360)`)
+    }
+    if (item.locationPolicy !== 'near-player' && item.locationPolicy !== 'anywhere') {
+      throw new GameProtocolError(`${enemyField}.locationPolicy is not supported`)
+    }
+    const locationPolicy = item.locationPolicy as BoneyardEnemyState['locationPolicy']
+    return {
+      enemyToken: enemyToken as keyof typeof BONEYARD_WAVE_ENEMY_TYPES,
+      flags: limitedArray(
+        item.flags,
+        `${enemyField}.flags`,
+        MAX_BONEYARD_ENEMY_FLAGS,
+      ).map((flag, flagIndex) => limitedString(
+        flag,
+        `${enemyField}.flags[${flagIndex}]`,
+        64,
+      )),
+      headingDeg,
+      id,
+      locationPolicy,
+      nativeTypeId,
+      position: boneyardPoint(item.position, `${enemyField}.position`),
+      spawnTick: nonnegativeInteger(item.spawnTick, `${enemyField}.spawnTick`),
+      targetPlayerId: validatedPlayerId(
+        item.targetPlayerId,
+        `${enemyField}.targetPlayerId`,
+      ),
+    }
+  })
+  return {
+    enemies,
+    interwaveDelayTicks: nonnegativeInteger(
+      source.interwaveDelayTicks,
+      `${field}.interwaveDelayTicks`,
+    ),
+    pendingSpawnBudget: nonnegativeInteger(
+      source.pendingSpawnBudget,
+      `${field}.pendingSpawnBudget`,
+    ),
+    phase: phase as BoneyardWaveDirectorPhase,
+    scheduleIndex: nonnegativeInteger(source.scheduleIndex, `${field}.scheduleIndex`),
+    spawnDelayTicks: nonnegativeInteger(
+      source.spawnDelayTicks,
+      `${field}.spawnDelayTicks`,
+    ),
+    waveEventId: nonnegativeInteger(source.waveEventId, `${field}.waveEventId`),
+    waveOrdinal: nonnegativeInteger(source.waveOrdinal, `${field}.waveOrdinal`),
+  }
 }
 
 function gameWorldSnapshotFrame(

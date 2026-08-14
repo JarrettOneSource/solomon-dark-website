@@ -1,5 +1,6 @@
 import { Texture } from 'pixi.js'
 
+import solomonEncounterSource from '../../assets/game/anim-solomon-encounter.png'
 import { spriteRefFor } from '../../editor/assets.ts'
 import { liftedSpriteSource } from '../../editor/lifted-sprite.ts'
 import { boneyard } from '../../lib/assets.ts'
@@ -11,6 +12,7 @@ import {
 import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
+  gridFrames,
   playerWorldAssetSources,
   stripFrames,
   type PlayerWorldTextures,
@@ -23,7 +25,11 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   graveDirt: Texture
   lantern: Texture
   regionLightGlyph: Texture
+  solomonDialogueBody: readonly Texture[]
+  solomonDialogueMouth: readonly (readonly Texture[])[]
   solomonDig: readonly Texture[]
+  solomonShadow: Texture
+  solomonWalk: readonly (readonly Texture[])[]
 }
 
 export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures> {
@@ -37,9 +43,14 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     return ref ? [ref.src] : []
   })
   fenceSources.push(regionLightRef.src)
+  const solomonShadowSource = spriteRefFor('DeadHawg', 13)?.src
+  if (!solomonShadowSource) {
+    throw new Error('Boneyard DeadHawg record 13 is unavailable.')
+  }
   const liftedSourceSet = new Set([
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
+    solomonShadowSource,
   ])
   const sources = [...new Set([
     ...playerWorldAssetSources(),
@@ -48,6 +59,8 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.graveDirt,
     boneyard.lantern,
     boneyard.solomonDig,
+    solomonEncounterSource,
+    solomonShadowSource,
   ])]
   let images: readonly (readonly [string, HTMLImageElement])[]
   try {
@@ -80,6 +93,13 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     if (!result) throw new Error(`Boneyard texture was not loaded: ${source}`)
     return result
   }
+  const solomonEncounter = gridFrames(
+    texture(solomonEncounterSource),
+    15,
+    10,
+    200,
+    200,
+  )
 
   return {
     ...createPlayerWorldTextures(texture),
@@ -88,12 +108,24 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     graveDirt: texture(boneyard.graveDirt),
     lantern: texture(boneyard.lantern),
     regionLightGlyph: texture(regionLightRef.src),
+    solomonDialogueBody: solomonEncounter[0],
+    solomonDialogueMouth: solomonEncounter.slice(1, 4),
     solomonDig: stripFrames(texture(boneyard.solomonDig), 18, 200, 200, 'horizontal'),
+    solomonShadow: texture(solomonShadowSource),
+    solomonWalk: solomonEncounter.slice(4, 10),
   }
 }
 
 export function destroyBoneyardWorldTextures(textures: BoneyardWorldTextures): void {
   destroyPlayerWorldTextureFrames(textures)
-  for (const frame of textures.solomonDig) frame.destroy(false)
+  const derived = new Set<Texture>(textures.solomonDig)
+  textures.solomonDialogueBody.forEach((frame) => derived.add(frame))
+  textures.solomonDialogueMouth.forEach((row) => (
+    row.forEach((frame) => derived.add(frame))
+  ))
+  textures.solomonWalk.forEach((row) => (
+    row.forEach((frame) => derived.add(frame))
+  ))
+  for (const frame of derived) frame.destroy(false)
   for (const texture of Object.values(textures.base)) texture.destroy(true)
 }

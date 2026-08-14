@@ -37,6 +37,12 @@ const SOURCES = {
   streams: {
     'catch-it': 'catch.wav',
     'choose-element': 'choose.wav',
+    'solomon-get-him-boys': 'get-him-boys.wav',
+    'solomon-hello-1': 'hello-1.wav',
+    'solomon-hello-2': 'hello-2.wav',
+    'solomon-hello-3': 'hello-3.wav',
+    'solomon-hello-4': 'hello-4.wav',
+    'solomon-laugh-1': 'laugh-1.wav',
     'start-cast': 'start.wav',
   },
 } as const satisfies GameAudioSources
