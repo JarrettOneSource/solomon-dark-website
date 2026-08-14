@@ -39,7 +39,6 @@ export default function GameFullscreenButton() {
         aria-label={active ? 'Exit fullscreen' : 'Enter fullscreen'}
         aria-pressed={active}
         data-game-fullscreen
-        data-game-menu-navigation="ignore"
         onClick={() => { void toggle() }}
         title={active ? 'Exit fullscreen' : 'Enter fullscreen'}
       >
