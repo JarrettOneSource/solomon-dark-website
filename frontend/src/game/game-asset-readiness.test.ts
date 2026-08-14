@@ -2,7 +2,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import { collectAssetSources, loadAssetBatch } from './game-asset-readiness.ts'
+import {
+  assetDisplayName,
+  collectAssetSources,
+  loadAssetBatch,
+  loadAssetBatches,
+  type AssetProgress,
+} from './game-asset-readiness.ts'
 
 const GAME_ASSET_ROOT = new URL('../assets/game/', import.meta.url)
 
@@ -21,20 +27,67 @@ test('collects a stable unique manifest from nested asset groups', () => {
 
 test('reports actual task completions and resolves only after every asset', async () => {
   const releases = new Map<string, () => void>()
-  const progress: Array<readonly [number, number]> = []
+  const progress: AssetProgress[] = []
   const loading = loadAssetBatch(
     ['one', 'two', 'one'],
     (source) => new Promise<void>((resolve) => releases.set(source, resolve)),
-    ({ completed, total }) => progress.push([completed, total]),
+    (next) => progress.push(next),
   )
 
-  assert.deepEqual(progress, [[0, 2]])
+  assert.deepEqual(progress, [{ activeSource: 'one', completed: 0, total: 2 }])
   releases.get('two')?.()
   await Promise.resolve()
-  assert.deepEqual(progress, [[0, 2], [1, 2]])
+  assert.deepEqual(progress, [
+    { activeSource: 'one', completed: 0, total: 2 },
+    { activeSource: 'one', completed: 1, total: 2 },
+  ])
   releases.get('one')?.()
   await loading
-  assert.deepEqual(progress, [[0, 2], [1, 2], [2, 2]])
+  assert.deepEqual(progress, [
+    { activeSource: 'one', completed: 0, total: 2 },
+    { activeSource: 'one', completed: 1, total: 2 },
+    { activeSource: null, completed: 2, total: 2 },
+  ])
+})
+
+test('composes staged batches into one de-duplicated monotonic total', async () => {
+  const loaded: string[] = []
+  const progress: Array<AssetProgress & { stage: 'loader' | 'resident' }> = []
+
+  await loadAssetBatches([
+    {
+      load: async (source) => { loaded.push(source) },
+      sources: ['loader-logo', 'shared'],
+      stage: 'loader' as const,
+    },
+    {
+      load: async (source) => { loaded.push(source) },
+      sources: ['shared', 'title-art'],
+      stage: 'resident' as const,
+    },
+  ], (next) => progress.push(next))
+
+  assert.deepEqual(loaded, ['loader-logo', 'shared', 'title-art'])
+  assert.equal(progress[0]?.completed, 0)
+  assert.equal(progress[0]?.total, 3)
+  assert.equal(progress.at(-1)?.completed, 3)
+  assert.equal(progress.at(-1)?.total, 3)
+  assert.ok(progress.some(({ completed, stage }) => stage === 'resident' && completed === 2))
+  assert.ok(progress.every((next, index) => (
+    index === 0 || next.completed >= progress[index - 1].completed
+  )))
+})
+
+test('formats readable asset names without Vite transport noise', () => {
+  assert.equal(
+    assetDisplayName('/src/assets/game/hub-courtyard.png?t=1786712400'),
+    'hub-courtyard.png',
+  )
+  assert.equal(
+    assetDisplayName('/assets/hub-courtyard-DhFEGPzz.png'),
+    'hub-courtyard.png',
+  )
+  assert.equal(assetDisplayName('/assets/011-a1B2c3D4.png'), '011.png')
 })
 
 test('keeps recovered Hub parity art at its native registrations', () => {

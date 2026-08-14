@@ -10,6 +10,7 @@ import {
   LOADER_RENDER_HEIGHT,
   LOADER_RENDER_WIDTH,
   loaderFillWidth,
+  loaderProgressPercent,
 } from './loader-render-contract.ts'
 
 test('loader retains the native virtual canvas and authored registrations', () => {
@@ -28,4 +29,12 @@ test('loader clips the native fill from zero through its complete width', () => 
   assert.equal(loaderFillWidth(0.25), 48)
   assert.equal(loaderFillWidth(1), 192)
   assert.equal(loaderFillWidth(2), 192)
+})
+
+test('loader reserves one hundred percent for actual completion', () => {
+  assert.equal(loaderProgressPercent(Number.NaN), 0)
+  assert.equal(loaderProgressPercent(0.009), 0)
+  assert.equal(loaderProgressPercent(634 / 635), 99)
+  assert.equal(loaderProgressPercent(1), 100)
+  assert.equal(loaderProgressPercent(2), 100)
 })

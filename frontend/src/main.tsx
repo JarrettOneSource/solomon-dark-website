@@ -69,7 +69,7 @@ const router = createBrowserRouter([
       {
         path: '/game',
         element: (
-          <Suspense fallback={<NativeLoader progress={0} />}>
+          <Suspense fallback={<NativeLoader progress={0} stage="Loading game code" />}>
             <Game />
           </Suspense>
         ),

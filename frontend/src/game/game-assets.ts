@@ -15,15 +15,21 @@ import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import {
   collectAssetSources,
   loadAssetBatch,
+  loadAssetBatches,
   type AssetProgress,
+  type StagedAssetProgress,
 } from './game-asset-readiness.ts'
 
 export const LOADER_ASSET_SOURCES = collectAssetSources(loader)
 
-export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
+const BONEYARD_RESIDENT_IMAGE_SOURCES = collectAssetSources({
   boneyard,
-  boneyardSprites: BONEYARD_SPRITE_SOURCES,
-  boneyardTextures: STAGE_TEXTURES,
+  sprites: BONEYARD_SPRITE_SOURCES,
+  textures: STAGE_TEXTURES,
+})
+
+export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
+  boneyard: BONEYARD_RESIDENT_IMAGE_SOURCES,
   createMenu,
   elementVfx,
   hub,
@@ -40,6 +46,23 @@ export const GAME_RESIDENT_ASSET_SOURCES = [
 const imagePromises = new Map<string, Promise<HTMLImageElement>>()
 const audioPromises = new Map<string, Promise<HTMLAudioElement>>()
 const audioSources = new Set(GAME_RESIDENT_AUDIO_SOURCES)
+const boneyardSources = new Set(BONEYARD_RESIDENT_IMAGE_SOURCES)
+
+export type GameStartupStage = 'loader' | 'resident'
+export type GameStartupProgress = StagedAssetProgress<GameStartupStage>
+
+export function initialGameStartupProgress(): GameStartupProgress {
+  const allSources = new Set([
+    ...LOADER_ASSET_SOURCES,
+    ...GAME_RESIDENT_ASSET_SOURCES,
+  ])
+  return {
+    activeSource: LOADER_ASSET_SOURCES[0] ?? GAME_RESIDENT_ASSET_SOURCES[0] ?? null,
+    completed: 0,
+    stage: LOADER_ASSET_SOURCES.length > 0 ? 'loader' : 'resident',
+    total: allSources.size,
+  }
+}
 
 export function loadGameImage(source: string): Promise<HTMLImageElement> {
   const cached = imagePromises.get(source)
@@ -62,10 +85,6 @@ export function loadGameImage(source: string): Promise<HTMLImageElement> {
   })
   imagePromises.set(source, promise)
   return promise
-}
-
-export function loadLoaderAssets(): Promise<void> {
-  return Promise.all(LOADER_ASSET_SOURCES.map(loadGameImage)).then(() => undefined)
 }
 
 export function loadGameAudio(source: string): Promise<HTMLAudioElement> {
@@ -95,14 +114,29 @@ export function loadGameAudio(source: string): Promise<HTMLAudioElement> {
   return promise
 }
 
-export function loadResidentGameAssets(
-  onProgress: (progress: AssetProgress) => void,
+export function loadGameStartupAssets(
+  onProgress: (progress: GameStartupProgress) => void,
 ): Promise<void> {
-  return loadAssetBatch(
-    GAME_RESIDENT_ASSET_SOURCES,
-    (source) => audioSources.has(source) ? loadGameAudio(source) : loadGameImage(source),
-    onProgress,
-  )
+  return loadAssetBatches<GameStartupStage>([
+    {
+      load: loadGameImage,
+      sources: LOADER_ASSET_SOURCES,
+      stage: 'loader',
+    },
+    {
+      load: (source) => audioSources.has(source) ? loadGameAudio(source) : loadGameImage(source),
+      sources: GAME_RESIDENT_ASSET_SOURCES,
+      stage: 'resident',
+    },
+  ], onProgress)
+}
+
+export function gameStartupStageLabel(progress: GameStartupProgress): string {
+  if (!progress.activeSource) return 'Finishing startup'
+  if (progress.stage === 'loader') return 'Preparing loading screen'
+  if (audioSources.has(progress.activeSource)) return 'Loading game audio'
+  if (boneyardSources.has(progress.activeSource)) return 'Loading Boneyard artwork'
+  return 'Loading game artwork'
 }
 
 export function hubGameAssetSources(element: WizardElement): string[] {

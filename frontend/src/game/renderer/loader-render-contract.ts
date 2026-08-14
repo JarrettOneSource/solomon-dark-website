@@ -14,3 +14,8 @@ export function loaderFillWidth(progress: number): number {
   const bounded = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0
   return bounded * LOADER_FILL_CLIP.width
 }
+
+export function loaderProgressPercent(progress: number): number {
+  const bounded = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0
+  return bounded === 1 ? 100 : Math.floor(bounded * 100)
+}

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { loadLoaderAssets, loadResidentGameAssets } from '../game/game-assets'
+import {
+  gameStartupStageLabel,
+  initialGameStartupProgress,
+  loadGameStartupAssets,
+} from '../game/game-assets'
+import { assetDisplayName } from '../game/game-asset-readiness.ts'
 import { bootGame, type GameEndpoint, type GameSession } from '../game/engine.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import {
@@ -15,7 +20,7 @@ import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
 import { useAuth } from '../lib/auth'
 
-type Readiness = 'loader' | 'assets' | 'ready'
+type Readiness = 'loading' | 'ready'
 
 export default function Game() {
   const { user } = useAuth()
@@ -25,8 +30,8 @@ export default function Game() {
   const lobbyId = parseGameLobbyId(requestedParty)
   const hostedLobby = useRef<CreatedGameLobby | null>(null)
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
-  const [readiness, setReadiness] = useState<Readiness>('loader')
-  const [progress, setProgress] = useState(0)
+  const [readiness, setReadiness] = useState<Readiness>('loading')
+  const [loadProgress, setLoadProgress] = useState(initialGameStartupProgress)
   const [fatal, setFatal] = useState<string | null>(null)
 
   useEffect(() => {
@@ -49,24 +54,24 @@ export default function Game() {
 
   useEffect(() => {
     let cancelled = false
-    void loadLoaderAssets().then(() => {
-      if (!cancelled) setReadiness('assets')
+    void loadGameStartupAssets((progress) => {
+      if (!cancelled) setLoadProgress(progress)
+    }).then(() => {
+      if (!cancelled) setReadiness('ready')
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setFatal(error instanceof Error
+          ? error.message
+          : 'The game files could not be loaded.')
+      }
     })
     return () => { cancelled = true }
   }, [])
 
-  useEffect(() => {
-    if (readiness !== 'assets') return
-    let cancelled = false
-    void loadResidentGameAssets(({ completed, total }) => {
-      if (!cancelled) setProgress(total === 0 ? 1 : completed / total)
-    }).then(() => {
-      if (!cancelled) setReadiness('ready')
-    })
-    return () => { cancelled = true }
-  }, [readiness])
-
   const displayName = user?.username ?? 'Helvidius'
+  const progress = loadProgress.total === 0
+    ? 1
+    : loadProgress.completed / loadProgress.total
 
   const prepareNewGame = useCallback(async (): Promise<void> => {
     if (preparedEndpoint.current) return
@@ -128,7 +133,17 @@ export default function Game() {
               prepareNewGame={prepareNewGame}
             />
           )
-        : <NativeLoader progress={progress} />}
+        : (
+            <NativeLoader
+              completed={loadProgress.completed}
+              currentItem={loadProgress.activeSource
+                ? assetDisplayName(loadProgress.activeSource)
+                : null}
+              progress={progress}
+              stage={gameStartupStageLabel(loadProgress)}
+              total={loadProgress.total}
+            />
+          )}
       <div className="game-orientation-hint" role="status">
         Rotate your device to landscape to enter the College.
       </div>
