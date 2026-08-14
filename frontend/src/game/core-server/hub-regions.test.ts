@@ -13,6 +13,7 @@ import {
   hubIncomingPlacement,
   hubPortalAt,
   isHubRegionTraversable,
+  moveWithHubRegionCollisionState,
   type HubParticipantState,
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
@@ -155,15 +156,21 @@ test('portal contact includes the native circle boundary without weakening wall 
   assert.equal(hubPortalAt('courtyard', boundary)?.destination, 'office')
 })
 
-test('locks every recovered private-room contour endpoint and authored order', () => {
+test('materializes every recovered private-room contour in native Region world space', () => {
   const expected = {
-    mortuary: [11, '7fca8ac16cd543f9099373fab2fefe8a81172255b034ed7e7c971b3ccfc5924c'],
-    storeroom: [34, '9dca83231104a899de808ea47deace85406cc208ee29af40c85ab5a2011574bc'],
-    library: [27, '7a85b75585c2d9664c237e7fc0d9b077c4071cc7dfe0c7f5d3942f1a3de7314c'],
-    office: [48, '5d80a995a13f246694cb7b640b82be45ce21a02da05489667922dd29335388d5'],
+    mortuary: [11, { x: 27, y: 57 }, 'fb65d761226e4e4d50a975a0b13d97da139b280f8136b1c7bdb48a4bc6953cde'],
+    storeroom: [34, { x: 0, y: 72.5 }, 'e40b8e2c1d21de36cb1d396f43721f2446ff13454d352391e8199e611be16f64'],
+    library: [27, { x: 16, y: 102.5 }, '65737c733d0a1542b9e8167bcaf77be663d9ce27243ac1e412251b5ee256293d'],
+    office: [48, { x: 102.5, y: 102.5 }, '03d34eceef915814d1f8f76b33bf2b36acc43aac7a3daf21ffa9286270524f7d'],
   } as const
 
-  for (const [region, [count, digest]] of Object.entries(expected)) {
+  for (const [region, [count, tableToWorldOffset, digest]] of Object.entries(expected)) {
+    assert.deepEqual(
+      HUB_PRIVATE_ROOM_LAYOUTS[region as keyof typeof HUB_PRIVATE_ROOM_LAYOUTS]
+        .architecture.collider.tableToWorldOffset,
+      tableToWorldOffset,
+      region,
+    )
     const segments = HUB_REGION_DEFINITIONS[region as HubRegionId].segments
     assert.equal(segments.length, count, region)
     assert.equal(
@@ -175,6 +182,38 @@ test('locks every recovered private-room contour endpoint and authored order', (
       assert.equal(isHubRegionTraversable(region as HubRegionId, midpoint(segment)), false, region)
     }
   }
+
+  assert.deepEqual(HUB_REGION_DEFINITIONS.office.segments[0], {
+    x1: 600.5,
+    y1: 972.5,
+    x2: 598.5,
+    y2: 921.5,
+  })
+  assert.deepEqual(HUB_REGION_DEFINITIONS.office.segments[38], {
+    x1: 450.5,
+    y1: 741.5,
+    x2: 589.5,
+    y2: 741.5,
+  })
+  assert.deepEqual(HUB_REGION_DEFINITIONS.office.segments[47], {
+    x1: 416.5,
+    y1: 733.5,
+    x2: 451.5,
+    y2: 741.5,
+  })
+})
+
+test('Office movement stops at the registered inner contour, not its raw table Y', () => {
+  const result = moveWithHubRegionCollisionState(
+    'office',
+    { x: 512, y: 874 },
+    { x: 0, y: -200 },
+    PLAYER_CHARACTER_RADIUS,
+    0x51a7c011,
+  )
+
+  assert.equal(result.position.x, 512)
+  assert.equal(result.position.y, 766.6)
 })
 
 test('locks recovered fixed collision bodies in every private room', () => {

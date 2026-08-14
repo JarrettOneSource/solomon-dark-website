@@ -100,12 +100,17 @@ try {
     assert.equal(await scene.getAttribute('data-hub-region'), room.region)
     assert.match(await scene.getAttribute('aria-label') || '', new RegExp(room.region, 'i'))
 
+    const collision = room.region === 'office'
+      ? await verifyOfficeInnerContour(page, canvas)
+      : null
+
     const returned = await holdUntilTransition(page, canvas, ['s'], 'courtyard')
     await waitForSettledRegion(page, canvas, 'courtyard')
     process.stdout.write(`Returned from ${room.region}.\n`)
     receipts.push({
       entered,
       entryScreenshotPath: entryPath,
+      ...(collision ? { collision } : {}),
       region: room.region,
       roomPosition,
       routeWaypoints,
@@ -166,6 +171,69 @@ async function playerPosition(canvas) {
     x: node.__sdrHubFrame.playerX,
     y: node.__sdrHubFrame.playerY,
   }))
+}
+
+async function verifyOfficeInnerContour(page, canvas) {
+  const start = await playerPosition(canvas)
+  assert.equal(await canvas.getAttribute('data-hub-region'), 'office')
+  const enteredAtInnerContour = distance(start, { x: 512, y: 766.6 }) < 0.15
+  assert.ok(
+    enteredAtInnerContour || distance(start, { x: 512, y: 874 }) < 1,
+    JSON.stringify(start),
+  )
+
+  const deadline = Date.now() + 5_000
+  let last = start
+  let stableSince = null
+  let sampleCount = 0
+  let minimumY = start.y
+  try {
+    await page.keyboard.down('w')
+    while (Date.now() < deadline) {
+      const current = await playerPosition(canvas)
+      sampleCount += 1
+      minimumY = Math.min(minimumY, current.y)
+      if (current.y < 800 && distance(current, last) < 0.01) {
+        stableSince ??= Date.now()
+        if (Date.now() - stableSince >= 500) break
+      } else {
+        stableSince = null
+      }
+      last = current
+      await page.waitForTimeout(25)
+    }
+  } finally {
+    await page.keyboard.up('w')
+  }
+
+  await page.waitForTimeout(350)
+  const stopped = await playerPosition(canvas)
+  assert.equal(await canvas.getAttribute('data-hub-region'), 'office')
+  assert.ok(stableSince, `Office player did not settle at the inner contour: ${JSON.stringify(stopped)}`)
+  assert.ok(Math.abs(stopped.x - 512) < 0.01, JSON.stringify(stopped))
+  assert.ok(
+    Math.abs(stopped.y - 766.6) < 0.15,
+    `expected native Office stop y=766.6, got ${stopped.y}`,
+  )
+  assert.ok(
+    enteredAtInnerContour
+      ? distance(start, stopped) < 0.15
+      : start.y - stopped.y > 100,
+    JSON.stringify({ start, stopped }),
+  )
+
+  const screenshotPath = `${screenshotRoot}-office-collision.png`
+  await page.screenshot({ path: screenshotPath })
+  process.stdout.write(`Office inner contour stopped at ${JSON.stringify(stopped)}.\n`)
+  return {
+    enteredAtInnerContour,
+    minimumY,
+    nativeSegment: { x1: 450.5, x2: 589.5, y: 741.5 },
+    sampleCount,
+    screenshotPath,
+    start,
+    stopped,
+  }
 }
 
 function planCourtyardRoute(start, target, portalClearance) {
@@ -387,12 +455,14 @@ async function holdUntilTransition(page, canvas, keys, destination) {
         alpha: Number(node.dataset.transitionAlpha),
         phase: node.dataset.transitionPhase,
         region: node.dataset.hubRegion,
+        x: node.__sdrHubFrame.playerX,
+        y: node.__sdrHubFrame.playerY,
       }))
       samples.push(sample)
       const observedFade = samples.some(({ alpha, phase }) => (
         phase === 'outgoing' && alpha > 0 && alpha < 1
       ))
-      if (sample.phase === 'outgoing' && observedFade) {
+      if ((sample.phase === 'outgoing' && observedFade) || sample.region === destination) {
         return {
           destination,
           observedFade,
@@ -401,7 +471,12 @@ async function holdUntilTransition(page, canvas, keys, destination) {
       }
       await page.waitForTimeout(25)
     }
-    throw new Error(`portal input did not start transition to ${destination}`)
+    throw new Error(
+      `portal input did not start transition to ${destination}: ${JSON.stringify({
+        first: samples[0],
+        last: samples.at(-1),
+      })}`,
+    )
   } finally {
     await syncKeys(page, pressed, [])
   }

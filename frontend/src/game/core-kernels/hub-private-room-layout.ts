@@ -30,6 +30,7 @@ export interface HubRoomArchitectureDefinition {
   collider: {
     kind: 'segments'
     segments: readonly HubSegment[]
+    tableToWorldOffset: Vector2
   }
   visual: {
     asset: HubPrivateRoomAsset
@@ -228,14 +229,25 @@ const MORTUARY_PAINTINGS = [
   { marker: true, portraitId: 9, x: 670, y: 400 },
 ] as const
 
+const MORTUARY_TABLE_TO_WORLD_OFFSET = { x: 27, y: 57 } as const
+const STOREROOM_TABLE_TO_WORLD_OFFSET = { x: 0, y: 72.5 } as const
+const LIBRARY_TABLE_TO_WORLD_OFFSET = { x: 16, y: 102.5 } as const
+const OFFICE_TABLE_TO_WORLD_OFFSET = { x: 102.5, y: 102.5 } as const
+
 function circle(x: number, y: number, radius: number): HubRoomCircleCollider {
   return { kind: 'circle', position: { x, y }, radius }
 }
 
 function segments(
   values: readonly (readonly [number, number, number, number])[],
+  tableToWorldOffset: Vector2,
 ): readonly HubSegment[] {
-  return values.map(([x1, y1, x2, y2]) => ({ x1, y1, x2, y2 }))
+  return values.map(([x1, y1, x2, y2]) => ({
+    x1: x1 + tableToWorldOffset.x,
+    y1: y1 + tableToWorldOffset.y,
+    x2: x2 + tableToWorldOffset.x,
+    y2: y2 + tableToWorldOffset.y,
+  }))
 }
 
 /**
@@ -256,7 +268,11 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       },
     },
     architecture: {
-      collider: { kind: 'segments', segments: segments(MORTUARY_SEGMENT_COORDINATES) },
+      collider: {
+        kind: 'segments',
+        segments: segments(MORTUARY_SEGMENT_COORDINATES, MORTUARY_TABLE_TO_WORLD_OFFSET),
+        tableToWorldOffset: MORTUARY_TABLE_TO_WORLD_OFFSET,
+      },
       visual: { asset: 'mortuary-background', kind: 'background' },
     },
     height: 1024,
@@ -296,7 +312,11 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       },
     },
     architecture: {
-      collider: { kind: 'segments', segments: segments(LIBRARY_SEGMENT_COORDINATES) },
+      collider: {
+        kind: 'segments',
+        segments: segments(LIBRARY_SEGMENT_COORDINATES, LIBRARY_TABLE_TO_WORLD_OFFSET),
+        tableToWorldOffset: LIBRARY_TABLE_TO_WORLD_OFFSET,
+      },
       visual: { asset: 'library-background', kind: 'background' },
     },
     height: 1024,
@@ -336,7 +356,11 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
   storeroom: {
     actors: {},
     architecture: {
-      collider: { kind: 'segments', segments: segments(STOREROOM_SEGMENT_COORDINATES) },
+      collider: {
+        kind: 'segments',
+        segments: segments(STOREROOM_SEGMENT_COORDINATES, STOREROOM_TABLE_TO_WORLD_OFFSET),
+        tableToWorldOffset: STOREROOM_TABLE_TO_WORLD_OFFSET,
+      },
       visual: { asset: 'storeroom-background', kind: 'background' },
     },
     height: 800,
@@ -379,7 +403,11 @@ export const HUB_PRIVATE_ROOM_LAYOUTS = {
       },
     },
     architecture: {
-      collider: { kind: 'segments', segments: segments(OFFICE_SEGMENT_COORDINATES) },
+      collider: {
+        kind: 'segments',
+        segments: segments(OFFICE_SEGMENT_COORDINATES, OFFICE_TABLE_TO_WORLD_OFFSET),
+        tableToWorldOffset: OFFICE_TABLE_TO_WORLD_OFFSET,
+      },
       visual: { asset: 'office-background', kind: 'background' },
     },
     height: 1024,
