@@ -256,9 +256,12 @@ export default function HubScene({
         <GameHud
           element={element}
           getPingMs={getPingMs}
+          initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"
           onMapClick={beginMatch}
+          playerId={playerId}
           subscribePing={subscribePing}
+          subscribeSnapshot={subscribe}
         />
 
         {pickerOpen && isHost && (

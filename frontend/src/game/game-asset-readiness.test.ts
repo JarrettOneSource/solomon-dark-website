@@ -102,6 +102,8 @@ test('keeps recovered Hub parity art at its native registrations', () => {
     'hub-astronomer-telescope.png': [1870, 292],
     'hub-courtyard-foreground.png': [2000, 1024],
     'hub-hud-inventory-digits.png': [80, 14],
+    'hub-hud-font-atlas.png': [512, 256],
+    'hub-hud-golem.png': [37, 7],
     'hub-hud-map-compass.png': [121, 118],
     'hub-hud-map-play.png': [121, 118],
     'hub-hud-mouse-right.png': [22, 31],

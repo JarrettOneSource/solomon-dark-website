@@ -106,6 +106,8 @@ import hubTentShadow from '../assets/game/hub-tent-shadow.png'
 import hubHudBackpack from '../assets/game/hub-hud-backpack.png'
 import hubHudBarBlue from '../assets/game/hub-hud-bar-blue.png'
 import hubHudBarRed from '../assets/game/hub-hud-bar-red.png'
+import hubHudFontAtlas from '../assets/game/hub-hud-font-atlas.png'
+import hubHudGolem from '../assets/game/hub-hud-golem.png'
 import hubHudHelp from '../assets/game/hub-hud-help.png'
 import hubHudInventoryDigits from '../assets/game/hub-hud-inventory-digits.png'
 import hubHudMapCompass from '../assets/game/hub-hud-map-compass.png'
@@ -606,6 +608,8 @@ export const hub = {
     backpack: hubHudBackpack,
     barBlue: hubHudBarBlue,
     barRed: hubHudBarRed,
+    fontAtlas: hubHudFontAtlas,
+    golem: hubHudGolem,
     help: hubHudHelp,
     inventoryDigits: hubHudInventoryDigits,
     mapCompass: hubHudMapCompass,

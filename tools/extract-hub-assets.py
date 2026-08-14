@@ -11,7 +11,9 @@ not the Solomon[95:185] DriveBy encounter actor.
 from __future__ import annotations
 
 import argparse
+import json
 import math
+import shutil
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -102,6 +104,23 @@ class SpriteRecord:
     end: int
 
 
+@dataclass(frozen=True)
+class FontGlyph:
+    glyph_id: int
+    record_index: int
+    advance: float
+    offset_x: float
+    offset_y: float
+    sprite: SpriteRecord
+
+
+@dataclass(frozen=True)
+class FontGroup:
+    header: tuple[float, float, float]
+    kerning: dict[str, float]
+    glyphs: dict[str, FontGlyph]
+
+
 def integral(value: float, label: str) -> int:
     rounded = round(value)
     if not math.isclose(value, rounded):
@@ -109,41 +128,120 @@ def integral(value: float, label: str) -> int:
     return rounded
 
 
+def parse_sprite_record(data: bytes, offset: int, label: str) -> SpriteRecord:
+    x, y, width, height = struct.unpack_from("<4f", data, offset)
+    logical_width, logical_height = struct.unpack_from("<iI", data, offset + 0x10)
+    content_width, content_height = struct.unpack_from("<2f", data, offset + 0x18)
+    center_x, center_y = struct.unpack_from("<2f", data, offset + 0x20)
+    rotated = data[offset + 0x28]
+    point_count = struct.unpack_from("<I", data, offset + 0x29)[0]
+    points = tuple(
+        struct.unpack_from("<2f", data, offset + 45 + point_index * 8)
+        for point_index in range(point_count)
+    )
+    if rotated != 0:
+        raise ValueError(f"rotated record in {label} is unsupported")
+    if not math.isclose(content_width, width) or not math.isclose(content_height, height):
+        raise ValueError(f"record in {label} has mismatched content bounds")
+    return SpriteRecord(
+        x=integral(x, "atlas x"),
+        y=integral(y, "atlas y"),
+        width=integral(width, "atlas width"),
+        height=integral(height, "atlas height"),
+        logical_width=logical_width,
+        logical_height=logical_height,
+        center_x=center_x,
+        center_y=center_y,
+        points=points,
+        end=offset + 45 + point_count * 8,
+    )
+
+
 def parse_bundle(path: Path) -> list[SpriteRecord]:
     data = path.read_bytes()
     records: list[SpriteRecord] = []
     offset = 0
     while offset < len(data):
-        x, y, width, height = struct.unpack_from("<4f", data, offset)
-        logical_width, logical_height = struct.unpack_from("<iI", data, offset + 0x10)
-        content_width, content_height = struct.unpack_from("<2f", data, offset + 0x18)
-        center_x, center_y = struct.unpack_from("<2f", data, offset + 0x20)
-        rotated = data[offset + 0x28]
-        point_count = struct.unpack_from("<I", data, offset + 0x29)[0]
-        points = tuple(
-            struct.unpack_from("<2f", data, offset + 45 + point_index * 8)
-            for point_index in range(point_count)
-        )
-        if rotated != 0:
-            raise ValueError(f"rotated record {len(records)} in {path.name} is unsupported")
-        if not math.isclose(content_width, width) or not math.isclose(content_height, height):
-            raise ValueError(f"record {len(records)} in {path.name} has mismatched content bounds")
-        records.append(
-            SpriteRecord(
-                x=integral(x, "atlas x"),
-                y=integral(y, "atlas y"),
-                width=integral(width, "atlas width"),
-                height=integral(height, "atlas height"),
-                logical_width=logical_width,
-                logical_height=logical_height,
-                center_x=center_x,
-                center_y=center_y,
-                points=points,
-                end=offset + 45 + point_count * 8,
-            )
-        )
-        offset = records[-1].end
+        record = parse_sprite_record(data, offset, path.name)
+        records.append(record)
+        offset = record.end
     return records
+
+
+def parse_font_groups(path: Path) -> list[FontGroup]:
+    data = path.read_bytes()
+    direct_record = parse_sprite_record(data, 0, path.name)
+    offset = direct_record.end
+    record_index = 1
+    groups: list[FontGroup] = []
+
+    while offset < len(data):
+        header = struct.unpack_from("<3f", data, offset)
+        offset += 12
+        kerning: dict[str, float] = {}
+        while True:
+            left, right = struct.unpack_from("<HH", data, offset)
+            offset += 4
+            if left == 0 and right == 0:
+                break
+            adjustment = struct.unpack_from("<f", data, offset)[0]
+            offset += 4
+            kerning[f"{left}:{right}"] = adjustment
+
+        glyphs: dict[str, FontGlyph] = {}
+        while True:
+            glyph_id = struct.unpack_from("<H", data, offset)[0]
+            offset += 2
+            if glyph_id == 0:
+                break
+            advance, offset_x, offset_y = struct.unpack_from("<3f", data, offset)
+            offset += 12
+            sprite = parse_sprite_record(data, offset, path.name)
+            glyphs[chr(glyph_id)] = FontGlyph(
+                glyph_id=glyph_id,
+                record_index=record_index,
+                advance=advance,
+                offset_x=offset_x,
+                offset_y=offset_y,
+                sprite=sprite,
+            )
+            record_index += 1
+            offset = sprite.end
+
+        groups.append(FontGroup(header=header, kerning=kerning, glyphs=glyphs))
+
+    return groups
+
+
+def write_ally_font_data(group: FontGroup, output_dir: Path) -> None:
+    data = {
+        "atlasHeight": 256,
+        "atlasWidth": 512,
+        "glyphCount": len(group.glyphs),
+        "group": 6,
+        "header": list(group.header),
+        "kerning": group.kerning,
+        "kerningCount": len(group.kerning),
+        "scale": 0.25,
+        "glyphs": {
+            char: {
+                "advance": glyph.advance,
+                "atlasHeight": glyph.sprite.height,
+                "atlasWidth": glyph.sprite.width,
+                "atlasX": glyph.sprite.x,
+                "atlasY": glyph.sprite.y,
+                "centerX": glyph.sprite.center_x,
+                "centerY": glyph.sprite.center_y,
+                "glyphId": glyph.glyph_id,
+                "offsetX": glyph.offset_x,
+                "offsetY": glyph.offset_y,
+                "record": glyph.record_index,
+            }
+            for char, glyph in group.glyphs.items()
+        },
+    }
+    path = output_dir / "hub-hud-font-group-6.json"
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def crop(atlas: Image.Image, record: SpriteRecord) -> Image.Image:
@@ -1349,6 +1447,7 @@ def main() -> int:
         "hub-hud-backpack": 47,
         "hub-hud-bar-blue": 40,
         "hub-hud-bar-red": 26,
+        "hub-hud-golem": 23,
         "hub-hud-mouse-right": 100,
         "hub-hud-skull": 42,
         "hub-hud-tome": 48,
@@ -1357,6 +1456,20 @@ def main() -> int:
     }
     for name, index in ui_assets.items():
         save(crop(ui, ui_records[index]), output_dir, name)
+
+    font_groups = parse_font_groups(images_dir / "Fonts.bundle")
+    if len(font_groups) != 9:
+        raise ValueError(f"Fonts.bundle has {len(font_groups)} groups; expected 9")
+    ally_font = font_groups[6]
+    if len(ally_font.glyphs) != 67 or len(ally_font.kerning) != 1_043:
+        raise ValueError(
+            "Fonts group 6 does not match the native 67-glyph/1043-kerning contract"
+        )
+    shutil.copyfile(
+        images_dir / "Fonts.png",
+        output_dir / "hub-hud-font-atlas.png",
+    )
+    write_ally_font_data(ally_font, output_dir)
 
     inventory = Image.open(images_dir / "Inventory.png").convert("RGBA")
     inventory_records = parse_bundle(images_dir / "Inventory.bundle")

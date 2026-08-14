@@ -44,6 +44,65 @@
   object-fit: contain;
 }
 
+.hub-hud-allies {
+  position: absolute;
+  top: 46px;
+  left: 11px;
+  width: 180px;
+}
+
+.hub-hud-ally-row {
+  position: relative;
+  width: 180px;
+  height: 10px;
+}
+
+.hub-hud-ally-bar {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  display: block;
+  width: 50px;
+  height: 5px;
+  overflow: hidden;
+}
+
+.hub-hud-ally-bar-fill {
+  display: block;
+  height: 5px;
+  background: rgb(255 128 128);
+}
+
+.hub-hud-ally-identity {
+  position: absolute;
+  top: 0;
+  left: 52px;
+  display: block;
+  width: 128px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.hub-hud-ally-glyph,
+.hub-hud-ally-golem {
+  position: absolute;
+  display: block;
+  background: rgb(217 186 112);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+.hub-hud-ally-golem {
+  top: 0;
+  left: 0;
+  width: 37px;
+  height: 7px;
+  mask-position: 0 0;
+  mask-size: 37px 7px;
+  -webkit-mask-position: 0 0;
+  -webkit-mask-size: 37px 7px;
+}
+
 .hub-hud-diagnostics {
   position: absolute;
   top: 12px;

@@ -47,6 +47,7 @@ interface BoneyardSceneProps {
   playerId: string
   samplePresentation: (nowMs?: number) => GameSnapshot
   subscribePing: (listener: (pingMs: number) => void) => () => void
+  subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
 
 interface BoneyardFrameDiagnostics {
@@ -69,6 +70,7 @@ export default function BoneyardScene({
   playerId,
   samplePresentation,
   subscribePing,
+  subscribe,
 }: BoneyardSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
@@ -260,8 +262,11 @@ export default function BoneyardScene({
         <GameHud
           element={element}
           getPingMs={getPingMs}
+          initialSnapshot={initialSnapshot}
           mode="run"
+          playerId={playerId}
           subscribePing={subscribePing}
+          subscribeSnapshot={subscribe}
         />
         {digIndicatorVisible ? (
           <div

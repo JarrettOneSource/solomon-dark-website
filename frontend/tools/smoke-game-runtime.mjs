@@ -4,9 +4,12 @@ import { chromium } from 'playwright-core'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const CREATE_MENU_TIMEOUT_MS = 30_000
+const HUB_SCENE_TIMEOUT_MS = 30_000
 const expectedModBoneyard = process.env.SDR_GAME_EXPECT_MOD_BONEYARD?.trim()
 const screenshotPath = process.env.SDR_GAME_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-boneyard-smoke.png'
+const allyScreenshotPath = process.env.SDR_GAME_SMOKE_ALLY_SCREENSHOT
+  || screenshotPath.replace(/(\.[^.]+)?$/, '-ally-hub$1')
 const gateScreenshotPath = process.env.SDR_GAME_SMOKE_GATE_SCREENSHOT
   || screenshotPath.replace(/(\.[^.]+)?$/, '-gate-open$1')
 const injectedEndpoint = process.env.SDR_GAME_SMOKE_ENDPOINT?.trim()
@@ -31,10 +34,13 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   const clientPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const thirdPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   const pageErrors = []
   const consoleErrors = []
   const clientPageErrors = []
   const clientConsoleErrors = []
+  const thirdPageErrors = []
+  const thirdConsoleErrors = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
@@ -43,12 +49,19 @@ try {
   clientPage.on('console', (message) => {
     if (message.type() === 'error') clientConsoleErrors.push(message.text())
   })
+  thirdPage.on('pageerror', (error) => thirdPageErrors.push(error.message))
+  thirdPage.on('console', (message) => {
+    if (message.type() === 'error') thirdConsoleErrors.push(message.text())
+  })
   if (runtime) {
     await Promise.all([
       page.addInitScript((configuration) => {
         window.solomonDarkRuntime = configuration
       }, runtime),
       clientPage.addInitScript((configuration) => {
+        window.solomonDarkRuntime = configuration
+      }, runtime),
+      thirdPage.addInitScript((configuration) => {
         window.solomonDarkRuntime = configuration
       }, runtime),
     ])
@@ -92,9 +105,11 @@ try {
   const scene = page.getByLabel(/College courtyard/)
   const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   try {
-    await scene.waitFor({ timeout: 30_000 })
-    await canvas.waitFor({ timeout: 30_000 })
-    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+    await scene.waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+    await canvas.waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({
+      timeout: HUB_SCENE_TIMEOUT_MS,
+    })
   } catch (error) {
     process.stderr.write(JSON.stringify({
       body: (await page.locator('body').innerText()).slice(0, 2000),
@@ -215,6 +230,56 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Start Match' }).count(), 0)
   assert.equal(await clientPage.getByRole('button', { name: 'Enter the Boneyard' }).count(), 1)
 
+  await Promise.all([
+    page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
+    clientPage.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
+  ])
+  const hostSingleAllyReceipt = await allyRosterReceipt(page)
+  const clientSingleAllyReceipt = await allyRosterReceipt(clientPage)
+  assert.deepEqual(hostSingleAllyReceipt.names, ['Helvidius'])
+  assert.deepEqual(clientSingleAllyReceipt.names, ['Helvidius'])
+
+  await enterHub(thirdPage, 'Water')
+  await Promise.all([
+    page.locator('.hub-hud-allies[data-ally-count="2"]').waitFor(),
+    clientPage.locator('.hub-hud-allies[data-ally-count="2"]').waitFor(),
+    thirdPage.locator('.hub-hud-allies[data-ally-count="2"]').waitFor(),
+  ])
+  const hostMultiAllyReceipt = await allyRosterReceipt(page)
+  assert.deepEqual(hostMultiAllyReceipt.names, ['Helvidius', 'Helvidius'])
+  assert.equal(hostMultiAllyReceipt.roster.x, 11)
+  assert.equal(hostMultiAllyReceipt.roster.y, 46)
+  assert.equal(
+    hostMultiAllyReceipt.roster.y
+      - (hostMultiAllyReceipt.skull.y + hostMultiAllyReceipt.skull.height),
+    6,
+  )
+  assert.ok(
+    hostMultiAllyReceipt.roster.y
+      >= hostMultiAllyReceipt.diagnostics.y + hostMultiAllyReceipt.diagnostics.height,
+  )
+  for (const row of hostMultiAllyReceipt.rows) {
+    assert.equal(row.bar.width, 50)
+    assert.equal(row.bar.height, 5)
+    assert.equal(row.fill.width, 50)
+    assert.equal(row.identity.x - (row.bar.x + row.bar.width), 2)
+    assert.equal(row.barColor, 'rgb(255, 128, 128)')
+    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
+    assert.equal(row.healthRatio, '1')
+    assert.ok(row.glyphCount > 0)
+  }
+  assert.equal(
+    hostMultiAllyReceipt.rows[1].row.y - hostMultiAllyReceipt.rows[0].row.y,
+    10,
+  )
+  await page.screenshot({ path: allyScreenshotPath })
+
+  await thirdPage.close()
+  await Promise.all([
+    page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
+    clientPage.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
+  ])
+
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   if (expectedModBoneyard) {
     const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
@@ -236,6 +301,14 @@ try {
     boneyardReceipt(hostBoneyard),
     boneyardReceipt(clientBoneyard),
   ])
+  const [hostBoneyardAllyReceipt, clientBoneyardAllyReceipt] = await Promise.all([
+    allyRosterReceipt(page),
+    allyRosterReceipt(clientPage),
+  ])
+  assert.deepEqual(hostBoneyardAllyReceipt.names, hostSingleAllyReceipt.names)
+  assert.deepEqual(clientBoneyardAllyReceipt.names, clientSingleAllyReceipt.names)
+  assert.deepEqual(hostBoneyardAllyReceipt.rowIds, hostSingleAllyReceipt.rowIds)
+  assert.deepEqual(clientBoneyardAllyReceipt.rowIds, clientSingleAllyReceipt.rowIds)
   const [hostPainterReceipt, clientPainterReceipt] = await Promise.all([
     boneyardPainterReceipt(page),
     boneyardPainterReceipt(clientPage),
@@ -379,12 +452,17 @@ try {
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(clientConsoleErrors, [])
   assert.deepEqual(clientPageErrors, [])
+  assert.deepEqual(thirdConsoleErrors, [])
+  assert.deepEqual(thirdPageErrors, [])
   process.stdout.write(JSON.stringify({
     status: 'ok',
     before,
     after,
+    allyScreenshotPath,
     boneyardPings,
+    clientBoneyardAllyReceipt,
     clientHubPing,
+    clientSingleAllyReceipt,
     consoleErrors,
     pageErrors,
     clientConsoleErrors,
@@ -392,8 +470,11 @@ try {
     clientDigFrames: [...new Set(clientDigFrames)],
     digIndicatorReceipt,
     hostDigFrames: [...new Set(hostDigFrames)],
+    hostBoneyardAllyReceipt,
+    hostMultiAllyReceipt,
     hostReceipt,
     hostHubPing,
+    hostSingleAllyReceipt,
     hostPainterReceipt,
     clientPainterReceipt,
     gateCrossing,
@@ -404,6 +485,8 @@ try {
     smoothPlayerSamples: new Set(presentationSamples.map(({ playerX }) => playerX)).size,
     studentCount,
     teacherFrames: [...new Set(teacherFrames)],
+    thirdConsoleErrors,
+    thirdPageErrors,
     walkPoses: [...new Set(presentationSamples.map(({ walkPose }) => walkPose))],
   }) + '\n')
 } finally {
@@ -456,7 +539,63 @@ async function enterHub(page, element) {
   await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
-  await page.getByLabel(/College courtyard/).waitFor({ timeout: 15_000 })
+  await page.getByLabel(/College courtyard/).waitFor({ timeout: HUB_SCENE_TIMEOUT_MS })
+}
+
+async function allyRosterReceipt(page) {
+  return page.locator('.hub-hud-allies').evaluate((roster) => {
+    const requireElement = (value, label) => {
+      if (!(value instanceof Element)) throw new Error(`Expected ${label}`)
+      return value
+    }
+    const bounds = (node) => {
+      const rect = node.getBoundingClientRect()
+      return {
+        height: rect.height,
+        width: rect.width,
+        x: rect.x,
+        y: rect.y,
+      }
+    }
+    const rows = [...roster.querySelectorAll('.hub-hud-ally-row')]
+    const skull = requireElement(document.querySelector('.hub-hud-skull'), 'HUD skull')
+    const diagnostics = requireElement(
+      document.querySelector('.hub-hud-diagnostics'),
+      'HUD diagnostics',
+    )
+    return {
+      diagnostics: bounds(diagnostics),
+      names: rows.map((row) => row.getAttribute('aria-label')),
+      roster: bounds(roster),
+      rowIds: rows.map((row) => row.getAttribute('data-ally-id')),
+      rows: rows.map((row) => {
+        const bar = requireElement(row.querySelector('.hub-hud-ally-bar'), 'ally health bar')
+        const fill = requireElement(
+          row.querySelector('.hub-hud-ally-bar-fill'),
+          'ally health fill',
+        )
+        const identity = requireElement(
+          row.querySelector('.hub-hud-ally-identity'),
+          'ally identity lane',
+        )
+        const glyph = requireElement(
+          row.querySelector('.hub-hud-ally-glyph, .hub-hud-ally-golem'),
+          'ally identity glyph',
+        )
+        return {
+          bar: bounds(bar),
+          barColor: getComputedStyle(fill).backgroundColor,
+          fill: bounds(fill),
+          glyphCount: identity.children.length,
+          healthRatio: row.getAttribute('data-health-ratio'),
+          identity: bounds(identity),
+          identityColor: getComputedStyle(glyph).backgroundColor,
+          row: bounds(row),
+        }
+      }),
+      skull: bounds(skull),
+    }
+  })
 }
 
 async function boneyardReceipt(locator) {

@@ -405,6 +405,7 @@ export default function MainMenuScene({
             onInput={session.sendInput}
             samplePresentation={session.sampleBoneyardPresentation}
             subscribePing={session.onPing}
+            subscribe={session.onSnapshot}
           />
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
           <HubScene

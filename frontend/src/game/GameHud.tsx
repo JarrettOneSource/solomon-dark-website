@@ -1,17 +1,24 @@
 import { useEffect, useState } from 'react'
 import { hub } from '../lib/assets'
+import AllyHud from './AllyHud.tsx'
+import type { AllyHudRow } from './ally-hud.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import type { GameSnapshot } from './protocol/game-protocol.ts'
 
 const XP_PROGRESS = 0.45
 
 interface GameHudProps {
+  additionalAllyRows?: readonly AllyHudRow[]
   element: WizardElement
   getPingMs: () => number | null
+  initialSnapshot: GameSnapshot
   mapLabel?: string
   mode?: 'hub' | 'run'
   onMapClick?: () => void
+  playerId: string
   subscribePing: (listener: (pingMs: number) => void) => () => void
+  subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
 
 function HudSlot({ src }: { src: string }) {
@@ -85,16 +92,26 @@ function PingCounter({
 }
 
 export default function GameHud({
+  additionalAllyRows,
   element,
   getPingMs,
+  initialSnapshot,
   mapLabel = 'Map',
   mode = 'hub',
   onMapClick,
+  playerId,
   subscribePing,
+  subscribeSnapshot,
 }: GameHudProps) {
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
+      <AllyHud
+        additionalRows={additionalAllyRows}
+        initialSnapshot={initialSnapshot}
+        playerId={playerId}
+        subscribeSnapshot={subscribeSnapshot}
+      />
       <div className="hub-hud-diagnostics" aria-label="Performance">
         <FpsCounter />
         <PingCounter getPingMs={getPingMs} subscribePing={subscribePing} />
