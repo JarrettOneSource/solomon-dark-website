@@ -81,11 +81,15 @@ export interface NativeAirLightningPlan {
   sourceCorona: NativeAirCoronaPlan | null
 }
 
-interface NativeAirLightningInput {
+export interface NativeAirLightningInput {
   ageTicks: number
   direction: NativeAirPoint
   id: number
   reach: number
+}
+
+export interface NativeAirContactLightSourceInput extends NativeAirLightningInput {
+  origin: NativeAirPoint
 }
 
 export interface NativeAirContactLightInput {
@@ -183,6 +187,31 @@ export function buildNativeAirContactLightPlan(
     multipleShadows: false,
     position: input.position,
     radius: nativeContactSamples(input.id).lightRadius,
+  }
+}
+
+export function buildNativeAirContactLightSource(
+  input: NativeAirContactLightSourceInput,
+): NativeAirContactLightPlan | null {
+  const direction = normalized(input.direction)
+  const samples = nativeContactSamples(input.id)
+  const light = buildNativeAirContactLightPlan({
+    ageTicks: input.ageTicks,
+    id: input.id,
+    position: {
+      x: direction.x * input.reach
+        + Math.cos(samples.offsetAngle) * samples.offsetRadius,
+      y: direction.y * input.reach
+        + Math.sin(samples.offsetAngle) * samples.offsetRadius,
+    },
+  })
+  if (!light) return null
+  return {
+    ...light,
+    position: {
+      x: input.origin.x + light.position.x,
+      y: input.origin.y + light.position.y,
+    },
   }
 }
 

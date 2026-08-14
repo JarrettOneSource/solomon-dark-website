@@ -17,6 +17,7 @@ import {
   AIR_LIGHTNING_FAST_INVERSE_SQRT_MAGIC,
   AIR_LIGHTNING_MAX_PARAMETER_STEP,
   AIR_LIGHTNING_SPLINE_DURATION,
+  buildNativeAirContactLightSource,
   buildNativeAirContactLightPlan,
   buildNativeAirLightningPlan,
 } from './primary-spell-air-native.ts'
@@ -144,6 +145,19 @@ test('native Air exposes the contact ZAnimLit source without inventing range 50'
     id: 29,
     position: visual.contactCorona.center,
   }), null)
+
+  const worldLight = buildNativeAirContactLightSource({
+    ageTicks: 0,
+    direction: RIGHT,
+    id: 29,
+    origin: { x: 400, y: 300 },
+    reach: 205,
+  })
+  assert.ok(worldLight)
+  assert.deepEqual(worldLight.position, {
+    x: 400 + visual.contactLight!.position.x,
+    y: 300 + visual.contactLight!.position.y,
+  })
 })
 
 test('native Air presentation randomness is stable by semantic transient id', () => {

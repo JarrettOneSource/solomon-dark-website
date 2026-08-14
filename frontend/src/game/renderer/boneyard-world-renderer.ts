@@ -44,6 +44,7 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
+import { PRIMARY_SPELL_AIR_REACH } from '../core-kernels/primary-spells.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
@@ -85,6 +86,7 @@ import {
   nativeEnemyPainterLayer,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+import { buildNativeAirContactLightSource } from './primary-spell-air-native.ts'
 import { nativeFireballLightSource } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
@@ -602,6 +604,20 @@ class BoneyardDynamicScene {
       ) {
         lightSourceCandidates.push(nativeFireballLightSource(spell, presentationFrame))
       }
+    }
+    for (const effect of snapshot.primarySpells.transients) {
+      if (
+        effect.kind !== 'air'
+        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+      ) continue
+      const contactLight = buildNativeAirContactLightSource({
+        ageTicks: effect.ageTicks,
+        direction: effect.direction,
+        id: effect.id,
+        origin: effect.origin,
+        reach: PRIMARY_SPELL_AIR_REACH,
+      })
+      if (contactLight) lightSourceCandidates.push(contactLight)
     }
     if (lanternLight) lightSourceCandidates.push(lanternLight)
     const lightSources = nativeAcceptedBoneyardLightSources(
