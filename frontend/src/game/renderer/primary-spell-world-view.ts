@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellChannelTransientState,
   PrimarySpellProjectileState,
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
@@ -9,6 +10,10 @@ import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
   PRIMARY_SPELL_AIR_REACH,
 } from '../core-kernels/primary-spells.ts'
+import {
+  EarthBoulderImpactView,
+  EarthBoulderView,
+} from './earth-boulder-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
@@ -46,14 +51,20 @@ export class PrimarySpellWorldView {
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        view = 'position' in state
-          ? new ProjectileSpellView(state, this.textures)
-          : state.kind === 'water'
-            ? new WaterPrimarySpellView(state, {
-                core: this.textures.primarySpells.frost.core,
-                glint: this.textures.primarySpells.frost.over,
-              })
-            : new TransientSpellView(state)
+        if ('position' in state) {
+          view = state.kind === 'earth'
+            ? new EarthBoulderView(state, this.textures.primarySpells.earth)
+            : new ProjectileSpellView(state, this.textures)
+        } else {
+          view = state.kind === 'earth-impact'
+            ? new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
+            : state.kind === 'water'
+              ? new WaterPrimarySpellView(state, {
+                  core: this.textures.primarySpells.frost.core,
+                  glint: this.textures.primarySpells.frost.over,
+                })
+              : new TransientSpellView(state)
+        }
         this.views.set(state.id, view)
         this.root.addChild(view.container)
       }
@@ -121,7 +132,7 @@ class ProjectileSpellView implements SpellView {
     this.main = new Sprite(this.texture(state))
     this.main.anchor.set(0.5)
     this.main.eventMode = 'none'
-    if (state.kind !== 'earth') this.main.blendMode = 'add'
+    this.main.blendMode = 'add'
     this.container.addChild(this.main)
     if (state.kind === 'fire') {
       const core = effectSprite(textures.elementVfx.core[0], 0.45, 0.65)
@@ -137,10 +148,7 @@ class ProjectileSpellView implements SpellView {
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
     this.main.texture = this.texture(state)
-    if (state.kind === 'earth') {
-      this.main.scale.set(state.charge)
-      this.main.rotation = state.ageTicks * 0.035
-    } else if (state.kind === 'ether') {
+    if (state.kind === 'ether') {
       this.main.rotation = Math.atan2(state.direction.y, state.direction.x) + Math.PI / 2
       this.main.alpha = 0.92
     } else {
@@ -166,7 +174,7 @@ class ProjectileSpellView implements SpellView {
 
   private texture(state: PrimarySpellProjectileState): Texture {
     switch (state.kind) {
-      case 'earth': return this.textures.primarySpells.boulder
+      case 'earth': throw new Error('Earth projectiles require EarthBoulderView')
       case 'ether': return this.textures.primarySpells.magicMissile
       case 'fire': {
         const frames = this.textures.primarySpells.fire
@@ -179,9 +187,9 @@ class ProjectileSpellView implements SpellView {
 class TransientSpellView implements SpellView {
   readonly container: Container
   private readonly graphics: Graphics[] = []
-  private state: PrimarySpellTransientState
+  private state: PrimarySpellChannelTransientState
 
-  constructor(state: PrimarySpellTransientState) {
+  constructor(state: PrimarySpellChannelTransientState) {
     this.state = state
     this.container = new Container({ label: state.kind })
     this.container.eventMode = 'none'
@@ -197,7 +205,7 @@ class TransientSpellView implements SpellView {
   }
 
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
-    if (!('origin' in state)) return
+    if (!('origin' in state) || state.kind !== 'air') return
     this.state = state
     this.container.position.set(state.origin.x, state.origin.y)
     this.container.alpha = Math.max(0, 1 - state.ageTicks / PRIMARY_SPELL_AIR_LIFETIME_TICKS)
@@ -227,7 +235,7 @@ function effectSprite(texture: Texture, scale: number, alpha: number): Sprite {
   return sprite
 }
 
-function lightningPoints(state: PrimarySpellTransientState): readonly [number, number][] {
+function lightningPoints(state: PrimarySpellChannelTransientState): readonly [number, number][] {
   const perpendicular = { x: -state.direction.y, y: state.direction.x }
   return Array.from({ length: 10 }, (_, index) => {
     const progress = index / 9

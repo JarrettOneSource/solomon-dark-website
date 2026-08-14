@@ -10,6 +10,11 @@ import {
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
+import { isHubRegionTraversable } from '../core-kernels/hub-regions.ts'
+import {
+  canPlaceBoneyardBody,
+  withBoneyardGateCollision,
+} from './boneyard-collision.ts'
 import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
@@ -167,7 +172,22 @@ function finishGameSimulationTick(
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
   const tick = previous.tick + 1
+  const boneyardCollision = result.world.kind === 'boneyard'
+    ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
+    : null
   const cast = stepPrimarySpells({
+    canPlaceProjectile: (spell, position, radius) => {
+      if (result.world.kind === 'boneyard') {
+        return canPlaceBoneyardBody(
+          position,
+          result.world.bounds,
+          boneyardCollision!,
+          radius,
+        )
+      }
+      const region = result.world.participants[spell.ownerId]?.region
+      return region !== undefined && isHubRegionTraversable(region, position, radius)
+    },
     inputs,
     players: result.players,
     previousPlayers: previous.players,

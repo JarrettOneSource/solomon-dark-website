@@ -205,7 +205,14 @@ import elementVfxFire from '../assets/game/element-vfx-fire.png'
 import elementVfxRay from '../assets/game/element-vfx-ray.png'
 import elementVfxSpark from '../assets/game/element-vfx-spark.png'
 import elementVfxWater from '../assets/game/element-vfx-water.png'
-import primarySpellBoulder from '../assets/game/primary-spell-boulder.png'
+import primarySpellEarthGlimmer from '../assets/game/primary-spell-earth-glimmer.png'
+import primarySpellEarthLitRock0 from '../assets/game/primary-spell-earth-lit-rock-0.png'
+import primarySpellEarthLitRock1 from '../assets/game/primary-spell-earth-lit-rock-1.png'
+import primarySpellEarthLitRock2 from '../assets/game/primary-spell-earth-lit-rock-2.png'
+import primarySpellEarthRock0 from '../assets/game/primary-spell-earth-rock-0.png'
+import primarySpellEarthRock1 from '../assets/game/primary-spell-earth-rock-1.png'
+import primarySpellEarthRock2 from '../assets/game/primary-spell-earth-rock-2.png'
+import primarySpellEarthRockCenter from '../assets/game/primary-spell-earth-rock-center.png'
 import primarySpellFrostCore from '../assets/game/primary-spell-frost-core.png'
 import primarySpellFrostExtra from '../assets/game/primary-spell-frost-extra.png'
 import primarySpellFrostOver from '../assets/game/primary-spell-frost-over.png'
@@ -469,7 +476,20 @@ export const elementVfx = {
 
 /** Registered stock sprites used by the five rank-1 player primaries. */
 export const primarySpells = {
-  boulder: primarySpellBoulder,
+  earth: {
+    glimmer: primarySpellEarthGlimmer,
+    litRocks: [
+      primarySpellEarthLitRock0,
+      primarySpellEarthLitRock1,
+      primarySpellEarthLitRock2,
+    ],
+    rocks: [
+      primarySpellEarthRock0,
+      primarySpellEarthRock1,
+      primarySpellEarthRock2,
+      primarySpellEarthRockCenter,
+    ],
+  },
   fire: elementVfxFire,
   frost: {
     core: primarySpellFrostCore,

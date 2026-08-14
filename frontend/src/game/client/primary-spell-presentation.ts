@@ -81,8 +81,22 @@ function interpolateTransient(
   blend: number,
 ): PrimarySpellTransientState {
   const discrete = blend < 1 ? older : newer
+  if (older.kind === 'earth-impact' && newer.kind === 'earth-impact') {
+    return {
+      ...discrete,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: {
+        x: lerp(older.origin.x, newer.origin.x, blend),
+        y: lerp(older.origin.y, newer.origin.y, blend),
+      },
+    }
+  }
+  if (older.kind === 'earth-impact' || newer.kind === 'earth-impact') {
+    return copyTransient(discrete)
+  }
+  const channel = blend < 1 ? older : newer
   return {
-    ...discrete,
+    ...channel,
     ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
     direction: {
       x: lerp(older.direction.x, newer.direction.x, blend),
@@ -105,6 +119,9 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
+  if (effect.kind === 'earth-impact') {
+    return { ...effect, origin: { ...effect.origin } }
+  }
   return {
     ...effect,
     direction: { ...effect.direction },

@@ -46,6 +46,13 @@ const SPELLS = [
     startCue: '/game/audio/sfx/start-boulder.wav',
   },
 ]
+const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
+const selectedSpells = requestedSpellKind
+  ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
+  : SPELLS
+if (selectedSpells.length === 0) {
+  throw new Error(`Unknown SDR_PRIMARY_SPELL_KIND: ${requestedSpellKind}`)
+}
 
 const browser = await chromium.launch({
   args: ['--autoplay-policy=no-user-gesture-required'],
@@ -58,8 +65,10 @@ try {
   await context.addInitScript(() => {
     const events = []
     const poseEvents = []
+    const wireFrames = []
     let nextChannel = 1
     let previousPose = null
+    const nativeJsonParse = JSON.parse
     const nativePause = HTMLMediaElement.prototype.pause
     const nativePlay = HTMLMediaElement.prototype.play
     const sourceMatches = (actual, expected) => {
@@ -116,7 +125,24 @@ try {
       __primarySpellAudioEvents: { value: events },
       __primarySpellPoseEvents: { value: poseEvents },
       __primarySpellAudioSourceMatches: { value: sourceMatches },
+      __primarySpellWireFrames: { value: wireFrames },
     })
+    JSON.parse = function (...args) {
+      const value = nativeJsonParse.apply(this, args)
+      const frame = value?.type === 'server-welcome'
+        ? value.snapshot
+        : value?.type === 'server-snapshot'
+          ? value.frame
+          : null
+      if (frame?.primarySpells) {
+        wireFrames.push({
+          primarySpells: frame.primarySpells,
+          tick: frame.tick,
+        })
+        if (wireFrames.length > 2_000) wireFrames.shift()
+      }
+      return value
+    }
     const observePose = () => {
       const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
       if (frame && frame.playerAttachmentPose !== previousPose) {
@@ -136,7 +162,7 @@ try {
   const errors = []
   let earthPage = null
 
-  for (const spell of SPELLS) {
+  for (const spell of selectedSpells) {
     const page = await context.newPage()
     watchErrors(page, errors, spell.kind)
     await enterHub(page, spell.element)
@@ -150,17 +176,45 @@ try {
     const target = await castTarget(canvas, 0.67, 0.42)
     await page.mouse.move(target.x, target.y)
     await page.mouse.down({ button: 'left' })
+    const castPosePromise = waitForHubCastPose(page, poseEventStart, spell.castPose)
+    let frame = null
+    let opening = null
+
+    if (spell.mode === 'charge') {
+      frame = await waitForHubSpell(page, spell.kind)
+      const openingScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-opening.png`
+      opening = {
+        ...await captureHubEarthStage(page, openingScreenshotPath),
+        screenshotPath: openingScreenshotPath,
+      }
+    }
 
     if (spell.mode === 'one-shot') {
       await page.waitForTimeout(35)
       await page.mouse.up({ button: 'left' })
     }
 
-    const castFrame = await waitForHubCastPose(page, poseEventStart, spell.castPose)
+    const castFrame = await castPosePromise
     assert.equal(castFrame.playerAttachmentPose, spell.castPose)
-    const frame = await waitForHubSpell(page, spell.kind)
-    const screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
-    await page.screenshot({ path: screenshotPath })
+    frame ??= await waitForHubSpell(page, spell.kind)
+    let earthStages = null
+    let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
+    if (spell.mode === 'charge') {
+      await page.waitForTimeout(500)
+      const midScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-mid.png`
+      const mid = await captureHubEarthStage(page, midScreenshotPath)
+      await page.waitForTimeout(2_500)
+      const highScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-high.png`
+      const high = await captureHubEarthStage(page, highScreenshotPath)
+      earthStages = {
+        high: { ...high, screenshotPath: highScreenshotPath },
+        mid: { ...mid, screenshotPath: midScreenshotPath },
+        opening,
+      }
+      screenshotPath = highScreenshotPath
+    } else {
+      await page.screenshot({ path: screenshotPath })
+    }
 
     if (spell.startCue) await waitForAudio(page, eventStart, spell.startCue, 'play')
     if (spell.releaseCue && spell.mode === 'one-shot') {
@@ -177,11 +231,48 @@ try {
       if (spell.mode === 'channel') {
         await waitForAudio(page, eventStart, spell.loopCue, 'pause')
       } else {
-        const rolling = await waitForAudio(page, eventStart, spell.rollingCue, 'play')
-        assert.equal(rolling.loop, true)
-        await waitForHubSpell(page, spell.kind)
+        const releaseWirePromise = waitForEarthRelease(
+          page,
+          earthStages.high.wire.tick,
+          10_000,
+        )
+        await page.waitForTimeout(40)
         releaseScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-release.png`
-        await page.screenshot({ path: releaseScreenshotPath })
+        const releaseScreenshotPromise = page.screenshot({ path: releaseScreenshotPath })
+        const releaseWire = await releaseWirePromise
+        const rolling = await findAudio(page, eventStart, spell.rollingCue, 'play')
+        if (releaseWire.state.kind === 'earth') assert.equal(rolling?.loop, true)
+        await releaseScreenshotPromise
+        earthStages.release = {
+          frame: await page.evaluate(() => ({
+            ...document.querySelector('.hub-world-canvas')?.__sdrHubFrame,
+          })),
+          rollingAudioObserved: rolling !== null,
+          screenshotPath: releaseScreenshotPath,
+          wire: releaseWire,
+        }
+        if (releaseWire.state.kind === 'earth-impact') {
+          earthStages.impact = {
+            fragmentCount: Math.floor(Math.max(8, 30 * releaseWire.state.charge)),
+            screenshotPath: releaseScreenshotPath,
+            wire: releaseWire,
+          }
+        } else {
+          try {
+            const impact = await waitForWireSpell(
+              page,
+              'earth-impact',
+              earthStages.high.wire.tick,
+              6_000,
+            )
+            await page.waitForTimeout(16)
+            const impactScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-impact.png`
+            await page.screenshot({ path: impactScreenshotPath })
+            earthStages.impact = { screenshotPath: impactScreenshotPath, wire: impact }
+          } catch {
+            earthStages.impact = null
+          }
+        }
       }
     }
 
@@ -194,6 +285,7 @@ try {
       }))
     receipts.push({
       castPose: castFrame.playerAttachmentPose,
+      earthStages,
       element: spell.element,
       kind: spell.kind,
       primarySpellCount: frame.primarySpellCount,
@@ -276,9 +368,13 @@ async function castEarthInBoneyard(page) {
   )
   assert.equal(gather.loop, true)
   const held = await waitForBoneyardSpell(page, 'earth')
+  await page.waitForTimeout(400)
   const heldScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-held.png`
   await page.screenshot({ path: heldScreenshotPath })
   await page.mouse.up({ button: 'left' })
+  await page.waitForTimeout(40)
+  const releaseScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-release.png`
+  const releaseScreenshotPromise = page.screenshot({ path: releaseScreenshotPath })
   const rolling = await waitForAudio(
     page,
     eventStart,
@@ -286,9 +382,8 @@ async function castEarthInBoneyard(page) {
     'play',
   )
   assert.equal(rolling.loop, true)
-  const released = await waitForBoneyardSpell(page, 'earth')
-  const releaseScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-release.png`
-  await page.screenshot({ path: releaseScreenshotPath })
+  const released = await waitForBoneyardSpell(page, ['earth', 'earth-impact'])
+  await releaseScreenshotPromise
   assert.ok(released.painterBandCount >= 2)
   assert.ok(released.maxDynamicZIndex > 0)
   return {
@@ -311,16 +406,17 @@ async function waitForHubCastPose(page, eventStart, expectedPose) {
 }
 
 async function waitForHubSpell(page, kind) {
+  const expectedKinds = Array.isArray(kind) ? kind : [kind]
   let handle
   try {
     handle = await page.waitForFunction(
-      (expectedKind) => {
+      (kinds) => {
         const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-        return frame?.primarySpellKinds?.includes(expectedKind)
+        return kinds.some((expectedKind) => frame?.primarySpellKinds?.includes(expectedKind))
           ? { ...frame, playerPositions: { ...frame.playerPositions } }
           : null
       },
-      kind,
+      expectedKinds,
       { timeout: 10_000 },
     )
   } catch (error) {
@@ -340,14 +436,119 @@ async function waitForHubSpell(page, kind) {
 }
 
 async function waitForBoneyardSpell(page, kind) {
+  const expectedKinds = Array.isArray(kind) ? kind : [kind]
   const handle = await page.waitForFunction(
-    (expectedKind) => {
+    (kinds) => {
       const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-      return frame?.primarySpellKinds?.includes(expectedKind) ? { ...frame } : null
+      return kinds.some((expectedKind) => frame?.primarySpellKinds?.includes(expectedKind))
+        ? { ...frame }
+        : null
     },
-    kind,
+    expectedKinds,
     { timeout: 10_000 },
   )
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function captureHubEarthStage(page, screenshotPath) {
+  const wire = await latestWireSpell(page, 'earth')
+  const presentation = await page.evaluate(async (state) => {
+    const { earthBoulderPresentationPlan } = await import(
+      '/src/game/renderer/earth-boulder-presentation.ts'
+    )
+    const plan = earthBoulderPresentationPlan(state)
+    return {
+      bodyAlpha: plan.bodyAlpha,
+      calledRockCount: plan.calledRocks.length,
+      glimmerAlpha: plan.glimmer.alpha,
+      mainRockCount: plan.rocks.length,
+    }
+  }, wire.state)
+  const frame = await page.evaluate(() => ({
+    ...document.querySelector('.hub-world-canvas')?.__sdrHubFrame,
+  }))
+  await page.screenshot({ path: screenshotPath })
+  return {
+    frame,
+    presentation,
+    wire,
+  }
+}
+
+async function latestWireSpell(page, kind) {
+  const expectedKinds = Array.isArray(kind) ? kind : [kind]
+  return page.evaluate((kinds) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      const states = [
+        ...wire.primarySpells.projectiles,
+        ...wire.primarySpells.transients,
+      ]
+      const state = states.find((candidate) => kinds.includes(candidate.kind))
+      if (state) {
+        return {
+          projectileCount: wire.primarySpells.projectiles.length,
+          state,
+          tick: wire.tick,
+          transientCount: wire.primarySpells.transients.length,
+        }
+      }
+    }
+    throw new Error(`No wire spell matched ${kinds.join(', ')}`)
+  }, expectedKinds)
+}
+
+async function waitForWireSpell(page, kind, afterTick, timeout) {
+  const handle = await page.waitForFunction(([expectedKind, minimumTick]) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) continue
+      const states = [
+        ...wire.primarySpells.projectiles,
+        ...wire.primarySpells.transients,
+      ]
+      const state = states.find((candidate) => candidate.kind === expectedKind)
+      if (state) {
+        return {
+          projectileCount: wire.primarySpells.projectiles.length,
+          state,
+          tick: wire.tick,
+          transientCount: wire.primarySpells.transients.length,
+        }
+      }
+      return null
+    }
+    return null
+  }, [kind, afterTick], { timeout })
+  const result = await handle.jsonValue()
+  await handle.dispose()
+  return result
+}
+
+async function waitForEarthRelease(page, afterTick, timeout) {
+  const handle = await page.waitForFunction((minimumTick) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) continue
+      const state = wire.primarySpells.transients.find(
+        (candidate) => candidate.kind === 'earth-impact',
+      ) ?? wire.primarySpells.projectiles.find(
+        (candidate) => candidate.kind === 'earth' && candidate.phase === 'flight',
+      )
+      if (state) {
+        return {
+          projectileCount: wire.primarySpells.projectiles.length,
+          state,
+          tick: wire.tick,
+          transientCount: wire.primarySpells.transients.length,
+        }
+      }
+      return null
+    }
+    return null
+  }, afterTick, { timeout })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
@@ -385,6 +586,15 @@ async function waitForAudio(page, eventStart, source, type) {
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
+}
+
+async function findAudio(page, eventStart, source, type) {
+  return page.evaluate(({ expected, expectedType, start }) => (
+    window.__primarySpellAudioEvents.slice(start).find((event) => (
+      event.type === expectedType
+      && window.__primarySpellAudioSourceMatches(event.src, expected)
+    )) || null
+  ), { expected: source, expectedType: type, start: eventStart })
 }
 
 function watchErrors(page, errors, label) {

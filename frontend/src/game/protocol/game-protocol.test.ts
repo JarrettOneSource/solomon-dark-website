@@ -244,6 +244,22 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     velocity: { x: 0, y: -3 },
     worldKey: 'hub:courtyard',
   }
+  const earthImpact = {
+    ageTicks: 3,
+    charge: 0.5,
+    id: 1,
+    kind: 'earth-impact',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    worldKey: 'hub:courtyard',
+  }
+
+  const decodedImpact = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [], transients: [earthImpact] },
+  })
+  assert.equal(decodedImpact.type, 'server-snapshot')
+  assert.deepEqual(decodedImpact.frame.primarySpells.transients, [earthImpact])
 
   assert.throws(() => decodeFrame({
     ...frame,
@@ -341,6 +357,22 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       }],
     },
   }), /variant exceeds the native family/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...earthImpact, direction: { x: 0, y: -1 } }],
+    },
+  }), /direction is not allowed/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...earthImpact, charge: 1.1 }],
+    },
+  }), /charge must be within/)
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {

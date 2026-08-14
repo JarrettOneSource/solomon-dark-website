@@ -226,9 +226,37 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
       dimensions: [1700, 4080],
       sha256: 'e7923b25771a6eb00cdd780cd6902ce3e9cd050e961cbb35c1a4d65201731c0a',
     },
-    'primary-spell-boulder.png': {
+    'primary-spell-earth-glimmer.png': {
       dimensions: [94, 94],
       sha256: '0a6d5925da9f87d26eadd7d3a8e9bfea71471209163eb44671f9e6174baf7e1e',
+    },
+    'primary-spell-earth-lit-rock-0.png': {
+      dimensions: [37, 33],
+      sha256: 'db614042c6ba99a42c4a6c040d2026ef9f5e99bc938a0ce9b3a9d549959a0b58',
+    },
+    'primary-spell-earth-lit-rock-1.png': {
+      dimensions: [33, 32],
+      sha256: '1192e5a42a2b045bccd6a43565b88e396a20e4b678cfcba397229b098e7f6d9b',
+    },
+    'primary-spell-earth-lit-rock-2.png': {
+      dimensions: [38, 34],
+      sha256: '76ebbed82a78e2e003ee3038286002ad10f9fca67093fdcbfbc39f8c1e85f988',
+    },
+    'primary-spell-earth-rock-0.png': {
+      dimensions: [37, 33],
+      sha256: 'cadc84452743aee24a3fb45a0092f75e34ddb76d1c903f960f63ecb9af48daca',
+    },
+    'primary-spell-earth-rock-1.png': {
+      dimensions: [33, 32],
+      sha256: 'e5cfd7d0bf24482973df9e7efd37a605bf2e221a149e94542b3653f4173e4c61',
+    },
+    'primary-spell-earth-rock-2.png': {
+      dimensions: [38, 34],
+      sha256: '0d9c3dd4906dff44c34a2a21547ee3250e46ffbfac136b7decc5523eabba5de2',
+    },
+    'primary-spell-earth-rock-center.png': {
+      dimensions: [17, 17],
+      sha256: 'c1d53171295dbc05522a296a8464b195d61738d3ef0566ac8e860e6de2583203',
     },
     'primary-spell-frost-core.png': {
       dimensions: [93, 145],

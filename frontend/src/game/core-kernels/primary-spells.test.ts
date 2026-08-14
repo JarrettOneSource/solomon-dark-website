@@ -18,6 +18,7 @@ import {
   primaryCastPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
+  stepPrimarySpells,
 } from './primary-spells.ts'
 import {
   createGameSimulation,
@@ -272,11 +273,109 @@ test('Earth preserves long-held age and applies containment only after release',
   assert.equal(boulder.flightTicks, 0)
   assert.equal(boulder.charge, 1)
   assert.equal(boulder.phase, 'held')
+  const releaseResult = stepPrimarySpells({
+    canPlaceProjectile: () => true,
+    inputs: { [PLAYER_ID]: input(state, false) },
+    players: state.players,
+    previousPlayers: state.players,
+    spells: state.primarySpells,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  const releasePosition = releaseResult.spells.projectiles[0].position
+  let spells = releaseResult.spells
+  let players = releaseResult.players
+  const containmentStep = () => {
+    const result = stepPrimarySpells({
+      canPlaceProjectile: () => true,
+      inputs: { [PLAYER_ID]: input(state, false) },
+      players,
+      previousPlayers: players,
+      spells,
+      viewScale: 1.2,
+      worldKeyForPlayer: () => 'hub:courtyard',
+    })
+    players = result.players
+    spells = result.spells
+  }
+  for (let tick = 1; tick < PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS; tick += 1) {
+    containmentStep()
+  }
+  assert.equal(spells.projectiles[0].flightTicks, 500)
+  containmentStep()
+  assert.equal(spells.projectiles.length, 0)
+  assert.equal(spells.transients.length, 1)
+  assert.deepEqual(spells.transients[0], {
+    ageTicks: 0,
+    charge: 1,
+    id: 2,
+    kind: 'earth-impact',
+    origin: { ...releasePosition, y: releasePosition.y - 1_497 },
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  })
+})
+
+test('Earth publishes one authoritative breakup when its next flight position contacts terrain', () => {
+  let state = step(simulation('earth'), true, 97)
   state = step(state, false)
-  state = step(state, false, PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS - 1)
-  assert.equal(state.primarySpells.projectiles[0].flightTicks, 500)
-  state = step(state, false)
-  assert.equal(state.primarySpells.projectiles.length, 0)
+  const released = state.primarySpells.projectiles[0]
+  const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const result = stepPrimarySpells({
+    canPlaceProjectile: (_spell, position, radius) => {
+      checked.push({ position, radius })
+      return false
+    },
+    inputs: { [PLAYER_ID]: input(state, false) },
+    players: state.players,
+    previousPlayers: state.players,
+    spells: state.primarySpells,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+
+  assert.deepEqual(checked, [{
+    position: { x: released.position.x, y: released.position.y - 3 },
+    radius: released.charge * 75,
+  }])
+  assert.equal(result.spells.projectiles.length, 0)
+  assert.notDeepEqual(checked[0].position, released.position)
+  assert.deepEqual(result.spells.transients, [{
+    ageTicks: 0,
+    charge: released.charge,
+    id: 2,
+    kind: 'earth-impact',
+    origin: checked[0].position,
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  }])
+})
+
+test('Earth uses the native 45-charge release probe before normal 75-charge flight probes', () => {
+  let state = step(simulation('earth'), true, 2)
+  state = step(state, false, 95)
+  const heldBoulder = state.primarySpells.projectiles[0]
+  const checked: { position: { x: number, y: number }, radius: number }[] = []
+  const result = stepPrimarySpells({
+    canPlaceProjectile: (_spell, position, radius) => {
+      checked.push({ position, radius })
+      return false
+    },
+    inputs: { [PLAYER_ID]: input(state, false) },
+    players: state.players,
+    previousPlayers: state.players,
+    spells: state.primarySpells,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+
+  assert.deepEqual(checked, [{
+    position: { x: heldBoulder.position.x, y: heldBoulder.position.y - 3 },
+    radius: heldBoulder.charge * 45,
+  }])
+  assert.equal(result.spells.projectiles.length, 0)
+  assert.equal(result.spells.transients[0].kind, 'earth-impact')
+  assert.deepEqual(result.spells.transients[0].origin, checked[0].position)
 })
 
 test('pins native torso aim, Staff pose schedule, and observed socket banks', () => {

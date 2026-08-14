@@ -1083,6 +1083,24 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
+  if (source.kind === 'earth-impact') {
+    onlyKeys(source, field, [
+      'ageTicks', 'charge', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+    ])
+    const charge = finite(source.charge, `${field}.charge`)
+    if (charge < 0 || charge > 1) {
+      throw new GameProtocolError(`${field}.charge must be within [0,1]`)
+    }
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      charge,
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'earth-impact',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
   onlyKeys(source, field, [
     'ageTicks', 'direction', 'id', 'kind', 'origin', 'ownerId', 'variant',
     'worldKey',

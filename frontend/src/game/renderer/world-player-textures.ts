@@ -34,7 +34,11 @@ export interface PlayerWorldTextures {
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
-    boulder: Texture
+    earth: {
+      glimmer: Texture
+      litRocks: readonly Texture[]
+      rocks: readonly Texture[]
+    }
     fire: readonly Texture[]
     frost: {
       core: Texture
@@ -105,7 +109,11 @@ export function createPlayerWorldTextures(
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
-      boulder: texture(primarySpells.boulder),
+      earth: {
+        glimmer: texture(primarySpells.earth.glimmer),
+        litRocks: primarySpells.earth.litRocks.map(texture),
+        rocks: primarySpells.earth.rocks.map(texture),
+      },
       fire: elementTextures.fire,
       frost: {
         core: texture(primarySpells.frost.core),
