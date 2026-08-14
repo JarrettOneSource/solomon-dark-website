@@ -8,6 +8,8 @@ import {
   type WizardElement,
 } from './player-character.ts'
 import {
+  PRIMARY_CAST_ACTION_END_TICK,
+  PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_SPELL_EARTH_CHARGE_STEP,
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
@@ -94,6 +96,45 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
   assert.equal(fireball.position.x, player.position.x + 8.5)
   assert.equal(fireball.position.y, player.position.y - 62)
   assert.equal(fireball.ageTicks, 1)
+})
+
+test('one-shot casts retain accepted facing against movement through projectile birth', () => {
+  for (const element of ['ether', 'fire'] as const) {
+    let state = simulation(element)
+    const start = state.players[PLAYER_ID]
+    const eastAim = {
+      x: start.position.x + 200,
+      y: start.position.y - 25 / 1.2,
+    }
+    const castInput = (primary: boolean): PlayerCharacterInput => ({
+      aim: eastAim,
+      cast: { primary, secondary: false },
+      movement: { x: -1, y: 0 },
+    })
+
+    state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(true) })
+    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+
+    for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+      state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
+    }
+
+    const projectile = state.primarySpells.projectiles[0]
+    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, PRIMARY_CAST_EMISSION_TICK)
+    assert.equal(state.players[PLAYER_ID].headingIndex, 6)
+    assert.ok(projectile.velocity.x > 0)
+    assert.equal(projectile.velocity.y, 0)
+
+    for (
+      let tick = PRIMARY_CAST_EMISSION_TICK;
+      tick < PRIMARY_CAST_ACTION_END_TICK;
+      tick += 1
+    ) {
+      state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
+    }
+    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
+    assert.equal(state.players[PLAYER_ID].headingIndex, 18)
+  }
 })
 
 test('Air emits one ten-tick procedural fade per held authority tick', () => {

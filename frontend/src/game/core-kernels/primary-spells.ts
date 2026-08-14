@@ -190,17 +190,24 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const pressed = rawHeld && !previous.primaryCast.held
     const released = !rawHeld && previous.primaryCast.held
     const acceptedPress = pressed && previous.primaryCast.actionTick < 0
-    const aimTracksInput = rawHeld || (
-      player.config.element === 'earth'
-      && previous.primaryCast.channelActive
+    const sustainedPrimary = (
+      player.config.element === 'air'
+      || player.config.element === 'water'
+      || player.config.element === 'earth'
     )
-    const aimDirection = aimTracksInput && input?.aim
+    const aimSamplesInput = rawHeld && (
+      sustainedPrimary || previous.primaryCast.actionTick < 0
+    )
+    const aimDirection = aimSamplesInput && input?.aim
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
       : previous.primaryCast.aimDirection
     let primaryCast = advancePrimaryCast(previous.primaryCast, rawHeld, acceptedPress)
+    const castOwnsFacing = (
+      primaryCast.actionTick >= 0 || primaryCast.channelActive
+    )
     let nextPlayer: PlayerCharacterState = {
       ...player,
-      headingIndex: aimTracksInput
+      headingIndex: castOwnsFacing
         ? actorHeadingIndex(actorHeadingFromVector(aimDirection.x, aimDirection.y))
         : player.headingIndex,
       primaryCast: { ...primaryCast, aimDirection },
