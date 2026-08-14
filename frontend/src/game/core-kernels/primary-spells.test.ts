@@ -20,7 +20,6 @@ import {
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
   stepPrimarySpells,
-  type PrimarySpellSimulationState,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
 import {

@@ -75,17 +75,19 @@ export class PrimarySpellWorldView {
                   spark: this.textures.elementVfx.spark[0],
                 })
               : new FirePrimarySpellView(state, this.textures.primarySpells.fire)
+        } else if (state.kind === 'earth-impact') {
+          view = new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
+        } else if (state.kind === 'water') {
+          view = new WaterPrimarySpellView(state, {
+            core: this.textures.primarySpells.frost.core,
+            glint: this.textures.primarySpells.frost.over,
+          })
+        } else if (state.kind === 'air') {
+          view = new AirPrimarySpellView(state, this.textures.primarySpells.air)
+        } else if (state.kind === 'fire') {
+          view = new FireParticleSpellView(state, this.textures.primarySpells.fire)
         } else {
-          view = state.kind === 'earth-impact'
-            ? new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
-            : state.kind === 'water'
-              ? new WaterPrimarySpellView(state, {
-                  core: this.textures.primarySpells.frost.core,
-                  glint: this.textures.primarySpells.frost.over,
-                })
-              : state.kind === 'air'
-                ? new AirPrimarySpellView(state, this.textures.primarySpells.air)
-                : new FireParticleSpellView(state, this.textures.primarySpells.fire)
+          throw new Error(`Unsupported primary spell presentation: ${state.kind}`)
         }
         this.views.set(state.id, view)
         this.root.addChild(...view.containers)
