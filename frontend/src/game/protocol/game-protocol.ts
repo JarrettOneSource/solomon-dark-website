@@ -26,11 +26,19 @@ import type {
 } from '../core-kernels/boneyard.ts'
 import type {
   GameSnapshot,
+  GameSnapshotFrame,
   HubWorldSnapshot,
   ProtocolAmbientState,
   ProtocolPlayerState,
   ProtocolStudentState,
 } from './game-state.ts'
+import { REPLICATED_ENTITY_TYPE_REGISTRY } from './entity-replication.ts'
+import type {
+  ReplicatedEntityDescriptor,
+  ReplicatedEntityFrame,
+  ReplicatedEntityKey,
+  ReplicatedEntitySample,
+} from './replicated-entity-types.ts'
 
 export type { GameSnapshot } from './game-state.ts'
 export type {
@@ -39,7 +47,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 8
+export const GAME_PROTOCOL_VERSION = 9
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-2'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -53,6 +61,8 @@ const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
 const MAX_STUDENT_PROPS = 8
 const MAX_STUDENTS = 256
+const MAX_REPLICATED_ENTITIES = 8192
+const MAX_REPLICATED_COMPONENTS = 64
 
 export interface GameContentIdentity {
   id: string
@@ -94,6 +104,12 @@ export interface ClientPingMessage {
   nonce: number
 }
 
+export interface ClientSnapshotAckMessage {
+  type: 'client-snapshot-ack'
+  requireKeyframe: boolean
+  sequence: number
+}
+
 export interface ClientDisconnectMessage {
   type: 'client-disconnect'
 }
@@ -107,6 +123,7 @@ export type ClientGameMessage =
   | ClientHelloMessage
   | ClientInputMessage
   | ClientPingMessage
+  | ClientSnapshotAckMessage
   | ClientStartMatchMessage
   | ClientDisconnectMessage
 
@@ -122,12 +139,14 @@ export interface ServerWelcomeMessage {
   content: GameContentManifest
   boneyards: readonly BoneyardChoice[]
   snapshot: GameSnapshot
+  snapshotSequence: number
 }
 
 export interface ServerSnapshotMessage {
   type: 'server-snapshot'
   acknowledgedInputSequence: number
-  snapshot: GameSnapshot
+  frame: GameSnapshotFrame
+  sequence: number
 }
 
 export interface ServerBoneyardLoadedMessage {
@@ -196,6 +215,14 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type', 'nonce'])
     return { type: 'client-ping', nonce: pingNonce(value.nonce) }
   }
+  if (value.type === 'client-snapshot-ack') {
+    onlyKeys(value, 'message', ['type', 'requireKeyframe', 'sequence'])
+    return {
+      type: 'client-snapshot-ack',
+      requireKeyframe: boolean(value.requireKeyframe, 'requireKeyframe'),
+      sequence: nonnegativeInteger(value.sequence, 'sequence'),
+    }
+  }
   if (value.type === 'client-start-match') {
     onlyKeys(value, 'message', ['type', 'boneyardId'])
     return {
@@ -225,6 +252,7 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'content',
       'boneyards',
       'snapshot',
+      'snapshotSequence',
     ])
     return {
       type: 'server-welcome',
@@ -238,13 +266,15 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       content: contentManifest(value.content),
       boneyards: boneyardChoices(value.boneyards),
       snapshot: gameSnapshot(value.snapshot),
+      snapshotSequence: nonnegativeInteger(value.snapshotSequence, 'snapshotSequence'),
     }
   }
   if (value.type === 'server-snapshot') {
     onlyKeys(value, 'message', [
       'type',
       'acknowledgedInputSequence',
-      'snapshot',
+      'frame',
+      'sequence',
     ])
     return {
       type: 'server-snapshot',
@@ -252,7 +282,8 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
         value.acknowledgedInputSequence,
         'acknowledgedInputSequence',
       ),
-      snapshot: gameSnapshot(value.snapshot),
+      frame: gameSnapshotFrame(value.frame),
+      sequence: nonnegativeInteger(value.sequence, 'sequence'),
     }
   }
   if (value.type === 'server-boneyard-loaded') {
@@ -723,7 +754,17 @@ function loadedBoneyard(value: unknown): LoadedBoneyard {
 
 function studentState(value: unknown, field: string): ProtocolStudentState {
   const source = record(value, field)
-  const profile = record(source.profile, `${field}.profile`)
+  onlyKeys(source, field, [
+    'framePhase',
+    'gaitDegrees',
+    'heading',
+    'headingIndex',
+    'id',
+    'position',
+    'props',
+    'reading',
+    'scale',
+  ])
   const props = limitedArray(
     source.props,
     `${field}.props`,
@@ -739,38 +780,16 @@ function studentState(value: unknown, field: string): ProtocolStudentState {
       radius: finite(prop.radius, `${field}.props[${index}].radius`),
     }
   })
-  const pathStep = integer(source.pathStep, `${field}.pathStep`)
-  if (pathStep !== -1 && pathStep !== 1) {
-    throw new GameProtocolError(`${field}.pathStep must be -1 or 1`)
-  }
   return {
-    currentSpeed: finite(source.currentSpeed, `${field}.currentSpeed`),
-    desiredSpeed: finite(source.desiredSpeed, `${field}.desiredSpeed`),
     framePhase: finite(source.framePhase, `${field}.framePhase`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     heading: finite(source.heading, `${field}.heading`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     id: nonnegativeInteger(source.id, `${field}.id`),
-    pathCursor: finite(source.pathCursor, `${field}.pathCursor`),
-    pathId: nonnegativeInteger(source.pathId, `${field}.pathId`),
-    pathStep,
     position: vector(source.position, `${field}.position`),
-    profile: {
-      pushResistance: finite(profile.pushResistance, `${field}.profile.pushResistance`),
-      pushStrength: finite(profile.pushStrength, `${field}.profile.pushStrength`),
-      radius: positiveFinite(profile.radius, `${field}.profile.radius`),
-    },
     props,
     reading: boolean(source.reading, `${field}.reading`),
-    retired: boolean(source.retired, `${field}.retired`),
-    rngState: nonnegativeInteger(source.rngState, `${field}.rngState`),
     scale: positiveFinite(source.scale, `${field}.scale`),
-    staticCollisionEnabled: boolean(
-      source.staticCollisionEnabled,
-      `${field}.staticCollisionEnabled`,
-    ),
-    tick: nonnegativeInteger(source.tick, `${field}.tick`),
-    wander: vector(source.wander, `${field}.wander`),
   }
 }
 
@@ -887,6 +906,34 @@ function gameSnapshot(value: unknown): GameSnapshot {
   }
 }
 
+function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
+  const source = record(value, 'frame')
+  onlyKeys(source, 'frame', ['hostPlayerId', 'players', 'tick', 'world'])
+  const rawPlayers = record(source.players, 'frame.players')
+  if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
+    throw new GameProtocolError(`frame.players may contain at most ${MAX_PLAYERS} entries`)
+  }
+  const players: Record<string, ProtocolPlayerState> = {}
+  for (const [rawPlayerId, state] of Object.entries(rawPlayers)) {
+    const playerId = validatedPlayerId(rawPlayerId, 'frame player id')
+    players[playerId] = playerState(state, `frame.players.${playerId}`)
+  }
+  const hostPlayerId = source.hostPlayerId === null
+    ? null
+    : validatedPlayerId(source.hostPlayerId, 'frame.hostPlayerId')
+  if (hostPlayerId !== null && !players[hostPlayerId]) {
+    throw new GameProtocolError('frame.hostPlayerId is not present in frame.players')
+  }
+  const world = gameWorldSnapshotFrame(source.world, 'frame.world')
+  if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
+  return {
+    hostPlayerId,
+    players,
+    tick: nonnegativeInteger(source.tick, 'frame.tick'),
+    world,
+  }
+}
+
 function hubParticipantState(value: unknown, field: string): HubParticipantState {
   const source = record(value, field)
   onlyKeys(source, field, ['region', 'transition'])
@@ -969,6 +1016,144 @@ function gameWorldSnapshot(value: unknown, field: string): GameSnapshot['world']
     }
   }
   throw new GameProtocolError(`${field}.kind is not supported`)
+}
+
+function gameWorldSnapshotFrame(
+  value: unknown,
+  field: string,
+): GameSnapshotFrame['world'] {
+  const source = record(value, field)
+  if (source.kind !== 'hub') {
+    const world = gameWorldSnapshot(source, field)
+    if (world.kind === 'hub') throw new GameProtocolError(`${field}.kind is invalid`)
+    return world
+  }
+  onlyKeys(source, field, [
+    'ambient',
+    'collisionRngState',
+    'entities',
+    'kind',
+    'participants',
+  ])
+  const rawParticipants = record(source.participants, `${field}.participants`)
+  if (Object.keys(rawParticipants).length > MAX_PLAYERS) {
+    throw new GameProtocolError(
+      `${field}.participants may contain at most ${MAX_PLAYERS} entries`,
+    )
+  }
+  const participants: Record<string, HubParticipantState> = {}
+  for (const [rawPlayerId, state] of Object.entries(rawParticipants)) {
+    const playerId = validatedPlayerId(rawPlayerId, `${field} participant id`)
+    participants[playerId] = hubParticipantState(
+      state,
+      `${field}.participants.${playerId}`,
+    )
+  }
+  return {
+    ambient: ambientState(source.ambient, `${field}.ambient`),
+    collisionRngState: nonnegativeInteger(
+      source.collisionRngState,
+      `${field}.collisionRngState`,
+    ),
+    entities: replicatedEntityFrame(source.entities, `${field}.entities`),
+    kind: 'hub',
+    participants,
+  }
+}
+
+function replicatedEntityFrame(value: unknown, field: string): ReplicatedEntityFrame {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'baselineSequence',
+    'keyframe',
+    'retired',
+    'samples',
+    'spawned',
+  ])
+  const keyframe = boolean(source.keyframe, `${field}.keyframe`)
+  const baselineSequence = nonnegativeInteger(
+    source.baselineSequence,
+    `${field}.baselineSequence`,
+  )
+  if (keyframe && baselineSequence !== 0) {
+    throw new GameProtocolError(`${field}.baselineSequence must be zero for a keyframe`)
+  }
+  return {
+    baselineSequence,
+    keyframe,
+    retired: uniqueEntityEntries(
+      source.retired,
+      `${field}.retired`,
+      'key',
+    ) as unknown as readonly ReplicatedEntityKey[],
+    samples: uniqueEntityEntries(
+      source.samples,
+      `${field}.samples`,
+      'sample',
+    ) as unknown as readonly ReplicatedEntitySample[],
+    spawned: uniqueEntityEntries(
+      source.spawned,
+      `${field}.spawned`,
+      'descriptor',
+    ) as unknown as readonly ReplicatedEntityDescriptor[],
+  }
+}
+
+function uniqueEntityEntries(
+  value: unknown,
+  field: string,
+  kind: 'descriptor' | 'key' | 'sample',
+): readonly number[][] {
+  const entries = limitedArray(value, field, MAX_REPLICATED_ENTITIES)
+  const result: number[][] = []
+  const keys = new Set<string>()
+  for (let index = 0; index < entries.length; index += 1) {
+    const entryField = `${field}[${index}]`
+    const raw = limitedArray(entries[index], entryField, MAX_REPLICATED_COMPONENTS)
+    if (raw.length < 2 || (kind === 'key' && raw.length !== 2)) {
+      throw new GameProtocolError(`${entryField} has an invalid component count`)
+    }
+    const typeId = nonnegativeInteger(raw[0], `${entryField}[0]`)
+    const entityId = nonnegativeInteger(raw[1], `${entryField}[1]`)
+    const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(typeId)
+    if (!registration) {
+      throw new GameProtocolError(`${entryField} uses an unknown entity type`)
+    }
+    const key = `${typeId}:${entityId}`
+    if (keys.has(key)) throw new GameProtocolError(`${entryField} duplicates ${key}`)
+    keys.add(key)
+    const decoded: [number, number, ...number[]] = [
+      typeId,
+      entityId,
+      ...raw.slice(2).map((component, componentIndex) => finite(
+        component,
+        `${entryField}[${componentIndex + 2}]`,
+      )),
+    ]
+    if (
+      (kind === 'descriptor' && !registration.descriptorIsValid(decoded))
+      || (kind === 'sample' && !registration.sampleIsValid(decoded))
+    ) throw new GameProtocolError(`${entryField} has an invalid registered ${kind} shape`)
+    result.push(decoded)
+  }
+  return result
+}
+
+function validateParticipantOwnership(
+  participants: Readonly<Record<string, HubParticipantState>>,
+  players: Readonly<Record<string, ProtocolPlayerState>>,
+  field: string,
+): void {
+  const participantIds = Object.keys(participants).sort()
+  const playerIds = Object.keys(players).sort()
+  if (
+    participantIds.length !== playerIds.length
+    || participantIds.some((id, index) => id !== playerIds[index])
+  ) {
+    throw new GameProtocolError(
+      `${field}.world.participants must match ${field}.players exactly`,
+    )
+  }
 }
 
 function boneyardGateLeafSnapshot(

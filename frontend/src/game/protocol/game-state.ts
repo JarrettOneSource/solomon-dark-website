@@ -9,6 +9,7 @@ import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
 export interface ProtocolFountainParticleState {
   id: number
@@ -37,30 +38,15 @@ export interface ProtocolStudentProp {
 }
 
 export interface ProtocolStudentState {
-  currentSpeed: number
-  desiredSpeed: number
   framePhase: number
   gaitDegrees: number
   heading: number
   headingIndex: number
   id: number
-  pathCursor: number
-  pathId: number
-  pathStep: 1 | -1
   position: Vector2
-  profile: {
-    pushResistance: number
-    pushStrength: number
-    radius: number
-  }
   props: readonly ProtocolStudentProp[]
   reading: boolean
-  retired: boolean
-  rngState: number
   scale: number
-  staticCollisionEnabled: boolean
-  tick: number
-  wander: Vector2
 }
 
 export interface HubWorldSnapshot {
@@ -79,9 +65,26 @@ export interface BoneyardWorldSnapshot {
 
 export type GameWorldSnapshot = HubWorldSnapshot | BoneyardWorldSnapshot
 
+export interface HubWorldSnapshotFrame {
+  ambient: ProtocolAmbientState
+  collisionRngState: number
+  entities: ReplicatedEntityFrame
+  kind: 'hub'
+  participants: Readonly<Record<string, HubParticipantState>>
+}
+
+export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapshot
+
 export interface GameSnapshot {
   hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   tick: number
   world: GameWorldSnapshot
+}
+
+export interface GameSnapshotFrame {
+  hostPlayerId: string | null
+  players: Readonly<Record<string, ProtocolPlayerState>>
+  tick: number
+  world: GameWorldSnapshotFrame
 }

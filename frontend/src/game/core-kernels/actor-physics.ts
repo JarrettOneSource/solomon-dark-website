@@ -1,4 +1,5 @@
 import type { Vector2 } from './vector.ts'
+import type { ActorMotionBroadphase } from './dynamic-actor-grid.ts'
 
 export interface ActorPhysicsBody {
   delta: Vector2
@@ -63,16 +64,21 @@ function separation(
 }
 
 function applyCorrection(
+  bodyIndex: number,
   body: WorkingBody,
   correction: Vector2,
   world: ActorPhysicsWorld,
+  bodies: readonly WorkingBody[],
+  broadphase?: ActorMotionBroadphase,
 ): void {
   if (correction.x === 0 && correction.y === 0) return
   const candidate = {
     x: body.position.x + correction.x,
     y: body.position.y + correction.y,
   }
-  if (world.canPlace(body.id, candidate, body.radius)) body.position = candidate
+  if (!world.canPlace(body.id, candidate, body.radius)) return
+  body.position = candidate
+  broadphase?.update(bodyIndex, bodies)
 }
 
 /**
@@ -84,6 +90,7 @@ export function resolveActorMotion(
   sourceBodies: readonly ActorPhysicsBody[],
   world: ActorPhysicsWorld,
   shouldCollide: ActorBodyPairFilter,
+  broadphase?: ActorMotionBroadphase,
 ): ActorPhysicsBody[] {
   const bodies: WorkingBody[] = sourceBodies.map((body) => ({
     ...body,
@@ -91,6 +98,7 @@ export function resolveActorMotion(
     delta: { ...body.delta },
     position: { ...body.position },
   }))
+  broadphase?.rebuild(bodies)
 
   const moveBody = (
     bodyIndex: number,
@@ -107,18 +115,19 @@ export function resolveActorMotion(
     }
 
     mover.position = world.move(mover.id, mover.position, delta, mover.radius)
+    broadphase?.update(bodyIndex, bodies)
 
-    for (let otherIndex = 0; otherIndex < bodies.length; otherIndex += 1) {
-      if (otherIndex === bodyIndex) continue
+    const resolvePair = (otherIndex: number): void => {
+      if (otherIndex === bodyIndex) return
       const other = bodies[otherIndex]
-      if (!shouldCollide(mover, other)) continue
+      if (!shouldCollide(mover, other)) return
 
       if (
         (!recursive && mover.pushEnabled === false)
         || mover.currentPushStrength < other.pushResistance
       ) {
-        applyCorrection(mover, separation(mover, other, false), world)
-        continue
+        applyCorrection(bodyIndex, mover, separation(mover, other, false), world, bodies, broadphase)
+        return
       }
 
       const otherCorrection = separation(other, mover, true)
@@ -138,7 +147,34 @@ export function resolveActorMotion(
           y: otherCorrection.y * pushFactor,
         }, epochRecipients, true)
       }
-      applyCorrection(mover, separation(mover, other, true), world)
+      applyCorrection(bodyIndex, mover, separation(mover, other, true), world, bodies, broadphase)
+    }
+
+    if (!broadphase) {
+      for (let otherIndex = 0; otherIndex < bodies.length; otherIndex += 1) {
+        resolvePair(otherIndex)
+      }
+      return
+    }
+
+    let minimumCandidateIndex = 0
+    let candidateRevision = -1
+    let candidates: readonly number[] = []
+    while (minimumCandidateIndex < bodies.length) {
+      if (candidateRevision !== broadphase.revision) {
+        candidates = [...broadphase.candidateIndices(bodyIndex, bodies)]
+        candidateRevision = broadphase.revision
+      }
+      let otherIndex = -1
+      for (const candidateIndex of candidates) {
+        if (candidateIndex >= minimumCandidateIndex && candidateIndex !== bodyIndex) {
+          otherIndex = candidateIndex
+          break
+        }
+      }
+      if (otherIndex < 0) break
+      minimumCandidateIndex = otherIndex + 1
+      resolvePair(otherIndex)
     }
   }
 

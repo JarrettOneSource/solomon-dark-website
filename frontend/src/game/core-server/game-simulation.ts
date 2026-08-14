@@ -24,6 +24,7 @@ import {
   stepHubWorldTick,
   type HubWorldState,
 } from './hub-world.ts'
+import type { HubStudentPopulationState } from './hub-students.ts'
 
 export type PlayerId = string
 
@@ -34,6 +35,10 @@ export interface GameSimulationState {
   players: Readonly<Record<PlayerId, PlayerCharacterState>>
   tick: number
   world: GameWorldState
+}
+
+export interface GameSimulationOptions {
+  hubStudentPopulation?: HubStudentPopulationState
 }
 
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
@@ -51,8 +56,11 @@ export function createGameSimulation(
   characters: Readonly<Record<PlayerId, PlayerCharacterConfig>> = {
     [DEFAULT_PLAYER_ID]: DEFAULT_PLAYER_CHARACTER_CONFIG,
   },
+  options: GameSimulationOptions = {},
 ): GameSimulationState {
-  const world = createHubWorld(Object.keys(characters))
+  const world = createHubWorld(Object.keys(characters), {
+    studentPopulation: options.hubStudentPopulation,
+  })
   const players: Record<PlayerId, PlayerCharacterState> = {}
   for (const [playerId, config] of Object.entries(characters)) {
     players[playerId] = createPlayerCharacter(config, hubSpawnPoint())

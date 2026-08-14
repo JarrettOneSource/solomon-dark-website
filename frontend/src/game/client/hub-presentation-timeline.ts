@@ -4,7 +4,6 @@ import type {
   ProtocolAmbientState,
   ProtocolFountainParticleState,
   ProtocolPlayerState,
-  ProtocolStudentProp,
   ProtocolStudentState,
 } from '../protocol/game-state.ts'
 import type {
@@ -316,8 +315,6 @@ function interpolateStudent(
   const discrete = blend < 1 ? older : newer
   return {
     ...discrete,
-    currentSpeed: lerp(older.currentSpeed, newer.currentSpeed, blend),
-    desiredSpeed: lerp(older.desiredSpeed, newer.desiredSpeed, blend),
     framePhase: lerpCycle(older.framePhase, newer.framePhase, blend, WALK_FRAME_COUNT),
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
     heading: lerpCycle(older.heading, newer.heading, blend, FULL_CIRCLE),
@@ -331,37 +328,7 @@ function interpolateStudent(
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),
     },
-    profile: {
-      pushResistance: lerp(older.profile.pushResistance, newer.profile.pushResistance, blend),
-      pushStrength: lerp(older.profile.pushStrength, newer.profile.pushStrength, blend),
-      radius: lerp(older.profile.radius, newer.profile.radius, blend),
-    },
-    props: interpolateProps(older.props, newer.props, blend),
-    scale: lerp(older.scale, newer.scale, blend),
-    wander: {
-      x: lerp(older.wander.x, newer.wander.x, blend),
-      y: lerp(older.wander.y, newer.wander.y, blend),
-    },
   }
-}
-
-function interpolateProps(
-  older: readonly ProtocolStudentProp[],
-  newer: readonly ProtocolStudentProp[],
-  blend: number,
-): ProtocolStudentProp[] {
-  const count = blend < 1 ? older.length : newer.length
-  return Array.from({ length: count }, (_, index) => {
-    const first = older[index]
-    const second = newer[index]
-    if (!first) return { ...second }
-    if (!second) return { ...first }
-    return {
-      angle: lerpCycle(first.angle, second.angle, blend, FULL_CIRCLE),
-      paletteIndex: blend < 1 ? first.paletteIndex : second.paletteIndex,
-      radius: lerp(first.radius, second.radius, blend),
-    }
-  })
 }
 
 function interpolateAmbient(
@@ -479,9 +446,7 @@ function copyStudent(student: ProtocolStudentState): ProtocolStudentState {
   return {
     ...student,
     position: { ...student.position },
-    profile: { ...student.profile },
     props: student.props.map((prop) => ({ ...prop })),
-    wander: { ...student.wander },
   }
 }
 

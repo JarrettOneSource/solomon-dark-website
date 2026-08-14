@@ -40,6 +40,11 @@ import {
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
+import {
+  createGameSnapshotFrame,
+  createReplicatedEntityBaseline,
+  type ReplicatedEntityBaseline,
+} from '../protocol/entity-replication.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
@@ -54,6 +59,7 @@ export interface GameHostOptions {
   authentication: GameHostAuthentication
   boneyards?: BoneyardCatalog
   content?: GameContentManifest
+  createSimulation?: () => GameSimulationState
   host?: string
   maxPlayers?: number
   port?: number
@@ -78,10 +84,14 @@ export interface GameHost {
 
 interface HostClient {
   acknowledgedSequence: number
+  acknowledgedSnapshotSequence: number
   activeInput: PlayerCharacterInput
+  forceReplicationKeyframe: boolean
   lastReceivedSequence: number
+  lastSentSnapshotSequence: number
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
+  sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
 }
 
@@ -111,11 +121,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
 
-  let state = createGameSimulation({})
+  let state = createInitialSimulation(options.createSimulation)
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
   let reservedHostClaimed = false
   let loadedBoneyard: LoadedBoneyard | null = null
+  let nextSnapshotSequence = 1
   let closed = false
   let ticking = false
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
@@ -228,12 +239,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         } else if (reservedHostClaimed) {
           hostPlayerId ??= playerId
         }
+        const welcomeSnapshot = createGameSnapshot(state, hostPlayerId)
+        const snapshotSequence = nextSnapshotSequence
+        nextSnapshotSequence += 1
+        const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
         clients.set(socket, {
           acknowledgedSequence: 0,
+          acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
+          forceReplicationKeyframe: false,
           lastReceivedSequence: 0,
+          lastSentSnapshotSequence: snapshotSequence,
           playerId,
           queuedInputs: new Map(),
+          sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
         })
         socket.send(encodeGameMessage({
@@ -257,7 +276,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             mods: [],
           },
           boneyards: boneyards.choices,
-          snapshot: createGameSnapshot(state, hostPlayerId),
+          snapshot: welcomeSnapshot,
+          snapshotSequence,
         }))
         if (loadedBoneyard) {
           socket.send(encodeGameMessage({
@@ -303,6 +323,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       if (message.type === 'client-ping') {
         socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
+        return
+      }
+      if (message.type === 'client-snapshot-ack') {
+        if (message.sequence > client.lastSentSnapshotSequence) {
+          disconnect(socket, 'invalid-message', 'Snapshot acknowledgement is ahead of the server.')
+          return
+        }
+        if (message.requireKeyframe) client.forceReplicationKeyframe = true
+        if (message.sequence <= client.acknowledgedSnapshotSequence) return
+        if (!client.sentReplicationBaselines.has(message.sequence)) {
+          client.forceReplicationKeyframe = true
+          return
+        }
+        client.acknowledgedSnapshotSequence = message.sequence
+        pruneReplicationBaselines(client)
         return
       }
       if (message.type === 'client-start-match') {
@@ -367,13 +402,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   function broadcastSnapshot(): void {
     const snapshot = createGameSnapshot(state, hostPlayerId)
+    const snapshotSequence = nextSnapshotSequence
+    nextSnapshotSequence += 1
+    const currentBaseline = createReplicatedEntityBaseline(snapshot)
+    const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
+      const acknowledgedBaseline = client.sentReplicationBaselines.get(
+        client.acknowledgedSnapshotSequence,
+      )
+      const forceKeyframe = periodicKeyframe
+        || client.forceReplicationKeyframe
+        || !acknowledgedBaseline
       client.socket.send(encodeGameMessage({
         type: 'server-snapshot',
         acknowledgedInputSequence: client.acknowledgedSequence,
-        snapshot,
+        frame: createGameSnapshotFrame(
+          snapshot,
+          client.acknowledgedSnapshotSequence,
+          acknowledgedBaseline,
+          forceKeyframe,
+        ),
+        sequence: snapshotSequence,
       }))
+      client.forceReplicationKeyframe = false
+      client.lastSentSnapshotSequence = snapshotSequence
+      client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
+      pruneReplicationBaselines(client)
     }
   }
 
@@ -427,6 +482,37 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     state: () => state,
+  }
+}
+
+function createInitialSimulation(
+  factory: (() => GameSimulationState) | undefined,
+): GameSimulationState {
+  const state = factory?.() ?? createGameSimulation({})
+  if (state.world.kind !== 'hub') {
+    throw new Error('Game hosts must start in the Hub')
+  }
+  if (Object.keys(state.players).length !== 0) {
+    throw new Error('Game hosts must start without player characters')
+  }
+  if (Object.keys(state.world.participants).length !== 0) {
+    throw new Error('Game hosts must start without Hub participants')
+  }
+  return state
+}
+
+function pruneReplicationBaselines(client: HostClient): void {
+  for (const sequence of client.sentReplicationBaselines.keys()) {
+    if (sequence < client.acknowledgedSnapshotSequence) {
+      client.sentReplicationBaselines.delete(sequence)
+    }
+  }
+  while (client.sentReplicationBaselines.size > 64) {
+    const sequence = [...client.sentReplicationBaselines.keys()].find(
+      (candidate) => candidate !== client.acknowledgedSnapshotSequence,
+    )
+    if (sequence === undefined) break
+    client.sentReplicationBaselines.delete(sequence)
   }
 }
 

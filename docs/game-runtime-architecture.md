@@ -1,6 +1,6 @@
 # Solomon Dark rebuilt runtime architecture
 
-Status: accepted; authoritative, GPU-client, and desktop-solo vertical slices implemented, 2026-08-12
+Status: accepted; authoritative, GPU-client, desktop-solo, headless-crowd, and compact-replication slices implemented, 2026-08-14
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -144,10 +144,21 @@ Local Network Access exceptions.
 Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
-prediction-kernel identity and parameters, and a reserved resume token. The
-v2 snapshot keeps session-owned players at its root and uses a discriminated
-`world` payload, currently `kind: "hub"`; Boneyard extends that world union
-without changing player identity. Unknown or malformed messages fail closed.
+prediction-kernel identity and parameters, and a reserved resume token.
+Protocol `9` welcomes a client with one complete snapshot plus its sequence.
+Subsequent messages keep session-owned players at the frame root and use a
+discriminated world payload. The Hub world carries a compact replicated-entity
+lane; Boneyard currently carries its small world payload directly until its
+first replicated enemy family exists. Unknown or malformed messages fail
+closed.
+
+Each client acknowledges the newest complete snapshot sequence it has
+reconstructed. The host computes entity spawn, retire, and dynamic samples
+against that acknowledged baseline rather than assuming delivery. It sends a
+complete entity keyframe when the baseline is unavailable, the client requests
+recovery, or the five-second recovery interval expires. A missing descriptor,
+invalid sample, or sequence gap makes the client request a keyframe; it never
+guesses missing entity state.
 Authenticated clients also measure application-level transport RTT with a
 nonce ping that the host echoes immediately outside the simulation and snapshot
 clocks. The measurement is client-local diagnostics state and never enters an
@@ -193,10 +204,39 @@ There is one composed client, not one DOM client and one canvas client.
   Players, Solomon Dig, and moving gate leaves remain dynamic GPU residents.
   The recovered mode-1/2 darkness compositor remains a small screen-space
   post-process between the world canvas and HUD.
+- Gameplay camera motion is isolated at Pixi render-group boundaries. Boneyard
+  owns one camera group; the Hub owns separate primary-Courtyard and recovered
+  southern-parallax groups, plus one active private-room group. Group boundaries
+  follow existing painter banks, so they never split an intra-bank z-order.
+- Immutable Boneyard sprites carry their complete texture-frame world
+  rectangles. Each display frame intersects those rectangles with a `32`
+  world-unit padded camera view and toggles only static sprite renderability.
+  Oversized and overhanging art stays resident whenever any part of its
+  rectangle can be visible. Dynamic actors and moving gates remain uncullable
+  live views.
+- Hub static art is deliberately not camera-culled. Controlled physical-GPU A/B
+  measurement found its complete baseline scene costs about `0.02 ms` per
+  synchronous render, with no measurable benefit from per-sprite visibility
+  checks. Keeping the castle bank, circular platforms, statue, fountain,
+  telescope, and complete Astronomer ensemble live removes a visual-risk surface
+  while the three existing camera render groups retain cheap transform updates.
+- Boneyard culling does not prune the recovered effective-Y painter plan.
+  Offscreen main layers remain in depth calculation, while tint and z-index
+  writes are restricted to residents that will render; an entering resident is
+  updated before the same frame is submitted.
 - Actor and menu presentation is pooled inside the active GPU scene. The old
   per-actor and per-menu-art DOM/style painters are removed; React continues to
   own HUD semantics, accessibility text, focusable hit targets, and touch
   controls.
+- Hub Student views cache discrete texture inputs and write body, head, and prop
+  textures only when their heading, pose, reading state, scale, or palette
+  changes. Continuous position, depth, bob, and prop transforms still update
+  every display frame. Retired views enter a bounded scene-owned pool and are
+  reset before reuse.
+- Student visibility is currently instrumentation only. It reports conservative
+  candidate counts without changing `renderable`. It never owns a Courtyard
+  camera bank or any southern architecture, telescope, Astronomer, statue,
+  fountain, tent, or other authored art.
 - The client presents buffered server snapshots at display cadence. The Hub
   applies bounded local prediction through the shared movement kernel;
   Boneyard presentation interpolates received players and gate leaves without
@@ -220,7 +260,10 @@ Node host. Stack changes require a failed measured gate, not preference.
 - browser-to-residential-peer hosting, which is unsupported without a relay;
 - host migration;
 - automatic crash restart and seamless multiplayer rejoin;
-- binary or delta snapshots before measured bandwidth requires them;
+- a binary entity wire codec, compression, or per-client spatial interest sets
+  until a declared product load crosses the measured adoption gate;
+- a general ECS dependency until several large entity families demonstrably
+  need shared component-membership queries;
 - cross-platform fixed-point determinism;
 - WebGPU or a lower-level renderer before a recovered-load WebGL gate fails;
 - replacement of Electron before its package, lifecycle, or platform gates fail;
@@ -252,8 +295,9 @@ Before final stack commitments:
    minimum hardware.
 4. Measure local server spawn, socket lifecycle, input latency, teardown, and
    failure behavior in the packaged shell.
-5. Measure uncompressed JSON snapshot rates before deciding on quantization,
-   deltas, or a binary codec.
+5. Continue measuring compact JSON snapshots at each declared combat load;
+   adopt the measured binary lane only when that product load justifies its
+   transport and tooling complexity.
 6. Replay one input recording through loopback and cloud-hosted instances and
    compare discrete events plus declared continuous-state tolerances. Measure,
    but do not require, cross-platform hash identity.
@@ -350,3 +394,149 @@ clear the held touch vector. A real `800 ms` mobile gesture must cross at least
 `40` world units; the retained receipt crossed `61.89`. This prevents UI render
 frequency from leaking into the authoritative input lifetime without adding
 command polling or a mobile-only simulation path.
+
+## 2026-08-14 crowd, headless, and replication cutover
+
+### Authoritative data and scheduling
+
+Hub Students now live in a purpose-built structure-of-arrays store owned by
+`HubStudentPopulationState`. Stable numeric slots hold hot scalar fields;
+stable ID order remains the system iteration contract; retired slots are
+reused only after removal. The `students` accessor is a scalar compatibility
+adapter for snapshots and tests, not the hot storage owner. The current route
+planner consumes scalar work views whose objects and nested vectors are reused
+in place each tick; it does not yet claim to be a direct typed-array kernel.
+This is an ECS-shaped data layout without a general ECS package or a whole-game
+entity rewrite.
+
+`HubWorldRuntime` owns reusable plans, body arrays, position maps, the Student
+neighbor grid, and the generic dynamic actor grid. The grid is rebuilt from
+stable source slots once per fixed tick and emits candidates in the previous
+source-body order before narrow phase. Focused randomized tests retain the
+all-pairs solver as an oracle and require identical candidate sets and final
+motion. Static Hub collision and all render-only art remain outside this grid.
+
+The ML seam is `HubHeadlessEnvironment`:
+
+- `reset({ seed, studentCount })` creates an isolated deterministic Hub world;
+- one packed six-float action carries movement, optional aim, and two cast
+  levels;
+- one fixed-stride `Float32Array` observation carries the player header and a
+  bounded Student lane;
+- `stateHash()` hashes canonical authoritative state, excluding runtime scratch
+  buffers, for replay checks;
+- `HubHeadlessBatch` steps many same-thread worlds into reusable packed output;
+- `HubHeadlessWorkerPool` partitions isolated worlds across persistent Node
+  worker threads and transfers packed buffers rather than cloning world graphs.
+
+The ordinary game host remains the authoritative runtime. The headless seam
+does not remove collision, AI, RNG, or lifecycle systems and does not depend on
+Pixi, React, WebSocket, or wall-clock scheduling.
+
+### Replicated entity contract
+
+The Hub entity lane separates immutable descriptors from quantized dynamic
+samples. Student type `1` sends scale, reading mode, and prop appearance only
+on spawn/keyframe, then sends ID, position, heading, frame phase, and gait.
+Position uses `1/16`-world-unit precision; headings and gait use `1/64` degree;
+frame phase uses `1/1024` frame. Authoritative state remains full-precision
+JavaScript numbers. Quantization is a transport decision and cannot feed back
+into simulation.
+
+Every future enemy family must satisfy this contract before entering the lane:
+
+1. Allocate a stable numeric type ID that is never silently reused.
+2. Register strict descriptor and sample validators and bound every variable
+   length before raising protocol limits.
+3. Put immutable presentation/configuration in the spawn descriptor and only
+   snapshot-varying presentation state in the dynamic sample.
+4. Preserve full authoritative precision, stable lifecycle order, and semantic
+   gameplay events outside presentation interpolation.
+5. Add round-trip and maximum-error tests for quantization, spawn, retire,
+   late join, periodic keyframe, missing-baseline recovery, and stale frames.
+6. Materialize through the shared registry on every client; a sample without a
+   known descriptor is a recovery gap, not a partially rendered enemy.
+7. Keep the current near-state snapshot cadence until a separate interest/LOD
+   contract proves that an approaching entity receives its descriptor and at
+   least two samples before visibility, with hysteresis at both boundaries.
+
+Boneyard frames remain direct world payloads today because no enemy entity
+family exists in that world yet. The first enemy implementation must add its
+codec to the registry, extend the Boneyard entity lane, bump the exact-match
+protocol version, and pass connected-client recovery tests. The current Student
+codec is infrastructure for that work, not a claim that enemies already
+replicate.
+
+### Measured gates
+
+The warmed WSL Node 50-tick episodic benchmark now measures `0.1150`, `0.1421`,
+`0.2578`, `0.5490`, and `1.9883 ms` per authoritative tick at `16`, `32`, `64`,
+`128`, and `256` deterministic Students. The original `256` directional
+baseline was `5.392 ms`, so the matching short-episode stress case is about
+`63.1%` faster while the equivalence tests preserve current authoritative
+outcomes.
+
+The default training-oriented benchmark no longer hides later route and push
+work behind frequent resets. It keeps the exact population active by reversing
+routes and runs `1,000` uninterrupted ticks. Across three warmed runs, median
+tick costs were `0.1246`, `0.1511`, `0.2990`, `0.8218`, and `2.8296 ms`; every
+run produced the same deterministic hash for its population. The `256` lane
+sustained `353.4` ticks per second, over `3.5x` the authoritative `100 Hz`
+requirement on WSL Node `22.17.0`.
+
+The five-second, `20 Hz` compact-JSON benchmark averages `20.61`, `31.77`,
+`54.15`, `99.34`, and `190.55 KiB/s` per client at the same populations. That
+is a `91.79%` to `95.04%` reduction from the legacy full authoritative Student
+snapshot shape. At `256`, an ordinary delta frame is about `9,371` bytes and a
+recovery keyframe about `47,907` bytes, versus `196,533` bytes for the legacy
+full frame.
+
+A benchmark-only packed entity lane estimates `5,548` bytes for the same
+`256`-Student message and about `10.7 microseconds` of entity encoding. Deflate
+reaches `4,278` bytes but costs about `143.8 microseconds` per message. Neither
+is production transport. Re-evaluate the binary lane when a declared,
+representative scene exceeds `64 KiB/s` per client at P95 or snapshot encoding
+becomes a measured server phase; a synthetic `256`-Student stress case already
+shows that future high-population combat may cross that gate, while the stock
+roster does not justify mixed text/binary tooling today.
+
+`SDR_HUB_BENCH_STUDENTS` and `SDR_HUB_BENCH_SEED` inject a deterministic,
+empty-player Hub fixture only into the development host. The count is capped at
+the current `256`-Student protocol limit. This fixture alone reverses a Student
+at each route endpoint so the population stays exact and moving throughout a
+sample; the stock population retains native retirement. The measurement records
+arrival, minimum, maximum, and final counts and requires all four to match.
+`SDR_GAME_CDP_URL` lets the same measurement connect to a dedicated Windows
+Chrome process so GPU identity and physical-device receipts are not inferred
+from WSL software rendering. `SDR_GAME_PERF_MOVE_SCRIPT` accepts bounded
+`w|a|s|d:milliseconds` steps so the same exact-population receipt can sample and
+capture camera extrema rather than validating only the spawn view.
+
+Headed Windows Chrome `151.0.7922.110` on the physical Radeon RX 9070 XT held
+the exact moving fixture at the presentation ceiling with no frame over `20
+ms`:
+
+| Students | Average FPS | 1% low | Browser task time | Snapshot ingress |
+| ---: | ---: | ---: | ---: | ---: |
+| 16 | `130.673` | `123.023` | `0.491 s` | `34.034 KiB/s` |
+| 64 | `130.897` | `120.069` | `0.666 s` | `67.994 KiB/s` |
+| 128 | `130.582` | `120.482` | `0.839 s` | `110.383 KiB/s` |
+| 256 | `131.605` | `123.239` | `1.316 s` | `201.790 KiB/s` |
+
+The final post-guard two-page run on that same Windows machine received `101`
+snapshots per page over `5.012 s` at `20.150 Hz`, sequences `3597..3697`, with
+zero gaps, one keyframe per page, exact `256`-Student samples, and identical
+shared ticks. Measured snapshot ingress was `207.141 KiB/s` per page; aggregate
+ingress plus ACK egress was `417.100 KiB/s`. This is a two-client wire receipt,
+not a claim about two distinct physical devices.
+
+The exact-256 southern stress sweep reached player position `(1196.031,
+1074.941)` at `131.645` average FPS and `122.699` one-percent low. A separate
+zero-crowd camera-control run removed actor pushing from the path and reached
+the true east extreme at `(1972.254, 1071.001)`, measuring `129.766` average FPS
+and `123.457` one-percent low. Direct inspection of
+`/mnt/c/Temp/sdr-hub-telescope-extreme-final.png` retained the castle row,
+circular architecture, animated statue base, telescope, and Wizards. Both runs
+reported all `16` southern architecture sprites, all `19` southern-bank
+children, and no frame over `20 ms`. The scene guard verifies visibility and
+parent ownership, rather than treating `renderable` alone as sufficient.

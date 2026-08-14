@@ -28,7 +28,9 @@ export interface HubRendererDiagnostics {
 }
 
 interface HubFrameDiagnostics {
+  astronomerRenderable: boolean
   astronomerTelescopeFrame: number
+  cameraRenderGroupCount: number
   frameCount: number
   fadeAlpha: number
   hostPlayerId: string | null
@@ -40,7 +42,15 @@ interface HubFrameDiagnostics {
   playerWalkPose: number
   playerX: number
   playerY: number
+  pooledStudentViewCount: number
+  southernArchitectureCount: number
+  southernArtRenderable: boolean
+  southernChildCount: number
   studentCount: number
+  studentOutsideViewCount: number
+  studentViewCreationCount: number
+  studentViewReuseCount: number
+  studentVisibleCandidateCount: number
   teacherFrame: number
   tick: number
   transitionPhase: 'incoming' | 'outgoing' | null
@@ -114,6 +124,8 @@ export async function createHubWorldRenderer(
   canvas.className = 'hub-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
+  canvas.dataset.staticCulling = 'none'
+  canvas.dataset.studentCulling = 'instrumentation-only'
   canvas.dataset.textureSources = JSON.stringify(textures.assetSources)
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
@@ -127,7 +139,10 @@ export async function createHubWorldRenderer(
   let frameTimeTotal = 0
   let resolution = initialResolution
   const frameDiagnostics: HubFrameDiagnostics = {
+    astronomerRenderable: true,
     astronomerTelescopeFrame: 0,
+    cameraRenderGroupCount: courtyardScene.cameraRenderGroupCount
+      + Number(privateRoomScene.world.isRenderGroup),
     frameCount: 0,
     fadeAlpha: 0,
     hostPlayerId: options.initialSnapshot.hostPlayerId,
@@ -139,7 +154,15 @@ export async function createHubWorldRenderer(
     playerWalkPose: 0,
     playerX: Number.NaN,
     playerY: Number.NaN,
+    pooledStudentViewCount: 0,
+    southernArchitectureCount: courtyardScene.southernArchitectureCount,
+    southernArtRenderable: true,
+    southernChildCount: courtyardScene.southernChildCount,
     studentCount: 0,
+    studentOutsideViewCount: 0,
+    studentViewCreationCount: 0,
+    studentViewReuseCount: 0,
+    studentVisibleCandidateCount: 0,
     teacherFrame: 0,
     tick: options.initialSnapshot.tick,
     transitionPhase: null,
@@ -168,12 +191,19 @@ export async function createHubWorldRenderer(
   const updateFrameDiagnostics = (snapshot: HubPresentationFrame) => {
     const player = snapshot.players[options.playerId]
     const participant = snapshot.world.participants[options.playerId]
+    frameDiagnostics.astronomerRenderable = courtyardScene.astronomerRenderable
     frameDiagnostics.astronomerTelescopeFrame = courtyardScene.astronomerTelescopeFrame
     frameDiagnostics.frameCount = frameCount
     frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
     frameDiagnostics.hostPlayerId = snapshot.hostPlayerId
     frameDiagnostics.playerCount = Object.keys(snapshot.players).length
+    frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
+    frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
+    frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
+    frameDiagnostics.southernChildCount = courtyardScene.southernChildCount
     frameDiagnostics.studentCount = courtyardScene.studentCount
+    frameDiagnostics.studentViewCreationCount = courtyardScene.studentViewCreationCount
+    frameDiagnostics.studentViewReuseCount = courtyardScene.studentViewReuseCount
     frameDiagnostics.teacherFrame = courtyardScene.teacherFrame
     frameDiagnostics.tick = snapshot.tick
     frameDiagnostics.transitionPhase = participant?.transition?.phase ?? null
@@ -216,15 +246,27 @@ export async function createHubWorldRenderer(
       const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
       if (inCourtyard) {
         courtyardScene.world.position.set(-camera.x, -camera.y)
-        courtyardScene.southern.position.copyFrom(hubSouthernCameraTranslation(camera, {
+        const southernTranslation = hubSouthernCameraTranslation(camera, {
           height: viewport.height / HUB_CAMERA_SCALE,
           width: viewport.width / HUB_CAMERA_SCALE,
-        }))
+        })
+        courtyardScene.southern.position.copyFrom(southernTranslation)
+        if (frameCount === 1 || frameCount % DIAGNOSTIC_WINDOW_FRAMES === 0) {
+          const view = {
+            height: viewport.height / HUB_CAMERA_SCALE,
+            width: viewport.width / HUB_CAMERA_SCALE,
+          }
+          const visible = courtyardScene.countVisibleStudents(snapshot, camera, view)
+          frameDiagnostics.studentVisibleCandidateCount = visible
+          frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length - visible
+        }
       } else {
         privateRoomScene.world.position.set(
           -camera.x * HUB_CAMERA_SCALE,
           -camera.y * HUB_CAMERA_SCALE,
         )
+        frameDiagnostics.studentVisibleCandidateCount = 0
+        frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length
       }
       fadeCover.alpha = participant.transition?.alpha ?? 0
       canvas.dataset.hubRegion = participant.region

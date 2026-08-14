@@ -8,12 +8,14 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
 const minimumFps = Number(process.env.SDR_GAME_MIN_FPS || 0)
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
+const uncapped = process.env.SDR_GAME_PERF_UNCAPPED === '1'
 const connectedBrowser = Boolean(cdpUrl)
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
   : await chromium.launch({
       executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
       headless: true,
+      args: uncapped ? ['--disable-frame-rate-limit', '--disable-gpu-vsync'] : [],
     })
 const context = connectedBrowser
   ? browser.contexts()[0]
@@ -59,7 +61,13 @@ try {
         : 'unavailable',
       renderer: node.dataset.rendererName,
       resolution: Number(node.dataset.resolution),
+      cameraRenderGroup: frame.cameraRenderGroup,
+      culledResidentCount: frame.culledResidentCount,
+      residentCount: frame.residentCount,
       staticPaintCount: frame.staticPaintCount,
+      visibleMainLayerCount: frame.visibleMainLayerCount,
+      visibleOversizedResidentCount: frame.visibleOversizedResidentCount,
+      visibleResidentCount: frame.visibleResidentCount,
     }
 
     function darknessAlphaReceipt(darknessCanvas, diagnostics) {
@@ -105,8 +113,18 @@ try {
 
   assert.deepEqual(errors, [])
   assert.equal(runtime.renderer, 'webgl')
+  assert.equal(runtime.cameraRenderGroup, true)
+  assert.ok(runtime.residentCount > 0)
+  assert.ok(runtime.culledResidentCount > 0)
   assert.ok(runtime.staticPaintCount > 0)
   assert.equal(runtime.staticPaintCount, initialStaticPaintCount)
+  assert.ok(runtime.visibleResidentCount > 0)
+  assert.ok(runtime.visibleMainLayerCount > 0)
+  assert.equal(runtime.visibleResidentCount + runtime.culledResidentCount, runtime.residentCount)
+  assert.ok(idle.minimumVisibleResidentCount > 0, JSON.stringify(idle))
+  assert.ok(moving.minimumVisibleResidentCount > 0, JSON.stringify(moving))
+  assert.ok(idle.minimumOversizedVisibleResidentCount > 0, JSON.stringify(idle))
+  assert.ok(moving.minimumOversizedVisibleResidentCount > 0, JSON.stringify(moving))
   assert.ok(moving.presentedPlayerPositions > 10, JSON.stringify(moving))
   if (runtime.environmentMode === 1 || runtime.environmentMode === 2) {
     assert.ok(runtime.darknessAlpha, 'expected the native darkness canvas')
@@ -126,6 +144,7 @@ try {
     runtime,
     sampleSeconds: sampleMs / 1000,
     status: 'ok',
+    uncapped,
   })}\n`)
 } finally {
   await page.close()
@@ -161,6 +180,7 @@ async function measure(page, duration) {
   const before = metricMap(await cdp.send('Performance.getMetrics'))
   const samples = await page.evaluate((measurementMs) => new Promise((resolve) => {
     const positions = []
+    const residentCounts = []
     const timestamps = []
     const startedAt = performance.now()
     const frame = (now) => {
@@ -170,7 +190,13 @@ async function measure(page, duration) {
       positions.push(diagnostics
         ? { x: diagnostics.playerX, y: diagnostics.playerY }
         : null)
-      if (now - startedAt >= measurementMs) resolve({ positions, timestamps })
+      residentCounts.push(diagnostics
+        ? {
+            oversized: diagnostics.visibleOversizedResidentCount,
+            visible: diagnostics.visibleResidentCount,
+          }
+        : null)
+      if (now - startedAt >= measurementMs) resolve({ positions, residentCounts, timestamps })
       else requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
@@ -185,6 +211,7 @@ async function measure(page, duration) {
   const lowCount = Math.max(1, Math.ceil(slowest.length * 0.01))
   const slowMean = slowest.slice(0, lowCount)
     .reduce((total, value) => total + value, 0) / lowCount
+  const residentCounts = samples.residentCounts.filter(Boolean)
   return {
     averageFps: round(intervals.length * 1000 / elapsedMs),
     browserTaskMs: round(
@@ -192,6 +219,12 @@ async function measure(page, duration) {
     ),
     onePercentLowFps: round(1000 / slowMean),
     endPosition: samples.positions.findLast(Boolean),
+    minimumOversizedVisibleResidentCount: residentCounts.length > 0
+      ? Math.min(...residentCounts.map(({ oversized }) => oversized))
+      : 0,
+    minimumVisibleResidentCount: residentCounts.length > 0
+      ? Math.min(...residentCounts.map(({ visible }) => visible))
+      : 0,
     presentedPlayerPositions: new Set(samples.positions
       .filter(Boolean)
       .map(({ x, y }) => `${x},${y}`)).size,

@@ -5,7 +5,9 @@ import {
   HUB_COURTYARD_DEPTH_PROPS,
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
+  HUB_STUDENT_VISIBILITY_HALF_EXTENT,
   hubWorldDepthForActor,
+  hubStudentIntersectsView,
   initialHubResolution,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
@@ -49,4 +51,26 @@ test('sprite frame indices wrap in both directions', () => {
   assert.equal(spriteFrameIndex(5.9, 5), 0)
   assert.equal(spriteFrameIndex(-1, 5), 4)
   assert.equal(spriteFrameIndex(Number.NaN, 5), 0)
+})
+
+test('Student visibility instrumentation uses conservative actor bounds without culling art', () => {
+  const camera = { x: 100, y: 200 }
+  const view = { width: 800, height: 450 }
+  assert.equal(HUB_STUDENT_VISIBILITY_HALF_EXTENT, 120)
+  assert.equal(hubStudentIntersectsView({
+    position: { x: -20, y: 300 },
+    scale: 1,
+  }, camera, view), true)
+  assert.equal(hubStudentIntersectsView({
+    position: { x: -21, y: 300 },
+    scale: 1,
+  }, camera, view), false)
+  assert.equal(hubStudentIntersectsView({
+    position: { x: 950, y: 300 },
+    scale: 1.5,
+  }, camera, view), true)
+  assert.equal(hubStudentIntersectsView({
+    position: { x: Number.NaN, y: 300 },
+    scale: 1,
+  }, camera, view), false)
 })

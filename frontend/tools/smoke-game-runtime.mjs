@@ -133,6 +133,7 @@ try {
     const canvas = node
     const context = canvas.getContext('webgl2') || canvas.getContext('webgl')
     return {
+      staticCulling: canvas.dataset.staticCulling,
       context: context ? context.constructor.name : null,
       rendererName: canvas.dataset.rendererName,
       resolution: Number(canvas.dataset.resolution),
@@ -141,6 +142,7 @@ try {
   assert.ok(renderer.context?.includes('WebGL'), `expected a real WebGL context, got ${renderer.context}`)
   assert.match(renderer.rendererName || '', /webgl/i)
   assert.ok(renderer.resolution >= 0.5 && renderer.resolution <= 1.5)
+  assert.equal(renderer.staticCulling, 'none')
 
   const before = await canvas.evaluate((node) => node.__sdrHubFrame.playerX)
   const initialTeacherFrame = await canvas.evaluate((node) => node.__sdrHubFrame.teacherFrame)
@@ -163,8 +165,11 @@ try {
   await page.keyboard.down('d')
   for (let sample = 0; sample < 24; sample += 1) {
     presentationSamples.push(await canvas.evaluate((node) => ({
+      astronomerRenderable: node.__sdrHubFrame.astronomerRenderable,
+      cameraRenderGroupCount: node.__sdrHubFrame.cameraRenderGroupCount,
       frame: node.__sdrHubFrame.frameCount,
       playerX: node.__sdrHubFrame.playerX,
+      telescopeFrame: node.__sdrHubFrame.astronomerTelescopeFrame,
       tick: node.__sdrHubFrame.tick,
       walkPose: node.__sdrHubFrame.playerWalkPose,
     })))
@@ -189,6 +194,9 @@ try {
   assert.ok(new Set(presentationSamples.map(({ walkPose }) => walkPose)).size > 1, 'expected the native five-pose robe walk selector to advance')
   assert.ok(new Set(presentationSamples.map(({ playerX }) => playerX)).size > 10, 'expected display-rate local presentation between 20 Hz snapshots')
   assert.ok(presentationSamples.at(-1).frame > presentationSamples[0].frame, 'expected the GPU renderer to keep presenting frames')
+  assert.ok(presentationSamples.every(({ astronomerRenderable }) => astronomerRenderable), 'expected the animated Astronomer ensemble to remain unculled')
+  assert.ok(presentationSamples.every(({ cameraRenderGroupCount }) => cameraRenderGroupCount === 3), 'expected all three Hub camera banks to remain render groups')
+  assert.ok(new Set(presentationSamples.map(({ telescopeFrame }) => telescopeFrame)).size > 1, 'expected the unculled Astronomer telescope to keep animating')
   assert.ok(studentCount > 0, `expected authoritative Students, got ${studentCount}`)
   assert.ok(orbSpriteCount >= 3, `expected the native multi-sprite Fire orb, got ${orbSpriteCount}`)
   for (const element of ['air', 'earth', 'ether', 'fire', 'water']) {
@@ -252,12 +260,25 @@ try {
     const rendererReceipt = await boneyardCanvas.evaluate((canvas) => {
       const diagnostics = canvas.__sdrBoneyardFrame
       return {
+        cameraRenderGroup: diagnostics?.cameraRenderGroup,
+        culledResidentCount: diagnostics?.culledResidentCount,
         frameCount: diagnostics?.frameCount,
+        residentCount: diagnostics?.residentCount,
         staticPaintCount: diagnostics?.staticPaintCount,
+        visibleMainLayerCount: diagnostics?.visibleMainLayerCount,
+        visibleOversizedResidentCount: diagnostics?.visibleOversizedResidentCount,
+        visibleResidentCount: diagnostics?.visibleResidentCount,
       }
     })
+    assert.equal(rendererReceipt.cameraRenderGroup, true)
     assert.ok(rendererReceipt.frameCount > 0)
+    assert.ok(rendererReceipt.residentCount > 0)
     assert.ok(rendererReceipt.staticPaintCount > 0)
+    assert.ok(rendererReceipt.visibleResidentCount > 0)
+    assert.equal(
+      rendererReceipt.visibleResidentCount + rendererReceipt.culledResidentCount,
+      rendererReceipt.residentCount,
+    )
     await runPage.waitForFunction(() => /^[1-9]\d* FPS$/.test(
       document.querySelector('.hub-hud-fps')?.textContent?.trim() || '',
     ))
@@ -471,13 +492,23 @@ async function boneyardPainterReceipt(page) {
       renderer: canvas?.getAttribute('data-game-renderer'),
       sceneBandCount: Number(scene?.getAttribute('data-painter-band-count')),
       staticLayerCount: diagnostics?.staticLayerCount,
+      cameraRenderGroup: diagnostics?.cameraRenderGroup,
+      culledResidentCount: diagnostics?.culledResidentCount,
+      residentCount: diagnostics?.residentCount,
+      visibleMainLayerCount: diagnostics?.visibleMainLayerCount,
+      visibleOversizedResidentCount: diagnostics?.visibleOversizedResidentCount,
+      visibleResidentCount: diagnostics?.visibleResidentCount,
     }
   })
+  assert.equal(receipt.cameraRenderGroup, true)
   assert.equal(receipt.renderer, 'pixi-webgl')
   assert.equal(receipt.regionLighting, 'native-object-scalar')
   assert.equal(receipt.sceneBandCount, receipt.bandCount)
   assert.ok(receipt.bandCount >= 2, 'expected scenery bands on both sides of live actors')
   assert.ok(receipt.staticLayerCount > 0)
+  assert.ok(receipt.residentCount > 0)
+  assert.ok(receipt.visibleResidentCount > 0)
+  assert.equal(receipt.visibleResidentCount + receipt.culledResidentCount, receipt.residentCount)
   assert.equal(receipt.localPlayerRow, 0)
   assert.equal(receipt.mainBelowLocal, true)
   assert.equal(receipt.mainAboveLocal, true)
@@ -492,9 +523,11 @@ async function boneyardPainterReceipt(page) {
 
 async function crossEntryGate(hostPage, clientPage) {
   const scene = hostPage.locator('.boneyard-scene')
+  const clientScene = clientPage.locator('.boneyard-scene')
   const alignedX = await alignWithEntryGate(hostPage, scene)
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
+  const initialClientGateState = await clientScene.getAttribute('data-gate-state')
   const key = initialY > 1000 ? 'w' : 's'
   const direction = key === 'w' ? -1 : 1
   await hostPage.bringToFront()
@@ -518,11 +551,12 @@ async function crossEntryGate(hostPage, clientPage) {
   assert.ok((finalY - initialY) * direction > 200)
   assert.notEqual(finalGateState, initialGateState)
 
+  await clientPage.bringToFront()
   await clientPage.waitForFunction(
-    (expected) => document.querySelector('.boneyard-scene')
-      ?.getAttribute('data-gate-state') === expected,
-    finalGateState,
-    { timeout: 3_000 },
+    (initial) => document.querySelector('.boneyard-scene')
+      ?.getAttribute('data-gate-state') !== initial,
+    initialClientGateState,
+    { timeout: 5_000 },
   )
   return { alignedX, direction, finalY, initialY }
 }

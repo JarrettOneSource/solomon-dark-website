@@ -1,4 +1,6 @@
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
+import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import {
   createBoneyardCatalog,
   loadModBoneyardsFromStageReport,
@@ -15,6 +17,13 @@ const allowedOrigins = process.env.SDR_GAME_ALLOWED_ORIGINS
   .filter(Boolean)
 const snapshotRate = parseSnapshotRate(process.env.SDR_GAME_SNAPSHOT_RATE)
 const trustedProxy = process.env.SDR_GAME_TRUSTED_PROXY === '1'
+const benchmarkStudentCount = parseBenchmarkStudentCount(
+  process.env.SDR_HUB_BENCH_STUDENTS,
+)
+const benchmarkStudentSeed = parseBenchmarkStudentSeed(
+  process.env.SDR_HUB_BENCH_SEED,
+  benchmarkStudentCount,
+)
 const stageReport = process.env.SDR_GAME_STAGE_REPORT?.trim()
 const boneyards = createBoneyardCatalog(
   stageReport ? await loadModBoneyardsFromStageReport(stageReport) : [],
@@ -28,12 +37,29 @@ const server = await startGameHost({
   snapshotRate,
   trustedProxy,
   ...(allowedOrigins ? { allowedOrigins } : {}),
+  ...(benchmarkStudentCount === undefined
+    ? {}
+    : {
+        createSimulation: () => createGameSimulation({}, {
+          hubStudentPopulation: createHubStudentFixturePopulation({
+            count: benchmarkStudentCount,
+            routeEndBehavior: 'reverse',
+            seed: benchmarkStudentSeed,
+          }),
+        }),
+      }),
 })
 
 process.stdout.write(`${JSON.stringify({
   type: 'ready',
   url: server.address.url,
   protocol: GAME_PROTOCOL_NAME,
+  ...(benchmarkStudentCount === undefined
+    ? {}
+    : {
+        benchmarkStudentCount,
+        benchmarkStudentSeed,
+      }),
 })}\n`)
 
 let stopping = false
@@ -63,4 +89,28 @@ function parseSnapshotRate(value: string | undefined): number {
     throw new Error('SDR_GAME_SNAPSHOT_RATE must be an integer between 1 and 100')
   }
   return rate
+}
+
+function parseBenchmarkStudentCount(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const count = Number(value)
+  if (!Number.isInteger(count) || count < 0 || count > 256) {
+    throw new Error('SDR_HUB_BENCH_STUDENTS must be an integer between 0 and 256')
+  }
+  return count
+}
+
+function parseBenchmarkStudentSeed(
+  value: string | undefined,
+  count: number | undefined,
+): number {
+  if (count === undefined && value) {
+    throw new Error('SDR_HUB_BENCH_SEED requires SDR_HUB_BENCH_STUDENTS')
+  }
+  if (!value) return 0x51d07e57
+  const seed = Number(value)
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
+    throw new Error('SDR_HUB_BENCH_SEED must be an unsigned 32-bit integer')
+  }
+  return seed
 }

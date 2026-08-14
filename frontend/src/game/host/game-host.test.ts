@@ -4,6 +4,8 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type {
   PlayerCharacterConfig,
   PlayerCharacterInput,
@@ -13,7 +15,10 @@ import {
   decodeServerGameMessage,
   encodeGameMessage,
   type ServerGameMessage,
+  type ServerSnapshotMessage,
 } from '../protocol/game-protocol.ts'
+import type { GameSnapshot } from '../protocol/game-state.ts'
+import { EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
@@ -30,6 +35,18 @@ const SECOND_CHARACTER = {
   element: 'water',
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
+
+type MaterializedServerSnapshotMessage = ServerSnapshotMessage & { snapshot: GameSnapshot }
+type TestServerGameMessage =
+  | Exclude<ServerGameMessage, ServerSnapshotMessage>
+  | MaterializedServerSnapshotMessage
+
+interface TestReplicationState {
+  readonly frames: Map<number, MaterializedServerSnapshotMessage>
+  readonly reconstructor: EntityReplicationReconstructor
+}
+
+const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
 
 function gameplayInput(
   movement: { x: number; y: number },
@@ -79,6 +96,42 @@ test('authoritative game host owns two configured player characters and movement
   )
 })
 
+test('game host accepts an empty deterministic Hub fixture factory', async (context) => {
+  let factoryCalls = 0
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    createSimulation: () => {
+      factoryCalls += 1
+      return createGameSimulation({}, {
+        hubStudentPopulation: createHubStudentFixturePopulation({
+          count: 32,
+          seed: 0x12345678,
+        }),
+      })
+    },
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  assert.equal(factoryCalls, 1)
+  const initialState = host.state()
+  assert.equal(initialState.world.kind, 'hub')
+  if (initialState.world.kind !== 'hub') throw new Error('expected Hub')
+  assert.equal(initialState.world.studentPopulation.store.size, 32)
+
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  assert.equal(client.welcome.snapshot.world.kind, 'hub')
+  if (client.welcome.snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  assert.equal(client.welcome.snapshot.world.students.length, 32)
+})
+
+test('game host rejects pre-populated initial simulation factories', async () => {
+  await assert.rejects(() => startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    createSimulation: () => createGameSimulation(),
+  }), /must start without player characters/)
+})
+
 test('game host echoes authenticated ping outside the snapshot loop', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 1 })
   context.after(() => host.close())
@@ -90,6 +143,33 @@ test('game host echoes authenticated ping outside the snapshot loop', async (con
   ))
   client.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 41 }))
   assert.deepEqual(await pong, { type: 'server-pong', nonce: 41 })
+})
+
+test('game host sends a complete keyframe when a client requests recovery', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const first = await nextMessage(client.socket, (message) => message.type === 'server-snapshot')
+  assert.equal(first.type, 'server-snapshot')
+  client.socket.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: true,
+    sequence: first.sequence,
+  }))
+  const recovered = await nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.world.entities.keyframe
+  ))
+  assert.equal(recovered.type, 'server-snapshot')
+  assert.equal(recovered.frame.world.kind, 'hub')
+  if (recovered.frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  assert.equal(recovered.frame.world.entities.baselineSequence, 0)
+  assert.equal(
+    recovered.frame.world.entities.spawned.length,
+    recovered.snapshot.world.kind === 'hub' ? recovered.snapshot.world.students.length : -1,
+  )
 })
 
 test('game host reconnects a new character at the active world spawn', async (context) => {
@@ -477,15 +557,18 @@ function openSocket(url: string, origin?: string): Promise<WebSocket> {
 
 function nextMessage(
   socket: WebSocket,
-  predicate: (message: ServerGameMessage) => boolean,
-): Promise<ServerGameMessage> {
+  predicate: (message: TestServerGameMessage) => boolean,
+): Promise<TestServerGameMessage> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup()
       reject(new Error('timed out waiting for game message'))
     }, 3000)
     const receive = (data: WebSocket.RawData) => {
-      const message = decodeServerGameMessage(data.toString())
+      const message = materializeServerMessage(
+        socket,
+        decodeServerGameMessage(data.toString()),
+      )
       if (!predicate(message)) return
       cleanup()
       resolve(message)
@@ -502,6 +585,36 @@ function nextMessage(
     socket.on('message', receive)
     socket.on('error', fail)
   })
+}
+
+function materializeServerMessage(
+  socket: WebSocket,
+  message: ServerGameMessage,
+): TestServerGameMessage {
+  if (message.type === 'server-welcome') {
+    const state: TestReplicationState = {
+      frames: new Map(),
+      reconstructor: new EntityReplicationReconstructor(),
+    }
+    state.reconstructor.reset(message.snapshot, message.snapshotSequence)
+    replicationBySocket.set(socket, state)
+    return message
+  }
+  if (message.type !== 'server-snapshot') return message
+  const state = replicationBySocket.get(socket)
+  if (!state) throw new Error('test socket received a snapshot before its welcome')
+  const cached = state.frames.get(message.sequence)
+  if (cached) return cached
+  const snapshot = state.reconstructor.apply(message.frame, message.sequence)
+  const materialized = { ...message, snapshot }
+  state.frames.set(message.sequence, materialized)
+  while (state.frames.size > 64) state.frames.delete(state.frames.keys().next().value!)
+  socket.send(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: message.sequence,
+  }))
+  return materialized
 }
 
 function modBoneyardEntry(): ModBoneyardEntry {

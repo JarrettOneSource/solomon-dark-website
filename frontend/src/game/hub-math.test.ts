@@ -68,12 +68,14 @@ import {
   hubStudentStaticCollisionEnabled,
   planHubStudentRoute,
   stepHubStudentPopulation,
-  type HubStudentPopulationState,
+  HubStudentPopulationState,
 } from './core-server/hub-students.ts'
 import {
   COMPILED_HUB_STUDENT_SPLINES,
   evaluateHubStudentSpline,
 } from './core-server/hub-student-splines.ts'
+import { createHubStudentFixture } from './core-server/hub-student-fixtures.ts'
+import { HubStudentNeighborGrid } from './core-server/hub-student-grid.ts'
 import {
   HUB_TEACHER_CAST_ORIGIN,
   HUB_TEACHER_CAST_SECONDS,
@@ -387,6 +389,44 @@ test('Students follow the recovered deterministic Courtyard splines', () => {
   assert.ok(firstRun[firstIndex].headingIndex >= 0 && firstRun[firstIndex].headingIndex < 24)
 })
 
+test('Student neighbor grid preserves all-pairs route planning exactly', () => {
+  const students = createHubStudentFixture({ count: 256, seed: 0x12345678 })
+  const neighbors = new HubStudentNeighborGrid()
+  neighbors.rebuild(students)
+  for (const student of students) {
+    assert.deepEqual(
+      planHubStudentRoute(student, students, 0.01, neighbors),
+      planHubStudentRoute(student, students, 0.01),
+    )
+  }
+})
+
+test('benchmark Students reverse at route ends while stock Students retire', () => {
+  const spline = COMPILED_HUB_STUDENT_SPLINES[0]
+  const pathCursor = spline.points.length - 1.05
+  const source = {
+    ...createHubStudentFixture({ count: 1, seed: 0x12345678 })[0],
+    pathCursor,
+    pathId: 0,
+    pathStep: 1 as const,
+    position: evaluateHubStudentSpline(0, pathCursor),
+    wander: { x: 0, y: 0 },
+  }
+  const retired = planHubStudentRoute(source, [source], 0.01).state
+  const reversed = planHubStudentRoute(
+    source,
+    [source],
+    0.01,
+    undefined,
+    'reverse',
+  ).state
+
+  assert.equal(retired.retired, true)
+  assert.equal(reversed.retired, false)
+  assert.equal(reversed.pathStep, -1)
+  assert.ok(reversed.pathCursor < source.pathCursor)
+})
+
 test('Student static collision follows the native Courtyard doorway field', () => {
   assert.equal(HUB_STUDENT_STATIC_COLLISION_REFRESH_TICKS, 15)
   assert.equal(hubStudentStaticCollisionEnabled({ x: 1577, y: -29 }), false)
@@ -461,14 +501,14 @@ test('Student admission uses the native Courtyard ticker and transient bootstrap
     student.scale >= 0.75 && student.scale < 1.1
   )))
 
-  let coldPopulation: HubStudentPopulationState = {
+  let coldPopulation = new HubStudentPopulationState({
     nextId: 0,
     rarePathDenominator: 20,
     rngState: 0x51d07e57,
+    spawningEnabled: true,
     spawnRequestPending: false,
     spawnTickerCounter: 0,
-    students: [],
-  }
+  })
   for (let tick = 0; tick < 34; tick += 1) {
     coldPopulation = stepHubStudentPopulation(
       coldPopulation,

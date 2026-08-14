@@ -41,14 +41,18 @@ import {
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   hubWorldDepthForActor,
+  hubStudentIntersectsView,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
-  readonly world = new Container({ label: 'college-courtyard' })
-  readonly southern = new Container({ label: 'college-courtyard-southern-bank' })
+  readonly world = new Container({ isRenderGroup: true, label: 'college-courtyard' })
+  readonly southern = new Container({
+    isRenderGroup: true,
+    label: 'college-courtyard-southern-bank',
+  })
   private readonly sealGlyphs: Sprite
   private readonly sealCore: Sprite
   private readonly markerSprites: Sprite[] = []
@@ -63,9 +67,13 @@ export class HubWorldScene {
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly livePlayerIds = new Set<string>()
   private readonly students = new Map<number, HubStudentView>()
+  private readonly retiredStudentViews: HubStudentView[] = []
   private readonly liveStudentIds = new Set<number>()
+  private readonly southernArchitecture: Sprite[] = []
   private readonly textures: HubWorldTextures
   private readonly layerFrameTextures: Texture[] = []
+  private createdStudentViewCount = 0
+  private reusedStudentViewCount = 0
 
   constructor(textures: HubWorldTextures, createdAtTick: number) {
     this.textures = textures
@@ -157,6 +165,18 @@ export class HubWorldScene {
     return this.students.size
   }
 
+  get pooledStudentViewCount(): number {
+    return this.retiredStudentViews.length
+  }
+
+  get studentViewCreationCount(): number {
+    return this.createdStudentViewCount
+  }
+
+  get studentViewReuseCount(): number {
+    return this.reusedStudentViewCount
+  }
+
   get teacherFrame(): number {
     return this.teacher.frame
   }
@@ -165,7 +185,38 @@ export class HubWorldScene {
     return this.astronomer.telescopeFrame
   }
 
+  get astronomerRenderable(): boolean {
+    return this.astronomer.renderable
+      && this.astronomer.behind.parent === this.southern
+      && this.astronomer.telescope.parent === this.southern
+      && this.astronomer.front.parent === this.southern
+  }
+
+  get southernArchitectureCount(): number {
+    return this.southernArchitecture.length
+  }
+
+  get southernChildCount(): number {
+    return this.southern.children.length
+  }
+
+  get southernArtRenderable(): boolean {
+    return this.southern.visible
+      && this.southern.renderable
+      && this.southern.parent === this.stage
+      && this.southernArchitecture.every((sprite) => (
+        sprite.visible && sprite.renderable && sprite.parent === this.southern
+      ))
+      && this.astronomerRenderable
+  }
+
+  get cameraRenderGroupCount(): number {
+    return Number(this.world.isRenderGroup) + Number(this.southern.isRenderGroup)
+  }
+
   destroy(): void {
+    for (const view of this.retiredStudentViews) view.destroy()
+    this.retiredStudentViews.length = 0
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()
@@ -288,7 +339,20 @@ export class HubWorldScene {
     sprite.position.set(x, y)
     sprite.zIndex = HUB_WORLD_DEPTH.southernForeground
     sprite.eventMode = 'none'
+    this.southernArchitecture.push(sprite)
     return sprite
+  }
+
+  countVisibleStudents(
+    snapshot: HubPresentationFrame,
+    camera: { x: number; y: number },
+    view: { height: number; width: number },
+  ): number {
+    let visible = 0
+    for (const student of snapshot.world.students) {
+      visible += Number(hubStudentIntersectsView(student, camera, view))
+    }
+    return visible
   }
 
   private updateFountain(snapshot: HubPresentationFrame): void {
@@ -352,7 +416,12 @@ export class HubWorldScene {
       live.add(student.id)
       let view = this.students.get(student.id)
       if (!view) {
-        view = new HubStudentView(this.textures)
+        view = this.retiredStudentViews.pop()
+        if (view) this.reusedStudentViewCount += 1
+        else {
+          view = new HubStudentView(this.textures)
+          this.createdStudentViewCount += 1
+        }
         this.students.set(student.id, view)
         this.world.addChild(view.container)
       }
@@ -361,7 +430,10 @@ export class HubWorldScene {
     for (const [id, view] of this.students) {
       if (live.has(id)) continue
       this.students.delete(id)
-      view.destroy()
+      this.world.removeChild(view.container)
+      view.prepareForPool()
+      if (this.retiredStudentViews.length < 256) this.retiredStudentViews.push(view)
+      else view.destroy()
     }
   }
 }
@@ -470,6 +542,17 @@ class HubAstronomerView {
 
   get telescopeFrame(): number {
     return this.currentTelescopeFrame
+  }
+
+  get renderable(): boolean {
+    return this.behind.visible
+      && this.behind.renderable
+      && this.behind.children.every((child) => child.visible && child.renderable)
+      && this.telescope.visible
+      && this.telescope.renderable
+      && this.front.visible
+      && this.front.renderable
+      && this.front.children.every((child) => child.visible && child.renderable)
   }
 
   private updateMain(

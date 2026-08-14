@@ -11,6 +11,10 @@ import {
 } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
+  createGameSnapshotFrame,
+  createReplicatedEntityBaseline,
+} from '../protocol/entity-replication.ts'
+import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
   PLAYER_CHARACTER_KERNEL_VERSION,
@@ -66,6 +70,7 @@ test('client carries character config, publishes authority, and tears down', asy
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
   }))
   const session = await connecting
   assert.equal(session.isHost, true)
@@ -121,29 +126,21 @@ test('client carries character config, publishes authority, and tears down', asy
     replacementInput.targetTick,
     firstInput.type === 'client-input' ? firstInput.targetTick : -1,
   )
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 0,
-    snapshot: createGameSnapshot(serverState, 'player-1'),
-  }))
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
   assert.deepEqual(presented.players['player-1'].position, origin)
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 2,
-    snapshot: createGameSnapshot(serverState, 'player-1'),
-  }))
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 2)
   assert.deepEqual(presented.players['player-1'].position, origin)
 
   const loadedBoneyard = session.getBoneyard()
   assert.ok(loadedBoneyard)
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 2,
-    snapshot: createGameSnapshot(
+  receiveSnapshot(
+    transport,
+    createGameSnapshot(
       enterBoneyardWorld(serverState, loadedBoneyard),
       'player-1',
     ),
-  }))
+    2,
+  )
   assert.equal(session.getSnapshot().world.kind, 'boneyard')
   assert.equal(session.samplePresentation().world.kind, 'hub')
   assert.equal(session.sampleBoneyardPresentation().world.kind, 'boneyard')
@@ -173,6 +170,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
   }))
   const session = await connecting
 
@@ -257,17 +255,14 @@ test('client disables prediction when the shared character kernel does not match
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
   }))
   const session = await connecting
   const origin = session.getSnapshot().players['player-1'].position.x
   let presented = session.getSnapshot()
   session.onSnapshot((snapshot) => { presented = snapshot })
   session.sendInput(gameplayInput({ x: 1, y: 0 }))
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 0,
-    snapshot: createGameSnapshot(serverState, 'player-1'),
-  }))
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
   assert.equal(presented.players['player-1'].position.x, origin)
   session.destroy()
 })
@@ -294,6 +289,7 @@ test('client presents bounded display-rate movement without resending unchanged 
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
   }))
   const session = await connecting
   const origin = session.getSnapshot().players['player-1'].position.x
@@ -395,18 +391,14 @@ test('client does not rewind a locally presented turn while acknowledgement is d
     authoritativePlayer = predicted.player
     collisionRngState = predicted.collisionRngState
   }
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 0,
-    snapshot: {
+  receiveSnapshot(transport, {
       ...initialSnapshot,
       players: { ...initialSnapshot.players, 'player-1': authoritativePlayer },
       tick: 105,
       world: initialSnapshot.world.kind === 'hub'
         ? { ...initialSnapshot.world, collisionRngState }
         : initialSnapshot.world,
-    },
-  }))
+  }, 0)
   const afterSnapshot = session.samplePresentation()
 
   assert.equal(
@@ -438,10 +430,7 @@ test('client visually absorbs an unpredicted push over one snapshot interval', a
   const pushedX = origin.x + 10
 
   nowMs += 50
-  transport.receive(encodeGameMessage({
-    type: 'server-snapshot',
-    acknowledgedInputSequence: 0,
-    snapshot: {
+  receiveSnapshot(transport, {
       ...initialSnapshot,
       players: {
         ...initialSnapshot.players,
@@ -451,8 +440,7 @@ test('client visually absorbs an unpredicted push over one snapshot interval', a
         },
       },
       tick: initialSnapshot.tick + 5,
-    },
-  }))
+  }, 0)
   const atArrival = session.samplePresentation()
   nowMs += 25
   const halfway = session.samplePresentation()
@@ -509,8 +497,59 @@ test('client rejects a welcome that omits its assigned player', async () => {
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot: createGameSnapshot(createGameSimulation({}), null),
+    snapshotSequence: 1,
   }))
   await assert.rejects(connecting, /does not contain the assigned player/)
+})
+
+test('client requests a keyframe after a replication gap and resumes cleanly', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  receiveWelcome(transport, snapshot)
+  const session = await connecting
+  const beforeGap = transport.sent.length
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(
+      snapshot,
+      99,
+      createReplicatedEntityBaseline(snapshot),
+    ),
+    sequence: 10,
+  }))
+  assert.equal(transport.sent.length, beforeGap + 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: true,
+    sequence: 1,
+  })
+
+  const recovered = {
+    ...snapshot,
+    tick: snapshot.tick + 5,
+  }
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(recovered, 0, undefined, true),
+    sequence: 11,
+  }))
+  assert.equal(session.getSnapshot().tick, recovered.tick)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 11,
+  })
+  session.destroy()
 })
 
 function kernelParameters() {
@@ -540,6 +579,24 @@ function receiveWelcome(
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     snapshot,
+    snapshotSequence: 1,
+  }))
+}
+
+let nextSnapshotSequence = 10
+
+function receiveSnapshot(
+  transport: MemoryTransport,
+  snapshot: ReturnType<typeof createGameSnapshot>,
+  acknowledgedInputSequence: number,
+): void {
+  const sequence = nextSnapshotSequence
+  nextSnapshotSequence += 1
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence,
   }))
 }
 

@@ -20,6 +20,7 @@ export const HUB_RENDER_WIDTH = GAME_VIEWPORT_MIN_WIDTH
 export const HUB_RENDER_HEIGHT = GAME_VIEWPORT_MIN_HEIGHT
 export const HUB_RENDER_MIN_RESOLUTION = 0.5
 export const HUB_RENDER_MAX_RESOLUTION = 1.5
+export const HUB_STUDENT_VISIBILITY_HALF_EXTENT = 120
 
 export const HUB_WORLD_DEPTH = {
   astronomer: HUB_ASTRONOMER_DEPTH,
@@ -84,6 +85,27 @@ export function initialHubResolution({
 
 export function hubWorldDepthForActor(y: number): number {
   return hubActorDepth(y)
+}
+
+export function hubStudentIntersectsView(
+  student: { position: { x: number; y: number }; scale: number },
+  camera: { x: number; y: number },
+  view: { height: number; width: number },
+): boolean {
+  if (
+    !Number.isFinite(student.position.x)
+    || !Number.isFinite(student.position.y)
+    || !Number.isFinite(camera.x)
+    || !Number.isFinite(camera.y)
+    || !(view.width > 0)
+    || !(view.height > 0)
+  ) return false
+  const halfExtent = HUB_STUDENT_VISIBILITY_HALF_EXTENT
+    * Math.max(1, Number.isFinite(student.scale) ? student.scale : 1)
+  return student.position.x + halfExtent >= camera.x
+    && student.position.x - halfExtent <= camera.x + view.width
+    && student.position.y + halfExtent >= camera.y
+    && student.position.y - halfExtent <= camera.y + view.height
 }
 
 export function spriteFrameIndex(value: number, count: number): number {

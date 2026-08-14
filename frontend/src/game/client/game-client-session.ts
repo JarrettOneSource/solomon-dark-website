@@ -36,6 +36,10 @@ import {
   type HubPresentationTimeline,
 } from './hub-presentation-timeline.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
+import {
+  EntityReplicationGapError,
+  EntityReplicationReconstructor,
+} from '../protocol/entity-replication.ts'
 
 export interface GameClientSessionOptions {
   character: PlayerCharacterConfig
@@ -101,6 +105,7 @@ export function connectGameClientSession(
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let lastSnapshotReceivedAtMs = 0
+    let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
     let nextPingNonce = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
@@ -115,6 +120,7 @@ export function connectGameClientSession(
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const pendingPings = new Map<number, number>()
+    const entityReplication = new EntityReplicationReconstructor()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
@@ -138,6 +144,8 @@ export function connectGameClientSession(
         }
         welcome = message
         snapshot = message.snapshot
+        lastSnapshotSequence = message.snapshotSequence
+        entityReplication.reset(snapshot, lastSnapshotSequence)
         if (!snapshot.players[message.playerId]) {
           fail(new Error('The server welcome snapshot does not contain the assigned player.'))
           return
@@ -182,21 +190,43 @@ export function connectGameClientSession(
         for (const listener of pingListeners) listener(latestPingMs)
         return
       }
+      if (message.sequence <= lastSnapshotSequence) return
+      let reconstructedSnapshot: GameSnapshot
+      try {
+        reconstructedSnapshot = entityReplication.apply(message.frame, message.sequence)
+      } catch (error) {
+        if (!(error instanceof EntityReplicationGapError)) {
+          fail(error instanceof Error ? error : new Error('Entity replication failed'))
+          return
+        }
+        options.transport.send(encodeGameMessage({
+          type: 'client-snapshot-ack',
+          requireKeyframe: true,
+          sequence: lastSnapshotSequence,
+        }))
+        return
+      }
+      lastSnapshotSequence = message.sequence
+      options.transport.send(encodeGameMessage({
+        type: 'client-snapshot-ack',
+        requireKeyframe: false,
+        sequence: lastSnapshotSequence,
+      }))
       pendingInputs = pendingInputs.filter(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
       const previousWorldKind = snapshot.world.kind
       const receivedAtMs = now()
-      if (isHubGameSnapshot(message.snapshot)) {
+      if (isHubGameSnapshot(reconstructedSnapshot)) {
         reconcileLocalHubPresentation(
-          message.snapshot,
+          reconstructedSnapshot,
           receivedAtMs,
           previousWorldKind === 'hub',
         )
       } else {
         localHubPresentation = undefined
       }
-      snapshot = message.snapshot
+      snapshot = reconstructedSnapshot
       lastSnapshotReceivedAtMs = receivedAtMs
       if (isHubGameSnapshot(snapshot)) {
         if (!presentationTimeline || previousWorldKind !== 'hub') {

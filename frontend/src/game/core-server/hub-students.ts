@@ -7,6 +7,8 @@ import {
   COMPILED_HUB_STUDENT_SPLINES,
   evaluateHubStudentSpline,
 } from './hub-student-splines.ts'
+import { HubStudentStore } from './hub-student-store.ts'
+import type { HubStudentNeighborQuery } from './hub-student-grid.ts'
 
 export interface HubStudentProp {
   angle: number
@@ -48,13 +50,43 @@ export interface HubStudentRoutePlan {
   state: HubStudentState
 }
 
-export interface HubStudentPopulationState {
+export interface HubStudentPopulationOptions {
   nextId: number
   rarePathDenominator: number
+  routeEndBehavior?: HubStudentRouteEndBehavior
   rngState: number
+  spawningEnabled: boolean
   spawnRequestPending: boolean
   spawnTickerCounter: number
-  students: HubStudentState[]
+  students?: readonly HubStudentState[]
+}
+
+export type HubStudentRouteEndBehavior = 'retire' | 'reverse'
+
+export class HubStudentPopulationState {
+  nextId: number
+  rarePathDenominator: number
+  routeEndBehavior: HubStudentRouteEndBehavior
+  rngState: number
+  spawningEnabled: boolean
+  spawnRequestPending: boolean
+  spawnTickerCounter: number
+  readonly store: HubStudentStore
+
+  constructor(options: HubStudentPopulationOptions) {
+    this.nextId = options.nextId
+    this.rarePathDenominator = options.rarePathDenominator
+    this.routeEndBehavior = options.routeEndBehavior ?? 'retire'
+    this.rngState = options.rngState
+    this.spawningEnabled = options.spawningEnabled
+    this.spawnRequestPending = options.spawnRequestPending
+    this.spawnTickerCounter = options.spawnTickerCounter
+    this.store = HubStudentStore.fromStates(options.students ?? [])
+  }
+
+  get students(): HubStudentState[] {
+    return this.store.states()
+  }
 }
 
 const NATIVE_STUDENT_TICK_SECONDS = 0.01
@@ -179,7 +211,7 @@ function createStudentProps(
   return { props, state }
 }
 
-function createHubStudent(
+export function createHubStudentState(
   id: number,
   pathId: number,
   sourceState: number,
@@ -232,65 +264,77 @@ function spawnStudent(
   pathId: number,
   desiredSpeed: number,
 ): HubStudentPopulationState {
-  const student = createHubStudent(
+  const student = createHubStudentState(
     population.nextId,
     pathId,
     population.rngState,
     desiredSpeed,
   )
-  return {
-    ...population,
-    nextId: population.nextId + 1,
-    rngState: student.rngState,
-    students: [...population.students, student],
-  }
+  population.nextId += 1
+  population.rngState = student.rngState
+  population.store.add(student)
+  return population
 }
 
 export function createHubStudentPopulation(): HubStudentPopulationState {
-  let population: HubStudentPopulationState = {
+  const population = new HubStudentPopulationState({
     nextId: 0,
     rarePathDenominator: NATIVE_RARE_PATH_DENOMINATOR,
     rngState: 0x51d07e57,
+    spawningEnabled: true,
     spawnRequestPending: true,
     spawnTickerCounter: 0,
-    students: [],
-  }
+  })
   // The native transition advances the already-live Courtyard before its first
   // visible frame. Warm that same lifecycle; do not manufacture a fixed roster.
   for (let tick = 0; tick < NATIVE_PRESENTATION_WARMUP_TICKS; tick += 1) {
-    const students = population.students
+    const currentStudents = population.students
+    const students = currentStudents
       .map((student) => {
-        const plan = stepHubStudentTick(student, population.students)
+        const plan = stepHubStudentTick(student, currentStudents)
         return commitHubStudentRoute(plan.state, {
           x: plan.state.position.x + plan.delta.x,
           y: plan.state.position.y + plan.delta.y,
         })
       })
       .filter((student) => !student.retired)
-    population = stepHubStudentPopulation(population, students)
+    stepHubStudentPopulation(population, students)
   }
   return population
 }
 
 export function createHubStudents(): HubStudentState[] {
-  return createHubStudentPopulation().students
+  return hubStudentSnapshotStates(createHubStudentPopulation())
+}
+
+export function hubStudentSnapshotStates(
+  population: HubStudentPopulationState,
+): HubStudentState[] {
+  return population.store.states()
 }
 
 function studentSpeedFactor(
   student: HubStudentState,
   students: readonly HubStudentState[],
+  neighbors?: HubStudentNeighborQuery,
 ): number {
-  for (const other of students) {
+  const radians = student.heading * Math.PI / 180
+  const lookAhead = {
+    x: student.position.x + Math.sin(radians) * 15,
+    y: student.position.y - Math.cos(radians) * 15,
+  }
+  const candidateIndices = neighbors?.candidateIndices(
+    lookAhead,
+    student.profile.radius,
+  )
+  const count = candidateIndices?.length ?? students.length
+  for (let candidate = 0; candidate < count; candidate += 1) {
+    const other = students[candidateIndices?.[candidate] ?? candidate]
     if (
       other.id === student.id
       || other.desiredSpeed > student.currentSpeed
       || Math.abs(signedAngleDelta(student.heading, other.heading)) > 90
     ) continue
-    const radians = student.heading * Math.PI / 180
-    const lookAhead = {
-      x: student.position.x + Math.sin(radians) * 15,
-      y: student.position.y - Math.cos(radians) * 15,
-    }
     const distanceSquared = (other.position.x - lookAhead.x) ** 2
       + (other.position.y - lookAhead.y) ** 2
     if (distanceSquared < student.profile.radius ** 2) return 0.9
@@ -301,6 +345,8 @@ function studentSpeedFactor(
 function stepHubStudentTick(
   source: HubStudentState,
   students: readonly HubStudentState[],
+  neighbors?: HubStudentNeighborQuery,
+  routeEndBehavior: HubStudentRouteEndBehavior = 'retire',
 ): HubStudentRoutePlan {
   if (source.retired) return { delta: { x: 0, y: 0 }, state: source }
   const staticCollisionEnabled = source.tick % NATIVE_STATIC_COLLISION_REFRESH_TICKS === 0
@@ -330,6 +376,7 @@ function stepHubStudentTick(
   }
 
   let pathCursor = source.pathCursor
+  let pathStep = source.pathStep
   let target = evaluateHubStudentSpline(source.pathId, pathCursor)
   target = { x: target.x + wander.x, y: target.y + wander.y }
   let offset = {
@@ -339,21 +386,25 @@ function stepHubStudentTick(
   let distance = Math.hypot(offset.x, offset.y)
   const pushResistance = distance / NATIVE_PATH_TARGET_DIVISOR
   if (distance <= source.profile.radius * 2) {
-    pathCursor += source.pathStep * NATIVE_PATH_CURSOR_STEP
+    pathCursor += pathStep * NATIVE_PATH_CURSOR_STEP
     if (pathCursor < 0 || pathCursor >= spline.points.length - 1) {
-      return {
-        delta: { x: 0, y: 0 },
-        state: {
-          ...source,
-          pathCursor,
-          profile: { ...source.profile, pushResistance },
-          retired: true,
-          rngState: state,
-          staticCollisionEnabled,
-          tick: source.tick + 1,
-          wander,
-        },
+      if (routeEndBehavior === 'retire') {
+        return {
+          delta: { x: 0, y: 0 },
+          state: {
+            ...source,
+            pathCursor,
+            profile: { ...source.profile, pushResistance },
+            retired: true,
+            rngState: state,
+            staticCollisionEnabled,
+            tick: source.tick + 1,
+            wander,
+          },
+        }
       }
+      pathStep = pathStep === 1 ? -1 : 1
+      pathCursor = source.pathCursor + pathStep * NATIVE_PATH_CURSOR_STEP
     }
     target = evaluateHubStudentSpline(source.pathId, pathCursor)
     target = { x: target.x + wander.x, y: target.y + wander.y }
@@ -379,7 +430,8 @@ function stepHubStudentTick(
   state = capSample.state
   const travel = Math.min(
     distance,
-    (1 + capSample.value) * source.currentSpeed * studentSpeedFactor(source, students),
+    (1 + capSample.value) * source.currentSpeed
+      * studentSpeedFactor(source, students, neighbors),
   )
   const radians = heading * Math.PI / 180
   return {
@@ -397,6 +449,7 @@ function stepHubStudentTick(
       heading,
       headingIndex: actorHeadingIndex(heading),
       pathCursor,
+      pathStep,
       profile: { ...source.profile, pushResistance },
       rngState: state,
       staticCollisionEnabled,
@@ -410,8 +463,10 @@ export function planHubStudentRoute(
   sourceStudent: HubStudentState,
   students: readonly HubStudentState[],
   _elapsedSeconds: number,
+  neighbors?: HubStudentNeighborQuery,
+  routeEndBehavior: HubStudentRouteEndBehavior = 'retire',
 ): HubStudentRoutePlan {
-  return stepHubStudentTick(sourceStudent, students)
+  return stepHubStudentTick(sourceStudent, students, neighbors, routeEndBehavior)
 }
 
 export function commitHubStudentRoute(
@@ -439,47 +494,40 @@ export function stepHubStudentPopulation(
 ): HubStudentPopulationState {
   const nextTickerCounter = source.spawnTickerCounter + 1
   const tickerElapsed = nextTickerCounter >= NATIVE_SPAWN_REQUEST_TICKS
-  let population: HubStudentPopulationState = {
-    ...source,
-    spawnRequestPending: source.spawnRequestPending || tickerElapsed,
-    spawnTickerCounter: tickerElapsed ? 0 : nextTickerCounter,
-    students: committedStudents.filter((student) => !student.retired),
-  }
-  if (population.spawnRequestPending) {
-    population = { ...population, spawnRequestPending: false }
-    const divisor = population.students.length < 9
+  const population = source
+  population.spawnRequestPending ||= tickerElapsed
+  population.spawnTickerCounter = tickerElapsed ? 0 : nextTickerCounter
+  population.store.replaceOrderedStates(committedStudents)
+  if (population.spawningEnabled && population.spawnRequestPending) {
+    population.spawnRequestPending = false
+    const divisor = population.store.size < 9
       ? 2
-      : population.students.length > 25
+      : population.store.size > 25
         ? 60
-        : population.students.length > 17
+        : population.store.size > 17
           ? 30
-          : population.students.length > 12
+          : population.store.size > 12
             ? 15
             : 7
     const spawnRoll = randomInteger(population.rngState, Math.max(2, Math.floor(divisor / 2)))
-    population = { ...population, rngState: spawnRoll.state }
-    if (spawnRoll.value === 1 || population.students.length < 5) {
+    population.rngState = spawnRoll.state
+    if (spawnRoll.value === 1 || population.store.size < 5) {
       const countRoll = randomInteger(population.rngState, 8)
       const speedSample = randomSignedFloat(countRoll.state, 0.1)
       const pathRoll = randomInteger(speedSample.state, 19)
-      population = { ...population, rngState: pathRoll.state }
+      population.rngState = pathRoll.state
       if (pathRoll.value > 0) {
         const rareRoll = randomInteger(
           population.rngState,
           population.rarePathDenominator,
         )
         const rarePath = rareRoll.value === 3
-        population = {
-          ...population,
-          rarePathDenominator: rarePath
-            ? population.rarePathDenominator + 10
-            : population.rarePathDenominator,
-          rngState: rareRoll.state,
-        }
+        if (rarePath) population.rarePathDenominator += 10
+        population.rngState = rareRoll.state
         const count = rarePath ? 1 : countRoll.value === 1 ? 2 : 1
         const desiredSpeed = rarePath ? 2 : (0.5 - speedSample.value) * 1.5
         for (let index = 0; index < count; index += 1) {
-          population = spawnStudent(
+          spawnStudent(
             population,
             pathRoll.value - 1,
             desiredSpeed,

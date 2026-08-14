@@ -31,6 +31,8 @@ import {
 } from '../../editor/native-fence-geometry.ts'
 import {
   buildBoneyardPainterOrder,
+  type DynamicPainterLayer,
+  type StaticPainterLayer,
 } from '../boneyard-painter-order.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
@@ -39,8 +41,11 @@ import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
   BONEYARD_CAMERA_ZOOM,
+  type BoneyardBounds,
   boneyardCamera,
+  boneyardResidentIsVisible,
   boneyardStaticTiles,
+  boneyardVisibleWorldBounds,
   boneyardWorldPosition,
 } from './boneyard-render-contract.ts'
 import {
@@ -53,12 +58,15 @@ import {
   nativeBoneyardLightTint,
   nativeLanternLightSource,
   nativePlayerLightSource,
+  type NativeBoneyardLightSource,
 } from './boneyard-lighting.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   frameCount: number
   foregroundZIndex: number
   gateLeafCount: number
+  cameraRenderGroup: boolean
+  culledResidentCount: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
@@ -80,6 +88,10 @@ interface BoneyardRendererFrameDiagnostics {
   staticLayerCount: number
   staticPaintCount: number
   tick: number
+  residentCount: number
+  visibleMainLayerCount: number
+  visibleOversizedResidentCount: number
+  visibleResidentCount: number
 }
 
 export interface BoneyardWorldRenderer {
@@ -98,16 +110,50 @@ interface BoneyardWorldRendererOptions {
   viewport: GameViewportLayout
 }
 
-interface ResidentTexture {
+interface ResidentTexture extends BoneyardBounds {
+  mainLayerIndex: number | null
   sprite: Sprite
   texture: Texture
 }
 
 interface StaticWorldBuild {
   foreground: Container
-  mainSprites: ReadonlyMap<number, Sprite>
+  mainResidents: ReadonlyMap<number, ResidentTexture>
   residents: ResidentTexture[]
   staticPaintCount: number
+}
+
+class BoneyardResidentVisibility {
+  private readonly residents: readonly ResidentTexture[]
+  readonly visibleMainResidents: ResidentTexture[] = []
+  culledResidentCount = 0
+  visibleOversizedResidentCount = 0
+  visibleResidentCount = 0
+
+  constructor(residents: readonly ResidentTexture[]) {
+    this.residents = residents
+  }
+
+  update(camera: Camera, viewport: GameViewportLayout): void {
+    const view = boneyardVisibleWorldBounds(camera, viewport)
+    this.culledResidentCount = 0
+    this.visibleMainResidents.length = 0
+    this.visibleOversizedResidentCount = 0
+    this.visibleResidentCount = 0
+    for (const resident of this.residents) {
+      const visible = boneyardResidentIsVisible(resident, view)
+      resident.sprite.renderable = visible
+      if (!visible) {
+        this.culledResidentCount += 1
+        continue
+      }
+      this.visibleResidentCount += 1
+      if (resident.w > view.w || resident.h > view.h) {
+        this.visibleOversizedResidentCount += 1
+      }
+      if (resident.mainLayerIndex !== null) this.visibleMainResidents.push(resident)
+    }
+  }
 }
 
 export async function createBoneyardWorldRenderer(
@@ -150,7 +196,7 @@ export async function createBoneyardWorldRenderer(
   application.stop()
 
   const document = editorDocument(options.boneyard)
-  const world = new Container({ label: 'boneyard-world' })
+  const world = new Container({ isRenderGroup: true, label: 'boneyard-world' })
   world.sortableChildren = true
   application.stage.addChild(world)
 
@@ -171,9 +217,10 @@ export async function createBoneyardWorldRenderer(
     world,
     textures,
     mainLayers,
-    staticWorld.mainSprites,
+    staticWorld.mainResidents,
     staticWorld.foreground,
   )
+  const visibility = new BoneyardResidentVisibility(staticWorld.residents)
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
@@ -181,6 +228,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
   canvas.dataset.regionLighting = 'native-object-scalar'
+  canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
@@ -194,6 +242,8 @@ export async function createBoneyardWorldRenderer(
     frameCount: 0,
     foregroundZIndex: 0,
     gateLeafCount: 0,
+    cameraRenderGroup: world.isRenderGroup,
+    culledResidentCount: 0,
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
@@ -215,6 +265,10 @@ export async function createBoneyardWorldRenderer(
     staticLayerCount: mainLayers.length,
     staticPaintCount: staticWorld.staticPaintCount,
     tick: options.initialSnapshot.tick,
+    residentCount: staticWorld.residents.length,
+    visibleMainLayerCount: 0,
+    visibleOversizedResidentCount: 0,
+    visibleResidentCount: 0,
   }
   Object.defineProperty(canvas, '__sdrBoneyardFrame', {
     configurable: false,
@@ -241,8 +295,14 @@ export async function createBoneyardWorldRenderer(
       const player = snapshot.players[options.playerId]
       if (!player) return
       frameCount += 1
-      const painter = scene.update(snapshot, options.playerId, frameCount)
       const camera = cameraFor(snapshot)
+      visibility.update(camera, viewport)
+      const painter = scene.update(
+        snapshot,
+        options.playerId,
+        frameCount,
+        visibility.visibleMainResidents,
+      )
       const worldPosition = boneyardWorldPosition(camera, viewport)
       world.scale.set(BONEYARD_CAMERA_ZOOM)
       world.position.set(worldPosition.x, worldPosition.y)
@@ -251,6 +311,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
+      frameDiagnostics.culledResidentCount = visibility.culledResidentCount
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
@@ -262,7 +323,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.painterBandCount = painter.painterBandCount
-      frameDiagnostics.playerCount = Object.keys(snapshot.players).length
+      frameDiagnostics.playerCount = scene.playerCount
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
         + viewport.width / 2
       frameDiagnostics.playerScreenY = (player.position.y - camera.y) * camera.zoom
@@ -272,6 +333,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerY = player.position.y
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
+      frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
+      frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
+      frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -307,7 +371,6 @@ export async function createBoneyardWorldRenderer(
     },
   }
 
-  scene.update(options.initialSnapshot, options.playerId, 0)
   renderer.render(options.initialSnapshot)
   return renderer
 }
@@ -329,13 +392,19 @@ interface BoneyardPainterFrame {
 
 class BoneyardDynamicScene {
   private readonly boneyard: LoadedBoneyard
+  private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly foreground: Container
+  private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
   private readonly gates: BoneyardGateViews
+  private readonly lightSources: NativeBoneyardLightSource[] = []
+  private readonly livePlayerIds = new Set<string>()
   private readonly mainLayers: readonly MainLayer[]
-  private readonly mainSprites: ReadonlyMap<number, Sprite>
+  private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
   private readonly players = new Map<string, PlayerWorldView>()
+  private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
   private readonly solomon: BoneyardSolomonView | null
+  private readonly staticPainterLayers: StaticPainterLayer[]
   private readonly textures: BoneyardWorldTextures
 
   constructor(
@@ -343,15 +412,21 @@ class BoneyardDynamicScene {
     root: Container,
     textures: BoneyardWorldTextures,
     mainLayers: readonly MainLayer[],
-    mainSprites: ReadonlyMap<number, Sprite>,
+    mainResidents: ReadonlyMap<number, ResidentTexture>,
     foreground: Container,
   ) {
     this.boneyard = boneyard
     this.root = root
     this.textures = textures
     this.mainLayers = mainLayers
-    this.mainSprites = mainSprites
+    this.mainResidents = mainResidents
     this.foreground = foreground
+    this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
+      layerIndex,
+      worldY: layer.worldY,
+      sortBias: layer.sortBias,
+      sourceOrder: layer.sourceOrder,
+    }))
     this.gates = new BoneyardGateViews(root, textures)
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
@@ -362,16 +437,14 @@ class BoneyardDynamicScene {
     snapshot: GameSnapshot,
     localPlayerId: string,
     presentationFrame: number,
+    visibleMainResidents: readonly ResidentTexture[],
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
-    const liveIds = new Set(Object.keys(snapshot.players))
-    for (const [playerId, view] of this.players) {
-      if (liveIds.has(playerId)) continue
-      this.root.removeChild(view.container)
-      view.destroy()
-      this.players.delete(playerId)
-    }
-    for (const [playerId, player] of Object.entries(snapshot.players)) {
+    const livePlayerIds = this.livePlayerIds
+    livePlayerIds.clear()
+    for (const playerId in snapshot.players) {
+      const player = snapshot.players[playerId]
+      livePlayerIds.add(playerId)
       let view = this.players.get(playerId)
       if (!view) {
         view = new PlayerWorldView(player.config.element, this.textures)
@@ -380,6 +453,12 @@ class BoneyardDynamicScene {
       }
       view.update(player, snapshot.tick)
     }
+    for (const [playerId, view] of this.players) {
+      if (livePlayerIds.has(playerId)) continue
+      this.root.removeChild(view.container)
+      view.destroy()
+      this.players.delete(playerId)
+    }
     this.gates.update(snapshot.world.gateLeaves)
     this.solomon?.update(snapshot.tick)
 
@@ -387,18 +466,24 @@ class BoneyardDynamicScene {
     const lanternLight = dig
       ? nativeLanternLightSource(dig.lanternPosition, presentationFrame)
       : null
-    const lightSources = [
-      ...Object.values(snapshot.players).map(nativePlayerLightSource),
-      ...(lanternLight ? [lanternLight] : []),
-    ]
-    const mainLightScalars: number[] = []
-    for (const [layerIndex, sprite] of this.mainSprites) {
+    const lightSources = this.lightSources
+    lightSources.length = 0
+    for (const playerId in snapshot.players) {
+      lightSources.push(nativePlayerLightSource(snapshot.players[playerId]))
+    }
+    if (lanternLight) lightSources.push(lanternLight)
+    let maxMainLightScalar = 0
+    let minMainLightScalar = 1
+    for (const resident of visibleMainResidents) {
+      const layerIndex = resident.mainLayerIndex
+      if (layerIndex === null) continue
       const scalar = nativeBoneyardLightScalar(
         this.mainLayers[layerIndex].pos,
         lightSources,
       )
-      sprite.tint = nativeBoneyardLightTint(scalar)
-      mainLightScalars.push(scalar)
+      resident.sprite.tint = nativeBoneyardLightTint(scalar)
+      maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
+      minMainLightScalar = Math.min(minMainLightScalar, scalar)
     }
     for (const [id, view] of this.players) {
       const player = snapshot.players[id]
@@ -426,16 +511,22 @@ class BoneyardDynamicScene {
 
     const localPlayer = snapshot.players[localPlayerId]
     if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
-    const gateLeaves = new Map(snapshot.world.gateLeaves.map((leaf) => [
-      `${leaf.fenceEid}:${leaf.side}`,
-      leaf,
-    ]))
-    const dynamicLayers = Object.entries(snapshot.players).map(([id, player], sourceOrder) => ({
-      id: `player:${id}`,
-      worldY: player.position.y,
-      sortBias: 0,
-      sourceOrder,
-    }))
+    const gateLeaves = this.gateLeaves
+    gateLeaves.clear()
+    for (const leaf of snapshot.world.gateLeaves) {
+      gateLeaves.set(`${leaf.fenceEid}:${leaf.side}`, leaf)
+    }
+    const dynamicLayers = this.dynamicLayers
+    dynamicLayers.length = 0
+    for (const playerId in snapshot.players) {
+      const player = snapshot.players[playerId]
+      dynamicLayers.push({
+        id: `player:${playerId}`,
+        worldY: player.position.y,
+        sortBias: 0,
+        sourceOrder: dynamicLayers.length,
+      })
+    }
     if (dig) {
       dynamicLayers.push({
         id: 'solomon-dig',
@@ -450,30 +541,36 @@ class BoneyardDynamicScene {
         sourceOrder: dynamicLayers.length,
       })
     }
+    for (const layer of this.staticPainterLayers) {
+      layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
+    }
     const order = buildBoneyardPainterOrder({
       referenceY: localPlayer.position.y,
-      staticLayers: this.mainLayers.map((layer, layerIndex) => ({
-        layerIndex,
-        worldY: runtimeMainWorldY(layer, gateLeaves),
-        sortBias: layer.sortBias,
-        sourceOrder: layer.sourceOrder,
-      })),
+      staticLayers: this.staticPainterLayers,
       dynamicLayers,
     })
-    const staticDepths: number[] = []
+    let maxMainZIndex = 0
+    let minMainZIndex = Number.POSITIVE_INFINITY
     for (const band of order.bands) {
       band.layerIndexes.forEach((layerIndex, position) => {
         const depth = band.zIndex + ((position + 1) / (band.layerIndexes.length + 1)) * 0.5
-        staticDepths.push(depth)
-        const sprite = this.mainSprites.get(layerIndex)
-        if (sprite) sprite.zIndex = depth
+        maxMainZIndex = Math.max(maxMainZIndex, depth)
+        minMainZIndex = Math.min(minMainZIndex, depth)
+        const resident = this.mainResidents.get(layerIndex)
+        if (resident?.sprite.renderable) resident.sprite.zIndex = depth
         const layer = this.mainLayers[layerIndex]
         if (isMovingGateBody(layer)) {
           this.gates.setDepth(layer.fence.eid, layer.pieceIndex, depth)
         }
       })
     }
-    const positionedDynamics = new Map(order.dynamicLayers.map((layer) => [layer.id, layer]))
+    const positionedDynamics = this.positionedDynamics
+    positionedDynamics.clear()
+    let maxDynamicZIndex = 0
+    for (const layer of order.dynamicLayers) {
+      positionedDynamics.set(layer.id, layer)
+      maxDynamicZIndex = Math.max(maxDynamicZIndex, layer.zIndex)
+    }
     for (const [id, view] of this.players) {
       view.setDepth(positionedDynamics.get(`player:${id}`)?.zIndex ?? 1)
     }
@@ -488,14 +585,18 @@ class BoneyardDynamicScene {
       localPlayerZIndex,
       lanternLightIntensity: lanternLight?.intensity ?? 0,
       lightSourceCount: lightSources.length,
-      mainAboveLocal: staticDepths.some((depth) => depth > localPlayerZIndex),
-      mainBelowLocal: staticDepths.some((depth) => depth < localPlayerZIndex),
-      maxDynamicZIndex: Math.max(0, ...order.dynamicLayers.map((layer) => layer.zIndex)),
-      maxMainLightScalar: Math.max(0, ...mainLightScalars),
-      maxMainZIndex: Math.max(0, ...staticDepths),
-      minMainLightScalar: Math.min(1, ...mainLightScalars),
+      mainAboveLocal: maxMainZIndex > localPlayerZIndex,
+      mainBelowLocal: minMainZIndex < localPlayerZIndex,
+      maxDynamicZIndex,
+      maxMainLightScalar,
+      maxMainZIndex,
+      minMainLightScalar: visibleMainResidents.length > 0 ? minMainLightScalar : 0,
       painterBandCount: order.bands.length,
     }
+  }
+
+  get playerCount(): number {
+    return this.players.size
   }
 
   playerWalkPose(playerId: string): number {
@@ -587,6 +688,7 @@ class BoneyardSolomonView {
 
 class BoneyardGateViews {
   private readonly leaves = new Map<string, BoneyardGateLeafView>()
+  private readonly liveLeafIds = new Set<string>()
   private readonly root: Container
   private readonly textures: BoneyardWorldTextures
 
@@ -599,7 +701,8 @@ class BoneyardGateViews {
   }
 
   update(leaves: readonly BoneyardGateLeafSnapshot[]): void {
-    const live = new Set<string>()
+    const live = this.liveLeafIds
+    live.clear()
     for (const state of leaves) {
       const key = `${state.fenceEid}:${state.side}`
       live.add(key)
@@ -628,6 +731,7 @@ class BoneyardGateViews {
   destroy(): void {
     for (const view of this.leaves.values()) view.destroy()
     this.leaves.clear()
+    this.liveLeafIds.clear()
   }
 }
 
@@ -701,7 +805,7 @@ async function buildStaticWorld(
   base.zIndex = 0
   root.addChild(base, foreground)
   const residents: ResidentTexture[] = []
-  const mainSprites = new Map<number, Sprite>()
+  const mainResidents = new Map<number, ResidentTexture>()
   let staticPaintCount = 0
   try {
     residents.push(...await buildTiledStaticLayer(
@@ -723,7 +827,7 @@ async function buildStaticWorld(
       if (resident) {
         root.addChild(resident.sprite)
         residents.push(resident)
-        mainSprites.set(layerIndex, resident.sprite)
+        mainResidents.set(layerIndex, resident)
       }
       if (layerIndex % 12 === 11) await nextFrame()
     }
@@ -741,7 +845,7 @@ async function buildStaticWorld(
     for (const resident of residents) resident.texture.destroy(true)
     throw error
   }
-  return { foreground, mainSprites, residents, staticPaintCount }
+  return { foreground, mainResidents, residents, staticPaintCount }
 }
 
 async function buildTiledStaticLayer(
@@ -802,7 +906,7 @@ function buildMainLayerResident(
   )
   const crop = cropTransparentCanvas(canvas)
   return crop
-    ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y)
+    ? residentTexture(crop.canvas, bounds.x + crop.x, bounds.y + crop.y, layerIndex)
     : null
 }
 
@@ -874,13 +978,26 @@ function cropTransparentCanvas(
   return { canvas: cropped, x: minX, y: minY }
 }
 
-function residentTexture(canvas: HTMLCanvasElement, x: number, y: number): ResidentTexture {
+function residentTexture(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  mainLayerIndex: number | null = null,
+): ResidentTexture {
   const texture = Texture.from(canvas, true)
   texture.source.style.scaleMode = 'nearest'
   const sprite = new Sprite(texture)
   sprite.position.set(x, y)
   sprite.eventMode = 'none'
-  return { sprite, texture }
+  return {
+    h: canvas.height,
+    mainLayerIndex,
+    sprite,
+    texture,
+    w: canvas.width,
+    x,
+    y,
+  }
 }
 
 function isMovingGateBody(layer: MainLayer | undefined): layer is Extract<MainLayer, { kind: 'fence' }> {

@@ -24,7 +24,7 @@ const STOREROOM_PROP_DEPTHS = [324, 434, 542.5] as const
 const LIBRARY_PROP_DEPTHS = [788, 678.5, 732.5] as const
 
 export class HubPrivateRoomScene {
-  readonly world = new Container({ label: 'college-private-rooms' })
+  readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
   private readonly rooms: Record<PrivateHubRegionId, Container>
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()

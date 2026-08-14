@@ -5,8 +5,11 @@ import {
   BONEYARD_CAMERA_ZOOM,
   BONEYARD_RENDER_HEIGHT,
   BONEYARD_RENDER_WIDTH,
+  BONEYARD_RESIDENT_CULL_PADDING,
   boneyardCamera,
+  boneyardResidentIsVisible,
   boneyardStaticTiles,
+  boneyardVisibleWorldBounds,
   boneyardWorldPosition,
 } from './boneyard-render-contract.ts'
 
@@ -61,4 +64,49 @@ test('world transform presents the clamped camera in the native 1600 by 900 fram
     x: BONEYARD_RENDER_WIDTH / 2 - camera.x * camera.zoom,
     y: BONEYARD_RENDER_HEIGHT / 2 - camera.y * camera.zoom,
   })
+})
+
+test('resident visibility uses the complete oversized art rectangle', () => {
+  const view = { x: 0, y: 0, w: 1000, h: 600 }
+
+  assert.equal(boneyardResidentIsVisible({ x: -4000, y: 100, w: 4050, h: 200 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: 400, y: -3000, w: 200, h: 3050 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: -4000, y: 601, w: 5000, h: 200 }, view), false)
+})
+
+test('resident visibility keeps exact camera-edge contact renderable', () => {
+  const view = { x: 100, y: 200, w: 800, h: 450 }
+
+  assert.equal(boneyardResidentIsVisible({ x: -100, y: 300, w: 200, h: 80 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: 900, y: 300, w: 200, h: 80 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: 300, y: 120, w: 80, h: 80 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: 300, y: 650, w: 80, h: 80 }, view), true)
+  assert.equal(boneyardResidentIsVisible({ x: -100.001, y: 300, w: 200, h: 80 }, view), false)
+})
+
+test('visible world bounds include a conservative guard band at responsive sizes', () => {
+  const camera = { x: 1200, y: 900, zoom: BONEYARD_CAMERA_ZOOM }
+  const viewport = { width: 1947.6923076923076, height: 900 }
+  const bounds = boneyardVisibleWorldBounds(camera, viewport)
+  const worldWidth = viewport.width / camera.zoom
+  const worldHeight = viewport.height / camera.zoom
+
+  assert.deepEqual(bounds, {
+    x: camera.x - worldWidth / 2 - BONEYARD_RESIDENT_CULL_PADDING,
+    y: camera.y - worldHeight / 2 - BONEYARD_RESIDENT_CULL_PADDING,
+    w: worldWidth + BONEYARD_RESIDENT_CULL_PADDING * 2,
+    h: worldHeight + BONEYARD_RESIDENT_CULL_PADDING * 2,
+  })
+  assert.equal(boneyardResidentIsVisible({
+    x: bounds.x - 300,
+    y: camera.y,
+    w: 300,
+    h: 1,
+  }, bounds), true)
+  assert.equal(boneyardResidentIsVisible({
+    x: bounds.x - 300.001,
+    y: camera.y,
+    w: 300,
+    h: 1,
+  }, bounds), false)
 })

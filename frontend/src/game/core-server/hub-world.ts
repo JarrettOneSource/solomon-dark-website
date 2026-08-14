@@ -1,4 +1,5 @@
 import { resolveActorMotion, type ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
+import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
 import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
@@ -34,19 +35,39 @@ import {
   planHubStudentRoute,
   stepHubStudentPopulation,
   type HubStudentPopulationState,
+  type HubStudentRoutePlan,
+  type HubStudentState,
 } from './hub-students.ts'
+import { HubStudentNeighborGrid } from './hub-student-grid.ts'
 
 export interface HubWorldState {
   ambient: HubAmbientState
   collisionRngState: number
   kind: 'hub'
   participants: Readonly<Record<string, HubParticipantState>>
+  runtime: HubWorldRuntime
   studentPopulation: HubStudentPopulationState
+}
+
+export class HubWorldRuntime {
+  readonly actorGrid = new DynamicActorGrid(128)
+  readonly bodies: RegionPhysicsBody[] = []
+  readonly bodyRegions = new Map<string, HubRegionId>()
+  readonly playerPlans = new Map<string, PlayerCharacterMovementPlan>()
+  readonly positions = new Map<string, Vector2>()
+  readonly staticCollisionEnabled = new Map<string, boolean>()
+  readonly studentPlans: HubStudentRoutePlan[] = []
+  readonly studentStates: HubStudentState[] = []
+  readonly studentNeighbors = new HubStudentNeighborGrid()
 }
 
 export interface HubWorldTickResult {
   players: Readonly<Record<string, PlayerCharacterState>>
   world: HubWorldState
+}
+
+export interface HubWorldOptions {
+  studentPopulation?: HubStudentPopulationState
 }
 
 export const HUB_PLAYER_CHARACTER_PHYSICS = {
@@ -117,8 +138,9 @@ export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly RegionPhysicsBody[] = [
 
 export function createHubWorld(
   playerIds: readonly string[] = [],
+  options: HubWorldOptions = {},
 ): HubWorldState {
-  const studentPopulation = createHubStudentPopulation()
+  const studentPopulation = options.studentPopulation ?? createHubStudentPopulation()
   return {
     ambient: createHubAmbientState(),
     collisionRngState: 0x51a7c011,
@@ -126,6 +148,7 @@ export function createHubWorld(
     participants: Object.fromEntries(
       playerIds.map((playerId) => [playerId, createHubParticipantState()]),
     ),
+    runtime: new HubWorldRuntime(),
     studentPopulation,
   }
 }
@@ -164,8 +187,11 @@ export function stepHubWorldTick(
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
 ): HubWorldTickResult {
   const participants = reconcileParticipants(world.participants, players)
-  const playerPlans = new Map<string, PlayerCharacterMovementPlan>()
-  for (const [playerId, player] of Object.entries(players)) {
+  const runtime = world.runtime
+  const playerPlans = runtime.playerPlans
+  playerPlans.clear()
+  const playerEntries = Object.entries(players)
+  for (const [playerId, player] of playerEntries) {
     const transition = participants[playerId].transition
     playerPlans.set(
       playerId,
@@ -182,43 +208,57 @@ export function stepHubWorldTick(
     )
   }
 
-  const currentStudents = world.studentPopulation.students
-  const studentPlans = currentStudents.map((student) => (
-    planHubStudentRoute(
-      student,
+  const currentStudents = world.studentPopulation.store.states(runtime.studentStates)
+  runtime.studentNeighbors.rebuild(currentStudents)
+  const studentPlans = runtime.studentPlans
+  studentPlans.length = currentStudents.length
+  for (let index = 0; index < currentStudents.length; index += 1) {
+    studentPlans[index] = planHubStudentRoute(
+      currentStudents[index],
       currentStudents,
       HUB_STUDENT_FIXED_TICK_SECONDS,
+      runtime.studentNeighbors,
+      world.studentPopulation.routeEndBehavior,
     )
-  ))
-  const staticCollisionEnabled = new Map<string, boolean>([
-    ...Object.keys(players).map((playerId) => [
+  }
+  const staticCollisionEnabled = runtime.staticCollisionEnabled
+  staticCollisionEnabled.clear()
+  for (const [playerId] of playerEntries) {
+    staticCollisionEnabled.set(
       `player-${playerId}`,
       participants[playerId].transition === null,
-    ] as const),
-    ...studentPlans.map(({ state: student }) => [
+    )
+  }
+  for (const { state: student } of studentPlans) {
+    staticCollisionEnabled.set(
       `student-${student.id}`,
       student.staticCollisionEnabled,
-    ] as const),
-  ])
+    )
+  }
 
-  const bodyRegions = new Map<string, HubRegionId>()
-  const bodies: RegionPhysicsBody[] = [
-    ...Object.entries(players).map(([playerId, player]) => ({
+  const bodyRegions = runtime.bodyRegions
+  bodyRegions.clear()
+  const bodies = runtime.bodies
+  bodies.length = 0
+  for (const [playerId, player] of playerEntries) {
+    bodies.push({
       delta: playerPlans.get(playerId)!.delta,
       id: `player-${playerId}`,
       position: player.position,
       region: participants[playerId].region,
       ...HUB_PLAYER_CHARACTER_PHYSICS,
-    })),
-    ...studentPlans.map(({ delta, state: student }) => ({
+    })
+  }
+  for (const { delta, state: student } of studentPlans) {
+    bodies.push({
       delta,
       id: `student-${student.id}`,
       position: student.position,
-      region: 'courtyard' as const,
+      region: 'courtyard',
       ...student.profile,
-    })),
-    ...HUB_FIXED_ACTOR_COLLISION_LAYOUT,
-  ]
+    })
+  }
+  bodies.push(...HUB_FIXED_ACTOR_COLLISION_LAYOUT)
   for (const body of bodies) bodyRegions.set(body.id, body.region)
 
   let collisionRngState = world.collisionRngState
@@ -258,11 +298,14 @@ export function stepHubWorldTick(
       },
     },
     (mover, other) => bodyRegions.get(mover.id) === bodyRegions.get(other.id),
+    runtime.actorGrid,
   )
-  const positions = new Map(resolvedBodies.map((body) => [body.id, body.position]))
+  const positions = runtime.positions
+  positions.clear()
+  for (const body of resolvedBodies) positions.set(body.id, body.position)
 
   const nextPlayers: Record<string, PlayerCharacterState> = {}
-  for (const [playerId, player] of Object.entries(players)) {
+  for (const [playerId, player] of playerEntries) {
     const position = positions.get(`player-${playerId}`)
     if (!position) throw new Error(`Hub world lost player character ${playerId}`)
     nextPlayers[playerId] = commitPlayerCharacterTick(
@@ -297,6 +340,7 @@ export function stepHubWorldTick(
       collisionRngState,
       kind: 'hub',
       participants: nextParticipants,
+      runtime,
       studentPopulation,
     },
   }

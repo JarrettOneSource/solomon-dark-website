@@ -10,6 +10,7 @@ export const BONEYARD_RENDER_HEIGHT = GAME_VIEWPORT_MIN_HEIGHT
 export const BONEYARD_CAMERA_ZOOM = 1.35
 export const BONEYARD_STATIC_TILE_SIZE = 1024
 export const BONEYARD_STATIC_ART_MARGIN = 256
+export const BONEYARD_RESIDENT_CULL_PADDING = 32
 
 export interface BoneyardBounds {
   h: number
@@ -66,6 +67,34 @@ export function boneyardWorldPosition(
     x: viewport.width / 2 - camera.x * camera.zoom,
     y: viewport.height / 2 - camera.y * camera.zoom,
   }
+}
+
+export function boneyardVisibleWorldBounds(
+  camera: Camera,
+  viewport: BoneyardRenderViewport = {
+    height: BONEYARD_RENDER_HEIGHT,
+    width: BONEYARD_RENDER_WIDTH,
+  },
+  padding = BONEYARD_RESIDENT_CULL_PADDING,
+): BoneyardBounds {
+  const width = viewport.width / camera.zoom
+  const height = viewport.height / camera.zoom
+  return {
+    x: camera.x - width / 2 - padding,
+    y: camera.y - height / 2 - padding,
+    w: width + padding * 2,
+    h: height + padding * 2,
+  }
+}
+
+export function boneyardResidentIsVisible(
+  resident: BoneyardBounds,
+  view: BoneyardBounds,
+): boolean {
+  return resident.x <= view.x + view.w
+    && resident.x + resident.w >= view.x
+    && resident.y <= view.y + view.h
+    && resident.y + resident.h >= view.y
 }
 
 export function boneyardStaticTiles(

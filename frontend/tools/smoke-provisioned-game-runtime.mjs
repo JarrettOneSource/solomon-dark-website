@@ -7,6 +7,10 @@ import {
   decodeServerGameMessage,
   encodeGameMessage,
 } from '../src/game/protocol/game-protocol.ts'
+import {
+  EntityReplicationGapError,
+  EntityReplicationReconstructor,
+} from '../src/game/protocol/entity-replication.ts'
 
 const provisionUrl = process.env.SDR_GAME_PROVISION_URL
   || 'https://solomondarker.com/api/game/sessions'
@@ -48,18 +52,25 @@ try {
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   const before = welcome.snapshot.players[welcome.playerId].position.x
+  const replication = {
+    lastSequence: welcome.snapshotSequence,
+    reconstructor: new EntityReplicationReconstructor(),
+  }
+  replication.reconstructor.reset(welcome.snapshot, welcome.snapshotSequence)
   socket.send(encodeGameMessage({
     type: 'client-input',
-    input: { movement: { x: 1, y: 0 } },
+    input: {
+      aim: null,
+      cast: { primary: false, secondary: false },
+      movement: { x: 1, y: 0 },
+    },
     sequence: 1,
     targetTick: welcome.snapshot.tick + 1,
   }))
-  const moved = await nextMessage(socket, (message) => (
-    message.type === 'server-snapshot'
-    && message.acknowledgedInputSequence === 1
-    && message.snapshot.players[welcome.playerId].position.x > before
+  const moved = await nextSnapshot(socket, replication, (message, snapshot) => (
+    message.acknowledgedInputSequence === 1
+    && snapshot.players[welcome.playerId].position.x > before
   ))
-  assert.equal(moved.type, 'server-snapshot')
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     endpoint: publicEndpoint.toString(),
@@ -94,6 +105,54 @@ function nextMessage(socket, predicate) {
       if (!predicate(message)) return
       cleanup()
       resolve(message)
+    }
+    const fail = (error) => {
+      cleanup()
+      reject(error)
+    }
+    const cleanup = () => {
+      clearTimeout(timeout)
+      socket.off('message', receive)
+      socket.off('error', fail)
+    }
+    socket.on('message', receive)
+    socket.on('error', fail)
+  })
+}
+
+function nextSnapshot(socket, replication, predicate) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error('timed out waiting for game snapshot'))
+    }, 5000)
+    const receive = (data) => {
+      let message
+      try {
+        message = decodeServerGameMessage(data.toString())
+        if (message.type !== 'server-snapshot') return
+        if (message.sequence <= replication.lastSequence) return
+        const snapshot = replication.reconstructor.apply(message.frame, message.sequence)
+        replication.lastSequence = message.sequence
+        socket.send(encodeGameMessage({
+          type: 'client-snapshot-ack',
+          requireKeyframe: false,
+          sequence: message.sequence,
+        }))
+        if (!predicate(message, snapshot)) return
+        cleanup()
+        resolve({ message, snapshot })
+      } catch (error) {
+        if (error instanceof EntityReplicationGapError) {
+          socket.send(encodeGameMessage({
+            type: 'client-snapshot-ack',
+            requireKeyframe: true,
+            sequence: replication.lastSequence,
+          }))
+          return
+        }
+        fail(error)
+      }
     }
     const fail = (error) => {
       cleanup()

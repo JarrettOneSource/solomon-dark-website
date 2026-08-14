@@ -16,6 +16,7 @@ import {
   encodeGameMessage,
   type ServerWelcomeMessage,
 } from './game-protocol.ts'
+import { createGameSnapshotFrame } from './entity-replication.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -23,7 +24,7 @@ const CHARACTER = {
   element: 'ether',
 } as const
 
-test('client protocol validates character hello, input, and ping messages', () => {
+test('client protocol validates character hello, input, acknowledgement, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -62,6 +63,15 @@ test('client protocol validates character hello, input, and ping messages', () =
   })), {
     type: 'client-start-match',
     boneyardId: 'default-random',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 12,
+  })), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 12,
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-ping',
@@ -105,6 +115,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
       createGameSimulation({ 'player-1': CHARACTER }),
       'player-1',
     ),
+    snapshotSequence: 1,
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
@@ -174,18 +185,38 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
   )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: { ...snapshot, world: { ...snapshot.world, kind: 'unknown' } },
+    frame: { ...frame, world: { ...frame.world, kind: 'unknown' } },
+    sequence: 2,
   })), /kind/)
-  const malformed = JSON.parse(JSON.stringify(snapshot))
+  const malformed = JSON.parse(JSON.stringify(frame))
   delete malformed.players['player-1'].config
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: malformed,
+    frame: malformed,
+    sequence: 2,
   })), /config/)
+  if (frame.world.kind !== 'hub') throw new Error('expected Hub frame')
+  const malformedSample = JSON.parse(JSON.stringify(frame))
+  malformedSample.world.entities.samples[0].pop()
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: malformedSample,
+    sequence: 2,
+  })), /invalid registered sample shape/)
+  const malformedDescriptor = JSON.parse(JSON.stringify(frame))
+  malformedDescriptor.world.entities.spawned[0][3] = 2
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: malformedDescriptor,
+    sequence: 2,
+  })), /invalid registered descriptor shape/)
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {
@@ -193,13 +224,15 @@ test('protocol rejects player ids reserved by ordinary JavaScript records', () =
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
   )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   assert.throws(() => decodeServerGameMessage(JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: {
-      ...snapshot,
-      players: { ['__proto__']: snapshot.players['player-1'] },
+    frame: {
+      ...frame,
+      players: { ['__proto__']: frame.players['player-1'] },
     },
+    sequence: 2,
   })), /player id.*reserved/)
 })
 
@@ -209,19 +242,22 @@ test('protocol validates participant ownership and the recovered Hub room graph'
     'player-1',
   )
   if (snapshot.world.kind !== 'hub') throw new Error('expected Hub snapshot')
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  if (frame.world.kind !== 'hub') throw new Error('expected Hub frame')
   const message = (world: unknown) => JSON.stringify({
     type: 'server-snapshot',
     acknowledgedInputSequence: 0,
-    snapshot: { ...snapshot, world },
+    frame: { ...frame, world },
+    sequence: 2,
   })
 
   assert.throws(() => decodeServerGameMessage(message({
-    ...snapshot.world,
+    ...frame.world,
     participants: {},
-  })), /participants must match snapshot.players exactly/)
+  })), /participants must match frame.players exactly/)
 
   assert.throws(() => decodeServerGameMessage(message({
-    ...snapshot.world,
+    ...frame.world,
     participants: {
       'player-1': {
         region: 'mortuary',
@@ -238,7 +274,7 @@ test('protocol validates participant ownership and the recovered Hub room graph'
   })), /transition is inconsistent/)
 
   assert.throws(() => decodeServerGameMessage(message({
-    ...snapshot.world,
+    ...frame.world,
     participants: {
       'player-1': {
         region: 'courtyard',
@@ -288,6 +324,7 @@ test('protocol bounds server-controlled world collections', () => {
         students: Array.from({ length: 257 }, () => hubWorld.students[0]),
       },
     },
+    snapshotSequence: 1,
   })), /at most 256/)
 })
 
@@ -341,7 +378,8 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   assert.equal(snapshot.world.gateLeaves.length, 2)
   const snapshotMessage = {
     acknowledgedInputSequence: 0,
-    snapshot,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 2,
     type: 'server-snapshot' as const,
   }
   assert.deepEqual(
@@ -350,7 +388,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 
   const malformed = JSON.parse(encodeGameMessage(snapshotMessage))
-  delete malformed.snapshot.world.gateLeaves[0].tip
+  delete malformed.frame.world.gateLeaves[0].tip
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(malformed)),
     /tip/,
