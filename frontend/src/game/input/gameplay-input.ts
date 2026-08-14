@@ -28,12 +28,14 @@ export interface BrowserGameplayInput {
   sample(): BrowserGameplayInputSample
   setBlocked(blocked: boolean): void
   setTouch(movement: Vector2): void
+  setTouchPrimary(direction: Vector2): void
 }
 
 interface BrowserGameplayInputOptions {
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
   onInput: (input: PlayerCharacterInput) => void
+  projectDirection: (direction: Vector2) => Vector2 | null
   projectPointer: (pointer: Vector2) => Vector2 | null
   target?: BrowserInputTarget
   visibilityTarget?: BrowserVisibilityTarget
@@ -43,12 +45,14 @@ export function createBrowserGameplayInput({
   getGamepads = () => navigator.getGamepads(),
   mouseTarget,
   onInput,
+  projectDirection,
   projectPointer,
   target = window,
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
   let aim: Vector2 | null = null
-  let cast = { primary: false, secondary: false }
+  let mouseCast = { primary: false, secondary: false }
+  let touchPrimaryDirection: Vector2 | null = null
   let capturedPointer: Vector2 | null = null
   let blocked = false
   let destroyed = false
@@ -57,7 +61,8 @@ export function createBrowserGameplayInput({
     getGamepads,
     onStop: () => {
       aim = null
-      cast = { primary: false, secondary: false }
+      mouseCast = { primary: false, secondary: false }
+      touchPrimaryDirection = null
       capturedPointer = null
       onInput(createIdlePlayerCharacterInput())
     },
@@ -72,7 +77,9 @@ export function createBrowserGameplayInput({
         input: createIdlePlayerCharacterInput(),
       }
     }
-    if (capturedPointer && (cast.primary || cast.secondary)) {
+    if (touchPrimaryDirection) {
+      aim = projectDirection(touchPrimaryDirection) ?? aim
+    } else if (capturedPointer && (mouseCast.primary || mouseCast.secondary)) {
       aim = projectPointer(capturedPointer) ?? aim
     }
     const movementSample = movement.sample()
@@ -80,7 +87,10 @@ export function createBrowserGameplayInput({
       device: movementSample.device,
       input: {
         aim: aim ? { ...aim } : null,
-        cast: { ...cast },
+        cast: {
+          primary: mouseCast.primary || touchPrimaryDirection !== null,
+          secondary: mouseCast.secondary,
+        },
         movement: { ...movementSample.movement },
       },
     }
@@ -95,13 +105,13 @@ export function createBrowserGameplayInput({
     if (!nextAim) return
     capturedPointer = mouse
     aim = nextAim
-    cast = { ...cast, [lane]: true }
+    mouseCast = { ...mouseCast, [lane]: true }
     event.preventDefault()
     publish()
   }
   const mouseMove: EventListener = (event) => {
     if (blocked) return
-    if (!cast.primary && !cast.secondary) return
+    if (!mouseCast.primary && !mouseCast.secondary) return
     const mouse = mouseEvent(event)
     if (!mouse) return
     capturedPointer = mouse
@@ -113,10 +123,10 @@ export function createBrowserGameplayInput({
     if (blocked) return
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
-    if (!mouse || !lane || !cast[lane]) return
+    if (!mouse || !lane || !mouseCast[lane]) return
     capturedPointer = mouse
     aim = projectPointer(mouse) ?? aim
-    cast = { ...cast, [lane]: false }
+    mouseCast = { ...mouseCast, [lane]: false }
     event.preventDefault()
     publish()
   }
@@ -146,7 +156,20 @@ export function createBrowserGameplayInput({
     setTouch(nextMovement) {
       if (!blocked) movement.setTouch(nextMovement)
     },
+    setTouchPrimary(direction) {
+      if (blocked) return
+      touchPrimaryDirection = primaryDirection(direction)
+      publish()
+    },
   }
+}
+
+function primaryDirection(direction: Vector2): Vector2 | null {
+  if (!Number.isFinite(direction.x) || !Number.isFinite(direction.y)) return null
+  const magnitude = Math.hypot(direction.x, direction.y)
+  return magnitude > 0.001
+    ? { x: direction.x / magnitude, y: direction.y / magnitude }
+    : null
 }
 
 function castLane(button: number): 'primary' | 'secondary' | null {

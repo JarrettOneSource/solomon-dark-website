@@ -47,6 +47,7 @@ test('captures independent left and right levels from the world surface', () => 
     getGamepads: () => [],
     mouseTarget,
     onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
     projectPointer: ({ x, y }) => ({ x: x + 1_000, y: y + 2_000 }),
     target,
     visibilityTarget,
@@ -77,6 +78,7 @@ test('ignores non-world downs but keeps move and release capture outside the sur
     getGamepads: () => [],
     mouseTarget,
     onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
     projectPointer: ({ x, y }) => ({ x, y }),
     target,
     visibilityTarget: new FakeVisibilityTarget(),
@@ -99,6 +101,7 @@ test('cancels the browser context menu only on the gameplay surface', () => {
     getGamepads: () => [],
     mouseTarget,
     onInput: () => {},
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
     projectPointer: ({ x, y }) => ({ x, y }),
     target,
     visibilityTarget: new FakeVisibilityTarget(),
@@ -119,6 +122,7 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
     getGamepads: () => [],
     mouseTarget,
     onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x + cameraX, y }),
     projectPointer: ({ x, y }) => ({ x: x + cameraX, y }),
     target,
     visibilityTarget,
@@ -126,12 +130,13 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
 
   input.setTouch({ x: 1, y: 0 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 10, 20))
+  input.setTouchPrimary({ x: 1, y: 0 })
   cameraX = 200
   assert.deepEqual(input.sample(), {
     device: 'touch',
     input: {
-      aim: { x: 210, y: 20 },
-      cast: { primary: false, secondary: true },
+      aim: { x: 201, y: 0 },
+      cast: { primary: true, secondary: true },
       movement: { x: 1, y: 0 },
     },
   })
@@ -165,6 +170,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
     getGamepads: () => [],
     mouseTarget,
     onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
     projectPointer: ({ x, y }) => ({ x, y }),
     target,
     visibilityTarget: new FakeVisibilityTarget(),
@@ -172,6 +178,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
 
   input.setTouch({ x: 1, y: 0 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30))
+  input.setTouchPrimary({ x: 1, y: 0 })
   assert.equal(input.sample().device, 'touch')
   assert.equal(input.sample().input.cast.primary, true)
 
@@ -184,6 +191,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
 
   const publishedAtBarrier = published.length
   input.setTouch({ x: 0, y: -1 })
+  input.setTouchPrimary({ x: 0, y: -1 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 40, 50))
   assert.equal(published.length, publishedAtBarrier)
   assert.deepEqual(input.sample(), {
@@ -204,5 +212,71 @@ test('blocking owns input immediately and drops barrier-time state', () => {
     cast: { primary: false, secondary: true },
     movement: { x: 0, y: 1 },
   })
+  input.destroy()
+})
+
+test('touch primary reprojects held direction, retains released aim, and coexists with movement', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  let playerX = 100
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: playerX + x * 10, y: 200 + y * 10 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  input.setTouch({ x: -1, y: 0 })
+  input.setTouchPrimary({ x: 2, y: 0 })
+  assert.deepEqual(published.at(-1), {
+    aim: { x: 110, y: 200 },
+    cast: { primary: true, secondary: false },
+    movement: { x: -1, y: 0 },
+  })
+  assert.equal(input.sample().device, 'touch')
+
+  playerX = 300
+  assert.deepEqual(input.sample().input, {
+    aim: { x: 310, y: 200 },
+    cast: { primary: true, secondary: false },
+    movement: { x: -1, y: 0 },
+  })
+
+  input.setTouchPrimary({ x: 0, y: 0 })
+  assert.deepEqual(published.at(-1), {
+    aim: { x: 310, y: 200 },
+    cast: { primary: false, secondary: false },
+    movement: { x: -1, y: 0 },
+  })
+  input.destroy()
+})
+
+test('touch and mouse primary levels compose without stealing each other release', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30))
+  input.setTouchPrimary({ x: 1, y: 0 })
+  assert.deepEqual(published.at(-1), expectedInput({ x: 100, y: 0 }, true, false))
+
+  input.setTouchPrimary({ x: 0, y: 0 })
+  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, true, false))
+
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 0, 20, 30))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, false, false))
   input.destroy()
 })

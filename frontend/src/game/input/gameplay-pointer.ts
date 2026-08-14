@@ -12,6 +12,8 @@ interface NativePointerViewport {
   width: number
 }
 
+const NATIVE_AIM_ANCHOR_Y_PIXELS = 25
+
 export function projectNativeWorldPointer(
   pointer: Vector2,
   surface: NativePointerSurface,
@@ -41,6 +43,34 @@ export function projectNativeWorldPointer(
     y: viewOrigin.y + logicalScreen.y / viewScale,
   }
   return finitePoint(world) ? world : null
+}
+
+export function projectNativeStickAim(
+  direction: Vector2,
+  playerPosition: Vector2,
+  viewport: NativePointerViewport,
+  viewScale: number,
+): Vector2 | null {
+  if (
+    !finitePoint(direction)
+    || !finitePoint(playerPosition)
+    || !(viewport.width > 0)
+    || !(viewport.height > 0)
+    || !(viewScale > 0)
+    || !Number.isFinite(viewScale)
+  ) return null
+
+  const magnitude = Math.hypot(direction.x, direction.y)
+  const reachPixels = Math.min(viewport.width, viewport.height) / 2
+    - NATIVE_AIM_ANCHOR_Y_PIXELS
+  if (!(magnitude > 0.001) || !(reachPixels > 0)) return null
+
+  const reach = reachPixels / viewScale
+  return {
+    x: playerPosition.x + direction.x / magnitude * reach,
+    y: playerPosition.y - NATIVE_AIM_ANCHOR_Y_PIXELS / viewScale
+      + direction.y / magnitude * reach,
+  }
 }
 
 function finitePoint(point: Vector2): boolean {

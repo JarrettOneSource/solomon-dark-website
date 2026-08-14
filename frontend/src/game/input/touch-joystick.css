@@ -2,7 +2,6 @@
   position: absolute;
   z-index: 11000;
   bottom: 74px;
-  left: 42px;
   display: none;
   width: 152px;
   height: 152px;
@@ -12,6 +11,10 @@
   box-shadow: inset 0 0 18px rgb(0 0 0 / 0.7), 0 4px 14px rgb(0 0 0 / 0.45);
   touch-action: none;
 }
+
+.game-touch-joystick-movement { left: 42px; }
+
+.game-touch-joystick-primary { right: 170px; }
 
 .game-touch-joystick-knob {
   position: absolute;
@@ -32,6 +35,11 @@
 @media (orientation: portrait) and (hover: none) and (pointer: coarse) {
   .game-touch-joystick {
     bottom: 92px;
+  }
+
+  .game-touch-joystick-movement {
     left: 54px;
   }
+
+  .game-touch-joystick-primary { right: 182px; }
 }

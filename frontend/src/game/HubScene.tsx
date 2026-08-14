@@ -25,7 +25,10 @@ import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
 } from './input/gameplay-input.ts'
-import { projectNativeWorldPointer } from './input/gameplay-pointer.ts'
+import {
+  projectNativeStickAim,
+  projectNativeWorldPointer,
+} from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
 import {
   createHubWorldRenderer,
@@ -162,6 +165,17 @@ export default function HubScene({
     const input = createBrowserGameplayInput({
       mouseTarget: host,
       onInput,
+      projectDirection: (direction) => {
+        const snapshot = samplePresentation()
+        const player = snapshot.players[playerId]
+        if (!player) return null
+        return projectNativeStickAim(
+          direction,
+          player.position,
+          viewportRef.current,
+          HUB_CAMERA_SCALE,
+        )
+      },
       projectPointer: (pointer) => {
         const snapshot = samplePresentation()
         const player = snapshot.players[playerId]
@@ -324,7 +338,14 @@ export default function HubScene({
           </div>
         )}
 
-        <TouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
+        <TouchJoystick
+          lane="movement"
+          onInput={(movement) => inputRef.current?.setTouch(movement)}
+        />
+        <TouchJoystick
+          lane="primary"
+          onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
+        />
 
         <div className="hub-world-accessibility sr-only">
           {currentRegion === 'courtyard'

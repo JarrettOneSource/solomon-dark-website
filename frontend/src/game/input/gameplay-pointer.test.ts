@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { projectNativeWorldPointer } from './gameplay-pointer.ts'
+import {
+  projectNativeStickAim,
+  projectNativeWorldPointer,
+} from './gameplay-pointer.ts'
 
 test('projects transformed browser coordinates through the native view origin and scale', () => {
   assert.deepEqual(projectNativeWorldPointer(
@@ -48,5 +51,45 @@ test('rejects unavailable surfaces and invalid native view scales', () => {
     { width: 1600, height: 900 },
     { x: 0, y: 0 },
     0,
+  ), null)
+})
+
+test('projects stick direction from the native torso anchor to the visible viewport radius', () => {
+  assert.deepEqual(projectNativeStickAim(
+    { x: 1, y: 0 },
+    { x: 100, y: 200 },
+    { width: 1600, height: 900 },
+    1.25,
+  ), { x: 440, y: 180 })
+
+  const diagonal = projectNativeStickAim(
+    { x: 1, y: -1 },
+    { x: 100, y: 200 },
+    { width: 1600, height: 900 },
+    1.25,
+  )
+  assert.ok(diagonal)
+  assert.ok(Math.abs(diagonal.x - 340.41630560342617) < 1e-12)
+  assert.ok(Math.abs(diagonal.y - -60.41630560342617) < 1e-12)
+})
+
+test('rejects idle or invalid stick aim geometry', () => {
+  assert.equal(projectNativeStickAim(
+    { x: 0, y: 0 },
+    { x: 100, y: 200 },
+    { width: 1600, height: 900 },
+    1.25,
+  ), null)
+  assert.equal(projectNativeStickAim(
+    { x: 1, y: 0 },
+    { x: 100, y: 200 },
+    { width: 40, height: 40 },
+    1.25,
+  ), null)
+  assert.equal(projectNativeStickAim(
+    { x: Number.NaN, y: 0 },
+    { x: 100, y: 200 },
+    { width: 1600, height: 900 },
+    1.25,
   ), null)
 })

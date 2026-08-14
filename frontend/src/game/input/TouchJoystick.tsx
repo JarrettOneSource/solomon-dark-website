@@ -10,11 +10,14 @@ import { joystickVector } from './movement-input.ts'
 
 import './touch-joystick.css'
 
+type TouchJoystickLane = 'movement' | 'primary'
+
 interface TouchJoystickProps {
+  lane: TouchJoystickLane
   onInput: (movement: Vector2) => void
 }
 
-export default function TouchJoystick({ onInput }: TouchJoystickProps) {
+export default function TouchJoystick({ lane, onInput }: TouchJoystickProps) {
   const baseRef = useRef<HTMLDivElement>(null)
   const activePointerRef = useRef<number | null>(null)
   const inputSinkRef = useRef(onInput)
@@ -76,9 +79,10 @@ export default function TouchJoystick({ onInput }: TouchJoystickProps) {
   return (
     <div
       ref={baseRef}
-      className="game-touch-joystick"
+      className={`game-touch-joystick game-touch-joystick-${lane}`}
+      data-joystick={lane}
       role="region"
-      aria-label="Movement joystick"
+      aria-label={lane === 'movement' ? 'Movement joystick' : 'Primary attack joystick'}
       tabIndex={-1}
       onPointerDown={(event) => {
         if (activePointerRef.current !== null) return

@@ -27,7 +27,10 @@ import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
 } from './input/gameplay-input.ts'
-import { projectNativeWorldPointer } from './input/gameplay-pointer.ts'
+import {
+  projectNativeStickAim,
+  projectNativeWorldPointer,
+} from './input/gameplay-pointer.ts'
 import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
 import {
   createBoneyardWorldRenderer,
@@ -183,6 +186,19 @@ export default function BoneyardScene({
     const input = createBrowserGameplayInput({
       mouseTarget: host,
       onInput,
+      projectDirection: (direction) => {
+        const renderer = rendererRef.current
+        if (!renderer) return null
+        const snapshot = samplePresentation()
+        const player = snapshot.players[playerId]
+        if (!player) return null
+        return projectNativeStickAim(
+          direction,
+          player.position,
+          viewportRef.current,
+          renderer.camera(snapshot).zoom,
+        )
+      },
       projectPointer: (pointer) => {
         const renderer = rendererRef.current
         if (!renderer) return null
@@ -348,7 +364,14 @@ export default function BoneyardScene({
             </svg>
           </div>
         ) : null}
-        <TouchJoystick onInput={(movement) => inputRef.current?.setTouch(movement)} />
+        <TouchJoystick
+          lane="movement"
+          onInput={(movement) => inputRef.current?.setTouch(movement)}
+        />
+        <TouchJoystick
+          lane="primary"
+          onInput={(direction) => inputRef.current?.setTouchPrimary(direction)}
+        />
 
         {dig ? (
           <div className="sr-only">

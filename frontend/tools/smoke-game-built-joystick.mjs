@@ -25,6 +25,14 @@ function rectCenter(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
 }
 
+function rectsOverlap(first, second) {
+  assert.ok(first && second, 'expected both element bounds')
+  return first.x < second.x + second.width
+    && first.x + first.width > second.x
+    && first.y < second.y + second.height
+    && first.y + first.height > second.y
+}
+
 async function settledBounds(locator, page) {
   let previous = ''
   let stable = 0
@@ -73,51 +81,162 @@ try {
   await mobile.locator('.create-menu-discipline-arcane').click()
   await mobile.locator('.hub-world-canvas').waitFor({ timeout: 30_000 })
 
-  const joystick = mobile.locator('.game-touch-joystick')
-  const knob = mobile.locator('.game-touch-joystick-knob')
-  await joystick.waitFor()
+  const movementJoystick = mobile.locator('[data-joystick="movement"]')
+  const movementKnob = movementJoystick.locator('.game-touch-joystick-knob')
+  const primaryJoystick = mobile.locator('[data-joystick="primary"]')
+  const primaryKnob = primaryJoystick.locator('.game-touch-joystick-knob')
+  await movementJoystick.waitFor()
+  await primaryJoystick.waitFor()
 
-  const idleKnobCenter = rectCenter(await settledBounds(knob, mobile))
-  const base = await joystick.boundingBox()
-  const baseCenter = rectCenter(base)
+  const movementIdleCenter = rectCenter(await settledBounds(movementKnob, mobile))
+  const movementBase = await movementJoystick.boundingBox()
+  const movementCenter = rectCenter(movementBase)
   assert.ok(
-    Math.abs(idleKnobCenter.x - baseCenter.x) < 1,
-    `idle knob must center in the base (x ${idleKnobCenter.x} vs ${baseCenter.x})`,
+    Math.abs(movementIdleCenter.x - movementCenter.x) < 1,
+    `idle movement knob must center in the base (x ${movementIdleCenter.x} vs ${movementCenter.x})`,
   )
   assert.ok(
-    Math.abs(idleKnobCenter.y - baseCenter.y) < 1,
-    `idle knob must center in the base (y ${idleKnobCenter.y} vs ${baseCenter.y})`,
+    Math.abs(movementIdleCenter.y - movementCenter.y) < 1,
+    `idle movement knob must center in the base (y ${movementIdleCenter.y} vs ${movementCenter.y})`,
+  )
+
+  const primaryIdleCenter = rectCenter(await settledBounds(primaryKnob, mobile))
+  const primaryBase = await primaryJoystick.boundingBox()
+  const primaryCenter = rectCenter(primaryBase)
+  assert.ok(Math.abs(primaryIdleCenter.x - primaryCenter.x) < 1)
+  assert.ok(Math.abs(primaryIdleCenter.y - primaryCenter.y) < 1)
+  assert.equal(
+    rectsOverlap(primaryBase, await mobile.locator('.hub-hud-map').boundingBox()),
+    false,
+    'primary joystick must not cover the Hub map control',
   )
   await mobile.screenshot({ path: idleScreenshotPath })
 
   const cdp = await mobile.context().newCDPSession(mobile)
-  const requestedOffset = base.width * 0.3
+  const movementOffset = movementBase.width * 0.3
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
-    touchPoints: [{ x: baseCenter.x, y: baseCenter.y }],
+    touchPoints: [{ x: movementCenter.x, y: movementCenter.y }],
   })
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
-    touchPoints: [{ x: baseCenter.x + requestedOffset, y: baseCenter.y }],
+    touchPoints: [{ x: movementCenter.x + movementOffset, y: movementCenter.y }],
   })
   await mobile.waitForTimeout(60)
-  const heldKnobCenter = rectCenter(await knob.boundingBox())
+  const movementHeldCenter = rectCenter(await movementKnob.boundingBox())
   assert.ok(
-    Math.abs(heldKnobCenter.x - (baseCenter.x + requestedOffset)) < 1,
-    `held knob must follow the touch (${heldKnobCenter.x} vs ${baseCenter.x + requestedOffset})`,
+    Math.abs(movementHeldCenter.x - (movementCenter.x + movementOffset)) < 1,
+    `held movement knob must follow the touch (${movementHeldCenter.x} vs ${movementCenter.x + movementOffset})`,
   )
-  assert.ok(Math.abs(heldKnobCenter.y - baseCenter.y) < 1)
+  assert.ok(Math.abs(movementHeldCenter.y - movementCenter.y) < 1)
+
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  const movementReleasedCenter = rectCenter(await settledBounds(movementKnob, mobile))
+  assert.ok(Math.abs(movementReleasedCenter.x - movementCenter.x) < 1)
+  assert.ok(Math.abs(movementReleasedCenter.y - movementCenter.y) < 1)
+
+  const primaryOffset = primaryBase.width * 0.3
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: primaryCenter.x, y: primaryCenter.y }],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{ x: primaryCenter.x + primaryOffset, y: primaryCenter.y }],
+  })
+  await mobile.waitForFunction(() => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerHeadingIndex === 6
+      && frame.primarySpellKinds?.includes('water')
+  }, null, { timeout: 10_000 })
+  const primaryHeldCenter = rectCenter(await primaryKnob.boundingBox())
+  assert.ok(Math.abs(primaryHeldCenter.x - (primaryCenter.x + primaryOffset)) < 1)
+  assert.ok(Math.abs(primaryHeldCenter.y - primaryCenter.y) < 1)
   await mobile.screenshot({ path: heldScreenshotPath })
 
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  const releasedKnobCenter = rectCenter(await settledBounds(knob, mobile))
-  assert.ok(Math.abs(releasedKnobCenter.x - baseCenter.x) < 1)
-  assert.ok(Math.abs(releasedKnobCenter.y - baseCenter.y) < 1)
+  await mobile.waitForFunction(() => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerAttachmentPose === 0
+      && !frame.primarySpellKinds?.includes('water')
+  }, null, { timeout: 10_000 })
+  const primaryReleasedCenter = rectCenter(await settledBounds(primaryKnob, mobile))
+  assert.ok(Math.abs(primaryReleasedCenter.x - primaryCenter.x) < 1)
+  assert.ok(Math.abs(primaryReleasedCenter.y - primaryCenter.y) < 1)
+
+  const concurrentStartX = await mobile.locator('.hub-world-canvas').evaluate(
+    (node) => node.__sdrHubFrame.playerX,
+  )
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { id: 11, x: movementCenter.x, y: movementCenter.y },
+      { id: 22, x: primaryCenter.x, y: primaryCenter.y },
+    ],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [
+      { id: 11, x: movementCenter.x + movementOffset, y: movementCenter.y },
+      { id: 22, x: primaryCenter.x + primaryOffset, y: primaryCenter.y },
+    ],
+  })
+  await mobile.waitForFunction((startX) => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerX > startX + 10
+      && frame.playerHeadingIndex === 6
+      && frame.primarySpellKinds?.includes('water')
+  }, concurrentStartX, { timeout: 10_000 })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await mobile.waitForFunction(() => {
+    const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+    return frame?.playerMoving === false
+      && frame.playerAttachmentPose === 0
+      && !frame.primarySpellKinds?.includes('water')
+  }, null, { timeout: 10_000 })
+  const concurrentMovementReleased = rectCenter(await settledBounds(movementKnob, mobile))
+  const concurrentPrimaryReleased = rectCenter(await settledBounds(primaryKnob, mobile))
+  assert.ok(Math.abs(concurrentMovementReleased.x - movementCenter.x) < 1)
+  assert.ok(Math.abs(concurrentMovementReleased.y - movementCenter.y) < 1)
+  assert.ok(Math.abs(concurrentPrimaryReleased.x - primaryCenter.x) < 1)
+  assert.ok(Math.abs(concurrentPrimaryReleased.y - primaryCenter.y) < 1)
+
+  await mobile.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  await mobile.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  const boneyardPrimaryJoystick = mobile.locator('[data-joystick="primary"]')
+  const boneyardPrimaryKnob = boneyardPrimaryJoystick.locator('.game-touch-joystick-knob')
+  const boneyardPrimaryBase = await boneyardPrimaryJoystick.boundingBox()
+  const boneyardPrimaryCenter = rectCenter(boneyardPrimaryBase)
+  const boneyardPrimaryOffset = boneyardPrimaryBase.width * 0.3
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: boneyardPrimaryCenter.x, y: boneyardPrimaryCenter.y }],
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: [{
+      x: boneyardPrimaryCenter.x + boneyardPrimaryOffset,
+      y: boneyardPrimaryCenter.y,
+    }],
+  })
+  await mobile.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')
+      ?.__sdrBoneyardFrame.primarySpellKinds?.includes('water')
+  ), null, { timeout: 10_000 })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await mobile.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame && !frame.primarySpellKinds?.includes('water')
+  }, null, { timeout: 10_000 })
+  const boneyardPrimaryReleased = rectCenter(await settledBounds(boneyardPrimaryKnob, mobile))
+  assert.ok(Math.abs(boneyardPrimaryReleased.x - boneyardPrimaryCenter.x) < 1)
+  assert.ok(Math.abs(boneyardPrimaryReleased.y - boneyardPrimaryCenter.y) < 1)
 
   assert.deepEqual(pageErrors, [])
   process.stdout.write(
-    `built-bundle joystick smoke passed: idle knob (${idleKnobCenter.x.toFixed(2)}, ${idleKnobCenter.y.toFixed(2)}) `
-    + `centered in base (${baseCenter.x.toFixed(2)}, ${baseCenter.y.toFixed(2)})\n`,
+    `built-bundle joystick smoke passed: movement (${movementIdleCenter.x.toFixed(2)}, ${movementIdleCenter.y.toFixed(2)}), `
+    + `primary attack (${primaryIdleCenter.x.toFixed(2)}, ${primaryIdleCenter.y.toFixed(2)}), `
+    + 'rightward Water heading 6, simultaneous movement, and Boneyard cast\n',
   )
 } finally {
   await browser.close()
