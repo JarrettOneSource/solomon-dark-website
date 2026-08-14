@@ -20,6 +20,8 @@ export interface EarthBoulderTextures {
 
 export class EarthBoulderView {
   readonly container: Container
+  readonly containers: readonly Container[]
+  readonly kind = 'earth'
   private readonly body = new Container({ label: 'earth-boulder-body' })
   private readonly called = new Container({ label: 'earth-boulder-called-rocks' })
   private readonly calledSprites: Sprite[] = []
@@ -33,6 +35,7 @@ export class EarthBoulderView {
     this.state = state
     this.textures = textures
     this.container = new Container({ label: 'earth' })
+    this.containers = [this.container]
     this.container.eventMode = 'none'
     this.body.eventMode = 'none'
     this.called.eventMode = 'none'
@@ -76,6 +79,10 @@ export class EarthBoulderView {
     return this.state.position.y
   }
 
+  painterRoots(): readonly EarthPainterRoot[] {
+    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+  }
+
   setTint(tint: number): void {
     this.glimmer.tint = tint
     for (const rock of this.rockSprites) rock.tint = tint
@@ -91,6 +98,8 @@ export class EarthBoulderView {
 
 export class EarthBoulderImpactView {
   readonly container: Container
+  readonly containers: readonly Container[]
+  readonly kind = 'earth-impact'
   private readonly fragmentSprites: Sprite[] = []
   private state: PrimarySpellEarthImpactState
   private readonly textures: EarthBoulderTextures
@@ -99,6 +108,7 @@ export class EarthBoulderImpactView {
     this.state = state
     this.textures = textures
     this.container = new Container({ label: 'earth-impact' })
+    this.containers = [this.container]
     this.container.eventMode = 'none'
     this.update(state)
   }
@@ -127,6 +137,10 @@ export class EarthBoulderImpactView {
     return this.state.origin.y
   }
 
+  painterRoots(): readonly EarthPainterRoot[] {
+    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+  }
+
   setTint(tint: number): void {
     for (const fragment of this.fragmentSprites) fragment.tint = tint
   }
@@ -135,6 +149,12 @@ export class EarthBoulderImpactView {
     this.container.destroy({ children: true })
     this.fragmentSprites.length = 0
   }
+}
+
+interface EarthPainterRoot {
+  container: Container
+  suffix: string
+  worldY: number
 }
 
 function sprite(texture: Texture): Sprite {

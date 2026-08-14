@@ -6,6 +6,7 @@ import {
 } from 'pixi.js'
 
 import type {
+  PrimarySpellChannelTransientState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -33,10 +34,10 @@ export class AirPrimarySpellView {
   private readonly contactCorona: AirCoronaView
   readonly kind = 'air'
   private plan: ReturnType<typeof buildNativeAirLightningPlan>
-  private state: PrimarySpellTransientState
+  private state: PrimarySpellChannelTransientState
   private readonly sourceCorona: AirCoronaView
 
-  constructor(state: PrimarySpellTransientState, textures: AirTextures) {
+  constructor(state: PrimarySpellChannelTransientState, textures: AirTextures) {
     this.state = state
     this.bodyContainer = new Container({ label: 'air-body' })
     this.bodyContainer.eventMode = 'none'

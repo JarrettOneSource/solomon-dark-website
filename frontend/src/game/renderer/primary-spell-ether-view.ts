@@ -14,7 +14,9 @@ export type EtherPrimaryTextures = Readonly<Record<EtherPrimarySprite, Texture>>
 
 export class EtherPrimarySpellView {
   readonly container = new Container({ label: 'ether' })
+  readonly containers: readonly Container[]
   private readonly compositor = new Container({ label: 'ether-flight-compositor' })
+  readonly kind = 'ether'
   private readonly nativeTints: number[] = []
   private readonly sprites: Sprite[] = []
   private state: PrimarySpellProjectileState
@@ -25,6 +27,7 @@ export class EtherPrimarySpellView {
     if (state.kind !== 'ether') throw new Error('EtherPrimarySpellView requires an Ether actor')
     this.state = state
     this.textures = textures
+    this.containers = [this.container]
     this.container.eventMode = 'none'
     this.compositor.eventMode = 'none'
     this.compositor.position.set(ETHER_PRIMARY_ROOT_OFFSET.x, ETHER_PRIMARY_ROOT_OFFSET.y)
@@ -64,6 +67,10 @@ export class EtherPrimarySpellView {
     return this.state.position.y
   }
 
+  painterRoots(): readonly EtherPainterRoot[] {
+    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+  }
+
   setTint(tint: number): void {
     this.worldTint = tint
     for (let index = 0; index < this.sprites.length; index += 1) {
@@ -76,6 +83,12 @@ export class EtherPrimarySpellView {
     this.nativeTints.length = 0
     this.sprites.length = 0
   }
+}
+
+interface EtherPainterRoot {
+  container: Container
+  suffix: string
+  worldY: number
 }
 
 function multiplyTints(left: number, right: number): number {

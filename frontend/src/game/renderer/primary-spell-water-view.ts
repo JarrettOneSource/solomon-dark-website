@@ -18,15 +18,18 @@ export interface WaterPrimarySpellTextures {
 
 export class WaterPrimarySpellView {
   readonly container: Container
+  readonly containers: readonly Container[]
   private readonly additiveCore: Sprite
   private readonly core: Sprite
   private state: PrimarySpellChannelTransientState
   private readonly glint: Sprite
+  readonly kind = 'water'
   private worldTint = 0xffffff
 
   constructor(state: PrimarySpellChannelTransientState, textures: WaterPrimarySpellTextures) {
     this.state = state
     this.container = new Container({ label: 'water' })
+    this.containers = [this.container]
     this.container.eventMode = 'none'
     this.core = frostSprite(textures.core, 'normal')
     this.additiveCore = frostSprite(textures.core, 'add')
@@ -53,6 +56,10 @@ export class WaterPrimarySpellView {
     return waterFrostJetPlan(this.state).worldY
   }
 
+  painterRoots(): readonly WaterPainterRoot[] {
+    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+  }
+
   setTint(tint: number): void {
     this.worldTint = tint
     this.update(this.state)
@@ -74,6 +81,12 @@ export class WaterPrimarySpellView {
     sprite.alpha = draw.alpha
     sprite.tint = multiplyWaterFrostTint(this.worldTint, draw.tint)
   }
+}
+
+interface WaterPainterRoot {
+  container: Container
+  suffix: string
+  worldY: number
 }
 
 function frostSprite(texture: Texture, blend: 'add' | 'normal'): Sprite {
