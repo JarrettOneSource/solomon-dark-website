@@ -1,19 +1,15 @@
-import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
+import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
-  PrimarySpellChannelTransientState,
   PrimarySpellProjectileState,
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
-  PRIMARY_SPELL_AIR_LIFETIME_TICKS,
-  PRIMARY_SPELL_AIR_REACH,
-} from '../core-kernels/primary-spells.ts'
-import {
   EarthBoulderImpactView,
   EarthBoulderView,
 } from './earth-boulder-view.ts'
+import { AirPrimarySpellView } from './primary-spell-air-view.ts'
 import { EtherPrimarySpellView } from './primary-spell-ether-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
@@ -27,11 +23,18 @@ export interface PrimarySpellPainterLayer {
 }
 
 interface SpellView {
-  readonly container: Container
-  readonly worldY: number
+  readonly containers: readonly Container[]
+  readonly kind: string
   destroy(): void
+  painterRoots(): readonly SpellPainterRoot[]
   setTint(tint: number): void
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void
+}
+
+interface SpellPainterRoot {
+  container: Container
+  suffix: string
+  worldY: number
 }
 
 export class PrimarySpellWorldView {
@@ -70,39 +73,50 @@ export class PrimarySpellWorldView {
                   core: this.textures.primarySpells.frost.core,
                   glint: this.textures.primarySpells.frost.over,
                 })
-              : new TransientSpellView(state)
+              : new AirPrimarySpellView(state, this.textures.primarySpells.air)
         }
         this.views.set(state.id, view)
-        this.root.addChild(view.container)
+        this.root.addChild(...view.containers)
       }
       view.update(state)
-      view.container.zIndex = hubWorldDepthForActor(view.worldY)
+      for (const painterRoot of view.painterRoots()) {
+        painterRoot.container.zIndex = hubWorldDepthForActor(painterRoot.worldY)
+      }
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
       this.views.delete(id)
-      this.root.removeChild(view.container)
+      for (const container of view.containers) this.root.removeChild(container)
       view.destroy()
     }
   }
 
   painterLayers(): PrimarySpellPainterLayer[] {
-    return [...this.views.entries()].map(([id, view], sourceOrder) => ({
-      id: `primary-spell:${id}`,
-      sortBias: 0,
-      sourceOrder,
-      worldY: view.worldY,
-    }))
+    const layers: PrimarySpellPainterLayer[] = []
+    for (const [id, view] of this.views) {
+      for (const painterRoot of view.painterRoots()) {
+        layers.push({
+          id: painterRoot.suffix.length > 0
+            ? `primary-spell:${id}:${painterRoot.suffix}`
+            : `primary-spell:${id}`,
+          sortBias: 0,
+          sourceOrder: layers.length,
+          worldY: painterRoot.worldY,
+        })
+      }
+    }
+    return layers
   }
 
   setDepth(id: string, depth: number): void {
-    const numericId = Number(id.slice('primary-spell:'.length))
-    const view = this.views.get(numericId)
-    if (view) view.container.zIndex = depth
+    const parsed = parsePainterId(id)
+    const view = this.views.get(parsed.numericId)
+    const painterRoot = view?.painterRoots().find(({ suffix }) => suffix === parsed.suffix)
+    if (painterRoot) painterRoot.container.zIndex = depth
   }
 
   setTint(id: string, tint: number): void {
-    const numericId = Number(id.slice('primary-spell:'.length))
+    const { numericId } = parsePainterId(id)
     this.views.get(numericId)?.setTint(tint)
   }
 
@@ -111,12 +125,12 @@ export class PrimarySpellWorldView {
   }
 
   get kinds(): readonly string[] {
-    return [...this.views.values()].map((view) => view.container.label)
+    return [...this.views.values()].map((view) => view.kind)
   }
 
   destroy(): void {
     for (const view of this.views.values()) {
-      this.root.removeChild(view.container)
+      for (const container of view.containers) this.root.removeChild(container)
       view.destroy()
     }
     this.views.clear()
@@ -126,7 +140,9 @@ export class PrimarySpellWorldView {
 
 class ProjectileSpellView implements SpellView {
   readonly container: Container
+  readonly containers: readonly Container[]
   private readonly extras: Sprite[] = []
+  readonly kind: string
   private readonly main: Sprite
   private state: PrimarySpellProjectileState
   private readonly textures: PlayerWorldTextures
@@ -134,7 +150,9 @@ class ProjectileSpellView implements SpellView {
   constructor(state: PrimarySpellProjectileState, textures: PlayerWorldTextures) {
     this.state = state
     this.textures = textures
+    this.kind = state.kind
     this.container = new Container({ label: state.kind })
+    this.containers = [this.container]
     this.container.eventMode = 'none'
     this.main = new Sprite(this.texture(state))
     this.main.anchor.set(0.5)
@@ -166,6 +184,10 @@ class ProjectileSpellView implements SpellView {
     return this.state.position.y
   }
 
+  painterRoots(): readonly SpellPainterRoot[] {
+    return [{ container: this.container, suffix: '', worldY: this.worldY }]
+  }
+
   setTint(tint: number): void {
     this.main.tint = tint
     for (const extra of this.extras) extra.tint = tint
@@ -188,47 +210,6 @@ class ProjectileSpellView implements SpellView {
   }
 }
 
-class TransientSpellView implements SpellView {
-  readonly container: Container
-  private readonly graphics: Graphics[] = []
-  private state: PrimarySpellChannelTransientState
-
-  constructor(state: PrimarySpellChannelTransientState) {
-    this.state = state
-    this.container = new Container({ label: state.kind })
-    this.container.eventMode = 'none'
-    const points = lightningPoints(state)
-    const glow = lightningStroke(points, 0x5da9ff, 7)
-    glow.alpha = 0.45
-    glow.blendMode = 'add'
-    const core = lightningStroke(points, 0xeaf8ff, 2)
-    core.blendMode = 'add'
-    this.graphics.push(glow, core)
-    this.container.addChild(glow, core)
-    this.update(state)
-  }
-
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
-    if (!('origin' in state) || state.kind !== 'air') return
-    this.state = state
-    this.container.position.set(state.origin.x, state.origin.y)
-    this.container.alpha = Math.max(0, 1 - state.ageTicks / PRIMARY_SPELL_AIR_LIFETIME_TICKS)
-  }
-
-  get worldY(): number {
-    return this.state.origin.y + this.state.direction.y * PRIMARY_SPELL_AIR_REACH * 0.5
-  }
-
-  setTint(tint: number): void {
-    for (const graphic of this.graphics) graphic.tint = tint
-  }
-
-  destroy(): void {
-    this.container.destroy({ children: true })
-    this.graphics.length = 0
-  }
-}
-
 function effectSprite(texture: Texture, scale: number, alpha: number): Sprite {
   const sprite = new Sprite(texture)
   sprite.anchor.set(0.5)
@@ -239,39 +220,13 @@ function effectSprite(texture: Texture, scale: number, alpha: number): Sprite {
   return sprite
 }
 
-function lightningPoints(state: PrimarySpellChannelTransientState): readonly [number, number][] {
-  const perpendicular = { x: -state.direction.y, y: state.direction.x }
-  return Array.from({ length: 10 }, (_, index) => {
-    const progress = index / 9
-    const seed = hash(state.id, index)
-    const jitter = index === 0 || index === 9
-      ? 0
-      : ((seed / 0xffff_ffff) * 2 - 1) * 13
-    return [
-      state.direction.x * PRIMARY_SPELL_AIR_REACH * progress + perpendicular.x * jitter,
-      state.direction.y * PRIMARY_SPELL_AIR_REACH * progress + perpendicular.y * jitter,
-    ]
-  })
-}
-
-function lightningStroke(
-  points: readonly [number, number][],
-  color: number,
-  width: number,
-): Graphics {
-  const graphics = new Graphics().moveTo(points[0][0], points[0][1])
-  for (let index = 1; index < points.length; index += 1) {
-    graphics.lineTo(points[index][0], points[index][1])
-  }
-  graphics.stroke({ color, width })
-  graphics.eventMode = 'none'
-  return graphics
-}
-
-function hash(id: number, salt: number): number {
-  let value = (id ^ Math.imul(salt + 1, 0x9e3779b1)) >>> 0
-  value ^= value >>> 16
-  value = Math.imul(value, 0x7feb352d) >>> 0
-  value ^= value >>> 15
-  return Math.imul(value, 0x846ca68b) >>> 0
+function parsePainterId(id: string): { numericId: number; suffix: string } {
+  const value = id.slice('primary-spell:'.length)
+  const separator = value.indexOf(':')
+  return separator < 0
+    ? { numericId: Number(value), suffix: '' }
+    : {
+        numericId: Number(value.slice(0, separator)),
+        suffix: value.slice(separator + 1),
+      }
 }

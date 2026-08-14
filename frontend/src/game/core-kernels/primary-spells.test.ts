@@ -138,7 +138,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
   }
 })
 
-test('Air emits one ten-tick procedural fade per held authority tick', () => {
+test('Air emits one presentation record per held tick for the five-tick contact fade', () => {
   let state = step(simulation('air'), true)
   let player = state.players[PLAYER_ID]
   assert.equal(player.primaryCast.channelActive, true)
@@ -163,7 +163,9 @@ test('Air emits one ten-tick procedural fade per held authority tick', () => {
   state = step(state, false)
   assert.equal(state.players[PLAYER_ID].primaryCast.channelActive, false)
   assert.equal(state.primarySpells.transients.length, 2)
-  state = step(state, false, 9)
+  state = step(state, false, 3)
+  assert.equal(state.primarySpells.transients.length, 1)
+  state = step(state, false)
   assert.equal(state.primarySpells.transients.length, 0)
 })
 

@@ -34,6 +34,11 @@ export interface PlayerWorldTextures {
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
+    air: {
+      circle: Texture
+      forks: readonly Texture[]
+      ribbon: Texture
+    }
     earth: {
       glimmer: Texture
       litRocks: readonly Texture[]
@@ -109,6 +114,11 @@ export function createPlayerWorldTextures(
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
+      air: {
+        circle: texture(primarySpells.air.circle),
+        forks: primarySpells.air.forks.map(texture),
+        ribbon: texture(primarySpells.air.ribbon),
+      },
       earth: {
         glimmer: texture(primarySpells.earth.glimmer),
         litRocks: primarySpells.earth.litRocks.map(texture),
