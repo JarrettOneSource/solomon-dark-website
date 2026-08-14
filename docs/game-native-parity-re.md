@@ -7982,8 +7982,11 @@ world left-button level + world aim
 - On the Staff Cast 1 marker, create one world actor at the exact Staff socket
   plus local `(0,+10)`. Move `3` world units per fixed tick along aim. Native
   radius is `15` and no fixed native lifetime is recovered.
-- Draw registered `BadGuys[53]` in the world queue. The native homing and
-  5-tick terrain checks are excluded with targeting/collision.
+- Draw the native two-pass Ether compositor at actor `(x,y-10)`: record `110`
+  core, record `111` radial sparks, and record `112` rays, with projectile
+  phase advancing `9` degrees per actor tick. Record `53` belongs only to the
+  surviving-pierce contact streak and must never be used for the flight body.
+  Native homing and 5-tick terrain checks remain excluded with contact.
 - Play registry 57 `sounds/magicmissile.wav` once at emission. Flight is
   silent. Native impact registry 58 is excluded because no contact exists.
 
@@ -7992,8 +7995,13 @@ world left-button level + world aim
 - Skill `16`; handler `0x0053DC60`; actor type `0x7D4`.
 - On the same action marker, start at Staff socket plus `(0,+10)` plus `20`
   along aim. Move `4.5` world units per fixed tick. Native radius is `22.5`.
-- Main art is `BadGuys[255..266]` with frame `(ageTicks/3)%12`; retain native
-  auxiliary records `[110..112]` as presentation-only fire motes.
+- Draw the orange record-`110` core, then additive and normal passes of
+  `BadGuys[255..266]` at frame `(ageTicks/3)%12`. Every authoritative Fireball
+  actor tick also creates one independently owned cosmetic fire-particle actor
+  from records `267..270`; clients retain those semantic births rather than
+  reconstructing a trail from sparse projectile snapshots. The Fireball owns
+  an outbound local light. Contact burst records `251..254` remain deferred
+  until the Website has a semantic Fire contact event.
 - Play registry 97 `sounds/throwfire.wav` once at emission. Flight is silent.
 
 #### 3. Air — Lightning
@@ -8020,14 +8028,16 @@ world left-button level + world aim
 #### 4. Water — Frost Jet
 
 - Skill `32`; sustained handler `0x00543860`; no persistent projectile actor.
-- On every held fixed tick emit one deterministic rank-1 cone transient to
-  reach `205`. Each survives 33 web ticks, covering the native 32-33-tick
-  lifetime band; release stops emission and lets existing particles finish.
+- With the shipped-default Enhanced Effects setting, every held fixed tick
+  emits two independently owned deterministic rank-1 cone transients. Each
+  survives its recovered 32-33-tick lifetime; release stops emission and lets
+  existing particles finish. The documented setting-off branch emits one.
 - Use constant Staff pose `K=0` on the insertion tick and `K=7` for every later
   held tick.
-- Use native registered core records `BadGuys[30]`, `[28]` and handler extras
-  `[32]`, `[14]`. Seeded per-emission variation may select placement/rotation,
-  but cannot change authoritative RNG or lifetime.
+- Use only native rank-1 records `BadGuys[30]` (core) and `[28]` (forward
+  glint), with the recovered 75-percent Normal / 25-percent Over ownership and
+  intra-tick heading phase. Records `[32]` and `[14]` belong to learned Hail
+  and Cold Aura branches and are not Frost Jet art.
 - On the start edge play registry 44 `sounds/icestart.wav` and acquire
   owner-keyed loop 161 `sounds/iceloop__loop.wav`; release balances it.
 
@@ -8046,8 +8056,13 @@ world left-button level + world aim
   first flies on the next actor tick at age `98`. A 170-frame hold is held at
   age `170` and first flies at age `171`. Release preserves actor identity and
   gives it speed `3` world units/tick.
-- Draw `BadGuys[86]`; body scale follows live charge. Impact/debris records are
-  excluded with collision.
+- Record `86` is only the center glimmer/underlay. The body is a charge-gated,
+  oriented, depth-sorted collection of records `168..171`; separately owned
+  CalledRock actors gather inward using lit records `2008..2010`. Earth terrain
+  contact emits an authoritative breakup event whose independently rooted
+  fragments reuse `2008..2010`. The full recovered construction, ownership,
+  lighting, and recurrence contract is authoritative in the Earth section
+  below.
 - Actor creation plays registry 87 `sounds/startboulder.wav` exactly once at
   native call `0x00544FA8`, after allocation/registration and after the actor
   handle is stored on the caster. Charge acquires owner-keyed loop 159
