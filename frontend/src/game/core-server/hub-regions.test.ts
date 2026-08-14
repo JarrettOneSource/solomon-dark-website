@@ -17,6 +17,11 @@ import {
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import {
+  HUB_PRIVATE_ROOM_IDS,
+  HUB_PRIVATE_ROOM_LAYOUTS,
+} from '../core-kernels/hub-private-room-layout.ts'
+import {
+  HUB_SPAWN,
   HUB_VIEW_HEIGHT,
   HUB_VIEW_WIDTH,
   hubRegionCameraOrigin,
@@ -83,7 +88,7 @@ test('encodes the recovered College room graph, bounds, and ordinary portal cons
     ['courtyard', 'mortuary', 0.65, { x1: 179, y1: 394, x2: 33, y2: 529 }, { x: 32, y: 363 }],
     ['courtyard', 'library', 0.45, { x1: 1995.5, y1: 606.5, x2: 1915.5, y2: 443.5 }, { x: 2057.5, y: 460.5 }],
     ['courtyard', 'storeroom', 0.45, { x1: 679.5, y1: 146.5, x2: 576.5, y2: 146.5 }, { x: 627.5, y: -1000 }],
-    ['courtyard', 'office', 0.45, { x1: 1024.5, y1: 881.5, x2: 881.5, y2: 881.5 }, { x: 881.5, y: -1000 }],
+    ['courtyard', 'office', 0.45, { x1: 1024.5, y1: 115.5, x2: 881.5, y2: 115.5 }, { x: 881.5, y: -1000 }],
     ['mortuary', 'courtyard', 1, { x1: -488, y1: 964, x2: 1512, y2: 964 }, { x: 512, y: 2024 }],
     ['library', 'courtyard', 1, { x1: 412, y1: 924, x2: 612, y2: 924 }, { x: 512, y: 2024 }],
     ['storeroom', 'courtyard', 1, { x1: 437.5, y1: 700, x2: 637.5, y2: 700 }, { x: 537.5, y: 1800 }],
@@ -97,12 +102,12 @@ test('encodes the recovered College room graph, bounds, and ordinary portal cons
   })
 })
 
-test('neutral Hub input can reach every ordinary Courtyard portal', () => {
+test('neutral Hub input, including north-only input from spawn, reaches every portal', () => {
   const approaches = [
     ['mortuary', { x: 150, y: 540 }, { x: -1, y: -0.4 }],
     ['library', { x: 1900, y: 600 }, { x: 1, y: -0.2 }],
     ['storeroom', { x: 628, y: 230 }, { x: 0, y: -1 }],
-    ['office', { x: 830, y: 920 }, { x: 1, y: -1 }],
+    ['office', HUB_SPAWN, { x: 0, y: -1 }],
   ] as const
 
   for (const [destination, position, movement] of approaches) {
@@ -119,6 +124,24 @@ test('neutral Hub input can reach every ordinary Courtyard portal', () => {
       destination,
     )
   }
+})
+
+test('private-room architecture and props own their native colliders', () => {
+  const collisionOnlyProps: string[] = []
+  for (const region of HUB_PRIVATE_ROOM_IDS) {
+    const layout = HUB_PRIVATE_ROOM_LAYOUTS[region]
+    assert.strictEqual(
+      HUB_REGION_DEFINITIONS[region].segments,
+      layout.architecture.collider.segments,
+      region,
+    )
+    assert.equal(layout.architecture.visual.kind, 'background', region)
+    for (const prop of layout.props) {
+      assert.equal(prop.collider.kind, 'circle', `${region}:${prop.id}`)
+      if (!prop.visual) collisionOnlyProps.push(`${region}:${prop.id}`)
+    }
+  }
+  assert.deepEqual(collisionOnlyProps, ['library:library-prop-3'])
 })
 
 test('portal contact includes the native circle boundary without weakening wall overlap', () => {

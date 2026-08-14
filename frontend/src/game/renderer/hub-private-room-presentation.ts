@@ -1,28 +1,15 @@
-import type { HubRegionId } from '../core-kernels/hub-regions.ts'
+import {
+  HUB_PRIVATE_ROOM_LAYOUTS,
+  type PrivateHubRegionId,
+} from '../core-kernels/hub-private-room-layout.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 
-export type PrivateHubRegionId = Exclude<HubRegionId, 'courtyard'>
-
-export const HUB_MEMORATOR_POSITION = { x: 628, y: 770 } as const
 export const HUB_PRIVATE_ROOM_EFFECT_DEPTH = 1_000_000
 export const HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH = 2_000_000
 
 export const HUB_LIBRARY_EXIT_MASKS = [
   { height: 121, width: 381, x: 16, y: 801 },
   { height: 121, width: 381, x: 627, y: 801 },
-] as const
-
-export const HUB_MORTUARY_PAINTINGS = [
-  { marker: false, portraitId: 0, x: 512, y: 697 },
-  { marker: true, portraitId: 1, x: 350, y: 683 },
-  { marker: true, portraitId: 2, x: 673, y: 683 },
-  { marker: true, portraitId: 3, x: 744, y: 540 },
-  { marker: false, portraitId: 4, x: 590, y: 540 },
-  { marker: true, portraitId: 5, x: 434, y: 540 },
-  { marker: true, portraitId: 6, x: 279, y: 540 },
-  { marker: false, portraitId: 7, x: 354, y: 400 },
-  { marker: false, portraitId: 8, x: 512, y: 400 },
-  { marker: true, portraitId: 9, x: 670, y: 400 },
 ] as const
 
 export const HUB_PRIVATE_ROOM_FLAME_ANCHORS: Readonly<
@@ -81,9 +68,10 @@ const REGION_SEEDS: Readonly<Record<PrivateHubRegionId, number>> = {
 }
 
 export function hubMemoratorHeadingIndex(playerPosition: Vector2): number {
+  const memoratorPosition = HUB_PRIVATE_ROOM_LAYOUTS.mortuary.actors.memorator.visual.position
   const radians = Math.atan2(
-    playerPosition.x - HUB_MEMORATOR_POSITION.x,
-    -(playerPosition.y - HUB_MEMORATOR_POSITION.y),
+    playerPosition.x - memoratorPosition.x,
+    -(playerPosition.y - memoratorPosition.y),
   )
   const heading = (radians + Math.PI * 2) % (Math.PI * 2)
   return Math.round(heading / (Math.PI * 2) * 16) % 16

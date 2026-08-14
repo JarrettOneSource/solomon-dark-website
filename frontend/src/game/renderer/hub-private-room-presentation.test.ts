@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
 
+import { HUB_PRIVATE_ROOM_LAYOUTS } from '../core-kernels/hub-private-room-layout.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
-  HUB_MORTUARY_PAINTINGS,
   HUB_PRIVATE_ROOM_FLAME_ANCHORS,
   hubMemoratorHeadingIndex,
   hubRoomFlameTransform,
@@ -22,7 +22,10 @@ test('locks the native late Library exit masks around the return corridor', () =
 
 test('locks the ordinary visible Mortuary portrait and marker state', () => {
   assert.deepEqual(
-    HUB_MORTUARY_PAINTINGS.map(({ portraitId, marker }) => [portraitId, marker]),
+    HUB_PRIVATE_ROOM_LAYOUTS.mortuary.props.map(({ visual }) => {
+      assert.equal(visual?.kind, 'portrait')
+      return [visual.frameIndex, visual.marker]
+    }),
     [
       [0, false], [1, true], [2, true], [3, true], [4, false],
       [5, true], [6, true], [7, false], [8, false], [9, true],

@@ -1,27 +1,38 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
+import {
+  HUB_PRIVATE_ROOM_LAYOUTS,
+  type HubPrivateRoomAsset,
+  type HubPrivateRoomLayoutDefinition,
+  type PrivateHubRegionId,
+} from '../core-kernels/hub-private-room-layout.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import { hubMarkerAlpha } from '../hub-presentation.ts'
 import { HubPlayerView } from './hub-actors.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
-  HUB_MEMORATOR_POSITION,
-  HUB_MORTUARY_PAINTINGS,
   HUB_PRIVATE_ROOM_EFFECT_DEPTH,
   HUB_PRIVATE_ROOM_FLAME_ANCHORS,
   HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
   hubMemoratorHeadingIndex,
   hubRoomFlameTransform,
-  type PrivateHubRegionId,
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
 const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
-const STOREROOM_PROP_DEPTHS = [324, 434, 542.5] as const
-const LIBRARY_PROP_DEPTHS = [788, 678.5, 732.5] as const
+const HUB_PRIVATE_ROOM_ASSETS: Readonly<Record<HubPrivateRoomAsset, string>> = {
+  'library-background': hub.rooms.library.background,
+  'library-props': hub.rooms.library.props,
+  'mortuary-background': hub.rooms.mortuary.background,
+  'mortuary-paintings': hub.rooms.mortuary.paintings,
+  'office-background': hub.rooms.office.background,
+  'office-prop': hub.rooms.office.prop,
+  'storeroom-background': hub.rooms.storeroom.background,
+  'storeroom-props': hub.rooms.storeroom.props,
+}
 
 export class HubPrivateRoomScene {
   readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
@@ -79,17 +90,22 @@ export class HubPrivateRoomScene {
 
   private createMortuary(): Container {
     const room = this.room('mortuary')
-    room.addChild(this.layer(hub.rooms.mortuary.background, 0))
+    const layout = HUB_PRIVATE_ROOM_LAYOUTS.mortuary
+    room.addChild(this.layer(
+      HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
+      0,
+    ))
     this.memoratorFrames = this.horizontalFrames(
       hub.rooms.mortuary.memorator,
       MEMORATOR_FRAME.count,
       MEMORATOR_FRAME.width,
       MEMORATOR_FRAME.height,
     )
+    const memoratorVisual = layout.actors.memorator.visual
     const memorator = new Container({ label: 'college-mortuary-memorator' })
     memorator.sortableChildren = true
-    memorator.position.set(HUB_MEMORATOR_POSITION.x, HUB_MEMORATOR_POSITION.y)
-    memorator.zIndex = hubWorldDepthForActor(HUB_MEMORATOR_POSITION.y)
+    memorator.position.copyFrom(memoratorVisual.position)
+    memorator.zIndex = hubWorldDepthForActor(memoratorVisual.painterY)
     memorator.eventMode = 'none'
     this.memoratorBody = new Sprite(this.memoratorFrames[0])
     this.memoratorBody.anchor.set(0.5)
@@ -101,39 +117,25 @@ export class HubPrivateRoomScene {
     this.memoratorMarker.eventMode = 'none'
     memorator.addChild(this.memoratorBody, this.memoratorMarker)
     room.addChild(memorator)
-    const paintingSource = this.textures.base[hub.rooms.mortuary.paintings]
-    for (const painting of HUB_MORTUARY_PAINTINGS) {
-      const texture = new Texture({
-        source: paintingSource.source,
-        frame: new Rectangle(
-          painting.portraitId * MORTUARY_PAINTING_FRAME.width,
-          0,
-          MORTUARY_PAINTING_FRAME.width,
-          MORTUARY_PAINTING_FRAME.height,
-        ),
-      })
-      this.derivedTextures.push(texture)
-      room.addChild(this.actorTexture(texture, painting.x, painting.y + 5))
-    }
+    this.addRoomProps(room, layout)
     this.addRoomFlames(room, 'mortuary', hub.rooms.mortuary.flame)
     return room
   }
 
   private createLibrary(): Container {
     const room = this.room('library')
-    room.addChild(this.layer(hub.rooms.library.background, 0))
-    this.addRoomLayerStrip(
-      room,
-      hub.rooms.library.props,
-      1024,
-      1024,
-      LIBRARY_PROP_DEPTHS,
-    )
+    const layout = HUB_PRIVATE_ROOM_LAYOUTS.library
+    room.addChild(this.layer(
+      HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
+      0,
+    ))
+    this.addRoomProps(room, layout)
 
+    const librarianVisual = layout.actors.librarian.visual
     const librarian = new Container({ label: 'college-library-librarian' })
     librarian.sortableChildren = true
     librarian.eventMode = 'none'
-    librarian.zIndex = hubWorldDepthForActor(595)
+    librarian.zIndex = hubWorldDepthForActor(librarianVisual.painterY)
     const counter = this.layer(hub.rooms.library.librarian, 0, 16, 102.5)
     const librarianSource = this.textures.base[hub.rooms.library.librarianFrames]
     const librarianFrame = new Texture({
@@ -141,7 +143,11 @@ export class HubPrivateRoomScene {
       frame: new Rectangle(0, 0, 150, 150),
     })
     this.derivedTextures.push(librarianFrame)
-    const librarianBody = this.actorTexture(librarianFrame, 512, 538)
+    const librarianBody = this.actorTexture(
+      librarianFrame,
+      librarianVisual.position.x,
+      librarianVisual.position.y,
+    )
     librarianBody.zIndex = 1
     librarian.addChild(counter, librarianBody)
     room.addChild(librarian)
@@ -152,7 +158,14 @@ export class HubPrivateRoomScene {
       frame: new Rectangle(0, 0, 150, 150),
     })
     this.derivedTextures.push(dowserFrame)
-    room.addChild(this.actorTexture(dowserFrame, 900, 642.5))
+    const dowserVisual = layout.actors.dowser.visual
+    const dowser = this.actorTexture(
+      dowserFrame,
+      dowserVisual.position.x,
+      dowserVisual.position.y,
+    )
+    dowser.zIndex = hubWorldDepthForActor(dowserVisual.painterY)
+    room.addChild(dowser)
     this.addRoomFlames(room, 'library', hub.rooms.library.flame)
     room.addChild(this.layer(
       hub.rooms.library.foreground,
@@ -173,14 +186,12 @@ export class HubPrivateRoomScene {
 
   private createStoreroom(): Container {
     const room = this.room('storeroom')
-    room.addChild(this.layer(hub.rooms.storeroom.background, 0))
-    this.addRoomLayerStrip(
-      room,
-      hub.rooms.storeroom.props,
-      1075,
-      800,
-      STOREROOM_PROP_DEPTHS,
-    )
+    const layout = HUB_PRIVATE_ROOM_LAYOUTS.storeroom
+    room.addChild(this.layer(
+      HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
+      0,
+    ))
+    this.addRoomProps(room, layout)
     this.addRoomFlames(room, 'storeroom', hub.rooms.storeroom.flame)
     room.addChild(this.layer(
       hub.rooms.storeroom.foreground,
@@ -191,15 +202,17 @@ export class HubPrivateRoomScene {
 
   private createOffice(): Container {
     const room = this.room('office')
-    room.addChild(this.layer(hub.rooms.office.background, 0))
+    const layout = HUB_PRIVATE_ROOM_LAYOUTS.office
     room.addChild(this.layer(
-      hub.rooms.office.prop,
-      hubWorldDepthForActor(681),
+      HUB_PRIVATE_ROOM_ASSETS[layout.architecture.visual.asset],
+      0,
     ))
+    this.addRoomProps(room, layout)
+    const archVisual = layout.actors['arch-chancellor'].visual
     const archChancellor = new Container({ label: 'college-office-arch-chancellor' })
     archChancellor.sortableChildren = true
     archChancellor.eventMode = 'none'
-    archChancellor.zIndex = hubWorldDepthForActor(467)
+    archChancellor.zIndex = hubWorldDepthForActor(archVisual.painterY)
     const desk = this.layer(hub.rooms.office.desk, 0, 102.5, 102.5)
     const archSource = this.textures.base[hub.rooms.office.archChancellor]
     const archFrame = new Texture({
@@ -207,7 +220,11 @@ export class HubPrivateRoomScene {
       frame: new Rectangle(0, 0, 150, 150),
     })
     this.derivedTextures.push(archFrame)
-    const archBody = this.actorTexture(archFrame, 518, 412)
+    const archBody = this.actorTexture(
+      archFrame,
+      archVisual.position.x,
+      archVisual.position.y,
+    )
     archBody.zIndex = 1
     archChancellor.addChild(desk, archBody)
     room.addChild(archChancellor)
@@ -251,22 +268,39 @@ export class HubPrivateRoomScene {
     return frames
   }
 
-  private addRoomLayerStrip(
+  private addRoomProps(
     room: Container,
-    source: string,
-    frameWidth: number,
-    frameHeight: number,
-    depths: readonly number[],
+    layout: HubPrivateRoomLayoutDefinition,
   ): void {
-    const sourceTexture = this.textures.base[source]
-    for (let index = 0; index < depths.length; index += 1) {
+    for (const prop of layout.props) {
+      const visual = prop.visual
+      if (!visual) continue
+      const source = HUB_PRIVATE_ROOM_ASSETS[visual.asset]
+      if (visual.kind === 'room-layer') {
+        room.addChild(this.layer(source, hubWorldDepthForActor(visual.painterY)))
+        continue
+      }
+
+      const frameWidth = visual.kind === 'portrait'
+        ? MORTUARY_PAINTING_FRAME.width
+        : layout.width
+      const frameHeight = visual.kind === 'portrait'
+        ? MORTUARY_PAINTING_FRAME.height
+        : layout.height
+      const sourceTexture = this.textures.base[source]
       const texture = new Texture({
         source: sourceTexture.source,
-        frame: new Rectangle(index * frameWidth, 0, frameWidth, frameHeight),
+        frame: new Rectangle(visual.frameIndex * frameWidth, 0, frameWidth, frameHeight),
       })
       this.derivedTextures.push(texture)
+      if (visual.kind === 'portrait') {
+        const sprite = this.actorTexture(texture, visual.position.x, visual.position.y)
+        sprite.zIndex = hubWorldDepthForActor(visual.painterY)
+        room.addChild(sprite)
+        continue
+      }
       const sprite = new Sprite(texture)
-      sprite.zIndex = hubWorldDepthForActor(depths[index])
+      sprite.zIndex = hubWorldDepthForActor(visual.painterY)
       sprite.eventMode = 'none'
       room.addChild(sprite)
     }

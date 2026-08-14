@@ -7,6 +7,7 @@ import {
   isHubRegionTraversable,
   moveWithHubRegionCollisionState,
 } from '../src/game/core-kernels/hub-regions.ts'
+import { HUB_SPAWN } from '../src/game/core-kernels/hub-math.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4187'
@@ -29,8 +30,9 @@ const allRoomRuns = [
     region: 'mortuary',
   },
   {
-    approach: { x: 830, y: 920 },
-    enterKeys: ['d', 'w'],
+    approach: HUB_SPAWN,
+    approachPortalClearance: PLAYER_CHARACTER_RADIUS,
+    enterKeys: ['w'],
     region: 'office',
   },
   {

@@ -4127,7 +4127,14 @@ and starts the outgoing fade at `+0.01` alpha per native tick:
 | Mortuary `1` | `(179,394)` to `(33,529)` | `(32,363)` | `0.65` |
 | Library `2` | `(1995.5,606.5)` to `(1915.5,443.5)` | `(2057.5,460.5)` | `0.45` |
 | StoreRoom `3` | `(679.5,146.5)` to `(576.5,146.5)` | `(627.5,-1000)` | `0.45` |
-| Office `4` | `(1024.5,881.5)` to `(881.5,881.5)` | `(881.5,-1000)` | `0.45` |
+| Office `4` | `(1024.5,115.5)` to `(881.5,115.5)` | `(881.5,-1000)` | `0.45` |
+
+The Office row corrects an earlier x87-stack transcription error. Courtyard
+tick loads `0x00793078 = 115.5` at `0x0050D7C0` and retains it while the two
+endpoint X values `0x00793074 = 1024.5` and `0x00793070 = 881.5` are stored.
+Both endpoint Y stores consume the retained `115.5`; `881.5` is the second X
+and the later scripted-target X, not a Y coordinate. The branch call at
+`0x0050D85C` writes target region `4` at `0x0050D896`.
 
 The private-room return is also a physical bottom-edge crossing rather than
 an interact button. StoreRoom, Library, and Office test the exact horizontal
@@ -4224,6 +4231,16 @@ Recovered centers/radii include Memorator `(628,770,r25)`, Librarian
 `(434,540)`, `(279,540)`, `(354,400)`, `(512,400)`, and `(670,400)` with
 actor radius `15` and paired solid radius `40`.
 
+The native modular boundary is the region layout, not an alpha mask extracted
+from the art. A room owns its bounds, registered architecture layers, and
+authored contour chain. A depth-sorted solid prop is a separate world object
+whose auxiliary renderer selects the matching atlas record and whose actor
+state supplies the collision body. The clean web seam is consequently one
+room-layout declaration where an architecture visual carries its contour
+chain and each prop visual carries its authored collider. Deriving physics
+from opaque PNG pixels would lose native ownership and would make animation,
+foreground splits, and collision-only records ambiguous.
+
 The atlas evidence also rules out a flat room screenshot. Primary room art is
 drawn around the room center, normal actors/props enter the world painter, and
 later registered fragments form foreground occlusion. StoreRoom shelving,
@@ -4293,20 +4310,42 @@ room-local rectangles `(-496,289,381,121)` and `(115,289,381,121)`. Under the
 `(627,801)..(1008,922)`, leaving the exact 230-pixel return corridor. This is a
 late renderer mask, not atlas art and not collision geometry.
 
+The adjacent Boneyard editor has the same need at a different serialization
+boundary. Its placed object already carries native class, variant, transform,
+and registered art identity, while collision is class/variant behavior. That
+supports the same semantic rule—materialize art and collider from one placed
+object—but does not make fixed Hub region contours `.boneyard` data. The two
+systems may share collision-shape vocabulary; they should not share a false
+pixel-mask or serialized-room abstraction.
+
 Confidence: high for bounds, art offsets, contour-record counts, fixed actor
 centers/radii, and layer ownership. Individual fixed-room dialogue/service
 flows are adjacent G8 systems and are not inferred as part of room traversal.
 
-#### 2026-08-13 deep-audit correction
+#### 2026-08-14 Office-route and room-layout correction
 
-The reported inaccessible Office exposed a test-model error adjacent to the
-product predicate. Native `FUN_00410B40` accepts circle-to-portal contact at
-distance **less than or equal to** radius, after base collision has resolved
-the actor. The Office line is the north edge of a closed sigil contour, so a
-valid proof must walk from its reachable exterior and slide diagonally into
-the line; the prior unit setup began inside that closed contour. The web must
-use an inclusive portal-contact helper without weakening strict solid-wall
-penetration handling.
+The reported inaccessible Office exposed a native-data transcription error,
+not an unreachable native route. `FUN_00410B40` still accepts
+circle-to-portal contact at distance **less than or equal to** radius after
+base collision, but the Office contact line is the north doorway at
+`y=115.5`. Fresh retail attach `0x00503F20` independently agrees: a normal new
+game treats previous region `-1` as Office id `4`, places the local actor at
+`(952.5,67.5)`, and scripts it south to `(952.5,157.5)`. A player settled near
+`y=164` must therefore be able to hold north and re-enter Office.
+
+The failure survived because both the unit test and browser smoke staged a
+diagonal approach to the erroneous southern segment instead of replaying the
+user route from the authored spawn. A full-image search of writes to
+`Region+0x8EAC` found only the one Courtyard target-`4` branch, ruling out a
+second hidden Office portal.
+
+Direct stock validation used the unmodified executable SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Holding W from a clean new-game spawn entered the Office. An isolated loader
+run measured the settled Courtyard actor at `(944.0377,164.3609)` and, after
+700 ms of W, region `4` at `(511.9665,903.5174)`. The web regression must start
+at `HUB_SPAWN`, submit north-only input, and observe the authoritative region
+transition.
 
 All 11 Mortuary, 34 StoreRoom, 27 Library, and 48 Office contour endpoints were
 freshly dumped from the live tables and matched the web arrays and ordering.
@@ -4323,11 +4362,12 @@ the player.
 Evidence: clean normal stock session, semantic region/player probes, eight
 Mortuary presentation captures, fixed-room scene ledgers, live static-table
 dumps, and Ghidra re-decompilation of Courtyard tick `0x0050C970`, portal helper
-`FUN_00410B40`, and StoreRoom present `0x00519070`. Confidence: high for the
-normal visible state, heading banks, portal predicate/order, all contour
-coordinates, and StoreRoom painter order. External portrait loading and exact
-native presentation RNG stream remain separate unknowns; the observed flame
-anchors, transform envelopes, count, and blend are bounded.
+`FUN_00410B40`, Courtyard attach `0x00503F20`, and StoreRoom present
+`0x00519070`. Confidence: high for the Office route, normal visible state,
+heading banks, portal predicate/order, all contour coordinates, and StoreRoom
+painter order. External portrait loading and exact native presentation RNG
+stream remain separate unknowns; the observed flame anchors, transform
+envelopes, count, and blend are bounded.
 
 The browser therefore advances each flame from the shared fixed tick and an
 anchor-indexed deterministic hash while keeping those recovered envelopes.
@@ -4356,34 +4396,41 @@ continuity; no claim is made that every private-room NPC interaction is silent.
 
 ### Web parity receipt
 
-The post-audit browser receipt ran `tools/smoke-hub-rooms.mjs` against an
-isolated authoritative development host. One continuous Playwright session
-walked Courtyard -> StoreRoom -> Courtyard -> Mortuary -> Courtyard -> Office
--> Courtyard -> Library -> Courtyard through physical portal contact. The
-Office approach began on the reachable exterior at `(830,920)` and pressed
-up-right into the sigil endpoint. The run observed a nonzero intermediate
-alpha in every outgoing fade, waited through every covered swap and incoming
-fade, kept the original Pixi canvas mounted, captured each entrance and
-settled room, and reported no page or console errors. The settled private
-positions were `(537.5,650)` for StoreRoom, `(512,904)` for Mortuary, and
-`(512,874)` for both Office and Library, matching the recovered attach targets.
+The corrected browser receipts ran `tools/smoke-hub-rooms.mjs` against an
+isolated authoritative development host restarted after the kernel cutover.
+The dedicated Office run began at the actual new-game `HUB_SPAWN`
+`(950.64,164.04)`, used zero route waypoints, held W only, observed the
+outgoing fade, settled in Office at `(512,874)`, and physically returned to
+Courtyard. Dedicated StoreRoom and Library runs likewise entered and returned
+with no page or console errors, and a combined run entered and returned from
+Mortuary before continuing. Their settled positions were `(537.5,650)`,
+`(512,874)`, and `(512,904)` respectively, matching the recovered attach
+targets. Every room and entrance capture was visually inspected.
 
 The capture comparison verified the ten ordinary Mortuary portraits, six
 marker urns, directional Memorator/question marker, all private-room flame
 banks, the StoreRoom late-foreground center gap, and the four independent
-Courtyard obstacle depths at the StoreRoom entrance. The focused post-audit
-contract suite passed 50 tests, including SHA-256 locks for every private-room
-contour and exact fixed-body layouts. The complete repository gate then passed
-23 Website/backend contracts, 183 frontend tests, 5 desktop tests, strict
-lint/import-boundary checks, backend build, production frontend build, game
-host build, and production media policy.
+Courtyard obstacle depths at the StoreRoom entrance. Collision overlays placed
+the recovered segment chains over the architecture and every actor circle over
+its matching visible prop; the Library's fourth prop remained the one native
+collision-only record.
 
-`hub-regions.test.ts` separately locks the room graph, portal constants,
-covered-swap tick boundary, incoming fade rates, collision contours, camera,
-participant-local ownership, Mortuary contact-X return, and exact Courtyard
-re-entry placements. Protocol and presentation tests lock the participant
-map, legal edges, local scripted prediction, and native fade projection. The
-complete repository `./scripts/validate.sh` gate passed after the integration.
+`HUB_PRIVATE_ROOM_LAYOUTS` is now the single declaration consumed by both
+rendering and simulation. Each architecture visual owns its authored segment
+chain, and each prop record owns its semantic art registration, painter Y, and
+circle collider. The renderer no longer carries separate StoreRoom/Library
+depth arrays or Mortuary painting positions, and `hub-world.ts` no longer
+redeclares their collision bodies.
+
+`hub-regions.test.ts` separately locks the room graph, corrected Office portal,
+north-only spawn route, layout/collider ownership, covered-swap tick boundary,
+incoming fade rates, collision contours, camera, participant-local ownership,
+Mortuary contact-X return, and exact Courtyard re-entry placements. Protocol
+and presentation tests lock the participant map, legal edges, local scripted
+prediction, and native fade projection. The complete repository
+`./scripts/validate.sh` gate passed 23 Website/backend contracts, the complete
+frontend and desktop test suites, strict lint/import-boundary checks, backend
+build, production frontend and game-host builds, and production media policy.
 
 ### Open questions carried forward
 

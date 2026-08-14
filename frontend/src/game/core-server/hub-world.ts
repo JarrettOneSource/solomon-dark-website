@@ -1,6 +1,11 @@
 import { resolveActorMotion, type ActorPhysicsBody } from '../core-kernels/actor-physics.ts'
 import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
 import {
+  HUB_PRIVATE_ROOM_IDS,
+  HUB_PRIVATE_ROOM_LAYOUTS,
+  type HubPrivateRoomLayoutDefinition,
+} from '../core-kernels/hub-private-room-layout.ts'
+import {
   HUB_INCOMING_FADE_RATES,
   HUB_OUTGOING_FADE_RATE,
   beginHubTransition,
@@ -100,18 +105,21 @@ function fixedActor(
   }
 }
 
-const MORTUARY_PAINTINGS = [
-  [512, 697],
-  [350, 683],
-  [673, 683],
-  [744, 540],
-  [590, 540],
-  [434, 540],
-  [279, 540],
-  [354, 400],
-  [512, 400],
-  [670, 400],
-] as const
+function privateRoomFixedActors(): readonly RegionPhysicsBody[] {
+  const bodies: RegionPhysicsBody[] = []
+  for (const region of HUB_PRIVATE_ROOM_IDS) {
+    const layout: HubPrivateRoomLayoutDefinition = HUB_PRIVATE_ROOM_LAYOUTS[region]
+    for (const [id, actor] of Object.entries(layout.actors)) {
+      const { position, radius } = actor.collider
+      bodies.push(fixedActor(id, region, position.x, position.y, radius))
+    }
+    for (const prop of layout.props) {
+      const { position, radius } = prop.collider
+      bodies.push(fixedActor(prop.id, region, position.x, position.y, radius))
+    }
+  }
+  return bodies
+}
 
 export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly RegionPhysicsBody[] = [
   fixedActor('perk-witch', 'courtyard', 1340, 280, 15),
@@ -119,21 +127,7 @@ export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly RegionPhysicsBody[] = [
   fixedActor('annalist', 'courtyard', 895.5, 455.5, 8),
   fixedActor('items-trader', 'courtyard', 1700.5, 449.5, 25),
   fixedActor('teacher', 'courtyard', 576.5, 710.5, 25),
-  fixedActor('memorator', 'mortuary', 628, 770, 25),
-  ...MORTUARY_PAINTINGS.map(([x, y], index) => (
-    fixedActor(`painting-${index}`, 'mortuary', x, y - 2, 40)
-  )),
-  fixedActor('librarian', 'library', 512, 595, 55),
-  fixedActor('dowser', 'library', 900, 642.5, 25),
-  fixedActor('library-prop-0', 'library', 239.5, 788, 40),
-  fixedActor('library-prop-1', 'library', 258.5, 678.5, 40),
-  fixedActor('library-prop-2', 'library', 762, 732.5, 40),
-  fixedActor('library-prop-3', 'library', 831, 620.5, 40),
-  fixedActor('storeroom-prop-0', 'storeroom', 538, 324, 40),
-  fixedActor('storeroom-prop-1', 'storeroom', 537.5, 434, 40),
-  fixedActor('storeroom-prop-2', 'storeroom', 536, 542.5, 40),
-  fixedActor('arch-chancellor', 'office', 514, 467, 55),
-  fixedActor('office-prop-0', 'office', 517.5, 681, 40),
+  ...privateRoomFixedActors(),
 ]
 
 export function createHubWorld(
