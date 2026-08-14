@@ -22,12 +22,22 @@ export interface PlayerCharacterInput {
   movement: Vector2
 }
 
+export interface PlayerPrimaryCastState {
+  actionTick: number
+  aimDirection: Vector2
+  castSequence: number
+  channelActive: boolean
+  emissionSequence: number
+  held: boolean
+}
+
 export interface PlayerCharacterState {
   config: PlayerCharacterConfig
   footstepTick: number
   gaitDegrees: number
   headingIndex: number
   position: Vector2
+  primaryCast: PlayerPrimaryCastState
   velocity: Vector2
   walkCyclePrimary: number
 }
@@ -74,8 +84,29 @@ export function createPlayerCharacter(
     gaitDegrees: 0,
     headingIndex: actorHeadingIndex(180),
     position: { ...position },
+    primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
+  }
+}
+
+export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
+  return {
+    actionTick: -1,
+    aimDirection: { x: 0, y: 1 },
+    castSequence: 0,
+    channelActive: false,
+    emissionSequence: 0,
+    held: false,
+  }
+}
+
+export function resetPlayerPrimaryCast(
+  player: PlayerCharacterState,
+): PlayerCharacterState {
+  return {
+    ...player,
+    primaryCast: createIdlePlayerPrimaryCast(),
   }
 }
 

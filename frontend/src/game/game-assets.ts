@@ -9,6 +9,7 @@ import {
   mainMenu,
   menuSolomon,
   playerCharacter,
+  primarySpells,
 } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
@@ -36,6 +37,7 @@ export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
   mainMenu,
   menuSolomon,
   playerCharacter,
+  primarySpells,
 })
 export const GAME_RESIDENT_AUDIO_SOURCES = collectAssetSources(GAME_AUDIO_SOURCES)
 export const GAME_RESIDENT_ASSET_SOURCES = [
@@ -163,6 +165,7 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     props: hub.props,
     npcs: hub.npcs,
     elementVfx: elementVfxSources(element),
+    primarySpells,
   })
 }
 

@@ -6,6 +6,7 @@ import {
   GAME_SCENE_MUSIC,
   HUB_AUDIO_ATTENUATION_RADIUS,
   NATIVE_MUSIC_MODULE_SHA256,
+  NATIVE_LOOP_MANIFEST,
   NATIVE_SOUND_MANIFEST,
   NATIVE_STREAM_MANIFEST,
   createEntryAudioEvents,
@@ -40,6 +41,11 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
+  assert.equal(NATIVE_SOUND_MANIFEST['start-boulder'].registryOffset, 0xf0c)
+  assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
+  assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
+  assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
+  assert.equal(NATIVE_LOOP_MANIFEST['rolling-stone-loop'].registryOffset, 0x1acc)
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)

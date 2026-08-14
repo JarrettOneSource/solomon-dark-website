@@ -20,6 +20,7 @@ import {
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
 const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
@@ -33,12 +34,14 @@ const HUB_PRIVATE_ROOM_ASSETS: Readonly<Record<HubPrivateRoomAsset, string>> = {
   'storeroom-background': hub.rooms.storeroom.background,
   'storeroom-props': hub.rooms.storeroom.props,
 }
+const PRIVATE_HUB_REGIONS = ['mortuary', 'library', 'storeroom', 'office'] as const
 
 export class HubPrivateRoomScene {
   readonly world = new Container({ isRenderGroup: true, label: 'college-private-rooms' })
   private readonly rooms: Record<PrivateHubRegionId, Container>
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
+  private readonly primarySpells: Record<PrivateHubRegionId, PrimarySpellWorldView>
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
@@ -58,6 +61,10 @@ export class HubPrivateRoomScene {
       storeroom: this.createStoreroom(),
       office: this.createOffice(),
     }
+    this.primarySpells = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
+      region,
+      new PrimarySpellWorldView(this.rooms[region], textures),
+    ])) as Record<PrivateHubRegionId, PrimarySpellWorldView>
     this.world.addChild(
       this.rooms.mortuary,
       this.rooms.library,
@@ -72,6 +79,9 @@ export class HubPrivateRoomScene {
     if (!localParticipant || localParticipant.region === 'courtyard') return
     this.showRegion(localParticipant.region)
     this.updatePlayers(snapshot, localParticipant.region)
+    for (const region of PRIVATE_HUB_REGIONS) {
+      this.primarySpells[region].update(snapshot.primarySpells, `hub:${region}`)
+    }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
   }
 
@@ -79,7 +89,16 @@ export class HubPrivateRoomScene {
     return this.players.get(playerId)
   }
 
+  get primarySpellCount(): number {
+    return this.primarySpells[this.activeRegion].count
+  }
+
+  get primarySpellKinds(): readonly string[] {
+    return this.primarySpells[this.activeRegion].kinds
+  }
+
   destroy(): void {
+    for (const view of Object.values(this.primarySpells)) view.destroy()
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()

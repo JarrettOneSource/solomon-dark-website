@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
   addPlayerCharacter,
   createGameSimulation,
+  enterBoneyardWorld,
   removePlayerCharacter,
   stepGameSimulation,
   stepGameSimulationTick,
@@ -84,3 +86,54 @@ test('the authoritative tick latches footsteps only while native movement is act
 
   assert.equal(state.players['local-player'].footstepTick, 100)
 })
+
+test('disconnect and world replacement clean spell actors and cast ownership', () => {
+  const earth = {
+    discipline: 'arcane',
+    displayName: 'Earth Caster',
+    element: 'earth',
+  } as const
+  let state = createGameSimulation({ caster: earth })
+  const cast = (primary: boolean) => ({
+    aim: { x: state.players.caster.position.x, y: state.players.caster.position.y - 200 },
+    cast: { primary, secondary: false },
+    movement: { x: 0, y: 0 },
+  })
+  state = stepGameSimulationTick(state, { caster: cast(true) })
+  assert.equal(state.primarySpells.projectiles.length, 1)
+  assert.equal(state.players.caster.primaryCast.channelActive, true)
+  state = removePlayerCharacter(state, 'caster')
+  assert.deepEqual(state.primarySpells.projectiles, [])
+
+  state = createGameSimulation({ caster: { ...earth, element: 'fire' } })
+  for (let tick = 0; tick < 20; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: cast(true) })
+  }
+  assert.equal(state.primarySpells.projectiles.length, 1)
+  state = enterBoneyardWorld(state, emptyBoneyard())
+  assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
+  assert.equal(state.players.caster.primaryCast.actionTick, -1)
+  assert.equal(state.players.caster.primaryCast.channelActive, false)
+})
+
+function emptyBoneyard(): LoadedBoneyard {
+  return {
+    choice: { id: 'empty', name: 'Empty', source: 'default' },
+    geometrySha256: 'b'.repeat(64),
+    runId: 'spell-cleanup-run',
+    scene: {
+      bounds: { x: 0, y: 0, w: 500, h: 500 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Spell cleanup fixture',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 250, y: 250 },
+      sprites: [],
+      terrain: [],
+    },
+    seed: 'spell-cleanup-seed',
+    sourceSha256: 'a'.repeat(64),
+  }
+}

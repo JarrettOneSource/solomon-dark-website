@@ -1,6 +1,11 @@
 import { Rectangle, Texture } from 'pixi.js'
 
-import { elementVfx, hub, playerCharacter } from '../../lib/assets.ts'
+import {
+  elementVfx,
+  hub,
+  playerCharacter,
+  primarySpells,
+} from '../../lib/assets.ts'
 import {
   WIZARD_ELEMENTS,
   type WizardElement,
@@ -10,24 +15,35 @@ import {
   type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
-import type { NativeElementVfxTextures } from './native-element-vfx-view.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
+const ACTOR_ATTACHMENT_POSES = 10
 
 export interface PlayerActorTextureFrames {
-  fixed: readonly Texture[]
+  fixed: readonly (readonly Texture[])[]
   head: readonly Texture[]
   robe: readonly (readonly Texture[])[]
-  staffBack: readonly Texture[]
-  staffFront: readonly Texture[]
+  staffBack: readonly (readonly Texture[])[]
+  staffFront: readonly (readonly Texture[])[]
 }
 
 export interface PlayerWorldTextures {
-  elementVfx: NativeElementVfxTextures
+  elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
+  primarySpells: {
+    boulder: Texture
+    fire: readonly Texture[]
+    frost: {
+      core: Texture
+      extra: Texture
+      over: Texture
+      spark: Texture
+    }
+    magicMissile: Texture
+  }
 }
 
 export function playerWorldAssetSources(): string[] {
@@ -35,6 +51,7 @@ export function playerWorldAssetSources(): string[] {
     elementVfx,
     playerCharacter,
     playerShadow: hub.npcs.teacher.shadow,
+    primarySpells,
   })
 }
 
@@ -42,12 +59,12 @@ export function createPlayerWorldTextures(
   texture: (source: string) => Texture,
 ): PlayerWorldTextures {
   const playerTextures = (element: WizardElement): PlayerActorTextureFrames => ({
-    fixed: stripFrames(
+    fixed: gridFrames(
       texture(playerCharacter.robeFixed[element]),
+      ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
       ACTOR_FRAME_SIZE,
       ACTOR_FRAME_SIZE,
-      'vertical',
     ),
     head: stripFrames(
       texture(playerCharacter.head[element]),
@@ -63,19 +80,19 @@ export function createPlayerWorldTextures(
       ACTOR_FRAME_SIZE,
       ACTOR_FRAME_SIZE,
     ),
-    staffBack: stripFrames(
+    staffBack: gridFrames(
       texture(playerCharacter.staffBack),
+      ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
       ACTOR_FRAME_SIZE,
       ACTOR_FRAME_SIZE,
-      'vertical',
     ),
-    staffFront: stripFrames(
+    staffFront: gridFrames(
       texture(playerCharacter.staffFront),
+      ACTOR_ATTACHMENT_POSES,
       ACTOR_HEADINGS,
       ACTOR_FRAME_SIZE,
       ACTOR_FRAME_SIZE,
-      'vertical',
     ),
   })
   const players = Object.fromEntries(WIZARD_ELEMENTS.map((element) => [
@@ -87,19 +104,29 @@ export function createPlayerWorldTextures(
     elementVfx: elementTextures,
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
+    primarySpells: {
+      boulder: texture(primarySpells.boulder),
+      fire: elementTextures.fire,
+      frost: {
+        core: texture(primarySpells.frost.core),
+        extra: texture(primarySpells.frost.extra),
+        over: texture(primarySpells.frost.over),
+        spark: texture(primarySpells.frost.spark),
+      },
+      magicMissile: texture(primarySpells.magicMissile),
+    },
   }
 }
 
 export function createNativeElementVfxTextures(
   texture: (source: string) => Texture,
-): NativeElementVfxTextures {
-  const elementTextures: Partial<Record<NativeElementVfxSprite, readonly Texture[]>> = {}
-  for (const sprite of ['core', 'ray', 'spark', 'air', 'earth', 'fire', 'water'] as const) {
+): Readonly<Record<NativeElementVfxSprite, readonly Texture[]>> {
+  const frames = (sprite: NativeElementVfxSprite): readonly Texture[] => {
     const metrics = NATIVE_ELEMENT_VFX_SPRITES[sprite]
     const source = sprite === 'core' || sprite === 'ray' || sprite === 'spark'
       ? elementVfx.common[sprite]
       : elementVfx.frames[sprite]
-    elementTextures[sprite] = stripFrames(
+    return stripFrames(
       texture(source),
       metrics.count,
       metrics.width,
@@ -107,18 +134,26 @@ export function createNativeElementVfxTextures(
       'horizontal',
     )
   }
-  return elementTextures
+  return {
+    air: frames('air'),
+    core: frames('core'),
+    earth: frames('earth'),
+    fire: frames('fire'),
+    ray: frames('ray'),
+    spark: frames('spark'),
+    water: frames('water'),
+  }
 }
 
 export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): void {
   const derived = new Set<Texture>()
   const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))
   for (const player of Object.values(textures.players)) {
-    add(player.fixed)
+    player.fixed.forEach(add)
     add(player.head)
     player.robe.forEach(add)
-    add(player.staffBack)
-    add(player.staffFront)
+    player.staffBack.forEach(add)
+    player.staffFront.forEach(add)
   }
   Object.values(textures.elementVfx).forEach(add)
   for (const texture of derived) texture.destroy(false)

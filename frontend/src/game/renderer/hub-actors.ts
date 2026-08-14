@@ -26,6 +26,7 @@ export class PlayerWorldView {
   private readonly head: Sprite
   private readonly textures: PlayerWorldTextures
   private currentWalkPose = 0
+  private currentAttachmentPose = 0
 
   constructor(
     element: WizardElement,
@@ -38,12 +39,12 @@ export class PlayerWorldView {
     this.shadow = actorSprite(textures.playerShadow, 0)
     this.shadow.scale.set(1.25)
     this.shadow.alpha = 0.72
-    this.staffBack = actorSprite(playerTextures.staffBack[0], 1)
+    this.staffBack = actorSprite(playerTextures.staffBack[0][0], 1)
     this.orb = new NativeElementVfxView(element, textures.elementVfx)
     this.orb.container.zIndex = 2
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
-    this.fixed = actorSprite(playerTextures.fixed[0], 4)
-    this.staffFront = actorSprite(playerTextures.staffFront[0], 5)
+    this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.head = actorSprite(playerTextures.head[0], 7)
     this.container.addChild(
       this.shadow,
@@ -61,6 +62,8 @@ export class PlayerWorldView {
     const plan = createPlayerCharacterDrawPlan(player)
     const heading = spriteFrameIndex(Math.round(player.headingIndex), 24)
     const pose = spriteFrameIndex(plan.robePose, 5)
+    const attachmentPose = plan.attachmentPose
+    this.currentAttachmentPose = attachmentPose
     this.currentWalkPose = pose
     const fixedOffset = plan.fixedRobeOffset
     const attachmentOffset = plan.frontAttachmentOffset
@@ -70,12 +73,12 @@ export class PlayerWorldView {
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
-    this.staffBack.texture = playerTextures.staffBack[heading]
+    this.staffBack.texture = playerTextures.staffBack[heading][attachmentPose]
     this.staffBack.visible = !staffFront
     this.robe.texture = playerTextures.robe[heading][pose]
-    this.fixed.texture = playerTextures.fixed[heading]
+    this.fixed.texture = playerTextures.fixed[heading][attachmentPose]
     this.fixed.position.set(fixedOffset.x, fixedOffset.y)
-    this.staffFront.texture = playerTextures.staffFront[heading]
+    this.staffFront.texture = playerTextures.staffFront[heading][attachmentPose]
     this.staffFront.visible = staffFront
     this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
     this.head.texture = playerTextures.head[heading]
@@ -90,6 +93,10 @@ export class PlayerWorldView {
 
   get walkPose(): number {
     return this.currentWalkPose
+  }
+
+  get attachmentPose(): number {
+    return this.currentAttachmentPose
   }
 
   setDepth(depth: number): void {

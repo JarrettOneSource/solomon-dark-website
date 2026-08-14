@@ -14,13 +14,20 @@ export type GameSoundCue =
   | 'magic-missile'
   | 'pick-skill'
   | 'rock-hit'
+  | 'start-boulder'
   | 'step-1'
   | 'step-2'
   | 'summon'
   | 'throw-fire'
 export type GameStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
+export type GameLoopCue =
+  | 'gather-rocks-loop'
+  | 'ice-loop'
+  | 'lightning-loop'
+  | 'rolling-stone-loop'
 
 export interface GameAudioSources {
+  loops: Readonly<Record<GameLoopCue, string>>
   music: Readonly<Record<GameMusicCue, string>>
   sounds: Readonly<Record<GameSoundCue, string>>
   streams: Readonly<Record<GameStreamCue, string>>
@@ -82,6 +89,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\rockhit',
     sourceSha256: '865484cf3d7c2e199fb46f069973c43893122e934f0f46ba33d30eeeac4de25b',
   },
+  'start-boulder': {
+    registryOffset: 0xf0c,
+    sourceName: 'sounds\\startboulder',
+    sourceSha256: 'c7bbd54f293ae2b8a9dbde4d8a6810a5f98f46ee6fb20912b378631a5033d503',
+  },
   'step-1': {
     registryOffset: 0x23b8,
     sourceName: 'sounds\\Step\\step1',
@@ -103,6 +115,29 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
   },
 } as const satisfies Readonly<Record<GameSoundCue, NativeSoundEntry>>
+
+export const NATIVE_LOOP_MANIFEST = {
+  'gather-rocks-loop': {
+    registryOffset: 0x176c,
+    sourceName: 'sounds\\gatherrocksloop__loop',
+    sourceSha256: '143cfa6a54d77570d3d929c3c536fe0306a9a1f1f5292cf4c1521481d5895990',
+  },
+  'ice-loop': {
+    registryOffset: 0x182c,
+    sourceName: 'sounds\\iceloop__loop',
+    sourceSha256: 'fd9aa082bd5bb3b6197528a5f2d6771aac7e2f478d8bdca0abd3d521c70fc89a',
+  },
+  'lightning-loop': {
+    registryOffset: 0x188c,
+    sourceName: 'sounds\\lightningloop__loop',
+    sourceSha256: '4bdd74a6734206d1212c52d623d0b7fe994bf4beeaa2119d34f3d1fad7d68281',
+  },
+  'rolling-stone-loop': {
+    registryOffset: 0x1acc,
+    sourceName: 'sounds\\rollingstoneloop__loop',
+    sourceSha256: '66a306a2ebe8443cb017ce8c3737477f196600a82af7472201cc123f70cee706',
+  },
+} as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 
 export const NATIVE_STREAM_MANIFEST = {
   'catch-it': {

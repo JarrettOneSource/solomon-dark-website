@@ -9,6 +9,7 @@ import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
 export interface ProtocolFountainParticleState {
@@ -78,6 +79,7 @@ export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapsh
 export interface GameSnapshot {
   hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
+  primarySpells: PrimarySpellSimulationState
   tick: number
   world: GameWorldSnapshot
 }
@@ -85,6 +87,7 @@ export interface GameSnapshot {
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
   players: Readonly<Record<string, ProtocolPlayerState>>
+  primarySpells: PrimarySpellSimulationState
   tick: number
   world: GameWorldSnapshotFrame
 }

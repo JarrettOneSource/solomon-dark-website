@@ -15,6 +15,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         players: state.players,
+        primarySpells: state.primarySpells,
         tick: state.tick,
         world: {
           ambient: state.world.ambient,
@@ -29,6 +30,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         players: state.players,
+        primarySpells: state.primarySpells,
         tick: state.tick,
         world: {
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),

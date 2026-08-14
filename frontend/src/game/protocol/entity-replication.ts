@@ -165,6 +165,7 @@ export function createGameSnapshotFrame(
     return {
       hostPlayerId: snapshot.hostPlayerId,
       players: snapshot.players,
+      primarySpells: snapshot.primarySpells,
       tick: snapshot.tick,
       world: snapshot.world,
     }
@@ -193,6 +194,7 @@ export function createGameSnapshotFrame(
   return {
     hostPlayerId: snapshot.hostPlayerId,
     players: snapshot.players,
+    primarySpells: snapshot.primarySpells,
     tick: snapshot.tick,
     world: {
       ambient: snapshot.world.ambient,
@@ -226,6 +228,7 @@ export class EntityReplicationReconstructor {
       return {
         hostPlayerId: frame.hostPlayerId,
         players: frame.players,
+        primarySpells: frame.primarySpells,
         tick: frame.tick,
         world: frame.world,
       }
@@ -258,6 +261,7 @@ export class EntityReplicationReconstructor {
     return {
       hostPlayerId: frame.hostPlayerId,
       players: frame.players,
+      primarySpells: frame.primarySpells,
       tick: frame.tick,
       world: {
         ambient: frame.world.ambient,

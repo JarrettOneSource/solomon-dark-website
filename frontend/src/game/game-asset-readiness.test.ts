@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
@@ -16,6 +17,12 @@ function pngDimensions(name: string): readonly [number, number] {
   const contents = readFileSync(new URL(name, GAME_ASSET_ROOT))
   assert.equal(contents.subarray(1, 4).toString('ascii'), 'PNG')
   return [contents.readUInt32BE(16), contents.readUInt32BE(20)]
+}
+
+function assetSha256(name: string): string {
+  return createHash('sha256')
+    .update(readFileSync(new URL(name, GAME_ASSET_ROOT)))
+    .digest('hex')
 }
 
 test('collects a stable unique manifest from nested asset groups', () => {
@@ -144,5 +151,111 @@ test('keeps recovered Hub parity art at its native registrations', () => {
   }
   for (const [name, expected] of Object.entries(dimensions)) {
     assert.deepEqual(pngDimensions(name), expected, name)
+  }
+})
+
+test('locks every native primary-cast extraction in one asset manifest', () => {
+  const manifest: Readonly<Record<string, {
+    dimensions?: readonly [number, number]
+    sha256: string
+  }>> = {
+    'audio/sfx/gather-rocks-loop.wav': {
+      sha256: '143cfa6a54d77570d3d929c3c536fe0306a9a1f1f5292cf4c1521481d5895990',
+    },
+    'audio/sfx/ice-loop.wav': {
+      sha256: 'fd9aa082bd5bb3b6197528a5f2d6771aac7e2f478d8bdca0abd3d521c70fc89a',
+    },
+    'audio/sfx/ice-start.wav': {
+      sha256: '28cfda1e9d59f39dfacfd808cdb267465592ae5ce0d34a9aa4495a3f659b9694',
+    },
+    'audio/sfx/lightning-loop.wav': {
+      sha256: '4bdd74a6734206d1212c52d623d0b7fe994bf4beeaa2119d34f3d1fad7d68281',
+    },
+    'audio/sfx/lightning-start.wav': {
+      sha256: '1542ec3ab4e41624b5e8d073000a02bb36a3f8c733bf709835768f095494dceb',
+    },
+    'audio/sfx/magic-missile.wav': {
+      sha256: 'a7765b778d5cc49546c5e7e7822f38aac6a3edd8636d91e4ae92ec78611ac567',
+    },
+    'audio/sfx/rolling-stone-loop.wav': {
+      sha256: '66a306a2ebe8443cb017ce8c3737477f196600a82af7472201cc123f70cee706',
+    },
+    'audio/sfx/start-boulder.wav': {
+      sha256: 'c7bbd54f293ae2b8a9dbde4d8a6810a5f98f46ee6fb20912b378631a5033d503',
+    },
+    'audio/sfx/throw-fire.wav': {
+      sha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
+    },
+    'element-vfx-core.png': {
+      dimensions: [27, 26],
+      sha256: 'dc85c8e39483f4256ec7b28240d33a15b6966c0e997554598f19091d7a4c189f',
+    },
+    'element-vfx-fire.png': {
+      dimensions: [384, 54],
+      sha256: 'e7cc1d4a3233eab0d93e24684c952779f1c0a88b28cd70a1e738156ce80fcd2b',
+    },
+    'element-vfx-spark.png': {
+      dimensions: [40, 40],
+      sha256: '3b02db24cc4caaad26432e4bf3e480c71c1a99e9cc8fb4fb4703077af22180c0',
+    },
+    'player-character-robe-fixed-air.png': {
+      dimensions: [1700, 4080],
+      sha256: 'f1dcd51715071a958ea5dd71a606c27301396295a628fe7bf34bed03b3d0c401',
+    },
+    'player-character-robe-fixed-earth.png': {
+      dimensions: [1700, 4080],
+      sha256: 'e5480c5819fd9bf6c696f77d6a3228d76b843471a887a4f1caf4d3207faca3f8',
+    },
+    'player-character-robe-fixed-ether.png': {
+      dimensions: [1700, 4080],
+      sha256: '6b98394e62cef6415b0cf816def96987ee2498b75c9e94d1b26b92058be1d166',
+    },
+    'player-character-robe-fixed-fire.png': {
+      dimensions: [1700, 4080],
+      sha256: '1baac4dcf15b7871ade40e4526fb35ca08891c89b0ae9a8c136e8f806518048c',
+    },
+    'player-character-robe-fixed-water.png': {
+      dimensions: [1700, 4080],
+      sha256: '6336d092bb3619bfdf39c66491cb118fbae27ce32220a2004e8ec5e3d750f964',
+    },
+    'player-character-staff-back.png': {
+      dimensions: [1700, 4080],
+      sha256: 'e47d4977140767c354363c8808631e933733a96404d2741a61a18b9adcc2ba23',
+    },
+    'player-character-staff-front.png': {
+      dimensions: [1700, 4080],
+      sha256: 'e7923b25771a6eb00cdd780cd6902ce3e9cd050e961cbb35c1a4d65201731c0a',
+    },
+    'primary-spell-boulder.png': {
+      dimensions: [94, 94],
+      sha256: '0a6d5925da9f87d26eadd7d3a8e9bfea71471209163eb44671f9e6174baf7e1e',
+    },
+    'primary-spell-frost-core.png': {
+      dimensions: [93, 145],
+      sha256: '62aac46ed0f3436cf39023b2c93e8c02b8dee3c0611e74179cc5af92793470b5',
+    },
+    'primary-spell-frost-extra.png': {
+      dimensions: [29, 30],
+      sha256: 'eb07de5b4d61b81e48cf34d939a04de461c435d6592580a86e1f30e470ffd6ff',
+    },
+    'primary-spell-frost-over.png': {
+      dimensions: [10, 11],
+      sha256: 'e118b2feb22c5ffd4c5f0981e20044b8df6181ead01c572965143ad959e24d60',
+    },
+    'primary-spell-frost-spark.png': {
+      dimensions: [92, 91],
+      sha256: '2020e10b7557792c13cc1939a71db8ed3459d32b5554efa120ea4c3d5e6117cb',
+    },
+    'primary-spell-magic-missile.png': {
+      dimensions: [28, 58],
+      sha256: '71a6e48a62a0ad1458fee3498bc6b7727cb96f5da173a040d4a97e929e383152',
+    },
+  }
+
+  for (const [name, expected] of Object.entries(manifest)) {
+    assert.equal(assetSha256(name), expected.sha256, name)
+    if (expected.dimensions) {
+      assert.deepEqual(pngDimensions(name), expected.dimensions, name)
+    }
   }
 })

@@ -204,6 +204,12 @@ import elementVfxFire from '../assets/game/element-vfx-fire.png'
 import elementVfxRay from '../assets/game/element-vfx-ray.png'
 import elementVfxSpark from '../assets/game/element-vfx-spark.png'
 import elementVfxWater from '../assets/game/element-vfx-water.png'
+import primarySpellBoulder from '../assets/game/primary-spell-boulder.png'
+import primarySpellFrostCore from '../assets/game/primary-spell-frost-core.png'
+import primarySpellFrostExtra from '../assets/game/primary-spell-frost-extra.png'
+import primarySpellFrostOver from '../assets/game/primary-spell-frost-over.png'
+import primarySpellFrostSpark from '../assets/game/primary-spell-frost-spark.png'
+import primarySpellMagicMissile from '../assets/game/primary-spell-magic-missile.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
 import animSolomonDig from '../assets/game/anim-solomon-dig.png'
@@ -453,6 +459,19 @@ export const elementVfx = {
     fire: elementVfxFire,
     water: elementVfxWater,
   },
+}
+
+/** Registered stock sprites used by the five rank-1 player primaries. */
+export const primarySpells = {
+  boulder: primarySpellBoulder,
+  fire: elementVfxFire,
+  frost: {
+    core: primarySpellFrostCore,
+    extra: primarySpellFrostExtra,
+    over: primarySpellFrostOver,
+    spark: primarySpellFrostSpark,
+  },
+  magicMissile: primarySpellMagicMissile,
 }
 
 /** Source-registered wizard equipment shared by every gameplay world. */

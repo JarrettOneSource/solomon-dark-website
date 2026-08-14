@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
+import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import {
@@ -20,6 +22,7 @@ function playerAt(x: number): ProtocolPlayerState {
     gaitDegrees: x,
     headingIndex: 0,
     position: { x, y: 200 },
+    primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 100, y: 0 },
     walkCyclePrimary: x / 10 % 5,
   }
@@ -29,6 +32,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
   return {
     hostPlayerId: 'local',
     players: { local: playerAt(playerX) },
+    primarySpells: createPrimarySpellSimulation(),
     tick,
     world: {
       gateLeaves: [{

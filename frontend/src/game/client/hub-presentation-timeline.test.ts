@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
+import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
   ProtocolPlayerState,
@@ -14,6 +15,10 @@ import {
   lerpCycle,
   type HubGameSnapshot,
 } from './hub-presentation-timeline.ts'
+import {
+  copyPrimarySpellState,
+  interpolatePrimarySpellState,
+} from './primary-spell-presentation.ts'
 
 const SERVER_TICK_RATE = 100
 const SNAPSHOT_RATE = 20
@@ -31,6 +36,7 @@ function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
     gaitDegrees: x,
     headingIndex,
     position: { x, y: 200 },
+    primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 100, y: 0 },
     walkCyclePrimary: x / 10 % 5,
   }
@@ -75,6 +81,83 @@ test('returns an owned presentation copy until a second authoritative snapshot e
   assert.notEqual(presentation.players.local, initial.players.local)
   assert.notEqual(presentation.world, initial.world)
   assert.notEqual(presentation.world.ambient, initial.world.ambient)
+})
+
+test('interpolates primary spells by stable identity without popping lifecycle edges early', () => {
+  const older = {
+    nextId: 4,
+    projectiles: [
+      {
+        ageTicks: 1,
+        charge: 0.2,
+        direction: { x: 0, y: -1 },
+        flightTicks: 0,
+        id: 1,
+        kind: 'earth',
+        ownerId: 'local',
+        phase: 'held',
+        position: { x: 10, y: 20 },
+        velocity: { x: 0, y: 0 },
+        worldKey: 'hub:courtyard',
+      },
+      {
+        ageTicks: 9,
+        charge: 1,
+        direction: { x: 1, y: 0 },
+        flightTicks: 9,
+        id: 3,
+        kind: 'ether',
+        ownerId: 'local',
+        phase: 'flight',
+        position: { x: 90, y: 20 },
+        velocity: { x: 3, y: 0 },
+        worldKey: 'hub:courtyard',
+      },
+    ],
+    transients: [],
+  } as const
+  const newer = {
+    nextId: 5,
+    projectiles: [
+      {
+        ...older.projectiles[0],
+        ageTicks: 6,
+        charge: 0.4,
+        direction: { x: 1, y: 0 },
+        flightTicks: 1,
+        phase: 'flight',
+        position: { x: 20, y: 30 },
+        velocity: { x: 3, y: 0 },
+      },
+      {
+        ageTicks: 1,
+        charge: 1,
+        direction: { x: 0, y: -1 },
+        flightTicks: 1,
+        id: 4,
+        kind: 'fire',
+        ownerId: 'local',
+        phase: 'flight',
+        position: { x: 50, y: 50 },
+        velocity: { x: 0, y: -4.5 },
+        worldKey: 'hub:courtyard',
+      },
+    ],
+    transients: [],
+  } as const
+
+  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  assert.deepEqual(halfway.projectiles.map(({ id }) => id), [1, 3])
+  assert.deepEqual(halfway.projectiles[0].position, { x: 15, y: 25 })
+  assert.equal(halfway.projectiles[0].charge, 0.30000000000000004)
+  assert.equal(halfway.projectiles[0].phase, 'held')
+  const caughtUp = interpolatePrimarySpellState(older, newer, 1)
+  assert.deepEqual(caughtUp.projectiles.map(({ id }) => id), [1, 4])
+  assert.equal(caughtUp.projectiles[0].phase, 'flight')
+
+  const owned = copyPrimarySpellState(newer)
+  assert.deepEqual(owned, newer)
+  assert.notEqual(owned.projectiles[0].position, newer.projectiles[0].position)
 })
 
 test('interpolates remote state over one network interval while keeping local prediction immediate', () => {

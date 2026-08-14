@@ -1,32 +1,9 @@
 import type { PlayerCharacterState } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
-
-const STAFF_ORB_OFFSETS: readonly Vector2[] = [
-  { x: -32.5, y: -66.5 },
-  { x: -21.5, y: -72.5 },
-  { x: -9, y: -76.5 },
-  { x: 4.5, y: -76.5 },
-  { x: 17, y: -74.5 },
-  { x: 28.5, y: -69.5 },
-  { x: 38.5, y: -61.5 },
-  { x: 45.5, y: -52.5 },
-  { x: 49.5, y: -41.5 },
-  { x: 50.5, y: -30.5 },
-  { x: 47.5, y: -19.5 },
-  { x: 41.5, y: -9.5 },
-  { x: 32.5, y: -1.5 },
-  { x: 21.5, y: 4.5 },
-  { x: 9, y: 8.5 },
-  { x: -4.5, y: 8.5 },
-  { x: -17, y: 6.5 },
-  { x: -28.5, y: 1.5 },
-  { x: -38.5, y: -6.5 },
-  { x: -45.5, y: -15.5 },
-  { x: -49.5, y: -26.5 },
-  { x: -50.5, y: -37.5 },
-  { x: -47.5, y: -48.5 },
-  { x: -41.5, y: -58.5 },
-]
+import {
+  primaryCastPose,
+  primarySpellEmitterOffset,
+} from './core-kernels/primary-spells.ts'
 
 const STAFF_FRONT: readonly boolean[] = [
   false, false, false, false, false, true,
@@ -35,7 +12,15 @@ const STAFF_FRONT: readonly boolean[] = [
   false, false, false, false, false, false,
 ]
 
+const CAST_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  false, false, false, false, false, false,
+]
+
 export interface PlayerCharacterDrawPlan {
+  attachmentPose: 0 | 1 | 7 | 8
   fixedRobeOffset: Vector2
   frontAttachmentOffset: Vector2
   headOffset: Vector2
@@ -50,12 +35,17 @@ export interface PlayerCharacterDrawPlan {
 export function createPlayerCharacterDrawPlan(
   state: Pick<
     PlayerCharacterState,
-    'gaitDegrees' | 'headingIndex' | 'velocity' | 'walkCyclePrimary'
+    'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
   >,
   scale = 1,
 ): PlayerCharacterDrawPlan {
-  const staffFront = playerCharacterStaffIsFront(state.headingIndex)
+  const attachmentPose = primaryCastPose(
+    state.primaryCast.actionTick,
+    state.primaryCast.channelActive,
+  )
+  const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
+    attachmentPose,
     fixedRobeOffset: playerCharacterFixedRobeOffset(state.gaitDegrees, scale),
     frontAttachmentOffset: playerCharacterFrontAttachmentOffset(
       state.gaitDegrees,
@@ -68,7 +58,11 @@ export function createPlayerCharacterDrawPlan(
     ),
     headingSheetOffsetY: -state.headingIndex * 170,
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
-    orbOffset: playerCharacterStaffOrbOffset(state.headingIndex),
+    orbOffset: primarySpellEmitterOffset(
+      state.headingIndex,
+      state.primaryCast.actionTick,
+      state.primaryCast.channelActive,
+    ),
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
@@ -76,11 +70,17 @@ export function createPlayerCharacterDrawPlan(
 }
 
 export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
-  return STAFF_ORB_OFFSETS[normalizedIndex(headingIndex, STAFF_ORB_OFFSETS.length)]
+  return primarySpellEmitterOffset(headingIndex, -1)
 }
 
-export function playerCharacterStaffIsFront(headingIndex: number): boolean {
-  return STAFF_FRONT[normalizedIndex(headingIndex, STAFF_FRONT.length)]
+export function playerCharacterStaffIsFront(
+  headingIndex: number,
+  attachmentPose: 0 | 1 | 7 | 8 = 0,
+): boolean {
+  const bank = attachmentPose === 7 || attachmentPose === 8
+    ? CAST_STAFF_FRONT
+    : STAFF_FRONT
+  return bank[normalizedIndex(headingIndex, bank.length)]
 }
 
 export function playerCharacterRobePose(walkCyclePrimary: number): number {

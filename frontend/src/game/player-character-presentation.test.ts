@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
 
 import {
   createPlayerCharacterDrawPlan,
@@ -37,6 +38,7 @@ test('player character draw plan preserves native attachment and gait transforms
   const plan = createPlayerCharacterDrawPlan({
     gaitDegrees: 90,
     headingIndex: 6,
+    primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 90, y: 0 },
     walkCyclePrimary: 2.5,
   })
@@ -45,4 +47,58 @@ test('player character draw plan preserves native attachment and gait transforms
   assert.equal(plan.moving, true)
   assert.equal(plan.staffFront, true)
   assert.equal(plan.orbZIndex, 6)
+})
+
+test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () => {
+  const markerPlan = createPlayerCharacterDrawPlan({
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), actionTick: 19 },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  })
+  assert.equal(markerPlan.attachmentPose, 8)
+  assert.deepEqual(markerPlan.orbOffset, { x: 8.5, y: -47.5 })
+  assert.equal(markerPlan.staffFront, false)
+
+  const recoveryPlan = createPlayerCharacterDrawPlan({
+    gaitDegrees: 0,
+    headingIndex: 7,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), actionTick: 37 },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  })
+  assert.equal(recoveryPlan.attachmentPose, 7)
+  assert.deepEqual(recoveryPlan.orbOffset, { x: 41.5, y: -0.5 })
+  assert.equal(recoveryPlan.staffFront, true)
+})
+
+test('player draw plan holds the sustained Staff Constant pose bank', () => {
+  const insertion = createPlayerCharacterDrawPlan({
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: {
+      ...createIdlePlayerPrimaryCast(),
+      actionTick: 0,
+      channelActive: true,
+    },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  })
+  assert.equal(insertion.attachmentPose, 0)
+  assert.deepEqual(insertion.orbOffset, { x: -32.5, y: -66.5 })
+
+  const constant = createPlayerCharacterDrawPlan({
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: {
+      ...createIdlePlayerPrimaryCast(),
+      actionTick: 1,
+      channelActive: true,
+    },
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  })
+  assert.equal(constant.attachmentPose, 7)
+  assert.deepEqual(constant.orbOffset, { x: 8.5, y: -56 })
 })

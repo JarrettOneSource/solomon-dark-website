@@ -219,6 +219,130 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /invalid registered descriptor shape/)
 })
 
+test('protocol rejects malformed cast programs and primary-spell ownership', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const decodeFrame = (candidate: unknown) => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: candidate,
+    sequence: 2,
+  }))
+  const missile = {
+    ageTicks: 1,
+    charge: 1,
+    direction: { x: 0, y: -1 },
+    flightTicks: 1,
+    id: 1,
+    kind: 'ether',
+    ownerId: 'player-1',
+    phase: 'flight',
+    position: { x: 800, y: 400 },
+    velocity: { x: 0, y: -3 },
+    worldKey: 'hub:courtyard',
+  }
+
+  assert.throws(() => decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        primaryCast: { ...frame.players['player-1'].primaryCast, actionTick: 74 },
+      },
+    },
+  }), /outside the Staff Cast 1 program/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        primaryCast: {
+          ...frame.players['player-1'].primaryCast,
+          actionTick: 2,
+          channelActive: true,
+        },
+      },
+    },
+  }), /outside the Staff Constant program/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, ownerId: 'missing-player' }],
+      transients: [],
+    },
+  }), /owner missing-player is not present/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, phase: 'held' }],
+      transients: [],
+    },
+  }), /only permits held Earth actors/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{
+        ...missile,
+        charge: 0.2,
+        kind: 'earth',
+        phase: 'held',
+        velocity: { x: 0, y: 0 },
+      }],
+      transients: [],
+    },
+  }), /flightTicks must be zero while held/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, flightTicks: 0 }],
+      transients: [],
+    },
+  }), /flightTicks is outside the actor age/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [missile],
+      transients: [{
+        ageTicks: 0,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        variant: 0,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /duplicate id 1/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{
+        ageTicks: 0,
+        direction: { x: 0, y: -1 },
+        id: 1,
+        kind: 'water',
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        variant: 4,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /variant exceeds the native family/)
+})
+
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),

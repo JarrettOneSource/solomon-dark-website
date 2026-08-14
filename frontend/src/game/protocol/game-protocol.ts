@@ -12,6 +12,11 @@ import {
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type {
+  PrimarySpellProjectileState,
+  PrimarySpellSimulationState,
+  PrimarySpellTransientState,
+} from '../core-kernels/primary-spells.ts'
+import type {
   BoneyardBounds,
   BoneyardChoice,
   BoneyardFence,
@@ -47,9 +52,9 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 9
+export const GAME_PROTOCOL_VERSION = 10
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
-export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-2'
+export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-3'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 
 const MAX_CONTENT_MODS = 256
@@ -63,6 +68,8 @@ const MAX_STUDENT_PROPS = 8
 const MAX_STUDENTS = 256
 const MAX_REPLICATED_ENTITIES = 8192
 const MAX_REPLICATED_COMPONENTS = 64
+const MAX_PRIMARY_SPELL_PROJECTILES = 4096
+const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
 
 export interface GameContentIdentity {
   id: string
@@ -483,6 +490,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     'gaitDegrees',
     'headingIndex',
     'position',
+    'primaryCast',
     'velocity',
     'walkCyclePrimary',
   ])
@@ -492,8 +500,43 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     position: vector(source.position, `${field}.position`),
+    primaryCast: playerPrimaryCastState(source.primaryCast, `${field}.primaryCast`),
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
+  }
+}
+
+function playerPrimaryCastState(
+  value: unknown,
+  field: string,
+): ProtocolPlayerState['primaryCast'] {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'actionTick',
+    'aimDirection',
+    'castSequence',
+    'channelActive',
+    'emissionSequence',
+    'held',
+  ])
+  const actionTick = integer(source.actionTick, `${field}.actionTick`)
+  const channelActive = boolean(source.channelActive, `${field}.channelActive`)
+  if (channelActive && (actionTick < 0 || actionTick > 1)) {
+    throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
+  }
+  if (!channelActive && (actionTick < -1 || actionTick >= 74)) {
+    throw new GameProtocolError(`${field}.actionTick is outside the Staff Cast 1 program`)
+  }
+  return {
+    actionTick,
+    aimDirection: unitVector(source.aimDirection, `${field}.aimDirection`),
+    castSequence: nonnegativeInteger(source.castSequence, `${field}.castSequence`),
+    channelActive,
+    emissionSequence: nonnegativeInteger(
+      source.emissionSequence,
+      `${field}.emissionSequence`,
+    ),
+    held: boolean(source.held, `${field}.held`),
   }
 }
 
@@ -866,7 +909,9 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
 
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
-  onlyKeys(source, 'snapshot', ['hostPlayerId', 'players', 'tick', 'world'])
+  onlyKeys(source, 'snapshot', [
+    'hostPlayerId', 'players', 'primarySpells', 'tick', 'world',
+  ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
     throw new GameProtocolError(`snapshot.players may contain at most ${MAX_PLAYERS} entries`)
@@ -886,6 +931,8 @@ function gameSnapshot(value: unknown): GameSnapshot {
     throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
   }
   const world = gameWorldSnapshot(source.world, 'snapshot.world')
+  const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
+  validatePrimarySpellOwners(primarySpells, players, 'snapshot.primarySpells')
   if (world.kind === 'hub') {
     const participantIds = Object.keys(world.participants).sort()
     const playerIds = Object.keys(players).sort()
@@ -901,6 +948,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
   return {
     hostPlayerId,
     players,
+    primarySpells,
     tick: nonnegativeInteger(source.tick, 'snapshot.tick'),
     world,
   }
@@ -908,7 +956,9 @@ function gameSnapshot(value: unknown): GameSnapshot {
 
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
-  onlyKeys(source, 'frame', ['hostPlayerId', 'players', 'tick', 'world'])
+  onlyKeys(source, 'frame', [
+    'hostPlayerId', 'players', 'primarySpells', 'tick', 'world',
+  ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
     throw new GameProtocolError(`frame.players may contain at most ${MAX_PLAYERS} entries`)
@@ -925,12 +975,121 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     throw new GameProtocolError('frame.hostPlayerId is not present in frame.players')
   }
   const world = gameWorldSnapshotFrame(source.world, 'frame.world')
+  const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
+  validatePrimarySpellOwners(primarySpells, players, 'frame.primarySpells')
   if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
   return {
     hostPlayerId,
     players,
+    primarySpells,
     tick: nonnegativeInteger(source.tick, 'frame.tick'),
     world,
+  }
+}
+
+function primarySpellState(value: unknown, field: string): PrimarySpellSimulationState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['nextId', 'projectiles', 'transients'])
+  const nextId = positiveInteger(source.nextId, `${field}.nextId`)
+  const projectiles = limitedArray(
+    source.projectiles,
+    `${field}.projectiles`,
+    MAX_PRIMARY_SPELL_PROJECTILES,
+  ).map((spell, index) => primarySpellProjectile(
+    spell,
+    `${field}.projectiles[${index}]`,
+  ))
+  const transients = limitedArray(
+    source.transients,
+    `${field}.transients`,
+    MAX_PRIMARY_SPELL_TRANSIENTS,
+  ).map((effect, index) => primarySpellTransient(
+    effect,
+    `${field}.transients[${index}]`,
+  ))
+  const ids = new Set<number>()
+  for (const spell of [...projectiles, ...transients]) {
+    if (ids.has(spell.id)) throw new GameProtocolError(`${field} contains duplicate id ${spell.id}`)
+    if (spell.id >= nextId) throw new GameProtocolError(`${field} id ${spell.id} is not allocated`)
+    ids.add(spell.id)
+  }
+  return { nextId, projectiles, transients }
+}
+
+function primarySpellProjectile(value: unknown, field: string): PrimarySpellProjectileState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'ageTicks', 'charge', 'direction', 'flightTicks', 'id', 'kind', 'ownerId',
+    'phase', 'position', 'velocity', 'worldKey',
+  ])
+  if (source.kind !== 'earth' && source.kind !== 'ether' && source.kind !== 'fire') {
+    throw new GameProtocolError(`${field}.kind is not a projectile primary`)
+  }
+  if (source.phase !== 'flight' && source.phase !== 'held') {
+    throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  if (source.phase === 'held' && source.kind !== 'earth') {
+    throw new GameProtocolError(`${field} only permits held Earth actors`)
+  }
+  const charge = finite(source.charge, `${field}.charge`)
+  if (charge < 0 || charge > 1) {
+    throw new GameProtocolError(`${field}.charge must be within [0,1]`)
+  }
+  const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+  const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
+  if (source.phase === 'held' && flightTicks !== 0) {
+    throw new GameProtocolError(`${field}.flightTicks must be zero while held`)
+  }
+  if (source.phase === 'flight' && (flightTicks < 1 || flightTicks > ageTicks)) {
+    throw new GameProtocolError(`${field}.flightTicks is outside the actor age`)
+  }
+  return {
+    ageTicks,
+    charge,
+    direction: unitVector(source.direction, `${field}.direction`),
+    flightTicks,
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: source.kind,
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    phase: source.phase,
+    position: vector(source.position, `${field}.position`),
+    velocity: vector(source.velocity, `${field}.velocity`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'ageTicks', 'direction', 'id', 'kind', 'origin', 'ownerId', 'variant',
+    'worldKey',
+  ])
+  if (source.kind !== 'air' && source.kind !== 'water') {
+    throw new GameProtocolError(`${field}.kind is not a transient primary`)
+  }
+  const variant = nonnegativeInteger(source.variant, `${field}.variant`)
+  if (variant > 3) throw new GameProtocolError(`${field}.variant exceeds the native family`)
+  return {
+    ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+    direction: unitVector(source.direction, `${field}.direction`),
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: source.kind,
+    origin: vector(source.origin, `${field}.origin`),
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    variant,
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function validatePrimarySpellOwners(
+  spells: PrimarySpellSimulationState,
+  players: Readonly<Record<string, ProtocolPlayerState>>,
+  field: string,
+): void {
+  for (const spell of [...spells.projectiles, ...spells.transients]) {
+    if (!players[spell.ownerId]) {
+      throw new GameProtocolError(`${field} owner ${spell.ownerId} is not present`)
+    }
   }
 }
 

@@ -18,6 +18,7 @@ import type {
 } from './core-kernels/player-character.ts'
 import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
 import { GameAudioDirector } from './game-audio-director.ts'
+import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import HubScene from './HubScene.tsx'
@@ -245,6 +246,20 @@ export default function MainMenuScene({
       removeBoneyard()
     }
   }, [session])
+
+  useEffect(() => {
+    if (!session) return
+    const synchronizer = new PrimarySpellAudioSynchronizer(
+      audio,
+      session.playerId,
+      session.getSnapshot(),
+    )
+    const removeSnapshot = session.onSnapshot((snapshot) => synchronizer.update(snapshot))
+    return () => {
+      removeSnapshot()
+      synchronizer.destroy()
+    }
+  }, [audio, session])
 
   useEffect(() => {
     if (screen === 'hub' || !stageRef.current) return

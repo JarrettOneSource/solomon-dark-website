@@ -9,6 +9,13 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
+import {
+  createPrimarySpellSimulation,
+  removePrimarySpellOwner,
+  stepPrimarySpells,
+  type PrimarySpellSimulationState,
+} from '../core-kernels/primary-spells.ts'
 import {
   createBoneyardWorld,
   placePlayersInBoneyard,
@@ -33,6 +40,7 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 export interface GameSimulationState {
   accumulatorSeconds: number
   players: Readonly<Record<PlayerId, PlayerCharacterState>>
+  primarySpells: PrimarySpellSimulationState
   tick: number
   world: GameWorldState
 }
@@ -65,7 +73,13 @@ export function createGameSimulation(
   for (const [playerId, config] of Object.entries(characters)) {
     players[playerId] = createPlayerCharacter(config, hubSpawnPoint())
   }
-  return { accumulatorSeconds: 0, players, tick: 0, world }
+  return {
+    accumulatorSeconds: 0,
+    players,
+    primarySpells: createPrimarySpellSimulation(),
+    tick: 0,
+    world,
+  }
 }
 
 export function addPlayerCharacter(
@@ -97,6 +111,7 @@ export function removePlayerCharacter(
   return {
     ...state,
     players,
+    primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
     world: state.world.kind === 'hub'
       ? removeHubParticipant(state.world, playerId)
       : state.world,
@@ -111,6 +126,7 @@ export function enterBoneyardWorld(
   return {
     ...state,
     players: placePlayersInBoneyard(state.players, world),
+    primarySpells: createPrimarySpellSimulation(),
     world,
   }
 }
@@ -131,11 +147,11 @@ export function stepGameSimulationTick(
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, state.players, inputs)
-      return finishGameSimulationTick(state, result)
+      return finishGameSimulationTick(state, result, inputs)
     }
     case 'boneyard': {
       const result = stepBoneyardWorldTick(state.world, state.players, inputs)
-      return finishGameSimulationTick(state, result)
+      return finishGameSimulationTick(state, result, inputs)
     }
   }
 }
@@ -143,19 +159,31 @@ export function stepGameSimulationTick(
 function finishGameSimulationTick(
   previous: GameSimulationState,
   result: { players: Readonly<Record<PlayerId, PlayerCharacterState>>, world: GameWorldState },
+  inputs: PlayerCharacterInputs,
 ): GameSimulationState {
   const tick = previous.tick + 1
+  const cast = stepPrimarySpells({
+    inputs,
+    players: result.players,
+    previousPlayers: previous.players,
+    spells: previous.primarySpells,
+    viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
+    worldKeyForPlayer: (playerId) => result.world.kind === 'hub'
+      ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
+      : `boneyard:${result.world.runId}`,
+  })
   if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL !== 0) {
     return {
       accumulatorSeconds: previous.accumulatorSeconds,
-      players: result.players,
+      players: cast.players,
+      primarySpells: cast.spells,
       tick,
       world: result.world,
     }
   }
 
   const players: Record<PlayerId, PlayerCharacterState> = {}
-  for (const [playerId, player] of Object.entries(result.players)) {
+  for (const [playerId, player] of Object.entries(cast.players)) {
     const priorPlayer = previous.players[playerId]
     players[playerId] = priorPlayer
       && priorPlayer.walkCyclePrimary !== player.walkCyclePrimary
@@ -165,6 +193,7 @@ function finishGameSimulationTick(
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
     players,
+    primarySpells: cast.spells,
     tick,
     world: result.world,
   }

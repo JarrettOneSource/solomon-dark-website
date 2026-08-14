@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 import {
   allyHudIdentityPresentation,
@@ -24,6 +25,7 @@ function player(displayName: string): ProtocolPlayerState {
     gaitDegrees: 0,
     headingIndex: 0,
     position: { x: 0, y: 0 },
+    primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
   }

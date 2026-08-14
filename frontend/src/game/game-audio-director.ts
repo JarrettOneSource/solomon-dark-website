@@ -3,6 +3,7 @@ import {
   NATIVE_AUDIO_TICK_MS,
   type GameAudioScene,
   type GameAudioSources,
+  type GameLoopCue,
   type GameSoundCue,
   type GameStreamCue,
 } from './game-audio-native.ts'
@@ -45,6 +46,10 @@ export class GameAudioDirector {
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
+  private loops = new Map<GameLoopCue, {
+    channel: GameAudioChannel
+    owners: Set<string>
+  }>()
   private now: () => number
   private outgoingMusic: GameAudioChannel | null = null
   private requestFrame: (callback: FrameRequestCallback) => number
@@ -78,9 +83,43 @@ export class GameAudioDirector {
   }
 
   unlock(): void {
-    if (!this.currentMusic || !this.currentMusic.paused) return
-    this.currentMusic.currentTime = 0
-    void this.startCurrentMusic(this.generation)
+    if (this.currentMusic?.paused) {
+      this.currentMusic.currentTime = 0
+      void this.startCurrentMusic(this.generation)
+    }
+    for (const loop of this.loops.values()) {
+      if (loop.channel.paused) void loop.channel.play().catch(() => {})
+    }
+  }
+
+  startLoop(
+    cue: GameLoopCue,
+    owner: string,
+    options: PlaySoundOptions = {},
+  ): void {
+    let state = this.loops.get(cue)
+    if (state?.owners.has(owner)) return
+    if (!state) {
+      const channel = this.makeChannel(this.sources.loops[cue])
+      channel.loop = true
+      channel.volume = clampUnit(options.volume ?? 1)
+      channel.playbackRate = options.playbackRate ?? 1
+      state = { channel, owners: new Set() }
+      this.loops.set(cue, state)
+      void channel.play().catch(() => {})
+    }
+    state.owners.add(owner)
+  }
+
+  stopLoop(cue: GameLoopCue, owner: string): void {
+    const state = this.loops.get(cue)
+    if (!state || !state.owners.delete(owner) || state.owners.size > 0) return
+    this.stopAndReset(state.channel)
+    this.loops.delete(cue)
+  }
+
+  stopLoopsForOwner(owner: string): void {
+    for (const cue of this.loops.keys()) this.stopLoop(cue, owner)
   }
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
@@ -127,6 +166,8 @@ export class GameAudioDirector {
     this.musicScene = null
     for (const channel of this.activeSounds) this.stopAndReset(channel)
     this.activeSounds.clear()
+    for (const loop of this.loops.values()) this.stopAndReset(loop.channel)
+    this.loops.clear()
     for (const channel of this.streams.values()) this.stopAndReset(channel)
     this.streams.clear()
   }

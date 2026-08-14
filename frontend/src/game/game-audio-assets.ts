@@ -15,9 +15,20 @@ import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
+import gatherRocksLoop from '../assets/game/audio/sfx/gather-rocks-loop.wav'
+import iceLoop from '../assets/game/audio/sfx/ice-loop.wav'
+import lightningLoop from '../assets/game/audio/sfx/lightning-loop.wav'
+import rollingStoneLoop from '../assets/game/audio/sfx/rolling-stone-loop.wav'
+import startBoulder from '../assets/game/audio/sfx/start-boulder.wav'
 import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
+  loops: {
+    'gather-rocks-loop': gatherRocksLoop,
+    'ice-loop': iceLoop,
+    'lightning-loop': lightningLoop,
+    'rolling-stone-loop': rollingStoneLoop,
+  },
   music: {
     academy,
     prelude,
@@ -31,6 +42,7 @@ export const GAME_AUDIO_SOURCES = {
     'magic-missile': magicMissile,
     'pick-skill': pickSkill,
     'rock-hit': rockHit,
+    'start-boulder': startBoulder,
     'step-1': step1,
     'step-2': step2,
     summon,

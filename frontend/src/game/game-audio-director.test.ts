@@ -6,8 +6,15 @@ import {
   type GameAudioChannel,
 } from './game-audio-director.ts'
 import type { GameAudioSources } from './game-audio-native.ts'
+import './primary-spell-audio.test.ts'
 
 const SOURCES = {
+  loops: {
+    'gather-rocks-loop': 'gather.wav',
+    'ice-loop': 'ice-loop.wav',
+    'lightning-loop': 'lightning-loop.wav',
+    'rolling-stone-loop': 'rolling.wav',
+  },
   music: {
     academy: 'academy.mp3',
     prelude: 'prelude.mp3',
@@ -21,6 +28,7 @@ const SOURCES = {
     'magic-missile': 'magic.wav',
     'pick-skill': 'pick.wav',
     'rock-hit': 'rock.wav',
+    'start-boulder': 'boulder.wav',
     'step-1': 'step1.wav',
     'step-2': 'step2.wav',
     summon: 'summon.wav',
@@ -214,5 +222,22 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   created[0].emit('ended')
   director.destroy()
   assert.equal(created[1].paused, true)
+  await flushPromises()
+})
+
+test('balances one native loop channel across independent semantic owners', async () => {
+  const { created, director } = fixture()
+  director.startLoop('lightning-loop', 'player:a')
+  director.startLoop('lightning-loop', 'player:a')
+  director.startLoop('lightning-loop', 'player:b')
+  assert.equal(created.length, 1)
+  assert.equal(created[0].loop, true)
+  assert.equal(created[0].playCalls, 1)
+
+  director.stopLoop('lightning-loop', 'player:a')
+  assert.equal(created[0].paused, false)
+  director.stopLoop('lightning-loop', 'player:b')
+  assert.equal(created[0].paused, true)
+  assert.equal(created[0].currentTime, 0)
   await flushPromises()
 })

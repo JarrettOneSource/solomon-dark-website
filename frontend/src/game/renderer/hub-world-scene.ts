@@ -45,6 +45,7 @@ import {
   spriteFrameIndex,
 } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -65,6 +66,7 @@ export class HubWorldScene {
   private readonly teacher: HubTeacherView
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
+  private readonly primarySpells: PrimarySpellWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly students = new Map<number, HubStudentView>()
   private readonly retiredStudentViews: HubStudentView[] = []
@@ -83,6 +85,7 @@ export class HubWorldScene {
     this.southern.sortableChildren = true
     this.southern.eventMode = 'none'
     this.stage.addChild(this.world, this.southern)
+    this.primarySpells = new PrimarySpellWorldView(this.world, textures)
     this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
     this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
@@ -155,6 +158,7 @@ export class HubWorldScene {
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
     this.updatePlayers(snapshot)
+    this.primarySpells.update(snapshot.primarySpells, 'hub:courtyard')
   }
 
   player(playerId: string): HubPlayerView | undefined {
@@ -214,7 +218,16 @@ export class HubWorldScene {
     return Number(this.world.isRenderGroup) + Number(this.southern.isRenderGroup)
   }
 
+  get primarySpellCount(): number {
+    return this.primarySpells.count
+  }
+
+  get primarySpellKinds(): readonly string[] {
+    return this.primarySpells.kinds
+  }
+
   destroy(): void {
+    this.primarySpells.destroy()
     for (const view of this.retiredStudentViews) view.destroy()
     this.retiredStudentViews.length = 0
     this.players.clear()

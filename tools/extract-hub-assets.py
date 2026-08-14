@@ -48,7 +48,7 @@ PLAYER_CELL_SIZE = 170
 STUDENT_POSES = 5
 PLAYER_HEADINGS = 24
 PLAYER_WALK_POSES = 5
-PLAYER_ATTACHMENT_POSE = 0
+PLAYER_ATTACHMENT_POSES = 10
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
 PLAYER_PALETTES = {
     # Skills_Wizard_GetPrimaryColor (0x00660760) is the descriptor-facing
@@ -805,7 +805,7 @@ def build_player_colored_layers(
     """Preserve Wizard_Render's independently selected and transformed passes."""
     layers = {
         "robe-dynamic": empty_player_sheet(PLAYER_WALK_POSES),
-        "robe-fixed": empty_player_sheet(),
+        "robe-fixed": empty_player_sheet(PLAYER_ATTACHMENT_POSES),
         "head": empty_player_sheet(),
     }
 
@@ -824,14 +824,20 @@ def build_player_colored_layers(
                 (pose * PLAYER_CELL_SIZE, row[1]),
             )
 
-        # The second robe argument selects these four banks from actor +0x238,
-        # which remains pose zero throughout ordinary clean Hub locomotion.
-        fixed = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-        paste_player_layer(fixed, atlas, records[1612 + heading], primary)
-        paste_player_layer(fixed, atlas, records[2428 + heading], primary)
-        paste_player_layer(fixed, atlas, records[2020 + heading], secondary)
-        paste_player_layer(fixed, atlas, records[2836 + heading], secondary)
-        layers["robe-fixed"].alpha_composite(fixed, row)
+        # The second robe argument selects these four ten-pose banks from
+        # actor +0x238. Cast actions use poses 1, 7, and 8 in addition to the
+        # ordinary locomotion pose zero.
+        for pose in range(PLAYER_ATTACHMENT_POSES):
+            fixed = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            fixed_offset = pose * PLAYER_HEADINGS + heading
+            paste_player_layer(fixed, atlas, records[1612 + fixed_offset], primary)
+            paste_player_layer(fixed, atlas, records[2428 + fixed_offset], primary)
+            paste_player_layer(fixed, atlas, records[2020 + fixed_offset], secondary)
+            paste_player_layer(fixed, atlas, records[2836 + fixed_offset], secondary)
+            layers["robe-fixed"].alpha_composite(
+                fixed,
+                (pose * PLAYER_CELL_SIZE, row[1]),
+            )
 
         # The loadout slot +0x18 painter runs last under the full gait bob.
         head = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
@@ -847,18 +853,22 @@ def build_player_staff_sheet(
     records: list[SpriteRecord],
     front: bool,
 ) -> Image.Image:
-    sheet = empty_player_sheet()
+    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
     for heading in range(PLAYER_HEADINGS):
-        cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-        draw_player_staff_pass(
-            cell,
-            atlas,
-            records,
-            heading,
-            PLAYER_ATTACHMENT_POSE,
-            front,
-        )
-        sheet.alpha_composite(cell, (0, heading * PLAYER_CELL_SIZE))
+        for pose in range(PLAYER_ATTACHMENT_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            draw_player_staff_pass(
+                cell,
+                atlas,
+                records,
+                heading,
+                pose,
+                front,
+            )
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
     return sheet
 
 
@@ -1320,6 +1330,12 @@ def main() -> int:
         "element-vfx-core": 110,
         "element-vfx-spark": 111,
         "element-vfx-ray": 112,
+        "primary-spell-boulder": 86,
+        "primary-spell-frost-core": 30,
+        "primary-spell-frost-extra": 32,
+        "primary-spell-frost-over": 28,
+        "primary-spell-frost-spark": 14,
+        "primary-spell-magic-missile": 53,
     }.items():
         save(registered_sprite(bad_guys, bad_guys_records[record_index]), output_dir, name)
     for element, indices in ELEMENT_VFX_RECORDS.items():

@@ -69,6 +69,7 @@ import {
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   frameCount: number
@@ -88,6 +89,8 @@ interface BoneyardRendererFrameDiagnostics {
   minMainLightScalar: number
   painterBandCount: number
   playerCount: number
+  primarySpellCount: number
+  primarySpellKinds: readonly string[]
   playerScreenX: number
   playerScreenY: number
   playerWalkPose: number
@@ -274,6 +277,8 @@ export async function createBoneyardWorldRenderer(
     minMainLightScalar: 0,
     painterBandCount: 0,
     playerCount: 0,
+    primarySpellCount: 0,
+    primarySpellKinds: [],
     playerScreenX: Number.NaN,
     playerScreenY: Number.NaN,
     playerWalkPose: 0,
@@ -349,6 +354,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = scene.playerCount
+      frameDiagnostics.primarySpellCount = scene.primarySpellCount
+      frameDiagnostics.primarySpellKinds = scene.primarySpellKinds
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
         + viewport.width / 2
       frameDiagnostics.playerScreenY = (player.position.y - camera.y) * camera.zoom
@@ -429,6 +436,7 @@ class BoneyardDynamicScene {
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
   private readonly players = new Map<string, PlayerWorldView>()
+  private readonly primarySpells: PrimarySpellWorldView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
   private readonly solomon: BoneyardSolomonView | null
@@ -449,6 +457,7 @@ class BoneyardDynamicScene {
     this.mainLayers = mainLayers
     this.mainResidents = mainResidents
     this.foreground = foreground
+    this.primarySpells = new PrimarySpellWorldView(root, textures)
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
       layerIndex,
       worldY: layer.worldY,
@@ -487,6 +496,10 @@ class BoneyardDynamicScene {
       view.destroy()
       this.players.delete(playerId)
     }
+    this.primarySpells.update(
+      snapshot.primarySpells,
+      `boneyard:${snapshot.world.runId}`,
+    )
     this.gates.update(snapshot.world.gateLeaves)
     this.solomon?.update(snapshot.tick)
 
@@ -524,6 +537,20 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(player.position, lightSources),
       ))
     }
+    for (const spell of snapshot.primarySpells.projectiles) {
+      if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      this.primarySpells.setTint(
+        `primary-spell:${spell.id}`,
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(spell.position, lightSources)),
+      )
+    }
+    for (const effect of snapshot.primarySpells.transients) {
+      if (effect.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+      this.primarySpells.setTint(
+        `primary-spell:${effect.id}`,
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(effect.origin, lightSources)),
+      )
+    }
     for (const leaf of snapshot.world.gateLeaves) {
       const position = nativeGatePainterRoot(leaf.hinge, leaf.tip)
       this.gates.setTint(
@@ -557,6 +584,9 @@ class BoneyardDynamicScene {
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
       })
+    }
+    for (const layer of this.primarySpells.painterLayers()) {
+      dynamicLayers.push({ ...layer, sourceOrder: dynamicLayers.length })
     }
     if (dig) {
       dynamicLayers.push({
@@ -605,6 +635,12 @@ class BoneyardDynamicScene {
     for (const [id, view] of this.players) {
       view.setDepth(positionedDynamics.get(`player:${id}`)?.zIndex ?? 1)
     }
+    for (const layer of this.primarySpells.painterLayers()) {
+      this.primarySpells.setDepth(
+        layer.id,
+        positionedDynamics.get(layer.id)?.zIndex ?? 1,
+      )
+    }
     this.solomon?.setDigDepth(positionedDynamics.get('solomon-dig')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
@@ -634,6 +670,14 @@ class BoneyardDynamicScene {
     return this.lightSources
   }
 
+  get primarySpellCount(): number {
+    return this.primarySpells.count
+  }
+
+  get primarySpellKinds(): readonly string[] {
+    return this.primarySpells.kinds
+  }
+
   playerWalkPose(playerId: string): number {
     return this.players.get(playerId)?.walkPose ?? 0
   }
@@ -643,6 +687,7 @@ class BoneyardDynamicScene {
   }
 
   destroy(): void {
+    this.primarySpells.destroy()
     this.gates.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()

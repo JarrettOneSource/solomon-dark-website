@@ -5,6 +5,10 @@ import type {
   ProtocolPlayerState,
 } from '../protocol/game-state.ts'
 import { lerpCycle } from './hub-presentation-timeline.ts'
+import {
+  copyPrimarySpellState,
+  interpolatePrimarySpellState,
+} from './primary-spell-presentation.ts'
 
 export type BoneyardGameSnapshot = Omit<GameSnapshot, 'world'> & {
   world: BoneyardWorldSnapshot
@@ -123,6 +127,11 @@ function interpolateSnapshot(
   return {
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
     players,
+    primarySpells: interpolatePrimarySpellState(
+      older.primarySpells,
+      newer.primarySpells,
+      blend,
+    ),
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
       gateLeaves: interpolateGateLeaves(
@@ -155,6 +164,10 @@ function interpolatePlayer(
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),
+    },
+    primaryCast: {
+      ...discrete.primaryCast,
+      aimDirection: { ...discrete.primaryCast.aimDirection },
     },
     velocity: {
       x: lerp(older.velocity.x, newer.velocity.x, blend),
@@ -209,6 +222,7 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       id,
       copyPlayer(player),
     ])),
+    primarySpells: copyPrimarySpellState(snapshot.primarySpells),
     tick: snapshot.tick,
     world: {
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
@@ -223,6 +237,10 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     ...player,
     config: { ...player.config },
     position: { ...player.position },
+    primaryCast: {
+      ...player.primaryCast,
+      aimDirection: { ...player.primaryCast.aimDirection },
+    },
     velocity: { ...player.velocity },
   }
 }

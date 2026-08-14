@@ -37,11 +37,14 @@ interface HubFrameDiagnostics {
   localPlayerId: string
   orbSpriteCount: number
   playerCount: number
+  playerAttachmentPose: number
   playerMoving: boolean
   playerPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
   playerX: number
   playerY: number
+  primarySpellCount: number
+  primarySpellKinds: readonly string[]
   pooledStudentViewCount: number
   southernArchitectureCount: number
   southernArtRenderable: boolean
@@ -149,11 +152,14 @@ export async function createHubWorldRenderer(
     localPlayerId: options.playerId,
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
+    playerAttachmentPose: 0,
     playerMoving: false,
     playerPositions: {},
     playerWalkPose: 0,
     playerX: Number.NaN,
     playerY: Number.NaN,
+    primarySpellCount: 0,
+    primarySpellKinds: [],
     pooledStudentViewCount: 0,
     southernArchitectureCount: courtyardScene.southernArchitectureCount,
     southernArtRenderable: true,
@@ -197,6 +203,11 @@ export async function createHubWorldRenderer(
     frameDiagnostics.fadeAlpha = participant?.transition?.alpha ?? 0
     frameDiagnostics.hostPlayerId = snapshot.hostPlayerId
     frameDiagnostics.playerCount = Object.keys(snapshot.players).length
+    const currentScene = participant?.region === 'courtyard'
+      ? courtyardScene
+      : privateRoomScene
+    frameDiagnostics.primarySpellCount = currentScene.primarySpellCount
+    frameDiagnostics.primarySpellKinds = currentScene.primarySpellKinds
     frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
     frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
     frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
@@ -223,6 +234,7 @@ export async function createHubWorldRenderer(
       ? courtyardScene.player(options.playerId)
       : privateRoomScene.player(options.playerId)
     if (!playerView) return
+    frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
     frameDiagnostics.playerWalkPose = playerView.walkPose
     frameDiagnostics.orbSpriteCount = playerView.orbSpriteCount
   }
