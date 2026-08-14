@@ -29,6 +29,8 @@ test('game menu art is presented by the shared WebGL baseline', () => {
 test('fixed menu renderers share the full game viewport and persistent fullscreen control', () => {
   assert.match(mainScene, /fixedGameViewportLayout/)
   assert.match(mainScene, /GameFullscreenButton/)
+  assert.match(mainScene, /game-orientation-hint/)
+  assert.doesNotMatch(gamePage, /game-orientation-hint/)
   assert.match(createScene, /fixedGameStageBounds/)
   assert.doesNotMatch(menuStyles, /\.main-menu-stage\s*\{[^}]*aspect-ratio:/s)
 })

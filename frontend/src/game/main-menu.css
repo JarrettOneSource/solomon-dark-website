@@ -192,18 +192,27 @@
   stroke-width: 2;
 }
 
-.game-fullscreen-error {
+.game-fullscreen-message {
   position: absolute;
   top: 42px;
   right: 0;
+  display: flex;
   width: max-content;
-  max-width: min(260px, 70vw);
+  max-width: min(300px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 9px;
   border: 1px solid rgb(205 177 105 / 0.65);
   color: #f0dca7;
   font: 13px var(--font-display);
   text-align: right;
   background: rgb(7 6 14 / 0.94);
+}
+
+.main-menu-page[data-game-scene='root'] .game-fullscreen-message,
+.main-menu-page[data-game-scene='play'] .game-fullscreen-message {
+  top: auto;
+  bottom: 42px;
 }
 
 .create-menu-back:focus-visible,
@@ -328,8 +337,26 @@
   }
 }
 
+@media (hover: none) and (pointer: coarse) {
+  .game-fullscreen-button {
+    width: 44px;
+    height: 44px;
+    padding: 10px;
+  }
+
+  .game-fullscreen-message { top: 52px; }
+
+  .main-menu-page[data-game-scene='root'] .game-fullscreen-message,
+  .main-menu-page[data-game-scene='play'] .game-fullscreen-message {
+    top: auto;
+    bottom: 52px;
+  }
+}
+
 @media (orientation: portrait) and (hover: none) and (pointer: coarse) {
   .main-menu-stage { visibility: hidden; }
+
+  .game-fullscreen-control { z-index: 100001; }
 
   .game-orientation-hint {
     position: fixed;

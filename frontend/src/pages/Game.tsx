@@ -144,9 +144,6 @@ export default function Game() {
               total={loadProgress.total}
             />
           )}
-      <div className="game-orientation-hint" role="status">
-        Rotate your device to landscape to enter the College.
-      </div>
     </>
   )
 }

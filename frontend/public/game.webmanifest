@@ -1,0 +1,12 @@
+{
+  "id": "/game",
+  "name": "Solomon Darker",
+  "short_name": "Solomon Darker",
+  "description": "Play Solomon Darker in an app-like landscape window.",
+  "start_url": "/game",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#08070b"
+}

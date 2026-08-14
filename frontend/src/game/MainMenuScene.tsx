@@ -451,6 +451,9 @@ export default function MainMenuScene({
           aria-hidden
         />
       </section>
+      <div className="game-orientation-hint" role="status">
+        Rotate your device to landscape to enter the College.
+      </div>
       <GameFullscreenButton />
     </div>
   )

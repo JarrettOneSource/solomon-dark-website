@@ -22,6 +22,7 @@
     "smoke:game": "node tools/smoke-game-runtime.mjs",
     "smoke:game:boneyard-collision": "node --experimental-strip-types tools/smoke-boneyard-player-collision.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
+    "smoke:game:fullscreen": "node tools/smoke-game-fullscreen.mjs",
     "smoke:game:hub-rooms": "node --experimental-strip-types tools/smoke-hub-rooms.mjs",
     "smoke:game:lobbies": "node tools/smoke-web-game-lobbies.mjs",
     "smoke:game-audio": "node tools/smoke-game-audio.mjs",
