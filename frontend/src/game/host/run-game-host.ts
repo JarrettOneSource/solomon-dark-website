@@ -33,6 +33,7 @@ const server = await startGameHost({
   authentication: { kind: 'shared', credential },
   host,
   port,
+  resetWhenEmpty: true,
   boneyards,
   snapshotRate,
   trustedProxy,

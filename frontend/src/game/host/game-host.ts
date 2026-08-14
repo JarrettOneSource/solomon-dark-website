@@ -63,6 +63,7 @@ export interface GameHostOptions {
   host?: string
   maxPlayers?: number
   port?: number
+  resetWhenEmpty?: boolean
   snapshotRate?: number
   trustedProxy?: boolean
 }
@@ -106,6 +107,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
+  const resetWhenEmpty = options.resetWhenEmpty ?? false
   const snapshotRate = options.snapshotRate ?? 20
   const boneyards = options.boneyards ?? createBoneyardCatalog()
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
@@ -364,6 +366,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (!client) return
       clients.delete(socket)
       state = removePlayerCharacter(state, client.playerId)
+      if (clients.size === 0 && resetWhenEmpty) {
+        state = createInitialSimulation(options.createSimulation)
+        nextPlayerId = 1
+        hostPlayerId = null
+        reservedHostClaimed = false
+        loadedBoneyard = null
+        nextSnapshotSequence = 1
+        nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
+        return
+      }
       if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
         broadcastSnapshot()

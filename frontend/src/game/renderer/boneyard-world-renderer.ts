@@ -30,6 +30,7 @@ import {
   nativeGateLeaf,
   nativeGateHingeArtPosition,
   nativeGatePainterRoot,
+  nativeGateRules,
   NATIVE_GATE_ART_INDICES,
   NATIVE_GATE_ART_UVS,
   type NativeGateLeaf,
@@ -1078,18 +1079,13 @@ class BoneyardGateLeafView {
 }
 
 function drawGateLines(graphics: Graphics, leaf: NativeGateLeaf): void {
+  const [tipRule, centerRule] = nativeGateRules(leaf)
   graphics.clear()
   graphics
-    .moveTo(leaf.p1.x, leaf.p1.y)
-    .lineTo(leaf.p3.x, leaf.p3.y + 32)
-    .moveTo(
-      (leaf.p0.x + leaf.p1.x) / 2,
-      (leaf.p0.y + leaf.p1.y) / 2,
-    )
-    .lineTo(
-      (leaf.p2.x + leaf.p3.x) / 2,
-      (leaf.p2.y + leaf.p3.y) / 2,
-    )
+    .moveTo(tipRule.start.x, tipRule.start.y)
+    .lineTo(tipRule.end.x, tipRule.end.y)
+    .moveTo(centerRule.start.x, centerRule.start.y)
+    .lineTo(centerRule.end.x, centerRule.end.y)
     .stroke({ color: 0x000000, width: 3 })
 }
 

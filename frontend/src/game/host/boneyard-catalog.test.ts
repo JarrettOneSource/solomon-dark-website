@@ -60,6 +60,20 @@ test('native default bank contains distinct exact materializations and Solomon D
   assert.deepEqual(loaded.scene, NATIVE_GENERATED_BONEYARDS[0].scene)
 })
 
+test('default selector reaches every stock-generated template', () => {
+  const catalog = createBoneyardCatalog()
+  const selected = NATIVE_GENERATED_BONEYARDS.map((_, index) => {
+    const seed = Buffer.alloc(16)
+    seed.writeUInt32BE(index)
+    return materializeBoneyard(catalog, 'default-random', seed)?.sourceSha256
+  })
+
+  assert.deepEqual(
+    selected,
+    NATIVE_GENERATED_BONEYARDS.map((entry) => entry.sourceSha256),
+  )
+})
+
 test('stage report exposes every enabled mod Boneyard and ignores non-level art', async (context) => {
   const root = await createTemporaryDirectory()
   context.after(() => rm(root, { recursive: true, force: true }))

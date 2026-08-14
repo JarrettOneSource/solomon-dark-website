@@ -11,6 +11,7 @@ import {
   nativeGateArtVertices,
   nativeGateHingeArtPosition,
   nativeGateLeaves,
+  nativeGateRules,
   NATIVE_GATE_ART_INDICES,
   NATIVE_GATE_ART_UVS,
   NATIVE_FENCE_TEXTURE_REPEAT,
@@ -236,6 +237,27 @@ test('maps the full Gate ornament UV rectangle onto all four live leaf points', 
     1, 1,
   ])
   assert.deepEqual(NATIVE_GATE_ART_INDICES, [0, 1, 2, 2, 1, 3])
+})
+
+test('places both native Gate rules on their recovered endpoints', () => {
+  const leaf = nativeGateLeaves([{ x: 10, y: 120 }, { x: 160, y: 120 }])[0]
+
+  assert.deepEqual(nativeGateRules(leaf), [
+    {
+      end: leaf.p3,
+      start: { x: leaf.p1.x, y: leaf.p1.y + 32 },
+    },
+    {
+      end: {
+        x: (leaf.p2.x + leaf.p3.x) / 2,
+        y: (leaf.p2.y + leaf.p3.y) / 2,
+      },
+      start: {
+        x: (leaf.p0.x + leaf.p1.x) / 2,
+        y: (leaf.p0.y + leaf.p1.y) / 2,
+      },
+    },
+  ])
 })
 
 test('maps every record-7 source corner to the same Gate quad in Canvas2D', () => {

@@ -370,6 +370,71 @@ test('host starts one exact random Boneyard for every connected client', async (
   assert.equal(loadedA.boneyard.scene.solomonDig?.frameProgram.length, 29)
 })
 
+test('standalone host resets its run after the final client leaves', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    resetWhenEmpty: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const firstLoaded = nextMessage(first.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const firstRun = await firstLoaded
+  assert.equal(firstRun.type, 'server-boneyard-loaded')
+
+  await closeSocket(first.socket)
+  await waitFor(() => host.loadedBoneyard() === null)
+  assert.equal(host.hostPlayerId(), null)
+  assert.equal(host.state().world.kind, 'hub')
+
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => second.socket.close())
+  assert.equal(second.welcome.playerId, 'player-1')
+  assert.equal(second.welcome.snapshot.tick, 0)
+  assert.equal(second.welcome.snapshot.world.kind, 'hub')
+  const secondLoaded = nextMessage(second.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const secondRun = await secondLoaded
+  assert.equal(secondRun.type, 'server-boneyard-loaded')
+  assert.notEqual(secondRun.boneyard.runId, firstRun.boneyard.runId)
+  assert.notEqual(secondRun.boneyard.seed, firstRun.boneyard.seed)
+})
+
+test('persistent host retains its loaded run across an empty interval', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const loaded = nextMessage(first.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const firstRun = await loaded
+  assert.equal(firstRun.type, 'server-boneyard-loaded')
+  await closeSocket(first.socket)
+  await waitFor(() => host.playerCount() === 0)
+
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => second.socket.close())
+  assert.equal(second.welcome.snapshot.world.kind, 'boneyard')
+  if (second.welcome.snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(second.welcome.snapshot.world.runId, firstRun.boneyard.runId)
+  assert.equal(host.loadedBoneyard()?.runId, firstRun.boneyard.runId)
+})
+
 test('host exposes and authoritatively loads a selected mod Boneyard', async (context) => {
   const mod = modBoneyardEntry()
   const host = await startGameHost({

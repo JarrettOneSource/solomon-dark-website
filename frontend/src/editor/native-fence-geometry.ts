@@ -17,6 +17,11 @@ export interface NativeGateLeafOverride {
   tip: Vec2
 }
 
+export interface NativeGateRule {
+  end: Vec2
+  start: Vec2
+}
+
 export interface NativeGateArtCanvasTransform {
   a: number
   b: number
@@ -132,4 +137,25 @@ export function nativeGateHingeArtPosition(leaf: NativeGateLeaf): Vec2 {
     x: (leaf.p0.x + leaf.p1.x) / 2,
     y: (leaf.p0.y + leaf.p1.y) / 2 + 7,
   }
+}
+
+export function nativeGateRules(
+  leaf: NativeGateLeaf,
+): readonly [NativeGateRule, NativeGateRule] {
+  return [
+    {
+      end: leaf.p3,
+      start: { x: leaf.p1.x, y: leaf.p1.y + 32 },
+    },
+    {
+      end: {
+        x: (leaf.p2.x + leaf.p3.x) / 2,
+        y: (leaf.p2.y + leaf.p3.y) / 2,
+      },
+      start: {
+        x: (leaf.p0.x + leaf.p1.x) / 2,
+        y: (leaf.p0.y + leaf.p1.y) / 2,
+      },
+    },
+  ]
 }

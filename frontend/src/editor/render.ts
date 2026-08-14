@@ -12,6 +12,7 @@ import {
   nativeGateLeaf,
   nativeGateHingeArtPosition,
   nativeGateLeaves,
+  nativeGateRules,
   NATIVE_FENCE_GRATE_HEIGHT,
   NATIVE_FENCE_TEXTURE_REPEAT,
   type NativeGateLeafOverride,
@@ -1433,20 +1434,12 @@ function drawGateLeaf(
   ctx.save()
   ctx.strokeStyle = '#000'
   ctx.lineWidth = 3 * cam.zoom
-  strokePath(ctx, [
-    worldToScreen(leaf.p1, cam, w, h),
-    worldToScreen({ x: leaf.p3.x, y: leaf.p3.y + 32 }, cam, w, h),
-  ])
-  strokePath(ctx, [
-    worldToScreen({
-      x: (leaf.p0.x + leaf.p1.x) / 2,
-      y: (leaf.p0.y + leaf.p1.y) / 2,
-    }, cam, w, h),
-    worldToScreen({
-      x: (leaf.p2.x + leaf.p3.x) / 2,
-      y: (leaf.p2.y + leaf.p3.y) / 2,
-    }, cam, w, h),
-  ])
+  for (const rule of nativeGateRules(leaf)) {
+    strokePath(ctx, [
+      worldToScreen(rule.start, cam, w, h),
+      worldToScreen(rule.end, cam, w, h),
+    ])
+  }
   ctx.restore()
 }
 

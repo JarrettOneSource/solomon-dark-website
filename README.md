@@ -105,7 +105,9 @@ Run only the headless host with `SDR_GAME_BOOTSTRAP_CREDENTIAL` set to a strong
 secret and then `npm run game:host`. Its first stdout line is a machine-readable
 readiness record for a desktop or cloud supervisor. See
 `docs/game-runtime-architecture.md` for the supported solo, peer-hosted,
-browser-provisioned, and dedicated topology.
+browser-provisioned, and dedicated topology. This standalone host ends its
+current run when the final client leaves, so a desktop restart or browser
+refresh begins from a fresh Hub and materializes a new random Boneyard.
 
 Production browser sessions use the bundled `GameHost/game-session-supervisor.mjs`.
 The website's `POST /api/game/sessions` adapter authenticates to that
