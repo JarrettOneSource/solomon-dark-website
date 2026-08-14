@@ -1,14 +1,46 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { Container } from 'pixi.js'
+
 import {
   TITLE_CLOUD_WIDTH,
   TITLE_GRAVE_ROWS,
+  TITLE_SOLOMON_LAYER_Z,
   createTitleGraveRows,
   stepTitleGraveRow,
   tileStart,
   titleBackdropOffsetsAt,
 } from './title-menu-render-contract.ts'
+
+test('title Solomon keeps every cloak pass painter-above the eyes', () => {
+  const parent = new Container({ label: 'title-solomon' })
+  const child = (label: string, zIndex: number) => {
+    const container = new Container({ label })
+    container.zIndex = zIndex
+    return container
+  }
+  parent.addChild(
+    child('body', TITLE_SOLOMON_LAYER_Z.body),
+    child('eyes', TITLE_SOLOMON_LAYER_Z.eyes),
+    child('cloak-current-first', TITLE_SOLOMON_LAYER_Z.cloak),
+    child('cloak-current-second', TITLE_SOLOMON_LAYER_Z.cloak),
+    child('cloak-next-first', TITLE_SOLOMON_LAYER_Z.cloak),
+    child('cloak-next-second', TITLE_SOLOMON_LAYER_Z.cloak),
+  )
+
+  parent.sortChildren()
+
+  assert.deepEqual(parent.children.map(({ label }) => label), [
+    'body',
+    'eyes',
+    'cloak-current-first',
+    'cloak-current-second',
+    'cloak-next-first',
+    'cloak-next-second',
+  ])
+  parent.destroy({ children: true })
+})
 
 test('title parallax uses the recovered native rates', () => {
   const start = titleBackdropOffsetsAt(0)

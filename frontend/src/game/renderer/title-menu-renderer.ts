@@ -20,6 +20,7 @@ import {
   TITLE_GRAVE_REGISTRATION,
   TITLE_RENDER_HEIGHT,
   TITLE_RENDER_WIDTH,
+  TITLE_SOLOMON_LAYER_Z,
   createTitleGraveRows,
   stepTitleGraveRow,
   tileStart,
@@ -483,11 +484,17 @@ function syncGraveRow(
 function createSolomonView(texture: (source: string) => Texture) {
   const container = new Container({ label: 'title-solomon' })
   container.position.set(0, 300)
-  const body = stageSprite(texture(menuSolomon.body), 48, 106, 208, 498, 0)
-  const eyes = stageSprite(texture(menuSolomon.eyes), 50, 230, 171, 30, 1)
+  container.sortableChildren = true
+  const body = stageSprite(
+    texture(menuSolomon.body), 48, 106, 208, 498, TITLE_SOLOMON_LAYER_Z.body,
+  )
+  const eyes = stageSprite(
+    texture(menuSolomon.eyes), 50, 230, 171, 30, TITLE_SOLOMON_LAYER_Z.eyes,
+  )
   const cloaks = Array.from({ length: 4 }, () => {
     const sprite = new Sprite()
     sprite.eventMode = 'none'
+    sprite.zIndex = TITLE_SOLOMON_LAYER_Z.cloak
     return sprite
   })
   const cloakTextures = menuSolomon.cloak.map(texture)

@@ -7,6 +7,11 @@ export const TITLE_DETAIL_PHASE = 0.384
 export const TITLE_SHADOW_PHASE = 0.075
 export const TITLE_HORIZON_OFFSET = 356
 export const TITLE_GRASS_OFFSET = 385
+export const TITLE_SOLOMON_LAYER_Z = {
+  body: 0,
+  eyes: 1,
+  cloak: 2,
+} as const
 
 export interface TitleGraveRowDefinition {
   baseline: number
