@@ -38,6 +38,7 @@ import {
 import './hub.css'
 
 interface HubSceneProps {
+  accountUsername: string | null
   audio: GameAudioDirector
   boneyards: readonly BoneyardChoice[]
   getPingMs: () => number | null
@@ -64,6 +65,7 @@ const HUB_REGION_ACCESSIBILITY: Readonly<Record<HubRegionId, string>> = {
 }
 
 export default function HubScene({
+  accountUsername,
   audio,
   boneyards,
   getPingMs,
@@ -273,6 +275,7 @@ export default function HubScene({
         <div ref={hostRef} className="hub-world-renderer" />
 
         <GameHud
+          accountUsername={accountUsername}
           element={element}
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}

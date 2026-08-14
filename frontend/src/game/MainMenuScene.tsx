@@ -22,6 +22,7 @@ import { GameAudioDirector } from './game-audio-director.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
 import type { GameConnectionStage } from './engine.ts'
+import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import HubScene from './HubScene.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
@@ -174,6 +175,7 @@ function PlayActions({
 }
 
 interface MainMenuSceneProps {
+  accountUsername: string | null
   displayName: string
   connectSession: (
     character: PlayerCharacterConfig,
@@ -185,6 +187,7 @@ interface MainMenuSceneProps {
 }
 
 export default function MainMenuScene({
+  accountUsername,
   connectSession,
   displayName,
   initialScreen = 'root',
@@ -403,6 +406,10 @@ export default function MainMenuScene({
     fixedViewport,
     fixedGameStageBounds(fixedViewport, 'right', 'bottom'),
   )
+  const accountStageStyle = fixedStageStyle(
+    fixedViewport,
+    fixedGameStageBounds(fixedViewport, 'left', 'top'),
+  )
 
   const beginNewGame = async () => {
     if (preparing || connecting) return
@@ -490,6 +497,13 @@ export default function MainMenuScene({
               viewport={fixedViewport}
             />
 
+            <div
+              className="main-menu-native-stage main-menu-account-stage"
+              style={accountStageStyle}
+            >
+              <GameAccountName placement="title" username={accountUsername} />
+            </div>
+
             <div className="main-menu-native-stage" style={nativeStageStyle}>
               <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
                 {screen === 'root' ? (
@@ -535,6 +549,7 @@ export default function MainMenuScene({
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
           && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
           <BoneyardScene
+            accountUsername={accountUsername}
             audio={audio}
             boneyard={loadedBoneyard}
             getPingMs={session.getPingMs}
@@ -550,6 +565,7 @@ export default function MainMenuScene({
           />
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
           <HubScene
+            accountUsername={accountUsername}
             audio={audio}
             boneyards={session.boneyards}
             getPingMs={session.getPingMs}

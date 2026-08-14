@@ -46,6 +46,7 @@ const NATIVE_DARKNESS_MAX_ALPHA = 0.96
 const grayscaleAlphaMasks = new WeakMap<HTMLImageElement, HTMLCanvasElement>()
 
 interface BoneyardSceneProps {
+  accountUsername: string | null
   audio: GameAudioDirector
   boneyard: LoadedBoneyard
   getPingMs: () => number | null
@@ -73,6 +74,7 @@ interface BoneyardFrameDiagnostics {
 type RendererState = 'loading' | 'ready'
 
 export default function BoneyardScene({
+  accountUsername,
   audio,
   boneyard: loaded,
   getPingMs,
@@ -323,6 +325,7 @@ export default function BoneyardScene({
         ) : null}
 
         <GameHud
+          accountUsername={accountUsername}
           element={element}
           getPingMs={getPingMs}
           initialSnapshot={initialSnapshot}

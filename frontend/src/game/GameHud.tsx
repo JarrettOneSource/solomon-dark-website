@@ -4,11 +4,13 @@ import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
+import GameAccountName from './GameAccountName.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 
 const XP_PROGRESS = 0.45
 
 interface GameHudProps {
+  accountUsername: string | null
   additionalAllyRows?: readonly AllyHudRow[]
   element: WizardElement
   getPingMs: () => number | null
@@ -92,6 +94,7 @@ function PingCounter({
 }
 
 export default function GameHud({
+  accountUsername,
   additionalAllyRows,
   element,
   getPingMs,
@@ -106,6 +109,7 @@ export default function GameHud({
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
+      <GameAccountName placement="hud" username={accountUsername} />
       <AllyHud
         additionalRows={additionalAllyRows}
         initialSnapshot={initialSnapshot}

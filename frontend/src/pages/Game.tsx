@@ -73,7 +73,8 @@ export default function Game() {
     return () => { cancelled = true }
   }, [])
 
-  const displayName = user?.username ?? 'Helvidius'
+  const accountUsername = user?.username ?? null
+  const displayName = accountUsername ?? 'Helvidius'
   const progress = loadProgress.total === 0
     ? 1
     : loadProgress.completed / loadProgress.total
@@ -133,6 +134,7 @@ export default function Game() {
       {readiness === 'ready'
         ? (
             <MainMenuScene
+              accountUsername={accountUsername}
               connectSession={connectSession}
               displayName={displayName}
               initialScreen={lobbyId ? 'create' : 'root'}
