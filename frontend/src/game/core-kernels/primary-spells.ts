@@ -9,7 +9,7 @@ import {
   type PlayerPrimaryCastState,
   type WizardElement,
 } from './player-character.ts'
-import type { NativePrimarySkillRankStats } from './player-progression.ts'
+import type { NativePrimarySkillProfile } from './native-primary-skill-profile.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
@@ -237,7 +237,7 @@ export interface PrimarySpellCastAuthority {
   availableMana: number
   castProgressFactor: number
   eligible: boolean
-  primarySkill: NativePrimarySkillRankStats
+  primarySkill: NativePrimarySkillProfile
 }
 
 export interface PrimarySpellTickContext {
@@ -1274,7 +1274,7 @@ function createOneShotProjectile(
   ownerId: string,
   player: PlayerCharacterState,
   kind: 'ether' | 'fire',
-  primarySkill: NativePrimarySkillRankStats,
+  primarySkill: NativePrimarySkillProfile,
   worldKey: string,
   targets: readonly PrimarySpellTarget[],
   underpowered: boolean,
@@ -1328,7 +1328,7 @@ function createOneShotProjectile(
 
 function primarySpellManaCost(
   element: WizardElement,
-  primarySkill: NativePrimarySkillRankStats,
+  primarySkill: NativePrimarySkillProfile,
 ): number {
   return element === 'ether' || element === 'fire'
     ? primarySkill.manaCost
@@ -1336,7 +1336,7 @@ function primarySpellManaCost(
 }
 
 function primarySpellChannelDamage(
-  primarySkill: NativePrimarySkillRankStats,
+  primarySkill: NativePrimarySkillProfile,
   underpowered: boolean,
 ): number {
   return primarySkill.damageMinimum / PRIMARY_SPELL_TICKS_PER_SECOND
@@ -1345,7 +1345,7 @@ function primarySpellChannelDamage(
 
 function assertPrimarySkillMatchesElement(
   element: WizardElement,
-  primarySkill: NativePrimarySkillRankStats,
+  primarySkill: NativePrimarySkillProfile,
 ): void {
   if (primarySkill.skillId !== PRIMARY_SKILL_ID_BY_ELEMENT[element]) {
     throw new Error(

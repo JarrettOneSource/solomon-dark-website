@@ -1009,7 +1009,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
   assert.ok(bolt.endpoint.y >= 375, `Air escaped retired boundary: ${bolt.endpoint.y}`)
 })
 
-test('simulation wires effective primary rank into debit and captured projectile damage', () => {
+test('booked primary ranks feed new casts while existing projectile payloads stay immutable', () => {
   const fire = {
     discipline: 'arcane',
     displayName: 'Fire Caster',
@@ -1028,10 +1028,8 @@ test('simulation wires effective primary rank into debit and captured projectile
 
   rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
   rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
-  assert.equal(
-    getPlayerProgression(rankOne, 'caster').currentMana,
-    getPlayerProgression(rankTwo, 'caster').currentMana,
-  )
+  assert.equal(getPlayerProgression(rankOne, 'caster').currentMana, 88.1)
+  assert.equal(getPlayerProgression(rankTwo, 'caster').currentMana, 85.1)
 
   for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
     rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })

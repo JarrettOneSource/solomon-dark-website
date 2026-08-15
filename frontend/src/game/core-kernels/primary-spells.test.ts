@@ -10,9 +10,12 @@ import {
 } from './player-character.ts'
 import {
   createPlayerSkillBook,
-  effectivePrimarySkillRankStats,
-  type NativePrimarySkillRankStats,
+  playerStatBook,
 } from './player-progression.ts'
+import {
+  nativePrimarySkillProfile,
+  type NativePrimarySkillProfile,
+} from './native-primary-skill-profile.ts'
 import {
   createPrimarySpellSimulation,
   PRIMARY_CAST_EMISSION_TICK,
@@ -143,7 +146,7 @@ function earthChargeAfter(updateCount: number): number {
 
 interface DirectSpellHarness {
   players: Readonly<Record<string, PlayerCharacterState>>
-  primarySkill: NativePrimarySkillRankStats
+  primarySkill: NativePrimarySkillProfile
   spells: PrimarySpellSimulationState
   tick: number
 }
@@ -151,7 +154,7 @@ interface DirectSpellHarness {
 function primarySkillRankStats(
   element: WizardElement,
   rank: number,
-): NativePrimarySkillRankStats {
+): NativePrimarySkillProfile {
   const book = createPlayerSkillBook({
     discipline: 'arcane',
     displayName: 'Caster',
@@ -159,10 +162,11 @@ function primarySkillRankStats(
   })
   const effectiveRanks = [...book.effectiveRanks]
   effectiveRanks[book.primarySkillId] = rank
-  return effectivePrimarySkillRankStats({
-    ...book,
-    effectiveRanks: Object.freeze(effectiveRanks),
-  })
+  return nativePrimarySkillProfile(
+    { ...book, effectiveRanks: Object.freeze(effectiveRanks) },
+    playerStatBook(),
+    { damage: 1, manaCost: 1 },
+  )
 }
 
 function directSpellHarness(element: WizardElement, rank = 1): DirectSpellHarness {
@@ -181,7 +185,7 @@ function stepSpellKernel(
   availableMana: number,
   eligible = true,
   canPlaceProjectile: () => boolean = () => true,
-  primarySkill = state.primarySkill,
+  primarySkill: NativePrimarySkillProfile = state.primarySkill,
 ): {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaSpent: number

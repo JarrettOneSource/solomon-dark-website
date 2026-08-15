@@ -5,6 +5,7 @@ import './native-secondary-ability-contract.test.ts'
 import './native-secondary-abilities.test.ts'
 import './secondary-ability-loadout.test.ts'
 import '../skill-book.test.ts'
+import './native-primary-skill-profile.test.ts'
 
 import {
   MAX_PLAYER_EXPERIENCE,

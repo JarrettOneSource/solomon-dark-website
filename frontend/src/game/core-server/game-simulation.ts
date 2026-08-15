@@ -63,7 +63,6 @@ import {
 } from '../core-kernels/hub-economy.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
 import {
-  resolveNativePrimarySkillStats,
   resolveNativeSkillDamageValue,
   resolveNativeSkillManaCostValue,
 } from '../core-kernels/native-offensive-resolution.ts'
@@ -74,13 +73,13 @@ import {
 } from '../core-kernels/player-skill-runtime.ts'
 import {
   boneyardEnemyExperienceAward,
-  effectivePrimarySkillRankStats,
   NATIVE_SKILL_CATALOG,
   type PlayerLevelUpBarrierState,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import { nativePrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import {
   applyNativeSecondaryGolemDamage,
@@ -1977,8 +1976,9 @@ function finishGameSimulationTick(
       if (derived === null || runtime === null) {
         throw new Error(`player ${playerId} has no native skill runtime`)
       }
-      const primarySkill = resolveNativePrimarySkillStats(
-        effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!),
+      const primarySkill = nativePrimarySkillProfile(
+        playerEntities.skillBooks[index]!,
+        playerEntities.statBooks[index]!,
         {
           damage: derived.offensiveDamageFactor,
           equipment: runtime.equipmentModifiers,
