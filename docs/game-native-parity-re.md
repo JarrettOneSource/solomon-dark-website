@@ -14869,28 +14869,31 @@ while private offers and transport remain live. `BoneyardScene` now retains
 its run-initial snapshot just as `HubScene` does, so barrier snapshot changes
 do not destroy/reload the resident WebGL renderer or discard effect actors.
 
-The decisive two-client Chromium flow ran on 2026-08-15 with
+The decisive post-rebase two-client Chromium 150 flow ran on 2026-08-15 with
 `tools/smoke-multiplayer-combat-lifecycle.mjs --feature-only` and exited zero
 with empty page/console error arrays. It used ordinary keyboard/mouse combat
-after the physical gate and Solomon proximity sequence. The receipt pinned:
+after the physical gate and Solomon proximity sequence. Its supported resident
+Web Audio probe observed the actual decoded buffer starts rather than only
+manifest declarations. The receipt pinned:
 
-- a nonterminal Air contact on actor 3, health `2.5 ->
-  1.8981406249850807`, with replicated `hitFlash=1`;
-- Fire terminal ownership on actor 1 and 20 independent Skeleton effect
+- a nonterminal Air contact on actor 11, health `2.5 -> 1.900390625`, with a
+  replicated positive native hit latch (`hitFlash=0.4954999999701613`);
+- Fire terminal ownership on actor 10 and 20 independent Skeleton effect
   actors, including the record-86 Unbind and Enhanced Effects skull variant;
 - shared XP `89 -> 106`, level 2, HUD fill `98.88888888888889% ->
   22.857142857142858%`, and distinct offers host `[18,21,65]` versus guest
   `[48,27,67]`;
-- an unchanged authoritative world at frozen tick `15965` after the host
+- an unchanged authoritative world at frozen tick `19068` after the host
   selected and attempted movement/casting, followed by the exact first resumed
-  tick `15966` only after the guest selected;
-- the level-up WAV pair at pitch multipliers `2,3`, death audio, effect aging,
-  and once-only retirement.
+  tick `19069` only after the guest selected;
+- actual level-up WAV buffer starts at pitch multipliers `2,3` on both clients,
+  the Skeleton death WAV, effect aging after release, and eventual retirement
+  on both independent 20 Hz presentation timelines.
 
 Visual receipts are
-`/tmp/solomon-dark-hit-death-xp-final-34.VyARFk/solomon-dark-multiplayer-enemy-hit.png`
-(SHA-256 `209fa296c945b5d7e1431b3477a6cf7f74438408a835ed1c6cc75a61ae3a526a`),
+`/tmp/solomon-dark-hit-death-xp-post-rebase-final3.7rBOCS/solomon-dark-multiplayer-enemy-hit.png`
+(SHA-256 `d31cd1696491c75515e54ee3fc46bb4c98cdbb1450401a2eed169018b0b917e0`),
 `.../solomon-dark-multiplayer-level-up.png`
-(`2abb0318e6d6647ebfbbcd7a87eeba6aef0d7e25d60103125a8f8e6ff7bd42ae`),
+(`67d1ee5dcc2ba258ba5150ac9897c51134b7c5be9e008a44656b45a048dc789a`),
 and `.../solomon-dark-multiplayer-level-up-waiting.png`
-(`54b03c5d8a70a72c499f1e9ab9152ad966bfd898819ddca3b6d3152a58ec5092`).
+(`51b7b2eefa20579c55e4e2d9cff179129a19b5637462cf949454293da2f7f2bb`).

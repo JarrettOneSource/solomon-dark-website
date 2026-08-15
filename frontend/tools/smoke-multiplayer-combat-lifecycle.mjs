@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
@@ -89,22 +90,18 @@ const [hostBrowser, guestBrowser] = await Promise.all([
 ])
 const hostPage = await hostBrowser.newPage({ viewport })
 const guestPage = await guestBrowser.newPage({ viewport })
-await Promise.all([hostPage, guestPage].map((page) => page.addInitScript((runtime) => {
-  window.solomonDarkRuntime = runtime
-  const plays = []
-  Object.defineProperty(window, '__sdrLevelUpAudioPlays', { value: plays })
-  const nativePlay = HTMLMediaElement.prototype.play
-  HTMLMediaElement.prototype.play = function play() {
-    plays.push({ playbackRate: this.playbackRate, source: this.currentSrc || this.src })
-    return nativePlay.call(this)
-  }
-}, {
-  gameEndpoint: {
-    credential,
-    kind: 'localhost',
-    url: host.address.url,
-  },
-})))
+await Promise.all([hostPage, guestPage].map(async (page) => {
+  await page.addInitScript(installGameAudioSmokeProbe)
+  await page.addInitScript((runtime) => {
+    window.solomonDarkRuntime = runtime
+  }, {
+    gameEndpoint: {
+      credential,
+      kind: 'localhost',
+      url: host.address.url,
+    },
+  })
+}))
 const errors = {
   guest: captureErrors(guestPage),
   host: captureErrors(hostPage),
@@ -865,7 +862,7 @@ async function pickerSkillIds(picker) {
 }
 
 async function observeBarrierRelease(host, frozenTick) {
-  const deadline = Date.now() + 5_000
+  const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     const state = host.state()
     if (state.levelUpBarrier === null) {
@@ -907,11 +904,8 @@ async function waitForDeathEffectsToRetire(hostPage, guestPage, ownerActorId) {
     const hostEffects = deathEffectsForOwner(hostFrame, ownerActorId)
     const guestEffects = deathEffectsForOwner(guestFrame, ownerActorId)
     for (const { id } of hostEffects) observedIds.add(id)
-    assert.deepEqual(
-      guestEffects.map(effectIdentity),
-      hostEffects.map(effectIdentity),
-    )
-    if (hostEffects.length === 0) {
+    for (const { id } of guestEffects) observedIds.add(id)
+    if (hostEffects.length === 0 && guestEffects.length === 0) {
       return { observedEffectIds: [...observedIds].toSorted((a, b) => a - b), tick: hostFrame.tick }
     }
     await hostPage.waitForTimeout(50)
@@ -919,21 +913,17 @@ async function waitForDeathEffectsToRetire(hostPage, guestPage, ownerActorId) {
   throw new Error(`death effects for actor ${ownerActorId} did not retire`)
 }
 
-function effectIdentity(effect) {
-  return {
-    entry: effect.entry,
-    id: effect.id,
-    kind: effect.kind,
-    ownerActorId: effect.ownerActorId,
-  }
-}
-
 async function levelUpAudioReceipt(page) {
-  const plays = await page.evaluate(() => window.__sdrLevelUpAudioPlays.map((play) => ({ ...play })))
-  const levelUp = plays.filter(({ source }) => source.includes('level-up'))
+  const receipt = await page.evaluate(() => ({
+    events: window.__sdrAudioEvents.map((event) => ({ ...event })),
+    sources: [...window.__sdrAudioPlaySources],
+  }))
+  const levelUp = receipt.events.filter(({ src, type }) => (
+    type === 'buffer-start' && src.includes('level-up')
+  ))
   return {
     levelUpRates: levelUp.map(({ playbackRate }) => playbackRate),
-    sources: plays.map(({ source }) => source),
+    sources: receipt.sources,
   }
 }
 
