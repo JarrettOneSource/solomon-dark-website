@@ -1,12 +1,16 @@
-import { Container, FillGradient, Graphics } from 'pixi.js'
+import {
+  Container,
+  Geometry,
+  Mesh,
+  Shader,
+  Texture,
+} from 'pixi.js'
 
 import { nativeGatePainterRoot } from '../../editor/native-fence-geometry.ts'
-import type { Vec2 } from '../../editor/model.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import {
   nativeBoneyardComplexShadowRecords,
   nativeBoneyardFenceGrateShadows,
-  nativeBoneyardPackedShadowAlpha,
   nativeBoneyardProjectedShadowEdges,
   nativeBoneyardRailsShadows,
   nativeBoneyardWallShadow,
@@ -14,6 +18,10 @@ import {
   type NativeBoneyardProjectedShadowEdge,
 } from './boneyard-complex-shadows.ts'
 import type { NativeBoneyardLightSource } from './boneyard-lighting.ts'
+import {
+  buildNativeBoneyardShadowMesh,
+  nativeBoneyardShadowLineQuad,
+} from './boneyard-shadow-mesh.ts'
 
 interface ShadowDepthOwner {
   renderable: boolean
@@ -35,20 +43,24 @@ const NATIVE_SHADOW_DEPTH_OFFSET = 0.001
 interface StaticShadowView {
   caster: NativeBoneyardComplexShadowCaster
   depthOwner: ShadowDepthOwner
-  graphics: Graphics
-  gradients: FillGradient[]
+  mesh: ShadowMeshView
 }
 
 interface DynamicShadowView {
   caster: NativeBoneyardComplexShadowCaster
-  graphics: Graphics
-  gradients: FillGradient[]
+  mesh: ShadowMeshView
+}
+
+interface ShadowMeshView {
+  geometry: Geometry
+  mesh: Mesh<Geometry, Shader>
 }
 
 export class BoneyardComplexShadowPresentation {
   private readonly dynamicViews = new Map<string, DynamicShadowView>()
   private readonly liveDynamicIds = new Set<string>()
   private readonly root: Container
+  private readonly shader = shadowShader()
   private readonly staticViews: readonly StaticShadowView[]
 
   constructor(
@@ -57,9 +69,9 @@ export class BoneyardComplexShadowPresentation {
   ) {
     this.root = root
     this.staticViews = staticCasters.map(({ caster, depthOwner }) => {
-      const graphics = shadowGraphics(caster.id)
-      root.addChild(graphics)
-      return { caster, depthOwner, gradients: [], graphics }
+      const mesh = shadowMesh(caster.id, this.shader)
+      root.addChild(mesh.mesh)
+      return { caster, depthOwner, mesh }
     })
   }
 
@@ -74,13 +86,12 @@ export class BoneyardComplexShadowPresentation {
     let recordCount = 0
     for (const view of this.staticViews) {
       if (!view.depthOwner.renderable) {
-        view.graphics.renderable = false
+        view.mesh.mesh.renderable = false
         continue
       }
-      view.graphics.zIndex = view.depthOwner.zIndex - NATIVE_SHADOW_DEPTH_OFFSET
+      view.mesh.mesh.zIndex = view.depthOwner.zIndex - NATIVE_SHADOW_DEPTH_OFFSET
       const result = renderCaster(
-        view.graphics,
-        view.gradients,
+        view.mesh,
         view.caster,
         sources,
         presentationFrame,
@@ -100,17 +111,16 @@ export class BoneyardComplexShadowPresentation {
       liveDynamicIds.add(id)
       let view = this.dynamicViews.get(id)
       if (!view) {
-        const graphics = shadowGraphics(id)
-        view = { caster: gateCaster(id, gate), gradients: [], graphics }
+        const mesh = shadowMesh(id, this.shader)
+        view = { caster: gateCaster(id, gate), mesh }
         this.dynamicViews.set(id, view)
-        this.root.addChild(graphics)
+        this.root.addChild(mesh.mesh)
       } else {
         view.caster = gateCaster(id, gate)
       }
-      view.graphics.zIndex = depth - NATIVE_SHADOW_DEPTH_OFFSET
+      view.mesh.mesh.zIndex = depth - NATIVE_SHADOW_DEPTH_OFFSET
       const result = renderCaster(
-        view.graphics,
-        view.gradients,
+        view.mesh,
         view.caster,
         sources,
         presentationFrame,
@@ -121,9 +131,7 @@ export class BoneyardComplexShadowPresentation {
     }
     for (const [id, view] of this.dynamicViews) {
       if (liveDynamicIds.has(id)) continue
-      destroyGradients(view.gradients)
-      this.root.removeChild(view.graphics)
-      view.graphics.destroy()
+      destroyShadowMesh(this.root, view.mesh)
       this.dynamicViews.delete(id)
     }
     return { casterCount, quadCount, recordCount }
@@ -131,102 +139,54 @@ export class BoneyardComplexShadowPresentation {
 
   destroy(): void {
     for (const view of this.staticViews) {
-      destroyGradients(view.gradients)
-      this.root.removeChild(view.graphics)
-      view.graphics.destroy()
+      destroyShadowMesh(this.root, view.mesh)
     }
     for (const view of this.dynamicViews.values()) {
-      destroyGradients(view.gradients)
-      this.root.removeChild(view.graphics)
-      view.graphics.destroy()
+      destroyShadowMesh(this.root, view.mesh)
     }
     this.dynamicViews.clear()
     this.liveDynamicIds.clear()
+    this.shader.destroy(true)
   }
 }
 
 function renderCaster(
-  graphics: Graphics,
-  gradients: FillGradient[],
+  view: ShadowMeshView,
   caster: NativeBoneyardComplexShadowCaster,
   sources: readonly NativeBoneyardLightSource[],
   presentationFrame: number,
 ): { quadCount: number; recordCount: number } {
-  destroyGradients(gradients)
-  graphics.clear()
   const records = nativeBoneyardComplexShadowRecords(caster, sources, presentationFrame)
-  let quadCount = 0
+  const projectedEdges: NativeBoneyardProjectedShadowEdge[] = []
+  const lineQuads: NativeBoneyardProjectedShadowEdge[] = []
   for (const record of records) {
     if (caster.program?.kind === 'fence-grate') {
       const grate = nativeBoneyardFenceGrateShadows(caster.program, record)
       for (const bar of grate.bars) {
-        drawProjectedEdge(graphics, gradients, bar)
-        quadCount += 1
+        projectedEdges.push(bar)
       }
-      graphics
-        .moveTo(grate.rail.start.x, grate.rail.start.y)
-        .lineTo(grate.rail.end.x, grate.rail.end.y)
-        .stroke({
-          alpha: nativeBoneyardPackedShadowAlpha(grate.rail.alpha),
-          color: 0x000000,
-          width: grate.rail.width,
-        })
-      quadCount += 1
+      lineQuads.push(nativeBoneyardShadowLineQuad(grate.rail))
       continue
     }
     if (caster.program?.kind === 'rails') {
       for (const rail of nativeBoneyardRailsShadows(caster.program, record)) {
-        graphics
-          .moveTo(rail.start.x, rail.start.y)
-          .lineTo(rail.end.x, rail.end.y)
-          .stroke({
-            alpha: nativeBoneyardPackedShadowAlpha(rail.alpha),
-            color: 0x000000,
-            width: rail.width,
-          })
-        quadCount += 1
+        lineQuads.push(nativeBoneyardShadowLineQuad(rail))
       }
       continue
     }
     if (caster.program?.kind === 'wall') {
-      drawProjectedEdge(graphics, gradients, nativeBoneyardWallShadow(caster.program, record))
-      quadCount += 1
+      projectedEdges.push(nativeBoneyardWallShadow(caster.program, record))
       continue
     }
     for (const edge of nativeBoneyardProjectedShadowEdges(caster, record)) {
-      drawProjectedEdge(graphics, gradients, edge)
-      quadCount += 1
+      projectedEdges.push(edge)
     }
   }
-  graphics.renderable = quadCount > 0
+  const mesh = buildNativeBoneyardShadowMesh(projectedEdges, lineQuads)
+  updateShadowMesh(view, mesh)
+  const quadCount = projectedEdges.length + lineQuads.length
+  view.mesh.renderable = quadCount > 0
   return { quadCount, recordCount: records.length }
-}
-
-function drawProjectedEdge(
-  graphics: Graphics,
-  gradients: FillGradient[],
-  edge: NativeBoneyardProjectedShadowEdge,
-): void {
-  const gradient = new FillGradient({
-    colorStops: [
-      { color: [0, 0, 0, nativeBoneyardPackedShadowAlpha(edge.baseAlpha)], offset: 0 },
-      { color: [0, 0, 0, nativeBoneyardPackedShadowAlpha(edge.tipAlpha)], offset: 1 },
-    ],
-    end: midpoint(edge.tipStart, edge.tipEnd),
-    start: midpoint(edge.baseStart, edge.baseEnd),
-    textureSpace: 'global',
-  })
-  gradients.push(gradient)
-  graphics.poly([
-    edge.baseStart.x,
-    edge.baseStart.y,
-    edge.baseEnd.x,
-    edge.baseEnd.y,
-    edge.tipEnd.x,
-    edge.tipEnd.y,
-    edge.tipStart.x,
-    edge.tipStart.y,
-  ]).fill(gradient)
 }
 
 function gateCaster(
@@ -247,21 +207,68 @@ function gateCaster(
   }
 }
 
-function shadowGraphics(id: string): Graphics {
-  const graphics = new Graphics({ label: `complex-shadow:${id}` })
-  graphics.eventMode = 'none'
-  graphics.renderable = false
-  return graphics
+function shadowMesh(id: string, shader: Shader): ShadowMeshView {
+  const geometry = new Geometry({
+    attributes: {
+      aAlpha: { buffer: new Float32Array(), format: 'float32' },
+      aPosition: { buffer: new Float32Array(), format: 'float32x2' },
+    },
+    indexBuffer: new Uint32Array(),
+    label: `complex-shadow:${id}`,
+  })
+  const mesh = new Mesh({ geometry, shader, texture: Texture.EMPTY })
+  mesh.eventMode = 'none'
+  mesh.label = `complex-shadow:${id}`
+  mesh.renderable = false
+  return { geometry, mesh }
 }
 
-function midpoint(start: Vec2, end: Vec2): Vec2 {
-  return {
-    x: (start.x + end.x) / 2,
-    y: (start.y + end.y) / 2,
-  }
+function updateShadowMesh(
+  view: ShadowMeshView,
+  mesh: ReturnType<typeof buildNativeBoneyardShadowMesh>,
+): void {
+  const positionBuffer = view.geometry.getBuffer('aPosition')
+  positionBuffer.data = mesh.positions
+  positionBuffer.update()
+  const alphaBuffer = view.geometry.getBuffer('aAlpha')
+  alphaBuffer.data = mesh.alphas
+  alphaBuffer.update()
+  view.geometry.indexBuffer.data = mesh.indices
+  view.geometry.indexBuffer.update()
 }
 
-function destroyGradients(gradients: FillGradient[]): void {
-  for (const gradient of gradients) gradient.destroy()
-  gradients.length = 0
+function destroyShadowMesh(root: Container, view: ShadowMeshView): void {
+  root.removeChild(view.mesh)
+  view.mesh.destroy()
+  view.geometry.destroy(true)
+}
+
+function shadowShader(): Shader {
+  return Shader.from({
+    gl: {
+      fragment: `
+        in float vAlpha;
+        out vec4 finalColor;
+        void main(void) {
+          finalColor = vec4(0.0, 0.0, 0.0, vAlpha);
+        }
+      `,
+      name: 'boneyard-complex-shadow',
+      vertex: `
+        in vec2 aPosition;
+        in float aAlpha;
+        uniform mat3 uProjectionMatrix;
+        uniform mat3 uWorldTransformMatrix;
+        uniform vec4 uWorldColorAlpha;
+        uniform mat3 uTransformMatrix;
+        uniform vec4 uColor;
+        out float vAlpha;
+        void main(void) {
+          mat3 matrix = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
+          gl_Position = vec4((matrix * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
+          vAlpha = aAlpha * uWorldColorAlpha.a * uColor.a;
+        }
+      `,
+    },
+  })
 }

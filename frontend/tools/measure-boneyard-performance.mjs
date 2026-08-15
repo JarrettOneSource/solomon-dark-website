@@ -8,6 +8,9 @@ const baseUrl = process.env.SDR_GAME_PERF_URL
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
 const minimumFps = Number(process.env.SDR_GAME_MIN_FPS || 0)
 const sampleMs = Number(process.env.SDR_GAME_PERF_SAMPLE_MS || 5_000)
+const viewport = parseViewport(process.env.SDR_GAME_PERF_VIEWPORT || '1600x900')
+const mobileEmulation = process.env.SDR_GAME_PERF_MOBILE === '1'
+const cpuThrottleRate = Number(process.env.SDR_GAME_CPU_THROTTLE || 1)
 const browserFrameLimitDisabled = process.env.SDR_GAME_PERF_UNCAPPED === '1'
 const presentationUncapped = process.env.SDR_GAME_PRESENTATION_UNCAPPED === '1'
 const connectedBrowser = Boolean(cdpUrl)
@@ -22,10 +25,15 @@ const browser = cdpUrl
     })
 const context = connectedBrowser
   ? browser.contexts()[0]
-  : await browser.newContext()
+  : await browser.newContext({
+      deviceScaleFactor: mobileEmulation ? 3 : 1,
+      hasTouch: mobileEmulation,
+      isMobile: mobileEmulation,
+      viewport,
+    })
 assert.ok(context, 'expected a browser context')
 const page = await context.newPage()
-await page.setViewportSize({ width: 1600, height: 900 })
+await page.setViewportSize(viewport)
 await page.bringToFront()
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
@@ -34,6 +42,14 @@ page.on('console', (message) => {
 })
 
 try {
+  if (!Number.isFinite(cpuThrottleRate) || cpuThrottleRate < 1 || cpuThrottleRate > 20) {
+    throw new Error('SDR_GAME_CPU_THROTTLE must be between 1 and 20')
+  }
+  if (cpuThrottleRate > 1) {
+    const cdp = await page.context().newCDPSession(page)
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottleRate })
+    await cdp.detach()
+  }
   const presentation = await enterBoneyard(page)
   const canvas = page.locator(
     '.boneyard-world-canvas[data-game-renderer="pixi-webgl"]',
@@ -48,14 +64,14 @@ try {
   await page.keyboard.down(movementKey)
   const moving = await measure(page, sampleMs)
   await page.keyboard.up(movementKey)
-  const runtime = await canvas.evaluate((node) => {
+  const runtime = await canvas.evaluate((node, measuredViewport) => {
     const context = node.getContext('webgl2') || node.getContext('webgl')
     const extension = context?.getExtension('WEBGL_debug_renderer_info')
     const darkness = document.querySelector('.boneyard-darkness')
     const frame = node.__sdrBoneyardFrame
     return {
       darknessAlpha: darkness instanceof HTMLCanvasElement
-        ? darknessAlphaReceipt(darkness, frame)
+        ? darknessAlphaReceipt(darkness, frame, measuredViewport)
         : null,
       domNodes: document.querySelectorAll('*').length,
       environmentMode: Number(document.querySelector('.boneyard-scene')
@@ -74,20 +90,23 @@ try {
       visibleResidentCount: frame.visibleResidentCount,
     }
 
-    function darknessAlphaReceipt(darknessCanvas, diagnostics) {
+    function darknessAlphaReceipt(darknessCanvas, diagnostics, viewportSize) {
       const darknessContext = darknessCanvas.getContext('2d')
       if (!darknessContext) return null
-      const scaleX = darknessCanvas.width / 1600
-      const scaleY = darknessCanvas.height / 900
+      const scaleX = darknessCanvas.width / viewportSize.width
+      const scaleY = darknessCanvas.height / viewportSize.height
       const player = {
         x: diagnostics.playerScreenX * scaleX,
         y: diagnostics.playerScreenY * scaleY,
       }
       const corners = [
         { x: 2 * scaleX, y: 2 * scaleY },
-        { x: 1598 * scaleX, y: 2 * scaleY },
-        { x: 2 * scaleX, y: 898 * scaleY },
-        { x: 1598 * scaleX, y: 898 * scaleY },
+        { x: (viewportSize.width - 2) * scaleX, y: 2 * scaleY },
+        { x: 2 * scaleX, y: (viewportSize.height - 2) * scaleY },
+        {
+          x: (viewportSize.width - 2) * scaleX,
+          y: (viewportSize.height - 2) * scaleY,
+        },
       ]
       const farthest = corners.reduce((best, point) => (
         Math.hypot(point.x - player.x, point.y - player.y)
@@ -110,7 +129,7 @@ try {
         ).data[3],
       }
     }
-  })
+  }, viewport)
   if (process.env.SDR_GAME_PERF_SCREENSHOT) {
     await page.screenshot({ path: process.env.SDR_GAME_PERF_SCREENSHOT })
   }
@@ -153,6 +172,9 @@ try {
     sampleSeconds: sampleMs / 1000,
     status: 'ok',
     browserFrameLimitDisabled,
+    cpuThrottleRate,
+    mobileEmulation,
+    viewport,
     presentationFrameCap: presentation.frameCap,
     presentationUncapped: presentation.uncapped,
   })}\n`)
@@ -192,6 +214,7 @@ async function measure(page, duration) {
   const before = metricMap(await cdp.send('Performance.getMetrics'))
   const samples = await page.evaluate((measurementMs) => new Promise((resolve) => {
     const presentation = window.__sdrGamePresentation
+    const longTasks = []
     const positions = []
     const residentCounts = []
     const timestamps = []
@@ -209,9 +232,18 @@ async function measure(page, duration) {
           }
         : null)
     })
+    const observer = typeof PerformanceObserver === 'undefined'
+      ? null
+      : new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            longTasks.push({ duration: entry.duration, startTime: entry.startTime })
+          }
+        })
+    observer?.observe({ entryTypes: ['longtask'] })
     setTimeout(() => {
       unsubscribe()
-      resolve({ positions, residentCounts, timestamps })
+      observer?.disconnect()
+      resolve({ longTasks, positions, residentCounts, timestamps })
     }, measurementMs)
   }), duration)
   const after = metricMap(await cdp.send('Performance.getMetrics'))
@@ -221,6 +253,7 @@ async function measure(page, duration) {
   )
   const elapsedMs = samples.timestamps.at(-1) - samples.timestamps[0]
   const slowest = [...intervals].sort((a, b) => b - a)
+  const sorted = [...intervals].sort((a, b) => a - b)
   const lowCount = Math.max(1, Math.ceil(slowest.length * 0.01))
   const slowMean = slowest.slice(0, lowCount)
     .reduce((total, value) => total + value, 0) / lowCount
@@ -231,6 +264,11 @@ async function measure(page, duration) {
       ((after.TaskDuration ?? 0) - (before.TaskDuration ?? 0)) * 1000,
     ),
     onePercentLowFps: round(1000 / slowMean),
+    p95FrameMs: round(percentile(sorted, 0.95)),
+    p99FrameMs: round(percentile(sorted, 0.99)),
+    maximumFrameMs: round(Math.max(...intervals)),
+    longTaskCount: samples.longTasks.length,
+    longestTaskMs: round(Math.max(0, ...samples.longTasks.map(({ duration }) => duration))),
     endPosition: samples.positions.findLast(Boolean),
     minimumOversizedVisibleResidentCount: residentCounts.length > 0
       ? Math.min(...residentCounts.map(({ oversized }) => oversized))
@@ -265,4 +303,20 @@ function metricMap(result) {
 
 function round(value) {
   return Math.round(value * 100) / 100
+}
+
+function parseViewport(value) {
+  const match = /^(\d+)x(\d+)$/.exec(value.trim())
+  if (!match) throw new Error('SDR_GAME_PERF_VIEWPORT must use WIDTHxHEIGHT')
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (width < 320 || width > 7680 || height < 240 || height > 4320) {
+    throw new Error('SDR_GAME_PERF_VIEWPORT is outside the supported range')
+  }
+  return { height, width }
+}
+
+function percentile(sorted, fraction) {
+  if (sorted.length === 0) return 0
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)]
 }

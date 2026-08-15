@@ -143,6 +143,19 @@ try {
   const guestGatherStops = await bufferEventsFor(guestPage, gatherRocks, 'buffer-stop')
   assert.equal(hostGatherStops[0].channelId, hostGather[0].channelId)
   assert.equal(guestGatherStops[0].channelId, guestGather[0].channelId)
+  await Promise.all(pages.map((page) => waitForBufferEvents(
+    page,
+    rollingStone,
+    'buffer-stop',
+    1,
+    15_000,
+  )))
+  const hostRollingStops = await bufferEventsFor(hostPage, rollingStone, 'buffer-stop')
+  const guestRollingStops = await bufferEventsFor(guestPage, rollingStone, 'buffer-stop')
+  assert.equal(hostRollingStops.length, 1)
+  assert.equal(guestRollingStops.length, 1)
+  assert.equal(hostRollingStops[0].channelId, hostRolling[0].channelId)
+  assert.equal(guestRollingStops[0].channelId, guestRolling[0].channelId)
 
   for (const page of pages) {
     const mediaEffects = (await allEvents(page)).filter((event) => (
@@ -166,6 +179,7 @@ try {
       gatherStops: [hostGatherStops.length, guestGatherStops.length],
       gatherVolumes: [hostGather[0].volume, guestGather[0].volume],
       rollingVolumes: [hostRolling[0].volume, guestRolling[0].volume],
+      rollingStops: [hostRollingStops.length, guestRollingStops.length],
     },
     music: { academy, prelude },
   })}\n`)
@@ -280,7 +294,7 @@ async function waitForStarts(page, source, count) {
   return waitForBufferEvents(page, source, 'buffer-start', count)
 }
 
-async function waitForBufferEvents(page, source, type, count) {
+async function waitForBufferEvents(page, source, type, count, timeout = 10_000) {
   await page.waitForFunction(({ expected, minimum, type: expectedType }) => (
     window.__multiplayerAudioEvents.filter((event) => (
       event.type === expectedType
@@ -297,7 +311,7 @@ async function waitForBufferEvents(page, source, type, count) {
             && /^-[\w-]+$/.test(suffix))
       })()
     )).length >= minimum
-  ), { expected: source, minimum: count, type }, { timeout: 10_000 })
+  ), { expected: source, minimum: count, type }, { timeout })
 }
 
 async function waitForFootsteps(page, count) {

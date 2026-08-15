@@ -23,6 +23,10 @@ import {
   nativeMonumentShadowOutline,
 } from './boneyard-native-shadow-shapes.ts'
 import { nativeBoneyardMainLayerShadowCaster } from './boneyard-shadow-casters.ts'
+import {
+  buildNativeBoneyardShadowMesh,
+  nativeBoneyardShadowLineQuad,
+} from './boneyard-shadow-mesh.ts'
 
 test('packs shadow vertex alpha through the native 8-bit truncation boundary', () => {
   assert.equal(nativeBoneyardPackedShadowAlpha(9.459294673673612e-7), 0)
@@ -470,4 +474,56 @@ test('selects Goodie authored shadow geometry by subtype, not visible phase', ()
   const caster = nativeBoneyardMainLayerShadowCaster({ fences: [] } as EditorDoc, layer, 3)
 
   assert.deepEqual(caster?.outline, nativeGoodieShadowOutline(0))
+})
+
+test('packs tapered shadow edges into one indexed vertex-alpha mesh', () => {
+  const mesh = buildNativeBoneyardShadowMesh([{
+    baseAlpha: 0.75,
+    baseEnd: { x: 4, y: 2 },
+    baseStart: { x: 1, y: 2 },
+    tipAlpha: 0.125,
+    tipEnd: { x: 8, y: 10 },
+    tipStart: { x: 2, y: 10 },
+  }], [])
+
+  assert.deepEqual([...mesh.positions], [1, 2, 4, 2, 2, 10, 8, 10])
+  assert.deepEqual([...mesh.alphas], [
+    Math.fround(nativeBoneyardPackedShadowAlpha(0.75)),
+    Math.fround(nativeBoneyardPackedShadowAlpha(0.75)),
+    Math.fround(nativeBoneyardPackedShadowAlpha(0.125)),
+    Math.fround(nativeBoneyardPackedShadowAlpha(0.125)),
+  ])
+  assert.deepEqual([...mesh.indices], [0, 1, 2, 1, 3, 2])
+})
+
+test('packs native fixed-width shadow strokes as butt-ended quads', () => {
+  const line = nativeBoneyardShadowLineQuad({
+    alpha: 0.4,
+    end: { x: 10, y: 5 },
+    start: { x: 2, y: 5 },
+    width: 4,
+  })
+  assert.deepEqual(line, {
+    baseAlpha: 0.4,
+    baseEnd: { x: 10, y: 3 },
+    baseStart: { x: 2, y: 3 },
+    tipAlpha: 0.4,
+    tipEnd: { x: 10, y: 7 },
+    tipStart: { x: 2, y: 7 },
+  })
+
+  const mesh = buildNativeBoneyardShadowMesh([], [line])
+  assert.equal(mesh.positions.length, 8)
+  assert.deepEqual(
+    [...mesh.alphas],
+    Array(4).fill(Math.fround(nativeBoneyardPackedShadowAlpha(0.4))),
+  )
+  assert.deepEqual([...mesh.indices], [0, 1, 2, 1, 3, 2])
+})
+
+test('keeps an empty shadow mesh allocation-free and non-renderable', () => {
+  const mesh = buildNativeBoneyardShadowMesh([], [])
+  assert.equal(mesh.positions.length, 0)
+  assert.equal(mesh.alphas.length, 0)
+  assert.equal(mesh.indices.length, 0)
 })
