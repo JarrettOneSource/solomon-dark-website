@@ -62,6 +62,13 @@ test('the native secondary belt maps right mouse and all seven keyboard slots', 
 })
 
 test('critical native VFX and lifecycle constants cannot collapse to generic effects', () => {
+  assert.deepEqual(nativeSecondaryAbilityContract(11).timing, {
+    activeTicks: 1_600,
+    boltLifetimeTicks: 100,
+    phases: ['scale-in', 'active', 'scale-out'],
+    scaleInTicks: 40,
+    scaleOutTicks: 25,
+  })
   assert.deepEqual(nativeSecondaryAbilityContract(21).timing, {
     angleStepDegrees: 12,
     segmentCount: 30,
@@ -87,6 +94,25 @@ test('critical native VFX and lifecycle constants cannot collapse to generic eff
     dropsPerTick: 2,
     enhancedDropsPerTick: 5,
     targetsPerPulse: 'min(n,floor(n/3)+1)',
+  })
+  assert.deepEqual(nativeSecondaryAbilityContract(73).timing, {
+    contactPeriodTicks: 3,
+    lineLength: 300,
+    patchCount: 11,
+    patchLifetimeTicks: 200,
+    patchSpacing: 30,
+  })
+  assert.deepEqual(nativeSecondaryAbilityContract(74).timing, {
+    activeTicks: 1_000,
+    phases: ['scale-in', 'active', 'scale-out'],
+    scaleInTicks: 40,
+    scaleOutTicks: 20,
+  })
+  assert.deepEqual(nativeSecondaryAbilityContract(76).timing, {
+    countdownStart: 8_000,
+    countdownStep: 20,
+    impactTicks: 400,
+    whistleTicksRemaining: 175,
   })
   assert.equal(nativeSecondaryAbilityContract(78).audio[0]?.path, 'sounds/mindstar__stream.wav')
   assert.deepEqual(

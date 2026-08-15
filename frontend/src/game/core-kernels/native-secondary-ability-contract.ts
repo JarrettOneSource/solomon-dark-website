@@ -110,7 +110,13 @@ export const NATIVE_SECONDARY_ABILITY_CONTRACTS: readonly NativeSecondaryAbility
     name: 'Call Leviathan',
     skillId: 11,
     targeting: 'aimed-world-point',
-    timing: { boltLifetimeTicks: 100, phases: ['scale-in', 'active', 'scale-out'] },
+    timing: {
+      activeTicks: 1_600,
+      boltLifetimeTicks: 100,
+      phases: ['scale-in', 'active', 'scale-out'],
+      scaleInTicks: 40,
+      scaleOutTicks: 25,
+    },
   }),
   define({
     action: null,
@@ -362,7 +368,13 @@ export const NATIVE_SECONDARY_ABILITY_CONTRACTS: readonly NativeSecondaryAbility
     name: 'Fire Wall',
     skillId: 73,
     targeting: 'line-perpendicular-to-aim',
-    timing: { contactPeriodTicks: 3, patchLifetimeTicks: 200 },
+    timing: {
+      contactPeriodTicks: 3,
+      lineLength: 300,
+      patchCount: 11,
+      patchLifetimeTicks: 200,
+      patchSpacing: 30,
+    },
   }),
   define({
     action: null,
@@ -378,7 +390,12 @@ export const NATIVE_SECONDARY_ABILITY_CONTRACTS: readonly NativeSecondaryAbility
     name: 'Ether Drain',
     skillId: 74,
     targeting: 'aimed-world-point',
-    timing: { activeTicks: 100, phases: ['scale-in', 'active', 'scale-out'] },
+    timing: {
+      activeTicks: 1_000,
+      phases: ['scale-in', 'active', 'scale-out'],
+      scaleInTicks: 40,
+      scaleOutTicks: 20,
+    },
   }),
   define({
     action: null,
@@ -396,7 +413,12 @@ export const NATIVE_SECONDARY_ABILITY_CONTRACTS: readonly NativeSecondaryAbility
     name: 'Call Comet',
     skillId: 76,
     targeting: 'aimed-world-point',
-    timing: { impact: 'countdown-reaches-zero' },
+    timing: {
+      countdownStart: 8_000,
+      countdownStep: 20,
+      impactTicks: 400,
+      whistleTicksRemaining: 175,
+    },
   }),
   define({
     action: null,

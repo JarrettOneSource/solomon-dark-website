@@ -17959,7 +17959,7 @@ or provenance drifts.
 
 | ID / member | Native gameplay and lifecycle | Native presentation ownership | Website disposition |
 | --- | --- | --- | --- |
-| `11` Call Leviathan | Aimed Leviathan scales in, runs its active attack, scales out, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-port-required |
+| `11` Call Leviathan | Aimed Leviathan scales in for 40 ticks, attacks for 1,600 ticks, scales out for 25 ticks, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-port-required |
 | `12` Planewalker | Self toggle installs `Mod_Planewalker`, forces Plane Orb `80`, preserves/restores the prior spell, and expires after `mDuration*100`. | PlaneOrb actor; on/off streams and `PlaneCross` loop. | exact-port-required |
 | `15` Phasing | Heading cast probes at most 20 collision-safe destinations and relocates only to the accepted probe. | BadGuys `53`; `phase`. | exact-port-required |
 | `21` Ring of Fire | Thirty MovingFire segments at 12-degree steps plus a unique-target Shockwave query every 10 ticks. | DeadHawg `46..77`; `bigfire`, then `nuke`. | exact-port-required |
@@ -17976,9 +17976,9 @@ or provenance drifts.
 | `51` Dampen | Caster rectangle dispels 50 percent of shield state and owns mode-21 CastSpin for 73 strict-boundary ticks. | BadGuys `10,11,48`; `flash`, `dampen` stream. | exact-port-required |
 | `54` Magic Shield | Self absorb state owns a 40-tick hit pulse; break emits exactly 20 BadGuys-68 additive particles, optional explosive contact, then clears both factors. | BadGuys `68`; up/hit/pop/explode sequence. | exact-port-required |
 | `72` Acid Rain | Aimed rain lives 1500 active ticks plus residue; emits 2 drops/tick or 5 enhanced and every 25 ticks hits exactly `min(n,floor(n/3)+1)` shuffled targets. | BadGuys `10` plus AcidRaindrop child; storm/sizzle/rain audio. | exact-port-required |
-| `73` Fire Wall | Builds a line perpendicular to aim from independent 200-tick Fire_Goodguy patches with 3-tick contacts. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-port-required |
-| `74` Ether Drain | Aimed field scales in, owns 100 active ticks, scales out, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-port-required |
-| `76` Call Comet | Aimed countdown terminates in damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-port-required |
+| `73` Fire Wall | Builds one 300-unit aim-perpendicular line from exactly eleven independent 200-tick Fire_Goodguy patches, spaced 30 units apart and contacting every 3 ticks. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-port-required |
+| `74` Ether Drain | Aimed field scales in for 40 ticks, owns 1,000 active ticks, scales out for 20 ticks, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-port-required |
+| `76` Call Comet | Aimed countdown starts at 8,000, subtracts 20/tick, starts the whistle with 175 ticks remaining, and impacts on tick 400 with damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-port-required |
 | `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | BadGuys `48`; the same `levelup` sample at pitches 2, then 3. | exact-port-required |
 | `78` Mindstar | Self toggle changes byte `+0x8DD`, reserves/removes mana, and refreshes temporary ranks immediately and on normal progression refresh. | Caster activation flash; `mindstar__stream`. | exact-port-required |
 | `79` Regenerate | Self toggle changes byte `+0x8DE`, reserves/removes mana, heals `1.5/tickRate`, and stops on overload/death/session teardown. | Same caster activation flash and exact shared `mindstar__stream`. | exact-port-required |
