@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type { EditorDoc } from '../../editor/model.ts'
+import type { MainLayer } from '../../editor/native-render-plan.ts'
 import {
   nativeBoneyardAlphaSilhouette,
   nativeBoneyardComplexShadowRecords,
@@ -20,6 +22,7 @@ import {
   nativeGravestoneShadowOutline,
   nativeMonumentShadowOutline,
 } from './boneyard-native-shadow-shapes.ts'
+import { nativeBoneyardMainLayerShadowCaster } from './boneyard-shadow-casters.ts'
 
 test('packs shadow vertex alpha through the native 8-bit truncation boundary', () => {
   assert.equal(nativeBoneyardPackedShadowAlpha(9.459294673673612e-7), 0)
@@ -406,4 +409,65 @@ test('keeps Tree root edges fixed while native presentation jitter moves only ti
     )
   }
   assert.ok(new Set(frames.map(([edge]) => edge!.tipStart.x)).size > 1)
+})
+
+test('never invents complex-shadow silhouettes from arbitrary sprite alpha', () => {
+  const unknownLayer: MainLayer = {
+    atlas: 'DeadHawg',
+    atlasEntry: 23,
+    kind: 'object',
+    object: { eid: 'unknown', pos: { x: 10, y: 20 }, typeId: 9999 },
+    pos: { x: 10, y: 20 },
+    sel: { eid: 'unknown', kind: 'object' },
+    sortBias: 0,
+    sortKey: 20,
+    sourceOrder: 0,
+    worldY: 20,
+  }
+  const brokenBody: MainLayer = {
+    fence: {
+      eid: 'broken',
+      points: [{ x: 0, y: 0 }, { x: 100, y: 0 }],
+      segmentCode: 1,
+      style: 1,
+      typeId: 3005,
+    },
+    kind: 'fence',
+    part: 'body',
+    pieceIndex: 0,
+    pos: { x: 28, y: 0 },
+    sel: { eid: 'broken', kind: 'fence' },
+    sortBias: -15,
+    sortKey: -15,
+    sourceOrder: 0,
+    worldY: 0,
+  }
+  const document = { fences: [brokenBody.fence] } as EditorDoc
+
+  assert.equal(nativeBoneyardMainLayerShadowCaster(document, unknownLayer, 0), null)
+  assert.equal(nativeBoneyardMainLayerShadowCaster(document, brokenBody, 1), null)
+})
+
+test('selects Goodie authored shadow geometry by subtype, not visible phase', () => {
+  const layer: MainLayer = {
+    atlas: 'DeadHawg',
+    atlasEntry: 147,
+    kind: 'object',
+    object: {
+      eid: 'goodie',
+      pos: { x: 50, y: 60 },
+      subtype: 0,
+      typeId: 2061,
+      variant: 2,
+    },
+    pos: { x: 50, y: 60 },
+    sel: { eid: 'goodie', kind: 'object' },
+    sortBias: 0,
+    sortKey: 60,
+    sourceOrder: 0,
+    worldY: 60,
+  }
+  const caster = nativeBoneyardMainLayerShadowCaster({ fences: [] } as EditorDoc, layer, 3)
+
+  assert.deepEqual(caster?.outline, nativeGoodieShadowOutline(0))
 })

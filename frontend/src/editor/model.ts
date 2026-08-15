@@ -64,6 +64,8 @@ export interface PlacedObject {
   pos: Vec2
   /** Which look this object wears; mapping to atlas entries is format-layer truth. */
   variant?: number
+  /** Native Goodie +0x140 class selector; independent of its visible phase. */
+  subtype?: number
   rot?: number
   scale?: number
   uid?: number

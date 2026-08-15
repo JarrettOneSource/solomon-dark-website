@@ -174,6 +174,7 @@ try {
         },
         tick,
         world: {
+          deathEffects: [],
           encounter: null,
           enemies: [],
           enemyEvents: [],
@@ -361,6 +362,7 @@ try {
       },
       tick,
       world: {
+        deathEffects: [],
         encounter: encounter ?? null,
         enemies: [],
         enemyEvents: [],
