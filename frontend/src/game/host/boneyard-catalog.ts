@@ -11,7 +11,6 @@ import type {
 import { NATIVE_GENERATED_BONEYARDS } from './native-generated-boneyards.ts'
 import {
   boneyardGeometrySha256,
-  materializeSolomonSetPiece,
   projectBoneyard,
 } from './project-boneyard.ts'
 
@@ -61,32 +60,25 @@ export function materializeBoneyard(
   if (seedBytes.length < 4) throw new Error('Boneyard seed needs at least four bytes')
   const seed = seedBytes.toString('hex')
   const runId = randomBytes(16).toString('hex')
-  const setPieceSelection = seedBytes.length >= 8
-    ? seedBytes.readUInt32BE(4)
-    : seedBytes.readUInt32BE(0)
   if (boneyardId === DEFAULT_BONEYARD_CHOICE.id) {
     const template = NATIVE_GENERATED_BONEYARDS[
       seedBytes.readUInt32BE(0) % NATIVE_GENERATED_BONEYARDS.length
     ]
-    const scene = materializeSolomonSetPiece(template.scene, setPieceSelection)
     return {
       choice: DEFAULT_BONEYARD_CHOICE,
       runId,
       seed,
       sourceSha256: template.sourceSha256,
-      geometrySha256: boneyardGeometrySha256(scene),
-      scene,
+      geometrySha256: template.geometrySha256,
+      scene: template.scene,
     }
   }
   const entry = catalog.modEntries.get(boneyardId)
   if (!entry) return null
-  const scene = materializeSolomonSetPiece(entry.scene, setPieceSelection)
   return {
     ...entry,
     runId,
     seed,
-    geometrySha256: boneyardGeometrySha256(scene),
-    scene,
   }
 }
 

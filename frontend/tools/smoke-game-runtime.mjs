@@ -458,6 +458,7 @@ try {
   const hostDigFrames = hostDigCount ? await sampleDigFrames(page) : []
   const clientDigFrames = clientDigCount ? await sampleDigFrames(clientPage) : []
   let digIndicatorReceipt = null
+  let solomonPlacementReceipts = null
   if (hostDigCount) {
     assert.ok(new Set(hostDigFrames).size > 1, `expected host Solomon Dig to animate (${hostDigFrames.join(', ')})`)
     assert.ok(new Set(clientDigFrames).size > 1, `expected client Solomon Dig to animate (${clientDigFrames.join(', ')})`)
@@ -465,6 +466,17 @@ try {
       assert.equal(await runPage.locator('.boneyard-grave-dirt').count(), 1)
       assert.equal(await runPage.locator('.boneyard-lantern').count(), 1)
       await assertSolomonSetPieceRoots(runPage)
+    }
+    if (!expectedModBoneyard) {
+      solomonPlacementReceipts = await Promise.all([
+        stockSolomonPlacementReceipt(page),
+        stockSolomonPlacementReceipt(clientPage),
+      ])
+      for (const receipt of solomonPlacementReceipts) {
+        assert.ok(receipt.candidateCount >= 9 && receipt.candidateCount <= 14)
+        assert.equal(receipt.selectedIndex, receipt.nearestIndex)
+      }
+      assert.deepEqual(solomonPlacementReceipts[0], solomonPlacementReceipts[1])
     }
 
     const hostIndicator = page.getByRole('img', { name: 'Direction to Solomon Dig' })
@@ -561,6 +573,7 @@ try {
     orbSpriteCount,
     renderer,
     smoothPlayerSamples: new Set(presentationSamples.map(({ playerX }) => playerX)).size,
+    solomonPlacementReceipts,
     studentCount,
     teacherFrames: [...new Set(teacherFrames)],
     thirdConsoleErrors,
@@ -1107,6 +1120,50 @@ async function assertSolomonSetPieceRoots(page) {
   assert.deepEqual(roots.lantern, {
     x: roots.grave.x - 55,
     y: roots.grave.y + 73,
+  })
+}
+
+async function stockSolomonPlacementReceipt(page) {
+  return page.evaluate(async () => {
+    const scene = document.querySelector('.boneyard-scene')
+    const grave = document.querySelector('.boneyard-grave-dirt')
+    const geometrySha256 = scene?.getAttribute('data-geometry-sha256')
+    const { NATIVE_GENERATED_BONEYARDS } = await import(
+      '/src/game/host/native-generated-boneyards.ts'
+    )
+    const template = NATIVE_GENERATED_BONEYARDS.find((entry) => (
+      entry.geometrySha256 === geometrySha256
+    ))
+    if (!template) throw new Error(`No native template for geometry ${geometrySha256}`)
+    const selected = {
+      x: Number(grave?.getAttribute('data-world-x')),
+      y: Number(grave?.getAttribute('data-world-y')),
+    }
+    const candidates = template.scene.objects.filter((object) => (
+      object.typeId === 2029 && object.overlayVariant === 8
+    ))
+    const distance = (candidate) => (
+      (candidate.pos.x - template.scene.spawn.x) ** 2
+      + (candidate.pos.y - template.scene.spawn.y) ** 2
+    )
+    let nearestIndex = 0
+    for (let index = 1; index < candidates.length; index += 1) {
+      if (distance(candidates[index]) < distance(candidates[nearestIndex])) {
+        nearestIndex = index
+      }
+    }
+    const selectedIndex = candidates.findIndex((candidate) => (
+      candidate.pos.x === selected.x && candidate.pos.y === selected.y
+    ))
+    return {
+      candidateCount: candidates.length,
+      geometrySha256,
+      nearestIndex,
+      selected,
+      selectedIndex,
+      sourceSha256: template.sourceSha256,
+      spawn: template.scene.spawn,
+    }
   })
 }
 

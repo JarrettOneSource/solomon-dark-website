@@ -22,7 +22,7 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     'atlasEntry', 'secondaryAtlasEntry', 'secondaryVariant',
     'secondaryVisible', 'overlayAtlasEntry', 'overlayVariant', 'atlasEntries',
   ])) as unknown as BoneyardScene['objects']
-  return {
+  const scene = {
     name: doc.meta.name,
     environmentMode: doc.meta.header.environmentMode,
     bounds: {
@@ -44,8 +44,9 @@ export function projectBoneyard(doc: BoneyardDoc): BoneyardScene {
     terrain: doc.terrain.map((terrain) => compact(terrain, [
       'eid', 'pos', 'points', 'style', 'entry',
     ])),
-    solomonDig: selectSolomonSetPiece(objects, 0),
+    solomonDig: null,
   } as unknown as BoneyardScene
+  return materializeOpeningSolomonSetPiece(scene)
 }
 
 function projectFence(fence: BoneyardDoc['fences'][number]): Record<string, unknown> {
@@ -63,13 +64,10 @@ function explicitPostVariant(value: number | undefined): number | undefined {
   return value === 0xffffffff ? undefined : value
 }
 
-export function materializeSolomonSetPiece(
-  scene: BoneyardScene,
-  selection: number,
-): BoneyardScene {
+export function materializeOpeningSolomonSetPiece(scene: BoneyardScene): BoneyardScene {
   return {
     ...scene,
-    solomonDig: selectSolomonSetPiece(scene.objects, selection),
+    solomonDig: selectSolomonSetPiece(scene.objects, scene.spawn),
   }
 }
 
@@ -79,13 +77,22 @@ export function boneyardGeometrySha256(scene: BoneyardScene): string {
 
 function selectSolomonSetPiece(
   objects: BoneyardScene['objects'],
-  selection: number,
+  origin: BoneyardScene['spawn'],
 ): BoneyardScene['solomonDig'] {
-  const candidates = objects.filter((object) => (
-    object.typeId === 2029 && object.overlayVariant === 8
-  ))
-  if (candidates.length === 0) return null
-  const gravePosition = candidates[selection % candidates.length].pos
+  let selected: BoneyardScene['objects'][number] | null = null
+  let selectedDistance = Number.POSITIVE_INFINITY
+  for (const object of objects) {
+    if (object.typeId !== 2029 || object.overlayVariant !== 8) continue
+    const dx = object.pos.x - origin.x
+    const dy = object.pos.y - origin.y
+    const distance = dx * dx + dy * dy
+    if (distance < selectedDistance) {
+      selected = object
+      selectedDistance = distance
+    }
+  }
+  if (selected === null) return null
+  const gravePosition = selected.pos
   return {
     gravePosition: { ...gravePosition },
     lanternPosition: {

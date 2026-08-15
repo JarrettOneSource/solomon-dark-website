@@ -27,14 +27,22 @@ test('native default bank contains distinct exact materializations and Solomon D
     assert.match(template.geometrySha256, /^[0-9a-f]{64}$/)
     assert.ok(template.scene.objects.length >= 300)
     assert.ok(template.scene.sprites.length >= 190)
+    const candidates = template.scene.objects.filter((object) => (
+      object.typeId === 2029 && object.overlayVariant === 8
+    ))
+    assert.ok(candidates.length >= 9 && candidates.length <= 14)
     const dig = template.scene.solomonDig
     assert.ok(dig)
-    assert.ok(template.scene.objects.some((object) => (
-      object.typeId === 2029
-      && object.overlayVariant === 8
-      && object.pos.x === dig.gravePosition.x
-      && object.pos.y === dig.gravePosition.y
-    )))
+    let nearest = candidates[0]!
+    let nearestDistance = squaredDistance(nearest.pos, template.scene.spawn)
+    for (const candidate of candidates.slice(1)) {
+      const distance = squaredDistance(candidate.pos, template.scene.spawn)
+      if (distance < nearestDistance) {
+        nearest = candidate
+        nearestDistance = distance
+      }
+    }
+    assert.deepEqual(dig.gravePosition, nearest.pos)
     assert.deepEqual(dig.position, {
       x: dig.gravePosition.x + 10,
       y: dig.gravePosition.y + 113,
@@ -60,6 +68,29 @@ test('native default bank contains distinct exact materializations and Solomon D
   assert.deepEqual(loaded.scene, NATIVE_GENERATED_BONEYARDS[0].scene)
 })
 
+test('native default bank retains the complete stock generator output-family census', () => {
+  const objectTypes = new Set<number>()
+  const compactTypes = new Set<number>()
+  const environmentModes = new Set<number>()
+
+  for (const template of NATIVE_GENERATED_BONEYARDS) {
+    const scene = template.scene
+    environmentModes.add(scene.environmentMode)
+    assert.ok(scene.roads.length > 0)
+    assert.ok(scene.fences.length > 0)
+    assert.equal(scene.terrain.length, 0)
+    for (const object of scene.objects) objectTypes.add(object.typeId)
+    for (const sprite of scene.sprites) compactTypes.add(sprite.atlasEntry)
+  }
+
+  assert.deepEqual([...objectTypes].sort((a, b) => a - b), [2001, 2029, 2040, 2061])
+  assert.deepEqual(
+    [...compactTypes].sort((a, b) => a - b),
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 21, 22, 23, 24, 25, 26, 27, 28],
+  )
+  assert.deepEqual([...environmentModes].sort((a, b) => a - b), [0, 1, 2])
+})
+
 test('default selector reaches every stock-generated template', () => {
   const catalog = createBoneyardCatalog()
   const selected = NATIVE_GENERATED_BONEYARDS.map((_, index) => {
@@ -72,6 +103,21 @@ test('default selector reaches every stock-generated template', () => {
     selected,
     NATIVE_GENERATED_BONEYARDS.map((entry) => entry.sourceSha256),
   )
+})
+
+test('opening Solomon placement does not consume a second seed word', () => {
+  const catalog = createBoneyardCatalog()
+  const seedA = Buffer.alloc(16)
+  const seedB = Buffer.alloc(16)
+  seedB.writeUInt32BE(7, 4)
+
+  const loadedA = materializeBoneyard(catalog, 'default-random', seedA)
+  const loadedB = materializeBoneyard(catalog, 'default-random', seedB)
+  assert.ok(loadedA)
+  assert.ok(loadedB)
+  assert.equal(loadedA.sourceSha256, loadedB.sourceSha256)
+  assert.equal(loadedA.geometrySha256, loadedB.geometrySha256)
+  assert.deepEqual(loadedA.scene.solomonDig, loadedB.scene.solomonDig)
 })
 
 test('stage report exposes every enabled mod Boneyard and ignores non-level art', async (context) => {
@@ -148,4 +194,11 @@ test('stage report attributes a conflicting Boneyard target to its final overlay
 
 async function createTemporaryDirectory(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'sdr-boneyard-catalog-'))
+}
+
+function squaredDistance(
+  left: { x: number, y: number },
+  right: { x: number, y: number },
+): number {
+  return (left.x - right.x) ** 2 + (left.y - right.y) ** 2
 }

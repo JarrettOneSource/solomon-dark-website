@@ -16,13 +16,56 @@ import {
   NATIVE_IMP_BODY_POSE_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import { projectBoneyard } from './project-boneyard.ts'
+import type { BoneyardScene } from '../core-kernels/boneyard.ts'
+import {
+  materializeOpeningSolomonSetPiece,
+  projectBoneyard,
+} from './project-boneyard.ts'
 import {
   projectBoneyardEnemies,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
 
 const storyFixture = new URL('../../../public/samples/story0.boneyard', import.meta.url)
+
+test('materializes the opening Solomon set piece at the spawn-nearest eligible grave', () => {
+  const scene = solomonSelectionScene([
+    { eid: 'near-ineligible', typeId: 2029, overlayVariant: 7, pos: { x: 1, y: 0 } },
+    { eid: 'far', typeId: 2029, overlayVariant: 8, pos: { x: 9, y: 12 } },
+    { eid: 'nearest', typeId: 2029, overlayVariant: 8, pos: { x: 3, y: 4 } },
+  ])
+
+  assert.deepEqual(materializeOpeningSolomonSetPiece(scene).solomonDig, {
+    frameProgram: [
+      0, 0, 0, 0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17,
+      17, 17, 17, 16, 15, 13, 11, 9, 7, 5, 3, 1,
+    ],
+    gravePosition: { x: 3, y: 4 },
+    lanternPosition: { x: -52, y: 77 },
+    position: { x: 13, y: 117 },
+    ticksPerFrame: 5,
+  })
+})
+
+test('keeps the first serialized grave when opening candidates tie', () => {
+  const scene = solomonSelectionScene([
+    { eid: 'first', typeId: 2029, overlayVariant: 8, pos: { x: 3, y: 4 } },
+    { eid: 'second', typeId: 2029, overlayVariant: 8, pos: { x: -3, y: -4 } },
+  ])
+
+  assert.deepEqual(
+    materializeOpeningSolomonSetPiece(scene).solomonDig?.gravePosition,
+    { x: 3, y: 4 },
+  )
+})
+
+test('does not synthesize an opening Solomon set piece without an eligible grave', () => {
+  const scene = solomonSelectionScene([
+    { eid: 'ordinary-grave', typeId: 2029, overlayVariant: 7, pos: { x: 0, y: 0 } },
+  ])
+
+  assert.equal(materializeOpeningSolomonSetPiece(scene).solomonDig, null)
+})
 
 test('projects explicit Fencepost selectors and omits the native sentinel', () => {
   const document = parseBoneyard(readFileSync(storyFixture))
@@ -37,6 +80,21 @@ test('projects explicit Fencepost selectors and omits the native sentinel', () =
   assert.equal(projected.startPostVariant, 4)
   assert.equal('endPostVariant' in projected, false)
 })
+
+function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene {
+  return {
+    bounds: { x: -100, y: -100, w: 200, h: 200 },
+    environmentMode: 0,
+    fences: [],
+    name: 'Solomon placement contract',
+    objects,
+    roads: [],
+    solomonDig: null,
+    spawn: { x: 0, y: 0, facingDeg: 0 },
+    sprites: [],
+    terrain: [],
+  }
+}
 
 test('projects Maggot damage age as the authoritative five-tick hit flash', () => {
   const maggot: BoneyardMaggotActor = {
