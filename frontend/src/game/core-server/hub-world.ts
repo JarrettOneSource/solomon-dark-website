@@ -52,6 +52,7 @@ export interface HubWorldState {
   participants: Readonly<Record<string, HubParticipantState>>
   runtime: HubWorldRuntime
   studentPopulation: HubStudentPopulationState
+  traderAnimationSeed: number
 }
 
 export class HubWorldRuntime {
@@ -73,7 +74,10 @@ export interface HubWorldTickResult {
 
 export interface HubWorldOptions {
   studentPopulation?: HubStudentPopulationState
+  traderAnimationSeed?: number
 }
+
+export const DEFAULT_HUB_TRADER_ANIMATION_SEED = 0x5eedc0de
 
 interface RegionPhysicsBody extends ActorPhysicsBody {
   region: HubRegionId
@@ -138,6 +142,7 @@ export function createHubWorld(
     ),
     runtime: new HubWorldRuntime(),
     studentPopulation,
+    traderAnimationSeed: options.traderAnimationSeed ?? DEFAULT_HUB_TRADER_ANIMATION_SEED,
   }
 }
 
@@ -331,6 +336,7 @@ export function stepHubWorldTick(
       participants: nextParticipants,
       runtime,
       studentPopulation,
+      traderAnimationSeed: world.traderAnimationSeed,
     },
   }
 }

@@ -619,6 +619,7 @@ export default function MainMenuScene({
             progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             initialSnapshot={runtimeSnapshot}
             onInput={session.sendInput}
+            onHubAction={session.sendHubAction}
             onLoadingError={cancelHubLoading}
             onReady={finishHubLoading}
             onStartMatch={startBoneyard}

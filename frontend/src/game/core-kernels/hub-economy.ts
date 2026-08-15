@@ -1,0 +1,728 @@
+import {
+  createNativeRng,
+  drawNativeInteger,
+  type NativeRngState,
+} from './native-rng.ts'
+
+export const STARTING_PLAYER_GOLD = 10_000
+export const HUB_INVENTORY_SLOT_CAPACITY = 28
+export const SHLORIO_INITIAL_DOWSING_FEE = 650
+
+export type EquipmentType = 'amulet' | 'hat' | 'ring' | 'robe' | 'staff' | 'wand'
+export type EquipmentSlot = 'amulet' | 'hat' | 'ring-0' | 'ring-1' | 'ring-2' | 'robe' | 'weapon'
+export const EQUIPMENT_TYPES = ['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'] as const
+export const EQUIPMENT_SLOTS = ['amulet', 'hat', 'ring-0', 'ring-1', 'ring-2', 'robe', 'weapon'] as const
+export type HubTraderId = 'fomentius' | 'hagatha' | 'luthacus' | 'shlorio'
+export type HubInventoryAction =
+  | { readonly type: 'buy-dowsing'; readonly offerId: number }
+  | { readonly type: 'buy-fomentius'; readonly itemId: number }
+  | { readonly type: 'buy-hagatha'; readonly selector: number }
+  | { readonly type: 'close-dowsing' }
+  | { readonly type: 'dowse' }
+  | { readonly type: 'equip'; readonly itemId: number; readonly slot: EquipmentSlot }
+  | { readonly type: 'transfer'; readonly direction: 'to-backpack' | 'to-storage'; readonly itemId: number }
+  | { readonly type: 'unequip'; readonly slot: EquipmentSlot }
+export type HubItemKind =
+  | 'antidote'
+  | 'dye'
+  | 'equipment'
+  | 'health-potion'
+  | 'key'
+  | 'mana-potion'
+  | 'mind-chug'
+  | 'rejuvenation-potion'
+  | 'sack'
+  | 'wizard-chug'
+export const HUB_ITEM_KINDS = [
+  'antidote',
+  'dye',
+  'equipment',
+  'health-potion',
+  'key',
+  'mana-potion',
+  'mind-chug',
+  'rejuvenation-potion',
+  'sack',
+  'wizard-chug',
+] as const
+
+export interface HubInventoryItem {
+  readonly equipmentType: EquipmentType | null
+  readonly iconRecords: readonly number[]
+  readonly id: number
+  readonly kind: HubItemKind
+  readonly name: string
+  readonly nativeSubtype: number | null
+  readonly nativeTypeId: number
+  readonly quantity: number
+  readonly rarity: 'Epic' | 'Rare' | null
+  readonly recipeIndex: number | null
+}
+
+export interface HubShopItem extends HubInventoryItem {
+  readonly price: number
+}
+
+export interface EquipmentRecipe {
+  readonly iconRecords: readonly number[]
+  readonly level: number
+  readonly name: string
+  readonly nativeTypeId: number
+  readonly rarity: 'Epic' | 'Rare'
+  readonly setName: string | null
+  readonly sourceIndex: number
+  readonly type: EquipmentType
+}
+
+export interface HagathaPerkDefinition {
+  readonly basePrice: number
+  readonly behaviorFamily: string
+  readonly description: string
+  readonly name: string
+  readonly selector: number
+}
+
+export interface HagathaOffer extends HagathaPerkDefinition {
+  readonly members: readonly number[]
+  readonly price: number
+}
+
+export interface DowsingOffer {
+  readonly id: number
+  readonly price: number
+  readonly recipeIndex: number
+}
+
+export interface HubEquipmentState {
+  readonly amulet: HubInventoryItem | null
+  readonly hat: HubInventoryItem | null
+  readonly rings: readonly [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null]
+  readonly robe: HubInventoryItem | null
+  readonly weapon: HubInventoryItem | null
+}
+
+export interface HubEconomyState {
+  readonly backpack: readonly HubInventoryItem[]
+  readonly charmCapacity: number
+  readonly dowsingFee: number
+  readonly dowsingOffers: readonly DowsingOffer[]
+  readonly equipment: HubEquipmentState
+  readonly firstMixedSelectors: readonly number[]
+  readonly fomentiusStock: readonly HubShopItem[]
+  readonly gold: number
+  readonly hagathaBundleSelectors: readonly number[]
+  readonly nextItemId: number
+  readonly nextOfferId: number
+  readonly ownedPerkSelectors: readonly number[]
+  readonly revision: number
+  readonly rng: NativeRngState
+  readonly storage: readonly HubInventoryItem[]
+  readonly tonicPurchases: number
+}
+
+export type HubEconomyRejection =
+  | 'capacity-full'
+  | 'ineligible-item'
+  | 'insufficient-gold'
+  | 'invalid-offer'
+  | 'invalid-slot'
+  | 'item-not-found'
+  | 'offers-active'
+  | 'perk-capacity-full'
+  | 'slot-empty'
+  | 'slot-locked'
+
+export interface HubEconomyResult {
+  readonly accepted: boolean
+  readonly reason: HubEconomyRejection | null
+  readonly state: HubEconomyState
+}
+
+export interface FomentiusStockDefinition {
+  readonly gateValue?: number
+  readonly iconRecords: readonly number[]
+  readonly kind: Exclude<HubItemKind, 'equipment'>
+  readonly name: string
+  readonly nativeSubtype: number
+  readonly nativeTypeId: number
+  readonly price: number
+  readonly quantityOffset?: number
+  readonly rollBound: number
+}
+
+export const FOMENTIUS_STOCK_DEFINITIONS: readonly FomentiusStockDefinition[] = [
+  { kind: 'health-potion', name: 'Health Potion', nativeTypeId: 7001, nativeSubtype: 0, iconRecords: [46], price: 150, rollBound: 3, quantityOffset: 2 },
+  { kind: 'mana-potion', name: 'Mana Potion', nativeTypeId: 7001, nativeSubtype: 1, iconRecords: [47], price: 75, rollBound: 6, quantityOffset: 2 },
+  { kind: 'rejuvenation-potion', name: 'Rejuvenation Potion', nativeTypeId: 7001, nativeSubtype: 5, iconRecords: [51], price: 200, rollBound: 3, quantityOffset: 0 },
+  { kind: 'dye', name: 'Dye', nativeTypeId: 7012, nativeSubtype: 0, iconRecords: [42], price: 300, rollBound: 2, quantityOffset: 2 },
+  { kind: 'key', name: 'Key', nativeTypeId: 7012, nativeSubtype: 1, iconRecords: [43], price: 1200, rollBound: 18, gateValue: 1 },
+  { kind: 'sack', name: 'Sack', nativeTypeId: 7008, nativeSubtype: 0, iconRecords: [70], price: 50, rollBound: 2, quantityOffset: 1 },
+  { kind: 'antidote', name: 'Antidote', nativeTypeId: 7001, nativeSubtype: 3, iconRecords: [49], price: 100, rollBound: 3, quantityOffset: 1 },
+  { kind: 'wizard-chug', name: 'Wizard Chug', nativeTypeId: 7001, nativeSubtype: 2, iconRecords: [48], price: 2500, rollBound: 8, gateValue: 3 },
+  { kind: 'mind-chug', name: 'Mind Chug', nativeTypeId: 7001, nativeSubtype: 4, iconRecords: [50], price: 1500, rollBound: 8, gateValue: 3 },
+]
+
+const EQUIPMENT_RECIPE_ROWS = [
+  [0, 'Pentaclostic Ring', 'ring', 7002, 0, 'Rare', [63], 'The Arcanus Spectrum Paraclosm'],
+  [1, 'Arcanoric Robe', 'robe', 7006, 0, 'Epic', [65, 68], 'The Arcanus Spectrum Paraclosm'],
+  [2, 'Cosmofluxic Wand', 'wand', 7011, 0, 'Epic', [80], 'The Arcanus Spectrum Paraclosm'],
+  [3, 'Theptoplasmar Amulet', 'amulet', 7003, 0, 'Rare', [26, 31], 'The Arcanus Spectrum Paraclosm'],
+  [4, 'Synertauxic Ring', 'ring', 7002, 0, 'Rare', [63], 'The Arcanus Spectrum Paraclosm'],
+  [5, 'Sublunarous Hat', 'hat', 7005, 0, 'Epic', [34, 38], 'The Arcanus Spectrum Paraclosm'],
+  [6, "Combinator's Cap", 'hat', 7005, 0, 'Epic', [36, 40], "Combinator's Coutrement"],
+  [7, "Combinator's Cape", 'robe', 7006, 0, 'Epic', [66, 69], "Combinator's Coutrement"],
+  [8, "Combinator's Club", 'staff', 7004, 0, 'Epic', [73], "Combinator's Coutrement"],
+  [9, "Combinator's Choker", 'amulet', 7003, 0, 'Rare', [24, 31], "Combinator's Coutrement"],
+  [10, "Combinator's Circle", 'ring', 7002, 0, 'Rare', [53], "Combinator's Coutrement"],
+  [11, "Bug-Master's Cap", 'hat', 7005, 0, 'Epic', [34, 38], "Pandimensional Bug-Master's Outfit"],
+  [12, "Bug-Master's Robe", 'robe', 7006, 0, 'Epic', [64, 67], "Pandimensional Bug-Master's Outfit"],
+  [13, "Bug-Master's Wand", 'wand', 7011, 0, 'Rare', [82], "Pandimensional Bug-Master's Outfit"],
+  [14, "Bug-Master's Loop", 'ring', 7002, 0, 'Rare', [59], "Pandimensional Bug-Master's Outfit"],
+  [15, 'Pan-Dimensional Strangler', 'amulet', 7003, 0, 'Rare', [23, 30], "Pandimensional Bug-Master's Outfit"],
+  [16, 'Cloudcover Hood', 'hat', 7005, 0, 'Epic', [37, 41], 'Tempest Kit'],
+  [17, 'Ozone Cape', 'robe', 7006, 0, 'Epic', [66, 69], 'Tempest Kit'],
+  [18, 'Lightning Rod', 'staff', 7004, 0, 'Epic', [75], 'Tempest Kit'],
+  [19, 'Storm Choker', 'amulet', 7003, 0, 'Rare', [22, 30], 'Tempest Kit'],
+  [20, 'Burning Hat', 'hat', 7005, 0, 'Epic', [36, 40], 'Burning Man'],
+  [21, 'Burning Robe', 'robe', 7006, 0, 'Epic', [64, 67], 'Burning Man'],
+  [22, 'Biting Ring', 'ring', 7002, 0, 'Epic', [55], 'Frostburn Jewels'],
+  [23, 'Bitter Ring', 'ring', 7002, 0, 'Epic', [55], 'Frostburn Jewels'],
+  [24, 'Glittering Amulet', 'amulet', 7003, 0, 'Epic', [29, 31], 'Frostburn Jewels'],
+  [25, "Potter's Apron", 'robe', 7006, 0, 'Epic', [66, 69], 'Fete of Clay'],
+  [26, "Clayshaper's Ring", 'ring', 7002, 0, 'Epic', [57], 'Fete of Clay'],
+  [27, "Claybaker's Ring", 'ring', 7002, 0, 'Epic', [57], 'Fete of Clay'],
+  [28, 'Kiln', 'wand', 7011, 0, 'Epic', [81], 'Fete of Clay'],
+  [29, "Obfuscate's Meddler", 'amulet', 7003, 8, 'Rare', [18, 30], null],
+  [30, 'Karen You Scandalous Wench', 'amulet', 7003, 15, 'Epic', [26, 31], null],
+  [31, 'Poxproof', 'amulet', 7003, 30, 'Rare', [23, 30], null],
+  [32, 'Ethereal Choker', 'amulet', 7003, 10, 'Epic', [19, 30], null],
+  [33, "Absolox's Boomstick", 'staff', 7004, 5, 'Rare', [72], null],
+  [34, 'Staff of Dawn', 'staff', 7004, 15, 'Rare', [74], null],
+  [35, 'Ringwall', 'ring', 7002, 3, 'Rare', [57], null],
+  [36, 'Fleetfinger', 'ring', 7002, 10, 'Rare', [60], null],
+  [37, 'Gritchenscorn', 'ring', 7002, 10, 'Rare', [62], null],
+  [38, 'Mindblowing Ring', 'ring', 7002, 1, 'Rare', [52], null],
+  [39, 'Smartest Ring', 'ring', 7002, 20, 'Epic', [53], null],
+  [40, "Yzmar's Handicap", 'hat', 7005, 3, 'Rare', [37, 41], null],
+  [41, "Qubar's Ether", 'wand', 7011, 10, 'Rare', [83], null],
+  [42, "Qubar's Fire", 'wand', 7011, 10, 'Rare', [83], null],
+  [43, "Qubar's Air", 'wand', 7011, 10, 'Rare', [83], null],
+  [44, "Qubar's Water", 'wand', 7011, 10, 'Rare', [83], null],
+  [45, "Qubar's Earth", 'wand', 7011, 10, 'Rare', [83], null],
+  [46, 'Robe of Thaumic Unperturbability', 'robe', 7006, 15, 'Epic', [64, 67], null],
+] as const
+
+export const DOWSING_EQUIPMENT_RECIPES: readonly EquipmentRecipe[] =
+  EQUIPMENT_RECIPE_ROWS.map(([
+    sourceIndex,
+    name,
+    type,
+    nativeTypeId,
+    level,
+    rarity,
+    iconRecords,
+    setName,
+  ]) => ({
+    iconRecords,
+    level,
+    name,
+    nativeTypeId,
+    rarity,
+    setName,
+    sourceIndex,
+    type,
+  }))
+
+const HAGATHA_PERK_ROWS = [
+  [0, 'LIFE CHARM', 200, 'Increases maximum life by 25 percent.', 'derived_stat'],
+  [1, 'MANA CHARM', 200, 'Increases maximum mana by 25 percent.', 'derived_stat'],
+  [2, 'SPEED CHARM', 250, 'Increases movement and casting speed by 10 percent.', 'derived_stat'],
+  [3, 'ITEM CHARM', 1000, 'Improves the chance that useful items drop.', 'drop_modifier'],
+  [4, 'GOLD CHARM', 500, 'Improves gold drop chance and quantity.', 'drop_modifier'],
+  [5, "SEEKER'S CHARM", 200, 'Reveals directions to gold, items, and upgrades.', 'owner_visual'],
+  [6, 'REVELATION CHARM', 800, 'Newly learned skills start at level two.', 'skill_progression'],
+  [7, 'CHEAT DEATH CHARM', 5000, 'Survives one killing blow and restores half of maximum life.', 'one_shot_combat'],
+  [8, 'PERKY CHARM', 1500, 'Adds level-up choices and lowers item and skill requirements by two.', 'level_up_choice'],
+  [9, 'SCATTER CURSE', 150, 'Killed monsters scatter more and larger orbs.', 'drop_modifier'],
+  [10, 'WAR CHARM', 800, 'Reduces offensive spell mana costs by 25 percent.', 'derived_stat'],
+  [11, 'CURING CHARM', 250, 'Reduces poison damage by 50 percent.', 'damage_modifier'],
+  [12, 'THE LAST WORD CHARM', 500, 'Explodes on death for large area damage and changes final drops.', 'death_effect'],
+  [13, "SPELLWELDER'S CHARM", 2000, 'Recombines welded spells when one component improves.', 'skill_progression'],
+  [14, 'WEIRD CASTER CHARM', 2500, 'Grants a new secondary spell and favors secondary choices.', 'skill_progression'],
+  [15, "DRINKER'S CHARM", 1000, 'Automatically drinks owned potions when needed.', 'inventory_consumption'],
+  [16, 'GLASS CANNON CURSE', 1000, 'Doubles damage dealt and damage taken.', 'damage_modifier'],
+  [17, "SORCEROR'S CHARM", 3000, 'Allows one level-up reroll or preserves the reroll for later.', 'level_up_choice'],
+  [18, 'FOCUS CHARM', 1000, 'Reduces spell cooldowns by 25 percent.', 'derived_stat'],
+  [19, 'DISFIGURING CURSE', 3000, 'Enables all three ring slots.', 'equipment_capacity'],
+  [20, 'BARE HANDS CHARM', 500, 'Without a weapon, increases damage by 15 percent and reduces mana cost by 15 percent.', 'conditional_derived_stat'],
+  [21, 'SPLIT MIND CHARM', 4000, 'Concentrates progression on two selected skills.', 'skill_progression'],
+  [22, 'CURSE BOSSES', 2000, 'Makes bosses take triple damage.', 'damage_modifier'],
+  [23, 'ARCANE ATTRACTOR CHARM', 2000, 'Greatly improves the chance of magical upgrades.', 'drop_modifier'],
+  [24, 'SERENDIPITY CHARM', 1000, 'Triples spell damage until the owner is hurt.', 'until_hurt_combat'],
+  [25, 'REVERIE CHARM', 1000, 'Removes offensive spell mana costs until the owner is hurt.', 'until_hurt_combat'],
+  [26, "BRUTE'S CHARM", 3000, 'Increases melee damage by 200 percent and pushing by 100 percent.', 'derived_stat'],
+  [27, 'TONIC', 1000, 'Increases charm and curse capacity; at most two tonics apply.', 'perk_capacity'],
+] as const
+
+export const HAGATHA_PERKS: readonly HagathaPerkDefinition[] =
+  HAGATHA_PERK_ROWS.map(([selector, name, basePrice, description, behaviorFamily]) => ({
+    basePrice,
+    behaviorFamily,
+    description,
+    name,
+    selector,
+  }))
+
+export function createHubEconomy(
+  seed: number,
+  options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
+): HubEconomyState {
+  const stock = rollFomentiusStock(createNativeRng(seed), 3)
+  const bundleSelectors = stableSelectors(options.hagathaBundleSelectors ?? [])
+  return {
+    backpack: [
+      starterPotion(1, 'health-potion', 'Health Potion', 0, 46),
+      starterPotion(2, 'mana-potion', 'Mana Potion', 1, 47),
+    ],
+    charmCapacity: 3,
+    dowsingFee: SHLORIO_INITIAL_DOWSING_FEE,
+    dowsingOffers: [],
+    equipment: emptyEquipment(),
+    firstMixedSelectors: [],
+    fomentiusStock: stock.items,
+    gold: STARTING_PLAYER_GOLD,
+    hagathaBundleSelectors: bundleSelectors,
+    nextItemId: stock.nextItemId,
+    nextOfferId: 1,
+    ownedPerkSelectors: [],
+    revision: 0,
+    rng: stock.rng,
+    storage: [],
+    tonicPurchases: 0,
+  }
+}
+
+export function restockFomentius(source: HubEconomyState): HubEconomyState {
+  const stock = rollFomentiusStock(source.rng, source.nextItemId)
+  return {
+    ...source,
+    fomentiusStock: stock.items,
+    nextItemId: stock.nextItemId,
+    revision: source.revision + 1,
+    rng: stock.rng,
+  }
+}
+
+export function buyFomentiusItem(
+  source: HubEconomyState,
+  itemId: number,
+): HubEconomyResult {
+  const item = source.fomentiusStock.find((entry) => entry.id === itemId)
+  if (!item) return rejected(source, 'invalid-offer')
+  if (source.gold < item.price) return rejected(source, 'insufficient-gold')
+  const inserted = insertItem(source.backpack, inventoryCopy(item), HUB_INVENTORY_SLOT_CAPACITY)
+  if (!inserted) return rejected(source, 'capacity-full')
+  return accepted({
+    ...source,
+    backpack: inserted,
+    fomentiusStock: source.fomentiusStock.filter((entry) => entry.id !== itemId),
+    gold: source.gold - item.price,
+  })
+}
+
+export function hagathaOffers(source: HubEconomyState): readonly HagathaOffer[] {
+  const owned = new Set(source.ownedPerkSelectors)
+  const offers = HAGATHA_PERKS
+    .filter(({ selector }) => (
+      selector !== 8
+      && (selector === 27 ? source.tonicPurchases < 2 : !owned.has(selector))
+    ))
+    .map((perk) => ({
+      ...perk,
+      members: [perk.selector],
+      price: individualPerkPrice(source, perk.selector),
+    }))
+  if (source.hagathaBundleSelectors.length === 0) return offers
+  const price = Math.ceil(source.hagathaBundleSelectors.reduce(
+    (sum, selector) => sum + individualPerkPrice(source, selector),
+    0,
+  ) / 2)
+  return [...offers, {
+    basePrice: price,
+    behaviorFamily: 'bulk_selector_list',
+    description: 'A bargain bundle mixed from the selected charms and curses.',
+    members: source.hagathaBundleSelectors,
+    name: 'BARGAIN BUNDLE',
+    price,
+    selector: -1,
+  }]
+}
+
+export function buyHagathaPerk(
+  source: HubEconomyState,
+  selector: number,
+): HubEconomyResult {
+  const offer = hagathaOffers(source).find((entry) => entry.selector === selector)
+  if (!offer) return rejected(source, 'invalid-offer')
+  if (source.gold < offer.price) return rejected(source, 'insufficient-gold')
+  if (!perksFitCapacity(source, offer.members)) return rejected(source, 'perk-capacity-full')
+
+  let charmCapacity = source.charmCapacity
+  let tonicPurchases = source.tonicPurchases
+  const owned = new Set(source.ownedPerkSelectors)
+  const firstMixed = new Set(source.firstMixedSelectors)
+  for (const member of offer.members) {
+    firstMixed.add(member)
+    if (member === 27) {
+      if (tonicPurchases < 2) {
+        tonicPurchases += 1
+        charmCapacity = Math.min(9, charmCapacity + 3)
+      }
+    } else {
+      owned.add(member)
+    }
+  }
+  return accepted({
+    ...source,
+    charmCapacity,
+    firstMixedSelectors: [...firstMixed].sort((left, right) => left - right),
+    gold: source.gold - offer.price,
+    hagathaBundleSelectors: selector === -1 ? [] : source.hagathaBundleSelectors,
+    ownedPerkSelectors: [...owned].sort((left, right) => left - right),
+    tonicPurchases,
+  })
+}
+
+export function transferInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+  direction: 'to-backpack' | 'to-storage',
+): HubEconomyResult {
+  const from = direction === 'to-storage' ? source.backpack : source.storage
+  const to = direction === 'to-storage' ? source.storage : source.backpack
+  const item = from.find((entry) => entry.id === itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  const inserted = insertItem(to, item, HUB_INVENTORY_SLOT_CAPACITY)
+  if (!inserted) return rejected(source, 'capacity-full')
+  return accepted({
+    ...source,
+    backpack: direction === 'to-storage'
+      ? from.filter((entry) => entry.id !== itemId)
+      : inserted,
+    storage: direction === 'to-storage'
+      ? inserted
+      : from.filter((entry) => entry.id !== itemId),
+  })
+}
+
+export function dowse(source: HubEconomyState, playerLevel: number): HubEconomyResult {
+  if (source.dowsingOffers.length > 0) return rejected(source, 'offers-active')
+  if (source.gold < source.dowsingFee) return rejected(source, 'insufficient-gold')
+  let rng = source.rng
+  const countDraw = drawNativeInteger(rng, 2)
+  rng = countDraw.state
+  const requestedCount = countDraw.value + 3
+  const offers: DowsingOffer[] = []
+  let nextOfferId = source.nextOfferId
+  for (let slot = 0; slot < requestedCount; slot += 1) {
+    let acceptedRecipe: EquipmentRecipe | undefined
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const recipeDraw = drawNativeInteger(rng, DOWSING_EQUIPMENT_RECIPES.length)
+      rng = recipeDraw.state
+      const recipe = DOWSING_EQUIPMENT_RECIPES[recipeDraw.value]!
+      if (
+        recipe.level <= playerLevel
+        && !offers.some(({ recipeIndex }) => recipeIndex === recipe.sourceIndex)
+      ) {
+        acceptedRecipe = recipe
+        break
+      }
+    }
+    if (!acceptedRecipe) continue
+    const priceDraw = drawNativeInteger(rng, 15)
+    rng = priceDraw.state
+    offers.push({
+      id: nextOfferId,
+      price: (priceDraw.value + 100) * 50,
+      recipeIndex: acceptedRecipe.sourceIndex,
+    })
+    nextOfferId += 1
+  }
+  return accepted({
+    ...source,
+    dowsingOffers: offers,
+    gold: source.gold - source.dowsingFee,
+    nextOfferId,
+    rng,
+  })
+}
+
+export function buyDowsingOffer(
+  source: HubEconomyState,
+  offerId: number,
+): HubEconomyResult {
+  const offer = source.dowsingOffers.find((entry) => entry.id === offerId)
+  if (!offer) return rejected(source, 'invalid-offer')
+  if (source.gold < offer.price) return rejected(source, 'insufficient-gold')
+  const recipe = DOWSING_EQUIPMENT_RECIPES[offer.recipeIndex]
+  if (!recipe) return rejected(source, 'invalid-offer')
+  const item = createEquipmentInventoryItem(recipe, source.nextItemId)
+  const backpack = insertItem(source.backpack, item, HUB_INVENTORY_SLOT_CAPACITY)
+  if (!backpack) return rejected(source, 'capacity-full')
+  const feeDraw = drawNativeInteger(source.rng, 10)
+  return accepted({
+    ...source,
+    backpack,
+    dowsingFee: (feeDraw.value + 10) * 50,
+    dowsingOffers: [],
+    gold: source.gold - offer.price,
+    nextItemId: source.nextItemId + 1,
+    rng: feeDraw.state,
+  })
+}
+
+export function closeDowsingOffers(source: HubEconomyState): HubEconomyState {
+  return source.dowsingOffers.length === 0
+    ? source
+    : { ...source, dowsingOffers: [], revision: source.revision + 1 }
+}
+
+export function createEquipmentInventoryItem(
+  recipe: EquipmentRecipe,
+  id: number,
+): HubInventoryItem {
+  return {
+    equipmentType: recipe.type,
+    iconRecords: recipe.iconRecords,
+    id,
+    kind: 'equipment',
+    name: recipe.name,
+    nativeSubtype: null,
+    nativeTypeId: recipe.nativeTypeId,
+    quantity: 1,
+    rarity: recipe.rarity,
+    recipeIndex: recipe.sourceIndex,
+  }
+}
+
+export function equipInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+  slot: EquipmentSlot,
+): HubEconomyResult {
+  const item = source.backpack.find((entry) => entry.id === itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  if (!item.equipmentType) return rejected(source, 'ineligible-item')
+  if (!slotAccepts(slot, item.equipmentType)) return rejected(source, 'invalid-slot')
+  if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
+    return rejected(source, 'slot-locked')
+  }
+  const previous = equippedAt(source.equipment, slot)
+  let backpack: readonly HubInventoryItem[] = source.backpack.filter(({ id }) => id !== itemId)
+  if (previous) {
+    const inserted = insertItem(backpack, previous, HUB_INVENTORY_SLOT_CAPACITY)
+    if (!inserted) return rejected(source, 'capacity-full')
+    backpack = inserted
+  }
+  return accepted({
+    ...source,
+    backpack,
+    equipment: withEquippedItem(source.equipment, slot, item),
+  })
+}
+
+export function unequipInventorySlot(
+  source: HubEconomyState,
+  slot: EquipmentSlot,
+): HubEconomyResult {
+  if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
+    return rejected(source, 'slot-locked')
+  }
+  const item = equippedAt(source.equipment, slot)
+  if (!item) return rejected(source, 'slot-empty')
+  const backpack = insertItem(source.backpack, item, HUB_INVENTORY_SLOT_CAPACITY)
+  if (!backpack) return rejected(source, 'capacity-full')
+  return accepted({
+    ...source,
+    backpack,
+    equipment: withEquippedItem(source.equipment, slot, null),
+  })
+}
+
+function inventoryItemFromStock(
+  definition: FomentiusStockDefinition,
+  id: number,
+): HubInventoryItem {
+  return {
+    equipmentType: null,
+    iconRecords: definition.iconRecords,
+    id,
+    kind: definition.kind,
+    name: definition.name,
+    nativeSubtype: definition.nativeSubtype,
+    nativeTypeId: definition.nativeTypeId,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+}
+
+function rollFomentiusStock(
+  sourceRng: NativeRngState,
+  sourceNextItemId: number,
+): { readonly items: readonly HubShopItem[]; readonly nextItemId: number; readonly rng: NativeRngState } {
+  let rng = sourceRng
+  let nextItemId = sourceNextItemId
+  const items: HubShopItem[] = []
+  for (const definition of FOMENTIUS_STOCK_DEFINITIONS) {
+    const draw = drawNativeInteger(rng, definition.rollBound)
+    rng = draw.state
+    const quantity = definition.gateValue === undefined
+      ? draw.value + (definition.quantityOffset ?? 0)
+      : Number(draw.value === definition.gateValue)
+    for (let index = 0; index < quantity; index += 1) {
+      items.push({
+        ...inventoryItemFromStock(definition, nextItemId),
+        price: definition.price,
+      })
+      nextItemId += 1
+    }
+  }
+  return { items, nextItemId, rng }
+}
+
+function inventoryCopy(item: HubShopItem): HubInventoryItem {
+  const { price: _price, ...inventory } = item
+  return inventory
+}
+
+function starterPotion(
+  id: number,
+  kind: 'health-potion' | 'mana-potion',
+  name: string,
+  nativeSubtype: number,
+  iconRecord: number,
+): HubInventoryItem {
+  return {
+    equipmentType: null,
+    iconRecords: [iconRecord],
+    id,
+    kind,
+    name,
+    nativeSubtype,
+    nativeTypeId: 7001,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+}
+
+function emptyEquipment(): HubEquipmentState {
+  return {
+    amulet: null,
+    hat: null,
+    rings: [null, null, null],
+    robe: null,
+    weapon: null,
+  }
+}
+
+function stableSelectors(source: readonly number[]): readonly number[] {
+  const result = [...new Set(source)].sort((left, right) => left - right)
+  if (result.some((selector) => selector < 0 || selector > 27 || selector === 8)) {
+    throw new RangeError('Hagatha bundle contains an unavailable selector')
+  }
+  return result
+}
+
+function individualPerkPrice(source: HubEconomyState, selector: number): number {
+  const perk = HAGATHA_PERKS[selector]
+  if (!perk) throw new RangeError(`unknown Hagatha selector ${selector}`)
+  return source.firstMixedSelectors.includes(selector) ? perk.basePrice : perk.basePrice * 3
+}
+
+function perksFitCapacity(source: HubEconomyState, selectors: readonly number[]): boolean {
+  let capacity = source.charmCapacity
+  let tonicPurchases = source.tonicPurchases
+  let ownedCount = source.ownedPerkSelectors.length
+  const owned = new Set(source.ownedPerkSelectors)
+  for (const selector of selectors) {
+    if (selector === 27) {
+      if (tonicPurchases >= 2) return false
+      tonicPurchases += 1
+      capacity = Math.min(9, capacity + 3)
+    } else if (!owned.has(selector)) {
+      owned.add(selector)
+      ownedCount += 1
+    }
+  }
+  return ownedCount <= capacity
+}
+
+function insertItem(
+  destination: readonly HubInventoryItem[],
+  item: HubInventoryItem,
+  capacity: number,
+): readonly HubInventoryItem[] | null {
+  if (item.nativeTypeId === 7001) {
+    const stackIndex = destination.findIndex((entry) => (
+      entry.nativeTypeId === item.nativeTypeId
+      && entry.nativeSubtype === item.nativeSubtype
+    ))
+    if (stackIndex >= 0) {
+      return destination.map((entry, index) => index === stackIndex
+        ? { ...entry, quantity: entry.quantity + item.quantity }
+        : entry)
+    }
+  }
+  return destination.length >= capacity ? null : [...destination, item]
+}
+
+function slotAccepts(slot: EquipmentSlot, type: EquipmentType): boolean {
+  if (slot === 'weapon') return type === 'staff' || type === 'wand'
+  if (slot.startsWith('ring-')) return type === 'ring'
+  return slot === type
+}
+
+function equippedAt(
+  equipment: HubEquipmentState,
+  slot: EquipmentSlot,
+): HubInventoryItem | null {
+  if (slot === 'ring-0') return equipment.rings[0]
+  if (slot === 'ring-1') return equipment.rings[1]
+  if (slot === 'ring-2') return equipment.rings[2]
+  return equipment[slot]
+}
+
+function withEquippedItem(
+  source: HubEquipmentState,
+  slot: EquipmentSlot,
+  item: HubInventoryItem | null,
+): HubEquipmentState {
+  if (slot.startsWith('ring-')) {
+    const index = Number(slot.at(-1))
+    const rings = [...source.rings] as [
+      HubInventoryItem | null,
+      HubInventoryItem | null,
+      HubInventoryItem | null,
+    ]
+    rings[index] = item
+    return { ...source, rings }
+  }
+  return { ...source, [slot]: item }
+}
+
+function accepted(source: HubEconomyState): HubEconomyResult {
+  return {
+    accepted: true,
+    reason: null,
+    state: { ...source, revision: source.revision + 1 },
+  }
+}
+
+function rejected(
+  state: HubEconomyState,
+  reason: HubEconomyRejection,
+): HubEconomyResult {
+  return { accepted: false, reason, state }
+}

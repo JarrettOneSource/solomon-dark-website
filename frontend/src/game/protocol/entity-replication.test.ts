@@ -106,6 +106,69 @@ test('registry gives Students stable static descriptors and compact dynamic samp
   assert.ok(frameBytes < fullBytes * 0.4, `${frameBytes} is not compact against ${fullBytes}`)
 })
 
+test('player economy is revision-delta replicated instead of repeated on every frame', () => {
+  const initial = createGameSnapshot(createGameSimulation({ wizard: {
+    discipline: 'arcane',
+    displayName: 'Economy Wizard',
+    element: 'fire',
+  } }), 'wizard')
+  const unchangedBase = cloneSnapshot(initial)
+  const unchanged: GameSnapshot = {
+    ...unchangedBase,
+    tick: unchangedBase.tick + 1,
+    players: {
+      ...unchangedBase.players,
+      wizard: {
+        ...unchangedBase.players.wizard!,
+        position: { x: unchangedBase.players.wizard!.position.x + 1, y: 400 },
+      },
+    },
+  }
+  const baseline = createReplicatedEntityBaseline(initial)
+  const delta = createGameSnapshotFrame(unchanged, 1, baseline)
+  assert.equal(Object.hasOwn(delta.players.wizard!, 'economy'), false)
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(delta))
+      < Buffer.byteLength(JSON.stringify(unchanged)) - 5_000,
+  )
+
+  const reconstructor = new EntityReplicationReconstructor()
+  reconstructor.reset(initial, 1)
+  const reconstructed = reconstructor.apply(delta, 2)
+  assert.deepEqual(reconstructed.players.wizard!.economy, initial.players.wizard!.economy)
+  assert.deepEqual(reconstructed.players.wizard!.position, unchanged.players.wizard!.position)
+
+  const purchasedBase = cloneSnapshot(unchanged)
+  const purchased: GameSnapshot = {
+    ...purchasedBase,
+    tick: purchasedBase.tick + 1,
+    players: {
+      ...purchasedBase.players,
+      wizard: {
+        ...purchasedBase.players.wizard!,
+        economy: {
+          ...purchasedBase.players.wizard!.economy,
+          gold: purchasedBase.players.wizard!.economy.gold - 150,
+          revision: purchasedBase.players.wizard!.economy.revision + 1,
+        },
+      },
+    },
+  }
+  const purchaseFrame = createGameSnapshotFrame(purchased, 2, createReplicatedEntityBaseline(unchanged))
+  assert.equal(Object.hasOwn(purchaseFrame.players.wizard!, 'economy'), true)
+  const afterPurchase = reconstructor.apply(purchaseFrame, 3)
+  assert.equal(afterPurchase.players.wizard!.economy.gold, 9_850)
+
+  const keyframe = createGameSnapshotFrame(purchased, 0, undefined, true)
+  assert.equal(Object.hasOwn(keyframe.players.wizard!, 'economy'), true)
+  const missingKeyframeEconomy = cloneSnapshotFrame(keyframe)
+  delete missingKeyframeEconomy.players.wizard!.economy
+  assert.throws(
+    () => new EntityReplicationReconstructor().apply(missingKeyframeEconomy, 1),
+    /missing its economy baseline/,
+  )
+})
+
 test('reconstructor applies quantized motion and exact spawn-retire lifecycle', () => {
   const initial = hubSnapshot(32)
   const changed = cloneSnapshot(initial)

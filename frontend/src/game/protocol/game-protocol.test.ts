@@ -153,6 +153,38 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
+test('protocol v21 accepts every authoritative inventory action and rejects malformed variants', () => {
+  const actions = [
+    { type: 'buy-dowsing', offerId: 1 },
+    { type: 'buy-fomentius', itemId: 2 },
+    { type: 'buy-hagatha', selector: -1 },
+    { type: 'close-dowsing' },
+    { type: 'dowse' },
+    { type: 'equip', itemId: 3, slot: 'ring-2' },
+    { type: 'transfer', direction: 'to-storage', itemId: 4 },
+    { type: 'unequip', slot: 'weapon' },
+  ] as const
+  for (const action of actions) {
+    assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+      type: 'client-hub-action',
+      action,
+    })), { type: 'client-hub-action', action })
+  }
+
+  for (const action of [
+    { type: 'buy-hagatha', selector: 8 },
+    { type: 'equip', itemId: 1, slot: 'boots' },
+    { type: 'transfer', direction: 'sell', itemId: 1 },
+    { type: 'dowse', offerId: 1 },
+    { type: 'sell-fomentius', itemId: 1 },
+  ]) {
+    assert.throws(() => decodeClientGameMessage(JSON.stringify({
+      type: 'client-hub-action',
+      action,
+    })), GameProtocolError)
+  }
+})
+
 test('server welcome round-trips content, kernel, character, and world ownership', () => {
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
@@ -183,6 +215,8 @@ test('server welcome round-trips content, kernel, character, and world ownership
   }
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
+  assert.equal(welcome.snapshot.players['player-1'].economy.gold, 10_000)
+  assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     activeWeldBuildId: null,
     currentHealth: 50,

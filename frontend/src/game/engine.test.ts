@@ -126,6 +126,7 @@ function inertSession() {
     sampleBoneyardPresentation() { throw new Error() },
     samplePresentation() { throw new Error() },
     selectSkill() {},
+    sendHubAction() {},
     sendInput() {},
     startMatch() {},
   }

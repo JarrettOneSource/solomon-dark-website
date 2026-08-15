@@ -5,7 +5,7 @@ import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
-import { createGameSimulation } from '../core-server/game-simulation.ts'
+import { createGameSimulation, getPlayerEconomy } from '../core-server/game-simulation.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type {
   PlayerCharacterConfig,
@@ -95,6 +95,34 @@ test('authoritative game host owns two configured player characters and movement
     snapshot.snapshot.players[second.welcome.playerId].velocity,
     { x: 0, y: 0 },
   )
+})
+
+test('game host routes inventory commands without disconnecting on a stale or unavailable offer', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+  const initial = getPlayerEconomy(host.state(), playerId)
+  const stockItemId = initial.fomentiusStock[0]!.id
+
+  const reconciled = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].economy.revision === initial.revision
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'buy-fomentius', itemId: stockItemId },
+  }))
+  const snapshot = await reconciled
+  assert.equal(snapshot.type, 'server-snapshot')
+  assert.equal(snapshot.snapshot.players[playerId].economy.gold, 10_000)
+
+  const pong = nextMessage(client.socket, (message) => (
+    message.type === 'server-pong' && message.nonce === 73
+  ))
+  client.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 73 }))
+  assert.deepEqual(await pong, { type: 'server-pong', nonce: 73 })
 })
 
 test('game host pauses a leveling player and authoritatively books the offered skill', async (context) => {
@@ -231,6 +259,26 @@ test('game host drops an authenticated player that misses its transport heartbea
   assert.equal(host.playerCount(), 1)
   await waitFor(() => host.playerCount() === 0)
   assert.equal(client.socket.readyState, WebSocket.CLOSED)
+})
+
+test('game host tolerates one delayed transport pong before declaring the client dead', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    heartbeatIntervalMs: 50,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER, false)
+  context.after(() => closeSocket(client.socket))
+  client.socket.once('ping', () => {
+    setTimeout(() => {
+      if (client.socket.readyState === WebSocket.OPEN) client.socket.pong()
+    }, 60)
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 170))
+  assert.equal(host.playerCount(), 1)
+  assert.equal(client.socket.readyState, WebSocket.OPEN)
 })
 
 test('game host sends a complete keyframe when a client requests recovery', async (context) => {

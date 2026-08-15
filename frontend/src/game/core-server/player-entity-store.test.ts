@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createPlayerCharacter } from '../core-kernels/player-character.ts'
+import { buyFomentiusItem } from '../core-kernels/hub-economy.ts'
 import {
   addPlayerEntity,
   coldSlowPlayerEntity,
@@ -14,12 +15,14 @@ import {
   playerEntityDisplayHealth,
   playerEntityMovementScale,
   playerCharacterAt,
+  playerEconomyAt,
   playerEntityId,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
   playerStatBookAt,
   removePlayerEntity,
+  replacePlayerEconomy,
   resetPlayerEntitiesForNewRun,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
@@ -36,6 +39,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.deepEqual(store.entityIds, [1, 2])
   assert.deepEqual(store.identities.map((identity) => identity.playerId), ['first', 'second'])
   assert.equal(store.configs.length, store.locomotions.length)
+  assert.equal(store.economies.length, store.locomotions.length)
   assert.equal('config' in store.locomotions[0]!, false)
   assert.equal('primaryCast' in store.locomotions[0]!, false)
   assert.equal(store.locomotions.length, store.progressions.length)
@@ -43,6 +47,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.progressions.length, store.skillBooks.length)
   assert.equal(store.skillBooks.length, store.statBooks.length)
   assert.equal(playerEntityId(store, 'second'), 2)
+  assert.equal(playerEconomyAt(store, 'first')?.gold, 10_000)
 
   store = damagePlayerEntity(store, 'second', 60)
   assert.equal(playerProgressionAt(store, 'second')?.currentHealth, -10)
@@ -54,6 +59,26 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(playerCharacterAt(store, 'second')?.config.displayName, 'Second')
   assert.equal(playerProgressionAt(store, 'second')?.lifeState, 'lethal-pending')
   assert.equal(store.nextEntityId, 3)
+})
+
+test('each dense player row owns an isolated economy component that survives run resets', () => {
+  let store = createPlayerEntityStore()
+  store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
+  const second = playerEconomyAt(store, 'second')!
+  const first = playerEconomyAt(store, 'first')!
+  const purchase = buyFomentiusItem(first, first.fomentiusStock[0]!.id)
+  assert.equal(purchase.accepted, true)
+  store = replacePlayerEconomy(store, 'first', purchase.state)
+
+  assert.equal(playerEconomyAt(store, 'first')?.gold, purchase.state.gold)
+  assert.strictEqual(playerEconomyAt(store, 'second'), second)
+  const economyRows = store.economies
+  store = resetPlayerEntitiesForNewRun(store, {
+    first: createPlayerCharacter(FIRST, { x: 100, y: 200 }),
+    second: createPlayerCharacter(SECOND, { x: 300, y: 400 }),
+  })
+  assert.strictEqual(store.economies, economyRows)
 })
 
 test('each player owns private progression and ranks while sharing immutable stat definitions', () => {

@@ -15450,3 +15450,191 @@ There are no browser-platform approximations or undisposed members inside the
 implemented Website enemy-damage presenter. The separately documented Imp
 materialization phase and the remaining numeric death-effect physics are not
 producers in this system and remain outside this closure.
+
+## 2026-08-15 — Inventory and hub-trader native contract
+
+### Reported smell and parity question
+
+- Reported web behavior: `/game` has no usable inventory, gold ledger, merchant
+  dialogue, merchant screens, or authoritative purchase/transfer path; three of
+  the four trader actors are also static.
+- Stock behavior to recover: the complete participant-owned inventory and hub
+  merchant service system, including every authored catalog member, lifecycle
+  branch, interaction geometry, dialogue, screen layout, and actor animation.
+- Reproduction scenes: a new Survival College profile, Courtyard Hagatha,
+  Fomentius, and Luthacus, plus Library Shlorio; a second participant falsifies
+  shared-ledger behavior.
+- Falsifiable questions: whether stock is participant- or world-owned; whether
+  reopening restocks; whether rejection is atomic; whether Luthacus charges or
+  copies; whether dowsing close refunds; whether dormant rows are reachable;
+  and whether each apparent still actor owns a larger animation bank.
+
+### Evidence and provenance
+
+| Clean stock | committed G8 hub-trader fixture, three clean retail instances and two-owner transaction runs | initial stock/fees and participant-local mutation | high |
+| Instructions | retail functions `0x004fb890`, `0x00501610`, `0x00505010`, `0x0050b720`, `0x0055faf0`, `0x0056bf70`, `0x0056c340`, `0x0056cd00`, `0x0056d110`, `0x005c8960` | constructors, reachability, animation, range, stock, debit, transfer, dowsing, teardown | high |
+| Runtime | prior injected-loader `sd.debug` G8 captures against retail 0.72.5 | gold/backpack/storage changes remain local to the initiating native profile | high |
+| Asset/data | retail dialogue files; College 10, 45, 54..58, 89..92, 126..129, 160..164, 517..524; Library 21..24; Inventory/Skills/UI records; complete perk/item catalogs | exact copy, animation membership, item identity, and UI art membership | high |
+
+The preferred image base is `0x00400000`; those are preferred image addresses,
+not ASLR runtime addresses. A fresh clean-stock backbuffer was not captured in
+this pass because the available loader rejected the exact retail build stamp
+before process launch; that failed launch is not behavioral evidence.
+
+### System boundary and membership inventory
+
+Native system: participant-owned inventory/equipment state and the four hub
+merchant actors/services that inspect or mutate it, from world activation
+through modal teardown. Item use, combat-stat effect application, ground loot,
+and persistence production are downstream or upstream systems, not merchant
+transactions.
+
+| Member (class/variant/scene/branch) | Native source | Shipping disposition | Proof required or retained |
+| --- | --- | --- | --- |
+| Player gold, backpack, storage, stable objects, starter stacks | profile/inventory roots; `0x0055ff20` | exact-ported | fresh-player, stack, and two-owner tests |
+| Fomentius nine-row stock generator and ordinary buy | `0x005c8960`, `0x0056bf70` | exact-ported | complete rows, seeded stock, atomic tests |
+| Hagatha 28 catalog rows, visible 27, bundle -1, prices/capacity | perk catalog; `0x0056c340` | exact-ported; selector 8 out-of-system because native excludes it | catalog, price, rebuild, bundle tests |
+| Luthacus backpack/storage transfer | `0x0056cd00` | exact-ported | two-way/no-gold/no-copy tests |
+| Shlorio fee, untargeted offers, buy, clear, close | `0x0055faf0`, `0x0056d110` | exact-ported | complete 47-recipe lifecycle tests |
+| Six equipment classes and seven equip sinks | item catalog; `0x00570cd0`, `0x00575850`, `0x00570d80`, `0x0066f020` | exact-ported | per-class/per-sink tests |
+| Shop, DowsingShop, and InventoryScreen presentation | `0x00557d40`, `0x00558160`, `0x00568b90`; Inventory/Skills/UI records | exact-ported | render contract and browser screenshots |
+| Four reachable introductions and commands | survival dialogue data; `0x0050b720`, `0x004fb890` | exact-ported | exact-copy and reachability tests |
+| Fomentius actor/balloon | `0x0050b110`, `0x0051c1a0`; College 54..58, 160..164 | verified-already-at-parity | existing presentation/render tests |
+| Hagatha body, accessory, and cross-fades | `0x0051adc0`, `0x0051b1d0`; College 45, 89..92, 517..524 | exact-ported | every-bank-member animation tests |
+| Luthacus common animation composite | `0x0050a4c0`, `0x00501610`; College 10, 126..129 | exact-ported | four-frame composite test |
+| Shlorio common animation strip | `0x0050a4c0`, `0x00501610`; Library 21..24 | exact-ported | four-frame private-room test |
+| Range/fade/region interruption and modal/input teardown | `0x00505010`, `0x00514a20` | exact-ported | authority and UI lifecycle tests |
+| `Outfit me Randomly` / `!RANDOMEQUIP` | dormant scavenger data row, absent executable literal/dispatcher branch | out-of-system (not wired by retail builder) | builder and full literal/xref sweep |
+| Targeted dowsing | `DowsingShop+0x344`; constructor/xrefs and set/type helpers | out-of-system (no retail hub producer) | constructor/xref/writer sweep |
+| Item use, ground loot, archival and account persistence | separate inventory/save consumers | out-of-system (separate gameplay/save systems) | ownership boundary trace |
+| 86 equipment FX declarations and Clothes attachments | item catalog and downstream consumers | out-of-system (separate combat/stat/render systems) | complete catalog retained |
+| Annalist, Librarian, Arch Chancellor, Painting animator siblings | remaining common-animator xrefs | out-of-system (non-trader actors/props) | complete shared-function xref sweep |
+
+The 2026-08-15 trader pass uses retail `0.72.5` `SolomonDark.exe`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Static evidence comes from the checked-in Ghidra project and exact retail data
+files; the prior G8 live fixture corroborates the initial trader state and
+transactions. A fresh native backbuffer capture was not possible because the
+available built loader rejected this executable's build stamp before launch,
+so that failed attempt supplies no behavioral evidence.
+
+### Participant-owned inventory and temporary gold override
+
+Native gold and inventory are participant-owned profile state which survives
+region replacement. The Website must keep the same ownership boundary in its
+authoritative player entity component and replicate a read-only projection to
+clients. Hub transaction messages identify an intent only; the server resolves
+the authenticated participant, active hub region, target range, current offer,
+price, funds, and destination capacity before one atomic mutation.
+
+Protocol 21 carries the complete economy in the welcome and periodic recovery
+keyframes, then omits it from ordinary player frames while that player's economy
+revision is unchanged. A changed revision carries the complete replacement and
+the client reconstructs it against its last accepted baseline. This keeps the
+participant-owned state authoritative without repeating the multi-kilobyte
+Fomentius/Hagatha catalogs on every 20 Hz movement snapshot.
+
+For this milestone, every newly created Website participant starts with
+exactly **10,000 gold**. This is an explicit product override requested on
+2026-08-15, not a recovered native starting value. It is intentionally a
+single named constant so a later persistence/economy pass can replace it.
+Each new participant also starts with the recovered two one-unit potion stacks:
+Health Potion in backpack slot 0 and Mana Potion in slot 1.
+
+Backpack entries carry a stable participant-local ID, native item/type identity,
+display name, icon record, stack count, and any offer provenance needed by the
+UI. Storage is a second participant-owned container. Gold is never represented
+as an inventory stack. Potion-like identical entries stack on insertion;
+equipment and perk offers do not. Shop views may group equivalent stock for
+display, but buying one removes and transfers exactly one native stock object.
+
+### Actors, animation, and interaction
+
+The service actors and recovered hit circles are:
+
+| Actor | Region | Root | Radius | Service title |
+| --- | --- | --- | ---: | --- |
+| Hagatha | Courtyard | `(1340,280)` | 15 | `HAGATHA'S CHARMS AND CURSES` |
+| Fomentius | Courtyard | `(1397,664)` | 30 | `FOMENTIUS' USEFUL THYNGS` |
+| Luthacus | Courtyard | `(1700.5,449.5)` | 25 | `LUTHACUS' SCAVENGED GOODS` |
+| Shlorio | Library | `(900,642.5)` | 25 | `SHLORIO'S DISCOUNT DOWSING` |
+
+Pointer activation uses those actor circles. Keyboard activation chooses the
+nearest in-range service. Both client presentation and server authority use the
+native engagement boundary:
+
+```text
+distanceSquared(player, actor) <= 5 * actorRadius^2 + 1500
+```
+
+Opening a dialogue blocks spell/movement input. Moving outside that boundary,
+changing region, or entering a region fade closes it. Service selection
+replaces the dialogue with the shop/storage view. The exact introductions and
+choice labels come from
+`data/dialogue/survival/{witch,potionguy,scavenger,dowser}.txt`; no invented
+merchant copy substitutes for them.
+
+Luthacus renders College record 10 composited with records 126..129, and
+Shlorio renders Library records 21..24. Their recovered common idle animator
+has a 1-in-200 trigger, a `(Float(3,false)+1)*0.45` phase speed, and a
+180-degree easing cycle selecting the four-frame strip. Hagatha continuously
+loops College records 517..524 from phase speed
+`(Float(0.25,false)+1)*0.05`, wrapping at eight. A native
+`Integer(1500)==3` draw persistently reverses that velocity's sign; it does not
+double the speed. College 89..92 cross-fade decoration is presentation state
+rather than economy state. Multiplayer clients derive the visual loop from
+snapshot/tick time and never mutate trader stock from an animation event.
+
+### Service behavior
+
+Fomentius generates stock only for initial hub creation and post-run return.
+The exact ordered generator is Health Potion 150 (2..4), Mana Potion 75
+(2..7), Rejuvenation Potion 200 (0..2), Dye 300 (2..3), Key 1200 (one on
+`Integer(18)==1`), Sack 50 (1..2), Antidote 100 (1..3), Wizard Chug 2500 (one
+on `Integer(8)==3`), and Mind Chug 1500 (one on `Integer(8)==3`). Opening and
+closing the shop never restocks it.
+
+Hagatha exposes selector IDs 0..27 except 8 from the recovered perk catalog.
+Owned selectors disappear on rebuild. A selector's first-ever mix costs three
+times its base price; after its persistent first-mix flag is set, a later mix
+costs the base price. Capacity and funds are
+validated before debit; success advances that participant's owned/rank and
+first-mix state. The Website inventory milestone records the recovered perk
+progression transaction and exposes it in the inventory. Combat effects that
+are not already represented by the player stat/skill model remain separately
+gated rather than being guessed.
+
+Luthacus transfers a selected object backpack-to-storage or
+storage-to-backpack. The operation neither reads nor changes gold, creates no
+copy, and preserves stacking semantics.
+
+Shlorio's initial fee is the live-observed explicit value 650. A DOWSE action
+rejects insufficient funds without mutation, otherwise debits once and creates
+three or four unique offers from the recovered 47-equipment recipe catalog.
+Offer prices are 5000..5700 in 50-gold increments. Buying one uses the common
+atomic purchase path, clears all remaining offers, and rolls the next fee in
+500..950. Closing a paid result loses those offers without refund. The dormant
+targeted branch would deterministically union every eligible same-set and
+same-type recipe, but the constructor writes its target pointer null and both
+retail hub constructor call sites leave it null. It is omitted because no
+retail hub producer reaches it, not because its cardinality is unknown.
+
+All purchases are buy-only. There is no sale, refund, or buyback action. The
+four-column common shop and three-column dowsing layouts display the replicated
+participant gold and disable unaffordable actions, but the server still
+revalidates every intent. A rejected action changes neither gold, inventory,
+offer stock, perk state, nor dowsing state.
+
+### Focused acceptance boundary
+
+Required automated coverage pins 10,000 starting gold, the two starter stacks,
+exact Fomentius roll order/ranges, atomic success and rejection, Hagatha price
+progression, two-way storage transfer, Shlorio fee/offer/purchase lifecycle,
+participant isolation, protocol validation/copying, and recovered animation
+frame selection. Browser acceptance must enter the hub as an ordinary player,
+open a trader through world interaction, buy an item, observe gold and
+inventory update, transfer it through Luthacus, complete one dowsing purchase,
+and show that a second participant's ledger is unchanged. Native-equipment
+combat effects, dormant random outfitting, unreachable targeted dowsing,
+selling, and persistent account storage are not silently invented by this
+milestone.

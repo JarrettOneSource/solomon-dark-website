@@ -27,6 +27,21 @@ import {
 } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
+  buyDowsingOffer,
+  buyFomentiusItem,
+  buyHagathaPerk,
+  closeDowsingOffers,
+  dowse,
+  equipInventoryItem,
+  restockFomentius,
+  transferInventoryItem,
+  unequipInventorySlot,
+  type HubEconomyRejection,
+  type HubEconomyState,
+  type HubInventoryAction,
+  type HubTraderId,
+} from '../core-kernels/hub-economy.ts'
+import {
   boneyardEnemyExperienceAward,
   effectivePrimarySkillRankStats,
   type PlayerLevelUpBarrierState,
@@ -76,6 +91,7 @@ import {
   grantPlayerEntityExperience,
   grantSharedPlayerEntityExperience,
   playerCharacterAt,
+  playerEconomyAt,
   playerCharacterRecords,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
@@ -91,6 +107,7 @@ import {
   stepPlayerEntityCombatTick,
   tryDebitPlayerEntityMana,
   replacePlayerCharacterRecords,
+  replacePlayerEconomy,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
 
@@ -112,8 +129,15 @@ export interface GameSimulationState {
 
 export interface GameSimulationOptions {
   hubStudentPopulation?: HubStudentPopulationState
+  hubTraderAnimationSeed?: number
   initialPlayerExperience?: number
   playerOfferRngSeed?: number
+}
+
+export interface GameSimulationInventoryActionResult {
+  readonly accepted: boolean
+  readonly reason: HubEconomyRejection | 'service-unavailable' | null
+  readonly state: GameSimulationState
 }
 
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
@@ -137,6 +161,7 @@ export function createGameSimulation(
 ): GameSimulationState {
   const world = createHubWorld(Object.keys(characters), {
     studentPopulation: options.hubStudentPopulation,
+    traderAnimationSeed: options.hubTraderAnimationSeed,
   })
   let playerEntities = createPlayerEntityStore()
   let playerOfferRng = createNativeRng(options.playerOfferRngSeed ?? 0)
@@ -282,10 +307,15 @@ export function acknowledgeGameSimulationOver(
     const config = state.playerEntities.configs[index]!
     return [playerId, createPlayerCharacter(config, hubSpawnPoint())]
   }))
+  let playerEntities = resetPlayerEntitiesForNewRun(state.playerEntities, placements)
+  for (const { playerId } of playerEntities.identities) {
+    const economy = playerEconomyAt(playerEntities, playerId)
+    if (economy) playerEntities = replacePlayerEconomy(playerEntities, playerId, restockFomentius(economy))
+  }
   return {
     ...state,
     levelUpBarrier: null,
-    playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
+    playerEntities,
     primarySpells: createPrimarySpellSimulation(),
     run,
     world,
@@ -315,6 +345,56 @@ export function getPlayerProgression(
   const progression = playerProgressionAt(state.playerEntities, playerId)
   if (!progression) throw new Error(`game simulation has no player progression ${playerId}`)
   return progression
+}
+
+export function getPlayerEconomy(
+  state: GameSimulationState,
+  playerId = DEFAULT_PLAYER_ID,
+): HubEconomyState {
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  if (!economy) throw new Error(`game simulation has no player economy ${playerId}`)
+  return economy
+}
+
+export function applyGameSimulationHubAction(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  action: HubInventoryAction,
+): GameSimulationInventoryActionResult {
+  const economy = playerEconomyAt(state.playerEntities, playerId)
+  const player = playerCharacterAt(state.playerEntities, playerId)
+  if (!economy || !player || state.levelUpBarrier !== null) {
+    return { accepted: false, reason: 'service-unavailable', state }
+  }
+  const trader = traderForAction(action)
+  if (trader && !traderAvailable(state, playerId, player.position, trader)) {
+    return { accepted: false, reason: 'service-unavailable', state }
+  }
+
+  const result = (() => {
+    switch (action.type) {
+      case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
+      case 'buy-fomentius': return buyFomentiusItem(economy, action.itemId)
+      case 'buy-hagatha': return buyHagathaPerk(economy, action.selector)
+      case 'close-dowsing': {
+        const next = closeDowsingOffers(economy)
+        return { accepted: true, reason: null, state: next }
+      }
+      case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
+      case 'equip': return equipInventoryItem(economy, action.itemId, action.slot)
+      case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
+      case 'unequip': return unequipInventorySlot(economy, action.slot)
+    }
+  })()
+  if (!result.accepted) return { ...result, state }
+  return {
+    accepted: true,
+    reason: null,
+    state: {
+      ...state,
+      playerEntities: replacePlayerEconomy(state.playerEntities, playerId, result.state),
+    },
+  }
 }
 
 export function getPlayerSkillBook(
@@ -649,6 +729,47 @@ function finishGameSimulationTick(
     tick,
     world,
   }
+}
+
+const HUB_TRADER_GEOMETRY: Readonly<Record<HubTraderId, {
+  readonly position: Vector2
+  readonly radius: number
+  readonly region: 'courtyard' | 'library'
+}>> = {
+  fomentius: { position: { x: 1397, y: 664 }, radius: 30, region: 'courtyard' },
+  hagatha: { position: { x: 1340, y: 280 }, radius: 15, region: 'courtyard' },
+  luthacus: { position: { x: 1700.5, y: 449.5 }, radius: 25, region: 'courtyard' },
+  shlorio: { position: { x: 900, y: 642.5 }, radius: 25, region: 'library' },
+}
+
+function traderForAction(action: HubInventoryAction): HubTraderId | null {
+  switch (action.type) {
+    case 'buy-fomentius': return 'fomentius'
+    case 'buy-hagatha': return 'hagatha'
+    case 'transfer': return 'luthacus'
+    case 'buy-dowsing':
+    case 'dowse': return 'shlorio'
+    case 'close-dowsing':
+    case 'equip':
+    case 'unequip': return null
+  }
+}
+
+function traderAvailable(
+  state: GameSimulationState,
+  playerId: string,
+  playerPosition: Vector2,
+  trader: HubTraderId,
+): boolean {
+  if (state.run.phase !== 'hub' || state.world.kind !== 'hub') return false
+  const participant = state.world.participants[playerId]
+  const geometry = HUB_TRADER_GEOMETRY[trader]
+  if (!participant || participant.transition !== null || participant.region !== geometry.region) {
+    return false
+  }
+  const dx = playerPosition.x - geometry.position.x
+  const dy = playerPosition.y - geometry.position.y
+  return dx * dx + dy * dy <= 5 * geometry.radius * geometry.radius + 1500
 }
 
 function retainBoneyardEnemyEvents(

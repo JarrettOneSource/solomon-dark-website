@@ -40,8 +40,12 @@ import {
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
+  createHubCommonTraderClock,
+  createHubHagathaClock,
   createHubPotionTraderClock,
+  hubCommonTraderFrameAt,
   hubFountainParticleAlpha,
+  hubHagathaFrameAt,
   hubMarkerAlpha,
   hubPotionTraderActorFrameAt,
   hubPotionTraderBalloonFrameAt,
@@ -243,6 +247,45 @@ test('PotionGuy keeps the inherited stochastic actor pulse separate', () => {
     Array.from({ length: 1_000 }, (_, tick) => hubPotionTraderActorFrameAt(tick)),
   )
   assert.deepEqual([...frames].sort(), [0, 1, 2, 3])
+})
+
+test('Luthacus and Shlorio common animation reaches every recovered frame from the session seed', () => {
+  const luthacusSeed = 0x5eedc0de ^ 5005
+  const shlorioSeed = 0x5eedc0de ^ 5016
+  for (const seed of [luthacusSeed, shlorioSeed]) {
+    const frames = new Set(Array.from(
+      { length: 5_000 },
+      (_, tick) => hubCommonTraderFrameAt(tick, seed),
+    ))
+    assert.deepEqual([...frames].sort(), [0, 1, 2, 3])
+    const clock = createHubCommonTraderClock(seed)
+    for (const tick of [0, 1, 511, 512, 2_049, 37]) {
+      assert.equal(clock.advanceTo(tick), hubCommonTraderFrameAt(tick, seed))
+    }
+  }
+})
+
+test('Hagatha reaches all body frames and emits every cross-fade member once per tick', () => {
+  const seed = 0x5eedc0de ^ 5001
+  const bodyFrames = new Set<number>()
+  const crossfadeFrames = new Set<number>()
+  const scanClock = createHubHagathaClock(seed)
+  for (let tick = 0; tick < 20_000; tick += 1) {
+    const frame = scanClock.advanceTo(tick)
+    bodyFrames.add(frame.bodyFrame)
+    for (const particle of frame.particles) crossfadeFrames.add(particle.frame)
+  }
+  assert.deepEqual([...bodyFrames].sort(), [0, 1, 2, 3, 4, 5, 6, 7])
+  assert.deepEqual([...crossfadeFrames].sort(), [0, 1, 2, 3])
+  assert.equal(hubHagathaFrameAt(0, seed).particles.length, 0)
+  assert.equal(hubHagathaFrameAt(1, seed).particles.length, 1)
+  assert.ok(hubHagathaFrameAt(150, seed).particles.length >= 125)
+  assert.ok(hubHagathaFrameAt(150, seed).particles.length <= 150)
+
+  const clock = createHubHagathaClock(seed)
+  for (const tick of [0, 1, 511, 512, 8_193, 77]) {
+    assert.deepEqual(clock.advanceTo(tick), hubHagathaFrameAt(tick, seed))
+  }
 })
 
 test('PotionGuy balloons replay their five-frame clock and vertical drift', () => {

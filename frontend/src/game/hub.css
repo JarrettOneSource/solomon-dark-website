@@ -218,10 +218,23 @@
   height: 50px;
 }
 
-.hub-hud-backpack {
+.hub-hud-backpack-button {
   position: absolute;
   bottom: 14px;
   left: calc(50% - 66px);
+  width: 58px;
+  height: 62px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  pointer-events: auto;
+}
+
+.hub-hud-backpack-button:disabled { cursor: default; }
+
+.hub-hud-backpack {
+  display: block;
   width: 58px;
   height: 62px;
   max-width: none;

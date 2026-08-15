@@ -6,6 +6,9 @@ import type {
   BoneyardMaggotSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
+  ProtocolPlayerEconomy,
+  ProtocolPlayerState,
+  ProtocolPlayerSnapshotFrame,
   ProtocolStudentProp,
   ProtocolStudentState,
 } from './game-state.ts'
@@ -60,6 +63,7 @@ const STUDENT_SAMPLE_LENGTH = 7
 
 export interface ReplicatedEntityBaseline {
   readonly descriptors: ReadonlyMap<string, ReplicatedEntityDescriptor>
+  readonly playerEconomyRevisions: ReadonlyMap<string, number>
   readonly worldIdentity: string
 }
 
@@ -197,6 +201,9 @@ export function createReplicatedEntityBaseline(
 ): ReplicatedEntityBaseline {
   return {
     descriptors: descriptorMap(snapshot),
+    playerEconomyRevisions: new Map(Object.entries(snapshot.players).map(
+      ([playerId, player]) => [playerId, player.economy.revision],
+    )),
     worldIdentity: replicatedWorldIdentity(snapshot),
   }
 }
@@ -240,7 +247,7 @@ export function createGameSnapshotFrame(
   const common = {
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
-    players: snapshot.players,
+    players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
     primarySpells: snapshot.primarySpells,
     run: snapshot.run,
     tick: snapshot.tick,
@@ -254,6 +261,7 @@ export function createGameSnapshotFrame(
         entities,
         kind: 'hub',
         participants: snapshot.world.participants,
+        traderAnimationSeed: snapshot.world.traderAnimationSeed,
       },
     }
   }
@@ -271,15 +279,53 @@ export function createGameSnapshotFrame(
   }
 }
 
+function playerSnapshotFrames(
+  players: Readonly<Record<string, ProtocolPlayerState>>,
+  baseline: ReplicatedEntityBaseline | undefined,
+  keyframe: boolean,
+): Readonly<Record<string, ProtocolPlayerSnapshotFrame>> {
+  return Object.fromEntries(Object.entries(players).map(([playerId, player]) => {
+    const includeEconomy = keyframe
+      || baseline?.playerEconomyRevisions.get(playerId) !== player.economy.revision
+    if (includeEconomy) return [playerId, player]
+    const { economy: _economy, ...frame } = player
+    return [playerId, frame]
+  }))
+}
+
+function materializePlayerSnapshotFrames(
+  frames: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
+  economies: Map<string, ProtocolPlayerEconomy>,
+): Readonly<Record<string, ProtocolPlayerState>> {
+  const livePlayerIds = new Set(Object.keys(frames))
+  const players = Object.fromEntries(Object.entries(frames).map(([playerId, frame]) => {
+    const economy = frame.economy ?? economies.get(playerId)
+    if (!economy) {
+      throw new EntityReplicationGapError('player frame is missing its economy baseline')
+    }
+    economies.set(playerId, economy)
+    return [playerId, { ...frame, economy }]
+  }))
+  for (const playerId of economies.keys()) {
+    if (!livePlayerIds.has(playerId)) economies.delete(playerId)
+  }
+  return players
+}
+
 export class EntityReplicationReconstructor {
   private readonly descriptors = new Map<string, ReplicatedEntityDescriptor>()
+  private readonly playerEconomies = new Map<string, ProtocolPlayerEconomy>()
   private lastSequence = 0
   private worldIdentity: string | null = null
 
   reset(snapshot: GameSnapshot, sequence: number): void {
     this.descriptors.clear()
+    this.playerEconomies.clear()
     for (const descriptor of descriptorMap(snapshot).values()) {
       this.descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const [playerId, player] of Object.entries(snapshot.players)) {
+      this.playerEconomies.set(playerId, player.economy)
     }
     this.lastSequence = sequence
     this.worldIdentity = replicatedWorldIdentity(snapshot)
@@ -297,7 +343,10 @@ export class EntityReplicationReconstructor {
     if (!entities.keyframe && entities.baselineSequence > this.lastSequence) {
       throw new EntityReplicationGapError('entity baseline has not been applied')
     }
-    if (entities.keyframe) this.descriptors.clear()
+    if (entities.keyframe) {
+      this.descriptors.clear()
+      this.playerEconomies.clear()
+    }
     for (const key of entities.retired) this.descriptors.delete(entityKey(key[0], key[1]))
     for (const descriptor of entities.spawned) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(descriptor[0])
@@ -344,12 +393,13 @@ export class EntityReplicationReconstructor {
         deathEffects.push(materializeBoneyardEnemyDeathEffect(descriptor, sample))
       }
     }
+    const players = materializePlayerSnapshotFrames(frame.players, this.playerEconomies)
     this.lastSequence = sequence
     this.worldIdentity = nextWorldIdentity
     const common = {
       hostPlayerId: frame.hostPlayerId,
       levelUpBarrier: frame.levelUpBarrier,
-      players: frame.players,
+      players,
       primarySpells: frame.primarySpells,
       run: frame.run,
       tick: frame.tick,
@@ -363,6 +413,7 @@ export class EntityReplicationReconstructor {
           kind: 'hub',
           participants: frame.world.participants,
           students,
+          traderAnimationSeed: frame.world.traderAnimationSeed,
         },
       }
     }

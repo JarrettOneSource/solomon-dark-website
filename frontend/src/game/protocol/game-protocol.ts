@@ -51,6 +51,21 @@ import {
   type GameRunPhase,
 } from '../core-kernels/game-run.ts'
 import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
+import {
+  DOWSING_EQUIPMENT_RECIPES,
+  EQUIPMENT_SLOTS,
+  EQUIPMENT_TYPES,
+  HAGATHA_PERKS,
+  HUB_ITEM_KINDS,
+  type DowsingOffer,
+  type EquipmentSlot,
+  type EquipmentType,
+  type HagathaOffer,
+  type HubInventoryAction,
+  type HubInventoryItem,
+  type HubItemKind,
+  type HubShopItem,
+} from '../core-kernels/hub-economy.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -88,7 +103,9 @@ import type {
   HubWorldSnapshot,
   ProtocolAmbientState,
   ProtocolPlayerProgression,
+  ProtocolPlayerEconomy,
   ProtocolPlayerState,
+  ProtocolPlayerSnapshotFrame,
   ProtocolStudentState,
 } from './game-state.ts'
 import {
@@ -220,6 +237,11 @@ export interface ClientSelectSkillMessage {
   skillId: number
 }
 
+export interface ClientHubActionMessage {
+  type: 'client-hub-action'
+  action: HubInventoryAction
+}
+
 export interface ClientPingMessage {
   type: 'client-ping'
   nonce: number
@@ -254,6 +276,7 @@ export type ClientGameMessage =
   | ClientAcknowledgeGameOverMessage
   | ClientConfirmLoadoutMessage
   | ClientHelloMessage
+  | ClientHubActionMessage
   | ClientInputMessage
   | ClientSelectSkillMessage
   | ClientPingMessage
@@ -344,6 +367,10 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       sequence: nonnegativeInteger(value.sequence, 'sequence'),
       targetTick: nonnegativeInteger(value.targetTick, 'targetTick'),
     }
+  }
+  if (value.type === 'client-hub-action') {
+    onlyKeys(value, 'message', ['type', 'action'])
+    return { type: 'client-hub-action', action: hubInventoryAction(value.action) }
   }
   if (value.type === 'client-select-skill') {
     onlyKeys(value, 'message', ['type', 'choiceIndex', 'offerSequence', 'skillId'])
@@ -554,6 +581,19 @@ function positiveInteger(value: unknown, field: string): number {
   return result
 }
 
+function boundedInteger(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const result = integer(value, field)
+  if (result < minimum || result > maximum) {
+    throw new GameProtocolError(`${field} is outside [${minimum},${maximum}]`)
+  }
+  return result
+}
+
 function pingNonce(value: unknown): number {
   const result = positiveInteger(value, 'nonce')
   if (result > 0x7fffffff) throw new GameProtocolError('nonce is out of range')
@@ -640,10 +680,75 @@ function playerCharacterConfig(value: unknown, field: string): PlayerCharacterCo
   }
 }
 
+function hubInventoryAction(value: unknown): HubInventoryAction {
+  const source = record(value, 'action')
+  const type = limitedString(source.type, 'action.type', 32)
+  if (type === 'buy-dowsing') {
+    onlyKeys(source, 'action', ['type', 'offerId'])
+    return { type, offerId: positiveInteger(source.offerId, 'action.offerId') }
+  }
+  if (type === 'buy-fomentius') {
+    onlyKeys(source, 'action', ['type', 'itemId'])
+    return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
+  }
+  if (type === 'buy-hagatha') {
+    onlyKeys(source, 'action', ['type', 'selector'])
+    const selector = integer(source.selector, 'action.selector')
+    if (selector < -1 || selector > 27 || selector === 8) {
+      throw new GameProtocolError('action.selector is unavailable')
+    }
+    return { type, selector }
+  }
+  if (type === 'close-dowsing' || type === 'dowse') {
+    onlyKeys(source, 'action', ['type'])
+    return { type }
+  }
+  if (type === 'equip') {
+    onlyKeys(source, 'action', ['type', 'itemId', 'slot'])
+    return {
+      type,
+      itemId: positiveInteger(source.itemId, 'action.itemId'),
+      slot: equipmentSlot(source.slot, 'action.slot'),
+    }
+  }
+  if (type === 'transfer') {
+    onlyKeys(source, 'action', ['type', 'direction', 'itemId'])
+    const direction = limitedString(source.direction, 'action.direction', 32)
+    if (direction !== 'to-backpack' && direction !== 'to-storage') {
+      throw new GameProtocolError('action.direction is not supported')
+    }
+    return {
+      type,
+      direction,
+      itemId: positiveInteger(source.itemId, 'action.itemId'),
+    }
+  }
+  if (type === 'unequip') {
+    onlyKeys(source, 'action', ['type', 'slot'])
+    return { type, slot: equipmentSlot(source.slot, 'action.slot') }
+  }
+  throw new GameProtocolError('unknown hub inventory action')
+}
+
+function equipmentSlot(value: unknown, field: string): EquipmentSlot {
+  const slot = limitedString(value, field, 16)
+  if (!(EQUIPMENT_SLOTS as readonly string[]).includes(slot)) {
+    throw new GameProtocolError(`${field} is not supported`)
+  }
+  return slot as EquipmentSlot
+}
+
 function playerState(value: unknown, field: string): ProtocolPlayerState {
+  const player = playerSnapshotFrame(value, field)
+  if (!player.economy) throw new GameProtocolError(`${field}.economy is required`)
+  return { ...player, economy: player.economy }
+}
+
+function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnapshotFrame {
   const source = record(value, field)
   onlyKeys(source, field, [
     'config',
+    'economy',
     'footstepTick',
     'gaitDegrees',
     'headingIndex',
@@ -654,8 +759,12 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     'walkCyclePrimary',
   ])
   const config = playerCharacterConfig(source.config, `${field}.config`)
+  const economy = source.economy === undefined
+    ? undefined
+    : playerEconomy(source.economy, `${field}.economy`)
   return {
     config,
+    ...(economy ? { economy } : {}),
     footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
@@ -669,6 +778,291 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
   }
+}
+
+function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'backpack',
+    'charmCapacity',
+    'dowsingFee',
+    'dowsingOffers',
+    'equipment',
+    'fomentiusStock',
+    'gold',
+    'hagathaOffers',
+    'ownedPerkSelectors',
+    'revision',
+    'storage',
+    'tonicPurchases',
+  ])
+  const backpack = inventoryItems(source.backpack, `${field}.backpack`, 28)
+  const storage = inventoryItems(source.storage, `${field}.storage`, 28)
+  const equipment = playerEquipment(source.equipment, `${field}.equipment`)
+  const fomentiusStock = limitedArray(
+    source.fomentiusStock,
+    `${field}.fomentiusStock`,
+    24,
+  ).map((item, index) => shopItem(item, `${field}.fomentiusStock[${index}]`))
+  const allItemIds = [
+    ...backpack,
+    ...storage,
+    ...fomentiusStock,
+    ...equippedItems(equipment),
+  ].map(({ id }) => id)
+  if (new Set(allItemIds).size !== allItemIds.length) {
+    throw new GameProtocolError(`${field} contains a duplicate item id`)
+  }
+  const dowsingOffers = limitedArray(
+    source.dowsingOffers,
+    `${field}.dowsingOffers`,
+    4,
+  ).map((offer, index) => dowsingOffer(offer, `${field}.dowsingOffers[${index}]`))
+  if (
+    new Set(dowsingOffers.map(({ id }) => id)).size !== dowsingOffers.length
+    || new Set(dowsingOffers.map(({ recipeIndex }) => recipeIndex)).size
+      !== dowsingOffers.length
+  ) throw new GameProtocolError(`${field}.dowsingOffers contains a duplicate`)
+  const hagathaOffers = limitedArray(
+    source.hagathaOffers,
+    `${field}.hagathaOffers`,
+    29,
+  ).map((offer, index) => hagathaOffer(offer, `${field}.hagathaOffers[${index}]`))
+  if (new Set(hagathaOffers.map(({ selector }) => selector)).size !== hagathaOffers.length) {
+    throw new GameProtocolError(`${field}.hagathaOffers contains a duplicate selector`)
+  }
+  const ownedPerkSelectors = selectorArray(
+    source.ownedPerkSelectors,
+    `${field}.ownedPerkSelectors`,
+  )
+  const charmCapacity = integer(source.charmCapacity, `${field}.charmCapacity`)
+  if (charmCapacity !== 3 && charmCapacity !== 6 && charmCapacity !== 9) {
+    throw new GameProtocolError(`${field}.charmCapacity is invalid`)
+  }
+  const tonicPurchases = nonnegativeInteger(
+    source.tonicPurchases,
+    `${field}.tonicPurchases`,
+  )
+  if (tonicPurchases > 2 || charmCapacity !== 3 + tonicPurchases * 3) {
+    throw new GameProtocolError(`${field}.tonicPurchases does not match charmCapacity`)
+  }
+  return {
+    backpack,
+    charmCapacity,
+    dowsingFee: boundedInteger(source.dowsingFee, `${field}.dowsingFee`, 500, 950),
+    dowsingOffers,
+    equipment,
+    fomentiusStock,
+    gold: boundedInteger(source.gold, `${field}.gold`, 0, 10_000_000),
+    hagathaOffers,
+    ownedPerkSelectors,
+    revision: nonnegativeInteger(source.revision, `${field}.revision`),
+    storage,
+    tonicPurchases,
+  }
+}
+
+function inventoryItems(
+  value: unknown,
+  field: string,
+  maximum: number,
+): readonly HubInventoryItem[] {
+  return limitedArray(value, field, maximum).map((item, index) => (
+    inventoryItem(item, `${field}[${index}]`)
+  ))
+}
+
+function inventoryItem(
+  value: unknown,
+  field: string,
+  extraKeys: readonly string[] = [],
+): HubInventoryItem {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'equipmentType',
+    'iconRecords',
+    'id',
+    'kind',
+    'name',
+    'nativeSubtype',
+    'nativeTypeId',
+    'quantity',
+    'rarity',
+    'recipeIndex',
+    ...extraKeys,
+  ])
+  const kind = limitedString(source.kind, `${field}.kind`, 32)
+  if (!(HUB_ITEM_KINDS as readonly string[]).includes(kind)) {
+    throw new GameProtocolError(`${field}.kind is not supported`)
+  }
+  const equipmentType = source.equipmentType === null
+    ? null
+    : limitedString(source.equipmentType, `${field}.equipmentType`, 16)
+  if (
+    equipmentType !== null
+    && !(EQUIPMENT_TYPES as readonly string[]).includes(equipmentType)
+  ) throw new GameProtocolError(`${field}.equipmentType is not supported`)
+  const recipeIndex = source.recipeIndex === null
+    ? null
+    : boundedInteger(
+        source.recipeIndex,
+        `${field}.recipeIndex`,
+        0,
+        DOWSING_EQUIPMENT_RECIPES.length - 1,
+      )
+  if ((kind === 'equipment') !== (equipmentType !== null && recipeIndex !== null)) {
+    throw new GameProtocolError(`${field} equipment identity is inconsistent`)
+  }
+  const rarity = source.rarity === null
+    ? null
+    : limitedString(source.rarity, `${field}.rarity`, 8)
+  if (rarity !== null && rarity !== 'Epic' && rarity !== 'Rare') {
+    throw new GameProtocolError(`${field}.rarity is not supported`)
+  }
+  if ((kind === 'equipment') !== (rarity !== null)) {
+    throw new GameProtocolError(`${field} rarity is inconsistent`)
+  }
+  const nativeSubtype = source.nativeSubtype === null
+    ? null
+    : boundedInteger(source.nativeSubtype, `${field}.nativeSubtype`, 0, 32)
+  const iconRecords = limitedArray(source.iconRecords, `${field}.iconRecords`, 2)
+    .map((recordIndex, index) => boundedInteger(
+      recordIndex,
+      `${field}.iconRecords[${index}]`,
+      0,
+      83,
+    ))
+  if (iconRecords.length < 1) throw new GameProtocolError(`${field}.iconRecords is empty`)
+  return {
+    equipmentType: equipmentType as EquipmentType | null,
+    iconRecords,
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: kind as HubItemKind,
+    name: limitedString(source.name, `${field}.name`, 128),
+    nativeSubtype,
+    nativeTypeId: boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7012),
+    quantity: boundedInteger(source.quantity, `${field}.quantity`, 1, 9_999),
+    rarity,
+    recipeIndex,
+  }
+}
+
+function shopItem(value: unknown, field: string): HubShopItem {
+  const source = record(value, field)
+  return {
+    ...inventoryItem(source, field, ['price']),
+    price: boundedInteger(source.price, `${field}.price`, 1, 100_000),
+  }
+}
+
+function playerEquipment(value: unknown, field: string): ProtocolPlayerEconomy['equipment'] {
+  const source = record(value, field)
+  onlyKeys(source, field, ['amulet', 'hat', 'rings', 'robe', 'weapon'])
+  const nullableItem = (item: unknown, itemField: string) => item === null
+    ? null
+    : inventoryItem(item, itemField)
+  const rings = array(source.rings, `${field}.rings`)
+  if (rings.length !== 3) throw new GameProtocolError(`${field}.rings must contain three slots`)
+  const equipment = {
+    amulet: nullableItem(source.amulet, `${field}.amulet`),
+    hat: nullableItem(source.hat, `${field}.hat`),
+    rings: rings.map((item, index) => nullableItem(item, `${field}.rings[${index}]`)) as [
+      HubInventoryItem | null,
+      HubInventoryItem | null,
+      HubInventoryItem | null,
+    ],
+    robe: nullableItem(source.robe, `${field}.robe`),
+    weapon: nullableItem(source.weapon, `${field}.weapon`),
+  }
+  for (const [slot, item] of [
+    ['amulet', equipment.amulet],
+    ['hat', equipment.hat],
+    ['ring-0', equipment.rings[0]],
+    ['ring-1', equipment.rings[1]],
+    ['ring-2', equipment.rings[2]],
+    ['robe', equipment.robe],
+    ['weapon', equipment.weapon],
+  ] as const) {
+    if (item && !equipmentSlotAccepts(slot, item.equipmentType)) {
+      throw new GameProtocolError(`${field}.${slot} contains the wrong equipment type`)
+    }
+  }
+  return equipment
+}
+
+function equipmentSlotAccepts(slot: EquipmentSlot, type: EquipmentType | null): boolean {
+  if (slot === 'weapon') return type === 'staff' || type === 'wand'
+  if (slot.startsWith('ring-')) return type === 'ring'
+  return slot === type
+}
+
+function equippedItems(
+  equipment: ProtocolPlayerEconomy['equipment'],
+): readonly HubInventoryItem[] {
+  return [
+    equipment.amulet,
+    equipment.hat,
+    ...equipment.rings,
+    equipment.robe,
+    equipment.weapon,
+  ].filter((item): item is HubInventoryItem => item !== null)
+}
+
+function dowsingOffer(value: unknown, field: string): DowsingOffer {
+  const source = record(value, field)
+  onlyKeys(source, field, ['id', 'price', 'recipeIndex'])
+  const price = boundedInteger(source.price, `${field}.price`, 5_000, 5_700)
+  if (price % 50 !== 0) throw new GameProtocolError(`${field}.price is not a 50-gold step`)
+  return {
+    id: positiveInteger(source.id, `${field}.id`),
+    price,
+    recipeIndex: boundedInteger(
+      source.recipeIndex,
+      `${field}.recipeIndex`,
+      0,
+      DOWSING_EQUIPMENT_RECIPES.length - 1,
+    ),
+  }
+}
+
+function hagathaOffer(value: unknown, field: string): HagathaOffer {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'basePrice',
+    'behaviorFamily',
+    'description',
+    'members',
+    'name',
+    'price',
+    'selector',
+  ])
+  const selector = integer(source.selector, `${field}.selector`)
+  if (selector < -1 || selector >= HAGATHA_PERKS.length || selector === 8) {
+    throw new GameProtocolError(`${field}.selector is unavailable`)
+  }
+  const members = selectorArray(source.members, `${field}.members`)
+  if (members.length < 1 || (selector >= 0 && (members.length !== 1 || members[0] !== selector))) {
+    throw new GameProtocolError(`${field}.members does not match selector`)
+  }
+  return {
+    basePrice: positiveInteger(source.basePrice, `${field}.basePrice`),
+    behaviorFamily: limitedString(source.behaviorFamily, `${field}.behaviorFamily`, 64),
+    description: limitedString(source.description, `${field}.description`, 512),
+    members,
+    name: limitedString(source.name, `${field}.name`, 64),
+    price: positiveInteger(source.price, `${field}.price`),
+    selector,
+  }
+}
+
+function selectorArray(value: unknown, field: string): readonly number[] {
+  const selectors = limitedArray(value, field, 28).map((selector, index) => (
+    boundedInteger(selector, `${field}[${index}]`, 0, 27)
+  ))
+  if (selectors.some((selector, index) => (
+    selector === 8 || (index > 0 && selector <= selectors[index - 1]!)
+  ))) throw new GameProtocolError(`${field} must be sorted, unique, and available`)
+  return selectors
 }
 
 function playerPrimaryCastState(
@@ -1229,6 +1623,7 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
     'kind',
     'participants',
     'students',
+    'traderAnimationSeed',
   ])
   if (source.kind !== 'hub') throw new GameProtocolError(`${field}.kind is not supported`)
   const rawParticipants = record(source.participants, `${field}.participants`)
@@ -1256,13 +1651,17 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
     students: limitedArray(source.students, `${field}.students`, MAX_STUDENTS).map(
       (student, index) => studentState(student, `${field}.students[${index}]`),
     ),
+    traderAnimationSeed: nonnegativeInteger(
+      source.traderAnimationSeed,
+      `${field}.traderAnimationSeed`,
+    ),
   }
 }
 
 function playerLevelUpBarrier(
   value: unknown,
   field: string,
-  players: Readonly<Record<string, ProtocolPlayerState>>,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
   run: GameRunLifecycleState,
 ): NonNullable<GameSnapshot['levelUpBarrier']> {
   const source = record(value, field)
@@ -1335,7 +1734,7 @@ function playerLevelUpBarrier(
 function validatedBarrierPlayerIds(
   value: unknown,
   field: string,
-  players: Readonly<Record<string, ProtocolPlayerState>>,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
 ): readonly string[] {
   const playerIds = limitedArray(value, field, MAX_PLAYERS).map((entry, index) => (
     validatedPlayerId(entry, `${field}[${index}]`)
@@ -1412,10 +1811,10 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
     throw new GameProtocolError(`frame.players may contain at most ${MAX_PLAYERS} entries`)
   }
-  const players: Record<string, ProtocolPlayerState> = {}
+  const players: Record<string, ProtocolPlayerSnapshotFrame> = {}
   for (const [rawPlayerId, state] of Object.entries(rawPlayers)) {
     const playerId = validatedPlayerId(rawPlayerId, 'frame player id')
-    players[playerId] = playerState(state, `frame.players.${playerId}`)
+    players[playerId] = playerSnapshotFrame(state, `frame.players.${playerId}`)
   }
   const hostPlayerId = source.hostPlayerId === null
     ? null
@@ -1883,7 +2282,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
 
 function validatePrimarySpellOwners(
   spells: PrimarySpellSimulationState,
-  players: Readonly<Record<string, ProtocolPlayerState>>,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
   field: string,
 ): void {
   for (const spell of [...spells.projectiles, ...spells.transients]) {
@@ -2923,6 +3322,7 @@ function gameWorldSnapshotFrame(
     'entities',
     'kind',
     'participants',
+    'traderAnimationSeed',
   ])
   const rawParticipants = record(source.participants, `${field}.participants`)
   if (Object.keys(rawParticipants).length > MAX_PLAYERS) {
@@ -2947,6 +3347,10 @@ function gameWorldSnapshotFrame(
     entities: replicatedEntityFrame(source.entities, `${field}.entities`),
     kind: 'hub',
     participants,
+    traderAnimationSeed: nonnegativeInteger(
+      source.traderAnimationSeed,
+      `${field}.traderAnimationSeed`,
+    ),
   }
 }
 
@@ -3030,7 +3434,7 @@ function uniqueEntityEntries(
 
 function validateParticipantOwnership(
   participants: Readonly<Record<string, HubParticipantState>>,
-  players: Readonly<Record<string, ProtocolPlayerState>>,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
   field: string,
 ): void {
   const participantIds = Object.keys(participants).sort()

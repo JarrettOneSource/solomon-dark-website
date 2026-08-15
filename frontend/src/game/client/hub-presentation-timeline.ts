@@ -206,6 +206,9 @@ function interpolateSnapshot(
         blend,
       ),
       students: interpolateStudents(older.world.students, newer.world.students, blend),
+      traderAnimationSeed: blend < 1
+        ? older.world.traderAnimationSeed
+        : newer.world.traderAnimationSeed,
     },
   }
 }
@@ -271,6 +274,7 @@ function interpolatePlayer(
   const discrete = blend < 1 ? older : newer
   return {
     config: { ...discrete.config },
+    economy: discrete.economy,
     footstepTick: discrete.footstepTick,
     gaitDegrees: lerpCycle(older.gaitDegrees, newer.gaitDegrees, blend, FULL_CIRCLE),
     headingIndex: Math.round(lerpCycle(
@@ -436,6 +440,7 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
         ]),
       ),
       students: snapshot.world.students.map(copyStudent),
+      traderAnimationSeed: snapshot.world.traderAnimationSeed,
     },
   }
 }

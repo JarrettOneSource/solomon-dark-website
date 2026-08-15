@@ -29,6 +29,10 @@ import {
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import {
+  createHubEconomy,
+  type HubEconomyState,
+} from '../core-kernels/hub-economy.ts'
 
 export type PlayerEntityId = number
 
@@ -40,6 +44,7 @@ export type PlayerLocomotionComponent = Omit<PlayerCharacterState, 'config' | 'p
 
 export interface PlayerEntityStore {
   readonly configs: readonly PlayerCharacterConfig[]
+  readonly economies: readonly HubEconomyState[]
   readonly entityIds: readonly PlayerEntityId[]
   readonly identities: readonly PlayerIdentityComponent[]
   readonly locomotions: readonly PlayerLocomotionComponent[]
@@ -69,6 +74,7 @@ export interface PlayerEntitySharedExperienceResult {
 export function createPlayerEntityStore(): PlayerEntityStore {
   return {
     configs: [],
+    economies: [],
     entityIds: [],
     identities: [],
     locomotions: [],
@@ -90,6 +96,7 @@ export function addPlayerEntity(
   if (playerEntityIndex(source, playerId) >= 0) return source
   return {
     configs: [...source.configs, Object.freeze({ ...config })],
+    economies: [...source.economies, createHubEconomy(offerSeed)],
     entityIds: [...source.entityIds, source.nextEntityId],
     identities: [...source.identities, Object.freeze({ playerId })],
     locomotions: [...source.locomotions, locomotionComponent(character)],
@@ -109,6 +116,7 @@ export function removePlayerEntity(
   if (index < 0) return source
   return {
     configs: withoutIndex(source.configs, index),
+    economies: withoutIndex(source.economies, index),
     entityIds: withoutIndex(source.entityIds, index),
     identities: withoutIndex(source.identities, index),
     locomotions: withoutIndex(source.locomotions, index),
@@ -146,6 +154,26 @@ export function playerProgressionAt(
 ): PlayerProgressionComponent | null {
   const index = playerEntityIndex(source, playerId)
   return index < 0 ? null : source.progressions[index] ?? null
+}
+
+export function playerEconomyAt(
+  source: PlayerEntityStore,
+  playerId: string,
+): HubEconomyState | null {
+  const index = playerEntityIndex(source, playerId)
+  return index < 0 ? null : source.economies[index] ?? null
+}
+
+export function replacePlayerEconomy(
+  source: PlayerEntityStore,
+  playerId: string,
+  economy: HubEconomyState,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const economies = [...source.economies]
+  economies[index] = economy
+  return { ...source, economies }
 }
 
 export function playerSkillBookAt(

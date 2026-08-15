@@ -9,11 +9,13 @@ import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
   acknowledgeGameSimulationOver,
   addPlayerCharacter,
+  applyGameSimulationHubAction,
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   getPlayerCharacter,
+  getPlayerEconomy,
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
@@ -32,6 +34,7 @@ import {
   dazzlePlayerEntity,
   playerCharacterRecords,
   poisonPlayerEntity,
+  replacePlayerCharacter,
   replacePlayerCharacterRecords,
 } from './player-entity-store.ts'
 
@@ -80,6 +83,72 @@ test('game simulation owns player characters outside the active world', () => {
   assert.throws(() => getPlayerCharacter(state, 'first'), /no player character/)
   assert.deepEqual(getPlayerCharacter(state, 'second').config, secondConfig)
   assert.deepEqual(Object.keys(state.world.participants), ['second'])
+})
+
+test('hub trader actions require the authenticated participant to be in native service range', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let state = createGameSimulation({ first, second })
+  const firstStock = getPlayerEconomy(state, 'first').fomentiusStock[0]!
+  const outOfRange = applyGameSimulationHubAction(state, 'first', {
+    type: 'buy-fomentius',
+    itemId: firstStock.id,
+  })
+  assert.equal(outOfRange.accepted, false)
+  assert.equal(outOfRange.reason, 'service-unavailable')
+  assert.strictEqual(outOfRange.state, state)
+
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(
+      state.playerEntities,
+      'first',
+      { ...getPlayerCharacter(state, 'first'), position: { x: 1397, y: 664 } },
+    ),
+  }
+  const purchased = applyGameSimulationHubAction(state, 'first', {
+    type: 'buy-fomentius',
+    itemId: firstStock.id,
+  })
+  assert.equal(purchased.accepted, true)
+  assert.equal(getPlayerEconomy(purchased.state, 'first').gold, 9_850)
+  assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 10_000)
+  assert.strictEqual(
+    getPlayerEconomy(purchased.state, 'second'),
+    getPlayerEconomy(state, 'second'),
+  )
+
+  if (purchased.state.world.kind !== 'hub') throw new Error('expected Hub world')
+  const transition = {
+    alpha: 0.1,
+    destination: 'library',
+    phase: 'outgoing',
+    scriptedSpeed: 0.45,
+    scriptedTarget: { x: 2057.5, y: 460.5 },
+    sourceRegion: 'courtyard',
+  } as const
+  const fading: GameSimulationState = {
+    ...purchased.state,
+    world: {
+      ...purchased.state.world,
+      participants: {
+        ...purchased.state.world.participants,
+        first: { region: 'courtyard', transition },
+      },
+    },
+  }
+  assert.equal(applyGameSimulationHubAction(fading, 'first', {
+    type: 'buy-fomentius',
+    itemId: getPlayerEconomy(fading, 'first').fomentiusStock[0]!.id,
+  }).reason, 'service-unavailable')
 })
 
 test('game simulation owns fixed-step accumulation independently of its world', () => {
@@ -728,10 +797,12 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     displayName: 'Second',
     element: 'water',
   } as const
-  let state = enterBoneyardWorld(
-    createGameSimulation({ first, second }),
-    combatBoneyard('multiplayer-death-run'),
-  )
+  let state = createGameSimulation({ first, second })
+  const initialStockIds = Object.fromEntries(['first', 'second'].map((playerId) => [
+    playerId,
+    getPlayerEconomy(state, playerId).fomentiusStock.map(({ id }) => id),
+  ]))
+  state = enterBoneyardWorld(state, combatBoneyard('multiplayer-death-run'))
   state = {
     ...state,
     playerEntities: damagePlayerEntity(state.playerEntities, 'first', 60),
@@ -783,6 +854,11 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     Object.keys(playerCharacterRecords(loadout.playerEntities)).sort(),
     ['first', 'second'],
   )
+  for (const playerId of ['first', 'second']) {
+    const restocked = getPlayerEconomy(loadout, playerId).fomentiusStock
+    assert.notDeepEqual(restocked.map(({ id }) => id), initialStockIds[playerId])
+    assert.ok(restocked.every(({ id }) => id > Math.max(...initialStockIds[playerId]!)))
+  }
 
   const hub = confirmGameSimulationLoadout(loadout)
   assert.ok(hub)

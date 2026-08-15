@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws'
 
 export const DEFAULT_GAME_HEARTBEAT_INTERVAL_MS = 5_000
+export const GAME_HEARTBEAT_MISSED_PONG_LIMIT = 6
 
 export function resolveGameHeartbeatInterval(intervalMs: number | undefined): number {
   const resolved = intervalMs ?? DEFAULT_GAME_HEARTBEAT_INTERVAL_MS
@@ -14,19 +15,19 @@ export function monitorWebSocketHeartbeat(
   socket: WebSocket,
   intervalMs: number,
 ): () => void {
-  let awaitingPong = false
+  let missedPongs = 0
   let stopped = false
   const receivePong = () => {
-    awaitingPong = false
+    missedPongs = 0
   }
   socket.on('pong', receivePong)
   const timer = setInterval(() => {
     if (socket.readyState !== WebSocket.OPEN) return
-    if (awaitingPong) {
+    if (missedPongs >= GAME_HEARTBEAT_MISSED_PONG_LIMIT) {
       socket.terminate()
       return
     }
-    awaitingPong = true
+    missedPongs += 1
     socket.ping()
   }, intervalMs)
   timer.unref()

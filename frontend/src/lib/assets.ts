@@ -139,8 +139,13 @@ import hubPropStatue from '../assets/game/hub-prop-statue.png'
 import hubPropStatueAura from '../assets/game/hub-prop-statue-aura.png'
 import hubNpcAnnalist from '../assets/game/hub-npc-annalist.png'
 import hubNpcItems from '../assets/game/hub-npc-items.png'
+import hubNpcItemsFrames from '../assets/game/hub-npc-items-frames.png'
 import hubNpcPerkWitch from '../assets/game/hub-npc-perk-witch.png'
+import hubNpcPerkWitchAccessory from '../assets/game/hub-npc-perk-witch-accessory.png'
+import hubNpcPerkWitchCrossfades from '../assets/game/hub-npc-perk-witch-crossfades.png'
+import hubNpcPerkWitchFrames from '../assets/game/hub-npc-perk-witch-frames.png'
 import hubNpcPotion from '../assets/game/hub-npc-potion.png'
+import hubTraderInventoryAtlas from '../assets/game/hub-trader-inventory-atlas.png'
 import actorShadow from '../assets/game/actor-shadow.png'
 import hubTeacherFrames from '../assets/game/hub-teacher-frames.png'
 import hubTeacherRune from '../assets/game/hub-teacher-rune.png'
@@ -669,7 +674,11 @@ export const hub = {
   npcs: {
     annalist: hubNpcAnnalist,
     items: hubNpcItems,
+    itemsFrames: hubNpcItemsFrames,
     perkWitch: hubNpcPerkWitch,
+    perkWitchAccessory: hubNpcPerkWitchAccessory,
+    perkWitchCrossfades: hubNpcPerkWitchCrossfades,
+    perkWitchFrames: hubNpcPerkWitchFrames,
     potion: hubNpcPotion,
     teacher: {
       frames: hubTeacherFrames,
@@ -720,6 +729,11 @@ export const hub = {
       potion: hubHudNpcPotion,
       teacher: hubHudNpcTeacher,
     },
+  },
+  trader: {
+    inventoryAtlas: hubTraderInventoryAtlas,
+    skillsAtlas: skillPickerSkillsAtlas,
+    uiAtlas: skillPickerUiAtlas,
   },
 }
 

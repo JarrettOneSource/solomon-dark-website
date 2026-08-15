@@ -17,6 +17,7 @@ import {
   GAME_TICK_RATE,
   addPlayerCharacter,
   acknowledgeGameSimulationOver,
+  applyGameSimulationHubAction,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
@@ -368,6 +369,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
+        broadcastSnapshot()
+        return
+      }
+      if (message.type === 'client-hub-action') {
+        const applied = applyGameSimulationHubAction(state, client.playerId, message.action)
+        if (applied.accepted) state = applied.state
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
         broadcastSnapshot()
         return
       }

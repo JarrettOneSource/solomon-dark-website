@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 import type {
   HubGameSnapshot,
   HubPresentationFrame,
@@ -10,6 +17,7 @@ import {
   hubRegionCameraOrigin,
 } from './core-kernels/hub-math.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   hubTeacherReleasesBetween,
@@ -18,6 +26,11 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
+import {
+  hubTraderAtPoint,
+  hubTraderWithinServiceRange,
+} from './hub-inventory-presentation.ts'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import {
   createBrowserGameplayInput,
@@ -28,7 +41,10 @@ import {
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
-import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type {
+  ProtocolPlayerEconomy,
+  ProtocolPlayerProgression,
+} from './protocol/game-state.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import {
   createHubWorldRenderer,
@@ -48,6 +64,7 @@ interface HubSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   onInput: (input: PlayerCharacterInput) => void
+  onHubAction: (action: HubInventoryAction) => void
   onLoadingError: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
@@ -76,6 +93,7 @@ export default function HubScene({
   initialSnapshot,
   inputBlocked,
   onInput,
+  onHubAction,
   onLoadingError,
   onReady,
   onStartMatch,
@@ -96,6 +114,7 @@ export default function HubScene({
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
+  const modalOpenRef = useRef(false)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
@@ -112,6 +131,18 @@ export default function HubScene({
     hubInitialSnapshot.world.participants[playerId]?.region ?? 'courtyard',
   )
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
+  const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
+    hubInitialSnapshot.players[playerId]!.economy
+  ))
+  const [playerPosition, setPlayerPosition] = useState(() => ({
+    ...hubInitialSnapshot.players[playerId]!.position,
+  }))
+  const [transitionActive, setTransitionActive] = useState(() => (
+    hubInitialSnapshot.world.participants[playerId]?.transition !== null
+  ))
+  const modalOpen = pickerOpen || hubUiSurface !== null
+  modalOpenRef.current = modalOpen
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -129,8 +160,8 @@ export default function HubScene({
   }, [])
 
   useLayoutEffect(() => {
-    inputRef.current?.setBlocked(inputBlocked)
-  }, [inputBlocked])
+    inputRef.current?.setBlocked(inputBlocked || modalOpen)
+  }, [inputBlocked, modalOpen])
 
   useEffect(() => {
     const footstepAudio = new PlayerFootstepAudioSynchronizer(
@@ -150,6 +181,18 @@ export default function HubScene({
       if (participant) setCurrentRegion((region) => (
         region === participant.region ? region : participant.region
       ))
+      if (participant) setTransitionActive(participant.transition !== null)
+      const player = snapshot.players[playerId]
+      if (player) {
+        setPlayerPosition((position) => (
+          position.x === player.position.x && position.y === player.position.y
+            ? position
+            : { ...player.position }
+        ))
+        setEconomy((current) => (
+          current.revision === player.economy.revision ? current : player.economy
+        ))
+      }
       setHostPlayerId((current) => current === snapshot.hostPlayerId
         ? current
         : snapshot.hostPlayerId)
@@ -194,7 +237,7 @@ export default function HubScene({
         )
       },
     })
-    input.setBlocked(inputBlockedRef.current)
+    input.setBlocked(inputBlockedRef.current || modalOpenRef.current)
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
@@ -262,6 +305,36 @@ export default function HubScene({
   }
   const localPlayer = hubInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
+  const activatePointerTrader = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || inputBlocked || modalOpen || transitionActive) return
+    const host = hostRef.current
+    if (!host) return
+    const snapshot = samplePresentation()
+    const player = snapshot.players[playerId]
+    const participant = snapshot.world.participants[playerId]
+    if (!player || !participant || participant.transition) return
+    const point = projectNativeWorldPointer(
+      { x: event.clientX, y: event.clientY },
+      host.getBoundingClientRect(),
+      viewportRef.current,
+      hubRegionCameraOrigin(
+        participant.region,
+        player.position,
+        viewportRef.current,
+      ),
+      HUB_CAMERA_SCALE,
+    )
+    if (!point) return
+    const trader = hubTraderAtPoint(participant.region, point)
+    if (!trader || !hubTraderWithinServiceRange(
+      trader,
+      participant.region,
+      player.position,
+    )) return
+    event.preventDefault()
+    event.stopPropagation()
+    setHubUiSurface({ kind: 'dialogue', trader })
+  }
 
   return (
     <div
@@ -269,7 +342,9 @@ export default function HubScene({
       className="hub-scene"
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
+      data-gameplay-input-blocked={inputBlocked || modalOpen}
       data-hub-region={currentRegion}
+      data-modal-open={modalOpen}
       data-is-host={isHost}
       data-viewport-height={viewport.height}
       data-viewport-scale={viewport.displayScale}
@@ -286,7 +361,11 @@ export default function HubScene({
           width: viewport.width,
         } satisfies CSSProperties}
       >
-        <div ref={hostRef} className="hub-world-renderer" />
+        <div
+          ref={hostRef}
+          className="hub-world-renderer"
+          onMouseDownCapture={activatePointerTrader}
+        />
 
         <GameHud
           accountUsername={accountUsername}
@@ -294,11 +373,27 @@ export default function HubScene({
           getPingMs={getPingMs}
           initialSnapshot={hubInitialSnapshot}
           mapLabel="Enter the Boneyard"
+          onInventoryClick={() => {
+            if (!inputBlocked && !pickerOpen && !transitionActive) {
+              setHubUiSurface({ kind: 'inventory' })
+            }
+          }}
           onMapClick={beginMatch}
           playerId={playerId}
           progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
+        />
+
+        <HubInventoryUi
+          disabled={inputBlocked || pickerOpen}
+          economy={economy}
+          onAction={onHubAction}
+          onSurfaceChange={setHubUiSurface}
+          playerPosition={playerPosition}
+          region={currentRegion}
+          surface={hubUiSurface}
+          transitionActive={transitionActive}
         />
 
         {pickerOpen && isHost && (

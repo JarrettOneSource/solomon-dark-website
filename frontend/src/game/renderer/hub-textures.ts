@@ -55,6 +55,15 @@ export interface HubAstronomerTextureFrames {
   telescope: readonly Texture[]
 }
 
+export interface HubTraderTextureFrames {
+  hagatha: {
+    body: readonly Texture[]
+    crossfades: readonly Texture[]
+  }
+  luthacus: readonly Texture[]
+  shlorio: readonly Texture[]
+}
+
 export interface HubWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   astronomer: HubAstronomerTextureFrames
@@ -62,6 +71,7 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   potion: HubPotionTextureFrames
   students: HubStudentTextureFrames
   teacher: HubTeacherTextureFrames
+  traders: HubTraderTextureFrames
 }
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
@@ -138,6 +148,14 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       actor: stripFrames(texture(hub.npcs.teacher.frames), 4, 150, 150, 'horizontal'),
       burst: stripFrames(texture(hub.npcs.teacher.burst.frames), 11, 31, 140, 'horizontal'),
     },
+    traders: {
+      hagatha: {
+        body: stripFrames(texture(hub.npcs.perkWitchFrames), 8, 150, 150, 'horizontal'),
+        crossfades: stripFrames(texture(hub.npcs.perkWitchCrossfades), 4, 25, 25, 'horizontal'),
+      },
+      luthacus: stripFrames(texture(hub.npcs.itemsFrames), 4, 200, 200, 'horizontal'),
+      shlorio: stripFrames(texture(hub.rooms.library.dowser), 4, 150, 150, 'horizontal'),
+    },
   }
 }
 
@@ -158,6 +176,10 @@ export function hubDeferredAnimationTextures(
     textures.base[hub.npcs.teacher.burst.core],
     textures.base[hub.npcs.teacher.burst.flare],
     textures.teacher.burst[0],
+    textures.traders.hagatha.body[0],
+    textures.traders.hagatha.crossfades[0],
+    textures.traders.luthacus[0],
+    textures.traders.shlorio[0],
   ]
 }
 
@@ -184,6 +206,10 @@ export function destroyHubWorldTextureFrames(textures: HubWorldTextures): void {
   textures.students.walk.forEach(add)
   add(textures.teacher.actor)
   add(textures.teacher.burst)
+  add(textures.traders.hagatha.body)
+  add(textures.traders.hagatha.crossfades)
+  add(textures.traders.luthacus)
+  add(textures.traders.shlorio)
   for (const texture of derived) texture.destroy(false)
   for (const texture of Object.values(textures.base)) texture.destroy(true)
 }

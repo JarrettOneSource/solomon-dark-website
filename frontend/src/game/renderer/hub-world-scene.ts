@@ -18,12 +18,17 @@ import {
 import {
   HUB_FOUNTAIN_ORIGIN,
   HUB_STATUE_ROOT,
+  createHubCommonTraderClock,
+  createHubHagathaClock,
   createHubPotionTraderClock,
   hubFountainParticleAlpha,
   hubMarkerAlpha,
   hubSealColors,
   hubStatueOffsets,
   type HubColor,
+  type HubCommonTraderClock,
+  type HubHagathaClock,
+  type HubHagathaParticle,
 } from '../hub-presentation.ts'
 import {
   HUB_TEACHER_CAST_ORIGIN,
@@ -60,6 +65,8 @@ export class HubWorldScene {
   private readonly statueAura: Sprite
   private readonly statueBody: Sprite
   private readonly astronomer: HubAstronomerView
+  private readonly hagatha: HubHagathaView
+  private readonly luthacus: HubCommonTraderView
   private readonly potion: HubPotionTraderView
   private readonly teacher: HubTeacherView
   private readonly players = new Map<string, HubPlayerView>()
@@ -75,7 +82,7 @@ export class HubWorldScene {
   private createdStudentViewCount = 0
   private reusedStudentViewCount = 0
 
-  constructor(textures: HubWorldTextures, createdAtTick: number) {
+  constructor(textures: HubWorldTextures, createdAtTick: number, traderAnimationSeed: number) {
     this.textures = textures
     this.stage.eventMode = 'none'
     this.world.sortableChildren = true
@@ -106,9 +113,12 @@ export class HubWorldScene {
     this.statueBody.eventMode = 'none'
     this.world.addChild(this.statueAura, this.statueBody)
 
-    this.addNpc(hub.npcs.perkWitch, hub.markers.help.right, 1340, 280)
     this.addNpc(hub.npcs.annalist, hub.markers.talk.right, 895.5, 455.5)
-    this.addNpc(hub.npcs.items, hub.markers.help.right, 1700.5, 449.5)
+
+    this.hagatha = new HubHagathaView(textures, traderAnimationSeed ^ 5001)
+    this.luthacus = new HubCommonTraderView(textures, traderAnimationSeed ^ 5005)
+    this.markerSprites.push(this.hagatha.marker, this.luthacus.marker)
+    this.world.addChild(this.hagatha.container, this.luthacus.container)
 
     this.potion = new HubPotionTraderView(textures)
     this.markerSprites.push(this.potion.marker)
@@ -154,6 +164,8 @@ export class HubWorldScene {
       HUB_STATUE_ROOT.y - 189 + statue.body.y,
     )
     this.potion.update(snapshot.tick)
+    this.hagatha.update(snapshot.tick)
+    this.luthacus.update(snapshot.tick)
     this.teacher.update(snapshot.tick / 100)
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
@@ -596,6 +608,111 @@ class HubAstronomerView {
     actor.texture = textures[frame.frame]
     actor.position.copyFrom(frame.position)
     placeAstronomerShadow(shadow, frame.shadowPosition)
+  }
+}
+
+class HubHagathaView {
+  readonly container = new Container({ label: 'perk-witch' })
+  readonly marker: Sprite
+  private readonly body: Sprite
+  private readonly clock: HubHagathaClock
+  private readonly liveParticleIds = new Set<number>()
+  private readonly particles = new Map<number, Sprite>()
+  private readonly textures: HubWorldTextures
+
+  constructor(textures: HubWorldTextures, seed: number) {
+    this.textures = textures
+    this.clock = createHubHagathaClock(seed)
+    this.container.sortableChildren = true
+    this.container.position.set(1340, 280)
+    this.container.zIndex = hubWorldDepthForActor(280)
+    this.container.eventMode = 'none'
+
+    const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
+    shadow.scale.set(1.25)
+    shadow.alpha = 0.62
+    this.body = new Sprite(textures.traders.hagatha.body[0])
+    this.body.anchor.set(0.5)
+    this.body.position.set(-5, 0)
+    this.body.zIndex = 1
+    this.body.eventMode = 'none'
+    const accessory = new Sprite(textures.base[hub.npcs.perkWitchAccessory])
+    accessory.anchor.set(0.5)
+    accessory.position.set(-25, 15)
+    accessory.zIndex = 2
+    accessory.eventMode = 'none'
+    this.marker = new Sprite(textures.base[hub.markers.help.right])
+    this.marker.anchor.set(0.5)
+    this.marker.position.set(48, -60)
+    this.marker.zIndex = 4
+    this.marker.eventMode = 'none'
+    this.container.addChild(shadow, this.body, accessory, this.marker)
+  }
+
+  update(tick: number): void {
+    const frame = this.clock.advanceTo(tick)
+    this.body.texture = this.textures.traders.hagatha.body[frame.bodyFrame]
+    const live = this.liveParticleIds
+    live.clear()
+    for (const particle of frame.particles) {
+      live.add(particle.id)
+      let sprite = this.particles.get(particle.id)
+      if (!sprite) {
+        sprite = this.createParticle(particle)
+        this.particles.set(particle.id, sprite)
+        this.container.addChild(sprite)
+      }
+      sprite.texture = this.textures.traders.hagatha.crossfades[particle.frame]
+      sprite.position.copyFrom(particle.offset)
+      sprite.scale.set(particle.scale)
+      sprite.alpha = particle.alpha
+    }
+    for (const [id, sprite] of this.particles) {
+      if (live.has(id)) continue
+      this.particles.delete(id)
+      sprite.destroy()
+    }
+  }
+
+  private createParticle(particle: HubHagathaParticle): Sprite {
+    const sprite = new Sprite(this.textures.traders.hagatha.crossfades[particle.frame])
+    sprite.zIndex = 3
+    sprite.eventMode = 'none'
+    return sprite
+  }
+}
+
+class HubCommonTraderView {
+  readonly container = new Container({ label: 'items-trader' })
+  readonly marker: Sprite
+  private readonly clock: HubCommonTraderClock
+  private readonly sprite: Sprite
+  private readonly textures: HubWorldTextures
+
+  constructor(textures: HubWorldTextures, seed: number) {
+    this.textures = textures
+    this.clock = createHubCommonTraderClock(seed)
+    this.container.sortableChildren = true
+    this.container.position.set(1700.5, 449.5)
+    this.container.zIndex = hubWorldDepthForActor(449.5)
+    this.container.eventMode = 'none'
+    const shadow = actorSprite(textures.base[hub.npcs.teacher.shadow], 0)
+    shadow.scale.set(1.25)
+    shadow.alpha = 0.62
+    this.sprite = new Sprite(textures.traders.luthacus[0])
+    this.sprite.anchor.set(0.5)
+    this.sprite.zIndex = 1
+    this.sprite.eventMode = 'none'
+    this.marker = new Sprite(textures.base[hub.markers.help.right])
+    this.marker.anchor.set(0.5)
+    this.marker.position.set(48, -60)
+    this.marker.zIndex = 2
+    this.marker.eventMode = 'none'
+    this.container.addChild(shadow, this.sprite, this.marker)
+  }
+
+  update(tick: number): void {
+    this.sprite.texture = this.textures.traders.luthacus[this.clock.advanceTo(tick)]
   }
 }
 

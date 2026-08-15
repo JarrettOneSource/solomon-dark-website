@@ -3,7 +3,10 @@ import { hub } from '../lib/assets'
 import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
-import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type {
+  ProtocolPlayerEconomy,
+  ProtocolPlayerProgression,
+} from './protocol/game-state.ts'
 import { playerExperienceProgress } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
@@ -17,6 +20,7 @@ interface GameHudProps {
   initialSnapshot: GameSnapshot
   mapLabel?: string
   mode?: 'hub' | 'run'
+  onInventoryClick?: () => void
   onMapClick?: () => void
   playerId: string
   progression: ProtocolPlayerProgression
@@ -29,14 +33,15 @@ function HudSlot({ src }: { src: string }) {
 }
 
 function InventoryCount({ count, variant }: { count: number; variant: 'blue' | 'red' }) {
+  const atlasDigit = Math.min(9, Math.max(0, count))
   return (
     <span
       className={`hub-hud-count hub-hud-count-${variant}`}
       style={{
         backgroundImage: `url("${hub.hud.inventoryDigits}")`,
-        backgroundPosition: `${-count * 8}px 0`,
+        backgroundPosition: `${-atlasDigit * 8}px 0`,
       }}
-      aria-hidden
+      aria-label={`${count}`}
     />
   )
 }
@@ -102,15 +107,25 @@ export default function GameHud({
   initialSnapshot,
   mapLabel = 'Map',
   mode = 'hub',
+  onInventoryClick,
   onMapClick,
   playerId,
   progression,
   subscribePing,
   subscribeSnapshot,
 }: GameHudProps) {
+  const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
+    initialSnapshot.players[playerId]!.economy
+  ))
+  useEffect(() => subscribeSnapshot((snapshot) => {
+    const next = snapshot.players[playerId]?.economy
+    if (next) setEconomy((current) => current.revision === next.revision ? current : next)
+  }), [playerId, subscribeSnapshot])
   const xpProgress = playerExperienceProgress(progression)
   const healthProgress = progression.currentHealth / progression.maximumHealth
   const manaProgress = progression.currentMana / progression.maximumMana
+  const healthPotions = inventoryQuantity(economy, 'health-potion')
+  const manaPotions = inventoryQuantity(economy, 'mana-potion')
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
@@ -162,9 +177,17 @@ export default function GameHud({
       ) : null}
 
       <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
-        <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="3 health potions" />
-        <InventoryCount count={3} variant="red" />
-        <img className="hub-hud-backpack" src={hub.hud.backpack} alt="Backpack" />
+        <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt={`${healthPotions} health potions`} />
+        <InventoryCount count={healthPotions} variant="red" />
+        <button
+          type="button"
+          className="hub-hud-backpack-button"
+          aria-label={`Open inventory, ${economy.gold} gold`}
+          disabled={!onInventoryClick}
+          onClick={onInventoryClick}
+        >
+          <img className="hub-hud-backpack" src={hub.hud.backpack} alt="" />
+        </button>
         <div
           className="hub-hud-xp"
           role="progressbar"
@@ -182,8 +205,8 @@ export default function GameHud({
           <img className="hub-hud-xp-frame" src={hub.hud.xpFrame} alt="" />
         </div>
         <img className="hub-hud-tome" src={hub.hud.tome} alt="Spellbook" />
-        <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="4 mana potions" />
-        <InventoryCount count={4} variant="blue" />
+        <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt={`${manaPotions} mana potions`} />
+        <InventoryCount count={manaPotions} variant="blue" />
       </div>
 
       {mode === 'hub' ? (
@@ -203,4 +226,13 @@ export default function GameHud({
       ) : null}
     </div>
   )
+}
+
+function inventoryQuantity(
+  economy: ProtocolPlayerEconomy,
+  kind: 'health-potion' | 'mana-potion',
+): number {
+  return economy.backpack.reduce((total, item) => (
+    item.kind === kind ? total + item.quantity : total
+  ), 0)
 }

@@ -14,6 +14,13 @@ import type {
 } from '../core-kernels/player-character.ts'
 import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type {
+  DowsingOffer,
+  HagathaOffer,
+  HubEquipmentState,
+  HubInventoryItem,
+  HubShopItem,
+} from '../core-kernels/hub-economy.ts'
+import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -40,7 +47,27 @@ export interface ProtocolAmbientState {
 
 export interface ProtocolPlayerState extends PlayerCharacterState {
   config: PlayerCharacterConfig
+  economy: ProtocolPlayerEconomy
   progression: ProtocolPlayerProgression
+}
+
+export type ProtocolPlayerSnapshotFrame = Omit<ProtocolPlayerState, 'economy'> & {
+  economy?: ProtocolPlayerEconomy
+}
+
+export interface ProtocolPlayerEconomy {
+  backpack: readonly HubInventoryItem[]
+  charmCapacity: number
+  dowsingFee: number
+  dowsingOffers: readonly DowsingOffer[]
+  equipment: HubEquipmentState
+  fomentiusStock: readonly HubShopItem[]
+  gold: number
+  hagathaOffers: readonly HagathaOffer[]
+  ownedPerkSelectors: readonly number[]
+  revision: number
+  storage: readonly HubInventoryItem[]
+  tonicPurchases: number
 }
 
 export interface ProtocolPlayerSkillOfferOption {
@@ -101,6 +128,7 @@ export interface HubWorldSnapshot {
   kind: 'hub'
   participants: Readonly<Record<string, HubParticipantState>>
   students: readonly ProtocolStudentState[]
+  traderAnimationSeed: number
 }
 
 export interface BoneyardWorldSnapshot {
@@ -405,6 +433,7 @@ export interface HubWorldSnapshotFrame {
   entities: ReplicatedEntityFrame
   kind: 'hub'
   participants: Readonly<Record<string, HubParticipantState>>
+  traderAnimationSeed: number
 }
 
 export interface BoneyardWorldSnapshotFrame {
@@ -432,7 +461,7 @@ export interface GameSnapshot {
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
-  players: Readonly<Record<string, ProtocolPlayerState>>
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
   primarySpells: PrimarySpellSimulationState
   run: GameRunLifecycleState
   tick: number

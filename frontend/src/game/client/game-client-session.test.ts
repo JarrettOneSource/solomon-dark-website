@@ -100,6 +100,12 @@ test('client carries character config, publishes authority, and tears down', asy
   const session = await connecting
   assert.equal(session.isHost, true)
   assert.equal(session.boneyards[0].id, 'default-random')
+  const stockItemId = session.getSnapshot().players[session.playerId].economy.fomentiusStock[0]!.id
+  session.sendHubAction({ type: 'buy-fomentius', itemId: stockItemId })
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-hub-action',
+    action: { type: 'buy-fomentius', itemId: stockItemId },
+  })
   session.startMatch('default-random')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-start-match',
@@ -632,7 +638,11 @@ test('client does not rewind a locally presented turn while acknowledgement is d
         ? initialSnapshot.world.participants['player-1']
         : undefined,
     )
-    authoritativePlayer = { ...predicted.player, progression: authoritativePlayer.progression }
+    authoritativePlayer = {
+      ...predicted.player,
+      economy: authoritativePlayer.economy,
+      progression: authoritativePlayer.progression,
+    }
     collisionRngState = predicted.collisionRngState
   }
   receiveSnapshot(transport, {

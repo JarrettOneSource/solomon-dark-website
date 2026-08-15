@@ -1,4 +1,10 @@
 import type { Vector2 } from './core-kernels/vector.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+  type NativeRngState,
+} from './core-kernels/native-rng.ts'
 import type {
   ProtocolAmbientState,
   ProtocolFountainParticleState,
@@ -23,6 +29,27 @@ export interface HubPotionTraderClock {
   advanceTo(tick: number): HubPotionTraderFrame
 }
 
+export interface HubCommonTraderClock {
+  advanceTo(tick: number): number
+}
+
+export interface HubHagathaFrame {
+  bodyFrame: number
+  particles: readonly HubHagathaParticle[]
+}
+
+export interface HubHagathaParticle {
+  alpha: number
+  frame: number
+  id: number
+  offset: Vector2
+  scale: number
+}
+
+export interface HubHagathaClock {
+  advanceTo(tick: number): HubHagathaFrame
+}
+
 const FOUNTAIN_ALPHA_LIMIT = 0.25
 const POTION_TRADER_ACTOR_CHECKPOINT_TICKS = 512
 const POTION_TRADER_ACTOR_RNG_SEED = 0x50b110
@@ -33,6 +60,30 @@ const POTION_TRADER_ACTOR_SPEED_BASE = 1
 const POTION_TRADER_ACTOR_SPEED_RANGE = 3
 const POTION_TRADER_ACTOR_SPEED_SCALE = Math.fround(0.44999998807907104)
 const POTION_TRADER_ACTOR_FRAME_SCALE = 4 - 0.01
+const HAGATHA_BODY_FRAME_COUNT = 8
+const HAGATHA_CROSSFADE_FRAME_COUNT = 4
+const HAGATHA_PHASE_SPEED_BASE = Math.fround(0.05)
+const HAGATHA_PHASE_SPEED_RANGE = 0.25
+const HAGATHA_DIRECTION_REVERSE_RANGE = 1500
+const HAGATHA_DIRECTION_REVERSE_VALUE = 3
+const HAGATHA_NATIVE_TICK_RATE = 100
+const HAGATHA_PARTICLE_LIFETIME_BASE = 1.25
+const HAGATHA_PARTICLE_LIFETIME_RANGE = 0.25
+const HAGATHA_PARTICLE_SCALE_BASE = 0.15
+const HAGATHA_PARTICLE_SCALE_RANGE = 0.1
+const HAGATHA_PARTICLE_JITTER_RADIUS = 2
+const HAGATHA_PARTICLE_Y_BIAS = 14
+const HAGATHA_BODY_HALF_EXTENT = 75
+const HAGATHA_PARTICLE_ANCHORS: readonly Vector2[] = [
+  { x: 79.5, y: 80.5 },
+  { x: 81.5, y: 81.5 },
+  { x: 83.5, y: 82.5 },
+  { x: 86.5, y: 83.5 },
+  { x: 90.5, y: 83.5 },
+  { x: 103.5, y: 77.5 },
+  { x: 104.5, y: 75.5 },
+  { x: 84.5, y: 84.5 },
+]
 const POTION_TRADER_BALLOON_CHECKPOINT_TICKS = 398
 const POTION_TRADER_BALLOON_FRAME_COUNT = 5
 const POTION_TRADER_BALLOON_FRAME_STEP = Math.fround(0.05)
@@ -51,7 +102,7 @@ const SEAL_GLYPH_TRACK: readonly HubColor[] = [
 interface PotionTraderActorState {
   active: boolean
   phaseDegrees: number
-  rngState: number
+  rng: NativeRngState
   speedDegrees: number
 }
 
@@ -61,10 +112,28 @@ interface PotionTraderBalloonState {
   holdTicks: number
 }
 
+interface HagathaState {
+  nextParticleId: number
+  particles: readonly HagathaParticleState[]
+  phase: number
+  rng: NativeRngState
+  velocity: number
+}
+
+interface HagathaParticleState {
+  frame: number
+  id: number
+  offset: Vector2
+  opacity: number
+  progress: number
+  progressStep: number
+  scale: number
+}
+
 const POTION_TRADER_ACTOR_CHECKPOINTS: PotionTraderActorState[] = [{
   active: false,
   phaseDegrees: 0,
-  rngState: POTION_TRADER_ACTOR_RNG_SEED,
+  rng: createNativeRng(POTION_TRADER_ACTOR_RNG_SEED),
   speedDegrees: 0,
 }]
 
@@ -73,32 +142,22 @@ const POTION_TRADER_BALLOON_CHECKPOINTS: PotionTraderBalloonState[] = [{
   frame: 0,
   holdTicks: 0,
 }]
-
-function nextPotionTraderActorRandom(
-  state: number,
-): { state: number; value: number } {
-  let value = state >>> 0
-  value ^= value << 13
-  value ^= value >>> 17
-  value ^= value << 5
-  value >>>= 0
-  return { state: value || 0x6d2b79f5, value: value / 0x100000000 }
-}
+const COMMON_TRADER_CHECKPOINTS = new Map<number, PotionTraderActorState[]>()
+const HAGATHA_CHECKPOINTS = new Map<number, HagathaState[]>()
 
 function stepPotionTraderActor(state: PotionTraderActorState): PotionTraderActorState {
   if (!state.active) {
-    const trigger = nextPotionTraderActorRandom(state.rngState)
-    if (Math.floor(trigger.value * POTION_TRADER_ACTOR_TRIGGER_RANGE)
-      !== POTION_TRADER_ACTOR_TRIGGER_VALUE) {
-      return { ...state, rngState: trigger.state }
+    const trigger = drawNativeInteger(state.rng, POTION_TRADER_ACTOR_TRIGGER_RANGE)
+    if (trigger.value !== POTION_TRADER_ACTOR_TRIGGER_VALUE) {
+      return { ...state, rng: trigger.state }
     }
-    const speed = nextPotionTraderActorRandom(trigger.state)
+    const speed = drawNativeFloat(trigger.state, POTION_TRADER_ACTOR_SPEED_RANGE)
     return {
       active: true,
       phaseDegrees: 0,
-      rngState: speed.state,
+      rng: speed.state,
       speedDegrees: Math.fround(
-        (speed.value * POTION_TRADER_ACTOR_SPEED_RANGE + POTION_TRADER_ACTOR_SPEED_BASE)
+        (speed.value + POTION_TRADER_ACTOR_SPEED_BASE)
           * POTION_TRADER_ACTOR_SPEED_SCALE,
       ),
     }
@@ -109,6 +168,132 @@ function stepPotionTraderActor(state: PotionTraderActorState): PotionTraderActor
     return { ...state, active: false, phaseDegrees: 0, speedDegrees: 0 }
   }
   return { ...state, phaseDegrees }
+}
+
+function initialCommonTraderState(seed: number): PotionTraderActorState {
+  return {
+    active: false,
+    phaseDegrees: 0,
+    rng: createNativeRng(seed >>> 0),
+    speedDegrees: 0,
+  }
+}
+
+function commonTraderCheckpoints(seed: number): PotionTraderActorState[] {
+  const normalized = seed >>> 0
+  let checkpoints = COMMON_TRADER_CHECKPOINTS.get(normalized)
+  if (!checkpoints) {
+    checkpoints = [initialCommonTraderState(normalized)]
+    COMMON_TRADER_CHECKPOINTS.set(normalized, checkpoints)
+  }
+  return checkpoints
+}
+
+function commonTraderStateAt(tick: number, seed: number): PotionTraderActorState {
+  const checkpoints = commonTraderCheckpoints(seed)
+  const checkpointIndex = Math.floor(tick / POTION_TRADER_ACTOR_CHECKPOINT_TICKS)
+  while (checkpoints.length <= checkpointIndex) {
+    let state = checkpoints.at(-1)!
+    for (let update = 0; update < POTION_TRADER_ACTOR_CHECKPOINT_TICKS; update += 1) {
+      state = stepPotionTraderActor(state)
+    }
+    checkpoints.push(state)
+  }
+  let state = checkpoints[checkpointIndex]!
+  const remainder = tick % POTION_TRADER_ACTOR_CHECKPOINT_TICKS
+  for (let update = 0; update < remainder; update += 1) {
+    state = stepPotionTraderActor(state)
+  }
+  return state
+}
+
+function initialHagathaState(seed: number): HagathaState {
+  return {
+    nextParticleId: 0,
+    particles: [],
+    phase: 0,
+    rng: createNativeRng(seed >>> 0),
+    velocity: HAGATHA_PHASE_SPEED_BASE,
+  }
+}
+
+function stepHagatha(state: HagathaState): HagathaState {
+  const particles = state.particles
+    .map((particle) => ({
+      ...particle,
+      progress: Math.fround(particle.progress + particle.progressStep),
+    }))
+    .filter(({ progress }) => progress <= 1)
+
+  const phaseDraw = drawNativeFloat(state.rng, HAGATHA_PHASE_SPEED_RANGE)
+  let phase = Math.fround(
+    state.phase + Math.fround((phaseDraw.value + 1) * state.velocity),
+  )
+  if (phase >= HAGATHA_BODY_FRAME_COUNT) phase = Math.fround(phase - HAGATHA_BODY_FRAME_COUNT)
+  if (phase < 0) phase = Math.fround(phase + HAGATHA_BODY_FRAME_COUNT)
+
+  const frameDraw = drawNativeInteger(phaseDraw.state, HAGATHA_CROSSFADE_FRAME_COUNT)
+  const opacityDraw = drawNativeFloat(frameDraw.state, 1)
+  const lifetimeDraw = drawNativeFloat(opacityDraw.state, HAGATHA_PARTICLE_LIFETIME_RANGE)
+  const scaleDraw = drawNativeFloat(lifetimeDraw.state, HAGATHA_PARTICLE_SCALE_RANGE, true)
+  const anchorDraw = drawNativeInteger(scaleDraw.state, HAGATHA_PARTICLE_ANCHORS.length)
+  const radiusDraw = drawNativeFloat(anchorDraw.state, HAGATHA_PARTICLE_JITTER_RADIUS)
+  const angleDraw = drawNativeFloat(radiusDraw.state, 360)
+  const radians = Math.fround(angleDraw.value * Math.fround(Math.PI) / 180)
+  const anchor = HAGATHA_PARTICLE_ANCHORS[anchorDraw.value]!
+  const particle: HagathaParticleState = {
+    frame: frameDraw.value,
+    id: state.nextParticleId,
+    offset: {
+      x: Math.fround(
+        anchor.x - HAGATHA_BODY_HALF_EXTENT
+          + Math.fround(radiusDraw.value * Math.cos(radians)),
+      ),
+      y: Math.fround(
+        anchor.y + HAGATHA_PARTICLE_Y_BIAS - HAGATHA_BODY_HALF_EXTENT
+          - Math.fround(radiusDraw.value * Math.sin(radians)),
+      ),
+    },
+    opacity: opacityDraw.value,
+    progress: 0,
+    progressStep: Math.fround(1 / (
+      Math.fround(lifetimeDraw.value + HAGATHA_PARTICLE_LIFETIME_BASE)
+        * HAGATHA_NATIVE_TICK_RATE
+    )),
+    scale: Math.fround(scaleDraw.value + HAGATHA_PARTICLE_SCALE_BASE),
+  }
+  const reverseDraw = drawNativeInteger(angleDraw.state, HAGATHA_DIRECTION_REVERSE_RANGE)
+  const velocity = reverseDraw.value === HAGATHA_DIRECTION_REVERSE_VALUE
+    ? Math.fround(-state.velocity)
+    : state.velocity
+  return {
+    nextParticleId: state.nextParticleId + 1,
+    particles: [...particles, particle],
+    phase,
+    rng: reverseDraw.state,
+    velocity,
+  }
+}
+
+function hagathaStateAt(tick: number, seed: number): HagathaState {
+  const normalized = seed >>> 0
+  let checkpoints = HAGATHA_CHECKPOINTS.get(normalized)
+  if (!checkpoints) {
+    checkpoints = [initialHagathaState(normalized)]
+    HAGATHA_CHECKPOINTS.set(normalized, checkpoints)
+  }
+  const checkpointIndex = Math.floor(tick / POTION_TRADER_ACTOR_CHECKPOINT_TICKS)
+  while (checkpoints.length <= checkpointIndex) {
+    let state = checkpoints.at(-1)!
+    for (let update = 0; update < POTION_TRADER_ACTOR_CHECKPOINT_TICKS; update += 1) {
+      state = stepHagatha(state)
+    }
+    checkpoints.push(state)
+  }
+  let state = checkpoints[checkpointIndex]!
+  const remainder = tick % POTION_TRADER_ACTOR_CHECKPOINT_TICKS
+  for (let update = 0; update < remainder; update += 1) state = stepHagatha(state)
+  return state
 }
 
 function potionTraderActorCheckpoint(index: number): PotionTraderActorState {
@@ -214,6 +399,78 @@ export function hubMarkerAlpha(state: ProtocolAmbientState): number {
 export function hubPotionTraderActorFrameAt(tick: number): number {
   const fixedTick = Math.max(0, Math.floor(tick))
   return potionTraderActorFrame(potionTraderActorStateAt(fixedTick))
+}
+
+/** Luthacus and Shlorio's shared 1-in-200, four-frame native idle gesture. */
+export function hubCommonTraderFrameAt(tick: number, seed: number): number {
+  const fixedTick = Math.max(0, Math.floor(tick))
+  return potionTraderActorFrame(commonTraderStateAt(fixedTick, seed))
+}
+
+export function createHubCommonTraderClock(seed: number): HubCommonTraderClock {
+  let currentTick = 0
+  let state = initialCommonTraderState(seed)
+  let frame = 0
+  return {
+    advanceTo(tick) {
+      const fixedTick = Math.max(0, Math.floor(tick))
+      if (fixedTick < currentTick || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS) {
+        state = commonTraderStateAt(fixedTick, seed)
+        currentTick = fixedTick
+      } else {
+        while (currentTick < fixedTick) {
+          state = stepPotionTraderActor(state)
+          currentTick += 1
+        }
+      }
+      frame = potionTraderActorFrame(state)
+      return frame
+    },
+  }
+}
+
+/** Hagatha's eight-frame loop and per-tick native cross-fade particle field. */
+export function hubHagathaFrameAt(tick: number, seed: number): HubHagathaFrame {
+  const fixedTick = Math.max(0, Math.floor(tick))
+  return presentHagatha(hagathaStateAt(fixedTick, seed))
+}
+
+export function createHubHagathaClock(seed: number): HubHagathaClock {
+  let currentTick = 0
+  let state = initialHagathaState(seed)
+  let frame = hubHagathaFrameAt(0, seed)
+  return {
+    advanceTo(tick) {
+      const fixedTick = Math.max(0, Math.floor(tick))
+      if (fixedTick < currentTick || fixedTick - currentTick >= POTION_TRADER_ACTOR_CHECKPOINT_TICKS) {
+        state = hagathaStateAt(fixedTick, seed)
+        currentTick = fixedTick
+      } else {
+        while (currentTick < fixedTick) {
+          state = stepHagatha(state)
+          currentTick += 1
+        }
+      }
+      frame = presentHagatha(state)
+      return frame
+    },
+  }
+}
+
+function presentHagatha(state: HagathaState): HubHagathaFrame {
+  return {
+    bodyFrame: Math.floor(state.phase) % HAGATHA_BODY_FRAME_COUNT,
+    particles: state.particles.map((particle) => ({
+      alpha: Math.max(0, Math.min(
+        1,
+        Math.cos(particle.progress * Math.PI) * particle.opacity,
+      )),
+      frame: particle.frame,
+      id: particle.id,
+      offset: particle.offset,
+      scale: particle.scale,
+    })),
+  }
 }
 
 /** PotionGuy's native five-frame balloon clock with endpoint holds. */

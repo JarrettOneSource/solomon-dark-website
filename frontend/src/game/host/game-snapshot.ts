@@ -1,9 +1,11 @@
 import {
   gameSimulationPlayerRecords,
+  getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
+import { hagathaOffers, type HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
 import { playerEntityDisplayHealth } from '../core-server/player-entity-store.ts'
@@ -44,6 +46,7 @@ export function createGameSnapshot(
           participants: state.world.participants,
           students: hubStudentSnapshotStates(state.world.studentPopulation)
             .map(protocolStudentState),
+          traderAnimationSeed: state.world.traderAnimationSeed,
         },
       }
     case 'boneyard': {
@@ -130,9 +133,10 @@ function protocolBoneyardEnemyEvent(
 function protocolPlayerState(
   state: GameSimulationState,
   playerId: string,
-  player: Omit<ProtocolPlayerState, 'progression'>,
+  player: Omit<ProtocolPlayerState, 'economy' | 'progression'>,
 ): ProtocolPlayerState {
   const progression = getPlayerProgression(state, playerId)
+  const economy = getPlayerEconomy(state, playerId)
   const skillBook = getPlayerSkillBook(state, playerId)
   const learnedSkills: Array<readonly [number, number, number]> = []
   for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
@@ -144,6 +148,36 @@ function protocolPlayerState(
   }
   return {
     ...player,
+    economy: {
+      backpack: economy.backpack.map(protocolInventoryItem),
+      charmCapacity: economy.charmCapacity,
+      dowsingFee: economy.dowsingFee,
+      dowsingOffers: economy.dowsingOffers.map((offer) => ({ ...offer })),
+      equipment: {
+        amulet: economy.equipment.amulet && protocolInventoryItem(economy.equipment.amulet),
+        hat: economy.equipment.hat && protocolInventoryItem(economy.equipment.hat),
+        rings: economy.equipment.rings.map((item) => item && protocolInventoryItem(item)) as [
+          HubInventoryItem | null,
+          HubInventoryItem | null,
+          HubInventoryItem | null,
+        ],
+        robe: economy.equipment.robe && protocolInventoryItem(economy.equipment.robe),
+        weapon: economy.equipment.weapon && protocolInventoryItem(economy.equipment.weapon),
+      },
+      fomentiusStock: economy.fomentiusStock.map((item) => ({
+        ...protocolInventoryItem(item),
+        price: item.price,
+      })),
+      gold: economy.gold,
+      hagathaOffers: hagathaOffers(economy).map((offer) => ({
+        ...offer,
+        members: [...offer.members],
+      })),
+      ownedPerkSelectors: [...economy.ownedPerkSelectors],
+      revision: economy.revision,
+      storage: economy.storage.map(protocolInventoryItem),
+      tonicPurchases: economy.tonicPurchases,
+    },
     progression: {
       activeWeldBuildId: skillBook.activeWeldBuildId,
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
@@ -166,6 +200,10 @@ function protocolPlayerState(
       revision: progression.revision,
     },
   }
+}
+
+function protocolInventoryItem(item: HubInventoryItem): HubInventoryItem {
+  return { ...item, iconRecords: [...item.iconRecords] }
 }
 
 function protocolStudentState(

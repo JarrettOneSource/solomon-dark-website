@@ -8,7 +8,11 @@ import {
   type PrivateHubRegionId,
 } from '../core-kernels/hub-private-room-layout.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
-import { hubMarkerAlpha } from '../hub-presentation.ts'
+import {
+  createHubCommonTraderClock,
+  hubMarkerAlpha,
+  type HubCommonTraderClock,
+} from '../hub-presentation.ts'
 import { HubPlayerView } from './hub-actors.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
@@ -49,10 +53,14 @@ export class HubPrivateRoomScene {
   private memoratorBody!: Sprite
   private memoratorMarker!: Sprite
   private memoratorFrames: readonly Texture[] = []
+  private readonly dowserClock: HubCommonTraderClock
+  private dowserBody!: Sprite
+  private dowserMarker!: Sprite
   private activeRegion: PrivateHubRegionId = 'mortuary'
 
-  constructor(textures: HubWorldTextures) {
+  constructor(textures: HubWorldTextures, traderAnimationSeed: number) {
     this.textures = textures
+    this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016)
     this.world.sortableChildren = true
     this.world.eventMode = 'none'
     this.rooms = {
@@ -184,19 +192,21 @@ export class HubPrivateRoomScene {
     librarian.addChild(counter, librarianBody)
     room.addChild(librarian)
 
-    const dowserSource = this.textures.base[hub.rooms.library.dowser]
-    const dowserFrame = new Texture({
-      source: dowserSource.source,
-      frame: new Rectangle(0, 0, 150, 150),
-    })
-    this.derivedTextures.push(dowserFrame)
     const dowserVisual = layout.actors.dowser.visual
-    const dowser = this.actorTexture(
-      dowserFrame,
-      dowserVisual.position.x,
-      dowserVisual.position.y,
-    )
+    const dowser = new Container({ label: 'college-library-dowser' })
+    dowser.sortableChildren = true
+    dowser.position.copyFrom(dowserVisual.position)
     dowser.zIndex = hubWorldDepthForActor(dowserVisual.painterY)
+    dowser.eventMode = 'none'
+    this.dowserBody = new Sprite(this.textures.traders.shlorio[0])
+    this.dowserBody.anchor.set(0.5)
+    this.dowserBody.eventMode = 'none'
+    this.dowserMarker = new Sprite(this.textures.base[hub.markers.help.right])
+    this.dowserMarker.anchor.set(0.5)
+    this.dowserMarker.position.set(48, -60)
+    this.dowserMarker.zIndex = 1
+    this.dowserMarker.eventMode = 'none'
+    dowser.addChild(this.dowserBody, this.dowserMarker)
     room.addChild(dowser)
     this.addRoomFlames(room, 'library', hub.rooms.library.flame)
     room.addChild(this.layer(
@@ -387,6 +397,12 @@ export class HubPrivateRoomScene {
         ]
       }
       this.memoratorMarker.alpha = hubMarkerAlpha(snapshot.world.ambient)
+    }
+    if (region === 'library') {
+      this.dowserBody.texture = this.textures.traders.shlorio[
+        this.dowserClock.advanceTo(snapshot.tick)
+      ]
+      this.dowserMarker.alpha = hubMarkerAlpha(snapshot.world.ambient)
     }
     const flames = this.roomFlames.get(region) ?? []
     for (let index = 0; index < flames.length; index += 1) {

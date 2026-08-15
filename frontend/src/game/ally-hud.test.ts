@@ -16,8 +16,8 @@ import {
   type AllyHudRow,
 } from './ally-hud.ts'
 
-const PROGRESSION = createGameSnapshot(createGameSimulation(), null)
-  .players['local-player']!.progression
+const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
+  .players['local-player']!
 
 function player(displayName: string): ProtocolPlayerState {
   return {
@@ -26,12 +26,13 @@ function player(displayName: string): ProtocolPlayerState {
       displayName,
       element: 'ether',
     },
+    economy: DEFAULT_PLAYER.economy,
     footstepTick: 0,
     gaitDegrees: 0,
     headingIndex: 0,
     position: { x: 0, y: 0 },
     primaryCast: createIdlePlayerPrimaryCast(),
-    progression: PROGRESSION,
+    progression: DEFAULT_PLAYER.progression,
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
   }

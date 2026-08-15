@@ -116,8 +116,13 @@ export async function createHubWorldRenderer(
     throw error
   }
   application.stop()
-  const courtyardScene = new HubWorldScene(textures, options.initialSnapshot.tick)
-  const privateRoomScene = new HubPrivateRoomScene(textures)
+  const traderAnimationSeed = options.initialSnapshot.world.traderAnimationSeed
+  const courtyardScene = new HubWorldScene(
+    textures,
+    options.initialSnapshot.tick,
+    traderAnimationSeed,
+  )
+  const privateRoomScene = new HubPrivateRoomScene(textures, traderAnimationSeed)
   courtyardScene.stage.scale.set(HUB_CAMERA_SCALE)
   privateRoomScene.world.scale.set(HUB_CAMERA_SCALE)
   application.stage.addChild(courtyardScene.stage, privateRoomScene.world)

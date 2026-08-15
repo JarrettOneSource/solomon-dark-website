@@ -24,6 +24,7 @@ import {
 } from '../protocol/game-protocol.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
+import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   createBoneyardPresentationTimeline,
@@ -70,6 +71,7 @@ export interface GameClientSession {
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
+  sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
   startMatch(boneyardId: string): void
 }
@@ -453,6 +455,14 @@ export function connectGameClientSession(
           skillId,
         }))
       },
+      sendHubAction(action) {
+        if (!welcome || !snapshot || destroyed) return
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-hub-action',
+          action,
+        }))
+      },
       startMatch(boneyardId) {
         if (!welcome || destroyed) return
         if (!welcome.boneyards.some((choice) => choice.id === boneyardId)) {
@@ -630,6 +640,7 @@ export function connectGameClientSession(
         state.player = {
           ...predicted.player,
           config: { ...state.player.config },
+          economy: state.player.economy,
           progression: state.player.progression,
         }
         state.collisionRngState = predicted.collisionRngState

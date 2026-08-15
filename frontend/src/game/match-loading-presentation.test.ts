@@ -64,11 +64,19 @@ test('seals scene input until the same renderer reports its initial frame', () =
   for (const scene of [hubScene, boneyardScene]) {
     assert.match(scene, /inputBlocked: boolean/)
     assert.match(scene, /onReady: \(\) => void/)
-    assert.match(scene, /input\.setBlocked\(inputBlockedRef\.current\)/)
-    assert.match(scene, /inputRef\.current\?\.setBlocked\(inputBlocked\)/)
     assert.match(scene, /onLoadingErrorRef\.current\(\)/)
     assert.match(scene, /onReadyRef\.current\(\)/)
   }
+  assert.match(boneyardScene, /input\.setBlocked\(inputBlockedRef\.current\)/)
+  assert.match(boneyardScene, /inputRef\.current\?\.setBlocked\(inputBlocked\)/)
+  assert.match(
+    hubScene,
+    /input\.setBlocked\(inputBlockedRef\.current \|\| modalOpenRef\.current\)/,
+  )
+  assert.match(
+    hubScene,
+    /inputRef\.current\?\.setBlocked\(inputBlocked \|\| modalOpen\)/,
+  )
 })
 
 test('keeps the Boneyard renderer resident across run-local snapshot changes', () => {

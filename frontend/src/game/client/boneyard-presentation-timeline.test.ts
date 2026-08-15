@@ -27,18 +27,19 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'fire',
 } as const
-const PROGRESSION = createGameSnapshot(createGameSimulation(), null)
-  .players['local-player']!.progression
+const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
+  .players['local-player']!
 
 function playerAt(x: number): ProtocolPlayerState {
   return {
     config: { ...CHARACTER },
+    economy: DEFAULT_PLAYER.economy,
     footstepTick: x,
     gaitDegrees: x,
     headingIndex: 0,
     position: { x, y: 200 },
     primaryCast: createIdlePlayerPrimaryCast(),
-    progression: PROGRESSION,
+    progression: DEFAULT_PLAYER.progression,
     velocity: { x: 100, y: 0 },
     walkCyclePrimary: x / 10 % 5,
   }
