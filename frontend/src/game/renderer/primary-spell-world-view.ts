@@ -17,6 +17,7 @@ import {
   EtherPrimarySpellView,
 } from './primary-spell-ether-view.ts'
 import {
+  FireActorSpellView,
   FireImpactSpellView,
   FireParticleSpellView,
   FirePrimarySpellView,
@@ -107,6 +108,12 @@ export class PrimarySpellWorldView {
           view = new PlayerStaffVfxView(state, this.textures)
         } else if (state.kind === 'earth-called-rock') {
           view = new EarthCalledRockView(state, this.textures.primarySpells.earth)
+        } else if (
+          state.kind === 'fire-ember'
+          || state.kind === 'fire-good-imp'
+          || state.kind === 'fire-patch'
+        ) {
+          view = new FireActorSpellView(state, this.textures.fireActors)
         } else if ('position' in state) {
           view = state.kind === 'earth'
             ? new EarthBoulderView(state, this.textures.primarySpells.earth)

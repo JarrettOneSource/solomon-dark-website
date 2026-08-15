@@ -11236,6 +11236,83 @@ gameplay actor. The rank-1 Fireball's `Anim_FireParticle` records `267..270`
 never contact or damage actors. The Website must not fabricate
 `Fire_Goodguy` state to make the primary look richer.
 
+The complete Fire-family pass separates three more native owners. A naturally
+spent Embers-to-Imps fragment creates an allied `GoodImp 0x3ED`, copies half
+the row-19 damage into both attack endpoints, and gives it 300 ticks. Its tick
+reuses Imp pursuit/contact, decrements life once plus once more while
+targetless, and expires into a non-reward `Fire 0x7E3` release. The exact
+outer tick is `GoodImp::Tick 0x0052C1A0`: a null retained target invokes
+`0x0052A050` immediately, while a valid retained target is never periodically
+reselected. It then calls shared `Imp::Tick 0x00485DC0` before either lifetime
+decrement, so the terminal tick can still move, bounce, and contact.
+
+The constructor chain `0x006287D0 -> 0x00473390 -> 0x00473E30 ->
+0x00529FE0` consumes fourteen generic-Badguy RNG words followed by the Imp
+fields: collision radius `2.5-Float(2.5)`, upper-effect phase `Float(10)`, one
+of four body banks through `Integer(4)`, and signed body rotation
+`Float(45,true)`. The retained body scale was created earlier as
+`f32(0.9800000190734863 + Float(0.05,true))`; GoodImp does not replace it.
+This is a 19-word constructor schedule. Its initial horizontal flight scalar
+is `4.5`, while the team-zero base path samples a ten-tick movement interval;
+the displacement budget is therefore `speed * 0.25 * 10` at each sampled
+path step, not the former web-only two-tick approximation.
+
+Every active Imp tick advances upper phase by `abs(speed)*0.25`, vertical
+offset by velocity, velocity by `0.4`, and upper alpha toward zero by `0.05`.
+Crossing positive vertical offset is the landing/bounce edge. It sets speed to
+`4.5*(1+Float(1.5))`, vertical velocity to `-(3+Float(3))`, selects a new
+body bank and signed `Float(60)` rotation, restores upper alpha to one, and
+multiplies the vertical impulse by `1.5` exactly when `Integer(20)==3`.
+That edge also owns an `Integer(8)` Imp vocal selection.
+
+The landing contact threshold is
+`distance <= (targetRadius + 45) * 1.25`. A successful contact consumes
+`Float(0.25)` plus `Integer(3)` for the Bite sound, creates an independent
+`BadGuys[251..254]` four-frame contact child at heading-offset distance `15`
+and y `-15` with scale `0.5+Float(0.1)`, turns the Imp by
+`180+Float(45)`, and consumes the two fade-child draws in inherited vslot
+`+0xA0` (`0x00478A20`). There is no native 6/11/18 contact-action clock; that
+was a named bounded web fallback and is removed. Ordinary Imp body/facing
+remains `BadGuys[285..332]`, with upper fire `333..342`. Draw
+`0x00492E10` keeps the body opaque at the retained scale/rotation and applies
+`+0x228` alpha only to the upper flame, so fading the whole body is falsified.
+The Imp bank plays at `1+Float(0.1)` pitch and the Bite bank at
+`1+Float(0.25)`; host-owned monotonic landing/contact counters retain the
+chosen row and pitch so sparse client snapshots neither replay nor invent
+these sounds. All eleven untouched WAVs are hash-pinned to registry rows
+`176..178` and `191..198`.
+GoodImp also retains the shared Imp outbound-light provider `0x00478CC0`.
+Actor glow `+0x230` rises by `0.01` to one; the provider submits intensity
+`glow*(0.75+Float(0.25))`, radius `0.25+Float(0.1,true)`, current actor
+position, and Multiple Shadows off. It remains independently Region-lit on
+the inbound actor path; the two directions must not be conflated.
+
+Ring of Fire helper `0x0063F920` creates 30 visual-only `MovingFire 0x7E6`
+children at 12-degree base-heading intervals plus one damaging
+`Shockwave 0x7E7`. MovingFire uses additive `DeadHawg[46..77]`, scale `2.75`,
+life `1.05` decreasing `0.01` per tick, initial speed
+`2.5*(1-U[0,0.025])`, and component acceleration `1.01`; the helper never
+writes its damage lane. Shockwave begins at radius `75`, grows by `6` before
+each `0.01` life decrement, and starts with life `1.155`. Every ten ticks it
+retains each newly intersected hostile once, deals half the row-21 damage,
+runs Burn, and attaches the fixed 400-tick Dazzle response. It pushes retained
+live contacts radially on its separate two-tick lane and multiplies push by
+`0.8` during the final `0.12375` life band.
+
+Firewalker is a player/progression toggle, not a primary trail. While byte
+`+0x8DC` is active, player mode is not `2`, and the global tick is divisible
+by ten, `PlayerWizard::Tick 0x00548B00` creates one owned
+`Fire_Goodguy 0x7EE`. Creation is not gated by nonzero movement. Movement only
+drives signed `U[0,10]` perpendicular and unsigned `U[0,8]` longitudinal birth
+offsets. Each patch copies row-23 damage, uses
+`mDuration*(1.1-U[0,0.25])` life, and scales by `1-U[0,0.5]`. Its common Fire
+tick advances phase `0.25`, life `-0.01`, alpha `+0.05` capped at one, and
+contacts a `32*scale` footprint every third global tick. The sole native
+`Game+0xC00` initialization writes exact `100.0`, so that contact resolves as
+`damage/100*3*0.5 = damage*0.015` per accepted pulse. Firewalker reserves
+exactly 50 MP while active; that scalar is neither a percentage nor a cast
+cost.
+
 Upgrade fields at `+0x150..+0x16E` can add status, area, or ember work during
 contact. Those branches are adjacent gameplay semantics, not rank-1 flight
 presentation, and remain outside this no-contact slice.

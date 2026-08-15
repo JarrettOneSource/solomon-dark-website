@@ -7,6 +7,9 @@ import death from '../assets/music/death.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import acidSizzle from '../assets/game/audio/sfx/acid-sizzle.wav'
 import bigFire from '../assets/game/audio/sfx/big-fire.wav'
+import bite1 from '../assets/game/audio/sfx/bite-1.wav'
+import bite2 from '../assets/game/audio/sfx/bite-2.wav'
+import bite3 from '../assets/game/audio/sfx/bite-3.wav'
 import cometLoop from '../assets/game/audio/sfx/comet-loop.wav'
 import electricLoop from '../assets/game/audio/sfx/electric-loop.wav'
 import cometWhistle from '../assets/game/audio/sfx/comet-whistle.wav'
@@ -43,6 +46,14 @@ import golemDie from '../assets/game/audio/sfx/golem-die.wav'
 import golemProvoke from '../assets/game/audio/sfx/golem-provoke.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
+import impVocal1 from '../assets/game/audio/sfx/imp-1.wav'
+import impVocal2 from '../assets/game/audio/sfx/imp-2.wav'
+import impVocal3 from '../assets/game/audio/sfx/imp-3.wav'
+import impVocal4 from '../assets/game/audio/sfx/imp-4.wav'
+import impVocal5 from '../assets/game/audio/sfx/imp-5.wav'
+import impVocal6 from '../assets/game/audio/sfx/imp-6.wav'
+import impVocal7 from '../assets/game/audio/sfx/imp-7.wav'
+import impVocal8 from '../assets/game/audio/sfx/imp-8.wav'
 import ignite from '../assets/game/audio/sfx/ignite.wav'
 import knockbackGolem from '../assets/game/audio/sfx/knockback-golem.wav'
 import knockback from '../assets/game/audio/sfx/knockback.wav'
@@ -156,6 +167,9 @@ export const GAME_AUDIO_SOURCES = {
     'banshee-die': bansheeDie,
     'bone-crack': boneCrack,
     'big-fire': bigFire,
+    'bite-1': bite1,
+    'bite-2': bite2,
+    'bite-3': bite3,
     click,
     'coffin-break': coffinBreak,
     'critical-hit': criticalHit,
@@ -178,6 +192,14 @@ export const GAME_AUDIO_SOURCES = {
     'goto-orb': gotoOrb,
     'ice-start': iceStart,
     'imp-split': impSplit,
+    'imp-vocal-1': impVocal1,
+    'imp-vocal-2': impVocal2,
+    'imp-vocal-3': impVocal3,
+    'imp-vocal-4': impVocal4,
+    'imp-vocal-5': impVocal5,
+    'imp-vocal-6': impVocal6,
+    'imp-vocal-7': impVocal7,
+    'imp-vocal-8': impVocal8,
     ignite,
     'knockback-golem': knockbackGolem,
     knockback,

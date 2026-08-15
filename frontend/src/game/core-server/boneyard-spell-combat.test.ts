@@ -151,6 +151,72 @@ test('Fire contact partitions direct and rectangular splash damage and consumes 
   ])
 })
 
+test('persistent Fire and GoodImp contacts use authoritative semantic events', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 15, y: 0 }, token: 'SKELETON' },
+    { position: { x: 16, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 100,
+      maximumHealth: 100,
+    })),
+  }
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({}),
+    [],
+    3,
+    WORLD_KEY,
+    COMBAT_RNG,
+    null,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        amount: 0.6,
+        burnDamage: 9,
+        footprintDimension: 32,
+        kind: 'fire-patch',
+        ownerId: 'wizard',
+        position: { x: 0, y: 0 },
+        spellId: 7,
+        worldKey: WORLD_KEY,
+      },
+      {
+        amount: 12,
+        kind: 'fire-good-imp',
+        ownerId: 'wizard',
+        spellId: 8,
+        targetId: 'enemy:2',
+        worldKey: WORLD_KEY,
+      },
+    ],
+  )
+
+  assert.deepEqual(
+    result.hits.map(({ actorId, amount, spellKind }) => ({ actorId, amount, spellKind })),
+    [
+      { actorId: 1, amount: 0.6, spellKind: 'fire-patch' },
+      { actorId: 2, amount: 0.6, spellKind: 'fire-patch' },
+      { actorId: 2, amount: 12, spellKind: 'fire-good-imp' },
+    ],
+  )
+  assert.deepEqual(
+    result.enemies.actors.map(({ currentHealth }) => currentHealth),
+    [99.4, 87.4, 100],
+  )
+  assert.deepEqual(result.burns, [
+    { damage: 9, ownerId: 'wizard', targetId: 1 },
+    { damage: 9, ownerId: 'wizard', targetId: 2 },
+  ])
+})
+
 test('Fire and Ether skip an ineligible Coffin and contact the next hostile actor', () => {
   const enemies = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'COFFIN' },

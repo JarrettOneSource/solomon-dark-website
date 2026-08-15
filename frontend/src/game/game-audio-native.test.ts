@@ -178,6 +178,34 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
 })
 
+test('pins every GoodImp landing and contact cue to its untouched stock WAV', () => {
+  const files = {
+    'bite-1': ['bite-1.wav', 0x1d30],
+    'bite-2': ['bite-2.wav', 0x1d5c],
+    'bite-3': ['bite-3.wav', 0x1d88],
+    'imp-vocal-1': ['imp-1.wav', 0x1fc4],
+    'imp-vocal-2': ['imp-2.wav', 0x1ff0],
+    'imp-vocal-3': ['imp-3.wav', 0x201c],
+    'imp-vocal-4': ['imp-4.wav', 0x2048],
+    'imp-vocal-5': ['imp-5.wav', 0x2074],
+    'imp-vocal-6': ['imp-6.wav', 0x20a0],
+    'imp-vocal-7': ['imp-7.wav', 0x20cc],
+    'imp-vocal-8': ['imp-8.wav', 0x20f8],
+  } as const
+  for (const [cue, [filename, registryOffset]] of Object.entries(files)) {
+    const entry = NATIVE_SOUND_MANIFEST[cue as keyof typeof files]
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(entry.registryOffset, registryOffset)
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      entry.sourceSha256,
+    )
+  }
+})
+
 test('pins every Staff contact cue to its untouched stock WAV', () => {
   for (const [cue, filename] of [
     ['critical-hit', 'critical-hit.wav'],

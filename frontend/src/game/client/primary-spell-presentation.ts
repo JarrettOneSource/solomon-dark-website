@@ -205,7 +205,8 @@ function fixedTransientTiming(
       lifetimeTicks: nativeFireParticleLifetimeTicks(effect.id),
     }
     case 'fire-ember':
-    case 'fire-good-imp': return null
+    case 'fire-good-imp':
+    case 'fire-patch': return null
     case 'fire-explosion': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
       firstVisibleAge: 0,
@@ -417,16 +418,27 @@ function interpolateTransient(
     const imp = blend < 1 ? older : newer
     return {
       ...imp,
-      actionTick: lerp(older.actionTick, newer.actionTick, blend),
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
-      cooldownTicks: lerp(older.cooldownTicks, newer.cooldownTicks, blend),
-      gaitPose: lerp(older.gaitPose, newer.gaitPose, blend),
+      bodyRotationDeg: lerp(older.bodyRotationDeg, newer.bodyRotationDeg, blend),
+      bodyScale: lerp(older.bodyScale, newer.bodyScale, blend),
+      contactAgeTicks: older.contactAgeTicks !== null && newer.contactAgeTicks !== null
+        ? lerp(older.contactAgeTicks, newer.contactAgeTicks, blend)
+        : imp.contactAgeTicks,
+      contactOrigin: imp.contactOrigin === null ? null : { ...imp.contactOrigin },
+      contactScale: lerp(older.contactScale, newer.contactScale, blend),
+      effectAlpha: lerp(older.effectAlpha, newer.effectAlpha, blend),
+      effectPhase: lerp(older.effectPhase, newer.effectPhase, blend),
+      flightSpeed: lerp(older.flightSpeed, newer.flightSpeed, blend),
       headingDegrees: lerp(older.headingDegrees, newer.headingDegrees, blend),
+      lightGlow: lerp(older.lightGlow, newer.lightGlow, blend),
+      lightRegistration: { ...imp.lightRegistration },
       position: {
         x: lerp(older.position.x, newer.position.x, blend),
         y: lerp(older.position.y, newer.position.y, blend),
       },
       remainingTicks: lerp(older.remainingTicks, newer.remainingTicks, blend),
+      verticalOffset: lerp(older.verticalOffset, newer.verticalOffset, blend),
+      verticalVelocity: lerp(older.verticalVelocity, newer.verticalVelocity, blend),
     }
   }
   if (older.kind === 'fire-good-imp' || newer.kind === 'fire-good-imp') {
@@ -587,7 +599,19 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     }
   }
   if (effect.kind === 'fire-good-imp') {
-    return { ...effect, position: { ...effect.position } }
+    return {
+      ...effect,
+      contactOrigin: effect.contactOrigin === null ? null : { ...effect.contactOrigin },
+      lightRegistration: { ...effect.lightRegistration },
+      position: { ...effect.position },
+    }
+  }
+  if (effect.kind === 'fire-patch') {
+    return {
+      ...effect,
+      position: { ...effect.position },
+      velocity: { ...effect.velocity },
+    }
   }
   if (effect.kind === 'water') {
     return {

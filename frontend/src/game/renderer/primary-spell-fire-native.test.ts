@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { createNativeFirePatch } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   nativeFireParticleFadeStep,
   nativeFireParticleLifetimeTicks,
@@ -9,17 +10,24 @@ import {
 import type {
   PrimarySpellFireImpactState,
   PrimarySpellFireProjectileState,
+  PrimarySpellFireEmberState,
+  PrimarySpellFireGoodImpState,
   PrimarySpellFireParticleState,
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_FIREBALL_CORE_RECORD,
   NATIVE_FIREBALL_FRAME_FIRST,
   NATIVE_FIRE_IMPACT_FRAME_FIRST,
+  NATIVE_FIRE_PATCH_FRAME_FIRST,
   NATIVE_FIRE_PARTICLE_FRAME_FIRST,
   nativeFireballLightSource,
   nativeFireballPlan,
+  nativeFireEmberPlan,
+  nativeFireGoodImpLightSource,
+  nativeFireGoodImpPlan,
   nativeFireImpactLightSource,
   nativeFireImpactPlan,
+  nativeFirePatchPlan,
   nativeFireParticlePlan,
 } from './primary-spell-fire-native.ts'
 
@@ -185,4 +193,111 @@ test('pins exact Fire impact frame clock, recurrence, blend order, and light own
   assert.equal(light.radius, 1.5)
   assert.equal(light.intensity, 0.4)
   assert.equal(light.castsDirectionalShadow, false)
+})
+
+test('projects Ember glow and dual phase passes from native atlas records', () => {
+  const ember = {
+    ageTicks: 20,
+    burnDamage: 4,
+    damage: 8,
+    height: -7,
+    horizontalVelocity: { x: 0, y: 0 },
+    id: 21,
+    kind: 'fire-ember',
+    life: 2.5,
+    ownerId: 'caster',
+    phase: 2.75,
+    position: { x: 100, y: 200 },
+    presentationVariant: 0,
+    spentEmber: { kind: 'none' },
+    verticalVelocity: -1,
+    worldKey: 'hub:courtyard',
+  } satisfies PrimarySpellFireEmberState
+  const plan = nativeFireEmberPlan(ember)
+  assert.deepEqual(plan.position, { x: 100, y: 193 })
+  assert.deepEqual(plan.draws.map(({ blend, entry, role }) => ({ blend, entry, role })), [
+    { blend: 'normal', entry: 15, role: 'glow' },
+    { blend: 'add', entry: 269, role: 'additive-body' },
+    { blend: 'normal', entry: 269, role: 'body' },
+  ])
+  assert.equal(plan.draws[0].alpha, 0.5)
+  assert.equal(plan.draws[0].scale, 1)
+  assert.deepEqual(plan.draws.slice(1).map(({ alpha }) => alpha), [1, 1])
+})
+
+test('projects common Fire patches through DeadHawg 46..77 with native alpha and scale', () => {
+  const patch = createNativeFirePatch({
+    alpha: 0.75,
+    burnDamage: 0,
+    damage: 0,
+    drawAlpha: 0.8,
+    id: 22,
+    life: 0.5,
+    nativeType: 'moving',
+    ownerId: 'caster',
+    phase: 17.75,
+    position: { x: 40, y: 50 },
+    scale: 2.75,
+    worldKey: 'hub:courtyard',
+  })
+  const plan = nativeFirePatchPlan(patch)
+  assert.equal(plan.entry, NATIVE_FIRE_PATCH_FRAME_FIRST + 17)
+  assert.equal(plan.alpha, 0.4)
+  assert.equal(plan.scale, 1.1 * 2.75)
+  assert.equal(plan.blend, 'add')
+  assert.deepEqual(plan.position, { x: 40, y: 50 })
+})
+
+test('projects GoodImp authoritative flight, upper flame, and detached contact bank', () => {
+  const imp = {
+    ageTicks: 4,
+    bodyRotationDeg: 30,
+    bodyScale: 0.98,
+    bodyVariant: 2,
+    bounceSoundIndex: 3,
+    bounceSoundPitch: 1.05,
+    bounceSoundSequence: 1,
+    burnDamage: 9,
+    collisionRadius: 1.5,
+    contactAgeTicks: 12,
+    contactOrigin: { x: 55, y: 25 },
+    contactScale: 0.55,
+    contactSoundIndex: 2,
+    contactSoundPitch: 1.1,
+    contactSoundSequence: 1,
+    damage: 12,
+    effectAlpha: 0.8,
+    effectPhase: 4.2,
+    flightSpeed: 4.5,
+    headingDegrees: 0,
+    id: 23,
+    kind: 'fire-good-imp',
+    lightGlow: 0.5,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 4 },
+    ownerId: 'caster',
+    position: { x: 40, y: 50 },
+    remainingTicks: 296,
+    targetId: 'enemy:1',
+    verticalOffset: -2,
+    verticalVelocity: -3,
+    worldKey: 'hub:courtyard',
+  } satisfies PrimarySpellFireGoodImpState
+  const plan = nativeFireGoodImpPlan(imp)
+  assert.equal(plan.regionLightPoint?.x, 40)
+  assert.deepEqual(plan.draws.map(({ entry, role }) => ({ entry, role })), [
+    { entry: 309, role: 'body' },
+    { entry: 337, role: 'upper-effect' },
+    { entry: 254, role: 'contact' },
+  ])
+  assert.equal(plan.draws[0]!.alpha, 1)
+  assert.equal(plan.draws[0]!.rotation, Math.PI / 6)
+  assert.deepEqual(plan.draws[0]!.offset, { x: 0, y: -2 })
+  assert.equal(plan.draws[1]!.alpha, 0.8)
+  assert.deepEqual(plan.draws[2]!.offset, { x: 15, y: -25 })
+  assert.equal(plan.draws[2]!.scale, 0.55)
+  const light = nativeFireGoodImpLightSource(imp, 20)
+  assert.equal(light.castsDirectionalShadow, false)
+  assert.ok(light.intensity >= 0.375 && light.intensity <= 0.5)
+  assert.ok(light.radius >= 0.15 && light.radius <= 0.35)
+  assert.deepEqual(light.position, imp.position)
 })

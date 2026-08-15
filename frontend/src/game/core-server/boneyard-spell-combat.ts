@@ -16,6 +16,7 @@ import {
 } from '../core-kernels/primary-spells.ts'
 import {
   nativeFireDirectDamage,
+  type NativeFireActorContact,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   firstNativePrimaryPointContact,
@@ -43,6 +44,7 @@ export type BoneyardSpellHitKind =
   | 'fire-ember'
   | 'fire-explosion'
   | 'fire-good-imp'
+  | 'fire-patch'
   | 'water'
 export const WATER_PRIMARY_ACTOR_MASK = 0x1082
 export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
@@ -101,6 +103,7 @@ export function resolveBoneyardSpellCombat(
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
   fireballSceneryTargets: readonly PrimarySpellTarget[] = [],
   lethalObserver?: BoneyardEnemyLethalObserver,
+  fireActorContacts: readonly NativeFireActorContact[] = [],
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -346,6 +349,53 @@ export function resolveBoneyardSpellCombat(
       enemies = damaged.store
       events.push(...damaged.events)
       hits.push(transientSpellHit(effect, actor.id, effect.damage, damaged.killed, tick))
+    }
+  }
+
+  for (const contact of [...fireActorContacts].sort((left, right) => (
+    left.spellId - right.spellId
+  ))) {
+    if (contact.worldKey !== worldKey) continue
+    const rows = primaryTargetRows(enemies)
+    const contacted = contact.kind === 'fire-good-imp'
+      ? rows.filter(({ target }) => target.id === contact.targetId)
+      : rows.filter(({ target }) => (
+          target.active
+          && !target.pendingRemove
+          && (target.actorFlags & 0x2) !== 0
+          && Math.abs(target.position.x - contact.position.x)
+            < contact.footprintDimension * 0.5
+          && Math.abs(target.position.y - contact.position.y)
+            < contact.footprintDimension * 0.5
+        ))
+    for (const { actor } of contacted) {
+      if (contact.kind === 'fire-patch') {
+        queueBurn(
+          actor.id,
+          contact.ownerId,
+          contact.burnDamage,
+        )
+      }
+      const amount = contact.amount
+        * validatedDamageMultiplier(damageMultiplier(actor.id, contact.kind))
+      const damaged = damageBoneyardEnemy(enemies, {
+        actorId: actor.id,
+        amount,
+        sourcePlayerId: contact.ownerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      enemies = damaged.store
+      events.push(...damaged.events)
+      hits.push({
+        actorId: actor.id,
+        amount,
+        killed: damaged.killed,
+        ownerId: contact.ownerId,
+        spellId: contact.spellId,
+        spellKind: contact.kind,
+        tick,
+      })
     }
   }
 

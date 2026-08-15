@@ -62,7 +62,10 @@ import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
-import type { NativeFireSpentEmber } from '../core-kernels/primary-spell-fire-effects.ts'
+import {
+  NATIVE_GOOD_IMP_CONTACT_VISIBLE_TICKS,
+  type NativeFireSpentEmber,
+} from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   NATIVE_STAFF_MELEE_ACCELERATION,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
@@ -4092,33 +4095,161 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'fire-good-imp') {
     onlyKeys(source, field, [
-      'actionTick', 'ageTicks', 'cooldownTicks', 'damage', 'gaitPose',
-      'headingDegrees', 'id', 'kind', 'ownerId', 'phase', 'position',
-      'remainingTicks', 'targetId', 'worldKey',
+      'ageTicks', 'bodyRotationDeg', 'bodyScale', 'bodyVariant',
+      'bounceSoundIndex', 'bounceSoundPitch', 'bounceSoundSequence', 'burnDamage',
+      'collisionRadius', 'contactAgeTicks', 'contactOrigin', 'contactScale',
+      'contactSoundIndex', 'contactSoundPitch', 'contactSoundSequence', 'damage',
+      'effectAlpha', 'effectPhase', 'flightSpeed', 'headingDegrees',
+      'id', 'kind', 'lightGlow', 'lightRegistration', 'ownerId', 'position',
+      'remainingTicks', 'targetId',
+      'verticalOffset', 'verticalVelocity', 'worldKey',
     ])
-    if (
-      source.phase !== 'contact'
-      && source.phase !== 'cooldown'
-      && source.phase !== 'flight'
-    ) {
-      throw new GameProtocolError(`${field}.phase is not a GoodImp phase`)
+    const bodyVariant = nonnegativeInteger(source.bodyVariant, `${field}.bodyVariant`)
+    if (bodyVariant >= 4) {
+      throw new GameProtocolError(`${field}.bodyVariant is outside the native pose banks`)
+    }
+    const bounceSoundIndex = nonnegativeInteger(
+      source.bounceSoundIndex,
+      `${field}.bounceSoundIndex`,
+    )
+    if (bounceSoundIndex >= 8) {
+      throw new GameProtocolError(`${field}.bounceSoundIndex exceeds the Imp sound bank`)
+    }
+    const bounceSoundPitch = positiveFinite(
+      source.bounceSoundPitch,
+      `${field}.bounceSoundPitch`,
+    )
+    if (bounceSoundPitch < 1 || bounceSoundPitch > Math.fround(1.1)) {
+      throw new GameProtocolError(`${field}.bounceSoundPitch is outside the native range`)
+    }
+    const contactSoundIndex = nonnegativeInteger(
+      source.contactSoundIndex,
+      `${field}.contactSoundIndex`,
+    )
+    if (contactSoundIndex >= 3) {
+      throw new GameProtocolError(`${field}.contactSoundIndex exceeds the Bite sound bank`)
+    }
+    const contactSoundPitch = positiveFinite(
+      source.contactSoundPitch,
+      `${field}.contactSoundPitch`,
+    )
+    if (contactSoundPitch < 1 || contactSoundPitch > 1.25) {
+      throw new GameProtocolError(`${field}.contactSoundPitch is outside the native range`)
+    }
+    const effectAlpha = nonnegativeFinite(source.effectAlpha, `${field}.effectAlpha`)
+    if (effectAlpha > 1) {
+      throw new GameProtocolError(`${field}.effectAlpha exceeds one`)
+    }
+    const effectPhase = nonnegativeFinite(source.effectPhase, `${field}.effectPhase`)
+    if (effectPhase >= 10) {
+      throw new GameProtocolError(`${field}.effectPhase exceeds the native frame bank`)
+    }
+    const lightGlow = nonnegativeFinite(source.lightGlow, `${field}.lightGlow`)
+    if (lightGlow > 1) {
+      throw new GameProtocolError(`${field}.lightGlow exceeds one`)
+    }
+    const contactAgeTicks = source.contactAgeTicks === null
+      ? null
+      : nonnegativeInteger(source.contactAgeTicks, `${field}.contactAgeTicks`)
+    if (contactAgeTicks !== null && contactAgeTicks >= NATIVE_GOOD_IMP_CONTACT_VISIBLE_TICKS) {
+      throw new GameProtocolError(`${field}.contactAgeTicks exceeds the native contact lifetime`)
+    }
+    const contactOrigin = source.contactOrigin === null
+      ? null
+      : vector(source.contactOrigin, `${field}.contactOrigin`)
+    if ((contactAgeTicks === null) !== (contactOrigin === null)) {
+      throw new GameProtocolError(`${field} contact age and origin must be present together`)
     }
     return {
-      actionTick: nonnegativeInteger(source.actionTick, `${field}.actionTick`),
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
-      cooldownTicks: nonnegativeInteger(source.cooldownTicks, `${field}.cooldownTicks`),
+      bodyRotationDeg: finite(source.bodyRotationDeg, `${field}.bodyRotationDeg`),
+      bodyScale: positiveFinite(source.bodyScale, `${field}.bodyScale`),
+      bodyVariant,
+      bounceSoundIndex,
+      bounceSoundPitch,
+      bounceSoundSequence: nonnegativeInteger(
+        source.bounceSoundSequence,
+        `${field}.bounceSoundSequence`,
+      ),
+      burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+      collisionRadius: nonnegativeFinite(source.collisionRadius, `${field}.collisionRadius`),
+      contactAgeTicks,
+      contactOrigin,
+      contactScale: positiveFinite(source.contactScale, `${field}.contactScale`),
+      contactSoundIndex,
+      contactSoundPitch,
+      contactSoundSequence: nonnegativeInteger(
+        source.contactSoundSequence,
+        `${field}.contactSoundSequence`,
+      ),
       damage: positiveFinite(source.damage, `${field}.damage`),
-      gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
+      effectAlpha,
+      effectPhase,
+      flightSpeed: positiveFinite(source.flightSpeed, `${field}.flightSpeed`),
       headingDegrees: finite(source.headingDegrees, `${field}.headingDegrees`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-good-imp',
+      lightGlow,
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'actor',
+      ),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
-      phase: source.phase,
       position: vector(source.position, `${field}.position`),
       remainingTicks: positiveInteger(source.remainingTicks, `${field}.remainingTicks`),
       targetId: source.targetId === null
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),
+      verticalOffset: finite(source.verticalOffset, `${field}.verticalOffset`),
+      verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'fire-patch') {
+    onlyKeys(source, field, [
+      'ageTicks', 'alpha', 'burnDamage', 'damage', 'drawAlpha', 'id', 'kind',
+      'life', 'nativeType', 'ownerId', 'phase', 'position', 'scale',
+      'supplementalContact', 'velocity', 'velocityMultiplier', 'worldKey',
+    ])
+    if (
+      source.nativeType !== 'fire'
+      && source.nativeType !== 'goodguy'
+      && source.nativeType !== 'moving'
+    ) {
+      throw new GameProtocolError(`${field}.nativeType is not a Fire patch type`)
+    }
+    const alpha = finite(source.alpha, `${field}.alpha`)
+    if (alpha < 0 || alpha > 1) {
+      throw new GameProtocolError(`${field}.alpha is outside [0,1]`)
+    }
+    const phase = finite(source.phase, `${field}.phase`)
+    if (phase < 0 || phase >= 32) {
+      throw new GameProtocolError(`${field}.phase is outside [0,32)`)
+    }
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      alpha,
+      burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+      damage: nonnegativeFinite(source.damage, `${field}.damage`),
+      drawAlpha: nonnegativeFinite(source.drawAlpha, `${field}.drawAlpha`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'fire-patch',
+      life: positiveFinite(source.life, `${field}.life`),
+      nativeType: source.nativeType,
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      phase,
+      position: vector(source.position, `${field}.position`),
+      scale: positiveFinite(source.scale, `${field}.scale`),
+      supplementalContact: boolean(
+        source.supplementalContact,
+        `${field}.supplementalContact`,
+      ),
+      velocity: vector(source.velocity, `${field}.velocity`),
+      velocityMultiplier: vector(
+        source.velocityMultiplier,
+        `${field}.velocityMultiplier`,
+      ),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }

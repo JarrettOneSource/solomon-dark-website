@@ -8,6 +8,7 @@ import {
 } from './core-kernels/player-character.ts'
 import {
   PRIMARY_CAST_ETHER_EMISSION_TICK,
+  type PrimarySpellFireGoodImpState,
 } from './core-kernels/primary-spells.ts'
 import type {
   NativeSecondaryActorKind,
@@ -184,6 +185,76 @@ test('consumes the Fire release once from its authoritative marker sequence', ()
   synchronizer.update(emitted)
   synchronizer.update(emitted)
   assert.deepEqual(audio.sounds, ['throw-fire'])
+})
+
+test('consumes GoodImp landing and Bite banks only from replicated actor counters', () => {
+  const state = simulation('fire')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const imp = {
+    ageTicks: 2,
+    bodyRotationDeg: 0,
+    bodyScale: 0.98,
+    bodyVariant: 1,
+    bounceSoundIndex: 3,
+    bounceSoundPitch: 1.05,
+    bounceSoundSequence: 1,
+    burnDamage: 3,
+    collisionRadius: 1,
+    contactAgeTicks: 0,
+    contactOrigin: { x: initial.players[PLAYER_ID].position.x + 10, y: initial.players[PLAYER_ID].position.y },
+    contactScale: 0.55,
+    contactSoundIndex: 2,
+    contactSoundPitch: 1.125,
+    contactSoundSequence: 1,
+    damage: 5,
+    effectAlpha: 1,
+    effectPhase: 2,
+    flightSpeed: 4.5,
+    headingDegrees: 0,
+    id: 700,
+    kind: 'fire-good-imp',
+    lightGlow: 0.02,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+    ownerId: PLAYER_ID,
+    position: { ...initial.players[PLAYER_ID].position },
+    remainingTicks: 298,
+    targetId: 'enemy:1',
+    verticalOffset: 0,
+    verticalVelocity: -4,
+    worldKey: 'hub:courtyard',
+  } satisfies PrimarySpellFireGoodImpState
+  const landed = {
+    ...initial,
+    primarySpells: { ...initial.primarySpells, transients: [imp] },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(landed)
+  synchronizer.update(landed)
+  assert.deepEqual(audio.sounds, ['imp-vocal-4', 'bite-3'])
+  assert.deepEqual(audio.soundOptions.map(({ playbackRate }) => playbackRate), [1.05, 1.125])
+
+  synchronizer.update({
+    ...landed,
+    primarySpells: {
+      ...landed.primarySpells,
+      transients: [{
+        ...imp,
+        bounceSoundIndex: 0,
+        bounceSoundPitch: 1.01,
+        bounceSoundSequence: 2,
+        contactAgeTicks: null,
+        contactOrigin: null,
+      }],
+    },
+    tick: landed.tick + 1,
+  })
+  assert.deepEqual(audio.sounds, ['imp-vocal-4', 'bite-3', 'imp-vocal-1'])
 })
 
 test('orders low-mana fizzle before both attenuated one-shot launches', () => {

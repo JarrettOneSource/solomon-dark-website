@@ -36,6 +36,9 @@ export type GameSoundCue =
   | 'acid-sizzle'
   | 'banshee-die'
   | 'big-fire'
+  | 'bite-1'
+  | 'bite-2'
+  | 'bite-3'
   | 'bone-crack'
   | 'click'
   | 'coffin-break'
@@ -59,6 +62,14 @@ export type GameSoundCue =
   | 'goto-orb'
   | 'ice-start'
   | 'imp-split'
+  | 'imp-vocal-1'
+  | 'imp-vocal-2'
+  | 'imp-vocal-3'
+  | 'imp-vocal-4'
+  | 'imp-vocal-5'
+  | 'imp-vocal-6'
+  | 'imp-vocal-7'
+  | 'imp-vocal-8'
   | 'ignite'
   | 'knockback-golem'
   | 'knockback'
@@ -209,6 +220,21 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\bigfire',
     sourceSha256: 'd70d4a94b490b7ea7f72d26a06edb50e7906a6a5ca095e1e80744fd17bf17868',
   },
+  'bite-1': {
+    registryOffset: 0x1d30,
+    sourceName: 'sounds\\Bite\\bite1',
+    sourceSha256: '8f2f7fb4e8275e42785e912bd9b5cdcaa41e517e2335912d3bf3bb026bd789e1',
+  },
+  'bite-2': {
+    registryOffset: 0x1d5c,
+    sourceName: 'sounds\\Bite\\bite2',
+    sourceSha256: 'fb2b04c05ee084245826233934c752e39e9ba45572b946e887fb9850a674d32f',
+  },
+  'bite-3': {
+    registryOffset: 0x1d88,
+    sourceName: 'sounds\\Bite\\bite3',
+    sourceSha256: '6b4f1c15073cde2958b448adea63ff55d1ca35627bc86b46d4da82709ca31657',
+  },
   click: {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
@@ -318,6 +344,46 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x82c,
     sourceName: 'sounds\\ImpSplit',
     sourceSha256: 'd5b3bca86d9d981701a8dba3e17e07e7ad50aa3ed183817813b048997b5103b0',
+  },
+  'imp-vocal-1': {
+    registryOffset: 0x1fc4,
+    sourceName: 'sounds\\imp\\imp1',
+    sourceSha256: '309a72706858886e6b9f0111d1ac354b9310cede4c25d559b7f6401850471d26',
+  },
+  'imp-vocal-2': {
+    registryOffset: 0x1ff0,
+    sourceName: 'sounds\\imp\\imp2',
+    sourceSha256: '3e8ba5c8ca15a08213dca2eda7f4e8b272220adb7aa615b3a4391fd7c02b463b',
+  },
+  'imp-vocal-3': {
+    registryOffset: 0x201c,
+    sourceName: 'sounds\\imp\\imp3',
+    sourceSha256: '5a26b6440b4e3d4446dbe2726f9cd8c034d56146b573d1b5b64ac7482d381b85',
+  },
+  'imp-vocal-4': {
+    registryOffset: 0x2048,
+    sourceName: 'sounds\\imp\\imp4',
+    sourceSha256: '877e7cb891256837bc1359851be5bb975931f2a4171642d81a0648b789cf4fe3',
+  },
+  'imp-vocal-5': {
+    registryOffset: 0x2074,
+    sourceName: 'sounds\\imp\\imp5',
+    sourceSha256: '2bcdc7927c3769adcd64f78472f4891a61d85c3718d47c4db86a2fbf08f6068d',
+  },
+  'imp-vocal-6': {
+    registryOffset: 0x20a0,
+    sourceName: 'sounds\\imp\\imp6',
+    sourceSha256: '31e9dac6699ccc1c25e93d401af690d7451d100c1b7e23ee1386e8795d3a9f56',
+  },
+  'imp-vocal-7': {
+    registryOffset: 0x20cc,
+    sourceName: 'sounds\\imp\\imp7',
+    sourceSha256: 'bc4de125342eeb704d90d8ef55fb4cd0cd3686f074d5851b14e6fb3da5bd4a41',
+  },
+  'imp-vocal-8': {
+    registryOffset: 0x20f8,
+    sourceName: 'sounds\\imp\\imp8',
+    sourceSha256: 'f2e0ad120a67c89dcf19fd9387a098d92fe58f653953891815dec61c6e9bc495',
   },
   ignite: {
     registryOffset: 0x800,

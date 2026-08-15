@@ -155,6 +155,7 @@ import {
 } from './primary-spell-ether-native.ts'
 import {
   nativeFireballLightSource,
+  nativeFireGoodImpLightSource,
   nativeFireImpactLightSource,
 } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
@@ -1409,6 +1410,16 @@ class BoneyardDynamicScene {
         lightProviderOwners.push({ registration, sources: [candidate.source] })
       }
       for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind === 'fire-good-imp'
+          && effect.worldKey === `boneyard:${snapshot.world.runId}`
+        ) {
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: [nativeFireGoodImpLightSource(effect, presentationFrame)],
+          })
+          continue
+        }
         if (
           effect.kind === 'ether-impact'
           && effect.worldKey === `boneyard:${snapshot.world.runId}`

@@ -38,11 +38,18 @@ import {
 } from './primary-spell-earth-orientation.ts'
 import type { Vector2 } from './vector.ts'
 import {
+  createNativeFirePatch,
   createNativeFireDetonation,
   drawNativeFirePrivateSeed,
+  spawnNativeFireGoodImp,
+  stepNativeFireGoodImp,
+  stepNativeFirePatch,
   stepNativeFireEmber,
+  type NativeFireActorContact,
   type NativeFireEmberState,
   type NativeFireExplosionState,
+  type NativeFireGoodImpState,
+  type NativeFirePatchState,
   type NativeFireSpentEmber,
 } from './primary-spell-fire-effects.ts'
 import {
@@ -85,6 +92,7 @@ export type PrimarySpellTransientKind =
   | 'fire-good-imp'
   | 'fire-impact'
   | NativePlayerStaffTransient['kind']
+  | 'fire-patch'
   | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
@@ -278,22 +286,12 @@ export interface PrimarySpellFireExplosionState extends NativeFireExplosionState
   readonly kind: 'fire-explosion'
 }
 
-export interface PrimarySpellFireGoodImpState {
-  readonly actionTick: number
-  readonly ageTicks: number
-  readonly cooldownTicks: number
-  readonly damage: number
-  readonly gaitPose: number
-  readonly headingDegrees: number
-  readonly id: number
+export interface PrimarySpellFireGoodImpState extends NativeFireGoodImpState {
   readonly kind: 'fire-good-imp'
-  readonly ownerId: string
-  readonly phase: 'contact' | 'cooldown' | 'flight'
-  readonly position: Vector2
-  readonly remainingTicks: number
-  readonly targetId: string | null
-  readonly worldKey: string
+  readonly lightRegistration: NativeLightProviderRegistration
 }
+
+export type PrimarySpellFirePatchState = NativeFirePatchState
 
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
@@ -305,6 +303,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellFireExplosionState
   | PrimarySpellFireGoodImpState
   | PrimarySpellFireImpactState
+  | PrimarySpellFirePatchState
   | PrimarySpellFireParticleState
   | NativePlayerStaffTransient
 
@@ -358,6 +357,7 @@ export interface PrimarySpellTickContext {
 
 export interface PrimarySpellTickResult {
   channelEmissions: readonly PrimarySpellChannelEmission[]
+  fireActorContacts: readonly NativeFireActorContact[]
   manaSpent: Readonly<Record<string, number>>
   players: Readonly<Record<string, PlayerCharacterState>>
   rng: NativeRngState
@@ -655,11 +655,44 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     .filter((effect) => effect.kind === 'earth-called-rock')
     .map((effect) => effect.id))
   let transients: PrimarySpellTransientState[] = []
+  const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
     if (effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)) {
       transients.push(effect)
     } else if (effect.kind === 'fire-good-imp') {
-      transients.push(effect)
+      const stepped = stepNativeFireGoodImp(effect, {
+        canOccupy: (position) => context.canPlaceProjectile(
+          effect,
+          position,
+          effect.collisionRadius,
+        ),
+        rng,
+        targets: context.spellTargets(effect.ownerId),
+      })
+      rng = stepped.rng
+      if (stepped.contact) fireActorContacts.push(stepped.contact)
+      if (stepped.goodImp) {
+        transients.push({
+          ...stepped.goodImp,
+          kind: 'fire-good-imp',
+          lightRegistration: effect.lightRegistration,
+        })
+      } else if (stepped.releaseFire) {
+        transients.push(createNativeFirePatch({
+          burnDamage: effect.burnDamage,
+          damage: effect.damage,
+          id: nextId,
+          nativeType: 'fire',
+          ownerId: effect.ownerId,
+          position: stepped.releasePosition,
+          worldKey: effect.worldKey,
+        }))
+        nextId += 1
+      }
+    } else if (effect.kind === 'fire-patch') {
+      const stepped = stepNativeFirePatch(effect, context.tick)
+      if (stepped.contact) fireActorContacts.push(stepped.contact)
+      if (stepped.patch) transients.push(stepped.patch)
     } else if (effect.kind === 'fire-ember') {
       const stepped = stepNativeFireEmber(effect)
       if (stepped.ember) {
@@ -685,22 +718,31 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         })
         nextId += 1
       } else if (stepped.retirement.kind === 'imp') {
-        transients.push({
-          actionTick: 0,
-          ageTicks: 0,
-          cooldownTicks: 0,
+        const spawned = spawnNativeFireGoodImp({
+          burnDamage: stepped.retirement.burnDamage,
           damage: stepped.retirement.damage,
-          gaitPose: 0,
-          headingDegrees: 0,
           id: nextId,
-          kind: 'fire-good-imp',
+          lifetimeTicks: stepped.retirement.lifetimeTicks,
           ownerId: stepped.retirement.ownerId,
-          phase: 'flight',
           position: stepped.retirement.position,
-          remainingTicks: stepped.retirement.lifetimeTicks,
-          targetId: null,
           worldKey: stepped.retirement.worldKey,
+        }, rng)
+        rng = spawned.rng
+        transients.push({
+          ...spawned.goodImp,
+          kind: 'fire-good-imp',
+          lightRegistration: registerLightProvider('actor'),
         })
+        nextId += 1
+        transients.push(createNativeFirePatch({
+          burnDamage: stepped.retirement.burnDamage,
+          damage: stepped.retirement.damage,
+          id: nextId,
+          nativeType: 'fire',
+          ownerId: stepped.retirement.ownerId,
+          position: stepped.retirement.position,
+          worldKey: stepped.retirement.worldKey,
+        }))
         nextId += 1
       }
     } else if (effect.ageTicks + 1 < transientLifetime(effect)) {
@@ -1292,6 +1334,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
   return {
     channelEmissions,
+    fireActorContacts,
     manaSpent,
     players,
     rng,
@@ -1735,6 +1778,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'fire-explosion': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'fire-good-imp': throw new Error('GoodImp lifetime is state driven')
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
+    case 'fire-patch': throw new Error('Fire patch lifetime is state driven')
     case 'player-staff-contact':
     case 'player-staff-contact-knockback':
     case 'player-staff-knockback':

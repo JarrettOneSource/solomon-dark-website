@@ -3,9 +3,14 @@ import test from 'node:test'
 
 import { createNativeRng } from './native-rng.ts'
 import {
+  createNativeFirePatch,
   createNativeFireDetonation,
   drawNativeFirePrivateSeed,
+  NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR,
   nativeFireDirectDamage,
+  spawnNativeFireGoodImp,
+  stepNativeFireGoodImp,
+  stepNativeFirePatch,
   stepNativeFireEmber,
   type NativeFireProjectilePayload,
 } from './primary-spell-fire-effects.ts'
@@ -97,4 +102,103 @@ test('Ember bounces, settles, and Immolates only on natural grounded retirement'
     },
     kind: 'immolate',
   })
+})
+
+test('Fire patches own the float animation clock and exact three-tick contact normalization', () => {
+  const patch = createNativeFirePatch({
+    burnDamage: 9,
+    damage: 40,
+    id: 7,
+    nativeType: 'fire',
+    ownerId: 'p1',
+    position: { x: 10, y: 20 },
+    worldKey: 'world',
+  })
+  assert.equal(NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR, 0.015)
+
+  const first = stepNativeFirePatch(patch, 1)
+  assert.equal(first.contact, null)
+  assert.equal(first.patch?.phase, 0.25)
+  assert.equal(first.patch?.alpha, 0.05000000074505806)
+
+  const contact = stepNativeFirePatch(first.patch!, 3)
+  assert.deepEqual(contact.contact, {
+    amount: 40 * NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR,
+    burnDamage: 9,
+    footprintDimension: 32,
+    kind: 'fire-patch',
+    ownerId: 'p1',
+    position: { x: 10, y: 20 },
+    spellId: 7,
+    worldKey: 'world',
+  })
+})
+
+test('GoodImp preserves the native constructor stream, landing attack, flight state, and targetless expiry', () => {
+  const spawned = spawnNativeFireGoodImp({
+    burnDamage: 9,
+    damage: 12,
+    id: 8,
+    lifetimeTicks: 300,
+    ownerId: 'p1',
+    position: { x: 0, y: 0 },
+    worldKey: 'world',
+  }, createNativeRng(123))
+  assert.equal(spawned.rng.indexA, 19)
+  assert.equal(spawned.goodImp.bodyVariant >= 0 && spawned.goodImp.bodyVariant < 4, true)
+  assert.equal(spawned.goodImp.bodyScale >= 0.93 && spawned.goodImp.bodyScale <= 1.03, true)
+  assert.equal(spawned.goodImp.collisionRadius >= 0 && spawned.goodImp.collisionRadius <= 2.5, true)
+  const target = {
+    active: true,
+    actorFlags: 0x2,
+    attachment: { x: 0, y: 0 },
+    bodyRadius: 8,
+    id: 'enemy:4',
+    kind: 'enemy' as const,
+    nativePriority: 0,
+    pendingRemove: false,
+    position: { x: 20, y: 0 },
+    registrationOrder: 0,
+  }
+  const first = stepNativeFireGoodImp(spawned.goodImp, {
+    canOccupy: () => true,
+    rng: spawned.rng,
+    targets: [target],
+  })
+  assert.equal(first.goodImp?.remainingTicks, 299)
+  assert.equal(first.goodImp?.position.x, 11.25)
+  assert.equal(first.goodImp?.verticalVelocity, Math.fround(0.4))
+  assert.equal(first.contact, null)
+
+  const landed = stepNativeFireGoodImp(first.goodImp!, {
+    canOccupy: () => true,
+    rng: first.rng,
+    targets: [target],
+  })
+  assert.deepEqual(landed.contact, {
+    amount: 12,
+    kind: 'fire-good-imp',
+    ownerId: 'p1',
+    spellId: 8,
+    targetId: 'enemy:4',
+    worldKey: 'world',
+  })
+  const landedImp = landed.goodImp!
+  assert.equal(landedImp.contactAgeTicks, 0)
+  assert.equal(landedImp.effectAlpha, 1)
+  assert.equal(landedImp.verticalOffset, 0)
+  assert.equal(landedImp.bounceSoundSequence, 1)
+  assert.equal(landedImp.bounceSoundIndex >= 0 && landedImp.bounceSoundIndex < 8, true)
+  assert.equal(landedImp.contactSoundSequence, 1)
+  assert.equal(landedImp.contactSoundIndex >= 0 && landedImp.contactSoundIndex < 3, true)
+  assert.equal(landed.rng.indexA, 33)
+
+  const targetless = stepNativeFireGoodImp({ ...spawned.goodImp, remainingTicks: 2 }, {
+    canOccupy: () => true,
+    rng: spawned.rng,
+    targets: [],
+  })
+  assert.equal(targetless.goodImp, null)
+  assert.equal(targetless.releaseFire, true)
+  assert.deepEqual(targetless.releasePosition, { x: 0, y: 0 })
 })

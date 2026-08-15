@@ -1,7 +1,10 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellFireEmberState,
+  PrimarySpellFireGoodImpState,
   PrimarySpellFireImpactState,
+  PrimarySpellFirePatchState,
   PrimarySpellFireParticleState,
   PrimarySpellFireProjectileState,
   PrimarySpellProjectileState,
@@ -11,12 +14,17 @@ import {
   NATIVE_FIREBALL_FRAME_FIRST,
   NATIVE_FIRE_IMPACT_FRAME_FIRST,
   NATIVE_FIRE_PARTICLE_FRAME_FIRST,
+  nativeFireEmberPlan,
+  nativeFireGoodImpPlan,
   nativeFireballPlan,
   nativeFireImpactPlan,
+  nativeFirePatchPlan,
   nativeFireParticlePlan,
   type NativeFireballDraw,
   type NativeFireImpactDraw,
 } from './primary-spell-fire-native.ts'
+import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import type { NativeFireActorTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellFireTextures {
   core: Texture
@@ -28,11 +36,122 @@ export interface PrimarySpellFireTextures {
 interface FirePainterRoot {
   container: Container
   lane: 'world-sorted'
-  queueFamily: 'ordinary-dynamic'
-  regionLightPoint: null
+  queueFamily: 'ordinary-dynamic' | 'zanim'
+  regionLightPoint: Readonly<{ x: number; y: number }> | null
   sortBias: number
   suffix: string
   worldY: number
+}
+
+type NativeFireActorState =
+  | PrimarySpellFireEmberState
+  | PrimarySpellFireGoodImpState
+  | PrimarySpellFirePatchState
+
+export class FireActorSpellView {
+  readonly container: Container
+  readonly containers: readonly Container[]
+  readonly kind: string
+  private regionLightPoint: Readonly<{ x: number; y: number }> | null = null
+  private readonly sprites: Sprite[] = []
+  private state: NativeFireActorState
+  private readonly textures: NativeFireActorTextures
+  private worldY: number
+
+  constructor(state: NativeFireActorState, textures: NativeFireActorTextures) {
+    this.state = state
+    this.textures = textures
+    this.kind = state.kind
+    this.worldY = state.position.y
+    this.container = new Container({ label: state.kind })
+    this.containers = [this.container]
+    this.container.eventMode = 'none'
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (
+      state.kind !== 'fire-ember'
+      && state.kind !== 'fire-good-imp'
+      && state.kind !== 'fire-patch'
+    ) return
+    this.state = state
+    const plan = state.kind === 'fire-ember'
+      ? nativeFireEmberPlan(state)
+      : state.kind === 'fire-good-imp'
+        ? nativeFireGoodImpPlan(state)
+        : (() => {
+            const patch = nativeFirePatchPlan(state)
+            return {
+              draws: [{
+                alpha: patch.alpha,
+                atlas: patch.atlas,
+                blend: patch.blend,
+                entry: patch.entry,
+                offset: { x: 0, y: 0 },
+                role: 'fire-patch',
+                rotation: 0,
+                scale: patch.scale,
+                tint: patch.tint,
+              }],
+              position: patch.position,
+              regionLightPoint: patch.regionLightPoint,
+              worldY: patch.worldY,
+            }
+          })()
+    while (this.sprites.length < plan.draws.length) {
+      const sprite = new Sprite()
+      sprite.eventMode = 'none'
+      this.sprites.push(sprite)
+      this.container.addChild(sprite)
+    }
+    while (this.sprites.length > plan.draws.length) {
+      const sprite = this.sprites.pop()!
+      this.container.removeChild(sprite)
+      sprite.destroy()
+    }
+    for (const [index, draw] of plan.draws.entries()) {
+      const record = nativeEnemySpriteRecord(draw.atlas, draw.entry)
+      const texture = draw.atlas === 'BadGuys'
+        ? this.textures.badGuys[draw.entry]
+        : this.textures.deadHawg[draw.entry]
+      if (!texture) throw new Error(`Missing native Fire texture ${draw.atlas}:${draw.entry}`)
+      const sprite = this.sprites[index]!
+      sprite.label = `${draw.role}:${draw.atlas}:${draw.entry}`
+      sprite.texture = texture
+      sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
+      sprite.position.set(draw.offset.x, draw.offset.y)
+      sprite.rotation = draw.rotation
+      sprite.scale.set(draw.scale)
+      sprite.alpha = draw.alpha
+      sprite.blendMode = draw.blend
+      sprite.tint = draw.tint
+    }
+    this.container.position.set(plan.position.x, plan.position.y)
+    this.regionLightPoint = plan.regionLightPoint
+    this.worldY = plan.worldY
+  }
+
+  painterRoots(): readonly FirePainterRoot[] {
+    return [{
+      container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
+      regionLightPoint: this.regionLightPoint,
+      sortBias: 0,
+      suffix: '',
+      worldY: this.worldY,
+    }]
+  }
+
+  setTint(_suffix: string, tint: number): void {
+    if (this.state.kind === 'fire-good-imp') this.container.tint = tint
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
+    this.sprites.length = 0
+  }
 }
 
 export class FirePrimarySpellView {

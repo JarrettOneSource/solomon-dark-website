@@ -22,6 +22,7 @@ import {
   NATIVE_SECONDARY_SPRITE_RECORDS,
   nativeSecondarySpriteKey,
 } from './native-secondary-assets.ts'
+import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -29,6 +30,18 @@ const ACTOR_WALK_FRAMES = 5
 const ACTOR_ATTACHMENT_POSES = 10
 const ACTOR_DEATH_FACINGS = 6
 const ACTOR_DEATH_FRAMES = 4
+const NATIVE_FIRE_ACTOR_BADGUYS_RECORDS = Object.freeze([
+  15,
+  ...integerRange(251, 254),
+  ...integerRange(267, 270),
+  ...integerRange(285, 342),
+])
+const NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS = Object.freeze(integerRange(46, 77))
+
+export interface NativeFireActorTextures {
+  badGuys: Readonly<Record<number, Texture>>
+  deadHawg: Readonly<Record<number, Texture>>
+}
 
 export interface PlayerActorTextureFrames {
   death: readonly (readonly Texture[])[]
@@ -84,6 +97,7 @@ export interface PlayerWorldTextures {
   elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
   fontAtlas: Texture
   equipment: PlayerLivingEquipmentTextureFrames
+  fireActors: NativeFireActorTextures
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
@@ -123,6 +137,14 @@ export function playerWorldAssetSources(): string[] {
   return collectAssetSources({
     elementVfx,
     fontAtlas: hub.hud.fontAtlas,
+    fireActors: {
+      badGuys: NATIVE_FIRE_ACTOR_BADGUYS_RECORDS.map((entry) => (
+        nativeEnemySpriteRecord('BadGuys', entry).source
+      )),
+      deadHawg: NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS.map((entry) => (
+        nativeEnemySpriteRecord('DeadHawg', entry).source
+      )),
+    },
     playerCharacter,
     playerShadow: hub.npcs.teacher.shadow,
     primarySpells,
@@ -259,6 +281,10 @@ export function createPlayerWorldTextures(
     elementVfx: elementTextures,
     fontAtlas: texture(hub.hud.fontAtlas),
     equipment,
+    fireActors: {
+      badGuys: nativeRecordTextures(texture, 'BadGuys', NATIVE_FIRE_ACTOR_BADGUYS_RECORDS),
+      deadHawg: nativeRecordTextures(texture, 'DeadHawg', NATIVE_FIRE_ACTOR_DEADHAWG_RECORDS),
+    },
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
@@ -422,4 +448,19 @@ export function gridFrames(
       frame: new Rectangle(column * width, row * height, width, height),
     }),
   ))
+}
+
+function integerRange(first: number, last: number): number[] {
+  return Array.from({ length: last - first + 1 }, (_, index) => first + index)
+}
+
+function nativeRecordTextures(
+  texture: (source: string) => Texture,
+  atlas: 'BadGuys' | 'DeadHawg',
+  entries: readonly number[],
+): Readonly<Record<number, Texture>> {
+  return Object.freeze(Object.fromEntries(entries.map((entry) => [
+    entry,
+    texture(nativeEnemySpriteRecord(atlas, entry).source),
+  ])))
 }

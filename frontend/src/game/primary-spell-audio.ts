@@ -39,6 +39,15 @@ const SECONDARY_LOOP_CUES = new Set<NativeSecondaryAudioCue>([
   'rainfall-loop', 'steady-wind-loop',
 ])
 
+const GOOD_IMP_BOUNCE_CUES = Object.freeze([
+  'imp-vocal-1', 'imp-vocal-2', 'imp-vocal-3', 'imp-vocal-4',
+  'imp-vocal-5', 'imp-vocal-6', 'imp-vocal-7', 'imp-vocal-8',
+] as const satisfies readonly GameSoundCue[])
+
+const GOOD_IMP_CONTACT_CUES = Object.freeze([
+  'bite-1', 'bite-2', 'bite-3',
+] as const satisfies readonly GameSoundCue[])
+
 export class PrimarySpellAudioSynchronizer {
   private readonly audio: GameAudioDirector
   private readonly localPlayerId: string
@@ -117,6 +126,42 @@ export class PrimarySpellAudioSynchronizer {
             effect.origin.y - listener.position.y,
           )),
         })
+      }
+      const previousGoodImps = new Map(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'fire-good-imp')
+        .map((effect) => [`${effect.worldKey}\u0000${effect.id}`, effect]))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (effect.kind !== 'fire-good-imp' || effect.worldKey !== listenerWorldKey) continue
+        const previous = previousGoodImps.get(`${effect.worldKey}\u0000${effect.id}`)
+        const priorBounceSequence = previous?.bounceSoundSequence ?? 0
+        for (
+          let sequence = priorBounceSequence;
+          sequence < effect.bounceSoundSequence;
+          sequence += 1
+        ) {
+          this.audio.playSound(GOOD_IMP_BOUNCE_CUES[effect.bounceSoundIndex]!, {
+            playbackRate: effect.bounceSoundPitch,
+            volume: hubAudioAttenuation(Math.hypot(
+              effect.position.x - listener.position.x,
+              effect.position.y - listener.position.y,
+            )),
+          })
+        }
+        const priorContactSequence = previous?.contactSoundSequence ?? 0
+        const contactOrigin = effect.contactOrigin ?? effect.position
+        for (
+          let sequence = priorContactSequence;
+          sequence < effect.contactSoundSequence;
+          sequence += 1
+        ) {
+          this.audio.playSound(GOOD_IMP_CONTACT_CUES[effect.contactSoundIndex]!, {
+            playbackRate: effect.contactSoundPitch,
+            volume: hubAudioAttenuation(Math.hypot(
+              contactOrigin.x - listener.position.x,
+              contactOrigin.y - listener.position.y,
+            )),
+          })
+        }
       }
       for (const event of snapshot.secondaryAbilities.events) {
         if (

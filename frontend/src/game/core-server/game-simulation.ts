@@ -2158,6 +2158,7 @@ function finishGameSimulationTick(
         : 1,
       boneyardWorld.fireballSceneryTargets,
       lethalObserver,
+      cast.fireActorContacts,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
