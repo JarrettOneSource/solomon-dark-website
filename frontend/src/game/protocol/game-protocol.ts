@@ -93,6 +93,7 @@ import type {
 } from './game-state.ts'
 import {
   BONEYARD_ENEMY_EFFECT_ROLES,
+  BONEYARD_ENEMY_DAMAGE_SOUNDS,
   BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
   BONEYARD_ENEMY_DEATH_SOUNDS,
   BONEYARD_ENEMY_EVENT_TYPES,
@@ -116,7 +117,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 20
+export const GAME_PROTOCOL_VERSION = 21
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -132,14 +133,14 @@ const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192
 const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
 const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
-const MAX_BONEYARD_ENEMY_EFFECTS = 3
+const MAX_BONEYARD_ENEMY_EFFECTS = 4
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
 const MAX_STUDENT_PROPS = 8
 const MAX_STUDENTS = 256
 const MAX_REPLICATED_ENTITIES = 8192
-const MAX_REPLICATED_COMPONENTS = 64
+const MAX_REPLICATED_COMPONENTS = 72
 const MAX_PRIMARY_SPELL_PROJECTILES = 4096
 const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
 const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
@@ -2091,9 +2092,6 @@ function boneyardEnemyDeathEffectSnapshot(
     'tint',
   ])
   const alpha = finite(source.alpha, `${field}.alpha`)
-  if (alpha < 0 || alpha > 1) {
-    throw new GameProtocolError(`${field}.alpha must be within [0,1]`)
-  }
   const atlas = limitedString(source.atlas, `${field}.atlas`, 32)
   if (atlas !== 'BadGuys' && atlas !== 'DeadHawg' && atlas !== 'Demon') {
     throw new GameProtocolError(`${field}.atlas is not supported`)
@@ -2106,6 +2104,16 @@ function boneyardEnemyDeathEffectSnapshot(
   if (!(BONEYARD_ENEMY_DEATH_EFFECT_KINDS as readonly string[]).includes(kind)) {
     throw new GameProtocolError(`${field}.kind is not supported`)
   }
+  const entry = nonnegativeInteger(source.entry, `${field}.entry`)
+  const maximumAlpha = atlas === 'BadGuys'
+    && blendMode === 'add'
+    && entry === 69
+    && kind === 'fade'
+    ? 1.25
+    : 1
+  if (alpha < 0 || alpha > maximumAlpha) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
+  }
   const tint = nonnegativeInteger(source.tint, `${field}.tint`)
   if (tint > 0xffffff) {
     throw new GameProtocolError(`${field}.tint must be a 24-bit RGB value`)
@@ -2115,7 +2123,7 @@ function boneyardEnemyDeathEffectSnapshot(
     alpha,
     atlas,
     blendMode,
-    entry: nonnegativeInteger(source.entry, `${field}.entry`),
+    entry,
     height: finite(source.height, `${field}.height`),
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyDeathEffectSnapshot['kind'],
@@ -2305,6 +2313,7 @@ function boneyardEnemyEvents(
         case 'coffin-maggot-release': return ['count']
         case 'enemy-death':
         case 'enemy-retired': return []
+        case 'enemy-damage-sound':
         case 'enemy-death-sound': return [
           'gainScale',
           'pitch',
@@ -2367,9 +2376,13 @@ function boneyardEnemyEvents(
       }
       case 'enemy-death':
       case 'enemy-retired': return base
+      case 'enemy-damage-sound':
       case 'enemy-death-sound': {
         const sound = limitedString(source.sound, `${eventField}.sound`, 64)
-        if (!(BONEYARD_ENEMY_DEATH_SOUNDS as readonly string[]).includes(sound)) {
+        const supportedSounds = type === 'enemy-damage-sound'
+          ? BONEYARD_ENEMY_DAMAGE_SOUNDS
+          : BONEYARD_ENEMY_DEATH_SOUNDS
+        if (!(supportedSounds as readonly string[]).includes(sound)) {
           throw new GameProtocolError(`${eventField}.sound is not supported`)
         }
         const pitch = positiveFinite(source.pitch, `${eventField}.pitch`)
@@ -2832,6 +2845,8 @@ function boneyardEnemyEffect(
   if (
     (role === 'burning-fire'
       && (atlas !== 'DeadHawg' || blendMode !== 'normal' || entry < 46 || entry > 77))
+    || (role === 'magic-shield'
+      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 49))
     || (role === 'mage-lightning-source'
       && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 381))
     || (role === 'mage-lightning-target'
@@ -2840,8 +2855,9 @@ function boneyardEnemyEffect(
     throw new GameProtocolError(`${field} fields do not match role`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
-  if (alpha < 0 || alpha > 1) {
-    throw new GameProtocolError(`${field}.alpha must be within [0,1]`)
+  const maximumAlpha = role === 'magic-shield' ? 1.25 : 1
+  if (alpha < 0 || alpha > maximumAlpha) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
   }
   return {
     alpha,

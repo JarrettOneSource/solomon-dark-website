@@ -29,6 +29,7 @@ const SOURCES = {
   },
   sounds: {
     'banshee-die': 'banshee.wav',
+    'bone-crack': 'bone-crack.wav',
     click: 'click.wav',
     'coffin-break': 'coffin.wav',
     'demon-die': 'demon.wav',
@@ -36,6 +37,7 @@ const SOURCES = {
     'firey-death': 'firey.wav',
     flash: 'flash.wav',
     fizzle: 'fizzle.wav',
+    'hit-shield': 'hit-shield.wav',
     'ice-start': 'ice.wav',
     'imp-split': 'imp-split.wav',
     'lightning-start': 'lightning.wav',
@@ -48,6 +50,7 @@ const SOURCES = {
     'maggot-squish-2': 'maggot-squish-2.wav',
     'maggot-squish-3': 'maggot-squish-3.wav',
     'pick-skill': 'pick.wav',
+    'pop-shield': 'pop-shield.wav',
     'rock-hit': 'rock.wav',
     'skeleton-die': 'skeleton.wav',
     'start-boulder': 'boulder.wav',
@@ -57,6 +60,7 @@ const SOURCES = {
     'throw-fire': 'fire.wav',
     'zombie-die': 'zombie-die.wav',
     'zombie-die-groan': 'zombie-groan.wav',
+    'zombie-ouch': 'zombie-ouch.wav',
     'zombie-poison-splat': 'zombie-splat.wav',
   },
   streams: {

@@ -26,6 +26,7 @@ export type GameMusicCue =
   | 'solomondarktheme'
 export type GameSoundCue =
   | 'banshee-die'
+  | 'bone-crack'
   | 'click'
   | 'coffin-break'
   | 'demon-die'
@@ -33,6 +34,7 @@ export type GameSoundCue =
   | 'firey-death'
   | 'flash'
   | 'fizzle'
+  | 'hit-shield'
   | 'ice-start'
   | 'imp-split'
   | 'level-up'
@@ -45,6 +47,7 @@ export type GameSoundCue =
   | 'maggot-squish-2'
   | 'maggot-squish-3'
   | 'pick-skill'
+  | 'pop-shield'
   | 'rock-hit'
   | 'skeleton-die'
   | 'start-boulder'
@@ -54,6 +57,7 @@ export type GameSoundCue =
   | 'throw-fire'
   | 'zombie-die'
   | 'zombie-die-groan'
+  | 'zombie-ouch'
   | 'zombie-poison-splat'
 export type CreateStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
 export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
@@ -107,6 +111,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\bansheedie',
     sourceSha256: 'e6419e4437ee457dffdf1b2d5e488971f60cdf98e737b1a4443a8333f8a0a80d',
   },
+  'bone-crack': {
+    registryOffset: 0x228,
+    sourceName: 'sounds\\bonecrack',
+    sourceSha256: '9b42d96a3d505cc1d631d43b6fde4b7fb9670ed2fa758a7692207f2c514047c4',
+  },
   click: {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
@@ -141,6 +150,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x598,
     sourceName: 'sounds\\fizzle',
     sourceSha256: '938420950d859ebc00a9b1a37e548c7c2183a8504689b32aab3de3c683899e76',
+  },
+  'hit-shield': {
+    registryOffset: 0x750,
+    sourceName: 'sounds\\hitshield',
+    sourceSha256: 'ad5a4870955e5393c17a03c847af274f7a054b62a4c712582206623d1d92ad3f',
   },
   'ice-start': {
     registryOffset: 0x7a8,
@@ -202,6 +216,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\pickskill',
     sourceSha256: '494d1b973bd3f319199199ec9cf851491caee10c3d72dbe61acda69d28daabe4',
   },
+  'pop-shield': {
+    registryOffset: 0xcd0,
+    sourceName: 'sounds\\popshield',
+    sourceSha256: 'b4d6bf4d9a68f11bab92def6e823a53f6b8534c49b96e80bbf25d99972af2503',
+  },
   'rock-hit': {
     registryOffset: 0xd54,
     sourceName: 'sounds\\rockhit',
@@ -247,6 +266,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\zombie_die_groan',
     sourceSha256: 'd2e664024a50f1153f2874e6feaa08799e1113593da49227dd1fffb3254ae2e9',
   },
+  'zombie-ouch': {
+    registryOffset: 0x127c,
+    sourceName: 'sounds\\zombieouch',
+    sourceSha256: 'db5400fa0d40ec3507d56d6d29c77ca23dfff4686abe97193b13945da0772d32',
+  },
   'zombie-poison-splat': {
     registryOffset: 0x12a8,
     sourceName: 'sounds\\zombiepoisonsplat',
@@ -269,7 +293,9 @@ export interface NativeEnemyEventSoundRequest {
 export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
 ): NativeEnemyEventSoundRequest | null {
-  if (event.type !== 'enemy-death-sound') return null
+  if (event.type !== 'enemy-damage-sound' && event.type !== 'enemy-death-sound') {
+    return null
+  }
   return {
     cue: event.sound as GameSoundCue,
     playbackRate: event.pitch!,

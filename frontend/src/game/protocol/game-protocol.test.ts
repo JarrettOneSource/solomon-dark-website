@@ -259,7 +259,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v20 strictly round-trips projected statuses, shields, payloads, and effects', () => {
+test('protocol v21 strictly round-trips projected statuses, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -293,6 +293,16 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
       demonRearJointRotationRadians: 0,
       demonRearLimbRotationRadians: 0,
       effects: [{
+        alpha: 1,
+        atlas: 'DeadHawg',
+        blendMode: 'normal',
+        entry: 46,
+        id: 41,
+        offset: { x: 0, y: 0 },
+        role: 'burning-fire',
+        rotationRadians: 0,
+        scale: 1,
+      }, {
         alpha: 1 / BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
         atlas: 'BadGuys',
         blendMode: 'add',
@@ -312,6 +322,16 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
         role: 'mage-lightning-target',
         rotationRadians: 0,
         scale: 1,
+      }, {
+        alpha: 1.25,
+        atlas: 'BadGuys',
+        blendMode: 'add',
+        entry: 49,
+        id: 44,
+        offset: { x: 0, y: -30 },
+        role: 'magic-shield',
+        rotationRadians: 0,
+        scale: 1.599609375,
       }],
       gaitPose: 0,
       hitFlash: 0,
@@ -372,18 +392,18 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
   }]
   snapshot.world.deathEffects = [{
     ageTicks: 7,
-    alpha: 0.75,
+    alpha: 1.25,
     atlas: 'BadGuys',
-    blendMode: 'normal',
-    entry: 117,
-    height: -4.25,
+    blendMode: 'add',
+    entry: 69,
+    height: 0,
     id: 4,
-    kind: 'bouncer',
+    kind: 'fade',
     ownerActorId: 1,
     position: { x: 130, y: 100 },
     rotationRadians: 0.5,
-    scale: 1.2,
-    shadow: true,
+    scale: 1.7,
+    shadow: false,
     spawnTick: 1,
     tint: 0xffaa88,
   }]
@@ -410,6 +430,20 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
   }
 
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage(welcome)), welcome)
+  const fullEffectFrame = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 2,
+    type: 'server-snapshot' as const,
+  }
+  assert.equal(
+    fullEffectFrame.frame.world.entities.samples[0]?.length,
+    72,
+  )
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
+    fullEffectFrame,
+  )
 
   const missingCold = JSON.parse(encodeGameMessage(welcome))
   delete missingCold.snapshot.players['player-1'].progression.coldSlowTicksRemaining
@@ -428,10 +462,17 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidShield)), /shieldHealth/)
 
   const invalidLightning = JSON.parse(encodeGameMessage(welcome))
-  invalidLightning.snapshot.world.enemies[0].animation.effects[0].entry = 382
+  invalidLightning.snapshot.world.enemies[0].animation.effects[1].entry = 382
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidLightning)),
     /fields do not match role/,
+  )
+
+  const invalidLightningAlpha = JSON.parse(encodeGameMessage(welcome))
+  invalidLightningAlpha.snapshot.world.enemies[0].animation.effects[1].alpha = 1.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidLightningAlpha)),
+    /animation\.effects\[1\]\.alpha/,
   )
 
   const invalidEmergence = JSON.parse(encodeGameMessage(welcome))
@@ -439,9 +480,16 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidEmergence)), /emergenceTick/)
 
   const invalidDeathEffect = JSON.parse(encodeGameMessage(welcome))
-  invalidDeathEffect.snapshot.world.deathEffects[0].alpha = 1.01
+  invalidDeathEffect.snapshot.world.deathEffects[0].alpha = 1.251
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidDeathEffect)),
+    /deathEffects\[0\]\.alpha/,
+  )
+
+  const invalidBrightDeathEffectShape = JSON.parse(encodeGameMessage(welcome))
+  invalidBrightDeathEffectShape.snapshot.world.deathEffects[0].entry = 70
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidBrightDeathEffectShape)),
     /deathEffects\[0\]\.alpha/,
   )
 
@@ -455,8 +503,8 @@ test('protocol v20 strictly round-trips projected statuses, shields, payloads, a
   )
 })
 
-test('protocol v20 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 20)
+test('protocol v21 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 21)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -547,7 +595,7 @@ test('protocol v20 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v20 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v21 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -636,6 +684,16 @@ test('protocol v20 preserves the bounded run-scoped enemy semantic-event lane', 
       tick: 20,
       type: 'coffin-maggot-release',
     },
+    {
+      actorId: 4,
+      eventId: 13,
+      gainScale: 1,
+      pitch: 0.825,
+      sound: 'hit-shield',
+      sourcePosition: { x: 130, y: 250 },
+      tick: 20,
+      type: 'enemy-damage-sound',
+    },
   ]
   const state = {
     ...active,
@@ -716,6 +774,13 @@ test('protocol v20 preserves the bounded run-scoped enemy semantic-event lane', 
   unsupportedDeathSound.frame.world.enemyEvents[8].sound = 'skeleton-ish'
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(unsupportedDeathSound)),
+    /sound is not supported/,
+  )
+
+  const unsupportedDamageSound = JSON.parse(encodeGameMessage(message))
+  unsupportedDamageSound.frame.world.enemyEvents[12].sound = 'shield-ish'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unsupportedDamageSound)),
     /sound is not supported/,
   )
 

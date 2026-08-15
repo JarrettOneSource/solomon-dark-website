@@ -380,6 +380,8 @@ test('projects armor, shields, burning, and the named four-tick lightning sample
       ...attacked.store.actors[0]!,
       shieldHealth: 25,
       shieldMaximumHealth: 50,
+      shieldPulse: 3,
+      shieldSoundCooldownTicks: 0,
     }, attacked.store.actors[1]!],
   }
 
@@ -392,8 +394,15 @@ test('projects armor, shields, burning, and the named four-tick lightning sample
     { alpha: 1, role: 'burning-fire' },
     { alpha: 1, role: 'mage-lightning-source' },
     { alpha: 1, role: 'mage-lightning-target' },
+    { alpha: 1.25, role: 'magic-shield' },
   ])
   assert.deepEqual(created.animation.effects[2]?.offset, { x: 150, y: 0 })
+  assert.equal(created.animation.effects[3]?.entry, 49)
+  assert.deepEqual(created.animation.effects[3]?.offset, { x: 0, y: -30 })
+  assert.ok(Math.abs(
+    created.animation.effects[3]!.scale
+      - (1.5 + 0.1 * Math.sin(startedTick * 20 * Math.PI / 180)),
+  ) < 1e-12)
 
   const retained = projectBoneyardEnemies(
     store,
@@ -404,7 +413,10 @@ test('projects armor, shields, burning, and the named four-tick lightning sample
     store,
     startedTick + BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
   )[0]!
-  assert.deepEqual(expired.animation.effects.map(({ role }) => role), ['burning-fire'])
+  assert.deepEqual(expired.animation.effects.map(({ role }) => role), [
+    'burning-fire',
+    'magic-shield',
+  ])
 })
 
 function projectedMaggot(

@@ -106,6 +106,7 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
 })
 
 test('keeps native registry offsets on the browser cue manifest', () => {
+  assert.equal(NATIVE_SOUND_MANIFEST['bone-crack'].registryOffset, 0x228)
   assert.equal(NATIVE_SOUND_MANIFEST.click.registryOffset, 0x18)
   assert.equal(NATIVE_SOUND_MANIFEST['fireball-hit'].registryOffset, 0x540)
   assert.equal(
@@ -118,6 +119,9 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
   assert.equal(NATIVE_SOUND_MANIFEST['start-boulder'].registryOffset, 0xf0c)
   assert.equal(NATIVE_SOUND_MANIFEST['skeleton-die'].registryOffset, 0xdac)
+  assert.equal(NATIVE_SOUND_MANIFEST['hit-shield'].registryOffset, 0x750)
+  assert.equal(NATIVE_SOUND_MANIFEST['pop-shield'].registryOffset, 0xcd0)
+  assert.equal(NATIVE_SOUND_MANIFEST['zombie-ouch'].registryOffset, 0x127c)
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
@@ -187,7 +191,26 @@ test('pins every checked-in enemy death cue to its untouched stock WAV', () => {
   }
 })
 
-test('maps only authoritative death-sound events to their host-authored request', () => {
+test('pins every checked-in enemy damage cue to its untouched stock WAV', () => {
+  const filenames = {
+    'bone-crack': 'bone-crack.wav',
+    'hit-shield': 'hit-shield.wav',
+    'pop-shield': 'pop-shield.wav',
+    'zombie-ouch': 'zombie-ouch.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(filenames)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue as keyof typeof NATIVE_SOUND_MANIFEST].sourceSha256,
+    )
+  }
+})
+
+test('maps authoritative enemy damage and death sounds to host-authored requests', () => {
   const death = {
     actorId: 9,
     eventId: 3,
@@ -202,6 +225,18 @@ test('maps only authoritative death-sound events to their host-authored request'
   assert.deepEqual(nativeEnemyEventSoundRequest(death), {
     cue: 'maggot-squeak-2',
     playbackRate: 1.125,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 0.375,
+  })
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    ...death,
+    eventId: 4,
+    pitch: 0.825,
+    sound: 'hit-shield',
+    type: 'enemy-damage-sound',
+  }), {
+    cue: 'hit-shield',
+    playbackRate: 0.825,
     sourcePosition: { x: 10, y: 20 },
     volume: 0.375,
   })

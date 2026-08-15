@@ -200,11 +200,11 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
   assert.equal(frame.world.entities.spawned[0]!.length, 8)
-  assert.equal(frame.world.entities.samples[0]!.length, 62)
+  assert.equal(frame.world.entities.samples[0]!.length, 72)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
   assert.equal(frame.world.entities.samples[0]![29], 25 * 1024)
   assert.equal(frame.world.entities.samples[0]![30], 50 * 1024)
-  assert.equal(frame.world.entities.samples[0]![31], 3)
+  assert.equal(frame.world.entities.samples[0]![31], 4)
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(frame, 1)
@@ -441,6 +441,16 @@ test('enemy death effects replicate independent motion and exact retirement iden
   assert.equal(registration.sampleIsValid(
     sample.slice(0, -1) as [number, number, ...number[]],
   ), false)
+  const invalidBrightShape = cloneSnapshotFrame(keyframe)
+  if (invalidBrightShape.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  const invalidBrightSample = invalidBrightShape.world.entities.samples.find((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
+  ))!
+  Reflect.set(invalidBrightSample, 5, 1.25 * 1024)
+  assert.throws(
+    () => new EntityReplicationReconstructor().apply(invalidBrightShape, 1),
+    /alpha exceeds its native shape/,
+  )
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(keyframe, 1)
@@ -539,6 +549,16 @@ function enemySnapshot(): BoneyardEnemySnapshot {
         role: 'mage-lightning-target',
         rotationRadians: 0,
         scale: 1,
+      }, {
+        alpha: 1.25,
+        atlas: 'BadGuys',
+        blendMode: 'add',
+        entry: 49,
+        id: 28,
+        offset: { x: 0, y: -30 },
+        role: 'magic-shield',
+        rotationRadians: 0,
+        scale: 1.599609375,
       }],
       gaitPose: 2.75,
       hitFlash: 0.5,

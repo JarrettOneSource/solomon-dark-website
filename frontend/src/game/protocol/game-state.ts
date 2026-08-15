@@ -146,6 +146,7 @@ export interface BoneyardEnemyDeathEffectSnapshot {
 export const BONEYARD_ENEMY_EVENT_TYPES = [
   'attack-marker',
   'coffin-maggot-release',
+  'enemy-damage-sound',
   'enemy-death',
   'enemy-death-sound',
   'enemy-retired',
@@ -156,6 +157,13 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'projectile-retired',
   'projectile-spawned',
   'reward',
+] as const
+
+export const BONEYARD_ENEMY_DAMAGE_SOUNDS = [
+  'bone-crack',
+  'hit-shield',
+  'pop-shield',
+  'zombie-ouch',
 ] as const
 
 export const BONEYARD_ENEMY_DEATH_SOUNDS = [
@@ -176,6 +184,11 @@ export const BONEYARD_ENEMY_DEATH_SOUNDS = [
   'zombie-poison-splat',
 ] as const
 
+export const BONEYARD_ENEMY_SOUNDS = [
+  ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
+  ...BONEYARD_ENEMY_DEATH_SOUNDS,
+] as const
+
 export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
   'archer-shatter',
   'coffin-break',
@@ -188,7 +201,9 @@ export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
 ] as const
 
 export type BoneyardEnemyEventType = typeof BONEYARD_ENEMY_EVENT_TYPES[number]
+export type BoneyardEnemyDamageSound = typeof BONEYARD_ENEMY_DAMAGE_SOUNDS[number]
 export type BoneyardEnemyDeathSound = typeof BONEYARD_ENEMY_DEATH_SOUNDS[number]
+export type BoneyardEnemySound = typeof BONEYARD_ENEMY_SOUNDS[number]
 export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS[number]
 
 export interface BoneyardEnemyEventSnapshot {
@@ -200,7 +215,7 @@ export interface BoneyardEnemyEventSnapshot {
   pitch?: number
   projectileId?: number
   runId: string
-  sound?: BoneyardEnemyDeathSound
+  sound?: BoneyardEnemySound
   sourcePosition?: Vector2
   targetPosition?: Vector2
   targetPlayerId?: string | null
@@ -316,6 +331,7 @@ export interface BoneyardEnemyAnimationSnapshot {
 
 export const BONEYARD_ENEMY_EFFECT_ROLES = [
   'burning-fire',
+  'magic-shield',
   'mage-lightning-source',
   'mage-lightning-target',
 ] as const

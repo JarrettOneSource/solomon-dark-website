@@ -542,7 +542,37 @@ test('Mage self and ally shields preserve 50/450 strength and 1000/500 cadence',
   }
 })
 
-test('enemy damage consumes shields before health and clears exhausted capacity', () => {
+test('Mage ally shields accept only the three stock runtime recipient types', () => {
+  for (const [token, eligible] of [
+    ['SKELETON', true],
+    ['SKELETONARCHER', true],
+    ['ZOMBIE', true],
+    ['SKELETONMAGE', false],
+    ['IMP', false],
+    ['WRAITH', false],
+    ['DEMON', false],
+    ['COFFIN', false],
+  ] as const) {
+    let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`shield-recipient-${token}`), {
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players: { player: livingTarget(150, 0) },
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [
+        intent('SKELETONMAGE', 1, { x: 0, y: 0 }, ['FLAG_SHIELDOTHERS']),
+        intent(token, 2, { x: 20, y: 0 }),
+      ],
+      tick: 0,
+    })
+    const brain = result.store.actors[0]!.brain
+    assert.equal(brain.family, 'mage')
+    if (brain.family !== 'mage') throw new Error('expected Mage brain')
+    result = withActorBrain(result, 0, { ...brain, shieldTicksRemaining: 1 })
+    result = step(result.store, 1, { player: livingTarget(150, 0) })
+    assert.equal(result.store.actors[1]!.shieldHealth, eligible ? 50 : 0, token)
+  }
+})
+
+test('shield damage suppresses body hits, never overflows health, and breaks natively', () => {
   const players = { player: livingTarget(150, 0) }
   let result = spawnOne(
     'shield-absorption',
@@ -557,6 +587,9 @@ test('enemy damage consumes shields before health and clears exhausted capacity'
   result = withActorBrain(result, 0, { ...brain, shieldTicksRemaining: 1 })
   result = step(result.store, 1, players)
   const initialHealth = result.store.actors[0]!.currentHealth
+  assert.equal(result.store.actors[0]!.shieldPulse, 3)
+  assert.equal(result.store.actors[0]!.shieldSoundCooldownTicks, 0)
+  const appliedStore = result.store
 
   const absorbed = damageBoneyardEnemy(result.store, {
     actorId: result.store.actors[0]!.id,
@@ -568,17 +601,150 @@ test('enemy damage consumes shields before health and clears exhausted capacity'
   assert.equal(absorbed.store.actors[0]!.currentHealth, initialHealth)
   assert.equal(absorbed.store.actors[0]!.shieldHealth, 30)
   assert.equal(absorbed.store.actors[0]!.shieldMaximumHealth, 50)
+  assert.equal(absorbed.store.actors[0]!.lastDamageTick, null)
+  assert.equal(absorbed.store.actors[0]!.lastDamagedByPlayerId, null)
+  assert.equal(absorbed.store.actors[0]!.shieldPulse, 2)
+  assert.equal(absorbed.store.actors[0]!.shieldSoundCooldownTicks, 10)
+  assert.equal(absorbed.events.length, 1)
+  assert.equal(absorbed.events[0]?.type, 'enemy-damage-sound')
+  assert.equal(absorbed.events[0]?.sound, 'hit-shield')
+  assert.ok(absorbed.events[0]!.pitch! >= 0.8 && absorbed.events[0]!.pitch! < 0.85)
 
-  const exhausted = damageBoneyardEnemy(absorbed.store, {
-    actorId: absorbed.store.actors[0]!.id,
+  const timed = step(absorbed.store, 2, players)
+  assert.equal(timed.store.actors[0]!.shieldPulse, 1.95)
+  assert.equal(timed.store.actors[0]!.shieldSoundCooldownTicks, 9)
+
+  const exhausted = damageBoneyardEnemy(timed.store, {
+    actorId: timed.store.actors[0]!.id,
     amount: 31,
+    sourcePlayerId: 'player',
+    tick: 2,
+  })
+  assert.equal(exhausted.killed, false)
+  assert.equal(exhausted.store.actors[0]!.currentHealth, initialHealth)
+  assert.equal(exhausted.store.actors[0]!.shieldHealth, 0)
+  assert.equal(exhausted.store.actors[0]!.shieldMaximumHealth, 0)
+  assert.equal(exhausted.store.actors[0]!.lastDamageTick, null)
+  assert.deepEqual(exhausted.events.map(({ sound }) => sound), ['pop-shield'])
+  assert.equal(exhausted.events[0]?.pitch, 0.8)
+  assert.equal(exhausted.store.deathEffects.length, 20)
+  assert.ok(exhausted.store.deathEffects.every((effect) => (
+    effect.atlas === 'BadGuys'
+    && effect.blendMode === 'add'
+    && effect.entry === 69
+    && effect.kind === 'fade'
+    && effect.position.x === timed.store.actors[0]!.position.x
+    && effect.position.y === timed.store.actors[0]!.position.y - 30
+    && effect.alpha >= 0.5
+    && effect.alpha < 1.25
+    && effect.alphaLossPerTick === 0.05
+    && effect.rotationDeg >= 0
+    && effect.rotationDeg < 360
+    && effect.scale >= 1.5
+    && effect.scale < 1.75
+    && effect.role === 'shield-break-particle'
+    && effect.velocity.x === 0
+    && effect.velocity.y === 0
+  )))
+
+  const immediateBreak = damageBoneyardEnemy(appliedStore, {
+    actorId: appliedStore.actors[0]!.id,
+    amount: 10_000,
     sourcePlayerId: 'player',
     tick: 1,
   })
-  assert.equal(exhausted.killed, false)
-  assert.equal(exhausted.store.actors[0]!.currentHealth, initialHealth - 1)
-  assert.equal(exhausted.store.actors[0]!.shieldHealth, 0)
-  assert.equal(exhausted.store.actors[0]!.shieldMaximumHealth, 0)
+  assert.equal(immediateBreak.killed, false)
+  assert.equal(immediateBreak.store.actors[0]!.currentHealth, initialHealth)
+  assert.deepEqual(immediateBreak.events.map(({ sound }) => sound), [
+    'hit-shield',
+    'pop-shield',
+  ])
+  const brightParticle = immediateBreak.store.deathEffects.find(({ alpha }) => alpha > 1)
+  assert.ok(brightParticle)
+  const faded = step(immediateBreak.store, 2, players).store.deathEffects
+    .find(({ id }) => id === brightParticle.id)
+  assert.ok(faded)
+  assert.ok(Math.abs(faded.alpha - (brightParticle.alpha - 0.05)) < 1e-12)
+
+  const firstCue = damageBoneyardEnemy(appliedStore, {
+    actorId: appliedStore.actors[0]!.id,
+    amount: 1,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  const cooling = step(firstCue.store, 10, players)
+  const throttled = damageBoneyardEnemy(cooling.store, {
+    actorId: cooling.store.actors[0]!.id,
+    amount: 1,
+    sourcePlayerId: 'player',
+    tick: 10,
+  })
+  assert.deepEqual(throttled.events, [])
+  const ready = step(throttled.store, 11, players)
+  const replayed = damageBoneyardEnemy(ready.store, {
+    actorId: ready.store.actors[0]!.id,
+    amount: 1,
+    sourcePlayerId: 'player',
+    tick: 11,
+  })
+  assert.deepEqual(replayed.events.map(({ sound }) => sound), ['hit-shield'])
+  assert.equal(replayed.store.actors[0]!.shieldPulse, 2)
+  assert.equal(replayed.store.actors[0]!.shieldSoundCooldownTicks, 10)
+})
+
+test('Skeleton-family and Zombie hurt sounds use the prior 20-tick body latch', () => {
+  for (const [token, expectedSound] of [
+    ['SKELETON', 'bone-crack'],
+    ['SKELETONARCHER', 'bone-crack'],
+    ['SKELETONMAGE', 'bone-crack'],
+    ['ZOMBIE', 'zombie-ouch'],
+  ] as const) {
+    let store = spawnOne(
+      `hurt-${token}`,
+      token,
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+    ).store
+    const actorId = store.actors[0]!.id
+    const first = damageBoneyardEnemy(store, {
+      actorId,
+      amount: 0.1,
+      sourcePlayerId: 'player',
+      tick: 0,
+    })
+    assert.deepEqual(first.events.map(({ sound }) => sound), [expectedSound])
+    assert.ok(first.events[0]!.pitch! >= 0.9 && first.events[0]!.pitch! < 1.1)
+    assert.equal(first.store.actors[0]!.lastDamageTick, 0)
+
+    const refreshed = damageBoneyardEnemy(first.store, {
+      actorId,
+      amount: 0.1,
+      sourcePlayerId: 'player',
+      tick: 10,
+    })
+    assert.deepEqual(refreshed.events, [])
+    assert.equal(refreshed.store.actors[0]!.lastDamageTick, 10)
+
+    const quiet = damageBoneyardEnemy(refreshed.store, {
+      actorId,
+      amount: 0.1,
+      sourcePlayerId: 'player',
+      tick: 30,
+    })
+    assert.deepEqual(quiet.events.map(({ sound }) => sound), [expectedSound])
+    store = quiet.store
+    assert.equal(store.actors[0]!.lastDamageTick, 30)
+  }
+
+  for (const token of ['COFFIN', 'DEMON', 'IMP', 'WRAITH'] as const) {
+    const silent = spawnOne(`hurt-${token}-negative`, token, { x: 0, y: 0 }, FAR_PLAYERS)
+    assert.deepEqual(damageBoneyardEnemy(silent.store, {
+      actorId: silent.store.actors[0]!.id,
+      amount: 0.1,
+      sourcePlayerId: 'player',
+      tick: 0,
+    }).events, [])
+  }
 })
 
 test('all Mage elements emit their authoritative damage, status, payload, and lightning lifetime', () => {
@@ -1401,6 +1567,7 @@ test('Skeleton death hands off immediately to exact independent shatter actors',
     sourcePlayerId: 'player',
     tick: 0,
   })
+  assert.deepEqual(damaged.events.map(({ sound }) => sound), ['bone-crack'])
   result = step(damaged.store, 1, FAR_PLAYERS)
 
   assert.equal(result.store.actors.length, 0)

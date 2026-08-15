@@ -415,6 +415,9 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.ok(enemy.currentHealth <= 0)
   assert.equal(enemy.lastDamagedByPlayerId, 'caster')
   assert.ok(enemy.lastDamageTick !== null)
+  assert.ok(state.world.enemyEvents.some((event) => (
+    event.type === 'enemy-damage-sound' && event.sound === 'bone-crack'
+  )))
   assert.deepEqual(state.primarySpells.projectiles, [])
 
   const experienceBeforeReward = getPlayerProgression(state, 'caster').experience
@@ -529,17 +532,25 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
     sourcePlayerId: 'local-player',
     tick: 0,
   })
-  state = { ...state, world: { ...state.world, enemies: killed.store } }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: killed.store,
+      enemyEvents: killed.events,
+    },
+  }
 
   state = stepGameSimulationTick(state, {})
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const firstBatch = state.world.enemyEvents
   assert.deepEqual(firstBatch.map(({ eventId, type }) => ({ eventId, type })), [
-    { eventId: 2, type: 'enemy-death' },
-    { eventId: 3, type: 'enemy-terminal-output' },
-    { eventId: 4, type: 'enemy-death-sound' },
-    { eventId: 5, type: 'reward' },
-    { eventId: 6, type: 'enemy-retired' },
+    { eventId: 2, type: 'enemy-damage-sound' },
+    { eventId: 3, type: 'enemy-death' },
+    { eventId: 4, type: 'enemy-terminal-output' },
+    { eventId: 5, type: 'enemy-death-sound' },
+    { eventId: 6, type: 'reward' },
+    { eventId: 7, type: 'enemy-retired' },
   ])
 
   for (let tick = 0; tick < 99; tick += 1) state = stepGameSimulationTick(state, {})

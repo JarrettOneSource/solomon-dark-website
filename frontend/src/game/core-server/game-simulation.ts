@@ -594,7 +594,15 @@ function finishGameSimulationTick(
       ),
     )
     primarySpells = spellCombat.spells
-    world = { ...world, enemies: spellCombat.enemies }
+    world = {
+      ...world,
+      enemies: spellCombat.enemies,
+      enemyEvents: retainBoneyardEnemyEvents(
+        world.enemyEvents,
+        spellCombat.events,
+        tick,
+      ),
+    }
   }
   const players: Record<PlayerId, PlayerCharacterState> = { ...cast.players }
   if (tick % PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL === 0) {

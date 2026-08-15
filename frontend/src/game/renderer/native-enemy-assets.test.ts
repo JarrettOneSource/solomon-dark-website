@@ -90,7 +90,8 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
     assert.equal(used.size, 68)
 
     const deathEffectRecords = [
-      ...[10, 11, 15, 21, 27, 55, 86].map((entry) => ['BadGuys', entry] as const),
+      ...[10, 11, 15, 21, 27, 49, 55, 69, 86]
+        .map((entry) => ['BadGuys', entry] as const),
       ...recordPairs('BadGuys', 92, 121),
       ...recordPairs('BadGuys', 401, 419),
       ...recordPairs('BadGuys', 1_819, 1_822),
@@ -106,7 +107,7 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       assert.ok(record.source.length > 0)
       selectedDeathEffects.add(`${atlas}:${entry}`)
     }
-    assert.equal(selectedDeathEffects.size, 156)
+    assert.equal(selectedDeathEffects.size, 158)
   } finally {
     await server.close()
   }

@@ -145,15 +145,9 @@ export function nativeEnemyPresentationPlan(
   const baseLayers = animation?.state === 'death'
     ? []
     : familyLayers(enemy, facing, flags, spawnAgeTicks, animation, actionFrame)
-  const shieldedLayers = animation?.state === 'death'
-    ? baseLayers
-    : [...baseLayers, ...shieldLayers(baseLayers, enemy)]
-  const sampledLayers = animation
-    ? [...shieldedLayers, ...effectLayers(animation.effects)]
-    : shieldedLayers
   const layers = animation
-    ? applyAuthoritativeSample(sampledLayers, animation)
-    : sampledLayers
+    ? applyAuthoritativeSample(baseLayers, effectLayers(animation.effects), animation)
+    : baseLayers
   return {
     actionFrame,
     deathProgram,
@@ -467,45 +461,34 @@ function effectLayers(
   ))
 }
 
-function shieldLayers(
-  bodyLayers: readonly NativeEnemySpriteLayer[],
-  enemy: NativeEnemyVisualSnapshot,
-): NativeEnemySpriteLayer[] {
-  if (enemy.shieldHealth <= 0 || enemy.shieldMaximumHealth <= 0) return []
-  const alpha = boundedUnit(enemy.shieldHealth / enemy.shieldMaximumHealth)
-  return bodyLayers.map((source) => ({
-    ...source,
-    alpha: source.alpha * alpha,
-    blendMode: 'add',
-    role: `shield:${source.role}`,
-    scale: source.scale * 1.05,
-  }))
-}
-
 function applyAuthoritativeSample(
-  sourceLayers: readonly NativeEnemySpriteLayer[],
+  bodyLayers: readonly NativeEnemySpriteLayer[],
+  effectSampleLayers: readonly NativeEnemySpriteLayer[],
   animation: NativeEnemyAnimationSample,
 ): NativeEnemySpriteLayer[] {
   const alpha = boundedUnit(animation.alpha)
-  const layers = sourceLayers.map((source) => ({
+  const transform = (source: NativeEnemySpriteLayer): NativeEnemySpriteLayer => ({
     ...source,
     alpha: source.alpha * alpha,
     offset: {
       x: source.offset.x,
       y: source.offset.y + finiteOrZero(animation.verticalOffset),
     },
-  }))
+  })
+  const body = bodyLayers.map(transform)
+  const effects = effectSampleLayers.map(transform)
   const hitFlash = boundedUnit(animation.hitFlash)
-  if (hitFlash === 0) return layers
+  if (hitFlash === 0) return [...body, ...effects]
   return [
-    ...layers,
-    ...layers.filter((source) => source.alpha > 0).map((source) => ({
+    ...body,
+    ...body.filter((source) => source.alpha > 0).map((source) => ({
       ...source,
       alpha: source.alpha * hitFlash,
       blendMode: 'normal' as const,
       role: `hit:${source.role}`,
       tint: 0xff0000,
     })),
+    ...effects,
   ]
 }
 

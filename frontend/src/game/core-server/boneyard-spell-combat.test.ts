@@ -49,6 +49,7 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
 
   assert.equal(worldQueries, 0, 'projectile terrain contact belongs to the native tick kernel')
   assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1])
+  assert.deepEqual(result.events.map(({ sound }) => sound), ['bone-crack'])
   assert.equal(result.enemies.actors[0]?.currentHealth, 1)
   assert.equal(result.enemies.actors[1]?.currentHealth, 5)
   assert.deepEqual(result.spells.projectiles, [])

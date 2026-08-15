@@ -103,21 +103,64 @@ test('Skeleton ARMORMAYBE consumes the projected armor decision', () => {
   assert.equal(armored.layers[1]?.entry, 613)
 })
 
-test('authoritative shields append proportional additive body layers', () => {
+test('authoritative shields draw one sampled BadGuys 49 shell instead of body copies', () => {
   const plan = nativeEnemyPresentationPlan({
     ...enemy('SKELETONMAGE'),
+    animation: nativeEnemyIdleAnimationSample({
+      effects: [{
+        alpha: 0.75,
+        atlas: 'BadGuys',
+        blendMode: 'add',
+        entry: 49,
+        id: 28,
+        offset: { x: 0, y: -30 },
+        role: 'magic-shield',
+        rotationRadians: 0,
+        scale: 1.6,
+      }],
+    }),
     shieldHealth: 25,
     shieldMaximumHealth: 50,
   }, 100)
 
-  const midpoint = plan.layers.length / 2
-  assert.deepEqual(
-    plan.layers.slice(midpoint).map((layer) => layer.role),
-    plan.layers.slice(0, midpoint).map((layer) => `shield:${layer.role}`),
-  )
-  assert.ok(plan.layers.slice(midpoint).every((layer) => (
-    layer.alpha === 0.5 && layer.blendMode === 'add' && layer.scale === 1.05
-  )))
+  const shield = plan.layers.filter(({ entry }) => entry === 49)
+  assert.deepEqual(shield, [{
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'add',
+    entry: 49,
+    offset: { x: 0, y: -30 },
+    role: 'effect:28:magic-shield',
+    rotationRadians: 0,
+    scale: 1.6,
+    tint: 0xffffff,
+  }])
+  assert.ok(plan.layers.every(({ role }) => !role.startsWith('shield:')))
+})
+
+test('ordinary body hit redraw does not tint the independent shield shell', () => {
+  const source = enemy('SKELETON')
+  const plan = nativeEnemyPresentationPlan({
+    ...source,
+    animation: nativeEnemyIdleAnimationSample({
+      effects: [{
+        alpha: 0.25,
+        atlas: 'BadGuys',
+        blendMode: 'add',
+        entry: 49,
+        id: 28,
+        offset: { x: 0, y: -30 },
+        role: 'magic-shield',
+        rotationRadians: 0,
+        scale: 1.5,
+      }],
+      hitFlash: 0.65,
+    }),
+  }, 100)
+
+  assert.equal(plan.layers.filter(({ entry }) => entry === 49).length, 1)
+  assert.ok(plan.layers.some(({ role }) => role.startsWith('hit:')))
+  assert.ok(plan.layers.every(({ role }) => role !== 'hit:effect:28:magic-shield'))
 })
 
 test('native hit feedback redraws the exact current pose red with normal blending', () => {

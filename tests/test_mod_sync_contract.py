@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+from contextlib import closing
 import hmac
 import io
 import json
@@ -151,15 +152,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
     @classmethod
     def start_server(cls) -> None:
+        server_path = ROOT / "backend/bin/Debug/net10.0/Server.dll"
         cls.server = subprocess.Popen(
-            [
-                cls.dotnet,
-                "run",
-                "--project",
-                str(ROOT / "backend/Server.csproj"),
-                "--no-launch-profile",
-                "--no-build",
-            ],
+            [cls.dotnet, str(server_path)],
             cwd=ROOT,
             env=cls.environment,
             stdout=subprocess.PIPE,
@@ -468,7 +463,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertTrue(receipt["submittedAtUtc"].endswith("Z"))
 
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             row = database.execute(
                 """
                 SELECT SubmitterUserId, SubmitterSteamId, ClientReportId,
@@ -502,7 +497,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             self.token,
         )
         self.assertEqual(status, 201, account_receipt)
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             account_row = database.execute(
                 """
                 SELECT SubmitterUserId, SubmitterSteamId
@@ -533,7 +528,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             self.steam_token("76561198000009997"),
         )
         self.assertEqual(status, 400)
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             mismatched_count = database.execute(
                 "SELECT COUNT(*) FROM CrashReports WHERE ClientReportId = ?",
                 (mismatched_metadata["clientReportId"],),
@@ -572,7 +567,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertTrue(receipt["submittedAtUtc"].endswith(("Z", "+00:00")))
 
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             row = database.execute(
                 """
                 SELECT SubmitterUserId, SubmitterSteamId, ClientLogId,
@@ -630,7 +625,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
         steam_id = "76561198000007777"
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.execute(
                 "UPDATE Users SET SteamId = ? WHERE Id = ?",
                 (steam_id, self.user_id),
@@ -698,7 +693,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 401, rejected)
 
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
             database.commit()
         status, rejected = self.request(
@@ -708,7 +703,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 401, rejected)
 
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.execute(
                 "UPDATE Users SET SteamId = ? WHERE Id = ?",
                 (steam_id, self.user_id),
@@ -787,7 +782,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers={"Authorization": f"Bearer {self.token}"},
         )
         self.assertEqual(status, 404)
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
             database.commit()
 
@@ -1424,7 +1419,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
 
     def test_password_ticket_guards_join_manifest(self) -> None:
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path, timeout=10) as database:
+        with closing(sqlite3.connect(database_path, timeout=10)) as database, database:
             database.execute(
                 "UPDATE Users SET SteamId = ? WHERE Username = ?",
                 ("76561198000000003", "modsync"),
@@ -1503,7 +1498,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_steam_session_can_unlink_its_linked_account(self) -> None:
         steam_id = "76561198000006666"
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.execute(
                 "UPDATE Users SET SteamId = ? WHERE Id = ?",
                 (steam_id, self.user_id),
@@ -1517,7 +1512,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 204, response)
 
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             linked_steam_id = database.execute(
                 "SELECT SteamId FROM Users WHERE Id = ?",
                 (self.user_id,),
@@ -1527,7 +1522,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_z_database_schema_upgrades_existing_rows(self) -> None:
         type(self).stop_server()
         database_path = Path(self.temp.name) / "sdr.db"
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             database.executescript(
                 """
                 DROP INDEX IX_Mods_LauncherModId;
@@ -1544,7 +1539,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             )
         type(self).start_server()
 
-        with sqlite3.connect(database_path) as database:
+        with closing(sqlite3.connect(database_path)) as database, database:
             columns = {
                 table: {
                     row[1]

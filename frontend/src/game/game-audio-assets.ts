@@ -7,6 +7,7 @@ import death from '../assets/music/death.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import bansheeDie from '../assets/game/audio/sfx/banshee-die.wav'
+import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
 import click from '../assets/game/audio/sfx/click.wav'
 import coffinBreak from '../assets/game/audio/sfx/coffin-break.wav'
 import demonDie from '../assets/game/audio/sfx/demon-die.wav'
@@ -14,6 +15,7 @@ import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
 import fizzle from '../assets/game/audio/sfx/fizzle.wav'
+import hitShield from '../assets/game/audio/sfx/hit-shield.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
 import levelUp from '../assets/game/audio/sfx/level-up.wav'
@@ -26,6 +28,7 @@ import maggotSquish1 from '../assets/game/audio/sfx/maggot-squish-1.wav'
 import maggotSquish2 from '../assets/game/audio/sfx/maggot-squish-2.wav'
 import maggotSquish3 from '../assets/game/audio/sfx/maggot-squish-3.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
+import popShield from '../assets/game/audio/sfx/pop-shield.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
 import startCast from '../assets/game/audio/sfx/start-cast.wav'
@@ -35,6 +38,7 @@ import summon from '../assets/game/audio/sfx/summon.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
 import zombieDie from '../assets/game/audio/sfx/zombie-die.wav'
 import zombieDieGroan from '../assets/game/audio/sfx/zombie-die-groan.wav'
+import zombieOuch from '../assets/game/audio/sfx/zombie-ouch.wav'
 import zombiePoisonSplat from '../assets/game/audio/sfx/zombie-poison-splat.wav'
 import gatherRocksLoop from '../assets/game/audio/sfx/gather-rocks-loop.wav'
 import iceLoop from '../assets/game/audio/sfx/ice-loop.wav'
@@ -67,6 +71,7 @@ export const GAME_AUDIO_SOURCES = {
   },
   sounds: {
     'banshee-die': bansheeDie,
+    'bone-crack': boneCrack,
     click,
     'coffin-break': coffinBreak,
     'demon-die': demonDie,
@@ -74,6 +79,7 @@ export const GAME_AUDIO_SOURCES = {
     'firey-death': fireyDeath,
     fizzle,
     flash: enemyFlash,
+    'hit-shield': hitShield,
     'ice-start': iceStart,
     'imp-split': impSplit,
     'level-up': levelUp,
@@ -86,6 +92,7 @@ export const GAME_AUDIO_SOURCES = {
     'maggot-squish-2': maggotSquish2,
     'maggot-squish-3': maggotSquish3,
     'pick-skill': pickSkill,
+    'pop-shield': popShield,
     'rock-hit': rockHit,
     'skeleton-die': skeletonDie,
     'start-boulder': startBoulder,
@@ -95,6 +102,7 @@ export const GAME_AUDIO_SOURCES = {
     'throw-fire': throwFire,
     'zombie-die': zombieDie,
     'zombie-die-groan': zombieDieGroan,
+    'zombie-ouch': zombieOuch,
     'zombie-poison-splat': zombiePoisonSplat,
   },
   streams: {

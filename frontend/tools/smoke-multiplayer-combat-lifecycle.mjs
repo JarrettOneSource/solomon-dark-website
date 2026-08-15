@@ -31,6 +31,7 @@ const credential = randomBytes(32).toString('base64url')
 const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const NATIVE_POINTER_AIM_ANCHOR_Y_PIXELS = 25
+const SHIELD_PROOF_CONTACT_HEALTH = 1 / 1024
 const boneyards = createBoneyardCatalog()
 const loadedBoneyard = materializeBoneyard(
   boneyards,
@@ -49,6 +50,8 @@ const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT |
 const featureOnly = process.argv.includes('--feature-only')
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
 const enemyHitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-hit.png`
+const enemyShieldScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield.png`
+const enemyShieldBreakScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield-break.png`
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
 const levelUpScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up.png`
 const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up-waiting.png`
@@ -181,6 +184,8 @@ try {
       approach,
       browserVersion: hostBrowser.version(),
       enemyHitScreenshotPath,
+      enemyShieldBreakScreenshotPath,
+      enemyShieldScreenshotPath,
       errors,
       gateCrossing,
       levelUpScreenshotPath,
@@ -280,6 +285,8 @@ try {
     },
     firstDeathScreenshotPath,
     enemyHitScreenshotPath,
+    enemyShieldBreakScreenshotPath,
+    enemyShieldScreenshotPath,
     firstSpectatorCamera,
     gameOverScreenshotPath,
     gateCrossing,
@@ -510,6 +517,7 @@ async function proveSharedLevelUpAndEnemyEffects({
   let audio
   let firstContact
   let hitSamples
+  let shieldBreak
   try {
     resumedFrame = await waitForEffectAgeAdvance(hostPage, ownerActorId, hostEffects[0].ageTicks)
     retirement = await waitForDeathEffectsToRetire(
@@ -522,6 +530,12 @@ async function proveSharedLevelUpAndEnemyEffects({
       host: await levelUpAudioReceipt(hostPage),
     }
     await guestEvasion.stop()
+    shieldBreak = await proveShieldBreak({
+      casterPlayerId: guestPlayerId,
+      guestPage,
+      host,
+      hostPage,
+    })
     firstContact = await castAirForContact(guestPage)
     assert.ok(firstContact.current, 'the first Air contact must remain a live enemy')
     assert.ok(firstContact.current.currentHealth > 0, 'the first Air hit must be nonterminal')
@@ -544,6 +558,8 @@ async function proveSharedLevelUpAndEnemyEffects({
   assert.deepEqual(audio.guest.levelUpRates, [2, 3])
   assert.deepEqual(audio.host.levelUpRates, [2, 3])
   assert.ok(audio.guest.sources.some((source) => source.includes('skeleton-die')))
+  assert.ok(audio.guest.sources.some((source) => source.includes('bone-crack')))
+  assert.ok(audio.host.sources.some((source) => source.includes('bone-crack')))
 
   return {
     audio,
@@ -564,6 +580,216 @@ async function proveSharedLevelUpAndEnemyEffects({
     retainedEffectCount: hostEffects.length,
     resumedEffectAge: deathEffectsForOwner(resumedFrame, ownerActorId)[0]?.ageTicks ?? null,
     retirement,
+    shieldBreak,
+  }
+}
+
+async function proveShieldBreak({ casterPlayerId, guestPage, host, hostPage }) {
+  fortifyShieldProofCaster(host, casterPlayerId)
+  const armed = await armAirTargetShield(guestPage, host)
+  await guestPage.screenshot({ path: enemyShieldScreenshotPath })
+  const audioStarts = {
+    guest: await audioEventCount(guestPage),
+    host: await audioEventCount(hostPage),
+  }
+  const [contact, peerFrame] = await Promise.all([
+    castAirForShieldBreak(guestPage, host, armed),
+    waitForShieldBreakEffectFrame(hostPage, armed.actorId),
+  ])
+  await guestPage.screenshot({ path: enemyShieldBreakScreenshotPath })
+  const [guestAudio, hostAudio] = await Promise.all([
+    waitForShieldBreakAudio(guestPage, audioStarts.guest),
+    waitForShieldBreakAudio(hostPage, audioStarts.host),
+  ])
+  const peerEffects = shieldBreakEffectsForOwner(peerFrame, armed.actorId)
+  assert.equal(peerEffects.length, 20)
+  assert.deepEqual(
+    peerEffects.map(({ id }) => id),
+    contact.effects.map(({ id }) => id),
+  )
+  return {
+    actorId: armed.actorId,
+    armedTick: armed.armedTick,
+    audio: { guest: guestAudio, host: hostAudio },
+    breakTick: contact.frame.tick,
+    effectAlphaMaximum: Math.max(...contact.effects.map(({ alpha }) => alpha)),
+    effectAlphaMinimum: Math.min(...contact.effects.map(({ alpha }) => alpha)),
+    effectCount: contact.effects.length,
+    effectIds: contact.effects.map(({ id }) => id),
+    healthAfter: contact.current.currentHealth,
+    healthBefore: armed.healthBefore,
+  }
+}
+
+function fortifyShieldProofCaster(host, playerId) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex((identity) => (
+    identity.playerId === playerId
+  ))
+  assert.ok(index >= 0, `shield-proof caster ${playerId} was absent`)
+  const progression = state.playerEntities.progressions[index]
+  assert.ok(progression)
+  state.playerEntities.progressions[index] = {
+    ...progression,
+    currentHealth: 500,
+    maximumHealth: 500,
+  }
+}
+
+async function armAirTargetShield(page, host, deadline = Date.now() + 30_000) {
+  while (Date.now() < deadline) {
+    const frame = await boneyardFrame(page)
+    const target = nearestAirTarget(frame)
+    if (!target) {
+      await approachNearestAirTarget(page, frame, combatNavigation, 180)
+      continue
+    }
+    const state = host.state()
+    if (state.world.kind !== 'boneyard') throw new Error('expected a Boneyard shield proof')
+    const index = state.world.enemies.actors.findIndex(({ id }) => id === target.id)
+    const actor = state.world.enemies.actors[index]
+    if (!actor || actor.lifeState !== 'alive') continue
+    const armedTick = state.tick
+    state.world.enemies.actors[index] = {
+      ...actor,
+      shieldHealth: SHIELD_PROOF_CONTACT_HEALTH,
+      shieldMaximumHealth: SHIELD_PROOF_CONTACT_HEALTH,
+      shieldPulse: 3,
+      shieldSoundCooldownTicks: 0,
+    }
+    await page.waitForFunction(({ actorId, armedTick }) => {
+      const rendered = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+      return rendered?.tick > armedTick
+        && rendered.enemySamples.some(({ id }) => id === actorId)
+    }, { actorId: actor.id, armedTick }, { timeout: 5_000 })
+    return {
+      actorId: actor.id,
+      armedTick,
+      healthBefore: actor.currentHealth,
+      lastDamagedByPlayerIdBefore: actor.lastDamagedByPlayerId,
+      lastDamageTickBefore: actor.lastDamageTick,
+    }
+  }
+  throw new Error('no reachable enemy was available for the shield proof')
+}
+
+async function castAirForShieldBreak(page, host, armed, deadline = Date.now() + 30_000) {
+  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
+  while (Date.now() < deadline) {
+    const before = await boneyardFrame(page)
+    if (before.localPlayerLifeState !== 'alive') {
+      throw new Error(`Air caster died before the shield proof: ${JSON.stringify(before)}`)
+    }
+    const target = enemyById(before, armed.actorId)
+    if (!target || target.lifeState === 'death') {
+      throw new Error(`shield target ${armed.actorId} left living play before contact`)
+    }
+    if (!visibleEnemy(before, target) || !airPathReachesTarget(before, target)) {
+      await approachAirTarget(page, before, target, combatNavigation, 180)
+      continue
+    }
+    const point = await enemyScreenPoint(
+      canvas,
+      before,
+      target,
+      -NATIVE_POINTER_AIM_ANCHOR_Y_PIXELS,
+    )
+    assert.ok(point, 'expected the Boneyard canvas before the shield-breaking Air cast')
+    await page.bringToFront()
+    await canvas.evaluate((node, pointer) => {
+      node.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        cancelable: true,
+        clientX: pointer.x,
+        clientY: pointer.y,
+        view: window,
+      }))
+      window.dispatchEvent(new MouseEvent('mouseup', {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+        cancelable: true,
+        clientX: pointer.x,
+        clientY: pointer.y,
+        view: window,
+      }))
+    }, point)
+    // Both transitions publish in one browser task and are queued on adjacent
+    // host ticks, producing exactly one Air emission for one shield contact.
+    const frame = await waitForShieldBreakEffectFrame(page, armed.actorId)
+    const effects = shieldBreakEffectsForOwner(frame, armed.actorId)
+    const current = enemyById(frame, armed.actorId)
+    assert.ok(current, 'shield break removed the living body')
+    assert.equal(current.currentHealth, armed.healthBefore)
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard state')
+    const authoritative = state.world.enemies.actors.find(({ id }) => id === armed.actorId)
+    assert.ok(authoritative)
+    assert.equal(authoritative.currentHealth, armed.healthBefore)
+    assert.equal(
+      authoritative.lastDamagedByPlayerId,
+      armed.lastDamagedByPlayerIdBefore,
+    )
+    assert.equal(authoritative.lastDamageTick, armed.lastDamageTickBefore)
+    assert.equal(authoritative.shieldHealth, 0)
+    assert.equal(authoritative.shieldMaximumHealth, 0)
+    assert.ok(effects.every(({ alpha, entry, kind }) => (
+      alpha >= 0
+      && alpha <= 1.25
+      && entry === 69
+      && kind === 'fade'
+    )))
+    return { current, effects, frame }
+  }
+  throw new Error(`Air combat could not reach shielded actor ${armed.actorId}`)
+}
+
+async function waitForShieldBreakEffectFrame(page, actorId) {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const frame = await boneyardFrame(page)
+    if (shieldBreakEffectsForOwner(frame, actorId).length === 20) return frame
+    await page.waitForTimeout(10)
+  }
+  throw new Error(`peer did not render the 20 shield-break particles for actor ${actorId}`)
+}
+
+function shieldBreakEffectsForOwner(frame, ownerActorId) {
+  return deathEffectsForOwner(frame, ownerActorId).filter(({ entry, kind }) => (
+    entry === 69 && kind === 'fade'
+  ))
+}
+
+async function audioEventCount(page) {
+  return page.evaluate(() => window.__sdrAudioEvents.length)
+}
+
+async function waitForShieldBreakAudio(page, eventStart) {
+  await page.waitForFunction((start) => {
+    const events = window.__sdrAudioEvents.slice(start)
+    return ['hit-shield', 'pop-shield'].every((cue) => events.some(({ src, type }) => (
+      type === 'buffer-start' && src.includes(cue)
+    )))
+  }, eventStart, { timeout: 10_000 })
+  const events = await page.evaluate((start) => window.__sdrAudioEvents
+    .slice(start)
+    .filter(({ src, type }) => (
+      type === 'buffer-start'
+      && (src.includes('hit-shield') || src.includes('pop-shield'))
+    ))
+    .map(({ playbackRate, src }) => ({ playbackRate, src })), eventStart)
+  const hit = events.find(({ src }) => src.includes('hit-shield'))
+  const pop = events.find(({ src }) => src.includes('pop-shield'))
+  assert.ok(hit)
+  assert.ok(pop)
+  assert.ok(hit.playbackRate >= 0.8 && hit.playbackRate < 0.85)
+  assert.equal(pop.playbackRate, Math.fround(0.8))
+  return {
+    hitShieldRate: hit.playbackRate,
+    popShieldRate: pop.playbackRate,
   }
 }
 
@@ -1214,6 +1440,22 @@ async function approachNearestAirTarget(page, frame, navigation, durationMs) {
     await page.waitForTimeout(100)
     return false
   }
+  const start = { x: frame.playerX, y: frame.playerY }
+  const route = planAirApproachPath(
+    navigation,
+    start,
+    { x: target.x, y: target.y },
+  )
+  const waypoint = route[1]
+  if (!waypoint) return false
+  await pulseMovement(page, movementKeys({
+    x: waypoint.x - start.x,
+    y: waypoint.y - start.y,
+  }), durationMs)
+  return true
+}
+
+async function approachAirTarget(page, frame, target, navigation, durationMs) {
   const start = { x: frame.playerX, y: frame.playerY }
   const route = planAirApproachPath(
     navigation,

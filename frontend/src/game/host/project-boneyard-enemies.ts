@@ -220,6 +220,20 @@ function projectEnemyEffects(
       scale: 1,
     })
   }
+  if (actor.shieldHealth > 0) {
+    const wobble = Math.min(actor.shieldPulse, 1)
+    effects.push({
+      alpha: 0.5 * (Math.max(actor.shieldPulse, 1) - 1) + 0.25,
+      atlas: 'BadGuys',
+      blendMode: 'add',
+      entry: 49,
+      id: actor.id * 4,
+      offset: { x: 0, y: -30 },
+      role: 'magic-shield',
+      rotationRadians: 0,
+      scale: 1.5 + 0.1 * Math.sin(tick * 20 * Math.PI / 180) * wobble,
+    })
+  }
   return effects
 }
 

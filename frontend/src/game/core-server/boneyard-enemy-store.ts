@@ -253,6 +253,8 @@ export interface BoneyardEnemyActor {
   readonly rewardGranted: boolean
   readonly shieldHealth: number
   readonly shieldMaximumHealth: number
+  readonly shieldPulse: number
+  readonly shieldSoundCooldownTicks: number
   readonly sourceSpawnIntentId: number
   readonly spawnTick: number
   readonly targetPlayerId: string | null
@@ -398,11 +400,22 @@ export type BoneyardEnemyDeathSound =
   | 'zombie-die-groan'
   | 'zombie-poison-splat'
 
+export type BoneyardEnemyDamageSound =
+  | 'bone-crack'
+  | 'hit-shield'
+  | 'pop-shield'
+  | 'zombie-ouch'
+
+export type BoneyardEnemySound =
+  | BoneyardEnemyDamageSound
+  | BoneyardEnemyDeathSound
+
 export type BoneyardEnemySemanticEventType =
   | 'attack-marker'
   | 'coffin-maggot-release'
   | 'enemy-death'
   | 'enemy-death-sound'
+  | 'enemy-damage-sound'
   | 'enemy-retired'
   | 'enemy-spawned'
   | 'enemy-terminal-output'
@@ -420,7 +433,7 @@ export interface BoneyardEnemySemanticEvent {
   readonly output?: BoneyardEnemyTerminalOutput
   readonly pitch?: number
   readonly projectileId?: BoneyardEnemyProjectileId
-  readonly sound?: BoneyardEnemyDeathSound
+  readonly sound?: BoneyardEnemySound
   readonly sourcePosition?: Readonly<BoneyardPoint>
   readonly targetPosition?: Readonly<BoneyardPoint>
   readonly targetPlayerId?: string | null
@@ -538,8 +551,17 @@ export interface DamageBoneyardEnemyRequest {
 
 export interface DamageBoneyardEnemyResult {
   readonly accepted: boolean
+  readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly killed: boolean
   readonly store: BoneyardEnemyStore
+}
+
+interface DamagePresentationWork {
+  deathEffects: BoneyardEnemyDeathEffect[]
+  events: BoneyardEnemySemanticEvent[]
+  nextDeathEffectId: number
+  nextEventId: number
+  rngState: number
 }
 
 interface WorkingStep {
@@ -611,11 +633,66 @@ export function damageBoneyardEnemy(
   const actor = source.actors[index]
   if (!actor) return damageBoneyardMaggot(source, request)
   if (actor.lifeState !== 'alive') {
-    return { accepted: false, killed: false, store: source }
+    return { accepted: false, events: [], killed: false, store: source }
   }
-  const absorbed = Math.min(actor.shieldHealth, request.amount)
-  const shieldHealth = actor.shieldHealth - absorbed
-  const currentHealth = actor.currentHealth - (request.amount - absorbed)
+
+  const work: DamagePresentationWork = {
+    deathEffects: [...source.deathEffects],
+    events: [],
+    nextDeathEffectId: source.nextDeathEffectId,
+    nextEventId: source.nextEventId,
+    rngState: source.rngState,
+  }
+  if (actor.shieldHealth > 0) {
+    let shieldPulse = actor.shieldPulse
+    let shieldSoundCooldownTicks = actor.shieldSoundCooldownTicks
+    if (shieldSoundCooldownTicks <= 0) {
+      emitDamageSound(
+        work,
+        actor,
+        request.tick,
+        'hit-shield',
+        0.8 + drawDamageUnit(work) * 0.05,
+      )
+      shieldPulse = 2
+      shieldSoundCooldownTicks = 10
+    }
+    const shieldHealth = Math.max(0, actor.shieldHealth - request.amount)
+    const broke = shieldHealth === 0
+    const nextActor: BoneyardEnemyActor = {
+      ...actor,
+      shieldHealth,
+      shieldMaximumHealth: broke ? 0 : actor.shieldMaximumHealth,
+      shieldPulse,
+      shieldSoundCooldownTicks,
+    }
+    if (broke) {
+      emitDamageSound(work, actor, request.tick, 'pop-shield', 0.8)
+      spawnShieldBreakParticles(work, actor, request.tick)
+    }
+    const actors = [...source.actors]
+    actors[index] = nextActor
+    return finishDamage(source, actors, work, false)
+  }
+
+  const hurtSound = enemyHurtSound(actor)
+  if (
+    hurtSound !== null
+    && (
+      actor.lastDamageTick === null
+      || request.tick - actor.lastDamageTick >= NATIVE_ENEMY_HIT_LATCH_TICKS
+    )
+  ) {
+    emitDamageSound(
+      work,
+      actor,
+      request.tick,
+      hurtSound,
+      0.9 + drawDamageUnit(work) * 0.2,
+    )
+  }
+
+  const currentHealth = actor.currentHealth - request.amount
   const killed = currentHealth <= 0
   const nextActor: BoneyardEnemyActor = killed
     ? {
@@ -631,26 +708,18 @@ export function damageBoneyardEnemy(
         lightningEffect: null,
         shieldHealth: 0,
         shieldMaximumHealth: 0,
+        shieldPulse: 0,
+        shieldSoundCooldownTicks: 0,
       }
     : {
         ...actor,
         currentHealth,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
-        shieldHealth,
-        shieldMaximumHealth: shieldHealth === 0 ? 0 : actor.shieldMaximumHealth,
       }
   const actors = [...source.actors]
   actors[index] = nextActor
-  return {
-    accepted: true,
-    killed,
-    store: {
-      ...source,
-      actors,
-      nextDeathEpoch: source.nextDeathEpoch + (killed ? 1 : 0),
-    },
-  }
+  return finishDamage(source, actors, work, killed)
 }
 
 function damageBoneyardMaggot(
@@ -660,7 +729,7 @@ function damageBoneyardMaggot(
   const index = source.maggots.findIndex((maggot) => maggot.id === request.actorId)
   const maggot = source.maggots[index]
   if (!maggot || maggot.lifeState !== 'alive') {
-    return { accepted: false, killed: false, store: source }
+    return { accepted: false, events: [], killed: false, store: source }
   }
   const currentHealth = maggot.currentHealth - request.amount
   const killed = currentHealth <= 0
@@ -677,6 +746,7 @@ function damageBoneyardMaggot(
   maggots[index] = nextMaggot
   return {
     accepted: true,
+    events: [],
     killed,
     store: {
       ...source,
@@ -684,6 +754,114 @@ function damageBoneyardMaggot(
       nextDeathEpoch: source.nextDeathEpoch + (killed ? 1 : 0),
     },
   }
+}
+
+function finishDamage(
+  source: BoneyardEnemyStore,
+  actors: readonly BoneyardEnemyActor[],
+  work: DamagePresentationWork,
+  killed: boolean,
+): DamageBoneyardEnemyResult {
+  return {
+    accepted: true,
+    events: Object.freeze(work.events),
+    killed,
+    store: {
+      ...source,
+      actors,
+      deathEffects: work.deathEffects,
+      nextDeathEpoch: source.nextDeathEpoch + (killed ? 1 : 0),
+      nextDeathEffectId: work.nextDeathEffectId,
+      nextEventId: work.nextEventId,
+      rngState: work.rngState,
+    },
+  }
+}
+
+function enemyHurtSound(
+  actor: BoneyardEnemyActor,
+): BoneyardEnemyDamageSound | null {
+  switch (actor.config.enemyToken) {
+    case 'SKELETON':
+    case 'SKELETONARCHER':
+    case 'SKELETONMAGE':
+      return 'bone-crack'
+    case 'ZOMBIE':
+      return 'zombie-ouch'
+    case 'COFFIN':
+    case 'DEMON':
+    case 'IMP':
+    case 'WRAITH':
+      return null
+  }
+}
+
+function emitDamageSound(
+  work: DamagePresentationWork,
+  actor: DeathEffectOwner,
+  tick: number,
+  sound: BoneyardEnemyDamageSound,
+  pitch: number,
+): void {
+  work.events.push(Object.freeze({
+    actorId: actor.id,
+    eventId: work.nextEventId,
+    gainScale: 1,
+    pitch,
+    sound,
+    sourcePosition: Object.freeze({ ...actor.position }),
+    tick,
+    type: 'enemy-damage-sound',
+  }))
+  work.nextEventId += 1
+}
+
+function spawnShieldBreakParticles(
+  work: DamagePresentationWork,
+  actor: DeathEffectOwner,
+  tick: number,
+): void {
+  for (let index = 0; index < 20; index += 1) {
+    const rotationDeg = drawDamageUnit(work) * 360
+    const alpha = 0.5 + drawDamageUnit(work) * 0.75
+    const scale = 1.5 + drawDamageUnit(work) * 0.25
+    work.deathEffects.push(Object.freeze({
+      ageTicks: 0,
+      alpha,
+      alphaLossPerTick: 0.05,
+      angularVelocityDeg: 0,
+      atlas: 'BadGuys',
+      blendMode: 'add',
+      bounceVelocity: 0,
+      entry: 69,
+      firstEntry: 69,
+      frameCount: 1,
+      frameTicks: 1,
+      height: 0,
+      id: work.nextDeathEffectId,
+      kind: 'fade',
+      lastStepTick: tick,
+      lifetimeTicks: Math.ceil(alpha / 0.05),
+      opacityTimer: alpha,
+      ownerActorId: actor.id,
+      position: Object.freeze({ x: actor.position.x, y: actor.position.y - 30 }),
+      role: 'shield-break-particle',
+      rotationDeg,
+      scale,
+      shadow: false,
+      spawnTick: tick,
+      tint: 0xffffff,
+      verticalVelocity: 0,
+      velocity: Object.freeze({ x: 0, y: 0 }),
+    }))
+    work.nextDeathEffectId += 1
+  }
+}
+
+function drawDamageUnit(work: DamagePresentationWork): number {
+  const draw = nextBoneyardWaveRandom(work.rngState)
+  work.rngState = draw.state
+  return draw.value
 }
 
 export function stepBoneyardEnemyStore(
@@ -716,12 +894,16 @@ export function stepBoneyardEnemyStore(
   }
   stepDeathEffects(work, source.deathEffects, context.tick)
   for (const actor of source.actors) {
-    const stepped = actor.lifeState === 'dying'
-      ? stepDyingActor(work, actor, context)
-      : stepLivingActor(work, actor, context)
+    const timedActor = stepDamagePresentationTimers(
+      actor,
+      context.tick - source.lastStepTick,
+    )
+    const stepped = timedActor.lifeState === 'dying'
+      ? stepDyingActor(work, timedActor, context)
+      : stepLivingActor(work, timedActor, context)
     if (stepped) {
       work.actors.push(stepped)
-    } else if (actor.config.enemyToken === 'IMP') {
+    } else if (timedActor.config.enemyToken === 'IMP') {
       work.impActorCount -= 1
     }
   }
@@ -827,6 +1009,8 @@ function materializeSpawnIntents(
       rewardGranted: false,
       shieldHealth: 0,
       shieldMaximumHealth: 0,
+      shieldPulse: 0,
+      shieldSoundCooldownTicks: 0,
       sourceSpawnIntentId: intent.id,
       spawnTick: intent.spawnTick,
       targetPlayerId,
@@ -999,6 +1183,7 @@ function nearestShieldAllyIndex(
     if (index === sourceIndex) continue
     const actor = actors[index]!
     if (actor.lifeState !== 'alive') continue
+    if (!canReceiveNativeMageAllyShield(actor)) continue
     const distance = Math.hypot(
       actor.position.x - source.position.x,
       actor.position.y - source.position.y,
@@ -1018,6 +1203,21 @@ function nearestShieldAllyIndex(
   return selectedIndex
 }
 
+function canReceiveNativeMageAllyShield(actor: BoneyardEnemyActor): boolean {
+  switch (actor.config.enemyToken) {
+    case 'SKELETON':
+    case 'SKELETONARCHER':
+    case 'ZOMBIE':
+      return true
+    case 'SKELETONMAGE':
+    case 'IMP':
+    case 'WRAITH':
+    case 'DEMON':
+    case 'COFFIN':
+      return false
+  }
+}
+
 function withRefreshedShield(
   actor: BoneyardEnemyActor,
   strength: number,
@@ -1027,7 +1227,24 @@ function withRefreshedShield(
     ...actor,
     shieldHealth,
     shieldMaximumHealth: Math.max(actor.shieldMaximumHealth, shieldHealth),
+    shieldPulse: 3,
   }
+}
+
+function stepDamagePresentationTimers(
+  actor: BoneyardEnemyActor,
+  elapsedTicks: number,
+): BoneyardEnemyActor {
+  if (elapsedTicks <= 0) return actor
+  const shieldPulse = Math.max(0, actor.shieldPulse - elapsedTicks * 0.05)
+  const shieldSoundCooldownTicks = Math.max(
+    0,
+    actor.shieldSoundCooldownTicks - elapsedTicks,
+  )
+  return shieldPulse === actor.shieldPulse
+    && shieldSoundCooldownTicks === actor.shieldSoundCooldownTicks
+    ? actor
+    : { ...actor, shieldPulse, shieldSoundCooldownTicks }
 }
 
 function stepLivingActor(
@@ -2823,7 +3040,7 @@ function stepDeathEffect(
   return Object.freeze({
     ...source,
     ageTicks,
-    alpha: Math.min(1, opacityTimer),
+    alpha: opacityTimer,
     entry,
     lastStepTick: tick,
     opacityTimer,

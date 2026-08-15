@@ -21,6 +21,7 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   damageBoneyardEnemy,
   type BoneyardEnemyActor,
+  type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
   type BoneyardMaggotActor,
 } from './boneyard-enemy-store.ts'
@@ -41,6 +42,7 @@ export interface BoneyardSpellHit {
 
 export interface BoneyardSpellCombatResult {
   readonly enemies: BoneyardEnemyStore
+  readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly hits: readonly BoneyardSpellHit[]
   readonly spells: PrimarySpellSimulationState
 }
@@ -70,6 +72,7 @@ export function resolveBoneyardSpellCombat(
   const consumedProjectileIds = new Set<number>()
   const updatedProjectiles = new Map<number, PrimarySpellProjectileState>()
   const hits: BoneyardSpellHit[] = []
+  const events: BoneyardEnemySemanticEvent[] = []
   const impactTransients: PrimarySpellTransientState[] = []
   let nextSpellId = sourceSpells.nextId
 
@@ -115,6 +118,7 @@ export function resolveBoneyardSpellCombat(
         })
         if (!damaged.accepted) continue
         enemies = damaged.store
+        events.push(...damaged.events)
         hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
       }
       updatedProjectiles.set(projectile.id, { ...projectile, hitTargetIds })
@@ -143,6 +147,7 @@ export function resolveBoneyardSpellCombat(
     if (!damaged.accepted) continue
 
     enemies = damaged.store
+    events.push(...damaged.events)
     consumedProjectileIds.add(projectile.id)
     publishContactImpact(projectile, projectile.position)
     hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
@@ -179,6 +184,7 @@ export function resolveBoneyardSpellCombat(
       if (!damaged.accepted) continue
 
       enemies = damaged.store
+      events.push(...damaged.events)
       hits.push({
         actorId: actor.id,
         amount: emission.damage,
@@ -208,6 +214,7 @@ export function resolveBoneyardSpellCombat(
 
   return {
     enemies,
+    events: Object.freeze(events),
     hits: Object.freeze(hits),
     spells,
   }

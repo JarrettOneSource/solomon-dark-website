@@ -19,10 +19,10 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 8
-const SAMPLE_LENGTH = 62
+const SAMPLE_LENGTH = 72
 const EFFECT_COMPONENT_OFFSET = 32
 const EFFECT_COMPONENT_COUNT = 10
-const MAX_EFFECTS = 3
+const MAX_EFFECTS = 4
 
 const FAMILIES = [
   'SKELETON',
@@ -316,7 +316,11 @@ function effectComponentsAreValid(sample: ReplicatedEntitySample): boolean {
       || !entityId(id)
       || id === 0
       || sample[offset + 5] < 0
-      || sample[offset + 5] > VALUE_SCALE
+      || sample[offset + 5] > VALUE_SCALE * 1.25
+      || (
+        BONEYARD_ENEMY_EFFECT_ROLES[role] !== 'magic-shield'
+        && sample[offset + 5] > VALUE_SCALE
+      )
       || sample[offset + 9] <= 0
       || !effectShapeMatchesRole(role, atlas, blendMode, entry)
       || ids.has(id)
@@ -336,6 +340,7 @@ function effectShapeMatchesRole(
 ): boolean {
   switch (BONEYARD_ENEMY_EFFECT_ROLES[role]) {
     case 'burning-fire': return atlas === 1 && blendMode === 1 && entry >= 46 && entry <= 77
+    case 'magic-shield': return atlas === 0 && blendMode === 0 && entry === 49
     case 'mage-lightning-source': return atlas === 0 && blendMode === 0 && entry === 381
     case 'mage-lightning-target': return atlas === 0 && blendMode === 0 && entry === 382
     default: return false

@@ -34,7 +34,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION = {
       && sample[0] === BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID
       && positiveEntityId(sample[1])
       && sample.slice(2).every(Number.isSafeInteger)
-      && sample[5] >= 0 && sample[5] <= VALUE_SCALE
+      && sample[5] >= 0 && sample[5] <= VALUE_SCALE * 1.25
       && sample[6] > 0
       && nonnegativeInteger(sample[7])
       && sample[8] >= 0 && sample[8] <= 0xffffff
@@ -88,10 +88,20 @@ export function materializeBoneyardEnemyDeathEffect(
   if (descriptor[1] !== sample[1]) {
     throw new Error('Boneyard enemy death-effect sample identity does not match its descriptor')
   }
+  const alpha = dequantize(sample[5], VALUE_SCALE)
+  const maximumAlpha = ATLASES[descriptor[4]] === 'BadGuys'
+    && BLEND_MODES[descriptor[5]] === 'add'
+    && sample[7] === 69
+    && BONEYARD_ENEMY_DEATH_EFFECT_KINDS[descriptor[3]] === 'fade'
+    ? 1.25
+    : 1
+  if (alpha > maximumAlpha) {
+    throw new Error('Boneyard enemy death-effect alpha exceeds its native shape')
+  }
   const height = dequantize(sample[10], POSITION_SCALE)
   return {
     ageTicks: sample[9],
-    alpha: dequantize(sample[5], VALUE_SCALE),
+    alpha,
     atlas: ATLASES[descriptor[4]]!,
     blendMode: BLEND_MODES[descriptor[5]]!,
     entry: sample[7],
