@@ -6,8 +6,12 @@ import type {
 import {
   nativeFireParticleFadeStep,
   nativeFirePresentationRandom,
+  nativeFirePresentationRandomInt,
 } from '../core-kernels/primary-spell-fire-native.ts'
-import type { NativeBoneyardLightSource } from './boneyard-lighting.ts'
+import {
+  NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+  type NativeBoneyardLightSource,
+} from './boneyard-lighting.ts'
 
 export const NATIVE_FIREBALL_CORE_RECORD = 110
 export const NATIVE_FIREBALL_FRAME_FIRST = 255
@@ -82,7 +86,7 @@ export function nativeFireballPlan(
     % NATIVE_FIREBALL_FRAME_COUNT
   const rotation = Math.atan2(state.direction.y, state.direction.x) + Math.PI / 2
   const coreAlpha = 0.2
-    + nativeFirePresentationRandom(state.id, presentationSample, 7) * 0.25
+    + nativeFirePresentationRandom(state.id, presentationSample, 7, 0.25)
   const common = {
     rotation,
     x: 0,
@@ -132,8 +136,8 @@ export function nativeFireballPlan(
 export function nativeFireParticlePlan(
   state: PrimarySpellFireParticleState,
 ): NativeFireParticlePlan {
-  const angle = nativeFirePresentationRandom(state.id, 0, 0) * Math.PI * 2
-  const radius = nativeFirePresentationRandom(state.id, 0, 1) * 10
+  const angle = nativeFirePresentationRandom(state.id, 0, 0, Math.PI * 2)
+  const radius = nativeFirePresentationRandom(state.id, 0, 1, 10)
   const ageTicks = state.ageTicks
   const travel = -10 + ageTicks * 2
   const position = {
@@ -150,7 +154,7 @@ export function nativeFireParticlePlan(
     position,
     regionLightPoint: null,
     rotation: (
-      nativeFirePresentationRandom(state.id, 0, 2) * 360 + ageTicks
+      nativeFirePresentationRandom(state.id, 0, 2, 360) + ageTicks
     ) * Math.PI / 180,
     scale: (
       nativeFirePresentationRandom(state.id, 0, 3) + 0.5
@@ -165,11 +169,13 @@ export function nativeFireImpactPlan(
 ): NativeFireImpactPlan {
   const ageTicks = state.ageTicks
   const frameIndex = Math.floor(ageTicks / NATIVE_FIRE_IMPACT_TICKS_PER_FRAME)
-  const scale = 1 + nativeFirePresentationRandom(state.id, 0, 9) * 0.1
+  const scale = 1 + nativeFirePresentationRandom(state.id, 0, 9, 0.1)
   const angularMagnitude = 0.5 + nativeFirePresentationRandom(state.id, 0, 11)
-  const angularDirection = nativeFirePresentationRandom(state.id, 0, 13) < 0.5 ? -1 : 1
+  const angularDirection = nativeFirePresentationRandomInt(state.id, 0, 13, 2) === 1
+    ? -1
+    : 1
   const rotation = (
-    nativeFirePresentationRandom(state.id, 0, 10) * 360
+    nativeFirePresentationRandom(state.id, 0, 10, 360)
     + angularDirection * angularMagnitude * ageTicks
   ) * Math.PI / 180
   const position = {
@@ -228,13 +234,14 @@ export function nativeFireballLightSource(
 ): NativeBoneyardLightSource {
   return {
     intensity: 0.75,
-    castsDirectionalShadow: false,
+    castsDirectionalShadow: NATIVE_DEFAULT_MULTIPLE_SHADOWS,
     position: { ...state.position },
-    radius: 1 + nativeFirePresentationRandom(
+    radius: Math.fround(1 + nativeFirePresentationRandom(
       state.id,
       Math.floor(presentationFrame),
       8,
-    ) * 0.25,
+      0.25,
+    )),
   }
 }
 

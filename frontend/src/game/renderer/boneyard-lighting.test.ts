@@ -1,37 +1,455 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import type {
+  BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemySnapshot,
+} from '../protocol/game-state.ts'
+import type {
+  PrimarySpellEtherImpactState,
+  PrimarySpellFireImpactState,
+  PrimarySpellFireProjectileState,
+} from '../core-kernels/primary-spells.ts'
 import {
+  nativeRandomFloatFromSemanticWord,
+  nativeRandomIntFromSemanticWord,
+  nativeSignedRandomFloatFromSemanticWords,
+} from '../core-kernels/native-random-domain.ts'
+import {
+  NATIVE_DEFAULT_LIGHT_QUALITY,
+  NATIVE_DEFAULT_MULTIPLE_SHADOWS,
   NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
   NATIVE_LANTERN_LIGHT_FLICKER,
+  NATIVE_LIGHT_GRID_CELL_SIZE,
+  NATIVE_LOW_CAPABILITY_LIGHT_QUALITY,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+  NATIVE_PLAYER_LIGHT_RASTER_JITTER,
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NATIVE_REGION_LIGHT_ENTRY,
+  NativeBoneyardLightIndex,
+  type NativeBoneyardLightSource,
   nativeAcceptedBoneyardLightSources,
+  nativeBoulderLightSource,
   nativeBoneyardLightScalar,
   nativeBoneyardLightTint,
+  nativeBoneyardLightVisibleInManager,
+  nativeEnemyProjectileLightProvider,
+  nativeEnemyLightSources,
   nativeLanternLightSource,
+  nativeMissileLightSource,
   nativePlayerLightSource,
+  nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
   nativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
+import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
+import {
+  nativeFireballLightSource,
+  nativeFireImpactLightSource,
+} from './primary-spell-fire-native.ts'
+import {
+  buildNativeAirContactLightSource,
+  buildNativeAirPathLightSources,
+} from './primary-spell-air-native.ts'
+import { nativeMageLightningPulsePlan } from './native-mage-lightning-pulse-presentation.ts'
+
+const LIGHT_VIEW = {
+  camera: { x: 800, y: 450, zoom: 1 },
+  viewport: { height: 900, width: 1_600 },
+}
+
+const WIDE_ZOOMED_LIGHT_VIEW = {
+  camera: { x: 800, y: 450, zoom: 1.35 },
+  viewport: { height: 900, width: 1_600 },
+}
+
+const PORTRAIT_ZOOMED_LIGHT_VIEW = {
+  camera: { x: 195, y: 422, zoom: 1.35 },
+  viewport: { height: 844, width: 390 },
+}
+
+const FLOAT32_STEP_BUFFER = new ArrayBuffer(4)
+const FLOAT32_STEP_VIEW = new DataView(FLOAT32_STEP_BUFFER)
+
+function adjacentFloat32(value: number, direction: -1 | 1): number {
+  const rounded = Math.fround(value)
+  FLOAT32_STEP_VIEW.setFloat32(0, rounded)
+  const bits = FLOAT32_STEP_VIEW.getUint32(0)
+  const step = (rounded > 0) === (direction > 0) ? 1 : -1
+  FLOAT32_STEP_VIEW.setUint32(0, bits + step)
+  return FLOAT32_STEP_VIEW.getFloat32(0)
+}
+
+test('matches the native inclusive random lattice, biased reducer, and signed draw', () => {
+  assert.equal(nativeRandomIntFromSemanticWord(0, 100_001), 0)
+  assert.equal(nativeRandomIntFromSemanticWord(64, 100_001), 1)
+  assert.equal(nativeRandomIntFromSemanticWord(99_999 * 64, 100_001), 99_999)
+  assert.equal(nativeRandomIntFromSemanticWord(100_000 * 64, 100_001), 100_000)
+  assert.equal(nativeRandomIntFromSemanticWord(100_001 * 64, 100_001), 0)
+
+  assert.equal(nativeRandomFloatFromSemanticWord(0), 0)
+  assert.equal(nativeRandomFloatFromSemanticWord(64), 0.000009999999747378752)
+  assert.equal(nativeRandomFloatFromSemanticWord(99_999 * 64), 0.9999899864196777)
+  assert.equal(nativeRandomFloatFromSemanticWord(100_000 * 64), 1)
+  assert.equal(
+    nativeRandomFloatFromSemanticWord(100_000 * 64, 0.2),
+    0.20000000298023224,
+  )
+
+  assert.equal(nativeRandomIntFromSemanticWord(8 * 64, 9), 8)
+  assert.equal(nativeRandomIntFromSemanticWord(9 * 64, 9), 0)
+  assert.equal(
+    nativeSignedRandomFloatFromSemanticWords(100_000 * 64, 0, 0.1),
+    0.10000000149011612,
+  )
+  assert.equal(
+    nativeSignedRandomFloatFromSemanticWords(100_000 * 64, 64, 0.1),
+    -0.10000000149011612,
+  )
+  assert.equal(
+    Object.is(nativeSignedRandomFloatFromSemanticWords(0, 64, 0.1), -0),
+    true,
+  )
+})
+
+function enemyProjectile(
+  overrides: Partial<BoneyardEnemyProjectileSnapshot> = {},
+): BoneyardEnemyProjectileSnapshot {
+  return {
+    ageTicks: 3,
+    contactRadius: 12,
+    headingDeg: 90,
+    homing: false,
+    id: 17,
+    kind: 'arrow',
+    lightRegistration: null,
+    lifetimeTicks: 100,
+    nativeTypeId: 0x7da,
+    ownerActorId: 9,
+    payload: 'normal',
+    position: { x: 31, y: 47 },
+    spawnTick: 80,
+    ...overrides,
+  }
+}
+
+function enemy(
+  enemyToken: BoneyardEnemySnapshot['enemyToken'],
+  overrides: Partial<Omit<BoneyardEnemySnapshot, 'animation' | 'enemyToken'>> & {
+    animation?: Partial<BoneyardEnemySnapshot['animation']>
+  } = {},
+): BoneyardEnemySnapshot {
+  return {
+    animation: {
+      action: null,
+      actionProgress: 0,
+      alpha: 1,
+      bodyPose: 0,
+      coffinPose: 0,
+      coffinSecondaryPose: null,
+      coffinState: 'closed',
+      deathEpoch: 0,
+      deathTick: 0,
+      demonFrontJointRotationRadians: 0,
+      demonFrontLimbRotationRadians: 0,
+      demonRearJointRotationRadians: 0,
+      demonRearLimbRotationRadians: 0,
+      effects: [],
+      gaitPose: 0,
+      hitFlash: 0,
+      impEffectFrame: -1,
+      maggots: [],
+      state: 'idle',
+      verticalOffset: 0,
+      zombieAngularOffsetDeg: 0,
+      zombieFrontArmPose: 0,
+      zombieFrontArmRotationRadians: 0,
+      zombieRearArmPose: 0,
+      zombieRearArmRotationRadians: 0,
+      ...overrides.animation,
+    },
+    armored: false,
+    currentHealth: 5,
+    enemyToken,
+    flags: [],
+    headingDeg: 0,
+    id: 23,
+    lightRegistration: null,
+    lighting: { charge: 0, glow: 0, providerCopies: 0 },
+    maximumHealth: 5,
+    nativeTypeId: 1_001,
+    position: { x: 20, y: 30 },
+    shieldHealth: 0,
+    shieldMaximumHealth: 0,
+    spawnTick: 1,
+    ...overrides,
+  }
+}
 
 test('anchors the ordinary player light fifteen units along native heading', () => {
-  assert.deepEqual(nativePlayerLightSource({
+  const forward = nativePlayerLightSource({
     headingIndex: 0,
+    id: 'player-a',
+    lighting: {
+      driveActive: false,
+      overlayEffectPhase: 0,
+    },
     position: { x: 100, y: 200 },
-  }), {
-    intensity: 1,
-    castsDirectionalShadow: true,
-    position: { x: 100, y: 185 },
-    radius: 2.6,
-  })
+  }, 7, false)!
+  assert.equal(forward.intensity, 1)
+  assert.equal(forward.castsDirectionalShadow, true)
+  assert.deepEqual(forward.position, { x: 100, y: 185 })
+  assert.equal(forward.radius, 2.5999999046325684)
+  assert.ok(
+    forward.rasterScale >= Math.fround(
+      NATIVE_PLAYER_LIGHT_RADIUS - Math.fround(NATIVE_PLAYER_LIGHT_RASTER_JITTER),
+    )
+    && forward.rasterScale <= NATIVE_PLAYER_LIGHT_RADIUS,
+  )
   const right = nativePlayerLightSource({
     headingIndex: 6,
+    id: 'player-a',
+    lighting: {
+      driveActive: false,
+      overlayEffectPhase: 0,
+    },
     position: { x: 100, y: 200 },
-  })
+  }, 7, false)!
   assert.ok(Math.abs(right.position.x - 115) < 1e-12)
   assert.ok(Math.abs(right.position.y - 200) < 1e-12)
+})
+
+test('matches the native player drive/local gate matrix and authoritative overlay radius', () => {
+  for (const { driveActive, isLocalPlayer, providerPresent } of [
+    { driveActive: false, isLocalPlayer: false, providerPresent: true },
+    { driveActive: false, isLocalPlayer: true, providerPresent: true },
+    { driveActive: true, isLocalPlayer: false, providerPresent: false },
+    { driveActive: true, isLocalPlayer: true, providerPresent: true },
+  ]) {
+    const source = nativePlayerLightSource({
+      headingIndex: 0,
+      id: 'player-a',
+      lighting: {
+        driveActive,
+        overlayEffectPhase: 0.25,
+      },
+      position: { x: 100, y: 200 },
+    }, 10, isLocalPlayer)
+    assert.equal(
+      source !== null,
+      providerPresent,
+      `drive=${driveActive}, local=${isLocalPlayer}`,
+    )
+  }
+
+  const localPlayer = {
+    headingIndex: 0,
+    id: 'player-a',
+    lighting: {
+      driveActive: true,
+      overlayEffectPhase: 0.25,
+    },
+    position: { x: 100, y: 200 },
+  }
+  const local = nativePlayerLightSource(localPlayer, 10, true)!
+  assert.ok(Math.abs(local.radius - 1.25 * 2.5999999046325684) < 1e-6)
+  const nextFrame = nativePlayerLightSource(localPlayer, 11, true)!
+  assert.equal(nextFrame.radius, local.radius)
+  assert.notEqual(nextFrame.rasterScale, local.rasterScale)
+})
+
+test('culls providers against the native camera-relative manager rectangle before admission', () => {
+  const source = {
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: -145, y: 100 },
+    radius: 1,
+  }
+  assert.equal(nativeBoneyardLightVisibleInManager(source, LIGHT_VIEW), false)
+  assert.equal(nativeBoneyardLightVisibleInManager({
+    ...source,
+    position: { x: -144.99, y: 100 },
+  }, LIGHT_VIEW), true)
+  assert.equal(nativeBoneyardLightVisibleInManager({
+    ...source,
+    position: { x: 2_145, y: 100 },
+  }, LIGHT_VIEW), false)
+})
+
+test('pins all strict manager-edge tangencies for wide and portrait zoom-1.35 views', () => {
+  const cases = [
+    {
+      axis: 'x',
+      edge: 'left',
+      inward: 1,
+      position: { x: 62.40741729736328, y: 1335.4166259765625 },
+      view: WIDE_ZOOMED_LIGHT_VIEW,
+      viewport: 'wide',
+    },
+    {
+      axis: 'x',
+      edge: 'right',
+      inward: -1,
+      position: { x: 2352.407470703125, y: 1335.4166259765625 },
+      view: WIDE_ZOOMED_LIGHT_VIEW,
+      viewport: 'wide',
+    },
+    {
+      axis: 'y',
+      edge: 'top',
+      inward: 1,
+      position: {
+        x: Math.fround(120_740_735 / 100_000),
+        y: Math.fround(-28_333_328 / 1_000_000),
+      },
+      view: WIDE_ZOOMED_LIGHT_VIEW,
+      viewport: 'wide',
+    },
+    {
+      axis: 'y',
+      edge: 'bottom',
+      inward: -1,
+      position: { x: Math.fround(120_740_735 / 100_000), y: 2699.166748046875 },
+      view: WIDE_ZOOMED_LIGHT_VIEW,
+      viewport: 'wide',
+    },
+    {
+      axis: 'x',
+      edge: 'left',
+      inward: 1,
+      position: { x: -94.4444351196289, y: 855.6574096679688 },
+      view: PORTRAIT_ZOOMED_LIGHT_VIEW,
+      viewport: 'portrait',
+    },
+    {
+      axis: 'x',
+      edge: 'right',
+      inward: -1,
+      position: { x: 1250.5555419921875, y: 855.6574096679688 },
+      view: PORTRAIT_ZOOMED_LIGHT_VIEW,
+      viewport: 'portrait',
+    },
+    {
+      axis: 'y',
+      edge: 'top',
+      inward: 1,
+      position: { x: 578.0555419921875, y: -35.59258270263672 },
+      view: PORTRAIT_ZOOMED_LIGHT_VIEW,
+      viewport: 'portrait',
+    },
+    {
+      axis: 'y',
+      edge: 'bottom',
+      inward: -1,
+      position: { x: 578.0555419921875, y: 1746.9073486328125 },
+      view: PORTRAIT_ZOOMED_LIGHT_VIEW,
+      viewport: 'portrait',
+    },
+  ] as const
+
+  const index = new NativeBoneyardLightIndex({ height: 4_000, width: 4_000 })
+  for (const edgeCase of cases) {
+    for (const castsDirectionalShadow of [false, true]) {
+      const tangent: NativeBoneyardLightSource = {
+        castsDirectionalShadow,
+        intensity: 1,
+        position: edgeCase.position,
+        radius: 1,
+      }
+      const inward: NativeBoneyardLightSource = {
+        ...tangent,
+        position: {
+          ...tangent.position,
+          [edgeCase.axis]: adjacentFloat32(
+            tangent.position[edgeCase.axis],
+            edgeCase.inward,
+          ),
+        },
+      }
+      const label = [
+        edgeCase.viewport,
+        edgeCase.edge,
+        `Multiple Shadows ${castsDirectionalShadow}`,
+      ].join(' ')
+
+      assert.equal(
+        nativeBoneyardLightVisibleInManager(tangent, edgeCase.view),
+        false,
+        `${label} tangent`,
+      )
+      assert.equal(
+        nativeBoneyardLightVisibleInManager(inward, edgeCase.view),
+        true,
+        `${label} inward float32`,
+      )
+      assert.equal(index.rebuild([tangent], [], edgeCase.view).length, 0, `${label} provider`)
+      assert.equal(index.rebuild([inward], [], edgeCase.view).length, 1, `${label} provider in`)
+      assert.equal(index.rebuild([], [tangent], edgeCase.view).length, 0, `${label} Misc`)
+      assert.equal(index.rebuild([], [inward], edgeCase.view).length, 1, `${label} Misc in`)
+    }
+  }
+})
+
+test('manager cull uses analytic radius and never the Region raster scale', () => {
+  const position = { x: 62.40741729736328, y: 1335.4166259765625 }
+  for (const rasterScale of [0.001, 10_000]) {
+    assert.equal(nativeBoneyardLightVisibleInManager({
+      castsDirectionalShadow: true,
+      intensity: 1,
+      position,
+      radius: 1,
+      rasterScale,
+    }, WIDE_ZOOMED_LIGHT_VIEW), false)
+  }
+  assert.equal(nativeBoneyardLightVisibleInManager({
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position,
+    radius: 2,
+    rasterScale: 0.001,
+  }, WIDE_ZOOMED_LIGHT_VIEW), true)
+})
+
+test('normalizes the submitted light ABI to float32 and keeps raster scale separate', () => {
+  const index = new NativeBoneyardLightIndex({ height: 600, width: 600 })
+  const accepted = index.rebuild([{
+    castsDirectionalShadow: true,
+    intensity: 0.85,
+    position: { x: 0.1, y: -0.1 },
+    radius: 0.6,
+    rasterScale: 2.6,
+  }], [], LIGHT_VIEW)
+  assert.deepEqual(accepted, [{
+    castsDirectionalShadow: true,
+    intensity: Math.fround(0.85),
+    position: { x: Math.fround(0.1), y: Math.fround(-0.1) },
+    radius: Math.fround(0.6),
+    rasterScale: Math.fround(2.6),
+  }])
+
+  const submitted = accepted[0]!
+  assert.equal(nativeBoneyardLightScalar(submitted.position, index), submitted.intensity)
+  assert.equal(nativeBoneyardLightScalar({
+    x: submitted.position.x + submitted.radius * 145,
+    y: submitted.position.y,
+  }, index), 0)
+  assert.equal(nativeRegionLightStamp(
+    submitted,
+    { x: 400, y: 300 },
+    { anchorX: 168, anchorY: 153, h: 305, w: 336 },
+    1.35,
+  ).scale, Math.fround(2.6) * 1.35)
+
+  for (const castsDirectionalShadow of [false, true]) {
+    assert.equal(nativeBoneyardLightVisibleInManager({
+      castsDirectionalShadow,
+      intensity: 1,
+      position: { x: -145, y: 100 },
+      radius: 1,
+      rasterScale: 100,
+    }, LIGHT_VIEW), false)
+  }
 })
 
 test('uses the recovered elliptical plateau, squared falloff, and outer edge', () => {
@@ -58,10 +476,489 @@ test('takes the native maximum contribution and keeps Lantern flicker cosmetic',
   ))
   assert.ok(samples.every((sample) => (
     sample >= NATIVE_LANTERN_LIGHT_MIN_INTENSITY
-    && sample < NATIVE_LANTERN_LIGHT_MIN_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER
+    && sample <= NATIVE_LANTERN_LIGHT_MIN_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER
   )))
   assert.ok(new Set(samples).size > 60)
-  assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).castsDirectionalShadow, false)
+  assert.equal(NATIVE_DEFAULT_MULTIPLE_SHADOWS, true)
+  assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).castsDirectionalShadow, true)
+  assert.equal(
+    nativeLanternLightSource({ x: 4, y: 5 }, 0, false).castsDirectionalShadow,
+    false,
+  )
+})
+
+test('uses the shipped Windows light-quality profile and a square low-resolution target', () => {
+  assert.equal(NATIVE_DEFAULT_LIGHT_QUALITY, 0.25)
+  assert.equal(NATIVE_LOW_CAPABILITY_LIGHT_QUALITY, Math.fround(0.06))
+  assert.deepEqual(nativeRegionLightTargetPlan(
+    { height: 390, width: 844 },
+    2,
+  ), {
+    logicalSide: 844,
+    physicalSide: 422,
+    renderResolution: 0.5,
+  })
+  assert.deepEqual(nativeRegionLightTargetPlan(
+    { height: 801, width: 390 },
+    1.25,
+  ), {
+    logicalSide: 801,
+    physicalSide: 250,
+    renderResolution: 250 / 801,
+  })
+})
+
+test('publishes currently modeled Ether and Earth providers through native defaults', () => {
+  const missile = nativeMissileLightSource(
+    { id: 9, position: { x: 10, y: 20 } },
+    41,
+  )
+  assert.deepEqual(missile.position, { x: 10, y: 20 })
+  assert.equal(missile.intensity, 0.75)
+  assert.ok(missile.radius >= 0.75 && missile.radius <= Math.fround(
+    Math.fround(0.75) + Math.fround(0.1),
+  ))
+  assert.equal(missile.castsDirectionalShadow, true)
+  assert.deepEqual(nativeBoulderLightSource({
+    charge: 0.3,
+    position: { x: 30, y: 40 },
+  }), {
+    castsDirectionalShadow: true,
+    intensity: 0.5,
+    position: { x: 30, y: 40 },
+    radius: 1,
+  })
+  assert.equal(nativeBoulderLightSource({
+    charge: 0.8,
+    position: { x: 30, y: 40 },
+  }).radius, 1.6)
+})
+
+test('table-drives every source-family disposition exposed by the pure lighting adapters', () => {
+  type SourceLane = 'actor' | 'misc' | 'none' | 'transient'
+  interface SourceProjection {
+    lane: SourceLane
+    sources: readonly NativeBoneyardLightSource[]
+  }
+  interface SourceFamilyRow {
+    directional?: boolean
+    expectedCount: number
+    expectedLane: SourceLane
+    family: string
+    project: () => SourceProjection
+  }
+
+  const none = (): SourceProjection => ({ lane: 'none', sources: [] })
+  const projectSources = (
+    lane: Exclude<SourceLane, 'none'>,
+    sources: readonly NativeBoneyardLightSource[],
+  ): SourceProjection => sources.length === 0 ? none() : { lane, sources }
+  const projectPlayer = (driveActive: boolean, isLocalPlayer: boolean): SourceProjection => {
+    const source = nativePlayerLightSource({
+      headingIndex: 0,
+      id: 'player-a',
+      lighting: {
+        driveActive,
+        overlayEffectPhase: 0,
+      },
+      position: { x: 100, y: 200 },
+    }, 12, isLocalPlayer)
+    return source ? projectSources('actor', [source]) : none()
+  }
+  const projectEnemyProjectile = (
+    overrides: Partial<BoneyardEnemyProjectileSnapshot>,
+  ): SourceProjection => {
+    const candidate = nativeEnemyProjectileLightProvider(
+      enemyProjectile(overrides),
+      12,
+    )
+    return candidate ? projectSources(candidate.lane, [candidate.source]) : none()
+  }
+
+  const fireball: PrimarySpellFireProjectileState = {
+    ageTicks: 1,
+    charge: 1,
+    damage: 4,
+    direction: { x: 1, y: 0 },
+    flightTicks: 1,
+    id: 41,
+    kind: 'fire',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 41 },
+    ownerId: 'player-a',
+    phase: 'flight',
+    position: { x: 400, y: 300 },
+    velocity: { x: 4.5, y: 0 },
+    worldKey: 'boneyard:run',
+  }
+  const etherImpact: PrimarySpellEtherImpactState = {
+    ageTicks: 0,
+    birthTick: 20,
+    id: 42,
+    kind: 'ether-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 42 },
+    origin: { x: 400, y: 300 },
+    ownerId: 'player-a',
+    worldKey: 'boneyard:run',
+  }
+  const fireImpact: PrimarySpellFireImpactState = {
+    ageTicks: 0,
+    id: 43,
+    kind: 'fire-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 43 },
+    origin: { x: 400, y: 300 },
+    ownerId: 'player-a',
+    worldKey: 'boneyard:run',
+  }
+  const airPathInput = {
+    birthTick: 20,
+    endpoint: { x: 650, y: 0 },
+    id: 44,
+    midpoint: { x: 350, y: 0 },
+    origin: { x: 0, y: 0 },
+  }
+  const magePulse = nativeMageLightningPulsePlan({
+    contact: { kind: 'world', position: { x: 650, y: 0 } },
+    endpoint: { x: 650, y: 0 },
+    midpoint: { x: 350, y: 0 },
+    seed: 45,
+    source: { x: 0, y: 0 },
+    tick: 20,
+  }, 20)!
+
+  const rows: readonly SourceFamilyRow[] = [
+    {
+      directional: true,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: 'ordinary player',
+      project: () => projectPlayer(false, false),
+    },
+    {
+      expectedCount: 0,
+      expectedLane: 'none',
+      family: 'remote driven player',
+      project: () => projectPlayer(true, false),
+    },
+    {
+      directional: true,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: 'Lantern',
+      project: () => projectSources(
+        'actor',
+        [nativeLanternLightSource({ x: 400, y: 300 }, 12)],
+      ),
+    },
+    ...([
+      ['SKELETON', true, { charge: 0, glow: 1, providerCopies: 1 }],
+      ['SKELETONARCHER', true, { charge: 1, glow: 0, providerCopies: 1 }],
+      ['SKELETONMAGE', true, { charge: 1, glow: 0, providerCopies: 1 }],
+      ['IMP', false, { charge: 0, glow: 1, providerCopies: 1 }],
+      ['WRAITH', true, { charge: 0, glow: 1, providerCopies: 1 }],
+      ['DEMON', true, { charge: 0, glow: 0, providerCopies: 1 }],
+      ['COFFIN', true, { charge: 0, glow: 0, providerCopies: 1 }],
+    ] as const).map(([enemyToken, directional, lighting]): SourceFamilyRow => ({
+      directional,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: `enemy ${enemyToken}`,
+      project: () => projectSources(
+        'actor',
+        nativeEnemyLightSources(enemy(enemyToken, { lighting }), 12),
+      ),
+    })),
+    {
+      expectedCount: 0,
+      expectedLane: 'none',
+      family: 'enemy ZOMBIE',
+      project: () => projectSources('actor', nativeEnemyLightSources(enemy('ZOMBIE', {
+        lighting: { charge: 1, glow: 1, providerCopies: 1 },
+      }), 12)),
+    },
+    {
+      directional: true,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: 'Earth Boulder',
+      project: () => projectSources('actor', [nativeBoulderLightSource({
+        charge: 1,
+        position: { x: 400, y: 300 },
+      })]),
+    },
+    {
+      directional: true,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: 'Ether Magic Missile',
+      project: () => projectSources('actor', [nativeMissileLightSource({
+        id: 40,
+        position: { x: 400, y: 300 },
+      }, 12)]),
+    },
+    {
+      directional: true,
+      expectedCount: 1,
+      expectedLane: 'actor',
+      family: 'Fireball',
+      project: () => projectSources('actor', [nativeFireballLightSource(fireball, 12)]),
+    },
+    ...([
+      ['enemy arrow normal', 'none', false, { payload: 'normal' }],
+      ['enemy arrow poison', 'none', false, { payload: 'poison' }],
+      ['enemy arrow fire', 'transient', false, { payload: 'fire' }],
+      ['enemy firebolt', 'transient', false, {
+        kind: 'firebolt', nativeTypeId: 0x7eb, payload: 'fire',
+      }],
+      ['enemy guided cold', 'actor', true, {
+        kind: 'guided-missile', nativeTypeId: 0x7ec, payload: 'cold',
+      }],
+      ['enemy guided poison', 'actor', true, {
+        kind: 'guided-missile', nativeTypeId: 0x7ec, payload: 'poison',
+      }],
+      ['enemy DemonBomb', 'actor', false, {
+        kind: 'demon-bomb', nativeTypeId: 0x7f7, payload: 'none',
+      }],
+      ['enemy PoisonPool', 'none', false, {
+        kind: 'poison-pool', nativeTypeId: 0x806, payload: 'poison',
+      }],
+    ] as const).map(([family, expectedLane, directional, overrides]): SourceFamilyRow => ({
+      ...(expectedLane === 'none' ? {} : { directional }),
+      expectedCount: expectedLane === 'none' ? 0 : 1,
+      expectedLane,
+      family,
+      project: () => projectEnemyProjectile(overrides),
+    })),
+    {
+      directional: false,
+      expectedCount: 1,
+      expectedLane: 'transient',
+      family: 'Air contact ZAnimLit',
+      project: () => {
+        const source = buildNativeAirContactLightSource({
+          ageTicks: 0,
+          endpoint: { x: 650, y: 0 },
+          id: 44,
+          origin: { x: 0, y: 0 },
+        })
+        return source ? projectSources('transient', [source]) : none()
+      },
+    },
+    {
+      expectedCount: 0,
+      expectedLane: 'none',
+      family: 'expired Air contact ZAnimLit',
+      project: () => {
+        const source = buildNativeAirContactLightSource({
+          ageTicks: 5,
+          endpoint: { x: 650, y: 0 },
+          id: 44,
+          origin: { x: 0, y: 0 },
+        })
+        return source ? projectSources('transient', [source]) : none()
+      },
+    },
+    {
+      directional: true,
+      expectedCount: 5,
+      expectedLane: 'misc',
+      family: 'Air factory path MiscLights',
+      project: () => projectSources('misc', buildNativeAirPathLightSources(airPathInput)),
+    },
+    {
+      directional: false,
+      expectedCount: 1,
+      expectedLane: 'transient',
+      family: 'Ether impact ZAnimLit',
+      project: () => projectSources('transient', [etherPrimaryImpactLightSource(etherImpact)]),
+    },
+    {
+      directional: false,
+      expectedCount: 1,
+      expectedLane: 'transient',
+      family: 'Fire impact provider',
+      project: () => projectSources('transient', [nativeFireImpactLightSource(fireImpact)]),
+    },
+    {
+      directional: true,
+      expectedCount: 5,
+      expectedLane: 'misc',
+      family: 'Mage Air factory path MiscLights',
+      project: () => projectSources('misc', magePulse.pathLights),
+    },
+  ]
+
+  assert.equal(new Set(rows.map(({ family }) => family)).size, rows.length)
+  for (const row of rows) {
+    const projection = row.project()
+    assert.equal(projection.lane, row.expectedLane, `${row.family} lane`)
+    assert.equal(projection.sources.length, row.expectedCount, `${row.family} count`)
+    if (row.directional !== undefined) {
+      assert.ok(
+        projection.sources.every(({ castsDirectionalShadow }) => (
+          castsDirectionalShadow === row.directional
+        )),
+        `${row.family} Multiple Shadows`,
+      )
+    }
+  }
+})
+
+test('exhaustively maps modeled enemy projectiles onto native provider lanes', () => {
+  assert.equal(nativeEnemyProjectileLightProvider(enemyProjectile(), 11), null)
+  assert.equal(nativeEnemyProjectileLightProvider(enemyProjectile({
+    payload: 'poison',
+  }), 11), null)
+
+  const fireArrow = nativeEnemyProjectileLightProvider(enemyProjectile({
+    payload: 'fire',
+  }), 11)
+  assert.equal(fireArrow?.lane, 'transient')
+  assert.equal(fireArrow?.source.castsDirectionalShadow, false)
+  assert.equal(fireArrow?.source.intensity, 0.85)
+  assert.deepEqual(fireArrow?.source.position, { x: 31, y: 47 })
+  assert.ok(fireArrow!.source.radius >= 0.5 && fireArrow!.source.radius <= 0.75)
+
+  const firebolt = nativeEnemyProjectileLightProvider(enemyProjectile({
+    kind: 'firebolt',
+    nativeTypeId: 0x7eb,
+    payload: 'fire',
+  }), 11)
+  assert.equal(firebolt?.lane, 'transient')
+  assert.equal(firebolt?.source.intensity, 0.85)
+  assert.ok(firebolt!.source.radius >= 0.5 && firebolt!.source.radius <= 0.75)
+
+  for (const payload of ['cold', 'poison'] as const) {
+    const guided = nativeEnemyProjectileLightProvider(enemyProjectile({
+      kind: 'guided-missile',
+      nativeTypeId: 0x7ec,
+      payload,
+    }), 11, false)
+    assert.equal(guided?.lane, 'actor')
+    assert.equal(guided?.source.castsDirectionalShadow, false)
+    assert.equal(guided?.source.intensity, 0.75)
+    assert.ok(guided!.source.radius >= 0.75 && guided!.source.radius <= Math.fround(
+      Math.fround(0.75) + Math.fround(0.1),
+    ))
+  }
+
+  const bomb = nativeEnemyProjectileLightProvider(enemyProjectile({
+    kind: 'demon-bomb',
+    nativeTypeId: 0x7f7,
+    payload: 'none',
+  }), 11)
+  assert.equal(bomb?.lane, 'actor')
+  assert.equal(bomb?.source.castsDirectionalShadow, false)
+  assert.equal(bomb?.source.radius, 0.6)
+  assert.ok(bomb!.source.intensity >= 0.75 && bomb!.source.intensity <= 1)
+
+  assert.equal(nativeEnemyProjectileLightProvider(enemyProjectile({
+    kind: 'poison-pool',
+    nativeTypeId: 0x806,
+    payload: 'poison',
+  }), 11), null)
+})
+
+test('exhaustively projects every modeled enemy provider family and duplicate enrollment', () => {
+  assert.deepEqual(nativeEnemyLightSources(enemy('ZOMBIE', {
+    lighting: { charge: 1, glow: 1, providerCopies: 2 },
+  }), 12), [])
+
+  const skeleton = nativeEnemyLightSources(enemy('SKELETON', {
+    lighting: { charge: 0, glow: 0.8, providerCopies: 1 },
+  }), 12)
+  assert.equal(skeleton.length, 1)
+  assert.equal(skeleton[0]!.radius, 0.5)
+  assert.ok(skeleton[0]!.intensity >= 0.4 && skeleton[0]!.intensity <= 0.8)
+  assert.equal(skeleton[0]!.castsDirectionalShadow, true)
+
+  for (const enemyToken of ['SKELETONARCHER', 'SKELETONMAGE'] as const) {
+    const charged = nativeEnemyLightSources(enemy(enemyToken, {
+      lighting: { charge: 0.8, glow: 0, providerCopies: 1 },
+    }), 12)
+    assert.equal(charged.length, 1)
+    assert.ok(charged[0]!.radius >= 0.32 && charged[0]!.radius <= 0.48)
+    assert.equal(charged[0]!.intensity, Math.fround(0.75 * Math.fround(0.8)))
+
+    const burning = nativeEnemyLightSources(enemy(enemyToken, {
+      flags: ['FLAG_BURNING'],
+      lighting: { charge: 1, glow: 0.7, providerCopies: 2 },
+    }), 12)
+    assert.equal(burning.length, 2)
+    assert.ok(burning.every((source) => source.radius === 0.5))
+    assert.ok(burning.every((source) => (
+      source.intensity >= 0.35 && source.intensity <= 0.7
+    )))
+  }
+
+  const imp = nativeEnemyLightSources(enemy('IMP', {
+    lighting: { charge: 0, glow: 0.6, providerCopies: 1 },
+  }), 12)
+  assert.ok(imp[0]!.radius >= 0.15 && imp[0]!.radius <= 0.35)
+  assert.ok(imp[0]!.intensity >= 0.45 && imp[0]!.intensity <= 0.6)
+  assert.equal(imp[0]!.castsDirectionalShadow, false)
+
+  const wraith = nativeEnemyLightSources(enemy('WRAITH', {
+    lighting: { charge: 0, glow: 0.9, providerCopies: 1 },
+  }), 12)
+  assert.equal(wraith[0]!.radius, 0.5)
+  assert.ok(wraith[0]!.intensity >= 0.45 && wraith[0]!.intensity <= 0.9)
+
+  const demonAlive = nativeEnemyLightSources(enemy('DEMON', {
+    lighting: { charge: 0, glow: 0, providerCopies: 1 },
+  }), 12)
+  assert.ok(demonAlive[0]!.radius >= 1.25 && demonAlive[0]!.radius <= 1.75)
+  assert.equal(demonAlive[0]!.intensity, 1)
+  const demonDeath = nativeEnemyLightSources(enemy('DEMON', {
+    animation: { state: 'death' },
+    lighting: { charge: 0, glow: 0, providerCopies: 1 },
+  }), 12)
+  assert.ok(demonDeath[0]!.intensity >= 0.5 && demonDeath[0]!.intensity <= 1)
+
+  const coffin = nativeEnemyLightSources(enemy('COFFIN', {
+    animation: { coffinState: 'open' },
+    lighting: { charge: 0, glow: 0, providerCopies: 1 },
+  }), 12)
+  assert.equal(coffin[0]!.radius, 0.65)
+  assert.ok(coffin[0]!.intensity >= 0.2 && coffin[0]!.intensity <= 1)
+  const coffinIntensities = Array.from({ length: 512 }, (_, frame) => (
+    nativeEnemyLightSources(enemy('COFFIN', {
+      lighting: { charge: 0, glow: 0, providerCopies: 1 },
+    }), frame)[0]!.intensity
+  ))
+  const nativeCoffinDomain = new Set(Array.from({ length: 9 }, (_, value) => (
+    Math.fround(1 - value * 0.1)
+  )))
+  assert.ok(coffinIntensities.every((intensity) => nativeCoffinDomain.has(intensity)))
+})
+
+test('keeps projectile provider randomness presentation-owned and lane ordering explicit', () => {
+  const projectile = enemyProjectile({ payload: 'fire' })
+  assert.deepEqual(
+    nativeEnemyProjectileLightProvider(projectile, 20),
+    nativeEnemyProjectileLightProvider(projectile, 20),
+  )
+  assert.notEqual(
+    nativeEnemyProjectileLightProvider(projectile, 20)?.source.radius,
+    nativeEnemyProjectileLightProvider(projectile, 21)?.source.radius,
+  )
+
+  const inputs = [
+    enemyProjectile({ id: 1, kind: 'firebolt', nativeTypeId: 0x7eb, payload: 'fire' }),
+    enemyProjectile({ id: 2, kind: 'guided-missile', nativeTypeId: 0x7ec, payload: 'cold' }),
+    enemyProjectile({ id: 3, kind: 'demon-bomb', nativeTypeId: 0x7f7, payload: 'fire' }),
+    enemyProjectile({ id: 4, payload: 'fire' }),
+  ]
+  const candidates = inputs.map((input) => (
+    nativeEnemyProjectileLightProvider(input, 20)!
+  ))
+  assert.deepEqual(
+    candidates.filter(({ lane }) => lane === 'actor').map(({ source }) => source.position),
+    [inputs[1]!.position, inputs[2]!.position],
+  )
+  assert.deepEqual(
+    candidates.filter(({ lane }) => lane === 'transient').map(({ source }) => source.position),
+    [inputs[0]!.position, inputs[3]!.position],
+  )
 })
 
 test('preserves the native ordered containment gate for overlapping sources', () => {
@@ -99,9 +996,122 @@ test('preserves the native ordered containment gate for overlapping sources', ()
   )
 })
 
+test('applies false-Multiple-Shadows containment to the ordered Misc tail', () => {
+  const provider: NativeBoneyardLightSource = {
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: 800, y: 450 },
+    radius: 2,
+  }
+  const containedMisc: NativeBoneyardLightSource = {
+    castsDirectionalShadow: false,
+    intensity: 0.8,
+    position: { x: 944, y: 450 },
+    radius: 1,
+  }
+  const boundaryMisc: NativeBoneyardLightSource = {
+    ...containedMisc,
+    position: { x: 945, y: 450 },
+  }
+  const index = new NativeBoneyardLightIndex({ height: 1_600, width: 1_600 })
+
+  assert.deepEqual(
+    index.rebuild([provider], [containedMisc, boundaryMisc], LIGHT_VIEW),
+    [provider, { ...boundaryMisc, intensity: Math.fround(boundaryMisc.intensity) }],
+  )
+})
+
+test('reuses the finite generation-tagged native light grid without changing scalar output', () => {
+  assert.equal(NATIVE_LIGHT_GRID_CELL_SIZE, 150)
+  const index = new NativeBoneyardLightIndex({ height: 600, width: 600 })
+  const dominant = {
+    intensity: 1,
+    castsDirectionalShadow: true,
+    position: { x: -151, y: 149 },
+    radius: 2,
+  }
+  const contained = {
+    intensity: 0.8,
+    castsDirectionalShadow: false,
+    position: { x: -7, y: 149 },
+    radius: 1,
+  }
+  const tail = {
+    intensity: Math.fround(0.4),
+    castsDirectionalShadow: true,
+    position: { x: 301, y: -1 },
+    radius: 0.75,
+  }
+  const accepted = index.rebuild([dominant, contained], [tail], LIGHT_VIEW)
+  assert.deepEqual(accepted, [dominant, tail])
+  assert.equal(index.acceptedSources, accepted)
+  assert.ok(index.activeBucketCount > 0)
+  assert.ok(index.indexedSourceReferenceCount >= index.activeBucketCount)
+
+  const probes = [
+    { x: -151, y: 149 },
+    { x: -1, y: 149 },
+    { x: 0, y: 149 },
+    { x: 299, y: -1 },
+    { x: 450, y: -1 },
+  ]
+  for (const probe of probes) {
+    assert.equal(
+      index.scalarAt(probe),
+      nativeBoneyardLightScalar(probe, accepted),
+    )
+    assert.equal(
+      nativeBoneyardLightScalar(probe, index),
+      nativeBoneyardLightScalar(probe, accepted),
+    )
+  }
+
+  const allocated = index.allocatedBucketCount
+  index.rebuild([{ ...tail, position: { x: 310, y: 3 } }], [], LIGHT_VIEW)
+  assert.equal(index.acceptedSources.length, 1)
+  assert.equal(index.scalarAt(dominant.position), 0)
+  assert.equal(index.allocatedBucketCount, allocated)
+})
+
+test('uses native float32 truncation, two-cell padding, and finite grid bounds', () => {
+  const index = new NativeBoneyardLightIndex({ height: 300, width: 300 })
+  index.rebuild([{
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: 1, y: 1 },
+    radius: 0.001,
+  }], [], LIGHT_VIEW)
+
+  // Native truncates -1/150 toward zero, so this is the same logical cell as +1.
+  assert.deepEqual(index.sourceIndicesAt({ x: -1, y: -1 }), [0])
+  // A 300-unit world allocates ceil(300/150)+4 cells: logical -2..3.
+  assert.deepEqual(index.sourceIndicesAt({ x: 600, y: 1 }), [])
+
+  index.rebuild([{
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: -500, y: 1 },
+    radius: 0.001,
+  }], [], {
+    camera: { x: 200, y: 450, zoom: 1 },
+    viewport: LIGHT_VIEW.viewport,
+  })
+  assert.deepEqual(index.sourceIndicesAt({ x: -449.99, y: 1 }), [0])
+  assert.deepEqual(index.sourceIndicesAt({ x: -450, y: 1 }), [])
+
+  index.rebuild([{
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: 599.8, y: 1 },
+    radius: 0.001,
+  }], [], LIGHT_VIEW)
+  assert.deepEqual(index.sourceIndicesAt({ x: 599.99, y: 1 }), [0])
+  assert.deepEqual(index.sourceIndicesAt({ x: 600, y: 1 }), [])
+})
+
 test('projects the scalar into the renderer grayscale tint lane', () => {
   assert.equal(nativeBoneyardLightTint(0), 0x000000)
-  assert.equal(nativeBoneyardLightTint(0.5), 0x808080)
+  assert.equal(nativeBoneyardLightTint(0.5), 0x7f7f7f)
   assert.equal(nativeBoneyardLightTint(1), 0xffffff)
 })
 
@@ -111,7 +1121,12 @@ test('stamps the recovered Region light glyph before the native main queue', () 
   assert.ok(0 < NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX)
   assert.ok(NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX < 1)
   assert.deepEqual(nativeRegionLightStamp(
-    { intensity: 0.6, position: { x: 40, y: 50 }, radius: 0.65 },
+    {
+      intensity: 0.6,
+      position: { x: 40, y: 50 },
+      radius: 1.4,
+      rasterScale: 0.65,
+    },
     { x: 400, y: 300 },
     { anchorX: 168, anchorY: 153, h: 305, w: 336 },
     1.35,

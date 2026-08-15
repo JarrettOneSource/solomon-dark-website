@@ -15,6 +15,7 @@ import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type {
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
+  BoneyardMageLightningPulseSnapshot,
   BoneyardMaggotSnapshot,
 } from '../protocol/game-state.ts'
 import {
@@ -29,6 +30,7 @@ const CHARACTER = {
 } as const
 const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
   .players['local-player']!
+const LIGHTING = DEFAULT_PLAYER.lighting
 
 function playerAt(x: number): ProtocolPlayerState {
   return {
@@ -37,6 +39,7 @@ function playerAt(x: number): ProtocolPlayerState {
     footstepTick: x,
     gaitDegrees: x,
     headingIndex: 0,
+    lighting: LIGHTING,
     position: { x, y: 200 },
     primaryCast: createIdlePlayerPrimaryCast(),
     progression: DEFAULT_PLAYER.progression,
@@ -90,6 +93,12 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
     flags: ['FLAG_WEAK'],
     headingDeg: 90,
     id: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+    lighting: {
+      charge: 0,
+      glow: 0,
+      providerCopies: 0,
+    },
     maximumHealth: 6,
     nativeTypeId: 1001,
     position: { x, y: 500 },
@@ -107,6 +116,7 @@ function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
     homing: false,
     id: 1,
     kind: 'arrow',
+    lightRegistration: null,
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
@@ -134,6 +144,22 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     spawnTick: 90,
     state: 'emerging',
     verticalOffset: -x / 10,
+  }
+}
+
+function magePulse(tick: number): BoneyardMageLightningPulseSnapshot {
+  return {
+    contact: {
+      kind: 'world',
+      position: { x: tick + 3, y: 27 },
+    },
+    endpoint: { x: tick + 1, y: 20 },
+    id: tick,
+    midpoint: { x: tick - 20, y: 10 },
+    ownerActorId: 1,
+    seed: tick,
+    source: { x: tick - 40, y: 0 },
+    tick,
   }
 }
 
@@ -188,6 +214,8 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         tip: { x: gateTipX, y: 300 },
       }],
       kind: 'boneyard',
+      lanternLightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
+      mageLightningPulses: [],
       maggots: [maggotAt(gateTipX + 100, tick >= 105 ? 1 : 0)],
       runId: 'run-1',
       waves: {
@@ -236,6 +264,7 @@ function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnap
     players: {
       local: {
         ...player,
+        lighting: { ...player.lighting, driveActive: true },
         progression: {
           ...player.progression,
           currentHealth: 0,
@@ -249,13 +278,19 @@ function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnap
 }
 
 test('interpolates Boneyard actors and gate leaves at display time', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  newer.world.lanternLightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 7,
+  }
   const timeline = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: snapshotAt(100, 10, 100),
+    initialSnapshot: older,
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  timeline.push(snapshotAt(105, 20, 120), 50)
+  timeline.push(newer, 50)
 
   assert.equal(timeline.sample(50).players.local.position.x, 10)
   assert.equal(timeline.sample(75).players.local.position.x, 15)
@@ -278,6 +313,14 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).world.maggots[0].emergenceTick, 21)
   assert.equal(timeline.sample(75).world.maggots[0].verticalOffset, -21)
   assert.equal(timeline.sample(75).world.maggots[0].hitFlash, 0.5)
+  assert.deepEqual(timeline.sample(75).world.lanternLightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 2,
+  })
+  assert.notEqual(
+    timeline.sample(75).world.lanternLightRegistration,
+    older.world.lanternLightRegistration,
+  )
   assert.equal(timeline.sample(75).world.waves?.phase, 'dormant')
   assert.equal(timeline.sample(100).players.local.position.x, 20)
   assert.equal(timeline.sample(100).players.local.footstepTick, 20)
@@ -286,6 +329,151 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.deepEqual(timeline.sample(100).world.encounter?.voiceEvents, [
     { cue: 'solomon-hello-1', id: 1 },
   ])
+  assert.deepEqual(timeline.sample(100).world.lanternLightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 7,
+  })
+})
+
+test('merges every 100 Hz Mage pulse discretely across 20 Hz snapshot boundaries', () => {
+  const older = snapshotAt(100, 10, 100)
+  older.world.mageLightningPulses = [96, 97, 98, 99, 100].map(magePulse)
+  const newer = snapshotAt(105, 20, 120)
+  newer.world.mageLightningPulses = [101, 102, 103, 104, 105].map(magePulse)
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  assert.deepEqual(
+    timeline.sample(59).world.mageLightningPulses.map(({ tick }) => tick),
+    [96, 97, 98, 99, 100],
+  )
+  assert.deepEqual(
+    timeline.sample(60).world.mageLightningPulses.map(({ tick }) => tick),
+    [97, 98, 99, 100, 101],
+  )
+  assert.deepEqual(
+    timeline.sample(80).world.mageLightningPulses.map(({ tick }) => tick),
+    [99, 100, 101, 102, 103],
+  )
+  assert.deepEqual(
+    timeline.sample(100).world.mageLightningPulses.map(({ tick }) => tick),
+    [101, 102, 103, 104, 105],
+  )
+
+  const owned = timeline.sample(60).world.mageLightningPulses.at(-1)!
+  assert.notEqual(owned, newer.world.mageLightningPulses[0])
+  assert.notEqual(owned.source, newer.world.mageLightningPulses[0]!.source)
+  assert.notEqual(owned.contact, newer.world.mageLightningPulses[0]!.contact)
+  owned.source.x = -999
+  assert.equal(timeline.sample(60).world.mageLightningPulses.at(-1)!.source.x, 61)
+})
+
+test('late-join Mage pulse state retains only currently live ages', () => {
+  const late = snapshotAt(105, 20, 120)
+  late.world.mageLightningPulses = [100, 101, 102, 103, 104, 105].map(magePulse)
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: late,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  assert.deepEqual(
+    timeline.sample(0).world.mageLightningPulses.map(({ tick }) => tick),
+    [101, 102, 103, 104, 105],
+  )
+})
+
+test('holds enemy-lighting state discretely and returns an owned copy', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  older.world.enemies[0]!.lighting = {
+    charge: 0.25,
+    glow: 0.5,
+    providerCopies: 1,
+  }
+  newer.world.enemies[0]!.lighting = {
+    charge: 0.75,
+    glow: 1,
+    providerCopies: 2,
+  }
+  newer.world.enemies[0]!.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 9,
+  }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const midpoint = timeline.sample(75).world.enemies[0]!
+  assert.deepEqual(midpoint.lighting, older.world.enemies[0]!.lighting)
+  assert.notEqual(midpoint.lighting, older.world.enemies[0]!.lighting)
+  assert.deepEqual(midpoint.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  })
+  assert.notEqual(midpoint.lightRegistration, older.world.enemies[0]!.lightRegistration)
+  midpoint.lighting.glow = 0
+  assert.deepEqual(timeline.sample(75).world.enemies[0]!.lighting, {
+    charge: 0.25,
+    glow: 0.5,
+    providerCopies: 1,
+  })
+  assert.deepEqual(timeline.sample(100).world.enemies[0]!.lighting, {
+    charge: 0.75,
+    glow: 1,
+    providerCopies: 2,
+  })
+  assert.deepEqual(timeline.sample(100).world.enemies[0]!.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 9,
+  })
+})
+
+test('holds authoritative player-lighting state discretely and returns an owned copy', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  older.players.local.lighting = {
+    ...LIGHTING,
+    driveActive: false,
+    overlayEffectPhase: 0.135,
+  }
+  newer.players.local.lighting = {
+    ...LIGHTING,
+    driveActive: true,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
+    overlayEffectPhase: 0.225,
+  }
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const midpoint = timeline.sample(75).players.local.lighting
+  assert.deepEqual(midpoint, older.players.local.lighting)
+  assert.notEqual(midpoint, older.players.local.lighting)
+  midpoint.overlayEffectPhase = 0
+  assert.deepEqual(timeline.sample(75).players.local.lighting, {
+    driveActive: false,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    overlayEffectPhase: 0.135,
+  })
+  assert.deepEqual(timeline.sample(100).players.local.lighting, newer.players.local.lighting)
+  assert.notEqual(
+    timeline.sample(100).players.local.lighting.lightRegistration,
+    newer.players.local.lighting.lightRegistration,
+  )
 })
 
 test('interpolates independent death-effect transforms without rerolling art identity', () => {
@@ -491,6 +679,7 @@ test('owns returned state and ignores stale Boneyard snapshots', () => {
   assert.notEqual(frame.world.encounter, initial.world.encounter)
   assert.notEqual(frame.world.waves, initial.world.waves)
   assert.notEqual(frame.world.enemies[0], initial.world.enemies[0])
+  assert.notEqual(frame.world.enemies[0].lighting, initial.world.enemies[0].lighting)
   assert.notEqual(
     frame.world.enemies[0].animation.effects[0],
     initial.world.enemies[0].animation.effects[0],

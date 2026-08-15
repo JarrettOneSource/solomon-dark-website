@@ -5,9 +5,9 @@ import {
   type BoneyardEnemyActor,
   type BoneyardEnemyBrain,
   type BoneyardMaggotActor,
+  type BoneyardMageLightningPulse,
   type BoneyardEnemyStore,
 } from '../core-server/boneyard-enemy-store.ts'
-import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import { boundedImpFlightAnimationSample } from '../core-kernels/boneyard-imp-flight.ts'
 import type {
   BoneyardEnemyAction,
@@ -18,6 +18,7 @@ import type {
   BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
+  BoneyardMageLightningPulseSnapshot,
   BoneyardMaggotSnapshot,
 } from '../protocol/game-state.ts'
 
@@ -55,6 +56,8 @@ export function projectBoneyardEnemies(
     flags: actor.config.flags,
     headingDeg: actor.headingDeg,
     id: actor.id,
+    lightRegistration: actor.lightRegistration,
+    lighting: { ...actor.lighting },
     maximumHealth: actor.config.maximumHealth,
     nativeTypeId: actor.config.nativeTypeId,
     position: { ...actor.position },
@@ -74,6 +77,7 @@ export function projectBoneyardEnemyProjectiles(
     homing: projectile.homing,
     id: projectile.id,
     kind: projectile.kind,
+    lightRegistration: projectile.lightRegistration,
     lifetimeTicks: projectile.lifetimeTicks,
     nativeTypeId: projectile.nativeTypeId,
     ownerActorId: projectile.ownerActorId,
@@ -81,6 +85,33 @@ export function projectBoneyardEnemyProjectiles(
     position: { ...projectile.position },
     spawnTick: projectile.spawnTick,
   }))
+}
+
+export function projectBoneyardMageLightningPulses(
+  store: BoneyardEnemyStore,
+): readonly BoneyardMageLightningPulseSnapshot[] {
+  return store.mageLightningPulses.map(projectBoneyardMageLightningPulse)
+}
+
+function projectBoneyardMageLightningPulse(
+  pulse: BoneyardMageLightningPulse,
+): BoneyardMageLightningPulseSnapshot {
+  return {
+    contact: pulse.contact.kind === 'world'
+      ? { kind: 'world', position: { ...pulse.contact.position } }
+      : {
+          kind: 'target-attached',
+          localOffset: { ...pulse.contact.localOffset },
+          targetPlayerId: pulse.contact.targetPlayerId,
+        },
+    endpoint: { ...pulse.endpoint },
+    id: pulse.id,
+    midpoint: { ...pulse.midpoint },
+    ownerActorId: pulse.ownerActorId,
+    seed: pulse.seed,
+    source: { ...pulse.source },
+    tick: pulse.tick,
+  }
 }
 
 export function projectBoneyardMaggots(
@@ -184,38 +215,6 @@ function projectEnemyEffects(
       id: actor.id * 4 + 1,
       offset: { x: 0, y: 0 },
       role: 'burning-fire',
-      rotationRadians: 0,
-      scale: 1,
-    })
-  }
-  const lightning = actor.lightningEffect
-  if (
-    lightning !== null
-    && tick - lightning.startedTick < BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS
-  ) {
-    const ageTicks = Math.max(0, tick - lightning.startedTick)
-    const alpha = Math.max(0, 1 - ageTicks / BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS)
-    effects.push({
-      alpha,
-      atlas: 'BadGuys',
-      blendMode: 'add',
-      entry: 381,
-      id: lightning.eventId * 4 + 2,
-      offset: { x: 0, y: 0 },
-      role: 'mage-lightning-source',
-      rotationRadians: 0,
-      scale: 1,
-    }, {
-      alpha,
-      atlas: 'BadGuys',
-      blendMode: 'add',
-      entry: 382,
-      id: lightning.eventId * 4 + 3,
-      offset: {
-        x: lightning.targetPosition.x - actor.position.x,
-        y: lightning.targetPosition.y - actor.position.y,
-      },
-      role: 'mage-lightning-target',
       rotationRadians: 0,
       scale: 1,
     })

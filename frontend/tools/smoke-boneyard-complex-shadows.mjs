@@ -9,6 +9,8 @@ const rightScreenshot = process.env.SDR_SHADOW_RIGHT_SCREENSHOT
   || '/tmp/solomon-dark-complex-shadows-right-20260814.png'
 const generatedScreenshot = process.env.SDR_SHADOW_GENERATED_SCREENSHOT
   || '/tmp/solomon-dark-complex-shadows-generated-20260814.png'
+const expectedShadowImplementation = process.env.SDR_EXPECT_SHADOW_IMPLEMENTATION
+  || 'native-indexed-owner-mesh'
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -117,6 +119,8 @@ try {
       origin: { x: 275, y: 330 },
       ownerId: 'local',
       targetId: null,
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+      underpowered: false,
       variant: 0,
       worldKey: `boneyard:${runId}`,
     }
@@ -135,6 +139,11 @@ try {
             footstepTick: 0,
             gaitDegrees: headingIndex * 15,
             headingIndex,
+            lighting: {
+              driveActive: false,
+              lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+              overlayEffectPhase: 0,
+            },
             position,
             primaryCast: playerModule.createIdlePlayerPrimaryCast(),
             progression: {
@@ -181,6 +190,8 @@ try {
           enemyProjectiles: [],
           gateLeaves: [],
           kind: 'boneyard',
+          lanternLightRegistration: null,
+          mageLightningPulses: [],
           maggots: [],
           runId,
           waves: null,
@@ -207,7 +218,9 @@ try {
     window.__complexShadowProbe = {
       capture,
       leftPixels: capture(),
-      longAirPathLightCount: airModule.buildNativeAirPathLightSources(longAir).length,
+      longAirPathLightCount: typeof airModule.buildNativeAirPathLightSources === 'function'
+        ? airModule.buildNativeAirPathLightSources(longAir).length
+        : 0,
       renderer,
       rightSnapshot: snapshotAt(1_010, { x: 800, y: 330 }, 18),
     }
@@ -235,7 +248,7 @@ try {
   assert.equal(left.renderer, 'pixi-webgl')
   assert.match(left.rendererName.toLowerCase(), /webgl/)
   assert.equal(left.context, 'webgl2')
-  assert.equal(left.complexShadows, 'native-directional-edges')
+  assert.equal(left.complexShadows, expectedShadowImplementation)
   assert.equal(left.treeComplexShadowOutline, 'native-main-variant-table')
   assert.deepEqual(left.treeOutline, {
     maxX: 18,
@@ -247,8 +260,27 @@ try {
   assert.ok(left.frame.complexShadowCasterCount >= 3)
   assert.ok(left.frame.complexShadowRecordCount >= 3)
   assert.ok(left.frame.complexShadowQuadCount >= left.frame.complexShadowCasterCount)
-  assert.ok(left.longAirPathLightCount > 0)
-  assert.ok(left.frame.lightSourceCount >= left.longAirPathLightCount + 1)
+  if (expectedShadowImplementation === 'native-indexed-owner-mesh') {
+    assert.equal(
+      left.frame.complexShadowActiveMeshCount,
+      left.frame.complexShadowCasterCount,
+    )
+    assert.ok(
+      left.frame.complexShadowAllocatedQuadCapacity
+        >= left.frame.complexShadowQuadCount,
+    )
+    assert.equal(left.frame.complexShadowZOrderMismatchCount, 0)
+    assert.equal(left.frame.regionLightLogicalSide, 1_600)
+    assert.equal(left.frame.regionLightPhysicalSide, 400)
+    assert.equal(left.frame.lightProviderCandidateCount, 2)
+    assert.equal(
+      left.frame.lightMiscTailCandidateCount,
+      left.longAirPathLightCount,
+    )
+  }
+  if (left.longAirPathLightCount > 0) {
+    assert.ok(left.frame.lightSourceCount >= left.longAirPathLightCount + 1)
+  }
 
   const right = await page.evaluate(() => {
     const probe = window.__complexShadowProbe
@@ -275,6 +307,15 @@ try {
   assert.ok(right.frame.complexShadowCasterCount >= 3)
   assert.ok(right.frame.complexShadowRecordCount >= 3)
   assert.ok(right.frame.complexShadowQuadCount >= right.frame.complexShadowCasterCount)
+  if (expectedShadowImplementation === 'native-indexed-owner-mesh') {
+    assert.equal(
+      right.frame.complexShadowActiveMeshCount,
+      right.frame.complexShadowCasterCount,
+    )
+    assert.equal(right.frame.complexShadowZOrderMismatchCount, 0)
+    assert.equal(right.frame.lightProviderCandidateCount, 1)
+    assert.equal(right.frame.lightMiscTailCandidateCount, 0)
+  }
   assert.ok(right.frame.lightSourceCount < left.frame.lightSourceCount)
   assert.ok(right.changedPixels > 20_000)
   assert.ok(right.channelDelta > 100_000)
@@ -320,6 +361,11 @@ try {
           footstepTick: 0,
           gaitDegrees: headingIndex * 15,
           headingIndex,
+          lighting: {
+            driveActive: false,
+            lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+            overlayEffectPhase: 0,
+          },
           position: {
             x: template.scene.spawn.x,
             y: template.scene.spawn.y,
@@ -369,6 +415,10 @@ try {
         enemyProjectiles: [],
         gateLeaves: [],
         kind: 'boneyard',
+        lanternLightRegistration: encounter
+          ? { managerLane: 'actor', registrationOrdinal: 1 }
+          : null,
+        mageLightningPulses: [],
         maggots: [],
         runId,
         waves: null,
@@ -394,19 +444,72 @@ try {
     })
     renderer.canvas.id = 'generated-complex-shadow-probe'
     document.body.append(renderer.canvas)
-    const renderDurations = []
     for (let frame = 1; frame <= 30; frame += 1) {
       await new Promise(requestAnimationFrame)
-      const renderStart = performance.now()
       renderer.render(snapshotAt(2_000 + frame))
+    }
+    const initialResources = {
+      activeMeshes: renderer.canvas.__sdrBoneyardFrame.complexShadowActiveMeshCount,
+      allocatedQuadCapacity:
+        renderer.canvas.__sdrBoneyardFrame.complexShadowAllocatedQuadCapacity,
+      pooledMeshes: renderer.canvas.__sdrBoneyardFrame.complexShadowPooledMeshCount,
+    }
+    const renderDurations = []
+    const frameGaps = []
+    const longTasks = []
+    const measurementStart = performance.now()
+    const observer = new PerformanceObserver((entries) => {
+      for (const entry of entries.getEntries()) {
+        if (entry.startTime >= measurementStart) longTasks.push(entry.duration)
+      }
+    })
+    observer.observe({ type: 'longtask' })
+    let previousFrameTime = await new Promise(requestAnimationFrame)
+    for (let frame = 1; frame <= 180; frame += 1) {
+      const snapshot = snapshotAt(2_030 + frame)
+      const frameTime = await new Promise(requestAnimationFrame)
+      frameGaps.push(frameTime - previousFrameTime)
+      previousFrameTime = frameTime
+      const renderStart = performance.now()
+      renderer.render(snapshot)
       renderDurations.push(performance.now() - renderStart)
     }
     await new Promise(requestAnimationFrame)
+    observer.disconnect()
     window.__generatedComplexShadowRenderer = renderer
     return {
       averageRenderMs: renderDurations.reduce((sum, value) => sum + value, 0)
         / renderDurations.length,
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
+      initialResources,
+      frameGaps: distribution(frameGaps),
+      heapBytes: performance.memory
+        ? {
+            limit: performance.memory.jsHeapSizeLimit,
+            total: performance.memory.totalJSHeapSize,
+            used: performance.memory.usedJSHeapSize,
+          }
+        : null,
+      longTasks: {
+        count: longTasks.length,
+        durationMs: longTasks.reduce((sum, value) => sum + value, 0),
+        maximumMs: longTasks.length > 0 ? Math.max(...longTasks) : 0,
+      },
+      renderDurations: distribution(renderDurations),
+    }
+
+    function distribution(values) {
+      const ordered = [...values].sort((left, right) => left - right)
+      const percentile = (fraction) => ordered[
+        Math.min(ordered.length - 1, Math.ceil(ordered.length * fraction) - 1)
+      ]
+      return {
+        count: ordered.length,
+        maximum: ordered.at(-1),
+        p50: percentile(0.5),
+        p95: percentile(0.95),
+        p99: percentile(0.99),
+      }
     }
   })
   await page.locator('#generated-complex-shadow-probe').screenshot({
@@ -417,6 +520,19 @@ try {
   assert.ok(generated.frame.complexShadowCasterCount > 0)
   assert.ok(generated.frame.complexShadowRecordCount > 0)
   assert.ok(generated.frame.complexShadowQuadCount > 0)
+  if (expectedShadowImplementation === 'native-indexed-owner-mesh') {
+    assert.equal(
+      generated.frame.complexShadowActiveMeshCount,
+      generated.frame.complexShadowCasterCount,
+    )
+    assert.equal(generated.frame.complexShadowZOrderMismatchCount, 0)
+    assert.deepEqual({
+      activeMeshes: generated.frame.complexShadowActiveMeshCount,
+      allocatedQuadCapacity:
+        generated.frame.complexShadowAllocatedQuadCapacity,
+      pooledMeshes: generated.frame.complexShadowPooledMeshCount,
+    }, generated.initialResources)
+  }
   assert.ok(Number.isFinite(generated.averageRenderMs))
   assert.ok(generated.averageRenderMs > 0)
   await page.evaluate(() => window.__generatedComplexShadowRenderer.destroy())

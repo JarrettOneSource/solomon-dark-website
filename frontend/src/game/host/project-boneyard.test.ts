@@ -11,7 +11,6 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
-import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
   BOUNDED_IMP_FLIGHT_PROGRAM,
   NATIVE_IMP_BODY_POSE_COUNT,
@@ -24,6 +23,7 @@ import {
 } from './project-boneyard.ts'
 import {
   projectBoneyardEnemies,
+  projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
 
@@ -312,7 +312,7 @@ test('projects the bounded fixed-tick Imp flight program without changing spawn 
   )
 })
 
-test('projects armor, shields, burning, and the named four-tick lightning sample', () => {
+test('projects armor, shields, burning, and owned Mage lightning pulses', () => {
   const players = {
     player: {
       alive: true,
@@ -367,6 +367,7 @@ test('projects armor, shields, burning, and the named four-tick lightning sample
       },
     }, spawned.store.actors[1]!],
   }, {
+    clipSpellSegment: ({ end }) => end,
     firstProjectileWorldContact: () => null,
     players,
     resolveMovement: ({ requestedPosition }) => requestedPosition,
@@ -388,35 +389,26 @@ test('projects armor, shields, burning, and the named four-tick lightning sample
   const projected = projectBoneyardEnemies(store, startedTick)
   const created = projected[0]!
   assert.equal(projected[1]?.armored, true)
+  assert.deepEqual(created.lighting, attacked.store.actors[0]!.lighting)
+  assert.notEqual(created.lighting, attacked.store.actors[0]!.lighting)
   assert.equal(created.shieldHealth, 25)
   assert.equal(created.shieldMaximumHealth, 50)
   assert.deepEqual(created.animation.effects.map(({ alpha, role }) => ({ alpha, role })), [
     { alpha: 1, role: 'burning-fire' },
-    { alpha: 1, role: 'mage-lightning-source' },
-    { alpha: 1, role: 'mage-lightning-target' },
     { alpha: 1.25, role: 'magic-shield' },
   ])
-  assert.deepEqual(created.animation.effects[2]?.offset, { x: 150, y: 0 })
-  assert.equal(created.animation.effects[3]?.entry, 49)
-  assert.deepEqual(created.animation.effects[3]?.offset, { x: 0, y: -30 })
+  assert.equal(created.animation.effects[1]?.entry, 49)
+  assert.deepEqual(created.animation.effects[1]?.offset, { x: 0, y: -30 })
   assert.ok(Math.abs(
-    created.animation.effects[3]!.scale
+    created.animation.effects[1]!.scale
       - (1.5 + 0.1 * Math.sin(startedTick * 20 * Math.PI / 180)),
   ) < 1e-12)
-
-  const retained = projectBoneyardEnemies(
-    store,
-    startedTick + BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS - 1,
-  )[0]!
-  assert.equal(retained.animation.effects[1]?.alpha, 0.25)
-  const expired = projectBoneyardEnemies(
-    store,
-    startedTick + BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
-  )[0]!
-  assert.deepEqual(expired.animation.effects.map(({ role }) => role), [
-    'burning-fire',
-    'magic-shield',
-  ])
+  const pulses = projectBoneyardMageLightningPulses(store)
+  assert.equal(pulses.length, 1)
+  assert.deepEqual(pulses[0], attacked.store.mageLightningPulses[0])
+  assert.notEqual(pulses[0], attacked.store.mageLightningPulses[0])
+  assert.notEqual(pulses[0]!.source, attacked.store.mageLightningPulses[0]!.source)
+  assert.notEqual(pulses[0]!.contact, attacked.store.mageLightningPulses[0]!.contact)
 })
 
 function projectedMaggot(

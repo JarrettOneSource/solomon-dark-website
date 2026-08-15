@@ -131,12 +131,14 @@ test('wires modal suppression through Hub, private rooms, and the complete Boney
     'this.enemyDeathEffects.setRenderable(!modalActive)',
     'this.enemyProjectiles.setRenderable(!modalActive)',
     'this.maggots.setRenderable(!modalActive)',
+    'this.mageLightningPulses.setRenderable(!modalActive)',
     'this.playerDeathBursts.setRenderable(!modalActive)',
     'this.solomon?.setActorRenderable(!modalActive)',
   ]) {
     assert.ok(boneyard.includes(witness), `missing Boneyard modal witness: ${witness}`)
   }
-  assert.ok(boneyard.includes('playerLight.radius = levelUpFrame.lightRadius'))
+  assert.ok(boneyard.includes('(levelUpFrame.lightRadius - 2.6)'))
+  assert.equal(boneyard.includes('levelUpEffectTicksRemaining'), false)
   assert.ok(boneyard.includes('camera.y - viewport.height / (2 * camera.zoom)'))
   assert.ok(boneyard.includes('view.container.renderable = !modalActive || id === localPlayerId'))
   assert.ok(hub.includes('levelUpPresentation.playerScreenY'))

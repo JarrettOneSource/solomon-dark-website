@@ -18,6 +18,7 @@ import {
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
 import {
   damageBoneyardEnemy,
   type BoneyardEnemyActor,
@@ -66,6 +67,7 @@ export function resolveBoneyardSpellCombat(
   tick: number,
   worldKey: string,
   firstWorldContact: BoneyardSpellWorldContact | null = null,
+  registerLightProvider?: RegisterNativeLightProvider,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -85,6 +87,7 @@ export function resolveBoneyardSpellCombat(
       projectile,
       origin,
       tick,
+      registerLightProvider,
     )
     if (!impact) return
     impactTransients.push(impact)

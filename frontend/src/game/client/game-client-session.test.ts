@@ -323,11 +323,9 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
     actorId: 4,
     eventId: 7,
     runId: firstRunId,
-    sourcePosition: { x: 100, y: 200 },
     targetPlayerId: 'player-1',
-    targetPosition: { x: 300, y: 220 },
     tick: 0,
-    type: 'mage-lightning',
+    type: 'attack-marker',
   }]
   receiveWelcome(transport, firstSnapshot)
   const session = await connecting
@@ -337,15 +335,14 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   receiveSnapshot(transport, { ...firstSnapshot, tick: 5 }, 0)
   assert.deepEqual(received, [])
 
-  const lightning = {
+  const projectile = {
     actorId: 4,
     eventId: 8,
+    projectileId: 12,
     runId: firstRunId,
-    sourcePosition: { x: 110, y: 205 },
     targetPlayerId: 'player-1',
-    targetPosition: { x: 305, y: 225 },
     tick: 6,
-    type: 'mage-lightning' as const,
+    type: 'projectile-spawned' as const,
   }
   const deathSound = {
     actorId: 4,
@@ -363,12 +360,12 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
     tick: 10,
     world: {
       ...firstSnapshot.world,
-      enemyEvents: [...firstSnapshot.world.enemyEvents, lightning, deathSound],
+      enemyEvents: [...firstSnapshot.world.enemyEvents, projectile, deathSound],
     },
   }
   receiveSnapshot(transport, withImpact, 0)
   receiveSnapshot(transport, { ...withImpact, tick: 15 }, 0)
-  assert.deepEqual(received, [lightning, deathSound])
+  assert.deepEqual(received, [projectile, deathSound])
 
   const secondRunId = 'enemy-events-two'
   const secondSnapshot = createGameSnapshot(
@@ -675,6 +672,7 @@ test('client does not rewind a locally presented turn while acknowledgement is d
     authoritativePlayer = {
       ...predicted.player,
       economy: authoritativePlayer.economy,
+      lighting: authoritativePlayer.lighting,
       progression: authoritativePlayer.progression,
     }
     collisionRngState = predicted.collisionRngState
@@ -728,6 +726,10 @@ test('client accepts cast-owned heading and prevents movement prediction from re
       'player-1': {
         ...initialSnapshot.players['player-1'],
         headingIndex: castHeadingIndex,
+        lighting: {
+          ...initialSnapshot.players['player-1'].lighting,
+          driveActive: true,
+        },
         primaryCast: {
           actionTick: 20,
           aimDirection: {

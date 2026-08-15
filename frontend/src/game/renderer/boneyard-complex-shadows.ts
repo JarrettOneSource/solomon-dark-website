@@ -3,6 +3,8 @@ import {
   NATIVE_LIGHT_OUTER_DISTANCE,
   NATIVE_LIGHT_VERTICAL_SCALE,
   nativeBoneyardLightScalar,
+  type NativeBoneyardLightLookup,
+  type NativeBoneyardLightSamples,
   type NativeBoneyardLightSource,
 } from './boneyard-lighting.ts'
 
@@ -74,12 +76,141 @@ export interface NativeBoneyardRailShadowPlan {
   width: 10
 }
 
+interface NativeBoneyardLineShadowPlan {
+  alpha: number
+  end: Vec2
+  start: Vec2
+  width: number
+}
+
 export function nativeBoneyardPackedShadowAlpha(alpha: number): number {
   return Math.trunc(Math.min(1, Math.max(0, alpha)) * 255) / 255
 }
 
+export function nativeBoneyardShadowAlphaUv(alpha: number): number {
+  const packedByte = Math.trunc(Math.min(1, Math.max(0, alpha)) * 255)
+  return (packedByte + 0.5) / 256
+}
+
+export function nativeBoneyardShadowAlphaRampPixels(): Uint8Array {
+  const pixels = new Uint8Array(256 * 4)
+  for (let alpha = 0; alpha < 256; alpha += 1) {
+    pixels[alpha * 4 + 3] = alpha
+  }
+  return pixels
+}
+
+export class NativeBoneyardShadowMeshBuffers {
+  indexRevision = 0
+  indices: Uint32Array
+  positions: Float32Array
+  quadCapacity: number
+  quadCount = 0
+  uvs: Float32Array
+
+  constructor(initialQuadCapacity = 1) {
+    this.quadCapacity = nextPowerOfTwo(Math.max(1, initialQuadCapacity))
+    this.positions = new Float32Array(this.quadCapacity * 8)
+    this.uvs = new Float32Array(this.quadCapacity * 8)
+    this.indices = new Uint32Array(this.quadCapacity * 6)
+  }
+
+  write(edges: readonly NativeBoneyardProjectedShadowEdge[]): boolean {
+    const previousQuadCount = this.quadCount
+    const grew = this.ensureCapacity(edges.length)
+    const topologyChanged = grew || previousQuadCount !== edges.length
+    this.quadCount = edges.length
+    edges.forEach((edge, quadIndex) => {
+      const vertexOffset = quadIndex * 8
+      this.positions[vertexOffset] = edge.baseStart.x
+      this.positions[vertexOffset + 1] = edge.baseStart.y
+      this.positions[vertexOffset + 2] = edge.baseEnd.x
+      this.positions[vertexOffset + 3] = edge.baseEnd.y
+      this.positions[vertexOffset + 4] = edge.tipStart.x
+      this.positions[vertexOffset + 5] = edge.tipStart.y
+      this.positions[vertexOffset + 6] = edge.tipEnd.x
+      this.positions[vertexOffset + 7] = edge.tipEnd.y
+      const baseUv = nativeBoneyardShadowAlphaUv(edge.baseAlpha)
+      const tipUv = nativeBoneyardShadowAlphaUv(edge.tipAlpha)
+      this.uvs[vertexOffset] = baseUv
+      this.uvs[vertexOffset + 1] = 0.5
+      this.uvs[vertexOffset + 2] = baseUv
+      this.uvs[vertexOffset + 3] = 0.5
+      this.uvs[vertexOffset + 4] = tipUv
+      this.uvs[vertexOffset + 5] = 0.5
+      this.uvs[vertexOffset + 6] = tipUv
+      this.uvs[vertexOffset + 7] = 0.5
+      if (topologyChanged) {
+        const indexOffset = quadIndex * 6
+        const vertexIndex = quadIndex * 4
+        this.indices[indexOffset] = vertexIndex
+        this.indices[indexOffset + 1] = vertexIndex + 1
+        this.indices[indexOffset + 2] = vertexIndex + 2
+        this.indices[indexOffset + 3] = vertexIndex + 1
+        this.indices[indexOffset + 4] = vertexIndex + 3
+        this.indices[indexOffset + 5] = vertexIndex + 2
+      }
+    })
+    const usedPositions = edges.length * 8
+    const fillX = edges[0]?.baseStart.x ?? 0
+    const fillY = edges[0]?.baseStart.y ?? 0
+    for (let index = usedPositions; index < this.positions.length; index += 2) {
+      this.positions[index] = fillX
+      this.positions[index + 1] = fillY
+      this.uvs[index] = 0.5 / 256
+      this.uvs[index + 1] = 0.5
+    }
+    if (topologyChanged) {
+      this.indices.fill(0, edges.length * 6)
+      this.indexRevision += 1
+    }
+    return grew
+  }
+
+  private ensureCapacity(required: number): boolean {
+    if (required <= this.quadCapacity) return false
+    this.quadCapacity = nextPowerOfTwo(required)
+    this.positions = new Float32Array(this.quadCapacity * 8)
+    this.uvs = new Float32Array(this.quadCapacity * 8)
+    this.indices = new Uint32Array(this.quadCapacity * 6)
+    return true
+  }
+}
+
+export function nativeBoneyardLineShadowEdge(
+  line: NativeBoneyardLineShadowPlan,
+): NativeBoneyardProjectedShadowEdge {
+  const dx = line.end.x - line.start.x
+  const dy = line.end.y - line.start.y
+  const length = Math.hypot(dx, dy)
+  const halfWidthScale = length > 0 ? line.width / 2 / length : 0
+  const perpendicular = {
+    x: -dy * halfWidthScale,
+    y: dx * halfWidthScale,
+  }
+  return {
+    baseAlpha: line.alpha,
+    baseEnd: {
+      x: line.start.x + perpendicular.x,
+      y: line.start.y + perpendicular.y,
+    },
+    baseStart: {
+      x: line.start.x - perpendicular.x,
+      y: line.start.y - perpendicular.y,
+    },
+    tipAlpha: line.alpha,
+    tipEnd: {
+      x: line.end.x + perpendicular.x,
+      y: line.end.y + perpendicular.y,
+    },
+    tipStart: {
+      x: line.end.x - perpendicular.x,
+      y: line.end.y - perpendicular.y,
+    },
+  }
+}
+
 const NATIVE_LIGHT_OUTER_DISTANCE_SQUARED = NATIVE_LIGHT_OUTER_DISTANCE ** 2
-const MAX_ALPHA_OUTLINE_POINTS = 16
 export const NATIVE_FENCE_SHADOW_END_INSET = 12
 export const NATIVE_FENCE_SHADOW_BAR_STEP = 13.333333015441895
 export const NATIVE_GATE_SHADOW_END_INSET = 4
@@ -155,18 +286,26 @@ export function nativeBoneyardTreeComplexShadowOutline(mainVariant: number): Vec
 
 export function nativeBoneyardComplexShadowRecords(
   caster: NativeBoneyardComplexShadowCaster,
-  sources: readonly NativeBoneyardLightSource[],
+  sources: NativeBoneyardLightSamples,
   presentationFrame: number,
 ): NativeBoneyardComplexShadowRecord[] {
   const records: NativeBoneyardComplexShadowRecord[] = []
-  sources.forEach((source, sourceIndex) => {
-    if (!source.castsDirectionalShadow || source.radius <= 0) return
+  const casterSeed = stableStringHash(caster.id)
+  const lookup = nativeLightLookup(sources)
+  const sourceIndices = lookup?.sourceIndicesAt(caster.position)
+  const sourceCount = sourceIndices?.length ?? (sources as readonly NativeBoneyardLightSource[]).length
+  for (let ordinal = 0; ordinal < sourceCount; ordinal += 1) {
+    const sourceIndex = sourceIndices?.[ordinal] ?? ordinal
+    const source = lookup
+      ? lookup.acceptedSources[sourceIndex]!
+      : (sources as readonly NativeBoneyardLightSource[])[sourceIndex]!
+    if (!source.castsDirectionalShadow || source.radius <= 0) continue
     const worldDx = caster.position.x - source.position.x
     const worldDy = caster.position.y - source.position.y
     const dx = worldDx / source.radius
     const dy = worldDy / (NATIVE_LIGHT_VERTICAL_SCALE * source.radius)
     const distanceSquared = dx * dx + dy * dy
-    if (distanceSquared >= NATIVE_LIGHT_OUTER_DISTANCE_SQUARED) return
+    if (distanceSquared >= NATIVE_LIGHT_OUTER_DISTANCE_SQUARED) continue
 
     const worldDistance = Math.hypot(worldDx, worldDy)
     const direction = worldDistance === 0
@@ -183,12 +322,12 @@ export function nativeBoneyardComplexShadowRecords(
       distanceFraction: distanceSquared / NATIVE_LIGHT_OUTER_DISTANCE_SQUARED,
       projectionDistance: (
         NATIVE_LIGHT_OUTER_DISTANCE
-        - presentationRandom(caster, source, sourceIndex, presentationFrame)
+        - presentationRandom(casterSeed, source, sourceIndex, presentationFrame)
       ) * source.radius,
       sourcePosition: { ...source.position },
       sourceRadius: source.radius,
     })
-  })
+  }
 
   if (records.length > 1) {
     for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
@@ -206,6 +345,14 @@ export function nativeBoneyardComplexShadowRecords(
     }
   }
   return records
+}
+
+function nativeLightLookup(
+  sources: NativeBoneyardLightSamples,
+): NativeBoneyardLightLookup | null {
+  return !Array.isArray(sources) && 'sourceIndicesAt' in sources
+    ? sources
+    : null
 }
 
 export function nativeBoneyardProjectedShadowEdges(
@@ -420,91 +567,8 @@ function nativeStoredLength(dx: number, dy: number): number {
   )))
 }
 
-/**
- * Recovers a stable, bounded convex presentation outline from extracted native
- * sprite alpha. Runtime shadow projection never needs the source bitmap again.
- */
-export function nativeBoneyardAlphaSilhouette(
-  pixels: ArrayLike<number>,
-  width: number,
-  height: number,
-): Vec2[] {
-  if (width <= 0 || height <= 0 || pixels.length < width * height * 4) return []
-  const candidates: Vec2[] = []
-  for (let y = 0; y < height; y += 1) {
-    let left = width
-    let right = -1
-    for (let x = 0; x < width; x += 1) {
-      if (pixels[(y * width + x) * 4 + 3] === 0) continue
-      left = Math.min(left, x)
-      right = Math.max(right, x)
-    }
-    if (right < left) continue
-    candidates.push(
-      { x: left, y },
-      { x: right + 1, y },
-      { x: left, y: y + 1 },
-      { x: right + 1, y: y + 1 },
-    )
-  }
-  return nativeBoneyardConvexSilhouette(candidates)
-}
-
-export function nativeBoneyardConvexSilhouette(
-  boundaryPoints: readonly Vec2[],
-): Vec2[] {
-  return limitConvexOutline(
-    convexHull(boundaryPoints),
-    MAX_ALPHA_OUTLINE_POINTS,
-  )
-}
-
-function convexHull(points: readonly Vec2[]): Vec2[] {
-  const sorted = [...new Map(
-    points.map((point) => [`${point.x},${point.y}`, point] as const),
-  ).values()].sort((left, right) => left.x - right.x || left.y - right.y)
-  if (sorted.length <= 2) return sorted.map((point) => ({ ...point }))
-  const lower: Vec2[] = []
-  for (const point of sorted) {
-    while (
-      lower.length >= 2
-      && cross(lower.at(-2)!, lower.at(-1)!, point) <= 0
-    ) lower.pop()
-    lower.push(point)
-  }
-  const upper: Vec2[] = []
-  for (let index = sorted.length - 1; index >= 0; index -= 1) {
-    const point = sorted[index]
-    while (
-      upper.length >= 2
-      && cross(upper.at(-2)!, upper.at(-1)!, point) <= 0
-    ) upper.pop()
-    upper.push(point)
-  }
-  lower.pop()
-  upper.pop()
-  return [...lower, ...upper].map((point) => ({ ...point }))
-}
-
-function limitConvexOutline(points: readonly Vec2[], maximum: number): Vec2[] {
-  const outline = points.map((point) => ({ ...point }))
-  while (outline.length > maximum) {
-    let smallestArea = Number.POSITIVE_INFINITY
-    let removeIndex = 0
-    for (let index = 0; index < outline.length; index += 1) {
-      const area = Math.abs(cross(
-        outline[(index + outline.length - 1) % outline.length],
-        outline[index],
-        outline[(index + 1) % outline.length],
-      ))
-      if (area < smallestArea) {
-        smallestArea = area
-        removeIndex = index
-      }
-    }
-    outline.splice(removeIndex, 1)
-  }
-  return outline
+function nextPowerOfTwo(value: number): number {
+  return 2 ** Math.ceil(Math.log2(value))
 }
 
 function projectAway(point: Vec2, source: Vec2, distance: number): Vec2 {
@@ -533,26 +597,39 @@ function normalizedFrom(source: Vec2, destination: Vec2): Vec2 {
 }
 
 function presentationRandom(
-  caster: NativeBoneyardComplexShadowCaster,
+  casterSeed: number,
   source: NativeBoneyardLightSource,
   sourceIndex: number,
   presentationFrame: number,
 ): number {
-  const key = [
-    caster.id,
-    Math.trunc(presentationFrame),
-    sourceIndex,
-    source.position.x,
-    source.position.y,
-    source.radius,
-  ].join(':')
-  let value = 0x811c9dc5
-  for (let index = 0; index < key.length; index += 1) {
-    value = Math.imul(value ^ key.charCodeAt(index), 0x01000193) >>> 0
-  }
-  value = Math.imul(value ^ (value >>> 16), 0x21f0aaad) >>> 0
-  value = Math.imul(value ^ (value >>> 15), 0x735a2d97) >>> 0
+  let value = mixPresentationSeed(casterSeed ^ Math.trunc(presentationFrame))
+  value = mixPresentationSeed(value ^ sourceIndex)
+  value = mixPresentationSeed(value ^ float32Bits(source.position.x))
+  value = mixPresentationSeed(value ^ float32Bits(source.position.y))
+  value = mixPresentationSeed(value ^ float32Bits(source.radius))
   return ((value ^ (value >>> 15)) >>> 0) / 0x1_0000_0000
+}
+
+const PRESENTATION_FLOAT = new Float32Array(1)
+const PRESENTATION_BITS = new Uint32Array(PRESENTATION_FLOAT.buffer)
+
+function float32Bits(value: number): number {
+  PRESENTATION_FLOAT[0] = value
+  return PRESENTATION_BITS[0]
+}
+
+function mixPresentationSeed(seed: number): number {
+  let value = Math.imul(seed ^ (seed >>> 16), 0x21f0aaad) >>> 0
+  value = Math.imul(value ^ (value >>> 15), 0x735a2d97) >>> 0
+  return value ^ (value >>> 15)
+}
+
+function stableStringHash(value: string): number {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 0x01000193) >>> 0
+  }
+  return hash
 }
 
 function add(left: Vec2, right: Vec2): Vec2 {
@@ -561,11 +638,4 @@ function add(left: Vec2, right: Vec2): Vec2 {
 
 function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value))
-}
-
-function cross(origin: Vec2, left: Vec2, right: Vec2): number {
-  return (
-    (left.x - origin.x) * (right.y - origin.y)
-    - (left.y - origin.y) * (right.x - origin.x)
-  )
 }

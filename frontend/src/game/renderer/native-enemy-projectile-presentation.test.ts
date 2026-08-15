@@ -99,6 +99,7 @@ function projectile(
     homing: false,
     id: 1,
     kind,
+    lightRegistration: null,
     lifetimeTicks: 1_000,
     nativeTypeId,
     ownerActorId: 2,

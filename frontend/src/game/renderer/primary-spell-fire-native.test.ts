@@ -154,8 +154,8 @@ test('pins outbound Fireball light and self-lit inbound render paths', () => {
   assert.equal(trail.regionLightPoint, null)
   assert.deepEqual(source.position, { x: 400, y: 300 })
   assert.equal(source.intensity, 0.75)
-  assert.equal(source.castsDirectionalShadow, false)
-  assert.equal(source.radius >= 1 && source.radius < 1.25, true)
+  assert.equal(source.castsDirectionalShadow, true)
+  assert.equal(source.radius >= 1 && source.radius <= 1.25, true)
 })
 
 test('pins exact Fire impact frame clock, recurrence, blend order, and light ownership', () => {

@@ -61,6 +61,14 @@ import {
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
 
 const PLAYER_ID = 'caster'
+const ACTOR_LIGHT_REGISTRATION = {
+  managerLane: 'actor' as const,
+  registrationOrdinal: 0,
+}
+const TRANSIENT_LIGHT_REGISTRATION = {
+  managerLane: 'transient' as const,
+  registrationOrdinal: 0,
+}
 const EMPTY_SPELL_WORLD = {
   canTraverseProjectile: () => true,
   castAuthority: {
@@ -670,6 +678,7 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
     headingDegrees: 90,
     id: 1,
     kind: 'ether',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: PLAYER_ID,
     phase: 'flight',
     position: { x: 100, y: 200 },
@@ -718,6 +727,7 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
     birthTick: 88,
     id: 2,
     kind: 'ether-impact',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: missile.position,
     ownerId: PLAYER_ID,
     worldKey: 'hub:courtyard',
@@ -764,12 +774,17 @@ test('Fire emits its one 4.5-unit missile from the native pushed socket', () => 
   assert.equal(fireball.position.x, player.position.x + 8.5)
   assert.equal(fireball.position.y, player.position.y - 62)
   assert.equal(fireball.ageTicks, 1)
+  assert.deepEqual(fireball.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  })
   assert.equal(state.primarySpells.transients.length, 1)
   assert.deepEqual(state.primarySpells.transients[0], {
     ageTicks: 0,
     direction: { x: 0, y: -1 },
     id: 2,
     kind: 'fire',
+    lightRegistration: null,
     origin: { ...fireball.position },
     ownerId: PLAYER_ID,
     variant: nativeFireParticleVariant(2),
@@ -839,6 +854,7 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
     ageTicks: 0,
     id: 2,
     kind: 'fire-impact',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: probes[0].to,
     ownerId: PLAYER_ID,
     worldKey: 'hub:courtyard',
@@ -853,6 +869,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
     flightTicks: 5,
     id: 1,
     kind: 'fire',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: PLAYER_ID,
     phase: 'flight',
     position: { x: 100, y: 200 },
@@ -885,6 +902,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
     ageTicks: 0,
     id: 2,
     kind: 'fire-impact',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 100, y: 200 },
     ownerId: PLAYER_ID,
     worldKey: 'hub:courtyard',
@@ -929,6 +947,7 @@ test('Fire advances and emits its final trail before combat owns actor contact',
     flightTicks: 1,
     id: 1,
     kind: 'fire',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: PLAYER_ID,
     phase: 'flight',
     position: { x: 100, y: 200 },
@@ -977,6 +996,7 @@ test('Fire has no distance or PoC flight-time range cap', () => {
         flightTicks: ageTicks,
         id: 1,
         kind: 'fire',
+        lightRegistration: ACTOR_LIGHT_REGISTRATION,
         ownerId: PLAYER_ID,
         phase: 'flight',
         position: { x: 100, y: 200 },
@@ -1012,6 +1032,7 @@ test('Ether has no distance or legacy PoC flight-time range cap', () => {
         headingDegrees: 90,
         id: 1,
         kind: 'ether',
+        lightRegistration: ACTOR_LIGHT_REGISTRATION,
         ownerId: PLAYER_ID,
         phase: 'flight',
         position: { x: 100, y: 200 },
@@ -1398,6 +1419,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
     charge: released.charge,
     id: impact.id,
     kind: 'earth-impact',
+    lightRegistration: null,
     lifetimeTicks: earthImpactLifetimeTicks(impact),
     origin: checked[0].position,
     ownerId: PLAYER_ID,

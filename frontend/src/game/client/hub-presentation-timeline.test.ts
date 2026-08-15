@@ -36,6 +36,20 @@ const CHARACTER = {
 } as const
 const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
   .players['local-player']!
+const LIGHTING = DEFAULT_PLAYER.lighting
+const actorLightRegistration = (registrationOrdinal: number) => ({
+  managerLane: 'actor' as const,
+  registrationOrdinal,
+})
+const TRANSIENT_LIGHT_REGISTRATION = {
+  managerLane: 'transient',
+  registrationOrdinal: 2,
+} as const
+const primarySpellTime = (targetTick: number) => ({
+  newerTick: 105,
+  olderTick: 100,
+  targetTick,
+})
 
 function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
   return {
@@ -44,6 +58,7 @@ function playerAt(x: number, headingIndex = 0): ProtocolPlayerState {
     footstepTick: 0,
     gaitDegrees: x,
     headingIndex,
+    lighting: LIGHTING,
     position: { x, y: 200 },
     primaryCast: createIdlePlayerPrimaryCast(),
     progression: DEFAULT_PLAYER.progression,
@@ -89,8 +104,33 @@ test('returns an owned presentation copy until a second authoritative snapshot e
   assert.deepEqual(presentation, initial)
   assert.notEqual(presentation, initial)
   assert.notEqual(presentation.players.local, initial.players.local)
+  assert.notEqual(presentation.players.local.lighting, initial.players.local.lighting)
   assert.notEqual(presentation.world, initial.world)
   assert.notEqual(presentation.world.ambient, initial.world.ambient)
+})
+
+test('keeps player-lighting ownership discrete across Hub presentation samples', () => {
+  const older = snapshotAt(100, 10, 20)
+  const newer = snapshotAt(105, 20, 30)
+  older.players.remote.lighting = {
+    ...LIGHTING,
+    driveActive: false,
+    overlayEffectPhase: 0.135,
+  }
+  newer.players.remote.lighting = {
+    ...LIGHTING,
+    driveActive: true,
+    lightRegistration: actorLightRegistration(9),
+    overlayEffectPhase: 0.225,
+  }
+  const presentation = timeline(older)
+  presentation.push(newer, 50)
+  assert.deepEqual(presentation.sample(75).players.remote.lighting, older.players.remote.lighting)
+  assert.deepEqual(presentation.sample(100).players.remote.lighting, newer.players.remote.lighting)
+  assert.notEqual(
+    presentation.sample(100).players.remote.lighting.lightRegistration,
+    newer.players.remote.lighting.lightRegistration,
+  )
 })
 
 test('interpolates primary spells by stable identity without popping lifecycle edges early', () => {
@@ -107,6 +147,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         hitTargetIds: [],
         id: 1,
         kind: 'earth',
+        lightRegistration: actorLightRegistration(0),
         orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
         ownerId: 'local',
         phase: 'held',
@@ -123,6 +164,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         headingDegrees: 90,
         id: 3,
         kind: 'ether',
+        lightRegistration: actorLightRegistration(1),
         ownerId: 'local',
         phase: 'flight',
         position: { x: 90, y: 20 },
@@ -138,6 +180,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
       direction: { x: 0, y: -1 },
       id: 2,
       kind: 'fire',
+      lightRegistration: null,
       origin: { x: 40, y: 50 },
       ownerId: 'local',
       variant: nativeFireParticleVariant(2),
@@ -171,6 +214,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         flightTicks: 1,
         id: 4,
         kind: 'fire',
+        lightRegistration: actorLightRegistration(2),
         ownerId: 'local',
         phase: 'flight',
         position: { x: 50, y: 50 },
@@ -180,10 +224,11 @@ test('interpolates primary spells by stable identity without popping lifecycle e
       },
     ],
     transients: [{
-      ageTicks: 6,
+      ageTicks: 7,
       direction: { x: 1, y: 0 },
       id: 2,
       kind: 'fire',
+      lightRegistration: null,
       origin: { x: 400, y: 500 },
       ownerId: 'local',
       variant: nativeFireParticleVariant(2),
@@ -191,24 +236,34 @@ test('interpolates primary spells by stable identity without popping lifecycle e
     }],
   } as const
 
-  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
   assert.deepEqual(halfway.projectiles.map(({ id }) => id), [1, 3])
   assert.deepEqual(halfway.projectiles[0].position, { x: 15, y: 25 })
   assert.equal(halfway.projectiles[0].charge, 0.30000000000000004)
   assert.equal(halfway.projectiles[0].phase, 'held')
   assert.equal(halfway.projectiles[0].kind, 'earth')
+  assert.deepEqual(halfway.projectiles[0].lightRegistration, actorLightRegistration(0))
+  assert.notEqual(
+    halfway.projectiles[0].lightRegistration,
+    older.projectiles[0].lightRegistration,
+  )
   if (halfway.projectiles[0].kind === 'earth') {
     assert.equal(halfway.projectiles[0].assemblyCharge, Math.fround(0.18))
     assert.deepEqual(halfway.projectiles[0].hitTargetIds, [])
     assert.deepEqual(halfway.projectiles[0].orientation, EARTH_BOULDER_IDENTITY_ORIENTATION)
   }
-  assert.equal(halfway.transients[0].ageTicks, 4)
+  assert.equal(halfway.transients[0].ageTicks, 4.5)
   assert.equal(halfway.transients[0].kind, 'fire')
   if (halfway.transients[0].kind === 'fire') {
     assert.deepEqual(halfway.transients[0].origin, { x: 40, y: 50 })
     assert.deepEqual(halfway.transients[0].direction, { x: 0, y: -1 })
   }
-  const caughtUp = interpolatePrimarySpellState(older, newer, 1)
+  const caughtUp = interpolatePrimarySpellState(older, newer, 1, primarySpellTime(105))
   assert.deepEqual(caughtUp.projectiles.map(({ id }) => id), [1, 4])
   assert.equal(caughtUp.projectiles[0].phase, 'flight')
   assert.equal(caughtUp.projectiles[0].kind, 'earth')
@@ -226,6 +281,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   const owned = copyPrimarySpellState(newer)
   assert.deepEqual(owned, newer)
   assert.notEqual(owned.projectiles[0].position, newer.projectiles[0].position)
+  assert.notEqual(owned.projectiles[0].lightRegistration, newer.projectiles[0].lightRegistration)
   if (owned.projectiles[0].kind === 'earth' && newer.projectiles[0].kind === 'earth') {
     assert.notEqual(owned.projectiles[0].hitTargetIds, newer.projectiles[0].hitTargetIds)
     assert.notEqual(owned.projectiles[0].orientation, newer.projectiles[0].orientation)
@@ -236,6 +292,240 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   }
 })
 
+test('admits retained Air, Water, and Fire births on their owned 100 Hz ticks', () => {
+  const air = (birthTick: number) => ({
+    ageTicks: 0,
+    birthTick,
+    direction: { x: 1, y: 0 },
+    endpoint: { x: 300, y: 200 },
+    id: 1_000 + birthTick,
+    kind: 'air' as const,
+    lightRegistration: {
+      managerLane: 'transient' as const,
+      registrationOrdinal: 1_000 + birthTick,
+    },
+    midpoint: { x: 200, y: 200 },
+    origin: { x: 100, y: 200 },
+    ownerId: 'air-player',
+    targetId: null,
+    underpowered: false,
+    variant: birthTick % 4,
+    worldKey: 'hub:courtyard',
+  })
+  const water = (birthTick: number, variant: number, snapshotTick: number) => ({
+    ageTicks: snapshotTick - birthTick + 1,
+    direction: { x: 0, y: -1 },
+    id: 2_000 + birthTick * 2 + variant,
+    kind: 'water' as const,
+    lightRegistration: null,
+    obstructionDistance: null,
+    obstructionPoint: null,
+    origin: { x: 100, y: 200 },
+    ownerId: 'water-player',
+    underpowered: false,
+    variant,
+    worldKey: 'hub:courtyard',
+  })
+  const fire = (birthTick: number, snapshotTick: number) => {
+    const id = 3_000 + birthTick
+    return {
+      ageTicks: snapshotTick - birthTick,
+      direction: { x: 1, y: 0 },
+      id,
+      kind: 'fire' as const,
+      lightRegistration: null,
+      origin: { x: birthTick, y: 200 },
+      ownerId: 'fire-player',
+      variant: nativeFireParticleVariant(id),
+      worldKey: 'hub:courtyard',
+    }
+  }
+  const births = (first: number, last: number) => (
+    Array.from({ length: last - first + 1 }, (_, index) => first + index)
+  )
+  const older = {
+    nextId: 4_000,
+    projectiles: [],
+    transients: [
+      ...births(96, 100).map(air).map((effect) => ({
+        ...effect,
+        ageTicks: 100 - effect.birthTick,
+      })),
+      ...births(96, 100).flatMap((birthTick) => [
+        water(birthTick, 0, 100),
+        water(birthTick, 1, 100),
+      ]),
+      ...births(96, 100).map((birthTick) => fire(birthTick, 100)),
+    ],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 4_100,
+    projectiles: [],
+    transients: [
+      ...births(101, 105).map(air).map((effect) => ({
+        ...effect,
+        ageTicks: 105 - effect.birthTick,
+      })),
+      ...births(96, 105).flatMap((birthTick) => [
+        water(birthTick, 0, 105),
+        water(birthTick, 1, 105),
+      ]),
+      ...births(96, 105).map((birthTick) => fire(birthTick, 105)),
+    ],
+  } satisfies PrimarySpellSimulationState
+
+  for (const targetTick of births(100, 105)) {
+    const frame = interpolatePrimarySpellState(
+      older,
+      newer,
+      (targetTick - 100) / 5,
+      primarySpellTime(targetTick),
+    )
+    const airEffects = frame.transients.filter((effect) => effect.kind === 'air')
+    const waterEffects = frame.transients.filter((effect) => effect.kind === 'water')
+    const fireEffects = frame.transients.filter((effect) => effect.kind === 'fire')
+    assert.deepEqual(
+      airEffects.filter((effect) => effect.ageTicks === 0).map((effect) => effect.birthTick),
+      [targetTick],
+    )
+    assert.deepEqual(
+      waterEffects
+        .filter((effect) => effect.ageTicks === 1)
+        .map((effect) => effect.id),
+      [2_000 + targetTick * 2, 2_001 + targetTick * 2],
+    )
+    assert.deepEqual(
+      fireEffects.filter((effect) => effect.ageTicks === 0).map((effect) => effect.id),
+      [3_000 + targetTick],
+    )
+    assert.equal(airEffects.length, 5)
+    assert.equal(waterEffects.length, (targetTick - 95) * 2)
+    assert.equal(fireEffects.length, targetTick - 95)
+  }
+
+  const fractional = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
+  assert.deepEqual(
+    fractional.transients
+      .flatMap((effect) => (
+        effect.kind === 'air' && effect.ageTicks === 0 ? [effect.birthTick] : []
+      )),
+    [102],
+  )
+  assert.deepEqual(
+    fractional.transients
+      .filter((effect) => effect.kind === 'water' && effect.ageTicks === 1.5)
+      .map((effect) => effect.id),
+    [2_204, 2_205],
+  )
+  assert.deepEqual(
+    fractional.transients
+      .filter((effect) => effect.kind === 'fire' && effect.ageTicks === 0.5)
+      .map((effect) => effect.id),
+    [3_102],
+  )
+
+  const exhausted = {
+    ...newer,
+    transients: newer.transients.filter((effect) => {
+      if (effect.kind === 'air') return effect.birthTick <= 102
+      if (effect.kind === 'water') return effect.id <= 2_205
+      return effect.id <= 3_102
+    }),
+  }
+  const afterExhaustion = interpolatePrimarySpellState(
+    older,
+    exhausted,
+    0.8,
+    primarySpellTime(104),
+  ).transients
+  assert.equal(afterExhaustion.some((effect) => (
+    effect.kind === 'air' && effect.ageTicks === 0
+  )), false)
+  assert.equal(afterExhaustion.some((effect) => (
+    effect.kind === 'water' && effect.ageTicks === 1
+  )), false)
+  assert.equal(afterExhaustion.some((effect) => (
+    effect.kind === 'fire' && effect.ageTicks === 0
+  )), false)
+})
+
+test('admits and retires every fixed-lifetime impact at its reconstructed tick', () => {
+  const older = {
+    nextId: 5,
+    projectiles: [],
+    transients: [{
+      ageTicks: 15,
+      id: 4,
+      kind: 'fire-impact',
+      lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
+      origin: { x: 40, y: 50 },
+      ownerId: 'fire-player',
+      worldKey: 'hub:courtyard',
+    }],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 5,
+    projectiles: [],
+    transients: [
+      {
+        ageTicks: 3,
+        birthTick: 102,
+        charge: 1,
+        id: 1,
+        kind: 'earth-impact',
+        lightRegistration: null,
+        lifetimeTicks: 10,
+        origin: { x: 10, y: 20 },
+        ownerId: 'earth-player',
+        worldKey: 'hub:courtyard',
+      },
+      {
+        ageTicks: 2,
+        birthTick: 103,
+        id: 2,
+        kind: 'ether-impact',
+        lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
+        origin: { x: 20, y: 30 },
+        ownerId: 'ether-player',
+        worldKey: 'hub:courtyard',
+      },
+      {
+        ageTicks: 1,
+        id: 3,
+        kind: 'fire-impact',
+        lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
+        origin: { x: 30, y: 40 },
+        ownerId: 'fire-player',
+        worldKey: 'hub:courtyard',
+      },
+    ],
+  } satisfies PrimarySpellSimulationState
+  const sample = (targetTick: number) => interpolatePrimarySpellState(
+    older,
+    newer,
+    (targetTick - 100) / 5,
+    primarySpellTime(targetTick),
+  ).transients
+
+  assert.deepEqual(sample(100).map(({ id, ageTicks }) => [id, ageTicks]), [[4, 15]])
+  assert.deepEqual(sample(101), [])
+  assert.deepEqual(sample(102).map(({ id, ageTicks }) => [id, ageTicks]), [[1, 0]])
+  assert.deepEqual(sample(103.5).map(({ id, ageTicks }) => [id, ageTicks]), [
+    [1, 1.5],
+    [2, 0.5],
+  ])
+  assert.deepEqual(sample(104).map(({ id, ageTicks }) => [id, ageTicks]), [
+    [1, 2],
+    [2, 1],
+    [3, 0],
+  ])
+})
+
 test('interpolates Fire impact age while retaining its semantic contact origin', () => {
   const older = {
     nextId: 2,
@@ -244,6 +534,7 @@ test('interpolates Fire impact age while retaining its semantic contact origin',
       ageTicks: 2,
       id: 1,
       kind: 'fire-impact',
+      lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
       origin: { x: 100, y: 200 },
       ownerId: 'local',
       worldKey: 'hub:courtyard',
@@ -255,7 +546,12 @@ test('interpolates Fire impact age while retaining its semantic contact origin',
     transients: [{ ...older.transients[0], ageTicks: 7 }],
   } satisfies PrimarySpellSimulationState
 
-  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
   assert.equal(halfway.transients[0].kind, 'fire-impact')
   assert.equal(halfway.transients[0].ageTicks, 4.5)
   assert.deepEqual(halfway.transients[0].origin, { x: 100, y: 200 })
@@ -274,6 +570,7 @@ test('interpolates authoritative called-rock absolute state across sparse snapsh
     height: -5,
     id: 2,
     kind: 'earth-called-rock',
+    lightRegistration: null,
     lateralMagnitude: 2.5,
     ownerId: 'local',
     parentId: 1,
@@ -306,7 +603,12 @@ test('interpolates authoritative called-rock absolute state across sparse snapsh
     }, { ...rock, id: 4, position: { x: 300, y: 400 } }],
   } satisfies PrimarySpellSimulationState
 
-  const halfway = interpolatePrimarySpellState(older, newer, 0.5)
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
   const interpolated = halfway.transients.find(({ id }) => id === 2)
   assert.ok(interpolated?.kind === 'earth-called-rock')
   assert.deepEqual(interpolated.position, { x: 106, y: 203 })
@@ -314,7 +616,7 @@ test('interpolates authoritative called-rock absolute state across sparse snapsh
   assert.equal(interpolated.falling, false)
   assert.deepEqual(halfway.transients.map(({ id }) => id), [2, 3])
 
-  const caughtUp = interpolatePrimarySpellState(older, newer, 1)
+  const caughtUp = interpolatePrimarySpellState(older, newer, 1, primarySpellTime(105))
   assert.deepEqual(caughtUp.transients.map(({ id }) => id), [2, 4])
   const owned = copyPrimarySpellState(newer)
   const copied = owned.transients[0]

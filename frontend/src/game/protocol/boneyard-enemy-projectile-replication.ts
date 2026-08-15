@@ -15,7 +15,7 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID = 3
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 10
+const DESCRIPTOR_LENGTH = 12
 const SAMPLE_LENGTH = 6
 
 const KINDS = [
@@ -55,6 +55,10 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
     const payload = BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!
     return NATIVE_TYPE_IDS[kind] === descriptor[3]
       && payloadMatchesKind(kind, payload)
+      && descriptor[10] === lightManagerLaneCode(kind, payload)
+      && (descriptor[10] === -1
+        ? descriptor[11] === -1
+        : nonnegativeInteger(descriptor[11]))
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -80,6 +84,10 @@ export function boneyardEnemyProjectileDescriptor(
     quantize(projectile.contactRadius, VALUE_SCALE),
     Number(projectile.homing),
     requiredIndex(BONEYARD_ENEMY_PROJECTILE_PAYLOADS, projectile.payload),
+    projectile.lightRegistration === null
+      ? -1
+      : projectile.lightRegistration.managerLane === 'actor' ? 0 : 1,
+    projectile.lightRegistration?.registrationOrdinal ?? -1,
   ]
 }
 
@@ -116,6 +124,12 @@ export function materializeBoneyardEnemyProjectile(
     homing: descriptor[8] === 1,
     id: descriptor[1],
     kind: KINDS[descriptor[2]]!,
+    lightRegistration: descriptor[10] === -1
+      ? null
+      : {
+          managerLane: descriptor[10] === 0 ? 'actor' : 'transient',
+          registrationOrdinal: descriptor[11],
+        },
     lifetimeTicks: descriptor[6],
     nativeTypeId: descriptor[3] as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: descriptor[4],
@@ -139,6 +153,15 @@ function payloadMatchesKind(
     case 'demon-bomb': return payload === 'none'
     case 'poison-pool': return payload === 'poison'
   }
+}
+
+function lightManagerLaneCode(
+  kind: BoneyardEnemyProjectileSnapshot['kind'],
+  payload: BoneyardEnemyProjectilePayload,
+): -1 | 0 | 1 {
+  if (kind === 'guided-missile' || kind === 'demon-bomb') return 0
+  if (kind === 'firebolt' || (kind === 'arrow' && payload === 'fire')) return 1
+  return -1
 }
 
 function requiredIndex<T>(source: readonly T[], value: T): number {

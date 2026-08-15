@@ -3,6 +3,7 @@ import {
   NATIVE_IMP_BODY_POSE_COUNT,
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
+import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import type {
   BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
@@ -144,6 +145,7 @@ function interpolateSnapshot(
       older.primarySpells,
       newer.primarySpells,
       blend,
+      { newerTick: newer.tick, olderTick: older.tick, targetTick },
     ),
     run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
@@ -172,6 +174,14 @@ function interpolateSnapshot(
         blend,
       ),
       kind: 'boneyard',
+      lanternLightRegistration: copyLightRegistration(
+        (blend < 1 ? older : newer).world.lanternLightRegistration,
+      ),
+      mageLightningPulses: mergeMageLightningPulses(
+        older.world.mageLightningPulses,
+        newer.world.mageLightningPulses,
+        targetTick,
+      ),
       maggots: interpolateMaggots(older.world.maggots, newer.world.maggots, blend),
       runId: newer.world.runId,
       waves: interpolateWaves(older.world.waves, newer.world.waves, blend),
@@ -196,6 +206,10 @@ function interpolatePlayer(
       blend,
       HEADING_COUNT,
     )) % HEADING_COUNT,
+    lighting: {
+      ...discrete.lighting,
+      lightRegistration: { ...discrete.lighting.lightRegistration },
+    },
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),
@@ -289,6 +303,14 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       enemyProjectiles: snapshot.world.enemyProjectiles.map(copyEnemyProjectile),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
       kind: 'boneyard',
+      lanternLightRegistration: copyLightRegistration(
+        snapshot.world.lanternLightRegistration,
+      ),
+      mageLightningPulses: mergeMageLightningPulses(
+        snapshot.world.mageLightningPulses,
+        [],
+        snapshot.tick,
+      ),
       maggots: snapshot.world.maggots.map(copyMaggot),
       runId: snapshot.world.runId,
       waves: copyWaves(snapshot.world.waves),
@@ -413,6 +435,10 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
     config: { ...player.config },
+    lighting: {
+      ...player.lighting,
+      lightRegistration: { ...player.lighting.lightRegistration },
+    },
     position: { ...player.position },
     primaryCast: {
       ...player.primaryCast,
@@ -539,6 +565,8 @@ function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
       maggots: [],
     },
     flags: [...enemy.flags],
+    lightRegistration: copyLightRegistration(enemy.lightRegistration),
+    lighting: { ...enemy.lighting },
     position: { ...enemy.position },
   }
 }
@@ -546,7 +574,17 @@ function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
 function copyEnemyProjectile(
   projectile: BoneyardEnemyProjectileSnapshot,
 ): BoneyardEnemyProjectileSnapshot {
-  return { ...projectile, position: { ...projectile.position } }
+  return {
+    ...projectile,
+    lightRegistration: copyLightRegistration(projectile.lightRegistration),
+    position: { ...projectile.position },
+  }
+}
+
+function copyLightRegistration<T extends { managerLane: 'actor' | 'transient'; registrationOrdinal: number } | null>(
+  registration: T,
+): T {
+  return (registration === null ? null : { ...registration }) as T
 }
 
 function copyEnemyDeathEffect(
@@ -567,9 +605,42 @@ function copyEnemyEvent(
     ...(event.sourcePosition === undefined
       ? {}
       : { sourcePosition: { ...event.sourcePosition } }),
-    ...(event.targetPosition === undefined
-      ? {}
-      : { targetPosition: { ...event.targetPosition } }),
+  }
+}
+
+function mergeMageLightningPulses(
+  older: BoneyardWorldSnapshot['mageLightningPulses'],
+  newer: BoneyardWorldSnapshot['mageLightningPulses'],
+  presentationTick: number,
+): BoneyardWorldSnapshot['mageLightningPulses'] {
+  const pulses = new Map<number, BoneyardWorldSnapshot['mageLightningPulses'][number]>()
+  for (const pulse of [...older, ...newer]) {
+    if (
+      pulse.tick > presentationTick
+      || presentationTick - pulse.tick >= NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
+    ) continue
+    pulses.set(pulse.id, pulse)
+  }
+  return [...pulses.values()]
+    .sort((first, second) => first.tick - second.tick || first.id - second.id)
+    .map(copyMageLightningPulse)
+}
+
+function copyMageLightningPulse(
+  pulse: BoneyardWorldSnapshot['mageLightningPulses'][number],
+): BoneyardWorldSnapshot['mageLightningPulses'][number] {
+  return {
+    ...pulse,
+    contact: pulse.contact.kind === 'world'
+      ? { kind: 'world', position: { ...pulse.contact.position } }
+      : {
+          kind: 'target-attached',
+          localOffset: { ...pulse.contact.localOffset },
+          targetPlayerId: pulse.contact.targetPlayerId,
+        },
+    endpoint: { ...pulse.endpoint },
+    midpoint: { ...pulse.midpoint },
+    source: { ...pulse.source },
   }
 }
 

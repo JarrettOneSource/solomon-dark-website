@@ -25,6 +25,7 @@ import type {
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
+import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
@@ -48,6 +49,7 @@ export interface ProtocolAmbientState {
 export interface ProtocolPlayerState extends PlayerCharacterState {
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
+  lighting: ProtocolPlayerLighting
   progression: ProtocolPlayerProgression
 }
 
@@ -68,6 +70,12 @@ export interface ProtocolPlayerEconomy {
   revision: number
   storage: readonly HubInventoryItem[]
   tonicPurchases: number
+}
+
+export interface ProtocolPlayerLighting {
+  driveActive: boolean
+  lightRegistration: NativeLightProviderRegistration
+  overlayEffectPhase: number
 }
 
 export interface ProtocolPlayerSkillOfferOption {
@@ -137,9 +145,11 @@ export interface BoneyardWorldSnapshot {
   enemies: readonly BoneyardEnemySnapshot[]
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
   enemyProjectiles: readonly BoneyardEnemyProjectileSnapshot[]
+  mageLightningPulses: readonly BoneyardMageLightningPulseSnapshot[]
   maggots: readonly BoneyardMaggotSnapshot[]
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
+  lanternLightRegistration: NativeLightProviderRegistration | null
   runId: string
   waves: BoneyardWaveSnapshot | null
 }
@@ -171,6 +181,45 @@ export interface BoneyardEnemyDeathEffectSnapshot {
   tint: number
 }
 
+export type BoneyardMageLightningContactSnapshot =
+  | {
+      kind: 'target-attached'
+      localOffset: Vector2
+      targetPlayerId: string
+    }
+  | {
+      kind: 'world'
+      position: Vector2
+    }
+
+export interface BoneyardMageLightningPulseSnapshot {
+  contact: BoneyardMageLightningContactSnapshot
+  endpoint: Vector2
+  id: number
+  midpoint: Vector2
+  ownerActorId: number
+  seed: number
+  source: Vector2
+  tick: number
+}
+
+export type BoneyardMageLightningPulseFrame = readonly [
+  id: number,
+  ownerActorId: number,
+  tick: number,
+  seed: number,
+  sourceX: number,
+  sourceY: number,
+  midpointX: number,
+  midpointY: number,
+  endpointX: number,
+  endpointY: number,
+  contactKind: 0 | 1,
+  contactX: number,
+  contactY: number,
+  targetPlayerId: string | null,
+]
+
 export const BONEYARD_ENEMY_EVENT_TYPES = [
   'attack-marker',
   'coffin-maggot-release',
@@ -180,7 +229,6 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'enemy-retired',
   'enemy-spawned',
   'enemy-terminal-output',
-  'mage-lightning',
   'projectile-impact',
   'projectile-retired',
   'projectile-spawned',
@@ -245,7 +293,6 @@ export interface BoneyardEnemyEventSnapshot {
   runId: string
   sound?: BoneyardEnemySound
   sourcePosition?: Vector2
-  targetPosition?: Vector2
   targetPlayerId?: string | null
   tick: number
   type: BoneyardEnemyEventType
@@ -276,6 +323,7 @@ export interface BoneyardEnemyProjectileSnapshot {
   homing: boolean
   id: number
   kind: BoneyardEnemyProjectileKind
+  lightRegistration: NativeLightProviderRegistration | null
   lifetimeTicks: number
   nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   ownerActorId: number
@@ -360,8 +408,6 @@ export interface BoneyardEnemyAnimationSnapshot {
 export const BONEYARD_ENEMY_EFFECT_ROLES = [
   'burning-fire',
   'magic-shield',
-  'mage-lightning-source',
-  'mage-lightning-target',
 ] as const
 
 export type BoneyardEnemyEffectRole = typeof BONEYARD_ENEMY_EFFECT_ROLES[number]
@@ -378,6 +424,12 @@ export interface BoneyardEnemyEffectSnapshot {
   scale: number
 }
 
+export interface BoneyardEnemyLightingSnapshot {
+  charge: number
+  glow: number
+  providerCopies: 0 | 1 | 2
+}
+
 export interface BoneyardEnemySnapshot {
   animation: BoneyardEnemyAnimationSnapshot
   armored: boolean
@@ -386,6 +438,8 @@ export interface BoneyardEnemySnapshot {
   flags: readonly string[]
   headingDeg: number
   id: number
+  lightRegistration: NativeLightProviderRegistration | null
+  lighting: BoneyardEnemyLightingSnapshot
   maximumHealth: number
   nativeTypeId: number
   position: Vector2
@@ -442,6 +496,8 @@ export interface BoneyardWorldSnapshotFrame {
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
+  lanternLightRegistration: NativeLightProviderRegistration | null
+  mageLightningPulses: readonly BoneyardMageLightningPulseFrame[]
   runId: string
   waves: BoneyardWaveSnapshot | null
 }

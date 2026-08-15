@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { createPlayerCharacter } from '../core-kernels/player-character.ts'
+import {
+  createIdlePlayerPrimaryCast,
+  createPlayerCharacter,
+} from '../core-kernels/player-character.ts'
 import { buyFomentiusItem } from '../core-kernels/hub-economy.ts'
+import {
+  NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
+  NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
+  NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+  playerLightDriveActive,
+} from '../core-kernels/player-lighting.ts'
 import {
   addPlayerEntity,
   coldSlowPlayerEntity,
@@ -17,15 +26,18 @@ import {
   playerCharacterAt,
   playerEconomyAt,
   playerEntityId,
+  playerLightingAt,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
   playerStatBookAt,
   removePlayerEntity,
   replacePlayerEconomy,
+  replacePlayerCharacter,
   resetPlayerEntitiesForNewRun,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
+  stepPlayerEntityOverlayLightingTick,
   tryDebitPlayerEntityMana,
 } from './player-entity-store.ts'
 
@@ -40,6 +52,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.deepEqual(store.identities.map((identity) => identity.playerId), ['first', 'second'])
   assert.equal(store.configs.length, store.locomotions.length)
   assert.equal(store.economies.length, store.locomotions.length)
+  assert.equal(store.lightings.length, store.locomotions.length)
   assert.equal('config' in store.locomotions[0]!, false)
   assert.equal('primaryCast' in store.locomotions[0]!, false)
   assert.equal(store.locomotions.length, store.progressions.length)
@@ -48,6 +61,10 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.skillBooks.length, store.statBooks.length)
   assert.equal(playerEntityId(store, 'second'), 2)
   assert.equal(playerEconomyAt(store, 'first')?.gold, 10_000)
+  assert.deepEqual(playerLightingAt(store, 'second'), {
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
+    overlayEffectPhase: 0,
+  })
 
   store = damagePlayerEntity(store, 'second', 60)
   assert.equal(playerProgressionAt(store, 'second')?.currentHealth, -10)
@@ -165,7 +182,49 @@ test('new-run placement resets transient combat while retaining dense identity a
   assert.equal(playerProgressionAt(store, 'first')?.dazzleTicksRemaining, 0)
   assert.equal(playerEntityMovementScale(store, 'first'), 1)
   assert.equal(playerProgressionAt(store, 'first')?.currentMana, 100)
+  assert.deepEqual(playerLightingAt(store, 'first'), {
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    overlayEffectPhase: 0,
+  })
   assert.throws(() => resetPlayerEntitiesForNewRun(store, {
     first: createPlayerCharacter(FIRST, { x: 0, y: 0 }),
   }), /exactly one placement/)
+  assert.throws(() => resetPlayerEntitiesForNewRun(store, {
+    first: createPlayerCharacter(FIRST, { x: 0, y: 0 }),
+    second: createPlayerCharacter(SECOND, { x: 0, y: 0 }),
+  }, {
+    first: { managerLane: 'actor', registrationOrdinal: 2 },
+  }), /exactly one light registration/)
+})
+
+test('player lighting owns exact cast overlay recurrence', () => {
+  let store = createPlayerEntityStore()
+  store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
+  const first = playerCharacterAt(store, 'first')!
+  store = replacePlayerCharacter(store, 'first', {
+    ...first,
+    primaryCast: { ...first.primaryCast, actionTick: 0 },
+  })
+  const second = playerCharacterAt(store, 'second')!
+  store = replacePlayerCharacter(store, 'second', {
+    ...second,
+    primaryCast: { ...second.primaryCast, actionTick: 1, channelActive: true },
+  })
+  store = stepPlayerEntityOverlayLightingTick(store)
+  assert.equal(
+    playerLightingAt(store, 'first')?.overlayEffectPhase,
+    Math.fround(NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
+  )
+  assert.equal(
+    playerLightingAt(store, 'second')?.overlayEffectPhase,
+    Math.fround(NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
+  )
+
+  const idle = createIdlePlayerPrimaryCast()
+  assert.equal(playerLightDriveActive(idle, 'alive'), false)
+  assert.equal(playerLightDriveActive(idle, 'lethal-pending'), false)
+  assert.equal(playerLightDriveActive({ ...idle, actionTick: 0 }, 'alive'), true)
+  assert.equal(playerLightDriveActive(idle, 'dying'), true)
+  assert.equal(playerLightDriveActive(idle, 'spectating'), true)
 })

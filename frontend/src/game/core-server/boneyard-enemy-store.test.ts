@@ -7,10 +7,17 @@ import {
   BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   BOUNDED_ENEMY_POISON_DURATION_SECONDS,
-  BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
   BOUNDED_MAGE_RANGE_BANDS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import {
+  NATIVE_MAGE_FACING_COUNT,
+  NATIVE_MAGE_BODY_POSE_COUNT,
+  nativeMageBodyAttachment,
+  nativeMageBodyPose,
+  nativeMageFacingBucket,
+  nativeMageLightningDurationTicks,
+} from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
@@ -34,6 +41,7 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardEnemyActor,
   type BoneyardEnemyMovementRequest,
+  type BoneyardEnemySpellSegmentRequest,
   type BoneyardEnemyStore,
   type BoneyardEnemyStoreStepResult,
   type BoneyardEnemyTargets,
@@ -52,6 +60,7 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
 }
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
 const NO_WORLD_CONTACT = () => null
+const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
 
 test('materialization gives all eight families stable actor and event identities', () => {
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {
@@ -91,6 +100,395 @@ test('materialization gives all eight families stable actor and event identities
   assert.deepEqual(skeleton?.config.flags, ['FLAG_FAST'])
   assert.equal(Object.isFrozen(skeleton?.config.flags), true)
   assert.ok(result.store.actors.every((actor) => actor.lastDamageTick === null))
+  assert.deepEqual(
+    result.store.actors.map((actor) => actor.lighting),
+    TOKENS.map(() => ({ charge: 0, glow: 0, providerCopies: 0 })),
+  )
+  assert.deepEqual(
+    result.store.actors.map((actor) => actor.lightRegistration),
+    [0, 1, 2, 3, 4, 5, 6, null].map((registrationOrdinal) => (
+      registrationOrdinal === null
+        ? null
+        : { managerLane: 'actor', registrationOrdinal }
+    )),
+  )
+})
+
+test('enemy fixed ticks own every native persistent-light writer, reset, and enrollment gate', () => {
+  let skeleton = spawnOne(
+    'light-skeleton',
+    'SKELETON',
+    { x: 0, y: 0 },
+    FAR_PLAYERS,
+    ['FLAG_BURNING'],
+  )
+  skeleton = step(skeleton.store, 1, FAR_PLAYERS)
+  assert.deepEqual(skeleton.store.actors[0]!.lighting, {
+    charge: 0,
+    glow: 0.05,
+    providerCopies: 1,
+  })
+
+  const normalArcher = step(
+    spawnOne('light-archer-normal', 'SKELETONARCHER', { x: 0, y: 0 }, FAR_PLAYERS).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(normalArcher.lighting, {
+    charge: 0.02,
+    glow: 0,
+    providerCopies: 0,
+  })
+
+  const fireArcher = step(
+    spawnOne(
+      'light-archer-fire',
+      'SKELETONARCHER',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_POISONARROW', 'FLAG_FIREARROW'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(fireArcher.lighting, {
+    charge: 0.02,
+    glow: 0,
+    providerCopies: 1,
+  })
+
+  const poisonArcher = step(
+    spawnOne(
+      'light-archer-poison',
+      'SKELETONARCHER',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_FIREARROW', 'FLAG_POISONARROW'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.equal(poisonArcher.lighting.providerCopies, 0)
+
+  const burningFireArcher = step(
+    spawnOne(
+      'light-archer-burning-fire',
+      'SKELETONARCHER',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_BURNING', 'FLAG_FIREARROW'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(burningFireArcher.lighting, {
+    charge: 0.02,
+    glow: 0.05,
+    providerCopies: 2,
+  })
+
+  const ordinaryMage = step(
+    spawnOne('light-mage', 'SKELETONMAGE', { x: 0, y: 0 }, FAR_PLAYERS).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(ordinaryMage.lighting, {
+    charge: 0.02,
+    glow: 0,
+    providerCopies: 1,
+  })
+
+  const burningMage = step(
+    spawnOne(
+      'light-mage-burning',
+      'SKELETONMAGE',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_BURNING'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(burningMage.lighting, {
+    charge: 0.02,
+    glow: 0.1,
+    providerCopies: 2,
+  })
+
+  for (const [flag, expectedCharge, expectedCopies] of [
+    ['FLAG_CASTFIRE', 0, 0],
+    ['FLAG_CASTLIGHTNING', 1, 1],
+  ] as const) {
+    let result = spawnOne(
+      `light-mage-dispatch-${flag}`,
+      'SKELETONMAGE',
+      { x: 0, y: 0 },
+      { player: livingTarget(150, 0) },
+      [flag],
+    )
+    const actor = result.store.actors[0]!
+    const brain = actor.brain
+    if (brain.family !== 'mage') throw new Error('expected Mage brain')
+    result = {
+      ...result,
+      store: {
+        ...result.store,
+        actors: [{
+          ...actor,
+          brain: {
+            ...brain,
+            actionProgress: NATIVE_MAGE_ACTION_PROGRAMS.short.markerProgress,
+            castProgram: 'short',
+            castRoll: 0,
+            markerEmitted: false,
+            phase: 'cast',
+          },
+          lighting: { charge: 0.8, glow: 0, providerCopies: 1 },
+        }],
+      },
+    }
+    result = step(result.store, 1, { player: livingTarget(150, 0) })
+    assert.deepEqual(result.store.actors[0]!.lighting, {
+      charge: expectedCharge,
+      glow: 0,
+      providerCopies: expectedCopies,
+    })
+  }
+
+  const spawnedImp = spawnOne('light-imp', 'IMP', { x: 0, y: 0 }, FAR_PLAYERS)
+  const imp = step({
+    ...spawnedImp.store,
+    actors: [{
+      ...spawnedImp.store.actors[0]!,
+      config: { ...spawnedImp.store.actors[0]!.config, scale: 0 },
+    }],
+  }, 1, FAR_PLAYERS).store.actors[0]!
+  assert.deepEqual(imp.lighting, {
+    charge: 0,
+    glow: 0.01,
+    providerCopies: 0,
+  })
+
+  const zombie = step(
+    spawnOne('light-zombie', 'ZOMBIE', { x: 0, y: 0 }, FAR_PLAYERS).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(zombie.lighting, { charge: 0, glow: 0, providerCopies: 0 })
+
+  const wraith = step(
+    spawnOne(
+      'light-wraith',
+      'WRAITH',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_BURNING'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(wraith.lighting, {
+    charge: 0,
+    glow: 0.05,
+    providerCopies: 1,
+  })
+
+  const demon = step(
+    spawnOne('light-demon', 'DEMON', { x: 0, y: 0 }, FAR_PLAYERS).store,
+    1,
+    FAR_PLAYERS,
+  ).store.actors[0]!
+  assert.deepEqual(demon.lighting, { charge: 0, glow: 0, providerCopies: 1 })
+
+  let coffin = spawnOne('light-coffin', 'COFFIN', { x: 0, y: 0 }, FAR_PLAYERS)
+  coffin = step(coffin.store, 1, FAR_PLAYERS)
+  assert.equal(coffin.store.actors[0]!.lighting.providerCopies, 0)
+  coffin = withCoffinRemaining(coffin, 1)
+  coffin = step(coffin.store, 2, FAR_PLAYERS)
+  assert.equal(coffin.store.actors[0]!.brain.phase, 'rising')
+  assert.equal(coffin.store.actors[0]!.lighting.providerCopies, 1)
+})
+
+test('Mage lighting reads the pre-action pose and only exact native pose four pauses charge', () => {
+  const spawned = spawnOne(
+    'light-mage-pose-order',
+    'SKELETONMAGE',
+    { x: 0, y: 0 },
+    { player: livingTarget(150, 0) },
+  )
+  const source = spawned.store.actors[0]!
+  if (source.brain.family !== 'mage') throw new Error('expected Mage brain')
+
+  const enteringPoseFour = step({
+    ...spawned.store,
+    actors: [{
+      ...source,
+      brain: {
+        ...source.brain,
+        actionProgress: 24.8,
+        castProgram: 'short',
+        castRoll: 0,
+        markerEmitted: true,
+        phase: 'cast',
+      },
+      lighting: { charge: 0.3, glow: 0, providerCopies: 1 },
+    }],
+  }, 1, { player: livingTarget(150, 0) }).store.actors[0]!
+  assert.ok(enteringPoseFour.brain.family === 'mage')
+  assert.equal(Math.floor(enteringPoseFour.brain.actionProgress), 25)
+  assert.equal(enteringPoseFour.lighting.charge, 0.32)
+
+  const leavingPoseFour = step({
+    ...spawned.store,
+    actors: [{
+      ...source,
+      brain: {
+        ...source.brain,
+        actionProgress: 37.8,
+        castProgram: 'short',
+        castRoll: 0,
+        markerEmitted: true,
+        phase: 'cast',
+      },
+      lighting: { charge: 0.3, glow: 0, providerCopies: 1 },
+    }],
+  }, 1, { player: livingTarget(150, 0) }).store.actors[0]!
+  assert.ok(leavingPoseFour.brain.family === 'mage')
+  assert.equal(Math.floor(leavingPoseFour.brain.actionProgress), 38)
+  assert.equal(leavingPoseFour.lighting.charge, 0.3)
+
+  const nonCastPoseFive = step({
+    ...spawned.store,
+    actors: [{
+      ...source,
+      gaitPose: 5,
+      lighting: { charge: 0.3, glow: 0, providerCopies: 1 },
+    }],
+  }, 1, { player: livingTarget(150, 0) }).store.actors[0]!
+  assert.equal(nonCastPoseFive.lighting.charge, 0.32)
+
+  const lightningSpawned = spawnOne(
+    'light-mage-cold-lightning-dispatch',
+    'SKELETONMAGE',
+    { x: 0, y: 0 },
+    { player: livingTarget(150, 0) },
+    ['FLAG_CASTLIGHTNING'],
+  )
+  const lightningSource = lightningSpawned.store.actors[0]!
+  if (lightningSource.brain.family !== 'mage') throw new Error('expected Mage brain')
+  const dispatched = step({
+    ...lightningSpawned.store,
+    actors: [{
+      ...lightningSource,
+      brain: {
+        ...lightningSource.brain,
+        actionProgress: NATIVE_MAGE_ACTION_PROGRAMS.short.markerProgress,
+        castProgram: 'short',
+        castRoll: 0,
+        markerEmitted: false,
+        phase: 'cast',
+      },
+    }],
+  }, 1, { player: livingTarget(150, 0) })
+  assert.deepEqual(dispatched.store.actors[0]!.lighting, {
+    charge: 1,
+    glow: 0,
+    providerCopies: 0,
+  })
+  assert.deepEqual(
+    step(dispatched.store, 2, { player: livingTarget(150, 0) })
+      .store.actors[0]!.lighting,
+    { charge: 1, glow: 0, providerCopies: 1 },
+  )
+})
+
+test('native zero-speed gates preserve each family recurrence and enrollment rule', () => {
+  for (const [token, flags, expected] of [
+    ['SKELETON', ['FLAG_BURNING'], { charge: 0.3, glow: 0.4, providerCopies: 0 }],
+    [
+      'SKELETONARCHER',
+      ['FLAG_BURNING', 'FLAG_FIREARROW'],
+      { charge: 0.3, glow: 0.4, providerCopies: 0 },
+    ],
+    [
+      'SKELETONMAGE',
+      ['FLAG_BURNING'],
+      { charge: 0.3, glow: 0.4, providerCopies: 0 },
+    ],
+    ['IMP', [], { charge: 0.3, glow: 0.4 + 0.01, providerCopies: 0 }],
+    [
+      'WRAITH',
+      ['FLAG_BURNING'],
+      { charge: 0.3, glow: 0.4 + 0.05, providerCopies: 1 },
+    ],
+    ['DEMON', [], { charge: 0.3, glow: 0.4, providerCopies: 1 }],
+  ] as const) {
+    const spawned = spawnOne(
+      `light-zero-speed-${token}`,
+      token,
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      flags,
+    )
+    const actor = spawned.store.actors[0]!
+    const result = step({
+      ...spawned.store,
+      actors: [{
+        ...actor,
+        config: { ...actor.config, scale: 0 },
+        lighting: { charge: 0.3, glow: 0.4, providerCopies: 2 },
+      }],
+    }, 1, FAR_PLAYERS)
+    assert.deepEqual(result.store.actors[0]!.lighting, expected, token)
+  }
+})
+
+test('Archer death pose clears charge and every enrolled provider copy', () => {
+  const kill = (store: BoneyardEnemyStore): BoneyardEnemyActor => {
+    const actor = store.actors[0]!
+    const damaged = damageBoneyardEnemy(store, {
+      actorId: actor.id,
+      amount: actor.currentHealth + actor.shieldHealth + 1,
+      sourcePlayerId: 'player',
+      tick: 1,
+    })
+    assert.equal(damaged.killed, true)
+    return damaged.store.actors[0]!
+  }
+
+  const fire = step(
+    spawnOne(
+      'light-archer-death-fire',
+      'SKELETONARCHER',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_FIREARROW'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  )
+  assert.deepEqual(kill(fire.store).lighting, {
+    charge: 0,
+    glow: 0,
+    providerCopies: 0,
+  })
+
+  const burningFire = step(
+    spawnOne(
+      'light-archer-death-burning-fire',
+      'SKELETONARCHER',
+      { x: 0, y: 0 },
+      FAR_PLAYERS,
+      ['FLAG_BURNING', 'FLAG_FIREARROW'],
+    ).store,
+    1,
+    FAR_PLAYERS,
+  )
+  assert.deepEqual(kill(burningFire.store).lighting, {
+    charge: 0,
+    glow: 0.05,
+    providerCopies: 0,
+  })
 })
 
 test('target selection is nearest, tie-stable, and immediately rejects dead peers', () => {
@@ -406,6 +804,10 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     projectile.id,
     projectile.nativeTypeId,
   ]), [[1, 0x7eb]])
+  assert.deepEqual(mage.store.projectiles[0]!.lightRegistration, {
+    managerLane: 'transient',
+    registrationOrdinal: 0,
+  })
 })
 
 test('every Archer and Mage range mode attacks, approaches, and retreats at its own band', () => {
@@ -481,11 +883,27 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
   assert.deepEqual(fire.store.projectiles.map((projectile) => ({
     damage: projectile.damage,
     headingDeg: projectile.headingDeg,
+    lightRegistration: projectile.lightRegistration,
     payload: projectile.payload,
   })), [
-    { damage: 8, headingDeg: 86, payload: 'fire' },
-    { damage: 8, headingDeg: 90, payload: 'fire' },
-    { damage: 8, headingDeg: 94, payload: 'fire' },
+    {
+      damage: 8,
+      headingDeg: 86,
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
+      payload: 'fire',
+    },
+    {
+      damage: 8,
+      headingDeg: 90,
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+      payload: 'fire',
+    },
+    {
+      damage: 8,
+      headingDeg: 94,
+      lightRegistration: { managerLane: 'transient', registrationOrdinal: 2 },
+      payload: 'fire',
+    },
   ])
   const poison = forcedArcherVolley(
     'archer-poison',
@@ -494,11 +912,13 @@ test('Archer modes consume target velocity and RNG while payload and extra arrow
   ).store.projectiles[0]!
   assert.deepEqual({
     damage: poison.damage,
+    lightRegistration: poison.lightRegistration,
     payload: poison.payload,
     poisonDamage: poison.poisonDamage,
     poisonDuration: poison.poisonDuration,
   }, {
     damage: 4,
+    lightRegistration: null,
     payload: 'poison',
     poisonDamage: 12,
     poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
@@ -747,7 +1167,53 @@ test('Skeleton-family and Zombie hurt sounds use the prior 20-tick body latch', 
   }
 })
 
-test('all Mage elements emit their authoritative damage, status, payload, and lightning lifetime', () => {
+test('Mage body attachment source covers all authored poses and native facing buckets', () => {
+  assert.deepEqual(nativeMageBodyAttachment(0, 0), { x: 24.5, y: -14 })
+  assert.deepEqual(nativeMageBodyAttachment(0, 90), { x: -3, y: 8 })
+  assert.deepEqual(nativeMageBodyAttachment(0, 180), { x: -24.5, y: -11.5 })
+  assert.deepEqual(nativeMageBodyAttachment(0, 270), { x: 3, y: -33 })
+  assert.equal(nativeMageFacingBucket(0), 0)
+  assert.equal(nativeMageFacingBucket(90), 5)
+  assert.equal(nativeMageFacingBucket(180), 9)
+  assert.equal(nativeMageFacingBucket(270), 14)
+  assert.equal(nativeMageFacingBucket(20), 1)
+  assert.equal(nativeMageFacingBucket(-20), 0)
+
+  for (let pose = 0; pose < NATIVE_MAGE_BODY_POSE_COUNT; pose += 1) {
+    for (let facing = 0; facing < NATIVE_MAGE_FACING_COUNT; facing += 1) {
+      const attachment = nativeMageBodyAttachment(pose, facing * 20 - 10)
+      assert.ok(Number.isFinite(attachment.x) && Number.isFinite(attachment.y))
+    }
+  }
+  assert.deepEqual(nativeMageBodyAttachment(-1, 0), nativeMageBodyAttachment(0, 0))
+  assert.deepEqual(nativeMageBodyAttachment(99, 0), { x: 4, y: -38.5 })
+  assert.equal(nativeMageBodyPose({
+    actionProgress: 24,
+    castProgram: 'short',
+    gaitPose: 0,
+    phase: 'cast',
+  }), 3)
+  assert.equal(nativeMageBodyPose({
+    actionProgress: 25,
+    castProgram: 'short',
+    gaitPose: 0,
+    phase: 'cast',
+  }), 4)
+  assert.equal(nativeMageBodyPose({
+    actionProgress: 38,
+    castProgram: 'short',
+    gaitPose: 0,
+    phase: 'cast',
+  }), 3)
+  assert.equal(nativeMageBodyPose({
+    actionProgress: 45,
+    castProgram: 'long',
+    gaitPose: 0,
+    phase: 'cast',
+  }), 0)
+})
+
+test('all Mage elements emit their authoritative damage, status, payload, and lightning channel', () => {
   const fire = forcedMageAttack('mage-fire', ['FLAG_CASTFIRE'])
   assert.deepEqual(mageProjectileSummary(fire), {
     coldSlowTicks: 0,
@@ -782,32 +1248,75 @@ test('all Mage elements emit their authoritative damage, status, payload, and li
     amount: damage.amount,
     playerId: damage.playerId,
   })), [{ amount: 12, playerId: 'player' }])
-  const created = lightning.store.actors[0]!.lightningEffect
-  assert.ok(created)
-  const lightningEvent = lightning.events.find((event) => event.type === 'mage-lightning')
-  assert.ok(lightningEvent)
-  assert.deepEqual(lightningEvent, {
-    actorId: lightning.store.actors[0]!.id,
-    eventId: created.eventId,
-    sourcePosition: { x: 0, y: 0 },
-    targetPlayerId: 'player',
-    targetPosition: { x: 150, y: 0 },
-    tick: 1,
-    type: 'mage-lightning',
-  })
-  assert.equal(created.startedTick, 1)
-  for (let age = 1; age < BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS; age += 1) {
-    lightning = step(lightning.store, created.startedTick + age, {
-      player: livingTarget(150, 0),
-    })
-    assert.equal(lightning.store.actors[0]!.lightningEffect?.eventId, created.eventId)
-  }
-  lightning = step(
-    lightning.store,
-    created.startedTick + BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
-    { player: livingTarget(150, 0) },
+  assert.ok(lightning.events.every((event) => event.type !== ('mage-lightning' as string)))
+  const first = lightning.store.mageLightningPulses[0]!
+  assert.equal(first.tick, 1)
+  assert.equal(first.ownerActorId, lightning.store.actors[0]!.id)
+  assert.deepEqual(first.source, { x: 23, y: -16 })
+  assert.deepEqual(first.midpoint, { x: 75, y: 0 })
+  assert.equal(first.contact.kind, 'target-attached')
+  if (first.contact.kind !== 'target-attached') throw new Error('expected target contact')
+  assert.equal(first.contact.targetPlayerId, 'player')
+  assert.ok(Math.hypot(first.endpoint.x - 150, first.endpoint.y) < 10)
+  assert.ok(Math.hypot(first.contact.localOffset.x, first.contact.localOffset.y) < 15)
+  assert.notDeepEqual(
+    { x: first.endpoint.x - 150, y: first.endpoint.y },
+    first.contact.localOffset,
   )
-  assert.equal(lightning.store.actors[0]!.lightningEffect, null)
+  assert.equal(nativeMageLightningDurationTicks(1), 50)
+  assert.equal((lightning.store.actors[0]!.brain as { lightningTicksRemaining: number })
+    .lightningTicksRemaining, 49)
+
+  const birthTicks = [first.tick]
+  for (let tick = 2; tick <= 50; tick += 1) {
+    lightning = step(lightning.store, tick, { player: livingTarget(150, 0) })
+    const born = lightning.store.mageLightningPulses.find((pulse) => pulse.tick === tick)
+    assert.ok(born, `missing Mage lightning pulse at tick ${tick}`)
+    birthTicks.push(born.tick)
+  }
+  assert.equal(birthTicks.length, 50)
+  assert.deepEqual(birthTicks, Array.from({ length: 50 }, (_, index) => index + 1))
+  assert.deepEqual(lightning.store.mageLightningPulses.map(({ tick }) => tick), [46, 47, 48, 49, 50])
+  lightning = step(lightning.store, 51, { player: livingTarget(150, 0) })
+  assert.ok(!lightning.store.mageLightningPulses.some(({ tick }) => tick === 51))
+})
+
+test('Mage lightning uses a clipped world contact without reusing endpoint displacement', () => {
+  const blockedPoint = { x: 60, y: -4 }
+  const result = forcedMageAttack(
+    'mage-lightning-blocked',
+    ['FLAG_CASTLIGHTNING'],
+    () => blockedPoint,
+  )
+  const pulse = result.store.mageLightningPulses[0]!
+  assert.deepEqual(pulse.midpoint, { x: 75, y: 0 })
+  assert.equal(pulse.contact.kind, 'world')
+  if (pulse.contact.kind !== 'world') throw new Error('expected world contact')
+  const endpointOffset = {
+    x: pulse.endpoint.x - blockedPoint.x,
+    y: pulse.endpoint.y - blockedPoint.y,
+  }
+  const contactOffset = {
+    x: pulse.contact.position.x - blockedPoint.x,
+    y: pulse.contact.position.y - blockedPoint.y,
+  }
+  assert.ok(Math.hypot(endpointOffset.x, endpointOffset.y) < 10)
+  assert.ok(Math.hypot(contactOffset.x, contactOffset.y) < 15)
+  assert.notDeepEqual(endpointOffset, contactOffset)
+})
+
+test('Mage lightning preserves its dispatch target identity after attachment becomes invalid', () => {
+  let result = forcedMageAttack('mage-lightning-detached', ['FLAG_CASTLIGHTNING'])
+  const detachedTarget = { ...livingTarget(150, 0), alive: false }
+  result = step(result.store, 2, { player: detachedTarget })
+
+  const pulse = result.store.mageLightningPulses.find(({ tick }) => tick === 2)!
+  assert.equal(pulse.contact.kind, 'world')
+  const brain = result.store.actors[0]!.brain
+  assert.equal(brain.family, 'mage')
+  if (brain.family !== 'mage') throw new Error('expected Mage brain')
+  assert.equal(brain.lightningTargetPlayerId, 'player')
+  assert.deepEqual(brain.lightningTargetPosition, { x: 150, y: 0 })
 })
 
 test('Wraith contact applies the exact 50-tick Dazzle duration', () => {
@@ -893,6 +1402,10 @@ test('unresolved families keep separate bounded approach, special, and cooldown 
     projectile.kind,
     projectile.nativeTypeId,
   ]), [[1, 'demon-bomb', 0x7f7]])
+  assert.deepEqual(result.store.projectiles[0]!.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 4,
+  })
 
   result = withActorBrain(result, 2, {
     ...wraith,
@@ -929,6 +1442,10 @@ test('GuidedMissile deterministically reacquires, homes, contacts, and retires',
   }
   assert.equal(result.store.projectiles[0]?.kind, 'guided-missile')
   assert.equal(result.store.projectiles[0]?.nativeTypeId, 0x7ec)
+  assert.deepEqual(result.store.projectiles[0]?.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  })
 
   const redirectedPlayers: BoneyardEnemyTargets = {
     alpha: { ...livingTarget(150, 0), alive: false },
@@ -1546,6 +2063,7 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     projectile.kind,
     projectile.nativeTypeId,
   ]), [[1, 'poison-pool', 0x806]])
+  assert.equal(result.store.projectiles[0]!.lightRegistration, null)
   assert.equal(boneyardEnemyLiveCount(result.store), 0)
   assert.equal(result.retired.length, 8)
   assert.ok(result.store.deathEffects.length > 8)
@@ -1795,6 +2313,7 @@ function forcedArcherVolley(
 function forcedMageAttack(
   seed: string,
   flags: readonly string[],
+  clipSpellSegment = CLEAR_SPELL_SEGMENT,
 ): BoneyardEnemyStoreStepResult {
   const players = { player: livingTarget(150, 0) }
   let result = spawnOne(seed, 'SKELETONMAGE', { x: 0, y: 0 }, players, flags)
@@ -1808,7 +2327,7 @@ function forcedMageAttack(
     markerEmitted: false,
     phase: 'cast',
   })
-  return step(result.store, 1, players)
+  return step(result.store, 1, players, clipSpellSegment)
 }
 
 function mageProjectileSummary(result: BoneyardEnemyStoreStepResult) {
@@ -1868,6 +2387,7 @@ function spawnOne(
   flags: readonly string[] = [],
 ): BoneyardEnemyStoreStepResult {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore(seed), {
+    clipSpellSegment: CLEAR_SPELL_SEGMENT,
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players,
     resolveMovement: DIRECT_MOVEMENT,
@@ -1919,8 +2439,10 @@ function step(
   store: BoneyardEnemyStore,
   tick: number,
   players: BoneyardEnemyTargets,
+  clipSpellSegment = CLEAR_SPELL_SEGMENT,
 ): BoneyardEnemyStoreStepResult {
   return stepBoneyardEnemyStore(store, {
+    clipSpellSegment,
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players,
     resolveMovement: DIRECT_MOVEMENT,

@@ -3,6 +3,7 @@ import {
   NATIVE_IMP_BODY_POSE_COUNT,
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
+import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
@@ -105,11 +106,12 @@ export function nativeEnemyFacingBucket(
   headingDeg: number,
 ): number {
   if (family === 'COFFIN') return 0
+  if (!Number.isFinite(headingDeg)) throw new Error('native facing value must be finite')
   if (family === 'IMP') {
-    return positiveModulo(roundHalfToEven((headingDeg + 15) / 30), 12)
+    return positiveModulo(Math.trunc((headingDeg + 15) / 30), 12)
   }
   if (isNativeEnemyFamily(family)) {
-    return positiveModulo(roundHalfToEven((headingDeg + 10) / 20), 18)
+    return nativeEighteenWayFacingBucket(headingDeg)
   }
   throw new Error(`unsupported native enemy family ${String(family)}`)
 }

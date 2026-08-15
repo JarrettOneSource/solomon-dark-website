@@ -13,7 +13,6 @@ import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   BOUNDED_ENEMY_POISON_DURATION_SECONDS,
   BOUNDED_MAGE_ALLY_SHIELD_RANGE,
-  BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
   BOUNDED_MAGE_RANGE_BANDS,
   NATIVE_WRAITH_DAZZLE_TICKS,
   boundedArcherAimHeading,
@@ -21,6 +20,12 @@ import {
   projectilePayloadForArrow,
   type BoneyardEnemyProjectilePayload,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import {
+  NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES,
+  nativeMageBodyPose,
+  nativeMageLightningDurationTicks,
+  nativeMageLightningSource,
+} from '../core-kernels/boneyard-mage-lightning.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
@@ -30,11 +35,18 @@ import {
   randomBoneyardWaveInteger,
   seedBoneyardWaveRng,
 } from '../core-kernels/boneyard-wave-timeline.ts'
+import {
+  createNativeLightProviderOrder,
+  type NativeLightManagerLane,
+  type NativeLightProviderRegistration,
+  type RegisterNativeLightProvider,
+} from '../core-kernels/native-light-provider-order.ts'
 
 export type BoneyardEnemyActorId = number
 export type BoneyardEnemyDeathEffectId = number
 export type BoneyardEnemyProjectileId = number
 export type BoneyardEnemyEventId = number
+export type BoneyardMageLightningPulseId = number
 
 export const NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS = 2
 export const NATIVE_ENEMY_TARGET_REFRESH_TICKS = 25
@@ -146,6 +158,9 @@ const NATIVE_COFFIN_RISE_TICKS = 10
 const NATIVE_COFFIN_HOLD_MINIMUM_TICKS = 150
 const NATIVE_COFFIN_HOLD_RANDOM_COUNT = 150
 const NATIVE_COFFIN_OPEN_TICKS = 60
+const NATIVE_ENEMY_BURN_GLOW_PER_TICK = 0.05
+const NATIVE_ENEMY_CHARGE_PER_TICK = 0.02
+const NATIVE_IMP_GLOW_PER_TICK = 0.01
 
 interface ActionClock {
   readonly actionProgress: number
@@ -169,6 +184,9 @@ export interface BoneyardMageBrain extends ActionClock {
   readonly castProgram: 'long' | 'short'
   readonly castRoll: number
   readonly family: 'mage'
+  readonly lightningTargetPlayerId: string | null
+  readonly lightningTargetPosition: Readonly<BoneyardPoint> | null
+  readonly lightningTicksRemaining: number
   readonly phase: 'range-control' | 'cast' | 'death'
   readonly shieldTicksRemaining: number
 }
@@ -228,6 +246,12 @@ export type BoneyardEnemyBrain =
   | BoneyardWraithBrain
   | BoneyardZombieBrain
 
+export interface BoneyardEnemyLightingState {
+  readonly charge: number
+  readonly glow: number
+  readonly providerCopies: 0 | 1 | 2
+}
+
 export interface BoneyardEnemyActor {
   readonly brain: BoneyardEnemyBrain
   readonly config: EvaluatedBoneyardEnemyConfig
@@ -242,11 +266,8 @@ export interface BoneyardEnemyActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
-  readonly lightningEffect: Readonly<{
-    eventId: number
-    startedTick: number
-    targetPosition: Readonly<BoneyardPoint>
-  }> | null
+  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lighting: Readonly<BoneyardEnemyLightingState>
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
   readonly position: Readonly<BoneyardPoint>
@@ -291,6 +312,7 @@ export interface BoneyardEnemyProjectile {
   readonly id: BoneyardEnemyProjectileId
   readonly kind: BoneyardEnemyProjectileKind
   readonly lastStepTick: number
+  readonly lightRegistration: NativeLightProviderRegistration | null
   readonly lifetimeTicks: number
   readonly nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   readonly ownerActorId: BoneyardEnemyActorId
@@ -373,6 +395,28 @@ export interface BoneyardEnemyDeathEffect {
   readonly velocity: Readonly<BoneyardPoint>
 }
 
+export interface BoneyardMageLightningWorldContact {
+  readonly kind: 'world'
+  readonly position: Readonly<BoneyardPoint>
+}
+
+export interface BoneyardMageLightningTargetContact {
+  readonly kind: 'target-attached'
+  readonly localOffset: Readonly<BoneyardPoint>
+  readonly targetPlayerId: string
+}
+
+export interface BoneyardMageLightningPulse {
+  readonly contact: BoneyardMageLightningTargetContact | BoneyardMageLightningWorldContact
+  readonly endpoint: Readonly<BoneyardPoint>
+  readonly id: BoneyardMageLightningPulseId
+  readonly midpoint: Readonly<BoneyardPoint>
+  readonly ownerActorId: BoneyardEnemyActorId
+  readonly seed: number
+  readonly source: Readonly<BoneyardPoint>
+  readonly tick: number
+}
+
 export type BoneyardEnemyTerminalOutput =
   | 'archer-shatter'
   | 'coffin-break'
@@ -419,7 +463,6 @@ export type BoneyardEnemySemanticEventType =
   | 'enemy-retired'
   | 'enemy-spawned'
   | 'enemy-terminal-output'
-  | 'mage-lightning'
   | 'projectile-impact'
   | 'projectile-retired'
   | 'projectile-spawned'
@@ -435,7 +478,6 @@ export interface BoneyardEnemySemanticEvent {
   readonly projectileId?: BoneyardEnemyProjectileId
   readonly sound?: BoneyardEnemySound
   readonly sourcePosition?: Readonly<BoneyardPoint>
-  readonly targetPosition?: Readonly<BoneyardPoint>
   readonly targetPlayerId?: string | null
   readonly tick: number
   readonly type: BoneyardEnemySemanticEventType
@@ -475,11 +517,13 @@ export interface BoneyardEnemyStore {
   readonly actors: readonly BoneyardEnemyActor[]
   readonly deathEffects: readonly BoneyardEnemyDeathEffect[]
   readonly lastStepTick: number
+  readonly mageLightningPulses: readonly BoneyardMageLightningPulse[]
   readonly maggots: readonly BoneyardMaggotActor[]
   readonly nextActorId: BoneyardEnemyActorId
   readonly nextDeathEpoch: number
   readonly nextDeathEffectId: BoneyardEnemyDeathEffectId
   readonly nextEventId: BoneyardEnemyEventId
+  readonly nextMageLightningPulseId: BoneyardMageLightningPulseId
   readonly nextProjectileId: BoneyardEnemyProjectileId
   readonly nextSyntheticSpawnIntentId: number
   readonly projectiles: readonly BoneyardEnemyProjectile[]
@@ -521,10 +565,22 @@ export type FirstBoneyardEnemyProjectileWorldContact = (
   request: BoneyardEnemyProjectileWorldContactRequest,
 ) => number | null
 
+export interface BoneyardEnemySpellSegmentRequest {
+  readonly end: Readonly<BoneyardPoint>
+  readonly start: Readonly<BoneyardPoint>
+}
+
+export type ClipBoneyardEnemySpellSegment = (
+  request: BoneyardEnemySpellSegmentRequest,
+) => Readonly<BoneyardPoint>
+
 export interface BoneyardEnemyStoreStepContext {
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
+  readonly clipSpellSegment?: ClipBoneyardEnemySpellSegment
   readonly firstProjectileWorldContact: FirstBoneyardEnemyProjectileWorldContact
   readonly players: BoneyardEnemyTargets
+  readonly registerLightProvider?: RegisterNativeLightProvider
+  readonly registerProjectileLightProvider?: RegisterNativeLightProvider
   readonly resolveMovement: ResolveBoneyardEnemyMovement
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,
@@ -569,16 +625,20 @@ interface WorkingStep {
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
   impActorCount: number
+  mageLightningPulses: BoneyardMageLightningPulse[]
   maggots: BoneyardMaggotActor[]
   nextActorId: number
   nextDeathEpoch: number
   nextDeathEffectId: number
   nextEventId: number
+  nextMageLightningPulseId: number
   nextProjectileId: number
   nextSyntheticSpawnIntentId: number
   playerDamage: BoneyardEnemyPlayerDamage[]
   playerKnockbacks: BoneyardEnemyPlayerKnockback[]
   projectiles: BoneyardEnemyProjectile[]
+  registerLightProvider: RegisterNativeLightProvider
+  registerProjectileLightProvider: RegisterNativeLightProvider
   retired: BoneyardEnemyRetirement[]
   rewards: BoneyardEnemyReward[]
   rngState: number
@@ -601,15 +661,45 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
     actors: [],
     deathEffects: [],
     lastStepTick: -1,
+    mageLightningPulses: [],
     maggots: [],
     nextActorId: 1,
     nextDeathEpoch: 1,
     nextDeathEffectId: 1,
     nextEventId: 1,
+    nextMageLightningPulseId: 1,
     nextProjectileId: 1,
     nextSyntheticSpawnIntentId: 1,
     projectiles: [],
     rngState: seedBoneyardWaveRng(`${seed}:enemy-actors`),
+  }
+}
+
+function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {
+  const nextRegistrationOrdinal = { actor: 0, transient: 0 }
+  for (const registration of [
+    ...source.actors.map(({ lightRegistration }) => lightRegistration),
+    ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
+  ]) {
+    if (registration === null) continue
+    nextRegistrationOrdinal[registration.managerLane] = Math.max(
+      nextRegistrationOrdinal[registration.managerLane],
+      registration.registrationOrdinal + 1,
+    )
+  }
+  return { nextRegistrationOrdinal }
+}
+
+function enemyProjectileLightManagerLane(
+  kind: BoneyardEnemyProjectileKind,
+  payload: BoneyardEnemyProjectilePayload,
+): NativeLightManagerLane | null {
+  switch (kind) {
+    case 'arrow': return payload === 'fire' ? 'transient' : null
+    case 'firebolt': return 'transient'
+    case 'demon-bomb':
+    case 'guided-missile': return 'actor'
+    case 'poison-pool': return null
   }
 }
 
@@ -705,7 +795,13 @@ export function damageBoneyardEnemy(
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
         lifeState: 'dying',
-        lightningEffect: null,
+        lighting: actor.config.enemyToken === 'SKELETONARCHER'
+          ? {
+              ...actor.lighting,
+              charge: 0,
+              providerCopies: 0,
+            }
+          : actor.lighting,
         shieldHealth: 0,
         shieldMaximumHealth: 0,
         shieldPulse: 0,
@@ -872,21 +968,33 @@ export function stepBoneyardEnemyStore(
   if (context.tick <= source.lastStepTick) {
     throw new RangeError('enemy store ticks must advance monotonically')
   }
+  const standaloneLightProviderOrder = createNativeLightProviderOrder(
+    standaloneEnemyLightProviderOrderState(source),
+  )
   const work: WorkingStep = {
     actors: [],
     deathEffects: [],
     events: [],
     impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    mageLightningPulses: source.mageLightningPulses.filter((pulse) => (
+      context.tick - pulse.tick < NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
+    )),
     maggots: [...source.maggots],
     nextActorId: source.nextActorId,
     nextDeathEpoch: source.nextDeathEpoch,
     nextDeathEffectId: source.nextDeathEffectId,
     nextEventId: source.nextEventId,
+    nextMageLightningPulseId: source.nextMageLightningPulseId,
     nextProjectileId: source.nextProjectileId,
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     playerDamage: [],
     playerKnockbacks: [],
     projectiles: [...source.projectiles],
+    registerLightProvider: context.registerLightProvider
+      ?? standaloneLightProviderOrder.register,
+    registerProjectileLightProvider: context.registerProjectileLightProvider
+      ?? context.registerLightProvider
+      ?? standaloneLightProviderOrder.register,
     retired: [],
     rewards: [],
     rngState: source.rngState,
@@ -925,11 +1033,13 @@ export function stepBoneyardEnemyStore(
       actors: work.actors,
       deathEffects: work.deathEffects,
       lastStepTick: context.tick,
+      mageLightningPulses: work.mageLightningPulses,
       maggots: work.maggots,
       nextActorId: work.nextActorId,
       nextDeathEpoch: work.nextDeathEpoch,
       nextDeathEffectId: work.nextDeathEffectId,
       nextEventId: work.nextEventId,
+      nextMageLightningPulseId: work.nextMageLightningPulseId,
       nextProjectileId: work.nextProjectileId,
       nextSyntheticSpawnIntentId: work.nextSyntheticSpawnIntentId,
       projectiles: work.projectiles,
@@ -998,7 +1108,10 @@ function materializeSpawnIntents(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
-      lightningEffect: null,
+      lightRegistration: config.enemyToken === 'ZOMBIE'
+        ? null
+        : work.registerLightProvider('actor'),
+      lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick + (
         targetPlayerId === null
@@ -1073,6 +1186,9 @@ function createBrain(
       castProgram: 'short',
       castRoll: 0,
       family: 'mage',
+      lightningTargetPlayerId: null,
+      lightningTargetPosition: null,
+      lightningTicksRemaining: 0,
       markerEmitted: false,
       phase: 'range-control',
       shieldTicksRemaining: config.family.shieldInterval > 0
@@ -1252,27 +1368,130 @@ function stepLivingActor(
   source: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  const lightningEffect = source.lightningEffect !== null
-    && context.tick - source.lightningEffect.startedTick >= BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS
-    ? null
-    : source.lightningEffect
-  const timed = lightningEffect === source.lightningEffect
-    ? source
-    : { ...source, lightningEffect }
-  const targeted = refreshTarget(timed, context)
+  const targeted = refreshTarget(source, context)
   const actor = targeted.brain.family === 'coffin'
     ? targeted
     : faceTarget(targeted, context.players)
-  switch (actor.brain.family) {
-    case 'skeleton': return stepSkeleton(work, actor, actor.brain, context)
-    case 'archer': return stepArcher(work, actor, actor.brain, context)
-    case 'mage': return stepMage(work, actor, actor.brain, context)
-    case 'imp': return stepImp(work, actor, actor.brain, context)
-    case 'zombie': return stepZombie(work, actor, actor.brain, context)
-    case 'wraith': return stepWraith(work, actor, actor.brain, context)
-    case 'demon': return stepDemon(work, actor, actor.brain, context)
-    case 'coffin': return stepCoffin(work, actor, actor.brain, context)
+  if (actor.brain.family === 'mage') {
+    const enrolled = stepEnemyLighting(actor)
+    return applyMageProviderGateAfterAction(
+      stepMage(work, enrolled, actor.brain, context),
+    )
   }
+  const stepped = (() => {
+    switch (actor.brain.family) {
+      case 'skeleton': return stepSkeleton(work, actor, actor.brain, context)
+      case 'archer': return stepArcher(work, actor, actor.brain, context)
+      case 'imp': return stepImp(work, actor, actor.brain, context)
+      case 'zombie': return stepZombie(work, actor, actor.brain, context)
+      case 'wraith': return stepWraith(work, actor, actor.brain, context)
+      case 'demon': return stepDemon(work, actor, actor.brain, context)
+      case 'coffin': return stepCoffin(work, actor, actor.brain, context)
+    }
+  })()
+  return stepEnemyLighting(stepped)
+}
+
+function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {
+  const prior = actor.lighting
+  const active = actor.config.scale !== 0
+  switch (actor.config.enemyToken) {
+    case 'SKELETON': {
+      const burning = active && actor.config.burning
+      return withEnemyLighting(actor, {
+        ...prior,
+        glow: burning
+          ? Math.min(1, prior.glow + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
+          : prior.glow,
+        providerCopies: burning ? 1 : 0,
+      })
+    }
+    case 'SKELETONARCHER': {
+      if (!active) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
+      const burning = actor.config.burning
+      return withEnemyLighting(actor, {
+        charge: Math.min(1, prior.charge + NATIVE_ENEMY_CHARGE_PER_TICK),
+        glow: burning
+          ? Math.min(1, prior.glow + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
+          : prior.glow,
+        providerCopies: (
+          Number(actor.config.family.arrowType === 'fire') + Number(burning)
+        ) as 0 | 1 | 2,
+      })
+    }
+    case 'SKELETONMAGE': {
+      if (!active) return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
+      const burning = actor.config.burning
+      const once = burning
+        ? Math.min(1, prior.glow + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
+        : prior.glow
+      const glow = burning
+        ? Math.min(1, once + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
+        : once
+      const charge = magePoseIsFour(actor)
+        ? prior.charge
+        : Math.min(1, prior.charge + NATIVE_ENEMY_CHARGE_PER_TICK)
+      return withEnemyLighting(actor, {
+        charge,
+        glow,
+        providerCopies: burning ? 2 : charge > 0 ? 1 : 0,
+      })
+    }
+    case 'IMP': {
+      const glow = Math.min(1, prior.glow + NATIVE_IMP_GLOW_PER_TICK)
+      return withEnemyLighting(actor, {
+        charge: prior.charge,
+        glow,
+        providerCopies: active ? 1 : 0,
+      })
+    }
+    case 'WRAITH': {
+      const burning = actor.config.burning
+      return withEnemyLighting(actor, {
+        ...prior,
+        glow: burning
+          ? Math.min(1, prior.glow + NATIVE_ENEMY_BURN_GLOW_PER_TICK)
+          : prior.glow,
+        providerCopies: burning ? 1 : 0,
+      })
+    }
+    case 'DEMON':
+      return withEnemyLighting(actor, { ...prior, providerCopies: 1 })
+    case 'COFFIN':
+      return withEnemyLighting(actor, {
+        ...prior,
+        providerCopies: actor.brain.family === 'coffin'
+          && actor.brain.phase !== 'hidden'
+          ? 1
+          : 0,
+      })
+    case 'ZOMBIE':
+      return withEnemyLighting(actor, { ...prior, providerCopies: 0 })
+  }
+}
+
+function withEnemyLighting(
+  actor: BoneyardEnemyActor,
+  lighting: BoneyardEnemyLightingState,
+): BoneyardEnemyActor {
+  return { ...actor, lighting }
+}
+
+function applyMageProviderGateAfterAction(
+  actor: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  if (actor.config.burning || actor.lighting.charge > 0) return actor
+  return withEnemyLighting(actor, { ...actor.lighting, providerCopies: 0 })
+}
+
+function magePoseIsFour(actor: BoneyardEnemyActor): boolean {
+  const brain = actor.brain
+  if (brain.family !== 'mage') return false
+  if (brain.phase !== 'cast') return Math.floor(actor.gaitPose) === 4
+  const index = Math.floor(brain.actionProgress)
+  return brain.castProgram === 'short'
+    ? index >= 25 && index <= 37
+    : index >= 31 && index <= 43
 }
 
 function stepSkeleton(
@@ -1482,11 +1701,14 @@ function stepMage(
   brain: BoneyardMageBrain,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  if (actor.targetPlayerId === null) return resetMage(actor, brain)
-  if (brain.phase === 'cast') {
+  const lightningDispatches: MageLightningDispatch[] = []
+  let stepped: BoneyardEnemyActor
+  if (actor.targetPlayerId === null) {
+    stepped = resetMage(actor, brain)
+  } else if (brain.phase === 'cast') {
     const base = NATIVE_MAGE_ACTION_PROGRAMS[brain.castProgram]
-    let lightningEffect: BoneyardEnemyActor['lightningEffect'] = null
-    const stepped = stepProgressAction(
+    let spellDispatched = false
+    stepped = stepProgressAction(
       work,
       actor,
       brain,
@@ -1494,32 +1716,62 @@ function stepMage(
       context.tick,
       actor.targetPlayerId,
       (eventId) => {
-        lightningEffect = emitMageAttack(work, actor, context, eventId)
+        spellDispatched = true
+        const dispatch = emitMageAttack(work, actor, context, eventId)
+        if (dispatch !== null) lightningDispatches.push(dispatch)
       },
     )
-    return lightningEffect === null ? stepped : { ...stepped, lightningEffect }
+    if (spellDispatched && actor.config.enemyToken === 'SKELETONMAGE') stepped = {
+      ...stepped,
+      lighting: {
+        ...stepped.lighting,
+        charge: actor.config.family.element === 'lightning' ? 1 : 0,
+      },
+    }
+  } else {
+    const distance = targetDistance(actor, context.players)
+    const range = actor.config.enemyToken === 'SKELETONMAGE'
+      ? BOUNDED_MAGE_RANGE_BANDS[actor.config.family.rangeMode]
+      : BOUNDED_MAGE_RANGE_BANDS[0]
+    if (distance >= range.minimum && distance <= range.maximum) {
+      const program = nextBoneyardWaveRandom(work.rngState)
+      const roll = nextBoneyardWaveRandom(program.state)
+      work.rngState = roll.state
+      stepped = {
+        ...actor,
+        brain: {
+          ...brain,
+          actionProgress: 0,
+          castProgram: program.value < 0.5 ? 'short' : 'long',
+          castRoll: roll.value,
+          markerEmitted: false,
+          phase: 'cast',
+        },
+      }
+    } else {
+      stepped = moveTowardTarget(
+        actor,
+        brain,
+        context,
+        distance < range.minimum ? -1 : 1,
+      )
+    }
   }
-  const distance = targetDistance(actor, context.players)
-  const range = actor.config.enemyToken === 'SKELETONMAGE'
-    ? BOUNDED_MAGE_RANGE_BANDS[actor.config.family.rangeMode]
-    : BOUNDED_MAGE_RANGE_BANDS[0]
-  if (distance >= range.minimum && distance <= range.maximum) {
-    const program = nextBoneyardWaveRandom(work.rngState)
-    const roll = nextBoneyardWaveRandom(program.state)
-    work.rngState = roll.state
-    return {
-      ...actor,
+  const dispatchedLightning = lightningDispatches[0]
+  if (dispatchedLightning !== undefined) {
+    const steppedBrain = stepped.brain
+    if (steppedBrain.family !== 'mage') throw new Error('Mage dispatch changed brain family')
+    stepped = {
+      ...stepped,
       brain: {
-        ...brain,
-        actionProgress: 0,
-        castProgram: program.value < 0.5 ? 'short' : 'long',
-        castRoll: roll.value,
-        markerEmitted: false,
-        phase: 'cast',
+        ...steppedBrain,
+        lightningTargetPlayerId: dispatchedLightning.targetPlayerId,
+        lightningTargetPosition: dispatchedLightning.targetPosition,
+        lightningTicksRemaining: nativeMageLightningDurationTicks(actor.config.attackSpeed),
       },
     }
   }
-  return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
+  return stepMageLightningPulse(work, stepped, context)
 }
 
 function stepImp(
@@ -2574,12 +2826,17 @@ function directContactPlayerDamage(
   }
 }
 
+interface MageLightningDispatch {
+  readonly targetPlayerId: string
+  readonly targetPosition: Readonly<BoneyardPoint>
+}
+
 function emitMageAttack(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
   eventId: number,
-): BoneyardEnemyActor['lightningEffect'] {
+): MageLightningDispatch | null {
   if (actor.config.enemyToken !== 'SKELETONMAGE') return null
   switch (actor.config.family.element) {
     case 'fire':
@@ -2617,28 +2874,93 @@ function emitMageAttack(
       )
       return null
     case 'lightning': {
-      const target = actor.targetPlayerId === null
-        ? undefined
-        : context.players[actor.targetPlayerId]
+      const targetPlayerId = actor.targetPlayerId
+      if (targetPlayerId === null) return null
+      const target = context.players[targetPlayerId]
       if (!target || !targetEligible(target)) return null
-      directPlayerDamage(work, actor, actor.targetPlayerId, eventId)
-      const lightningEventId = emitEvent(
-        work,
-        context.tick,
-        'mage-lightning',
-        actor.id,
-        {
-          sourcePosition: Object.freeze({ ...actor.position }),
-          targetPlayerId: actor.targetPlayerId,
-          targetPosition: Object.freeze({ ...target.position }),
-        },
-      )
+      directPlayerDamage(work, actor, targetPlayerId, eventId)
       return Object.freeze({
-        eventId: lightningEventId,
-        startedTick: context.tick,
+        targetPlayerId,
         targetPosition: Object.freeze({ ...target.position }),
       })
     }
+  }
+}
+
+function stepMageLightningPulse(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  const brain = actor.brain
+  if (brain.family !== 'mage' || brain.lightningTicksRemaining <= 0) return actor
+  const targetPlayerId = brain.lightningTargetPlayerId
+  const target = targetPlayerId === null ? undefined : context.players[targetPlayerId]
+  const attachedTarget = target && targetEligible(target) ? target : null
+  const targetPosition = attachedTarget?.position ?? brain.lightningTargetPosition
+  if (targetPosition === null) {
+    throw new Error('active Mage lightning is missing its preserved target position')
+  }
+  const pose = nativeMageBodyPose({
+    actionProgress: brain.actionProgress,
+    castProgram: brain.castProgram,
+    gaitPose: actor.gaitPose,
+    phase: brain.phase,
+  })
+  const source = nativeMageLightningSource(actor.position, pose, actor.headingDeg)
+  if (!context.clipSpellSegment) {
+    throw new Error('Mage lightning requires the exact spell-segment clip seam')
+  }
+  const clipped = context.clipSpellSegment({ end: targetPosition, start: source })
+  validatePoint(clipped, 'clipped Mage lightning endpoint')
+  const clearTarget = attachedTarget !== null
+    && clipped.x === targetPosition.x
+    && clipped.y === targetPosition.y
+  const endpointBase = clearTarget ? targetPosition : clipped
+  const endpointOffset = randomRadialDisplacement(work, 10)
+  const contactOffset = randomRadialDisplacement(work, 15)
+  const seed = work.rngState >>> 0
+  const pulse: BoneyardMageLightningPulse = Object.freeze({
+    contact: clearTarget
+      ? Object.freeze({
+          kind: 'target-attached' as const,
+          localOffset: Object.freeze({ ...contactOffset }),
+          targetPlayerId: targetPlayerId!,
+        })
+      : Object.freeze({
+          kind: 'world' as const,
+          position: Object.freeze({
+            x: clipped.x + contactOffset.x,
+            y: clipped.y + contactOffset.y,
+          }),
+        }),
+    endpoint: Object.freeze({
+      x: endpointBase.x + endpointOffset.x,
+      y: endpointBase.y + endpointOffset.y,
+    }),
+    id: work.nextMageLightningPulseId,
+    midpoint: Object.freeze({
+      x: (actor.position.x + targetPosition.x) * 0.5,
+      y: (actor.position.y + targetPosition.y) * 0.5,
+    }),
+    ownerActorId: actor.id,
+    seed,
+    source: Object.freeze({ ...source }),
+    tick: context.tick,
+  })
+  work.mageLightningPulses.push(pulse)
+  work.nextMageLightningPulseId += 1
+  const lightningTicksRemaining = brain.lightningTicksRemaining - 1
+  return {
+    ...actor,
+    brain: {
+      ...brain,
+      lightningTargetPlayerId: lightningTicksRemaining === 0 ? null : targetPlayerId,
+      lightningTargetPosition: lightningTicksRemaining === 0
+        ? null
+        : Object.freeze({ ...targetPosition }),
+      lightningTicksRemaining,
+    },
   }
 }
 
@@ -2661,6 +2983,8 @@ function spawnProjectile(
 ): BoneyardEnemyProjectile {
   const program = BOUNDED_ENEMY_PROJECTILE_PROGRAMS[kind]
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
+  const payload = options.payload ?? (kind === 'poison-pool' ? 'poison' : 'none')
+  const lightManagerLane = enemyProjectileLightManagerLane(kind, payload)
   const projectile: BoneyardEnemyProjectile = Object.freeze({
     ageTicks: 0,
     coldSlowTicks: options.coldSlowTicks ?? 0,
@@ -2672,10 +2996,13 @@ function spawnProjectile(
     id: work.nextProjectileId,
     kind,
     lastStepTick: tick,
+    lightRegistration: lightManagerLane === null
+      ? null
+      : work.registerProjectileLightProvider(lightManagerLane),
     lifetimeTicks: program.lifetimeTicks,
     nativeTypeId: projectileNativeTypeId(kind),
     ownerActorId: actor.id,
-    payload: options.payload ?? (kind === 'poison-pool' ? 'poison' : 'none'),
+    payload,
     poisonDamage: kind === 'poison-pool' ? damage : (options.poisonDamage ?? 0),
     poisonDuration: kind === 'poison-pool'
       ? (zombie?.poisonDuration ?? 0)
@@ -3624,6 +3951,14 @@ function radialVector(angleDeg: number, magnitude: number): { x: number; y: numb
   return { x: Math.sin(radians) * magnitude, y: -Math.cos(radians) * magnitude }
 }
 
+function randomRadialDisplacement(
+  work: WorkingStep,
+  maximumRadius: number,
+): Readonly<BoneyardPoint> {
+  const radius = drawUnit(work) * maximumRadius
+  return radialVector(drawUnit(work) * 360, radius)
+}
+
 function drawUnit(work: WorkingStep): number {
   const draw = nextBoneyardWaveRandom(work.rngState)
   work.rngState = draw.state
@@ -3749,7 +4084,15 @@ function emitEvent(
 }
 
 function deathBrain(brain: BoneyardEnemyBrain): BoneyardEnemyBrain {
-  return { ...brain, phase: 'death' } as BoneyardEnemyBrain
+  return brain.family === 'mage'
+    ? {
+        ...brain,
+        lightningTargetPlayerId: null,
+        lightningTargetPosition: null,
+        lightningTicksRemaining: 0,
+        phase: 'death',
+      }
+    : { ...brain, phase: 'death' } as BoneyardEnemyBrain
 }
 
 function skeletonAction(weapon: BoneyardSkeletonWeapon): 'claw' | 'pike' | 'weapon' {

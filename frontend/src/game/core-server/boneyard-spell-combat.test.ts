@@ -57,6 +57,7 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     ageTicks: 0,
     id: 100,
     kind: 'fire-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     worldKey: WORLD_KEY,
@@ -126,6 +127,7 @@ test('Ether contact uses its six-unit point query and publishes FadeMM at the ad
     birthTick: 77,
     id: 100,
     kind: 'ether-impact',
+    lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     worldKey: WORLD_KEY,
@@ -329,6 +331,7 @@ function projectile(options: {
     direction: normalized(velocity),
     flightTicks: 1,
     id: options.id,
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: options.id },
     ownerId: 'wizard',
     phase: 'flight' as const,
     position: { ...(options.position ?? { x: 0, y: 0 }) },
@@ -383,12 +386,17 @@ function transient(options: {
         birthTick: 0,
         endpoint: { x: 205, y: 0 },
         kind: 'air',
+        lightRegistration: {
+          managerLane: 'transient',
+          registrationOrdinal: options.id,
+        },
         midpoint: { x: 102.5, y: 0 },
         targetId: options.targetId ?? null,
       }
     : {
         ...common,
         kind: 'water',
+        lightRegistration: null,
         obstructionDistance: null,
         obstructionPoint: null,
       }

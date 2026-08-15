@@ -1,203 +1,279 @@
 import {
+  BufferImageSource,
   Container,
-  Geometry,
-  Mesh,
-  Shader,
+  MeshSimple,
   Texture,
+  type ContainerChild,
 } from 'pixi.js'
 
 import { nativeGatePainterRoot } from '../../editor/native-fence-geometry.ts'
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import {
+  NativeBoneyardShadowMeshBuffers,
   nativeBoneyardComplexShadowRecords,
   nativeBoneyardFenceGrateShadows,
+  nativeBoneyardLineShadowEdge,
   nativeBoneyardProjectedShadowEdges,
   nativeBoneyardRailsShadows,
+  nativeBoneyardShadowAlphaRampPixels,
   nativeBoneyardWallShadow,
   type NativeBoneyardComplexShadowCaster,
   type NativeBoneyardProjectedShadowEdge,
 } from './boneyard-complex-shadows.ts'
-import type { NativeBoneyardLightSource } from './boneyard-lighting.ts'
-import {
-  buildNativeBoneyardShadowMesh,
-  nativeBoneyardShadowLineQuad,
-} from './boneyard-shadow-mesh.ts'
-
-interface ShadowDepthOwner {
-  renderable: boolean
-  zIndex: number
-}
+import type { NativeBoneyardLightSamples } from './boneyard-lighting.ts'
 
 export interface BoneyardComplexShadowStaticCaster {
   caster: NativeBoneyardComplexShadowCaster
-  depthOwner: ShadowDepthOwner
+  depthOwner: ContainerChild
 }
 
 export interface BoneyardComplexShadowFrame {
+  activeMeshCount: number
+  allocatedQuadCapacity: number
   casterCount: number
+  pooledMeshCount: number
   quadCount: number
+  recordCount: number
+  zOrderMismatchCount: number
+}
+
+interface ActiveShadowView {
+  buffers: NativeBoneyardShadowMeshBuffers
+  mesh: MeshSimple
+  uploadedIndexRevision: number
+}
+
+interface CasterGeometry {
+  edges: NativeBoneyardProjectedShadowEdge[]
   recordCount: number
 }
 
-const NATIVE_SHADOW_DEPTH_OFFSET = 0.001
-interface StaticShadowView {
-  caster: NativeBoneyardComplexShadowCaster
-  depthOwner: ShadowDepthOwner
-  mesh: ShadowMeshView
-}
-
-interface DynamicShadowView {
-  caster: NativeBoneyardComplexShadowCaster
-  mesh: ShadowMeshView
-}
-
-interface ShadowMeshView {
-  geometry: Geometry
-  mesh: Mesh<Geometry, Shader>
-}
-
 export class BoneyardComplexShadowPresentation {
-  private readonly dynamicViews = new Map<string, DynamicShadowView>()
-  private readonly liveDynamicIds = new Set<string>()
+  private readonly activeViews = new Map<string, ActiveShadowView>()
+  private readonly alphaRamp: Texture
+  private readonly freeViews: ActiveShadowView[] = []
+  private readonly liveIds = new Set<string>()
   private readonly root: Container
-  private readonly shader = shadowShader()
-  private readonly staticViews: readonly StaticShadowView[]
+  private readonly staticCastersByOwner = new Map<ContainerChild, NativeBoneyardComplexShadowCaster>()
 
   constructor(
     root: Container,
     staticCasters: readonly BoneyardComplexShadowStaticCaster[],
   ) {
     this.root = root
-    this.staticViews = staticCasters.map(({ caster, depthOwner }) => {
-      const mesh = shadowMesh(caster.id, this.shader)
-      root.addChild(mesh.mesh)
-      return { caster, depthOwner, mesh }
-    })
+    for (const { caster, depthOwner } of staticCasters) {
+      this.staticCastersByOwner.set(depthOwner, caster)
+    }
+    this.alphaRamp = shadowAlphaRampTexture()
   }
 
   render(
-    sources: readonly NativeBoneyardLightSource[],
+    sources: NativeBoneyardLightSamples,
     presentationFrame: number,
     gateLeaves: readonly BoneyardGateLeafSnapshot[],
-    gateDepths: ReadonlyMap<string, number>,
+    gateDepthOwners: ReadonlyMap<string, ContainerChild>,
+    visibleStaticDepthOwners: readonly ContainerChild[],
   ): BoneyardComplexShadowFrame {
+    const liveIds = this.liveIds
+    liveIds.clear()
     let casterCount = 0
     let quadCount = 0
     let recordCount = 0
-    for (const view of this.staticViews) {
-      if (!view.depthOwner.renderable) {
-        view.mesh.mesh.renderable = false
-        continue
+    let zOrderMismatchCount = 0
+
+    for (const depthOwner of visibleStaticDepthOwners) {
+      const caster = this.staticCastersByOwner.get(depthOwner)
+      if (!caster) continue
+      if (!depthOwner.renderable || depthOwner.parent !== this.root) continue
+      const geometry = casterGeometry(caster, sources, presentationFrame)
+      recordCount += geometry.recordCount
+      if (geometry.edges.length === 0) continue
+      casterCount += 1
+      quadCount += geometry.edges.length
+      const view = this.activate(caster.id, geometry.edges)
+      positionBeforeOwner(this.root, view.mesh, depthOwner)
+      if (!ownsNativeShadowSlot(this.root, view.mesh, depthOwner)) {
+        zOrderMismatchCount += 1
       }
-      view.mesh.mesh.zIndex = view.depthOwner.zIndex - NATIVE_SHADOW_DEPTH_OFFSET
-      const result = renderCaster(
-        view.mesh,
-        view.caster,
-        sources,
-        presentationFrame,
-      )
-      if (result.quadCount > 0) casterCount += 1
-      quadCount += result.quadCount
-      recordCount += result.recordCount
+      liveIds.add(caster.id)
     }
 
-    const liveDynamicIds = this.liveDynamicIds
-    liveDynamicIds.clear()
     for (const gate of gateLeaves) {
       const key = `${gate.fenceEid}:${gate.side}`
-      const depth = gateDepths.get(key)
-      if (depth === undefined) continue
+      const depthOwner = gateDepthOwners.get(key)
+      if (!depthOwner?.renderable || depthOwner.parent !== this.root) continue
       const id = `gate:${key}`
-      liveDynamicIds.add(id)
-      let view = this.dynamicViews.get(id)
-      if (!view) {
-        const mesh = shadowMesh(id, this.shader)
-        view = { caster: gateCaster(id, gate), mesh }
-        this.dynamicViews.set(id, view)
-        this.root.addChild(mesh.mesh)
-      } else {
-        view.caster = gateCaster(id, gate)
-      }
-      view.mesh.mesh.zIndex = depth - NATIVE_SHADOW_DEPTH_OFFSET
-      const result = renderCaster(
-        view.mesh,
-        view.caster,
+      const geometry = casterGeometry(
+        gateCaster(id, gate),
         sources,
         presentationFrame,
       )
-      if (result.quadCount > 0) casterCount += 1
-      quadCount += result.quadCount
-      recordCount += result.recordCount
+      recordCount += geometry.recordCount
+      if (geometry.edges.length === 0) continue
+      casterCount += 1
+      quadCount += geometry.edges.length
+      const view = this.activate(id, geometry.edges)
+      positionBeforeOwner(this.root, view.mesh, depthOwner)
+      if (!ownsNativeShadowSlot(this.root, view.mesh, depthOwner)) {
+        zOrderMismatchCount += 1
+      }
+      liveIds.add(id)
     }
-    for (const [id, view] of this.dynamicViews) {
-      if (liveDynamicIds.has(id)) continue
-      destroyShadowMesh(this.root, view.mesh)
-      this.dynamicViews.delete(id)
+
+    for (const id of this.activeViews.keys()) {
+      if (!liveIds.has(id)) this.release(id)
     }
-    return { casterCount, quadCount, recordCount }
+    return {
+      activeMeshCount: this.activeViews.size,
+      allocatedQuadCapacity: this.allocatedQuadCapacity,
+      casterCount,
+      pooledMeshCount: this.freeViews.length,
+      quadCount,
+      recordCount,
+      zOrderMismatchCount,
+    }
   }
 
   destroy(): void {
-    for (const view of this.staticViews) {
-      destroyShadowMesh(this.root, view.mesh)
+    for (const id of this.activeViews.keys()) this.release(id)
+    for (const view of this.freeViews) view.mesh.destroy()
+    this.freeViews.length = 0
+    this.alphaRamp.destroy(true)
+    this.liveIds.clear()
+  }
+
+  private activate(
+    id: string,
+    edges: readonly NativeBoneyardProjectedShadowEdge[],
+  ): ActiveShadowView {
+    let view = this.activeViews.get(id)
+    if (!view) {
+      view = this.freeViews.pop() ?? shadowView(this.alphaRamp, edges.length)
+      this.activeViews.set(id, view)
     }
-    for (const view of this.dynamicViews.values()) {
-      destroyShadowMesh(this.root, view.mesh)
+    view.mesh.label = `complex-shadow:${id}`
+    const grew = view.buffers.write(edges)
+    if (grew) {
+      view.mesh.vertices = view.buffers.positions
+      view.mesh.geometry.getBuffer('aUV').data = view.buffers.uvs
+      view.mesh.geometry.getIndex().data = view.buffers.indices
     }
-    this.dynamicViews.clear()
-    this.liveDynamicIds.clear()
-    this.shader.destroy(true)
+    view.mesh.geometry.getBuffer('aPosition').update()
+    view.mesh.geometry.getBuffer('aUV').update()
+    if (view.uploadedIndexRevision !== view.buffers.indexRevision) {
+      view.mesh.geometry.getIndex().update()
+      view.uploadedIndexRevision = view.buffers.indexRevision
+    }
+    view.mesh.renderable = true
+    return view
+  }
+
+  private release(id: string): void {
+    const view = this.activeViews.get(id)
+    if (!view) return
+    this.activeViews.delete(id)
+    if (view.mesh.parent === this.root) this.root.removeChild(view.mesh)
+    view.mesh.renderable = false
+    this.freeViews.push(view)
+  }
+
+  private get allocatedQuadCapacity(): number {
+    let capacity = 0
+    for (const view of this.activeViews.values()) capacity += view.buffers.quadCapacity
+    for (const view of this.freeViews) capacity += view.buffers.quadCapacity
+    return capacity
   }
 }
 
-function renderCaster(
-  view: ShadowMeshView,
+function casterGeometry(
   caster: NativeBoneyardComplexShadowCaster,
-  sources: readonly NativeBoneyardLightSource[],
+  sources: NativeBoneyardLightSamples,
   presentationFrame: number,
-): { quadCount: number; recordCount: number } {
+): CasterGeometry {
   const records = nativeBoneyardComplexShadowRecords(caster, sources, presentationFrame)
-  const projectedEdges: NativeBoneyardProjectedShadowEdge[] = []
-  const lineQuads: NativeBoneyardProjectedShadowEdge[] = []
+  const edges: NativeBoneyardProjectedShadowEdge[] = []
   for (const record of records) {
     if (caster.program?.kind === 'fence-grate') {
       const grate = nativeBoneyardFenceGrateShadows(caster.program, record)
-      for (const bar of grate.bars) {
-        projectedEdges.push(bar)
-      }
-      lineQuads.push(nativeBoneyardShadowLineQuad(grate.rail))
+      edges.push(...grate.bars, nativeBoneyardLineShadowEdge(grate.rail))
       continue
     }
     if (caster.program?.kind === 'rails') {
-      for (const rail of nativeBoneyardRailsShadows(caster.program, record)) {
-        lineQuads.push(nativeBoneyardShadowLineQuad(rail))
-      }
+      edges.push(...nativeBoneyardRailsShadows(caster.program, record).map(
+        nativeBoneyardLineShadowEdge,
+      ))
       continue
     }
     if (caster.program?.kind === 'wall') {
-      projectedEdges.push(nativeBoneyardWallShadow(caster.program, record))
+      edges.push(nativeBoneyardWallShadow(caster.program, record))
       continue
     }
-    for (const edge of nativeBoneyardProjectedShadowEdges(caster, record)) {
-      projectedEdges.push(edge)
-    }
+    edges.push(...nativeBoneyardProjectedShadowEdges(caster, record))
   }
-  const mesh = buildNativeBoneyardShadowMesh(projectedEdges, lineQuads)
-  updateShadowMesh(view, mesh)
-  const quadCount = projectedEdges.length + lineQuads.length
-  view.mesh.renderable = quadCount > 0
-  return { quadCount, recordCount: records.length }
+  return { edges, recordCount: records.length }
+}
+
+function shadowView(texture: Texture, initialQuadCapacity: number): ActiveShadowView {
+  const buffers = new NativeBoneyardShadowMeshBuffers(initialQuadCapacity)
+  const mesh = new MeshSimple({
+    indices: buffers.indices,
+    texture,
+    topology: 'triangle-list',
+    uvs: buffers.uvs,
+    vertices: buffers.positions,
+  })
+  mesh.autoUpdate = false
+  mesh.eventMode = 'none'
+  return { buffers, mesh, uploadedIndexRevision: 0 }
+}
+
+function shadowAlphaRampTexture(): Texture {
+  return new Texture({
+    label: 'native-shadow-alpha-ramp',
+    source: new BufferImageSource({
+      alphaMode: 'premultiply-alpha-on-upload',
+      height: 1,
+      label: 'native-shadow-alpha-ramp-source',
+      resource: nativeBoneyardShadowAlphaRampPixels(),
+      scaleMode: 'linear',
+      width: 256,
+    }),
+  })
+}
+
+function positionBeforeOwner(
+  root: Container,
+  mesh: MeshSimple,
+  owner: ContainerChild,
+): void {
+  mesh.zIndex = owner.zIndex
+  const ownerIndex = root.getChildIndex(owner)
+  if (mesh.parent !== root) {
+    root.addChildAt(mesh, ownerIndex)
+    return
+  }
+  const meshIndex = root.getChildIndex(mesh)
+  if (meshIndex === ownerIndex - 1) return
+  root.setChildIndex(mesh, meshIndex < ownerIndex ? ownerIndex - 1 : ownerIndex)
+}
+
+function ownsNativeShadowSlot(
+  root: Container,
+  mesh: MeshSimple,
+  owner: ContainerChild,
+): boolean {
+  return mesh.zIndex === owner.zIndex
+    && root.getChildIndex(mesh) === root.getChildIndex(owner) - 1
 }
 
 function gateCaster(
   id: string,
   state: BoneyardGateLeafSnapshot,
 ): NativeBoneyardComplexShadowCaster {
-  const position = nativeGatePainterRoot(state.hinge, state.tip)
   return {
     id,
     outline: [],
-    position,
+    position: nativeGatePainterRoot(state.hinge, state.tip),
     program: {
       construction: 'gate',
       end: { ...state.tip },
@@ -205,70 +281,4 @@ function gateCaster(
       start: { ...state.hinge },
     },
   }
-}
-
-function shadowMesh(id: string, shader: Shader): ShadowMeshView {
-  const geometry = new Geometry({
-    attributes: {
-      aAlpha: { buffer: new Float32Array(), format: 'float32' },
-      aPosition: { buffer: new Float32Array(), format: 'float32x2' },
-    },
-    indexBuffer: new Uint32Array(),
-    label: `complex-shadow:${id}`,
-  })
-  const mesh = new Mesh({ geometry, shader, texture: Texture.EMPTY })
-  mesh.eventMode = 'none'
-  mesh.label = `complex-shadow:${id}`
-  mesh.renderable = false
-  return { geometry, mesh }
-}
-
-function updateShadowMesh(
-  view: ShadowMeshView,
-  mesh: ReturnType<typeof buildNativeBoneyardShadowMesh>,
-): void {
-  const positionBuffer = view.geometry.getBuffer('aPosition')
-  positionBuffer.data = mesh.positions
-  positionBuffer.update()
-  const alphaBuffer = view.geometry.getBuffer('aAlpha')
-  alphaBuffer.data = mesh.alphas
-  alphaBuffer.update()
-  view.geometry.indexBuffer.data = mesh.indices
-  view.geometry.indexBuffer.update()
-}
-
-function destroyShadowMesh(root: Container, view: ShadowMeshView): void {
-  root.removeChild(view.mesh)
-  view.mesh.destroy()
-  view.geometry.destroy(true)
-}
-
-function shadowShader(): Shader {
-  return Shader.from({
-    gl: {
-      fragment: `
-        in float vAlpha;
-        out vec4 finalColor;
-        void main(void) {
-          finalColor = vec4(0.0, 0.0, 0.0, vAlpha);
-        }
-      `,
-      name: 'boneyard-complex-shadow',
-      vertex: `
-        in vec2 aPosition;
-        in float aAlpha;
-        uniform mat3 uProjectionMatrix;
-        uniform mat3 uWorldTransformMatrix;
-        uniform vec4 uWorldColorAlpha;
-        uniform mat3 uTransformMatrix;
-        uniform vec4 uColor;
-        out float vAlpha;
-        void main(void) {
-          mat3 matrix = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
-          gl_Position = vec4((matrix * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
-          vAlpha = aAlpha * uWorldColorAlpha.a * uColor.a;
-        }
-      `,
-    },
-  })
 }

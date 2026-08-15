@@ -8,7 +8,6 @@ import {
   enterBoneyardWorld,
 } from '../core-server/game-simulation.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
-import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
@@ -40,6 +39,14 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+const ACTOR_LIGHT_REGISTRATION = {
+  managerLane: 'actor' as const,
+  registrationOrdinal: 1,
+}
+const TRANSIENT_LIGHT_REGISTRATION = {
+  managerLane: 'transient' as const,
+  registrationOrdinal: 0,
+}
 
 function loadedBoneyardFixture(runId: string): LoadedBoneyard {
   return {
@@ -153,7 +160,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v21 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v22 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -217,6 +224,11 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 10_000)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
+  assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
+    driveActive: false,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    overlayEffectPhase: 0,
+  })
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     activeWeldBuildId: null,
     currentHealth: 50,
@@ -293,7 +305,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v21 strictly round-trips projected statuses, shields, payloads, and effects', () => {
+test('protocol v22 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -327,33 +339,13 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
       demonRearJointRotationRadians: 0,
       demonRearLimbRotationRadians: 0,
       effects: [{
-        alpha: 1,
+        alpha: 0.75,
         atlas: 'DeadHawg',
         blendMode: 'normal',
-        entry: 46,
-        id: 41,
-        offset: { x: 0, y: 0 },
-        role: 'burning-fire',
-        rotationRadians: 0,
-        scale: 1,
-      }, {
-        alpha: 1 / BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
-        atlas: 'BadGuys',
-        blendMode: 'add',
-        entry: 381,
+        entry: 52,
         id: 42,
         offset: { x: 0, y: 0 },
-        role: 'mage-lightning-source',
-        rotationRadians: 0,
-        scale: 1,
-      }, {
-        alpha: 1 / BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
-        atlas: 'BadGuys',
-        blendMode: 'add',
-        entry: 382,
-        id: 43,
-        offset: { x: 150, y: 0 },
-        role: 'mage-lightning-target',
+        role: 'burning-fire',
         rotationRadians: 0,
         scale: 1,
       }, {
@@ -385,12 +377,28 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
     flags: ['FLAG_ARMOR'],
     headingDeg: 90,
     id: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 5,
     nativeTypeId: 1001,
     position: { x: 100, y: 100 },
+    lighting: { charge: 0, glow: 0.75, providerCopies: 1 },
     shieldHealth: 25,
     shieldMaximumHealth: 50,
     spawnTick: 0,
+  }]
+  snapshot.world.mageLightningPulses = [{
+    contact: {
+      kind: 'target-attached',
+      localOffset: { x: -4, y: 6 },
+      targetPlayerId: 'player-1',
+    },
+    endpoint: { x: 151, y: 2 },
+    id: 1,
+    midpoint: { x: 75, y: 0 },
+    ownerActorId: 1,
+    seed: 0x1234_5678,
+    source: { x: 23, y: -16 },
+    tick: snapshot.tick,
   }]
   snapshot.world.enemyProjectiles = [{
     ageTicks: 3,
@@ -399,6 +407,7 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
     homing: false,
     id: 2,
     kind: 'arrow',
+    lightRegistration: null,
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
@@ -472,7 +481,7 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    72,
+    55,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -487,6 +496,41 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
   oversizedDazzle.snapshot.players['player-1'].progression.dazzleTicksRemaining = 51
   assert.throws(() => decodeServerGameMessage(JSON.stringify(oversizedDazzle)), /dazzleTicksRemaining/)
 
+  const missingPlayerLighting = JSON.parse(encodeGameMessage(welcome))
+  delete missingPlayerLighting.snapshot.players['player-1'].lighting
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingPlayerLighting)),
+    /players\.player-1\.lighting/,
+  )
+
+  const missingPlayerLightRegistration = JSON.parse(encodeGameMessage(welcome))
+  delete missingPlayerLightRegistration.snapshot.players['player-1'].lighting.lightRegistration
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingPlayerLightRegistration)),
+    /lighting\.lightRegistration/,
+  )
+
+  const wrongPlayerLightLane = JSON.parse(encodeGameMessage(welcome))
+  wrongPlayerLightLane.snapshot.players['player-1'].lighting.lightRegistration.managerLane = 'transient'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongPlayerLightLane)),
+    /managerLane must be actor/,
+  )
+
+  const invalidOverlayLighting = JSON.parse(encodeGameMessage(welcome))
+  invalidOverlayLighting.snapshot.players['player-1'].lighting.overlayEffectPhase = 0.46
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidOverlayLighting)),
+    /overlayEffectPhase/,
+  )
+
+  const inconsistentDriveLighting = JSON.parse(encodeGameMessage(welcome))
+  inconsistentDriveLighting.snapshot.players['player-1'].lighting.driveActive = true
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(inconsistentDriveLighting)),
+    /driveActive is inconsistent/,
+  )
+
   const incompatiblePayload = JSON.parse(encodeGameMessage(welcome))
   incompatiblePayload.snapshot.world.enemyProjectiles[0].payload = 'cold'
   assert.throws(() => decodeServerGameMessage(JSON.stringify(incompatiblePayload)), /payload/)
@@ -495,18 +539,86 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
   invalidShield.snapshot.world.enemies[0].shieldHealth = 51
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidShield)), /shieldHealth/)
 
-  const invalidLightning = JSON.parse(encodeGameMessage(welcome))
-  invalidLightning.snapshot.world.enemies[0].animation.effects[1].entry = 382
+  const invalidMagicShield = JSON.parse(encodeGameMessage(welcome))
+  invalidMagicShield.snapshot.world.enemies[0].animation.effects[1].entry = 382
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(invalidLightning)),
+    () => decodeServerGameMessage(JSON.stringify(invalidMagicShield)),
     /fields do not match role/,
   )
 
-  const invalidLightningAlpha = JSON.parse(encodeGameMessage(welcome))
-  invalidLightningAlpha.snapshot.world.enemies[0].animation.effects[1].alpha = 1.01
+  const missingLighting = JSON.parse(encodeGameMessage(welcome))
+  delete missingLighting.snapshot.world.enemies[0].lighting
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(missingLighting)), /lighting/)
+
+  const missingEnemyLightRegistration = JSON.parse(encodeGameMessage(welcome))
+  delete missingEnemyLightRegistration.snapshot.world.enemies[0].lightRegistration
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(invalidLightningAlpha)),
+    () => decodeServerGameMessage(JSON.stringify(missingEnemyLightRegistration)),
+    /enemies\[0\]\.lightRegistration/,
+  )
+
+  const wrongEnemyLightLane = JSON.parse(encodeGameMessage(welcome))
+  wrongEnemyLightLane.snapshot.world.enemies[0].lightRegistration.managerLane = 'transient'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongEnemyLightLane)),
+    /managerLane must be actor/,
+  )
+
+  const unexpectedProjectileLightRegistration = JSON.parse(encodeGameMessage(welcome))
+  unexpectedProjectileLightRegistration.snapshot.world.enemyProjectiles[0].lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 9,
+  }
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unexpectedProjectileLightRegistration)),
+    /enemyProjectiles\[0\]\.lightRegistration must be null/,
+  )
+
+  const missingLanternLightRegistration = JSON.parse(encodeGameMessage(welcome))
+  delete missingLanternLightRegistration.snapshot.world.lanternLightRegistration
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingLanternLightRegistration)),
+    /lanternLightRegistration/,
+  )
+
+  const invalidGlow = JSON.parse(encodeGameMessage(welcome))
+  invalidGlow.snapshot.world.enemies[0].lighting.glow = 1.01
+  assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidGlow)), /lighting\.glow/)
+
+  const invalidProviderCopies = JSON.parse(encodeGameMessage(welcome))
+  invalidProviderCopies.snapshot.world.enemies[0].lighting.providerCopies = 3
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidProviderCopies)),
+    /lighting\.providerCopies/,
+  )
+
+  const invalidBurning = JSON.parse(encodeGameMessage(welcome))
+  invalidBurning.snapshot.world.enemies[0].animation.effects[0].entry = 382
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidBurning)),
+    /fields do not match role/,
+  )
+
+  const invalidMagicShieldAlpha = JSON.parse(encodeGameMessage(welcome))
+  invalidMagicShieldAlpha.snapshot.world.enemies[0].animation.effects[1].alpha = 1.251
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidMagicShieldAlpha)),
     /animation\.effects\[1\]\.alpha/,
+  )
+
+  const extraPulseField = JSON.parse(encodeGameMessage(welcome))
+  extraPulseField.snapshot.world.mageLightningPulses[0].contact.position = { x: 0, y: 0 }
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(extraPulseField)),
+    /position is not allowed/,
+  )
+
+  const stalePulse = JSON.parse(encodeGameMessage(welcome))
+  stalePulse.snapshot.tick = 5
+  stalePulse.snapshot.world.mageLightningPulses[0].tick = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(stalePulse)),
+    /live pulse age limit/,
   )
 
   const invalidEmergence = JSON.parse(encodeGameMessage(welcome))
@@ -537,8 +649,8 @@ test('protocol v21 strictly round-trips projected statuses, shields, payloads, a
   )
 })
 
-test('protocol v21 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 21)
+test('protocol v22 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 22)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -562,6 +674,7 @@ test('protocol v21 carries run lifecycle and authoritative combat modifiers', ()
       ...gameOverSnapshot.players,
       'player-1': {
         ...dyingPlayer,
+        lighting: { ...dyingPlayer.lighting, driveActive: true },
         progression: {
           ...dyingPlayer.progression,
           currentHealth: 0,
@@ -629,7 +742,7 @@ test('protocol v21 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v21 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v22 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -650,15 +763,6 @@ test('protocol v21 preserves the bounded run-scoped enemy semantic-event lane', 
       targetPlayerId: 'player-1',
       tick: 11,
       type: 'attack-marker',
-    },
-    {
-      actorId: 3,
-      eventId: 3,
-      sourcePosition: { x: 120, y: 240 },
-      targetPlayerId: 'player-1',
-      targetPosition: { x: 300, y: 260 },
-      tick: 11,
-      type: 'mage-lightning',
     },
     {
       actorId: 3,
@@ -737,6 +841,20 @@ test('protocol v21 preserves the bounded run-scoped enemy semantic-event lane', 
   const snapshot = createGameSnapshot(state, 'player-1')
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.ok(snapshot.world.enemyEvents.every((event) => event.runId === runId))
+  snapshot.world.mageLightningPulses = [{
+    contact: {
+      kind: 'target-attached',
+      localOffset: { x: -5, y: 7 },
+      targetPlayerId: 'player-1',
+    },
+    endpoint: { x: 302, y: 261 },
+    id: 1,
+    midpoint: { x: 210, y: 250 },
+    ownerActorId: 3,
+    seed: 0x1020_3040,
+    source: { x: 120, y: 240 },
+    tick: 20,
+  }]
 
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
@@ -777,49 +895,56 @@ test('protocol v21 preserves the bounded run-scoped enemy semantic-event lane', 
   )
 
   const missingProjectile = JSON.parse(encodeGameMessage(message))
-  delete missingProjectile.frame.world.enemyEvents[3].projectileId
+  delete missingProjectile.frame.world.enemyEvents[2].projectileId
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(missingProjectile)),
     /projectileId/,
   )
 
-  const missingLightningEndpoint = JSON.parse(encodeGameMessage(message))
-  delete missingLightningEndpoint.frame.world.enemyEvents[2].targetPosition
+  const malformedCompactPulse = JSON.parse(encodeGameMessage(message))
+  malformedCompactPulse.frame.world.mageLightningPulses[0][13] = null
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(missingLightningEndpoint)),
-    /targetPosition/,
+    () => decodeServerGameMessage(JSON.stringify(malformedCompactPulse)),
+    /valid compact pulse/,
   )
 
-  const extraLightningPayload = JSON.parse(encodeGameMessage(message))
-  extraLightningPayload.frame.world.enemyEvents[2].projectileId = 9
+  const reservedCompactTarget = JSON.parse(encodeGameMessage(message))
+  reservedCompactTarget.frame.world.mageLightningPulses[0][13] = '__proto__'
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(extraLightningPayload)),
-    /projectileId is not allowed/,
+    () => decodeServerGameMessage(JSON.stringify(reservedCompactTarget)),
+    /valid compact pulse/,
+  )
+
+  const futureCompactPulse = JSON.parse(encodeGameMessage(message))
+  futureCompactPulse.frame.world.mageLightningPulses[0][2] = 21
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(futureCompactPulse)),
+    /exceeds its snapshot tick/,
   )
 
   const missingDeathSoundPitch = JSON.parse(encodeGameMessage(message))
-  delete missingDeathSoundPitch.frame.world.enemyEvents[8].pitch
+  delete missingDeathSoundPitch.frame.world.enemyEvents[7].pitch
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(missingDeathSoundPitch)),
     /pitch/,
   )
 
   const unsupportedDeathSound = JSON.parse(encodeGameMessage(message))
-  unsupportedDeathSound.frame.world.enemyEvents[8].sound = 'skeleton-ish'
+  unsupportedDeathSound.frame.world.enemyEvents[7].sound = 'skeleton-ish'
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(unsupportedDeathSound)),
     /sound is not supported/,
   )
 
   const unsupportedDamageSound = JSON.parse(encodeGameMessage(message))
-  unsupportedDamageSound.frame.world.enemyEvents[12].sound = 'shield-ish'
+  unsupportedDamageSound.frame.world.enemyEvents[11].sound = 'shield-ish'
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(unsupportedDamageSound)),
     /sound is not supported/,
   )
 
   const excessDeathSoundGain = JSON.parse(encodeGameMessage(message))
-  excessDeathSoundGain.frame.world.enemyEvents[8].gainScale = 1.01
+  excessDeathSoundGain.frame.world.enemyEvents[7].gainScale = 1.01
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(excessDeathSoundGain)),
     /gainScale must be within/,
@@ -1065,6 +1190,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     headingDegrees: 0,
     id: 1,
     kind: 'ether',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
     phase: 'flight',
     position: { x: 800, y: 400 },
@@ -1084,6 +1210,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     hitTargetIds: [],
     id: missile.id,
     kind: 'earth',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
     orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     ownerId: missile.ownerId,
     phase: 'held',
@@ -1097,6 +1224,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     charge: 0.5,
     id: 1,
     kind: 'earth-impact',
+    lightRegistration: null,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
@@ -1112,6 +1240,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     height: -12.5,
     id: 2,
     kind: 'earth-called-rock',
+    lightRegistration: null,
     lateralMagnitude: 3.25,
     ownerId: 'player-1',
     parentId: 1,
@@ -1130,6 +1259,15 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: { nextId: 2, projectiles: [missile], transients: [] },
   }))
 
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, lightRegistration: undefined }],
+      transients: [],
+    },
+  }), /projectiles\[0\]\.lightRegistration/)
+
   const decodedImpact = decodeFrame({
     ...frame,
     primarySpells: { nextId: 2, projectiles: [], transients: [earthImpact] },
@@ -1141,6 +1279,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     direction: { x: 0, y: -1 },
     id: 1,
     kind: 'fire',
+    lightRegistration: null,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     variant: nativeFireParticleVariant(1),
@@ -1150,6 +1289,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ageTicks: 8,
     id: 1,
     kind: 'fire-impact',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
@@ -1159,6 +1299,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     birthTick: 91,
     id: 1,
     kind: 'ether-impact',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
@@ -1170,6 +1311,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     endpoint: { x: 820, y: 180 },
     id: 1,
     kind: 'air',
+    lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     midpoint: { x: 800, y: 290 },
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
@@ -1187,6 +1329,14 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [fireParticle],
     },
   }))
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...fireParticle, lightRegistration: TRANSIENT_LIGHT_REGISTRATION }],
+    },
+  }), /lightRegistration must be null/)
   const decodedFireImpact = decodeFrame({
     ...frame,
     primarySpells: {
@@ -1451,6 +1601,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        lightRegistration: null,
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -1471,6 +1622,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        lightRegistration: null,
         obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -1491,6 +1643,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        lightRegistration: null,
         obstructionDistance: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
@@ -1510,6 +1663,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         direction: { x: 1, y: 0 },
         id: 2,
         kind: 'water',
+        lightRegistration: null,
         obstructionDistance: 0,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
@@ -1794,7 +1948,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0]
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
   invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(

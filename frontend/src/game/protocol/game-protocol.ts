@@ -22,6 +22,11 @@ import {
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import {
+  NATIVE_LIGHT_MANAGER_LANES,
+  type NativeLightManagerLane,
+  type NativeLightProviderRegistration,
+} from '../core-kernels/native-light-provider-order.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
@@ -66,11 +71,16 @@ import {
   type HubItemKind,
   type HubShopItem,
 } from '../core-kernels/hub-economy.ts'
+import {
+  NATIVE_PLAYER_MAX_LIGHT_OVERLAY,
+  playerLightDriveActive,
+} from '../core-kernels/player-lighting.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import type {
   BoneyardBounds,
   BoneyardChoice,
@@ -97,6 +107,8 @@ import type {
   BoneyardEnemyProjectilePayload,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
+  BoneyardMageLightningPulseFrame,
+  BoneyardMageLightningPulseSnapshot,
   BoneyardMaggotSnapshot,
   BoneyardSolomonSnapshot,
   BoneyardWaveSnapshot,
@@ -108,6 +120,10 @@ import type {
   ProtocolPlayerSnapshotFrame,
   ProtocolStudentState,
 } from './game-state.ts'
+import {
+  boneyardMageLightningPulseFrameIsValid,
+  materializeBoneyardMageLightningPulse,
+} from './boneyard-mage-lightning-replication.ts'
 import {
   BONEYARD_ENEMY_EFFECT_ROLES,
   BONEYARD_ENEMY_DAMAGE_SOUNDS,
@@ -134,7 +150,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 21
+export const GAME_PROTOCOL_VERSION = 22
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -150,9 +166,11 @@ const MAX_BONEYARD_ENEMIES = 512
 const MAX_BONEYARD_ENEMY_EVENTS = 512
 const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192
 const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
+const MAX_BONEYARD_MAGE_LIGHTNING_PULSES = MAX_BONEYARD_ENEMIES
+  * NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
 const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
-const MAX_BONEYARD_ENEMY_EFFECTS = 4
+const MAX_BONEYARD_ENEMY_EFFECTS = 2
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
@@ -664,6 +682,44 @@ function vector(value: unknown, field: string): Vector2 {
   }
 }
 
+function nativeLightProviderRegistration(
+  value: unknown,
+  field: string,
+  expectedLane: NativeLightManagerLane,
+): NativeLightProviderRegistration {
+  const source = record(value, field)
+  onlyKeys(source, field, ['managerLane', 'registrationOrdinal'])
+  const managerLane = limitedString(source.managerLane, `${field}.managerLane`, 16)
+  if (!(NATIVE_LIGHT_MANAGER_LANES as readonly string[]).includes(managerLane)) {
+    throw new GameProtocolError(`${field}.managerLane is not supported`)
+  }
+  if (managerLane !== expectedLane) {
+    throw new GameProtocolError(`${field}.managerLane must be ${expectedLane}`)
+  }
+  return {
+    managerLane: managerLane as NativeLightManagerLane,
+    registrationOrdinal: nonnegativeInteger(
+      source.registrationOrdinal,
+      `${field}.registrationOrdinal`,
+    ),
+  }
+}
+
+function absentNativeLightProviderRegistration(value: unknown, field: string): null {
+  if (value !== null) throw new GameProtocolError(`${field} must be null`)
+  return null
+}
+
+function nullableNativeLightProviderRegistration(
+  value: unknown,
+  field: string,
+  expectedLane: NativeLightManagerLane,
+): NativeLightProviderRegistration | null {
+  return value === null
+    ? null
+    : nativeLightProviderRegistration(value, field, expectedLane)
+}
+
 function playerCharacterConfig(value: unknown, field: string): PlayerCharacterConfig {
   const source = record(value, field)
   onlyKeys(source, field, ['discipline', 'displayName', 'element'])
@@ -754,6 +810,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
     'footstepTick',
     'gaitDegrees',
     'headingIndex',
+    'lighting',
     'position',
     'primaryCast',
     'progression',
@@ -764,19 +821,26 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
   const economy = source.economy === undefined
     ? undefined
     : playerEconomy(source.economy, `${field}.economy`)
+  const primaryCast = playerPrimaryCastState(
+    source.primaryCast,
+    `${field}.primaryCast`,
+    config.element,
+  )
+  const progression = playerProgression(source.progression, `${field}.progression`)
+  const lighting = playerLighting(source.lighting, `${field}.lighting`)
+  if (lighting.driveActive !== playerLightDriveActive(primaryCast, progression.lifeState)) {
+    throw new GameProtocolError(`${field}.lighting.driveActive is inconsistent with player state`)
+  }
   return {
     config,
     ...(economy ? { economy } : {}),
     footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
+    lighting,
     position: vector(source.position, `${field}.position`),
-    primaryCast: playerPrimaryCastState(
-      source.primaryCast,
-      `${field}.primaryCast`,
-      config.element,
-    ),
-    progression: playerProgression(source.progression, `${field}.progression`),
+    primaryCast,
+    progression,
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
   }
@@ -1065,6 +1129,31 @@ function selectorArray(value: unknown, field: string): readonly number[] {
     selector === 8 || (index > 0 && selector <= selectors[index - 1]!)
   ))) throw new GameProtocolError(`${field} must be sorted, unique, and available`)
   return selectors
+}
+
+function playerLighting(
+  value: unknown,
+  field: string,
+): ProtocolPlayerState['lighting'] {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'driveActive',
+    'lightRegistration',
+    'overlayEffectPhase',
+  ])
+  const overlayEffectPhase = finite(source.overlayEffectPhase, `${field}.overlayEffectPhase`)
+  if (overlayEffectPhase < 0 || overlayEffectPhase > NATIVE_PLAYER_MAX_LIGHT_OVERLAY) {
+    throw new GameProtocolError(`${field}.overlayEffectPhase is outside the native domain`)
+  }
+  return {
+    driveActive: boolean(source.driveActive, `${field}.driveActive`),
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
+    overlayEffectPhase,
+  }
 }
 
 function playerPrimaryCastState(
@@ -1955,7 +2044,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   }
   onlyKeys(source, field, [
     'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
-    'ownerId', 'phase', 'position', 'velocity', 'worldKey',
+    'lightRegistration', 'ownerId', 'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? ['assemblyCharge', 'hitTargetIds', 'orientation'] : []),
     ...(source.kind === 'ether'
       ? ['headingDegrees', 'targetId', 'turnAccumulator', 'underpowered']
@@ -1992,6 +2081,11 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     id: positiveInteger(source.id, `${field}.id`),
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
     phase,
     position: vector(source.position, `${field}.position`),
@@ -2073,7 +2167,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   if (source.kind === 'earth-called-rock') {
     onlyKeys(source, field, [
       'ageTicks', 'fallVelocity', 'falling', 'height', 'id', 'kind',
-      'lateralMagnitude', 'ownerId', 'parentId', 'position', 'rotation',
+      'lateralMagnitude', 'lightRegistration', 'ownerId', 'parentId', 'position', 'rotation',
       'rotationStep', 'scale', 'speed', 'targetHeight', 'variant', 'worldKey',
     ])
     const fallVelocity = finite(source.fallVelocity, `${field}.fallVelocity`)
@@ -2113,6 +2207,10 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       id,
       kind: 'earth-called-rock',
       lateralMagnitude,
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       parentId,
       position: vector(source.position, `${field}.position`),
@@ -2128,7 +2226,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   if (source.kind === 'earth-impact') {
     onlyKeys(source, field, [
       'ageTicks', 'birthTick', 'charge', 'id', 'kind', 'origin', 'ownerId',
-      'lifetimeTicks', 'worldKey',
+      'lightRegistration', 'lifetimeTicks', 'worldKey',
     ])
     const charge = finite(source.charge, `${field}.charge`)
     if (charge < 0 || charge > 1) {
@@ -2151,6 +2249,10 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       charge,
       id,
       kind: 'earth-impact',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       lifetimeTicks,
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
@@ -2159,7 +2261,8 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'ether-impact') {
     onlyKeys(source, field, [
-      'ageTicks', 'birthTick', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+      'ageTicks', 'birthTick', 'id', 'kind', 'lightRegistration', 'origin', 'ownerId',
+      'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
     if (ageTicks >= PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS) {
@@ -2170,6 +2273,11 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'ether-impact',
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'transient',
+      ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
@@ -2177,7 +2285,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'fire-impact') {
     onlyKeys(source, field, [
-      'ageTicks', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+      'ageTicks', 'id', 'kind', 'lightRegistration', 'origin', 'ownerId', 'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
     if (ageTicks >= NATIVE_FIRE_IMPACT_LIFETIME_TICKS) {
@@ -2187,13 +2295,18 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ageTicks,
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-impact',
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'transient',
+      ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }
   const transientKeys = [
-    'ageTicks', 'direction', 'id', 'kind', 'origin', 'ownerId', 'variant',
+    'ageTicks', 'direction', 'id', 'kind', 'lightRegistration', 'origin', 'ownerId', 'variant',
     'worldKey',
   ]
   onlyKeys(
@@ -2254,6 +2367,10 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     return {
       ...common,
       kind: 'water',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       obstructionDistance,
       obstructionPoint,
       underpowered,
@@ -2272,6 +2389,11 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       endpoint: vector(source.endpoint, `${field}.endpoint`),
       kind: 'air',
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'transient',
+      ),
       midpoint: vector(source.midpoint, `${field}.midpoint`),
       targetId: source.targetId === null
         ? null
@@ -2279,7 +2401,14 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       underpowered,
     }
   }
-  return { ...common, kind: source.kind }
+  return {
+    ...common,
+    kind: source.kind,
+    lightRegistration: absentNativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+    ),
+  }
 }
 
 function validatePrimarySpellOwners(
@@ -2373,6 +2502,8 @@ function gameWorldSnapshot(
       'enemyProjectiles',
       'gateLeaves',
       'kind',
+      'lanternLightRegistration',
+      'mageLightningPulses',
       'maggots',
       'runId',
       'waves',
@@ -2387,6 +2518,11 @@ function gameWorldSnapshot(
       source.enemyEvents,
       `${field}.enemyEvents`,
       runId,
+      snapshotTick,
+    )
+    const mageLightningPulses = boneyardMageLightningPulses(
+      source.mageLightningPulses,
+      `${field}.mageLightningPulses`,
       snapshotTick,
     )
     const enemyIds = new Set<number>()
@@ -2462,6 +2598,12 @@ function gameWorldSnapshot(
         `${field}.gateLeaves[${index}]`,
       )),
       kind: 'boneyard',
+      lanternLightRegistration: nullableNativeLightProviderRegistration(
+        source.lanternLightRegistration,
+        `${field}.lanternLightRegistration`,
+        'actor',
+      ),
+      mageLightningPulses,
       maggots,
       runId,
       waves,
@@ -2722,11 +2864,6 @@ function boneyardEnemyEvents(
           'sourcePosition',
         ]
         case 'enemy-terminal-output': return ['count', 'output']
-        case 'mage-lightning': return [
-          'sourcePosition',
-          'targetPlayerId',
-          'targetPosition',
-        ]
         case 'projectile-impact':
         case 'projectile-retired':
         case 'projectile-spawned': return ['projectileId', 'targetPlayerId']
@@ -2805,15 +2942,6 @@ function boneyardEnemyEvents(
           sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
         }
       }
-      case 'mage-lightning': return {
-        ...base,
-        sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
-        targetPlayerId: validatedPlayerId(
-          source.targetPlayerId,
-          `${eventField}.targetPlayerId`,
-        ),
-        targetPosition: vector(source.targetPosition, `${eventField}.targetPosition`),
-      }
       case 'enemy-terminal-output': {
         const output = limitedString(source.output, `${eventField}.output`, 64)
         if (!(BONEYARD_ENEMY_TERMINAL_OUTPUTS as readonly string[]).includes(output)) {
@@ -2838,6 +2966,120 @@ function boneyardEnemyEvents(
   })
 }
 
+function boneyardMageLightningPulses(
+  value: unknown,
+  field: string,
+  snapshotTick: number,
+): BoneyardMageLightningPulseSnapshot[] {
+  const pulses = limitedArray(
+    value,
+    field,
+    MAX_BONEYARD_MAGE_LIGHTNING_PULSES,
+  ).map((pulse, index): BoneyardMageLightningPulseSnapshot => {
+    const pulseField = `${field}[${index}]`
+    const source = record(pulse, pulseField)
+    onlyKeys(source, pulseField, [
+      'contact',
+      'endpoint',
+      'id',
+      'midpoint',
+      'ownerActorId',
+      'seed',
+      'source',
+      'tick',
+    ])
+    const contactField = `${pulseField}.contact`
+    const contactSource = record(source.contact, contactField)
+    const kind = limitedString(contactSource.kind, `${contactField}.kind`, 32)
+    const contact = (() => {
+      if (kind === 'world') {
+        onlyKeys(contactSource, contactField, ['kind', 'position'])
+        return {
+          kind: 'world' as const,
+          position: vector(contactSource.position, `${contactField}.position`),
+        }
+      }
+      if (kind === 'target-attached') {
+        onlyKeys(contactSource, contactField, ['kind', 'localOffset', 'targetPlayerId'])
+        return {
+          kind: 'target-attached' as const,
+          localOffset: vector(contactSource.localOffset, `${contactField}.localOffset`),
+          targetPlayerId: validatedPlayerId(
+            contactSource.targetPlayerId,
+            `${contactField}.targetPlayerId`,
+          ),
+        }
+      }
+      throw new GameProtocolError(`${contactField}.kind is not supported`)
+    })()
+    const seed = nonnegativeInteger(source.seed, `${pulseField}.seed`)
+    if (seed > 0xffff_ffff) {
+      throw new GameProtocolError(`${pulseField}.seed must be an unsigned 32-bit integer`)
+    }
+    return {
+      contact,
+      endpoint: vector(source.endpoint, `${pulseField}.endpoint`),
+      id: positiveInteger(source.id, `${pulseField}.id`),
+      midpoint: vector(source.midpoint, `${pulseField}.midpoint`),
+      ownerActorId: positiveInteger(source.ownerActorId, `${pulseField}.ownerActorId`),
+      seed,
+      source: vector(source.source, `${pulseField}.source`),
+      tick: nonnegativeInteger(source.tick, `${pulseField}.tick`),
+    }
+  })
+  validateBoneyardMageLightningPulseSequence(pulses, field, snapshotTick)
+  return pulses
+}
+
+function validateBoneyardMageLightningPulseSequence(
+  pulses: readonly BoneyardMageLightningPulseSnapshot[],
+  field: string,
+  snapshotTick: number,
+): void {
+  let previousId = 0
+  let previousTick = -1
+  pulses.forEach((pulse, index) => {
+    const pulseField = `${field}[${index}]`
+    if (pulse.id <= previousId) {
+      throw new GameProtocolError(`${field} ids must increase`)
+    }
+    if (pulse.tick < previousTick) {
+      throw new GameProtocolError(`${field} ticks must not decrease`)
+    }
+    if (pulse.tick > snapshotTick) {
+      throw new GameProtocolError(`${pulseField}.tick exceeds its snapshot tick`)
+    }
+    if (snapshotTick - pulse.tick >= NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES) {
+      throw new GameProtocolError(`${pulseField} exceeds the live pulse age limit`)
+    }
+    previousId = pulse.id
+    previousTick = pulse.tick
+  })
+}
+
+function boneyardMageLightningPulseFrames(
+  value: unknown,
+  field: string,
+  snapshotTick: number,
+): BoneyardMageLightningPulseFrame[] {
+  const frames = limitedArray(
+    value,
+    field,
+    MAX_BONEYARD_MAGE_LIGHTNING_PULSES,
+  ).map((frame, index) => {
+    if (!boneyardMageLightningPulseFrameIsValid(frame)) {
+      throw new GameProtocolError(`${field}[${index}] is not a valid compact pulse`)
+    }
+    return [...frame] as BoneyardMageLightningPulseFrame
+  })
+  validateBoneyardMageLightningPulseSequence(
+    frames.map(materializeBoneyardMageLightningPulse),
+    field,
+    snapshotTick,
+  )
+  return frames
+}
+
 function nullablePlayerId(value: unknown, field: string): string | null {
   return value === null ? null : validatedPlayerId(value, field)
 }
@@ -2852,6 +3094,8 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     'flags',
     'headingDeg',
     'id',
+    'lightRegistration',
+    'lighting',
     'maximumHealth',
     'nativeTypeId',
     'position',
@@ -2913,6 +3157,17 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     flags,
     headingDeg,
     id: positiveInteger(source.id, `${field}.id`),
+    lightRegistration: enemyToken === 'ZOMBIE'
+      ? absentNativeLightProviderRegistration(
+          source.lightRegistration,
+          `${field}.lightRegistration`,
+        )
+      : nativeLightProviderRegistration(
+          source.lightRegistration,
+          `${field}.lightRegistration`,
+          'actor',
+        ),
+    lighting: boneyardEnemyLighting(source.lighting, `${field}.lighting`),
     maximumHealth,
     nativeTypeId,
     position: boneyardPoint(source.position, `${field}.position`),
@@ -2920,6 +3175,30 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     shieldMaximumHealth,
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
   }
+}
+
+function boneyardEnemyLighting(
+  value: unknown,
+  field: string,
+): BoneyardEnemySnapshot['lighting'] {
+  const source = record(value, field)
+  onlyKeys(source, field, ['charge', 'glow', 'providerCopies'])
+  const charge = finite(source.charge, `${field}.charge`)
+  const glow = finite(source.glow, `${field}.glow`)
+  if (charge < 0 || charge > 1) {
+    throw new GameProtocolError(`${field}.charge must be within [0,1]`)
+  }
+  if (glow < 0 || glow > 1) {
+    throw new GameProtocolError(`${field}.glow must be within [0,1]`)
+  }
+  const providerCopies = nonnegativeInteger(
+    source.providerCopies,
+    `${field}.providerCopies`,
+  )
+  if (providerCopies > 2) {
+    throw new GameProtocolError(`${field}.providerCopies must be within [0,2]`)
+  }
+  return { charge, glow, providerCopies: providerCopies as 0 | 1 | 2 }
 }
 
 function boneyardEnemyProjectileSnapshot(
@@ -2934,6 +3213,7 @@ function boneyardEnemyProjectileSnapshot(
     'homing',
     'id',
     'kind',
+    'lightRegistration',
     'lifetimeTicks',
     'nativeTypeId',
     'ownerActorId',
@@ -2978,6 +3258,12 @@ function boneyardEnemyProjectileSnapshot(
     homing: boolean(source.homing, `${field}.homing`),
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as BoneyardEnemyProjectileKind,
+    lightRegistration: boneyardEnemyProjectileLightRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      kind as BoneyardEnemyProjectileKind,
+      payload as BoneyardEnemyProjectilePayload,
+    ),
     lifetimeTicks,
     nativeTypeId: nativeTypeId as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
@@ -2998,6 +3284,21 @@ function projectilePayloadMatchesKind(
     case 'demon-bomb': return payload === 'none'
     case 'poison-pool': return payload === 'poison'
   }
+}
+
+function boneyardEnemyProjectileLightRegistration(
+  value: unknown,
+  field: string,
+  kind: BoneyardEnemyProjectileKind,
+  payload: BoneyardEnemyProjectilePayload,
+): NativeLightProviderRegistration | null {
+  if (kind === 'guided-missile' || kind === 'demon-bomb') {
+    return nativeLightProviderRegistration(value, field, 'actor')
+  }
+  if (kind === 'firebolt' || (kind === 'arrow' && payload === 'fire')) {
+    return nativeLightProviderRegistration(value, field, 'transient')
+  }
+  return absentNativeLightProviderRegistration(value, field)
 }
 
 function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSnapshot {
@@ -3248,10 +3549,6 @@ function boneyardEnemyEffect(
       && (atlas !== 'DeadHawg' || blendMode !== 'normal' || entry < 46 || entry > 77))
     || (role === 'magic-shield'
       && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 49))
-    || (role === 'mage-lightning-source'
-      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 381))
-    || (role === 'mage-lightning-target'
-      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 382))
   ) {
     throw new GameProtocolError(`${field} fields do not match role`)
   }
@@ -3286,6 +3583,8 @@ function gameWorldSnapshotFrame(
       'enemyEvents',
       'gateLeaves',
       'kind',
+      'lanternLightRegistration',
+      'mageLightningPulses',
       'runId',
       'waves',
     ])
@@ -3313,6 +3612,16 @@ function gameWorldSnapshotFrame(
         `${field}.gateLeaves[${index}]`,
       )),
       kind: 'boneyard',
+      lanternLightRegistration: nullableNativeLightProviderRegistration(
+        source.lanternLightRegistration,
+        `${field}.lanternLightRegistration`,
+        'actor',
+      ),
+      mageLightningPulses: boneyardMageLightningPulseFrames(
+        source.mageLightningPulses,
+        `${field}.mageLightningPulses`,
+        snapshotTick,
+      ),
       runId,
       waves,
     }

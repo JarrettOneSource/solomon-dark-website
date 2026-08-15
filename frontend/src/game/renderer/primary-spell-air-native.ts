@@ -1,3 +1,8 @@
+import {
+  nativeRandomFloatFromSemanticWord,
+  nativeRandomIntFromSemanticWord,
+} from '../core-kernels/native-random-domain.ts'
+
 export const AIR_LIGHTNING_BODY_LIFETIME_TICKS = 2
 export const AIR_LIGHTNING_CONTACT_LIFETIME_TICKS = 5
 export const AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING = 15
@@ -125,6 +130,11 @@ export interface NativeAirLightningPlan {
   sourceCorona: NativeAirCoronaPlan | null
 }
 
+export type NativeAirLightningFactoryPlan = Pick<
+  NativeAirLightningPlan,
+  'body' | 'endpoint' | 'midpoint' | 'source' | 'sourceCorona'
+>
+
 export interface NativeAirLightningInput {
   ageTicks: number
   birthTick: number
@@ -134,6 +144,15 @@ export interface NativeAirLightningInput {
   underpowered?: boolean
 }
 
+export interface NativeAirCoronaInput {
+  alpha: number
+  angle: number
+  center: NativeAirPoint
+  randomSalt: number
+  scale: number
+  seed: number
+}
+
 export interface NativeAirContactLightSourceInput {
   ageTicks: number
   endpoint: NativeAirPoint
@@ -141,6 +160,13 @@ export interface NativeAirContactLightSourceInput {
   origin: NativeAirPoint
   underpowered?: boolean
 }
+
+interface NativeAirPresentationRandomSource {
+  float: (maximum?: number) => number
+  int: (exclusiveBound: number) => number
+}
+
+type NativeAirRandomSource = NativeAirPresentationRandomSource | (() => number)
 
 export interface NativeAirContactLightInput {
   ageTicks: number
@@ -167,15 +193,13 @@ export function buildNativeAirLightningPlan(
   input: NativeAirLightningInput,
 ): NativeAirLightningPlan {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
-  const source = { x: 0, y: 0 }
-  const endpoint = { ...input.endpoint }
-  const midpoint = { ...input.midpoint }
-  const points = [source, midpoint, endpoint] as const
-  const basePhaseDegrees = -3 * input.birthTick
+  const factory = buildNativeAirLightningFactoryPlan(input)
   const contactSamples = nativeContactSamples(input.id)
   const contactCenter = {
-    x: endpoint.x + Math.cos(contactSamples.offsetAngle) * contactSamples.offsetRadius,
-    y: endpoint.y + Math.sin(contactSamples.offsetAngle) * contactSamples.offsetRadius,
+    x: factory.endpoint.x
+      + Math.cos(contactSamples.offsetAngle) * contactSamples.offsetRadius,
+    y: factory.endpoint.y
+      + Math.sin(contactSamples.offsetAngle) * contactSamples.offsetRadius,
   }
   const contactAngle = contactSamples.angle
     + nativeAge * CORONA_ANGLE_STEP_RADIANS
@@ -183,6 +207,39 @@ export function buildNativeAirLightningPlan(
     ? UNDERPOWERED_CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
     : CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
 
+  return {
+    ...factory,
+    contactCorona: buildNativeAirCoronaPlan({
+      alpha: contactAlpha,
+      angle: contactAngle,
+      center: contactCenter,
+      randomSalt: 0x46414445 ^ nativeAge,
+      scale: contactSamples.scale,
+      seed: input.id,
+    }),
+    contactLight: buildNativeAirContactLightPlan({
+      ageTicks: nativeAge,
+      id: input.id,
+      position: contactCenter,
+      underpowered: input.underpowered,
+    }),
+  }
+}
+
+/**
+ * Common visual owners constructed by the native Air factory. Contact
+ * ownership differs between player Air and Mage Air, so it deliberately does
+ * not live in this shared plan.
+ */
+export function buildNativeAirLightningFactoryPlan(
+  input: NativeAirLightningInput,
+): NativeAirLightningFactoryPlan {
+  const nativeAge = Math.max(0, Math.floor(input.ageTicks))
+  const source = { x: 0, y: 0 }
+  const endpoint = { ...input.endpoint }
+  const midpoint = { ...input.midpoint }
+  const points = [source, midpoint, endpoint] as const
+  const basePhaseDegrees = -3 * input.birthTick
   return {
     body: nativeAge < AIR_LIGHTNING_BODY_LIFETIME_TICKS
       ? {
@@ -210,19 +267,6 @@ export function buildNativeAirLightningPlan(
           ],
         }
       : null,
-    contactCorona: buildCorona(
-      contactCenter,
-      contactAlpha,
-      contactSamples.scale,
-      contactAngle,
-      randomStream(input.id, 0x46414445 ^ nativeAge),
-    ),
-    contactLight: buildNativeAirContactLightPlan({
-      ageTicks: nativeAge,
-      id: input.id,
-      position: contactCenter,
-      underpowered: input.underpowered,
-    }),
     endpoint,
     midpoint,
     source,
@@ -230,6 +274,18 @@ export function buildNativeAirLightningPlan(
       ? sourceCorona(input.id, source)
       : null,
   }
+}
+
+export function buildNativeAirCoronaPlan(
+  input: NativeAirCoronaInput,
+): NativeAirCoronaPlan {
+  return buildCorona(
+    input.center,
+    input.alpha,
+    input.scale,
+    input.angle,
+    nativeAirPresentationRandomSource(input.seed, input.randomSalt),
+  )
 }
 
 /**
@@ -287,10 +343,15 @@ export function buildNativeAirContactLightSource(
 
 export function buildNativeAirPathLightSources(
   input: NativeAirPathLightInput,
-  random = randomStream(input.id, semanticSeed(input.id, input.birthTick, 0x4d495343)),
+  random = nativeAirPresentationRandom(
+    input.id,
+    semanticSeed(input.id, input.birthTick, 0x4d495343),
+  ),
 ): readonly NativeAirPathLightPlan[] {
+  const intensityJitter = Math.fround(random() * Math.fround(0.75))
   const intensity = Math.fround(
-    (0.25 + random() * 0.75) * (input.weakCast === true ? 0.25 : 1),
+    Math.fround(Math.fround(0.25) + intensityJitter)
+      * Math.fround(input.weakCast === true ? 0.25 : 1),
   )
   const result: NativeAirPathLightPlan[] = []
   const tryAppend = (candidate: NativeAirPoint) => {
@@ -305,7 +366,9 @@ export function buildNativeAirPathLightSources(
         x: Math.fround(candidate.x),
         y: Math.fround(candidate.y + AIR_LIGHTNING_PATH_Y_OFFSET),
       },
-      radius: Math.fround(0.75 + random() * 0.25),
+      radius: Math.fround(
+        Math.fround(0.75) + Math.fround(random() * Math.fround(0.25)),
+      ),
     })
   }
 
@@ -420,7 +483,10 @@ function buildRibbon(
     alpha,
     branch: buildNativeAirBranchPlan(
       points,
-      randomStream(id, semanticSeed(id, birthTick, 0x4252414e ^ phaseOffset)),
+      nativeAirPresentationRandomSource(
+        id,
+        semanticSeed(id, birthTick, 0x4252414e ^ phaseOffset),
+      ),
     ),
     indices,
     parameterSamples,
@@ -452,20 +518,23 @@ export function nativeAirRibbonRandomSample(state: number): {
 
 export function buildNativeAirBranchPlan(
   points: readonly [NativeAirPoint, NativeAirPoint, NativeAirPoint],
-  random: () => number,
+  random: NativeAirRandomSource,
 ): NativeAirBranchPlan | null {
-  if (Math.floor(random() * 2) !== 1) return null
-  const attachment = quickSplinePoint(points, random() * AIR_LIGHTNING_SPLINE_DURATION)
-  let scale = 0.25 + random() * 0.5
-  if (Math.floor(random() * 30) === 1) scale = 1
-  const mirrorX = Math.floor(random() * 2) === 1
-  const geometryIndex = Math.floor(random() * 2) as 0 | 1
-  const textureIndex = Math.floor(random() * 2) as 0 | 1
+  if (airRandomInt(random, 2) !== 1) return null
+  const attachment = quickSplinePoint(
+    points,
+    airRandomFloat(random, AIR_LIGHTNING_SPLINE_DURATION),
+  )
+  let scale = Math.fround(0.25 + airRandomFloat(random, 0.5))
+  if (airRandomInt(random, 30) === 1) scale = 1
+  const mirrorX = airRandomInt(random, 2) === 1
+  const geometryIndex = airRandomInt(random, 2) as 0 | 1
+  const textureIndex = airRandomInt(random, 2) as 0 | 1
   const geometryRecord = AIR_LIGHTNING_BRANCH_RECORDS[geometryIndex]
   const geometry = AIR_LIGHTNING_BRANCH_GEOMETRY[geometryIndex]
   const first = geometry[0]
   const baseDegrees = normalizeDegrees(Math.atan2(-first.y, first.x) * 180 / Math.PI)
-  const radians = (baseDegrees + random() * 45) * Math.PI / 180
+  const radians = (baseDegrees + airRandomFloat(random, 45)) * Math.PI / 180
   const cosine = Math.cos(radians)
   const sine = Math.sin(radians)
   const xScale = (mirrorX ? -1 : 1) * scale
@@ -572,10 +641,17 @@ function quickSplineNormal(
 }
 
 function sourceCorona(id: number, source: NativeAirPoint): NativeAirCoronaPlan {
-  const random = randomStream(id, 0x534f5552)
-  const scale = 1 + random() * 0.5
-  const angle = random() * Math.PI * 2
-  return buildCorona(source, 1, scale, angle, randomStream(id, 0x474c4f57))
+  const random = nativeAirPresentationRandom(id, 0x534f5552)
+  const scale = Math.fround(1 + random(0.5))
+  const angle = random(Math.PI * 2)
+  return buildNativeAirCoronaPlan({
+    alpha: 1,
+    angle,
+    center: source,
+    randomSalt: 0x474c4f57,
+    scale,
+    seed: id,
+  })
 }
 
 function buildCorona(
@@ -583,26 +659,36 @@ function buildCorona(
   alpha: number,
   scale: number,
   angle: number,
-  random: () => number,
+  random: NativeAirRandomSource,
 ): NativeAirCoronaPlan {
   const pulseScale = (Math.abs(Math.sin(angle * 15)) * 0.15 + 3.5) * scale
-  const firstForkIndex = Math.floor(random() * AIR_LIGHTNING_CORONA_FORK_RECORDS.length)
+  const firstForkIndex = airRandomInt(random, AIR_LIGHTNING_CORONA_FORK_RECORDS.length)
   const secondForkIndex = AIR_LIGHTNING_CORONA_FORK_RECORDS.length - 1 - firstForkIndex
   return {
     alpha,
     center,
     circles: [
-      { alpha: 0.2 + random() * 0.25, record: 110, scale: pulseScale, tint: 0x80bfbf },
+      {
+        alpha: Math.fround(0.2 + airRandomFloat(random, 0.25)),
+        record: 110,
+        scale: pulseScale,
+        tint: 0x80bfbf,
+      },
       { alpha: 0.5, record: 110, scale: pulseScale * 0.75, tint: 0x80bfbf },
       { alpha: 0.5, record: 110, scale: pulseScale * 0.5, tint: 0x80bfbf },
-      { alpha: 0.25, record: 110, scale: pulseScale * (0.2 + random() * 0.2), tint: 0x80bfbf },
+      {
+        alpha: 0.25,
+        record: 110,
+        scale: pulseScale * Math.fround(0.2 + airRandomFloat(random, 0.2)),
+        tint: 0x80bfbf,
+      },
     ],
     forks: [
       {
         alpha: 1,
         record: AIR_LIGHTNING_CORONA_FORK_RECORDS[firstForkIndex],
         rotation: angle,
-        scale: scale * (0.75 + random() * 0.25),
+        scale: scale * Math.fround(0.75 + airRandomFloat(random, 0.25)),
         tint: 0xffffff,
       },
       {
@@ -617,15 +703,15 @@ function buildCorona(
 }
 
 function nativeContactSamples(id: number): NativeAirContactSamples {
-  const random = randomStream(id, 0x434f4e54)
+  const random = nativeAirPresentationRandom(id, 0x434f4e54)
   return {
-    offsetRadius: random() * CONTACT_OFFSET_RADIUS,
-    offsetAngle: random() * Math.PI * 2,
-    scale: 1 + random() * 0.5,
-    angle: random() * Math.PI * 2,
+    offsetRadius: random(CONTACT_OFFSET_RADIUS),
+    offsetAngle: random(Math.PI * 2),
+    scale: Math.fround(1 + random(0.5)),
+    angle: random(Math.PI * 2),
     lightRadius: Math.fround(
-      AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS
-        + random() * AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER,
+      Math.fround(AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS)
+        + random(AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER),
     ),
   }
 }
@@ -645,15 +731,46 @@ function normalized(direction: NativeAirPoint): NativeAirPoint {
     : { x: 1, y: 0 }
 }
 
-function randomStream(id: number, salt: number): () => number {
+export function nativeAirPresentationRandom(
+  id: number,
+  salt: number,
+): (maximum?: number) => number {
+  const source = nativeAirPresentationRandomSource(id, salt)
+  return (maximum = 1) => source.float(maximum)
+}
+
+function nativeAirPresentationRandomSource(
+  id: number,
+  salt: number,
+): NativeAirPresentationRandomSource {
   let value = mix32((id ^ salt) >>> 0)
-  return () => {
+  const nextWord = () => {
     value ^= value << 13
     value ^= value >>> 17
     value ^= value << 5
     value >>>= 0
-    return value / 0x1_0000_0000
+    return value
   }
+  return {
+    float: (maximum = 1) => nativeRandomFloatFromSemanticWord(nextWord(), maximum),
+    int: (exclusiveBound) => nativeRandomIntFromSemanticWord(nextWord(), exclusiveBound),
+  }
+}
+
+function airRandomFloat(random: NativeAirRandomSource, maximum = 1): number {
+  return typeof random === 'function'
+    ? Math.fround(Math.fround(random()) * Math.fround(maximum))
+    : random.float(maximum)
+}
+
+function airRandomInt(random: NativeAirRandomSource, exclusiveBound: number): number {
+  return typeof random === 'function'
+    ? boundedRandomIndex(random(), exclusiveBound)
+    : random.int(exclusiveBound)
+}
+
+function boundedRandomIndex(sample: number, exclusiveBound: number): number {
+  return Math.min(exclusiveBound - 1, Math.floor(sample * exclusiveBound))
 }
 
 function mix32(value: number): number {

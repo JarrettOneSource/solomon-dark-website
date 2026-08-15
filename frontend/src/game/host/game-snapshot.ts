@@ -8,7 +8,11 @@ import {
 import { hagathaOffers, type HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
-import { playerEntityDisplayHealth } from '../core-server/player-entity-store.ts'
+import { playerLightDriveActive } from '../core-kernels/player-lighting.ts'
+import {
+  playerEntityDisplayHealth,
+  playerLightingAt,
+} from '../core-server/player-entity-store.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import type {
   BoneyardEnemyEventSnapshot,
@@ -20,6 +24,7 @@ import {
   projectBoneyardEnemies,
   projectBoneyardEnemyDeathEffects,
   projectBoneyardEnemyProjectiles,
+  projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
 
@@ -85,9 +90,11 @@ export function createGameSnapshot(
             protocolBoneyardEnemyEvent(event, runId)
           )),
           enemyProjectiles: projectBoneyardEnemyProjectiles(state.world.enemies),
+          mageLightningPulses: projectBoneyardMageLightningPulses(state.world.enemies),
           maggots: projectBoneyardMaggots(state.world.enemies, state.tick),
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),
           kind: 'boneyard',
+          lanternLightRegistration: state.world.lanternLightRegistration,
           runId,
           waves: state.world.waves === null ? null : {
             interwaveDelayTicks: state.world.waves.interwaveDelayTicks,
@@ -123,9 +130,6 @@ function protocolBoneyardEnemyEvent(
     ...(event.sourcePosition === undefined
       ? {}
       : { sourcePosition: { ...event.sourcePosition } }),
-    ...(event.targetPosition === undefined
-      ? {}
-      : { targetPosition: { ...event.targetPosition } }),
     ...(event.targetPlayerId === undefined ? {} : { targetPlayerId: event.targetPlayerId }),
   }
 }
@@ -133,10 +137,12 @@ function protocolBoneyardEnemyEvent(
 function protocolPlayerState(
   state: GameSimulationState,
   playerId: string,
-  player: Omit<ProtocolPlayerState, 'economy' | 'progression'>,
+  player: Omit<ProtocolPlayerState, 'economy' | 'lighting' | 'progression'>,
 ): ProtocolPlayerState {
   const progression = getPlayerProgression(state, playerId)
   const economy = getPlayerEconomy(state, playerId)
+  const lighting = playerLightingAt(state.playerEntities, playerId)
+  if (!lighting) throw new Error(`game simulation has no player lighting ${playerId}`)
   const skillBook = getPlayerSkillBook(state, playerId)
   const learnedSkills: Array<readonly [number, number, number]> = []
   for (let skillId = 0; skillId < skillBook.permanentRanks.length; skillId += 1) {
@@ -177,6 +183,11 @@ function protocolPlayerState(
       revision: economy.revision,
       storage: economy.storage.map(protocolInventoryItem),
       tonicPurchases: economy.tonicPurchases,
+    },
+    lighting: {
+      driveActive: playerLightDriveActive(player.primaryCast, progression.lifeState),
+      lightRegistration: lighting.lightRegistration,
+      overlayEffectPhase: lighting.overlayEffectPhase,
     },
     progression: {
       activeWeldBuildId: skillBook.activeWeldBuildId,

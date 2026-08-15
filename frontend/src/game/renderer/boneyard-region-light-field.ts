@@ -13,6 +13,7 @@ import {
   NATIVE_REGION_LIGHT_ATLAS,
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
   NATIVE_REGION_LIGHT_ENTRY,
+  nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
   type NativeBoneyardLightSource,
 } from './boneyard-lighting.ts'
@@ -25,6 +26,8 @@ export class BoneyardRegionLightField {
   private readonly root: Container
   private readonly sourceContainer = new Container({ label: 'boneyard-region-light-sources' })
   private readonly sourceSprites: Sprite[] = []
+  private logicalSide: number
+  private physicalSide: number
 
   constructor(
     root: Container,
@@ -37,16 +40,19 @@ export class BoneyardRegionLightField {
       NATIVE_REGION_LIGHT_ENTRY,
     )
     if (!glyphRef) throw new Error('Native Region light glyph is missing.')
+    const target = nativeRegionLightTargetPlan(viewport, resolution)
     this.root = root
     this.glyph = glyph
     this.glyphRef = glyphRef
     this.sourceContainer.eventMode = 'none'
     this.renderTexture = RenderTexture.create({
       dynamic: true,
-      height: viewport.height,
-      resolution,
-      width: viewport.width,
+      height: target.logicalSide,
+      resolution: target.renderResolution,
+      width: target.logicalSide,
     })
+    this.logicalSide = target.logicalSide
+    this.physicalSide = target.physicalSide
     this.composite = new Sprite(this.renderTexture)
     this.composite.blendMode = 'multiply'
     this.composite.eventMode = 'none'
@@ -59,9 +65,8 @@ export class BoneyardRegionLightField {
     renderer: Renderer,
     sources: readonly NativeBoneyardLightSource[],
     camera: Camera,
-    viewport: GameViewportLayout,
   ): void {
-    this.syncSourceSprites(sources, camera, viewport)
+    this.syncSourceSprites(sources, camera)
     renderer.render({
       clear: true,
       clearColor: 0x000000,
@@ -69,14 +74,29 @@ export class BoneyardRegionLightField {
       target: this.renderTexture,
     })
     this.composite.position.set(
-      camera.x - viewport.width / 2 / camera.zoom,
-      camera.y - viewport.height / 2 / camera.zoom,
+      camera.x - this.logicalSide / 2 / camera.zoom,
+      camera.y - this.logicalSide / 2 / camera.zoom,
     )
     this.composite.scale.set(1 / camera.zoom)
   }
 
   resize(viewport: GameViewportLayout, resolution: number): void {
-    this.renderTexture.resize(viewport.width, viewport.height, resolution)
+    const target = nativeRegionLightTargetPlan(viewport, resolution)
+    this.logicalSide = target.logicalSide
+    this.physicalSide = target.physicalSide
+    this.renderTexture.resize(
+      target.logicalSide,
+      target.logicalSide,
+      target.renderResolution,
+    )
+  }
+
+  get targetLogicalSide(): number {
+    return this.logicalSide
+  }
+
+  get targetPhysicalSide(): number {
+    return this.physicalSide
   }
 
   destroy(): void {
@@ -89,7 +109,6 @@ export class BoneyardRegionLightField {
   private syncSourceSprites(
     sources: readonly NativeBoneyardLightSource[],
     camera: Camera,
-    viewport: GameViewportLayout,
   ): void {
     while (this.sourceSprites.length < sources.length) {
       const sprite = new Sprite(this.glyph)
@@ -103,8 +122,8 @@ export class BoneyardRegionLightField {
       sprite.visible = Boolean(source)
       if (!source) continue
       const stamp = nativeRegionLightStamp(source, {
-        x: (source.position.x - camera.x) * camera.zoom + viewport.width / 2,
-        y: (source.position.y - camera.y) * camera.zoom + viewport.height / 2,
+        x: (source.position.x - camera.x) * camera.zoom + this.logicalSide / 2,
+        y: (source.position.y - camera.y) * camera.zoom + this.logicalSide / 2,
       }, this.glyphRef, camera.zoom)
       sprite.alpha = stamp.alpha
       sprite.anchor.set(stamp.anchorX, stamp.anchorY)

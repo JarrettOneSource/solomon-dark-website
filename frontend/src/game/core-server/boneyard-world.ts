@@ -33,6 +33,10 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
+import type {
+  NativeLightProviderRegistration,
+  RegisterNativeLightProvider,
+} from '../core-kernels/native-light-provider-order.ts'
 import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
 import {
   createBoneyardWaveDirector,
@@ -42,6 +46,7 @@ import {
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
   canPlaceBoneyardBody,
+  clipBoneyardSegment,
   createBoneyardCollisionWorld,
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
@@ -75,6 +80,7 @@ export interface BoneyardWorldState {
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
+  lanternLightRegistration: NativeLightProviderRegistration | null
   runId: string
   scenerySpellTargets: readonly PrimarySpellTarget[]
   spawn: { x: number; y: number; facingDeg: number }
@@ -89,7 +95,10 @@ export interface BoneyardWorldTickResult {
   world: BoneyardWorldState
 }
 
-export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState {
+export function createBoneyardWorld(
+  loaded: LoadedBoneyard,
+  lanternLightRegistration: NativeLightProviderRegistration | null = null,
+): BoneyardWorldState {
   const ownsRetailEncounter = loaded.choice.source === 'default'
     && loaded.scene.solomonDig !== null
   return {
@@ -102,6 +111,7 @@ export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState 
     enemyEvents: [],
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
+    lanternLightRegistration,
     runId: loaded.runId,
     scenerySpellTargets: loaded.scene.objects
       .filter(({ typeId }) => typeId === 2029)
@@ -185,6 +195,8 @@ export function stepBoneyardWorldTick(
   inputs: Readonly<Record<string, PlayerCharacterInput>>,
   playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
   tick: number,
+  registerLightProvider?: RegisterNativeLightProvider,
+  registerProjectileLightProvider?: RegisterNativeLightProvider,
 ): BoneyardWorldTickResult {
   const plans = Object.entries(players).map(([playerId, player]) => {
     const locked = world.encounter !== null
@@ -307,6 +319,12 @@ export function stepBoneyardWorldTick(
   )
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
+    clipSpellSegment: ({ end, start }) => clipBoneyardSegment(
+      start,
+      end,
+      world.bounds,
+      collision,
+    ),
     firstProjectileWorldContact: ({ end, radius, start }) => (
       firstBoneyardPathBlockProgress(
         start,
@@ -388,6 +406,8 @@ export function stepBoneyardWorldTick(
       waves = result.director
       return result.spawnIntents
     },
+    registerLightProvider,
+    registerProjectileLightProvider,
     tick,
   })
   const knockback = applyBoneyardPlayerKnockbacks(

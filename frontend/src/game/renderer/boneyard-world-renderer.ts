@@ -7,6 +7,7 @@ import {
   MeshSimple,
   Sprite,
   Texture,
+  type ContainerChild,
 } from 'pixi.js'
 
 import {
@@ -44,8 +45,13 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
+import {
+  mergeNativeLightProviderOwners,
+  type NativeLightProviderRegistration,
+} from '../core-kernels/native-light-provider-order.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import type {
+  BoneyardEnemySnapshot,
   BoneyardEnemyEventSnapshot,
   BoneyardSolomonSnapshot,
 } from '../protocol/game-state.ts'
@@ -74,10 +80,15 @@ import {
 } from './boneyard-textures.ts'
 import {
   NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
-  nativeAcceptedBoneyardLightSources,
+  NativeBoneyardLightIndex,
+  NATIVE_PLAYER_LIGHT_RADIUS,
+  nativeBoulderLightSource,
   nativeBoneyardLightScalar,
   nativeBoneyardLightTint,
   nativeLanternLightSource,
+  nativeEnemyLightSources,
+  nativeEnemyProjectileLightProvider,
+  nativeMissileLightSource,
   nativePlayerLightSource,
   nativeSolomonSetPieceLighting,
   type NativeBoneyardLightSource,
@@ -87,10 +98,7 @@ import {
   BoneyardComplexShadowPresentation,
   type BoneyardComplexShadowStaticCaster,
 } from './boneyard-complex-shadow-presentation.ts'
-import {
-  nativeBoneyardConvexSilhouette,
-  type NativeBoneyardComplexShadowCaster,
-} from './boneyard-complex-shadows.ts'
+import type { NativeBoneyardComplexShadowCaster } from './boneyard-complex-shadows.ts'
 import { nativeBoneyardMainLayerShadowCaster } from './boneyard-shadow-casters.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
 import {
@@ -106,11 +114,15 @@ import {
 import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
 import { NativeMaggotViews } from './native-maggot-view.ts'
 import {
+  NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_OFFSET,
+  NativeMageLightningPulseViews,
+  nativeMageLightningTargetContactDepths,
+} from './native-mage-lightning-pulse-view.ts'
+import {
   nativeEnemyDeathEffectPainterLayer,
 } from './native-enemy-death-effect-presentation.ts'
 import {
   nativeEnemyPainterLayer,
-  type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
 import {
   buildNativeAirContactLightSource,
@@ -132,11 +144,16 @@ import {
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
+  activeStaticPainterLayerCount: number
   cameraFocusX: number
   cameraFocusY: number
+  complexShadowActiveMeshCount: number
+  complexShadowAllocatedQuadCapacity: number
   complexShadowCasterCount: number
+  complexShadowPooledMeshCount: number
   complexShadowQuadCount: number
   complexShadowRecordCount: number
+  complexShadowZOrderMismatchCount: number
   enemyCount: number
   enemyDeathEffectCount: number
   enemyDeathEffectSamples: readonly Readonly<{
@@ -179,6 +196,11 @@ interface BoneyardRendererFrameDiagnostics {
   localPlayerZIndex: number
   lanternLightIntensity: number
   levelUpParticleCount: number
+  lightMiscTailCandidateCount: number
+  lightActiveBucketCount: number
+  lightAllocatedBucketCount: number
+  lightIndexedSourceReferenceCount: number
+  lightProviderCandidateCount: number
   lightSourceCount: number
   mainAboveLocal: boolean
   mainBelowLocal: boolean
@@ -217,6 +239,8 @@ interface BoneyardRendererFrameDiagnostics {
   treeTintMismatchCount: number
   residentCount: number
   regionLightCompositeZIndex: number
+  regionLightLogicalSide: number
+  regionLightPhysicalSide: number
   runGameOverTicks: number
   runId: string | null
   runPhase: string
@@ -386,7 +410,7 @@ export async function createBoneyardWorldRenderer(
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
-  canvas.dataset.complexShadows = 'native-directional-edges'
+  canvas.dataset.complexShadows = 'native-indexed-owner-mesh'
   canvas.dataset.treeComplexShadowOutline = 'native-main-variant-table'
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
@@ -410,11 +434,16 @@ export async function createBoneyardWorldRenderer(
   let spectatorCamera: BoneyardSpectatorCameraState =
     INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
+    activeStaticPainterLayerCount: 0,
     cameraFocusX: Number.NaN,
     cameraFocusY: Number.NaN,
+    complexShadowActiveMeshCount: 0,
+    complexShadowAllocatedQuadCapacity: 0,
     complexShadowCasterCount: 0,
+    complexShadowPooledMeshCount: 0,
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
+    complexShadowZOrderMismatchCount: 0,
     enemyCount: 0,
     enemyDeathEffectCount: 0,
     enemyDeathEffectSamples: [],
@@ -439,6 +468,11 @@ export async function createBoneyardWorldRenderer(
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
     levelUpParticleCount: 0,
+    lightMiscTailCandidateCount: 0,
+    lightActiveBucketCount: 0,
+    lightAllocatedBucketCount: 0,
+    lightIndexedSourceReferenceCount: 0,
+    lightProviderCandidateCount: 0,
     lightSourceCount: 0,
     mainAboveLocal: false,
     mainBelowLocal: false,
@@ -471,6 +505,8 @@ export async function createBoneyardWorldRenderer(
     treeTintMismatchCount: 0,
     residentCount: staticWorld.residents.length,
     regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
+    regionLightLogicalSide: regionLightField.targetLogicalSide,
+    regionLightPhysicalSide: regionLightField.targetPhysicalSide,
     runGameOverTicks: 0,
     runId: options.initialSnapshot.run.runId,
     runPhase: options.initialSnapshot.run.phase,
@@ -521,7 +557,6 @@ export async function createBoneyardWorldRenderer(
     consumeEnemyEvent(event) {
       if (destroyed || event.runId !== options.boneyard.runId) return
       worldFeedback.consume(event)
-      scene.consumeEnemyEvent(event)
     },
     cycleSpectatorTarget(snapshot) {
       if (destroyed) return false
@@ -577,12 +612,13 @@ export async function createBoneyardWorldRenderer(
               presentationId: armedLevelUpPresentationId,
             },
         levelUpModalActive,
+        camera,
+        viewport,
       )
       regionLightField.render(
         application.renderer,
         scene.currentLightSources,
         camera,
-        viewport,
       )
       const feedback = worldFeedback.sample(snapshot.tick)
       const worldTransform = nativeEnemyWorldFeedbackTransform(
@@ -601,9 +637,14 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.cameraX = camera.x
       frameDiagnostics.cameraY = camera.y
       frameDiagnostics.frameCount = frameCount
+      frameDiagnostics.activeStaticPainterLayerCount = painter.activeStaticPainterLayerCount
+      frameDiagnostics.complexShadowActiveMeshCount = painter.complexShadowActiveMeshCount
+      frameDiagnostics.complexShadowAllocatedQuadCapacity = painter.complexShadowAllocatedQuadCapacity
       frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
+      frameDiagnostics.complexShadowPooledMeshCount = painter.complexShadowPooledMeshCount
       frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
       frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
+      frameDiagnostics.complexShadowZOrderMismatchCount = painter.complexShadowZOrderMismatchCount
       frameDiagnostics.enemyCount = scene.enemyCount
       frameDiagnostics.enemyDeathEffectCount = scene.enemyDeathEffectCount
       frameDiagnostics.enemyDeathEffectSamples = snapshot.world.deathEffects.map((effect) => ({
@@ -641,6 +682,11 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
       frameDiagnostics.levelUpParticleCount = scene.levelUpParticleCount
+      frameDiagnostics.lightMiscTailCandidateCount = painter.lightMiscTailCandidateCount
+      frameDiagnostics.lightActiveBucketCount = painter.lightActiveBucketCount
+      frameDiagnostics.lightAllocatedBucketCount = painter.lightAllocatedBucketCount
+      frameDiagnostics.lightIndexedSourceReferenceCount = painter.lightIndexedSourceReferenceCount
+      frameDiagnostics.lightProviderCandidateCount = painter.lightProviderCandidateCount
       frameDiagnostics.lightSourceCount = painter.lightSourceCount
       frameDiagnostics.mainAboveLocal = painter.mainAboveLocal
       frameDiagnostics.mainBelowLocal = painter.mainBelowLocal
@@ -685,22 +731,8 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
       frameDiagnostics.worldFeedbackMagnitude = feedback.magnitude
-      canvas.dataset.enemyCount = `${scene.enemyCount}`
-      canvas.dataset.enemyDeathEffectCount = `${scene.enemyDeathEffectCount}`
-      canvas.dataset.complexShadowCasterCount = `${painter.complexShadowCasterCount}`
-      canvas.dataset.complexShadowQuadCount = `${painter.complexShadowQuadCount}`
-      canvas.dataset.complexShadowRecordCount = `${painter.complexShadowRecordCount}`
-      canvas.dataset.enemyFamilies = scene.enemyFamilies
-      canvas.dataset.fadedTreeCount = `${painter.fadedTreeCount}`
-      canvas.dataset.minTreeAlpha = `${painter.minTreeAlpha}`
-      canvas.dataset.minTreeLightScalar = `${painter.minTreeLightScalar}`
-      canvas.dataset.enemyProjectileCount = `${scene.enemyProjectileCount}`
-      canvas.dataset.maggotCount = `${scene.maggotCount}`
-      canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
-      canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
-      canvas.dataset.worldFeedbackMagnitude = `${feedback.magnitude}`
-      canvas.dataset.levelUpDynamicSuppressed = `${levelUpModalActive}`
-      canvas.dataset.levelUpParticleCount = `${scene.levelUpParticleCount}`
+      frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
+      frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -765,14 +797,24 @@ export async function createBoneyardWorldRenderer(
 }
 
 interface BoneyardPainterFrame {
+  activeStaticPainterLayerCount: number
+  complexShadowActiveMeshCount: number
+  complexShadowAllocatedQuadCapacity: number
   complexShadowCasterCount: number
+  complexShadowPooledMeshCount: number
   complexShadowQuadCount: number
   complexShadowRecordCount: number
+  complexShadowZOrderMismatchCount: number
   fadedTreeCount: number
   foregroundZIndex: number
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  lightMiscTailCandidateCount: number
+  lightActiveBucketCount: number
+  lightAllocatedBucketCount: number
+  lightIndexedSourceReferenceCount: number
+  lightProviderCandidateCount: number
   lightSourceCount: number
   mainAboveLocal: boolean
   mainBelowLocal: boolean
@@ -789,7 +831,18 @@ interface BoneyardPainterFrame {
   treeTintMismatchCount: number
 }
 
+interface RegisteredBoneyardLightProviderOwner {
+  registration: NativeLightProviderRegistration
+  sources: readonly NativeBoneyardLightSource[]
+}
+
+interface RegisteredBoneyardMiscLightBatch extends RegisteredBoneyardLightProviderOwner {
+  birthTick: number
+  id: number
+}
+
 class BoneyardDynamicScene {
+  private readonly activeStaticPainterLayers: StaticPainterLayer[] = []
   private readonly boneyard: LoadedBoneyard
   private readonly complexShadows: BoneyardComplexShadowPresentation
   private readonly dynamicLayers: DynamicPainterLayer[] = []
@@ -798,17 +851,22 @@ class BoneyardDynamicScene {
   private readonly enemyProjectiles: NativeEnemyProjectileViews
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
-  private readonly gateShadowDepths = new Map<string, number>()
+  private readonly gateShadowDepthOwners = new Map<string, ContainerChild>()
   private readonly gates: BoneyardGateViews
+  private readonly lightMiscBatches: RegisteredBoneyardMiscLightBatch[] = []
+  private readonly lightProviderOwners: RegisteredBoneyardLightProviderOwner[] = []
   private readonly lightSourceCandidates: NativeBoneyardLightSource[] = []
-  private readonly lightSources: NativeBoneyardLightSource[] = []
+  private readonly lightMiscTailCandidates: NativeBoneyardLightSource[] = []
+  private readonly lightIndex: NativeBoneyardLightIndex
   private readonly levelUp: NativeLevelUpWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
+  private readonly movingGatePainterLayers: readonly StaticPainterLayer[]
   private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerDeathBursts: PlayerDeathBurstViews
   private readonly maggots: NativeMaggotViews
+  private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
   private readonly root: Container
@@ -817,6 +875,7 @@ class BoneyardDynamicScene {
   private readonly textures: BoneyardWorldTextures
   private readonly treeOcclusion: BoneyardTreeOcclusionPresentation
   private readonly treeResidents: ReadonlyMap<string, TreeResidents>
+  private readonly visibleShadowDepthOwners: ContainerChild[] = []
   private visibleEnemyFamilies = ''
 
   constructor(
@@ -832,6 +891,10 @@ class BoneyardDynamicScene {
     initialSnapshot: GameSnapshot,
   ) {
     this.boneyard = boneyard
+    this.lightIndex = new NativeBoneyardLightIndex({
+      height: boneyard.scene.bounds.h,
+      width: boneyard.scene.bounds.w,
+    })
     this.root = root
     this.textures = textures
     this.mainLayers = mainLayers
@@ -850,11 +913,18 @@ class BoneyardDynamicScene {
       sortBias: layer.sortBias,
       sourceOrder: layer.sourceOrder,
     }))
+    this.movingGatePainterLayers = this.staticPainterLayers.filter((layer) => (
+      isMovingGateBody(this.mainLayers[layer.layerIndex])
+    ))
     this.gates = new BoneyardGateViews(root, textures)
-    this.enemies = new NativeEnemyViews(root, textures, initialSnapshot.tick)
+    this.enemies = new NativeEnemyViews(root, textures)
     this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
+    this.mageLightningPulses = new NativeMageLightningPulseViews(
+      root,
+      textures.primarySpells.air,
+    )
     this.playerDeathBursts = new PlayerDeathBurstViews(root, textures, initialSnapshot)
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     root.addChild(this.levelUp.container)
@@ -874,6 +944,8 @@ class BoneyardDynamicScene {
       presentationId: number
     } | null,
     modalActive: boolean,
+    camera: Camera,
+    viewport: GameViewportLayout,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const enemySnapshots = nativeEnemySnapshots(snapshot)
@@ -915,6 +987,12 @@ class BoneyardDynamicScene {
     this.enemyDeathEffects.update(snapshot.world.deathEffects)
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles)
     this.maggots.update(snapshot.world.maggots)
+    this.mageLightningPulses.update(
+      snapshot.world.mageLightningPulses,
+      snapshot.tick,
+      (playerId) => snapshot.players[playerId]?.position ?? null,
+    )
+    const mageLightningPainterLayers = this.mageLightningPulses.painterLayers()
     this.playerDeathBursts.update(snapshot)
     for (const [id, view] of this.players) {
       view.container.renderable = !modalActive || id === localPlayerId
@@ -924,6 +1002,7 @@ class BoneyardDynamicScene {
     this.enemyDeathEffects.setRenderable(!modalActive)
     this.enemyProjectiles.setRenderable(!modalActive)
     this.maggots.setRenderable(!modalActive)
+    this.mageLightningPulses.setRenderable(!modalActive)
     this.playerDeathBursts.setRenderable(!modalActive)
     this.solomon?.setActorRenderable(!modalActive)
     this.visibleEnemyFamilies = [...new Set(
@@ -935,74 +1014,197 @@ class BoneyardDynamicScene {
     const lanternLight = dig
       ? nativeLanternLightSource(dig.lanternPosition, presentationFrame)
       : null
+    const lightProviderOwners = this.lightProviderOwners
+    lightProviderOwners.length = 0
     const lightSourceCandidates = this.lightSourceCandidates
     lightSourceCandidates.length = 0
     for (const playerId in snapshot.players) {
       if (modalActive && playerId !== localPlayerId) continue
-      const playerLight = nativePlayerLightSource(snapshot.players[playerId])
-      if (playerId === localPlayerId && levelUpFrame?.emitting) {
-        playerLight.radius = levelUpFrame.lightRadius
+      const player = snapshot.players[playerId]
+      const playerLight = nativePlayerLightSource({
+        ...player,
+        id: playerId,
+      }, presentationFrame, playerId === localPlayerId)
+      if (playerLight) {
+        if (playerId === localPlayerId && levelUpFrame?.emitting) {
+          playerLight.radius = (
+            (1 + player.lighting.overlayEffectPhase) * NATIVE_PLAYER_LIGHT_RADIUS
+            + (levelUpFrame.lightRadius - 2.6)
+          )
+        }
+        lightProviderOwners.push({
+          registration: player.lighting.lightRegistration,
+          sources: [playerLight],
+        })
       }
-      lightSourceCandidates.push(playerLight)
     }
-    if (!modalActive) for (const spell of snapshot.primarySpells.projectiles) {
-      if (
-        spell.kind === 'fire'
-        && spell.worldKey === `boneyard:${snapshot.world.runId}`
-      ) {
-        lightSourceCandidates.push(nativeFireballLightSource(spell, presentationFrame))
+    if (!modalActive) {
+      for (const enemy of snapshot.world.enemies) {
+        const sources = nativeEnemyLightSources(enemy, presentationFrame)
+        if (sources.length === 0) continue
+        lightProviderOwners.push({
+          registration: requiredLightRegistration(
+            enemy.lightRegistration,
+            `enemy ${enemy.id}`,
+          ),
+          sources,
+        })
+      }
+      for (const spell of snapshot.primarySpells.projectiles) {
+        if (spell.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+        let source: NativeBoneyardLightSource
+        switch (spell.kind) {
+          case 'earth':
+            source = nativeBoulderLightSource(spell)
+            break
+          case 'ether':
+            source = nativeMissileLightSource(spell, presentationFrame)
+            break
+          case 'fire':
+            source = nativeFireballLightSource(spell, presentationFrame)
+            break
+        }
+        lightProviderOwners.push({
+          registration: spell.lightRegistration,
+          sources: [source],
+        })
+      }
+      for (const projectile of snapshot.world.enemyProjectiles) {
+        const candidate = nativeEnemyProjectileLightProvider(
+          projectile,
+          presentationFrame,
+        )
+        if (!candidate) continue
+        const registration = requiredLightRegistration(
+          projectile.lightRegistration,
+          `enemy projectile ${projectile.id}`,
+        )
+        if (registration.managerLane !== candidate.lane) {
+          throw new Error(`enemy projectile ${projectile.id} changed native light-manager lane`)
+        }
+        lightProviderOwners.push({ registration, sources: [candidate.source] })
+      }
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind === 'ether-impact'
+          && effect.worldKey === `boneyard:${snapshot.world.runId}`
+        ) {
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: [etherPrimaryImpactLightSource(effect)],
+          })
+          continue
+        }
+        if (
+          effect.kind === 'fire-impact'
+          && effect.worldKey === `boneyard:${snapshot.world.runId}`
+        ) {
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: [nativeFireImpactLightSource(effect)],
+          })
+          continue
+        }
+        if (
+          effect.kind !== 'air'
+          || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+        ) continue
+        const contactLight = buildNativeAirContactLightSource({
+          ageTicks: effect.ageTicks,
+          endpoint: {
+            x: effect.endpoint.x - effect.origin.x,
+            y: effect.endpoint.y - effect.origin.y,
+          },
+          id: effect.id,
+          origin: effect.origin,
+          underpowered: effect.underpowered,
+        })
+        if (contactLight) {
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: [contactLight],
+          })
+        }
       }
     }
-    if (!modalActive) for (const effect of snapshot.primarySpells.transients) {
-      if (
-        effect.kind === 'ether-impact'
-        && effect.worldKey === `boneyard:${snapshot.world.runId}`
-      ) {
-        lightSourceCandidates.push(etherPrimaryImpactLightSource(effect))
-        continue
-      }
-      if (
-        effect.kind === 'fire-impact'
-        && effect.worldKey === `boneyard:${snapshot.world.runId}`
-      ) {
-        lightSourceCandidates.push(nativeFireImpactLightSource(effect))
-        continue
-      }
-      if (
-        effect.kind !== 'air'
-        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
-      ) continue
-      const contactLight = buildNativeAirContactLightSource({
-        ageTicks: effect.ageTicks,
-        endpoint: {
-          x: effect.endpoint.x - effect.origin.x,
-          y: effect.endpoint.y - effect.origin.y,
-        },
-        id: effect.id,
-        origin: effect.origin,
-        underpowered: effect.underpowered,
+    if (lanternLight) {
+      lightProviderOwners.push({
+        registration: requiredLightRegistration(
+          snapshot.world.lanternLightRegistration,
+          'Lantern',
+        ),
+        sources: [lanternLight],
       })
-      if (contactLight) lightSourceCandidates.push(contactLight)
     }
-    if (lanternLight) lightSourceCandidates.push(lanternLight)
-    if (!modalActive) for (const effect of snapshot.primarySpells.transients) {
-      if (
-        effect.kind !== 'air'
-        || effect.ageTicks !== 0
-        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
-      ) continue
-      lightSourceCandidates.push(...buildNativeAirPathLightSources({
-        birthTick: effect.birthTick,
-        endpoint: effect.endpoint,
-        id: effect.id,
-        midpoint: effect.midpoint,
-        origin: effect.origin,
-        weakCast: effect.underpowered,
-      }))
+    for (const owner of mergeNativeLightProviderOwners(
+      [lightProviderOwners],
+      ({ registration }) => registration,
+    )) {
+      lightSourceCandidates.push(...owner.sources)
     }
-    const lightSources = nativeAcceptedBoneyardLightSources(
+    const lightProviderCandidateCount = lightSourceCandidates.length
+    const lightMiscBatches = this.lightMiscBatches
+    lightMiscBatches.length = 0
+    const lightMiscTailCandidates = this.lightMiscTailCandidates
+    lightMiscTailCandidates.length = 0
+    if (!modalActive) {
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'air'
+          || effect.ageTicks !== 0
+          || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+        ) continue
+        const pathSources = buildNativeAirPathLightSources({
+          birthTick: effect.birthTick,
+          endpoint: effect.endpoint,
+          id: effect.id,
+          midpoint: effect.midpoint,
+          origin: effect.origin,
+          weakCast: effect.underpowered,
+        })
+        if (pathSources.length === 0) continue
+        const owner = snapshot.players[effect.ownerId]
+        if (!owner) throw new Error(`Air MiscLight owner ${effect.ownerId} is unavailable`)
+        lightMiscBatches.push({
+          birthTick: effect.birthTick,
+          id: effect.id,
+          registration: owner.lighting.lightRegistration,
+          sources: pathSources,
+        })
+      }
+      const enemyLightRegistrations = new Map(snapshot.world.enemies.map((enemy) => [
+        enemy.id,
+        enemy.lightRegistration,
+      ]))
+      for (const batch of this.mageLightningPulses.pathLightBatches) {
+        lightMiscBatches.push({
+          birthTick: batch.birthTick,
+          id: batch.id,
+          registration: requiredLightRegistration(
+            enemyLightRegistrations.get(batch.ownerActorId) ?? null,
+            `Mage Air factory ${batch.ownerActorId}`,
+          ),
+          sources: batch.sources,
+        })
+      }
+    }
+    const birthOrderedMiscBatches = lightMiscBatches.toSorted((first, second) => (
+      first.birthTick - second.birthTick || first.id - second.id
+    ))
+    for (const batch of mergeNativeLightProviderOwners(
+      [birthOrderedMiscBatches],
+      ({ registration }) => registration,
+    )) {
+      if (batch.registration.managerLane !== 'actor') {
+        throw new Error('Air factory MiscLight creator is not an actor-manager owner')
+      }
+      lightMiscTailCandidates.push(...batch.sources)
+    }
+    const lightMiscTailCandidateCount = lightMiscTailCandidates.length
+    const lightSources = this.lightIndex.rebuild(
       lightSourceCandidates,
-      this.lightSources,
+      lightMiscTailCandidates,
+      { camera, viewport },
     )
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
@@ -1011,7 +1213,7 @@ class BoneyardDynamicScene {
       if (layerIndex === null) continue
       const scalar = nativeBoneyardLightScalar(
         this.mainLayers[layerIndex].pos,
-        lightSources,
+        this.lightIndex,
       )
       resident.sprite.tint = nativeBoneyardLightTint(scalar)
       maxMainLightScalar = Math.max(maxMainLightScalar, scalar)
@@ -1031,7 +1233,7 @@ class BoneyardDynamicScene {
       if (!tree) continue
       const scalar = nativeBoneyardLightScalar(
         presentation.position,
-        lightSources,
+        this.lightIndex,
       )
       const tint = nativeBoneyardLightTint(scalar)
       tree.main.sprite.alpha = presentation.alpha
@@ -1052,7 +1254,7 @@ class BoneyardDynamicScene {
       const player = snapshot.players[id]
       if (!player) continue
       view.setWorldTint(nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(player.position, lightSources),
+        nativeBoneyardLightScalar(player.position, this.lightIndex),
       ))
     }
     for (const layer of this.primarySpells.painterLayers()) {
@@ -1061,28 +1263,28 @@ class BoneyardDynamicScene {
         layer.id,
         nativeBoneyardLightTint(nativeBoneyardLightScalar(
           layer.regionLightPoint,
-          lightSources,
+          this.lightIndex,
         )),
       )
     }
     for (const enemy of enemySnapshots) {
       this.enemies.setTint(enemy.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(enemy.position, lightSources),
+        nativeBoneyardLightScalar(enemy.position, this.lightIndex),
       ))
     }
     for (const effect of snapshot.world.deathEffects) {
       this.enemyDeathEffects.setWorldTint(effect.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(effect.position, lightSources),
+        nativeBoneyardLightScalar(effect.position, this.lightIndex),
       ))
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
       this.enemyProjectiles.setTint(projectile.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(projectile.position, lightSources),
+        nativeBoneyardLightScalar(projectile.position, this.lightIndex),
       ))
     }
     for (const maggot of snapshot.world.maggots) {
       this.maggots.setTint(maggot.id, nativeBoneyardLightTint(
-        nativeBoneyardLightScalar(maggot.position, lightSources),
+        nativeBoneyardLightScalar(maggot.position, this.lightIndex),
       ))
     }
     for (const leaf of snapshot.world.gateLeaves) {
@@ -1090,7 +1292,7 @@ class BoneyardDynamicScene {
       this.gates.setTint(
         leaf.fenceEid,
         leaf.side,
-        nativeBoneyardLightTint(nativeBoneyardLightScalar(position, lightSources)),
+        nativeBoneyardLightTint(nativeBoneyardLightScalar(position, this.lightIndex)),
       )
     }
     if (dig) {
@@ -1098,7 +1300,7 @@ class BoneyardDynamicScene {
       this.solomon?.setLighting(nativeSolomonSetPieceLighting(
         solomonPosition,
         dig.lanternPosition,
-        lightSources,
+        this.lightIndex,
       ))
     }
 
@@ -1124,6 +1326,16 @@ class BoneyardDynamicScene {
       dynamicLayers.push({
         ...layer,
         queueFamily: layer.queueFamily,
+        sourceOrder: dynamicLayers.length,
+      })
+    }
+    for (const layer of mageLightningPainterLayers) {
+      if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      dynamicLayers.push({
+        id: layer.id,
+        queueFamily: layer.queueFamily,
+        worldY: layer.worldY,
+        sortBias: layer.sortBias,
         sourceOrder: dynamicLayers.length,
       })
     }
@@ -1176,18 +1388,31 @@ class BoneyardDynamicScene {
         sourceOrder: dynamicLayers.length,
       })
     }
-    for (const layer of this.staticPainterLayers) {
+    const activeStaticPainterLayers = this.activeStaticPainterLayers
+    activeStaticPainterLayers.length = 0
+    const visibleShadowDepthOwners = this.visibleShadowDepthOwners
+    visibleShadowDepthOwners.length = 0
+    for (const resident of visibleMainResidents) {
+      const layerIndex = resident.mainLayerIndex
+      if (layerIndex === null) continue
+      const layer = this.staticPainterLayers[layerIndex]!
       layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
+      activeStaticPainterLayers.push(layer)
+      if (resident.shadowCaster) visibleShadowDepthOwners.push(resident.sprite)
+    }
+    for (const layer of this.movingGatePainterLayers) {
+      layer.worldY = runtimeMainWorldY(this.mainLayers[layer.layerIndex], gateLeaves)
+      activeStaticPainterLayers.push(layer)
     }
     const order = buildBoneyardPainterOrder({
       referenceY: localPlayer.position.y,
-      staticLayers: this.staticPainterLayers,
+      staticLayers: activeStaticPainterLayers,
       dynamicLayers,
     })
     let maxMainZIndex = 0
     let minMainZIndex = Number.POSITIVE_INFINITY
-    const gateShadowDepths = this.gateShadowDepths
-    gateShadowDepths.clear()
+    const gateShadowDepthOwners = this.gateShadowDepthOwners
+    gateShadowDepthOwners.clear()
     for (const band of order.bands) {
       band.layerIndexes.forEach((layerIndex, position) => {
         const depth = band.zIndex + ((position + 1) / (band.layerIndexes.length + 1)) * 0.5
@@ -1198,7 +1423,13 @@ class BoneyardDynamicScene {
         const layer = this.mainLayers[layerIndex]
         if (isMovingGateBody(layer)) {
           this.gates.setDepth(layer.fence.eid, layer.pieceIndex, depth)
-          gateShadowDepths.set(`${layer.fence.eid}:${layer.pieceIndex}`, depth)
+          const depthOwner = this.gates.depthOwner(layer.fence.eid, layer.pieceIndex)
+          if (depthOwner) {
+            gateShadowDepthOwners.set(
+              `${layer.fence.eid}:${layer.pieceIndex}`,
+              depthOwner,
+            )
+          }
         }
       })
     }
@@ -1221,6 +1452,18 @@ class BoneyardDynamicScene {
           ? order.foregroundZIndex + 0.5
           : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
+    }
+    const targetContactDepths = nativeMageLightningTargetContactDepths(
+      mageLightningPainterLayers,
+      Object.keys(snapshot.players),
+      order.foregroundZIndex,
+    )
+    for (const layer of mageLightningPainterLayers) {
+      layer.container.zIndex = layer.lane === 'post-main-overlay'
+        ? targetContactDepths.get(layer.id) ?? (
+            order.foregroundZIndex + NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_OFFSET
+          )
+        : positionedDynamics.get(layer.id)?.zIndex ?? 1
     }
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       positionedDynamics.get(`player:${ownerId}`)?.zIndex
@@ -1254,10 +1497,11 @@ class BoneyardDynamicScene {
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
     const complexShadows = this.complexShadows.render(
-      lightSources,
+      this.lightIndex,
       presentationFrame,
       snapshot.world.gateLeaves,
-      gateShadowDepths,
+      gateShadowDepthOwners,
+      visibleShadowDepthOwners,
     )
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
@@ -1267,14 +1511,24 @@ class BoneyardDynamicScene {
       localPlayerZIndex + 0.1,
     )
     return {
+      activeStaticPainterLayerCount: activeStaticPainterLayers.length,
+      complexShadowActiveMeshCount: complexShadows.activeMeshCount,
+      complexShadowAllocatedQuadCapacity: complexShadows.allocatedQuadCapacity,
       complexShadowCasterCount: complexShadows.casterCount,
+      complexShadowPooledMeshCount: complexShadows.pooledMeshCount,
       complexShadowQuadCount: complexShadows.quadCount,
       complexShadowRecordCount: complexShadows.recordCount,
+      complexShadowZOrderMismatchCount: complexShadows.zOrderMismatchCount,
       fadedTreeCount,
       foregroundZIndex: order.foregroundZIndex,
       localPlayerPainterRow: localPainter?.row ?? 0,
       localPlayerZIndex,
       lanternLightIntensity: lanternLight?.intensity ?? 0,
+      lightMiscTailCandidateCount,
+      lightActiveBucketCount: this.lightIndex.activeBucketCount,
+      lightAllocatedBucketCount: this.lightIndex.allocatedBucketCount,
+      lightIndexedSourceReferenceCount: this.lightIndex.indexedSourceReferenceCount,
+      lightProviderCandidateCount,
       lightSourceCount: lightSources.length,
       mainAboveLocal: maxMainZIndex > localPlayerZIndex,
       mainBelowLocal: minMainZIndex < localPlayerZIndex,
@@ -1304,12 +1558,8 @@ class BoneyardDynamicScene {
     return this.enemyDeathEffects.size
   }
 
-  consumeEnemyEvent(event: BoneyardEnemyEventSnapshot): void {
-    this.enemies.consumeEvent(event)
-  }
-
   get mageLightningCount(): number {
-    return this.enemies.lightningSize
+    return this.mageLightningPulses.size
   }
 
   get enemyFamilies(): string {
@@ -1333,7 +1583,7 @@ class BoneyardDynamicScene {
   }
 
   get currentLightSources(): readonly NativeBoneyardLightSource[] {
-    return this.lightSources
+    return this.lightIndex.acceptedSources
   }
 
   get levelUpParticleCount(): number {
@@ -1363,6 +1613,7 @@ class BoneyardDynamicScene {
     this.enemyDeathEffects.destroy()
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
+    this.mageLightningPulses.destroy()
     this.playerDeathBursts.destroy()
     this.root.removeChild(this.levelUp.container)
     this.levelUp.destroy()
@@ -1543,6 +1794,10 @@ class BoneyardGateViews {
 
   setDepth(fenceEid: string, side: number, depth: number): void {
     this.leaves.get(`${fenceEid}:${side}`)?.setDepth(depth)
+  }
+
+  depthOwner(fenceEid: string, side: number): ContainerChild | null {
+    return this.leaves.get(`${fenceEid}:${side}`)?.container ?? null
   }
 
   setTint(fenceEid: string, side: number, tint: number): void {
@@ -1766,7 +2021,7 @@ function buildMainLayerResident(
     document,
     [layerIndex],
   )
-  const crop = cropTransparentCanvas(canvas, true)
+  const crop = cropTransparentCanvas(canvas)
   if (!crop) return null
   const x = bounds.x + crop.x
   const y = bounds.y + crop.y
@@ -1854,8 +2109,7 @@ function mainLayerCaptureBounds(layer: MainLayer): { h: number; w: number; x: nu
 
 function cropTransparentCanvas(
   canvas: HTMLCanvasElement,
-  includeOutline = false,
-): { canvas: HTMLCanvasElement; outline?: Vec2[]; x: number; y: number } | null {
+): { canvas: HTMLCanvasElement; x: number; y: number } | null {
   const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true })
   if (!context) throw new Error('Boneyard texture crop could not acquire Canvas2D.')
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
@@ -1863,26 +2117,13 @@ function cropTransparentCanvas(
   let minY = canvas.height
   let maxX = -1
   let maxY = -1
-  const boundaryPoints: Vec2[] = []
   for (let y = 0; y < canvas.height; y += 1) {
-    let rowMinX = canvas.width
-    let rowMaxX = -1
     for (let x = 0; x < canvas.width; x += 1) {
       if (pixels[(y * canvas.width + x) * 4 + 3] === 0) continue
       minX = Math.min(minX, x)
       minY = Math.min(minY, y)
       maxX = Math.max(maxX, x)
       maxY = Math.max(maxY, y)
-      rowMinX = Math.min(rowMinX, x)
-      rowMaxX = Math.max(rowMaxX, x)
-    }
-    if (includeOutline && rowMaxX >= rowMinX) {
-      boundaryPoints.push(
-        { x: rowMinX, y },
-        { x: rowMaxX + 1, y },
-        { x: rowMinX, y: y + 1 },
-        { x: rowMaxX + 1, y: y + 1 },
-      )
     }
   }
   if (maxX < minX || maxY < minY) return null
@@ -1902,14 +2143,6 @@ function cropTransparentCanvas(
   )
   return {
     canvas: cropped,
-    ...(includeOutline
-      ? {
-          outline: nativeBoneyardConvexSilhouette(boundaryPoints).map((point) => ({
-            x: point.x - minX,
-            y: point.y - minY,
-          })),
-        }
-      : {}),
     x: minX,
     y: minY,
   }
@@ -2027,8 +2260,18 @@ function requiredTexture(textures: BoneyardWorldTextures, ref: SpriteRef): Textu
   return texture
 }
 
-function nativeEnemySnapshots(snapshot: GameSnapshot): readonly NativeEnemyVisualSnapshot[] {
+function nativeEnemySnapshots(snapshot: GameSnapshot): readonly BoneyardEnemySnapshot[] {
   return snapshot.world.kind === 'boneyard' ? snapshot.world.enemies : []
+}
+
+function requiredLightRegistration(
+  registration: NativeLightProviderRegistration | null,
+  owner: string,
+): NativeLightProviderRegistration {
+  if (registration === null) {
+    throw new Error(`${owner} emitted a light without native manager registration`)
+  }
+  return registration
 }
 
 function requireBoneyardSnapshot(snapshot: GameSnapshot, runId: string): asserts snapshot is GameSnapshot & {

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  NATIVE_MAGE_CAST_BODY_POSES,
+  nativeMageBodyPose,
+} from '../core-kernels/boneyard-mage-lightning.ts'
+import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
   NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
@@ -31,6 +35,30 @@ test('stock Skeleton, Archer, and Mage selectors are recorded exactly', () => {
   )
   assert.equal(NATIVE_ENEMY_ACTION_PROGRAMS['mage-cast-short'].frames.length, 42)
   assert.equal(NATIVE_ENEMY_ACTION_PROGRAMS['mage-cast-long'].frames.length, 48)
+})
+
+test('Mage lightning attachment pose shares every renderer action selector', () => {
+  for (const castProgram of ['short', 'long'] as const) {
+    const action = `mage-cast-${castProgram}` as const
+    const poses = NATIVE_MAGE_CAST_BODY_POSES[castProgram]
+    assert.strictEqual(NATIVE_ENEMY_ACTION_PROGRAMS[action].frames, poses)
+
+    for (let frame = 0; frame <= poses.length + 2; frame += 1) {
+      for (const fraction of [0, 0.25, 0.999]) {
+        const actionProgress = frame + fraction
+        assert.equal(
+          nativeMageBodyPose({
+            actionProgress,
+            castProgram,
+            gaitPose: 0,
+            phase: 'cast',
+          }),
+          nativeEnemyActionFrame(action, actionProgress).selector,
+          `${castProgram} progress ${actionProgress}`,
+        )
+      }
+    }
+  }
 })
 
 test('native strict completion boundaries do not complete on equality', () => {

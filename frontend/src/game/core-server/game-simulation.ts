@@ -51,6 +51,13 @@ import {
 } from '../core-kernels/player-progression.ts'
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import {
+  createDeferredNativeLightProviderRegistrations,
+  createNativeLightProviderOrder,
+  type DeferredNativeLightProviderRegistrations,
+  type NativeLightProviderOrder,
+  type NativeLightProviderOrderState,
+} from '../core-kernels/native-light-provider-order.ts'
+import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
   stepPrimarySpells,
@@ -105,6 +112,7 @@ import {
   resetPlayerEntitiesForNewRun,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
+  stepPlayerEntityOverlayLightingTick,
   tryDebitPlayerEntityMana,
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
@@ -118,6 +126,7 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 export interface GameSimulationState {
   accumulatorSeconds: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
+  lightProviderOrder: NativeLightProviderOrderState
   nextLevelUpBarrierId: number
   playerEntities: PlayerEntityStore
   playerOfferRng: NativeRngState
@@ -159,6 +168,7 @@ export function createGameSimulation(
   },
   options: GameSimulationOptions = {},
 ): GameSimulationState {
+  const lightProviderOrder = createNativeLightProviderOrder()
   const world = createHubWorld(Object.keys(characters), {
     studentPopulation: options.hubStudentPopulation,
     traderAnimationSeed: options.hubTraderAnimationSeed,
@@ -174,6 +184,7 @@ export function createGameSimulation(
       config,
       createPlayerCharacter(config, hubSpawnPoint()),
       draw.value,
+      lightProviderOrder.register('actor'),
     )
   }
   if (options.initialPlayerExperience !== undefined) {
@@ -208,6 +219,7 @@ export function createGameSimulation(
   return {
     accumulatorSeconds: 0,
     levelUpBarrier,
+    lightProviderOrder: lightProviderOrder.state(),
     nextLevelUpBarrierId: levelUpBarrier === null ? 1 : 2,
     playerEntities,
     playerOfferRng,
@@ -228,15 +240,18 @@ export function addPlayerCharacter(
     ? addHubParticipant(state.world, playerId)
     : state.world
   const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
+  const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const playerEntities = addPlayerEntity(
     state.playerEntities,
     playerId,
     config,
     spawnPlayerForWorld(state.world, config),
     draw.value,
+    lightProviderOrder.register('actor'),
   )
   return {
     ...state,
+    lightProviderOrder: lightProviderOrder.state(),
     playerEntities,
     playerOfferRng: draw.state,
     run: synchronizeGameRunParticipants(
@@ -279,12 +294,30 @@ export function enterBoneyardWorld(
   if (state.levelUpBarrier !== null) {
     throw new Error('cannot enter a Boneyard during a level-up barrier')
   }
-  const world = createBoneyardWorld(loaded)
+  const lightProviderOrder = createNativeLightProviderOrder()
+  const playerLightRegistrations = Object.fromEntries(
+    state.playerEntities.identities.map(({ playerId }) => [
+      playerId,
+      lightProviderOrder.register('actor'),
+    ]),
+  )
+  const baseWorld = createBoneyardWorld(loaded)
+  const world: BoneyardWorldState = {
+    ...baseWorld,
+    lanternLightRegistration: loaded.scene.solomonDig === null
+      ? null
+      : lightProviderOrder.register('actor'),
+  }
   const placements = placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world)
   return {
     ...state,
     levelUpBarrier: null,
-    playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
+    lightProviderOrder: lightProviderOrder.state(),
+    playerEntities: resetPlayerEntitiesForNewRun(
+      state.playerEntities,
+      placements,
+      playerLightRegistrations,
+    ),
     primarySpells: createPrimarySpellSimulation(),
     run: startGameRun(
       state.run,
@@ -303,11 +336,22 @@ export function acknowledgeGameSimulationOver(
   const run = acknowledgeGameOver(state.run, runId, eventId)
   if (!run) return null
   const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
+  const lightProviderOrder = createNativeLightProviderOrder()
+  const playerLightRegistrations = Object.fromEntries(
+    state.playerEntities.identities.map(({ playerId }) => [
+      playerId,
+      lightProviderOrder.register('actor'),
+    ]),
+  )
   const placements = Object.fromEntries(state.playerEntities.identities.map(({ playerId }, index) => {
     const config = state.playerEntities.configs[index]!
     return [playerId, createPlayerCharacter(config, hubSpawnPoint())]
   }))
-  let playerEntities = resetPlayerEntitiesForNewRun(state.playerEntities, placements)
+  let playerEntities = resetPlayerEntitiesForNewRun(
+    state.playerEntities,
+    placements,
+    playerLightRegistrations,
+  )
   for (const { playerId } of playerEntities.identities) {
     const economy = playerEconomyAt(playerEntities, playerId)
     if (economy) playerEntities = replacePlayerEconomy(playerEntities, playerId, restockFomentius(economy))
@@ -315,6 +359,7 @@ export function acknowledgeGameSimulationOver(
   return {
     ...state,
     levelUpBarrier: null,
+    lightProviderOrder: lightProviderOrder.state(),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
     run,
@@ -455,6 +500,7 @@ export function stepGameSimulationTick(
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
   if (state.levelUpBarrier !== null) return state
+  const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const players = playerCharacterRecords(state.playerEntities)
   const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => [
     playerId,
@@ -467,9 +513,10 @@ export function stepGameSimulationTick(
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, players, activeInputs)
-      return finishGameSimulationTick(state, result, activeInputs)
+      return finishGameSimulationTick(state, result, activeInputs, lightProviderOrder, null)
     }
     case 'boneyard': {
+      const deferredEnemyProjectileRegistrations = createDeferredNativeLightProviderRegistrations()
       const result = stepBoneyardWorldTick(
         state.world,
         players,
@@ -484,8 +531,16 @@ export function stepGameSimulationTick(
           }]
         })),
         state.tick + 1,
+        lightProviderOrder.register,
+        deferredEnemyProjectileRegistrations.register,
       )
-      return finishGameSimulationTick(state, result, activeInputs)
+      return finishGameSimulationTick(
+        state,
+        result,
+        activeInputs,
+        lightProviderOrder,
+        deferredEnemyProjectileRegistrations,
+      )
     }
   }
 }
@@ -510,6 +565,8 @@ function finishGameSimulationTick(
     world: GameWorldState
   },
   inputs: PlayerCharacterInputs,
+  lightProviderOrder: NativeLightProviderOrder,
+  deferredEnemyProjectileRegistrations: DeferredNativeLightProviderRegistrations | null,
 ): GameSimulationState {
   const tick = previous.tick + 1
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
@@ -604,6 +661,7 @@ function finishGameSimulationTick(
     inputs,
     players: result.players,
     previousPlayers: playerCharacterRecords(previous.playerEntities),
+    registerLightProvider: lightProviderOrder.register,
     spells: previous.primarySpells,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
@@ -639,6 +697,7 @@ function finishGameSimulationTick(
     }
     playerEntities = debit.store
   }
+  deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   let primarySpells = cast.spells
   let world = result.world
   if (world.kind === 'boneyard') {
@@ -672,6 +731,7 @@ function finishGameSimulationTick(
         collision,
         radius,
       ),
+      lightProviderOrder.register,
     )
     primarySpells = spellCombat.spells
     world = {
@@ -695,6 +755,7 @@ function finishGameSimulationTick(
     }
   }
   playerEntities = replacePlayerCharacterRecords(playerEntities, players)
+  playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
   const combat = stepPlayerEntityCombatTick(playerEntities)
   playerEntities = combat.store
   for (const playerId of combat.deathBurstPlayerIds) {
@@ -721,6 +782,7 @@ function finishGameSimulationTick(
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
     levelUpBarrier,
+    lightProviderOrder: lightProviderOrder.state(),
     nextLevelUpBarrierId,
     playerEntities,
     playerOfferRng: previous.playerOfferRng,

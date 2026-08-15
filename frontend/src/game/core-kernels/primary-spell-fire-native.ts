@@ -1,3 +1,8 @@
+import {
+  nativeRandomFloatFromSemanticWord,
+  nativeRandomIntFromSemanticWord,
+} from './native-random-domain.ts'
+
 export const NATIVE_FIRE_PARTICLE_FRAME_COUNT = 4
 export const NATIVE_FIRE_IMPACT_LIFETIME_TICKS = 16
 export const NATIVE_FIRE_ENHANCED_EFFECTS = true
@@ -6,7 +11,7 @@ export const NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE = 0.05
 
 export function nativeFireParticleFadeStep(id: number): number {
   const base = NATIVE_FIRE_PARTICLE_BASE_FADE_MIN
-    + nativeFirePresentationRandom(id, 0, 5) * NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE
+    + nativeFirePresentationRandom(id, 0, 5, NATIVE_FIRE_PARTICLE_BASE_FADE_RANGE)
   return NATIVE_FIRE_ENHANCED_EFFECTS ? base * 0.5 : base
 }
 
@@ -15,16 +20,38 @@ export function nativeFireParticleLifetimeTicks(id: number): number {
 }
 
 export function nativeFireParticleVariant(id: number): number {
-  return Math.floor(
-    nativeFirePresentationRandom(id, 0, 6) * NATIVE_FIRE_PARTICLE_FRAME_COUNT,
-  )
+  return nativeFirePresentationRandomInt(id, 0, 6, NATIVE_FIRE_PARTICLE_FRAME_COUNT)
 }
 
 export function nativeFireImpactPitch(id: number): number {
-  return 0.9 + nativeFirePresentationRandom(id, 0, 12) * 0.2
+  return 0.9 + nativeFirePresentationRandom(id, 0, 12, 0.2)
 }
 
 export function nativeFirePresentationRandom(
+  id: number,
+  sample: number,
+  channel: number,
+  maximum = 1,
+): number {
+  return nativeRandomFloatFromSemanticWord(
+    nativeFirePresentationRandomWord(id, sample, channel),
+    maximum,
+  )
+}
+
+export function nativeFirePresentationRandomInt(
+  id: number,
+  sample: number,
+  channel: number,
+  exclusiveBound: number,
+): number {
+  return nativeRandomIntFromSemanticWord(
+    nativeFirePresentationRandomWord(id, sample, channel),
+    exclusiveBound,
+  )
+}
+
+function nativeFirePresentationRandomWord(
   id: number,
   sample: number,
   channel: number,
@@ -36,5 +63,5 @@ export function nativeFirePresentationRandom(
   ) >>> 0
   value = Math.imul(value ^ (value >>> 16), 0x21f0aaad) >>> 0
   value = Math.imul(value ^ (value >>> 15), 0x735a2d97) >>> 0
-  return ((value ^ (value >>> 15)) >>> 0) / 0x1_0000_0000
+  return (value ^ (value >>> 15)) >>> 0
 }

@@ -46,6 +46,10 @@ import {
   boneyardMaggotSample,
   materializeBoneyardMaggot,
 } from './boneyard-maggot-replication.ts'
+import {
+  boneyardMageLightningPulseFrame,
+  materializeBoneyardMageLightningPulse,
+} from './boneyard-mage-lightning-replication.ts'
 
 export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -273,6 +277,10 @@ export function createGameSnapshotFrame(
       enemyEvents: snapshot.world.enemyEvents,
       gateLeaves: snapshot.world.gateLeaves,
       kind: 'boneyard',
+      lanternLightRegistration: snapshot.world.lanternLightRegistration,
+      mageLightningPulses: snapshot.world.mageLightningPulses.map(
+        boneyardMageLightningPulseFrame,
+      ),
       runId: snapshot.world.runId,
       waves: snapshot.world.waves,
     },
@@ -427,6 +435,10 @@ export class EntityReplicationReconstructor {
         enemyProjectiles,
         gateLeaves: frame.world.gateLeaves,
         kind: 'boneyard',
+        lanternLightRegistration: frame.world.lanternLightRegistration,
+        mageLightningPulses: frame.world.mageLightningPulses.map(
+          materializeBoneyardMageLightningPulse,
+        ),
         maggots,
         runId: frame.world.runId,
         waves: frame.world.waves,

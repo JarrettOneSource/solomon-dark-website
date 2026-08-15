@@ -15,10 +15,11 @@ import {
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   buildNativeAirLightningPlan,
   type NativeAirCoronaPlan,
+  type NativeAirLightningFactoryPlan,
 } from './primary-spell-air-native.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
-type AirTextures = PlayerWorldTextures['primarySpells']['air']
+export type NativeAirVfxTextures = PlayerWorldTextures['primarySpells']['air']
 
 const FORK_REGISTRATION = [
   { height: 56, originX: -3, originY: 0.5, record: 1836, width: 45 },
@@ -28,19 +29,16 @@ const FORK_REGISTRATION = [
 ] as const
 
 export class AirPrimarySpellView {
-  private readonly bodyContainer: Container
-  private readonly body: readonly MeshSimple[]
+  private readonly body: NativeAirLightningBodyView
   readonly containers: readonly Container[]
-  private readonly contactCorona: AirCoronaView
+  private readonly contactCorona: NativeAirCoronaView
   readonly kind = 'air'
   private plan: ReturnType<typeof buildNativeAirLightningPlan>
   private state: PrimarySpellAirTransientState
-  private readonly sourceCorona: AirCoronaView
+  private readonly sourceCorona: NativeAirCoronaView
 
-  constructor(state: PrimarySpellAirTransientState, textures: AirTextures) {
+  constructor(state: PrimarySpellAirTransientState, textures: NativeAirVfxTextures) {
     this.state = state
-    this.bodyContainer = new Container({ label: 'air-body' })
-    this.bodyContainer.eventMode = 'none'
     const construction = buildNativeAirLightningPlan({
       ageTicks: 0,
       birthTick: state.birthTick,
@@ -48,41 +46,11 @@ export class AirPrimarySpellView {
       id: state.id,
       underpowered: state.underpowered,
     })
-    this.body = construction.body?.layers.flatMap((layer) => {
-      const mesh = new MeshSimple({
-        indices: layer.indices,
-        texture: textures.ribbon,
-        topology: 'triangle-list',
-        uvs: layer.uvs,
-        vertices: layer.vertices,
-      })
-      mesh.alpha = layer.alpha
-      mesh.autoUpdate = false
-      mesh.blendMode = 'add'
-      mesh.eventMode = 'none'
-      mesh.tint = layer.tint
-      if (!layer.branch) return [mesh]
-      const branch = new MeshSimple({
-        indices: layer.branch.indices,
-        texture: textures.branches[
-          AIR_LIGHTNING_BRANCH_RECORDS.indexOf(layer.branch.textureRecord)
-        ],
-        topology: 'triangle-list',
-        uvs: layer.branch.uvs,
-        vertices: layer.branch.vertices,
-      })
-      branch.alpha = layer.alpha
-      branch.autoUpdate = false
-      branch.blendMode = 'add'
-      branch.eventMode = 'none'
-      branch.tint = layer.tint
-      return [mesh, branch]
-    }) ?? []
-    this.bodyContainer.addChild(...this.body)
-    this.sourceCorona = new AirCoronaView('air-source-corona', textures)
-    this.contactCorona = new AirCoronaView('air-contact-corona', textures)
+    this.body = new NativeAirLightningBodyView('air-body', construction.body, textures)
+    this.sourceCorona = new NativeAirCoronaView('air-source-corona', textures)
+    this.contactCorona = new NativeAirCoronaView('air-contact-corona', textures)
     this.containers = [
-      this.bodyContainer,
+      this.body.container,
       this.sourceCorona.container,
       this.contactCorona.container,
     ]
@@ -93,7 +61,7 @@ export class AirPrimarySpellView {
   update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
     if (!('origin' in state) || state.kind !== 'air') return
     this.state = state
-    this.bodyContainer.position.set(state.origin.x, state.origin.y)
+    this.body.container.position.set(state.origin.x, state.origin.y)
     const plan = buildNativeAirLightningPlan({
       ageTicks: state.ageTicks,
       birthTick: state.birthTick,
@@ -102,8 +70,7 @@ export class AirPrimarySpellView {
       underpowered: state.underpowered,
     })
     this.plan = plan
-    this.bodyContainer.visible = plan.body !== null
-    for (const mesh of this.body) mesh.visible = plan.body !== null
+    this.body.update(plan.body)
     this.sourceCorona.update(plan.sourceCorona, state.origin)
     this.contactCorona.update(plan.contactCorona, state.origin)
   }
@@ -112,7 +79,7 @@ export class AirPrimarySpellView {
     const roots: AirPainterRoot[] = []
     if (this.plan.body) {
       roots.push({
-        container: this.bodyContainer,
+        container: this.body.container,
         lane: 'world-sorted',
         queueFamily: 'ordinary-dynamic',
         regionLightPoint: null,
@@ -182,13 +149,64 @@ interface AirPainterRoot {
   worldY: number
 }
 
-class AirCoronaView {
+export class NativeAirLightningBodyView {
+  readonly container: Container
+  private readonly meshes: readonly MeshSimple[]
+
+  constructor(
+    label: string,
+    body: NativeAirLightningFactoryPlan['body'],
+    textures: NativeAirVfxTextures,
+  ) {
+    this.container = new Container({ label })
+    this.container.eventMode = 'none'
+    this.meshes = body?.layers.flatMap((layer) => {
+      const mesh = new MeshSimple({
+        indices: layer.indices,
+        texture: textures.ribbon,
+        topology: 'triangle-list',
+        uvs: layer.uvs,
+        vertices: layer.vertices,
+      })
+      mesh.alpha = layer.alpha
+      mesh.autoUpdate = false
+      mesh.blendMode = 'add'
+      mesh.eventMode = 'none'
+      mesh.tint = layer.tint
+      if (!layer.branch) return [mesh]
+      const branch = new MeshSimple({
+        indices: layer.branch.indices,
+        texture: textures.branches[
+          AIR_LIGHTNING_BRANCH_RECORDS.indexOf(layer.branch.textureRecord)
+        ],
+        topology: 'triangle-list',
+        uvs: layer.branch.uvs,
+        vertices: layer.branch.vertices,
+      })
+      branch.alpha = layer.alpha
+      branch.autoUpdate = false
+      branch.blendMode = 'add'
+      branch.eventMode = 'none'
+      branch.tint = layer.tint
+      return [mesh, branch]
+    }) ?? []
+    this.container.addChild(...this.meshes)
+    this.update(body)
+  }
+
+  update(body: NativeAirLightningFactoryPlan['body']): void {
+    this.container.visible = body !== null
+    for (const mesh of this.meshes) mesh.visible = body !== null
+  }
+}
+
+export class NativeAirCoronaView {
   readonly container: Container
   private readonly circles: readonly Sprite[]
   private readonly forks: readonly Sprite[]
-  private readonly textures: AirTextures
+  private readonly textures: NativeAirVfxTextures
 
-  constructor(label: string, textures: AirTextures) {
+  constructor(label: string, textures: NativeAirVfxTextures) {
     this.textures = textures
     this.container = new Container({ label })
     this.container.eventMode = 'none'

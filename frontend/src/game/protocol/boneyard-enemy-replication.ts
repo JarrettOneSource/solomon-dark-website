@@ -18,11 +18,11 @@ export const BONEYARD_ENEMY_ENTITY_TYPE_ID = 2
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 8
-const SAMPLE_LENGTH = 72
-const EFFECT_COMPONENT_OFFSET = 32
+const DESCRIPTOR_LENGTH = 10
+const EFFECT_COMPONENT_OFFSET = 35
 const EFFECT_COMPONENT_COUNT = 10
-const MAX_EFFECTS = 4
+const MAX_EFFECTS = 2
+const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
 
 const FAMILIES = [
   'SKELETON',
@@ -94,6 +94,9 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
     const family = FAMILIES[descriptor[2]]!
     return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
       && (descriptor[7] === 0 || family === 'SKELETON')
+      && (family === 'ZOMBIE'
+        ? descriptor[8] === -1 && descriptor[9] === -1
+        : descriptor[8] === 0 && nonnegativeInteger(descriptor[9]))
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -113,6 +116,9 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[17] >= 0 && sample[17] <= VALUE_SCALE
       && sample[29] >= 0
       && sample[30] >= sample[29]
+      && sample[32] >= 0 && sample[32] <= VALUE_SCALE
+      && sample[33] >= 0 && sample[33] <= VALUE_SCALE
+      && sample[34] >= 0 && sample[34] <= 2
       && effectComponentsAreValid(sample)
   },
 }
@@ -129,6 +135,8 @@ export function boneyardEnemyDescriptor(
     enemy.maximumHealth,
     encodeFlags(enemy.flags),
     Number(enemy.armored),
+    enemy.lightRegistration?.managerLane === 'actor' ? 0 : -1,
+    enemy.lightRegistration?.registrationOrdinal ?? -1,
   ]
 }
 
@@ -172,6 +180,9 @@ export function boneyardEnemySample(
     quantize(enemy.shieldHealth, VALUE_SCALE),
     quantize(enemy.shieldMaximumHealth, VALUE_SCALE),
     animation.effects.length,
+    quantize(enemy.lighting.glow, VALUE_SCALE),
+    quantize(enemy.lighting.charge, VALUE_SCALE),
+    enemy.lighting.providerCopies,
     ...effectComponents,
   ]
 }
@@ -225,6 +236,17 @@ export function materializeBoneyardEnemy(
     flags: decodeFlags(descriptor[6]),
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     id: descriptor[1],
+    lightRegistration: descriptor[8] === -1
+      ? null
+      : {
+          managerLane: 'actor',
+          registrationOrdinal: descriptor[9],
+        },
+    lighting: {
+      charge: dequantize(sample[33], VALUE_SCALE),
+      glow: dequantize(sample[32], VALUE_SCALE),
+      providerCopies: sample[34] as 0 | 1 | 2,
+    },
     maximumHealth: descriptor[5],
     nativeTypeId: descriptor[3],
     position: {
@@ -341,8 +363,6 @@ function effectShapeMatchesRole(
   switch (BONEYARD_ENEMY_EFFECT_ROLES[role]) {
     case 'burning-fire': return atlas === 1 && blendMode === 1 && entry >= 46 && entry <= 77
     case 'magic-shield': return atlas === 0 && blendMode === 0 && entry === 49
-    case 'mage-lightning-source': return atlas === 0 && blendMode === 0 && entry === 381
-    case 'mage-lightning-target': return atlas === 0 && blendMode === 0 && entry === 382
     default: return false
   }
 }
@@ -383,6 +403,10 @@ function dequantize(value: number, scale: number): number {
 }
 
 function entityId(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0
+}
+
+function nonnegativeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0
 }
 

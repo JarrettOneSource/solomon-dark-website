@@ -11,7 +11,7 @@ test('Maggot crawl, bite, facing, and death select recovered native records', ()
   }])
   assert.deepEqual(entries(maggot({ headingDeg: 180, state: 'bite' })), [{
     atlas: 'BadGuys',
-    entry: 230,
+    entry: 229,
   }])
   assert.deepEqual(entries(maggot({ state: 'death' })), [{
     atlas: 'DeadHawg',

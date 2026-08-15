@@ -4,6 +4,12 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  createPlayerLighting,
+  stepPlayerOverlayLighting,
+  type PlayerLightingState,
+} from '../core-kernels/player-lighting.ts'
+import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import {
   coldSlowPlayer,
   dazzlePlayer,
   damagePlayer,
@@ -47,6 +53,7 @@ export interface PlayerEntityStore {
   readonly economies: readonly HubEconomyState[]
   readonly entityIds: readonly PlayerEntityId[]
   readonly identities: readonly PlayerIdentityComponent[]
+  readonly lightings: readonly PlayerLightingState[]
   readonly locomotions: readonly PlayerLocomotionComponent[]
   readonly nextEntityId: PlayerEntityId
   readonly primaryCasts: readonly PlayerPrimaryCastState[]
@@ -77,6 +84,7 @@ export function createPlayerEntityStore(): PlayerEntityStore {
     economies: [],
     entityIds: [],
     identities: [],
+    lightings: [],
     locomotions: [],
     nextEntityId: 1,
     primaryCasts: [],
@@ -92,6 +100,10 @@ export function addPlayerEntity(
   config: PlayerCharacterConfig,
   character: PlayerCharacterState,
   offerSeed: number,
+  lightRegistration: NativeLightProviderRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: source.nextEntityId - 1,
+  },
 ): PlayerEntityStore {
   if (playerEntityIndex(source, playerId) >= 0) return source
   return {
@@ -99,6 +111,7 @@ export function addPlayerEntity(
     economies: [...source.economies, createHubEconomy(offerSeed)],
     entityIds: [...source.entityIds, source.nextEntityId],
     identities: [...source.identities, Object.freeze({ playerId })],
+    lightings: [...source.lightings, createPlayerLighting(lightRegistration)],
     locomotions: [...source.locomotions, locomotionComponent(character)],
     nextEntityId: source.nextEntityId + 1,
     primaryCasts: [...source.primaryCasts, character.primaryCast],
@@ -119,6 +132,7 @@ export function removePlayerEntity(
     economies: withoutIndex(source.economies, index),
     entityIds: withoutIndex(source.entityIds, index),
     identities: withoutIndex(source.identities, index),
+    lightings: withoutIndex(source.lightings, index),
     locomotions: withoutIndex(source.locomotions, index),
     nextEntityId: source.nextEntityId,
     primaryCasts: withoutIndex(source.primaryCasts, index),
@@ -174,6 +188,14 @@ export function replacePlayerEconomy(
   const economies = [...source.economies]
   economies[index] = economy
   return { ...source, economies }
+}
+
+export function playerLightingAt(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerLightingState | null {
+  const index = playerEntityIndex(source, playerId)
+  return index < 0 ? null : source.lightings[index] ?? null
 }
 
 export function playerSkillBookAt(
@@ -367,9 +389,26 @@ export function playerEntityMovementScale(
   return progression ? playerMovementScale(progression) : 1
 }
 
+export function stepPlayerEntityOverlayLightingTick(
+  source: PlayerEntityStore,
+): PlayerEntityStore {
+  let changed = false
+  const lightings = source.lightings.map((lighting, index) => {
+    const stepped = stepPlayerOverlayLighting(
+      lighting,
+      source.configs[index]!.element,
+      source.primaryCasts[index]!,
+    )
+    changed ||= stepped !== lighting
+    return stepped
+  })
+  return changed ? { ...source, lightings } : source
+}
+
 export function resetPlayerEntitiesForNewRun(
   source: PlayerEntityStore,
   placements: Readonly<Record<string, PlayerCharacterState>>,
+  lightRegistrations: Readonly<Record<string, NativeLightProviderRegistration>> | null = null,
 ): PlayerEntityStore {
   const placementIds = Object.keys(placements)
   if (
@@ -378,8 +417,22 @@ export function resetPlayerEntitiesForNewRun(
   ) {
     throw new Error('new run requires exactly one placement for every player entity')
   }
+  if (
+    lightRegistrations !== null
+    && (
+      Object.keys(lightRegistrations).length !== source.identities.length
+      || source.identities.some(({ playerId }) => !Object.hasOwn(lightRegistrations, playerId))
+    )
+  ) {
+    throw new Error('new run requires exactly one light registration for every player entity')
+  }
   return {
     ...source,
+    lightings: source.lightings.map((lighting, index) => createPlayerLighting(
+      lightRegistrations === null
+        ? lighting.lightRegistration
+        : lightRegistrations[source.identities[index]!.playerId]!,
+    )),
     locomotions: source.identities.map(({ playerId }) => (
       locomotionComponent(placements[playerId]!)
     )),
@@ -395,9 +448,10 @@ export function grantPlayerEntityExperience(
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) throw new Error(`player entity store has no player ${playerId}`)
+  const previous = source.progressions[index]!
   const progressions = [...source.progressions]
   progressions[index] = grantPlayerExperience(
-    progressions[index]!,
+    previous,
     source.skillBooks[index]!,
     amount,
   )
@@ -440,8 +494,9 @@ export function grantSharedPlayerEntityExperience(
   for (const participantId of stableParticipantIds) {
     const index = playerEntityIndex(source, participantId)
     if (index === sourceIndex) continue
+    const previousProgression = source.progressions[index]!
     progressions[index] = synchronizePlayerLevelMilestone(
-      source.progressions[index]!,
+      previousProgression,
       source.skillBooks[index]!,
       milestone,
     )

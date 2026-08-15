@@ -1,3 +1,5 @@
+import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
+
 export type NativeEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
 
 export type NativeEnemyActionProgramName =
@@ -178,7 +180,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'mage-cast-short': exactProgram(
     'mage-cast-short',
-    [...repeated(2, 24), 3, ...repeated(4, 13), 3, ...repeated(0, 3)],
+    NATIVE_MAGE_CAST_BODY_POSES.short,
     [25],
     41,
     0.253125012,
@@ -186,7 +188,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'mage-cast-long': exactProgram(
     'mage-cast-long',
-    [...repeated(2, 30), 3, ...repeated(4, 13), 3, ...repeated(0, 3)],
+    NATIVE_MAGE_CAST_BODY_POSES.long,
     [31],
     47,
     0.253125012,

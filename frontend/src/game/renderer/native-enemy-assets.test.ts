@@ -235,7 +235,7 @@ test('every live combat and Coffin child plan resolves to extracted records', ()
       used.add(`${layer.atlas}:${layer.entry}`)
     }
   }
-  assert.ok(used.has('BadGuys:220'))
+  assert.ok(used.has('BadGuys:237'))
 })
 
 function manifest(relativePath: string): AtlasManifest {

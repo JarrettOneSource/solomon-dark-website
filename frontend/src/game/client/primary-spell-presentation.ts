@@ -1,8 +1,19 @@
-import type {
-  PrimarySpellProjectileState,
-  PrimarySpellSimulationState,
-  PrimarySpellTransientState,
+import { nativeFireParticleLifetimeTicks } from '../core-kernels/primary-spell-fire-native.ts'
+import { waterFrostJetLifetimeTicks } from '../core-kernels/primary-spell-water.ts'
+import {
+  PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+  PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+  PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+  type PrimarySpellProjectileState,
+  type PrimarySpellSimulationState,
+  type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+
+export interface PrimarySpellPresentationTime {
+  newerTick: number
+  olderTick: number
+  targetTick: number
+}
 
 export function copyPrimarySpellState(
   spells: PrimarySpellSimulationState,
@@ -18,25 +29,18 @@ export function interpolatePrimarySpellState(
   older: PrimarySpellSimulationState,
   newer: PrimarySpellSimulationState,
   blend: number,
+  time: PrimarySpellPresentationTime,
 ): PrimarySpellSimulationState {
   const newerProjectiles = new Map(newer.projectiles.map((spell) => [spell.id, spell]))
   const projectiles = older.projectiles.map((spell) => {
     const next = newerProjectiles.get(spell.id)
     return next ? interpolateProjectile(spell, next, blend) : copyProjectile(spell)
   })
-  const newerTransients = new Map(newer.transients.map((effect) => [effect.id, effect]))
-  const transients = older.transients.map((effect) => {
-    const next = newerTransients.get(effect.id)
-    return next ? interpolateTransient(effect, next, blend) : copyTransient(effect)
-  })
+  const transients = interpolatePrimarySpellTransients(older, newer, blend, time)
   if (blend >= 1) {
     const projectileIds = new Set(projectiles.map((spell) => spell.id))
     for (const spell of newer.projectiles) {
       if (!projectileIds.has(spell.id)) projectiles.push(copyProjectile(spell))
-    }
-    const transientIds = new Set(transients.map((effect) => effect.id))
-    for (const effect of newer.transients) {
-      if (!transientIds.has(effect.id)) transients.push(copyTransient(effect))
     }
   }
   return {
@@ -44,9 +48,7 @@ export function interpolatePrimarySpellState(
     projectiles: blend < 1
       ? projectiles
       : projectiles.filter((spell) => newerProjectiles.has(spell.id)),
-    transients: blend < 1
-      ? transients
-      : transients.filter((effect) => newerTransients.has(effect.id)),
+    transients,
   }
 }
 
@@ -64,6 +66,7 @@ function interpolateProjectile(
       x: lerp(older.direction.x, newer.direction.x, blend),
       y: lerp(older.direction.y, newer.direction.y, blend),
     },
+    lightRegistration: { ...discrete.lightRegistration },
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),
@@ -79,6 +82,121 @@ function interpolateProjectile(
   }
 }
 
+interface FixedTransientTiming {
+  ageZeroTick: number
+  firstVisibleAge: 0 | 1
+  lifetimeTicks: number
+}
+
+interface BracketedFixedTransient {
+  newer?: PrimarySpellTransientState
+  older?: PrimarySpellTransientState
+  timing: FixedTransientTiming
+}
+
+function interpolatePrimarySpellTransients(
+  older: PrimarySpellSimulationState,
+  newer: PrimarySpellSimulationState,
+  blend: number,
+  time: PrimarySpellPresentationTime,
+): PrimarySpellTransientState[] {
+  const result = interpolateStateDrivenTransients(older, newer, blend)
+  const fixed = new Map<number, BracketedFixedTransient>()
+
+  for (const effect of older.transients) {
+    const timing = fixedTransientTiming(effect, time.olderTick)
+    if (timing) fixed.set(effect.id, { older: effect, timing })
+  }
+  for (const effect of newer.transients) {
+    const timing = fixedTransientTiming(effect, time.newerTick)
+    if (!timing) continue
+    const bracket = fixed.get(effect.id)
+    if (bracket) bracket.newer = effect
+    else fixed.set(effect.id, { newer: effect, timing })
+  }
+
+  for (const bracket of fixed.values()) {
+    const displayAge = time.targetTick - bracket.timing.ageZeroTick
+    if (
+      displayAge < bracket.timing.firstVisibleAge
+      || displayAge >= bracket.timing.lifetimeTicks
+    ) continue
+    const source = bracket.older && bracket.newer
+      ? interpolateTransient(bracket.older, bracket.newer, blend)
+      : copyTransient(bracket.older ?? bracket.newer!)
+    result.push({
+      ...source,
+      ageTicks: source.kind === 'air' ? Math.floor(displayAge) : displayAge,
+    })
+  }
+
+  // Primary-spell ids come from one monotonic authority allocator, so id order
+  // is the native birth-tick/factory-call order across every spell family.
+  return result.sort((first, second) => first.id - second.id)
+}
+
+function interpolateStateDrivenTransients(
+  older: PrimarySpellSimulationState,
+  newer: PrimarySpellSimulationState,
+  blend: number,
+): PrimarySpellTransientState[] {
+  const newerById = new Map(newer.transients
+    .filter((effect) => effect.kind === 'earth-called-rock')
+    .map((effect) => [effect.id, effect]))
+  const result = older.transients
+    .filter((effect) => effect.kind === 'earth-called-rock')
+    .map((effect) => {
+      const next = newerById.get(effect.id)
+      return next ? interpolateTransient(effect, next, blend) : copyTransient(effect)
+    })
+  if (blend < 1) return result
+
+  const knownIds = new Set(result.map((effect) => effect.id))
+  for (const effect of newerById.values()) {
+    if (!knownIds.has(effect.id)) result.push(copyTransient(effect))
+  }
+  return result.filter((effect) => newerById.has(effect.id))
+}
+
+function fixedTransientTiming(
+  effect: PrimarySpellTransientState,
+  snapshotTick: number,
+): FixedTransientTiming | null {
+  switch (effect.kind) {
+    case 'air': return {
+      ageZeroTick: effect.birthTick,
+      firstVisibleAge: 0,
+      lifetimeTicks: PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+    }
+    case 'earth-called-rock': return null
+    case 'earth-impact': return {
+      ageZeroTick: effect.birthTick,
+      firstVisibleAge: 0,
+      lifetimeTicks: effect.lifetimeTicks,
+    }
+    case 'ether-impact': return {
+      ageZeroTick: effect.birthTick,
+      firstVisibleAge: 0,
+      lifetimeTicks: PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+    }
+    case 'fire': return {
+      ageZeroTick: snapshotTick - effect.ageTicks,
+      firstVisibleAge: 0,
+      lifetimeTicks: nativeFireParticleLifetimeTicks(effect.id),
+    }
+    case 'fire-impact': return {
+      ageZeroTick: snapshotTick - effect.ageTicks,
+      firstVisibleAge: 0,
+      lifetimeTicks: PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+    }
+    case 'water': return {
+      ageZeroTick: snapshotTick - effect.ageTicks,
+      firstVisibleAge: 1,
+      lifetimeTicks: waterFrostJetLifetimeTicks(effect.id),
+    }
+  }
+}
+
 function interpolateTransient(
   older: PrimarySpellTransientState,
   newer: PrimarySpellTransientState,
@@ -90,6 +208,7 @@ function interpolateTransient(
     return {
       ...impact,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      lightRegistration: null,
       origin: {
         x: lerp(older.origin.x, newer.origin.x, blend),
         y: lerp(older.origin.y, newer.origin.y, blend),
@@ -106,6 +225,7 @@ function interpolateTransient(
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       fallVelocity: lerp(older.fallVelocity, newer.fallVelocity, blend),
       height: lerp(older.height, newer.height, blend),
+      lightRegistration: null,
       position: {
         x: lerp(older.position.x, newer.position.x, blend),
         y: lerp(older.position.y, newer.position.y, blend),
@@ -122,6 +242,7 @@ function interpolateTransient(
     return {
       ...impact,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      lightRegistration: { ...impact.lightRegistration },
       origin: { ...impact.origin },
     }
   }
@@ -133,6 +254,7 @@ function interpolateTransient(
     return {
       ...impact,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      lightRegistration: { ...impact.lightRegistration },
       origin: { ...impact.origin },
     }
   }
@@ -144,6 +266,7 @@ function interpolateTransient(
     return {
       ...fire,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      lightRegistration: null,
       direction: { ...fire.direction },
       origin: { ...fire.origin },
     }
@@ -158,6 +281,7 @@ function interpolateTransient(
         x: lerp(older.direction.x, newer.direction.x, blend),
         y: lerp(older.direction.y, newer.direction.y, blend),
       },
+      lightRegistration: null,
       obstructionPoint: water.obstructionPoint === null
         ? null
         : { ...water.obstructionPoint },
@@ -175,6 +299,7 @@ function interpolateTransient(
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       direction: { ...air.direction },
       endpoint: { ...air.endpoint },
+      lightRegistration: { ...air.lightRegistration! },
       midpoint: { ...air.midpoint },
       origin: { ...air.origin },
     }
@@ -187,6 +312,7 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
   return {
     ...spell,
     direction: { ...spell.direction },
+    lightRegistration: { ...spell.lightRegistration },
     ...(spell.kind === 'earth' ? {
       hitTargetIds: [...spell.hitTargetIds],
       orientation: [...spell.orientation],
@@ -197,20 +323,28 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
-  if (
-    effect.kind === 'earth-impact'
-    || effect.kind === 'ether-impact'
-    || effect.kind === 'fire-impact'
-  ) {
-    return { ...effect, origin: { ...effect.origin } }
+  if (effect.kind === 'earth-impact') {
+    return {
+      ...effect,
+      lightRegistration: null,
+      origin: { ...effect.origin },
+    }
+  }
+  if (effect.kind === 'ether-impact' || effect.kind === 'fire-impact') {
+    return {
+      ...effect,
+      lightRegistration: { ...effect.lightRegistration },
+      origin: { ...effect.origin },
+    }
   }
   if (effect.kind === 'earth-called-rock') {
-    return { ...effect, position: { ...effect.position } }
+    return { ...effect, lightRegistration: null, position: { ...effect.position } }
   }
   if (effect.kind === 'water') {
     return {
       ...effect,
       direction: { ...effect.direction },
+      lightRegistration: null,
       obstructionPoint: effect.obstructionPoint === null
         ? null
         : { ...effect.obstructionPoint },
@@ -222,6 +356,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       ...effect,
       direction: { ...effect.direction },
       endpoint: { ...effect.endpoint },
+      lightRegistration: { ...effect.lightRegistration },
       midpoint: { ...effect.midpoint },
       origin: { ...effect.origin },
     }
@@ -229,6 +364,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   return {
     ...effect,
     direction: { ...effect.direction },
+    lightRegistration: null,
     origin: { ...effect.origin },
   }
 }

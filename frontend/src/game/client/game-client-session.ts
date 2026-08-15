@@ -682,6 +682,7 @@ export function connectGameClientSession(
           ...predicted.player,
           config: { ...state.player.config },
           economy: state.player.economy,
+          lighting: state.player.lighting,
           progression: state.player.progression,
         }
         state.collisionRngState = predicted.collisionRngState
@@ -767,6 +768,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
     config: { ...player.config },
+    lighting: { ...player.lighting },
     position: { ...player.position },
     progression: {
       ...player.progression,

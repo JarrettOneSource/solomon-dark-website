@@ -217,7 +217,7 @@ test('native Air exposes the contact ZAnimLit source without inventing range 50'
   assert.ok(ages.every((light) => (
     light !== null
     && light.radius >= AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS
-    && light.radius < AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS
+    && light.radius <= AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS
       + AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER
   )))
   assert.deepEqual(visual.contactLight, ages[0])
@@ -280,6 +280,18 @@ test('native Air appends its factory MiscLights after exact 100-unit leg walks',
     origin: { x: 0, y: 0 },
   }, () => 0)
   assert.deepEqual(boundary.map(({ position }) => position.x), [220])
+
+  const inclusiveMaximum = buildNativeAirPathLightSources({
+    birthTick: 40,
+    endpoint: { x: 220, y: 0 },
+    id: 9,
+    midpoint: { x: 220, y: 0 },
+    origin: { x: 0, y: 0 },
+  }, () => 1)
+  assert.ok(inclusiveMaximum.length > 0)
+  assert.ok(inclusiveMaximum.every(({ intensity, radius }) => (
+    intensity === 1 && radius === 1
+  )))
 })
 
 test('native Air body phase is frozen from the semantic birth tick', () => {

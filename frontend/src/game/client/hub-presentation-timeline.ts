@@ -191,6 +191,7 @@ function interpolateSnapshot(
       older.primarySpells,
       newer.primarySpells,
       blend,
+      { newerTick: newer.tick, olderTick: older.tick, targetTick },
     ),
     run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
@@ -283,6 +284,10 @@ function interpolatePlayer(
       blend,
       HEADING_COUNT,
     )) % HEADING_COUNT,
+    lighting: {
+      ...discrete.lighting,
+      lightRegistration: { ...discrete.lighting.lightRegistration },
+    },
     position: {
       x: lerp(older.position.x, newer.position.x, blend),
       y: lerp(older.position.y, newer.position.y, blend),
@@ -461,6 +466,10 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
   return {
     ...player,
     config: { ...player.config },
+    lighting: {
+      ...player.lighting,
+      lightRegistration: { ...player.lighting.lightRegistration },
+    },
     position: { ...player.position },
     primaryCast: {
       ...player.primaryCast,

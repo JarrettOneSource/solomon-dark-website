@@ -4,8 +4,18 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import { playerCollisionEnabled } from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
+import {
+  NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
+  NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
+} from '../core-kernels/player-lighting.ts'
+import {
+  createDeferredNativeLightProviderRegistrations,
+  createNativeLightProviderOrder,
+  mergeNativeLightProviderOwners,
+} from '../core-kernels/native-light-provider-order.ts'
 import {
   acknowledgeGameSimulationOver,
   addPlayerCharacter,
@@ -26,6 +36,7 @@ import {
 } from './game-simulation.ts'
 import {
   damageBoneyardEnemy,
+  NATIVE_MAGE_ACTION_PROGRAMS,
   stepBoneyardEnemyStore,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
@@ -33,6 +44,7 @@ import {
   damagePlayerEntity,
   dazzlePlayerEntity,
   playerCharacterRecords,
+  playerLightingAt,
   poisonPlayerEntity,
   replacePlayerCharacter,
   replacePlayerCharacterRecords,
@@ -45,6 +57,255 @@ function gameplayInput(x: number, y: number) {
     movement: { x, y },
   }
 }
+
+test('native provider registration is lane-local and stable across grouped collectors', () => {
+  const order = createNativeLightProviderOrder()
+  assert.deepEqual(order.register('actor'), {
+    managerLane: 'actor',
+    registrationOrdinal: 0,
+  })
+  assert.deepEqual(order.register('transient'), {
+    managerLane: 'transient',
+    registrationOrdinal: 0,
+  })
+  assert.deepEqual(order.register('actor'), {
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  })
+
+  const deferred = createDeferredNativeLightProviderRegistrations()
+  const enemyProjectile = deferred.register('actor')
+  const playerProjectile = order.register('actor')
+  deferred.commit(order)
+  assert.equal(playerProjectile.registrationOrdinal, 2)
+  assert.equal(enemyProjectile.registrationOrdinal, 3)
+  assert.throws(() => deferred.register('actor'), /already committed/)
+
+  const owner = (
+    label: string,
+    managerLane: 'actor' | 'transient',
+    registrationOrdinal: number,
+  ) => ({ label, lightRegistration: { managerLane, registrationOrdinal } })
+  const merged = mergeNativeLightProviderOwners([
+    [owner('player', 'actor', 2), owner('transient-a', 'transient', 0)],
+    [
+      owner('enemy-copy-0', 'actor', 0),
+      owner('enemy-copy-1', 'actor', 0),
+      owner('projectile', 'actor', 1),
+    ],
+    [owner('transient-b', 'transient', 0)],
+  ], ({ lightRegistration }) => lightRegistration)
+  assert.deepEqual(merged.map(({ label }) => label), [
+    'enemy-copy-0',
+    'enemy-copy-1',
+    'projectile',
+    'player',
+    'transient-a',
+    'transient-b',
+  ])
+})
+
+test('Boneyard entry registers players before Lantern and reconnect appends a fresh actor ordinal', () => {
+  let state = createGameSimulation({
+    first: { discipline: 'arcane', displayName: 'First', element: 'fire' },
+    second: { discipline: 'arcane', displayName: 'Second', element: 'ether' },
+  })
+  const loaded = emptyBoneyard()
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 3, 1],
+    gravePosition: { x: 240, y: 240 },
+    lanternPosition: { x: 245, y: 245 },
+    position: { x: 250, y: 250 },
+    ticksPerFrame: 5,
+  }
+  state = enterBoneyardWorld(state, loaded)
+  assert.deepEqual(playerLightingAt(state.playerEntities, 'first')?.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 0,
+  })
+  assert.deepEqual(playerLightingAt(state.playerEntities, 'second')?.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 1,
+  })
+  assert.equal(state.world.kind, 'boneyard')
+  assert.deepEqual(state.world.lanternLightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 2,
+  })
+
+  state = removePlayerCharacter(state, 'first')
+  state = addPlayerCharacter(state, 'first', {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'fire',
+  })
+  assert.deepEqual(playerLightingAt(state.playerEntities, 'first')?.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 3,
+  })
+})
+
+test('same-tick player primary actors register before projectiles spawned by later enemy actors', () => {
+  const loaded = emptyBoneyard()
+  loaded.runId = 'provider-order-run'
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Caster',
+    element: 'fire',
+  } }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+
+  const order = createNativeLightProviderOrder(state.lightProviderOrder)
+  const player = getPlayerCharacter(state, 'caster')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      caster: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    registerLightProvider: order.register,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETONMAGE',
+      flags: ['FLAG_CASTFROST'],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETONMAGE,
+      position: { x: 100, y: 100 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const mage = seeded.store.actors[0]!
+  if (mage.brain.family !== 'mage') throw new Error('expected Mage brain')
+  state = {
+    ...state,
+    lightProviderOrder: order.state(),
+    playerEntities: {
+      ...state.playerEntities,
+      primaryCasts: [{
+        ...state.playerEntities.primaryCasts[0]!,
+        actionTick: PRIMARY_CAST_EMISSION_TICK - 1,
+        aimDirection: { x: 0, y: -1 },
+        castSequence: 1,
+        held: true,
+      }],
+    },
+    world: {
+      ...state.world,
+      enemies: {
+        ...seeded.store,
+        actors: [{
+          ...mage,
+          brain: {
+            ...mage.brain,
+            actionProgress: NATIVE_MAGE_ACTION_PROGRAMS.short.markerProgress,
+            castProgram: 'short',
+            castRoll: 0,
+            markerEmitted: false,
+            phase: 'cast',
+          },
+        }],
+      },
+    },
+  }
+
+  state = stepGameSimulationTick(state, {
+    caster: {
+      aim: { x: player.position.x, y: 0 },
+      cast: { primary: true, secondary: false },
+      movement: { x: 0, y: 0 },
+    },
+  })
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const primary = state.primarySpells.projectiles.find(({ kind }) => kind === 'fire')
+  const guided = state.world.enemies.projectiles.find(({ kind }) => kind === 'guided-missile')
+  assert.ok(primary)
+  assert.ok(guided)
+  assert.deepEqual(primary.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 2,
+  })
+  assert.deepEqual(guided.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 3,
+  })
+  assert.deepEqual(state.lightProviderOrder.nextRegistrationOrdinal, {
+    actor: 4,
+    transient: 0,
+  })
+})
+
+test('same-tick wave actors register before player primary actors', () => {
+  const loaded = emptyBoneyard()
+  loaded.runId = 'wave-provider-order-run'
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 3, 1],
+    gravePosition: { x: 240, y: 240 },
+    lanternPosition: { x: 245, y: 245 },
+    position: { x: 250, y: 250 },
+    ticksPerFrame: 5,
+  }
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Caster',
+    element: 'fire',
+  } }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  if (state.world.waves === null) throw new Error('expected retail wave director')
+  const player = getPlayerCharacter(state, 'caster')
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      primaryCasts: [{
+        ...state.playerEntities.primaryCasts[0]!,
+        actionTick: PRIMARY_CAST_EMISSION_TICK - 1,
+        aimDirection: { x: 0, y: -1 },
+        castSequence: 1,
+        held: true,
+      }],
+    },
+    world: {
+      ...state.world,
+      waves: startBoneyardWaveDirector(state.world.waves),
+    },
+  }
+
+  state = stepGameSimulationTick(state, {
+    caster: {
+      aim: { x: player.position.x, y: 0 },
+      cast: { primary: true, secondary: false },
+      movement: { x: 0, y: 0 },
+    },
+  })
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const fire = state.primarySpells.projectiles.find(({ kind }) => kind === 'fire')
+  assert.ok(fire)
+  assert.equal(state.world.enemies.actors.length, 10)
+  assert.deepEqual(
+    state.world.enemies.actors.map(({ lightRegistration }) => lightRegistration),
+    Array.from({ length: 10 }, (_, index) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal: index + 2,
+    })),
+  )
+  assert.deepEqual(fire.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 12,
+  })
+  assert.deepEqual(state.lightProviderOrder.nextRegistrationOrdinal, {
+    actor: 13,
+    transient: 0,
+  })
+})
 
 test('game simulation owns player characters outside the active world', () => {
   const firstConfig = {
@@ -233,7 +494,8 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
     skillId: secondChoice.skillId,
   })!
   assert.equal(state.levelUpBarrier, null)
-  assert.equal(stepGameSimulationTick(state, {}).tick, frozenTick + 1)
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.tick, frozenTick + 1)
 })
 
 test('shared picker cohort excludes late joiners and releases disconnected waiters', () => {
@@ -341,6 +603,34 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   assert.deepEqual(state.primarySpells, { nextId: 1, projectiles: [], transients: [] })
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.actionTick, -1)
   assert.equal(getPlayerCharacter(state, 'caster').primaryCast.channelActive, false)
+})
+
+test('authoritative player ticks reset and decay StaffConstant lighting before projection', () => {
+  const water = {
+    discipline: 'arcane',
+    displayName: 'Water Caster',
+    element: 'water',
+  } as const
+  let state = createGameSimulation({ caster: water })
+  const cast = (primary: boolean) => {
+    const player = getPlayerCharacter(state, 'caster')
+    return {
+      aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary, secondary: false },
+      movement: { x: 0, y: 0 },
+    }
+  }
+  state = stepGameSimulationTick(state, { caster: cast(true) })
+  const activePhase = Math.fround(
+    NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
+  )
+  assert.equal(playerLightingAt(state.playerEntities, 'caster')?.overlayEffectPhase, activePhase)
+
+  state = stepGameSimulationTick(state, { caster: cast(false) })
+  assert.equal(
+    playerLightingAt(state.playerEntities, 'caster')?.overlayEffectPhase,
+    Math.fround(activePhase * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY),
+  )
 })
 
 test('Boneyard Air falls back to a Gravestone and publishes the native curved segment', () => {
@@ -540,6 +830,7 @@ test('Boneyard Fire uses kernel terrain lookahead then post-move point contact',
         flightTicks: 5,
         id: 1,
         kind: 'fire',
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
         ownerId: 'caster',
         phase: 'flight',
         position: { x: 50, y: 250 },

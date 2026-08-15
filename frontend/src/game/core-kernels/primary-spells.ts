@@ -46,6 +46,11 @@ import {
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
 } from './primary-spell-targeting.ts'
+import {
+  createNativeLightProviderOrder,
+  type NativeLightProviderRegistration,
+  type RegisterNativeLightProvider,
+} from './native-light-provider-order.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
 export type PrimarySpellTransientKind =
@@ -65,6 +70,7 @@ interface PrimarySpellProjectileBaseState {
   direction: Vector2
   flightTicks: number
   id: number
+  lightRegistration: NativeLightProviderRegistration
   ownerId: string
   phase: PrimarySpellProjectilePhase
   position: Vector2
@@ -101,6 +107,7 @@ interface PrimarySpellChannelTransientBase {
   ageTicks: number
   direction: Vector2
   id: number
+  lightRegistration: NativeLightProviderRegistration | null
   origin: Vector2
   ownerId: string
   underpowered: boolean
@@ -112,12 +119,14 @@ export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransi
   birthTick: number
   endpoint: Vector2
   kind: 'air'
+  lightRegistration: NativeLightProviderRegistration
   midpoint: Vector2
   targetId: string | null
 }
 
 export interface PrimarySpellWaterTransientState extends PrimarySpellChannelTransientBase {
   kind: 'water'
+  lightRegistration: null
   obstructionDistance: number | null
   obstructionPoint: Vector2 | null
 }
@@ -145,6 +154,7 @@ export interface PrimarySpellEarthImpactState {
   charge: number
   id: number
   kind: 'earth-impact'
+  lightRegistration: null
   lifetimeTicks: number
   origin: Vector2
   ownerId: string
@@ -158,6 +168,7 @@ export interface PrimarySpellEarthCalledRockState {
   height: number
   id: number
   kind: 'earth-called-rock'
+  lightRegistration: null
   lateralMagnitude: number
   ownerId: string
   parentId: number
@@ -176,6 +187,7 @@ export interface PrimarySpellFireParticleState {
   direction: Vector2
   id: number
   kind: 'fire'
+  lightRegistration: null
   origin: Vector2
   ownerId: string
   variant: number
@@ -187,6 +199,7 @@ export interface PrimarySpellEtherImpactState {
   birthTick: number
   id: number
   kind: 'ether-impact'
+  lightRegistration: NativeLightProviderRegistration
   origin: Vector2
   ownerId: string
   worldKey: string
@@ -196,6 +209,7 @@ export interface PrimarySpellFireImpactState {
   ageTicks: number
   id: number
   kind: 'fire-impact'
+  lightRegistration: NativeLightProviderRegistration
   origin: Vector2
   ownerId: string
   worldKey: string
@@ -236,6 +250,7 @@ export interface PrimarySpellTickContext {
   inputs: Readonly<Record<string, PlayerCharacterInput>>
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
+  registerLightProvider?: RegisterNativeLightProvider
   spells: PrimarySpellSimulationState
   tick: number
   viewScale: number
@@ -367,6 +382,21 @@ export function createPrimarySpellSimulation(): PrimarySpellSimulationState {
   return { nextId: 1, projectiles: [], transients: [] }
 }
 
+function standalonePrimaryLightProviderOrderState(source: PrimarySpellSimulationState) {
+  const nextRegistrationOrdinal = { actor: 0, transient: 0 }
+  for (const registration of [
+    ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
+    ...source.transients.map(({ lightRegistration }) => lightRegistration),
+  ]) {
+    if (registration === null) continue
+    nextRegistrationOrdinal[registration.managerLane] = Math.max(
+      nextRegistrationOrdinal[registration.managerLane],
+      registration.registrationOrdinal + 1,
+    )
+  }
+  return { nextRegistrationOrdinal }
+}
+
 export function primaryCastPose(
   actionTick: number,
   channelActive = false,
@@ -421,6 +451,11 @@ export function primarySpellEmitterOffset(
 }
 
 export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpellTickResult {
+  const standaloneLightProviderOrder = createNativeLightProviderOrder(
+    standalonePrimaryLightProviderOrderState(context.spells),
+  )
+  const registerLightProvider = context.registerLightProvider
+    ?? standaloneLightProviderOrder.register
   let nextId = context.spells.nextId
   const existingCalledRockIds = new Set(context.spells.transients
     .filter((effect) => effect.kind === 'earth-called-rock')
@@ -452,10 +487,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       )
     ) {
       if (spell.kind === 'fire') {
-        transients = [...transients, fireImpact(nextId, spell)]
+        transients = [...transients, fireImpact(
+          nextId,
+          spell,
+          registerLightProvider('transient'),
+        )]
         nextId += 1
       } else {
-        transients = [...transients, etherImpact(nextId, spell, context.tick)]
+        transients = [...transients, etherImpact(
+          nextId,
+          spell,
+          context.tick,
+          registerLightProvider('transient'),
+        )]
         nextId += 1
       }
       continue
@@ -578,6 +622,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             hitTargetIds: [],
             id: nextId,
             kind: 'earth',
+            lightRegistration: registerLightProvider('actor'),
             orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
             ownerId: playerId,
             phase: 'held',
@@ -609,6 +654,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         worldKey,
         context.spellTargets(playerId),
         underpowered,
+        registerLightProvider('actor'),
       )
       nextId += 1
       if (born.kind === 'fire') {
@@ -631,7 +677,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           transients = [...transients, createFireParticle(nextId, spell)]
           nextId += 1
         } else {
-          transients = [...transients, fireImpact(nextId, born)]
+          transients = [...transients, fireImpact(
+            nextId,
+            born,
+            registerLightProvider('transient'),
+          )]
           nextId += 1
         }
       } else {
@@ -652,7 +702,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           if (spell.kind !== 'ether') throw new Error('Expected an Ether projectile')
           projectiles = [...projectiles, spell]
         } else {
-          transients = [...transients, etherImpact(nextId, born, context.tick)]
+          transients = [...transients, etherImpact(
+            nextId,
+            born,
+            context.tick,
+            registerLightProvider('transient'),
+          )]
           nextId += 1
         }
       }
@@ -708,6 +763,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             endpoint: air.endpoint,
             id: nextId,
             kind: 'air',
+            lightRegistration: registerLightProvider('transient'),
             midpoint: air.midpoint,
             origin: emitter,
             ownerId: playerId,
@@ -770,6 +826,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 direction: born.direction,
                 id,
                 kind: 'water',
+                lightRegistration: null,
                 obstructionDistance: obstruction?.distance ?? null,
                 obstructionPoint: obstruction?.point ?? null,
                 origin: born.origin,
@@ -1106,6 +1163,7 @@ function createOneShotProjectile(
   worldKey: string,
   targets: readonly PrimarySpellTarget[],
   underpowered: boolean,
+  lightRegistration: NativeLightProviderRegistration,
 ): PrimarySpellProjectileState {
   const direction = player.primaryCast.aimDirection
   const emitter = primarySpellEmitter(player)
@@ -1128,6 +1186,7 @@ function createOneShotProjectile(
     flightTicks: 0,
     id,
     kind,
+    lightRegistration,
     ownerId,
     phase: 'flight' as const,
     position: spawn,
@@ -1273,12 +1332,14 @@ function etherImpact(
   id: number,
   spell: PrimarySpellProjectileState,
   birthTick: number,
+  lightRegistration: NativeLightProviderRegistration,
 ): PrimarySpellEtherImpactState {
   return {
     ageTicks: 0,
     birthTick,
     id,
     kind: 'ether-impact',
+    lightRegistration,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
     worldKey: spell.worldKey,
@@ -1296,6 +1357,7 @@ function earthImpact(
     charge: spell.charge,
     id,
     kind: 'earth-impact',
+    lightRegistration: null,
     lifetimeTicks: 0,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
@@ -1307,11 +1369,13 @@ function earthImpact(
 function fireImpact(
   id: number,
   spell: PrimarySpellProjectileState,
+  lightRegistration: NativeLightProviderRegistration,
 ): PrimarySpellFireImpactState {
   return {
     ageTicks: 0,
     id,
     kind: 'fire-impact',
+    lightRegistration,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
     worldKey: spell.worldKey,
@@ -1323,16 +1387,20 @@ export function createPrimarySpellContactImpact(
   spell: PrimarySpellProjectileState,
   origin: Readonly<Vector2>,
   birthTick: number,
+  registerLightProvider: RegisterNativeLightProvider = (managerLane) => ({
+    managerLane,
+    registrationOrdinal: id,
+  }),
 ): PrimarySpellEarthImpactState | PrimarySpellEtherImpactState | PrimarySpellFireImpactState | null {
   const contactSpell = { ...spell, position: { ...origin } }
   if (contactSpell.kind === 'earth') {
     return earthImpact(id, contactSpell, birthTick)
   }
   if (contactSpell.kind === 'ether') {
-    return etherImpact(id, contactSpell, birthTick)
+    return etherImpact(id, contactSpell, birthTick, registerLightProvider('transient'))
   }
   return contactSpell.kind === 'fire'
-    ? fireImpact(id, contactSpell)
+    ? fireImpact(id, contactSpell, registerLightProvider('transient'))
     : null
 }
 
@@ -1358,6 +1426,7 @@ function createEarthCalledRock(
     height: -2,
     id,
     kind: 'earth-called-rock',
+    lightRegistration: null,
     lateralMagnitude: Math.fround(earthVisualUnitRandom(id, 0x6000) * 4),
     ownerId: boulder.ownerId,
     parentId: boulder.id,
@@ -1441,6 +1510,7 @@ function createFireParticle(
     direction: { ...fireball.direction },
     id,
     kind: 'fire',
+    lightRegistration: null,
     origin: { ...fireball.position },
     ownerId: fireball.ownerId,
     variant: nativeFireParticleVariant(id),

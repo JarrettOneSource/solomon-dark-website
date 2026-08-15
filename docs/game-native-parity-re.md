@@ -5418,7 +5418,7 @@ post-scene fog. Apply the recovered maximum scalar to individually resident
 main-object/fence sprites and dynamic main actors, leaving base/underlay and
 non-Tree proxy passes alone. Tree secondary art receives the same root scalar
 through its own late painter. Lantern flicker is presentation-owned and must stay in the
-recovered `[0.55,0.75)` range; it must not mutate synchronized gameplay RNG.
+recovered inclusive `[0.55,0.75]` lattice; it must not mutate synchronized gameplay RNG.
 Keep environment modes 1 and 2 on the existing two-pass player darkness
 compositor and keep the HUD above it. The far alpha `245` is still a
 capture-calibrated four-percent projection rather than a falsely claimed
@@ -5544,10 +5544,11 @@ The source flag is behavior, not spare metadata. Both submitters call
 `0x0057E2F0` for a zero-flag source and suppress it when an earlier source has
 at least its intensity and strictly contains its 145-scaled circle. A nonzero
 flag bypasses containment. The ordinary player passes one; the Lantern passes
-the retail `Multiple Shadows` setting, whose default is off. Future spell,
-enemy, and modifier adapters must preserve simulation/presentation order,
-radius, intensity, and this flag rather than hand the renderer an unordered
-set of glows.
+the retail `Multiple Shadows` setting. Fresh shipped-Windows initialization
+defaults that setting on through capability byte `0x00B3BCAE`; the preserved
+sandbox profile explicitly overrides it off. Future spell, enemy, and modifier
+adapters must preserve simulation/presentation order, radius, intensity, and
+this flag rather than hand the renderer an unordered set of glows.
 
 Entry-only browser Boneyards currently materialize only ordinary players and
 the Lantern from this inventory. The renderer needs a source-driven field seam
@@ -5580,7 +5581,7 @@ Synthesizing any of those dormant effects here would be non-native.
 - Keep the mode-1/mode-2 DeadHawg-18 plus DeadHawg-9 darkness compositor as a
   later, player-owned pass. A Lantern must not be inserted into that separate
   player aperture list merely to make its Region source visible.
-- Keep Lantern flicker local to the render frame and within `[0.55,0.75)`.
+- Keep Lantern flicker local to the render frame and within inclusive `[0.55,0.75]`.
   The authoritative host, snapshot protocol, collision, camera, and match RNG
   remain unchanged.
 
@@ -5623,7 +5624,7 @@ two sources, and composite depth `0.5`, with no page or console errors. The
 player was held `465.40` world units from the Lantern, beyond the player's
 recovered `377`-unit horizontal outer edge, while both remained on-screen.
 Four isolated Lantern samples were `0.654334`, `0.557695`, `0.565830`, and
-`0.689953`, all inside `[0.55,0.75)`. In raw WebGL captures, `7,548` of the
+`0.689953`, all inside inclusive `[0.55,0.75]`. In raw WebGL captures, `7,548` of the
 `25,048` pixels in the Lantern's 45-100-pixel ground ring changed by more than
 one channel level across those frames; the equally sampled distant control
 region changed on zero pixels. The receipt image is
@@ -8849,7 +8850,9 @@ bypasses both `Puppet_RenderDispatch (0x00624B40)` and `ZAnimLitObject`, so it
 has no inbound Region-light sample or outbound light. It must publish a direct
 painter root with `regionLightPoint=null`. By contrast, the Boulder body's
 vslot `+0x0C` is `Puppet_RenderDispatch`; its painter root samples Region light
-at Boulder world XY and has no recovered outbound light.
+at Boulder world XY. That inbound lane is independent from its recovered
+outbound provider: vslot `+0x30` `0x005E5670` submits the actor root with radius
+`max(1,2*charge)`, intensity `0.5`, and the retail Multiple-Shadows flag.
 
 Stock consumes its shared RNG for variants/scales/emission/angles. Those
 samples are cosmetic. The web analogue must use deterministic, isolated hashes
@@ -9257,19 +9260,21 @@ origin, and attachment points.
 The normal 18-facing families execute the same stock operation:
 
 ```text
-bucket18 = positiveMod(x87RoundToNearestEven((headingDegrees + 10) / 20), 18)
+bucket18 = positiveMod(truncTowardZero((headingDegrees + 10) / 20), 18)
 ```
 
 Imp alone uses:
 
 ```text
-bucket12 = positiveMod(x87RoundToNearestEven((headingDegrees + 15) / 30), 12)
+bucket12 = positiveMod(truncTowardZero((headingDegrees + 15) / 30), 12)
 ```
 
 The constants are direct `.rdata` values at `0x007DE810`, `0x007DE920`,
-`0x00784D80`, and `0x00784D50`. `0x00747360` reaches the default x87 `FISTP`
-path, so JavaScript `Math.round` is wrong at exact half buckets; the browser
-must implement round-to-nearest-even and positive modulo explicitly.
+`0x00784D80`, and `0x00784D50`. Callers reach helper `0x00747360`, whose
+SSE path uses `CVTTSD2SI`; its x87 fallback explicitly corrects the `FISTP`
+result to the same truncation-toward-zero result. JavaScript `Math.round` and
+round-to-nearest-even are both wrong. Exact boundaries include heading 20
+selecting 18-way bucket 1 and Imp heading 30 selecting 12-way bucket 1.
 
 ### Authority, geometry, and lifecycle boundary
 
@@ -10907,7 +10912,7 @@ the float32 intensity recurrence, and enrolls the wrapper as a Region light
 provider. Provider `0x005E48E0` passes `min(intensity, 1)`, radius, child
 position, and `localMultipleShadows & globalMultipleShadows` to the Region
 consumer. Air therefore always requests `multipleShadows=false`; its radius is
-`[1,1.75)`, its five renderable intensity values are the float32 recurrence
+the inclusive native lattice `[1,1.75]`, its five renderable intensity values are the float32 recurrence
 from `1` through four additions of `-0.05`, and its light center is exactly the
 same sub-`10`-unit jittered center as the contact corona. Float `50` at
 `0x00784CF8` is written to Puppet `+0xA0`, the painter sort bias; it is not a
@@ -10982,7 +10987,7 @@ native `75`-unit inner and `145`-unit outer distance constants, so no invented
    inbound Region tint. Neither geometry nor sprites own simulation,
    collision, audio, or replicated lifecycle.
 8. The contact plan exposes its native outbound light source as pure semantic
-   data: the jittered contact position, `[1,1.75)` radius, float32 intensity
+   data: the jittered contact position, inclusive `[1,1.75]` radius, float32 intensity
    recurrence, and `multipleShadows=false`. Shared Boneyard/Hub enrollment is
    an integration responsibility; the Air view must not create a second light
    model.
@@ -11107,7 +11112,7 @@ stored heading rotation. The source art points screen-up, so the browser
 rotation is `atan2(direction.y, direction.x) + pi/2`.
 
 1. Draw `BadGuys[110]` with render color `(1, 0.5, 0, A)`, where
-   `A = 0.2 + U[0,0.25)`. Scale is `(3.2 * actorScale,
+   `A = 0.2 + U(0.25)`. Scale is `(3.2 * actorScale,
    4.0 * actorScale)`. This pass does not set the renderer's additive flag.
 2. Select `BadGuys[255 + floor(ageTicks/3) % 12]`. Draw it at scale
    `(2.0 * actorScale, 2.5 * actorScale)` with white color, alpha `1`, and the
@@ -11144,13 +11149,13 @@ is:
 
 ```text
 R = random unit vector
-birthPosition = P + R * U[0, 10*S) + (0,-10) - D*10
+birthPosition = P + R * U(10*S) + (0,-10) - D*10
 velocity      = D*2
-rotation      = U[0,360) degrees
-scale         = (U[0,1) + 0.5) * 1.25       # [0.625,1.875)
-frame         = integer U[0,4)               # BadGuys[267..270]
-dBase         = (U[0,0.1) + 0.1) * 0.5      # [0.05,0.10)
-d             = dBase * 0.5                  # Enhanced Effects: [0.025,0.05)
+rotation      = U(360) degrees
+scale         = (U(1) + 0.5) * 1.25          # inclusive [0.625,1.875]
+frame         = RandomInt(4)                  # BadGuys[267..270]
+dBase         = (U(0.1) + 0.1) * 0.5         # inclusive [0.05,0.10]
+d             = dBase * 0.5                   # Enhanced Effects: [0.025,0.05]
 ```
 
 Each child tick adds `D*2` to position, adds one degree to rotation, multiplies
@@ -11159,8 +11164,8 @@ and blue. It deletes after the new red value becomes negative. The trail thus
 ages from white modulation through yellow/orange/red while shrinking. The
 retail `ENHANCED EFFECTS` global `0x00B3BCAD` halves the base decrement. The
 shipped Website-equivalent capability/default policy has Enhanced Effects on,
-so Fire uses `d` in `[0.025,0.05)` and lasts roughly 20--40 ticks. Turning the
-native setting off retains `dBase` in `[0.05,0.10)` and shortens the same
+so Fire uses `d` in inclusive `[0.025,0.05]` and lasts roughly 20--40 ticks. Turning the
+native setting off retains `dBase` in inclusive `[0.05,0.10]` and shortens the same
 particle to roughly 10--20 ticks; it does not create a different actor family.
 An older inspected performance-profile sample had that configurable alternate
 off and is not a default claim. Particle draw uses the selected registered
@@ -11194,9 +11199,10 @@ birth through the recurrence above.
 ### Light, impact, audio, and teardown
 
 The Fireball's actor-root light provider `0x005E50D0` submits position `P`,
-radius `1 + U[0,0.25)`, intensity `0.75`, and the current retail
-`MULTIPLE SHADOWS` byte `0x00B3BCAA`. The inspected stock profile and retail
-default have Multiple Shadows off. The browser Boneyard adapter must therefore
+radius `1 + U(0.25)`, intensity `0.75`, and the current retail
+`MULTIPLE SHADOWS` byte `0x00B3BCAA`. The inspected sandbox profile stores an
+explicit off override, while fresh shipped-Windows initialization defaults the
+byte on through capability `0x00B3BCAE`. The browser Boneyard adapter must
 include the Fireball among ordinary world-light candidates with deterministic
 presentation-only flicker; Hub remains a full-bright world without the
 Boneyard darkness compositor. This is outbound illumination only: neither the
@@ -11207,8 +11213,8 @@ On accepted contact, `0x005E5160` first owns gameplay/status dispatch and then
 replaces the projectile presentation with `Anim_FireBurst`, not a final
 Fireball body frame. The burst uses registered `BadGuys[251..254]`, phase
 `+0.25` per tick (four ticks per frame, about 16--17 ticks total), moves
-`y -= 1` per tick, starts at scale `U[1,1.1)`, and rotates from `U[0,360)` with
-signed angular velocity magnitude `U[0.5,1.5)` degrees/tick. It draws an outer
+`y -= 1` per tick, starts at scale `1+U(0.1)`, and rotates from `U(360)` with
+signed angular velocity magnitude `0.5+U(1)` degrees/tick. It draws an outer
 record-110 core at `5 * mainScale`, orange `(1,0.5,0)`, and
 `0.5 * (1-phase/4)` alpha, then the selected 251--254 frame additively under
 color `(1,1,0.75,1)`. Its `ZAnimLit` wrapper starts radius `1.5`, intensity
@@ -11759,15 +11765,15 @@ SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
 | Finding | Evidence | Confidence |
 | --- | --- | --- |
 | Source owner | Player provider `0x005299A0` calls sibling Region submitter `0x00580130` at player position plus 15 world units along heading, with radius `2.6`, intensity `1`, and flag `1`. Prior live manager sampling independently recovered the same record. | high |
-| Stock setting state | Retail initialization maps `Game.ComplexLighting`, `Game.ComplexShadows`, and `Game.MultipleShadows` to `0x00B3BCA8..AA`. The first two default true; the clean captured stock profile records true/true/false. | high |
+| Stock setting state | Retail initialization maps `Game.ComplexLighting`, `Game.ComplexShadows`, and `Game.MultipleShadows` to `0x00B3BCA8..AA`. Complex Lighting and Complex Shadows default true. Multiple Shadows defaults to platform capability `0x00B3BCAE`, true on shipped Windows; the captured sandbox profile explicitly records a false override. | high |
 | Shadow record builder | `0x0057F0E0` clears and fills the per-object list at `+0xAC` only from in-range sources whose shadow flag is nonzero. Its 0x24-byte records contain unit source-to-object direction, source point, base alpha factor, one-unit-behind light sample, normalized elliptical distance, projection distance, and radius. | high |
 | Multi-source rule | For multiple records, `0x0057F0E0` pairwise attenuates base alpha with `max(dot(directionA, directionB), other.distanceFraction)`. This is separate from raster-source containment. | high |
-| Projected geometry | Helper `0x00655970` tests each explicit outline edge against the source-facing normal, radially projects both endpoints by `(145 - RandomFloat()) * radius`, and emits a black quad. Object-edge alpha is the record base factor; projected-edge alpha is `((1 - behindScalar) * (1 - distanceFraction))^3`. | high |
+| Projected geometry | Shape closer `0x00655570` stores authored `(edge.dy,-edge.dx)` without winding normalization. Helper `0x00655970` accepts strict-positive `dot(normal, midpoint-source)`, radially projects both endpoints by `(145 - RandomFloat()) * radius`, and emits a black quad. Object-edge alpha is the record base factor; projected-edge alpha is `((1 - behindScalar) * (1 - distanceFraction))^3`. | high |
 | Direct caster ownership | Tree painter `0x00608AB0`, Gravestone `0x0060F260`, and Fencepost `0x00612DC0` consume class/variant outline tables through `0x00655970`. FenceGrate painter `0x00600ED0` uses the sibling projected-mesh path. | high |
 | Visible oracle | Clean-stock Boneyard capture `boneyard-re-direct-mode0-settled.png` visibly shows long source-opposed black projections from nearby tree and fence silhouettes under the forward orange player light. | high |
 
 The player source flag is always `1`, while Lantern provider `0x005E6220`
-passes the retail Multiple Shadows byte, normally false. Therefore this is not
+passes the retail Multiple Shadows byte. Therefore this is not
 a Lantern-only or orb-sprite effect: the player owns the normal stock
 cast-shadow source whenever its existing drive-state light predicate permits
 the source. The staff/orb presentation follows the same heading and is the
@@ -11783,8 +11789,9 @@ likely visual motivation for the offset, but it does not own the Region record.
   presentation state only and are not serialized, simulated, interpolated, or
   replicated. Native's sub-radius projection jitter consumes presentation RNG.
 - Geometry: source distance uses the same `x/r`, `y/(0.85*r)` ellipse and
-  145-unit cutoff as scalar lighting. Only source-facing outline edges project;
-  the result is not a fixed drop shadow or blurred oval.
+  145-unit cutoff as scalar lighting. Authored edge order and the strict
+  `dot((dy,-dx), midpoint-source)>0` predicate decide which edges project; the
+  result is not a fixed drop shadow or blurred oval.
 - Render order: in the Complex Lighting branch the Region light texture first
   multiplies the pre-main lanes. Each painter then emits its shadow quads and
   main sprite/mesh within shared world painter order. Ordinary source-alpha
@@ -11803,9 +11810,9 @@ likely visual motivation for the offset, but it does not own the Region record.
 
 - Add a shared Boneyard complex-shadow model that consumes the already
   accepted Region light candidates. Preserve the source flag independently
-  from source-containment acceptance; the ordinary player participates by
-  default while the stock-default Lantern does not.
-- Give each supported resident a stable source-facing outline. Because the
+  from source-containment acceptance; the ordinary player always participates,
+  while Lantern participation follows the active Multiple Shadows profile.
+- Give each supported resident its recovered authored outline. Because the
   web port already owns exact registered native alpha art but has not extracted
   every runtime-initialized outline coordinate, derive a simplified convex
   silhouette from that alpha at asset-build time. Keep this approximation
@@ -11825,17 +11832,17 @@ likely visual motivation for the offset, but it does not own the Region record.
 
 ### Bounded unknowns and falsifiers
 
-- The hand-authored point coordinates in the runtime-initialized native shape
-  tables are not yet extracted. Source ownership, falloff, edge test,
-  projection, alpha endpoints, setting gates, and direct caster callsites are
-  closed; web silhouette coordinates remain an explicit native-art-derived
-  approximation.
+- This historical subsection predates the later `Complex shadows v3` and
+  complete-system closure. The hand-authored Tree, Gravestone, Fencepost,
+  Monument, Building, and Goodie tables are now extracted, while grate, Gate,
+  Rails, Wall, and Scrub own class-specific programs. Alpha-derived convex
+  outlines are fallback-only for still-unknown classes.
 - Exact global presentation-RNG sequencing is neither available nor gameplay
   relevant. The browser may use stable presentation-only jitter within the
-  recovered `[144,145) * radius` interval, but must not consume simulation RNG
+  recovered inclusive `[144,145] * radius` lattice, but must not consume simulation RNG
   or make network-visible state.
 - Falsifiers are a circular blob beneath every object, projection toward the
-  source, shadows from the stock-default Lantern but not the player, shadows
+  source, shadows from an enabled-profile Lantern but not the player, shadows
   that survive source/caster removal, a protocol field for shadow state, a
   shadow layer that darkens HUD/foreground proxies, or no visible direction
   change when the player crosses a caster.
@@ -11845,7 +11852,7 @@ likely visual motivation for the offset, but it does not own the Region record.
 - `boneyard-complex-shadows.ts` now owns the shared presentation-only record
   and edge model: the native source flag and ellipse gate, source-to-caster
   direction, one-unit-behind light sample, pairwise multi-source attenuation,
-  `[144,145) * radius` projection range, facing-edge selection, and recovered
+  inclusive `[144,145] * radius` projection range, facing-edge selection, and recovered
   base/tip alpha endpoints. Its jitter is stable presentation state and never
   consumes simulation RNG.
 - `boneyard-complex-shadow-presentation.ts` submits black tapered projections
@@ -12160,8 +12167,8 @@ of the 4,723,200-byte retail `SolomonDark.exe`, SHA-256
 | Staff Cast 1 `0x0044B170` / `0x0044B370`, PlayerWizard marker callback `0x00550180` | Float32 base rate is `0.075`; neutral cast-speed helper `0x00656580` returns one and Fire alone applies double `0.75`, yielding `0.05625` progress/tick, marker tick 19, and action end tick 74. One marker dispatch occurs per occupied action; a still-held primary level queues the next action after the prior ends. Fireball skill 16 has no `mCooldown`, so this action program is the default repeat cadence. | high |
 | Fire handler `0x0053DC60` | Samples actor heading `+0x6C`, creates type `0x7D4` at Staff emitter plus `(0,+10)+20*D`, and stores immutable unit direction. No target lookup, retained target, homing, spread, or range comparison exists. After registration it segment-tests player root to spawned root with mask `0x700`; a blocked birth contacts immediately at the spawned root before any trail child exists. | high |
 | Fireball tick `0x005FDD90` | At `age % 5 == 0`, segment-tests current `P` through `P+5*(4.5*D)` before movement. Terrain failure contacts at current `P` and returns before trail birth. Otherwise common tick moves `4.5*D`, then the current-cell actor query uses radius 20/mask 6. Accepted actor contact falls through to one final cosmetic particle. No hard lifetime exists. | high |
-| Contact `0x005E5160` | Eligible actor contact owns damage/status/upgrade branches; null terrain contact skips those. Both paths call the Fireball removal vslot first, then request registry 30 `sounds\\fireballhit` at point gain with pitch `[0.9,1.1)`, and create `Anim_FireBurst` at `(P.x,P.y-10)`. | high |
-| Burst `0x00453470` / `0x00457540` / `0x004575B0` / `0x0045E2D0` | Registered `BadGuys[251..254]`; exactly 16 visible ages `0..15`, four ticks/frame; moves up one unit/tick; scale `[1,1.1)`, rotation `[0,360)`, signed angular speed magnitude `[0.5,1.5)` degrees/tick. Draw order is source-over record 110 orange core then additive impact frame tinted `(1,1,0.75)`. | high |
+| Contact `0x005E5160` | Eligible actor contact owns damage/status/upgrade branches; null terrain contact skips those. Both paths call the Fireball removal vslot first, then request registry 30 `sounds\\fireballhit` at point gain with pitch on inclusive `[0.9,1.1]`, and create `Anim_FireBurst` at `(P.x,P.y-10)`. | high |
+| Burst `0x00453470` / `0x00457540` / `0x004575B0` / `0x0045E2D0` | Registered `BadGuys[251..254]`; exactly 16 visible ages `0..15`, four ticks/frame; moves up one unit/tick; scale on inclusive `[1,1.1]`, rotation on inclusive `[0,360]`, signed angular speed magnitude on inclusive `[0.5,1.5]` degrees/tick. Draw order is source-over record 110 orange core then additive impact frame tinted `(1,1,0.75)`. | high |
 | `ZAnimLit` `0x005E03D0`, vtable `0x0079C4DC`, tick/light `0x005FD1D0` / `0x005E48E0` | Render slot `+0x0C = 0x005E01E0` directly dispatches the child, so the burst is self-lit for inbound Region tint. It independently emits a moving-position light at radius 1.5 and intensity `1-0.04*age`, Multiple Shadows false, depth bias 50. | high |
 
 The exact native hit WAV is 30,530 bytes, SHA-256
@@ -12187,8 +12194,8 @@ accepted or held-repeat Fire action
 ```
 
 The flight child still uses the shipped Enhanced Effects-on decrement
-`[0.025,0.05)` and one child per successful tick. The off branch is
-`[0.05,0.10)` with unchanged cadence. The contact burst has no Enhanced
+inclusive `[0.025,0.05]` and one child per successful tick. The off branch is
+inclusive `[0.05,0.10]` with unchanged cadence. The contact burst has no Enhanced
 Effects branch. `Fire_Goodguy`, Ember/Explode upgrades, area damage, and status
 payloads remain distinct actor/gameplay systems and are not visual substitutes.
 
@@ -12328,8 +12335,10 @@ The exact object-local Tree polygons are:
   only by main variant. Reject unsupported Tree variants rather than silently
   clamping or reconstructing them from visible alpha.
 - During resident construction, replace only a Tree main layer's alpha-derived
-  outline with the exact variant polygon at the existing object position.
-  Preserve native-alpha hulls for still-unrecovered caster classes.
+  outline with the exact variant polygon at the existing object position. This
+  was the interim Tree-pass boundary; the later complete direct-reference
+  census supersedes it and removes alpha-hull fallback from every materialized
+  caster class.
 - Add a red-first regression that pins all fifteen variant polygons, proves
   secondary variant/visibility cannot change the Tree caster, and proves an
   unsupported materialized Tree selector fails explicitly.
@@ -13051,21 +13060,36 @@ visible or audible scene effect exactly once.
 #### Cadence-safe Mage lightning and player death burst
 
 The residual presentation audit found two fixed-tick edges that a five-tick
-snapshot interval can skip even though their authoritative clocks are correct:
+snapshot interval can skip even though their authoritative clocks are correct.
+The first interpretation of the Mage edge was materially wrong and is
+superseded here:
 
-- A `FLAG_CASTLIGHTNING` Mage creates its direct-damage edge at the recovered
-  cast marker and owns a four-tick bounded attached-effect sample. BadGuys
-  records `381` and `382` are the registered lightning source and target art.
-  Keeping those records only in an actor snapshot is insufficient: for one of
-  the five possible marker phases, the next default snapshot arrives after the
-  four-tick window has closed. The attack marker must therefore also emit one
-  immutable, run-scoped `mage-lightning` semantic event containing the actor,
-  target player, source position, target position, event ID, and tick. The
-  client event cursor remains the replay authority: welcome seeds past the
-  retained history, repeated snapshots cannot replay an ID, and a run change
-  resets the cursor. The renderer starts the same four-tick additive sample on
-  first delivery; it does not lengthen or reconstruct the authoritative actor
-  effect.
+- A `FLAG_CASTLIGHTNING` Mage does not create one four-tick `381/382` sample.
+  Dispatch writes `+0x280 = trunc((100*0.5)/attackSpeed)`, which is 50 ticks at
+  the default attack-speed scalar. `Mage::Tick 0x00490860` invokes the common
+  Air factory `0x00531640` once on every active tick, then decrements the
+  counter. Each birth is therefore a distinct two-tick LightningBolt with its
+  own one-tick source glow, independent ribbon/branch buffers, and one age-zero
+  path-MiscLight tail. BadGuys `381/382` belong to GuidedMissile and are never
+  Mage-lightning art.
+- The factory source is attachment zero of the current Mage body record,
+  transformed at the actor root, then shifted `y-5`. The midpoint is exactly
+  `(mageRoot+targetBase)/2`; it deliberately ignores the source attachment and
+  endpoint jitter. The body endpoint receives an independent radial
+  `U(10)` displacement. A second independent radial `U(15)` displacement
+  owns the corona. A clear actor hit attaches that corona to the live target,
+  uses scale `0.5+U(0.25)`, and fades by `0.4*attackSpeed`; a blocked/world
+  endpoint stores an absolute corona point, uses scale `1+U(0.25)`, and fades
+  by `0.2*attackSpeed`. Neither Mage contact path has a `ZAnimLit` wrapper or
+  outbound contact light.
+- The authoritative store must retain the channel countdown and every semantic
+  pulse needed by the body/contact lifetimes. The 20 Hz snapshot stream must
+  carry the recent pulse ledger, while the delayed presentation timeline
+  admits each pulse only when its 100 Hz birth tick is reached. Reconstructing
+  one sample from `actionProgress`, stretching a pulse to the snapshot interval,
+  or replaying a future pulse early is invalid. Pulse payloads own source,
+  midpoint, independently jittered endpoint, world or target-attached contact,
+  birth tick, and semantic seed.
 - `PlayerWizard::Tick` / `FUN_00533520` selects corpse frame three and creates
   the stock additive death burst at death tick `159`. Static inspection shows
   finite `Anim_FadeMoveAdditive_Perspective` children using the BadGuys inline
@@ -13103,9 +13127,11 @@ The named browser approximation for the open death-burst distribution is
 exact BadGuys entry `10`, additive, lasting twenty presentation ticks, with
 stable per-player/death-epoch phase, bounded radial speed, scale, and fade.
 Those visual constants are not retail claims. The acceptance contract covers
-all five default snapshot onset phases, strict protocol decode, once-only
-client delivery, late-join/no-replay, duplicate suppression, run reset, exact
-records `10/381/382`, and finite teardown.
+all five default snapshot onset phases, strict protocol decode, every 100 Hz
+Mage pulse without duplication or preplay, late-join reconstruction, run reset,
+exact Mage Air-family records `44`, `110`, `375/376`, and `1836..1839`, exact
+player-death record `10`, and finite teardown. GuidedMissile retains ownership
+of `381/382`.
 
 #### Imp split depth and native live-cap correction
 
@@ -13206,8 +13232,8 @@ records resident before the first projectile appears.
 - The complete currently reachable Website set is: fire-arrow effect record 2;
   normal/fire Arrow 255..266; poison Arrow 271..282; Firebolt 251..266;
   GuidedMissile 110..112; DemonBomb 267..270; and PoisonPool DeadHawg 46..77.
-  GuidedMissile's native 381..382 sibling range is already selected for the
-  recovered Mage lightning presentation.
+  GuidedMissile's native 381..382 sibling range remains GuidedMissile-owned;
+  it must not be borrowed by Mage lightning.
 
 Nearby presentation findings remain outside this selection-only repair. The
 current Firebolt flight plan spans 251..266 even though stock separates impact
@@ -14105,7 +14131,7 @@ The existing dual ribbon, QuickSpline, and contact corona are only part of the
 normal Lightning factory. Each call to tessellator `0x00534510` independently
 gates one flare branch with `RandomInt(2)` at `0x00534A11`. A successful branch
 appends four vertices and six indices into that same layer mesh and therefore
-inherits its additive state, tint, and alpha. It attaches at `U[0,2)` spline
+inherits its additive state, tint, and alpha. It attaches at `U(2)` spline
 parameter and uses BadGuys records 375/376:
 
 | geometry record | cropped image | native local quad |
@@ -14113,11 +14139,11 @@ parameter and uses BadGuys records 375/376:
 | 375 | `39 x 73`, logical `90 x 146`, origin `(-18.5,-27.5)` | `(-38,-64),(1,-64),(-38,9),(1,9)` |
 | 376 | `40 x 185`, logical `96 x 372`, origin `(-20,-77.5)` | `(-40,-170),(0,-170),(-40,15),(0,15)` |
 
-Scale is `0.25+U[0,0.5)`, except `RandomInt(30)==1` forces one. X mirroring,
+Scale is `0.25+U(0.5)`, except `RandomInt(30)==1` forces one. X mirroring,
 geometry choice, and texture/UV choice are independent, so all four 375/376
 geometry-image pairings occur. Rotation derives from the selected geometry's
 first coordinate pair with the second component negated, normalized to
-degrees, then adds `U[0,45)`. The branch translates to the exact QuickSpline
+degrees, then adds `U(45)`. The branch translates to the exact QuickSpline
 point. The Website already ships both cropped PNGs but previously never loaded
 them for Air.
 
@@ -14141,8 +14167,8 @@ straight control legs, independently of the five-age contact `ZAnimLit`:
   once by each leg;
 - emit only samples whose distance from the original source is at least `220`
   (`distanceSquared >= 48400`);
-- publish at `(x,y+35)`, radius `0.75+U[0,0.25)`, and one shared factory-wide
-  intensity `0.25+U[0,0.75)`; normal player casts use that full intensity;
+- publish at `(x,y+35)`, radius `0.75+U(0.25)`, and one shared factory-wide
+  intensity `0.25+U(0.75)`; normal player casts use that full intensity;
 - use Enhanced Effects, shipped On, as the directional-shadow flag. It is not
   the global Multiple Shadows option; and
 - register the MiscLights once at transient age zero. Contact light continues
@@ -14156,6 +14182,40 @@ can wrongly suppress a later flag-zero Lantern/contact source. Contact itself
 has local Multiple Shadows false, so it creates no directional record, but all
 accepted sources contribute to every directional record's `behindScalar` and
 can shorten or remove the path-light shadow tails.
+
+### Fixed-tick primary transient admission across sparse snapshots
+
+The residual Air-light ordering audit exposed a shared presentation-clock
+defect, not an Air-only renderer defect. The authority creates retained primary
+transients at 100 Hz, while a normal 20 Hz pair at ticks `100` and `105`
+contains five intervening birth cohorts. Holding the older transient array
+until blend one freezes its members for five display ticks and then admits all
+new Water/Fire members as one batch. For Air this also replays one old
+age-zero path-MiscLight batch across multiple Region ticks while skipping the
+intervening factory births.
+
+Every fixed-lifetime transient must instead be merged from both bracketing
+snapshots by semantic id, admitted at its owned fixed tick, and aged from the
+fractional presentation target tick. The age-zero tick is explicit for Air,
+Earth impact, and Ether impact. It is exactly reconstructible for retained
+Fire particle, Fire impact, and Water snapshots as
+`snapshotTick-ageTicks`; Water is the sole first-visible-age-one family, so its
+actual admission tick is that reconstructed age-zero tick plus one. Admission
+is `displayAge >= firstVisibleAge`, retirement is
+`displayAge >= lifetimeTicks`, and stable painter order is birth tick then id.
+Air exposes `floor(displayAge)` so its age-zero Misc queue exists for exactly
+one 100 Hz interval; Water's native recurrence already floors completed
+updates. Fire particle/impact motion and Earth impact fragment motion retain
+their intentional fractional presentation age between fixed states, while
+Ether's renderer performs its already recovered completed-update flooring.
+
+`earth-called-rock` is deliberately outside that merge rule. Its lifetime and
+mutable absolute pose depend on the parent Boulder, and a later snapshot
+cannot reverse its current position/height/fall state into the missing birth
+pose or recover its exact early removal tick. Matching CalledRock identities
+continue to interpolate authoritative absolute state; closing their skipped
+birth edge requires a retained semantic birth seed/history, not a guessed
+fixed lifetime or a `birthTick` alone.
 
 ### Complex shadows v3: authored normals, real gradient meshes, and fence bars
 
@@ -14378,7 +14438,7 @@ ZAnimLit owns radius `0.75`, intensity `1.0` with float32 delta `-0.05` applied
 in the same birth tick, local directional-shadow flag false, and painter bias
 `100` (not light radius). First drawable light intensity is `0.95`; the last
 is about `0.05`. Registry 58 `magicmissilehit` uses pitch
-`f32(1+U[0,0.1))`. Flight and contact child renderers both install their own
+`f32(1+U(0.1))`. Flight and contact child renderers both install their own
 colors and therefore expose no Region-light tint sample.
 
 ### Integrated implementation receipt and remaining authority boundary
@@ -15780,3 +15840,401 @@ early and settled reveal frames, show BadGuys-73 particles at the player,
 hold an enemy/spell sample unchanged and invisible during the picker, reject
 selection before 0.4 seconds, accept it afterward, and restore the held world
 without page, console, or HTTP errors.
+
+## 2026-08-15 — Complete Region lighting, shadow ownership, and performance closure
+
+### Reported symptom and preserved failure
+
+After the first exact-outline shadow pass, the browser became substantially
+slower and still disagreed with retail around fence silhouettes, shadow depth,
+and spell illumination. The unchanged current renderer was measured against
+the parent of the shadow integration in isolated worktrees. In the cleaner
+deterministic generated-scene samples, current median direct render time was
+`10.5 ms` versus `4.3 ms` before the integration, about `2.3x`, even though the
+current frame emitted fewer quads (`50` versus `59`). System-wide rAF and
+LongTask samples were heavily contaminated by concurrent host load and are not
+used as the causal discriminator; final acceptance requires a quieter A/B/A
+run with p50, p95, p99, maximum, long-task count/total/max, and heap.
+
+The causal ownership mismatch is direct. Every frame, for every resident
+caster, `BoneyardComplexShadowPresentation` destroyed all `FillGradient`
+objects, cleared and retessellated `Graphics`, and created a fresh canvas-backed
+gradient texture for each projected edge. It also retained one shadow display
+root for every static caster, including invisible residents. Retail owns no
+per-edge texture and no independently retained shadow actor. A second mismatch
+made the raster light field more expensive: the browser allocated a full-DPR
+viewport RenderTexture, while retail sizes a square target through
+`Game.LightQuality`, `0.25f` on the shipped enhanced path.
+
+### Binary identity and evidence boundary
+
+All static claims below come from read-only analysis of retail
+`SolomonDark.exe`, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+using isolated Ghidra 12.0.3 replicas and raw PE instruction checks. The
+complete address/formula/source chart is the Mod Loader ledger
+`docs/reverse-engineering/native-lighting-and-shadow-system.md`; this Website
+entry records the port contract and supersedes the older assumptions that
+Multiple Shadows shipped off, generic edges were source-facing, alpha-hull
+shapes were authoritative, or shadow roots belonged at `ownerDepth-0.001`.
+
+### Four observable lanes
+
+Native Arena lighting is one manager with four separate products:
+
+1. Arena walks persistent provider owners through vslot `+0x30` in provider-list
+   order.
+2. Fixed-tick actions/effects append one-tick `MiscLight` records through
+   `0x0044F4B0`; Arena replays this lane after all providers.
+3. Accepted sources stamp DeadHawg record 18 into one quality-scaled raster
+   target. `0x0057D670` composites it with `ZERO,SRCCOLOR`, so the pre-main
+   framebuffer is multiplied by the light texture.
+4. The same accepted records enter a 150-unit spatial grid. Main painters query
+   a maximum analytic scalar for tint; true-flag sources additionally produce
+   object-owned directional records through `0x0057F0E0`.
+
+The lanes cannot be collapsed. A false-flag source can be suppressed by an
+earlier accepted source, true-flag sources bypass containment, and a false-flag
+source that survives still affects another record's one-unit-behind scalar and
+can shorten its shadow tail.
+
+Provider order is one authoritative manager order, not an ordering by protocol
+array or source family. `Region::Tick 0x0063EFC0` clears the pointer count, then
+walks the stable `+0x310` actor manager (`0x0063F127..0x0063F139`) before the
+`+0x8B70` transient manager (`0x0063F162..0x0063F168`). Each actor tick appends
+its provider pointer, including intentional duplicate Archer/Mage copies. Arena
+then consumes `+0x8D80` index zero upward. Initial Boneyard player slots register
+in slot order; the scripted Lantern follows Solomon_Dig; later actors and
+projectiles retain their manager insertion order. A reconnect appends at the
+tail, while cell rebind does not reorder the actor manager.
+
+Wave creation is a separate pre-manager edge: Arena ticks TimeLine at
+`0x0046E641..0x0046E646`, its Spawner manager at
+`0x0046E483..0x0046E493`, and the Spawner registers the enemy through
+`0x0046D313..0x0046D31C -> 0x0063F6D0` before Region begins the actor-manager
+walk. Player spell births then occur at their earlier player slots; projectiles
+created by later enemy actors append afterward. The web authority therefore
+persists `{managerLane,registrationOrdinal}` and defers same-tick enemy
+projectile tickets until earlier player spell births have claimed their native
+ordinal. Renderer category buckets such as players-then-enemies-then-spells are
+not evidence-equivalent.
+
+For the currently modeled Misc owners, player and Mage Air factories append
+synchronously from those same actor ticks. Their path-light batches are merged
+by creator actor registration, then birth tick and effect ID, and only then
+replayed after the complete provider batch. No wire `miscAppendOrdinal` is
+needed until a modeled owner can issue multiple distinct Misc-producing calls
+inside one tick; dormant Burn/ElectricBurn/EtherBurn will require that extension.
+
+### Settings and target quality
+
+Initializer `0x005BAB60` derives platform capability `0x00B3BCAE`; shipped
+Windows sets it to one. Missing-key defaults are therefore:
+
+| Setting | Global | Fresh shipped-Windows default |
+| --- | ---: | --- |
+| Complex Lighting | `0x00B3BCA8` | true |
+| Complex Shadows | `0x00B3BCA9` | true |
+| Multiple Shadows | `0x00B3BCAA` | true through the capability byte |
+| FastCPU / Enhanced Effects | `0x00B3BCAD` | true through the capability byte |
+| Light Quality | `0x00B3BCA4` | `0.25f`; low-capability default is float32 `0.05999999865889549` |
+
+The preserved sandbox settings are an override profile, not a default oracle:
+they explicitly store Multiple Shadows false, FastCPU false, and Light Quality
+`0.060000`. Browser receipts and policy must name which profile they compare.
+
+`Arena::Create 0x00470A90 -> 0x0057DF20` makes the light target square with
+side `trunc(max(logicalWidth,logicalHeight)*LightQuality)`. The web mapping is a
+logical square covering the viewport with RenderTexture resolution
+`deviceResolution*0.25`; source sprite scale remains `radius*cameraZoom`
+because the target transform, not the glyph, supplies quality.
+
+### Submission, falloff, and source families
+
+Generic submitter `0x0057FE40` consumes source point, raster/query point,
+radius, intensity, and a directional/containment-bypass flag. A false-flag
+candidate is suppressed only when a prior accepted record has no lower
+intensity, no smaller radius, and lies strictly inside the radius-difference
+circle scaled by 145. Ordinary tint query `0x0057F980` takes the maximum source
+contribution with plateau 75, outer radius 145, and vertical scale 0.85.
+
+The static census closes all compiled provider families rather than only those
+currently materialized by Website: player; DemonSkull; Skeleton, Archer, and
+Mage; Imp variants; Wraith; Demon; Coffin; DireFaculty; Heartmonger; Portal;
+GameNPC; ZAnimLit; missile families; Fireball; Boulder/Hailstones; Ember;
+Arrow/Firebolt/DarkFireball/Silk; Lantern; Meteor; fire families; GroundSpark;
+Shockwave/FreezeWave; Leviathan; EtherBolt/UnholySpit; Golem; MagicTrap; Bonus;
+DemonBomb; weather; EtherDrain; Comet; and OffscreenMagic. The separate
+MiscLight census closes DemonSkull MouthBeam, UltraBanish, three lightning
+factories, MagicCircle, EyeLaser, ElectricBurn, Burn, and EtherBurn. Dormant
+families remain ledger-only until their authoritative actors exist.
+
+Currently modeled formulas remain exact. Player intensity is one, its true
+flag bypasses containment, and its source is 15 units along heading. Its
+analytic radius is `(1+overlayPhase)*2.5999999046325684` plus the active
+local barrier presentation's 180-tick level-up sine pulse, while its
+independent raster scale is `2.5999999046325684-U(0.2)`. The host simulation
+does not advance or replicate a second level-up clock while the multiplayer
+barrier is frozen, and remote players never receive the browser-local pulse.
+Lantern radius is `0.65`, intensity
+`0.55+U(0.2)`, and its flag is Multiple Shadows. Fireball radius is
+`1+U(0.25)` with intensity `0.75`; ZAnimLit wrappers use their owned fields.
+Air factory path lights remain a Misc tail, are enrolled at transient age zero
+only, and use the exact two-leg 100-unit sampler, inclusive 220-unit
+source-distance gate, `(0,+35)` offset, radius `0.75+U(0.25)`, one shared
+intensity `0.25+U(0.75)`, and Enhanced Effects as their true flag.
+
+The modeled enemy-projectile union is also exhaustively dispositioned. Fire
+Arrow and Firebolt use the transient-provider lane with radius
+`0.5+U(0.25)`, intensity `0.85`, and false flag; normal/poison Arrow emit no
+source. Cold/poison Guided Missile uses the actor-provider lane with radius
+`0.75+U(0.1)`, intensity `0.75`, and Multiple Shadows. Demon Bomb is an
+actor provider with radius `0.6`, intensity `1-U(0.25)`, and false flag.
+Poison Pool's provider slot is a native no-op. Actor-lane candidates must be
+collected before transient-lane candidates in their replicated manager
+registration order; presentation RNG samples by display frame and stable
+projectile ID, not simulation age.
+
+The modeled enemy families are also an exhaustive source union, and their
+mutable light fields belong to simulation authority. Skeleton, Archer, Mage,
+Imp, Wraith, Demon, and Coffin have native providers; Zombie has none. Exact
+glow (`+0x244/+0x230`), Archer/Mage charge (`+0x24C`), and the post-gate copy
+count must be stepped in the enemy store and replicated. Spawn-age or visible
+pose reconstruction fails Archer pose-9 resets, Mage dispatch/lightning writes,
+burning Mage's double update/copy, and mid-run joins. Burning Skeleton/Archer/
+Wraith add `0.05` per active tick; burning Mage adds two clamped `0.05` steps;
+Imp adds `0.01`. Archer/Mage charged radius is
+`charge*(0.5+S(0.1))`, Imp radius is `0.25+S(0.1)`, and Demon radius is
+`1.5+S(0.25)`. Coffin emits only in opening, transition-delay, or open state.
+The static `burning-fire` role is family-owned presentation and does not imply
+the separate dormant Mod_Burn MiscLight. Mod_ElectricBurn, Mod_Burn, and
+Mod_EtherBurn remain catalogued but are not current snapshot members.
+
+Other modeled members are explicitly negative. The `banish`, `bouncer`,
+`fade`, `move-fade`, `sprite-array`, and `unbind` death-effect union emits no
+outbound Region source; Bouncer's black copy is class-local flat art.
+`Anim_UltraBanish` is a distinct dormant MiscLight, not Website `banish`.
+`Solomon_Dig` emits no light, while its separate Lantern does. Generic GameNPC
+has a native provider but is not a current snapshot member. The player
+tick-159 death burst also emits no source.
+
+The accepted-source list also retains the native distinction between world
+source, camera-relative query, analytic radius, and raster scale. Arena vslot
+`+0xF4 -> 0x004620D0` computes
+`query=source-(Arena[+0x8BCC],Arena[+0x8BD0])`. Before containment,
+`0x0057FE40/0x00580130` scale query and `145*analyticRadius` by
+`float32(LightQuality*0.8)` and reject circles that do not strictly intersect
+manager rectangle `(0,0,targetSide,targetSide+LightQuality*350)`. This is a
+provider-stage cull, so it applies independently of resident visibility and to
+true-flag sources as well.
+
+PlayerWizard's `0x00580130` path is the one modeled source whose raster scale
+is not its analytic radius. The analytic lane uses
+`(1+overlayPhase)*2.5999999046325684 + sin(pi*localLevelUpFrame/180)` while the
+DeadHawg-18 stamp uses `2.5999999046325684-U(0.2)`. Here
+`localLevelUpFrame` is owned by the browser-local, barrier-keyed level-up
+presentation above; it is not a replicated host timer. The presentation
+random draw occurs before view rejection. The Website light record and raster
+field must therefore carry the two values separately; using one `radius` for
+both changes player illumination, shadow reach, and the visible glyph at once.
+
+The provider's render-time gate is also authoritative: submit when native
+animation drive `+0x160==0` or the actor is the process-local player
+(`+0x5C==0`). The local exemption is per browser and must use `localPlayerId`,
+never the authority host ID. Remote casting, dying, and spectating actors are
+suppressed; the local actor remains eligible in those drive states. Overlay
+phase is fixed-tick state, not a render-age reconstruction: native cast modes
+reset it to `0.15`, `0.25`, or the dormant sibling value `0.45`, and every tick
+stores `float32(phase*0.8999999761581421)`. That overlay phase and provider
+registration survive snapshot, protocol, resync, and the presentation timeline
+discretely. The separate 180-tick threshold effect is keyed to the local
+barrier presentation so it continues while host simulation is frozen and
+cannot replay after release or leak onto a remote actor.
+
+Here `U(a)` is not a half-open JavaScript unit sample. Native RNG construction
+`0x00401110` sets denominator state to `100000`; `RandomFloat 0x00401310`
+draws `RandomInt(100001)`, stores the integer as float32, divides by 100000 and
+stores float32, multiplies by float32 `a`, and stores float32 again. Its domain
+therefore includes both zero and the exact maximum on a 100,001-point lattice.
+Signed `S(a)` consumes an independent `RandomInt(2)` sign draw after the
+magnitude. `RandomInt 0x00401170` reduces the generator word through the next
+power-of-two mask and then modulo, so Coffin's `I(9)` is the biased native
+integer reduction over `0..8`, never a scaled float.
+
+The browser cannot reproduce stock's one process-global draw identity without
+replicating every intervening native consumer. It instead hashes stable
+semantic owner/frame inputs into a 32-bit word, then applies the exact native
+mask/shift/reduction, inclusive float lattice, signed draw arity, and float32
+store schedule. This is a bounded sample-identity substitution, not a domain
+approximation. At the manager ABI boundary, source coordinates, analytic
+radius, intensity, and optional raster scale are normalized to float32 once;
+the normalized record is then used consistently by viewport rejection,
+containment, raster stamping, grid coverage, scalar queries, and shadows.
+
+Mage lightning is an Air-factory producer, not a `381/382` sprite effect.
+Default dispatch owns a 50-tick channel and emits one factory birth per fixed
+tick. Each pulse contributes its persistent body/source painters and its own
+age-zero Air path-MiscLight tail; its contact corona is direct/self-lit and
+never a ZAnimLit provider. Consequently provider collection must place the
+Mage actor's ordinary/charged provider copies in actor-manager order, collect
+all other persistent provider owners, and append every Mage/Air path source in
+the Misc tail only afterward. Grouping by convenient snapshot arrays or placing
+path lights adjacent to their actor changes asymmetric false-source
+suppression and is observable.
+
+The append order is now instruction-closed. `Region::Tick 0x0063EFC0` clears
+the MiscLight count at `0x0063F078`, then ticks the actor manager at
+`0x0063F127..0x0063F139` before the transient/ZAnim manager at
+`0x0063F162..0x0063F168`. `ObjectManager::Tick 0x004022A0` walks its active
+pointers in stored order and rereads the live count at `0x0040234B`; add
+`0x00402720 -> 0x004013C0 -> 0x004013E0` appends, while remove
+`0x00402450 -> 0x00402770` shifts left without reordering survivors. Player
+and Mage Air factories therefore append their complete path-light batches
+synchronously at the position of their creator in that one actor traversal.
+The repeated midpoint from the two control legs remains an intentional pair
+of adjacent records inside the batch. Arena `0x0046EC80` submits the rebuilt
+persistent provider list at `0x0046ED2B` and only then replays the Misc array
+at `0x0046EE58`; no Misc record can move beside its persistent owner.
+
+Current Website authority already has the smallest exact cross-owner key:
+player and Mage `lightRegistration.registrationOrdinal` is the monotonic proxy
+for their shared actor-manager append order, followed by factory birth tick and
+semantic id for same-owner calls. This is why player Air must not be grouped
+before Mage Air categorically: a late-joined player may follow an existing
+Mage. Same-tick wave births are also closed: Arena ticks TimeLine at
+`0x0046E641` before Region at `0x0046E68D`; Spawner reaches Region add through
+`0x0046D313..0x0046D31C`, so a newly spawned enemy is appended before that
+Region actor pass and can precede a later player-cast child. No serialized
+`miscAppendOrdinal` is required for the currently modeled Misc membership.
+
+That conclusion is deliberately bounded. Direct modifier roots
+`Mod_ElectricBurn 0x00628FE8`, `Mod_Burn 0x00629CAE`, and
+`Mod_EtherBurn 0x00629ED8` can bracket other factory calls inside one actor
+tick, so actor registration alone cannot order them when those dormant owners
+are implemented. Their future authority seam is one tick-scoped append ordinal
+per synchronous producing batch plus its deterministic local sample index,
+not a global ordinal per light sample and not a reuse of persistent-provider
+order.
+
+The target-attached corona's coordinate owner is not its painter owner.
+`PlayerWizard` constructs an embedded animation `ObjectManager` at `+0x16C`
+(`0x0052A539 -> 0x00402070`), and Mage appends the contact there at
+`0x004911B2..0x004911C4`. Arena first flushes the entire shared world painter
+queue at `0x0046FDAF`; only afterward does each player vslot `+0x24`
+(`0x0052C2A0 -> 0x0052A640`) install that target's root transform and draw the
+embedded manager at `0x0052A884`. Contact pulses retain insertion order, so a
+newer pulse paints above an older one. The Website must therefore follow the
+target position/lifetime while keeping the contact in a distinct post-main
+overlay lane. Parenting it inside the player's ordinary world-sorted root
+would incorrectly place it behind later main actors and scenery.
+
+The surrounding Arena calls close that lane rather than merely bounding it as
+"late." The foreground/proxy flush completes at `0x0046FDAA`; the immediately
+preceding late manager finishes at `0x0046FED7`; player slots `0..3` then draw
+their `+0x16C` managers through the call at `0x0046FEFE` (return
+`0x0046FF00`). Arena's `+0x8D90`, `+0x8DA4`, and optional `+0x4B4` managers
+follow, and Water Over's direct `+0x1E0` manager is last at
+`0x0046FFB7..0x0046FFBD`. The exact relative order is therefore
+`foreground/proxies < Mage target contact < post-world managers/Water Over`.
+Within the Mage lane, player-slot order wins first and each target's embedded
+manager draws oldest-to-newest. The web painter encodes that named interval as
+`foregroundZIndex + 0.25`, reserving the established `+0.5` post-world lane for
+Water Over rather than conflating the two.
+
+### Directional records, exact geometry, and Z ownership
+
+`0x0057F0E0` creates one 0x24-byte record per eligible true-flag source. It
+stores direction/source, pairwise base attenuation, scalar one unit behind the
+object, normalized elliptical distance, `(145-U(1))*radius` projection, and
+radius. Complex Shadows gates painting, not source collection.
+
+Analytic tint reaches the shared `0x0041FE50` color path and is packed through
+`0x00747360` with truncation after multiplying by 255. The web grayscale lane
+must therefore map scalar `0.5` to byte `127`, not rounded byte `128`.
+
+Generic shape closer `0x00655570` preserves authored point order and stores
+edge normal `(dy,-dx)` without polygon-winding normalization. Projector
+`0x00655970` accepts strict `dot(normal, midpoint-source)>0`. Each accepted
+edge is one four-vertex/six-index quad whose base vertices use record base alpha
+and tips use `((1-behindScalar)*(1-distanceFraction))^3`. Alpha is packed by
+truncation to eight bits and interpolated per vertex.
+
+The recovered native catalog is Tree 15, Gravestone 17, Monument 21,
+Building 4 including the concave row, Goodie subtype, Fencepost 14,
+FenceGrate, Broken grate, moving Gate, Rails, Wall, and Scrub. The currently
+materialized Website default path owns explicit programs for the authored
+object rows, intact FenceGrate, moving Gate, Rails, and Wall. Broken grate and
+Scrub remain catalogued but are absent from the shipped Website scene/model,
+so their static selector returns no invented fallback until those exact actor
+states exist. Grates use one separate tapered bar quad per bar plus their rail,
+preserving visible gaps; moving Gate geometry follows live leaf endpoints.
+Rails and Wall keep their class-specific programs rather than entering a
+convex-hull fallback.
+
+Native does not enqueue a separate shadow actor. Each caster rebuilds records,
+draws its shadow immediately before its own main art inside the same painter,
+then draws the owner. The shadow therefore has exactly the owner's painter row
+and stable tie position. The Website mapping must insert each active shadow mesh
+directly before its exact Sprite or Container at equal `zIndex`; subtracting an
+epsilon can cross unrelated fractional slots and is not stock Z ownership.
+
+### Required browser implementation and acceptance
+
+- Replace per-frame `Graphics`/`FillGradient` churn with one shared 256-entry
+  black-alpha ramp texture and pooled `MeshSimple` indexed buffers for currently
+  visible casters. UV selects the packed alpha byte; buffers grow only on
+  demand and update in place. Position/UV lanes update per frame, while index
+  topology uploads only when active quad count or retained capacity changes.
+- Materialize explicit quads for generic edges, grate bars/rail, Rails, and
+  Wall. Do not retain a display root for an inactive static caster.
+- Feed both complex-shadow projection and static painter ordering from the
+  reused visible-main-resident list, plus live moving-Gate owners. The generated
+  document has roughly 5,371 catalogued static casters; scanning or sorting all
+  of them every frame is not native painter ownership. Offscreen layers remain
+  materialized but perform no per-frame record, geometry, or sorting work.
+- Keep dynamic counters in the existing structured `__sdrBoneyardFrame`
+  receipt. Do not duplicate them into changing DOM `data-*` attributes every
+  frame; only static renderer-capability markers belong there.
+- Keep provider candidates and Misc tail separate until their native order is
+  assembled, then run asymmetric containment once.
+- Reuse a generation-tagged 150-unit light index across frames. Insert every
+  accepted source through the cells touched by its conservative
+  `145*radius` AABB; scalar and directional-record queries visit only the
+  point's current bucket and still apply the exact 0.85-elliptical predicate.
+  This preserves source order/output while removing the former
+  `casters*sources^2` hot path. Match the native finite allocation rather than
+  an infinite floor-divided map: `0x0057DB90` fixes two padding cells,
+  `0x0057DF20` allocates `ceil(float32(worldExtent/150))+4`, and
+  `0x0057D870/0x0057FC00` use
+  `trunc0(float32(float32(value)/150))+2`. Negative fractions stay in logical
+  cell zero, insertion clamps its AABB to the allocated grid, and point queries
+  beyond the padded extent return empty. Do not linearly clear retained
+  buckets.
+- Render the Region raster at native default LightQuality while retaining its
+  exact main-world multiply boundary and separate analytic tints.
+- Expose diagnostics for active shadow meshes, allocated capacity, records,
+  quads, accepted providers, and Misc-tail count.
+- Prove stable same-depth immediate-before-owner ordering for static residents
+  and moving Gate Containers; unrelated painter ordering must not change.
+- Run canonical validation, a real WebGL visual receipt containing oblique
+  player/Air light across gravestones and fences, and quiet A/B/A performance
+  measurements with p50/p95/p99/max, long tasks, and heap. The final current
+  median must remove the preserved roughly `2.3x` regression without deleting
+  native fence gaps or directional records.
+
+The performance harness must construct each authoritative snapshot before its
+render timer, warm the renderer before capturing its resource baseline, and
+count only LongTask entries whose start falls inside the measured interval.
+Otherwise host/state-construction work is mislabeled as painter cost and a
+buffered observer can report unrelated startup tasks.
+
+### Remaining bounded unknowns
+
+Exact process-global RNG interleaving for flicker and projection-distance
+samples is not recovered end to end; browser presentation uses deterministic
+semantic words with the exact native reducer, inclusive lattice, draw arity,
+and float32 boundaries. D3D9 texel-center behavior at every
+non-default LightQuality and fallback class painters used when Complex Shadows
+is disabled remain outside the current on/default WebGL target. Neither permits
+an approximation in the default geometry, lifecycle, source order, or painter
+ownership documented above.

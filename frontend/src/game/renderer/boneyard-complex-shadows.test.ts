@@ -1,20 +1,26 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { Container, Sprite, Texture } from 'pixi.js'
 
 import type { EditorDoc } from '../../editor/model.ts'
 import type { MainLayer } from '../../editor/native-render-plan.ts'
 import {
-  nativeBoneyardAlphaSilhouette,
+  NativeBoneyardShadowMeshBuffers,
   nativeBoneyardComplexShadowRecords,
   nativeBoneyardFenceGrateShadows,
+  nativeBoneyardLineShadowEdge,
   nativeBoneyardPackedShadowAlpha,
   nativeBoneyardProjectedShadowEdges,
   nativeBoneyardProjectedShadowMesh,
   nativeBoneyardRailsShadows,
+  nativeBoneyardShadowAlphaRampPixels,
+  nativeBoneyardShadowAlphaUv,
   nativeBoneyardTreeComplexShadowOutline,
   nativeBoneyardWallShadow,
   type NativeBoneyardComplexShadowCaster,
 } from './boneyard-complex-shadows.ts'
+import { NativeBoneyardLightIndex } from './boneyard-lighting.ts'
+import { BoneyardComplexShadowPresentation } from './boneyard-complex-shadow-presentation.ts'
 import {
   nativeBuildingShadowOutline,
   nativeFencepostShadowOutline,
@@ -32,6 +38,181 @@ test('packs shadow vertex alpha through the native 8-bit truncation boundary', (
   assert.equal(nativeBoneyardPackedShadowAlpha(9.459294673673612e-7), 0)
   assert.equal(nativeBoneyardPackedShadowAlpha(0.5), 127 / 255)
   assert.equal(nativeBoneyardPackedShadowAlpha(1), 1)
+})
+
+test('encodes native packed alpha in one shared 256-entry ramp', () => {
+  const pixels = nativeBoneyardShadowAlphaRampPixels()
+  assert.equal(pixels.length, 256 * 4)
+  assert.deepEqual([...pixels.slice(0, 8)], [0, 0, 0, 0, 0, 0, 0, 1])
+  assert.deepEqual([...pixels.slice(-4)], [0, 0, 0, 255])
+  assert.equal(nativeBoneyardShadowAlphaUv(0), 0.5 / 256)
+  assert.equal(nativeBoneyardShadowAlphaUv(0.5), 127.5 / 256)
+  assert.equal(nativeBoneyardShadowAlphaUv(1), 255.5 / 256)
+})
+
+test('reuses indexed shadow buffers and grows only when required', () => {
+  const first = {
+    baseAlpha: 0.8,
+    baseEnd: { x: 10, y: 0 },
+    baseStart: { x: 0, y: 0 },
+    tipAlpha: 0.2,
+    tipEnd: { x: 10, y: 20 },
+    tipStart: { x: 0, y: 20 },
+  }
+  const buffers = new NativeBoneyardShadowMeshBuffers(1)
+  buffers.write([first])
+  const retained = {
+    indices: buffers.indices,
+    positions: buffers.positions,
+    uvs: buffers.uvs,
+  }
+  assert.equal(buffers.quadCount, 1)
+  assert.equal(buffers.quadCapacity, 1)
+  assert.equal(buffers.indexRevision, 1)
+  assert.deepEqual([...buffers.indices], [0, 1, 2, 1, 3, 2])
+  assert.deepEqual([...buffers.positions], [0, 0, 10, 0, 0, 20, 10, 20])
+
+  buffers.write([first])
+  assert.equal(buffers.positions, retained.positions)
+  assert.equal(buffers.uvs, retained.uvs)
+  assert.equal(buffers.indices, retained.indices)
+  assert.equal(buffers.indexRevision, 1)
+  buffers.write([first, { ...first, baseStart: { x: 30, y: 0 } }])
+  assert.equal(buffers.quadCount, 2)
+  assert.equal(buffers.quadCapacity, 2)
+  assert.notEqual(buffers.positions, retained.positions)
+  assert.equal(buffers.indexRevision, 2)
+  const grownPositions = buffers.positions
+  buffers.write([first])
+  assert.equal(buffers.positions, grownPositions)
+  assert.equal(buffers.indexRevision, 3)
+  assert.deepEqual([...buffers.indices.slice(6)], [0, 0, 0, 0, 0, 0])
+})
+
+test('turns native rail strokes into explicit constant-alpha quads', () => {
+  const edge = nativeBoneyardLineShadowEdge({
+    alpha: 0.5,
+    end: { x: 20, y: 0 },
+    start: { x: 0, y: 0 },
+    width: 4,
+  })
+  assert.deepEqual(edge, {
+    baseAlpha: 0.5,
+    baseEnd: { x: 0, y: 2 },
+    baseStart: { x: 0, y: -2 },
+    tipAlpha: 0.5,
+    tipEnd: { x: 20, y: 2 },
+    tipStart: { x: 20, y: -2 },
+  })
+})
+
+test('pools only active meshes and places each at equal depth immediately before its owner', () => {
+  const root = new Container({ label: 'root' })
+  root.sortableChildren = true
+  const before = new Sprite(Texture.WHITE)
+  const owner = new Sprite(Texture.WHITE)
+  const offscreenOwner = new Sprite(Texture.WHITE)
+  const after = new Sprite(Texture.WHITE)
+  before.label = 'before'
+  owner.label = 'owner'
+  offscreenOwner.label = 'offscreen-owner'
+  after.label = 'after'
+  before.zIndex = 2
+  owner.zIndex = 3
+  offscreenOwner.zIndex = 3
+  after.zIndex = 4
+  root.addChild(before, offscreenOwner, owner, after)
+  const caster = {
+    id: 'grave:pool',
+    outline: [
+      { x: -1, y: -1 }, { x: 1, y: -1 },
+      { x: 1, y: 1 }, { x: -1, y: 1 },
+    ],
+    position: { x: 100, y: 0 },
+  }
+  const presentation = new BoneyardComplexShadowPresentation(root, [
+    { caster, depthOwner: owner },
+    {
+      caster: { ...caster, id: 'grave:offscreen' },
+      depthOwner: offscreenOwner,
+    },
+  ])
+  assert.equal(root.children.some(({ label }) => label.startsWith('complex-shadow:')), false)
+  const source = {
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: { x: 0, y: 0 },
+    radius: 1,
+  }
+  const first = presentation.render([source], 1, [], new Map(), [owner])
+  root.sortChildren()
+  const mesh = root.children.find(({ label }) => label === 'complex-shadow:grave:pool')
+  assert.ok(mesh)
+  assert.equal(first.activeMeshCount, 1)
+  assert.equal(first.casterCount, 1)
+  assert.equal(
+    root.children.some(({ label }) => label === 'complex-shadow:grave:offscreen'),
+    false,
+  )
+  assert.equal(first.pooledMeshCount, 0)
+  assert.equal(mesh.zIndex, owner.zIndex)
+  assert.equal(root.getChildIndex(mesh), root.getChildIndex(owner) - 1)
+
+  owner.renderable = false
+  const hidden = presentation.render([source], 2, [], new Map(), [owner])
+  assert.equal(hidden.activeMeshCount, 0)
+  assert.equal(hidden.pooledMeshCount, 1)
+  assert.equal(mesh.parent, null)
+  owner.renderable = true
+  const repeated = presentation.render([source], 3, [], new Map(), [owner])
+  assert.equal(repeated.activeMeshCount, 1)
+  assert.equal(
+    root.children.find(({ label }) => label === 'complex-shadow:grave:pool'),
+    mesh,
+  )
+  presentation.destroy()
+  root.destroy({ children: true })
+})
+
+test('keeps a moving Gate shadow immediately before its Container owner after sorting', () => {
+  const root = new Container({ label: 'root' })
+  root.sortableChildren = true
+  const before = new Sprite(Texture.WHITE)
+  const owner = new Container({ label: 'gate-owner' })
+  const sameDepthAfter = new Sprite(Texture.WHITE)
+  before.zIndex = 4
+  owner.zIndex = 4
+  sameDepthAfter.zIndex = 4
+  root.addChild(before, owner, sameDepthAfter)
+  const presentation = new BoneyardComplexShadowPresentation(root, [])
+  const gate = {
+    fenceEid: 'gate',
+    hinge: { x: 0, y: 0 },
+    id: 'gate:0',
+    side: 0 as const,
+    tip: { x: 80, y: 0 },
+  }
+  const frame = presentation.render(
+    [{
+      castsDirectionalShadow: true,
+      intensity: 1,
+      position: { x: 40, y: -80 },
+      radius: 1,
+    }],
+    7,
+    [gate],
+    new Map([['gate:0', owner]]),
+    [],
+  )
+  root.sortChildren()
+  const shadow = root.children.find(({ label }) => label === 'complex-shadow:gate:gate:0')
+  assert.ok(shadow)
+  assert.equal(frame.zOrderMismatchCount, 0)
+  assert.equal(shadow.zIndex, owner.zIndex)
+  assert.equal(root.getChildIndex(shadow), root.getChildIndex(owner) - 1)
+  assert.ok(root.getChildIndex(owner) < root.getChildIndex(sameDepthAfter))
+  presentation.destroy()
+  root.destroy({ children: true })
 })
 
 const squareCaster: NativeBoneyardComplexShadowCaster = {
@@ -140,6 +321,39 @@ test('lets a non-directional Air contact light erase a directional shadow tail',
   assert.ok(nativeBoneyardProjectedShadowEdges(caster, records[0]!).every(
     ({ tipAlpha }) => tipAlpha === 0,
   ))
+})
+
+test('uses retained light buckets without changing global source order or behind scalar', () => {
+  const caster = { ...squareCaster, position: { x: 0, y: 0 } }
+  const accepted = [
+    {
+      intensity: 1,
+      castsDirectionalShadow: true,
+      position: { x: 1_000, y: 0 },
+      radius: 1,
+    },
+    {
+      intensity: 1,
+      castsDirectionalShadow: true,
+      position: { x: -100, y: 0 },
+      radius: 1,
+    },
+    {
+      intensity: 1,
+      castsDirectionalShadow: false,
+      position: { x: 1, y: 0 },
+      radius: 1,
+    },
+  ]
+  const index = new NativeBoneyardLightIndex({ height: 900, width: 1_600 })
+  index.rebuild(accepted, [], {
+    camera: { x: 800, y: 450, zoom: 1 },
+    viewport: { height: 900, width: 1_600 },
+  })
+  assert.deepEqual(
+    nativeBoneyardComplexShadowRecords(caster, index, 19),
+    nativeBoneyardComplexShadowRecords(caster, accepted, 19),
+  )
 })
 
 test('projects every authored-normal-visible edge away from the source', () => {
@@ -284,31 +498,6 @@ test('projects Wall endpoints once with native cubed fade and no edge filter', (
   assert.ok(Math.abs(edge.tipAlpha - 0.216) < 1e-12)
   assert.ok(edge.tipStart.y > 0)
   assert.ok(edge.tipEnd.y > 0)
-})
-
-test('derives a bounded non-rectangular convex silhouette from native alpha art', () => {
-  const width = 5
-  const height = 5
-  const pixels = new Uint8ClampedArray(width * height * 4)
-  for (const [x, y] of [[2, 0], [0, 2], [2, 2], [4, 2], [2, 4]]) {
-    pixels[(y * width + x) * 4 + 3] = 255
-  }
-  const outline = nativeBoneyardAlphaSilhouette(pixels, width, height)
-  assert.ok(outline.length > 4)
-  assert.ok(outline.length <= 16)
-  assert.deepEqual(
-    outline,
-    nativeBoneyardAlphaSilhouette(pixels, width, height),
-  )
-  assert.deepEqual(
-    {
-      maxX: Math.max(...outline.map(({ x }) => x)),
-      maxY: Math.max(...outline.map(({ y }) => y)),
-      minX: Math.min(...outline.map(({ x }) => x)),
-      minY: Math.min(...outline.map(({ y }) => y)),
-    },
-    { maxX: 5, maxY: 5, minX: 0, minY: 0 },
-  )
 })
 
 test('selects the exact native Tree complex-shadow outline by main variant', () => {
