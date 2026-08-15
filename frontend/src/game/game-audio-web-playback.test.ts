@@ -140,6 +140,9 @@ test('restarts keyed streams and stops keyed loops without touching other channe
   assert.equal(loop.loop, true)
   assert.equal(loop.playbackRate.value, 0.95)
   assert.equal(context.gains[1].gain.value, 0.25)
+  playback.setVolume('loop:spell', 0.5)
+  assert.equal(context.gains[1].gain.value, 0.5)
+  assert.equal(loop.stopCalls, 0)
 
   playback.restart('stream:voice', 'stream.wav', {
     playbackRate: 1.1,

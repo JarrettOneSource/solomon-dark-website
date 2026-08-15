@@ -35,6 +35,7 @@ const SOURCES = {
     'fireball-hit': 'fireball-hit.wav',
     'firey-death': 'firey.wav',
     flash: 'flash.wav',
+    fizzle: 'fizzle.wav',
     'ice-start': 'ice.wav',
     'imp-split': 'imp-split.wav',
     'lightning-start': 'lightning.wav',
@@ -115,6 +116,7 @@ class FakePlayback implements GameAudioPlayback {
   destroyCalls = 0
   readonly plays: PlaybackCall[] = []
   readonly restarts: PlaybackCall[] = []
+  readonly volumeUpdates: Array<[string, number]> = []
   readonly stops: string[] = []
   unlockCalls = 0
 
@@ -132,6 +134,10 @@ class FakePlayback implements GameAudioPlayback {
     options: GameAudioPlaybackOptions,
   ): void {
     this.restarts.push({ key, options, source })
+  }
+
+  setVolume(key: string, volume: number): void {
+    this.volumeUpdates.push([key, volume])
   }
 
   stop(key: string): void {
@@ -318,21 +324,38 @@ test('overlaps Sound instances and reuses restartable SoundStream channels', asy
   await flushPromises()
 })
 
-test('balances one native loop channel across independent semantic owners', async () => {
+test('owns independent native loop channels and updates gain without restarting', async () => {
   const { created, director, playback } = fixture()
   director.startLoop('lightning-loop', 'player:a')
   director.startLoop('lightning-loop', 'player:a')
   director.startLoop('lightning-loop', 'player:b')
   assert.equal(created.length, 0)
-  assert.deepEqual(playback.restarts, [{
-    key: 'loop:lightning-loop',
-    options: { loop: true, playbackRate: 1, volume: 1 },
-    source: 'lightning-loop.wav',
-  }])
+  assert.deepEqual(playback.restarts, [
+    {
+      key: 'loop:lightning-loop:player:a',
+      options: { loop: true, playbackRate: 1, volume: 1 },
+      source: 'lightning-loop.wav',
+    },
+    {
+      key: 'loop:lightning-loop:player:b',
+      options: { loop: true, playbackRate: 1, volume: 1 },
+      source: 'lightning-loop.wav',
+    },
+  ])
+
+  director.startLoop('lightning-loop', 'player:a', { volume: 0.75 })
+  assert.deepEqual(playback.volumeUpdates, [[
+    'loop:lightning-loop:player:a',
+    0.75,
+  ]])
+  assert.equal(playback.restarts.length, 2)
 
   director.stopLoop('lightning-loop', 'player:a')
-  assert.deepEqual(playback.stops, [])
+  assert.deepEqual(playback.stops, ['loop:lightning-loop:player:a'])
   director.stopLoop('lightning-loop', 'player:b')
-  assert.deepEqual(playback.stops, ['loop:lightning-loop'])
+  assert.deepEqual(playback.stops, [
+    'loop:lightning-loop:player:a',
+    'loop:lightning-loop:player:b',
+  ])
   await flushPromises()
 })

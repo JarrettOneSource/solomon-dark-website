@@ -259,7 +259,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v19 strictly round-trips projected statuses, shields, payloads, and effects', () => {
+test('protocol v20 strictly round-trips projected statuses, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -455,8 +455,8 @@ test('protocol v19 strictly round-trips projected statuses, shields, payloads, a
   )
 })
 
-test('protocol v19 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 19)
+test('protocol v20 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 20)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -547,7 +547,7 @@ test('protocol v19 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v19 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v20 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -971,6 +971,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     position: { x: 800, y: 400 },
     targetId: null,
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    underpowered: false,
     velocity: { x: 0, y: -3 },
     worldKey: 'hub:courtyard',
   }
@@ -1074,6 +1075,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
     targetId: 'scenery:grave-7',
+    underpowered: true,
     variant: 1,
     worldKey: 'hub:courtyard',
   }
@@ -1125,6 +1127,14 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: {
       nextId: 2,
       projectiles: [],
+      transients: [{ ...airBolt, ageTicks: 3 }],
+    },
+  }), /Air contact lifetime/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
       transients: [{ ...airBolt, midpoint: undefined }],
     },
   }), /midpoint/)
@@ -1144,6 +1154,39 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedMissile.type, 'server-snapshot')
   assert.equal(decodedMissile.frame.primarySpells.projectiles[0]!.damage, 4)
+  assert.equal(decodedMissile.frame.primarySpells.projectiles[0]!.kind, 'ether')
+  if (decodedMissile.frame.primarySpells.projectiles[0]!.kind !== 'ether') {
+    throw new Error('expected an Ether projectile')
+  }
+  assert.equal(decodedMissile.frame.primarySpells.projectiles[0]!.underpowered, false)
+
+  const weakFrame = decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        primaryCast: {
+          ...frame.players['player-1'].primaryCast,
+          fizzleSequence: 1,
+          underpowered: true,
+        },
+      },
+    },
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...missile, damage: 2, underpowered: true }],
+      transients: [],
+    },
+  })
+  assert.equal(weakFrame.type, 'server-snapshot')
+  assert.equal(weakFrame.frame.players['player-1'].primaryCast.fizzleSequence, 1)
+  assert.equal(weakFrame.frame.players['player-1'].primaryCast.underpowered, true)
+  assert.equal(weakFrame.frame.primarySpells.projectiles[0]!.kind, 'ether')
+  if (weakFrame.frame.primarySpells.projectiles[0]!.kind !== 'ether') {
+    throw new Error('expected an Ether projectile')
+  }
+  assert.equal(weakFrame.frame.primarySpells.projectiles[0]!.underpowered, true)
 
   const missingDamage = JSON.parse(JSON.stringify(missile))
   delete missingDamage.damage
@@ -1313,6 +1356,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',
       }],
@@ -1332,6 +1376,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        underpowered: false,
         variant: 4,
         worldKey: 'hub:courtyard',
       }],
@@ -1350,6 +1395,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionDistance: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',
       }],
@@ -1369,6 +1415,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
+        underpowered: false,
         variant: 0,
         worldKey: 'hub:courtyard',
       }],

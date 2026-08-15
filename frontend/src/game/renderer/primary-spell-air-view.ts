@@ -46,6 +46,7 @@ export class AirPrimarySpellView {
       birthTick: state.birthTick,
       ...localAirGeometry(state),
       id: state.id,
+      underpowered: state.underpowered,
     })
     this.body = construction.body?.layers.flatMap((layer) => {
       const mesh = new MeshSimple({
@@ -98,6 +99,7 @@ export class AirPrimarySpellView {
       birthTick: state.birthTick,
       ...localAirGeometry(state),
       id: state.id,
+      underpowered: state.underpowered,
     })
     this.plan = plan
     this.bodyContainer.visible = plan.body !== null

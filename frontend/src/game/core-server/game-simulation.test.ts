@@ -5,6 +5,7 @@ import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { playerCollisionEnabled } from '../core-kernels/player-combat.ts'
+import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
   acknowledgeGameSimulationOver,
   addPlayerCharacter,
@@ -329,16 +330,20 @@ test('simulation wires effective primary rank into debit and captured projectile
 
   rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
   rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
+  assert.equal(
+    getPlayerProgression(rankOne, 'caster').currentMana,
+    getPlayerProgression(rankTwo, 'caster').currentMana,
+  )
+
+  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
+    rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
+  }
   assert.ok(Math.abs(
     getPlayerProgression(rankOne, 'caster').currentMana
       - getPlayerProgression(rankTwo, 'caster').currentMana
       - 3,
   ) < 1e-12)
-
-  for (let tick = 0; tick < 19; tick += 1) {
-    rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
-    rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
-  }
   assert.equal(rankOne.primarySpells.projectiles[0]!.damage, 4)
   assert.equal(rankTwo.primarySpells.projectiles[0]!.damage, 7)
 
@@ -391,8 +396,9 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
     cast: { primary, secondary: false },
     movement: { x: 0, y: 0 },
   })
+  const initialMana = getPlayerProgression(state, 'caster').currentMana
   state = stepGameSimulationTick(state, { caster: cast(true) })
-  assert.ok(getPlayerProgression(state, 'caster').currentMana < 89)
+  assert.equal(getPlayerProgression(state, 'caster').currentMana, initialMana)
   for (let tick = 0; tick < 30; tick += 1) {
     state = stepGameSimulationTick(state, { caster: cast(true) })
     if (
@@ -404,6 +410,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const enemy = state.world.enemies.actors[0]
   assert.ok(enemy)
+  assert.ok(getPlayerProgression(state, 'caster').currentMana < initialMana)
   assert.equal(enemy.lifeState, 'dying')
   assert.ok(enemy.currentHealth <= 0)
   assert.equal(enemy.lastDamagedByPlayerId, 'caster')
@@ -464,6 +471,7 @@ test('Boneyard Fire uses kernel terrain lookahead then post-move point contact',
         ownerId: 'caster',
         phase: 'flight',
         position: { x: 50, y: 250 },
+        underpowered: false,
         velocity: { x: 4.5, y: 0 },
         worldKey: `boneyard:${loaded.runId}`,
       }],

@@ -26,6 +26,8 @@ import {
 } from './boneyard-enemy-store.ts'
 
 export type BoneyardSpellHitKind = PrimarySpellProjectileKind | 'air' | 'water'
+export const WATER_PRIMARY_ACTOR_MASK = 0x1082
+export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
 
 export interface BoneyardSpellHit {
   readonly actorId: number
@@ -153,7 +155,9 @@ export function resolveBoneyardSpellCombat(
     const contacts = emission.kind === 'air'
       ? selectedAirTargets(rows, sourceSpells, emission)
       : nativePrimaryConeTargets({
-          actorMask: 0x1082,
+          actorMask: emission.underpowered
+            ? WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK
+            : WATER_PRIMARY_ACTOR_MASK,
           aimDirection: emission.direction,
           halfAngleDegrees: 15,
           hasLineOfSight: (target) => (
@@ -251,9 +255,7 @@ function primaryTargetRows(store: BoneyardEnemyStore): readonly PrimaryTargetRow
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {
-  return projectile.kind === 'earth'
-    ? projectile.damage * projectile.charge
-    : projectile.damage
+  return projectile.damage
 }
 
 function spellHit(

@@ -890,6 +890,7 @@ class BoneyardDynamicScene {
         },
         id: effect.id,
         origin: effect.origin,
+        underpowered: effect.underpowered,
       })
       if (contactLight) lightSourceCandidates.push(contactLight)
     }
@@ -906,6 +907,7 @@ class BoneyardDynamicScene {
         id: effect.id,
         midpoint: effect.midpoint,
         origin: effect.origin,
+        weakCast: effect.underpowered,
       }))
     }
     const lightSources = nativeAcceptedBoneyardLightSources(

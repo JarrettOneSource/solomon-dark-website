@@ -116,6 +116,63 @@ test('native Air builds two independently tessellated record-44 ribbons', () => 
   assert.deepEqual(plan.endpoint, { x: 205, y: 0 })
 })
 
+test('underpowered Air keeps the source edge but owns exact weak body, contact, and light lanes', () => {
+  const normal = buildNativeAirLightningPlan({ ageTicks: 0, id: 19, ...STRAIGHT_BOLT })
+  const weak = buildNativeAirLightningPlan({
+    ageTicks: 0,
+    id: 19,
+    underpowered: true,
+    ...STRAIGHT_BOLT,
+  })
+  assert.ok(weak.body)
+  assert.deepEqual(
+    weak.body.layers.map(({ alpha, phaseOffset, tint, width }) => ({
+      alpha, phaseOffset, tint, width,
+    })),
+    [
+      { alpha: 0.5, phaseOffset: 0, tint: 0x80ffff, width: 0.75 },
+      { alpha: 0.25, phaseOffset: 15, tint: 0x00ffff, width: 0.5625 },
+    ],
+  )
+  assert.deepEqual(weak.sourceCorona, normal.sourceCorona)
+
+  const ages = Array.from({ length: 4 }, (_, ageTicks) => (
+    buildNativeAirLightningPlan({
+      ageTicks,
+      id: 19,
+      underpowered: true,
+      ...STRAIGHT_BOLT,
+    })
+  ))
+  assert.deepEqual(ages.map(({ contactCorona }) => contactCorona.alpha), [0.5, 0.3, 0.1, 0])
+  assert.deepEqual(ages.map(({ contactLight }) => contactLight?.intensity ?? null), [
+    0.5,
+    Math.fround(0.45),
+    Math.fround(Math.fround(0.45) - 0.05),
+    null,
+  ])
+  assert.equal(weak.contactLight!.radius, normal.contactLight!.radius * 0.5)
+
+  const random = () => 0.5
+  const normalPath = buildNativeAirPathLightSources({
+    birthTick: 40,
+    endpoint: { x: 650, y: 0 },
+    id: 19,
+    midpoint: { x: 350, y: 0 },
+    origin: { x: 0, y: 0 },
+  }, random)
+  const weakPath = buildNativeAirPathLightSources({
+    birthTick: 40,
+    endpoint: { x: 650, y: 0 },
+    id: 19,
+    midpoint: { x: 350, y: 0 },
+    origin: { x: 0, y: 0 },
+    weakCast: true,
+  }, random)
+  assert.ok(normalPath.length > 0)
+  assert.equal(weakPath[0]!.intensity, Math.fround(normalPath[0]!.intensity * 0.25))
+})
+
 test('native Air tessellates the authoritative off-axis target control point', () => {
   const plan = buildNativeAirLightningPlan({
     ageTicks: 0,
@@ -315,6 +372,7 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     origin: { x: 50, y: 70 },
     ownerId: 'wizard',
     targetId: null,
+    underpowered: false,
     variant: 0,
     worldKey: 'hub:courtyard',
   } satisfies PrimarySpellTransientState

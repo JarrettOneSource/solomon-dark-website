@@ -18,7 +18,11 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
-import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import {
+  resolveBoneyardSpellCombat,
+  WATER_PRIMARY_ACTOR_MASK,
+  WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK,
+} from './boneyard-spell-combat.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
 
@@ -165,7 +169,24 @@ test('Earth gathers strict charge-scaled roots once and never fractures on actor
   assert.equal(repeated.spells, first.spells)
 })
 
+test('Earth contact consumes the finalized quadratic release pool without scaling charge twice', () => {
+  const enemies = spawnEnemies([{ position: { x: 20, y: 0 }, token: 'SKELETON' }])
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({
+      charge: 0.5,
+      damage: 2.5,
+      id: 4,
+      kind: 'earth',
+    })],
+  }), [], 1, WORLD_KEY)
+
+  assert.deepEqual(result.hits.map(({ amount }) => amount), [2.5])
+  assert.equal(result.enemies.actors[0]?.currentHealth, 2.5)
+})
+
 test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () => {
+  assert.equal(WATER_PRIMARY_ACTOR_MASK, 0x1082)
+  assert.equal(WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK, 0x2)
   const enemies = spawnEnemies([
     { position: { x: 50, y: 0 }, token: 'SKELETON' },
     { position: { x: 200, y: 0 }, token: 'SKELETON' },
@@ -194,6 +215,25 @@ test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () =
   assert.equal(result.enemies.actors[1]?.currentHealth, 5, 'LOS blocks this root')
   assert.equal(result.enemies.actors[2]?.currentHealth, 5, 'strict reach equality misses')
   assert.equal(result.enemies.actors[3]?.currentHealth, 5, 'root is outside 15 degrees')
+})
+
+test('underpowered Water carries half damage through the narrow actor-mask lane', () => {
+  const enemies = spawnEnemies([{ position: { x: 50, y: 0 }, token: 'SKELETON' }])
+  const weak = emission({
+    damage: 0.0125,
+    id: 11,
+    kind: 'water',
+    underpowered: true,
+  })
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [weak],
+    1,
+    WORLD_KEY,
+  )
+  assert.deepEqual(result.hits.map(({ amount }) => amount), [0.0125])
+  assert.equal(result.enemies.actors[0]?.currentHealth, 4.9875)
 })
 
 test('Air damages only the hostile selected by its semantic target id', () => {
@@ -310,9 +350,10 @@ function projectile(options: {
         kind: 'ether',
         targetId: null,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+        underpowered: false,
       }
     case 'fire':
-      return { ...common, kind: 'fire' }
+      return { ...common, kind: 'fire', underpowered: false }
   }
 }
 
@@ -331,6 +372,7 @@ function transient(options: {
     id: options.id,
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
+    underpowered: false,
     variant: 0,
     worldKey: options.worldKey ?? WORLD_KEY,
   }
@@ -352,12 +394,14 @@ function transient(options: {
 }
 
 function emission(options: {
+  damage?: number
   id: number
   kind: PrimarySpellChannelEmission['kind']
+  underpowered?: boolean
   worldKey?: string
 }): PrimarySpellChannelEmission {
   return {
-    damage: 0.025,
+    damage: options.damage ?? 0.025,
     direction: { x: 1, y: 0 },
     id: options.id,
     kind: options.kind,
@@ -365,6 +409,7 @@ function emission(options: {
     origin: { x: -10, y: -10 },
     ownerId: 'wizard',
     queryOrigin: { x: 0, y: 0 },
+    underpowered: options.underpowered ?? false,
     worldKey: options.worldKey ?? WORLD_KEY,
   }
 }

@@ -3,6 +3,7 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import type {
   PrimarySpellFireImpactState,
   PrimarySpellFireParticleState,
+  PrimarySpellFireProjectileState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -41,10 +42,10 @@ export class FirePrimarySpellView {
   private readonly body: Sprite
   private readonly core: Sprite
   readonly kind = 'fire'
-  private state: PrimarySpellProjectileState
+  private state: PrimarySpellFireProjectileState
   private readonly textures: PrimarySpellFireTextures
 
-  constructor(state: PrimarySpellProjectileState, textures: PrimarySpellFireTextures) {
+  constructor(state: PrimarySpellFireProjectileState, textures: PrimarySpellFireTextures) {
     this.state = state
     this.textures = textures
     this.container = new Container({ label: 'fire' })

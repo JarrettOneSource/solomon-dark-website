@@ -2,6 +2,7 @@ import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
 
 export const WATER_FROST_PARTICLES_PER_TICK = 2
+export const WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK = 1
 
 const DEGREES_TO_RADIANS = Math.fround(Math.PI) / 180
 const FROST_HEADING_MULTIPLIER = 65
@@ -127,8 +128,9 @@ export function waterFrostJetObstruction(
   casterPosition: Vector2,
   id: number,
   clip: (start: Vector2, end: Vector2) => Vector2 | null,
+  underpowered = false,
 ): WaterFrostJetObstruction | null {
-  if (waterFrostJetKind(id) !== 'normal') return null
+  if (waterFrostJetKind(id, underpowered) !== 'normal') return null
   const velocity = frostVelocity(emission.direction)
   const predictionSteps = Math.fround(
     waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP + emission.jitterRadius,
@@ -171,8 +173,8 @@ export function waterFrostJetPainterLane(
 export function waterFrostJetPlan(
   state: PrimarySpellWaterTransientState,
 ): WaterFrostJetPlan {
-  const kind = waterFrostJetKind(state.id)
-  const fields = waterFrostJetFields(state.id, state.ageTicks, kind)
+  const kind = waterFrostJetKind(state.id, state.underpowered)
+  const fields = waterFrostJetFields(state.id, state.ageTicks, kind, state.underpowered)
   const heading = Math.atan2(state.direction.x, -state.direction.y)
   const motion = waterFrostJetMotion(state)
   const { position, velocity } = motion
@@ -264,11 +266,14 @@ function waterFrostJetFields(
   id: number,
   ageTicks: number,
   kind: WaterFrostJetKind,
+  underpowered: boolean,
 ): WaterFrostJetFields {
   const completedUpdates = Math.max(0, Math.floor(ageTicks))
   let lifetime = waterFrostJetInitialLifetime(id)
   let phase = 0
-  let additiveCoreAlpha = Math.fround(FROST_ADDITIVE_ALPHA)
+  let additiveCoreAlpha = Math.fround(
+    FROST_ADDITIVE_ALPHA * (underpowered ? 0.25 : 1),
+  )
   let coreScale = Math.fround(
     FROST_CORE_SCALE_BASE
       + waterFrostBoundedRandom(id, 4, FROST_CORE_SCALE_RANDOM),
@@ -281,7 +286,9 @@ function waterFrostJetFields(
   let colorRamp = kind === 'normal'
     ? Math.fround(1 + waterFrostBoundedRandom(id, 6, FROST_COLOR_RAMP_RANDOM))
     : 0
-  const opacityMultiplier = Math.fround(FROST_OPACITY_MULTIPLIER)
+  const opacityMultiplier = Math.fround(
+    FROST_OPACITY_MULTIPLIER * (underpowered ? 0.25 : 1),
+  )
   const phaseStep = kind === 'normal' ? FROST_NORMAL_PHASE_STEP : FROST_OVER_PHASE_STEP
 
   for (let tick = 0; tick < completedUpdates; tick += 1) {
@@ -306,7 +313,11 @@ function waterFrostJetFields(
   }
 }
 
-export function waterFrostJetKind(id: number): WaterFrostJetKind {
+export function waterFrostJetKind(
+  id: number,
+  underpowered = false,
+): WaterFrostJetKind {
+  if (underpowered) return 'normal'
   return (waterFrostHash(id, 0) & 3) === 1 ? 'over' : 'normal'
 }
 

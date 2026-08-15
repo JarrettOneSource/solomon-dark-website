@@ -40,7 +40,7 @@ export class EtherPrimarySpellView {
     if (!('position' in state) || state.kind !== 'ether') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
-    const plan = etherPrimaryFlightPlan(state.id, state.ageTicks)
+    const plan = etherPrimaryFlightPlan(state.id, state.ageTicks, state.underpowered)
     while (this.sprites.length < plan.draws.length) {
       const sprite = new Sprite()
       sprite.anchor.set(0.5)

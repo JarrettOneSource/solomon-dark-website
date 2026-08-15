@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { actorHeadingFromVector } from './actor-heading.ts'
 import {
   AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES,
   AIR_PRIMARY_RETAIN_DOT,
   ETHER_PRIMARY_INITIAL_TURN,
   ETHER_PRIMARY_PROBE_DISTANCE,
   ETHER_PRIMARY_TURN_FAST_STEP,
+  ETHER_PRIMARY_TURN_INPUT,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
   firstNativePrimaryPointContact,
@@ -169,6 +171,7 @@ test('Magic Missile moves on the old heading then applies native steering to the
     speed: 3,
     targetPosition: { x: 100, y: 0 },
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    turnInput: ETHER_PRIMARY_TURN_INPUT,
   })
   assert.deepEqual(advanced.position, { x: 0, y: -3 })
   assert.ok(advanced.headingDegrees > 1.8 && advanced.headingDegrees < 1.9)
@@ -178,6 +181,34 @@ test('Magic Missile moves on the old heading then applies native steering to the
   )
   assert.ok(advanced.direction.x > 0)
   assert.ok(advanced.direction.y < 0)
+})
+
+test('underpowered Magic Missile combines its 0.75 turn lane with the 0.8 speed lane', () => {
+  const full = advanceEtherPrimaryHoming({
+    headingDegrees: 0,
+    movementScalar: 1,
+    position: { x: 0, y: 0 },
+    speed: 3,
+    targetPosition: { x: 100, y: 0 },
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    turnInput: ETHER_PRIMARY_TURN_INPUT,
+  })
+  const weak = advanceEtherPrimaryHoming({
+    headingDegrees: 0,
+    movementScalar: 1,
+    position: { x: 0, y: 0 },
+    speed: Math.fround(2.4),
+    targetPosition: { x: 100, y: 0 },
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    turnInput: Math.fround(1.2),
+  })
+  assert.deepEqual(weak.position, { x: 0, y: Math.fround(-2.4) })
+  const weakDesired = actorHeadingFromVector(100, Math.fround(2.4))
+  assert.equal(
+    weak.headingDegrees,
+    Math.fround(Math.fround(1.2) * ETHER_PRIMARY_INITIAL_TURN * weakDesired),
+  )
+  assert.ok(weak.headingDegrees < full.headingDegrees)
 })
 
 test('native point contact uses trunc0 cells, strict radii, and projected slot order', () => {

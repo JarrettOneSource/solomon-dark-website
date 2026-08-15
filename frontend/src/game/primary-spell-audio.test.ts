@@ -27,6 +27,7 @@ class RecordingAudio {
   readonly sounds: GameSoundCue[] = []
   readonly soundOptions: PlaySoundOptions[] = []
   readonly starts: Array<[GameLoopCue, string]> = []
+  readonly startOptions: PlaySoundOptions[] = []
   readonly stops: Array<[GameLoopCue, string]> = []
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
@@ -34,8 +35,9 @@ class RecordingAudio {
     this.soundOptions.push(options)
   }
 
-  startLoop(cue: GameLoopCue, owner: string): void {
+  startLoop(cue: GameLoopCue, owner: string, options: PlaySoundOptions = {}): void {
     this.starts.push([cue, owner])
+    this.startOptions.push(options)
   }
 
   stopLoop(cue: GameLoopCue, owner: string): void {
@@ -119,6 +121,136 @@ test('consumes the Fire release once from its authoritative marker sequence', ()
   synchronizer.update(emitted)
   synchronizer.update(emitted)
   assert.deepEqual(audio.sounds, ['throw-fire'])
+})
+
+test('orders low-mana fizzle before both attenuated one-shot launches', () => {
+  for (const [element, cue] of [
+    ['ether', 'magic-missile'],
+    ['fire', 'throw-fire'],
+  ] as const) {
+    const state = simulation(element)
+    const initial = createGameSnapshot(state, PLAYER_ID)
+    const audio = new RecordingAudio()
+    const synchronizer = new PrimarySpellAudioSynchronizer(
+      audio as unknown as GameAudioDirector,
+      PLAYER_ID,
+      initial,
+    )
+    const emitted = {
+      ...initial,
+      players: {
+        ...initial.players,
+        [PLAYER_ID]: {
+          ...initial.players[PLAYER_ID],
+          primaryCast: {
+            ...initial.players[PLAYER_ID].primaryCast,
+            emissionSequence: 1,
+            fizzleSequence: 1,
+            underpowered: true,
+          },
+        },
+      },
+      tick: initial.tick + 1,
+    }
+    synchronizer.update(emitted)
+    assert.deepEqual(audio.sounds, ['fizzle', cue])
+    assert.deepEqual(audio.soundOptions, [
+      { playbackRate: 1, volume: 1 },
+      { volume: 0.75 },
+    ])
+  }
+})
+
+test('updates weak Air loop gain without replaying its start cue', () => {
+  let state = simulation('air')
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(state, PLAYER_ID),
+  )
+  state = step(state, true)
+  const normal = createGameSnapshot(state, PLAYER_ID)
+  synchronizer.update(normal)
+  synchronizer.update({
+    ...normal,
+    players: {
+      ...normal.players,
+      [PLAYER_ID]: {
+        ...normal.players[PLAYER_ID],
+        primaryCast: {
+          ...normal.players[PLAYER_ID].primaryCast,
+          underpowered: true,
+        },
+      },
+    },
+    tick: normal.tick + 1,
+  })
+  assert.deepEqual(audio.sounds, ['lightning-start'])
+  assert.deepEqual(audio.starts, [
+    ['lightning-loop', 'primary-player:caster'],
+    ['lightning-loop', 'primary-player:caster'],
+  ])
+  assert.deepEqual(audio.startOptions, [{ volume: 1 }, { volume: 0.75 }])
+})
+
+test('updates weak Water loop to half gain without another ice-start edge', () => {
+  let state = simulation('water')
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(state, PLAYER_ID),
+  )
+  state = step(state, true)
+  const normal = createGameSnapshot(state, PLAYER_ID)
+  synchronizer.update(normal)
+  synchronizer.update({
+    ...normal,
+    players: {
+      ...normal.players,
+      [PLAYER_ID]: {
+        ...normal.players[PLAYER_ID],
+        primaryCast: {
+          ...normal.players[PLAYER_ID].primaryCast,
+          underpowered: true,
+        },
+      },
+    },
+    tick: normal.tick + 1,
+  })
+  assert.deepEqual(audio.sounds, ['ice-start'])
+  assert.deepEqual(audio.startOptions, [{ volume: 1 }, { volume: 0.5 }])
+})
+
+test('plays Earth periodic weak fizzle at pitch and point gain one half', () => {
+  let state = simulation('earth')
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(state, PLAYER_ID),
+  )
+  state = step(state, true)
+  const held = createGameSnapshot(state, PLAYER_ID)
+  synchronizer.update(held)
+  synchronizer.update({
+    ...held,
+    players: {
+      ...held.players,
+      [PLAYER_ID]: {
+        ...held.players[PLAYER_ID],
+        primaryCast: {
+          ...held.players[PLAYER_ID].primaryCast,
+          fizzleSequence: 1,
+          underpowered: true,
+        },
+      },
+    },
+    tick: held.tick + 1,
+  })
+  assert.deepEqual(audio.sounds, ['start-boulder', 'fizzle'])
+  assert.deepEqual(audio.soundOptions[1], { playbackRate: 0.5, volume: 0.5 })
 })
 
 test('plays each semantic Fire impact once without replaying an initial snapshot', () => {

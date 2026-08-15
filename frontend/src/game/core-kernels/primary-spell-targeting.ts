@@ -74,6 +74,7 @@ export interface EtherPrimaryHomingInput {
   speed: number
   targetPosition: Vector2 | null
   turnAccumulator: number
+  turnInput: number
 }
 
 export interface EtherPrimaryHomingResult {
@@ -267,7 +268,7 @@ export function advanceEtherPrimaryHoming(
   const signedDelta = signedHeadingDelta(heading, desired)
   const turnAccumulator = Math.fround(input.turnAccumulator)
   const turn = Math.fround(
-    ETHER_PRIMARY_TURN_INPUT
+    input.turnInput
     * turnAccumulator
     * input.movementScalar
     * signedDelta,

@@ -22,12 +22,14 @@ import {
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
+  PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
   primaryCastActionEndTick,
   primaryCastEmissionTick,
   primaryCastPose,
+  nativeEarthReleaseDamage,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
@@ -210,14 +212,115 @@ function stepSpellKernel(
   }
 }
 
-test('rank-one one-shot casts debit once on acceptance and reject unaffordable presses', () => {
+test('one-shot primaries debit at emission across every low-mana boundary', () => {
+  for (const element of ['ether', 'fire'] as const) {
+    const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[element]
+    const normalDamage = element === 'ether' ? 2 : 4
+    for (const expected of [
+      { availableMana: cost + 1, spent: cost, underpowered: false },
+      { availableMana: cost, spent: cost, underpowered: true },
+      { availableMana: cost / 2, spent: cost / 2, underpowered: true },
+      { availableMana: 0, spent: 0, underpowered: true },
+    ]) {
+      let state = directSpellHarness(element)
+      let outcome = stepSpellKernel(state, true, expected.availableMana)
+      state = outcome.state
+      assert.equal(outcome.manaSpent, 0)
+      assert.equal(state.players[PLAYER_ID]!.primaryCast.castSequence, 1)
+
+      const emissionTick = primaryCastEmissionTick(element)
+      for (let tick = 0; tick < emissionTick; tick += 1) {
+        outcome = stepSpellKernel(state, true, expected.availableMana)
+        state = outcome.state
+      }
+
+      const projectile = state.spells.projectiles[0]!
+      assert.equal(outcome.manaSpent, expected.spent)
+      assert.equal(state.spells.projectiles.length, 1)
+      assert.equal(projectile.kind, element)
+      if (projectile.kind === 'earth') throw new Error('expected a one-shot projectile')
+      assert.equal(
+        projectile.damage,
+        normalDamage * (expected.underpowered ? 0.5 : 1),
+      )
+      assert.equal(
+        Math.hypot(projectile.velocity.x, projectile.velocity.y),
+        element === 'ether' && expected.underpowered
+          ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED
+          : element === 'ether' ? 3 : 4.5,
+      )
+      assert.equal(projectile.underpowered, expected.underpowered)
+      assert.equal(
+        state.players[PLAYER_ID]!.primaryCast.underpowered,
+        expected.underpowered,
+      )
+      assert.equal(
+        state.players[PLAYER_ID]!.primaryCast.fizzleSequence,
+        expected.underpowered ? 1 : 0,
+      )
+    }
+  }
+})
+
+test('sustained primaries select the same fixed branch at every mana boundary', () => {
+  for (const element of ['air', 'water', 'earth'] as const) {
+    const harness = directSpellHarness(element)
+    const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[element]
+    for (const expected of [
+      { availableMana: cost + 1, spent: cost, underpowered: false },
+      { availableMana: cost, spent: cost, underpowered: true },
+      { availableMana: cost / 2, spent: cost / 2, underpowered: true },
+      { availableMana: 0, spent: 0, underpowered: true },
+    ]) {
+      const outcome = stepSpellKernel(
+        directSpellHarness(element),
+        true,
+        expected.availableMana,
+      )
+      const player = outcome.state.players[PLAYER_ID]!
+      assert.equal(outcome.manaSpent, expected.spent)
+      assert.equal(player.primaryCast.channelActive, true)
+      assert.equal(player.primaryCast.underpowered, expected.underpowered)
+
+      if (element === 'earth') {
+        const boulder = outcome.state.spells.projectiles[0]!
+        assert.equal(boulder.kind, 'earth')
+        assert.equal(
+          boulder.damage,
+          harness.primarySkill.damageMinimum * (expected.underpowered ? 0.5 : 1),
+        )
+        assert.deepEqual(outcome.channelEmissions, [])
+        continue
+      }
+
+      assert.equal(outcome.channelEmissions.length, 1)
+      assert.equal(outcome.channelEmissions[0]!.underpowered, expected.underpowered)
+      assert.equal(
+        outcome.channelEmissions[0]!.damage,
+        harness.primarySkill.damageMinimum / 100 * (expected.underpowered ? 0.5 : 1),
+      )
+      assert.equal(
+        outcome.state.spells.transients.length,
+        element === 'water' && !expected.underpowered ? 2 : 1,
+      )
+      assert.equal(
+        outcome.state.spells.transients.every((effect) => (
+          effect.kind === element && effect.underpowered === expected.underpowered
+        )),
+        true,
+      )
+    }
+  }
+})
+
+test('rank-one one-shot casts arm before their emission-time debit', () => {
   let ether = directSpellHarness('ether')
   let outcome = stepSpellKernel(ether, true, PRIMARY_SPELL_RANK_ONE_MANA_COSTS.ether)
   ether = outcome.state
-  assert.equal(outcome.manaSpent, 6)
+  assert.equal(outcome.manaSpent, 0)
   assert.equal(ether.players[PLAYER_ID]!.primaryCast.castSequence, 1)
 
-  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+  for (let tick = 0; tick < PRIMARY_CAST_ETHER_EMISSION_TICK; tick += 1) {
     outcome = stepSpellKernel(ether, true, 0)
     ether = outcome.state
     assert.equal(outcome.manaSpent, 0)
@@ -228,26 +331,26 @@ test('rank-one one-shot casts debit once on acceptance and reject unaffordable p
   let fire = directSpellHarness('fire')
   outcome = stepSpellKernel(fire, true, PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire)
   fire = outcome.state
-  assert.equal(outcome.manaSpent, 12)
+  assert.equal(outcome.manaSpent, 0)
   assert.equal(fire.players[PLAYER_ID]!.primaryCast.castSequence, 1)
 
-  const rejected = stepSpellKernel(
+  const acceptedLowMana = stepSpellKernel(
     directSpellHarness('fire'),
     true,
     PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire - 0.001,
   )
-  assert.equal(rejected.manaSpent, 0)
-  assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
-  assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.castSequence, 0)
-  assert.equal(rejected.state.spells.projectiles.length, 0)
+  assert.equal(acceptedLowMana.manaSpent, 0)
+  assert.equal(acceptedLowMana.state.players[PLAYER_ID]!.primaryCast.actionTick, 0)
+  assert.equal(acceptedLowMana.state.players[PLAYER_ID]!.primaryCast.castSequence, 1)
 })
 
 test('rank-two spell payloads change debit and damage without rewriting a live projectile', () => {
-  let rankOne = stepSpellKernel(directSpellHarness('fire'), true, 12)
-  assert.equal(rankOne.manaSpent, 12)
+  let rankOne = stepSpellKernel(directSpellHarness('fire'), true, 13)
+  assert.equal(rankOne.manaSpent, 0)
   for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
-    rankOne = stepSpellKernel(rankOne.state, true, 0)
+    rankOne = stepSpellKernel(rankOne.state, true, 13)
   }
+  assert.equal(rankOne.manaSpent, 12)
   assert.equal(rankOne.state.spells.projectiles[0]!.damage, 4)
 
   const rankTwoStats = primarySkillRankStats('fire', 2)
@@ -261,16 +364,17 @@ test('rank-two spell payloads change debit and damage without rewriting a live p
   )
   assert.equal(advanced.state.spells.projectiles[0]!.damage, 4)
 
-  let rankTwo = stepSpellKernel(directSpellHarness('fire', 2), true, 15)
-  assert.equal(rankTwo.manaSpent, 15)
+  let rankTwo = stepSpellKernel(directSpellHarness('fire', 2), true, 16)
+  assert.equal(rankTwo.manaSpent, 0)
   for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
-    rankTwo = stepSpellKernel(rankTwo.state, true, 0)
+    rankTwo = stepSpellKernel(rankTwo.state, true, 16)
   }
+  assert.equal(rankTwo.manaSpent, 15)
   assert.equal(rankTwo.state.spells.projectiles[0]!.damage, 7)
 })
 
 test('rank-two channels carry native 100 Hz cost and damage payloads', () => {
-  const air = stepSpellKernel(directSpellHarness('air', 2), true, 0.14)
+  const air = stepSpellKernel(directSpellHarness('air', 2), true, 0.15)
   assert.equal(air.manaSpent, 0.14)
   assert.deepEqual(air.state.spells.projectiles, [])
   assert.deepEqual(air.state.players[PLAYER_ID]!.primaryCast.channelActive, true)
@@ -279,7 +383,7 @@ test('rank-two channels carry native 100 Hz cost and damage payloads', () => {
     { damage: 0.04, manaCost: 0.14 },
   ])
 
-  const water = stepSpellKernel(directSpellHarness('water', 2), true, 0.175)
+  const water = stepSpellKernel(directSpellHarness('water', 2), true, 0.18)
   assert.deepEqual(water.channelEmissions.map(({ damage, manaCost }) => ({ damage, manaCost })), [
     { damage: 0.035, manaCost: 0.175 },
   ])
@@ -287,26 +391,27 @@ test('rank-two channels carry native 100 Hz cost and damage payloads', () => {
 })
 
 test('rank-two Boulder captures base damage while charging at its per-tick cost', () => {
-  const earth = stepSpellKernel(directSpellHarness('earth', 2), true, 0.13)
+  const earth = stepSpellKernel(directSpellHarness('earth', 2), true, 0.14)
   assert.equal(earth.manaSpent, 0.13)
   assert.equal(earth.state.spells.projectiles[0]!.damage, 30)
 })
 
-test('an unaffordable held press stays rejected and cannot emit later for free', () => {
-  let state = stepSpellKernel(directSpellHarness('ether'), true, 5).state
-  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK + 10; tick += 1) {
-    const outcome = stepSpellKernel(state, true, 100)
-    assert.equal(outcome.manaSpent, 0)
+test('a partial Ether payment at the emission marker still materializes weak flight', () => {
+  let outcome = stepSpellKernel(directSpellHarness('ether'), true, 5)
+  let state = outcome.state
+  for (let tick = 0; tick < PRIMARY_CAST_ETHER_EMISSION_TICK; tick += 1) {
+    outcome = stepSpellKernel(state, true, 5)
     state = outcome.state
   }
   const player = state.players[PLAYER_ID]!
-  assert.equal(player.primaryCast.actionTick, -1)
-  assert.equal(player.primaryCast.castSequence, 0)
-  assert.equal(player.primaryCast.emissionSequence, 0)
-  assert.equal(state.spells.projectiles.length, 0)
+  assert.equal(outcome.manaSpent, 5)
+  assert.equal(player.primaryCast.castSequence, 1)
+  assert.equal(player.primaryCast.emissionSequence, 1)
+  assert.equal(state.spells.projectiles.length, 1)
+  assert.equal(state.spells.projectiles[0]!.underpowered, true)
 })
 
-test('Air and Water debit every emitted channel tick and stop at exhaustion', () => {
+test('Air and Water debit every emitted channel tick and continue weak at zero', () => {
   for (const [element, startingMana] of [
     ['air', 0.24],
     ['water', 0.25],
@@ -315,22 +420,30 @@ test('Air and Water debit every emitted channel tick and stop at exhaustion', ()
     let availableMana = startingMana
     let totalSpent = 0
     let state = directSpellHarness(element)
+    const emissions: PrimarySpellChannelEmission[] = []
 
     for (let tick = 0; tick < 3; tick += 1) {
       const outcome = stepSpellKernel(state, true, availableMana)
       state = outcome.state
       availableMana -= outcome.manaSpent
       totalSpent += outcome.manaSpent
+      emissions.push(...outcome.channelEmissions)
     }
 
     assert.equal(totalSpent, cost * 2)
-    assert.equal(state.spells.transients.length, element === 'water' ? 4 : 2)
-    assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
-    assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+    assert.equal(state.spells.transients.length, element === 'water' ? 4 : 3)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, 1)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.underpowered, true)
+    assert.deepEqual(emissions.map(({ underpowered }) => underpowered), [false, true, true])
+    assert.deepEqual(
+      emissions.map(({ damage }) => damage),
+      [0.025, 0.0125, 0.0125],
+    )
   }
 })
 
-test('Earth debits each charging tick and cancels below its release gate at exhaustion', () => {
+test('Earth keeps charging weak and repeatedly halves its release base at zero', () => {
   let availableMana = 0.24
   let totalSpent = 0
   let state = directSpellHarness('earth')
@@ -345,18 +458,37 @@ test('Earth debits each charging tick and cancels below its release gate at exha
   const heldBoulder = state.spells.projectiles[0]!
   assert.equal(totalSpent, 0.24)
   assert.equal(heldBoulder.charge, earthChargeAfter(2))
+  assert.equal(heldBoulder.damage, 5)
   assert.ok(heldBoulder.charge < PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
 
   const exhausted = stepSpellKernel(state, true, availableMana)
   state = exhausted.state
   assert.equal(exhausted.manaSpent, 0)
-  assert.equal(state.spells.projectiles.length, 0)
-  assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
-  assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+  assert.equal(state.spells.projectiles.length, 1)
+  assert.equal(state.spells.projectiles[0]!.charge, earthChargeAfter(3))
+  assert.equal(state.spells.projectiles[0]!.damage, 2.5)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, 1)
   assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 0)
 })
 
-test('Earth mana exhaustion runs an eligible release through the terrain probe', () => {
+test('Earth publishes its half-gain fizzle sequence only on weak global 50-tick edges', () => {
+  const weak = stepSpellKernel({ ...directSpellHarness('earth'), tick: 49 }, true, 0)
+  assert.equal(weak.state.tick, 50)
+  assert.equal(weak.state.players[PLAYER_ID]!.primaryCast.fizzleSequence, 1)
+  assert.equal(weak.state.spells.projectiles[0]!.damage, 5)
+
+  const normal = stepSpellKernel({ ...directSpellHarness('earth'), tick: 49 }, true, 1)
+  assert.equal(normal.state.players[PLAYER_ID]!.primaryCast.fizzleSequence, 0)
+})
+
+test('Earth release finalization uses float32 quadratic damage with its native floor and cap', () => {
+  assert.equal(nativeEarthReleaseDamage(10, 0.5), 2.5)
+  assert.equal(nativeEarthReleaseDamage(0.0001, 0.30125), 0.25)
+  assert.equal(nativeEarthReleaseDamage(10, 2), 12.5)
+})
+
+test('Earth zero mana freezes above 0.3 and release still uses the terrain probe', () => {
   const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS.earth
   let state = directSpellHarness('earth')
   do {
@@ -366,13 +498,19 @@ test('Earth mana exhaustion runs an eligible release through the terrain probe',
   const exhausted = stepSpellKernel(state, true, 0, true, () => false)
 
   assert.equal(exhausted.manaSpent, 0)
-  assert.equal(exhausted.state.spells.projectiles.length, 0)
+  assert.equal(exhausted.state.spells.projectiles.length, 1)
+  assert.equal(exhausted.state.spells.projectiles[0]!.phase, 'held')
+  assert.equal(exhausted.state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+
+  const released = stepSpellKernel(exhausted.state, false, 0, true, () => false)
+  assert.equal(released.manaSpent, 0)
+  assert.equal(released.state.spells.projectiles.length, 0)
   assert.equal(
-    exhausted.state.spells.transients.some((effect) => effect.kind === 'earth-impact'),
+    released.state.spells.transients.some((effect) => effect.kind === 'earth-impact'),
     true,
   )
-  assert.equal(exhausted.state.players[PLAYER_ID]!.primaryCast.channelActive, false)
-  assert.equal(exhausted.state.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
+  assert.equal(released.state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+  assert.equal(released.state.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
 })
 
 test('cast eligibility cancels an active channel without another debit or emission', () => {
@@ -1067,6 +1205,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
   assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
+  assert.equal(released.damage, nativeEarthReleaseDamage(10, released.charge))
   const releaseDelta = {
     x: Math.fround(released.position.x - thresholdRow.position.x),
     y: Math.fround(released.position.y - thresholdRow.position.y),

@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
+  WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   packWaterFrostTint,
   quantizeWaterFrostAlpha,
   waterFrostJetEmission,
@@ -13,7 +14,12 @@ import {
   waterFrostJetPlan,
 } from './primary-spell-water.ts'
 
-function state(id: number, ageTicks = 0, variant = 0): PrimarySpellWaterTransientState {
+function state(
+  id: number,
+  ageTicks = 0,
+  variant = 0,
+  underpowered = false,
+): PrimarySpellWaterTransientState {
   return {
     ageTicks,
     direction: { x: 0, y: -1 },
@@ -23,6 +29,7 @@ function state(id: number, ageTicks = 0, variant = 0): PrimarySpellWaterTransien
     obstructionPoint: null,
     origin: { x: 100, y: 200 },
     ownerId: 'caster',
+    underpowered,
     variant,
     worldKey: 'hub:room',
   }
@@ -41,10 +48,37 @@ function assertNear(actual: number, expected: number): void {
 
 test('pins the shipped Enhanced Effects density and native lifetime band', () => {
   assert.equal(WATER_FROST_PARTICLES_PER_TICK, 2)
+  assert.equal(WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK, 1)
   const lifetimes = Array.from({ length: 256 }, (_, index) => (
     waterFrostJetLifetimeTicks(index + 1)
   ))
   assert.deepEqual([...new Set(lifetimes)].sort(), [32, 33])
+})
+
+test('underpowered Water forces Normal construction and quarters both opacity fields', () => {
+  const overId = firstId('over')
+  const created = waterFrostJetPlan(state(overId, 0, 0, true))
+  const updated = waterFrostJetPlan(state(overId, 1, 0, true))
+  assert.equal(created.kind, 'normal')
+  assert.deepEqual(created.draws.map(({ pass }) => pass), ['core', 'additive-core'])
+  assert.equal(created.draws[1]!.alpha, Math.fround(0.75 * 0.25))
+  assert.equal(updated.draws[0]!.alpha, Math.fround(0.25 * Math.fround(0.05)))
+  assert.equal(updated.draws[1]!.alpha, Math.fround(Math.fround(0.75 * 0.25) - 0.05))
+  assert.equal(created.draws.some(({ pass }) => pass === 'glint'), false)
+
+  let clips = 0
+  const obstruction = waterFrostJetObstruction(
+    { direction: { x: 1, y: 0 }, jitterRadius: 0, origin: { x: 0, y: 0 } },
+    { x: 0, y: 0 },
+    overId,
+    () => {
+      clips += 1
+      return { x: 8, y: 0 }
+    },
+    true,
+  )
+  assert.equal(clips, 1)
+  assert.deepEqual(obstruction, { distance: 8, point: { x: 8, y: 0 } })
 })
 
 test('deterministically preserves the native 75 percent Normal / 25 percent Over split', () => {

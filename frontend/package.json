@@ -25,6 +25,7 @@
     "smoke:game:boneyard-tree-occlusion": "node tools/smoke-boneyard-tree-occlusion.mjs",
     "smoke:game:boneyard-complex-shadows": "node tools/smoke-boneyard-complex-shadows.mjs",
     "smoke:game:primary-spells": "node tools/smoke-primary-spells.mjs",
+    "smoke:game:primary-spells:low-mana": "node --experimental-strip-types tools/smoke-low-mana-primary-spells.mjs",
     "smoke:game:fullscreen": "node tools/smoke-game-fullscreen.mjs",
     "smoke:game:waves": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",
     "smoke:game:combat": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",

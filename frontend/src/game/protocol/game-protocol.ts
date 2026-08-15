@@ -30,6 +30,8 @@ import {
 } from '../core-kernels/primary-spell-water.ts'
 import {
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+  PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+  PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   primaryCastActionEndTick,
   type PrimarySpellEarthProjectileState,
@@ -114,7 +116,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 19
+export const GAME_PROTOCOL_VERSION = 20
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -680,8 +682,10 @@ function playerPrimaryCastState(
     'castSequence',
     'channelActive',
     'emissionSequence',
+    'fizzleSequence',
     'held',
     'targetId',
+    'underpowered',
   ])
   const actionTick = integer(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
@@ -706,8 +710,13 @@ function playerPrimaryCastState(
       source.emissionSequence,
       `${field}.emissionSequence`,
     ),
+    fizzleSequence: nonnegativeInteger(
+      source.fizzleSequence,
+      `${field}.fizzleSequence`,
+    ),
     held: boolean(source.held, `${field}.held`),
     targetId,
+    underpowered: boolean(source.underpowered, `${field}.underpowered`),
   }
 }
 
@@ -1546,7 +1555,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
     'ownerId', 'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? ['assemblyCharge', 'hitTargetIds', 'orientation'] : []),
-    ...(source.kind === 'ether' ? ['headingDegrees', 'targetId', 'turnAccumulator'] : []),
+    ...(source.kind === 'ether'
+      ? ['headingDegrees', 'targetId', 'turnAccumulator', 'underpowered']
+      : []),
+    ...(source.kind === 'fire' ? ['underpowered'] : []),
   ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
     throw new GameProtocolError(`${field}.phase is not supported`)
@@ -1567,10 +1579,14 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   if (phase === 'flight' && (flightTicks < 1 || flightTicks > ageTicks)) {
     throw new GameProtocolError(`${field}.flightTicks is outside the actor age`)
   }
+  const damage = nonnegativeFinite(source.damage, `${field}.damage`)
+  if ((source.kind !== 'earth' || phase === 'flight') && damage <= 0) {
+    throw new GameProtocolError(`${field}.damage must be positive in flight`)
+  }
   const projectile = {
     ageTicks,
     charge,
-    damage: positiveFinite(source.damage, `${field}.damage`),
+    damage,
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     id: positiveInteger(source.id, `${field}.id`),
@@ -1640,9 +1656,14 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),
       turnAccumulator,
+      underpowered: boolean(source.underpowered, `${field}.underpowered`),
     }
   }
-  return { ...projectile, kind: 'fire' }
+  return {
+    ...projectile,
+    kind: 'fire',
+    underpowered: boolean(source.underpowered, `${field}.underpowered`),
+  }
 }
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
@@ -1777,9 +1798,9 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     source,
     field,
     source.kind === 'water'
-      ? [...transientKeys, 'obstructionDistance', 'obstructionPoint']
+      ? [...transientKeys, 'obstructionDistance', 'obstructionPoint', 'underpowered']
       : source.kind === 'air'
-        ? [...transientKeys, 'birthTick', 'endpoint', 'midpoint', 'targetId']
+        ? [...transientKeys, 'birthTick', 'endpoint', 'midpoint', 'targetId', 'underpowered']
       : transientKeys,
   )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
@@ -1807,6 +1828,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
   if (source.kind === 'water') {
+    const underpowered = boolean(source.underpowered, `${field}.underpowered`)
     if (variant > 1) {
       throw new GameProtocolError(`${field}.variant exceeds the two-per-tick ordinal`)
     }
@@ -1824,7 +1846,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
         `${field}.obstructionPoint and obstructionDistance must be present together`,
       )
     }
-    if (waterFrostJetKind(id) === 'over' && obstructionPoint !== null) {
+    if (waterFrostJetKind(id, underpowered) === 'over' && obstructionPoint !== null) {
       throw new GameProtocolError(`${field} Over particles cannot own obstruction state`)
     }
     return {
@@ -1832,9 +1854,17 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       kind: 'water',
       obstructionDistance,
       obstructionPoint,
+      underpowered,
     }
   }
   if (source.kind === 'air') {
+    const underpowered = boolean(source.underpowered, `${field}.underpowered`)
+    const lifetimeTicks = underpowered
+      ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
+      : PRIMARY_SPELL_AIR_LIFETIME_TICKS
+    if (ageTicks >= lifetimeTicks) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Air contact lifetime`)
+    }
     return {
       ...common,
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
@@ -1844,6 +1874,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       targetId: source.targetId === null
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),
+      underpowered,
     }
   }
   return { ...common, kind: source.kind }

@@ -32,6 +32,7 @@ export type GameSoundCue =
   | 'fireball-hit'
   | 'firey-death'
   | 'flash'
+  | 'fizzle'
   | 'ice-start'
   | 'imp-split'
   | 'level-up'
@@ -135,6 +136,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x5f0,
     sourceName: 'sounds\\flash',
     sourceSha256: 'dfbee90531011a439650ee0bbf30a3c5ea9469ccd97a9979c05ba73f3db9c05c',
+  },
+  fizzle: {
+    registryOffset: 0x598,
+    sourceName: 'sounds\\fizzle',
+    sourceSha256: '938420950d859ebc00a9b1a37e548c7c2183a8504689b32aab3de3c683899e76',
   },
   'ice-start': {
     registryOffset: 0x7a8,

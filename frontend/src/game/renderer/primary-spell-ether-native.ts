@@ -43,6 +43,7 @@ export const ETHER_PRIMARY_FLIGHT_RECORDS = {
 } as const
 
 export const ETHER_PRIMARY_PHASE_DEGREES_PER_TICK = 9
+export const ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK = 7.2
 export const ETHER_PRIMARY_ROOT_OFFSET = { x: 0, y: -10 } as const
 export const ETHER_PRIMARY_IMPACT_SORT_BIAS = 100
 export const ETHER_PRIMARY_IMPACT_LIGHT_RADIUS = 0.75
@@ -50,17 +51,30 @@ export const ETHER_PRIMARY_IMPACT_LIGHT_RADIUS = 0.75
 const ETHER_PURPLE = 0xff80ff
 const WHITE = 0xffffff
 
-export function etherPrimaryPhase(projectileId: number, ageTicks: number): number {
+export function etherPrimaryPhase(
+  projectileId: number,
+  ageTicks: number,
+  underpowered = false,
+): number {
   return visualRandom(projectileId, 0, 0) * 360
-    + ageTicks * ETHER_PRIMARY_PHASE_DEGREES_PER_TICK
+    + ageTicks * (underpowered
+      ? ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK
+      : ETHER_PRIMARY_PHASE_DEGREES_PER_TICK)
 }
 
 export function etherPrimaryFlightPlan(
   projectileId: number,
   ageTicks: number,
+  underpowered = false,
 ): EtherPrimaryFlightPlan {
-  const phase = etherPrimaryPhase(projectileId, ageTicks)
-  return etherPrimaryCompositorPlan(projectileId, Math.floor(ageTicks), phase, 1, 1)
+  const phase = etherPrimaryPhase(projectileId, ageTicks, underpowered)
+  return etherPrimaryCompositorPlan(
+    projectileId,
+    Math.floor(ageTicks),
+    phase,
+    1,
+    underpowered ? 0.5 : 1,
+  )
 }
 
 export function etherPrimaryImpactFade(ageTicks: number): number {
@@ -107,7 +121,7 @@ export function etherPrimaryImpactLightSource(
   }
 }
 
-function etherPrimaryCompositorPlan(
+export function etherPrimaryCompositorPlan(
   projectileId: number,
   sampleTick: number,
   phase: number,

@@ -7,7 +7,9 @@ import {
   ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
   ETHER_PRIMARY_IMPACT_SORT_BIAS,
   ETHER_PRIMARY_PHASE_DEGREES_PER_TICK,
+  ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK,
   ETHER_PRIMARY_ROOT_OFFSET,
+  etherPrimaryCompositorPlan,
   etherPrimaryFlightPlan,
   etherPrimaryImpactFade,
   etherPrimaryImpactLightSource,
@@ -30,6 +32,23 @@ test('pins the native Magic Missile records, sizes, root, and nine-degree phase 
   assert.deepEqual(NATIVE_ELEMENT_VFX_SPRITES.spark, { count: 1, height: 40, width: 40 })
   assert.deepEqual(NATIVE_ELEMENT_VFX_SPRITES.ray, { count: 1, height: 40, width: 40 })
   closeTo(etherPrimaryPhase(41, 19) - etherPrimaryPhase(41, 18), 9)
+})
+
+test('underpowered Ether advances at 7.2 degrees and halves the complete flight compositor', () => {
+  assert.equal(ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK, 7.2)
+  closeTo(etherPrimaryPhase(41, 19, true) - etherPrimaryPhase(41, 18, true), 7.2)
+  const weak = etherPrimaryFlightPlan(41, 19, true)
+  const fullAlphaAtWeakPhase = etherPrimaryCompositorPlan(
+    41,
+    19,
+    weak.phase,
+    1,
+    1,
+  )
+  assert.deepEqual(
+    weak.draws.map(({ alpha }) => alpha),
+    fullAlphaAtWeakPhase.draws.map(({ alpha }) => Math.fround(alpha * 0.5)),
+  )
 })
 
 test('builds two complete native compositor passes in their recovered order', () => {

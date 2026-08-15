@@ -28,8 +28,10 @@ export interface PlayerPrimaryCastState {
   castSequence: number
   channelActive: boolean
   emissionSequence: number
+  fizzleSequence: number
   held: boolean
   targetId: string | null
+  underpowered: boolean
 }
 
 export interface PlayerCharacterState {
@@ -98,8 +100,10 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     castSequence: 0,
     channelActive: false,
     emissionSequence: 0,
+    fizzleSequence: 0,
     held: false,
     targetId: null,
+    underpowered: false,
   }
 }
 

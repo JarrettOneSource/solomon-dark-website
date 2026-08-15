@@ -12,6 +12,7 @@ import {
 import type { NativePrimarySkillRankStats } from './player-progression.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
+  WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
   waterFrostJetObstruction,
@@ -83,10 +84,12 @@ export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectile
   kind: 'ether'
   targetId: string | null
   turnAccumulator: number
+  underpowered: boolean
 }
 
 export interface PrimarySpellFireProjectileState extends PrimarySpellProjectileBaseState {
   kind: 'fire'
+  underpowered: boolean
 }
 
 export type PrimarySpellProjectileState =
@@ -100,6 +103,7 @@ interface PrimarySpellChannelTransientBase {
   id: number
   origin: Vector2
   ownerId: string
+  underpowered: boolean
   variant: number
   worldKey: string
 }
@@ -131,6 +135,7 @@ export interface PrimarySpellChannelEmission {
   origin: Vector2
   ownerId: string
   queryOrigin: Vector2
+  underpowered: boolean
   worldKey: string
 }
 
@@ -262,6 +267,7 @@ export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 56
 export const PRIMARY_CAST_ETHER_EMISSION_TICK = 15
 export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
+export const PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS = 3
 export const PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS = NATIVE_ETHER_IMPACT_VISIBLE_TICKS
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
@@ -279,6 +285,8 @@ export const PRIMARY_SPELL_EARTH_CALLED_ROCK_REMOVE_DISTANCE = 5
 export const PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE = Math.fround(
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE + PRIMARY_SPELL_EARTH_CHARGE_STEP,
 )
+export const PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED = Math.fround(2.4)
+export const PRIMARY_SPELL_ETHER_UNDERPOWERED_TURN_INPUT = Math.fround(1.2)
 export const PRIMARY_SPELL_TICKS_PER_SECOND = 100
 export const PRIMARY_SPELL_RANK_ONE_MANA_COSTS = {
   air: 0.12,
@@ -488,11 +496,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
-    const spendMana = (): boolean => {
-      if (availableMana < manaCost) return false
-      availableMana -= manaCost
-      manaSpent[playerId] += manaCost
-      return true
+    const debitMana = (): boolean => {
+      const spent = Math.min(Math.max(0, availableMana), manaCost)
+      availableMana = Math.max(0, availableMana - spent)
+      manaSpent[playerId] += spent
+      return availableMana <= 0
     }
     const rawHeld = input?.cast.primary === true && input.aim !== null
     const pressed = rawHeld && !previous.primaryCast.held
@@ -502,7 +510,6 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && previous.primaryCast.actionTick < 0
       && (pressed || (oneShotPrimary && previous.primaryCast.castSequence > 0))
       && authority?.eligible === true
-      && availableMana >= manaCost
     const sustainedPrimary = (
       player.config.element === 'air'
       || player.config.element === 'water'
@@ -544,13 +551,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...nextPlayer.primaryCast,
           actionTick: -1,
           channelActive: false,
+          underpowered: false,
         },
       }
       continue
     }
 
     if (acceptedCast) {
-      spendMana()
       switch (player.config.element) {
         case 'air':
         case 'water':
@@ -592,6 +599,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && previous.primaryCast.actionTick !== primaryCastEmissionTick(player.config.element)
       && (player.config.element === 'ether' || player.config.element === 'fire')
     ) {
+      const underpowered = debitMana()
       const born = createOneShotProjectile(
         nextId,
         playerId,
@@ -600,6 +608,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         authority.primarySkill,
         worldKey,
         context.spellTargets(playerId),
+        underpowered,
       )
       nextId += 1
       if (born.kind === 'fire') {
@@ -652,6 +661,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         primaryCast: {
           ...nextPlayer.primaryCast,
           emissionSequence: nextPlayer.primaryCast.emissionSequence + 1,
+          fizzleSequence: underpowered
+            ? nextPlayer.primaryCast.fizzleSequence + 1
+            : nextPlayer.primaryCast.fizzleSequence,
+          underpowered,
         },
       }
     }
@@ -663,15 +676,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
     ))
 
-    let channelExhausted = false
     if (nextPlayer.primaryCast.channelActive) {
       switch (player.config.element) {
         case 'air': {
           if (!rawHeld) break
-          if (!acceptedCast && !spendMana()) {
-            channelExhausted = true
-            break
-          }
+          const underpowered = debitMana()
           const emitter = primarySpellEmitter(nextPlayer)
           const air = createAirTransient(
             playerId,
@@ -681,7 +690,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             context,
           )
           channelEmissions.push({
-            damage: primarySpellChannelDamage(authority.primarySkill),
+            damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
             direction: { ...aimDirection },
             id: nextId,
             kind: 'air',
@@ -689,6 +698,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             origin: emitter,
             ownerId: playerId,
             queryOrigin: { ...nextPlayer.position },
+            underpowered,
             worldKey,
           })
           transients = [...transients, {
@@ -702,6 +712,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             origin: emitter,
             ownerId: playerId,
             targetId: air.targetId,
+            underpowered,
             variant: nextId % 4,
             worldKey,
           }]
@@ -710,6 +721,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             primaryCast: {
               ...nextPlayer.primaryCast,
               targetId: air.targetId,
+              underpowered,
             },
           }
           nextId += 1
@@ -717,13 +729,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         }
         case 'water': {
           if (!rawHeld) break
-          if (!acceptedCast && !spendMana()) {
-            channelExhausted = true
-            break
-          }
+          const underpowered = debitMana()
           const emitter = primarySpellEmitter(nextPlayer)
           channelEmissions.push({
-            damage: primarySpellChannelDamage(authority.primarySkill),
+            damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
             direction: { ...aimDirection },
             id: nextId,
             kind: 'water',
@@ -731,10 +740,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             origin: emitter,
             ownerId: playerId,
             queryOrigin: { ...nextPlayer.position },
+            underpowered,
             worldKey,
           })
           const emitted = Array.from(
-            { length: WATER_FROST_PARTICLES_PER_TICK },
+            {
+              length: underpowered
+                ? WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK
+                : WATER_FROST_PARTICLES_PER_TICK,
+            },
             (_, variant): PrimarySpellTransientState => {
               const id = nextId + variant
               const born = waterFrostJetEmission(
@@ -749,6 +763,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 nextPlayer.position,
                 id,
                 (start, end) => context.spellObstructionPoint(playerId, start, end),
+                underpowered,
               )
               return {
                 ageTicks: 1,
@@ -759,21 +774,22 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 obstructionPoint: obstruction?.point ?? null,
                 origin: born.origin,
                 ownerId: playerId,
+                underpowered,
                 variant,
                 worldKey,
               }
             },
           )
           transients = [...transients, ...emitted]
-          nextId += WATER_FROST_PARTICLES_PER_TICK
+          nextId += emitted.length
+          nextPlayer = {
+            ...nextPlayer,
+            primaryCast: { ...nextPlayer.primaryCast, underpowered },
+          }
           break
         }
         case 'earth': {
-          const shouldCharge = acceptedCast || rawHeld || !earthReleaseEligible
-          if (shouldCharge && !acceptedCast && !spendMana()) {
-            channelExhausted = true
-            break
-          }
+          const underpowered = debitMana()
           projectiles = projectiles.map((spell) => {
             if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
               return spell
@@ -781,7 +797,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             const emitter = primarySpellEmitter(nextPlayer)
             const charge = acceptedCast || (!rawHeld && (
               spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
-            ))
+            )) || (underpowered && spell.charge > PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
               ? spell.charge
               : Math.min(1, Math.fround(spell.charge + PRIMARY_SPELL_EARTH_CHARGE_STEP))
             const releasesThisTick = !rawHeld
@@ -792,6 +808,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 ? spell.assemblyCharge
                 : charge,
               charge,
+              damage: underpowered && spell.charge < 1
+                ? Math.fround(spell.damage * 0.5)
+                : spell.damage,
               direction: { ...aimDirection },
               orientation: releasesThisTick
                 ? spell.orientation
@@ -800,6 +819,16 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               worldKey,
             }
           })
+          nextPlayer = {
+            ...nextPlayer,
+            primaryCast: {
+              ...nextPlayer.primaryCast,
+              fizzleSequence: underpowered && context.tick % 50 === 0
+                ? nextPlayer.primaryCast.fizzleSequence + 1
+                : nextPlayer.primaryCast.fizzleSequence,
+              underpowered,
+            },
+          }
           const heldBoulder = projectiles.find((
             spell,
           ): spell is PrimarySpellEarthProjectileState => (
@@ -825,45 +854,6 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         case 'ether':
         case 'fire':
           break
-      }
-    }
-
-    if (channelExhausted) {
-      if (player.config.element === 'earth') {
-        if (earthReleaseEligible) {
-          const released = releaseHeldEarthProjectiles(
-            projectiles,
-            playerId,
-            aimDirection,
-            context.canPlaceProjectile,
-            context.tick,
-            nextId,
-          )
-          projectiles = released.projectiles
-          transients = [...transients, ...released.impacts]
-          nextId = released.nextId
-          nextPlayer = {
-            ...nextPlayer,
-            primaryCast: {
-              ...nextPlayer.primaryCast,
-              emissionSequence: nextPlayer.primaryCast.emissionSequence + 1,
-            },
-          }
-        } else {
-          projectiles = projectiles.filter((spell) => !(
-            spell.kind === 'earth'
-            && spell.ownerId === playerId
-            && spell.phase === 'held'
-          ))
-        }
-      }
-      nextPlayer = {
-        ...nextPlayer,
-        primaryCast: {
-          ...nextPlayer.primaryCast,
-          actionTick: -1,
-          channelActive: false,
-        },
       }
     }
 
@@ -901,6 +891,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           actionTick: -1,
           channelActive: false,
           targetId: null,
+          underpowered: false,
         },
       }
     }
@@ -964,6 +955,7 @@ function releaseHeldEarthProjectiles(
     }
     const releasedSpell: PrimarySpellProjectileState = {
       ...spell,
+      damage: nativeEarthReleaseDamage(spell.damage, spell.charge),
       direction: { ...aimDirection },
       flightTicks: 1,
       orientation: earthBoulderFlightOrientationStep(
@@ -1012,6 +1004,16 @@ export function primarySpellAimDirection(
   return length > 0.0001
     ? { x: dx / length, y: dy / length }
     : { x: 0, y: -1 }
+}
+
+export function nativeEarthReleaseDamage(
+  baseDamage: number,
+  charge: number,
+): number {
+  const baseCharge = Math.fround(baseDamage * charge)
+  const quadratic = Math.fround(baseCharge * charge)
+  const cap = Math.fround(baseDamage * 1.25)
+  return Math.fround(Math.max(0.25, Math.min(quadratic, cap)))
 }
 
 function createAirTransient(
@@ -1091,6 +1093,7 @@ function advancePrimaryCast(
     actionTick,
     castSequence: acceptedCast ? previous.castSequence + 1 : previous.castSequence,
     held,
+    underpowered: acceptedCast ? false : previous.underpowered,
   }
 }
 
@@ -1102,10 +1105,13 @@ function createOneShotProjectile(
   primarySkill: NativePrimarySkillRankStats,
   worldKey: string,
   targets: readonly PrimarySpellTarget[],
+  underpowered: boolean,
 ): PrimarySpellProjectileState {
   const direction = player.primaryCast.aimDirection
   const emitter = primarySpellEmitter(player)
-  const speed = kind === 'ether' ? 3 : 4.5
+  const speed = kind === 'ether'
+    ? underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
+    : 4.5
   const alongAim = kind === 'fire' ? 20 : 0
   const spawn = {
     x: emitter.x + direction.x * alongAim,
@@ -1115,9 +1121,9 @@ function createOneShotProjectile(
   const common = {
     ageTicks: 0,
     charge: 1,
-    damage: kind === 'ether' && (id & 1) === 0
+    damage: (kind === 'ether' && (id & 1) === 0
       ? primarySkill.damageMinimum
-      : primarySkill.damageMaximum,
+      : primarySkill.damageMaximum) * (underpowered ? 0.5 : 1),
     direction: { ...direction },
     flightTicks: 0,
     id,
@@ -1125,6 +1131,7 @@ function createOneShotProjectile(
     ownerId,
     phase: 'flight' as const,
     position: spawn,
+    underpowered,
     velocity,
     worldKey,
   }
@@ -1154,8 +1161,12 @@ function primarySpellManaCost(
     : primarySkill.manaCost / PRIMARY_SPELL_TICKS_PER_SECOND
 }
 
-function primarySpellChannelDamage(primarySkill: NativePrimarySkillRankStats): number {
+function primarySpellChannelDamage(
+  primarySkill: NativePrimarySkillRankStats,
+  underpowered: boolean,
+): number {
   return primarySkill.damageMinimum / PRIMARY_SPELL_TICKS_PER_SECOND
+    * (underpowered ? 0.5 : 1)
 }
 
 function assertPrimarySkillMatchesElement(
@@ -1187,8 +1198,9 @@ function advanceProjectile(
       headingDegrees: spell.headingDegrees,
       movementScalar: 1,
       position: spell.position,
-      speed: 3,
+      speed: spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3,
       targetPosition: target?.position ?? null,
+      turnInput: spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_TURN_INPUT : 2,
       turnAccumulator: spell.turnAccumulator,
     })
     return {
@@ -1201,8 +1213,12 @@ function advanceProjectile(
       targetId: target?.id ?? null,
       turnAccumulator: advanced.turnAccumulator,
       velocity: {
-        x: Math.fround(advanced.direction.x * 3),
-        y: Math.fround(advanced.direction.y * 3),
+        x: Math.fround(advanced.direction.x * (
+          spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
+        )),
+        y: Math.fround(advanced.direction.y * (
+          spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
+        )),
       },
     }
   }
@@ -1241,7 +1257,9 @@ function advanceProjectile(
 
 function transientLifetime(effect: PrimarySpellTransientState): number {
   switch (effect.kind) {
-    case 'air': return PRIMARY_SPELL_AIR_LIFETIME_TICKS
+    case 'air': return effect.underpowered
+      ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
+      : PRIMARY_SPELL_AIR_LIFETIME_TICKS
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS

@@ -13,6 +13,7 @@ import demonDie from '../assets/game/audio/sfx/demon-die.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
+import fizzle from '../assets/game/audio/sfx/fizzle.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
 import levelUp from '../assets/game/audio/sfx/level-up.wav'
@@ -71,6 +72,7 @@ export const GAME_AUDIO_SOURCES = {
     'demon-die': demonDie,
     'fireball-hit': fireballHit,
     'firey-death': fireyDeath,
+    fizzle,
     flash: enemyFlash,
     'ice-start': iceStart,
     'imp-split': impSplit,

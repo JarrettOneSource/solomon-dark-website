@@ -8,8 +8,8 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import type {
   PrimarySpellFireImpactState,
+  PrimarySpellFireProjectileState,
   PrimarySpellFireParticleState,
-  PrimarySpellProjectileState,
 } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_FIREBALL_CORE_RECORD,
@@ -26,7 +26,8 @@ import {
 function fireball(
   ageTicks: number,
   direction = { x: 0, y: -1 },
-): PrimarySpellProjectileState {
+  underpowered = false,
+): PrimarySpellFireProjectileState {
   return {
     ageTicks,
     charge: 1,
@@ -38,6 +39,7 @@ function fireball(
     ownerId: 'caster',
     phase: 'flight',
     position: { x: 400, y: 300 },
+    underpowered,
     velocity: { x: direction.x * 4.5, y: direction.y * 4.5 },
     worldKey: 'hub:courtyard',
   }
@@ -96,6 +98,19 @@ test('pins Fireball frame clock, heading, transforms, and three-pass blend order
   assert.deepEqual(plan.draws.slice(1).map(({ alpha }) => alpha), [1, 0.5])
   assert.equal(plan.draws[0].rotation, 0)
   assert.equal(nativeFireballPlan(fireball(3, { x: 1, y: 0 })).draws[0].rotation, Math.PI / 2)
+})
+
+test('underpowered Fire halves only the three body draws', () => {
+  const normal = nativeFireballPlan(fireball(3), 91)
+  const weak = nativeFireballPlan(fireball(3, { x: 0, y: -1 }, true), 91)
+  assert.deepEqual(
+    weak.draws.map(({ alpha }) => alpha),
+    normal.draws.map(({ alpha }) => alpha * 0.5),
+  )
+  assert.deepEqual(
+    nativeFireballLightSource(fireball(3, { x: 0, y: -1 }, true), 91),
+    nativeFireballLightSource(fireball(3), 91),
+  )
 })
 
 test('projects one semantic Fire particle through the native birth and tick recurrence', () => {

@@ -1,7 +1,7 @@
 import type {
   PrimarySpellFireImpactState,
   PrimarySpellFireParticleState,
-  PrimarySpellProjectileState,
+  PrimarySpellFireProjectileState,
 } from '../core-kernels/primary-spells.ts'
 import {
   nativeFireParticleFadeStep,
@@ -75,7 +75,7 @@ export interface NativeFireImpactPlan {
 }
 
 export function nativeFireballPlan(
-  state: PrimarySpellProjectileState,
+  state: PrimarySpellFireProjectileState,
   presentationSample = Math.floor(state.ageTicks),
 ): NativeFireballPlan {
   const frameIndex = Math.floor(state.ageTicks / NATIVE_FIREBALL_TICKS_PER_FRAME)
@@ -88,11 +88,12 @@ export function nativeFireballPlan(
     x: 0,
     y: -10,
   }
+  const alphaMultiplier = state.underpowered ? 0.5 : 1
   return {
     draws: [
       {
         ...common,
-        alpha: coreAlpha,
+        alpha: coreAlpha * alphaMultiplier,
         blend: 'normal',
         frame: NATIVE_FIREBALL_CORE_RECORD,
         pass: 'core',
@@ -102,7 +103,7 @@ export function nativeFireballPlan(
       },
       {
         ...common,
-        alpha: 1,
+        alpha: alphaMultiplier,
         blend: 'add',
         frame: NATIVE_FIREBALL_FRAME_FIRST + frameIndex,
         pass: 'additive-body',
@@ -112,7 +113,7 @@ export function nativeFireballPlan(
       },
       {
         ...common,
-        alpha: 0.5,
+        alpha: 0.5 * alphaMultiplier,
         blend: 'normal',
         frame: NATIVE_FIREBALL_FRAME_FIRST + frameIndex,
         pass: 'body',
@@ -222,7 +223,7 @@ export function nativeFireImpactLightSource(
 }
 
 export function nativeFireballLightSource(
-  state: PrimarySpellProjectileState,
+  state: PrimarySpellFireProjectileState,
   presentationFrame: number,
 ): NativeBoneyardLightSource {
   return {

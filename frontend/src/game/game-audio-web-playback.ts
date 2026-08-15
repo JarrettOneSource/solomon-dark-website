@@ -72,6 +72,10 @@ export function createWebAudioPlayback(
       }
       owned.source.start()
     },
+    setVolume(key, volume) {
+      const owned = channels.get(key)
+      if (owned) owned.gain.gain.value = volume
+    },
     stop(key) {
       const owned = channels.get(key)
       if (!owned) return

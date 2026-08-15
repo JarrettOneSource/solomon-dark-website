@@ -23,6 +23,7 @@ const AIR_LIGHTNING_SECONDARY_WAVE = 12
 const AIR_LIGHTNING_RANDOM_ANGLE_DEGREES = 65
 const AIR_LIGHTNING_RANDOM_RADIUS = 30
 const CONTACT_ALPHA_LEVELS = [1, 0.8, 0.6, 0.4, 0.2] as const
+const UNDERPOWERED_CONTACT_ALPHA_LEVELS = [0.5, 0.3, 0.1] as const
 const CONTACT_OFFSET_RADIUS = 10
 const CORONA_ANGLE_STEP_RADIANS = Math.PI / 180
 const SPLINE_NORMAL_DELTA = 0.001
@@ -130,6 +131,7 @@ export interface NativeAirLightningInput {
   endpoint: NativeAirPoint
   id: number
   midpoint: NativeAirPoint
+  underpowered?: boolean
 }
 
 export interface NativeAirContactLightSourceInput {
@@ -137,12 +139,14 @@ export interface NativeAirContactLightSourceInput {
   endpoint: NativeAirPoint
   id: number
   origin: NativeAirPoint
+  underpowered?: boolean
 }
 
 export interface NativeAirContactLightInput {
   ageTicks: number
   id: number
   position: NativeAirPoint
+  underpowered?: boolean
 }
 
 interface NativeAirContactSamples {
@@ -175,6 +179,9 @@ export function buildNativeAirLightningPlan(
   }
   const contactAngle = contactSamples.angle
     + nativeAge * CORONA_ANGLE_STEP_RADIANS
+  const contactAlpha = input.underpowered
+    ? UNDERPOWERED_CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
+    : CONTACT_ALPHA_LEVELS[nativeAge] ?? 0
 
   return {
     body: nativeAge < AIR_LIGHTNING_BODY_LIFETIME_TICKS
@@ -184,28 +191,28 @@ export function buildNativeAirLightningPlan(
               points,
               input.id,
               input.birthTick,
-              1,
+              input.underpowered ? 0.75 : 1,
               basePhaseDegrees,
               0,
-              0xffffff,
-              1,
+              input.underpowered ? 0x80ffff : 0xffffff,
+              input.underpowered ? 0.5 : 1,
             ),
             buildRibbon(
               points,
               input.id,
               input.birthTick,
-              0.75,
+              input.underpowered ? 0.5625 : 0.75,
               basePhaseDegrees,
               15,
               0x00ffff,
-              0.5,
+              input.underpowered ? 0.25 : 0.5,
             ),
           ],
         }
       : null,
     contactCorona: buildCorona(
       contactCenter,
-      CONTACT_ALPHA_LEVELS[nativeAge] ?? 0,
+      contactAlpha,
       contactSamples.scale,
       contactAngle,
       randomStream(input.id, 0x46414445 ^ nativeAge),
@@ -214,6 +221,7 @@ export function buildNativeAirLightningPlan(
       ageTicks: nativeAge,
       id: input.id,
       position: contactCenter,
+      underpowered: input.underpowered,
     }),
     endpoint,
     midpoint,
@@ -233,18 +241,24 @@ export function buildNativeAirContactLightPlan(
   input: NativeAirContactLightInput,
 ): NativeAirContactLightPlan | null {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
-  if (nativeAge >= AIR_LIGHTNING_CONTACT_LIFETIME_TICKS) return null
+  const lifetimeTicks = input.underpowered
+    ? UNDERPOWERED_CONTACT_ALPHA_LEVELS.length
+    : AIR_LIGHTNING_CONTACT_LIFETIME_TICKS
+  if (nativeAge >= lifetimeTicks) return null
 
-  let intensity = Math.fround(AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY)
+  const maximumIntensity = input.underpowered
+    ? AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY * 0.5
+    : AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY
+  let intensity = Math.fround(maximumIntensity)
   for (let tick = 0; tick < nativeAge; tick += 1) {
     intensity = Math.fround(intensity + AIR_LIGHTNING_CONTACT_LIGHT_INTENSITY_DELTA)
   }
 
   return {
     castsDirectionalShadow: false,
-    intensity: Math.min(intensity, AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY),
+    intensity: Math.min(intensity, maximumIntensity),
     position: input.position,
-    radius: nativeContactSamples(input.id).lightRadius,
+    radius: nativeContactSamples(input.id).lightRadius * (input.underpowered ? 0.5 : 1),
   }
 }
 
@@ -259,6 +273,7 @@ export function buildNativeAirContactLightSource(
       x: input.endpoint.x + Math.cos(samples.offsetAngle) * samples.offsetRadius,
       y: input.endpoint.y + Math.sin(samples.offsetAngle) * samples.offsetRadius,
     },
+    underpowered: input.underpowered,
   })
   if (!light) return null
   return {

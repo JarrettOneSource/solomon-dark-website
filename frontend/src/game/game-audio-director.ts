@@ -31,6 +31,7 @@ export interface GameAudioPlayback {
   destroy(): void
   play(source: string, options: GameAudioPlaybackOptions): void
   restart(key: string, source: string, options: GameAudioPlaybackOptions): void
+  setVolume(key: string, volume: number): void
   stop(key: string): void
   unlock(): void
 }
@@ -57,7 +58,7 @@ export class GameAudioDirector {
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
-  private loops = new Map<GameLoopCue, Set<string>>()
+  private loops = new Map<GameLoopCue, Map<string, Required<PlaySoundOptions>>>()
   private now: () => number
   private outgoingMusic: GameMusicChannel | null = null
   private playback: GameAudioPlayback
@@ -108,24 +109,34 @@ export class GameAudioDirector {
     options: PlaySoundOptions = {},
   ): void {
     let owners = this.loops.get(cue)
-    if (owners?.has(owner)) return
-    if (!owners) {
-      owners = new Set()
-      this.loops.set(cue, owners)
-      this.playback.restart(loopKey(cue), this.sources.loops[cue], {
-        loop: true,
-        playbackRate: options.playbackRate ?? 1,
-        volume: clampUnit(options.volume ?? 1),
-      })
+    const next = {
+      playbackRate: options.playbackRate ?? 1,
+      volume: clampUnit(options.volume ?? 1),
     }
-    owners.add(owner)
+    if (!owners) {
+      owners = new Map()
+      this.loops.set(cue, owners)
+    }
+    const current = owners.get(owner)
+    if (current?.playbackRate === next.playbackRate) {
+      if (current.volume !== next.volume) {
+        this.playback.setVolume(loopKey(cue, owner), next.volume)
+        owners.set(owner, next)
+      }
+      return
+    }
+    this.playback.restart(loopKey(cue, owner), this.sources.loops[cue], {
+      loop: true,
+      ...next,
+    })
+    owners.set(owner, next)
   }
 
   stopLoop(cue: GameLoopCue, owner: string): void {
     const owners = this.loops.get(cue)
-    if (!owners || !owners.delete(owner) || owners.size > 0) return
-    this.playback.stop(loopKey(cue))
-    this.loops.delete(cue)
+    if (!owners || !owners.delete(owner)) return
+    this.playback.stop(loopKey(cue, owner))
+    if (owners.size === 0) this.loops.delete(cue)
   }
 
   stopLoopsForOwner(owner: string): void {
@@ -234,8 +245,8 @@ export class GameAudioDirector {
   }
 }
 
-function loopKey(cue: GameLoopCue): string {
-  return `loop:${cue}`
+function loopKey(cue: GameLoopCue, owner: string): string {
+  return `loop:${cue}:${owner}`
 }
 
 function streamKey(cue: GameStreamCue): string {

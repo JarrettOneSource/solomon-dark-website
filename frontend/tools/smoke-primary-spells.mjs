@@ -6,6 +6,11 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4184'
 const screenshotRoot = process.env.SDR_PRIMARY_SPELL_SCREENSHOT_ROOT || '/tmp'
+const gameEndpointUrl = process.env.SDR_GAME_SMOKE_ENDPOINT?.trim()
+const gameEndpointCredential = process.env.SDR_GAME_SMOKE_CREDENTIAL?.trim()
+if (Boolean(gameEndpointUrl) !== Boolean(gameEndpointCredential)) {
+  throw new Error('SDR_GAME_SMOKE_ENDPOINT and SDR_GAME_SMOKE_CREDENTIAL must be set together')
+}
 const BONEYARD_RENDER_TIMEOUT_MS = 60_000
 const CREATE_MENU_TIMEOUT_MS = 30_000
 const SPELLS = [
@@ -50,11 +55,15 @@ const SPELLS = [
   },
 ]
 const requestedSpellKind = process.env.SDR_PRIMARY_SPELL_KIND?.trim().toLowerCase()
+const lowManaAcceptance = process.env.SDR_PRIMARY_SPELL_LOW_MANA === '1'
 const selectedSpells = requestedSpellKind
   ? SPELLS.filter((spell) => spell.kind === requestedSpellKind)
   : SPELLS
 if (selectedSpells.length === 0) {
   throw new Error(`Unknown SDR_PRIMARY_SPELL_KIND: ${requestedSpellKind}`)
+}
+if (lowManaAcceptance && selectedSpells.length !== 1) {
+  throw new Error('Low-mana acceptance requires one SDR_PRIMARY_SPELL_KIND')
 }
 
 const browser = await chromium.launch({
@@ -65,6 +74,17 @@ const browser = await chromium.launch({
 
 try {
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+  if (gameEndpointUrl && gameEndpointCredential) {
+    await context.addInitScript((runtime) => {
+      window.solomonDarkRuntime = runtime
+    }, {
+      gameEndpoint: {
+        credential: gameEndpointCredential,
+        kind: 'localhost',
+        url: gameEndpointUrl,
+      },
+    })
+  }
   await context.addInitScript(installGameAudioSmokeProbe, {
     eventsGlobal: '__primarySpellAudioEvents',
     sourceMatcherGlobal: '__primarySpellAudioSourceMatches',
@@ -129,6 +149,14 @@ try {
     const page = await context.newPage()
     watchErrors(page, errors, spell.kind)
     await enterHub(page, spell.element)
+    let observerJoinMode = null
+    let observerPage = null
+    if (lowManaAcceptance && spell.mode === 'one-shot') {
+      observerJoinMode = 'pre-cast-peer'
+      observerPage = await context.newPage()
+      watchErrors(observerPage, errors, `${spell.kind}-observer`)
+      await enterHub(observerPage, spell.element)
+    }
     const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 30_000 })
     const initial = await canvas.evaluate((node) => ({ ...node.__sdrHubFrame }))
@@ -168,7 +196,11 @@ try {
       ? null
       : await waitForHubSpell(page, observableKinds)
     if (spell.kind === 'fire') await page.screenshot({ path: screenshotPath })
-    const facingWire = await latestWireSpell(page, observableKinds)
+    const facingWire = await latestWireSpell(
+      page,
+      observableKinds,
+      lowManaAcceptance && spell.kind === 'fire',
+    )
     if (castFrame === null) {
       assert.ok(
         facingWire.observedAttachmentPoses.includes(spell.castPose),
@@ -184,6 +216,40 @@ try {
     const facingFrame = observedSpellFrame?.playerHeadingIndex === expectedHeadingIndex
       ? observedSpellFrame
       : await waitForHubFacing(page, observableKinds, expectedHeadingIndex)
+    const lowManaPresentation = lowManaAcceptance
+      ? await captureLowManaPresentation(page, facingWire)
+      : null
+    if (lowManaAcceptance) assertLowManaWire(spell.kind, facingWire, lowManaPresentation)
+    let replication = null
+    if (lowManaAcceptance) {
+      if (!observerPage) {
+        observerJoinMode = 'late-held-peer'
+        observerPage = await context.newPage()
+        watchErrors(observerPage, errors, `${spell.kind}-observer`)
+        await enterHub(observerPage, spell.element)
+      }
+      const observerWire = await latestWireSpell(
+        observerPage,
+        observableKinds,
+        spell.kind === 'fire',
+      )
+      assert.equal(observerWire.state.kind, facingWire.state.kind)
+      assert.equal(observerWire.state.ownerId, facingWire.state.ownerId)
+      assert.equal(observerWire.playerUnderpowered, true)
+      if ('underpowered' in facingWire.state) {
+        assert.equal(observerWire.state.underpowered, facingWire.state.underpowered)
+      }
+      if (spell.mode === 'one-shot' || spell.kind === 'earth') {
+        assert.equal(observerWire.state.id, facingWire.state.id)
+      }
+      replication = {
+        joinMode: observerJoinMode,
+        ownerId: observerWire.state.ownerId,
+        stateId: observerWire.state.id,
+        tick: observerWire.tick,
+        underpowered: observerWire.playerUnderpowered,
+      }
+    }
     let earthStages = null
     if (spell.mode === 'charge') {
       await page.waitForTimeout(500)
@@ -267,13 +333,16 @@ try {
         .includes(event.type))
       .map((event) => ({
         loop: event.loop,
+        playbackRate: event.playbackRate,
         source: new URL(event.src).pathname,
         type: event.type === 'buffer-start'
           ? 'play'
           : event.type === 'buffer-stop'
             ? 'pause'
             : event.type,
+        volume: event.volume,
       }))
+    if (lowManaAcceptance) assertLowManaAudio(spell.kind, spellEvents)
     receipts.push({
       castPose: castFrame.playerAttachmentPose,
       castPoseSource: castPosePromise === null ? 'authoritative-plan' : 'renderer',
@@ -281,15 +350,19 @@ try {
       element: spell.element,
       expectedHeadingIndex,
       kind: spell.kind,
+      lowManaPresentation,
       playerHeadingIndex: facingFrame.playerHeadingIndex,
       primarySpellCount: facingFrame.primarySpellCount,
       primarySpellKinds: facingFrame.primarySpellKinds,
       releaseScreenshotPath,
+      replication,
       screenshotPath,
       spellEvents,
       tick: facingFrame.tick,
       wirePlayerHeadingIndex: facingWire.playerHeadingIndex,
     })
+
+    await observerPage?.close()
 
     if (spell.kind === 'earth') {
       earthPage = page
@@ -378,8 +451,14 @@ async function castEarthInBoneyard(page) {
   )
   assert.equal(gather.loop, true)
   const held = await waitForBoneyardSpell(page, 'earth')
+  if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
   await page.waitForTimeout(400)
   const heldWire = await latestWireSpell(page, 'earth')
+  if (lowManaAcceptance) {
+    assert.equal(heldWire.playerUnderpowered, true)
+    assert.equal('underpowered' in heldWire.state, false)
+    assert.ok(heldWire.state.damage <= 5)
+  }
   const heldScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-held.png`
   await page.screenshot({ path: heldScreenshotPath })
   await page.mouse.up({ button: 'left' })
@@ -459,7 +538,9 @@ async function castAirInBoneyard(page) {
   assert.ok(targeted, 'expected held Air to acquire a Boneyard Gravestone')
   assert.match(targeted.state.targetId, /^scenery:/)
   assert.equal(targeted.playerTargetId, targeted.state.targetId)
+  if (lowManaAcceptance) assert.equal(targeted.state.underpowered, true)
   const held = await waitForBoneyardSpell(page, 'air')
+  if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
   const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
   await page.screenshot({ path: screenshotPath })
   await page.mouse.up({ button: 'left' })
@@ -474,13 +555,26 @@ async function castFireInBoneyard(page) {
   const target = await castTarget(canvas, 0.5, 0.05)
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
-  await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
+  const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
+  let flight = null
+  let flightScreenshotPath = null
+  if (lowManaAcceptance) {
+    const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
+    assert.ok(fizzle.at <= launch.at)
+    assert.equal(fizzle.volume, 1)
+    assert.equal(launch.volume, 0.75)
+    flight = await waitForWireSpell(page, 'fire', afterTick, 10_000, true)
+    assert.equal(flight.state.underpowered, true)
+    assert.equal(flight.state.damage, 2)
+    flightScreenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-low-flight.png`
+    await page.screenshot({ path: flightScreenshotPath })
+  }
   await page.mouse.up({ button: 'left' })
   const impact = await waitForWireSpell(page, 'fire-impact', afterTick, 20_000)
   const screenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
   await waitForAudio(page, eventStart, '/game/audio/sfx/fireball-hit.wav', 'play')
-  return { impact, screenshotPath }
+  return { flight, flightScreenshotPath, impact, screenshotPath }
 }
 
 async function castEtherInBoneyard(page) {
@@ -490,13 +584,29 @@ async function castEtherInBoneyard(page) {
   const target = await castTarget(canvas, 0.5, 0.05)
   await page.mouse.move(target.x, target.y)
   await page.mouse.down({ button: 'left' })
-  await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile.wav', 'play')
+  const launch = await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile.wav', 'play')
+  let flight = null
+  let flightScreenshotPath = null
+  if (lowManaAcceptance) {
+    const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
+    assert.ok(fizzle.at <= launch.at)
+    assert.equal(fizzle.volume, 1)
+    assert.equal(launch.volume, 0.75)
+    flight = await waitForWireSpell(page, 'ether', afterTick, 10_000)
+    assert.equal(flight.state.underpowered, true)
+    assert.equal(flight.state.damage, 1)
+    assert.ok(
+      Math.abs(Math.hypot(flight.state.velocity.x, flight.state.velocity.y) - 2.4) < 0.000001,
+    )
+    flightScreenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-low-flight.png`
+    await page.screenshot({ path: flightScreenshotPath })
+  }
   await page.mouse.up({ button: 'left' })
   const impact = await waitForWireSpell(page, 'ether-impact', afterTick, 10_000)
   const screenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
   await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile-hit.wav', 'play')
-  return { impact, screenshotPath }
+  return { flight, flightScreenshotPath, impact, screenshotPath }
 }
 
 async function castWaterInBoneyard(page) {
@@ -509,7 +619,12 @@ async function castWaterInBoneyard(page) {
   const loop = await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'play')
   assert.equal(loop.loop, true)
   const held = await waitForBoneyardSpell(page, 'water')
+  if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
   const wire = await latestWireSpell(page, 'water')
+  if (lowManaAcceptance) {
+    assert.equal(wire.playerUnderpowered, true)
+    assert.equal(wire.state.underpowered, true)
+  }
   assert.equal(wire.state.obstructionPoint === null || (
     Number.isFinite(wire.state.obstructionPoint.x)
       && Number.isFinite(wire.state.obstructionPoint.y)
@@ -676,16 +791,193 @@ async function captureHubEarthStage(page, screenshotPath) {
   }
 }
 
-async function latestWireSpell(page, kind) {
+async function captureLowManaPresentation(page, wire) {
+  return page.evaluate(async ({ state }) => {
+    switch (state.kind) {
+      case 'ether': {
+        const { etherPrimaryCompositorPlan, etherPrimaryFlightPlan } = await import(
+          '/src/game/renderer/primary-spell-ether-native.ts'
+        )
+        const weak = etherPrimaryFlightPlan(state.id, state.ageTicks, true)
+        const fullAlphaAtWeakPhase = etherPrimaryCompositorPlan(
+          state.id,
+          Math.floor(state.ageTicks),
+          weak.phase,
+          1,
+          1,
+        )
+        return {
+          alphaHalved: weak.draws.every((draw, index) => (
+            draw.alpha === Math.fround(fullAlphaAtWeakPhase.draws[index].alpha * 0.5)
+          )),
+          kind: state.kind,
+          underpowered: state.underpowered,
+        }
+      }
+      case 'fire': {
+        const {
+          nativeFireballLightSource,
+          nativeFireballPlan,
+        } = await import('/src/game/renderer/primary-spell-fire-native.ts')
+        const normalState = { ...state, underpowered: false }
+        const normal = nativeFireballPlan(normalState)
+        const weak = nativeFireballPlan(state)
+        return {
+          alphaRatios: weak.draws.map((draw, index) => (
+            draw.alpha / normal.draws[index].alpha
+          )),
+          kind: state.kind,
+          lightUnchanged: JSON.stringify(nativeFireballLightSource(state, state.ageTicks))
+            === JSON.stringify(nativeFireballLightSource(normalState, state.ageTicks)),
+          underpowered: state.underpowered,
+        }
+      }
+      case 'air': {
+        const { buildNativeAirLightningPlan } = await import(
+          '/src/game/renderer/primary-spell-air-native.ts'
+        )
+        const plan = buildNativeAirLightningPlan({
+          ageTicks: state.ageTicks,
+          birthTick: state.birthTick,
+          endpoint: {
+            x: state.endpoint.x - state.origin.x,
+            y: state.endpoint.y - state.origin.y,
+          },
+          id: state.id,
+          midpoint: {
+            x: state.midpoint.x - state.origin.x,
+            y: state.midpoint.y - state.origin.y,
+          },
+          source: { x: 0, y: 0 },
+          underpowered: state.underpowered,
+        })
+        return {
+          bodyLayers: plan.body?.layers.map(({ alpha, phaseOffset, tint, width }) => ({
+            alpha,
+            phaseOffset,
+            tint,
+            width,
+          })) ?? [],
+          contactAlpha: plan.contactCorona.alpha,
+          contactLight: plan.contactLight,
+          kind: state.kind,
+          underpowered: state.underpowered,
+        }
+      }
+      case 'water': {
+        const { waterFrostJetPlan } = await import(
+          '/src/game/core-kernels/primary-spell-water.ts'
+        )
+        const plan = waterFrostJetPlan(state)
+        return {
+          draws: plan.draws.map(({ alpha, pass }) => ({ alpha, pass })),
+          kind: state.kind,
+          particleClass: plan.kind,
+          underpowered: state.underpowered,
+        }
+      }
+      case 'earth':
+        return {
+          charge: state.charge,
+          damage: state.damage,
+          hasPersistentUnderpoweredFlag: 'underpowered' in state,
+          kind: state.kind,
+        }
+      default:
+        throw new Error(`Unexpected low-mana presentation kind: ${state.kind}`)
+    }
+  }, wire)
+}
+
+function assertLowManaWire(kind, wire, presentation) {
+  assert.equal(wire.playerUnderpowered, true)
+  assert.ok(wire.minimumCurrentMana <= 0.1)
+  assert.equal(presentation.kind, kind)
+  switch (kind) {
+    case 'ether':
+      assert.equal(wire.state.underpowered, true)
+      assert.equal(wire.state.damage, 1)
+      assert.ok(
+        Math.abs(Math.hypot(wire.state.velocity.x, wire.state.velocity.y) - 2.4) < 0.000001,
+      )
+      assert.equal(presentation.alphaHalved, true)
+      break
+    case 'fire':
+      assert.equal(wire.state.underpowered, true)
+      assert.equal(wire.state.damage, 2)
+      assert.deepEqual(presentation.alphaRatios, [0.5, 0.5, 0.5])
+      assert.equal(presentation.lightUnchanged, true)
+      break
+    case 'air':
+      assert.equal(wire.state.underpowered, true)
+      assert.deepEqual(presentation.bodyLayers, [
+        { alpha: 0.5, phaseOffset: 0, tint: 0x80ffff, width: 0.75 },
+        { alpha: 0.25, phaseOffset: 15, tint: 0x00ffff, width: 0.5625 },
+      ])
+      break
+    case 'water':
+      assert.equal(wire.state.underpowered, true)
+      assert.equal(presentation.particleClass, 'normal')
+      assert.deepEqual(presentation.draws.map(({ pass }) => pass), ['core', 'additive-core'])
+      break
+    case 'earth':
+      assert.equal(presentation.hasPersistentUnderpoweredFlag, false)
+      assert.ok(wire.state.charge <= 0.30125)
+      assert.ok(wire.state.damage <= 5)
+      break
+    default:
+      throw new Error(`Unexpected low-mana wire kind: ${kind}`)
+  }
+}
+
+function assertLowManaAudio(kind, events) {
+  const find = (filename) => events.find((event) => audioPathMatches(event.source, filename))
+  if (kind === 'ether' || kind === 'fire') {
+    const fizzle = find('fizzle.wav')
+    const launch = find(kind === 'ether' ? 'magic-missile.wav' : 'throw-fire.wav')
+    assert.ok(fizzle)
+    assert.ok(launch)
+    assert.ok(events.indexOf(fizzle) < events.indexOf(launch))
+    assert.equal(fizzle.playbackRate, 1)
+    assert.equal(fizzle.volume, 1)
+    assert.equal(launch.volume, 0.75)
+    return
+  }
+  if (kind === 'air' || kind === 'water') {
+    const loop = find(kind === 'air' ? 'lightning-loop.wav' : 'ice-loop.wav')
+    assert.ok(loop)
+    assert.equal(loop.volume, kind === 'air' ? 0.75 : 0.5)
+    return
+  }
+  const fizzle = find('fizzle.wav')
+  assert.ok(fizzle)
+  assert.equal(fizzle.playbackRate, 0.5)
+  assert.ok(fizzle.volume > 0 && fizzle.volume <= 0.5)
+}
+
+function audioPathMatches(pathname, filename) {
+  const actual = pathname.split('/').at(-1)
+  const extensionAt = filename.lastIndexOf('.')
+  const stem = filename.slice(0, extensionAt)
+  const extension = filename.slice(extensionAt)
+  return actual === filename || (
+    actual.startsWith(`${stem}-`) && actual.endsWith(extension)
+  )
+}
+
+async function latestWireSpell(page, kind, projectileOnly = false) {
   const expectedKinds = Array.isArray(kind) ? kind : [kind]
-  return page.evaluate(async (kinds) => {
+  return page.evaluate(async ([kinds, requireProjectile]) => {
     const { primaryCastPose } = await import('/src/game/core-kernels/primary-spells.ts')
     const observedAttachmentPoses = window.__primarySpellWireFrames.flatMap((wire) => {
-      const states = [
-        ...wire.primarySpells.projectiles,
-        ...wire.primarySpells.transients,
-      ]
-      const state = states.find((candidate) => kinds.includes(candidate.kind))
+      const projectile = [...wire.primarySpells.projectiles].reverse().find(
+        (candidate) => kinds.includes(candidate.kind),
+      )
+      const state = projectile ?? (requireProjectile ? undefined : (
+        [...wire.primarySpells.transients].reverse().find(
+          (candidate) => kinds.includes(candidate.kind),
+        )
+      ))
       const player = state ? wire.players[state.ownerId] : null
       return player
         ? [primaryCastPose(
@@ -701,10 +993,25 @@ async function latestWireSpell(page, kind) {
         ...wire.primarySpells.projectiles,
         ...wire.primarySpells.transients,
       ]
-      const state = states.find((candidate) => kinds.includes(candidate.kind))
+      const projectile = [...wire.primarySpells.projectiles].reverse().find(
+        (candidate) => kinds.includes(candidate.kind),
+      )
+      const state = projectile ?? (requireProjectile ? undefined : (
+        [...wire.primarySpells.transients].reverse().find(
+          (candidate) => kinds.includes(candidate.kind),
+        )
+      ))
       if (state) {
         const player = wire.players[state.ownerId]
         if (!player) throw new Error(`No wire player owns primary spell ${state.id}`)
+        const manaSamples = window.__primarySpellWireFrames.flatMap((sample) => {
+          const ownsState = [
+            ...sample.primarySpells.projectiles,
+            ...sample.primarySpells.transients,
+          ].some((candidate) => candidate.id === state.id)
+          const owner = ownsState ? sample.players[state.ownerId] : null
+          return owner ? [owner.progression.currentMana] : []
+        })
         return {
           castAimDirection: player.primaryCast.aimDirection,
           calledRockCount: states.filter((candidate) => (
@@ -712,6 +1019,8 @@ async function latestWireSpell(page, kind) {
             && candidate.parentId === state.id
           )).length,
           observedAttachmentPoses,
+          currentMana: player.progression.currentMana,
+          minimumCurrentMana: Math.min(...manaSamples),
           playerAttachmentPose: primaryCastPose(
             player.primaryCast.actionTick,
             player.primaryCast.channelActive,
@@ -719,6 +1028,7 @@ async function latestWireSpell(page, kind) {
           ),
           projectileCount: wire.primarySpells.projectiles.length,
           playerHeadingIndex: player.headingIndex,
+          playerUnderpowered: player.primaryCast.underpowered,
           state,
           tick: wire.tick,
           transientCount: wire.primarySpells.transients.length,
@@ -726,11 +1036,11 @@ async function latestWireSpell(page, kind) {
       }
     }
     throw new Error(`No wire spell matched ${kinds.join(', ')}`)
-  }, expectedKinds)
+  }, [expectedKinds, projectileOnly])
 }
 
-async function waitForWireSpell(page, kind, afterTick, timeout) {
-  const handle = await page.waitForFunction(([expectedKind, minimumTick]) => {
+async function waitForWireSpell(page, kind, afterTick, timeout, projectileOnly = false) {
+  const handle = await page.waitForFunction(([expectedKind, minimumTick, requireProjectile]) => {
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       if (wire.tick <= minimumTick) continue
@@ -738,7 +1048,8 @@ async function waitForWireSpell(page, kind, afterTick, timeout) {
         ...wire.primarySpells.projectiles,
         ...wire.primarySpells.transients,
       ]
-      const state = states.find((candidate) => candidate.kind === expectedKind)
+      const state = (requireProjectile ? wire.primarySpells.projectiles : states)
+        .find((candidate) => candidate.kind === expectedKind)
       if (state) {
         return {
           projectileCount: wire.primarySpells.projectiles.length,
@@ -749,7 +1060,7 @@ async function waitForWireSpell(page, kind, afterTick, timeout) {
       }
     }
     return null
-  }, [kind, afterTick], { timeout })
+  }, [kind, afterTick, projectileOnly], { timeout })
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
