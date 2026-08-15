@@ -11966,7 +11966,7 @@ heading, turn accumulator, and one-shot restart all belong to the authoritative
 fixed tick and wire state. Boneyard world construction retains targetable
 Gravestones and exposes active wave enemies; render code consumes the resulting
 semantic geometry/state only. Hub has no target candidates and therefore uses
-its clipped untargeted ray. The implementation will retain the existing
+its clipped untargeted ray. The implementation retains the existing
 deterministic cosmetic Lightning/Ether compositors while replacing their
 incorrect gameplay inputs.
 
@@ -11976,8 +11976,51 @@ Evidence is static instruction/decompile work against retail
 Air `0x00529AD0`, `0x0052BA80`, `0x0053F9C0`, `0x00641500`, `0x00641340`;
 Ether `0x0053CFE0`, `0x005E4990`, `0x005FD270`, `0x005E4A80`, `0x005E4B80`,
 `0x00641160`; Staff cadence `0x0044B170`, `0x004486E0`, `0x0052DA80`,
-`0x00656580`. Runtime proof remains pending until the combined five-element
-tree is integrated.
+`0x00656580`.
+
+### Integrated implementation receipt
+
+- The authoritative fixed tick now performs the Region-bound Lightning query
+  separately from world obstruction clipping. This prevents a targetable grave
+  from shortening its own candidate range. Active enemies use native base
+  priority zero; Gravestone `2029` uses priority `1000` and is the fallback.
+  Each replicated bolt carries stable target identity and explicit source,
+  original-aim control point, and clipped endpoint for the native QuickSpline.
+- Rank-1 Ether now acquires once around its 100-unit forward probe, moves on its
+  prior heading, steers with the float32 accumulator recurrence, clears a lost
+  target without retargeting, performs its five-tick terrain lookahead, and has
+  no invented fixed lifetime. Ether's neutral Staff marker/action program is
+  15/56 ticks versus Fire's 19/74, and both one-shot actions requeue while held.
+- Protocol v13 owns the retained Air target, explicit Air geometry, and Ether
+  target/heading/turn state. Snapshot interpolation keeps those semantic fields
+  discrete while interpolating only presentation-safe actor motion. Focused
+  coverage pins enemy priority, Gravestone fallback, retained-target gating,
+  off-axis bolt geometry, launch-probe selection, move-then-steer ordering,
+  target-loss behavior, per-element pose/cadence, protocol strictness, and
+  world collision/range separation.
+- The currently materialized wave enemies use the native base attachment
+  `(0,0)` and priority zero. Other stock actor subclasses are not exposed by the
+  current Website world model; their class-specific `+0x34` attachment and
+  `+0xFC` priority values remain bounded future work rather than guessed data.
+- Isolated 1600x900 Chromium/WebGL journeys on the rebased integration tree returned
+  `status: ok` and `errors: []` for all five elements. Air's Boneyard receipt
+  acquired `scenery:object-140`: the player and bolt agreed on that id, and the
+  wire published source `(396.24,171.5)`, original-aim control
+  `(554.33,809.81)`, and grave endpoint `(656.83,1460.61)`. The control lies
+  about 28.49 units from the geometric midpoint, directly proving the off-axis
+  native arc. Its inspected capture is
+  `/tmp/sdr-primary-vfx2-rebased-20260814/solomon-primary-air-boneyard-target.png`,
+  SHA-256 `d78d8e8941b3d088d60f19b2d79008b43cdfa0abbed084b8b1cd0cb3042c115f`.
+- The inspected Ether Hub compositor capture is
+  `/tmp/sdr-primary-vfx2-rebased-20260814/solomon-primary-ether-hub.png`,
+  SHA-256 `b5f39af035ecc160604241efeb7700aeb6c3fa64e242aad654be72aada102a43`.
+  The scene has no eligible enemy, so this is flight/render/cadence proof;
+  deterministic authority tests, not a fabricated browser target, prove the
+  target-present homing and target-loss paths.
+- The same exact-tree run observed 64 independently owned Water particles in
+  Boneyard, and Earth progressed from the `0.18` opening assembly with seven
+  body rocks and a `0.615` flash to `0.80` assembly with 26 rocks and 11
+  CalledRocks, then produced 27 independently rooted impact fragments.
 
 ## 2026-08-14 — Fire primary contact and impact closure
 
@@ -12096,6 +12139,11 @@ payloads remain distinct actor/gameplay systems and are not visual substitutes.
   1600x900, SHA-256
   `f095a08ac3755d7914db21d1bcaf6c01e950ce3cd8c5618c55e211eb82f09959`.
   It proves the recovered body/trail was already present and isolates the
-  missing contact replacement. Final post-integration Hub/Boneyard browser and
-  canonical `./scripts/validate.sh` receipts are deliberately root-owned so
-  they exercise the combined five-element tree rather than this branch alone.
+  missing contact replacement.
+- On the rebased five-element tree, the isolated Hub journey rendered one
+  Fireball with 10 independently owned trail children and observed both
+  `throw-fire` and `fireball-hit`. The Boneyard boundary journey then published
+  a projectile-free `fire-impact` at age nine and the stock hit cue, with no page
+  errors. The inspected impact capture is
+  `/tmp/sdr-primary-vfx2-rebased-20260814/solomon-primary-fire-boneyard-impact.png`,
+  SHA-256 `d34a904bbdcc629f1046db05619a04a701975c309a6b3da699c89411210e83ef`.

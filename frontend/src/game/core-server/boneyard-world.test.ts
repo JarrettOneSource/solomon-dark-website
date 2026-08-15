@@ -7,6 +7,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  boneyardPrimarySpellTargets,
   createBoneyardWorld,
   retireBoneyardWorldEnemy,
   spawnPlayerCharacterInBoneyard,
@@ -156,6 +157,14 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     && enemy.flags.includes('FLAG_HPDOWN')
     && enemy.flags.includes('FLAG_XPBONUS')
   )))
+  const firstEnemy = world.waves!.enemies[0]
+  assert.deepEqual(boneyardPrimarySpellTargets(world)[0], {
+    airPriority: 0,
+    attachment: { x: 0, y: 0 },
+    id: `enemy:${firstEnemy.id}`,
+    kind: 'enemy',
+    position: firstEnemy.position,
+  })
   const enemyId = world.waves!.enemies[0].id
   const retired = retireBoneyardWorldEnemy(world, enemyId)
   assert.equal(retired.waves?.enemies.length, 9)

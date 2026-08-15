@@ -23,9 +23,11 @@ import {
   type HubRegionId,
 } from '../core-kernels/hub-regions.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+  primaryCastActionEndTick,
   type PrimarySpellEarthProjectileState,
   type PrimarySpellProjectilePhase,
   type PrimarySpellProjectileState,
@@ -75,7 +77,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 12
+export const GAME_PROTOCOL_VERSION = 13
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -526,13 +528,18 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
     'velocity',
     'walkCyclePrimary',
   ])
+  const config = playerCharacterConfig(source.config, `${field}.config`)
   return {
-    config: playerCharacterConfig(source.config, `${field}.config`),
+    config,
     footstepTick: nonnegativeInteger(source.footstepTick, `${field}.footstepTick`),
     gaitDegrees: finite(source.gaitDegrees, `${field}.gaitDegrees`),
     headingIndex: integer(source.headingIndex, `${field}.headingIndex`),
     position: vector(source.position, `${field}.position`),
-    primaryCast: playerPrimaryCastState(source.primaryCast, `${field}.primaryCast`),
+    primaryCast: playerPrimaryCastState(
+      source.primaryCast,
+      `${field}.primaryCast`,
+      config.element,
+    ),
     velocity: vector(source.velocity, `${field}.velocity`),
     walkCyclePrimary: finite(source.walkCyclePrimary, `${field}.walkCyclePrimary`),
   }
@@ -541,6 +548,7 @@ function playerState(value: unknown, field: string): ProtocolPlayerState {
 function playerPrimaryCastState(
   value: unknown,
   field: string,
+  element: PlayerCharacterConfig['element'],
 ): ProtocolPlayerState['primaryCast'] {
   const source = record(value, field)
   onlyKeys(source, field, [
@@ -550,14 +558,21 @@ function playerPrimaryCastState(
     'channelActive',
     'emissionSequence',
     'held',
+    'targetId',
   ])
   const actionTick = integer(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
   if (channelActive && (actionTick < 0 || actionTick > 1)) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
   }
-  if (!channelActive && (actionTick < -1 || actionTick >= 74)) {
+  if (!channelActive && (actionTick < -1 || actionTick >= primaryCastActionEndTick(element))) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Cast 1 program`)
+  }
+  const targetId = source.targetId === null
+    ? null
+    : limitedString(source.targetId, `${field}.targetId`, 256)
+  if (element !== 'air' && targetId !== null) {
+    throw new GameProtocolError(`${field}.targetId is only valid for Air`)
   }
   return {
     actionTick,
@@ -569,6 +584,7 @@ function playerPrimaryCastState(
       `${field}.emissionSequence`,
     ),
     held: boolean(source.held, `${field}.held`),
+    targetId,
   }
 }
 
@@ -1057,6 +1073,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     'ageTicks', 'charge', 'direction', 'flightTicks', 'id', 'kind', 'ownerId',
     'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? ['assemblyCharge'] : []),
+    ...(source.kind === 'ether' ? ['headingDegrees', 'targetId', 'turnAccumulator'] : []),
   ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
     throw new GameProtocolError(`${field}.phase is not supported`)
@@ -1106,7 +1123,28 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
       kind: 'earth',
     } satisfies PrimarySpellEarthProjectileState
   }
-  return { ...projectile, kind: source.kind }
+  if (source.kind === 'ether') {
+    const headingDegrees = finite(source.headingDegrees, `${field}.headingDegrees`)
+    if (headingDegrees < 0 || headingDegrees >= 360) {
+      throw new GameProtocolError(`${field}.headingDegrees is outside [0,360)`)
+    }
+    const turnAccumulator = finite(source.turnAccumulator, `${field}.turnAccumulator`)
+    if (turnAccumulator < ETHER_PRIMARY_INITIAL_TURN || turnAccumulator > 10) {
+      throw new GameProtocolError(
+        `${field}.turnAccumulator is outside [${ETHER_PRIMARY_INITIAL_TURN},10]`,
+      )
+    }
+    return {
+      ...projectile,
+      headingDegrees,
+      kind: 'ether',
+      targetId: source.targetId === null
+        ? null
+        : limitedString(source.targetId, `${field}.targetId`, 256),
+      turnAccumulator,
+    }
+  }
+  return { ...projectile, kind: 'fire' }
 }
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
@@ -1224,6 +1262,8 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     field,
     source.kind === 'water'
       ? [...transientKeys, 'obstructionPoint']
+      : source.kind === 'air'
+        ? [...transientKeys, 'endpoint', 'midpoint', 'targetId']
       : transientKeys,
   )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
@@ -1257,6 +1297,17 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       obstructionPoint: source.obstructionPoint === null
         ? null
         : vector(source.obstructionPoint, `${field}.obstructionPoint`),
+    }
+  }
+  if (source.kind === 'air') {
+    return {
+      ...common,
+      endpoint: vector(source.endpoint, `${field}.endpoint`),
+      kind: 'air',
+      midpoint: vector(source.midpoint, `${field}.midpoint`),
+      targetId: source.targetId === null
+        ? null
+        : limitedString(source.targetId, `${field}.targetId`, 256),
     }
   }
   return { ...common, kind: source.kind }

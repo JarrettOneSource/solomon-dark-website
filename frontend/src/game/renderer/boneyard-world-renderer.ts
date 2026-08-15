@@ -44,7 +44,6 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
-import { PRIMARY_SPELL_AIR_REACH } from '../core-kernels/primary-spells.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
 import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
@@ -653,10 +652,16 @@ class BoneyardDynamicScene {
       ) continue
       const contactLight = buildNativeAirContactLightSource({
         ageTicks: effect.ageTicks,
-        direction: effect.direction,
+        endpoint: {
+          x: effect.endpoint.x - effect.origin.x,
+          y: effect.endpoint.y - effect.origin.y,
+        },
         id: effect.id,
+        midpoint: {
+          x: effect.midpoint.x - effect.origin.x,
+          y: effect.midpoint.y - effect.origin.y,
+        },
         origin: effect.origin,
-        reach: PRIMARY_SPELL_AIR_REACH,
       })
       if (contactLight) lightSourceCandidates.push(contactLight)
     }

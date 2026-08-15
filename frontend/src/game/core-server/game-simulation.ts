@@ -9,8 +9,10 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
+import { lineBoundsExitObstruction } from '../core-kernels/line-obstruction.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
 import {
+  HUB_REGION_DEFINITIONS,
   firstHubRegionLineObstruction,
   isHubRegionTraversable,
 } from '../core-kernels/hub-regions.ts'
@@ -26,6 +28,7 @@ import {
   type PrimarySpellSimulationState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  boneyardPrimarySpellTargets,
   createBoneyardWorld,
   placePlayersInBoneyard,
   spawnPlayerCharacterInBoneyard,
@@ -179,6 +182,26 @@ function finishGameSimulationTick(
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
     : null
+  const spellObstructionPoint = (
+    playerId: string,
+    start: Vector2,
+    end: Vector2,
+    excludedSourceId?: string,
+  ): Vector2 | null => {
+    if (result.world.kind === 'boneyard') {
+      return firstBoneyardLineObstruction(
+        start,
+        end,
+        result.world.bounds,
+        boneyardCollision!,
+        excludedSourceId,
+      )
+    }
+    const region = result.world.participants[playerId]?.region
+    return region === undefined
+      ? null
+      : firstHubRegionLineObstruction(region, start, end)
+  }
   const cast = stepPrimarySpells({
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
@@ -193,17 +216,7 @@ function finishGameSimulationTick(
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
     canTraverseProjectile: (spell, from, to) => {
-      if (result.world.kind === 'boneyard') {
-        return firstBoneyardLineObstruction(
-          from,
-          to,
-          result.world.bounds,
-          boneyardCollision!,
-        ) === null
-      }
-      const region = result.world.participants[spell.ownerId]?.region
-      if (region === undefined) return false
-      return firstHubRegionLineObstruction(region, from, to) === null
+      return spellObstructionPoint(spell.ownerId, from, to) === null
     },
     inputs,
     players: result.players,
@@ -211,20 +224,26 @@ function finishGameSimulationTick(
     spells: previous.primarySpells,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
-    waterObstructionPoint: (playerId, start, end) => {
-      if (result.world.kind === 'boneyard') {
-        return firstBoneyardLineObstruction(
-          start,
-          end,
-          result.world.bounds,
-          boneyardCollision!,
-        )
+    spellObstructionPoint,
+    spellRangeEndpoint: (playerId, start, direction) => {
+      const bounds = result.world.kind === 'boneyard'
+        ? result.world.bounds
+        : (() => {
+            const region = result.world.participants[playerId]?.region
+            if (region === undefined) return { x: start.x, y: start.y, w: 0, h: 0 }
+            const definition = HUB_REGION_DEFINITIONS[region]
+            return { x: 0, y: 0, w: definition.width, h: definition.height }
+          })()
+      const length = 2 * Math.hypot(bounds.w, bounds.h)
+      const far = {
+        x: start.x + direction.x * length,
+        y: start.y + direction.y * length,
       }
-      const region = result.world.participants[playerId]?.region
-      return region === undefined
-        ? null
-        : firstHubRegionLineObstruction(region, start, end)
+      return lineBoundsExitObstruction(start, far, bounds)?.point ?? far
     },
+    spellTargets: () => result.world.kind === 'boneyard'
+      ? boneyardPrimarySpellTargets(result.world)
+      : [],
     worldKeyForPlayer: (playerId) => result.world.kind === 'hub'
       ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
       : `boneyard:${result.world.runId}`,

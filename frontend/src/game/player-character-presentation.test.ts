@@ -16,6 +16,12 @@ function closeTo(actual: number, expected: number, epsilon = 0.001): void {
   assert.ok(Math.abs(actual - expected) <= epsilon)
 }
 
+const FIRE_CONFIG = {
+  discipline: 'arcane',
+  displayName: 'Caster',
+  element: 'fire',
+} as const
+
 test('player character draw plan preserves native attachment and gait transforms', () => {
   assert.deepEqual(playerCharacterStaffOrbOffset(0), { x: -32.5, y: -66.5 })
   assert.deepEqual(playerCharacterStaffOrbOffset(6), { x: 38.5, y: -61.5 })
@@ -36,6 +42,7 @@ test('player character draw plan preserves native attachment and gait transforms
   closeTo(playerCharacterHeadOffset(6, 0).y, -0.5)
 
   const plan = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
     gaitDegrees: 90,
     headingIndex: 6,
     primaryCast: createIdlePlayerPrimaryCast(),
@@ -51,6 +58,7 @@ test('player character draw plan preserves native attachment and gait transforms
 
 test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () => {
   const markerPlan = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
     gaitDegrees: 0,
     headingIndex: 0,
     primaryCast: { ...createIdlePlayerPrimaryCast(), actionTick: 19 },
@@ -62,6 +70,7 @@ test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () =>
   assert.equal(markerPlan.staffFront, false)
 
   const recoveryPlan = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
     gaitDegrees: 0,
     headingIndex: 7,
     primaryCast: { ...createIdlePlayerPrimaryCast(), actionTick: 37 },
@@ -75,6 +84,7 @@ test('player draw plan consumes the authoritative Staff Cast 1 pose bank', () =>
 
 test('player draw plan holds the sustained Staff Constant pose bank', () => {
   const insertion = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
     gaitDegrees: 0,
     headingIndex: 0,
     primaryCast: {
@@ -89,6 +99,7 @@ test('player draw plan holds the sustained Staff Constant pose bank', () => {
   assert.deepEqual(insertion.orbOffset, { x: -32.5, y: -66.5 })
 
   const constant = createPlayerCharacterDrawPlan({
+    config: FIRE_CONFIG,
     gaitDegrees: 0,
     headingIndex: 0,
     primaryCast: {

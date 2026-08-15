@@ -116,6 +116,43 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
   assert.equal(state.players.caster.primaryCast.channelActive, false)
 })
 
+test('Boneyard Air falls back to a Gravestone and publishes the native curved segment', () => {
+  let state = createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Air Caster',
+    element: 'air',
+  } })
+  const loaded = emptyBoneyard()
+  loaded.scene.objects = [{
+    eid: 'grave-target',
+    overlayVariant: 8,
+    pos: { x: 250, y: 100 },
+    secondaryVariant: 0,
+    secondaryVisible: false,
+    typeId: 2029,
+    variant: 0,
+  }]
+  state = enterBoneyardWorld(state, loaded)
+  const player = state.players.caster
+  state = stepGameSimulationTick(state, { caster: {
+    aim: { x: 250, y: 50 },
+    cast: { primary: true, secondary: false },
+    movement: { x: 0, y: 0 },
+  } })
+
+  const bolt = state.primarySpells.transients[0]
+  assert.equal(bolt.kind, 'air')
+  assert.equal(bolt.targetId, 'scenery:grave-target')
+  assert.equal(state.players.caster.primaryCast.targetId, bolt.targetId)
+  assert.deepEqual(bolt.endpoint, { x: 250, y: 80 })
+  assert.equal(bolt.midpoint.x, bolt.origin.x)
+  assert.notDeepEqual(bolt.midpoint, {
+    x: (bolt.origin.x + bolt.endpoint.x) / 2,
+    y: (bolt.origin.y + bolt.endpoint.y) / 2,
+  })
+  assert.deepEqual(player.position, state.players.caster.position)
+})
+
 function emptyBoneyard(): LoadedBoneyard {
   return {
     choice: { id: 'empty', name: 'Empty', source: 'default' },

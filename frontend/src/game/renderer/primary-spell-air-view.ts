@@ -10,7 +10,6 @@ import type {
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
-import { PRIMARY_SPELL_AIR_REACH } from '../core-kernels/primary-spells.ts'
 import {
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   buildNativeAirLightningPlan,
@@ -43,9 +42,8 @@ export class AirPrimarySpellView {
     this.bodyContainer.eventMode = 'none'
     const construction = buildNativeAirLightningPlan({
       ageTicks: 0,
-      direction: state.direction,
+      ...localAirGeometry(state),
       id: state.id,
-      reach: PRIMARY_SPELL_AIR_REACH,
     })
     this.body = construction.body?.layers.map((layer) => {
       const mesh = new MeshSimple({
@@ -80,9 +78,8 @@ export class AirPrimarySpellView {
     this.bodyContainer.position.set(state.origin.x, state.origin.y)
     const plan = buildNativeAirLightningPlan({
       ageTicks: state.ageTicks,
-      direction: state.direction,
+      ...localAirGeometry(state),
       id: state.id,
-      reach: PRIMARY_SPELL_AIR_REACH,
     })
     this.plan = plan
     this.bodyContainer.visible = plan.body !== null
@@ -130,6 +127,22 @@ export class AirPrimarySpellView {
 
   destroy(): void {
     for (const container of this.containers) container.destroy({ children: true })
+  }
+}
+
+function localAirGeometry(state: PrimarySpellAirTransientState): {
+  endpoint: { x: number; y: number }
+  midpoint: { x: number; y: number }
+} {
+  return {
+    endpoint: {
+      x: state.endpoint.x - state.origin.x,
+      y: state.endpoint.y - state.origin.y,
+    },
+    midpoint: {
+      x: state.midpoint.x - state.origin.x,
+      y: state.midpoint.y - state.origin.y,
+    },
   }
 }
 

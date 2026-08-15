@@ -29,6 +29,7 @@ export interface PlayerPrimaryCastState {
   channelActive: boolean
   emissionSequence: number
   held: boolean
+  targetId: string | null
 }
 
 export interface PlayerCharacterState {
@@ -98,6 +99,7 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     channelActive: false,
     emissionSequence: 0,
     held: false,
+    targetId: null,
   }
 }
 

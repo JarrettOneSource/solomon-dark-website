@@ -35,13 +35,14 @@ export interface PlayerCharacterDrawPlan {
 export function createPlayerCharacterDrawPlan(
   state: Pick<
     PlayerCharacterState,
-    'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
+    'config' | 'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
   >,
   scale = 1,
 ): PlayerCharacterDrawPlan {
   const attachmentPose = primaryCastPose(
     state.primaryCast.actionTick,
     state.primaryCast.channelActive,
+    state.config.element,
   )
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
   return {
@@ -62,6 +63,7 @@ export function createPlayerCharacterDrawPlan(
       state.headingIndex,
       state.primaryCast.actionTick,
       state.primaryCast.channelActive,
+      state.config.element,
     ),
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),

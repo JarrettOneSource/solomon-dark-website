@@ -7,6 +7,9 @@ import {
   type WizardElement,
 } from './core-kernels/player-character.ts'
 import {
+  PRIMARY_CAST_ETHER_EMISSION_TICK,
+} from './core-kernels/primary-spells.ts'
+import {
   createGameSimulation,
   removePlayerCharacter,
   stepGameSimulationTick,
@@ -94,7 +97,7 @@ test('consumes the Ether one-shot only from its authoritative marker sequence', 
     PLAYER_ID,
     createGameSnapshot(state, PLAYER_ID),
   )
-  state = step(state, true, 19)
+  state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
   synchronizer.update(createGameSnapshot(state, PLAYER_ID))
   assert.deepEqual(audio.sounds, [])
   state = step(state, true)

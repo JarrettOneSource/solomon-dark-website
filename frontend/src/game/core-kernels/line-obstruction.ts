@@ -5,6 +5,27 @@ export interface LineObstruction {
   t: number
 }
 
+export interface LineBounds {
+  h: number
+  w: number
+  x: number
+  y: number
+}
+
+export function lineBoundsExitObstruction(
+  start: Vector2,
+  end: Vector2,
+  bounds: LineBounds,
+): LineObstruction | null {
+  const delta = subtract(end, start)
+  let t = Number.POSITIVE_INFINITY
+  if (delta.x > 0) t = Math.min(t, (bounds.x + bounds.w - start.x) / delta.x)
+  else if (delta.x < 0) t = Math.min(t, (bounds.x - start.x) / delta.x)
+  if (delta.y > 0) t = Math.min(t, (bounds.y + bounds.h - start.y) / delta.y)
+  else if (delta.y < 0) t = Math.min(t, (bounds.y - start.y) / delta.y)
+  return t >= 0 && t <= 1 ? { point: mix(start, end, t), t } : null
+}
+
 export function nearerLineObstruction(
   current: LineObstruction | null,
   candidate: LineObstruction | null,

@@ -84,6 +84,19 @@ export function createBoneyardWorld(loaded: LoadedBoneyard): BoneyardWorldState 
   }
 }
 
+export function boneyardPrimarySpellTargets(
+  world: BoneyardWorldState,
+): readonly PrimarySpellTarget[] {
+  const enemies: PrimarySpellTarget[] = (world.waves?.enemies ?? []).map((enemy) => ({
+    airPriority: 0,
+    attachment: { x: 0, y: 0 },
+    id: `enemy:${enemy.id}`,
+    kind: 'enemy',
+    position: { ...enemy.position },
+  }))
+  return [...enemies, ...world.scenerySpellTargets]
+}
+
 export function spawnPlayerCharacterInBoneyard(
   config: PlayerCharacterConfig,
   world: BoneyardWorldState,

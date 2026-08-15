@@ -8,14 +8,17 @@ import {
   type WizardElement,
 } from './player-character.ts'
 import {
-  PRIMARY_CAST_ACTION_END_TICK,
   PRIMARY_CAST_EMISSION_TICK,
+  PRIMARY_CAST_ETHER_ACTION_END_TICK,
+  PRIMARY_CAST_ETHER_EMISSION_TICK,
   PRIMARY_SPELL_EARTH_CHARGE_STEP,
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS,
+  primaryCastActionEndTick,
+  primaryCastEmissionTick,
   primaryCastPose,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
@@ -28,12 +31,26 @@ import {
   nativeFireParticleVariant,
 } from './primary-spell-fire-native.ts'
 import {
+  ETHER_PRIMARY_INITIAL_TURN,
+  ETHER_PRIMARY_TURN_FAST_STEP,
+  type PrimarySpellTarget,
+} from './primary-spell-targeting.ts'
+import {
   createGameSimulation,
   stepGameSimulationTick,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 
 const PLAYER_ID = 'caster'
+const EMPTY_SPELL_WORLD = {
+  spellObstructionPoint: () => null,
+  spellRangeEndpoint: (
+    _ownerId: string,
+    start: { x: number; y: number },
+    direction: { x: number; y: number },
+  ) => ({ x: start.x + direction.x * 2_000, y: start.y + direction.y * 2_000 }),
+  spellTargets: () => [],
+} as const
 
 function simulation(element: WizardElement): GameSimulationState {
   const config: PlayerCharacterConfig = {
@@ -73,25 +90,124 @@ function earthChargeAfter(updateCount: number): number {
   return charge
 }
 
-test('Ether emits one native Magic Missile at Staff Cast 1 marker tick', () => {
+test('Ether uses its faster native Staff rate and repeats while held', () => {
   let state = step(simulation('ether'), true)
   assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 0)
   assert.equal(state.primarySpells.projectiles.length, 0)
-  state = step(state, true, 19)
+  state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
   const player = state.players[PLAYER_ID]
   const missile = state.primarySpells.projectiles[0]
-  assert.equal(player.primaryCast.actionTick, 19)
+  assert.equal(player.primaryCast.actionTick, PRIMARY_CAST_ETHER_EMISSION_TICK)
   assert.equal(player.primaryCast.emissionSequence, 1)
-  assert.equal(primaryCastPose(player.primaryCast.actionTick), 8)
+  assert.equal(primaryCastPose(player.primaryCast.actionTick, false, 'ether'), 8)
   assert.equal(missile.kind, 'ether')
   assert.equal(missile.ageTicks, 1)
   assert.equal(missile.velocity.x, 0)
   assert.equal(missile.velocity.y, -3)
-  assert.equal(missile.position.x, player.position.x + 8.5)
-  assert.equal(missile.position.y, player.position.y - 40.5)
-  state = step(state, true, 100)
-  assert.equal(state.primarySpells.projectiles.length, 1)
-  assert.equal(state.players[PLAYER_ID].primaryCast.emissionSequence, 1)
+  assert.ok(Math.abs(missile.position.x - (player.position.x + 8.5)) < 0.0001)
+  assert.ok(Math.abs(missile.position.y - (player.position.y - 40.5)) < 0.0001)
+  state = step(
+    state,
+    true,
+    PRIMARY_CAST_ETHER_ACTION_END_TICK - PRIMARY_CAST_ETHER_EMISSION_TICK,
+  )
+  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, -1)
+  state = step(state, true)
+  assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, 0)
+  assert.equal(state.players[PLAYER_ID].primaryCast.castSequence, 2)
+  state = step(state, true, PRIMARY_CAST_ETHER_EMISSION_TICK)
+  assert.equal(state.players[PLAYER_ID].primaryCast.emissionSequence, 2)
+})
+
+test('Ether snapshots the forward-probe target and steers after its first movement', () => {
+  const initial = simulation('ether')
+  const player = initial.players[PLAYER_ID]
+  const target: PrimarySpellTarget = {
+    airPriority: 0,
+    attachment: { x: 0, y: 0 },
+    id: 'enemy:41',
+    kind: 'enemy',
+    position: { x: player.position.x + 100, y: player.position.y - 140 },
+  }
+  let players = initial.players
+  let previousPlayers = initial.players
+  let spells = initial.primarySpells
+  for (let tick = 1; tick <= PRIMARY_CAST_ETHER_EMISSION_TICK + 1; tick += 1) {
+    const result = stepPrimarySpells({
+      ...EMPTY_SPELL_WORLD,
+      canPlaceProjectile: () => true,
+      canTraverseProjectile: () => true,
+      inputs: { [PLAYER_ID]: input(initial, true) },
+      players,
+      previousPlayers,
+      spellTargets: () => [target],
+      spells,
+      tick,
+      viewScale: 1.2,
+      worldKeyForPlayer: () => 'hub:courtyard',
+    })
+    players = result.players
+    previousPlayers = result.players
+    spells = result.spells
+  }
+
+  const missile = spells.projectiles[0]
+  assert.equal(missile.kind, 'ether')
+  assert.equal(missile.targetId, target.id)
+  assert.equal(
+    missile.turnAccumulator,
+    Math.fround(ETHER_PRIMARY_INITIAL_TURN + ETHER_PRIMARY_TURN_FAST_STEP),
+  )
+  assert.ok(missile.headingDegrees > 0)
+  assert.ok(missile.direction.x > 0)
+  const firstPosition = { ...missile.position }
+
+  const advanced = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: { [PLAYER_ID]: input(initial, false) },
+    players,
+    previousPlayers: players,
+    spellTargets: () => [target],
+    spells,
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 2,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(advanced.kind, 'ether')
+  assert.ok(advanced.position.x > firstPosition.x)
+
+  const lost = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: { nextId: spells.nextId, projectiles: [advanced], transients: [] },
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 3,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(lost.kind, 'ether')
+  assert.equal(lost.targetId, null)
+
+  const noRankOneRetarget = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [target],
+    spells: { nextId: spells.nextId, projectiles: [lost], transients: [] },
+    tick: PRIMARY_CAST_ETHER_EMISSION_TICK + 4,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(noRankOneRetarget.kind, 'ether')
+  assert.equal(noRankOneRetarget.targetId, null)
 })
 
 test('Fire emits its one 4.5-unit missile from the native pushed socket', () => {
@@ -143,6 +259,7 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
   const player = beforeMarker.players[PLAYER_ID]
   const probes: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = []
   const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: (_spell, from, to) => {
       probes.push({ from, to })
@@ -192,6 +309,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
   } as const
   const probes: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = []
   const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: (_spell, from, to) => {
       probes.push({ from, to })
@@ -223,6 +341,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
   let impactState = result.spells
   for (let age = 1; age < PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS; age += 1) {
     impactState = stepPrimarySpells({
+      ...EMPTY_SPELL_WORLD,
       canPlaceProjectile: () => true,
       canTraverseProjectile: () => true,
       inputs: {},
@@ -236,6 +355,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
     assert.equal(impactState.transients[0]?.ageTicks, age)
   }
   impactState = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
     inputs: {},
@@ -252,6 +372,7 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
 test('Fire has no distance or PoC flight-time range cap', () => {
   const ageTicks = PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS + 5
   const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
     inputs: {},
@@ -299,19 +420,21 @@ test('one-shot casts retain accepted facing against movement through projectile 
     state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(true) })
     assert.equal(state.players[PLAYER_ID].headingIndex, 6)
 
-    for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    const emissionTick = primaryCastEmissionTick(element)
+    const actionEndTick = primaryCastActionEndTick(element)
+    for (let tick = 0; tick < emissionTick; tick += 1) {
       state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
     }
 
     const projectile = state.primarySpells.projectiles[0]
-    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, PRIMARY_CAST_EMISSION_TICK)
+    assert.equal(state.players[PLAYER_ID].primaryCast.actionTick, emissionTick)
     assert.equal(state.players[PLAYER_ID].headingIndex, 6)
     assert.ok(projectile.velocity.x > 0)
-    assert.equal(projectile.velocity.y, 0)
+    assert.ok(Math.abs(projectile.velocity.y) < 0.000001)
 
     for (
-      let tick = PRIMARY_CAST_EMISSION_TICK;
-      tick < PRIMARY_CAST_ACTION_END_TICK;
+      let tick = emissionTick;
+      tick < actionEndTick;
       tick += 1
     ) {
       state = stepGameSimulationTick(state, { [PLAYER_ID]: castInput(false) })
@@ -473,6 +596,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
   assert.deepEqual(released.velocity, { x: 3, y: 0 })
 
   const next = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
     players: state.players,
@@ -507,6 +631,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
   assert.equal(boulder.charge, 1)
   assert.equal(boulder.phase, 'held')
   const releaseResult = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
     inputs: { [PLAYER_ID]: input(state, false) },
@@ -515,7 +640,6 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
-    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
   let spells = releaseResult.spells
@@ -524,6 +648,7 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
   const containmentStep = () => {
     tick += 1
     const result = stepPrimarySpells({
+      ...EMPTY_SPELL_WORLD,
       canPlaceProjectile: () => true,
       canTraverseProjectile: () => true,
       inputs: { [PLAYER_ID]: input(state, false) },
@@ -532,7 +657,6 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
       spells,
       tick,
       viewScale: 1.2,
-      waterObstructionPoint: () => null,
       worldKeyForPlayer: () => 'hub:courtyard',
     })
     players = result.players
@@ -552,6 +676,7 @@ test('Earth publishes one authoritative breakup when its next flight position co
   const released = state.primarySpells.projectiles[0]
   const checked: { position: { x: number, y: number }, radius: number }[] = []
   const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: (_spell, position, radius) => {
       checked.push({ position, radius })
       return false
@@ -563,7 +688,6 @@ test('Earth publishes one authoritative breakup when its next flight position co
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
-    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
 
@@ -594,6 +718,7 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
   const heldBoulder = state.primarySpells.projectiles[0]
   const checked: { position: { x: number, y: number }, radius: number }[] = []
   const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: (_spell, position, radius) => {
       checked.push({ position, radius })
       return false
@@ -605,7 +730,6 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
     spells: state.primarySpells,
     tick: state.tick + 1,
     viewScale: 1.2,
-    waterObstructionPoint: () => null,
     worldKeyForPlayer: () => 'hub:courtyard',
   })
 
@@ -678,12 +802,16 @@ test('pins native torso aim, Staff pose schedule, and observed socket banks', ()
   assert.equal(primaryCastPose(19), 8)
   assert.equal(primaryCastPose(37), 7)
   assert.equal(primaryCastPose(74), 0)
+  assert.equal(primaryCastPose(15, false, 'ether'), 8)
+  assert.equal(primaryCastPose(28, false, 'ether'), 7)
+  assert.equal(primaryCastPose(56, false, 'ether'), 0)
   assert.equal(primaryCastPose(0, true), 0)
   assert.equal(primaryCastPose(1, true), 7)
   assert.equal(primaryCastPose(73, true), 7)
   assert.deepEqual(primarySpellEmitterOffset(0, 0), { x: -32.5, y: -66.5 })
   assert.deepEqual(primarySpellEmitterOffset(0, 2), { x: -41.5, y: 3.5 })
   assert.deepEqual(primarySpellEmitterOffset(0, 19), { x: 8.5, y: -47.5 })
+  assert.deepEqual(primarySpellEmitterOffset(0, 15, false, 'ether'), { x: 8.5, y: -47.5 })
   assert.deepEqual(primarySpellEmitterOffset(19, 37), { x: -41.5, y: -34.5 })
   assert.deepEqual(primarySpellEmitterOffset(0, 1, true), { x: 8.5, y: -56 })
 })

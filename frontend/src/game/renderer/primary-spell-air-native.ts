@@ -83,9 +83,9 @@ export interface NativeAirLightningPlan {
 
 export interface NativeAirLightningInput {
   ageTicks: number
-  direction: NativeAirPoint
+  endpoint: NativeAirPoint
   id: number
-  reach: number
+  midpoint: NativeAirPoint
 }
 
 export interface NativeAirContactLightSourceInput extends NativeAirLightningInput {
@@ -116,16 +116,9 @@ export function buildNativeAirLightningPlan(
   input: NativeAirLightningInput,
 ): NativeAirLightningPlan {
   const nativeAge = Math.max(0, Math.floor(input.ageTicks))
-  const direction = normalized(input.direction)
   const source = { x: 0, y: 0 }
-  const endpoint = {
-    x: direction.x * input.reach,
-    y: direction.y * input.reach,
-  }
-  const midpoint = {
-    x: endpoint.x * 0.5,
-    y: endpoint.y * 0.5,
-  }
+  const endpoint = { ...input.endpoint }
+  const midpoint = { ...input.midpoint }
   const points = [source, midpoint, endpoint] as const
   const basePhaseDegrees = -3 * input.id
   const contactSamples = nativeContactSamples(input.id)
@@ -193,16 +186,13 @@ export function buildNativeAirContactLightPlan(
 export function buildNativeAirContactLightSource(
   input: NativeAirContactLightSourceInput,
 ): NativeAirContactLightPlan | null {
-  const direction = normalized(input.direction)
   const samples = nativeContactSamples(input.id)
   const light = buildNativeAirContactLightPlan({
     ageTicks: input.ageTicks,
     id: input.id,
     position: {
-      x: direction.x * input.reach
-        + Math.cos(samples.offsetAngle) * samples.offsetRadius,
-      y: direction.y * input.reach
-        + Math.sin(samples.offsetAngle) * samples.offsetRadius,
+      x: input.endpoint.x + Math.cos(samples.offsetAngle) * samples.offsetRadius,
+      y: input.endpoint.y + Math.sin(samples.offsetAngle) * samples.offsetRadius,
     },
   })
   if (!light) return null

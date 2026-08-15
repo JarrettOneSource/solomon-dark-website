@@ -6,6 +6,7 @@ import type {
   BoneyardScene,
 } from '../core-kernels/boneyard.ts'
 import {
+  lineBoundsExitObstruction,
   lineCapsuleObstruction,
   lineCircleObstruction,
   lineSegmentObstruction,
@@ -173,23 +174,7 @@ export function firstBoneyardLineObstruction(
   world: BoneyardCollisionWorld,
   excludedSourceId?: string,
 ): BoneyardPoint | null {
-  let nearest: LineObstruction | null = null
-  const left = bounds.x
-  const right = bounds.x + bounds.w
-  const top = bounds.y
-  const bottom = bounds.y + bounds.h
-  const boundary = [
-    [{ x: left, y: top }, { x: right, y: top }],
-    [{ x: right, y: top }, { x: right, y: bottom }],
-    [{ x: right, y: bottom }, { x: left, y: bottom }],
-    [{ x: left, y: bottom }, { x: left, y: top }],
-  ] as const
-  for (const [edgeStart, edgeEnd] of boundary) {
-    nearest = nearerLineObstruction(
-      nearest,
-      lineSegmentObstruction(start, end, edgeStart, edgeEnd),
-    )
-  }
+  let nearest: LineObstruction | null = lineBoundsExitObstruction(start, end, bounds)
   for (const polygon of world.polygons) {
     if (excludedSourceId !== undefined && polygon.sourceId === excludedSourceId) continue
     for (let index = 0; index < polygon.points.length; index += 1) {

@@ -11,6 +11,7 @@ import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
+import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
@@ -242,22 +243,30 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     charge: 1,
     direction: { x: 0, y: -1 },
     flightTicks: 1,
+    headingDegrees: 0,
     id: 1,
     kind: 'ether',
     ownerId: 'player-1',
     phase: 'flight',
     position: { x: 800, y: 400 },
+    targetId: null,
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
     velocity: { x: 0, y: -3 },
     worldKey: 'hub:courtyard',
   }
   const boulder = {
-    ...missile,
+    ageTicks: missile.ageTicks,
     assemblyCharge: Math.fround(0.18),
     charge: 0.19,
+    direction: missile.direction,
     flightTicks: 0,
+    id: missile.id,
     kind: 'earth',
+    ownerId: missile.ownerId,
     phase: 'held',
+    position: missile.position,
     velocity: { x: 0, y: 0 },
+    worldKey: missile.worldKey,
   }
   const earthImpactSeed = {
     ageTicks: 3,
@@ -293,6 +302,11 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     worldKey: 'hub:courtyard',
   }
 
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [missile], transients: [] },
+  }))
+
   const decodedImpact = decodeFrame({
     ...frame,
     primarySpells: { nextId: 2, projectiles: [], transients: [earthImpact] },
@@ -317,6 +331,19 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
   }
+  const airBolt = {
+    ageTicks: 0,
+    direction: { x: 0, y: -1 },
+    endpoint: { x: 820, y: 180 },
+    id: 1,
+    kind: 'air',
+    midpoint: { x: 800, y: 290 },
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    targetId: 'scenery:grave-7',
+    variant: 1,
+    worldKey: 'hub:courtyard',
+  }
 
   assert.doesNotThrow(() => decodeFrame({
     ...frame,
@@ -336,6 +363,20 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedFireImpact.type, 'server-snapshot')
   assert.deepEqual(decodedFireImpact.frame.primarySpells.transients, [fireImpact])
+  const decodedAir = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [], transients: [airBolt] },
+  })
+  assert.equal(decodedAir.type, 'server-snapshot')
+  assert.deepEqual(decodedAir.frame.primarySpells.transients, [airBolt])
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...airBolt, midpoint: undefined }],
+    },
+  }), /midpoint/)
   const decodedCalledRock = decodeFrame({
     ...frame,
     primarySpells: { nextId: 3, projectiles: [], transients: [calledRock] },
@@ -377,10 +418,23 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       ...frame.players,
       'player-1': {
         ...frame.players['player-1'],
-        primaryCast: { ...frame.players['player-1'].primaryCast, actionTick: 74 },
+        primaryCast: { ...frame.players['player-1'].primaryCast, actionTick: 56 },
       },
     },
   }), /outside the Staff Cast 1 program/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    players: {
+      ...frame.players,
+      'player-1': {
+        ...frame.players['player-1'],
+        primaryCast: {
+          ...frame.players['player-1'].primaryCast,
+          targetId: 'scenery:grave-7',
+        },
+      },
+    },
+  }), /targetId is only valid for Air/)
   assert.throws(() => decodeFrame({
     ...frame,
     players: {
@@ -416,12 +470,8 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     primarySpells: {
       nextId: 2,
       projectiles: [{
-        ...missile,
-        assemblyCharge: 0.2,
-        charge: 0.2,
-        kind: 'earth',
-        phase: 'held',
-        velocity: { x: 0, y: 0 },
+        ...boulder,
+        flightTicks: 1,
       }],
       transients: [],
     },

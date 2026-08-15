@@ -450,6 +450,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           channelActive: false,
           emissionSequence: 1,
           held: false,
+          targetId: null,
         },
       },
     },

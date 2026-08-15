@@ -153,19 +153,19 @@ function interpolateTransient(
     }
   }
   if (older.kind === 'water' || newer.kind === 'water') return copyTransient(discrete)
-  const channel = blend < 1 ? older : newer
-  return {
-    ...channel,
-    ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
-    direction: {
-      x: lerp(older.direction.x, newer.direction.x, blend),
-      y: lerp(older.direction.y, newer.direction.y, blend),
-    },
-    origin: {
-      x: lerp(older.origin.x, newer.origin.x, blend),
-      y: lerp(older.origin.y, newer.origin.y, blend),
-    },
+  if (older.kind === 'air' && newer.kind === 'air') {
+    const air = blend < 1 ? older : newer
+    return {
+      ...air,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: { ...air.direction },
+      endpoint: { ...air.endpoint },
+      midpoint: { ...air.midpoint },
+      origin: { ...air.origin },
+    }
   }
+  if (older.kind === 'air' || newer.kind === 'air') return copyTransient(discrete)
+  throw new Error('Unsupported primary spell transient pair')
 }
 
 function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProjectileState {
@@ -191,6 +191,15 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       obstructionPoint: effect.obstructionPoint === null
         ? null
         : { ...effect.obstructionPoint },
+      origin: { ...effect.origin },
+    }
+  }
+  if (effect.kind === 'air') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      endpoint: { ...effect.endpoint },
+      midpoint: { ...effect.midpoint },
       origin: { ...effect.origin },
     }
   }

@@ -7,6 +7,7 @@ import {
   type PlayerCharacterInput,
   type PlayerCharacterState,
   type PlayerPrimaryCastState,
+  type WizardElement,
 } from './player-character.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
@@ -25,6 +26,15 @@ import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from './primary-spell-fire-native.ts'
+import {
+  AIR_PRIMARY_TARGET_Y_OFFSET,
+  ETHER_PRIMARY_INITIAL_TURN,
+  airPrimaryBoltGeometry,
+  advanceEtherPrimaryHoming,
+  selectAirPrimaryTarget,
+  selectEtherPrimaryTarget,
+  type PrimarySpellTarget,
+} from './primary-spell-targeting.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
 export type PrimarySpellTransientKind =
@@ -54,13 +64,21 @@ export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectile
   kind: 'earth'
 }
 
-export interface PrimarySpellFlightProjectileState extends PrimarySpellProjectileBaseState {
-  kind: 'ether' | 'fire'
+export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectileBaseState {
+  headingDegrees: number
+  kind: 'ether'
+  targetId: string | null
+  turnAccumulator: number
+}
+
+export interface PrimarySpellFireProjectileState extends PrimarySpellProjectileBaseState {
+  kind: 'fire'
 }
 
 export type PrimarySpellProjectileState =
   | PrimarySpellEarthProjectileState
-  | PrimarySpellFlightProjectileState
+  | PrimarySpellEtherProjectileState
+  | PrimarySpellFireProjectileState
 
 interface PrimarySpellChannelTransientBase {
   ageTicks: number
@@ -73,7 +91,10 @@ interface PrimarySpellChannelTransientBase {
 }
 
 export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransientBase {
+  endpoint: Vector2
   kind: 'air'
+  midpoint: Vector2
+  targetId: string | null
 }
 
 export interface PrimarySpellWaterTransientState extends PrimarySpellChannelTransientBase {
@@ -167,11 +188,18 @@ export interface PrimarySpellTickContext {
   spells: PrimarySpellSimulationState
   tick: number
   viewScale: number
-  waterObstructionPoint: (
+  spellObstructionPoint: (
     ownerId: string,
     start: Vector2,
     end: Vector2,
+    excludedSourceId?: string,
   ) => Vector2 | null
+  spellRangeEndpoint: (
+    ownerId: string,
+    start: Vector2,
+    direction: Vector2,
+  ) => Vector2
+  spellTargets: (ownerId: string) => readonly PrimarySpellTarget[]
   worldKeyForPlayer: (playerId: string) => string
 }
 
@@ -182,7 +210,8 @@ export interface PrimarySpellTickResult {
 
 export const PRIMARY_CAST_ACTION_END_TICK = 74
 export const PRIMARY_CAST_EMISSION_TICK = 19
-export const PRIMARY_SPELL_AIR_REACH = 205
+export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 56
+export const PRIMARY_CAST_ETHER_EMISSION_TICK = 15
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS = 500
@@ -266,21 +295,38 @@ export function createPrimarySpellSimulation(): PrimarySpellSimulationState {
 export function primaryCastPose(
   actionTick: number,
   channelActive = false,
+  element: WizardElement = 'fire',
 ): 0 | 1 | 7 | 8 {
   if (channelActive) return actionTick <= 0 ? 0 : 7
-  if (actionTick < 2 || actionTick >= PRIMARY_CAST_ACTION_END_TICK) return 0
-  if (actionTick < PRIMARY_CAST_EMISSION_TICK) return 1
-  if (actionTick < 37) return 8
+  const actionEndTick = primaryCastActionEndTick(element)
+  const emissionTick = primaryCastEmissionTick(element)
+  const recoveryTick = element === 'ether' ? 28 : 37
+  if (actionTick < 2 || actionTick >= actionEndTick) return 0
+  if (actionTick < emissionTick) return 1
+  if (actionTick < recoveryTick) return 8
   return 7
 }
 
+export function primaryCastActionEndTick(element: WizardElement): number {
+  return element === 'ether'
+    ? PRIMARY_CAST_ETHER_ACTION_END_TICK
+    : PRIMARY_CAST_ACTION_END_TICK
+}
+
+export function primaryCastEmissionTick(element: WizardElement): number {
+  return element === 'ether'
+    ? PRIMARY_CAST_ETHER_EMISSION_TICK
+    : PRIMARY_CAST_EMISSION_TICK
+}
+
 export function primarySpellEmitter(
-  player: Pick<PlayerCharacterState, 'headingIndex' | 'position' | 'primaryCast'>,
+  player: Pick<PlayerCharacterState, 'config' | 'headingIndex' | 'position' | 'primaryCast'>,
 ): Vector2 {
   const offset = primarySpellEmitterOffset(
     player.headingIndex,
     player.primaryCast.actionTick,
     player.primaryCast.channelActive,
+    player.config.element,
   )
   return {
     x: player.position.x + offset.x,
@@ -292,8 +338,9 @@ export function primarySpellEmitterOffset(
   headingIndex: number,
   actionTick: number,
   channelActive = false,
+  element: WizardElement = 'fire',
 ): Vector2 {
-  const pose = primaryCastPose(actionTick, channelActive)
+  const pose = primaryCastPose(actionTick, channelActive, element)
   const facing = ((Math.round(headingIndex) % 24) + 24) % 24
   return STAFF_PRIMARY_EMITTER_OFFSETS[pose][facing]
 }
@@ -314,11 +361,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   let projectiles: PrimarySpellProjectileState[] = []
   for (const spell of context.spells.projectiles) {
     if (spell.phase === 'held') {
-      projectiles.push(advanceProjectile(spell))
+      projectiles.push(advanceProjectile(spell, []))
       continue
     }
     if (
-      spell.kind === 'fire'
+      (spell.kind === 'ether' || spell.kind === 'fire')
       && spell.ageTicks % 5 === 0
       && !context.canTraverseProjectile(
         spell,
@@ -329,11 +376,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         },
       )
     ) {
-      transients = [...transients, fireImpact(nextId, spell)]
-      nextId += 1
+      if (spell.kind === 'fire') {
+        transients = [...transients, fireImpact(nextId, spell)]
+        nextId += 1
+      }
       continue
     }
-    const advanced = advanceProjectile(spell)
+    const targets = context.spellTargets(spell.ownerId)
+    const advanced = advanceProjectile(spell, targets)
     if (
       advanced.kind === 'earth'
       && !context.canPlaceProjectile(
@@ -346,6 +396,16 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       nextId += 1
       continue
     }
+    if (
+      advanced.kind === 'ether'
+      && targets.some((target) => (
+        target.kind === 'enemy'
+        && Math.hypot(
+          target.position.x - advanced.position.x,
+          target.position.y - advanced.position.y,
+        ) < 6
+      ))
+    ) continue
     projectiles.push(advanced)
   }
   const players: Record<string, PlayerCharacterState> = { ...context.players }
@@ -362,7 +422,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const rawHeld = input?.cast.primary === true && input.aim !== null
     const pressed = rawHeld && !previous.primaryCast.held
     const released = !rawHeld && previous.primaryCast.held
-    const acceptedPress = pressed && previous.primaryCast.actionTick < 0
+    const oneShotPrimary = player.config.element === 'ether' || player.config.element === 'fire'
+    const acceptedCast = rawHeld
+      && previous.primaryCast.actionTick < 0
+      && (pressed || oneShotPrimary)
     const sustainedPrimary = (
       player.config.element === 'air'
       || player.config.element === 'water'
@@ -374,7 +437,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const aimDirection = aimSamplesInput && input?.aim
       ? primarySpellAimDirection(player.position, input.aim, context.viewScale)
       : previous.primaryCast.aimDirection
-    let primaryCast = advancePrimaryCast(previous.primaryCast, rawHeld, acceptedPress)
+    let primaryCast = advancePrimaryCast(
+      previous.primaryCast,
+      rawHeld,
+      acceptedCast,
+      player.config.element,
+    )
     const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
       ...player,
@@ -385,7 +453,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
     const worldKey = context.worldKeyForPlayer(playerId)
 
-    if (acceptedPress) {
+    if (acceptedCast) {
       switch (player.config.element) {
         case 'air':
         case 'water':
@@ -420,8 +488,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
 
     if (
-      nextPlayer.primaryCast.actionTick === PRIMARY_CAST_EMISSION_TICK
-      && previous.primaryCast.actionTick !== PRIMARY_CAST_EMISSION_TICK
+      nextPlayer.primaryCast.actionTick === primaryCastEmissionTick(player.config.element)
+      && previous.primaryCast.actionTick !== primaryCastEmissionTick(player.config.element)
       && (player.config.element === 'ether' || player.config.element === 'fire')
     ) {
       const born = createOneShotProjectile(
@@ -430,6 +498,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         nextPlayer,
         player.config.element,
         worldKey,
+        context.spellTargets(playerId),
       )
       nextId += 1
       if (born.kind === 'fire') {
@@ -447,7 +516,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           },
         )
         if (initialClear && firstLookaheadClear) {
-          const spell = advanceProjectile(born)
+          const spell = advanceProjectile(born, [])
           projectiles = [...projectiles, spell]
           transients = [...transients, createFireParticle(nextId, spell)]
           nextId += 1
@@ -456,7 +525,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextId += 1
         }
       } else {
-        projectiles = [...projectiles, advanceProjectile(born)]
+        const firstLookaheadClear = context.canTraverseProjectile(
+          born,
+          born.position,
+          {
+            x: born.position.x + born.velocity.x * 5,
+            y: born.position.y + born.velocity.y * 5,
+          },
+        )
+        if (firstLookaheadClear) {
+          projectiles = [...projectiles, advanceProjectile(
+            born,
+            context.spellTargets(playerId),
+          )]
+        }
       }
       nextPlayer = {
         ...nextPlayer,
@@ -479,16 +561,33 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         case 'air': {
           if (!rawHeld) break
           const emitter = primarySpellEmitter(nextPlayer)
+          const air = createAirTransient(
+            playerId,
+            nextPlayer,
+            emitter,
+            aimDirection,
+            context,
+          )
           transients = [...transients, {
             ageTicks: 0,
             direction: { ...aimDirection },
+            endpoint: air.endpoint,
             id: nextId,
             kind: 'air',
+            midpoint: air.midpoint,
             origin: emitter,
             ownerId: playerId,
+            targetId: air.targetId,
             variant: nextId % 4,
             worldKey,
           }]
+          nextPlayer = {
+            ...nextPlayer,
+            primaryCast: {
+              ...nextPlayer.primaryCast,
+              targetId: air.targetId,
+            },
+          }
           nextId += 1
           break
         }
@@ -510,7 +609,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 born,
                 nextPlayer.position,
                 id,
-                (start, end) => context.waterObstructionPoint(playerId, start, end),
+                (start, end) => context.spellObstructionPoint(playerId, start, end),
               )
               return {
                 ageTicks: 0,
@@ -535,7 +634,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               return spell
             }
             const emitter = primarySpellEmitter(nextPlayer)
-            const charge = acceptedPress || (!rawHeld && (
+            const charge = acceptedCast || (!rawHeld && (
               spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
             ))
               ? spell.charge
@@ -634,6 +733,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...nextPlayer.primaryCast,
           actionTick: -1,
           channelActive: false,
+          targetId: null,
         },
       }
     }
@@ -685,10 +785,67 @@ export function primarySpellAimDirection(
     : { x: 0, y: -1 }
 }
 
+function createAirTransient(
+  ownerId: string,
+  player: PlayerCharacterState,
+  emitter: Vector2,
+  aimDirection: Vector2,
+  context: PrimarySpellTickContext,
+): Pick<PrimarySpellAirTransientState, 'endpoint' | 'midpoint' | 'targetId'> {
+  const rangeEndpoint = context.spellRangeEndpoint(
+    ownerId,
+    player.position,
+    aimDirection,
+  )
+  const untargetedEndpoint = context.spellObstructionPoint(
+    ownerId,
+    player.position,
+    rangeEndpoint,
+  ) ?? rangeEndpoint
+  const maxRange = Math.hypot(
+    rangeEndpoint.x - player.position.x,
+    rangeEndpoint.y - player.position.y,
+  )
+  const target = selectAirPrimaryTarget({
+    aimDirection,
+    hasLineOfSight: (candidate) => context.spellObstructionPoint(
+      ownerId,
+      player.position,
+      candidate.position,
+      candidate.id,
+    ) === null,
+    maxRange,
+    origin: player.position,
+    previousTargetId: player.primaryCast.targetId,
+    targets: context.spellTargets(ownerId),
+  })
+  let endpoint = untargetedEndpoint
+  if (target) {
+    const attachment = {
+      x: target.position.x + target.attachment.x,
+      y: target.position.y + target.attachment.y,
+    }
+    const clipped = context.spellObstructionPoint(
+      ownerId,
+      player.position,
+      attachment,
+      target.id,
+    ) ?? attachment
+    endpoint = { x: clipped.x, y: clipped.y + AIR_PRIMARY_TARGET_Y_OFFSET }
+  }
+  const geometry = airPrimaryBoltGeometry(emitter, aimDirection, endpoint)
+  return {
+    endpoint: geometry.endpoint,
+    midpoint: geometry.midpoint,
+    targetId: target?.id ?? null,
+  }
+}
+
 function advancePrimaryCast(
   previous: PlayerPrimaryCastState,
   held: boolean,
-  acceptedPress: boolean,
+  acceptedCast: boolean,
+  element: WizardElement,
 ): PlayerPrimaryCastState {
   let actionTick = previous.actionTick
   if (actionTick >= 0) {
@@ -696,14 +853,14 @@ function advancePrimaryCast(
       actionTick = Math.min(actionTick + 1, 1)
     } else {
       actionTick += 1
-      if (actionTick >= PRIMARY_CAST_ACTION_END_TICK) actionTick = -1
+      if (actionTick >= primaryCastActionEndTick(element)) actionTick = -1
     }
   }
-  if (acceptedPress) actionTick = 0
+  if (acceptedCast) actionTick = 0
   return {
     ...previous,
     actionTick,
-    castSequence: acceptedPress ? previous.castSequence + 1 : previous.castSequence,
+    castSequence: acceptedCast ? previous.castSequence + 1 : previous.castSequence,
     held,
   }
 }
@@ -714,6 +871,7 @@ function createOneShotProjectile(
   player: PlayerCharacterState,
   kind: 'ether' | 'fire',
   worldKey: string,
+  targets: readonly PrimarySpellTarget[],
 ): PrimarySpellProjectileState {
   const direction = player.primaryCast.aimDirection
   const emitter = primarySpellEmitter(player)
@@ -724,7 +882,7 @@ function createOneShotProjectile(
     y: emitter.y + 10 + direction.y * alongAim,
   }
   const velocity = { x: direction.x * speed, y: direction.y * speed }
-  return {
+  const common = {
     ageTicks: 0,
     charge: 1,
     direction: { ...direction },
@@ -732,18 +890,61 @@ function createOneShotProjectile(
     id,
     kind,
     ownerId,
-    phase: 'flight',
+    phase: 'flight' as const,
     position: spawn,
     velocity,
     worldKey,
+  }
+  if (kind === 'fire') {
+    return { ...common, kind: 'fire' }
+  }
+  const target = selectEtherPrimaryTarget({
+    aimDirection: direction,
+    origin: spawn,
+    targets,
+  })
+  return {
+    ...common,
+    headingDegrees: Math.fround(actorHeadingFromVector(direction.x, direction.y)),
+    kind: 'ether',
+    targetId: target?.id ?? null,
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
   }
 }
 
 function advanceProjectile(
   spell: PrimarySpellProjectileState,
+  targets: readonly PrimarySpellTarget[],
 ): PrimarySpellProjectileState {
   if (spell.phase === 'held') {
     return { ...spell, ageTicks: spell.ageTicks + 1 }
+  }
+  if (spell.kind === 'ether') {
+    const target = spell.targetId === null
+      ? undefined
+      : targets.find(({ id }) => id === spell.targetId)
+    const advanced = advanceEtherPrimaryHoming({
+      headingDegrees: spell.headingDegrees,
+      movementScalar: 1,
+      position: spell.position,
+      speed: 3,
+      targetPosition: target?.position ?? null,
+      turnAccumulator: spell.turnAccumulator,
+    })
+    return {
+      ...spell,
+      ageTicks: spell.ageTicks + 1,
+      direction: advanced.direction,
+      flightTicks: spell.flightTicks + 1,
+      headingDegrees: advanced.headingDegrees,
+      position: advanced.position,
+      targetId: target?.id ?? null,
+      turnAccumulator: advanced.turnAccumulator,
+      velocity: {
+        x: Math.fround(advanced.direction.x * 3),
+        y: Math.fround(advanced.direction.y * 3),
+      },
+    }
   }
   return {
     ...spell,

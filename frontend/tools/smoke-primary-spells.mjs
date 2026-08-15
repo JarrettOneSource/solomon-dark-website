@@ -168,7 +168,9 @@ try {
 
   const receipts = []
   const errors = []
+  let airPage = null
   let earthPage = null
+  let firePage = null
   let waterPage = null
 
   for (const spell of selectedSpells) {
@@ -185,7 +187,9 @@ try {
     const target = await castTarget(canvas, 0.67, 0.42)
     await page.mouse.move(target.x, target.y)
     await page.mouse.down({ button: 'left' })
-    const castPosePromise = waitForHubCastPose(page, poseEventStart, spell.castPose)
+    const castPosePromise = spell.mode === 'one-shot'
+      ? null
+      : waitForHubCastPose(page, poseEventStart, spell.castPose)
     let opening = null
 
     if (spell.mode === 'charge') {
@@ -202,15 +206,33 @@ try {
       await page.mouse.up({ button: 'left' })
     }
 
-    const castFrame = await castPosePromise
-    assert.equal(castFrame.playerAttachmentPose, spell.castPose)
-    if (spell.mode !== 'charge') await waitForHubSpell(page, spell.kind)
-    const facingWire = await latestWireSpell(page, spell.kind)
+    let castFrame = castPosePromise === null ? null : await castPosePromise
+    if (castFrame) assert.equal(castFrame.playerAttachmentPose, spell.castPose)
+    const observableKinds = spell.kind === 'fire'
+      ? ['fire', 'fire-impact']
+      : spell.kind
+    let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
+    const observedSpellFrame = spell.mode === 'charge'
+      ? null
+      : await waitForHubSpell(page, observableKinds)
+    if (spell.kind === 'fire') await page.screenshot({ path: screenshotPath })
+    const facingWire = await latestWireSpell(page, observableKinds)
+    if (castFrame === null) {
+      assert.ok(
+        facingWire.observedAttachmentPoses.includes(spell.castPose),
+        `expected authoritative ${spell.kind} pose ${spell.castPose}`,
+      )
+      castFrame = {
+        playerAttachmentPose: spell.castPose,
+        tick: facingWire.tick,
+      }
+    }
     const expectedHeadingIndex = headingIndex(facingWire.castAimDirection)
     assert.equal(facingWire.playerHeadingIndex, expectedHeadingIndex)
-    const facingFrame = await waitForHubFacing(page, spell.kind, expectedHeadingIndex)
+    const facingFrame = observedSpellFrame?.playerHeadingIndex === expectedHeadingIndex
+      ? observedSpellFrame
+      : await waitForHubFacing(page, observableKinds, expectedHeadingIndex)
     let earthStages = null
-    let screenshotPath = `${screenshotRoot}/solomon-primary-${spell.kind}-hub.png`
     if (spell.mode === 'charge') {
       await page.waitForTimeout(500)
       const midScreenshotPath = `${screenshotRoot}/solomon-primary-earth-hub-mid.png`
@@ -224,7 +246,7 @@ try {
         opening,
       }
       screenshotPath = highScreenshotPath
-    } else {
+    } else if (spell.kind !== 'fire') {
       await page.screenshot({ path: screenshotPath })
     }
 
@@ -297,6 +319,7 @@ try {
       }))
     receipts.push({
       castPose: castFrame.playerAttachmentPose,
+      castPoseSource: castPosePromise === null ? 'authoritative-plan' : 'renderer',
       earthStages,
       element: spell.element,
       expectedHeadingIndex,
@@ -313,6 +336,10 @@ try {
 
     if (spell.kind === 'earth') {
       earthPage = page
+    } else if (spell.kind === 'air' && selectedSpells.length === 1) {
+      airPage = page
+    } else if (spell.kind === 'fire' && selectedSpells.length === 1) {
+      firePage = page
     } else if (spell.kind === 'water' && selectedSpells.length === 1) {
       waterPage = page
     } else {
@@ -323,9 +350,13 @@ try {
 
   const boneyard = earthPage
     ? await castEarthInBoneyard(earthPage)
-    : waterPage
-      ? await castWaterInBoneyard(waterPage)
-      : null
+    : airPage
+      ? await castAirInBoneyard(airPage)
+      : firePage
+        ? await castFireInBoneyard(firePage)
+        : waterPage
+          ? await castWaterInBoneyard(waterPage)
+          : null
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     boneyard,
@@ -372,14 +403,7 @@ function headingIndex(direction) {
 }
 
 async function castEarthInBoneyard(page) {
-  const enter = page.getByRole('button', { name: 'Enter the Boneyard' })
-  await enter.waitFor({ timeout: 10_000 })
-  await enter.click()
-  await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
-    timeout: 30_000,
-  })
-  const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
-  await canvas.waitFor({ timeout: 30_000 })
+  const canvas = await enterBoneyard(page)
   const eventStart = await audioEventCount(page)
   const target = await castTarget(canvas, 0.67, 0.38)
   await page.mouse.move(target.x, target.y)
@@ -419,7 +443,7 @@ async function castEarthInBoneyard(page) {
   }
 }
 
-async function castWaterInBoneyard(page) {
+async function enterBoneyard(page) {
   const enter = page.getByRole('button', { name: 'Enter the Boneyard' })
   await enter.waitFor({ timeout: 10_000 })
   await enter.click()
@@ -428,6 +452,71 @@ async function castWaterInBoneyard(page) {
   })
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
   await canvas.waitFor({ timeout: 30_000 })
+  return canvas
+}
+
+async function castAirInBoneyard(page) {
+  const canvas = await enterBoneyard(page)
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
+  const frame = await canvas.evaluate((node) => ({ ...node.__sdrBoneyardFrame }))
+  const playerScreen = {
+    x: bounds.x + frame.playerScreenX * bounds.width / 1600,
+    y: bounds.y + frame.playerScreenY * bounds.height / 900,
+  }
+  const radius = Math.min(bounds.width, bounds.height) * 0.38
+  const eventStart = await audioEventCount(page)
+  const afterTick = await latestWireTick(page)
+  await page.mouse.move(playerScreen.x + radius, playerScreen.y)
+  await page.mouse.down({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-start.wav', 'play')
+  const loop = await waitForAudio(
+    page,
+    eventStart,
+    '/game/audio/sfx/lightning-loop.wav',
+    'play',
+  )
+  assert.equal(loop.loop, true)
+
+  let targeted = null
+  for (let index = 0; index < 24 && targeted === null; index += 1) {
+    const angle = index * Math.PI * 2 / 24
+    await page.mouse.move(
+      playerScreen.x + Math.cos(angle) * radius,
+      playerScreen.y + Math.sin(angle) * radius,
+    )
+    await page.waitForTimeout(90)
+    targeted = await targetedAirWire(page, afterTick)
+  }
+  assert.ok(targeted, 'expected held Air to acquire a Boneyard Gravestone')
+  assert.match(targeted.state.targetId, /^scenery:/)
+  assert.equal(targeted.playerTargetId, targeted.state.targetId)
+  const held = await waitForBoneyardSpell(page, 'air')
+  const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
+  await page.screenshot({ path: screenshotPath })
+  await page.mouse.up({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-loop.wav', 'pause')
+  return { held, screenshotPath, targeted }
+}
+
+async function castFireInBoneyard(page) {
+  const canvas = await enterBoneyard(page)
+  const eventStart = await audioEventCount(page)
+  const afterTick = await latestWireTick(page)
+  const target = await castTarget(canvas, 0.5, 0.05)
+  await page.mouse.move(target.x, target.y)
+  await page.mouse.down({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
+  await page.mouse.up({ button: 'left' })
+  const impact = await waitForWireSpell(page, 'fire-impact', afterTick, 10_000)
+  const screenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-impact.png`
+  await page.screenshot({ path: screenshotPath })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/fireball-hit.wav', 'play')
+  return { impact, screenshotPath }
+}
+
+async function castWaterInBoneyard(page) {
+  const canvas = await enterBoneyard(page)
   const eventStart = await audioEventCount(page)
   const target = await castTarget(canvas, 0.67, 0.38)
   await page.mouse.move(target.x, target.y)
@@ -447,6 +536,31 @@ async function castWaterInBoneyard(page) {
   await page.mouse.up({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/ice-loop.wav', 'pause')
   return { held, heldScreenshotPath, wire }
+}
+
+async function latestWireTick(page) {
+  return page.evaluate(() => window.__primarySpellWireFrames.at(-1)?.tick ?? -1)
+}
+
+async function targetedAirWire(page, afterTick) {
+  return page.evaluate((minimumTick) => {
+    for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
+      const wire = window.__primarySpellWireFrames[index]
+      if (wire.tick <= minimumTick) break
+      const state = wire.primarySpells.transients.find((candidate) => (
+        candidate.kind === 'air'
+        && typeof candidate.targetId === 'string'
+        && candidate.targetId.startsWith('scenery:')
+      ))
+      if (!state) continue
+      return {
+        playerTargetId: wire.players[state.ownerId]?.primaryCast.targetId ?? null,
+        state,
+        tick: wire.tick,
+      }
+    }
+    return null
+  }, afterTick)
 }
 
 async function waitForHubCastPose(page, eventStart, expectedPose) {
@@ -504,17 +618,30 @@ async function waitForHubSpell(page, kind) {
 }
 
 async function waitForHubFacing(page, kind, expectedHeadingIndex) {
-  const handle = await page.waitForFunction(
-    ([expectedKind, heading]) => {
-      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
-      return frame?.primarySpellKinds?.includes(expectedKind)
-        && frame.playerHeadingIndex === heading
-        ? { ...frame, playerPositions: { ...frame.playerPositions } }
-        : null
-    },
-    [kind, expectedHeadingIndex],
-    { timeout: 10_000 },
-  )
+  const expectedKinds = Array.isArray(kind) ? kind : [kind]
+  let handle
+  try {
+    handle = await page.waitForFunction(
+      ([kinds, heading]) => {
+        const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+        return kinds.some((expectedKind) => frame?.primarySpellKinds?.includes(expectedKind))
+          && frame.playerHeadingIndex === heading
+          ? { ...frame, playerPositions: { ...frame.playerPositions } }
+          : null
+      },
+      [expectedKinds, expectedHeadingIndex],
+      { timeout: 10_000 },
+    )
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      frame: { ...document.querySelector('.hub-world-canvas')?.__sdrHubFrame },
+      wireFrames: window.__primarySpellWireFrames.slice(-8),
+    }))
+    throw new Error(
+      `Hub ${kind} facing ${expectedHeadingIndex} was not rendered: ${JSON.stringify(diagnostics)}`,
+      { cause: error },
+    )
+  }
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
@@ -567,7 +694,23 @@ async function captureHubEarthStage(page, screenshotPath) {
 
 async function latestWireSpell(page, kind) {
   const expectedKinds = Array.isArray(kind) ? kind : [kind]
-  return page.evaluate((kinds) => {
+  return page.evaluate(async (kinds) => {
+    const { primaryCastPose } = await import('/src/game/core-kernels/primary-spells.ts')
+    const observedAttachmentPoses = window.__primarySpellWireFrames.flatMap((wire) => {
+      const states = [
+        ...wire.primarySpells.projectiles,
+        ...wire.primarySpells.transients,
+      ]
+      const state = states.find((candidate) => kinds.includes(candidate.kind))
+      const player = state ? wire.players[state.ownerId] : null
+      return player
+        ? [primaryCastPose(
+            player.primaryCast.actionTick,
+            player.primaryCast.channelActive,
+            player.config.element,
+          )]
+        : []
+    })
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       const states = [
@@ -584,6 +727,12 @@ async function latestWireSpell(page, kind) {
             candidate.kind === 'earth-called-rock'
             && candidate.parentId === state.id
           )).length,
+          observedAttachmentPoses,
+          playerAttachmentPose: primaryCastPose(
+            player.primaryCast.actionTick,
+            player.primaryCast.channelActive,
+            player.config.element,
+          ),
           projectileCount: wire.primarySpells.projectiles.length,
           playerHeadingIndex: player.headingIndex,
           state,
