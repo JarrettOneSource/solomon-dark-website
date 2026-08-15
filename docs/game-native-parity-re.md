@@ -17928,3 +17928,112 @@ owned servers before that browser. The focused target changes only the lethal
 stimulus and keeps every authoritative death, spectator, Game Over, fade, and
 return assertion live. The required final Mac gate and browser acceptance both
 exited zero, and teardown left no task-owned browser or listener process.
+## 2026-08-15 — Complete right-click ability system
+
+### Reported smell and supersession boundary
+
+The Website currently accepts a semantic secondary-cast input but does not own
+the native secondary belt or execute any category-2 skill. Its HUD displays a
+fixed Acid Rain icon, `PlayerSkillBookComponent.secondarySkillId` never changes
+after construction, and the host snapshots only primary-spell actors. This is
+one missing native system, not 23 unrelated feature requests.
+
+This entry supersedes only the earlier statements that learned category-2
+effects and Turn Undead's pitched level-up reuse remain inert. It does not
+weaken the actor-private skill/stat-book, mandatory picker, primary-spell, or
+low-mana contracts. The current `origin/main` primary-rank implementation also
+supersedes the earlier corrective slice's temporary rank-one production
+baseline.
+
+The source of truth is the generated
+`Mod Loader/docs/reverse-engineering/native-secondary-ability-catalog.json`
+with schema `solomon-dark-native-secondary-ability-catalog-v1`. It pins the
+4,723,200-byte retail executable with SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, the
+category-2 dispatcher at `0x0054CC50`, each exact authored rank table, and each
+member's targeting, actors, timing, art, audio, authority, and teardown. The
+Website must consume an equivalent checked-in contract and fail if membership
+or provenance drifts.
+
+### Closed membership and implementation ledger
+
+| ID / member | Native gameplay and lifecycle | Native presentation ownership | Website disposition |
+| --- | --- | --- | --- |
+| `11` Call Leviathan | Aimed Leviathan scales in, runs its active attack, scales out, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-port-required |
+| `12` Planewalker | Self toggle installs `Mod_Planewalker`, forces Plane Orb `80`, preserves/restores the prior spell, and expires after `mDuration*100`. | PlaneOrb actor; on/off streams and `PlaneCross` loop. | exact-port-required |
+| `15` Phasing | Heading cast probes at most 20 collision-safe destinations and relocates only to the accepted probe. | BadGuys `53`; `phase`. | exact-port-required |
+| `21` Ring of Fire | Thirty MovingFire segments at 12-degree steps plus a unique-target Shockwave query every 10 ticks. | DeadHawg `46..77`; `bigfire`, then `nuke`. | exact-port-required |
+| `23` Firewalker | Toggle reserves 50 MP and lays 200-tick Fire_Goodguy patches, contacting every 3 ticks; old patches outlive toggle-off. | DeadHawg `46..77`, BadGuys `11`; `ignite`, `lowfire` loop. | exact-port-required |
+| `27` Magic Storm | Aimed StormCloud lives 1000 active ticks, rerolls strikes in `30..120`, then fades and stops querying. | Native cloud/lightning children; `magicstorm`, `lightningstart`, `thunder`, rain/wind loops. | exact-port-required |
+| `30` Prismatic Shock | Caster rectangle applies/merges `Mod_Prismatic` for `mDuration*100`. | BadGuys `10,11`; prismatic stream and lightning start. | exact-port-required |
+| `35` Ring of Ice | Caster-centered FreezeWave queries every 10 ticks and emits three ice blasts. | DeadHawg `16,17`; `ringofice`. | exact-port-required |
+| `41` Earthquake | Caster-centered actor runs `mDuration*100`, disrupts every 30 ticks without direct damage, and owns world shake until retirement. | DeadHawg `200..202`, BadGuys `2008..2010,62`; quake/crack/rock audio. | exact-port-required |
+| `45` Raise Golem | Collision-adjusted summon assembles at ages `0/50/100/200`, enables contact at 400, has no natural expiry, and is retired by owner/world lifecycle. | Complete Golem `1..208` articulation plus exact BadGuys, DeadHawg, and UI children; full golem audio set. | exact-port-required |
+| `46` Stoneskin | Self modifier sets actor material flag `0x1`, merges by maximum duration, and clears on expiry/teardown. | Player material treatment; cast `StoneSkin__Stream`, all modifier callbacks use `stoneskin`. | exact-port-required |
+| `48` Teleport | Moves to a collision-safe destination near aim; rejection creates no persistent actor. | BadGuys `90`; `teleport`. | exact-port-required |
+| `49` Magic Circle | Aimed circle lives 1500 ticks, pulses every 10, slows targets, and executes the live MP-recovery branch. | BadGuys `48,7`; `magiccircle`. | exact-port-required |
+| `50` Magic Trap | Aimed trap charges for 800 ticks, polls every 25, then performs the selected element's terminal payload once. | BadGuys `393..400,16` and trigger `158..167,15`; set/trigger streams. | exact-port-required |
+| `51` Dampen | Caster rectangle dispels 50 percent of shield state and owns mode-21 CastSpin for 73 strict-boundary ticks. | BadGuys `10,11,48`; `flash`, `dampen` stream. | exact-port-required |
+| `54` Magic Shield | Self absorb state owns a 40-tick hit pulse; break emits exactly 20 BadGuys-68 additive particles, optional explosive contact, then clears both factors. | BadGuys `68`; up/hit/pop/explode sequence. | exact-port-required |
+| `72` Acid Rain | Aimed rain lives 1500 active ticks plus residue; emits 2 drops/tick or 5 enhanced and every 25 ticks hits exactly `min(n,floor(n/3)+1)` shuffled targets. | BadGuys `10` plus AcidRaindrop child; storm/sizzle/rain audio. | exact-port-required |
+| `73` Fire Wall | Builds a line perpendicular to aim from independent 200-tick Fire_Goodguy patches with 3-tick contacts. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-port-required |
+| `74` Ether Drain | Aimed field scales in, owns 100 active ticks, scales out, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-port-required |
+| `76` Call Comet | Aimed countdown terminates in damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-port-required |
+| `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | BadGuys `48`; the same `levelup` sample at pitches 2, then 3. | exact-port-required |
+| `78` Mindstar | Self toggle changes byte `+0x8DD`, reserves/removes mana, and refreshes temporary ranks immediately and on normal progression refresh. | Caster activation flash; `mindstar__stream`. | exact-port-required |
+| `79` Regenerate | Self toggle changes byte `+0x8DE`, reserves/removes mana, heals `1.5/tickRate`, and stops on overload/death/session teardown. | Same caster activation flash and exact shared `mindstar__stream`. | exact-port-required |
+
+No category-2 row is deferred, represented by substitute art, or collapsed into
+a generic particle template. Rank arrays come from the native skill catalog;
+the active rank is captured at the native creation/application boundary for
+each actor or modifier rather than reread opportunistically by the renderer.
+
+### Ownership, input, authority, and cleanup contract
+
+- Each player owns an eight-slot belt. Right mouse is native slot zero;
+  keyboard digits `1..7` address slots one through seven. Learned category-2
+  skills populate and mutate that player-owned loadout only. Slot selection,
+  skill identity, rank, cooldown current/cap, and toggle/reserve state are
+  authoritative and replicated; DOM button numbers are never protocol data.
+- A secondary cast is an edge/held intent resolved on the host from the
+  current belt slot and world aim. Cast eligibility, MP debit/reserve,
+  collision-safe placement, target query order, damage/status mutation,
+  cooldown, and actor IDs all belong to the fixed-tick simulation. Clients
+  render and interpolate the resulting semantic actors; they do not synthesize
+  gameplay from local VFX clocks.
+- One cohesive secondary-ability store owns stable actor IDs and separate
+  modifier/toggle state. Family kernels may split by persistent fields,
+  projectiles/summons, instant relocations, and player modifiers, but they
+  share one dispatcher and one cleanup boundary. The primary-spell store and
+  large enemy store are not extended into a second monolith.
+- Death, disconnect, Game Over, Hub/Boneyard replacement, and run reset remove
+  owner-bound modifiers, reserves, loops, summons, and persistent fields
+  exactly once. Registered terminal particles/debris may finish independently
+  only where the native contract says so. Toggle recasts follow each native
+  on/off path and must not replay break/impact effects during generic teardown.
+- Painter roots use the recovered atlas registrations, native blend modes,
+  authored tint/alpha, actor-local versus world-local coordinates, effective-Y
+  ordering, lights, camera shake, and fixed-tick animation clocks. CSS shapes,
+  gradients, emoji, and generic radial substitutes are prohibited.
+- Audio uses the original extracted WAV bytes and native lifecycle trigger.
+  Point sounds are owner/world positioned, streams are edge-triggered, and
+  ambient loops are renewed by live actors then stop when the final owner
+  retires. Shared samples such as `levelup`, `stoneskin`, and
+  `mindstar__stream` remain shared rather than being renamed into inventions.
+
+### Acceptance contract
+
+Tests must enumerate the exact 23 IDs and cover every member's authored rank
+fields, targeting shape, spawn/application edge, cadence, damage or modifier
+effect, VFX record program, audio sequence, replication, and terminal cleanup.
+Cross-member tests must cover all eight belt slots, simultaneous participants,
+late join, disconnect/death/world replacement, deterministic RNG, ambient-loop
+reference counts, and right-click suppression under modal/input barriers.
+
+The decisive browser journey must run the real `/game` WebGL scene and cast
+all 23 abilities through normal input against real authoritative targets. It
+must inspect every distinct animation phase, persistent field/toggle state,
+impact or modifier result, live HUD icon/cooldown, point/stream/loop audio
+event, peer snapshot, and retirement edge, with no page, console, asset, or
+protocol errors. Final completion additionally requires the canonical Website
+gate and the decisive journey from Windows; a WSL run is diagnostic only.
