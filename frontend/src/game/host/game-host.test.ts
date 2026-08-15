@@ -215,6 +215,21 @@ test('game host echoes authenticated ping outside the snapshot loop', async (con
   assert.deepEqual(await pong, { type: 'server-pong', nonce: 41 })
 })
 
+test('game host drops an authenticated player that misses its transport heartbeat', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    heartbeatIntervalMs: 50,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER, false)
+  context.after(() => closeSocket(client.socket))
+
+  assert.equal(host.playerCount(), 1)
+  await waitFor(() => host.playerCount() === 0)
+  assert.equal(client.socket.readyState, WebSocket.CLOSED)
+})
+
 test('game host sends a complete keyframe when a client requests recovery', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
@@ -249,7 +264,7 @@ test('game host reconnects a new character at the active world spawn', async (co
   const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
   assert.deepEqual(first.welcome.snapshot.players[first.welcome.playerId].position, HUB_SPAWN)
   await closeSocket(first.socket)
-  assert.equal(host.playerCount(), 0)
+  await waitFor(() => host.playerCount() === 0)
 
   const reconnected = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => reconnected.socket.close())
@@ -799,8 +814,9 @@ async function join(
   url: string,
   credential: string,
   character: PlayerCharacterConfig,
+  autoPong = true,
 ) {
-  const socket = await openSocket(url)
+  const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -831,9 +847,9 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   }
 }
 
-function openSocket(url: string, origin?: string): Promise<WebSocket> {
+function openSocket(url: string, origin?: string, autoPong = true): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, origin ? { origin } : undefined)
+    const socket = new WebSocket(url, { autoPong, ...(origin ? { origin } : {}) })
     socket.once('open', () => resolve(socket))
     socket.once('error', reject)
     socket.once('unexpected-response', (_request, response) => {

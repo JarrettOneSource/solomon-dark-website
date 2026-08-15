@@ -125,6 +125,15 @@ try {
 
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
+  await joinPage.close()
+  const afterGuestLeave = await waitForLobby(createdLobby.lobbyId, (lobby) => (
+    lobby.phase === 'hub' && lobby.players === 1
+  ))
+  await hostPage.close()
+  await waitForLobbyRemoval(createdLobby.lobbyId)
+  const finalSupervisorHealth = await supervisorHealth()
+  if (finalSupervisorHealth) assert.equal(finalSupervisorHealth.sessions, 0)
+
   process.stdout.write(`${JSON.stringify({
     status: 'ok',
     lobbyId: createdLobby.lobbyId,
@@ -133,6 +142,8 @@ try {
     guestBefore: before,
     guestAfter: moved.playerPositions[guestId].x,
     replicatedGuestAfter: replicated.playerPositions[guestId].x,
+    playersAfterGuestLeave: afterGuestLeave.players,
+    sessionsAfterFinalLeave: finalSupervisorHealth?.sessions ?? null,
     partiesScreenshot,
     hubScreenshot,
     consoleErrors,
@@ -197,4 +208,14 @@ async function waitForLobbyRemoval(lobbyId) {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   throw new Error(`timed out waiting for web lobby ${lobbyId} removal`)
+}
+
+async function supervisorHealth() {
+  if (!gatewayUrl) return null
+  const url = new URL('/health', gatewayUrl)
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:'
+  const response = await fetch(url)
+  const payload = await response.json()
+  assert.equal(response.status, 200, JSON.stringify(payload))
+  return payload
 }

@@ -34,12 +34,6 @@ const supervisor = await startGameSessionSupervisor({
     1,
     86_400,
   ) * 1000,
-  idleTimeoutMs: parseInteger(
-    process.env.SDR_GAME_IDLE_TIMEOUT_SECONDS,
-    300,
-    1,
-    86_400,
-  ) * 1000,
 })
 
 process.stdout.write(`${JSON.stringify({

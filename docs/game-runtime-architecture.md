@@ -76,6 +76,21 @@ arrive, so a guest that finishes Create first cannot become host by timing.
 After the reserved host has connected, the existing authoritative host handoff
 may select the earliest remaining participant if that host disconnects.
 
+A supervisor-provisioned browser session is a reservation until its first
+authenticated participant arrives. Never-claimed reservations retain a bounded
+claim timeout. After use, the supervisor destroys the per-session host as soon
+as both the authenticated-player count and proxy count reach zero; there is no
+empty-session reconnect lease. The exact release event, rather than a gameplay
+tick or periodic idle poll, owns that transition. A remaining participant or an
+in-flight proxy keeps the session live. WebSocket control heartbeats monitor
+both the game host's direct peer and the supervisor's browser-facing peer; one
+unanswered five-second interval terminates that transport and feeds the same
+release event, detecting a newly half-open connection within ten seconds. The
+protocol-visible client ping remains an RTT diagnostic rather than a liveness
+lease. This policy is specific to remotely provisioned browser hosts: standalone
+shell-owned hosts may reset an empty run, while externally managed dedicated
+servers retain their owner's process policy.
+
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to
 provision a remote instance. Those adapters may differ without creating a

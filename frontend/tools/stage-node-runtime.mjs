@@ -11,7 +11,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, posix, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const PINNED_NODE_VERSION = '22.17.0'
@@ -23,7 +23,7 @@ export function nodeArchiveDescriptor(platform, arch) {
     const directory = `node-v${PINNED_NODE_VERSION}-linux-${arch}`
     return {
       archive: `${directory}.tar.xz`,
-      executable: join(directory, 'bin', 'node'),
+      executable: posix.join(directory, 'bin', 'node'),
       extractor: 'tar-xz',
       sha256: arch === 'x64'
         ? '325c0f1261e0c61bcae369a1274028e9cfb7ab7949c05512c5b1e630f7e80e12'
@@ -34,7 +34,7 @@ export function nodeArchiveDescriptor(platform, arch) {
     const directory = `node-v${PINNED_NODE_VERSION}-darwin-${arch}`
     return {
       archive: `${directory}.tar.gz`,
-      executable: join(directory, 'bin', 'node'),
+      executable: posix.join(directory, 'bin', 'node'),
       extractor: 'tar-gz',
       sha256: arch === 'x64'
         ? 'c39c8ec3cdadedfcc75de0cb3305df95ae2aecebc5db8d68a9b67bd74616d2ad'
@@ -45,7 +45,7 @@ export function nodeArchiveDescriptor(platform, arch) {
     const directory = `node-v${PINNED_NODE_VERSION}-win-x64`
     return {
       archive: `${directory}.zip`,
-      executable: join(directory, 'node.exe'),
+      executable: posix.join(directory, 'node.exe'),
       extractor: 'zip',
       sha256: '721ab118a3aac8584348b132767eadf51379e0616f0db802cc1e66d7f0d98f85',
     }

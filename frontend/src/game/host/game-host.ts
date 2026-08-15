@@ -50,6 +50,10 @@ import {
   createReplicatedEntityBaseline,
   type ReplicatedEntityBaseline,
 } from '../protocol/entity-replication.ts'
+import {
+  monitorWebSocketHeartbeat,
+  resolveGameHeartbeatInterval,
+} from './websocket-heartbeat.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
@@ -67,8 +71,10 @@ export interface GameHostOptions {
   createBoneyardSeedBytes?: () => Buffer
   createSimulation?: () => GameSimulationState
   host?: string
+  heartbeatIntervalMs?: number
   initialPlayerExperience?: number
   maxPlayers?: number
+  onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
   snapshotRate?: number
@@ -116,6 +122,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const maxPlayers = options.maxPlayers ?? 16
   const resetWhenEmpty = options.resetWhenEmpty ?? false
   const snapshotRate = options.snapshotRate ?? 20
+  const heartbeatIntervalMs = resolveGameHeartbeatInterval(options.heartbeatIntervalMs)
   const boneyards = options.boneyards ?? createBoneyardCatalog()
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
     throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
@@ -178,6 +185,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
   websocketServer.on('connection', (socket) => {
     pending.add(socket)
+    const stopHeartbeat = monitorWebSocketHeartbeat(socket, heartbeatIntervalMs)
     const helloDeadline = setTimeout(() => {
       if (pending.has(socket)) disconnect(socket, 'authentication-failed', 'Handshake timed out.')
     }, 5000)
@@ -271,6 +279,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
         })
+        options.onPlayerCountChanged?.(clients.size)
         socket.send(encodeGameMessage({
           type: 'server-welcome',
           protocolVersion: GAME_PROTOCOL_VERSION,
@@ -427,6 +436,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
     const release = () => {
       clearTimeout(helloDeadline)
+      stopHeartbeat()
       pending.delete(socket)
       const client = clients.get(socket)
       if (!client) return
@@ -440,12 +450,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = null
         nextSnapshotSequence = 1
         nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
-        return
-      }
-      if (client.playerId === hostPlayerId) {
+      } else if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
         broadcastSnapshot()
       }
+      options.onPlayerCountChanged?.(clients.size)
     }
     socket.once('close', release)
     socket.once('error', release)

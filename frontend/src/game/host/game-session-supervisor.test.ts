@@ -55,7 +55,6 @@ test('game session supervisor enforces capacity and expires unclaimed sessions a
     allowedOrigins: [BROWSER_ORIGIN],
     maxSessions: 1,
     unclaimedTimeoutMs: 1000,
-    idleTimeoutMs: 30,
   })
   context.after(() => supervisor.close())
 
@@ -121,6 +120,66 @@ test('game session supervisor owns discoverable lobby lifecycle and reserved hos
   })
   assert.equal(cancelled.status, 204)
   assert.deepEqual(await listLobbies(supervisor.address.url), [])
+})
+
+test('game session supervisor closes a used session after the final player and proxy leave', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const endpoint = await provision(supervisor.address.url)
+  const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const second = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const pending = await openSocket(
+    websocketUrl(supervisor.address.url, endpoint.path),
+    BROWSER_ORIGIN,
+  )
+
+  await closeSocket(first.socket)
+  assert.equal(supervisor.sessionCount(), 1)
+
+  await closeSocket(second.socket)
+  assert.equal(supervisor.sessionCount(), 1)
+
+  await closeSocket(pending)
+  await waitFor(() => supervisor.sessionCount() === 0)
+  await assert.rejects(
+    () => openSocket(websocketUrl(supervisor.address.url, endpoint.path), BROWSER_ORIGIN),
+    /404/,
+  )
+})
+
+test('game session supervisor drops a player that misses its transport heartbeat', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    heartbeatIntervalMs: 50,
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+
+  const created = await createLobby(supervisor.address.url, 'Responsive Wizard')
+  const healthy = await join(supervisor.address.url, created, BROWSER_ORIGIN)
+  context.after(() => closeSocket(healthy.socket))
+  const guestEndpoint = await joinLobby(supervisor.address.url, created.lobbyId)
+  const unresponsive = await join(
+    supervisor.address.url,
+    guestEndpoint,
+    BROWSER_ORIGIN,
+    false,
+  )
+  context.after(() => closeSocket(unresponsive.socket))
+
+  assert.equal((await listLobbies(supervisor.address.url))[0]?.players, 2)
+  await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.players === 1)
+  assert.equal(supervisor.sessionCount(), 1)
+  assert.equal(healthy.socket.readyState, WebSocket.OPEN)
+
+  await closeSocket(healthy.socket)
+  await waitFor(() => supervisor.sessionCount() === 0)
 })
 
 interface ProvisionedEndpoint {
@@ -197,8 +256,9 @@ async function join(
   supervisorUrl: string,
   endpoint: ProvisionedEndpoint,
   origin: string,
+  autoPong = true,
 ) {
-  const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin)
+  const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -216,14 +276,22 @@ function websocketUrl(supervisorUrl: string, path: string): string {
   return url.toString()
 }
 
-function openSocket(url: string, origin: string): Promise<WebSocket> {
+function openSocket(url: string, origin: string, autoPong = true): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, { origin })
+    const socket = new WebSocket(url, { autoPong, origin })
     socket.once('open', () => resolve(socket))
     socket.once('error', reject)
     socket.once('unexpected-response', (_request, response) => {
       reject(new Error(`upgrade rejected with ${response.statusCode}`))
     })
+  })
+}
+
+function closeSocket(socket: WebSocket): Promise<void> {
+  if (socket.readyState === WebSocket.CLOSED) return Promise.resolve()
+  return new Promise((resolve) => {
+    socket.once('close', () => resolve())
+    socket.close(1000, 'test complete')
   })
 }
 

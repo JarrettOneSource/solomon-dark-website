@@ -12,11 +12,14 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import type { BoneyardCatalog } from './boneyard-catalog.ts'
 import { startGameHost, type GameHost } from './game-host.ts'
+import {
+  monitorWebSocketHeartbeat,
+  resolveGameHeartbeatInterval,
+} from './websocket-heartbeat.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
-const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 const DEFAULT_MAX_CONNECTIONS_PER_SESSION = 16
 const DEFAULT_MAX_SESSIONS = 64
 const DEFAULT_UNCLAIMED_TIMEOUT_MS = 2 * 60 * 1000
@@ -25,8 +28,8 @@ export interface GameSessionSupervisorOptions {
   adminSecret: string
   allowedOrigins: readonly string[]
   boneyards?: BoneyardCatalog
+  heartbeatIntervalMs?: number
   host?: string
-  idleTimeoutMs?: number
   maxConnectionsPerSession?: number
   maxSessions?: number
   port?: number
@@ -48,11 +51,11 @@ export interface GameSessionSupervisor {
 
 interface SessionRecord {
   activeProxies: number
+  claimed: boolean
+  closePromise: Promise<void> | null
   closing: boolean
   createdAt: number
-  emptySince: number | null
   guestCredential: string | null
-  hadPlayer: boolean
   host: GameHost
   hostCredential: string
   hostPlayer: string | null
@@ -71,14 +74,11 @@ export async function startGameSessionSupervisor(
   if (options.allowedOrigins.length === 0) {
     throw new Error('The game session supervisor requires at least one browser origin')
   }
-  const idleTimeoutMs = positiveDuration(
-    options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-    'idleTimeoutMs',
-  )
   const unclaimedTimeoutMs = positiveDuration(
     options.unclaimedTimeoutMs ?? DEFAULT_UNCLAIMED_TIMEOUT_MS,
     'unclaimedTimeoutMs',
   )
+  const heartbeatIntervalMs = resolveGameHeartbeatInterval(options.heartbeatIntervalMs)
   const maxConnectionsPerSession = positiveInteger(
     options.maxConnectionsPerSession ?? DEFAULT_MAX_CONNECTIONS_PER_SESSION,
     'maxConnectionsPerSession',
@@ -254,17 +254,27 @@ export async function startGameSessionSupervisor(
       authentication: guestCredential
         ? { kind: 'reserved-host', hostCredential, guestCredential }
         : { kind: 'shared', credential: hostCredential },
+      heartbeatIntervalMs,
       maxPlayers: maxConnectionsPerSession,
+      onPlayerCountChanged: (playerCount) => {
+        const session = sessions.get(id)
+        if (!session) return
+        if (playerCount > 0) {
+          session.claimed = true
+          return
+        }
+        closeClaimedSessionIfEmpty(session)
+      },
       ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
     const session: SessionRecord = {
       activeProxies: 0,
+      claimed: false,
+      closePromise: null,
       closing: false,
       createdAt: Date.now(),
-      emptySince: null,
       guestCredential,
-      hadPlayer: false,
       host: sessionHost,
       hostCredential,
       hostPlayer,
@@ -288,10 +298,13 @@ export async function startGameSessionSupervisor(
     const upstream = new WebSocket(session.host.address.url)
     let released = false
     let upgraded = false
+    let stopHeartbeat: (() => void) | null = null
     const release = () => {
       if (released) return
       released = true
+      stopHeartbeat?.()
       session.activeProxies = Math.max(0, session.activeProxies - 1)
+      closeClaimedSessionIfEmpty(session)
     }
     const timeout = setTimeout(() => {
       if (!upgraded) rejectUpgrade(socket, 504, 'Gateway Timeout')
@@ -320,6 +333,7 @@ export async function startGameSessionSupervisor(
       socket.off('close', abortPending)
       websocketServer.handleUpgrade(request, socket, head, (downstream) => {
         upgraded = true
+        stopHeartbeat = monitorWebSocketHeartbeat(downstream, heartbeatIntervalMs)
         downstreamSockets.add(downstream)
         downstream.on('message', (data, binary) => {
           if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary })
@@ -345,29 +359,37 @@ export async function startGameSessionSupervisor(
   const expiryTimer = setInterval(() => {
     const now = Date.now()
     for (const session of sessions.values()) {
-      if (session.closing) continue
-      const playerCount = session.host.playerCount()
-      if (playerCount > 0) {
-        session.hadPlayer = true
-        session.emptySince = null
-        continue
-      }
-      if (session.activeProxies > 0) continue
-      if (!session.hadPlayer) {
-        if (now - session.createdAt >= unclaimedTimeoutMs) void closeSession(session)
-        continue
-      }
-      session.emptySince ??= now
-      if (now - session.emptySince >= idleTimeoutMs) void closeSession(session)
+      if (
+        !session.closing
+        && !session.claimed
+        && session.activeProxies === 0
+        && now - session.createdAt >= unclaimedTimeoutMs
+      ) void closeSession(session)
     }
-  }, Math.min(1000, unclaimedTimeoutMs, idleTimeoutMs))
+  }, Math.min(1000, unclaimedTimeoutMs))
   expiryTimer.unref()
 
-  async function closeSession(session: SessionRecord): Promise<void> {
-    if (session.closing) return
+  function closeClaimedSessionIfEmpty(session: SessionRecord): void {
+    if (
+      session.closing
+      || !session.claimed
+      || session.activeProxies > 0
+      || session.host.playerCount() > 0
+    ) return
+    void closeSession(session)
+  }
+
+  function closeSession(session: SessionRecord): Promise<void> {
+    if (session.closePromise) return session.closePromise
     session.closing = true
-    sessions.delete(session.id)
-    await session.host.close()
+    session.closePromise = (async () => {
+      try {
+        await session.host.close()
+      } finally {
+        sessions.delete(session.id)
+      }
+    })()
+    return session.closePromise
   }
 
   await listen(server, options.port ?? 0, host)

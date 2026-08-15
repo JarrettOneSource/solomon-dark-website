@@ -19,7 +19,6 @@ SDR_GAME_SUPERVISOR_PORT=5222
 SDR_GAME_MAX_SESSIONS=64
 SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
-SDR_GAME_IDLE_TIMEOUT_SECONDS=300
 ```
 
 The same secret is supplied to the website through its existing protected
@@ -37,7 +36,11 @@ provisioning contract. New Game uses `POST /api/game/lobbies`, and `/parties`
 reads `GET /api/game/lobbies`; both are projections of the same live supervisor
 and do not write the Steam launcher lobby database. Joiners receive the guest
 credential only from `POST /api/game/lobbies/{id}/join`. Unclaimed sessions
-expire after two minutes and empty used sessions expire after five minutes.
+expire after two minutes. A used session shuts down when its final
+authenticated player and in-flight proxy have both left. The game host and
+browser-facing proxy send WebSocket control pings every five seconds and
+terminate a peer after one unanswered interval, bounding half-open player
+detection to ten seconds.
 
 Deploy the checked-in unit and Caddy site, validate both before reloading, and
 restart the game supervisor together with the website whenever the bundled game
