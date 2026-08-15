@@ -278,10 +278,10 @@ export const NATIVE_SOUND_MANIFEST = {
   },
 } as const satisfies Readonly<Record<GameSoundCue, NativeSoundEntry>>
 
-export const NATIVE_LEVEL_UP_SOUND_REQUESTS = Object.freeze([
-  Object.freeze({ cue: 'level-up' as const, playbackRate: 2 }),
-  Object.freeze({ cue: 'level-up' as const, playbackRate: 3 }),
-])
+export const NATIVE_LEVEL_UP_SOUND_REQUEST = Object.freeze({
+  cue: 'level-up' as const,
+  playbackRate: 1,
+})
 
 export interface NativeEnemyEventSoundRequest {
   cue: GameSoundCue

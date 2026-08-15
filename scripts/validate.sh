@@ -102,6 +102,7 @@ run_all() {
 
     printf 'Running frontend tests\n'
     npm --prefix frontend run test:boneyard
+    npm --prefix frontend run test:level-up
 
     printf 'Running desktop shell tests\n'
     npm --prefix frontend run test:desktop

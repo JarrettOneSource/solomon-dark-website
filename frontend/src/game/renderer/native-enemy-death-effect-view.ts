@@ -42,6 +42,10 @@ export class NativeEnemyDeathEffectViews {
     this.views.get(id)?.setWorldTint(tint)
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const view of this.views.values()) view.setRenderable(renderable)
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -90,6 +94,10 @@ class NativeEnemyDeathEffectView {
 
   setWorldTint(tint: number): void {
     this.container.tint = tint
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
   }
 
   destroy(): void {

@@ -167,6 +167,12 @@ export class PrimarySpellWorldView {
     this.views.get(numericId)?.setTint(suffix, tint)
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const view of this.views.values()) {
+      for (const container of view.containers) container.renderable = renderable
+    }
+  }
+
   promoteOwnerOverlays(ownerDepth: (ownerId: string) => number | undefined): void {
     for (const view of this.views.values()) {
       for (const painterRoot of view.painterRoots()) {

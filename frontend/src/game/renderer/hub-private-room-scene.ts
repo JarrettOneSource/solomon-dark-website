@@ -24,6 +24,8 @@ import {
 } from './hub-private-room-presentation.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
+import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
+import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
@@ -45,7 +47,14 @@ export class HubPrivateRoomScene {
   private readonly rooms: Record<PrivateHubRegionId, Container>
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
+  private readonly nonPlayerActors: Record<PrivateHubRegionId, Container[]> = {
+    mortuary: [],
+    library: [],
+    storeroom: [],
+    office: [],
+  }
   private readonly primarySpells: Record<PrivateHubRegionId, PrimarySpellWorldView>
+  private readonly levelUp: NativeLevelUpWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
@@ -75,6 +84,8 @@ export class HubPrivateRoomScene {
         postWorldQueueDepth: HUB_PRIVATE_ROOM_EFFECT_DEPTH - 0.5,
       }),
     ])) as Record<PrivateHubRegionId, PrimarySpellWorldView>
+    this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    this.rooms.mortuary.addChild(this.levelUp.container)
     this.world.addChild(
       this.rooms.mortuary,
       this.rooms.library,
@@ -88,6 +99,12 @@ export class HubPrivateRoomScene {
     snapshot: HubPresentationFrame,
     localPlayerId: string,
     presentationFrame?: number,
+    levelUpPresentation: {
+      elapsedMs: number
+      playerScreenY: number
+      presentationId: number
+    } | null = null,
+    modalActive = false,
   ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
@@ -104,6 +121,35 @@ export class HubPrivateRoomScene {
       ))
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
+    for (const [playerId, view] of this.players) {
+      view.container.renderable = !modalActive || playerId === localPlayerId
+    }
+    for (const region of PRIVATE_HUB_REGIONS) {
+      this.primarySpells[region].setRenderable(!modalActive)
+      for (const actor of this.nonPlayerActors[region]) actor.renderable = !modalActive
+      for (const flame of this.roomFlames.get(region) ?? []) {
+        flame.renderable = !modalActive
+      }
+    }
+    const room = this.rooms[localParticipant.region]
+    if (this.levelUp.container.parent !== room) {
+      this.levelUp.container.parent?.removeChild(this.levelUp.container)
+      room.addChild(this.levelUp.container)
+    }
+    const player = snapshot.players[localPlayerId]
+    const playerView = this.players.get(localPlayerId)
+    const levelUpFrame = levelUpPresentation === null
+      ? null
+      : nativeLevelUpPresentationFrame(
+          levelUpPresentation.presentationId,
+          levelUpPresentation.elapsedMs,
+          levelUpPresentation.playerScreenY,
+        )
+    this.levelUp.update(
+      levelUpFrame,
+      player?.position ?? { x: 0, y: 0 },
+      (playerView?.container.zIndex ?? 1) + 0.1,
+    )
   }
 
   player(playerId: string): HubPlayerView | undefined {
@@ -118,7 +164,13 @@ export class HubPrivateRoomScene {
     return this.primarySpells[this.activeRegion].kinds
   }
 
+  get levelUpParticleCount(): number {
+    return this.levelUp.particleCount
+  }
+
   destroy(): void {
+    this.levelUp.container.parent?.removeChild(this.levelUp.container)
+    this.levelUp.destroy()
     for (const view of Object.values(this.primarySpells)) view.destroy()
     this.players.clear()
     this.playerElements.clear()
@@ -156,6 +208,7 @@ export class HubPrivateRoomScene {
     this.memoratorMarker.zIndex = 1
     this.memoratorMarker.eventMode = 'none'
     memorator.addChild(this.memoratorBody, this.memoratorMarker)
+    this.nonPlayerActors.mortuary.push(memorator)
     room.addChild(memorator)
     this.addRoomProps(room, layout)
     this.addRoomFlames(room, 'mortuary', hub.rooms.mortuary.flame)
@@ -190,6 +243,7 @@ export class HubPrivateRoomScene {
     )
     librarianBody.zIndex = 1
     librarian.addChild(counter, librarianBody)
+    this.nonPlayerActors.library.push(librarian)
     room.addChild(librarian)
 
     const dowserVisual = layout.actors.dowser.visual
@@ -207,6 +261,7 @@ export class HubPrivateRoomScene {
     this.dowserMarker.zIndex = 1
     this.dowserMarker.eventMode = 'none'
     dowser.addChild(this.dowserBody, this.dowserMarker)
+    this.nonPlayerActors.library.push(dowser)
     room.addChild(dowser)
     this.addRoomFlames(room, 'library', hub.rooms.library.flame)
     room.addChild(this.layer(
@@ -269,6 +324,7 @@ export class HubPrivateRoomScene {
     )
     archBody.zIndex = 1
     archChancellor.addChild(desk, archBody)
+    this.nonPlayerActors.office.push(archChancellor)
     room.addChild(archChancellor)
     this.addRoomFlames(room, 'office', hub.rooms.office.flame)
     room.addChild(this.layer(

@@ -19,7 +19,10 @@ import type {
 } from './core-kernels/player-character.ts'
 import { createBrowserGameAudioDirector } from './game-audio-browser.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
-import type { GameAudioScene } from './game-audio-native.ts'
+import {
+  NATIVE_LEVEL_UP_SOUND_REQUEST,
+  type GameAudioScene,
+} from './game-audio-native.ts'
 import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
@@ -209,6 +212,7 @@ export default function MainMenuScene({
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
+  const levelUpSoundBarrierRef = useRef<number | null>(null)
   const [loading, setLoading] = useState<MatchLoadingState | null>(null)
   const loadingRef = useRef<MatchLoadingState | null>(null)
   const [preparing, setPreparing] = useState(false)
@@ -518,6 +522,26 @@ export default function MainMenuScene({
     }
   }
 
+  const levelUpBarrierId = runtimeSnapshot?.levelUpBarrier?.barrierId ?? null
+  const levelUpPresentationId = runtimeProgression?.pendingOffer
+    ? levelUpBarrierId
+    : null
+  const levelUpModalActive = Boolean(runtimeSnapshot?.levelUpBarrier)
+  useEffect(() => {
+    if (levelUpBarrierId === null) {
+      levelUpSoundBarrierRef.current = null
+      return
+    }
+    if (
+      !runtimeProgression?.pendingOffer
+      || levelUpSoundBarrierRef.current === levelUpBarrierId
+    ) return
+    levelUpSoundBarrierRef.current = levelUpBarrierId
+    audio.playSound(NATIVE_LEVEL_UP_SOUND_REQUEST.cue, {
+      playbackRate: NATIVE_LEVEL_UP_SOUND_REQUEST.playbackRate,
+    })
+  }, [audio, levelUpBarrierId, runtimeProgression?.pendingOffer])
+
   return (
     <div className="main-menu-page" data-game-scene={gameScene}>
       <section
@@ -596,6 +620,8 @@ export default function MainMenuScene({
             canAcknowledgeGameOver={session.isHost}
             getPingMs={session.getPingMs}
             inputBlocked={loading !== null || runtimeSnapshot.levelUpBarrier !== null}
+            levelUpModalActive={levelUpModalActive}
+            levelUpPresentationId={levelUpPresentationId}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onAcknowledgeGameOver={session.acknowledgeGameOver}
@@ -615,6 +641,8 @@ export default function MainMenuScene({
             boneyards={session.boneyards}
             getPingMs={session.getPingMs}
             inputBlocked={loading !== null || runtimeSnapshot.levelUpBarrier !== null}
+            levelUpModalActive={levelUpModalActive}
+            levelUpPresentationId={levelUpPresentationId}
             playerId={session.playerId}
             progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             initialSnapshot={runtimeSnapshot}
@@ -629,11 +657,12 @@ export default function MainMenuScene({
           />
         ) : null}
 
-        {session && runtimeProgression?.pendingOffer ? (
+        {session && runtimeProgression?.pendingOffer && levelUpPresentationId !== null ? (
           <SkillPicker
             audio={audio}
             offer={runtimeProgression.pendingOffer}
             onSelect={session.selectSkill}
+            presentationId={levelUpPresentationId}
             style={nativeStageStyle}
           />
         ) : null}

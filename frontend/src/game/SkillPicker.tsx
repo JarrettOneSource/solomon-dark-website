@@ -7,7 +7,6 @@ import {
 } from 'react'
 
 import type { GameAudioDirector } from './game-audio-director.ts'
-import { NATIVE_LEVEL_UP_SOUND_REQUESTS } from './game-audio-native.ts'
 import {
   NATIVE_SKILL_CATALOG,
   SPELL_WELDING_QUICK_DESCRIPTION,
@@ -20,6 +19,7 @@ import {
   createSkillPickerRenderer,
   type SkillPickerRenderer,
 } from './renderer/skill-picker-renderer.ts'
+import { nativeSkillPickerReveal } from './renderer/level-up-presentation.ts'
 import { skillPickerCardCenters } from './renderer/skill-picker-render-contract.ts'
 import './skill-picker.css'
 
@@ -27,33 +27,45 @@ interface SkillPickerProps {
   audio: GameAudioDirector
   offer: ProtocolPlayerSkillOffer
   onSelect: (choiceIndex: number, offerSequence: number, skillId: number) => void
+  presentationId: number
   style: CSSProperties
 }
 
-export default function SkillPicker({ audio, offer, onSelect, style }: SkillPickerProps) {
+export default function SkillPicker({
+  audio,
+  offer,
+  onSelect,
+  presentationId,
+  style,
+}: SkillPickerProps) {
+  const stageRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([])
-  const levelUpSoundOfferRef = useRef<string | null>(null)
   const offerRef = useRef(offer)
+  const revealReadyRef = useRef(false)
+  const revealStartedAtRef = useRef<number | null>(null)
   const rendererRef = useRef<SkillPickerRenderer | null>(null)
   const selectedIndexRef = useRef(0)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [rendererState, setRendererState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [revealReady, setRevealReady] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    revealStartedAtRef.current = null
+    revealReadyRef.current = false
+    setRevealReady(false)
+  }, [presentationId])
 
   useEffect(() => {
     selectedIndexRef.current = 0
     setSelectedIndex(0)
     setSubmitting(false)
-    buttonRefs.current[0]?.focus()
-    const soundOfferKey = `${offer.level}:${offer.sequence}`
-    if (levelUpSoundOfferRef.current !== soundOfferKey) {
-      levelUpSoundOfferRef.current = soundOfferKey
-      for (const request of NATIVE_LEVEL_UP_SOUND_REQUESTS) {
-        audio.playSound(request.cue, { playbackRate: request.playbackRate })
-      }
-    }
-  }, [audio, offer.level, offer.sequence])
+  }, [offer.sequence])
+
+  useEffect(() => {
+    if (revealReady) buttonRefs.current[0]?.focus()
+  }, [offer.sequence, revealReady])
 
   useEffect(() => {
     offerRef.current = offer
@@ -80,7 +92,19 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
       if (!disposed) setRendererState('error')
     })
     const unsubscribe = subscribeGamePresentationFrames((nowMs) => {
-      renderer?.render(nowMs, selectedIndexRef.current)
+      revealStartedAtRef.current ??= nowMs
+      const reveal = nativeSkillPickerReveal(nowMs - revealStartedAtRef.current)
+      renderer?.render(nowMs, selectedIndexRef.current, reveal)
+      const stage = stageRef.current
+      if (stage) {
+        stage.dataset.revealElapsedMs = `${nowMs - revealStartedAtRef.current}`
+        stage.dataset.revealAlpha = `${reveal.revealAlpha}`
+        stage.dataset.revealInteractive = `${reveal.interactive}`
+      }
+      if (reveal.interactive !== revealReadyRef.current) {
+        revealReadyRef.current = reveal.interactive
+        setRevealReady(reveal.interactive)
+      }
     })
     return () => {
       disposed = true
@@ -92,7 +116,7 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
   }, [])
 
   const moveSelection = (delta: number) => {
-    if (submitting) return
+    if (submitting || !revealReadyRef.current) return
     const next = (selectedIndexRef.current + delta + offer.options.length) % offer.options.length
     selectedIndexRef.current = next
     setSelectedIndex(next)
@@ -101,7 +125,7 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
   }
 
   const choose = (index: number) => {
-    if (submitting) return
+    if (submitting || !revealReadyRef.current) return
     const option = offer.options[index]
     if (!option) return
     selectedIndexRef.current = index
@@ -130,13 +154,16 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
   const centers = skillPickerCardCenters(offer.options.length)
   return (
     <div
+      ref={stageRef}
       className="main-menu-native-stage skill-picker-stage"
       style={style}
       role="dialog"
       aria-modal="true"
       aria-label={`Level ${offer.level}. Select a skill.`}
       data-offer-sequence={offer.sequence}
+      data-presentation-id={presentationId}
       data-renderer-state={rendererState}
+      data-reveal-interactive={revealReady}
       onKeyDown={handleKeyDown}
     >
       <div ref={hostRef} className="skill-picker-renderer" aria-hidden />
@@ -162,15 +189,17 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
               aria-pressed={selectedIndex === index}
               data-choice-index={index}
               data-skill-id={option.skillId}
-              disabled={submitting}
+              disabled={submitting || !revealReady}
               onClick={() => choose(index)}
               onFocus={() => {
+                if (!revealReadyRef.current) return
                 if (selectedIndexRef.current === index) return
                 selectedIndexRef.current = index
                 setSelectedIndex(index)
                 audio.playSound('pick-skill')
               }}
               onPointerEnter={() => {
+                if (!revealReadyRef.current) return
                 if (selectedIndexRef.current === index) return
                 selectedIndexRef.current = index
                 setSelectedIndex(index)

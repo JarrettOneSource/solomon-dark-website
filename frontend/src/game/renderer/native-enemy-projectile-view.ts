@@ -42,6 +42,10 @@ export class NativeEnemyProjectileViews {
     this.views.get(id)?.setTint(tint)
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const view of this.views.values()) view.setRenderable(renderable)
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -104,6 +108,10 @@ class NativeEnemyProjectileView {
 
   setTint(tint: number): void {
     this.container.tint = tint
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
   }
 
   destroy(): void {

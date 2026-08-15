@@ -66,6 +66,10 @@ export class PlayerDeathBurstViews {
     }
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const active of this.active.values()) active.view.setRenderable(renderable)
+  }
+
   get size(): number {
     return this.active.size
   }
@@ -130,6 +134,10 @@ class PlayerDeathBurstView {
 
   setDepth(depth: number): void {
     this.container.zIndex = depth
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
   }
 
   destroy(): void {

@@ -250,6 +250,7 @@ import boneyardDarknessRadial from '../assets/game/boneyard/deadhawg/009.png'
 import boneyardDarknessAperture from '../assets/game/boneyard/deadhawg/018.png'
 import boneyardGraveDirt from '../assets/game/boneyard/deadhawg/013.png'
 import boneyardLantern from '../assets/game/boneyard/badguys/0034.png'
+import boneyardLevelUpSparkle from '../assets/game/boneyard/badguys/0073.png'
 import solomonStand from '../assets/game/solomon-stand.png'
 import animFireball from '../assets/game/anim-fireball.png'
 import animSpellEtherWisp from '../assets/game/anim-spell-ether-wisp.png'
@@ -749,6 +750,7 @@ export const boneyard = {
   darknessRadial: boneyardDarknessRadial,
   graveDirt: boneyardGraveDirt,
   lantern: boneyardLantern,
+  levelUpSparkle: boneyardLevelUpSparkle,
   solomonDig: animSolomonDig,
 }
 

@@ -17,6 +17,7 @@ import {
 } from './hub-textures.ts'
 import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
+import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS } from './level-up-presentation.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -36,6 +37,7 @@ interface HubFrameDiagnostics {
   fadeAlpha: number
   hostPlayerId: string | null
   localPlayerId: string
+  levelUpParticleCount: number
   orbSpriteCount: number
   playerCount: number
   playerAttachmentPose: number
@@ -66,6 +68,7 @@ export interface HubWorldRenderer {
   destroy(): void
   render(snapshot: HubPresentationFrame): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
+  setLevelUpPresentation(presentationId: number | null, modalActive: boolean): void
 }
 
 interface HubWorldRendererOptions {
@@ -150,6 +153,10 @@ export async function createHubWorldRenderer(
   let previousFrameAt = now()
   let frameCount = 0
   let frameTimeTotal = 0
+  let armedLevelUpPresentationId: number | null = null
+  let lastLevelUpPresentationId: number | null = null
+  let levelUpPresentationStartedAt: number | null = null
+  let levelUpModalActive = false
   let resolution = initialResolution
   const frameDiagnostics: HubFrameDiagnostics = {
     astronomerRenderable: true,
@@ -160,6 +167,7 @@ export async function createHubWorldRenderer(
     fadeAlpha: 0,
     hostPlayerId: options.initialSnapshot.hostPlayerId,
     localPlayerId: options.playerId,
+    levelUpParticleCount: 0,
     orbSpriteCount: 0,
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
@@ -219,6 +227,7 @@ export async function createHubWorldRenderer(
       : privateRoomScene
     frameDiagnostics.primarySpellCount = currentScene.primarySpellCount
     frameDiagnostics.primarySpellKinds = currentScene.primarySpellKinds
+    frameDiagnostics.levelUpParticleCount = currentScene.levelUpParticleCount
     frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
     frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
     frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
@@ -258,16 +267,50 @@ export async function createHubWorldRenderer(
       const player = snapshot.players[options.playerId]
       const participant = snapshot.world.participants[options.playerId]
       if (!player || !participant) return
+      const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
       const frameAt = now()
       frameTimeTotal += Math.max(0, frameAt - previousFrameAt)
       previousFrameAt = frameAt
       frameCount += 1
-      courtyardScene.update(snapshot, frameCount)
-      privateRoomScene.update(snapshot, options.playerId, frameCount)
+      if (
+        armedLevelUpPresentationId !== null
+        && levelUpPresentationStartedAt === null
+      ) levelUpPresentationStartedAt = frameAt
+      const levelUpPresentationElapsedMs = levelUpPresentationStartedAt === null
+        ? 0
+        : frameAt - levelUpPresentationStartedAt
+      if (
+        armedLevelUpPresentationId !== null
+        && levelUpPresentationElapsedMs >= NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS
+      ) {
+        armedLevelUpPresentationId = null
+        levelUpPresentationStartedAt = null
+        canvas.dataset.levelUpPresentationId = 'none'
+      }
+      const levelUpPresentation = armedLevelUpPresentationId === null
+        ? null
+        : {
+            elapsedMs: levelUpPresentationElapsedMs,
+            playerScreenY: player.position.y - camera.y,
+            presentationId: armedLevelUpPresentationId,
+          }
+      courtyardScene.update(
+        snapshot,
+        options.playerId,
+        frameCount,
+        levelUpPresentation,
+        levelUpModalActive,
+      )
+      privateRoomScene.update(
+        snapshot,
+        options.playerId,
+        frameCount,
+        levelUpPresentation,
+        levelUpModalActive,
+      )
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
       privateRoomScene.world.visible = !inCourtyard
-      const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
       if (inCourtyard) {
         courtyardScene.world.position.set(-camera.x, -camera.y)
         const southernTranslation = hubSouthernCameraTranslation(camera, {
@@ -296,6 +339,8 @@ export async function createHubWorldRenderer(
       canvas.dataset.hubRegion = participant.region
       canvas.dataset.transitionAlpha = `${fadeCover.alpha}`
       canvas.dataset.transitionPhase = participant.transition?.phase ?? 'none'
+      canvas.dataset.levelUpDynamicSuppressed = `${levelUpModalActive}`
+      canvas.dataset.levelUpParticleCount = `${frameDiagnostics.levelUpParticleCount}`
       application.render()
       updateFrameDiagnostics(snapshot)
       if (frameCount % DIAGNOSTIC_WINDOW_FRAMES !== 0) return
@@ -324,6 +369,22 @@ export async function createHubWorldRenderer(
       canvas.dataset.viewportHeight = `${viewport.height}`
       canvas.dataset.viewportWidth = `${viewport.width}`
     },
+    setLevelUpPresentation(presentationId, modalActive) {
+      if (destroyed) return
+      levelUpModalActive = modalActive
+      if (
+        presentationId !== null
+        && presentationId !== lastLevelUpPresentationId
+      ) {
+        armedLevelUpPresentationId = presentationId
+        lastLevelUpPresentationId = presentationId
+        levelUpPresentationStartedAt = null
+      }
+      canvas.dataset.levelUpPresentationId = armedLevelUpPresentationId === null
+        ? 'none'
+        : `${armedLevelUpPresentationId}`
+      canvas.dataset.levelUpDynamicSuppressed = `${modalActive}`
+    },
     destroy() {
       if (destroyed) return
       destroyed = true
@@ -337,7 +398,7 @@ export async function createHubWorldRenderer(
     },
   }
 
-  courtyardScene.update(options.initialSnapshot, frameCount)
+  courtyardScene.update(options.initialSnapshot, options.playerId, frameCount)
   privateRoomScene.update(options.initialSnapshot, options.playerId, frameCount)
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)

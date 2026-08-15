@@ -36,6 +36,7 @@ import {
   skillPickerCardCenters,
   skillPickerPanelBounds,
 } from './skill-picker-render-contract.ts'
+import type { NativeSkillPickerReveal } from './level-up-presentation.ts'
 
 interface AtlasRecord {
   readonly frame: readonly [number, number, number, number]
@@ -69,7 +70,11 @@ interface AnimatedCorner {
 export interface SkillPickerRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
-  render(nowMs: number, selectedIndex: number): void
+  render(
+    nowMs: number,
+    selectedIndex: number,
+    reveal: NativeSkillPickerReveal,
+  ): void
   setOffer(offer: ProtocolPlayerSkillOffer): void
 }
 
@@ -106,7 +111,12 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
   const panelLayer = new Container()
   const chromeLayer = new Container()
   const offerLayer = new Container()
-  const dimmer = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000, alpha: 0.5 })
+  const dimmer = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
+  dimmer.alpha = 0
+  ambient.alpha = 0
+  panelLayer.alpha = 0
+  chromeLayer.alpha = 0
+  offerLayer.alpha = 0
   root.addChild(dimmer, ambient, panelLayer, chromeLayer, offerLayer)
   application.stage.addChild(root)
 
@@ -116,7 +126,6 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
     arc.anchor.set(0.5)
     arc.position.set(800, 450)
     arc.scale.set(1.9)
-    arc.alpha = 0.1
     arc.rotation = index * Math.PI / 4
     arcSprites.push(arc)
     ambient.addChild(arc)
@@ -127,7 +136,6 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
     ring.anchor.set(0.5)
     ring.position.set(800, centerY)
     ring.scale.set(1.6)
-    ring.alpha = 0.1
     ringSprites.push(ring)
     ambient.addChild(ring)
   }
@@ -153,8 +161,13 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       application.destroy({ removeView: true })
       resources.destroy()
     },
-    render(nowMs, selectedIndex) {
+    render(nowMs, selectedIndex, reveal) {
       if (destroyed) return
+      dimmer.alpha = reveal.curtainAlpha
+      ambient.alpha = reveal.ambientAlpha
+      panelLayer.alpha = reveal.panelAlpha
+      chromeLayer.alpha = reveal.panelAlpha
+      offerLayer.alpha = reveal.panelAlpha
       const phase = reducedMotion ? 0 : nowMs / 1000
       for (let index = 0; index < arcSprites.length; index += 1) {
         arcSprites[index]!.rotation = index * Math.PI / 4 + phase * 0.08

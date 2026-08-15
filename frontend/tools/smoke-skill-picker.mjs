@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
   getPlayerCharacter,
   getPlayerProgression,
@@ -15,6 +16,8 @@ import { startGameHost } from '../src/game/host/game-host.ts'
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const screenshotPath = process.env.SDR_SKILL_PICKER_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-skill-picker-smoke.png'
+const revealScreenshotPath = process.env.SDR_SKILL_PICKER_REVEAL_SMOKE_SCREENSHOT
+  || screenshotPath.replace(/\.png$/i, '-reveal.png')
 const credential = randomBytes(32).toString('base64url')
 const pageErrors = []
 const consoleErrors = []
@@ -39,6 +42,7 @@ const host = await startGameHost({
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
+  args: ['--autoplay-policy=no-user-gesture-required'],
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
@@ -49,6 +53,7 @@ try {
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
+  await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
   }, {
@@ -75,15 +80,85 @@ try {
   const hubScene = page.locator('.hub-scene[data-renderer-state="ready"]')
   const hubCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
   const picker = page.getByRole('dialog', { name: 'Level 2. Select a skill.' })
+  await picker.waitFor({ timeout: 30_000 })
+  const playerId = host.hostPlayerId()
+  assert.ok(playerId)
+  const earlyOfferSequence = getPlayerProgression(host.state(), playerId).pendingOffer?.sequence
+  assert.equal(await picker.getAttribute('data-reveal-interactive'), 'false')
+  assert.equal(await picker.getByRole('button').first().isDisabled(), true)
+  await picker.getByRole('button').first().evaluate((button) => button.click())
+  await page.waitForTimeout(20)
+  assert.equal(
+    getPlayerProgression(host.state(), playerId).pendingOffer?.sequence,
+    earlyOfferSequence,
+    'the native reveal gate must reject a choice before 0.4 seconds',
+  )
+  await page.screenshot({ path: revealScreenshotPath })
   await Promise.all([
     hubScene.waitFor({ timeout: 30_000 }),
     hubCanvas.waitFor({ timeout: 30_000 }),
-    picker.waitFor({ timeout: 30_000 }),
-    page.locator('.skill-picker-stage[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
   ])
+  const presentationSamples = []
+  const presentationDeadline = Date.now() + 5_000
+  while (Date.now() < presentationDeadline) {
+    const sample = await hubCanvas.evaluate((canvas) => ({
+      dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed,
+      particleCount: Number(canvas.dataset.levelUpParticleCount),
+      presentationId: canvas.dataset.levelUpPresentationId,
+    }))
+    presentationSamples.push(sample)
+    if (sample.dynamicSuppressed === 'true' && sample.particleCount > 0) break
+    await page.waitForTimeout(20)
+  }
+  const livePresentation = presentationSamples.find((sample) => (
+    sample.dynamicSuppressed === 'true' && sample.particleCount > 0
+  ))
+  assert.ok(livePresentation, `level-up particles were not rendered: ${JSON.stringify({
+    pageErrors,
+    presentationSamples,
+  })}`)
+  try {
+    await Promise.all([
+      page.locator('.skill-picker-stage[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
+      page.waitForFunction(() => (
+        document.querySelector('.skill-picker-stage')?.getAttribute('data-reveal-interactive')
+          === 'true'
+      ), undefined, { timeout: 30_000 }),
+      page.waitForFunction(() => window.__sdrAudioEvents?.some(({ playbackRate, src, type }) => (
+        type === 'buffer-start'
+          && src.includes('level-up')
+          && playbackRate === 1
+      )), undefined, { timeout: 30_000 }),
+    ])
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify(await page.evaluate(() => {
+      const canvas = document.querySelector('.hub-world-canvas')
+      const stage = document.querySelector('.skill-picker-stage')
+      return {
+        audioEvents: window.__sdrAudioEvents?.filter(({ src }) => src.includes('level-up')),
+        canvasDataset: canvas ? { ...canvas.dataset } : null,
+        frame: canvas?.__sdrHubFrame ? structuredClone(canvas.__sdrHubFrame) : null,
+        pickerDataset: stage ? { ...stage.dataset } : null,
+      }
+    }))}\n`)
+    throw error
+  }
+  assert.ok(Number(await picker.getAttribute('data-reveal-elapsed-ms')) >= 400)
+  assert.equal(await picker.getByRole('button').first().isDisabled(), false)
 
   const initialHubCanvas = await hubCanvas.elementHandle()
   assert.ok(initialHubCanvas, 'expected the Hub WebGL canvas below the picker')
+  const settledPresentation = await hubCanvas.evaluate((canvas) => ({
+    dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed,
+    presentationId: canvas.dataset.levelUpPresentationId,
+  }))
+  const presentationReceipt = {
+    ...settledPresentation,
+    particleCount: Math.max(...presentationSamples.map(({ particleCount }) => particleCount)),
+  }
+  assert.equal(presentationReceipt.dynamicSuppressed, 'true')
+  assert.ok(presentationReceipt.particleCount > 0)
+  assert.equal(presentationReceipt.presentationId, '1')
   const pickerCanvas = page.locator('.skill-picker-canvas[data-game-renderer="pixi-webgl"]')
   const pickerRenderer = await pickerCanvas.evaluate((canvas) => ({
     context: (canvas.getContext('webgl2') || canvas.getContext('webgl'))?.constructor.name,
@@ -114,8 +189,6 @@ try {
   assert.deepEqual(actionReceipt.map(({ centerX }) => centerX), [600, 800, 1000])
   assert.ok(actionReceipt.every(({ label, skillId }) => label && skillId >= 8 && skillId <= 79))
 
-  const playerId = host.hostPlayerId()
-  assert.ok(playerId)
   const beforeChoice = getPlayerProgression(host.state(), playerId)
   assert.equal(beforeChoice.level, 2)
   assert.equal(beforeChoice.experience, 100)
@@ -147,6 +220,10 @@ try {
   assert.equal(afterBook.effectiveRanks[selectedSkillId], previousRank + 1)
   assert.equal(await initialHubCanvas.evaluate((canvas) => canvas.isConnected), true)
   assert.equal(await page.locator('.hub-world-canvas').count(), 1)
+  const levelUpSoundRates = await page.evaluate(() => window.__sdrAudioEvents
+    .filter(({ src, type }) => type === 'buffer-start' && src.includes('level-up'))
+    .map(({ playbackRate }) => playbackRate))
+  assert.deepEqual(levelUpSoundRates, [1])
 
   const playerXBeforeReleasedInput = getPlayerCharacter(host.state(), playerId).position.x
   await page.keyboard.down('d')
@@ -163,8 +240,11 @@ try {
     actionReceipt,
     bookedRank: afterBook.permanentRanks[selectedSkillId],
     pickerRenderer,
+    presentationReceipt,
+    revealScreenshotPath,
     screenshotPath,
     selectedSkillId,
+    levelUpSoundRates,
   })}\n`)
 } finally {
   await browser.close()

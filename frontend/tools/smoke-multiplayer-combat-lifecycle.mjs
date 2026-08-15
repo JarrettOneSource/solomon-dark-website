@@ -421,6 +421,10 @@ async function proveSharedLevelUpAndEnemyEffects({
     hostPicker.waitFor({ timeout: 30_000 }),
     guestPicker.waitFor({ timeout: 30_000 }),
   ])
+  const [hostLevelUpPresentation, guestLevelUpPresentation] = await Promise.all([
+    waitForLevelUpPresentation(hostPage),
+    waitForLevelUpPresentation(guestPage),
+  ])
   const barrier = host.state().levelUpBarrier
   assert.ok(barrier)
   assert.deepEqual(barrier.participantIds, [hostPlayerId, guestPlayerId].toSorted())
@@ -476,6 +480,11 @@ async function proveSharedLevelUpAndEnemyEffects({
   await hostPicker.locator('button[data-skill-id]').first().click()
   const waiting = hostPage.locator('.skill-picker-waiting')
   await waiting.waitFor({ timeout: 15_000 })
+  assert.equal(
+    (await levelUpPresentationReceipt(hostPage)).dynamicSuppressed,
+    true,
+    'the shared waiting barrier must keep Boneyard dynamic clutter suppressed',
+  )
   assert.equal(await guestPicker.count(), 1)
   assert.deepEqual(host.state().levelUpBarrier?.pendingPlayerIds, [guestPlayerId])
   assert.equal(host.state().tick, frozenTick)
@@ -506,6 +515,10 @@ async function proveSharedLevelUpAndEnemyEffects({
     guestPicker.waitFor({ state: 'detached', timeout: 15_000 }),
   ])
   assert.equal(host.state().levelUpBarrier, null)
+  await Promise.all([hostPage, guestPage].map((page) => page.waitForFunction(() => (
+    document.querySelector('.boneyard-world-canvas')?.dataset.levelUpDynamicSuppressed
+      === 'false'
+  ), undefined, { timeout: 15_000 })))
   const { firstResumedTick, releaseTick } = await barrierRelease
   assert.equal(releaseTick, frozenTick)
   assert.equal(firstResumedTick, frozenTick + 1)
@@ -555,8 +568,8 @@ async function proveSharedLevelUpAndEnemyEffects({
       hostEvasion.stop(),
     ])
   }
-  assert.deepEqual(audio.guest.levelUpRates, [2, 3])
-  assert.deepEqual(audio.host.levelUpRates, [2, 3])
+  assert.deepEqual(audio.guest.levelUpRates, [1])
+  assert.deepEqual(audio.host.levelUpRates, [1])
   assert.ok(audio.guest.sources.some((source) => source.includes('skeleton-die')))
   assert.ok(audio.guest.sources.some((source) => source.includes('bone-crack')))
   assert.ok(audio.host.sources.some((source) => source.includes('bone-crack')))
@@ -574,6 +587,10 @@ async function proveSharedLevelUpAndEnemyEffects({
     firstResumedTick,
     frozenTick,
     initialMeters,
+    levelUpPresentations: {
+      guest: guestLevelUpPresentation,
+      host: hostLevelUpPresentation,
+    },
     leveledMeters,
     optionSets,
     ownerActorId,
@@ -1153,6 +1170,23 @@ async function levelUpAudioReceipt(page) {
   }
 }
 
+async function waitForLevelUpPresentation(page) {
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    return canvas?.dataset.levelUpDynamicSuppressed === 'true'
+      && Number(canvas.dataset.levelUpParticleCount) > 0
+  }, undefined, { timeout: 15_000 })
+  return levelUpPresentationReceipt(page)
+}
+
+async function levelUpPresentationReceipt(page) {
+  return page.locator('.boneyard-world-canvas').evaluate((canvas) => ({
+    dynamicSuppressed: canvas.dataset.levelUpDynamicSuppressed === 'true',
+    particleCount: Number(canvas.dataset.levelUpParticleCount),
+    presentationId: Number(canvas.dataset.levelUpPresentationId),
+  }))
+}
+
 async function boneyardFrameWithSpectatorStatus(page) {
   return page.locator('.boneyard-scene').evaluate((scene) => ({
     frame: structuredClone(
@@ -1602,7 +1636,7 @@ async function crossEntryGate(hostPage, guestPage, boneyardScene) {
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
   const initialGuestGateState = await guestScene.getAttribute('data-gate-state')
-  const target = nearestGateCenter(initialGateState, initialX, initialY)
+  const target = nearestAuthoredGateCenter(boneyardScene, initialX, initialY)
   const initialDirection = Math.sign(target.y - initialY)
   assert.notEqual(initialDirection, 0, 'expected the entry gate to be beyond the player')
   const approachTarget = {
@@ -1621,7 +1655,9 @@ async function crossEntryGate(hostPage, guestPage, boneyardScene) {
   )
   const direction = Math.sign(target.y - aligned.y)
   assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
-  const crossingDistance = Math.abs(target.y - aligned.y) + 35
+  const crossingDistance = Math.abs(target.y - aligned.y)
+    + PLAYER_CHARACTER_RADIUS
+    + 10
   await driveThroughEntryGate(
     hostPage,
     scene,
@@ -1684,26 +1720,16 @@ async function holdUntil(page, key, predicate, timeoutMs) {
   }
 }
 
-function nearestGateCenter(serializedState, playerX, playerY) {
-  const gates = new Map()
-  for (const serialized of serializedState?.split('|') || []) {
-    const separator = serialized.lastIndexOf(':')
-    if (separator < 0) continue
-    const id = serialized.slice(0, separator)
-    const [x, y] = serialized.slice(separator + 1).split(',').map(Number)
-    const gateId = id.slice(0, id.lastIndexOf(':'))
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !gateId) continue
-    const tips = gates.get(gateId) || []
-    tips.push({ x, y })
-    gates.set(gateId, tips)
-  }
-  const centers = [...gates.values()]
-    .filter((tips) => tips.length === 2)
-    .map((tips) => ({
-      x: (tips[0].x + tips[1].x) / 2,
-      y: (tips[0].y + tips[1].y) / 2,
-    }))
-  assert.ok(centers.length > 0, `expected an entry gate in ${serializedState}`)
+function nearestAuthoredGateCenter(boneyardScene, playerX, playerY) {
+  const centers = boneyardScene.fences
+    .filter((fence) => (fence.segmentCode ?? fence.style ?? 0) === 2)
+    .flatMap((fence) => {
+      const [start, end] = fence.points
+      return start && end
+        ? [{ x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }]
+        : []
+    })
+  assert.ok(centers.length > 0, 'expected an authored entry gate')
   return centers.reduce((nearest, center) => (
     Math.hypot(center.x - playerX, center.y - playerY)
       < Math.hypot(nearest.x - playerX, nearest.y - playerY)

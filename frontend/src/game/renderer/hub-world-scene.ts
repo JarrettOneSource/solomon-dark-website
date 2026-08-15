@@ -49,6 +49,8 @@ import {
 } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
+import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -60,6 +62,7 @@ export class HubWorldScene {
   private readonly sealGlyphs: Sprite
   private readonly sealCore: Sprite
   private readonly markerSprites: Sprite[] = []
+  private readonly nonPlayerActors: Container[] = []
   private readonly fountain = new Map<number, Sprite>()
   private readonly liveFountainIds = new Set<number>()
   private readonly statueAura: Sprite
@@ -72,6 +75,7 @@ export class HubWorldScene {
   private readonly players = new Map<string, HubPlayerView>()
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly primarySpells: PrimarySpellWorldView
+  private readonly levelUp: NativeLevelUpWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly students = new Map<number, HubStudentView>()
   private readonly retiredStudentViews: HubStudentView[] = []
@@ -93,6 +97,8 @@ export class HubWorldScene {
     this.primarySpells = new PrimarySpellWorldView(this.world, textures, {
       postWorldQueueDepth: HUB_WORLD_DEPTH.courtyardForeground - 0.5,
     })
+    this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    this.world.addChild(this.levelUp.container)
     this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
     this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
@@ -144,7 +150,17 @@ export class HubWorldScene {
     )
   }
 
-  update(snapshot: HubPresentationFrame, presentationFrame?: number): void {
+  update(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+    presentationFrame?: number,
+    levelUpPresentation: {
+      elapsedMs: number
+      playerScreenY: number
+      presentationId: number
+    } | null = null,
+    modalActive = false,
+  ): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
     this.sealGlyphs.tint = colorTint(colors.glyphs)
@@ -178,6 +194,36 @@ export class HubWorldScene {
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       this.players.get(ownerId)?.container.zIndex
     ))
+    for (const [id, view] of this.players) {
+      view.container.renderable = !modalActive || id === localPlayerId
+    }
+    for (const view of this.students.values()) view.container.renderable = !modalActive
+    for (const actor of this.nonPlayerActors) actor.renderable = !modalActive
+    for (const particle of this.fountain.values()) particle.renderable = !modalActive
+    this.hagatha.container.renderable = !modalActive
+    this.luthacus.container.renderable = !modalActive
+    this.potion.actor.renderable = !modalActive
+    this.potion.balloons.renderable = !modalActive
+    this.potion.marker.renderable = !modalActive
+    this.teacher.container.renderable = !modalActive
+    this.astronomer.behind.renderable = !modalActive
+    this.astronomer.telescope.renderable = !modalActive
+    this.astronomer.front.renderable = !modalActive
+    this.primarySpells.setRenderable(!modalActive)
+    const player = snapshot.players[localPlayerId]
+    const playerView = this.players.get(localPlayerId)
+    const levelUpFrame = levelUpPresentation === null
+      ? null
+      : nativeLevelUpPresentationFrame(
+          levelUpPresentation.presentationId,
+          levelUpPresentation.elapsedMs,
+          levelUpPresentation.playerScreenY,
+        )
+    this.levelUp.update(
+      levelUpFrame,
+      player?.position ?? { x: 0, y: 0 },
+      (playerView?.container.zIndex ?? 1) + 0.1,
+    )
   }
 
   player(playerId: string): HubPlayerView | undefined {
@@ -245,7 +291,13 @@ export class HubWorldScene {
     return this.primarySpells.kinds
   }
 
+  get levelUpParticleCount(): number {
+    return this.levelUp.particleCount
+  }
+
   destroy(): void {
+    this.world.removeChild(this.levelUp.container)
+    this.levelUp.destroy()
     this.primarySpells.destroy()
     for (const view of this.retiredStudentViews) view.destroy()
     this.retiredStudentViews.length = 0
@@ -282,6 +334,7 @@ export class HubWorldScene {
     marker.eventMode = 'none'
     this.markerSprites.push(marker)
     actor.addChild(shadow, body, marker)
+    this.nonPlayerActors.push(actor)
     this.world.addChild(actor)
   }
 

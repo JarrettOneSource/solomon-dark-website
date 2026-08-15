@@ -113,29 +113,28 @@ const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   Demon: demon as AtlasManifest,
 }
 
-export interface NativeEnemySpriteRecord {
+export interface NativeEnemySpriteGeometry {
   anchorX: number
   anchorY: number
   atlas: NativeEnemyAtlas
   entry: number
   height: number
-  source: string
   width: number
+}
+
+export interface NativeEnemySpriteRecord extends NativeEnemySpriteGeometry {
+  source: string
 }
 
 export const NATIVE_ENEMY_ASSET_SOURCES = [...new Set(Object.values(selectedSpriteFiles))]
 
-export function nativeEnemySpriteRecord(
+export function nativeEnemySpriteGeometry(
   atlas: NativeEnemyAtlas,
   entry: number,
-): NativeEnemySpriteRecord {
+): NativeEnemySpriteGeometry {
   const record = manifests[atlas].entries[entry]
   if (!record || record.empty || !record.file) {
     throw new Error(`Native enemy atlas record is missing: ${atlas}:${entry}`)
-  }
-  const source = selectedSpriteFiles[`../../assets/game/boneyard/${record.file}`]
-  if (!source) {
-    throw new Error(`Native enemy atlas record was not selected for loading: ${atlas}:${entry}`)
   }
   const anchor = nativeSpriteAnchor(record.rect.w, record.rect.h, record.origin)
   return {
@@ -144,7 +143,19 @@ export function nativeEnemySpriteRecord(
     atlas,
     entry,
     height: record.rect.h,
-    source,
     width: record.rect.w,
   }
+}
+
+export function nativeEnemySpriteRecord(
+  atlas: NativeEnemyAtlas,
+  entry: number,
+): NativeEnemySpriteRecord {
+  const geometry = nativeEnemySpriteGeometry(atlas, entry)
+  const record = manifests[atlas].entries[entry]!
+  const source = selectedSpriteFiles[`../../assets/game/boneyard/${record.file}`]
+  if (!source) {
+    throw new Error(`Native enemy atlas record was not selected for loading: ${atlas}:${entry}`)
+  }
+  return { ...geometry, source }
 }

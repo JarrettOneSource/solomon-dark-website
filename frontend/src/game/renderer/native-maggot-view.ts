@@ -42,6 +42,10 @@ export class NativeMaggotViews {
     this.views.get(id)?.setTint(tint)
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const view of this.views.values()) view.setRenderable(renderable)
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -103,6 +107,10 @@ class NativeMaggotView {
 
   setTint(tint: number): void {
     this.container.tint = tint
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
   }
 
   destroy(): void {

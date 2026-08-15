@@ -1,5 +1,5 @@
 import { Texture } from 'pixi.js'
-import { hub } from '../../lib/assets.ts'
+import { boneyard, hub } from '../../lib/assets.ts'
 import { WIZARD_ELEMENTS } from '../core-kernels/player-character.ts'
 import {
   hubGameAssetSources,
@@ -68,6 +68,7 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
   astronomer: HubAstronomerTextureFrames
   base: Readonly<Record<string, Texture>>
+  levelUpSparkle: Texture
   potion: HubPotionTextureFrames
   students: HubStudentTextureFrames
   teacher: HubTeacherTextureFrames
@@ -75,7 +76,10 @@ export interface HubWorldTextures extends PlayerWorldTextures {
 }
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
-  const sources = [...new Set(WIZARD_ELEMENTS.flatMap(hubGameAssetSources))]
+  const sources = [...new Set([
+    ...WIZARD_ELEMENTS.flatMap(hubGameAssetSources),
+    boneyard.levelUpSparkle,
+  ])]
   let images: readonly (readonly [string, HTMLImageElement])[]
   try {
     images = await Promise.all(sources.map(async (source) => [
@@ -134,6 +138,7 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
       telescope: stripFrames(texture(hub.astronomer.telescope), 5, 374, 292, 'horizontal'),
     },
     base,
+    levelUpSparkle: texture(boneyard.levelUpSparkle),
     potion: {
       actor: stripFrames(texture(hub.npcs.potion), 5, 35, 49, 'horizontal'),
       balloons: stripFrames(texture(hub.tent.balloons), 5, 54, 72, 'horizontal'),

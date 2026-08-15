@@ -125,6 +125,11 @@ import {
 } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
+import {
+  NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
+  nativeLevelUpPresentationFrame,
+} from './level-up-presentation.ts'
+import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   cameraFocusX: number
@@ -173,6 +178,7 @@ interface BoneyardRendererFrameDiagnostics {
   localPlayerPainterRow: number
   localPlayerZIndex: number
   lanternLightIntensity: number
+  levelUpParticleCount: number
   lightSourceCount: number
   mainAboveLocal: boolean
   mainBelowLocal: boolean
@@ -229,6 +235,7 @@ export interface BoneyardWorldRenderer {
   destroy(): void
   render(snapshot: GameSnapshot): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
+  setLevelUpPresentation(presentationId: number | null, modalActive: boolean): void
   spectatorStatus(snapshot: GameSnapshot): BoneyardSpectatorStatusPresentation | null
 }
 
@@ -236,6 +243,7 @@ interface BoneyardWorldRendererOptions {
   boneyard: LoadedBoneyard
   devicePixelRatio?: number
   initialSnapshot: GameSnapshot
+  now?: () => number
   playerId: string
   viewport: GameViewportLayout
 }
@@ -373,6 +381,7 @@ export async function createBoneyardWorldRenderer(
   const worldFeedback = new NativeEnemyWorldFeedbackPresentation(
     options.initialSnapshot.tick,
   )
+  const now = options.now ?? (() => performance.now())
   const canvas = application.canvas as HTMLCanvasElement
   canvas.className = 'boneyard-world-canvas'
   canvas.setAttribute('aria-hidden', 'true')
@@ -393,6 +402,10 @@ export async function createBoneyardWorldRenderer(
 
   let destroyed = false
   let frameCount = 0
+  let armedLevelUpPresentationId: number | null = null
+  let lastLevelUpPresentationId: number | null = null
+  let levelUpPresentationStartedAt: number | null = null
+  let levelUpModalActive = false
   let resolution = initialResolution
   let spectatorCamera: BoneyardSpectatorCameraState =
     INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
@@ -425,6 +438,7 @@ export async function createBoneyardWorldRenderer(
     localPlayerPainterRow: 0,
     localPlayerZIndex: 0,
     lanternLightIntensity: 0,
+    levelUpParticleCount: 0,
     lightSourceCount: 0,
     mainAboveLocal: false,
     mainBelowLocal: false,
@@ -532,11 +546,37 @@ export async function createBoneyardWorldRenderer(
         viewport,
       )
       visibility.update(camera, viewport)
+      const frameAt = now()
+      if (
+        armedLevelUpPresentationId !== null
+        && levelUpPresentationStartedAt === null
+      ) levelUpPresentationStartedAt = frameAt
+      const levelUpPresentationElapsedMs = levelUpPresentationStartedAt === null
+        ? 0
+        : frameAt - levelUpPresentationStartedAt
+      if (
+        armedLevelUpPresentationId !== null
+        && levelUpPresentationElapsedMs >= NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS
+      ) {
+        armedLevelUpPresentationId = null
+        levelUpPresentationStartedAt = null
+        canvas.dataset.levelUpPresentationId = 'none'
+      }
       const painter = scene.update(
         snapshot,
         options.playerId,
         frameCount,
         visibility.visibleMainResidents,
+        armedLevelUpPresentationId === null
+          ? null
+          : {
+              elapsedMs: levelUpPresentationElapsedMs,
+              playerScreenY: player.position.y - (
+                camera.y - viewport.height / (2 * camera.zoom)
+              ),
+              presentationId: armedLevelUpPresentationId,
+            },
+        levelUpModalActive,
       )
       regionLightField.render(
         application.renderer,
@@ -600,6 +640,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.localPlayerPainterRow = painter.localPlayerPainterRow
       frameDiagnostics.localPlayerZIndex = painter.localPlayerZIndex
       frameDiagnostics.lanternLightIntensity = painter.lanternLightIntensity
+      frameDiagnostics.levelUpParticleCount = scene.levelUpParticleCount
       frameDiagnostics.lightSourceCount = painter.lightSourceCount
       frameDiagnostics.mainAboveLocal = painter.mainAboveLocal
       frameDiagnostics.mainBelowLocal = painter.mainBelowLocal
@@ -658,6 +699,8 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
       canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
       canvas.dataset.worldFeedbackMagnitude = `${feedback.magnitude}`
+      canvas.dataset.levelUpDynamicSuppressed = `${levelUpModalActive}`
+      canvas.dataset.levelUpParticleCount = `${scene.levelUpParticleCount}`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -679,6 +722,22 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.viewportWidth = `${viewport.width}`
       canvas.style.width = `${viewport.width}px`
       canvas.style.height = `${viewport.height}px`
+    },
+    setLevelUpPresentation(presentationId, modalActive) {
+      if (destroyed) return
+      levelUpModalActive = modalActive
+      if (
+        presentationId !== null
+        && presentationId !== lastLevelUpPresentationId
+      ) {
+        armedLevelUpPresentationId = presentationId
+        lastLevelUpPresentationId = presentationId
+        levelUpPresentationStartedAt = null
+      }
+      canvas.dataset.levelUpPresentationId = armedLevelUpPresentationId === null
+        ? 'none'
+        : `${armedLevelUpPresentationId}`
+      canvas.dataset.levelUpDynamicSuppressed = `${modalActive}`
     },
     destroy() {
       if (destroyed) return
@@ -743,6 +802,7 @@ class BoneyardDynamicScene {
   private readonly gates: BoneyardGateViews
   private readonly lightSourceCandidates: NativeBoneyardLightSource[] = []
   private readonly lightSources: NativeBoneyardLightSource[] = []
+  private readonly levelUp: NativeLevelUpWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
@@ -796,6 +856,8 @@ class BoneyardDynamicScene {
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
     this.playerDeathBursts = new PlayerDeathBurstViews(root, textures, initialSnapshot)
+    this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
+    root.addChild(this.levelUp.container)
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
@@ -806,6 +868,12 @@ class BoneyardDynamicScene {
     localPlayerId: string,
     presentationFrame: number,
     visibleMainResidents: readonly ResidentTexture[],
+    levelUpPresentation: {
+      elapsedMs: number
+      playerScreenY: number
+      presentationId: number
+    } | null,
+    modalActive: boolean,
   ): BoneyardPainterFrame {
     requireBoneyardSnapshot(snapshot, this.boneyard.runId)
     const enemySnapshots = nativeEnemySnapshots(snapshot)
@@ -830,6 +898,13 @@ class BoneyardDynamicScene {
     }
     const localPlayer = snapshot.players[localPlayerId]
     if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
+    const levelUpFrame = levelUpPresentation === null
+      ? null
+      : nativeLevelUpPresentationFrame(
+          levelUpPresentation.presentationId,
+          levelUpPresentation.elapsedMs,
+          levelUpPresentation.playerScreenY,
+        )
     this.primarySpells.update(
       snapshot.primarySpells,
       `boneyard:${snapshot.world.runId}`,
@@ -841,6 +916,16 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles)
     this.maggots.update(snapshot.world.maggots)
     this.playerDeathBursts.update(snapshot)
+    for (const [id, view] of this.players) {
+      view.container.renderable = !modalActive || id === localPlayerId
+    }
+    this.primarySpells.setRenderable(!modalActive)
+    this.enemies.setRenderable(!modalActive)
+    this.enemyDeathEffects.setRenderable(!modalActive)
+    this.enemyProjectiles.setRenderable(!modalActive)
+    this.maggots.setRenderable(!modalActive)
+    this.playerDeathBursts.setRenderable(!modalActive)
+    this.solomon?.setActorRenderable(!modalActive)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
@@ -853,9 +938,14 @@ class BoneyardDynamicScene {
     const lightSourceCandidates = this.lightSourceCandidates
     lightSourceCandidates.length = 0
     for (const playerId in snapshot.players) {
-      lightSourceCandidates.push(nativePlayerLightSource(snapshot.players[playerId]))
+      if (modalActive && playerId !== localPlayerId) continue
+      const playerLight = nativePlayerLightSource(snapshot.players[playerId])
+      if (playerId === localPlayerId && levelUpFrame?.emitting) {
+        playerLight.radius = levelUpFrame.lightRadius
+      }
+      lightSourceCandidates.push(playerLight)
     }
-    for (const spell of snapshot.primarySpells.projectiles) {
+    if (!modalActive) for (const spell of snapshot.primarySpells.projectiles) {
       if (
         spell.kind === 'fire'
         && spell.worldKey === `boneyard:${snapshot.world.runId}`
@@ -863,7 +953,7 @@ class BoneyardDynamicScene {
         lightSourceCandidates.push(nativeFireballLightSource(spell, presentationFrame))
       }
     }
-    for (const effect of snapshot.primarySpells.transients) {
+    if (!modalActive) for (const effect of snapshot.primarySpells.transients) {
       if (
         effect.kind === 'ether-impact'
         && effect.worldKey === `boneyard:${snapshot.world.runId}`
@@ -895,7 +985,7 @@ class BoneyardDynamicScene {
       if (contactLight) lightSourceCandidates.push(contactLight)
     }
     if (lanternLight) lightSourceCandidates.push(lanternLight)
-    for (const effect of snapshot.primarySpells.transients) {
+    if (!modalActive) for (const effect of snapshot.primarySpells.transients) {
       if (
         effect.kind !== 'air'
         || effect.ageTicks !== 0
@@ -1171,6 +1261,11 @@ class BoneyardDynamicScene {
     )
     const localPainter = positionedDynamics.get(`player:${localPlayerId}`)
     const localPlayerZIndex = localPainter?.zIndex ?? 1
+    this.levelUp.update(
+      levelUpFrame,
+      localPlayer.position,
+      localPlayerZIndex + 0.1,
+    )
     return {
       complexShadowCasterCount: complexShadows.casterCount,
       complexShadowQuadCount: complexShadows.quadCount,
@@ -1241,6 +1336,10 @@ class BoneyardDynamicScene {
     return this.lightSources
   }
 
+  get levelUpParticleCount(): number {
+    return this.levelUp.particleCount
+  }
+
   get primarySpellCount(): number {
     return this.primarySpells.count
   }
@@ -1265,6 +1364,8 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
     this.playerDeathBursts.destroy()
+    this.root.removeChild(this.levelUp.container)
+    this.levelUp.destroy()
     this.gates.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()
@@ -1378,6 +1479,10 @@ class BoneyardSolomonView {
 
   setActorDepth(depth: number): void {
     this.actorRoot.zIndex = depth
+  }
+
+  setActorRenderable(renderable: boolean): void {
+    this.actorRoot.renderable = renderable
   }
 
   setGraveDepth(depth: number): void {

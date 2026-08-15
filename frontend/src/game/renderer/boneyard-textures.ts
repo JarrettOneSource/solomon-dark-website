@@ -24,6 +24,7 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   base: Readonly<Record<string, Texture>>
   graveDirt: Texture
   lantern: Texture
+  levelUpSparkle: Texture
   regionLightGlyph: Texture
   solomonDialogueBody: readonly Texture[]
   solomonDialogueMouth: readonly (readonly Texture[])[]
@@ -58,6 +59,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     ...NATIVE_ENEMY_ASSET_SOURCES,
     boneyard.graveDirt,
     boneyard.lantern,
+    boneyard.levelUpSparkle,
     boneyard.solomonDig,
     solomonEncounterSource,
     solomonShadowSource,
@@ -107,6 +109,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     base,
     graveDirt: texture(boneyard.graveDirt),
     lantern: texture(boneyard.lantern),
+    levelUpSparkle: texture(boneyard.levelUpSparkle),
     regionLightGlyph: texture(regionLightRef.src),
     solomonDialogueBody: solomonEncounter[0],
     solomonDialogueMouth: solomonEncounter.slice(1, 4),

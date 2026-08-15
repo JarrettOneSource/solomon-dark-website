@@ -63,6 +63,8 @@ interface HubSceneProps {
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
+  levelUpModalActive: boolean
+  levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onHubAction: (action: HubInventoryAction) => void
   onLoadingError: () => void
@@ -92,6 +94,8 @@ export default function HubScene({
   getPingMs,
   initialSnapshot,
   inputBlocked,
+  levelUpModalActive,
+  levelUpPresentationId,
   onInput,
   onHubAction,
   onLoadingError,
@@ -115,9 +119,13 @@ export default function HubScene({
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
   const modalOpenRef = useRef(false)
+  const levelUpModalActiveRef = useRef(levelUpModalActive)
+  const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
+  levelUpModalActiveRef.current = levelUpModalActive
+  levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
@@ -162,6 +170,13 @@ export default function HubScene({
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(inputBlocked || modalOpen)
   }, [inputBlocked, modalOpen])
+
+  useLayoutEffect(() => {
+    rendererRef.current?.setLevelUpPresentation(
+      levelUpPresentationId,
+      levelUpModalActive,
+    )
+  }, [levelUpModalActive, levelUpPresentationId])
 
   useEffect(() => {
     const footstepAudio = new PlayerFootstepAudioSynchronizer(
@@ -252,6 +267,10 @@ export default function HubScene({
         return
       }
       rendererRef.current = renderer
+      renderer.setLevelUpPresentation(
+        levelUpPresentationIdRef.current,
+        levelUpModalActiveRef.current,
+      )
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')

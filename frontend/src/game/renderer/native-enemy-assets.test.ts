@@ -66,11 +66,23 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
     const assetModule = await server.ssrLoadModule(
       '/src/game/renderer/native-enemy-assets.ts',
     ) as {
+      nativeEnemySpriteGeometry(
+        atlas: NativeEnemyAtlas,
+        entry: number,
+      ): { readonly anchorX: number; readonly anchorY: number; readonly height: number; readonly width: number }
       nativeEnemySpriteRecord(
         atlas: NativeEnemyAtlas,
         entry: number,
       ): { readonly atlas: NativeEnemyAtlas; readonly entry: number; readonly source: string }
     }
+    assert.deepEqual(assetModule.nativeEnemySpriteGeometry('BadGuys', 73), {
+      anchorX: 6,
+      anchorY: 6.5,
+      atlas: 'BadGuys',
+      entry: 73,
+      height: 13,
+      width: 12,
+    })
     const used = new Set<string>()
     for (const projectile of enemyProjectileAssetSamples()) {
       for (const layer of nativeEnemyProjectilePlan(projectile).layers) {

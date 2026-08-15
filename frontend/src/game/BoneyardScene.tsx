@@ -73,6 +73,8 @@ interface BoneyardSceneProps {
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
+  levelUpModalActive: boolean
+  levelUpPresentationId: number | null
   onAcknowledgeGameOver: (runId: string, eventId: number) => void
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
@@ -105,6 +107,8 @@ export default function BoneyardScene({
   getPingMs,
   initialSnapshot,
   inputBlocked,
+  levelUpModalActive,
+  levelUpPresentationId,
   onAcknowledgeGameOver,
   onInput,
   onLoadingError,
@@ -135,9 +139,13 @@ export default function BoneyardScene({
     runId: loaded.runId,
   })
   const inputBlockedRef = useRef(inputBlocked)
+  const levelUpModalActiveRef = useRef(levelUpModalActive)
+  const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
+  levelUpModalActiveRef.current = levelUpModalActive
+  levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
@@ -258,6 +266,13 @@ export default function BoneyardScene({
     inputRef.current?.setBlocked(inputBlocked)
   }, [inputBlocked])
 
+  useLayoutEffect(() => {
+    rendererRef.current?.setLevelUpPresentation(
+      levelUpPresentationId,
+      levelUpModalActive,
+    )
+  }, [levelUpModalActive, levelUpPresentationId])
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
@@ -325,6 +340,10 @@ export default function BoneyardScene({
         return
       }
       rendererRef.current = renderer
+      renderer.setLevelUpPresentation(
+        levelUpPresentationIdRef.current,
+        levelUpModalActiveRef.current,
+      )
       const pendingEnemyEvents = pendingEnemyPresentationEventsRef.current
       pendingEnemyPresentationEventsRef.current = []
       for (const event of pendingEnemyEvents) {

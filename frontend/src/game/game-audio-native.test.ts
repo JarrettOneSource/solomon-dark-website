@@ -7,7 +7,7 @@ import {
   CREATE_DISCIPLINE_FINALIZE_MS,
   GAME_SCENE_MUSIC,
   HUB_AUDIO_ATTENUATION_RADIUS,
-  NATIVE_LEVEL_UP_SOUND_REQUESTS,
+  NATIVE_LEVEL_UP_SOUND_REQUEST,
   NATIVE_MUSIC_MODULE_SHA256,
   NATIVE_LOOP_MANIFEST,
   NATIVE_SOUND_MANIFEST,
@@ -40,10 +40,6 @@ const mainMenuSceneSource = readFileSync(
 )
 const playerFootstepAudioSource = readFileSync(
   new URL('./player-footstep-audio.ts', import.meta.url),
-  'utf8',
-)
-const skillPickerSource = readFileSync(
-  new URL('./SkillPicker.tsx', import.meta.url),
   'utf8',
 )
 
@@ -131,7 +127,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
 })
 
-test('plays the untouched stock level-up cue at the exact two native pitches per offer', () => {
+test('plays the untouched stock level-up cue once at scalar one per barrier', () => {
   const source = readFileSync(
     new URL('../assets/game/audio/sfx/level-up.wav', import.meta.url),
   )
@@ -139,15 +135,17 @@ test('plays the untouched stock level-up cue at the exact two native pitches per
     createHash('sha256').update(source).digest('hex'),
     NATIVE_SOUND_MANIFEST['level-up'].sourceSha256,
   )
-  assert.deepEqual(NATIVE_LEVEL_UP_SOUND_REQUESTS, [
-    { cue: 'level-up', playbackRate: 2 },
-    { cue: 'level-up', playbackRate: 3 },
-  ])
-  assert.match(skillPickerSource, /levelUpSoundOfferRef\.current !== soundOfferKey/)
-  assert.match(skillPickerSource, /for \(const request of NATIVE_LEVEL_UP_SOUND_REQUESTS\)/)
+  assert.deepEqual(NATIVE_LEVEL_UP_SOUND_REQUEST, {
+    cue: 'level-up',
+    playbackRate: 1,
+  })
   assert.match(
-    skillPickerSource,
-    /playSound\(request\.cue, \{ playbackRate: request\.playbackRate \}\)/,
+    mainMenuSceneSource,
+    /levelUpSoundBarrierRef\.current === levelUpBarrierId/,
+  )
+  assert.match(
+    mainMenuSceneSource,
+    /playSound\(NATIVE_LEVEL_UP_SOUND_REQUEST\.cue, \{[\s\S]*playbackRate: NATIVE_LEVEL_UP_SOUND_REQUEST\.playbackRate/,
   )
 })
 

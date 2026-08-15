@@ -97,6 +97,11 @@ export class NativeEnemyViews {
     this.views.get(id)?.view.setTint(tint)
   }
 
+  setRenderable(renderable: boolean): void {
+    for (const managed of this.views.values()) managed.view.setRenderable(renderable)
+    for (const view of this.lightningViews.values()) view.setRenderable(renderable)
+  }
+
   get size(): number {
     return this.views.size
   }
@@ -169,6 +174,10 @@ class NativeMageLightningView {
     this.container.zIndex = depth
   }
 
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
+  }
+
   destroy(): void {
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
@@ -232,6 +241,10 @@ class NativeEnemyView {
 
   setTint(tint: number): void {
     this.container.tint = tint
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
   }
 
   destroy(): void {
