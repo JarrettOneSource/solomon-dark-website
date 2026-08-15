@@ -60,7 +60,7 @@ import {
 function gameplayInput(x: number, y: number) {
   return {
     aim: null,
-    cast: { primary: false, secondary: false },
+    cast: { primary: false, secondary: null },
     movement: { x, y },
   }
 }
@@ -698,7 +698,7 @@ test('disconnect and world replacement clean spell actors and cast ownership', (
       x: getPlayerCharacter(state, 'caster').position.x,
       y: getPlayerCharacter(state, 'caster').position.y - 200,
     },
-    cast: { primary, secondary: false },
+    cast: { primary, secondary: null },
     movement: { x: 0, y: 0 },
   })
   state = stepGameSimulationTick(state, { caster: cast(true) })
@@ -766,7 +766,7 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
   const player = getPlayerCharacter(state, 'caster')
   state = stepGameSimulationTick(state, { caster: {
     aim: { x: 250, y: 50 },
-    cast: { primary: true, secondary: false },
+    cast: { primary: true, secondary: null },
     movement: { x: 0, y: 0 },
   } })
 
@@ -838,7 +838,7 @@ test('simulation wires effective primary rank into debit and captured projectile
     const player = getPlayerCharacter(state, 'caster')
     return {
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary, secondary: false },
+      cast: { primary, secondary: null },
       movement: { x: 0, y: 0 },
     }
   }
@@ -908,7 +908,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
 
   const cast = (primary: boolean) => ({
     aim: { x: 250, y: 0 },
-    cast: { primary, secondary: false },
+    cast: { primary, secondary: null },
     movement: { x: 0, y: 0 },
   })
   const initialMana = getPlayerProgression(state, 'caster').currentMana

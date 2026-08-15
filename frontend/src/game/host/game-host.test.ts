@@ -63,7 +63,7 @@ function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
   primary = false,
-  secondary = false,
+  secondary: number | null = null,
 ): PlayerCharacterInput {
   return {
     aim,

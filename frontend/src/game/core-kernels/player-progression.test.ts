@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import './native-secondary-ability-contract.test.ts'
+import './secondary-ability-loadout.test.ts'
 
 import {
   MAX_PLAYER_EXPERIENCE,
@@ -23,6 +24,7 @@ import {
   effectivePrimarySkillRankStats,
   evaluateBoneyardEnemyExperience,
   grantPlayerExperience,
+  nativeSkillCategory,
   playerExperienceProgress,
   nativeWeldBuild,
   playerStatBook,
@@ -155,7 +157,7 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
   assert.deepEqual(first.permanentRanks, first.effectiveRanks)
   assert.equal(first.activeWeldBuildId, null)
   assert.equal(first.primarySkillId, 8)
-  assert.equal(first.secondarySkillId, 11)
+  assert.deepEqual(first.secondaryBelt, [11, null, null, null, null, null, null, null])
   const progression = createPlayerProgression(0)
   assert.equal(progression.offerCycle, 0)
   assert.equal(progression.weldOfferMarker, 9_999)
@@ -518,6 +520,62 @@ test('Boneyard enemy XP preserves native fractional awards and strict threshold 
   }), 4.25 / 90)
   assert.ok(Math.abs(playerExperienceProgress(fractionalCrossing) - 0.85 / 70) < 1e-15)
   assert.throws(() => grantPlayerExperience(atThreshold, book, Number.NaN), /finite/)
+})
+
+test('every offered row applies only its addressed player-book entry', () => {
+  for (let skillId = 8; skillId <= 79; skillId += 1) {
+    let skillBook = createPlayerSkillBook(ETHER_ARCANE)
+    if (skillId === SPELL_WELDING_SKILL_ID) {
+      skillBook = withLearnedSkills(skillBook, [16])
+    }
+    const beforeRanks = [...skillBook.permanentRanks]
+    const option = skillId === SPELL_WELDING_SKILL_ID
+      ? { skillId, targetRank: 1, weldBuildId: 1000 }
+      : { skillId, targetRank: (beforeRanks[skillId] ?? 0) + 1 }
+    const progression: PlayerProgressionComponent = {
+      ...createPlayerProgression(skillId),
+      currentHealth: 37,
+      currentMana: 61,
+      pendingLevels: Object.freeze([2]),
+      pendingOffer: Object.freeze({
+        level: 2,
+        options: Object.freeze([
+          Object.freeze(option),
+          Object.freeze({ skillId: 48, targetRank: 1 }),
+          Object.freeze({ skillId: 56, targetRank: 1 }),
+        ]),
+        sequence: skillId + 1,
+      }),
+    }
+    const applied = applyPlayerSkillChoice(progression, skillBook, {
+      choiceIndex: 0,
+      offerSequence: skillId + 1,
+      skillId,
+    })
+    assert.ok(applied, `skill ${skillId} did not book`)
+    assert.equal(applied.progression.currentHealth, 37)
+    assert.equal(applied.progression.currentMana, 61)
+    assert.equal(applied.skillBook.elementRoot, skillBook.elementRoot)
+    assert.equal(applied.skillBook.disciplineRoot, skillBook.disciplineRoot)
+    assert.equal(applied.skillBook.primarySkillId, skillBook.primarySkillId)
+    if (nativeSkillCategory(skillId) !== 2 || beforeRanks[skillId]! > 0) {
+      assert.equal(applied.skillBook.secondaryBelt, skillBook.secondaryBelt)
+    }
+    assert.equal(applied.skillBook.advancedUnlocks, skillBook.advancedUnlocks)
+    assert.equal(
+      applied.skillBook.permanentRanks.filter((rank, id) => rank !== beforeRanks[id]).length,
+      1,
+    )
+    assert.equal(
+      applied.skillBook.permanentRanks[skillId],
+      skillId === SPELL_WELDING_SKILL_ID ? 1 : (beforeRanks[skillId] ?? 0) + 1,
+    )
+    assert.equal(
+      applied.skillBook.activeWeldBuildId,
+      skillId === SPELL_WELDING_SKILL_ID ? 1000 : skillBook.activeWeldBuildId,
+    )
+    assert.equal(NATIVE_SKILL_CATALOG[skillId]?.id, skillId)
+  }
 })
 
 test('offer fill preserves the native category collision guards', () => {

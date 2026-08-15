@@ -115,11 +115,13 @@ export function createBrowserMovementInput({
   const state = createMovementInputState()
   let blocked = false
   const keyDown: EventListener = (event) => {
-    if (blocked || !(event instanceof KeyboardEvent) || !state.press(event.code)) return
+    const code = keyboardCode(event)
+    if (blocked || code === null || !state.press(code)) return
     event.preventDefault()
   }
   const keyUp: EventListener = (event) => {
-    if (blocked || !(event instanceof KeyboardEvent) || !state.release(event.code)) return
+    const code = keyboardCode(event)
+    if (blocked || code === null || !state.release(code)) return
     event.preventDefault()
   }
   const stop = () => {
@@ -156,6 +158,11 @@ export function createBrowserMovementInput({
       if (!blocked) state.setTouch(movement)
     },
   }
+}
+
+function keyboardCode(event: Event): string | null {
+  const code = (event as Partial<KeyboardEvent>).code
+  return typeof code === 'string' ? code : null
 }
 
 export function movementFromGamepads(

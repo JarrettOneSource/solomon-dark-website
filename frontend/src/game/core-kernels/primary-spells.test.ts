@@ -117,7 +117,7 @@ function input(state: GameSimulationState, primary: boolean): PlayerCharacterInp
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
-    cast: { primary, secondary: false },
+    cast: { primary, secondary: null },
   }
 }
 
@@ -198,7 +198,7 @@ function stepSpellKernel(
       [PLAYER_ID]: {
         ...createIdlePlayerCharacterInput(),
         aim: { x: player.position.x, y: player.position.y - 200 },
-        cast: { primary, secondary: false },
+        cast: { primary, secondary: null },
       },
     },
     players: state.players,
@@ -1061,7 +1061,7 @@ test('one-shot casts retain accepted facing against movement through projectile 
     }
     const castInput = (primary: boolean): PlayerCharacterInput => ({
       aim: eastAim,
-      cast: { primary, secondary: false },
+      cast: { primary, secondary: null },
       movement: { x: -1, y: 0 },
     })
 
@@ -1161,7 +1161,7 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
     Object.entries(playerCharacterRecords(state.playerEntities)).map(([playerId, player]) => [playerId, {
       ...createIdlePlayerCharacterInput(),
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary: true, secondary: false },
+      cast: { primary: true, secondary: null },
     }]),
   )
 
@@ -1252,7 +1252,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
       x: player.position.x + 200,
       y: player.position.y - 25 / 1.2,
     },
-    cast: { primary: true, secondary: false },
+    cast: { primary: true, secondary: null },
   }
   state = stepGameSimulationTick(state, { [PLAYER_ID]: eastInput })
   const retargeted = state.primarySpells.projectiles[0]

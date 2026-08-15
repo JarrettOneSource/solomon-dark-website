@@ -43,7 +43,7 @@ function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
   primary = false,
-  secondary = false,
+  secondary: number | null = null,
 ): PlayerCharacterInput {
   return {
     aim,
@@ -259,7 +259,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   assert.equal(session.getSnapshot().run.phase, 'game-over')
 
   const beforeStoppedInput = transport.sent.length
-  session.sendInput(gameplayInput({ x: 0, y: 1 }, { x: 600, y: 400 }, true, true))
+  session.sendInput(gameplayInput({ x: 0, y: 1 }, { x: 600, y: 400 }, true, 0))
   assert.equal(transport.sent.length, beforeStoppedInput + 1)
   const stoppedInput = decodeClientGameMessage(transport.sent.at(-1)!)
   assert.equal(stoppedInput.type, 'client-input')

@@ -97,7 +97,7 @@ import {
 function gameplayInput(movement: { x: number; y: number }) {
   return {
     aim: null,
-    cast: { primary: false, secondary: false },
+    cast: { primary: false, secondary: null },
     movement,
   }
 }

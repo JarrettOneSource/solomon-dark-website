@@ -428,8 +428,15 @@ export function connectGameClientSession(
         ) throw new Error('game input must contain finite aim coordinates')
         if (
           typeof requestedInput.cast.primary !== 'boolean'
-          || typeof requestedInput.cast.secondary !== 'boolean'
-        ) throw new Error('game input must contain primary and secondary cast levels')
+          || (
+            requestedInput.cast.secondary !== null
+            && (
+              !Number.isInteger(requestedInput.cast.secondary)
+              || requestedInput.cast.secondary < 0
+              || requestedInput.cast.secondary > 7
+            )
+          )
+        ) throw new Error('game input must contain a primary level and native secondary belt slot')
         const input: PlayerCharacterInput = {
           aim: requestedInput.aim ? { ...requestedInput.aim } : null,
           cast: { ...requestedInput.cast },

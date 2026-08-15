@@ -22,6 +22,17 @@ class FakeMouseEvent extends Event {
   }
 }
 
+class FakeKeyboardEvent extends Event {
+  readonly code: string
+  readonly repeat: boolean
+
+  constructor(type: string, code: string, repeat = false) {
+    super(type, { cancelable: true })
+    this.code = code
+    this.repeat = repeat
+  }
+}
+
 class FakeVisibilityTarget extends EventTarget {
   visibilityState: DocumentVisibilityState = 'visible'
 }
@@ -29,7 +40,7 @@ class FakeVisibilityTarget extends EventTarget {
 function expectedInput(
   aim: { x: number; y: number } | null,
   primary: boolean,
-  secondary: boolean,
+  secondary: number | null,
 ): PlayerCharacterInput {
   return {
     aim,
@@ -54,19 +65,19 @@ test('captures independent left and right levels from the world surface', () => 
   })
 
   assert.equal(mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30)), false)
-  assert.deepEqual(published.at(-1), expectedInput({ x: 1_020, y: 2_030 }, true, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 1_020, y: 2_030 }, true, null))
 
   assert.equal(mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 21, 31)), false)
-  assert.deepEqual(published.at(-1), expectedInput({ x: 1_021, y: 2_031 }, true, true))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 1_021, y: 2_031 }, true, 0))
 
   assert.equal(target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 40, 50)), false)
-  assert.deepEqual(published.at(-1), expectedInput({ x: 1_040, y: 2_050 }, true, true))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 1_040, y: 2_050 }, true, 0))
 
   assert.equal(target.dispatchEvent(new FakeMouseEvent('mouseup', 0, 41, 51)), false)
-  assert.deepEqual(published.at(-1), expectedInput({ x: 1_041, y: 2_051 }, false, true))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 1_041, y: 2_051 }, false, 0))
 
   assert.equal(target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 42, 52)), false)
-  assert.deepEqual(published.at(-1), expectedInput({ x: 1_042, y: 2_052 }, false, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 1_042, y: 2_052 }, false, null))
   input.destroy()
 })
 
@@ -96,7 +107,7 @@ test('a local presentation owner can claim either mouse edge before casting', ()
 
   assert.deepEqual(claimed, ['primary', 'secondary'])
   assert.deepEqual(published, [])
-  assert.deepEqual(input.sample().input, expectedInput(null, false, false))
+  assert.deepEqual(input.sample().input, expectedInput(null, false, null))
   input.destroy()
 })
 
@@ -120,7 +131,7 @@ test('ignores non-world downs but keeps move and release capture outside the sur
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 7, 8))
   target.dispatchEvent(new FakeMouseEvent('mousemove', 0, 70, 80))
   target.dispatchEvent(new FakeMouseEvent('mouseup', 0, 90, 100))
-  assert.deepEqual(published.at(-1), expectedInput({ x: 90, y: 100 }, false, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 90, y: 100 }, false, null))
   input.destroy()
 })
 
@@ -166,30 +177,30 @@ test('reprojects held aim while sampling and synchronously clears every lane on 
     device: 'touch',
     input: {
       aim: { x: 201, y: 0 },
-      cast: { primary: true, secondary: true },
+      cast: { primary: true, secondary: 0 },
       movement: { x: 1, y: 0 },
     },
   })
 
   visibilityTarget.visibilityState = 'hidden'
   visibilityTarget.dispatchEvent(new Event('visibilitychange'))
-  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
-  assert.deepEqual(input.sample(), { device: 'none', input: expectedInput(null, false, false) })
+  assert.deepEqual(published.at(-1), expectedInput(null, false, null))
+  assert.deepEqual(input.sample(), { device: 'none', input: expectedInput(null, false, null) })
 
   input.setTouch({ x: 0, y: -1 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 5, 6))
   target.dispatchEvent(new Event('blur'))
-  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
+  assert.deepEqual(published.at(-1), expectedInput(null, false, null))
 
   input.setTouch({ x: 0, y: 1 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 1, 2))
   target.dispatchEvent(new Event('pagehide'))
-  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
+  assert.deepEqual(published.at(-1), expectedInput(null, false, null))
 
   input.setTouch({ x: -1, y: 0 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 3, 4))
   input.destroy()
-  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
+  assert.deepEqual(published.at(-1), expectedInput(null, false, null))
 })
 
 test('blocking owns input immediately and drops barrier-time state', () => {
@@ -213,10 +224,10 @@ test('blocking owns input immediately and drops barrier-time state', () => {
   assert.equal(input.sample().input.cast.primary, true)
 
   input.setBlocked(true)
-  assert.deepEqual(published.at(-1), expectedInput(null, false, false))
+  assert.deepEqual(published.at(-1), expectedInput(null, false, null))
   assert.deepEqual(input.sample(), {
     device: 'none',
-    input: expectedInput(null, false, false),
+    input: expectedInput(null, false, null),
   })
 
   const publishedAtBarrier = published.length
@@ -226,20 +237,20 @@ test('blocking owns input immediately and drops barrier-time state', () => {
   assert.equal(published.length, publishedAtBarrier)
   assert.deepEqual(input.sample(), {
     device: 'none',
-    input: expectedInput(null, false, false),
+    input: expectedInput(null, false, null),
   })
 
   input.setBlocked(false)
   assert.deepEqual(input.sample(), {
     device: 'none',
-    input: expectedInput(null, false, false),
+    input: expectedInput(null, false, null),
   })
   input.setTouch({ x: 0, y: 1 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 60, 70))
   assert.equal(input.sample().device, 'touch')
   assert.deepEqual(input.sample().input, {
     aim: { x: 60, y: 70 },
-    cast: { primary: false, secondary: true },
+    cast: { primary: false, secondary: 0 },
     movement: { x: 0, y: 1 },
   })
   input.destroy()
@@ -264,7 +275,7 @@ test('touch primary reprojects held direction, retains released aim, and coexist
   input.setTouchPrimary({ x: 2, y: 0 })
   assert.deepEqual(published.at(-1), {
     aim: { x: 110, y: 200 },
-    cast: { primary: true, secondary: false },
+    cast: { primary: true, secondary: null },
     movement: { x: -1, y: 0 },
   })
   assert.equal(input.sample().device, 'touch')
@@ -272,14 +283,14 @@ test('touch primary reprojects held direction, retains released aim, and coexist
   playerX = 300
   assert.deepEqual(input.sample().input, {
     aim: { x: 310, y: 200 },
-    cast: { primary: true, secondary: false },
+    cast: { primary: true, secondary: null },
     movement: { x: -1, y: 0 },
   })
 
   input.setTouchPrimary({ x: 0, y: 0 })
   assert.deepEqual(published.at(-1), {
     aim: { x: 310, y: 200 },
-    cast: { primary: false, secondary: false },
+    cast: { primary: false, secondary: null },
     movement: { x: -1, y: 0 },
   })
   input.destroy()
@@ -301,12 +312,50 @@ test('touch and mouse primary levels compose without stealing each other release
 
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30))
   input.setTouchPrimary({ x: 1, y: 0 })
-  assert.deepEqual(published.at(-1), expectedInput({ x: 100, y: 0 }, true, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 100, y: 0 }, true, null))
 
   input.setTouchPrimary({ x: 0, y: 0 })
-  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, true, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, true, null))
 
   target.dispatchEvent(new FakeMouseEvent('mouseup', 0, 20, 30))
-  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, false, false))
+  assert.deepEqual(published.at(-1), expectedInput({ x: 20, y: 30 }, false, null))
+  input.destroy()
+})
+
+test('right mouse and digits one through seven address all native secondary belt slots', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
+  assert.equal(published.at(-1)?.cast.secondary, 0)
+
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1'))
+  assert.equal(published.at(-1)?.cast.secondary, 1)
+  const afterFirstEdge = published.length
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit1', true))
+  assert.equal(published.length, afterFirstEdge)
+
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit7'))
+  assert.equal(published.at(-1)?.cast.secondary, 7)
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit7'))
+  assert.equal(published.at(-1)?.cast.secondary, 1)
+  target.dispatchEvent(new FakeKeyboardEvent('keyup', 'Digit1'))
+  assert.equal(published.at(-1)?.cast.secondary, 0)
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 20, 30))
+  assert.equal(published.at(-1)?.cast.secondary, null)
+
+  const afterRelease = published.length
+  target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit0'))
+  assert.equal(published.length, afterRelease)
   input.destroy()
 })

@@ -55,7 +55,8 @@ export function createBrowserGameplayInput({
   visibilityTarget = document,
 }: BrowserGameplayInputOptions): BrowserGameplayInput {
   let aim: Vector2 | null = null
-  let mouseCast = { primary: false, secondary: false }
+  let mousePrimary = false
+  let heldSecondarySlots: number[] = []
   let touchPrimaryDirection: Vector2 | null = null
   let capturedPointer: Vector2 | null = null
   let blocked = false
@@ -65,7 +66,8 @@ export function createBrowserGameplayInput({
     getGamepads,
     onStop: () => {
       aim = null
-      mouseCast = { primary: false, secondary: false }
+      mousePrimary = false
+      heldSecondarySlots = []
       touchPrimaryDirection = null
       capturedPointer = null
       onInput(createIdlePlayerCharacterInput())
@@ -83,7 +85,7 @@ export function createBrowserGameplayInput({
     }
     if (touchPrimaryDirection) {
       aim = projectDirection(touchPrimaryDirection) ?? aim
-    } else if (capturedPointer && (mouseCast.primary || mouseCast.secondary)) {
+    } else if (capturedPointer && (mousePrimary || heldSecondarySlots.length > 0)) {
       aim = projectPointer(capturedPointer) ?? aim
     }
     const movementSample = movement.sample()
@@ -92,8 +94,8 @@ export function createBrowserGameplayInput({
       input: {
         aim: aim ? { ...aim } : null,
         cast: {
-          primary: mouseCast.primary || touchPrimaryDirection !== null,
-          secondary: mouseCast.secondary,
+          primary: mousePrimary || touchPrimaryDirection !== null,
+          secondary: heldSecondarySlots.at(-1) ?? null,
         },
         movement: { ...movementSample.movement },
       },
@@ -113,13 +115,14 @@ export function createBrowserGameplayInput({
     if (!nextAim) return
     capturedPointer = mouse
     aim = nextAim
-    mouseCast = { ...mouseCast, [lane]: true }
+    if (lane === 'primary') mousePrimary = true
+    else holdSecondarySlot(0)
     event.preventDefault()
     publish()
   }
   const mouseMove: EventListener = (event) => {
     if (blocked) return
-    if (!mouseCast.primary && !mouseCast.secondary) return
+    if (!mousePrimary && heldSecondarySlots.length === 0) return
     const mouse = mouseEvent(event)
     if (!mouse) return
     capturedPointer = mouse
@@ -131,19 +134,49 @@ export function createBrowserGameplayInput({
     if (blocked) return
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
-    if (!mouse || !lane || !mouseCast[lane]) return
+    if (!mouse || !lane) return
+    if (lane === 'primary' ? !mousePrimary : !heldSecondarySlots.includes(0)) return
     capturedPointer = mouse
     aim = projectPointer(mouse) ?? aim
-    mouseCast = { ...mouseCast, [lane]: false }
+    if (lane === 'primary') mousePrimary = false
+    else releaseSecondarySlot(0)
     event.preventDefault()
     publish()
   }
   const contextMenu: EventListener = (event) => event.preventDefault()
+  const keyDown: EventListener = (event) => {
+    if (blocked) return
+    const keyboard = keyboardEvent(event)
+    const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
+    if (slot === null || keyboard!.repeat || heldSecondarySlots.includes(slot)) return
+    holdSecondarySlot(slot)
+    event.preventDefault()
+    publish()
+  }
+  const keyUp: EventListener = (event) => {
+    if (blocked) return
+    const keyboard = keyboardEvent(event)
+    const slot = keyboard && secondaryKeyboardSlot(keyboard.code)
+    if (slot === null || !heldSecondarySlots.includes(slot)) return
+    releaseSecondarySlot(slot)
+    event.preventDefault()
+    publish()
+  }
+
+  function holdSecondarySlot(slot: number): void {
+    heldSecondarySlots = [...heldSecondarySlots.filter((entry) => entry !== slot), slot]
+  }
+
+  function releaseSecondarySlot(slot: number): void {
+    heldSecondarySlots = heldSecondarySlots.filter((entry) => entry !== slot)
+  }
 
   mouseTarget.addEventListener('mousedown', mouseDown)
   mouseTarget.addEventListener('contextmenu', contextMenu)
   target.addEventListener('mousemove', mouseMove)
   target.addEventListener('mouseup', mouseUp)
+  target.addEventListener('keydown', keyDown)
+  target.addEventListener('keyup', keyUp)
 
   return {
     destroy() {
@@ -153,6 +186,8 @@ export function createBrowserGameplayInput({
       mouseTarget.removeEventListener('contextmenu', contextMenu)
       target.removeEventListener('mousemove', mouseMove)
       target.removeEventListener('mouseup', mouseUp)
+      target.removeEventListener('keydown', keyDown)
+      target.removeEventListener('keyup', keyUp)
       movement.destroy()
     },
     sample,
@@ -170,6 +205,18 @@ export function createBrowserGameplayInput({
       publish()
     },
   }
+}
+
+function secondaryKeyboardSlot(code: string): number | null {
+  const match = /^Digit([1-7])$/.exec(code)
+  return match ? Number(match[1]) : null
+}
+
+function keyboardEvent(event: Event): { code: string; repeat: boolean } | null {
+  const source = event as Partial<KeyboardEvent>
+  return typeof source.code === 'string' && typeof source.repeat === 'boolean'
+    ? { code: source.code, repeat: source.repeat }
+    : null
 }
 
 function primaryDirection(direction: Vector2): Vector2 | null {

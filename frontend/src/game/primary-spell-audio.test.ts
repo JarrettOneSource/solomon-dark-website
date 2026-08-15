@@ -60,7 +60,7 @@ function castInput(state: GameSimulationState, primary: boolean): PlayerCharacte
   return {
     ...createIdlePlayerCharacterInput(),
     aim: { x: player.position.x, y: player.position.y - 200 },
-    cast: { primary, secondary: false },
+    cast: { primary, secondary: null },
   }
 }
 

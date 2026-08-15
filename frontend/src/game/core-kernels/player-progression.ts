@@ -10,6 +10,10 @@ import {
   type PlayerCombatComponent,
 } from './player-combat.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from './native-rng.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from './native-secondary-ability-contract.ts'
 
 export const NATIVE_SKILL_ROW_COUNT = 83
 export const MAX_PLAYER_LEVEL = 75
@@ -75,6 +79,23 @@ export interface NativePrimarySkillRankStats {
   readonly skillId: number
 }
 
+export type PlayerSecondaryAbilityBelt = readonly [
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+  NativeSecondaryAbilityId | null,
+]
+
+export interface NativeSecondaryAbilityRankStats {
+  readonly rank: number
+  readonly skillId: NativeSecondaryAbilityId
+  readonly values: Readonly<Record<string, number>>
+}
+
 export interface PlayerSkillBookComponent {
   readonly activeWeldBuildId: number | null
   readonly advancedUnlocks: readonly boolean[]
@@ -83,7 +104,7 @@ export interface PlayerSkillBookComponent {
   readonly elementRoot: number
   readonly permanentRanks: readonly number[]
   readonly primarySkillId: number
-  readonly secondarySkillId: number
+  readonly secondaryBelt: PlayerSecondaryAbilityBelt
 }
 
 export interface PlayerSkillOfferOption {
@@ -242,11 +263,71 @@ export function effectivePrimarySkillRankStats(
   skillBook: PlayerSkillBookComponent,
 ): NativePrimarySkillRankStats {
   const skillId = skillBook.primarySkillId
+  return nativePrimarySkillRankStats(skillId, skillBook.effectiveRanks[skillId])
+}
+
+export function effectiveSecondaryAbilityRankStats(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+): NativeSecondaryAbilityRankStats {
+  if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
+    throw new RangeError(`skill ${skillId} is not a native secondary`)
+  }
+  const rank = skillBook.effectiveRanks[skillId] ?? 0
+  const entry = SHARED_STAT_BOOK.entries[skillId]
+  if (!entry || !Number.isInteger(rank) || rank < 1 || rank > entry.maximumLevel) {
+    throw new RangeError(`secondary skill ${skillId} has invalid effective rank ${rank}`)
+  }
+  const values: Record<string, number> = {}
+  for (const [property, configured] of Object.entries(entry.numericProperties)) {
+    if (property === 'mCapLevel' || property === 'mMaxLevel') continue
+    const value = typeof configured === 'number'
+      ? configured
+      : configured[Math.min(rank, configured.length - 1)]
+    if (value === undefined || !Number.isFinite(value)) {
+      throw new RangeError(`secondary skill ${skillId} is missing ${property} rank ${rank}`)
+    }
+    values[property] = value
+  }
+  return Object.freeze({
+    rank,
+    skillId: skillId as NativeSecondaryAbilityId,
+    values: Object.freeze(values),
+  })
+}
+
+export function equipPlayerSecondaryAbility(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+  slot: number,
+): PlayerSkillBookComponent {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= 8) {
+    throw new RangeError(`secondary belt slot ${slot} is outside 0..7`)
+  }
+  if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
+    throw new RangeError(`skill ${skillId} is not a native secondary`)
+  }
+  if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
+    throw new Error(`secondary skill ${skillId} is not learned`)
+  }
+  const belt = skillBook.secondaryBelt.map((entry) => (
+    entry === skillId ? null : entry
+  )) as (NativeSecondaryAbilityId | null)[]
+  belt[slot] = skillId as NativeSecondaryAbilityId
+  return {
+    ...skillBook,
+    secondaryBelt: freezeSecondaryBelt(belt),
+  }
+}
+
+function nativePrimarySkillRankStats(
+  skillId: number,
+  rank: number | undefined,
+): NativePrimarySkillRankStats {
   if (!(ELEMENTAL_PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
     throw new RangeError(`skill ${skillId} is not an elemental primary`)
   }
   const entry = SHARED_STAT_BOOK.entries[skillId]
-  const rank = skillBook.effectiveRanks[skillId]
   if (
     !entry
     || rank === undefined
@@ -306,7 +387,16 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
     elementRoot,
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId,
-    secondarySkillId,
+    secondaryBelt: freezeSecondaryBelt([
+      secondarySkillId as NativeSecondaryAbilityId,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]),
   }
 }
 
@@ -627,6 +717,9 @@ export function applyPlayerSkillChoice(
     activeWeldBuildId: weldBuild?.id ?? skillBook.activeWeldBuildId,
     permanentRanks: Object.freeze(permanentRanks),
     effectiveRanks: Object.freeze(effectiveRanks),
+    secondaryBelt: rank === 0 && nativeSkillCategory(chosen.skillId) === 2
+      ? autofillSecondaryBelt(skillBook.secondaryBelt, chosen.skillId)
+      : skillBook.secondaryBelt,
   }
   let nextProgression: PlayerProgressionComponent = {
     ...progression,
@@ -1009,12 +1102,31 @@ function hasDependenciesAndUnlock(id: number, book: PlayerSkillBookComponent): b
     id >= 72
     && id <= 79
     && !book.advancedUnlocks[id - 72]
-    && !(id === 72 && book.secondarySkillId === 72)
+    && !(id === 72 && book.secondaryBelt.includes(72))
   ) return false
   if (rule.all?.some((required) => !learned(book, required))) return false
   if (rule.any && !rule.any.some((required) => learned(book, required))) return false
   if (rule.forbidden?.some((required) => learned(book, required))) return false
   return true
+}
+
+function autofillSecondaryBelt(
+  source: PlayerSecondaryAbilityBelt,
+  skillId: number,
+): PlayerSecondaryAbilityBelt {
+  if (source.includes(skillId as NativeSecondaryAbilityId)) return source
+  const slot = source.indexOf(null)
+  if (slot < 0) return source
+  const belt = [...source]
+  belt[slot] = skillId as NativeSecondaryAbilityId
+  return freezeSecondaryBelt(belt)
+}
+
+function freezeSecondaryBelt(
+  entries: readonly (NativeSecondaryAbilityId | null)[],
+): PlayerSecondaryAbilityBelt {
+  if (entries.length !== 8) throw new RangeError('secondary belt requires exactly eight slots')
+  return Object.freeze([...entries]) as PlayerSecondaryAbilityBelt
 }
 
 function isSpellWeldingEligible(level: number, book: PlayerSkillBookComponent): boolean {

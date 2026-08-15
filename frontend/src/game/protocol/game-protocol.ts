@@ -667,6 +667,15 @@ function boolean(value: unknown, field: string): boolean {
   return value
 }
 
+function secondaryBeltSlot(value: unknown, field: string): number | null {
+  if (value === null) return null
+  const slot = integer(value, field)
+  if (slot < 0 || slot > 7) {
+    throw new GameProtocolError(`${field} must be null or an integer from 0 through 7`)
+  }
+  return slot
+}
+
 function limitedString(value: unknown, field: string, maximum: number): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > maximum) {
     throw new GameProtocolError(
@@ -701,7 +710,7 @@ function playerCharacterInput(value: unknown, field: string): PlayerCharacterInp
     aim: source.aim === null ? null : vector(source.aim, `${field}.aim`),
     cast: {
       primary: boolean(cast.primary, `${field}.cast.primary`),
-      secondary: boolean(cast.secondary, `${field}.cast.secondary`),
+      secondary: secondaryBeltSlot(cast.secondary, `${field}.cast.secondary`),
     },
     movement: unitVector(source.movement, `${field}.movement`),
   }

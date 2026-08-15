@@ -90,7 +90,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
     type: 'client-input',
     input: {
       aim: { x: 800, y: 450 },
-      cast: { primary: true, secondary: false },
+      cast: { primary: true, secondary: 7 },
       movement: { x: 1, y: 0 },
     },
     sequence: 4,
@@ -99,7 +99,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
     type: 'client-input',
     input: {
       aim: { x: 800, y: 450 },
-      cast: { primary: true, secondary: false },
+      cast: { primary: true, secondary: 7 },
       movement: { x: 1, y: 0 },
     },
     sequence: 4,
@@ -1280,7 +1280,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: false, secondary: false },
+      cast: { primary: false, secondary: null },
       movement: { x: 2, y: 0 },
     },
     sequence: 1,
@@ -1290,7 +1290,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: { x: 1, y: Number.POSITIVE_INFINITY },
-      cast: { primary: false, secondary: false },
+      cast: { primary: false, secondary: null },
       movement: { x: 0, y: 0 },
     },
     sequence: 1,
@@ -1300,7 +1300,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: 1, secondary: false },
+      cast: { primary: 1, secondary: null },
       movement: { x: 0, y: 0 },
     },
     sequence: 1,
