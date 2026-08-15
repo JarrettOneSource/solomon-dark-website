@@ -1,16 +1,22 @@
 import {
   createPrimarySpellContactImpact,
+  createPrimarySpellFireDetonation,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
   PRIMARY_SPELL_WATER_REACH,
   type PrimarySpellAirTransientState,
   type PrimarySpellChannelEmission,
+  type PrimarySpellFireEmberState,
+  type PrimarySpellFireExplosionState,
   type PrimarySpellProjectileKind,
   type PrimarySpellProjectileState,
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  nativeFireDirectDamage,
+} from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
@@ -21,6 +27,7 @@ import {
 import { consumeNativeEarthBoulderContact } from '../core-kernels/native-earth-boulder.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
+import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   damageBoneyardEnemy,
   type BoneyardEnemyActor,
@@ -30,9 +37,21 @@ import {
   type BoneyardMaggotActor,
 } from './boneyard-enemy-store.ts'
 
-export type BoneyardSpellHitKind = PrimarySpellProjectileKind | 'air' | 'water'
+export type BoneyardSpellHitKind =
+  | PrimarySpellProjectileKind
+  | 'air'
+  | 'fire-ember'
+  | 'fire-explosion'
+  | 'fire-good-imp'
+  | 'water'
 export const WATER_PRIMARY_ACTOR_MASK = 0x1082
 export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
+
+export interface BoneyardSpellBurnContact {
+  readonly damage: number
+  readonly ownerId: string
+  readonly targetId: number
+}
 
 export interface BoneyardSpellHit {
   readonly actorId: number
@@ -45,9 +64,11 @@ export interface BoneyardSpellHit {
 }
 
 export interface BoneyardSpellCombatResult {
+  readonly burns: readonly BoneyardSpellBurnContact[]
   readonly enemies: BoneyardEnemyStore
   readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly hits: readonly BoneyardSpellHit[]
+  readonly rng: NativeRngState
   readonly spells: PrimarySpellSimulationState
 }
 
@@ -74,6 +95,7 @@ export function resolveBoneyardSpellCombat(
   channelEmissions: readonly PrimarySpellChannelEmission[],
   tick: number,
   worldKey: string,
+  sourceRng: NativeRngState = createNativeRng(0),
   firstWorldContact: BoneyardSpellWorldContact | null = null,
   registerLightProvider?: RegisterNativeLightProvider,
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
@@ -83,11 +105,18 @@ export function resolveBoneyardSpellCombat(
   validateTick(tick)
   let enemies = sourceEnemies
   const consumedProjectileIds = new Set<number>()
+  const consumedTransientIds = new Set<number>()
   const updatedProjectiles = new Map<number, PrimarySpellProjectileState>()
   const hits: BoneyardSpellHit[] = []
+  const burns: BoneyardSpellBurnContact[] = []
   const events: BoneyardEnemySemanticEvent[] = []
   const impactTransients: PrimarySpellTransientState[] = []
   let nextSpellId = sourceSpells.nextId
+  let rng = sourceRng
+  const queueBurn = (targetId: number, ownerId: string, damage: number): void => {
+    if (damage <= 0) return
+    burns.push(Object.freeze({ damage, ownerId, targetId }))
+  }
 
   const publishContactImpact = (
     projectile: PrimarySpellProjectileState,
@@ -185,6 +214,37 @@ export function resolveBoneyardSpellCombat(
       continue
     }
 
+    if (projectile.kind === 'fire') {
+      queueBurn(
+        actor.id,
+        projectile.ownerId,
+        projectile.burnDamage,
+      )
+      const amount = nativeFireDirectDamage(projectile.damage, projectile.explodeDamage)
+      const damaged = damageBoneyardEnemy(enemies, {
+        actorId: actor.id,
+        amount,
+        sourcePlayerId: projectile.ownerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      enemies = damaged.store
+      events.push(...damaged.events)
+      hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+      consumedProjectileIds.add(projectile.id)
+      const detonation = createPrimarySpellFireDetonation(
+        nextSpellId,
+        projectile,
+        projectile.position,
+        rng,
+        registerLightProvider,
+      )
+      rng = detonation.rng
+      impactTransients.push(...detonation.transients)
+      nextSpellId = detonation.nextId
+      continue
+    }
+
     const amount = projectileDamage(projectile)
       * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
     const damaged = damageBoneyardEnemy(enemies, {
@@ -223,6 +283,70 @@ export function resolveBoneyardSpellCombat(
     }
     consumedProjectileIds.add(projectile.id)
     publishContactImpact(projectile, projectile.position)
+  }
+
+  for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
+    if (effect.worldKey !== worldKey) continue
+    if (effect.kind === 'fire-ember') {
+      const rows = primaryTargetRows(enemies)
+      const target = firstNativePrimaryPointContact({
+        actorMask: 0x2,
+        position: effect.position,
+        queryRadius: 7,
+        targets: rows.map(({ target: rowTarget }) => rowTarget),
+      })
+      if (!target) continue
+      const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+      if (!actor) continue
+      queueBurn(actor.id, effect.ownerId, effect.burnDamage)
+      const damaged = damageBoneyardEnemy(enemies, {
+        actorId: actor.id,
+        amount: effect.damage,
+        sourcePlayerId: effect.ownerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      enemies = damaged.store
+      events.push(...damaged.events)
+      hits.push(transientSpellHit(effect, actor.id, effect.damage, damaged.killed, tick))
+      consumedTransientIds.add(effect.id)
+      impactTransients.push({
+        ageTicks: 0,
+        id: nextSpellId,
+        kind: 'fire-impact',
+        lightRegistration: registerLightProvider?.('transient') ?? {
+          managerLane: 'transient',
+          registrationOrdinal: nextSpellId,
+        },
+        origin: { ...effect.position },
+        ownerId: effect.ownerId,
+        worldKey: effect.worldKey,
+      })
+      nextSpellId += 1
+    }
+  }
+
+  const explosions = [...sourceSpells.transients, ...impactTransients]
+    .filter((effect): effect is PrimarySpellFireExplosionState => (
+      effect.kind === 'fire-explosion' && effect.ageTicks === 0
+    ))
+    .sort(bySpellId)
+  for (const effect of explosions) {
+    if (effect.worldKey !== worldKey) continue
+    const rows = nativeFireExplosionTargets(primaryTargetRows(enemies), effect)
+    for (const { actor } of rows) {
+      queueBurn(actor.id, effect.ownerId, effect.burnDamage)
+      const damaged = damageBoneyardEnemy(enemies, {
+        actorId: actor.id,
+        amount: effect.damage,
+        sourcePlayerId: effect.ownerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      enemies = damaged.store
+      events.push(...damaged.events)
+      hits.push(transientSpellHit(effect, actor.id, effect.damage, damaged.killed, tick))
+    }
   }
 
   for (const emission of [...channelEmissions].sort(bySpellId)) {
@@ -273,6 +397,7 @@ export function resolveBoneyardSpellCombat(
   }
 
   const spells = consumedProjectileIds.size === 0
+    && consumedTransientIds.size === 0
     && updatedProjectiles.size === 0
     && impactTransients.length === 0
     ? sourceSpells
@@ -283,14 +408,19 @@ export function resolveBoneyardSpellCombat(
           .filter((projectile) => !consumedProjectileIds.has(projectile.id))
           .map((projectile) => updatedProjectiles.get(projectile.id) ?? projectile),
         transients: impactTransients.length === 0
-          ? sourceSpells.transients
-          : [...sourceSpells.transients, ...impactTransients],
+          ? sourceSpells.transients.filter((effect) => !consumedTransientIds.has(effect.id))
+          : [
+              ...sourceSpells.transients.filter((effect) => !consumedTransientIds.has(effect.id)),
+              ...impactTransients,
+            ],
       }
 
   return {
+    burns: Object.freeze(burns),
     enemies,
     events: Object.freeze(events),
     hits: Object.freeze(hits),
+    rng,
     spells,
   }
 }
@@ -385,6 +515,37 @@ function nextRegistrationOrder(targets: readonly PrimarySpellTarget[]): number {
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {
   return projectile.damage
+}
+
+function nativeFireExplosionTargets(
+  rows: readonly PrimaryTargetRow[],
+  explosion: PrimarySpellFireExplosionState,
+): readonly PrimaryTargetRow[] {
+  return rows.filter(({ target }) => (
+    target.active
+    && !target.pendingRemove
+    && (target.actorFlags & 0x2) !== 0
+    && Math.abs(target.position.x - explosion.origin.x) < explosion.footprintDimension * 0.5
+    && Math.abs(target.position.y - explosion.origin.y) < explosion.footprintDimension * 0.5
+  ))
+}
+
+function transientSpellHit(
+  effect: PrimarySpellFireEmberState | PrimarySpellFireExplosionState,
+  actorId: number,
+  amount: number,
+  killed: boolean,
+  tick: number,
+): BoneyardSpellHit {
+  return {
+    actorId,
+    amount,
+    killed,
+    ownerId: effect.ownerId,
+    spellId: effect.id,
+    spellKind: effect.kind,
+    tick,
+  }
 }
 
 function spellHit(

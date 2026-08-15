@@ -137,7 +137,7 @@ export interface NativeSecondaryActorState {
   readonly rank: number
   readonly rotationRadians: number
   readonly scale: number
-  readonly skillId: NativeSecondaryAbilityId | null
+  readonly skillId: NativeSecondaryAbilityId | 22 | null
   readonly slowFactor: number
   readonly targetId: number | null
   readonly variant: number
@@ -155,7 +155,7 @@ export interface NativeSecondaryEventState {
   readonly pitch: number
   readonly position: Vector2
   readonly screenFlash: NativeSecondaryScreenFlashState | null
-  readonly skillId: NativeSecondaryAbilityId | null
+  readonly skillId: NativeSecondaryAbilityId | 22 | null
   readonly tick: number
   readonly worldKey: string
 }
@@ -393,6 +393,15 @@ interface NativeFireBurnRequest {
   readonly actor: NativeSecondaryActorState
   readonly damage: number
   readonly target: NativeSecondaryTarget
+}
+
+export interface NativeSecondaryFireBurnInput {
+  readonly damage: number
+  readonly ownerId: string
+  readonly rank: number
+  readonly skillId: NativeSecondaryAbilityId | 22
+  readonly target: NativeSecondaryTarget
+  readonly worldKey: string
 }
 
 interface NativeElectricBurnRequest {
@@ -4282,27 +4291,41 @@ function applyFireBurnRequest(
   source: NativeSecondarySimulationState,
   request: NativeFireBurnRequest,
 ): NativeSecondarySimulationState {
-  if (!(request.damage > 0)) return source
-  const damage = Math.fround(request.damage / FIRE_BURN_LIFETIME_TICKS)
+  return applyNativeSecondaryFireBurn(source, {
+    damage: request.damage,
+    ownerId: request.actor.ownerId,
+    rank: request.actor.rank,
+    skillId: request.actor.skillId ?? 22,
+    target: request.target,
+    worldKey: request.actor.worldKey,
+  })
+}
+
+export function applyNativeSecondaryFireBurn(
+  source: NativeSecondarySimulationState,
+  input: NativeSecondaryFireBurnInput,
+): NativeSecondarySimulationState {
+  if (!(input.damage > 0)) return source
+  const damage = Math.fround(input.damage / FIRE_BURN_LIFETIME_TICKS)
   const existingIndex = source.actors.findIndex((actor) => (
     actor.kind === 'fire-burn'
-      && actor.worldKey === request.actor.worldKey
-      && actor.targetId === request.target.id
+      && actor.worldKey === input.worldKey
+      && actor.targetId === input.target.id
   ))
   if (existingIndex < 0) {
     return spawn(source, actorSeed({
       damage,
       kind: 'fire-burn',
-      lightRegistration: request.target.lightRegistration,
+      lightRegistration: input.target.lightRegistration,
       lifetimeTicks: FIRE_BURN_LIFETIME_TICKS,
       miscLightAppendOrdinal: 0,
-      ownerId: request.actor.ownerId,
-      position: request.target.position,
-      rank: request.actor.rank,
-      scale: request.target.scale,
-      skillId: request.actor.skillId,
-      targetId: request.target.id,
-      worldKey: request.actor.worldKey,
+      ownerId: input.ownerId,
+      position: input.target.position,
+      rank: input.rank,
+      scale: input.target.scale,
+      skillId: input.skillId,
+      targetId: input.target.id,
+      worldKey: input.worldKey,
     }))
   }
 
@@ -4313,8 +4336,11 @@ function applyFireBurnRequest(
     ageTicks: 0,
     damage: Math.max(existing.damage, damage),
     lifetimeTicks: FIRE_BURN_LIFETIME_TICKS,
-    position: request.target.position,
-    scale: request.target.scale,
+    ownerId: input.ownerId,
+    position: input.target.position,
+    rank: input.rank,
+    scale: input.target.scale,
+    skillId: input.skillId,
   })
   return { ...source, actors }
 }

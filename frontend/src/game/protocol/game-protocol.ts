@@ -62,6 +62,7 @@ import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
+import type { NativeFireSpentEmber } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
   NATIVE_STAFF_MELEE_ACCELERATION,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
@@ -3206,7 +3207,9 @@ function nativeSecondaryActor(
     : nativeRngState(source.presentationRng, `${field}.presentationRng`)
   const skillId = source.skillId === null
     ? null
-    : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
+    : source.skillId === 22 && kind === 'fire-burn'
+      ? 22
+      : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
   const mindblast = kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
   if (mindblast !== (skillId === null)) {
     throw new GameProtocolError(`${field}.skillId must be null exactly for Mindblast actors`)
@@ -3420,7 +3423,9 @@ function nativeSecondaryEvent(
     : nativeSecondaryScreenFlash(source.screenFlash, `${field}.screenFlash`)
   const skillId = source.skillId === null
     ? null
-    : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
+    : source.skillId === 22
+      ? 22
+      : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
   if (skillId === null && (cue !== null || kind !== 'impact' || screenFlash === null)) {
     throw new GameProtocolError(`${field} null skillId is reserved for player-effect feedback`)
   }
@@ -3695,7 +3700,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
       'speed', 'targetId', 'turnAccumulator', 'turnInput', 'underpowered',
       'visualScale',
     ] : []),
-    ...(source.kind === 'fire' ? ['underpowered'] : []),
+    ...(source.kind === 'fire' ? [
+      'burnDamage', 'emberDamage', 'emberFragments', 'explodeDamage',
+      'explodeRadius', 'privateSeed', 'spentEmber', 'underpowered',
+    ] : []),
   ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
     throw new GameProtocolError(`${field}.phase is not supported`)
@@ -3834,11 +3842,56 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
       visualScale,
     }
   }
+  const emberFragments = nonnegativeInteger(
+    source.emberFragments,
+    `${field}.emberFragments`,
+  )
+  if (emberFragments > 100) {
+    throw new GameProtocolError(`${field}.emberFragments exceeds the native payload range`)
+  }
+  const privateSeed = nonnegativeInteger(source.privateSeed, `${field}.privateSeed`)
+  if (privateSeed > 1_000_000) {
+    throw new GameProtocolError(`${field}.privateSeed exceeds the native seed range`)
+  }
   return {
     ...projectile,
+    burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+    emberDamage: nonnegativeFinite(source.emberDamage, `${field}.emberDamage`),
+    emberFragments,
+    explodeDamage: nonnegativeFinite(source.explodeDamage, `${field}.explodeDamage`),
+    explodeRadius: nonnegativeFinite(source.explodeRadius, `${field}.explodeRadius`),
     kind: 'fire',
+    privateSeed,
+    spentEmber: primarySpellFireSpentEmber(source.spentEmber, `${field}.spentEmber`),
     underpowered: boolean(source.underpowered, `${field}.underpowered`),
   }
+}
+
+function primarySpellFireSpentEmber(
+  value: unknown,
+  field: string,
+): NativeFireSpentEmber {
+  const source = record(value, field)
+  if (source.kind === 'none') {
+    onlyKeys(source, field, ['kind'])
+    return { kind: 'none' }
+  }
+  if (source.kind === 'immolate') {
+    onlyKeys(source, field, ['damage', 'kind'])
+    return {
+      damage: positiveFinite(source.damage, `${field}.damage`),
+      kind: 'immolate',
+    }
+  }
+  if (source.kind === 'imp') {
+    onlyKeys(source, field, ['damage', 'kind', 'lifetimeTicks'])
+    return {
+      damage: positiveFinite(source.damage, `${field}.damage`),
+      kind: 'imp',
+      lifetimeTicks: positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`),
+    }
+  }
+  throw new GameProtocolError(`${field}.kind is not a spent-Ember effect`)
 }
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
@@ -3968,6 +4021,104 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
       visualScale,
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'fire-ember') {
+    onlyKeys(source, field, [
+      'ageTicks', 'burnDamage', 'damage', 'height', 'horizontalVelocity', 'id',
+      'kind', 'life', 'ownerId', 'phase', 'position', 'presentationVariant',
+      'spentEmber', 'verticalVelocity', 'worldKey',
+    ])
+    const phase = finite(source.phase, `${field}.phase`)
+    if (phase < 0 || phase >= 4) {
+      throw new GameProtocolError(`${field}.phase is outside [0,4)`)
+    }
+    const presentationVariant = nonnegativeInteger(
+      source.presentationVariant,
+      `${field}.presentationVariant`,
+    )
+    if (presentationVariant > 9) {
+      throw new GameProtocolError(`${field}.presentationVariant exceeds the native range`)
+    }
+    const life = positiveFinite(source.life, `${field}.life`)
+    if (life < 1 || life > 3) {
+      throw new GameProtocolError(`${field}.life is outside the live Ember interval`)
+    }
+    const height = finite(source.height, `${field}.height`)
+    if (height > 0) throw new GameProtocolError(`${field}.height must not exceed the ground`)
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+      damage: nonnegativeFinite(source.damage, `${field}.damage`),
+      height,
+      horizontalVelocity: vector(source.horizontalVelocity, `${field}.horizontalVelocity`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'fire-ember',
+      life,
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      phase,
+      position: vector(source.position, `${field}.position`),
+      presentationVariant,
+      spentEmber: primarySpellFireSpentEmber(source.spentEmber, `${field}.spentEmber`),
+      verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'fire-explosion') {
+    onlyKeys(source, field, [
+      'ageTicks', 'burnDamage', 'damage', 'footprintDimension', 'id', 'kind',
+      'origin', 'ownerId', 'visualScale', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= NATIVE_FIRE_IMPACT_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Fire explosion lifetime`)
+    }
+    return {
+      ageTicks,
+      burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
+      damage: positiveFinite(source.damage, `${field}.damage`),
+      footprintDimension: positiveFinite(
+        source.footprintDimension,
+        `${field}.footprintDimension`,
+      ),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'fire-explosion',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      visualScale: positiveFinite(source.visualScale, `${field}.visualScale`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'fire-good-imp') {
+    onlyKeys(source, field, [
+      'actionTick', 'ageTicks', 'cooldownTicks', 'damage', 'gaitPose',
+      'headingDegrees', 'id', 'kind', 'ownerId', 'phase', 'position',
+      'remainingTicks', 'targetId', 'worldKey',
+    ])
+    if (
+      source.phase !== 'contact'
+      && source.phase !== 'cooldown'
+      && source.phase !== 'flight'
+    ) {
+      throw new GameProtocolError(`${field}.phase is not a GoodImp phase`)
+    }
+    return {
+      actionTick: nonnegativeInteger(source.actionTick, `${field}.actionTick`),
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      cooldownTicks: nonnegativeInteger(source.cooldownTicks, `${field}.cooldownTicks`),
+      damage: positiveFinite(source.damage, `${field}.damage`),
+      gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
+      headingDegrees: finite(source.headingDegrees, `${field}.headingDegrees`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'fire-good-imp',
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      phase: source.phase,
+      position: vector(source.position, `${field}.position`),
+      remainingTicks: positiveInteger(source.remainingTicks, `${field}.remainingTicks`),
+      targetId: source.targetId === null
+        ? null
+        : limitedString(source.targetId, `${field}.targetId`, 256),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }

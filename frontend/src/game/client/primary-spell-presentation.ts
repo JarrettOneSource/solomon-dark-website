@@ -204,6 +204,13 @@ function fixedTransientTiming(
       firstVisibleAge: 0,
       lifetimeTicks: nativeFireParticleLifetimeTicks(effect.id),
     }
+    case 'fire-ember':
+    case 'fire-good-imp': return null
+    case 'fire-explosion': return {
+      ageZeroTick: snapshotTick - effect.ageTicks,
+      firstVisibleAge: 0,
+      lifetimeTicks: PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+    }
     case 'fire-impact': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
       firstVisibleAge: 0,
@@ -369,6 +376,62 @@ function interpolateTransient(
   if (older.kind === 'fire-impact' || newer.kind === 'fire-impact') {
     return copyTransient(discrete)
   }
+  if (older.kind === 'fire-ember' && newer.kind === 'fire-ember') {
+    const ember = blend < 1 ? older : newer
+    return {
+      ...ember,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      height: lerp(older.height, newer.height, blend),
+      horizontalVelocity: {
+        x: lerp(older.horizontalVelocity.x, newer.horizontalVelocity.x, blend),
+        y: lerp(older.horizontalVelocity.y, newer.horizontalVelocity.y, blend),
+      },
+      life: lerp(older.life, newer.life, blend),
+      phase: lerp(older.phase, newer.phase, blend),
+      position: {
+        x: lerp(older.position.x, newer.position.x, blend),
+        y: lerp(older.position.y, newer.position.y, blend),
+      },
+      verticalVelocity: lerp(
+        older.verticalVelocity,
+        newer.verticalVelocity,
+        blend,
+      ),
+    }
+  }
+  if (older.kind === 'fire-ember' || newer.kind === 'fire-ember') {
+    return copyTransient(discrete)
+  }
+  if (older.kind === 'fire-explosion' && newer.kind === 'fire-explosion') {
+    const explosion = blend < 1 ? older : newer
+    return {
+      ...explosion,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: { ...explosion.origin },
+    }
+  }
+  if (older.kind === 'fire-explosion' || newer.kind === 'fire-explosion') {
+    return copyTransient(discrete)
+  }
+  if (older.kind === 'fire-good-imp' && newer.kind === 'fire-good-imp') {
+    const imp = blend < 1 ? older : newer
+    return {
+      ...imp,
+      actionTick: lerp(older.actionTick, newer.actionTick, blend),
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      cooldownTicks: lerp(older.cooldownTicks, newer.cooldownTicks, blend),
+      gaitPose: lerp(older.gaitPose, newer.gaitPose, blend),
+      headingDegrees: lerp(older.headingDegrees, newer.headingDegrees, blend),
+      position: {
+        x: lerp(older.position.x, newer.position.x, blend),
+        y: lerp(older.position.y, newer.position.y, blend),
+      },
+      remainingTicks: lerp(older.remainingTicks, newer.remainingTicks, blend),
+    }
+  }
+  if (older.kind === 'fire-good-imp' || newer.kind === 'fire-good-imp') {
+    return copyTransient(discrete)
+  }
   if (older.kind === 'ether-impact' && newer.kind === 'ether-impact') {
     const impact = blend < 1 ? older : newer
     return {
@@ -463,7 +526,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   if (effect.kind === 'player-staff-melee' || effect.kind === 'player-staff-spin') {
     return { ...effect, origin: { ...effect.origin } }
   }
-  if (effect.kind === 'ether-pierce-streak') {
+  if (effect.kind === 'ether-pierce-streak' || effect.kind === 'fire-explosion') {
     return { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'player-staff-contact') {
@@ -515,6 +578,16 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   }
   if (effect.kind === 'earth-called-rock') {
     return { ...effect, lightRegistration: null, position: { ...effect.position } }
+  }
+  if (effect.kind === 'fire-ember') {
+    return {
+      ...effect,
+      horizontalVelocity: { ...effect.horizontalVelocity },
+      position: { ...effect.position },
+    }
+  }
+  if (effect.kind === 'fire-good-imp') {
+    return { ...effect, position: { ...effect.position } }
   }
   if (effect.kind === 'water') {
     return {

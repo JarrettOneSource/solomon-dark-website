@@ -38,6 +38,14 @@ import {
 } from './primary-spell-earth-orientation.ts'
 import type { Vector2 } from './vector.ts'
 import {
+  createNativeFireDetonation,
+  drawNativeFirePrivateSeed,
+  stepNativeFireEmber,
+  type NativeFireEmberState,
+  type NativeFireExplosionState,
+  type NativeFireSpentEmber,
+} from './primary-spell-fire-effects.ts'
+import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -72,6 +80,9 @@ export type PrimarySpellTransientKind =
   | 'ether-impact'
   | 'ether-pierce-streak'
   | 'fire'
+  | 'fire-ember'
+  | 'fire-explosion'
+  | 'fire-good-imp'
   | 'fire-impact'
   | NativePlayerStaffTransient['kind']
   | 'water'
@@ -117,7 +128,14 @@ export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectile
 }
 
 export interface PrimarySpellFireProjectileState extends PrimarySpellProjectileBaseState {
+  burnDamage: number
+  emberDamage: number
+  emberFragments: number
+  explodeDamage: number
+  explodeRadius: number
   kind: 'fire'
+  privateSeed: number
+  spentEmber: NativeFireSpentEmber
   underpowered: boolean
 }
 
@@ -250,12 +268,42 @@ export interface PrimarySpellFireImpactState {
   worldKey: string
 }
 
+export interface PrimarySpellFireEmberState extends NativeFireEmberState {
+  readonly kind: 'fire-ember'
+}
+
+export interface PrimarySpellFireExplosionState extends NativeFireExplosionState {
+  readonly ageTicks: number
+  readonly id: number
+  readonly kind: 'fire-explosion'
+}
+
+export interface PrimarySpellFireGoodImpState {
+  readonly actionTick: number
+  readonly ageTicks: number
+  readonly cooldownTicks: number
+  readonly damage: number
+  readonly gaitPose: number
+  readonly headingDegrees: number
+  readonly id: number
+  readonly kind: 'fire-good-imp'
+  readonly ownerId: string
+  readonly phase: 'contact' | 'cooldown' | 'flight'
+  readonly position: Vector2
+  readonly remainingTicks: number
+  readonly targetId: string | null
+  readonly worldKey: string
+}
+
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellEtherImpactState
   | PrimarySpellEtherPierceStreakState
+  | PrimarySpellFireEmberState
+  | PrimarySpellFireExplosionState
+  | PrimarySpellFireGoodImpState
   | PrimarySpellFireImpactState
   | PrimarySpellFireParticleState
   | NativePlayerStaffTransient
@@ -275,7 +323,7 @@ export interface PrimarySpellCastAuthority {
 
 export interface PrimarySpellTickContext {
   canPlaceProjectile: (
-    spell: PrimarySpellProjectileState,
+    spell: Pick<PrimarySpellProjectileState, 'ownerId'>,
     position: Vector2,
     radius: number,
   ) => boolean
@@ -610,6 +658,51 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   for (const effect of context.spells.transients) {
     if (effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)) {
       transients.push(effect)
+    } else if (effect.kind === 'fire-good-imp') {
+      transients.push(effect)
+    } else if (effect.kind === 'fire-ember') {
+      const stepped = stepNativeFireEmber(effect)
+      if (stepped.ember) {
+        const ember = { ...stepped.ember, kind: 'fire-ember' as const }
+        if (context.canPlaceProjectile(ember, ember.position, 7)) {
+          transients.push(ember)
+        } else {
+          transients.push(fireImpactAt(
+            nextId,
+            ember.position,
+            ember.ownerId,
+            ember.worldKey,
+            registerLightProvider('transient'),
+          ))
+          nextId += 1
+        }
+      } else if (stepped.retirement.kind === 'immolate') {
+        transients.push({
+          ...stepped.retirement.explosion,
+          ageTicks: 0,
+          id: nextId,
+          kind: 'fire-explosion',
+        })
+        nextId += 1
+      } else if (stepped.retirement.kind === 'imp') {
+        transients.push({
+          actionTick: 0,
+          ageTicks: 0,
+          cooldownTicks: 0,
+          damage: stepped.retirement.damage,
+          gaitPose: 0,
+          headingDegrees: 0,
+          id: nextId,
+          kind: 'fire-good-imp',
+          ownerId: stepped.retirement.ownerId,
+          phase: 'flight',
+          position: stepped.retirement.position,
+          remainingTicks: stepped.retirement.lifetimeTicks,
+          targetId: null,
+          worldKey: stepped.retirement.worldKey,
+        })
+        nextId += 1
+      }
     } else if (effect.ageTicks + 1 < transientLifetime(effect)) {
       transients.push({ ...effect, ageTicks: effect.ageTicks + 1 })
     }
@@ -633,12 +726,16 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       )
     ) {
       if (spell.kind === 'fire') {
-        transients = [...transients, fireImpact(
+        const detonation = createPrimarySpellFireDetonation(
           nextId,
           spell,
-          registerLightProvider('transient'),
-        )]
-        nextId += 1
+          spell.position,
+          rng,
+          registerLightProvider,
+        )
+        rng = detonation.rng
+        transients = [...transients, ...detonation.transients]
+        nextId = detonation.nextId
       } else {
         transients = [...transients, etherImpact(
           nextId,
@@ -885,12 +982,16 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             transients = [...transients, createFireParticle(nextId, spell)]
             nextId += 1
           } else {
-            transients = [...transients, fireImpact(
+            const detonation = createPrimarySpellFireDetonation(
               nextId,
               born,
-              registerLightProvider('transient'),
-            )]
-            nextId += 1
+              born.position,
+              rng,
+              registerLightProvider,
+            )
+            rng = detonation.rng
+            transients = [...transients, ...detonation.transients]
+            nextId = detonation.nextId
           }
         } else {
           const firstLookaheadClear = context.canTraverseProjectile(
@@ -1396,6 +1497,8 @@ function createOneShotProjectiles(
   const aimDirection = player.primaryCast.aimDirection
   const emitter = primarySpellEmitter(player)
   if (kind === 'fire') {
+    if (primarySkill.kind !== 'fire') throw new Error('Expected a Fire primary profile')
+    const privateSeed = drawNativeFirePrivateSeed(damageDraw.rng)
     const speed = 4.5
     const spawn = {
       x: emitter.x + aimDirection.x * 20,
@@ -1404,9 +1507,14 @@ function createOneShotProjectiles(
     return {
       projectiles: [{
         ageTicks: 0,
+        burnDamage: underpowered ? 0 : primarySkill.burnDamage,
         charge: 1,
         damage: damageDraw.value * (underpowered ? 0.5 : 1),
         direction: { ...aimDirection },
+        emberDamage: underpowered ? 0 : primarySkill.emberDamage,
+        emberFragments: underpowered ? 0 : primarySkill.emberFragments,
+        explodeDamage: underpowered ? 0 : primarySkill.explodeDamage,
+        explodeRadius: underpowered ? 0 : primarySkill.explodeRadius,
         flightTicks: 0,
         id: firstId,
         kind: 'fire',
@@ -1414,11 +1522,13 @@ function createOneShotProjectiles(
         ownerId,
         phase: 'flight',
         position: spawn,
+        privateSeed: privateSeed.seed,
+        spentEmber: underpowered ? Object.freeze({ kind: 'none' }) : primarySkill.spentEmber,
         underpowered,
         velocity: { x: aimDirection.x * speed, y: aimDirection.y * speed },
         worldKey,
       }],
-      rng: damageDraw.rng,
+      rng: privateSeed.rng,
     }
   }
   if (primarySkill.kind !== 'ether') throw new Error('Expected an Ether primary profile')
@@ -1621,6 +1731,9 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
     case 'ether-pierce-streak': return 10
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
+    case 'fire-ember': throw new Error('Ember lifetime is state driven')
+    case 'fire-explosion': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
+    case 'fire-good-imp': throw new Error('GoodImp lifetime is state driven')
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'player-staff-contact':
     case 'player-staff-contact-knockback':
@@ -1680,15 +1793,80 @@ function fireImpact(
   spell: PrimarySpellProjectileState,
   lightRegistration: NativeLightProviderRegistration,
 ): PrimarySpellFireImpactState {
+  return fireImpactAt(
+    id,
+    spell.position,
+    spell.ownerId,
+    spell.worldKey,
+    lightRegistration,
+  )
+}
+
+function fireImpactAt(
+  id: number,
+  origin: Readonly<Vector2>,
+  ownerId: string,
+  worldKey: string,
+  lightRegistration: NativeLightProviderRegistration,
+): PrimarySpellFireImpactState {
   return {
     ageTicks: 0,
     id,
     kind: 'fire-impact',
     lightRegistration,
-    origin: { ...spell.position },
-    ownerId: spell.ownerId,
-    worldKey: spell.worldKey,
+    origin: { ...origin },
+    ownerId,
+    worldKey,
   }
+}
+
+export function createPrimarySpellFireDetonation(
+  sourceNextId: number,
+  spell: PrimarySpellFireProjectileState,
+  origin: Readonly<Vector2>,
+  sourceRng: NativeRngState,
+  registerLightProvider: RegisterNativeLightProvider = (managerLane) => ({
+    managerLane,
+    registrationOrdinal: sourceNextId,
+  }),
+): Readonly<{
+  nextId: number
+  rng: NativeRngState
+  transients: readonly PrimarySpellTransientState[]
+}> {
+  const impact = fireImpactAt(
+    sourceNextId,
+    origin,
+    spell.ownerId,
+    spell.worldKey,
+    registerLightProvider('transient'),
+  )
+  const explosionOffset = spell.explodeRadius > 0 && spell.explodeDamage > 0 ? 1 : 0
+  const detonation = createNativeFireDetonation(
+    sourceNextId + 1 + explosionOffset,
+    spell,
+    origin,
+    spell.ownerId,
+    spell.worldKey,
+    sourceRng,
+  )
+  const explosion = detonation.explosion === null
+    ? []
+    : [{
+        ...detonation.explosion,
+        ageTicks: 0,
+        id: sourceNextId + 1,
+        kind: 'fire-explosion' as const,
+      }]
+  const embers = detonation.embers.map((ember): PrimarySpellFireEmberState => ({
+    ...ember,
+    kind: 'fire-ember',
+  }))
+  return Object.freeze({
+    nextId: detonation.nextId,
+    rng: detonation.rng,
+    transients: Object.freeze([impact, ...explosion, ...embers]),
+  })
 }
 
 export function createPrimarySpellContactImpact(

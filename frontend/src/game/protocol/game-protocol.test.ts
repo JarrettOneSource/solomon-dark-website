@@ -1753,6 +1753,74 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
   }
+  const fireball = {
+    ageTicks: 1,
+    burnDamage: 10,
+    charge: 1,
+    damage: 30,
+    direction: { x: 0, y: -1 },
+    emberDamage: 8,
+    emberFragments: 4,
+    explodeDamage: 12,
+    explodeRadius: 15,
+    flightTicks: 1,
+    id: 1,
+    kind: 'fire',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
+    ownerId: 'player-1',
+    phase: 'flight',
+    position: { x: 800, y: 400 },
+    privateSeed: 123_456,
+    spentEmber: { damage: 20, kind: 'imp', lifetimeTicks: 300 },
+    underpowered: false,
+    velocity: { x: 0, y: -4.5 },
+    worldKey: 'hub:courtyard',
+  }
+  const fireEmber = {
+    ageTicks: 10,
+    burnDamage: 10,
+    damage: 8,
+    height: -5,
+    horizontalVelocity: { x: 1, y: 0 },
+    id: 1,
+    kind: 'fire-ember',
+    life: 3,
+    ownerId: 'player-1',
+    phase: 2.5,
+    position: { x: 800, y: 400 },
+    presentationVariant: 7,
+    spentEmber: { damage: 20, kind: 'immolate' },
+    verticalVelocity: -1,
+    worldKey: 'hub:courtyard',
+  }
+  const fireExplosion = {
+    ageTicks: 0,
+    burnDamage: 10,
+    damage: 6,
+    footprintDimension: 209,
+    id: 1,
+    kind: 'fire-explosion',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    visualScale: 1.9,
+    worldKey: 'hub:courtyard',
+  }
+  const goodImp = {
+    actionTick: 0,
+    ageTicks: 1,
+    cooldownTicks: 0,
+    damage: 10,
+    gaitPose: 0,
+    headingDegrees: 0,
+    id: 1,
+    kind: 'fire-good-imp',
+    ownerId: 'player-1',
+    phase: 'flight',
+    position: { x: 800, y: 400 },
+    remainingTicks: 299,
+    targetId: null,
+    worldKey: 'hub:courtyard',
+  }
   const etherImpact = {
     ageTicks: 8,
     birthTick: 91,
@@ -1904,6 +1972,18 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [fireParticle],
     },
   }))
+  assert.doesNotThrow(() => decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 2, projectiles: [fireball], transients: [] },
+  }))
+  for (const effect of [fireEmber, fireExplosion, goodImp]) {
+    const decoded = decodeFrame({
+      ...frame,
+      primarySpells: { nextId: 2, projectiles: [], transients: [effect] },
+    })
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.deepEqual(decoded.frame.primarySpells.transients, [effect])
+  }
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -1912,6 +1992,14 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [{ ...fireParticle, lightRegistration: TRANSIENT_LIGHT_REGISTRATION }],
     },
   }), /lightRegistration must be null/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...fireEmber, presentationVariant: 10 }],
+    },
+  }), /presentationVariant/)
   const decodedFireImpact = decodeFrame({
     ...frame,
     primarySpells: {

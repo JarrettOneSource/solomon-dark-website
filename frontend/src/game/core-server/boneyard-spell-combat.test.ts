@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
@@ -26,6 +27,7 @@ import {
 } from './boneyard-spell-combat.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
+const COMBAT_RNG = createNativeRng(17)
 
 test('Fire uses the post-move same-cell point query, projected slot order, and strict radius sum', () => {
   const enemies = spawnEnemies([
@@ -42,6 +44,7 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     [],
     1,
     WORLD_KEY,
+    COMBAT_RNG,
     () => {
       worldQueries += 1
       return 0
@@ -72,7 +75,7 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
       config: { ...equalityEnemy.config, collisionRadius: 2 },
       position: { x: 22, y: 0 },
     }],
-  }, spells, [], 1, WORLD_KEY)
+  }, spells, [], 1, WORLD_KEY, COMBAT_RNG)
   assert.deepEqual(equality.hits, [], 'strict distance equality must miss')
 
   const boundaryEnemy = enemies.actors[0]!
@@ -81,7 +84,7 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     actors: [{ ...boundaryEnemy, position: { x: 101, y: 0 } }],
   }, spellState({
     projectiles: [projectile({ id: 8, kind: 'fire', position: { x: 99, y: 0 } })],
-  }), [], 1, WORLD_KEY)
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
   assert.deepEqual(crossCell.hits, [], 'the native point query never crosses a cell boundary')
 
   const negative = resolveBoneyardSpellCombat({
@@ -89,8 +92,63 @@ test('Fire uses the post-move same-cell point query, projected slot order, and s
     actors: [{ ...boundaryEnemy, position: { x: 0.25, y: 0 } }],
   }, spellState({
     projectiles: [projectile({ id: 9, kind: 'fire', position: { x: -0.25, y: 0 } })],
-  }), [], 1, WORLD_KEY)
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
   assert.equal(negative.hits[0]?.actorId, 1, 'float32 truncation maps both roots to cell zero')
+})
+
+test('Fire contact partitions direct and rectangular splash damage and consumes Ember RNG', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 104.5, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 100,
+      maximumHealth: 100,
+    })),
+  }
+  const base = projectile({ id: 7, kind: 'fire' })
+  if (base.kind !== 'fire') throw new Error('Expected a Fire fixture')
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [{
+      ...base,
+      burnDamage: 10,
+      damage: 30,
+      emberDamage: 8,
+      emberFragments: 2,
+      explodeDamage: 12,
+      explodeRadius: 15,
+      privateSeed: 123_456,
+    }],
+  }), [], 1, WORLD_KEY, COMBAT_RNG)
+
+  assert.deepEqual(
+    result.hits.map(({ actorId, amount, spellKind }) => ({ actorId, amount, spellKind })),
+    [
+      { actorId: 1, amount: 18, spellKind: 'fire' },
+      { actorId: 1, amount: 6, spellKind: 'fire-explosion' },
+      { actorId: 2, amount: 6, spellKind: 'fire-explosion' },
+    ],
+  )
+  assert.deepEqual(result.enemies.actors.map(({ currentHealth }) => currentHealth), [76, 94, 100])
+  assert.deepEqual(
+    result.spells.transients.map(({ id, kind }) => ({ id, kind })),
+    [
+      { id: 100, kind: 'fire-impact' },
+      { id: 101, kind: 'fire-explosion' },
+      { id: 102, kind: 'fire-ember' },
+      { id: 103, kind: 'fire-ember' },
+    ],
+  )
+  assert.equal(result.rng.indexA, 6)
+  assert.deepEqual(result.burns, [
+    { damage: 10, ownerId: 'wizard', targetId: 1 },
+    { damage: 10, ownerId: 'wizard', targetId: 1 },
+    { damage: 10, ownerId: 'wizard', targetId: 2 },
+  ])
 })
 
 test('Fire and Ether skip an ineligible Coffin and contact the next hostile actor', () => {
@@ -101,7 +159,7 @@ test('Fire and Ether skip an ineligible Coffin and contact the next hostile acto
   for (const kind of ['fire', 'ether'] as const) {
     const result = resolveBoneyardSpellCombat(enemies, spellState({
       projectiles: [projectile({ id: kind === 'fire' ? 7 : 8, kind })],
-    }), [], 1, WORLD_KEY)
+    }), [], 1, WORLD_KEY, COMBAT_RNG)
     assert.deepEqual(result.hits.map(({ actorId }) => actorId), [2])
     assert.deepEqual(result.spells.projectiles, [])
     assert.equal(result.spells.transients[0]?.kind, `${kind}-impact`)
@@ -154,7 +212,7 @@ test('Ether contact uses its six-unit point query and publishes FadeMM at the ad
   }
   const result = resolveBoneyardSpellCombat(enemies, spellState({
     projectiles: [projectile({ id: 8, kind: 'ether', position: { x: 0, y: 0 } })],
-  }), [], 77, WORLD_KEY)
+  }), [], 77, WORLD_KEY, COMBAT_RNG)
 
   assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [{
     actorId: 1,
@@ -192,7 +250,7 @@ test('Piercing keeps the missile, scales payload and art, and emits native conta
       piercesRemaining: 1,
       reacquiresTarget: true,
     }],
-  }), [], 77, WORLD_KEY)
+  }), [], 77, WORLD_KEY, COMBAT_RNG)
 
   assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [{
     actorId: 1,
@@ -232,7 +290,9 @@ test('Earth gathers strict charge-scaled roots once and never fractures on actor
       kind: 'earth',
     })],
   })
-  const first = resolveBoneyardSpellCombat(enemies, spells, [], 1, WORLD_KEY)
+  const first = resolveBoneyardSpellCombat(
+    enemies, spells, [], 1, WORLD_KEY, COMBAT_RNG,
+  )
 
   assert.deepEqual(first.hits.map(({ actorId }) => actorId), [2])
   assert.equal(first.enemies.actors[0]?.currentHealth, 5)
@@ -250,6 +310,7 @@ test('Earth gathers strict charge-scaled roots once and never fractures on actor
     [],
     2,
     WORLD_KEY,
+    first.rng,
   )
   assert.deepEqual(repeated.hits, [])
   assert.equal(repeated.spells, first.spells)
@@ -331,6 +392,7 @@ test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () =
     [water],
     1,
     WORLD_KEY,
+    COMBAT_RNG,
     (start, end) => {
       lineStarts.push({ ...start })
       return end.x === 200 ? 0.5 : null
@@ -379,6 +441,7 @@ test('Air damages only the hostile selected by its semantic target id', () => {
     [emission({ id: 10, kind: 'air' })],
     1,
     WORLD_KEY,
+    COMBAT_RNG,
     () => 0,
   )
 
@@ -399,6 +462,7 @@ test('world-mismatched spells remain live without touching Boneyard actors', () 
     [emission({ id: 2, kind: 'water', worldKey: 'hub:courtyard' })],
     1,
     WORLD_KEY,
+    COMBAT_RNG,
   )
   assert.deepEqual(result.hits, [])
   assert.equal(result.enemies, enemies)
@@ -495,7 +559,18 @@ function projectile(options: {
         visualScale: 1,
       }
     case 'fire':
-      return { ...common, kind: 'fire', underpowered: false }
+      return {
+        ...common,
+        burnDamage: 0,
+        emberDamage: 0,
+        emberFragments: 0,
+        explodeDamage: 0,
+        explodeRadius: 0,
+        kind: 'fire',
+        privateSeed: 0,
+        spentEmber: { kind: 'none' },
+        underpowered: false,
+      }
   }
 }
 

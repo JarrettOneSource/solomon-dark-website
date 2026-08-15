@@ -84,6 +84,7 @@ import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-co
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryDazzle,
+  applyNativeSecondaryFireBurn,
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
@@ -2045,6 +2046,7 @@ function finishGameSimulationTick(
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   let primarySpells = cast.spells
+  let combatRng = cast.rng
   if (world.kind === 'boneyard') {
     const previousEvents = world.enemyEvents
     const previousLootEvents = previous.world.kind === 'boneyard'
@@ -2137,6 +2139,7 @@ function finishGameSimulationTick(
       cast.channelEmissions,
       tick,
       `boneyard:${boneyardWorld.runId}`,
+      combatRng,
       (start, end, radius) => firstBoneyardPathBlockProgress(
         start,
         end,
@@ -2156,6 +2159,7 @@ function finishGameSimulationTick(
       boneyardWorld.fireballSceneryTargets,
       lethalObserver,
     )
+    combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
     world = {
       ...world,
@@ -2165,6 +2169,19 @@ function finishGameSimulationTick(
         spellCombat.events,
         tick,
       ),
+    }
+    for (const burn of spellCombat.burns) {
+      const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
+      const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
+      if (target === null || ownerIndex < 0) continue
+      secondaryAbilities = applyNativeSecondaryFireBurn(secondaryAbilities, {
+        damage: burn.damage,
+        ownerId: burn.ownerId,
+        rank: Math.max(1, playerEntities.skillBooks[ownerIndex]!.effectiveRanks[22] ?? 0),
+        skillId: 22,
+        target,
+        worldKey: `boneyard:${boneyardWorld.runId}`,
+      })
     }
   }
   const players: Record<PlayerId, PlayerCharacterState> = { ...cast.players }
@@ -2206,7 +2223,7 @@ function finishGameSimulationTick(
   )))
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
-    combatRng: cast.rng,
+    combatRng,
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),

@@ -24,6 +24,7 @@ test('resolves Ether ranks into a cast-time projectile payload', () => {
     damageMaximum: 6,
     damageMinimum: 3,
     damageRetention: 0.25,
+    damageRollCount: 3,
     kind: 'ether',
     manaCost: (9 + 2 + 15 + 10) * 0.75,
     pierces: 2,
@@ -48,6 +49,7 @@ test('resolves Fire impact, ember, burn, and exclusive spent-ember payloads', ()
     burnDamage: 9,
     damageMaximum: 15,
     damageMinimum: 15,
+    damageRollCount: 1,
     emberDamage: 6,
     emberFragments: 5,
     explodeDamage: 13.5,
@@ -58,6 +60,26 @@ test('resolves Fire impact, ember, burn, and exclusive spent-ember payloads', ()
     skillId: 16,
     spentEmber: { damage: 3, kind: 'imp', lifetimeTicks: 300 },
   })
+})
+
+test('repeats a short native property array terminal entry at higher effective ranks', () => {
+  const statBook = playerStatBook()
+  const entries = [...statBook.entries]
+  const fireball = entries[16]!
+  entries[16] = {
+    ...fireball,
+    numericProperties: {
+      ...fireball.numericProperties,
+      mDamage: [0, 10],
+    },
+  }
+  const profile = nativePrimarySkillProfile(
+    book('fire', { 16: 5 }),
+    { ...statBook, entries },
+    { damage: 1, manaCost: 1 },
+  )
+  assert.equal(profile.damageMinimum, 10)
+  assert.equal(profile.damageMaximum, 10)
 })
 
 test('resolves Air chain, stun, hurricane, and disintegrate payloads', () => {
@@ -72,6 +94,7 @@ test('resolves Air chain, stun, hurricane, and disintegrate payloads', () => {
     arcCount: 3,
     damageMaximum: 13.5,
     damageMinimum: 13.5,
+    damageRollCount: 1,
     disintegrateChance: 10,
     hurricaneDamageMaximum: 45,
     hurricaneDamageMinimum: 22.5,
@@ -100,6 +123,7 @@ test('resolves Water geometry, armor, aura, hail, and permafrost payloads', () =
     auraSlowFactor: 0.5,
     damageMaximum: 5.25,
     damageMinimum: 5.25,
+    damageRollCount: 1,
     hailChance: 8,
     hailDamageMaximum: 30,
     hailDamageMinimum: 12,
@@ -126,6 +150,7 @@ test('resolves Earth growth, toughness, surge, and Gargantuan ceiling', () => {
   assert.deepEqual(profile, {
     damageMaximum: 75,
     damageMinimum: 75,
+    damageRollCount: 1,
     growthFactor: 2,
     kind: 'earth',
     manaCost: (14 + 0.2 + 0.2 + 0.2) * 0.75,

@@ -36,7 +36,7 @@ export interface NativeFirePrimarySkillProfile extends NativePrimarySkillProfile
   readonly explodeRadius: number
   readonly kind: 'fire'
   readonly spentEmber:
-    | Readonly<{ damage: number; kind: 'immolate'; radius: number }>
+    | Readonly<{ damage: number; kind: 'immolate' }>
     | Readonly<{ damage: number; kind: 'imp'; lifetimeTicks: number }>
     | Readonly<{ kind: 'none' }>
 }
@@ -144,7 +144,6 @@ export function nativePrimarySkillProfile(
           ? Object.freeze({
               damage: ranked(statBook, 20, 'mDamage', immolateRank) * factors.damage,
               kind: 'immolate',
-              radius: 5,
             })
           : Object.freeze({ kind: 'none' })
       return Object.freeze({
@@ -325,7 +324,11 @@ function rankedValue(
   rank: number,
   field: string,
 ): number {
-  const resolved = typeof value === 'number' ? value : value?.[rank]
+  const resolved = typeof value === 'number'
+    ? value
+    : value && value.length > 0
+      ? value[Math.min(rank, value.length - 1)]
+      : undefined
   if (resolved === undefined || !Number.isFinite(resolved)) {
     throw new RangeError(`native skill catalog is missing ${field} rank ${rank}`)
   }
