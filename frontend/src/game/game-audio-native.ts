@@ -6,6 +6,7 @@ import type {
   BoneyardSolomonVoiceCue,
   BoneyardSolomonVoiceEvent,
 } from './core-kernels/boneyard-encounter.ts'
+import type { BoneyardEnemyEventSnapshot } from './protocol/game-state.ts'
 
 export const NATIVE_AUDIO_TICK_MS = 10
 
@@ -31,6 +32,7 @@ export type GameSoundCue =
   | 'magic-missile'
   | 'pick-skill'
   | 'rock-hit'
+  | 'skeleton-die'
   | 'start-boulder'
   | 'step-1'
   | 'step-2'
@@ -118,6 +120,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\rockhit',
     sourceSha256: '865484cf3d7c2e199fb46f069973c43893122e934f0f46ba33d30eeeac4de25b',
   },
+  'skeleton-die': {
+    registryOffset: 0xdac,
+    sourceName: 'sounds\\skeleton_die',
+    sourceSha256: 'ab38f903e828bd695ffd153dfacea5701f36376ad24cb96be96d3d059f52fb18',
+  },
   'start-boulder': {
     registryOffset: 0xf0c,
     sourceName: 'sounds\\startboulder',
@@ -144,6 +151,18 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
   },
 } as const satisfies Readonly<Record<GameSoundCue, NativeSoundEntry>>
+
+export function nativeEnemyEventSoundCue(
+  event: BoneyardEnemyEventSnapshot,
+): GameSoundCue | null {
+  if (event.type !== 'enemy-terminal-output') return null
+  if (
+    event.output === 'skeleton-shatter'
+    || event.output === 'archer-shatter'
+    || event.output === 'mage-shatter'
+  ) return 'skeleton-die'
+  return null
+}
 
 export const NATIVE_LOOP_MANIFEST = {
   'gather-rocks-loop': {

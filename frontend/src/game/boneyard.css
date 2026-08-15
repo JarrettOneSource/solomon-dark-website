@@ -58,6 +58,33 @@
   pointer-events: none;
 }
 
+.boneyard-spectator-status {
+  position: absolute;
+  z-index: 10001;
+  top: 5.5%;
+  left: 20%;
+  box-sizing: border-box;
+  display: flex;
+  width: 60%;
+  height: 7.5%;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 18px;
+  border: 2px solid #8c774e;
+  border-radius: 5px;
+  background: radial-gradient(circle at 50% 0, #353126, #11100d 70%);
+  box-shadow: 0 8px 24px #000, inset 0 0 24px rgb(208 181 111 / 0.08);
+  color: #ffe68c;
+  font: 20px 'IM FELL English', Georgia, serif;
+  text-shadow: 0 2px 2px #000;
+  pointer-events: none;
+}
+
+.boneyard-spectator-status-divider {
+  color: #948970;
+}
+
 .boneyard-dig-indicator {
   position: absolute;
   z-index: 10001;

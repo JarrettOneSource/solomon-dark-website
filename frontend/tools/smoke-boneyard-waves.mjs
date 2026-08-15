@@ -1,34 +1,82 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
+import { createServer as createViteServer } from 'vite'
 
 import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
 import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
+  PRIMARY_CAST_ACTION_END_TICK,
+  PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
+} from '../src/game/core-kernels/primary-spells.ts'
+import {
   createBoneyardCollisionWorld,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
+import {
+  EntityReplicationReconstructor,
+  REPLICATED_ENTITY_TYPES,
+} from '../src/game/protocol/entity-replication.ts'
+import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
 
-const baseUrl = process.env.SDR_GAME_WAVES_SMOKE_URL
-  || process.env.SDR_GAME_SMOKE_URL
-  || 'http://127.0.0.1:4181'
+const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const credential = randomBytes(32).toString('base64url')
+const deterministicSeedBytes = Buffer.alloc(16)
+const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
+const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
+const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
+const fireCastDriver = { nextReadyTick: 0 }
 const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-solomon-waves.png'
 const speakingScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-speaking$1')
 const combatScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-combat$1')
+const archerScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-archer-projectile$1')
 const deathScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-death$1')
 const gameOverScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-game-over$1')
 const loadoutScreenshotPath = screenshotPath.replace(/(\.[^.]+)?$/, '-loadout$1')
+const vite = await createViteServer({
+  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+  logLevel: 'error',
+  root: frontendRoot,
+  server: { host: '127.0.0.1', port: 0 },
+})
+await vite.listen()
+const viteAddress = vite.httpServer?.address()
+if (!viteAddress || typeof viteAddress === 'string') {
+  await vite.close()
+  throw new Error('Vite did not expose its local smoke-test port')
+}
+const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+const host = await startGameHost({
+  allowedOrigins: [baseUrl],
+  authentication: { kind: 'shared', credential },
+  createBoneyardSeedBytes: () => Buffer.from(deterministicSeedBytes),
+  resetWhenEmpty: true,
+  snapshotRate: 20,
+})
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 const errors = []
+const wire = observeGameWire(page, host.address.url)
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text())
+})
+await page.addInitScript((runtime) => {
+  window.solomonDarkRuntime = runtime
+}, {
+  gameEndpoint: {
+    credential,
+    kind: 'localhost',
+    url: host.address.url,
+  },
 })
 await page.addInitScript(installAudioPlayProbe)
 
@@ -39,8 +87,15 @@ try {
   assert.equal(initial.phase, 'digging')
   assert.equal(initial.wavePhase, 'dormant')
   assert.equal(initial.liveEnemies, 0)
-  const loadedBoneyard = await page.evaluate(() => window.__sdrLoadedBoneyard)
+  const loadedBoneyard = await waitForWireValue(
+    page,
+    wire,
+    (receipt) => receipt.loadedBoneyard,
+    10_000,
+    'the first loaded Boneyard',
+  )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
+  assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
 
   const gateCrossing = await crossNearestEntryGate(page, scene, loadedBoneyard.scene)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
@@ -112,12 +167,24 @@ try {
 
   await installEnemyActionProbe(page)
   const combat = await castUntilEnemyDies(page)
+  await page.waitForFunction(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    return scene?.getAttribute('data-last-enemy-event-output') === 'skeleton-shatter'
+      && window.__sdrAudioPlaySources?.some((source) => source.includes('skeleton-die'))
+  }, undefined, { timeout: 30_000 })
+  combat.enemyTerminalOutput = await scene.getAttribute('data-last-enemy-event-output')
   await page.screenshot({ path: combatScreenshotPath })
   const locomotion = await kiteUntilSolomonTaunt(page)
   const taunt = await encounterReceipt(scene)
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
   assert.equal(taunt.voiceEventId, 3)
   assert.ok(taunt.liveEnemies >= 9 && taunt.liveEnemies <= 15)
+  const archer = await proveArcherProjectileLifecycle(
+    page,
+    wire,
+    loadedBoneyard.runId,
+    archerScreenshotPath,
+  )
   const death = await waitForPlayerDeath(page)
   await page.screenshot({ path: deathScreenshotPath })
   const gameOver = page.getByRole('button', { name: 'Game over. Continue to loadout.' })
@@ -145,7 +212,20 @@ try {
     return frame?.runPhase === 'active' && frame.runId !== priorRunId
   }, firstRunId, { timeout: 30_000 })
   const secondRun = await boneyardFrame(page)
+  const secondLoadedBoneyard = await waitForWireValue(
+    page,
+    wire,
+    (receipt) => (
+      receipt.loadedBoneyard?.runId !== firstRunId
+        ? receipt.loadedBoneyard
+        : null
+    ),
+    10_000,
+    'the second loaded Boneyard',
+  )
   assert.notEqual(secondRun.runId, firstRunId)
+  assert.equal(secondLoadedBoneyard.runId, secondRun.runId)
+  assert.equal(secondLoadedBoneyard.seed, expectedBoneyardSeed)
   assert.equal(secondRun.localPlayerHealth, 50)
   assert.equal(secondRun.localPlayerMana, 100)
   assert.equal(secondRun.localPlayerLifeState, 'alive')
@@ -159,10 +239,14 @@ try {
   assert.ok(audioPlaySources.some((source) => source.includes('solomon-laugh-1')))
   assert.ok(audioPlaySources.some((source) => source.includes('solomon-get-him-boys')))
   assert.ok(audioPlaySources.some((source) => source.includes('throw-fire')))
+  assert.ok(audioPlaySources.some((source) => source.includes('skeleton-die')))
   assert.ok(audioPlaySources.some((source) => source.includes('death-guitar')))
+  assert.deepEqual(wire.errors, [])
   assert.deepEqual(errors, [])
   process.stdout.write(`${JSON.stringify({
     approach,
+    archer,
+    archerScreenshotPath,
     audioPlaySources,
     combat,
     combatScreenshotPath,
@@ -181,6 +265,10 @@ try {
     runEdge,
     screenshotPath,
     secondRun,
+    secondLoadedBoneyard: {
+      runId: secondLoadedBoneyard.runId,
+      seed: secondLoadedBoneyard.seed,
+    },
     speakingScreenshotPath,
     status: 'ok',
     taunt,
@@ -193,11 +281,426 @@ try {
     errors,
     screenshotPath,
     url: page.url(),
+    wire: wireSummary(wire),
   })}\n`)
   throw error
 } finally {
-  await page.close()
-  await browser.close()
+  await Promise.all([
+    browser.close(),
+    host.close(),
+    vite.close(),
+  ])
+}
+
+function observeGameWire(page, endpoint) {
+  const endpointUrl = new URL(endpoint).href
+  const receipt = {
+    descriptors: new Map(),
+    errors: [],
+    events: new Map(),
+    latestSnapshot: null,
+    loadedBoneyard: null,
+    projectileSamples: new Map(),
+    reconstructor: new EntityReplicationReconstructor(),
+    retired: new Map(),
+    sequence: 0,
+    socketCount: 0,
+  }
+  page.on('websocket', (socket) => {
+    if (new URL(socket.url()).href !== endpointUrl) return
+    receipt.socketCount += 1
+    socket.on('framereceived', ({ payload }) => {
+      try {
+        recordWireMessage(
+          receipt,
+          decodeServerGameMessage(Buffer.isBuffer(payload) ? payload.toString() : payload),
+        )
+      } catch (error) {
+        boundedPush(receipt.errors, error instanceof Error ? error.message : String(error), 16)
+      }
+    })
+  })
+  return receipt
+}
+
+function recordWireMessage(receipt, message) {
+  if (message.type === 'server-boneyard-loaded') {
+    receipt.loadedBoneyard = message.boneyard
+    return
+  }
+  if (message.type === 'server-welcome') {
+    receipt.reconstructor.reset(message.snapshot, message.snapshotSequence)
+    receipt.sequence = message.snapshotSequence
+    receipt.latestSnapshot = message.snapshot
+    recordWireEnemyEvents(receipt, message.snapshot)
+    return
+  }
+  if (message.type !== 'server-snapshot' || message.sequence <= receipt.sequence) return
+  recordWireEntityFrame(receipt, message.frame.world.entities, message.sequence)
+  const snapshot = receipt.reconstructor.apply(message.frame, message.sequence)
+  receipt.sequence = message.sequence
+  receipt.latestSnapshot = snapshot
+  recordWireEnemyEvents(receipt, snapshot)
+}
+
+function recordWireEntityFrame(receipt, entities, sequence) {
+  for (const descriptor of entities.spawned) {
+    boundedMapSet(
+      receipt.descriptors,
+      replicatedEntityKey(descriptor[0], descriptor[1]),
+      descriptor,
+      128,
+    )
+  }
+  for (const sample of entities.samples) {
+    if (sample[0] !== REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile) continue
+    const prior = receipt.projectileSamples.get(sample[1])
+    boundedMapSet(receipt.projectileSamples, sample[1], {
+      count: (prior?.count ?? 0) + 1,
+      first: prior?.first ?? sample,
+      last: sample,
+    }, 128)
+  }
+  for (const [typeId, id] of entities.retired) {
+    boundedMapSet(receipt.retired, replicatedEntityKey(typeId, id), sequence, 128)
+  }
+}
+
+function recordWireEnemyEvents(receipt, snapshot) {
+  if (snapshot.world.kind !== 'boneyard') return
+  for (const event of snapshot.world.enemyEvents) {
+    boundedMapSet(receipt.events, `${event.runId}:${event.eventId}`, event, 512)
+  }
+}
+
+function replicatedEntityKey(typeId, id) {
+  return `${typeId}:${id}`
+}
+
+function boundedMapSet(map, key, value, limit) {
+  if (map.has(key)) map.delete(key)
+  map.set(key, value)
+  while (map.size > limit) map.delete(map.keys().next().value)
+}
+
+function boundedPush(values, value, limit) {
+  values.push(value)
+  if (values.length > limit) values.splice(0, values.length - limit)
+}
+
+async function waitForWireValue(page, wire, read, timeoutMs, label) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (wire.errors.length > 0) {
+      throw new Error(`game wire observation failed: ${wire.errors.join('; ')}`)
+    }
+    const value = read(wire)
+    if (value) return value
+    await page.waitForTimeout(25)
+  }
+  throw new Error(`timed out waiting for ${label}: ${JSON.stringify(wireSummary(wire))}`)
+}
+
+function wireSummary(wire) {
+  return {
+    descriptorCount: wire.descriptors.size,
+    errors: [...wire.errors],
+    eventCount: wire.events.size,
+    latestTick: wire.latestSnapshot?.tick ?? null,
+    projectileSampleCount: wire.projectileSamples.size,
+    retiredCount: wire.retired.size,
+    sequence: wire.sequence,
+    socketCount: wire.socketCount,
+  }
+}
+
+async function proveArcherProjectileLifecycle(page, wire, runId, screenshotPath) {
+  const deadline = Date.now() + 360_000
+  const killReceipts = []
+  const selectedSkillIds = []
+  let killCount = 0
+  let wave
+
+  while (Date.now() < deadline) {
+    await drainPendingSkillOffers(page, selectedSkillIds)
+    if (wire.errors.length > 0) {
+      throw new Error(`game wire observation failed: ${wire.errors.join('; ')}`)
+    }
+
+    const frame = await boneyardFrame(page)
+    const snapshot = currentBoneyardSnapshot(wire, runId)
+    if (!snapshot) {
+      await page.waitForTimeout(25)
+      continue
+    }
+    const archers = snapshot.world.enemies.filter((enemy) => (
+      enemy.enemyToken === 'SKELETONARCHER'
+    ))
+    if (archers.length > 0) {
+      if (!frame.enemyFamilies.split(',').includes('SKELETONARCHER')) {
+        await page.waitForTimeout(25)
+        continue
+      }
+      wave = await encounterReceipt(page.locator('.boneyard-scene'))
+      assert.equal(wave.waveOrdinal, 2)
+      assert.equal(wave.waveScheduleIndex, 1)
+      break
+    }
+    assert.equal(
+      frame.localPlayerLifeState,
+      'alive',
+      `player died before the deterministic Archer wave after ${killCount} kills`,
+    )
+
+    const target = nearestVisibleLivingEnemy(frame)
+    if (!target) {
+      await page.waitForTimeout(100)
+      continue
+    }
+    const killed = await castUntilEnemyDies(page, {
+      deadline,
+      selectedSkillIds,
+      targetId: target.id,
+    })
+    killCount += 1
+    boundedPush(killReceipts, killed, 12)
+
+    const after = await boneyardFrame(page)
+    if (after.localPlayerLifeState === 'alive') {
+      const nearest = nearestLivingEnemy(after)
+      if (nearest) {
+        await pulseMovement(page, movementKeys({
+          x: after.playerX - nearest.x,
+          y: after.playerY - nearest.y,
+        }), 140)
+      }
+    }
+  }
+
+  assert.ok(wave, `deterministic Archer wave did not materialize: ${JSON.stringify({
+    killCount,
+    wire: wireSummary(wire),
+  })}`)
+  return observeArcherProjectileLifecycle(page, wire, runId, deadline, screenshotPath, {
+    killCount,
+    killReceipts,
+    selectedSkillIds,
+    wave,
+  })
+}
+
+async function observeArcherProjectileLifecycle(
+  page,
+  wire,
+  runId,
+  deadline,
+  screenshotPath,
+  advanceReceipt,
+) {
+  const discardedProjectileIds = new Set()
+  const renderedProjectileTicks = new Map()
+  const renderedShotActorIds = new Set()
+  let candidate = null
+  let reconstructedProjectile = null
+
+  while (Date.now() < deadline) {
+    if (wire.errors.length > 0) {
+      throw new Error(`game wire observation failed: ${wire.errors.join('; ')}`)
+    }
+    const snapshot = currentBoneyardSnapshot(wire, runId)
+    const frame = await boneyardFrame(page)
+    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before Archer projectile proof')
+    if (!snapshot) {
+      await page.waitForTimeout(25)
+      continue
+    }
+
+    const archerIds = new Set(snapshot.world.enemies
+      .filter((enemy) => enemy.enemyToken === 'SKELETONARCHER')
+      .map((enemy) => enemy.id))
+    for (const enemy of frame.enemySamples) {
+      if (archerIds.has(enemy.id) && enemy.action === 'archer-shot') {
+        renderedShotActorIds.add(enemy.id)
+      }
+    }
+
+    if (!candidate) {
+      candidate = [...wire.events.values()]
+        .filter((event) => (
+          event.runId === runId
+          && event.type === 'projectile-spawned'
+          && archerIds.has(event.actorId)
+          && !discardedProjectileIds.has(event.projectileId)
+        ))
+        .sort((left, right) => left.eventId - right.eventId)[0] ?? null
+      reconstructedProjectile = null
+    }
+
+    if (candidate) {
+      const projectileId = candidate.projectileId
+      const activeProjectile = snapshot.world.enemyProjectiles.find((projectile) => (
+        projectile.id === projectileId
+      ))
+      if (activeProjectile) reconstructedProjectile = { ...activeProjectile }
+      if (
+        frame.enemyProjectileIds.includes(projectileId)
+        && !renderedProjectileTicks.has(projectileId)
+      ) {
+        renderedProjectileTicks.set(projectileId, frame.tick)
+        await page.screenshot({ path: screenshotPath })
+      }
+
+      const retirement = [...wire.events.values()].find((event) => (
+        event.runId === runId
+        && event.type === 'projectile-retired'
+        && event.projectileId === projectileId
+      ))
+      const rendered = renderedProjectileTicks.has(projectileId)
+      const motion = wire.projectileSamples.get(projectileId)
+      const moved = motion
+        && motion.last[5] > motion.first[5]
+        && (motion.last[2] !== motion.first[2] || motion.last[3] !== motion.first[3])
+      const activeInReconstruction = snapshot.world.enemyProjectiles.some((projectile) => (
+        projectile.id === projectileId
+      ))
+      const activeInRenderer = frame.enemyProjectileIds.includes(projectileId)
+
+      if (retirement && !activeInReconstruction && !activeInRenderer) {
+        if (
+          rendered
+          && reconstructedProjectile
+          && renderedShotActorIds.has(candidate.actorId)
+          && motion?.count >= 2
+          && moved
+        ) {
+          const enemyDescriptor = wire.descriptors.get(replicatedEntityKey(
+            REPLICATED_ENTITY_TYPES.boneyardEnemy,
+            candidate.actorId,
+          ))
+          const projectileDescriptor = wire.descriptors.get(replicatedEntityKey(
+            REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile,
+            projectileId,
+          ))
+          assert.ok(enemyDescriptor, 'expected the Archer wire descriptor')
+          assert.equal(enemyDescriptor[0], REPLICATED_ENTITY_TYPES.boneyardEnemy)
+          assert.equal(enemyDescriptor[1], candidate.actorId)
+          assert.equal(enemyDescriptor[2], 1)
+          assert.equal(enemyDescriptor[3], 1002)
+          assert.ok(projectileDescriptor, 'expected the arrow wire descriptor')
+          assert.equal(
+            projectileDescriptor[0],
+            REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile,
+          )
+          assert.equal(projectileDescriptor[1], projectileId)
+          assert.equal(projectileDescriptor[2], 0)
+          assert.equal(projectileDescriptor[3], 0x7da)
+          assert.equal(projectileDescriptor[4], candidate.actorId)
+          assert.equal(reconstructedProjectile.kind, 'arrow')
+          assert.equal(reconstructedProjectile.nativeTypeId, 0x7da)
+          assert.equal(reconstructedProjectile.ownerActorId, candidate.actorId)
+          assert.equal(retirement.actorId, candidate.actorId)
+          return {
+            ...advanceReceipt,
+            actorId: candidate.actorId,
+            archerDescriptor: [...enemyDescriptor],
+            archerShotRendered: true,
+            projectileDescriptor: [...projectileDescriptor],
+            projectileId,
+            projectileMotion: {
+              count: motion.count,
+              first: [...motion.first],
+              last: [...motion.last],
+            },
+            projectileRenderedTick: renderedProjectileTicks.get(projectileId),
+            reconstructedProjectile,
+            retirementEventId: retirement.eventId,
+            retirementTick: retirement.tick,
+            wireRetirementSequence: wire.retired.get(replicatedEntityKey(
+              REPLICATED_ENTITY_TYPES.boneyardEnemyProjectile,
+              projectileId,
+            )) ?? null,
+          }
+        }
+        discardedProjectileIds.add(projectileId)
+        candidate = null
+        reconstructedProjectile = null
+      }
+    }
+
+    const focusActorId = candidate?.actorId
+      ?? nearestArcherId(frame, archerIds)
+    const archer = frame.enemySamples.find((enemy) => enemy.id === focusActorId)
+    if (!archer) {
+      await page.waitForTimeout(50)
+      continue
+    }
+    const difference = {
+      x: archer.x - frame.playerX,
+      y: archer.y - frame.playerY,
+    }
+    const distance = Math.hypot(difference.x, difference.y)
+    if (distance > 160) {
+      await pulseMovement(page, movementKeys(difference), 120)
+    } else if (distance < 95) {
+      await pulseMovement(page, movementKeys({
+        x: -difference.x,
+        y: -difference.y,
+      }), 120)
+    } else {
+      await page.waitForTimeout(50)
+    }
+  }
+
+  throw new Error(`Archer projectile lifecycle did not complete: ${JSON.stringify({
+    advanceReceipt,
+    discardedProjectileIds: [...discardedProjectileIds],
+    renderedProjectileTicks: [...renderedProjectileTicks],
+    renderedShotActorIds: [...renderedShotActorIds],
+    wire: wireSummary(wire),
+  })}`)
+}
+
+function currentBoneyardSnapshot(wire, runId) {
+  const snapshot = wire.latestSnapshot
+  return snapshot?.world.kind === 'boneyard' && snapshot.world.runId === runId
+    ? snapshot
+    : null
+}
+
+function nearestArcherId(frame, archerIds) {
+  return frame.enemySamples
+    .filter((enemy) => archerIds.has(enemy.id) && enemy.lifeState !== 'death')
+    .toSorted((left, right) => (
+      Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
+      - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+      || left.id - right.id
+    ))[0]?.id ?? null
+}
+
+async function drainPendingSkillOffers(page, selectedSkillIds = []) {
+  const picker = page.locator('.skill-picker-stage')
+
+  while (await picker.count() > 0) {
+    await picker.waitFor({ state: 'visible', timeout: 5_000 })
+    const offerSequence = Number(await picker.getAttribute('data-offer-sequence'))
+    assert.ok(Number.isSafeInteger(offerSequence), 'expected a real skill offer sequence')
+    const choices = picker.locator('button[data-skill-id]')
+    const skillIds = await choices.evaluateAll((buttons) => (
+      buttons.map((button) => Number(button.getAttribute('data-skill-id')))
+    ))
+    assert.ok(skillIds.length > 0, 'expected a real offered skill choice')
+    const nonPrimaryIndex = skillIds.findIndex((skillId) => skillId !== 16)
+    const choiceIndex = nonPrimaryIndex >= 0 ? nonPrimaryIndex : 0
+    const skillId = skillIds[choiceIndex]
+    assert.ok(Number.isSafeInteger(skillId), 'expected a real offered skill id')
+    await choices.nth(choiceIndex).click()
+    await page.waitForFunction((priorSequence) => {
+      const current = document.querySelector('.skill-picker-stage')
+      return current === null
+        || Number(current.getAttribute('data-offer-sequence')) !== priorSequence
+    }, offerSequence, { timeout: 15_000 })
+    boundedPush(selectedSkillIds, skillId, 16)
+  }
 }
 
 async function kiteUntilSolomonTaunt(page) {
@@ -255,24 +758,92 @@ async function kiteUntilSolomonTaunt(page) {
   throw new Error('Solomon did not finish the laugh and taunt while combat was active')
 }
 
-async function castUntilEnemyDies(page) {
+async function castUntilEnemyDies(page, {
+  deadline = Date.now() + 240_000,
+  selectedSkillIds = [],
+  targetId = null,
+} = {}) {
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
+  let acceptedCastCount = 0
+  let acceptedTick = null
+  let enemyCountBefore = null
+  let enemyHealthBefore = null
+  let manaAfter = null
+  let manaBefore = null
+  let selectedTargetId = targetId
+
+  while (Date.now() < deadline) {
+    await drainPendingSkillOffers(page, selectedSkillIds)
     let before = await boneyardFrame(page)
-    const visibilityDeadline = Date.now() + 60_000
-    while (
-      before.localPlayerLifeState === 'alive'
-      && nearestVisibleLivingEnemy(before) === null
-      && Date.now() < visibilityDeadline
-    ) {
-      await page.waitForTimeout(100)
-      before = await boneyardFrame(page)
-    }
     assert.equal(before.localPlayerLifeState, 'alive', 'player died before the combat cast')
-    const target = nearestVisibleLivingEnemy(before)
-    assert.ok(target, 'expected a visible opening-wave enemy')
+
+    let target = selectedTargetId === null
+      ? nearestVisibleLivingEnemy(before)
+      : enemyById(before, selectedTargetId)
+    if (!target) {
+      if (selectedTargetId !== null && acceptedCastCount > 0) {
+        return fireRetirementReceipt({
+          acceptedCastCount,
+          acceptedTick,
+          enemyCountBefore,
+          enemyHealthBefore,
+          frame: before,
+          manaAfter,
+          manaBefore,
+          selectedSkillIds,
+          targetId: selectedTargetId,
+        })
+      }
+      await page.waitForTimeout(50)
+      continue
+    }
+    selectedTargetId ??= target.id
+    enemyCountBefore ??= before.enemyCount
+    enemyHealthBefore ??= target.currentHealth
+
+    if (target.lifeState === 'death' || target.currentHealth <= 0) {
+      const retired = await waitForEnemyRetirement(
+        page,
+        selectedTargetId,
+        deadline,
+        selectedSkillIds,
+      )
+      return fireRetirementReceipt({
+        acceptedCastCount,
+        acceptedTick,
+        enemyCountBefore,
+        enemyHealthBefore,
+        frame: retired,
+        manaAfter,
+        manaBefore,
+        selectedSkillIds,
+        targetId: selectedTargetId,
+      })
+    }
+
+    const distance = enemyDistance(before, target)
+    const recovering = before.tick < fireCastDriver.nextReadyTick
+    const waitingForMana = before.localPlayerMana + Number.EPSILON
+      < PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire
+    if (recovering || waitingForMana || distance < FIRE_ENGAGEMENT_MIN_DISTANCE) {
+      await kiteFromNearestEnemy(page, before, 120)
+      continue
+    }
+    if (!visibleLivingEnemy(before, target) || distance > FIRE_ENGAGEMENT_MAX_DISTANCE) {
+      await closeOnEnemy(page, before, target, 100)
+      continue
+    }
+
+    await drainPendingSkillOffers(page, selectedSkillIds)
+    before = await boneyardFrame(page)
+    target = enemyById(before, selectedTargetId)
+    if (!target || !visibleLivingEnemy(before, target)) continue
+    if (
+      before.localPlayerMana + Number.EPSILON < PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire
+      || before.tick < fireCastDriver.nextReadyTick
+    ) continue
+
     const targetHealth = target.currentHealth
-    const targetId = target.id
     const targetPoint = await enemyScreenPoint(canvas, before, target)
     await page.bringToFront()
     await page.mouse.move(targetPoint.x, targetPoint.y)
@@ -280,59 +851,149 @@ async function castUntilEnemyDies(page) {
     await page.waitForTimeout(35)
     await page.mouse.up({ button: 'left' })
 
-    let accepted
-    try {
-      const acceptedHandle = await page.waitForFunction((manaBefore) => {
-        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-        return frame?.localPlayerMana < manaBefore ? structuredClone(frame) : null
-      }, before.localPlayerMana, { timeout: 30_000 })
-      accepted = await acceptedHandle.jsonValue()
-      await acceptedHandle.dispose()
-    } catch {
-      await page.waitForFunction((tick) => (
-        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.tick >= tick + 80
-      ), before.tick, { timeout: 60_000 })
-      continue
-    }
-
-    try {
-      const hitHandle = await page.waitForFunction(({ enemyCount, health, id }) => {
-        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-        if (!frame) return null
-        const enemy = frame.enemySamples.find((candidate) => candidate.id === id)
-        if (!enemy && frame.enemyCount < enemyCount) {
-          return { frame: structuredClone(frame), retired: true }
-        }
-        return enemy && (enemy.currentHealth < health || enemy.lifeState === 'death')
-          ? { enemy: { ...enemy }, frame: structuredClone(frame), retired: false }
-          : null
-      }, {
-        enemyCount: before.enemyCount,
-        health: targetHealth,
-        id: targetId,
-      }, { timeout: 60_000 })
-      const hit = await hitHandle.jsonValue()
-      await hitHandle.dispose()
-      assert.ok(hit.retired || hit.enemy?.lifeState === 'death' || hit.enemy?.currentHealth <= 0)
-      return {
-        acceptedTick: accepted.tick,
-        attempt,
-        enemyCountAfter: hit.frame.enemyCount,
-        enemyCountBefore: before.enemyCount,
-        enemyHealthAfter: hit.enemy?.currentHealth ?? null,
-        enemyHealthBefore: targetHealth,
-        enemyLifeState: hit.enemy?.lifeState ?? 'retired',
-        manaAfter: accepted.localPlayerMana,
-        manaBefore: before.localPlayerMana,
-        targetId,
+    const acceptanceDeadline = Math.min(deadline, Date.now() + 3_000)
+    let accepted = null
+    while (Date.now() < acceptanceDeadline) {
+      await drainPendingSkillOffers(page, selectedSkillIds)
+      const frame = await boneyardFrame(page)
+      const currentTarget = enemyById(frame, selectedTargetId)
+      if (frame.localPlayerMana < before.localPlayerMana) {
+        accepted = frame
+        break
       }
-    } catch {
-      await page.waitForFunction((tick) => (
-        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.tick >= tick + 80
-      ), accepted.tick, { timeout: 60_000 })
+      if (!currentTarget || currentTarget.lifeState === 'death' || currentTarget.currentHealth <= 0) {
+        // A point-blank Fire projectile can damage and retire between rendered mana samples.
+        // In this single-player smoke, that post-click contact is the acceptance witness.
+        accepted = frame
+        break
+      }
+      await page.waitForTimeout(25)
     }
+    if (!accepted) continue
+
+    acceptedCastCount += 1
+    acceptedTick ??= accepted.tick
+    fireCastDriver.nextReadyTick = accepted.tick + PRIMARY_CAST_ACTION_END_TICK
+    manaBefore ??= before.localPlayerMana
+    manaAfter = accepted.localPlayerMana
+
+    const contactDeadline = Math.min(deadline, Date.now() + 5_000)
+    let contacted = false
+    while (Date.now() < contactDeadline) {
+      await drainPendingSkillOffers(page, selectedSkillIds)
+      const frame = await boneyardFrame(page)
+      const currentTarget = enemyById(frame, selectedTargetId)
+      if (!currentTarget) {
+        return fireRetirementReceipt({
+          acceptedCastCount,
+          acceptedTick,
+          enemyCountBefore,
+          enemyHealthBefore,
+          frame,
+          manaAfter,
+          manaBefore,
+          selectedSkillIds,
+          targetId: selectedTargetId,
+        })
+      }
+      if (currentTarget.currentHealth < targetHealth) contacted = true
+      if (currentTarget.lifeState === 'death' || currentTarget.currentHealth <= 0) {
+        const retired = await waitForEnemyRetirement(
+          page,
+          selectedTargetId,
+          deadline,
+          selectedSkillIds,
+        )
+        return fireRetirementReceipt({
+          acceptedCastCount,
+          acceptedTick,
+          enemyCountBefore,
+          enemyHealthBefore,
+          frame: retired,
+          manaAfter,
+          manaBefore,
+          selectedSkillIds,
+          targetId: selectedTargetId,
+        })
+      }
+      if (contacted) break
+      await page.waitForTimeout(25)
+    }
+    if (!contacted) await kiteFromNearestEnemy(page, await boneyardFrame(page), 120)
   }
-  throw new Error('Fire casts never contacted an opening-wave enemy')
+
+  throw new Error(`Fire combat did not retire its selected enemy: ${JSON.stringify({
+    acceptedCastCount,
+    frame: await boneyardFrame(page),
+    selectedSkillIds,
+    targetId: selectedTargetId,
+  })}`)
+}
+
+async function waitForEnemyRetirement(page, targetId, deadline, selectedSkillIds) {
+  while (Date.now() < deadline) {
+    await drainPendingSkillOffers(page, selectedSkillIds)
+    const frame = await boneyardFrame(page)
+    if (!enemyById(frame, targetId)) return frame
+    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before the enemy retired')
+    await kiteFromNearestEnemy(page, frame, 120)
+  }
+  throw new Error(`enemy ${targetId} did not retire before the combat deadline`)
+}
+
+function fireRetirementReceipt({
+  acceptedCastCount,
+  acceptedTick,
+  enemyCountBefore,
+  enemyHealthBefore,
+  frame,
+  manaAfter,
+  manaBefore,
+  selectedSkillIds,
+  targetId,
+}) {
+  assert.ok(acceptedCastCount > 0, `enemy ${targetId} retired without an accepted Fire cast`)
+  return {
+    acceptedCastCount,
+    acceptedTick,
+    attempt: acceptedCastCount,
+    enemyCountAfter: frame.enemyCount,
+    enemyCountBefore,
+    enemyHealthAfter: null,
+    enemyHealthBefore,
+    enemyLifeState: 'retired',
+    manaAfter,
+    manaBefore,
+    selectedSkillIds: [...selectedSkillIds],
+    targetId,
+  }
+}
+
+function enemyById(frame, targetId) {
+  return frame.enemySamples.find((enemy) => enemy.id === targetId) ?? null
+}
+
+function enemyDistance(frame, enemy) {
+  return Math.hypot(enemy.x - frame.playerX, enemy.y - frame.playerY)
+}
+
+async function kiteFromNearestEnemy(page, frame, durationMs) {
+  const nearest = nearestLivingEnemy(frame)
+  if (!nearest) {
+    await page.waitForTimeout(durationMs)
+    return
+  }
+  await pulseMovement(page, movementKeys({
+    x: frame.playerX - nearest.x,
+    y: frame.playerY - nearest.y,
+  }), durationMs)
+}
+
+async function closeOnEnemy(page, frame, enemy, durationMs) {
+  await pulseMovement(page, movementKeys({
+    x: enemy.x - frame.playerX,
+    y: enemy.y - frame.playerY,
+  }), durationMs)
 }
 
 async function waitForPlayerDeath(page) {
@@ -429,17 +1090,19 @@ function nearestLivingEnemy(frame) {
 
 function nearestVisibleLivingEnemy(frame) {
   return frame.enemySamples
-    .filter((enemy) => {
-      if (enemy.lifeState === 'death') return false
-      const x = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
-      const y = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
-      return x >= 30 && x <= 1_570 && y >= 30 && y <= 870
-    })
+    .filter((enemy) => visibleLivingEnemy(frame, enemy))
     .toSorted((left, right) => (
       Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
       - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
       || left.id - right.id
     ))[0] ?? null
+}
+
+function visibleLivingEnemy(frame, enemy) {
+  if (enemy.lifeState === 'death') return false
+  const x = frame.playerScreenX + (enemy.x - frame.playerX) * 1.35
+  const y = frame.playerScreenY + (enemy.y - frame.playerY) * 1.35
+  return x >= 30 && x <= 1_570 && y >= 30 && y <= 870
 }
 
 async function enemyScreenPoint(canvas, frame, enemy) {
@@ -463,31 +1126,9 @@ function installAudioPlayProbe() {
   const sources = []
   const nativePlay = HTMLMediaElement.prototype.play
   Object.defineProperty(window, '__sdrAudioPlaySources', { value: sources })
-  Object.defineProperty(window, '__sdrLoadedBoneyard', {
-    configurable: true,
-    value: null,
-    writable: true,
-  })
   HTMLMediaElement.prototype.play = function play() {
     sources.push(this.currentSrc || this.src)
     return nativePlay.call(this)
-  }
-  const NativeWebSocket = window.WebSocket
-  window.WebSocket = class ProbedWebSocket extends NativeWebSocket {
-    constructor(...arguments_) {
-      super(...arguments_)
-      this.addEventListener('message', (event) => {
-        if (typeof event.data !== 'string') return
-        try {
-          const message = JSON.parse(event.data)
-          if (message?.type === 'server-boneyard-loaded') {
-            window.__sdrLoadedBoneyard = message.boneyard
-          }
-        } catch {
-          // The application protocol owns malformed-frame handling.
-        }
-      })
-    }
   }
 }
 
@@ -527,6 +1168,7 @@ async function crossNearestEntryGate(page, scene, boneyardScene) {
     boneyardScene,
     approachTarget,
     90_000,
+    30,
   )
   const direction = Math.sign(target.y - aligned.y)
   assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
@@ -538,6 +1180,7 @@ async function crossNearestEntryGate(page, scene, boneyardScene) {
   ), 15_000)
   const finalY = Number(await scene.getAttribute('data-local-player-y'))
   const finalGateState = await scene.getAttribute('data-gate-state')
+  assert.ok((finalY - aligned.y) * direction > crossingDistance)
   assert.notEqual(finalGateState, initialGateState)
   return { aligned, direction, finalY, initialX, initialY, target }
 }
@@ -586,7 +1229,7 @@ async function holdUntil(page, key, predicate, timeoutMs) {
   }
 }
 
-async function walkToPoint(page, scene, boneyardScene, target, timeoutMs) {
+async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolerance = 10) {
   await page.bringToFront()
   await scene.focus()
   const startedAt = Date.now()
@@ -599,7 +1242,7 @@ async function walkToPoint(page, scene, boneyardScene, target, timeoutMs) {
   let stalledSteps = 0
   while (Date.now() - startedAt < timeoutMs) {
     const before = await playerPointReceipt(scene, target)
-    if (before.distance <= 10) return { x: before.x, y: before.y }
+    if (before.distance <= tolerance) return { x: before.x, y: before.y }
     while (
       routeIndex < route.length
       && Math.hypot(

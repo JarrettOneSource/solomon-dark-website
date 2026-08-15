@@ -56,10 +56,12 @@ export interface ProtocolPlayerSkillOffer {
 
 export interface ProtocolPlayerProgression {
   activeWeldBuildId: number | null
+  coldSlowTicksRemaining: number
   currentHealth: number
   currentMana: number
   deathEpoch: number
   deathTick: number
+  dazzleTicksRemaining: number
   experience: number
   learnedSkills: readonly (readonly [number, number, number])[]
   level: number
@@ -119,6 +121,7 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'enemy-retired',
   'enemy-spawned',
   'enemy-terminal-output',
+  'mage-lightning',
   'projectile-impact',
   'projectile-retired',
   'projectile-spawned',
@@ -146,6 +149,8 @@ export interface BoneyardEnemyEventSnapshot {
   output?: BoneyardEnemyTerminalOutput
   projectileId?: number
   runId: string
+  sourcePosition?: Vector2
+  targetPosition?: Vector2
   targetPlayerId?: string | null
   tick: number
   type: BoneyardEnemyEventType
@@ -158,6 +163,17 @@ export type BoneyardEnemyProjectileKind =
   | 'guided-missile'
   | 'poison-pool'
 
+export const BONEYARD_ENEMY_PROJECTILE_PAYLOADS = [
+  'cold',
+  'fire',
+  'none',
+  'normal',
+  'poison',
+] as const
+
+export type BoneyardEnemyProjectilePayload =
+  typeof BONEYARD_ENEMY_PROJECTILE_PAYLOADS[number]
+
 export interface BoneyardEnemyProjectileSnapshot {
   ageTicks: number
   contactRadius: number
@@ -168,9 +184,13 @@ export interface BoneyardEnemyProjectileSnapshot {
   lifetimeTicks: number
   nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   ownerActorId: number
+  payload: BoneyardEnemyProjectilePayload
   position: Vector2
   spawnTick: number
 }
+
+export const BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES = ['edge', 'lid'] as const
+export const BONEYARD_MAGGOT_STATES = ['bite', 'crawl', 'death', 'emerging'] as const
 
 export interface BoneyardMaggotSnapshot {
   alpha: number
@@ -180,12 +200,15 @@ export interface BoneyardMaggotSnapshot {
   headingDeg: number
   hitFlash: number
   id: number
+  emergenceTick: number
+  launchTrajectory: typeof BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[number]
   maximumHealth: number
   ownerCoffinActorId: number
   pose: number
   position: Vector2
   spawnTick: number
-  state: 'crawl' | 'bite' | 'death'
+  state: typeof BONEYARD_MAGGOT_STATES[number]
+  verticalOffset: number
 }
 
 export type BoneyardEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
@@ -225,7 +248,7 @@ export interface BoneyardEnemyAnimationSnapshot {
   demonFrontLimbRotationRadians: number
   demonRearJointRotationRadians: number
   demonRearLimbRotationRadians: number
-  effects: readonly []
+  effects: readonly BoneyardEnemyEffectSnapshot[]
   gaitPose: number
   hitFlash: number
   impEffectFrame: number
@@ -239,8 +262,29 @@ export interface BoneyardEnemyAnimationSnapshot {
   zombieRearArmRotationRadians: number
 }
 
+export const BONEYARD_ENEMY_EFFECT_ROLES = [
+  'burning-fire',
+  'mage-lightning-source',
+  'mage-lightning-target',
+] as const
+
+export type BoneyardEnemyEffectRole = typeof BONEYARD_ENEMY_EFFECT_ROLES[number]
+
+export interface BoneyardEnemyEffectSnapshot {
+  alpha: number
+  atlas: 'BadGuys' | 'DeadHawg'
+  blendMode: 'add' | 'normal'
+  entry: number
+  id: number
+  offset: Vector2
+  role: BoneyardEnemyEffectRole
+  rotationRadians: number
+  scale: number
+}
+
 export interface BoneyardEnemySnapshot {
   animation: BoneyardEnemyAnimationSnapshot
+  armored: boolean
   currentHealth: number
   enemyToken: 'SKELETON' | 'SKELETONARCHER' | 'SKELETONMAGE' | 'IMP' | 'ZOMBIE' | 'WRAITH' | 'DEMON' | 'COFFIN'
   flags: readonly string[]
@@ -249,6 +293,8 @@ export interface BoneyardEnemySnapshot {
   maximumHealth: number
   nativeTypeId: number
   position: Vector2
+  shieldHealth: number
+  shieldMaximumHealth: number
   spawnTick: number
 }
 

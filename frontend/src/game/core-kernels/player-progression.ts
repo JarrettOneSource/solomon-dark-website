@@ -63,6 +63,14 @@ export interface PlayerStatBookComponent {
   readonly entries: readonly NativeSkillStatBookEntry[]
 }
 
+export interface NativePrimarySkillRankStats {
+  readonly damageMaximum: number
+  readonly damageMinimum: number
+  readonly manaCost: number
+  readonly rank: number
+  readonly skillId: number
+}
+
 export interface PlayerSkillBookComponent {
   readonly activeWeldBuildId: number | null
   readonly advancedUnlocks: readonly boolean[]
@@ -189,11 +197,58 @@ const SHARED_STAT_BOOK: PlayerStatBookComponent = Object.freeze({
     quickDescription: '',
   })]),
 })
+const PRIMARY_SKILL_RANK_STATS_CACHE = new Map<number, NativePrimarySkillRankStats>()
 
 const RULES: Readonly<Record<number, SkillRule>> = createSkillRules()
 
 export function playerStatBook(): PlayerStatBookComponent {
   return SHARED_STAT_BOOK
+}
+
+export function effectivePrimarySkillRankStats(
+  skillBook: PlayerSkillBookComponent,
+): NativePrimarySkillRankStats {
+  const skillId = skillBook.primarySkillId
+  if (!(ELEMENTAL_PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
+    throw new RangeError(`skill ${skillId} is not an elemental primary`)
+  }
+  const entry = SHARED_STAT_BOOK.entries[skillId]
+  const rank = skillBook.effectiveRanks[skillId]
+  if (
+    !entry
+    || rank === undefined
+    || !Number.isInteger(rank)
+    || rank < 1
+    || rank > entry.maximumLevel
+  ) {
+    throw new RangeError(`skill ${skillId} has invalid effective rank ${String(rank)}`)
+  }
+  const cacheKey = skillId * NATIVE_SKILL_ROW_COUNT + rank
+  const cached = PRIMARY_SKILL_RANK_STATS_CACHE.get(cacheKey)
+  if (cached) return cached
+
+  const sharedDamage = entry.numericProperties.mDamage
+  const damageMinimum = rankedNativeSkillValue(
+    sharedDamage ?? entry.numericProperties.mDamage1,
+    rank,
+    `${entry.id}.damageMinimum`,
+  )
+  const damageMaximum = rankedNativeSkillValue(
+    sharedDamage ?? entry.numericProperties.mDamage2,
+    rank,
+    `${entry.id}.damageMaximum`,
+  )
+  const manaCost = rankedNativeSkillValue(
+    entry.numericProperties.mManaCost,
+    rank,
+    `${entry.id}.manaCost`,
+  )
+  if (damageMinimum <= 0 || damageMaximum < damageMinimum || manaCost <= 0) {
+    throw new RangeError(`skill ${skillId} rank ${rank} has invalid primary stats`)
+  }
+  const stats = Object.freeze({ damageMaximum, damageMinimum, manaCost, rank, skillId })
+  PRIMARY_SKILL_RANK_STATS_CACHE.set(cacheKey, stats)
+  return stats
 }
 
 export function nativeWeldBuild(buildId: number): NativeWeldBuild | null {
@@ -677,6 +732,18 @@ function manaCost(id: number, rank: number): number {
   if (typeof value === 'number') return value
   if (!Array.isArray(value) || value.length === 0) return 0
   return value[Math.min(Math.max(0, rank), value.length - 1)] ?? 0
+}
+
+function rankedNativeSkillValue(
+  value: number | readonly number[] | undefined,
+  rank: number,
+  field: string,
+): number {
+  const ranked = typeof value === 'number' ? value : value?.[rank]
+  if (ranked === undefined || !Number.isFinite(ranked)) {
+    throw new RangeError(`native skill catalog is missing ${field} rank ${rank}`)
+  }
+  return ranked
 }
 
 function isStartedOrDependent(id: number, book: PlayerSkillBookComponent): boolean {

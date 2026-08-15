@@ -7,6 +7,19 @@ import {
   type EvaluatedBoneyardEnemyConfig,
 } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  BOUNDED_ARCHER_RANGE_BANDS,
+  BOUNDED_ENEMY_COLD_SLOW_TICKS,
+  BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  BOUNDED_MAGE_ALLY_SHIELD_RANGE,
+  BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
+  BOUNDED_MAGE_RANGE_BANDS,
+  NATIVE_WRAITH_DAZZLE_TICKS,
+  boundedArcherAimHeading,
+  boundedMageShieldIntervalTicks,
+  projectilePayloadForArrow,
+  type BoneyardEnemyProjectilePayload,
+} from '../core-kernels/boneyard-enemy-modifiers.ts'
+import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
@@ -32,6 +45,8 @@ export const NATIVE_SKELETON_ACTION_PROGRAMS = Object.freeze({
   weapon: Object.freeze({ markerProgress: 9, progressPerTick: 0.25, strictEnd: 24 }),
 })
 
+export const NATIVE_SKELETON_CLAW_MARKERS = Object.freeze([4, 8] as const)
+
 export const NATIVE_ARCHER_ACTION_PROGRAM = Object.freeze({
   markerProgress: 13,
   progressPerTick: 0.0843750015,
@@ -45,7 +60,6 @@ export const NATIVE_MAGE_ACTION_PROGRAMS = Object.freeze({
 
 /** Named deterministic web programs for families whose exact action clocks remain open. */
 export const BOUNDED_ENEMY_ACTION_PROGRAMS = Object.freeze({
-  coffinOpen: Object.freeze({ markerTick: 10, strictEndTick: 12 }),
   demonBomb: Object.freeze({ markerTick: 6, strictEndTick: 11, recoveryTicks: 36 }),
   impContact: Object.freeze({ cooldownTicks: 18, markerTick: 6, strictEndTick: 11 }),
   wraithDrain: Object.freeze({ cooldownTicks: 50, markerTick: 4, strictEndTick: 9 }),
@@ -84,15 +98,33 @@ export const BOUNDED_ENEMY_PROJECTILE_PROGRAMS = Object.freeze({
   'poison-pool': Object.freeze({ contactRadius: 35, homing: false, lifetimeTicks: 1000, speed: 0 }),
 })
 
-export const BOUNDED_MAGGOT_PROGRAM = Object.freeze({
-  attackReach: 18,
-  collisionRadius: 8,
-  deathTicks: 12,
-  movementStep: 0.5,
+/** Retail Coffin opening calls its Maggot helper exactly three times. */
+export const NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS = 3
+
+/** Named web bounds until retail Coffin replenishment timing is closed. */
+export const BOUNDED_COFFIN_MAGGOT_PROGRAM = Object.freeze({
+  replenishmentEmissionCount: 1,
+  replenishmentIntervalTicks: 50,
 })
 
-const BOUNDED_ARCHER_MINIMUM_RANGE = 120
-const BOUNDED_MAGE_MINIMUM_RANGE = 100
+/** Named web bounds until retail Maggot launch and crawl kinematics are closed. */
+export const BOUNDED_MAGGOT_PROGRAM = Object.freeze({
+  attackDelayAfterEmergenceTicks: 10,
+  attackReach: 18,
+  bitePresentationTicks: 6,
+  collisionRadius: 8,
+  deathTicks: 12,
+  emergenceTicks: 24,
+  gaitDistancePerPose: 2,
+  launchHeadingStepDeg: 137.5,
+  launchTrajectories: Object.freeze({
+    edge: Object.freeze({ horizontalStep: 1.75, originDistance: 12, verticalHeight: 12 }),
+    lid: Object.freeze({ horizontalStep: 1.25, originDistance: 8, verticalHeight: 20 }),
+  }),
+  movementStep: 0.5,
+  poisonDurationTicks: 10,
+})
+
 const NATIVE_WRAITH_RETREAT_MINIMUM_TICKS = 200
 const NATIVE_WRAITH_RETREAT_RANDOM_COUNT = 601
 const NATIVE_COFFIN_HIDDEN_SHORT_TICKS = 180
@@ -109,11 +141,13 @@ interface ActionClock {
 
 export interface BoneyardSkeletonBrain extends ActionClock {
   readonly action: 'claw' | 'pike' | 'weapon'
+  readonly contactTargetPlayerId: string | null
   readonly family: 'skeleton'
   readonly phase: 'approach' | 'attack' | 'death'
 }
 
 export interface BoneyardArcherBrain extends ActionClock {
+  readonly aimRngState: number
   readonly family: 'archer'
   readonly phase: 'range-control' | 'attack' | 'death'
 }
@@ -123,10 +157,12 @@ export interface BoneyardMageBrain extends ActionClock {
   readonly castRoll: number
   readonly family: 'mage'
   readonly phase: 'range-control' | 'cast' | 'death'
+  readonly shieldTicksRemaining: number
 }
 
 export interface BoneyardImpBrain {
   readonly actionTick: number
+  readonly contactTargetPlayerId: string | null
   readonly cooldownTicks: number
   readonly family: 'imp'
   readonly markerEmitted: boolean
@@ -135,6 +171,7 @@ export interface BoneyardImpBrain {
 
 export interface BoneyardZombieBrain {
   readonly actionTick: number
+  readonly contactTargetPlayerId: string | null
   readonly family: 'zombie'
   readonly markerEmitted: boolean
   readonly phase: 'approach' | 'swipe' | 'knockback' | 'death'
@@ -144,6 +181,7 @@ export interface BoneyardZombieBrain {
 export interface BoneyardWraithBrain {
   readonly actionTick: number
   readonly alpha: number
+  readonly contactTargetPlayerId: string | null
   readonly family: 'wraith'
   readonly markerEmitted: boolean
   readonly phase: 'approach' | 'orbit' | 'drain' | 'cooldown' | 'death'
@@ -161,6 +199,7 @@ export interface BoneyardDemonBrain {
 export interface BoneyardCoffinBrain {
   readonly family: 'coffin'
   readonly maggotsReleased: boolean
+  readonly nextMaggotReplenishmentTick: number
   readonly phase: 'hidden' | 'rising' | 'holding' | 'opening' | 'open' | 'death'
   readonly phaseTick: number
   readonly phaseTicksRemaining: number
@@ -190,10 +229,17 @@ export interface BoneyardEnemyActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
+  readonly lightningEffect: Readonly<{
+    eventId: number
+    startedTick: number
+    targetPosition: Readonly<BoneyardPoint>
+  }> | null
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
   readonly position: Readonly<BoneyardPoint>
   readonly rewardGranted: boolean
+  readonly shieldHealth: number
+  readonly shieldMaximumHealth: number
   readonly sourceSpawnIntentId: number
   readonly spawnTick: number
   readonly targetPlayerId: string | null
@@ -210,6 +256,7 @@ export type BoneyardEnemyProjectileKind =
 
 export interface BoneyardEnemyProjectile {
   readonly ageTicks: number
+  readonly coldSlowTicks: number
   readonly contactRadius: number
   readonly damage: number
   readonly headingDeg: number
@@ -221,6 +268,7 @@ export interface BoneyardEnemyProjectile {
   readonly lifetimeTicks: number
   readonly nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   readonly ownerActorId: BoneyardEnemyActorId
+  readonly payload: BoneyardEnemyProjectilePayload
   readonly poisonDamage: number
   readonly poisonDuration: number
   readonly position: Readonly<BoneyardPoint>
@@ -239,6 +287,9 @@ export interface BoneyardMaggotActor {
   readonly gaitPose: number
   readonly headingDeg: number
   readonly id: BoneyardEnemyActorId
+  readonly emergenceTick: number
+  readonly launchTrajectory: 'edge' | 'lid'
+  readonly launchVelocity: Readonly<BoneyardPoint>
   readonly lastAttackTick: number | null
   readonly lastDamagedByPlayerId: string | null
   readonly lastDamageTick: number | null
@@ -251,6 +302,7 @@ export interface BoneyardMaggotActor {
   readonly poisonDamage: number
   readonly poisonDuration: number
   readonly position: Readonly<BoneyardPoint>
+  readonly movementPhase: 'crawl' | 'emerging'
   readonly spawnTick: number
   readonly targetPlayerId: string | null
   readonly terminalEmitted: boolean
@@ -273,6 +325,7 @@ export type BoneyardEnemySemanticEventType =
   | 'enemy-retired'
   | 'enemy-spawned'
   | 'enemy-terminal-output'
+  | 'mage-lightning'
   | 'projectile-impact'
   | 'projectile-retired'
   | 'projectile-spawned'
@@ -284,6 +337,8 @@ export interface BoneyardEnemySemanticEvent {
   readonly eventId: BoneyardEnemyEventId
   readonly output?: BoneyardEnemyTerminalOutput
   readonly projectileId?: BoneyardEnemyProjectileId
+  readonly sourcePosition?: Readonly<BoneyardPoint>
+  readonly targetPosition?: Readonly<BoneyardPoint>
   readonly targetPlayerId?: string | null
   readonly tick: number
   readonly type: BoneyardEnemySemanticEventType
@@ -292,6 +347,8 @@ export interface BoneyardEnemySemanticEvent {
 export interface BoneyardEnemyPlayerDamage {
   readonly actorId: BoneyardEnemyActorId
   readonly amount: number
+  readonly coldSlowTicks: number
+  readonly dazzleTicks: number
   readonly eventId: BoneyardEnemyEventId
   readonly poisonDamage: number
   readonly poisonDuration: number
@@ -329,6 +386,7 @@ export interface BoneyardEnemyTargetCandidate {
   readonly connected: boolean
   readonly eligible: boolean
   readonly position: Readonly<BoneyardPoint>
+  readonly velocityPerTick: Readonly<BoneyardPoint>
 }
 
 export type BoneyardEnemyTargets = Readonly<Record<string, BoneyardEnemyTargetCandidate>>
@@ -449,7 +507,9 @@ export function damageBoneyardEnemy(
   if (actor.lifeState !== 'alive') {
     return { accepted: false, killed: false, store: source }
   }
-  const currentHealth = actor.currentHealth - request.amount
+  const absorbed = Math.min(actor.shieldHealth, request.amount)
+  const shieldHealth = actor.shieldHealth - absorbed
+  const currentHealth = actor.currentHealth - (request.amount - absorbed)
   const killed = currentHealth <= 0
   const nextActor: BoneyardEnemyActor = killed
     ? {
@@ -462,12 +522,17 @@ export function damageBoneyardEnemy(
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
         lifeState: 'dying',
+        lightningEffect: null,
+        shieldHealth: 0,
+        shieldMaximumHealth: 0,
       }
     : {
         ...actor,
         currentHealth,
         lastDamagedByPlayerId: request.sourcePlayerId,
         lastDamageTick: request.tick,
+        shieldHealth,
+        shieldMaximumHealth: shieldHealth === 0 ? 0 : actor.shieldMaximumHealth,
       }
   const actors = [...source.actors]
   actors[index] = nextActor
@@ -545,6 +610,7 @@ export function stepBoneyardEnemyStore(
       : stepLivingActor(work, actor, context)
     if (stepped) work.actors.push(stepped)
   }
+  stepMageShields(work)
   stepMaggots(work, context)
   stepProjectiles(work, context)
   const spawnIntents = context.resolveSpawnIntents(
@@ -610,6 +676,7 @@ function materializeSpawnIntents(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
+      lightningEffect: null,
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick + (
         targetPlayerId === null
@@ -618,6 +685,8 @@ function materializeSpawnIntents(
       ),
       position: Object.freeze({ ...intent.position }),
       rewardGranted: false,
+      shieldHealth: 0,
+      shieldMaximumHealth: 0,
       sourceSpawnIntentId: intent.id,
       spawnTick: intent.spawnTick,
       targetPlayerId,
@@ -642,15 +711,21 @@ function createBrain(
     case 'SKELETON': return {
       action: skeletonAction(config.family.weapon),
       actionProgress: 0,
+      contactTargetPlayerId: null,
       family: 'skeleton',
       markerEmitted: false,
       phase: 'approach',
     }
-    case 'SKELETONARCHER': return {
-      actionProgress: 0,
-      family: 'archer',
-      markerEmitted: false,
-      phase: 'range-control',
+    case 'SKELETONARCHER': {
+      const seed = nextBoneyardWaveRandom(work.rngState)
+      work.rngState = seed.state
+      return {
+        actionProgress: 0,
+        aimRngState: seed.state,
+        family: 'archer',
+        markerEmitted: false,
+        phase: 'range-control',
+      }
     }
     case 'SKELETONMAGE': return {
       actionProgress: 0,
@@ -659,9 +734,13 @@ function createBrain(
       family: 'mage',
       markerEmitted: false,
       phase: 'range-control',
+      shieldTicksRemaining: config.family.shieldInterval > 0
+        ? boundedMageShieldIntervalTicks(config.family.shieldInterval)
+        : 0,
     }
     case 'IMP': return {
       actionTick: 0,
+      contactTargetPlayerId: null,
       cooldownTicks: 0,
       family: 'imp',
       markerEmitted: false,
@@ -669,6 +748,7 @@ function createBrain(
     }
     case 'ZOMBIE': return {
       actionTick: 0,
+      contactTargetPlayerId: null,
       family: 'zombie',
       markerEmitted: false,
       phase: 'approach',
@@ -677,6 +757,7 @@ function createBrain(
     case 'WRAITH': return {
       actionTick: 0,
       alpha: 1,
+      contactTargetPlayerId: null,
       family: 'wraith',
       markerEmitted: false,
       phase: 'approach',
@@ -695,6 +776,7 @@ function createBrain(
       return {
         family: 'coffin',
         maggotsReleased: false,
+        nextMaggotReplenishmentTick: 0,
         phase: 'hidden',
         phaseTick: 0,
         phaseTicksRemaining: hidden.value === 0
@@ -705,12 +787,105 @@ function createBrain(
   }
 }
 
+function stepMageShields(work: WorkingStep): void {
+  for (let index = 0; index < work.actors.length; index += 1) {
+    const source = work.actors[index]!
+    if (
+      source.lifeState !== 'alive'
+      || source.brain.family !== 'mage'
+      || source.config.enemyToken !== 'SKELETONMAGE'
+      || source.config.family.shieldInterval <= 0
+    ) continue
+    const remaining = Math.max(0, source.brain.shieldTicksRemaining - 1)
+    if (remaining > 0) {
+      work.actors[index] = {
+        ...source,
+        brain: { ...source.brain, shieldTicksRemaining: remaining },
+      }
+      continue
+    }
+
+    let mage = source
+    if (source.config.family.selfShield && source.config.family.selfShieldHealth > 0) {
+      mage = withRefreshedShield(mage, source.config.family.selfShieldHealth)
+    }
+    mage = {
+      ...mage,
+      brain: {
+        ...(mage.brain as BoneyardMageBrain),
+        shieldTicksRemaining: boundedMageShieldIntervalTicks(
+          source.config.family.shieldInterval,
+        ),
+      },
+    }
+    work.actors[index] = mage
+
+    if (!source.config.family.otherShield || source.config.family.otherShieldHealth <= 0) continue
+    const allyIndex = nearestShieldAllyIndex(work.actors, source, index)
+    if (allyIndex >= 0) {
+      work.actors[allyIndex] = withRefreshedShield(
+        work.actors[allyIndex]!,
+        source.config.family.otherShieldHealth,
+      )
+    }
+  }
+}
+
+function nearestShieldAllyIndex(
+  actors: readonly BoneyardEnemyActor[],
+  source: BoneyardEnemyActor,
+  sourceIndex: number,
+): number {
+  let selectedIndex = -1
+  let selectedDistance = Number.POSITIVE_INFINITY
+  for (let index = 0; index < actors.length; index += 1) {
+    if (index === sourceIndex) continue
+    const actor = actors[index]!
+    if (actor.lifeState !== 'alive') continue
+    const distance = Math.hypot(
+      actor.position.x - source.position.x,
+      actor.position.y - source.position.y,
+    )
+    if (distance > BOUNDED_MAGE_ALLY_SHIELD_RANGE) continue
+    if (
+      distance < selectedDistance
+      || (
+        distance === selectedDistance
+        && (selectedIndex < 0 || actor.id < actors[selectedIndex]!.id)
+      )
+    ) {
+      selectedDistance = distance
+      selectedIndex = index
+    }
+  }
+  return selectedIndex
+}
+
+function withRefreshedShield(
+  actor: BoneyardEnemyActor,
+  strength: number,
+): BoneyardEnemyActor {
+  const shieldHealth = Math.max(actor.shieldHealth, strength)
+  return {
+    ...actor,
+    shieldHealth,
+    shieldMaximumHealth: Math.max(actor.shieldMaximumHealth, shieldHealth),
+  }
+}
+
 function stepLivingActor(
   work: WorkingStep,
   source: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  const targeted = refreshTarget(source, context)
+  const lightningEffect = source.lightningEffect !== null
+    && context.tick - source.lightningEffect.startedTick >= BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS
+    ? null
+    : source.lightningEffect
+  const timed = lightningEffect === source.lightningEffect
+    ? source
+    : { ...source, lightningEffect }
+  const targeted = refreshTarget(timed, context)
   const actor = targeted.brain.family === 'coffin'
     ? targeted
     : faceTarget(targeted, context.players)
@@ -734,19 +909,113 @@ function stepSkeleton(
 ): BoneyardEnemyActor {
   if (actor.targetPlayerId === null) return resetSkeleton(actor, brain)
   if (brain.phase === 'attack') {
+    if (brain.action === 'claw') {
+      return stepSkeletonClawAction(work, actor, brain, context)
+    }
     const program = NATIVE_SKELETON_ACTION_PROGRAMS[brain.action]
-    return stepProgressAction(work, actor, brain, program, context.tick, (eventId) => {
-      directPlayerDamage(work, actor, eventId)
-    })
+    return stepProgressAction(
+      work,
+      actor,
+      brain,
+      program,
+      context.tick,
+      brain.contactTargetPlayerId,
+      (eventId) => {
+        directContactPlayerDamage(
+          work,
+          actor,
+          brain.contactTargetPlayerId,
+          context.players,
+          BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
+          eventId,
+        )
+      },
+    )
   }
   if (targetWithinAttackReach(
     actor,
     context.players,
     BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
   )) {
-    return { ...actor, brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'attack' } }
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        actionProgress: 0,
+        contactTargetPlayerId: actor.targetPlayerId,
+        markerEmitted: false,
+        phase: 'attack',
+      },
+    }
   }
   return moveTowardTarget(actor, brain, context, 1)
+}
+
+function stepSkeletonClawAction(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardSkeletonBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  const program = NATIVE_SKELETON_ACTION_PROGRAMS.claw
+  const previousProgress = brain.actionProgress
+  const rawProgress = previousProgress
+    + program.progressPerTick * actor.config.attackSpeed
+  const completed = rawProgress > program.strictEnd
+  const wrappedProgress = completed
+    ? rawProgress - (program.strictEnd + 1)
+    : rawProgress
+  let markerEmitted = brain.markerEmitted
+  for (const marker of NATIVE_SKELETON_CLAW_MARKERS) {
+    if (!inclusiveCircularMarkerCrossed(
+      previousProgress,
+      wrappedProgress,
+      marker,
+      completed,
+    )) continue
+    const eventId = attackMarker(
+      work,
+      actor,
+      context.tick,
+      brain.contactTargetPlayerId,
+    )
+    directContactPlayerDamage(
+      work,
+      actor,
+      brain.contactTargetPlayerId,
+      context.players,
+      BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
+      eventId,
+    )
+    markerEmitted = true
+  }
+  if (completed) {
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        actionProgress: 0,
+        contactTargetPlayerId: null,
+        markerEmitted: false,
+        phase: 'approach',
+      },
+    }
+  }
+  return {
+    ...actor,
+    brain: { ...brain, actionProgress: rawProgress, markerEmitted },
+  }
+}
+
+function inclusiveCircularMarkerCrossed(
+  previousProgress: number,
+  currentProgress: number,
+  marker: number,
+  wrapped: boolean,
+): boolean {
+  return wrapped
+    ? marker >= previousProgress || marker <= currentProgress
+    : previousProgress <= marker && marker <= currentProgress
 }
 
 function stepArcher(
@@ -757,22 +1026,30 @@ function stepArcher(
 ): BoneyardEnemyActor {
   if (actor.targetPlayerId === null) return resetArcher(actor, brain)
   if (brain.phase === 'attack') {
-    return stepProgressAction(
+    let aimRngState = brain.aimRngState
+    const stepped = stepProgressAction(
       work,
       actor,
       brain,
       NATIVE_ARCHER_ACTION_PROGRAM,
       context.tick,
+      actor.targetPlayerId,
       () => {
-        spawnProjectile(work, actor, context.tick, 'arrow', actor.config.primaryDamage ?? 0)
+        aimRngState = emitArcherVolley(work, actor, brain.aimRngState, context)
       },
     )
+    return stepped.brain.family === 'archer' && aimRngState !== brain.aimRngState
+      ? { ...stepped, brain: { ...stepped.brain, aimRngState } }
+      : stepped
   }
   const distance = targetDistance(actor, context.players)
-  if (distance >= BOUNDED_ARCHER_MINIMUM_RANGE && distance <= BOUNDED_ENEMY_ATTACK_REACH.SKELETONARCHER) {
+  const range = actor.config.enemyToken === 'SKELETONARCHER'
+    ? BOUNDED_ARCHER_RANGE_BANDS[actor.config.family.rangeMode]
+    : BOUNDED_ARCHER_RANGE_BANDS[0]
+  if (distance >= range.minimum && distance <= range.maximum) {
     return { ...actor, brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'attack' } }
   }
-  return moveTowardTarget(actor, brain, context, distance < BOUNDED_ARCHER_MINIMUM_RANGE ? -1 : 1)
+  return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
 }
 
 function stepMage(
@@ -784,17 +1061,25 @@ function stepMage(
   if (actor.targetPlayerId === null) return resetMage(actor, brain)
   if (brain.phase === 'cast') {
     const base = NATIVE_MAGE_ACTION_PROGRAMS[brain.castProgram]
-    return stepProgressAction(
+    let lightningEffect: BoneyardEnemyActor['lightningEffect'] = null
+    const stepped = stepProgressAction(
       work,
       actor,
       brain,
       { ...base, progressPerTick: base.progressPerTick * (1 + brain.castRoll) },
       context.tick,
-      (eventId) => emitMageAttack(work, actor, context.tick, eventId),
+      actor.targetPlayerId,
+      (eventId) => {
+        lightningEffect = emitMageAttack(work, actor, context, eventId)
+      },
     )
+    return lightningEffect === null ? stepped : { ...stepped, lightningEffect }
   }
   const distance = targetDistance(actor, context.players)
-  if (distance >= BOUNDED_MAGE_MINIMUM_RANGE && distance <= BOUNDED_ENEMY_ATTACK_REACH.SKELETONMAGE) {
+  const range = actor.config.enemyToken === 'SKELETONMAGE'
+    ? BOUNDED_MAGE_RANGE_BANDS[actor.config.family.rangeMode]
+    : BOUNDED_MAGE_RANGE_BANDS[0]
+  if (distance >= range.minimum && distance <= range.maximum) {
     const program = nextBoneyardWaveRandom(work.rngState)
     const roll = nextBoneyardWaveRandom(program.state)
     work.rngState = roll.state
@@ -810,7 +1095,7 @@ function stepMage(
       },
     }
   }
-  return moveTowardTarget(actor, brain, context, distance < BOUNDED_MAGE_MINIMUM_RANGE ? -1 : 1)
+  return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
 }
 
 function stepImp(
@@ -825,7 +1110,14 @@ function stepImp(
     return {
       ...actor,
       brain: remaining === 0
-        ? { ...brain, actionTick: 0, cooldownTicks: 0, markerEmitted: false, phase: 'flight' }
+        ? {
+            ...brain,
+            actionTick: 0,
+            contactTargetPlayerId: null,
+            cooldownTicks: 0,
+            markerEmitted: false,
+            phase: 'flight',
+          }
         : { ...brain, cooldownTicks: remaining },
     }
   }
@@ -833,8 +1125,15 @@ function stepImp(
     const nextTick = brain.actionTick + actor.config.attackSpeed
     let markerEmitted = brain.markerEmitted
     if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.markerTick) {
-      const eventId = attackMarker(work, actor, context.tick)
-      directPlayerDamage(work, actor, eventId)
+      const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
+      directContactPlayerDamage(
+        work,
+        actor,
+        brain.contactTargetPlayerId,
+        context.players,
+        BOUNDED_ENEMY_ATTACK_REACH.IMP,
+        eventId,
+      )
       markerEmitted = true
     }
     if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.strictEndTick) {
@@ -843,6 +1142,7 @@ function stepImp(
         brain: {
           ...brain,
           actionTick: 0,
+          contactTargetPlayerId: null,
           cooldownTicks: BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.cooldownTicks,
           markerEmitted: false,
           phase: 'cooldown',
@@ -852,7 +1152,16 @@ function stepImp(
     return { ...actor, brain: { ...brain, actionTick: nextTick, markerEmitted } }
   }
   if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.IMP)) {
-    return { ...actor, brain: { ...brain, actionTick: 0, markerEmitted: false, phase: 'contact' } }
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        actionTick: 0,
+        contactTargetPlayerId: actor.targetPlayerId,
+        markerEmitted: false,
+        phase: 'contact',
+      },
+    }
   }
   return moveTowardTarget(actor, brain, context, 1)
 }
@@ -869,7 +1178,14 @@ function stepZombie(
     return {
       ...actor,
       brain: remaining === 0
-        ? { ...brain, actionTick: 0, markerEmitted: false, phase: 'approach', phaseTicksRemaining: 0 }
+        ? {
+            ...brain,
+            actionTick: 0,
+            contactTargetPlayerId: null,
+            markerEmitted: false,
+            phase: 'approach',
+            phaseTicksRemaining: 0,
+          }
         : { ...brain, phaseTicksRemaining: remaining },
     }
   }
@@ -877,8 +1193,15 @@ function stepZombie(
     const nextTick = brain.actionTick + actor.config.attackSpeed
     let markerEmitted = brain.markerEmitted
     if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.markerTick) {
-      const eventId = attackMarker(work, actor, context.tick)
-      directPlayerDamage(work, actor, eventId)
+      const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
+      directContactPlayerDamage(
+        work,
+        actor,
+        brain.contactTargetPlayerId,
+        context.players,
+        BOUNDED_ENEMY_ATTACK_REACH.ZOMBIE,
+        eventId,
+      )
       markerEmitted = true
     }
     if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.strictEndTick) {
@@ -887,6 +1210,7 @@ function stepZombie(
         brain: {
           ...brain,
           actionTick: 0,
+          contactTargetPlayerId: null,
           markerEmitted: false,
           phase: 'knockback',
           phaseTicksRemaining: BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.knockbackTicks,
@@ -896,7 +1220,16 @@ function stepZombie(
     return { ...actor, brain: { ...brain, actionTick: nextTick, markerEmitted } }
   }
   if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.ZOMBIE)) {
-    return { ...actor, brain: { ...brain, actionTick: 0, markerEmitted: false, phase: 'swipe' } }
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        actionTick: 0,
+        contactTargetPlayerId: actor.targetPlayerId,
+        markerEmitted: false,
+        phase: 'swipe',
+      },
+    }
   }
   return moveTowardTarget(actor, brain, context, 1)
 }
@@ -913,7 +1246,14 @@ function stepWraith(
     return {
       ...actor,
       brain: remaining === 0
-        ? { ...brain, actionTick: 0, markerEmitted: false, phase: 'approach', phaseTicksRemaining: 0 }
+        ? {
+            ...brain,
+            actionTick: 0,
+            contactTargetPlayerId: null,
+            markerEmitted: false,
+            phase: 'approach',
+            phaseTicksRemaining: 0,
+          }
         : { ...brain, alpha: 0.65 + 0.35 * remaining / 50, phaseTicksRemaining: remaining },
     }
   }
@@ -932,8 +1272,15 @@ function stepWraith(
     const nextTick = brain.actionTick + actor.config.attackSpeed
     let markerEmitted = brain.markerEmitted
     if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick) {
-      const eventId = attackMarker(work, actor, context.tick)
-      directPlayerDamage(work, actor, eventId)
+      const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
+      directContactPlayerDamage(
+        work,
+        actor,
+        brain.contactTargetPlayerId,
+        context.players,
+        BOUNDED_ENEMY_ATTACK_REACH.WRAITH,
+        eventId,
+      )
       markerEmitted = true
     }
     if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.strictEndTick) {
@@ -943,6 +1290,7 @@ function stepWraith(
           ...brain,
           actionTick: 0,
           alpha: 0.65,
+          contactTargetPlayerId: null,
           markerEmitted: false,
           phase: 'cooldown',
           phaseTicksRemaining: BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.cooldownTicks,
@@ -958,6 +1306,7 @@ function stepWraith(
       ...actor,
       brain: {
         ...brain,
+        contactTargetPlayerId: actor.targetPlayerId,
         phase: 'orbit',
         phaseTicksRemaining: NATIVE_WRAITH_RETREAT_MINIMUM_TICKS + retreat.value,
       },
@@ -1017,7 +1366,31 @@ function stepCoffin(
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
   const tick = context.tick
-  if (brain.phase === 'open') return actor
+  if (brain.phase === 'open') {
+    const family = actor.config.enemyToken === 'COFFIN' ? actor.config.family : null
+    if (
+      family === null
+      || tick < brain.nextMaggotReplenishmentTick
+      || ownedLiveMaggotCount(work.maggots, actor.id) >= family.maximumMaggots
+    ) return actor
+    const count = spawnCoffinMaggots(
+      work,
+      actor,
+      context,
+      BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentEmissionCount,
+    )
+    if (count > 0) {
+      emitEvent(work, tick, 'coffin-maggot-release', actor.id, { count })
+    }
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        nextMaggotReplenishmentTick: tick
+          + BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentIntervalTicks,
+      },
+    }
+  }
   const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
   if (remaining > 0) {
     return {
@@ -1058,15 +1431,22 @@ function stepCoffin(
       },
     }
     case 'opening': {
-      spawnCoffinMaggots(work, actor, context)
+      const count = spawnCoffinMaggots(
+        work,
+        actor,
+        context,
+        NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
+      )
       emitEvent(work, tick, 'coffin-maggot-release', actor.id, {
-        count: actor.config.enemyToken === 'COFFIN' ? actor.config.family.maximumMaggots : 0,
+        count,
       })
       return {
         ...actor,
         brain: {
           ...brain,
           maggotsReleased: true,
+          nextMaggotReplenishmentTick: tick
+            + BOUNDED_COFFIN_MAGGOT_PROGRAM.replenishmentIntervalTicks,
           phase: 'open',
           phaseTick: NATIVE_COFFIN_OPEN_TICKS,
           phaseTicksRemaining: 0,
@@ -1081,15 +1461,31 @@ function spawnCoffinMaggots(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
-): void {
-  if (actor.config.enemyToken !== 'COFFIN') return
+  requestedCount: number,
+): number {
+  if (actor.config.enemyToken !== 'COFFIN') return 0
   const family = actor.config.family
-  for (let index = 0; index < family.maximumMaggots; index += 1) {
-    const angle = index * Math.PI * (3 - Math.sqrt(5))
-    const radius = 8 + Math.floor(index / 10) * 6
+  const available = Math.max(
+    0,
+    family.maximumMaggots - ownedLiveMaggotCount(work.maggots, actor.id),
+  )
+  const count = Math.min(requestedCount, available)
+  for (let index = 0; index < count; index += 1) {
+    const launchTrajectory: BoneyardMaggotActor['launchTrajectory'] = (
+      work.nextActorId % 2 === 0 ? 'lid' : 'edge'
+    )
+    const trajectory = BOUNDED_MAGGOT_PROGRAM.launchTrajectories[launchTrajectory]
+    const headingDeg = positiveModulo(
+      actor.headingDeg
+        + (work.nextActorId - actor.id) * BOUNDED_MAGGOT_PROGRAM.launchHeadingStepDeg,
+      360,
+    )
+    const headingRadians = headingDeg * Math.PI / 180
+    const unitX = Math.sin(headingRadians)
+    const unitY = -Math.cos(headingRadians)
     const position = Object.freeze({
-      x: actor.position.x + Math.cos(angle) * radius,
-      y: actor.position.y + Math.sin(angle) * radius,
+      x: actor.position.x + unitX * trajectory.originDistance,
+      y: actor.position.y + unitY * trajectory.originDistance,
     })
     const targetPlayerId = nearestEligibleTarget(position, context.players)
     work.maggots.push(Object.freeze({
@@ -1099,20 +1495,31 @@ function spawnCoffinMaggots(
       deathEpoch: null,
       deathStartedTick: null,
       deathTick: 0,
+      emergenceTick: 0,
       gaitPose: 0,
-      headingDeg: targetHeading(position, targetPlayerId, context.players),
+      headingDeg,
       id: work.nextActorId,
+      launchTrajectory,
+      launchVelocity: Object.freeze({
+        x: unitX * trajectory.horizontalStep,
+        y: unitY * trajectory.horizontalStep,
+      }),
       lastAttackTick: null,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
       maximumHealth: family.maggotHealth,
-      nextAttackTick: context.tick + 20 + index % 10,
-      nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+      movementPhase: 'emerging',
+      nextAttackTick: context.tick
+        + BOUNDED_MAGGOT_PROGRAM.emergenceTicks
+        + BOUNDED_MAGGOT_PROGRAM.attackDelayAfterEmergenceTicks,
+      nextMovementTick: context.tick + 1,
       ownerCoffinActorId: actor.id,
       poisonDamage: family.maggotPoisonDamage,
-      poisonDuration: family.maggotPoisonDamage > 0 ? 10 : 0,
+      poisonDuration: family.maggotPoisonDamage > 0
+        ? BOUNDED_MAGGOT_PROGRAM.poisonDurationTicks
+        : 0,
       position,
       spawnTick: context.tick,
       targetPlayerId,
@@ -1124,6 +1531,17 @@ function spawnCoffinMaggots(
     })
     work.nextActorId += 1
   }
+  return count
+}
+
+function ownedLiveMaggotCount(
+  maggots: readonly BoneyardMaggotActor[],
+  ownerCoffinActorId: BoneyardEnemyActorId,
+): number {
+  return maggots.filter((maggot) => (
+    maggot.ownerCoffinActorId === ownerCoffinActorId
+    && maggot.lifeState === 'alive'
+  )).length
 }
 
 function stepMaggots(
@@ -1132,6 +1550,10 @@ function stepMaggots(
 ): void {
   const retained: BoneyardMaggotActor[] = []
   for (const source of work.maggots) {
+    if (!hasLiveCoffinOwner(work.actors, source.ownerCoffinActorId)) {
+      retireMaggot(work, source, context.tick)
+      continue
+    }
     if (source.lifeState === 'dying') {
       let maggot = source
       if (!maggot.terminalEmitted) {
@@ -1146,6 +1568,11 @@ function stepMaggots(
       } else {
         retained.push({ ...maggot, deathTick })
       }
+      continue
+    }
+
+    if (source.movementPhase === 'emerging') {
+      retained.push(stepEmergingMaggot(source, context))
       continue
     }
 
@@ -1171,6 +1598,8 @@ function stepMaggots(
         work.playerDamage.push(Object.freeze({
           actorId: source.id,
           amount: source.damage,
+          coldSlowTicks: 0,
+          dazzleTicks: 0,
           eventId,
           playerId: targetPlayerId,
           poisonDamage: source.poisonDamage,
@@ -1224,7 +1653,10 @@ function stepMaggots(
       ...source,
       gaitPose: traveled === 0
         ? source.gaitPose
-        : positiveModulo(source.gaitPose + traveled / 2, 2),
+        : positiveModulo(
+            source.gaitPose + traveled / BOUNDED_MAGGOT_PROGRAM.gaitDistancePerPose,
+            2,
+          ),
       headingDeg: actorHeadingFromVector(unitX, unitY),
       lastMovementTick: traveled === 0 ? source.lastMovementTick : context.tick,
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
@@ -1235,25 +1667,97 @@ function stepMaggots(
   work.maggots = retained
 }
 
+function hasLiveCoffinOwner(
+  actors: readonly BoneyardEnemyActor[],
+  ownerCoffinActorId: BoneyardEnemyActorId,
+): boolean {
+  return actors.some((actor) => (
+    actor.id === ownerCoffinActorId
+    && actor.lifeState === 'alive'
+    && actor.config.enemyToken === 'COFFIN'
+  ))
+}
+
+function retireMaggot(
+  work: WorkingStep,
+  maggot: BoneyardMaggotActor,
+  tick: number,
+): void {
+  const eventId = emitEvent(work, tick, 'enemy-retired', maggot.id)
+  work.retired.push(Object.freeze({ actorId: maggot.id, eventId }))
+}
+
+function stepEmergingMaggot(
+  source: BoneyardMaggotActor,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardMaggotActor {
+  const emergenceTick = Math.min(
+    BOUNDED_MAGGOT_PROGRAM.emergenceTicks,
+    Math.max(source.emergenceTick, context.tick - source.spawnTick),
+  )
+  const elapsedTicks = emergenceTick - source.emergenceTick
+  if (elapsedTicks === 0) return source
+  const delta = Object.freeze({
+    x: source.launchVelocity.x * elapsedTicks,
+    y: source.launchVelocity.y * elapsedTicks,
+  })
+  const requestedPosition = Object.freeze({
+    x: source.position.x + delta.x,
+    y: source.position.y + delta.y,
+  })
+  const position = context.resolveMovement({
+    actorId: source.id,
+    delta,
+    position: source.position,
+    radius: source.collisionRadius,
+    requestedPosition,
+  })
+  validatePoint(position, 'resolved emerging Maggot position')
+  const traveled = Math.hypot(
+    position.x - source.position.x,
+    position.y - source.position.y,
+  )
+  const movementPhase = emergenceTick >= BOUNDED_MAGGOT_PROGRAM.emergenceTicks
+    ? 'crawl' as const
+    : 'emerging' as const
+  return {
+    ...source,
+    emergenceTick,
+    lastMovementTick: traveled === 0 ? source.lastMovementTick : context.tick,
+    movementPhase,
+    nextMovementTick: context.tick + (
+      movementPhase === 'crawl' ? NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS : 1
+    ),
+    position: Object.freeze({ ...position }),
+  }
+}
+
 function stepProgressAction<B extends BoneyardSkeletonBrain | BoneyardArcherBrain | BoneyardMageBrain>(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   brain: B,
   program: ActionProgram,
   tick: number,
+  markerTargetPlayerId: string | null,
   onMarker: (eventId: number) => void,
 ): BoneyardEnemyActor {
   const actionProgress = brain.actionProgress
     + program.progressPerTick * actor.config.attackSpeed
   let markerEmitted = brain.markerEmitted
   if (!markerEmitted && actionProgress >= program.markerProgress) {
-    const eventId = attackMarker(work, actor, tick)
+    const eventId = attackMarker(work, actor, tick, markerTargetPlayerId)
     onMarker(eventId)
     markerEmitted = true
   }
   if (actionProgress > program.strictEnd) {
     const completedBrain = brain.family === 'skeleton'
-      ? { ...brain, actionProgress: 0, markerEmitted: false, phase: 'approach' as const }
+      ? {
+          ...brain,
+          actionProgress: 0,
+          contactTargetPlayerId: null,
+          markerEmitted: false,
+          phase: 'approach' as const,
+        }
       : { ...brain, actionProgress: 0, markerEmitted: false, phase: 'range-control' as const }
     return {
       ...actor,
@@ -1353,6 +1857,7 @@ function nearestEligibleTarget(
   let selectedDistance = Number.POSITIVE_INFINITY
   for (const [playerId, player] of Object.entries(players)) {
     validatePoint(player.position, `enemy target ${playerId}`)
+    validatePoint(player.velocityPerTick, `enemy target ${playerId} velocity`)
     if (!Number.isFinite(player.collisionRadius) || player.collisionRadius < 0) {
       throw new RangeError(`enemy target ${playerId} collision radius must be non-negative`)
     }
@@ -1393,10 +1898,27 @@ function targetWithinAttackReach(
   players: BoneyardEnemyTargets,
   centerReach: number,
 ): boolean {
-  if (actor.targetPlayerId === null) return false
-  const target = players[actor.targetPlayerId]
-  if (!target) return false
-  return targetDistance(actor, players) <= Math.max(
+  return targetPlayerWithinAttackReach(
+    actor,
+    actor.targetPlayerId,
+    players,
+    centerReach,
+  )
+}
+
+function targetPlayerWithinAttackReach(
+  actor: BoneyardEnemyActor,
+  targetPlayerId: string | null,
+  players: BoneyardEnemyTargets,
+  centerReach: number,
+): boolean {
+  if (targetPlayerId === null) return false
+  const target = players[targetPlayerId]
+  if (!target || !targetEligible(target)) return false
+  return Math.hypot(
+    target.position.x - actor.position.x,
+    target.position.y - actor.position.y,
+  ) <= Math.max(
     centerReach,
     actor.config.collisionRadius + target.collisionRadius,
   )
@@ -1434,48 +1956,170 @@ function attackMarker(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
   tick: number,
+  targetPlayerId: string | null = actor.targetPlayerId,
 ): number {
   return emitEvent(work, tick, 'attack-marker', actor.id, {
-    targetPlayerId: actor.targetPlayerId,
+    targetPlayerId,
   })
 }
 
 function directPlayerDamage(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
+  targetPlayerId: string | null,
   eventId: number,
 ): void {
-  if (actor.targetPlayerId === null || actor.config.primaryDamage === null) return
+  if (targetPlayerId === null || actor.config.primaryDamage === null) return
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   work.playerDamage.push(Object.freeze({
     actorId: actor.id,
     amount: actor.config.primaryDamage,
+    coldSlowTicks: 0,
+    dazzleTicks: actor.config.enemyToken === 'WRAITH'
+      ? NATIVE_WRAITH_DAZZLE_TICKS
+      : 0,
     eventId,
-    playerId: actor.targetPlayerId,
+    playerId: targetPlayerId,
     poisonDamage: zombie?.poisonPunchDamage ?? 0,
     poisonDuration: zombie?.poisonDuration ?? 0,
   }))
 }
 
+function emitArcherVolley(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  sourceRngState: number,
+  context: BoneyardEnemyStoreStepContext,
+): number {
+  if (actor.config.enemyToken !== 'SKELETONARCHER' || actor.targetPlayerId === null) {
+    return sourceRngState
+  }
+  const target = context.players[actor.targetPlayerId]
+  if (!target || !targetEligible(target)) return sourceRngState
+  const totalArrows = 1 + actor.config.family.extraArrows
+  let rngState = sourceRngState
+  for (let arrowIndex = 0; arrowIndex < totalArrows; arrowIndex += 1) {
+    const random = nextBoneyardWaveRandom(rngState)
+    rngState = random.state
+    const headingDeg = boundedArcherAimHeading({
+      accuracyMode: actor.config.family.accuracyMode,
+      arrowIndex,
+      arrowType: actor.config.family.arrowType,
+      origin: actor.position,
+      projectileSpeed: BOUNDED_ENEMY_PROJECTILE_PROGRAMS.arrow.speed,
+      randomUnit: random.value,
+      targetPosition: target.position,
+      targetVelocityPerTick: target.velocityPerTick,
+      totalArrows,
+    })
+    const poison = actor.config.family.arrowType === 'poison'
+    spawnProjectile(
+      work,
+      actor,
+      context.tick,
+      'arrow',
+      actor.config.primaryDamage ?? 0,
+      {
+        headingDeg,
+        payload: projectilePayloadForArrow(actor.config.family.arrowType),
+        poisonDamage: poison ? actor.config.secondaryDamage : 0,
+        poisonDuration: poison ? BOUNDED_ENEMY_POISON_DURATION_SECONDS : 0,
+        secondaryDamage: actor.config.family.arrowType === 'fire'
+          ? actor.config.secondaryDamage
+          : 0,
+      },
+    )
+  }
+  return rngState
+}
+
+function directContactPlayerDamage(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  targetPlayerId: string | null,
+  players: BoneyardEnemyTargets,
+  centerReach: number,
+  eventId: number,
+): void {
+  if (!targetPlayerWithinAttackReach(actor, targetPlayerId, players, centerReach)) return
+  directPlayerDamage(work, actor, targetPlayerId, eventId)
+}
+
 function emitMageAttack(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
-  tick: number,
+  context: BoneyardEnemyStoreStepContext,
   eventId: number,
-): void {
-  if (actor.config.enemyToken !== 'SKELETONMAGE') return
+): BoneyardEnemyActor['lightningEffect'] {
+  if (actor.config.enemyToken !== 'SKELETONMAGE') return null
   switch (actor.config.family.element) {
     case 'fire':
-      spawnProjectile(work, actor, tick, 'firebolt', actor.config.primaryDamage ?? 0)
-      break
+      spawnProjectile(
+        work,
+        actor,
+        context.tick,
+        'firebolt',
+        actor.config.primaryDamage ?? 0,
+        { payload: 'fire' },
+      )
+      return null
     case 'frost':
+      spawnProjectile(
+        work,
+        actor,
+        context.tick,
+        'guided-missile',
+        actor.config.primaryDamage ?? 0,
+        { coldSlowTicks: BOUNDED_ENEMY_COLD_SLOW_TICKS, payload: 'cold' },
+      )
+      return null
     case 'poison':
-      spawnProjectile(work, actor, tick, 'guided-missile', actor.config.primaryDamage ?? 0)
-      break
-    case 'lightning':
-      directPlayerDamage(work, actor, eventId)
-      break
+      spawnProjectile(
+        work,
+        actor,
+        context.tick,
+        'guided-missile',
+        actor.config.primaryDamage ?? 0,
+        {
+          payload: 'poison',
+          poisonDamage: actor.config.primaryDamage ?? 0,
+          poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+        },
+      )
+      return null
+    case 'lightning': {
+      const target = actor.targetPlayerId === null
+        ? undefined
+        : context.players[actor.targetPlayerId]
+      if (!target || !targetEligible(target)) return null
+      directPlayerDamage(work, actor, actor.targetPlayerId, eventId)
+      const lightningEventId = emitEvent(
+        work,
+        context.tick,
+        'mage-lightning',
+        actor.id,
+        {
+          sourcePosition: Object.freeze({ ...actor.position }),
+          targetPlayerId: actor.targetPlayerId,
+          targetPosition: Object.freeze({ ...target.position }),
+        },
+      )
+      return Object.freeze({
+        eventId: lightningEventId,
+        startedTick: context.tick,
+        targetPosition: Object.freeze({ ...target.position }),
+      })
+    }
   }
+}
+
+interface SpawnEnemyProjectileOptions {
+  readonly coldSlowTicks?: number
+  readonly headingDeg?: number
+  readonly payload?: BoneyardEnemyProjectilePayload
+  readonly poisonDamage?: number
+  readonly poisonDuration?: number
+  readonly secondaryDamage?: number
 }
 
 function spawnProjectile(
@@ -1484,14 +2128,16 @@ function spawnProjectile(
   tick: number,
   kind: BoneyardEnemyProjectileKind,
   damage: number,
+  options: SpawnEnemyProjectileOptions = {},
 ): BoneyardEnemyProjectile {
   const program = BOUNDED_ENEMY_PROJECTILE_PROGRAMS[kind]
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   const projectile: BoneyardEnemyProjectile = Object.freeze({
     ageTicks: 0,
+    coldSlowTicks: options.coldSlowTicks ?? 0,
     contactRadius: program.contactRadius,
-    damage: kind === 'poison-pool' ? 0 : damage,
-    headingDeg: actor.headingDeg,
+    damage: kind === 'poison-pool' ? 0 : damage + (options.secondaryDamage ?? 0),
+    headingDeg: options.headingDeg ?? actor.headingDeg,
     hitPlayerIds: Object.freeze([]),
     homing: program.homing,
     id: work.nextProjectileId,
@@ -1500,8 +2146,11 @@ function spawnProjectile(
     lifetimeTicks: program.lifetimeTicks,
     nativeTypeId: projectileNativeTypeId(kind),
     ownerActorId: actor.id,
-    poisonDamage: kind === 'poison-pool' ? damage : 0,
-    poisonDuration: kind === 'poison-pool' ? (zombie?.poisonDuration ?? 0) : 0,
+    payload: options.payload ?? (kind === 'poison-pool' ? 'poison' : 'none'),
+    poisonDamage: kind === 'poison-pool' ? damage : (options.poisonDamage ?? 0),
+    poisonDuration: kind === 'poison-pool'
+      ? (zombie?.poisonDuration ?? 0)
+      : (options.poisonDuration ?? 0),
     position: Object.freeze({ ...actor.position }),
     speed: program.speed,
     spawnTick: tick,
@@ -1588,6 +2237,8 @@ function stepProjectiles(
       work.playerDamage.push(Object.freeze({
         actorId: source.ownerActorId,
         amount: source.damage,
+        coldSlowTicks: source.coldSlowTicks,
+        dazzleTicks: 0,
         eventId,
         playerId: contact.playerId,
         poisonDamage: source.poisonDamage,
@@ -1832,7 +2483,13 @@ function resetSkeleton(
 ): BoneyardEnemyActor {
   return brain.phase === 'approach' ? actor : {
     ...actor,
-    brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'approach' },
+    brain: {
+      ...brain,
+      actionProgress: 0,
+      contactTargetPlayerId: null,
+      markerEmitted: false,
+      phase: 'approach',
+    },
   }
 }
 
@@ -1856,7 +2513,14 @@ function resetMage(actor: BoneyardEnemyActor, brain: BoneyardMageBrain): Boneyar
 function resetImp(actor: BoneyardEnemyActor, brain: BoneyardImpBrain): BoneyardEnemyActor {
   return brain.phase === 'flight' ? actor : {
     ...actor,
-    brain: { ...brain, actionTick: 0, cooldownTicks: 0, markerEmitted: false, phase: 'flight' },
+    brain: {
+      ...brain,
+      actionTick: 0,
+      contactTargetPlayerId: null,
+      cooldownTicks: 0,
+      markerEmitted: false,
+      phase: 'flight',
+    },
   }
 }
 
@@ -1869,6 +2533,7 @@ function resetZombie(
     brain: {
       ...brain,
       actionTick: 0,
+      contactTargetPlayerId: null,
       markerEmitted: false,
       phase: 'approach',
       phaseTicksRemaining: 0,
@@ -1885,6 +2550,7 @@ function resetWraith(
     brain: {
       ...brain,
       actionTick: 0,
+      contactTargetPlayerId: null,
       markerEmitted: false,
       phase: 'approach',
       phaseTicksRemaining: 0,

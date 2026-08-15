@@ -37,6 +37,23 @@ function player(displayName: string): ProtocolPlayerState {
   }
 }
 
+test('ally HUD derives remote health from authoritative player progression', () => {
+  const remote = player('Remote')
+  const rows = derivePlayerAllyHudRows({
+    local: player('Local'),
+    remote: {
+      ...remote,
+      progression: {
+        ...remote.progression,
+        currentHealth: 12.5,
+        maximumHealth: 50,
+      },
+    },
+  }, 'local')
+
+  assert.equal(rows[0]?.healthRatio, 0.25)
+})
+
 test('ally HUD derives exact nonlocal lobby identities in stable player order', () => {
   const rows = derivePlayerAllyHudRows({
     'player-3': player('Vibia'),

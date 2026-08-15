@@ -94,12 +94,13 @@ test('Skeleton equipment flags preserve exact ordered HP and damage transforms',
 
 test('Archer and Mage flags remain family-specific evaluated lanes', () => {
   const archer = evaluateBoneyardEnemyConfig('SKELETONARCHER', {
+    archerExtraArrows: 3,
     flags: ['FLAG_RANDOMSHOT', 'FLAG_RANGEEASY', 'FLAG_POISONARROW'],
   })
   assert.deepEqual(archer.family, {
     accuracyMode: 3,
     arrowType: 'poison',
-    extraArrows: 0,
+    extraArrows: 3,
     headgear: 0,
     rangeMode: 3,
   })
@@ -164,7 +165,7 @@ test('split, rotten, and Coffin child flags build their recovered payloads', () 
   })
 })
 
-test('source-only flags remain inert and every recovered flag is accepted', () => {
+test('source-only flags remain inert and every active recovered flag is accepted', () => {
   const ignored = evaluateBoneyardEnemyConfig('SKELETON', {
     flags: ['FLAG_IGNITE', 'FLAG_IMMORTALIZE'],
   })
@@ -172,6 +173,7 @@ test('source-only flags remain inert and every recovered flag is accepted', () =
   assert.equal(ignored.burning, false)
 
   for (const flag of BONEYARD_ENEMY_FLAGS) {
+    if (flag === 'FLAG_NOSKELETONS' || flag === 'FLAG_MORESKELETONS') continue
     assert.doesNotThrow(() => evaluateBoneyardEnemyConfig(tokenForFlag(flag), {
       flags: [flag],
       random: { randomArmor: true, splitUnit: 1 },
@@ -182,6 +184,21 @@ test('source-only flags remain inert and every recovered flag is accepted', () =
     () => evaluateBoneyardEnemyConfig('SKELETON', { flags: ['FLAG_NOT_NATIVE'] }),
     /unknown Boneyard enemy flag/,
   )
+})
+
+test('dormant policy/payload lanes fail closed while custom multi-arrow count is bounded', () => {
+  assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
+    flags: ['FLAG_NOSKELETONS'],
+  }), /unsupported dormant skeleton policy none/)
+  assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
+    flags: ['FLAG_MORESKELETONS'],
+  }), /unsupported dormant skeleton policy more/)
+  assert.throws(() => evaluateBoneyardEnemyConfig('SKELETONARCHER', {
+    archerExtraArrows: 9,
+  }), /extraArrows must be/)
+  assert.throws(() => evaluateBoneyardEnemyConfig('SKELETON', {
+    archerExtraArrows: 1,
+  }), /only valid for SKELETONARCHER/)
 })
 
 function tokenForFlag(flag: BoneyardEnemyFlag): BoneyardWaveEnemyToken {

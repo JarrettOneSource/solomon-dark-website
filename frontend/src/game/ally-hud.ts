@@ -62,7 +62,9 @@ export function derivePlayerAllyHudRows(
     .filter(([playerId]) => playerId !== localPlayerId)
     .sort(([leftId], [rightId]) => leftId < rightId ? -1 : leftId > rightId ? 1 : 0)
     .map(([playerId, player]) => ({
-      healthRatio: 1,
+      healthRatio: clampAllyHudHealthRatio(
+        player.progression.currentHealth / player.progression.maximumHealth,
+      ),
       id: playerId,
       identity: {
         kind: 'player',

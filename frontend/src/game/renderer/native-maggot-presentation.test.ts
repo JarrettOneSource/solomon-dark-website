@@ -49,6 +49,18 @@ test('Maggot hit presentation appends the same additive body overlay as enemies'
   ])
 })
 
+test('Maggot emergence consumes its authoritative launch height and trajectory', () => {
+  const plan = nativeMaggotPresentationPlan(maggot({
+    emergenceTick: 12,
+    launchTrajectory: 'lid',
+    state: 'emerging',
+    verticalOffset: -20,
+  }))
+
+  assert.equal(plan.layers[0]?.role, 'maggot-body-emerging-lid')
+  assert.deepEqual(plan.layers[0]?.offset, { x: 0, y: -20 })
+})
+
 function entries(snapshot: BoneyardMaggotSnapshot) {
   return nativeMaggotPresentationPlan(snapshot).layers.map(({ atlas, entry }) => ({
     atlas,
@@ -65,12 +77,15 @@ function maggot(overrides: Partial<BoneyardMaggotSnapshot>): BoneyardMaggotSnaps
     headingDeg: 0,
     hitFlash: 0,
     id: 1,
+    emergenceTick: 24,
+    launchTrajectory: 'edge',
     maximumHealth: 2,
     ownerCoffinActorId: 2,
     pose: 0,
     position: { x: 0, y: 0 },
     spawnTick: 0,
     state: 'crawl',
+    verticalOffset: 0,
     ...overrides,
   }
 }

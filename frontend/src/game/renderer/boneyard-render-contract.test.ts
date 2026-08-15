@@ -7,14 +7,21 @@ import {
   BONEYARD_RENDER_HEIGHT,
   BONEYARD_RENDER_WIDTH,
   BONEYARD_RESIDENT_CULL_PADDING,
+  INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
   boneyardCamera,
+  boneyardCameraFocus,
   boneyardResidentIsVisible,
+  boneyardSpectatorCameraState,
+  boneyardSpectatorStatus,
   boneyardStaticTiles,
   boneyardVisibleWorldBounds,
   boneyardWorldPosition,
+  type BoneyardSpectatorCameraSnapshot,
+  type BoneyardSpectatorCameraState,
 } from './boneyard-render-contract.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
+const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
 const editorRenderer = readFileSync(new URL('../../editor/render.ts', import.meta.url), 'utf8')
 
 test('Gate record 7 uses the recovered four-corner consumer in game and editor', () => {
@@ -64,6 +71,129 @@ test('Boneyard camera clamp and centering follow the logical browser viewport', 
     x: viewport.width / 2 - camera.x * camera.zoom,
     y: viewport.height / 2 - camera.y * camera.zoom,
   })
+})
+
+test('spectator follow starts after local death presentation and uses the first semantic ID', () => {
+  const dying = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    local: spectatorPlayer('Local', 'dying', 120, 130),
+    zeta: spectatorPlayer('Zeta', 'alive', 620, 630),
+  }, ['zeta', 'local', 'alpha'])
+  const inactive = boneyardSpectatorCameraState(
+    dying,
+    'local',
+    INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
+  )
+
+  assert.deepEqual(inactive, { runId: 'run-1', targetPlayerId: null })
+  assert.deepEqual(
+    boneyardCameraFocus(dying, 'local', inactive, { x: 0, y: 0 }),
+    { playerId: 'local', position: { x: 120, y: 130 } },
+  )
+  assert.equal(boneyardSpectatorStatus(dying, 'local', inactive), null)
+
+  const spectating = withLifeState(dying, 'local', 'spectating')
+  const following = boneyardSpectatorCameraState(spectating, 'local', inactive)
+  assert.deepEqual(following, { runId: 'run-1', targetPlayerId: 'alpha' })
+  assert.deepEqual(
+    boneyardCameraFocus(spectating, 'local', following, { x: 0, y: 0 }),
+    { playerId: 'alpha', position: { x: 420, y: 430 } },
+  )
+  assert.deepEqual(boneyardSpectatorStatus(spectating, 'local', following), {
+    accessibleLabel: 'Spectating Alpha. Left or right click to select the next player.',
+    instruction: 'Left / Right click: next player',
+    runId: 'run-1',
+    targetPlayerId: 'alpha',
+    title: 'Spectating Alpha',
+  })
+})
+
+test('selected spectator target stays through lethal and dying presentation before retarget', () => {
+  let snapshot = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+    zeta: spectatorPlayer('Zeta', 'alive', 620, 630),
+  }, ['alpha', 'local', 'zeta'])
+  let state: BoneyardSpectatorCameraState = {
+    runId: 'run-1',
+    targetPlayerId: 'zeta',
+  }
+
+  snapshot = withLifeState(snapshot, 'zeta', 'lethal-pending')
+  state = boneyardSpectatorCameraState(snapshot, 'local', state)
+  assert.equal(state.targetPlayerId, 'zeta')
+
+  snapshot = withLifeState(snapshot, 'zeta', 'dying')
+  state = boneyardSpectatorCameraState(snapshot, 'local', state)
+  assert.equal(state.targetPlayerId, 'zeta')
+  assert.deepEqual(
+    boneyardCameraFocus(snapshot, 'local', state, { x: 0, y: 0 }).position,
+    { x: 620, y: 630 },
+  )
+
+  state = boneyardSpectatorCameraState(snapshot, 'local', state, true)
+  assert.equal(state.targetPlayerId, 'alpha')
+
+  state = { runId: 'run-1', targetPlayerId: 'zeta' }
+  snapshot = withLifeState(snapshot, 'zeta', 'spectating')
+  assert.equal(
+    boneyardSpectatorCameraState(snapshot, 'local', state).targetPlayerId,
+    'alpha',
+  )
+})
+
+test('spectator cycling wraps living peers and lifecycle barriers clear camera and status', () => {
+  const active = spectatorSnapshot({
+    alpha: spectatorPlayer('Alpha', 'alive', 420, 430),
+    bravo: spectatorPlayer('Bravo', 'alive', 520, 530),
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+  }, ['bravo', 'local', 'alpha'])
+  let state = boneyardSpectatorCameraState(
+    active,
+    'local',
+    INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
+  )
+  assert.equal(state.targetPlayerId, 'alpha')
+  state = boneyardSpectatorCameraState(active, 'local', state, true)
+  assert.equal(state.targetPlayerId, 'bravo')
+  state = boneyardSpectatorCameraState(active, 'local', state, true)
+  assert.equal(state.targetPlayerId, 'alpha')
+
+  const gameOver = {
+    ...active,
+    run: { ...active.run, phase: 'game-over' as const },
+  }
+  state = boneyardSpectatorCameraState(gameOver, 'local', state)
+  assert.deepEqual(state, { runId: 'run-1', targetPlayerId: null })
+  assert.equal(boneyardSpectatorStatus(gameOver, 'local', state), null)
+
+  const nextRun = {
+    ...withLifeState(active, 'local', 'alive'),
+    run: { ...active.run, runId: 'run-2' },
+  }
+  state = boneyardSpectatorCameraState(nextRun, 'local', state)
+  assert.deepEqual(state, { runId: 'run-2', targetPlayerId: null })
+
+  const waiting = spectatorSnapshot({
+    local: spectatorPlayer('Local', 'spectating', 120, 130),
+  }, ['local'])
+  state = boneyardSpectatorCameraState(waiting, 'local', state)
+  assert.deepEqual(boneyardSpectatorStatus(waiting, 'local', state), {
+    accessibleLabel: 'Spectating - waiting for an alive player.',
+    instruction: null,
+    runId: 'run-1',
+    targetPlayerId: null,
+    title: 'Spectating - waiting for an alive player',
+  })
+})
+
+test('spectator status is an atomic accessible product surface', () => {
+  assert.match(boneyardRenderer, /boneyardSpectatorCameraState/)
+  assert.match(boneyardRenderer, /boneyardCameraFocus/)
+  assert.match(boneyardScene, /className="boneyard-spectator-status"/)
+  assert.match(boneyardScene, /role="status"/)
+  assert.match(boneyardScene, /aria-live="polite"/)
+  assert.match(boneyardScene, /aria-label=\{spectatorStatus\.accessibleLabel\}/)
 })
 
 test('static Boneyard tiles cover art overhang without exceeding the GPU tile size', () => {
@@ -132,3 +262,49 @@ test('visible world bounds include a conservative guard band at responsive sizes
     h: 1,
   }, bounds), false)
 })
+
+function spectatorPlayer(
+  displayName: string,
+  lifeState: 'alive' | 'lethal-pending' | 'dying' | 'spectating',
+  x: number,
+  y: number,
+): BoneyardSpectatorCameraSnapshot['players'][string] {
+  return {
+    config: { displayName },
+    position: { x, y },
+    progression: { lifeState },
+  }
+}
+
+function spectatorSnapshot(
+  players: BoneyardSpectatorCameraSnapshot['players'],
+  eligiblePlayerIds: readonly string[],
+): BoneyardSpectatorCameraSnapshot {
+  return {
+    players,
+    run: {
+      eligiblePlayerIds,
+      phase: 'active',
+      runId: 'run-1',
+    },
+  }
+}
+
+function withLifeState(
+  snapshot: BoneyardSpectatorCameraSnapshot,
+  playerId: string,
+  lifeState: 'alive' | 'lethal-pending' | 'dying' | 'spectating',
+): BoneyardSpectatorCameraSnapshot {
+  const player = snapshot.players[playerId]
+  assert.ok(player)
+  return {
+    ...snapshot,
+    players: {
+      ...snapshot.players,
+      [playerId]: {
+        ...player,
+        progression: { lifeState },
+      },
+    },
+  }
+}

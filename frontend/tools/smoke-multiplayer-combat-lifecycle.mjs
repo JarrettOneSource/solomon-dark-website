@@ -69,10 +69,12 @@ try {
     waitForOpeningEnemies(guestPage),
   ])
 
-  const firstDeath = await driveFirstPlayerToSpectating({
-    designatedVictim: { label: 'host', page: hostPage },
-    designatedSurvivor: { label: 'guest', page: guestPage },
+  const firstDeath = await driveDesignatedHostToSpectating({
+    guest: { label: 'guest', page: guestPage },
+    host: { label: 'host', page: hostPage },
   })
+  assert.equal(firstDeath.fallen.label, 'host')
+  assert.equal(firstDeath.survivor.label, 'guest')
   assert.equal(firstDeath.fallenFrame.localPlayerLifeState, 'spectating')
   assert.ok(firstDeath.fallenFrame.localPlayerDeathTick >= 159)
   assert.equal(firstDeath.fallenFrame.runPhase, 'active')
@@ -81,9 +83,21 @@ try {
   assert.equal(firstDeath.survivorFrame.runPhase, 'active')
   assert.equal(await firstDeath.fallen.page.locator('.boneyard-game-over').count(), 0)
   assert.equal(await firstDeath.survivor.page.locator('.boneyard-game-over').count(), 0)
+  const firstSpectatorCamera = assertSpectatorCameraFrame(
+    firstDeath.fallenFrame,
+    guestHub.localPlayerId,
+  )
+  const spectatorHud = await spectatorStatusReceipt(
+    firstDeath.fallen.page,
+    firstDeath.fallenFrame,
+    guestHub.localPlayerId,
+  )
   await firstDeath.fallen.page.screenshot({ path: firstDeathScreenshotPath })
 
-  const inputLock = await proveSpectatorInputLock(firstDeath.fallen.page)
+  const inputLock = await proveSpectatorInputLock(
+    firstDeath.fallen.page,
+    guestHub.localPlayerId,
+  )
   const terminal = await driveSurvivorToGameOver(firstDeath.survivor.page)
   await Promise.all([
     waitForGameOver(firstDeath.fallen.page),
@@ -99,6 +113,12 @@ try {
   assert.equal(survivorTerminalFrame.runPhase, 'game-over')
   assert.equal(fallenTerminalFrame.runId, survivorTerminalFrame.runId)
   assert.ok(survivorTerminalFrame.runGameOverTicks >= 0)
+  assert.equal(fallenTerminalFrame.spectatorTargetPlayerId, null)
+  await firstDeath.fallen.page.locator('.boneyard-spectator-status').waitFor({
+    state: 'detached',
+    timeout: 30_000,
+  })
+  assert.equal(await firstDeath.survivor.page.locator('.boneyard-spectator-status').count(), 0)
   await firstDeath.survivor.page.screenshot({ path: gameOverScreenshotPath })
   const returnToHub = await returnBothPlayersToHub(hostPage, guestPage)
 
@@ -118,6 +138,7 @@ try {
       survivorFrame: firstDeath.survivorFrame,
     },
     firstDeathScreenshotPath,
+    firstSpectatorCamera,
     gameOverScreenshotPath,
     gateCrossing,
     inputLock,
@@ -127,6 +148,7 @@ try {
       hostPlayerId: hostHub.localPlayerId,
       runId: hostInitial.runId,
     },
+    spectatorHud,
     returnToHub,
     returnedHubScreenshotPath,
     status: 'ok',
@@ -210,73 +232,66 @@ async function boneyardFrame(page) {
   ))
 }
 
-async function driveFirstPlayerToSpectating({ designatedVictim, designatedSurvivor }) {
-  let fallen = null
-  let survivor = null
+async function driveDesignatedHostToSpectating({ guest, host }) {
   const healthSamples = []
+  let sawDeathPresentation = false
   const deadline = Date.now() + 300_000
 
   while (Date.now() < deadline) {
-    const [victimFrame, survivorFrame] = await Promise.all([
-      boneyardFrame(designatedVictim.page),
-      boneyardFrame(designatedSurvivor.page),
-    ])
-    const frames = new Map([
-      [designatedVictim.label, victimFrame],
-      [designatedSurvivor.label, survivorFrame],
+    const [hostFrame, guestFrame] = await Promise.all([
+      boneyardFrame(host.page),
+      boneyardFrame(guest.page),
     ])
     healthSamples.push({
-      guest: frames.get('guest')?.localPlayerHealth,
-      host: frames.get('host')?.localPlayerHealth,
-      tick: victimFrame.tick,
+      guest: guestFrame.localPlayerHealth,
+      host: hostFrame.localPlayerHealth,
+      tick: hostFrame.tick,
     })
 
-    if (!fallen) {
-      const noLongerAlive = [designatedVictim, designatedSurvivor].filter((participant) => (
-        frames.get(participant.label).localPlayerLifeState !== 'alive'
-      ))
-      if (noLongerAlive.length > 1) {
-        throw new Error(`both players died before spectator proof: ${JSON.stringify({
-          survivorFrame,
-          victimFrame,
-        })}`)
-      }
-      if (noLongerAlive.length === 1) {
-        fallen = noLongerAlive[0]
-        survivor = fallen === designatedVictim ? designatedSurvivor : designatedVictim
-      }
+    if (guestFrame.localPlayerLifeState !== 'alive') {
+      throw new Error(`designated guest died before host spectator proof: ${JSON.stringify({
+        guestFrame,
+        hostFrame,
+      })}`)
     }
 
-    if (fallen && survivor) {
-      const fallenFrame = frames.get(fallen.label)
-      const livingFrame = frames.get(survivor.label)
-      if (livingFrame.localPlayerLifeState !== 'alive') {
-        throw new Error(`survivor died before the first death reached spectating: ${JSON.stringify({
-          fallenFrame,
-          livingFrame,
-        })}`)
-      }
-      if (fallenFrame.localPlayerLifeState === 'spectating') {
-        return {
-          fallen,
-          fallenFrame,
-          healthSamples: compactHealthSamples(healthSamples),
-          survivor,
-          survivorFrame: livingFrame,
+    if (hostFrame.localPlayerLifeState !== 'alive') {
+      if (hostFrame.localPlayerLifeState !== 'spectating') {
+        assert.equal(
+          await host.page.locator('.boneyard-spectator-status').count(),
+          0,
+          'spectator status appeared during host death presentation',
+        )
+        if (hostFrame.localPlayerLifeState === 'dying') {
+          sawDeathPresentation = true
         }
       }
-      await pulseAwayFromNearestEnemy(survivor.page, livingFrame, 240)
+      if (hostFrame.localPlayerLifeState === 'spectating') {
+        assert.equal(sawDeathPresentation, true)
+        return {
+          fallen: host,
+          fallenFrame: hostFrame,
+          healthSamples: compactHealthSamples(healthSamples),
+          sawDeathPresentation,
+          survivor: guest,
+          survivorFrame: guestFrame,
+        }
+      }
+      await pulseAwayFromNearestEnemy(guest.page, guestFrame, 240)
       continue
     }
 
-    await pulseTowardNearestEnemy(designatedVictim.page, victimFrame, 220)
-    await pulseAwayFromNearestEnemy(designatedSurvivor.page, survivorFrame, 280)
+    await Promise.all([
+      pulseTowardNearestEnemy(host.page, hostFrame, 220),
+      pulseAwayFromNearestEnemy(guest.page, guestFrame, 280),
+    ])
   }
-  throw new Error('neither player reached the native spectator state')
+  throw new Error('designated host did not reach the native spectator state')
 }
 
-async function proveSpectatorInputLock(page) {
+async function proveSpectatorInputLock(page, targetPlayerId) {
   const before = await boneyardFrame(page)
+  const cameraBefore = assertSpectatorCameraFrame(before, targetPlayerId)
   const canvas = page.locator('.boneyard-world-canvas')
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the spectator Boneyard canvas to have bounds')
@@ -287,6 +302,11 @@ async function proveSpectatorInputLock(page) {
     bounds.x + bounds.width * 0.75,
     bounds.y + bounds.height * 0.5,
   )
+  await page.mouse.click(
+    bounds.x + bounds.width * 0.25,
+    bounds.y + bounds.height * 0.5,
+    { button: 'right' },
+  )
   await page.waitForTimeout(500)
   await page.keyboard.up('s')
   await page.keyboard.up('d')
@@ -294,17 +314,60 @@ async function proveSpectatorInputLock(page) {
     document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame?.tick >= tick + 25
   ), before.tick, { timeout: 30_000 })
   const after = await boneyardFrame(page)
+  const cameraAfter = assertSpectatorCameraFrame(after, targetPlayerId)
   const displacement = Math.hypot(after.playerX - before.playerX, after.playerY - before.playerY)
   assert.ok(displacement < 0.1, `spectator movement changed position by ${displacement}`)
   assert.equal(after.localPlayerMana, before.localPlayerMana)
   assert.equal(after.localPlayerLifeState, 'spectating')
+  const hud = await spectatorStatusReceipt(page, after, targetPlayerId)
   return {
+    cameraAfter,
+    cameraBefore,
     displacement,
+    hud,
     manaAfter: after.localPlayerMana,
     manaBefore: before.localPlayerMana,
     tickAfter: after.tick,
     tickBefore: before.tick,
   }
+}
+
+function assertSpectatorCameraFrame(frame, targetPlayerId) {
+  const target = frame.playerSamples.find((player) => player.id === targetPlayerId)
+  assert.ok(target, `spectator target ${targetPlayerId} was absent from the rendered player sample`)
+  assert.equal(frame.spectatorTargetPlayerId, targetPlayerId)
+  assert.equal(frame.cameraSubjectPlayerId, targetPlayerId)
+  assert.equal(frame.cameraFocusX, target.x)
+  assert.equal(frame.cameraFocusY, target.y)
+  assert.equal(Number.isFinite(frame.cameraX), true)
+  assert.equal(Number.isFinite(frame.cameraY), true)
+  return {
+    cameraFocusX: frame.cameraFocusX,
+    cameraFocusY: frame.cameraFocusY,
+    cameraX: frame.cameraX,
+    cameraY: frame.cameraY,
+    targetDisplayName: target.displayName,
+    targetPlayerId,
+  }
+}
+
+async function spectatorStatusReceipt(page, frame, targetPlayerId) {
+  const target = frame.playerSamples.find((player) => player.id === targetPlayerId)
+  assert.ok(target, `spectator target ${targetPlayerId} was absent from the rendered player sample`)
+  const status = page.locator('.boneyard-spectator-status')
+  await status.waitFor({ timeout: 30_000 })
+  assert.equal(await status.getAttribute('data-target-player-id'), targetPlayerId)
+  const text = (await status.textContent())?.replace(/\s+/g, ' ').trim()
+  assert.equal(
+    text,
+    `Spectating ${target.displayName} | Left / Right click: next player`,
+  )
+  const accessibleLabel = await status.getAttribute('aria-label')
+  assert.equal(
+    accessibleLabel,
+    `Spectating ${target.displayName}. Left or right click to select the next player.`,
+  )
+  return { accessibleLabel, targetPlayerId, text }
 }
 
 async function driveSurvivorToGameOver(page) {

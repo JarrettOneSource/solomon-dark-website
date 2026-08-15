@@ -18,8 +18,10 @@ export function nativeMaggotPresentationPlan(
     atlas: record.atlas,
     blendMode: 'normal',
     entry: record.entry,
-    offset: { x: 0, y: 0 },
-    role: 'maggot-body',
+    offset: { x: 0, y: maggot.verticalOffset },
+    role: maggot.state === 'emerging'
+      ? `maggot-body-emerging-${maggot.launchTrajectory}`
+      : 'maggot-body',
     rotationRadians: 0,
     scale: 1,
   }

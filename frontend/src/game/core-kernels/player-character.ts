@@ -121,7 +121,11 @@ export function playerPrimaryCastOwnsFacing(
 export function planPlayerCharacterTick(
   previous: Pick<PlayerCharacterState, 'velocity'>,
   input: Pick<PlayerCharacterInput, 'movement'>,
+  movementScale: number,
 ): PlayerCharacterMovementPlan {
+  if (!Number.isFinite(movementScale) || movementScale < 0 || movementScale > 1) {
+    throw new RangeError('player movement scale must be within [0, 1]')
+  }
   const inputLength = Math.hypot(input.movement.x, input.movement.y)
   const direction = inputLength > 0
     ? {
@@ -130,12 +134,17 @@ export function planPlayerCharacterTick(
       }
     : { x: 0, y: 0 }
   const accumulated = {
-    x: Math.fround(previous.velocity.x + direction.x * PLAYER_CHARACTER_INPUT_ACCELERATION),
-    y: Math.fround(previous.velocity.y + direction.y * PLAYER_CHARACTER_INPUT_ACCELERATION),
+    x: Math.fround(
+      previous.velocity.x + direction.x * PLAYER_CHARACTER_INPUT_ACCELERATION * movementScale,
+    ),
+    y: Math.fround(
+      previous.velocity.y + direction.y * PLAYER_CHARACTER_INPUT_ACCELERATION * movementScale,
+    ),
   }
   const accumulatedLength = Math.hypot(accumulated.x, accumulated.y)
-  const capScale = accumulatedLength > PLAYER_CHARACTER_MOVEMENT_LANE_CAP
-    ? PLAYER_CHARACTER_MOVEMENT_LANE_CAP / accumulatedLength
+  const movementLaneCap = PLAYER_CHARACTER_MOVEMENT_LANE_CAP * movementScale
+  const capScale = accumulatedLength > movementLaneCap
+    ? movementLaneCap / accumulatedLength
     : 1
   const requestedVelocity = {
     x: Math.fround(accumulated.x * capScale),

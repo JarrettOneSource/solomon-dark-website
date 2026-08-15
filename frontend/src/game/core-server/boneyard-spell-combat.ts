@@ -1,12 +1,15 @@
 import {
+  createPrimarySpellContactImpact,
   PRIMARY_SPELL_AIR_REACH,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
   PRIMARY_SPELL_WATER_REACH,
+  type PrimarySpellAirTransientState,
   type PrimarySpellChannelEmission,
   type PrimarySpellProjectileKind,
   type PrimarySpellProjectileState,
   type PrimarySpellSimulationState,
+  type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
@@ -40,7 +43,6 @@ export type BoneyardSpellWorldContact = (
   radius: number,
 ) => number | null
 
-const CHANNEL_DAMAGE_PER_TICK = 0.025
 const CONTACT_TIE_EPSILON = 1e-9
 
 /**
@@ -60,6 +62,23 @@ export function resolveBoneyardSpellCombat(
   let enemies = sourceEnemies
   const consumedProjectileIds = new Set<number>()
   const hits: BoneyardSpellHit[] = []
+  const impactTransients: PrimarySpellTransientState[] = []
+  let nextSpellId = sourceSpells.nextId
+
+  const publishContactImpact = (
+    projectile: PrimarySpellProjectileState,
+    origin: Readonly<Vector2>,
+  ): void => {
+    const impact = createPrimarySpellContactImpact(
+      nextSpellId,
+      projectile,
+      origin,
+      tick,
+    )
+    if (!impact) return
+    impactTransients.push(impact)
+    nextSpellId += 1
+  }
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
     if (projectile.phase !== 'flight' || projectile.worldKey !== worldKey) continue
@@ -72,9 +91,16 @@ export function resolveBoneyardSpellCombat(
     ) ?? null
     if (
       worldContact !== null
-      && (contact === null || worldContact <= contact.pathProgress)
+      && (
+        contact === null
+        || worldContact - contact.pathProgress <= CONTACT_TIE_EPSILON
+      )
     ) {
       consumedProjectileIds.add(projectile.id)
+      publishContactImpact(
+        projectile,
+        segmentPoint(start, projectile.position, worldContact),
+      )
       continue
     }
     if (!contact) continue
@@ -90,6 +116,10 @@ export function resolveBoneyardSpellCombat(
 
     enemies = damaged.store
     consumedProjectileIds.add(projectile.id)
+    publishContactImpact(
+      projectile,
+      segmentPoint(start, projectile.position, contact.pathProgress),
+    )
     hits.push({
       actorId: contact.actor.id,
       amount,
@@ -104,14 +134,18 @@ export function resolveBoneyardSpellCombat(
   for (const emission of [...channelEmissions].sort(bySpellId)) {
     if (emission.worldKey !== worldKey) continue
 
-    for (const contact of rayContacts(
-      enemyTargets(enemies),
-      emission,
-      firstWorldContact,
-    )) {
+    const contacts = emission.kind === 'air'
+      ? selectedAirContacts(
+          enemyTargets(enemies),
+          sourceSpells,
+          emission,
+          firstWorldContact,
+        )
+      : rayContacts(enemyTargets(enemies), emission, firstWorldContact)
+    for (const contact of contacts) {
       const damaged = damageBoneyardEnemy(enemies, {
         actorId: contact.actor.id,
-        amount: CHANNEL_DAMAGE_PER_TICK,
+        amount: emission.damage,
         sourcePlayerId: emission.ownerId,
         tick,
       })
@@ -120,7 +154,7 @@ export function resolveBoneyardSpellCombat(
       enemies = damaged.store
       hits.push({
         actorId: contact.actor.id,
-        amount: CHANNEL_DAMAGE_PER_TICK,
+        amount: emission.damage,
         killed: damaged.killed,
         ownerId: emission.ownerId,
         spellId: emission.id,
@@ -130,13 +164,17 @@ export function resolveBoneyardSpellCombat(
     }
   }
 
-  const spells = consumedProjectileIds.size === 0
+  const spells = consumedProjectileIds.size === 0 && impactTransients.length === 0
     ? sourceSpells
     : {
         ...sourceSpells,
+        nextId: nextSpellId,
         projectiles: sourceSpells.projectiles.filter((projectile) => (
           !consumedProjectileIds.has(projectile.id)
         )),
+        transients: impactTransients.length === 0
+          ? sourceSpells.transients
+          : [...sourceSpells.transients, ...impactTransients],
       }
 
   return {
@@ -190,6 +228,41 @@ function projectileCollisionRadius(projectile: PrimarySpellProjectileState): num
     case 'ether': return PRIMARY_SPELL_ETHER_COLLISION_RADIUS
     case 'fire': return PRIMARY_SPELL_FIRE_COLLISION_RADIUS
   }
+}
+
+function selectedAirContacts(
+  actors: readonly BoneyardSpellTarget[],
+  spells: PrimarySpellSimulationState,
+  emission: PrimarySpellChannelEmission,
+  firstWorldContact: BoneyardSpellWorldContact | null,
+): readonly ActorContact[] {
+  const transient = spells.transients.find((effect): effect is PrimarySpellAirTransientState => (
+    effect.kind === 'air'
+    && effect.id === emission.id
+    && effect.ownerId === emission.ownerId
+    && effect.worldKey === emission.worldKey
+  ))
+  if (!transient?.targetId) return []
+  const actor = actors.find((candidate) => (
+    candidate.lifeState === 'alive'
+    && transient.targetId === `enemy:${candidate.id}`
+  ))
+  if (!actor) return []
+  const pathProgress = segmentCircleEntry(
+    emission.origin,
+    actor.position,
+    actor.position,
+    targetRadius(actor),
+  ) ?? 1
+  const worldContact = firstWorldContact?.(
+    emission.origin,
+    actor.position,
+    0,
+  ) ?? null
+  return worldContact !== null
+    && worldContact - pathProgress <= CONTACT_TIE_EPSILON
+    ? []
+    : [{ actor, pathProgress }]
 }
 
 function rayContacts(
@@ -261,6 +334,17 @@ function segmentCircleEntry(
   return null
 }
 
+function segmentPoint(
+  start: Readonly<Vector2>,
+  end: Readonly<Vector2>,
+  progress: number,
+): Vector2 {
+  return {
+    x: start.x + (end.x - start.x) * progress,
+    y: start.y + (end.y - start.y) * progress,
+  }
+}
+
 function contactPrecedes(left: ActorContact, right: ActorContact): boolean {
   const progressDifference = left.pathProgress - right.pathProgress
   return Math.abs(progressDifference) <= CONTACT_TIE_EPSILON
@@ -277,11 +361,9 @@ function targetRadius(target: BoneyardSpellTarget): number {
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {
-  switch (projectile.kind) {
-    case 'earth': return 10 * projectile.charge
-    case 'ether': return 1 + (projectile.id & 1)
-    case 'fire': return 4
-  }
+  return projectile.kind === 'earth'
+    ? projectile.damage * projectile.charge
+    : projectile.damage
 }
 
 function bySpellId(

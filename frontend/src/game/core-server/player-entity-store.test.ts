@@ -4,12 +4,15 @@ import test from 'node:test'
 import { createPlayerCharacter } from '../core-kernels/player-character.ts'
 import {
   addPlayerEntity,
+  coldSlowPlayerEntity,
   createPlayerEntityStore,
   damagePlayerEntity,
+  dazzlePlayerEntity,
   grantPlayerEntityExperience,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityDisplayHealth,
+  playerEntityMovementScale,
   playerCharacterAt,
   playerEntityId,
   poisonPlayerEntity,
@@ -103,6 +106,8 @@ test('new-run placement resets transient combat while retaining dense identity a
   store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
   store = grantPlayerEntityExperience(store, 'first', 100)
   store = poisonPlayerEntity(store, 'first', 5, 10)
+  store = coldSlowPlayerEntity(store, 'first', 200)
+  store = dazzlePlayerEntity(store, 'first', 50)
   store = damagePlayerEntity(store, 'first', 75)
   store = stepPlayerEntityCombatTick(store).store
   store = setPlayerEntitySpectating(store, 'first')
@@ -131,6 +136,9 @@ test('new-run placement resets transient combat while retaining dense identity a
   assert.equal(playerProgressionAt(store, 'first')?.currentHealth, 50)
   assert.equal(playerProgressionAt(store, 'first')?.poisonDamagePerTick, 0)
   assert.equal(playerProgressionAt(store, 'first')?.poisonTicksRemaining, 0)
+  assert.equal(playerProgressionAt(store, 'first')?.coldSlowTicksRemaining, 0)
+  assert.equal(playerProgressionAt(store, 'first')?.dazzleTicksRemaining, 0)
+  assert.equal(playerEntityMovementScale(store, 'first'), 1)
   assert.equal(playerProgressionAt(store, 'first')?.currentMana, 100)
   assert.throws(() => resetPlayerEntitiesForNewRun(store, {
     first: createPlayerCharacter(FIRST, { x: 0, y: 0 }),

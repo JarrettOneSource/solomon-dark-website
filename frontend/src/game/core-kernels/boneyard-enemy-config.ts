@@ -2,6 +2,7 @@ import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardWaveEnemyToken,
 } from './boneyard-wave-schema.ts'
+import { BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS } from './boneyard-enemy-modifiers.ts'
 
 export const BONEYARD_ENEMY_FLAGS = [
   'FLAG_HPUP',
@@ -77,6 +78,8 @@ export interface BoneyardEnemyConfigRandom {
 
 export interface EvaluateBoneyardEnemyConfigOptions {
   arenaScalars?: Partial<BoneyardEnemyArenaScalars>
+  /** Custom-authoring lane; retail wave data leaves this at zero. */
+  archerExtraArrows?: number
   flags?: readonly string[]
   random?: Partial<BoneyardEnemyConfigRandom>
   waveOrdinal?: number
@@ -278,7 +281,7 @@ export function evaluateBoneyardEnemyConfig(
     burning: false,
     chaseSpeed: base.chaseSpeed,
     experience: base.experience,
-    extraArrows: 0,
+    extraArrows: validatedExtraArrows(enemyToken, options.archerExtraArrows),
     extraDamage: 0,
     headgear: 0,
     mageElement: 'fire',
@@ -306,6 +309,7 @@ export function evaluateBoneyardEnemyConfig(
   }
   for (const flag of flags) applyFlag(config, flag, random, waveOrdinal)
   applyArenaScalars(config, validatedArenaScalars(options.arenaScalars))
+  assertImplementedPayloads(config)
 
   const common = {
     attackSpeed: config.attackSpeed,
@@ -384,6 +388,35 @@ export function evaluateBoneyardEnemyConfig(
         maximumMaggots: config.maximumMaggots,
       },
     })
+  }
+}
+
+function validatedExtraArrows(
+  enemyToken: BoneyardWaveEnemyToken,
+  value: number | undefined,
+): number {
+  if (value === undefined) return 0
+  if (enemyToken !== 'SKELETONARCHER') {
+    throw new Error('extraArrows is only valid for SKELETONARCHER')
+  }
+  if (
+    !Number.isSafeInteger(value)
+    || value < 0
+    || value > BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS
+  ) {
+    throw new RangeError(
+      `extraArrows must be a safe integer within 0..${BOUNDED_ARCHER_MAXIMUM_EXTRA_ARROWS}`,
+    )
+  }
+  return value
+}
+
+function assertImplementedPayloads(config: MutableConfig): void {
+  if (config.skeletonPolicy !== 'default') {
+    throw new Error(`unsupported dormant skeleton policy ${config.skeletonPolicy}`)
+  }
+  if (config.tertiaryDamage !== 0 || config.extraDamage !== 0) {
+    throw new Error('unsupported dormant tertiary/extra enemy damage payload')
   }
 }
 

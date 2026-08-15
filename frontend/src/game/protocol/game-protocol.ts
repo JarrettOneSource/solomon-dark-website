@@ -45,6 +45,10 @@ import {
 } from '../core-kernels/game-run.ts'
 import { PLAYER_LIFE_STATES, type PlayerLifeState } from '../core-kernels/player-combat.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
+import {
+  BOUNDED_ENEMY_COLD_SLOW_TICKS,
+  NATIVE_WRAITH_DAZZLE_TICKS,
+} from '../core-kernels/boneyard-enemy-modifiers.ts'
 import type {
   BoneyardBounds,
   BoneyardChoice,
@@ -65,7 +69,9 @@ import type {
   BoneyardEnemyAction,
   BoneyardEnemyAnimationSnapshot,
   BoneyardEnemyCoffinState,
+  BoneyardEnemyEffectSnapshot,
   BoneyardEnemyProjectileKind,
+  BoneyardEnemyProjectilePayload,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMaggotSnapshot,
@@ -78,8 +84,12 @@ import type {
   ProtocolStudentState,
 } from './game-state.ts'
 import {
+  BONEYARD_ENEMY_EFFECT_ROLES,
   BONEYARD_ENEMY_EVENT_TYPES,
+  BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
   BONEYARD_ENEMY_TERMINAL_OUTPUTS,
+  BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES,
+  BONEYARD_MAGGOT_STATES,
 } from './game-state.ts'
 import { REPLICATED_ENTITY_TYPE_REGISTRY } from './entity-replication.ts'
 import type {
@@ -96,7 +106,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 14
+export const GAME_PROTOCOL_VERSION = 17
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -111,6 +121,7 @@ const MAX_BONEYARD_ENEMY_EVENTS = 512
 const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
 const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
+const MAX_BONEYARD_ENEMY_EFFECTS = 3
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
@@ -694,8 +705,10 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   const source = record(value, field)
   onlyKeys(source, field, [
     'activeWeldBuildId',
+    'coldSlowTicksRemaining',
     'currentHealth',
     'currentMana',
+    'dazzleTicksRemaining',
     'deathEpoch',
     'deathTick',
     'experience',
@@ -727,6 +740,20 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   }
   if (poisonDamagePerTick < 0) {
     throw new GameProtocolError(`${field}.poisonDamagePerTick is out of range`)
+  }
+  const coldSlowTicksRemaining = nonnegativeInteger(
+    source.coldSlowTicksRemaining,
+    `${field}.coldSlowTicksRemaining`,
+  )
+  if (coldSlowTicksRemaining > BOUNDED_ENEMY_COLD_SLOW_TICKS) {
+    throw new GameProtocolError(`${field}.coldSlowTicksRemaining is out of range`)
+  }
+  const dazzleTicksRemaining = nonnegativeInteger(
+    source.dazzleTicksRemaining,
+    `${field}.dazzleTicksRemaining`,
+  )
+  if (dazzleTicksRemaining > NATIVE_WRAITH_DAZZLE_TICKS) {
+    throw new GameProtocolError(`${field}.dazzleTicksRemaining is out of range`)
   }
   const level = positiveInteger(source.level, `${field}.level`)
   if (level > 75) throw new GameProtocolError(`${field}.level is out of range`)
@@ -770,8 +797,10 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   }
   return {
     activeWeldBuildId,
+    coldSlowTicksRemaining,
     currentHealth,
     currentMana,
+    dazzleTicksRemaining,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
@@ -1407,8 +1436,8 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     throw new GameProtocolError(`${field}.kind is not a projectile primary`)
   }
   onlyKeys(source, field, [
-    'ageTicks', 'charge', 'direction', 'flightTicks', 'id', 'kind', 'ownerId',
-    'phase', 'position', 'velocity', 'worldKey',
+    'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
+    'ownerId', 'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? ['assemblyCharge'] : []),
     ...(source.kind === 'ether' ? ['headingDegrees', 'targetId', 'turnAccumulator'] : []),
   ])
@@ -1434,6 +1463,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   const projectile = {
     ageTicks,
     charge,
+    damage: positiveFinite(source.damage, `${field}.damage`),
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
     id: positiveInteger(source.id, `${field}.id`),
@@ -1997,6 +2027,11 @@ function boneyardEnemyEvents(
         case 'enemy-death':
         case 'enemy-retired': return []
         case 'enemy-terminal-output': return ['count', 'output']
+        case 'mage-lightning': return [
+          'sourcePosition',
+          'targetPlayerId',
+          'targetPosition',
+        ]
         case 'projectile-impact':
         case 'projectile-retired':
         case 'projectile-spawned': return ['projectileId', 'targetPlayerId']
@@ -2047,6 +2082,15 @@ function boneyardEnemyEvents(
       }
       case 'enemy-death':
       case 'enemy-retired': return base
+      case 'mage-lightning': return {
+        ...base,
+        sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
+        targetPlayerId: validatedPlayerId(
+          source.targetPlayerId,
+          `${eventField}.targetPlayerId`,
+        ),
+        targetPosition: vector(source.targetPosition, `${eventField}.targetPosition`),
+      }
       case 'enemy-terminal-output': {
         const output = limitedString(source.output, `${eventField}.output`, 64)
         if (!(BONEYARD_ENEMY_TERMINAL_OUTPUTS as readonly string[]).includes(output)) {
@@ -2079,6 +2123,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
   const source = record(value, field)
   onlyKeys(source, field, [
     'animation',
+    'armored',
     'currentHealth',
     'enemyToken',
     'flags',
@@ -2087,6 +2132,8 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     'maximumHealth',
     'nativeTypeId',
     'position',
+    'shieldHealth',
+    'shieldMaximumHealth',
     'spawnTick',
   ])
   const enemyToken = limitedString(source.enemyToken, `${field}.enemyToken`, 32)
@@ -2123,8 +2170,21 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
   if (currentHealth > maximumHealth) {
     throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
   }
+  const shieldHealth = nonnegativeFinite(source.shieldHealth, `${field}.shieldHealth`)
+  const shieldMaximumHealth = nonnegativeFinite(
+    source.shieldMaximumHealth,
+    `${field}.shieldMaximumHealth`,
+  )
+  if (shieldHealth > shieldMaximumHealth) {
+    throw new GameProtocolError(`${field}.shieldHealth exceeds shieldMaximumHealth`)
+  }
+  const armored = boolean(source.armored, `${field}.armored`)
+  if (armored && enemyToken !== 'SKELETON') {
+    throw new GameProtocolError(`${field}.armored is only valid for SKELETON`)
+  }
   return {
     animation: boneyardEnemyAnimation(source.animation, `${field}.animation`),
+    armored,
     currentHealth,
     enemyToken: enemyToken as BoneyardEnemySnapshot['enemyToken'],
     flags,
@@ -2133,6 +2193,8 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     maximumHealth,
     nativeTypeId,
     position: boneyardPoint(source.position, `${field}.position`),
+    shieldHealth,
+    shieldMaximumHealth,
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
   }
 }
@@ -2152,6 +2214,7 @@ function boneyardEnemyProjectileSnapshot(
     'lifetimeTicks',
     'nativeTypeId',
     'ownerActorId',
+    'payload',
     'position',
     'spawnTick',
   ])
@@ -2175,6 +2238,16 @@ function boneyardEnemyProjectileSnapshot(
   if (ageTicks > lifetimeTicks) {
     throw new GameProtocolError(`${field}.ageTicks exceeds lifetimeTicks`)
   }
+  const payload = limitedString(source.payload, `${field}.payload`, 16)
+  if (!(BONEYARD_ENEMY_PROJECTILE_PAYLOADS as readonly string[]).includes(payload)) {
+    throw new GameProtocolError(`${field}.payload is not supported`)
+  }
+  if (!projectilePayloadMatchesKind(
+    kind as BoneyardEnemyProjectileKind,
+    payload as BoneyardEnemyProjectilePayload,
+  )) {
+    throw new GameProtocolError(`${field}.payload does not match kind`)
+  }
   return {
     ageTicks,
     contactRadius: positiveFinite(source.contactRadius, `${field}.contactRadius`),
@@ -2185,8 +2258,22 @@ function boneyardEnemyProjectileSnapshot(
     lifetimeTicks,
     nativeTypeId: nativeTypeId as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    payload: payload as BoneyardEnemyProjectilePayload,
     position: boneyardPoint(source.position, `${field}.position`),
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+  }
+}
+
+function projectilePayloadMatchesKind(
+  kind: BoneyardEnemyProjectileKind,
+  payload: BoneyardEnemyProjectilePayload,
+): boolean {
+  switch (kind) {
+    case 'arrow': return payload === 'normal' || payload === 'fire' || payload === 'poison'
+    case 'firebolt': return payload === 'fire'
+    case 'guided-missile': return payload === 'cold' || payload === 'poison'
+    case 'demon-bomb': return payload === 'none'
+    case 'poison-pool': return payload === 'poison'
   }
 }
 
@@ -2197,19 +2284,37 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     'currentHealth',
     'deathEpoch',
     'deathTick',
+    'emergenceTick',
     'headingDeg',
     'hitFlash',
     'id',
+    'launchTrajectory',
     'maximumHealth',
     'ownerCoffinActorId',
     'pose',
     'position',
     'spawnTick',
     'state',
+    'verticalOffset',
   ])
   const state = limitedString(source.state, `${field}.state`, 16)
-  if (state !== 'crawl' && state !== 'bite' && state !== 'death') {
+  if (!(BONEYARD_MAGGOT_STATES as readonly string[]).includes(state)) {
     throw new GameProtocolError(`${field}.state is not supported`)
+  }
+  const launchTrajectory = limitedString(
+    source.launchTrajectory,
+    `${field}.launchTrajectory`,
+    16,
+  )
+  if (!(BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES as readonly string[]).includes(launchTrajectory)) {
+    throw new GameProtocolError(`${field}.launchTrajectory is not supported`)
+  }
+  const emergenceTick = nonnegativeInteger(source.emergenceTick, `${field}.emergenceTick`)
+  if (emergenceTick > 24) {
+    throw new GameProtocolError(`${field}.emergenceTick is out of range`)
+  }
+  if ((state === 'emerging') !== (emergenceTick < 24) && state !== 'death') {
+    throw new GameProtocolError(`${field}.emergenceTick does not match state`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
   if (alpha < 0 || alpha > 1) {
@@ -2228,14 +2333,20 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
   if (currentHealth > maximumHealth) {
     throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
   }
+  const verticalOffset = finite(source.verticalOffset, `${field}.verticalOffset`)
+  if (verticalOffset > 0) {
+    throw new GameProtocolError(`${field}.verticalOffset must be non-positive`)
+  }
   return {
     alpha,
     currentHealth,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
+    emergenceTick,
     headingDeg,
     hitFlash,
     id: positiveInteger(source.id, `${field}.id`),
+    launchTrajectory: launchTrajectory as BoneyardMaggotSnapshot['launchTrajectory'],
     maximumHealth,
     ownerCoffinActorId: positiveInteger(
       source.ownerCoffinActorId,
@@ -2244,7 +2355,8 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     pose: nonnegativeFinite(source.pose, `${field}.pose`),
     position: boneyardPoint(source.position, `${field}.position`),
     spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
-    state,
+    state: state as BoneyardMaggotSnapshot['state'],
+    verticalOffset,
   }
 }
 
@@ -2302,11 +2414,24 @@ function boneyardEnemyAnimation(
   if (alpha < 0 || alpha > 1 || hitFlash < 0 || hitFlash > 1) {
     throw new GameProtocolError(`${field} alpha channels must be within [0,1]`)
   }
-  if (limitedArray(source.effects, `${field}.effects`, 0).length !== 0) {
-    throw new GameProtocolError(`${field}.effects must be empty in protocol 14`)
+  const effects = limitedArray(
+    source.effects,
+    `${field}.effects`,
+    MAX_BONEYARD_ENEMY_EFFECTS,
+  ).map((effect, index) => boneyardEnemyEffect(
+    effect,
+    `${field}.effects[${index}]`,
+  ))
+  if (new Set(effects.map((effect) => effect.id)).size !== effects.length) {
+    throw new GameProtocolError(`${field}.effects must have unique ids`)
+  }
+  if (new Set(effects.map((effect) => effect.role)).size !== effects.length) {
+    throw new GameProtocolError(`${field}.effects must have unique roles`)
   }
   if (limitedArray(source.maggots, `${field}.maggots`, 0).length !== 0) {
-    throw new GameProtocolError(`${field}.maggots must be empty in protocol 14`)
+    throw new GameProtocolError(
+      `${field}.maggots must be empty in protocol ${GAME_PROTOCOL_VERSION}`,
+    )
   }
   return {
     action: action as BoneyardEnemyAction | null,
@@ -2336,7 +2461,7 @@ function boneyardEnemyAnimation(
       source.demonRearLimbRotationRadians,
       `${field}.demonRearLimbRotationRadians`,
     ),
-    effects: [],
+    effects,
     gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
     hitFlash,
     impEffectFrame: integer(source.impEffectFrame, `${field}.impEffectFrame`),
@@ -2363,6 +2488,62 @@ function boneyardEnemyAnimation(
       source.zombieRearArmRotationRadians,
       `${field}.zombieRearArmRotationRadians`,
     ),
+  }
+}
+
+function boneyardEnemyEffect(
+  value: unknown,
+  field: string,
+): BoneyardEnemyEffectSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'alpha',
+    'atlas',
+    'blendMode',
+    'entry',
+    'id',
+    'offset',
+    'role',
+    'rotationRadians',
+    'scale',
+  ])
+  const role = limitedString(source.role, `${field}.role`, 32)
+  if (!(BONEYARD_ENEMY_EFFECT_ROLES as readonly string[]).includes(role)) {
+    throw new GameProtocolError(`${field}.role is not supported`)
+  }
+  const atlas = limitedString(source.atlas, `${field}.atlas`, 16)
+  const blendMode = limitedString(source.blendMode, `${field}.blendMode`, 16)
+  if (atlas !== 'BadGuys' && atlas !== 'DeadHawg') {
+    throw new GameProtocolError(`${field}.atlas is not supported`)
+  }
+  if (blendMode !== 'add' && blendMode !== 'normal') {
+    throw new GameProtocolError(`${field}.blendMode is not supported`)
+  }
+  const entry = nonnegativeInteger(source.entry, `${field}.entry`)
+  if (
+    (role === 'burning-fire'
+      && (atlas !== 'DeadHawg' || blendMode !== 'normal' || entry < 46 || entry > 77))
+    || (role === 'mage-lightning-source'
+      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 381))
+    || (role === 'mage-lightning-target'
+      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 382))
+  ) {
+    throw new GameProtocolError(`${field} fields do not match role`)
+  }
+  const alpha = finite(source.alpha, `${field}.alpha`)
+  if (alpha < 0 || alpha > 1) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,1]`)
+  }
+  return {
+    alpha,
+    atlas,
+    blendMode,
+    entry,
+    id: positiveInteger(source.id, `${field}.id`),
+    offset: boneyardPoint(source.offset, `${field}.offset`),
+    role: role as BoneyardEnemyEffectSnapshot['role'],
+    rotationRadians: finite(source.rotationRadians, `${field}.rotationRadians`),
+    scale: positiveFinite(source.scale, `${field}.scale`),
   }
 }
 

@@ -45,19 +45,28 @@ import type {
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
-import type { BoneyardSolomonSnapshot } from '../protocol/game-state.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  BoneyardSolomonSnapshot,
+} from '../protocol/game-state.ts'
 import { PlayerWorldView } from './hub-actors.ts'
 import { boneyardSolomonVisualState } from './boneyard-solomon-render.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
 import { initialHubResolution } from './hub-render-contract.ts'
 import {
   BONEYARD_CAMERA_ZOOM,
+  INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
   type BoneyardBounds,
   boneyardCamera,
+  boneyardCameraFocus,
   boneyardResidentIsVisible,
+  boneyardSpectatorCameraState,
+  boneyardSpectatorStatus,
   boneyardStaticTiles,
   boneyardVisibleWorldBounds,
   boneyardWorldPosition,
+  type BoneyardSpectatorCameraState,
+  type BoneyardSpectatorStatusPresentation,
 } from './boneyard-render-contract.ts'
 import {
   destroyBoneyardWorldTextures,
@@ -102,8 +111,11 @@ import {
   nativeFireImpactLightSource,
 } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
+  cameraFocusX: number
+  cameraFocusY: number
   complexShadowCasterCount: number
   complexShadowQuadCount: number
   complexShadowRecordCount: number
@@ -120,9 +132,13 @@ interface BoneyardRendererFrameDiagnostics {
     y: number
   }>[]
   enemyProjectileCount: number
+  enemyProjectileIds: readonly number[]
   frameCount: number
   foregroundZIndex: number
   gateLeafCount: number
+  cameraSubjectPlayerId: string | null
+  cameraX: number
+  cameraY: number
   cameraRenderGroup: boolean
   culledResidentCount: number
   localPlayerDeathTick: number
@@ -139,11 +155,20 @@ interface BoneyardRendererFrameDiagnostics {
   maxMainLightScalar: number
   maxMainZIndex: number
   maggotCount: number
+  mageLightningCount: number
   minMainLightScalar: number
   minTreeAlpha: number
   minTreeLightScalar: number
   painterBandCount: number
   playerCount: number
+  playerDeathBurstCount: number
+  playerSamples: readonly Readonly<{
+    displayName: string
+    id: string
+    lifeState: string
+    x: number
+    y: number
+  }>[]
   primarySpellCount: number
   primarySpellKinds: readonly string[]
   playerScreenX: number
@@ -164,6 +189,7 @@ interface BoneyardRendererFrameDiagnostics {
   runGameOverTicks: number
   runId: string | null
   runPhase: string
+  spectatorTargetPlayerId: string | null
   visibleMainLayerCount: number
   visibleOversizedResidentCount: number
   visibleResidentCount: number
@@ -172,9 +198,12 @@ interface BoneyardRendererFrameDiagnostics {
 export interface BoneyardWorldRenderer {
   readonly canvas: HTMLCanvasElement
   camera(snapshot: GameSnapshot): Camera
+  consumeEnemyEvent(event: BoneyardEnemyEventSnapshot): void
+  cycleSpectatorTarget(snapshot: GameSnapshot): boolean
   destroy(): void
   render(snapshot: GameSnapshot): void
   resize(viewport: GameViewportLayout, devicePixelRatio?: number): void
+  spectatorStatus(snapshot: GameSnapshot): BoneyardSpectatorStatusPresentation | null
 }
 
 interface BoneyardWorldRendererOptions {
@@ -306,7 +335,7 @@ export async function createBoneyardWorldRenderer(
     staticWorld.shadowCasters,
     staticWorld.treeInputs,
     staticWorld.treeResidents,
-    options.initialSnapshot.tick,
+    options.initialSnapshot,
   )
   const regionLightField = new BoneyardRegionLightField(
     world,
@@ -336,7 +365,11 @@ export async function createBoneyardWorldRenderer(
   let destroyed = false
   let frameCount = 0
   let resolution = initialResolution
+  let spectatorCamera: BoneyardSpectatorCameraState =
+    INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
+    cameraFocusX: Number.NaN,
+    cameraFocusY: Number.NaN,
     complexShadowCasterCount: 0,
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
@@ -345,9 +378,13 @@ export async function createBoneyardWorldRenderer(
     fadedTreeCount: 0,
     enemySamples: [],
     enemyProjectileCount: 0,
+    enemyProjectileIds: [],
     frameCount: 0,
     foregroundZIndex: 0,
     gateLeafCount: 0,
+    cameraSubjectPlayerId: null,
+    cameraX: Number.NaN,
+    cameraY: Number.NaN,
     cameraRenderGroup: world.isRenderGroup,
     culledResidentCount: 0,
     localPlayerDeathTick: 0,
@@ -364,11 +401,14 @@ export async function createBoneyardWorldRenderer(
     maxMainLightScalar: 0,
     maxMainZIndex: 0,
     maggotCount: 0,
+    mageLightningCount: 0,
     minMainLightScalar: 0,
     minTreeAlpha: 1,
     minTreeLightScalar: 0,
     painterBandCount: 0,
     playerCount: 0,
+    playerDeathBurstCount: 0,
+    playerSamples: [],
     primarySpellCount: 0,
     primarySpellKinds: [],
     playerScreenX: Number.NaN,
@@ -389,6 +429,7 @@ export async function createBoneyardWorldRenderer(
     runGameOverTicks: 0,
     runId: options.initialSnapshot.run.runId,
     runPhase: options.initialSnapshot.run.phase,
+    spectatorTargetPlayerId: null,
     visibleMainLayerCount: 0,
     visibleOversizedResidentCount: 0,
     visibleResidentCount: 0,
@@ -400,10 +441,29 @@ export async function createBoneyardWorldRenderer(
     writable: false,
   })
 
-  const cameraFor = (snapshot: GameSnapshot): Camera => {
+  const cameraFocusFor = (
+    snapshot: GameSnapshot,
+    advance = false,
+  ) => {
     requireBoneyardSnapshot(snapshot, options.boneyard.runId)
+    spectatorCamera = boneyardSpectatorCameraState(
+      snapshot,
+      options.playerId,
+      spectatorCamera,
+      advance,
+    )
+    return boneyardCameraFocus(
+      snapshot,
+      options.playerId,
+      spectatorCamera,
+      options.boneyard.scene.spawn,
+    )
+  }
+
+  const cameraFor = (snapshot: GameSnapshot): Camera => {
+    const focus = cameraFocusFor(snapshot)
     return boneyardCamera(
-      snapshot.players[options.playerId]?.position ?? options.boneyard.scene.spawn,
+      focus.position,
       options.boneyard.scene.bounds,
       viewport,
     )
@@ -412,13 +472,32 @@ export async function createBoneyardWorldRenderer(
   const renderer: BoneyardWorldRenderer = {
     canvas,
     camera: cameraFor,
+    consumeEnemyEvent(event) {
+      if (destroyed || event.runId !== options.boneyard.runId) return
+      scene.consumeEnemyEvent(event)
+    },
+    cycleSpectatorTarget(snapshot) {
+      if (destroyed) return false
+      requireBoneyardSnapshot(snapshot, options.boneyard.runId)
+      const localPlayer = snapshot.players[options.playerId]
+      const active = snapshot.run.phase === 'active'
+        && snapshot.run.runId !== null
+        && localPlayer?.progression.lifeState === 'spectating'
+      cameraFocusFor(snapshot, active)
+      return active
+    },
     render(snapshot) {
       if (destroyed) return
       requireBoneyardSnapshot(snapshot, options.boneyard.runId)
       const player = snapshot.players[options.playerId]
       if (!player) return
       frameCount += 1
-      const camera = cameraFor(snapshot)
+      const cameraFocus = cameraFocusFor(snapshot)
+      const camera = boneyardCamera(
+        cameraFocus.position,
+        options.boneyard.scene.bounds,
+        viewport,
+      )
       visibility.update(camera, viewport)
       const painter = scene.update(
         snapshot,
@@ -437,6 +516,11 @@ export async function createBoneyardWorldRenderer(
       world.position.set(worldPosition.x, worldPosition.y)
       application.render()
 
+      frameDiagnostics.cameraFocusX = cameraFocus.position.x
+      frameDiagnostics.cameraFocusY = cameraFocus.position.y
+      frameDiagnostics.cameraSubjectPlayerId = cameraFocus.playerId
+      frameDiagnostics.cameraX = camera.x
+      frameDiagnostics.cameraY = camera.y
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
       frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
@@ -454,6 +538,7 @@ export async function createBoneyardWorldRenderer(
         y: enemy.position.y,
       }))
       frameDiagnostics.enemyProjectileCount = scene.enemyProjectileCount
+      frameDiagnostics.enemyProjectileIds = scene.enemyProjectileIds
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
       frameDiagnostics.culledResidentCount = visibility.culledResidentCount
@@ -471,11 +556,20 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxMainLightScalar = painter.maxMainLightScalar
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
       frameDiagnostics.maggotCount = scene.maggotCount
+      frameDiagnostics.mageLightningCount = scene.mageLightningCount
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.minTreeAlpha = painter.minTreeAlpha
       frameDiagnostics.minTreeLightScalar = painter.minTreeLightScalar
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = scene.playerCount
+      frameDiagnostics.playerDeathBurstCount = scene.playerDeathBurstCount
+      frameDiagnostics.playerSamples = Object.entries(snapshot.players).map(([id, sample]) => ({
+        displayName: sample.config.displayName,
+        id,
+        lifeState: sample.progression.lifeState,
+        x: sample.position.x,
+        y: sample.position.y,
+      }))
       frameDiagnostics.primarySpellCount = scene.primarySpellCount
       frameDiagnostics.primarySpellKinds = scene.primarySpellKinds
       frameDiagnostics.playerScreenX = (player.position.x - camera.x) * camera.zoom
@@ -488,6 +582,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.runGameOverTicks = snapshot.run.gameOverTicks
       frameDiagnostics.runId = snapshot.run.runId
       frameDiagnostics.runPhase = snapshot.run.phase
+      frameDiagnostics.spectatorTargetPlayerId = spectatorCamera.targetPlayerId
       frameDiagnostics.solomonFrame = scene.solomonFrame
       frameDiagnostics.tick = snapshot.tick
       frameDiagnostics.treeAlphaMismatchCount = painter.treeAlphaMismatchCount
@@ -507,6 +602,8 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.minTreeLightScalar = `${painter.minTreeLightScalar}`
       canvas.dataset.enemyProjectileCount = `${scene.enemyProjectileCount}`
       canvas.dataset.maggotCount = `${scene.maggotCount}`
+      canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
+      canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -532,6 +629,7 @@ export async function createBoneyardWorldRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
+      spectatorCamera = INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
       application.stage.removeChild(world)
       scene.destroy()
       regionLightField.destroy()
@@ -541,6 +639,11 @@ export async function createBoneyardWorldRenderer(
       destroyBoneyardWorldTextures(textures)
       application.destroy({ removeView: true })
       canvas.remove()
+    },
+    spectatorStatus(snapshot) {
+      if (destroyed) return null
+      cameraFocusFor(snapshot)
+      return boneyardSpectatorStatus(snapshot, options.playerId, spectatorCamera)
     },
   }
 
@@ -589,6 +692,7 @@ class BoneyardDynamicScene {
   private readonly mainLayers: readonly MainLayer[]
   private readonly mainResidents: ReadonlyMap<number, ResidentTexture>
   private readonly players = new Map<string, PlayerWorldView>()
+  private readonly playerDeathBursts: PlayerDeathBurstViews
   private readonly maggots: NativeMaggotViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly positionedDynamics = new Map<string, { row: number; zIndex: number }>()
@@ -610,7 +714,7 @@ class BoneyardDynamicScene {
     shadowCasters: readonly BoneyardComplexShadowStaticCaster[],
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
-    startTick: number,
+    initialSnapshot: GameSnapshot,
   ) {
     this.boneyard = boneyard
     this.root = root
@@ -619,7 +723,10 @@ class BoneyardDynamicScene {
     this.mainResidents = mainResidents
     this.foreground = foreground
     this.complexShadows = new BoneyardComplexShadowPresentation(root, shadowCasters)
-    this.treeOcclusion = new BoneyardTreeOcclusionPresentation(treeInputs, startTick)
+    this.treeOcclusion = new BoneyardTreeOcclusionPresentation(
+      treeInputs,
+      initialSnapshot.tick,
+    )
     this.treeResidents = treeResidents
     this.primarySpells = new PrimarySpellWorldView(root, textures)
     this.staticPainterLayers = mainLayers.map((layer, layerIndex) => ({
@@ -629,9 +736,10 @@ class BoneyardDynamicScene {
       sourceOrder: layer.sourceOrder,
     }))
     this.gates = new BoneyardGateViews(root, textures)
-    this.enemies = new NativeEnemyViews(root, textures)
+    this.enemies = new NativeEnemyViews(root, textures, initialSnapshot.tick)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
+    this.playerDeathBursts = new PlayerDeathBurstViews(root, textures, initialSnapshot)
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
@@ -674,6 +782,7 @@ class BoneyardDynamicScene {
     this.enemies.update(enemySnapshots, snapshot.tick)
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles)
     this.maggots.update(snapshot.world.maggots)
+    this.playerDeathBursts.update(snapshot)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
     )].sort().join(',')
@@ -915,7 +1024,9 @@ class BoneyardDynamicScene {
       maxDynamicZIndex = Math.max(maxDynamicZIndex, layer.zIndex)
     }
     for (const [id, view] of this.players) {
-      view.setDepth(positionedDynamics.get(`player:${id}`)?.zIndex ?? 1)
+      const depth = positionedDynamics.get(`player:${id}`)?.zIndex ?? 1
+      view.setDepth(depth)
+      this.playerDeathBursts.setDepth(id, depth)
     }
     for (const layer of this.primarySpells.painterLayers()) {
       this.primarySpells.setDepth(
@@ -987,6 +1098,14 @@ class BoneyardDynamicScene {
     return this.enemies.size
   }
 
+  consumeEnemyEvent(event: BoneyardEnemyEventSnapshot): void {
+    this.enemies.consumeEvent(event)
+  }
+
+  get mageLightningCount(): number {
+    return this.enemies.lightningSize
+  }
+
   get enemyFamilies(): string {
     return this.visibleEnemyFamilies
   }
@@ -995,8 +1114,16 @@ class BoneyardDynamicScene {
     return this.enemyProjectiles.size
   }
 
+  get enemyProjectileIds(): readonly number[] {
+    return this.enemyProjectiles.ids
+  }
+
   get maggotCount(): number {
     return this.maggots.size
+  }
+
+  get playerDeathBurstCount(): number {
+    return this.playerDeathBursts.size
   }
 
   get currentLightSources(): readonly NativeBoneyardLightSource[] {
@@ -1025,6 +1152,7 @@ class BoneyardDynamicScene {
     this.enemies.destroy()
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
+    this.playerDeathBursts.destroy()
     this.gates.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()

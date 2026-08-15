@@ -177,12 +177,17 @@ function enemy(
   flags: readonly string[],
 ): NativeEnemyVisualSnapshot {
   return {
+    armored: flags.includes('FLAG_ARMOR') || (
+      flags.includes('FLAG_ARMORMAYBE') && id % 2 === 0
+    ),
     enemyToken,
     flags,
     headingDeg,
     id,
     nativeTypeId: 1000,
     position: { x: 0, y: 0 },
+    shieldHealth: 0,
+    shieldMaximumHealth: 0,
     spawnTick: 450,
   }
 }

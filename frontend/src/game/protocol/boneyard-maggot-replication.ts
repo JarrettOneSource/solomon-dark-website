@@ -1,3 +1,7 @@
+import {
+  BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES,
+  BONEYARD_MAGGOT_STATES,
+} from './game-state.ts'
 import type { BoneyardMaggotSnapshot } from './game-state.ts'
 import type {
   ReplicatedEntityDescriptor,
@@ -9,9 +13,9 @@ export const BONEYARD_MAGGOT_ENTITY_TYPE_ID = 4
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 5
-const SAMPLE_LENGTH = 12
-const STATES = ['crawl', 'bite', 'death'] as const
+const DESCRIPTOR_LENGTH = 6
+const SAMPLE_LENGTH = 14
+const EMERGENCE_TICKS = 24
 
 export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
   name: 'boneyard-maggot',
@@ -24,6 +28,7 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && nonnegativeInteger(descriptor[3])
       && Number.isFinite(descriptor[4])
       && descriptor[4] > 0
+      && arrayIndex(descriptor[5], BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES.length)
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -31,11 +36,15 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && positiveInteger(sample[1])
       && sample.slice(2).every(Number.isSafeInteger)
       && cyclic(sample[4], 360, ANGLE_SCALE)
-      && arrayIndex(sample[6], STATES.length)
+      && arrayIndex(sample[6], BONEYARD_MAGGOT_STATES.length)
       && sample[8] >= 0 && sample[8] <= VALUE_SCALE
       && sample[9] >= 0 && sample[9] <= VALUE_SCALE
       && nonnegativeInteger(sample[10])
       && nonnegativeInteger(sample[11])
+      && nonnegativeInteger(sample[12])
+      && sample[12] <= EMERGENCE_TICKS
+      && maggotStateMatchesEmergence(sample[6], sample[12])
+      && sample[13] <= 0
   },
 }
 
@@ -48,6 +57,11 @@ export function boneyardMaggotDescriptor(
     maggot.ownerCoffinActorId,
     maggot.spawnTick,
     maggot.maximumHealth,
+    requiredIndex(
+      BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES,
+      maggot.launchTrajectory,
+      'launch trajectory',
+    ),
   ]
 }
 
@@ -61,12 +75,14 @@ export function boneyardMaggotSample(
     quantize(maggot.position.y, POSITION_SCALE),
     quantizeCyclic(maggot.headingDeg, 360, ANGLE_SCALE),
     quantize(maggot.currentHealth, VALUE_SCALE),
-    requiredIndex(STATES, maggot.state),
+    requiredIndex(BONEYARD_MAGGOT_STATES, maggot.state, 'state'),
     quantize(maggot.pose, VALUE_SCALE),
     quantize(maggot.alpha, VALUE_SCALE),
     quantize(maggot.hitFlash, VALUE_SCALE),
     maggot.deathEpoch,
     maggot.deathTick,
+    maggot.emergenceTick,
+    quantize(maggot.verticalOffset, VALUE_SCALE),
   ]
 }
 
@@ -91,6 +107,8 @@ export function materializeBoneyardMaggot(
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     hitFlash: dequantize(sample[9], VALUE_SCALE),
     id: descriptor[1],
+    emergenceTick: sample[12],
+    launchTrajectory: BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[descriptor[5]]!,
     maximumHealth: descriptor[4],
     ownerCoffinActorId: descriptor[2],
     pose: dequantize(sample[7], VALUE_SCALE),
@@ -99,14 +117,21 @@ export function materializeBoneyardMaggot(
       y: dequantize(sample[3], POSITION_SCALE),
     },
     spawnTick: descriptor[3],
-    state: STATES[sample[6]]!,
+    state: BONEYARD_MAGGOT_STATES[sample[6]]!,
+    verticalOffset: dequantize(sample[13], VALUE_SCALE),
   }
 }
 
-function requiredIndex<T>(values: readonly T[], value: T): number {
+function requiredIndex<T>(values: readonly T[], value: T, label: string): number {
   const index = values.indexOf(value)
-  if (index < 0) throw new Error(`unsupported Maggot state ${String(value)}`)
+  if (index < 0) throw new Error(`unsupported Maggot ${label} ${String(value)}`)
   return index
+}
+
+function maggotStateMatchesEmergence(stateIndex: number, emergenceTick: number): boolean {
+  const state = BONEYARD_MAGGOT_STATES[stateIndex]
+  return state === 'death'
+    || (state === 'emerging') === (emergenceTick < EMERGENCE_TICKS)
 }
 
 function quantize(value: number, scale: number): number {

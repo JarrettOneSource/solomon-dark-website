@@ -12640,10 +12640,17 @@ the recovered native action program requires it.
   authoritative positions.
 - Exact nominal Skeleton action boundaries at attack speed one are claw first
   marker 32/completion 57, ordinary weapon 36/97, Pike 16/97; Archer is
-  155/190. A live claw trace emitted three separate contacts, proving that an
-  action pose is not a damage Boolean. Mage owns its variable short/long cast
-  program. The other families retain distinct approach/special/cooldown/death
-  brains; they must not become cosmetic Skeleton aliases.
+  155/190. Fresh read-only decompilation of `SkeletonAction_Tick 0x0044BC20`
+  shows inclusive circular crossing checks through `0x00410E40` for both claw
+  markers `4.0` and `8.0`, after completion wraps progress by `end + 1.0`.
+  Consequently the accepted claw action that begins at native fixture tick
+  101 emits three independent 3-damage contacts at ticks 133, 134, and 161:
+  arrival at marker 4, departure from the inclusive marker-4 boundary, and the
+  marker-8 wrap edge. Each crossing must emit its own semantic marker and
+  re-check the staged target/reach; an action pose or one-shot Boolean is not
+  damage authority. Mage owns its variable short/long cast program. The other
+  families retain distinct approach/special/cooldown/death brains; they must
+  not become cosmetic Skeleton aliases.
 - Enemy lethal is `HP <= 0`. Family terminal outputs and the one reward execute
   before retirement. Baseline XP is Skeleton/Archer/Mage 10, Imp 2, Zombie
   210, Wraith 4, Demon 800, Coffin 200, Maggot 0. Wave live count changes only
@@ -12836,3 +12843,136 @@ retaining identity, progression books, and loadout preselection.
   `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-game-over.png`,
   `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-loadout.png`,
   and `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-returned-hub.png`.
+
+### Residual combat audit correction (2026-08-14)
+
+The implementation receipt above records the first integrated lifecycle pass,
+not completion of every runtime consumer. A clean-tree residual audit found a
+shared interpreter failure: several values were evaluated faithfully into the
+enemy config or skill book but stopped at that boundary. The native evidence
+and implementation consequences are now explicit before the repair:
+
+- High confidence: retail Archer arrow payload, aim mode, and range; Mage
+  element status, range, self shield, ally shield, strength, and interval; and
+  Wraith Dazzle are live behavior fields, not definition-only metadata
+  (`native-enemy-behavior.md`, fields 9, 10, 18, 20, 32, 33, 34, 36, and 42;
+  Skeleton-family transition rows). Retail waves exercise these flags. The
+  actor/projectile/status stores must consume them and replication must retain
+  every presentation-relevant subtype. Exact closed-form Archer scatter/random
+  aim and family range-mode formulas remain open; any temporary deterministic
+  formula must be named and tested rather than leaving the mode inert.
+- High confidence: Wraith tick `0x00486C30` constructs `Mod_Dazzle` type
+  `0x1B6E`, initializes progress at modifier `+0x1C = 0`, and writes duration
+  `+0x14 = 0x32` (50 ticks). `Mod_Dazzle::Tick 0x00623490` advances that
+  progress by the merged `+0x20 = 1 / duration`, clamps it to one, and
+  multiplies the target actor's shared movement/status scalar at `+0x120` by
+  the recovering progress. The authoritative web consumer must therefore use
+  a 50-tick movement recovery ramp; a diagnostic-only timer, stun, or constant
+  slow is rejected.
+- High confidence: a Coffin invokes its Maggot helper three times on the open
+  edge, then replenishes owned children while below its configured maximum;
+  Maggots have an emergence/ballistic phase, crawl, one bite, and self-death,
+  and invalid parent ownership cleans them up. The one-shot golden-angle burst
+  is rejected. Exact launch-vector distributions and every replenishment timer
+  constant remain open, so their web bounds must be centralized and visible.
+- High confidence: hostile and player circles participate in the same actor
+  contact domain, and an action marker stages contact against a still-valid
+  target. Player movement must not pass through hostile bodies. Marker damage
+  must re-check target identity and contact/reach at the marker tick; entering
+  windup is not permanent authorization to hit a departed or newly acquired
+  target. Exact per-family weapon shapes remain open, so the existing named
+  center-distance reaches remain the temporary contact geometry.
+- High confidence: each primary spell's effective skill-book rank indexes the
+  catalog mana and damage arrays. One-shot payloads capture their value when
+  emitted; channels consume rank-indexed per-second cost and damage at 100 Hz;
+  Boulder multiplies its rank-indexed base damage by authoritative charge.
+  Rank-one constants are valid fixtures, not a runtime authority after an
+  upgrade.
+- High confidence: semantic attack/death/projectile/terminal events are already
+  host-authored and replay-safe, but a scene consumer is required for their
+  once-only audio/effect consequences. Authoritative effect samples cannot
+  remain permanently empty where the actor store has emitted a recovered
+  terminal or attached-effect state. Exact unresolved family sprite clocks
+  remain labelled bounded-web; that label is not permission for a dead event
+  lane or an unreachable effect renderer.
+- High confidence: multiplayer ally health is the remote participant's
+  authoritative `currentHealth / maximumHealth`, clamped only for display; a
+  constant-full bar discards already-replicated combat state. The native player
+  corpse selector changes at death ticks `153`, `156`, and `159`, while the
+  production transport normally samples every five simulation ticks. Client
+  presentation may interpolate `deathTick` only when both snapshots already
+  share the same non-alive death epoch. All other progression remains discrete,
+  so the cadence repair cannot manufacture an alive-to-death transition.
+- High confidence: native multiplayer spectator follow is client-local
+  presentation, not host camera authority. `death_spectator_sync.inl:554-613`
+  rebuilds living, ready, connected, same-run participants, sorts semantic
+  IDs, preserves the current target, and cycles/wraps on either mouse edge;
+  `:615-674` holds a selected participant through its replicated death
+  presentation before retargeting; `:697-806` focuses that target's exact
+  gameplay coordinates; and `:808-841` begins follow only after the local
+  death-presentation phase completes. Organic host-death evidence in
+  `native-player-death-spectator.md:817-824` confirms selection of the sole
+  living client and exact-coordinate camera focus. New run, respawn, run end,
+  and all-dead Game Over clear the local focus. A camera left on the local
+  corpse after `spectating` is therefore an incomplete consumer, not an
+  acceptable bounded parity gap.
+- High confidence: the Skeleton, Archer, and Mage terminal paths call fixed
+  registry sound `79`, `sounds\\skeleton_die` (`0x0048D368`, with the sibling
+  Archer/Mage branches at `0x0049E9AF` and `0x0049FD5F`). The client must
+  consume the host-authored family terminal-output edge once and play that cue;
+  it must not infer a death edge from an interpolated health sample or replay
+  retained history to a late joiner. The `/game` cue is backed by the untouched
+  stock `sounds/skeleton_die.wav` PCM bytes, SHA-256
+  `ab38f903e828bd695ffd153dfacea5701f36376ad24cb96be96d3d059f52fb18`,
+  rather than the older resampled Website MP3.
+- High confidence: the runtime architecture document must describe protocol 14
+  (or its next deliberate bump) and replicated Boneyard entity types rather
+  than the obsolete student-only protocol-11 state.
+
+Acceptance for the correction is adversarial: an upgraded primary must change
+both debit and damage; a target leaving melee reach before the marker must take
+no damage; player/enemy circles must separate in both mover directions; every
+retail Archer/Mage/Wraith modifier must have a runtime consumer test; Coffin
+children must emerge in bounded batches, replenish, and retire with their
+parent; and at least one real host-to-client semantic event must drive a
+visible or audible scene effect exactly once.
+
+#### Cadence-safe Mage lightning and player death burst
+
+The residual presentation audit found two fixed-tick edges that a five-tick
+snapshot interval can skip even though their authoritative clocks are correct:
+
+- A `FLAG_CASTLIGHTNING` Mage creates its direct-damage edge at the recovered
+  cast marker and owns a four-tick bounded attached-effect sample. BadGuys
+  records `381` and `382` are the registered lightning source and target art.
+  Keeping those records only in an actor snapshot is insufficient: for one of
+  the five possible marker phases, the next default snapshot arrives after the
+  four-tick window has closed. The attack marker must therefore also emit one
+  immutable, run-scoped `mage-lightning` semantic event containing the actor,
+  target player, source position, target position, event ID, and tick. The
+  client event cursor remains the replay authority: welcome seeds past the
+  retained history, repeated snapshots cannot replay an ID, and a run change
+  resets the cursor. The renderer starts the same four-tick additive sample on
+  first delivery; it does not lengthen or reconstruct the authoritative actor
+  effect.
+- `PlayerWizard::Tick` / `FUN_00533520` selects corpse frame three and creates
+  the stock additive death burst at death tick `159`. Static inspection shows
+  finite `Anim_FadeMoveAdditive_Perspective` children using the BadGuys inline
+  record at object `+0x7E0`: with the `0x38` header and `0xC4` record stride,
+  this is exact BadGuys entry `10`. The same function disables the actor's grid
+  byte `+0x36` and writes render bias `+0xA0 = -1000`. Direction, scale, and
+  velocity are randomized radially, but their exact constants remain open.
+  Because the existing presentation timeline interpolates `deathTick` only
+  inside one non-alive death epoch, the client can consume the `158 -> 159`
+  crossing without another wire event. Initial snapshots and first-seen
+  players seed the crossing state, repeated frames are idempotent, and new
+  runs clear it.
+
+The named browser approximation for the open death-burst distribution is
+`BOUNDED_PLAYER_DEATH_BURST_PROGRAM`: twelve deterministic radial copies of
+exact BadGuys entry `10`, additive, lasting twenty presentation ticks, with
+stable per-player/death-epoch phase, bounded radial speed, scale, and fade.
+Those visual constants are not retail claims. The acceptance contract covers
+all five default snapshot onset phases, strict protocol decode, once-only
+client delivery, late-join/no-replay, duplicate suppression, run reset, exact
+records `10/381/382`, and finite teardown.

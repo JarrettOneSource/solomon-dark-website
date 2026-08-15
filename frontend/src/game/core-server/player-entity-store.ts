@@ -4,11 +4,14 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import {
+  coldSlowPlayer,
+  dazzlePlayer,
   damagePlayer,
   playerCanAcceptInput,
   playerCanCast,
   playerDisplayHealth,
   poisonPlayer,
+  playerMovementScale,
   resetPlayerCombatForNewRun,
   setPlayerSpectating,
   stepPlayerCombatTick,
@@ -222,6 +225,32 @@ export function poisonPlayerEntity(
     : replacePlayerProgression(source, index, progression)
 }
 
+export function coldSlowPlayerEntity(
+  source: PlayerEntityStore,
+  playerId: string,
+  durationTicks: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = coldSlowPlayer(source.progressions[index]!, durationTicks)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function dazzlePlayerEntity(
+  source: PlayerEntityStore,
+  playerId: string,
+  durationTicks: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = dazzlePlayer(source.progressions[index]!, durationTicks)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
 export function tryDebitPlayerEntityMana(
   source: PlayerEntityStore,
   playerId: string,
@@ -293,6 +322,14 @@ export function playerEntityDisplayHealth(
 ): number | null {
   const progression = playerProgressionAt(source, playerId)
   return progression ? playerDisplayHealth(progression) : null
+}
+
+export function playerEntityMovementScale(
+  source: PlayerEntityStore,
+  playerId: string,
+): number {
+  const progression = playerProgressionAt(source, playerId)
+  return progression ? playerMovementScale(progression) : 1
 }
 
 export function resetPlayerEntitiesForNewRun(

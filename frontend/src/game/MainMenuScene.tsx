@@ -606,6 +606,7 @@ export default function MainMenuScene({
             progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             samplePresentation={session.sampleBoneyardPresentation}
             subscribePing={session.onPing}
+            subscribeEnemyEvent={session.onEnemyEvent}
             subscribe={session.onSnapshot}
           />
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (

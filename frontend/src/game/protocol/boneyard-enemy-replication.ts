@@ -4,8 +4,10 @@ import type {
   BoneyardEnemyAction,
   BoneyardEnemyAnimationState,
   BoneyardEnemyCoffinState,
+  BoneyardEnemyEffectSnapshot,
   BoneyardEnemySnapshot,
 } from './game-state.ts'
+import { BONEYARD_ENEMY_EFFECT_ROLES } from './game-state.ts'
 import type {
   ReplicatedEntityDescriptor,
   ReplicatedEntitySample,
@@ -16,8 +18,11 @@ export const BONEYARD_ENEMY_ENTITY_TYPE_ID = 2
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 7
-const SAMPLE_LENGTH = 29
+const DESCRIPTOR_LENGTH = 8
+const SAMPLE_LENGTH = 62
+const EFFECT_COMPONENT_OFFSET = 32
+const EFFECT_COMPONENT_COUNT = 10
+const MAX_EFFECTS = 3
 
 const FAMILIES = [
   'SKELETON',
@@ -63,6 +68,9 @@ const COFFIN_STATES: readonly BoneyardEnemyCoffinState[] = [
   'open',
 ]
 
+const EFFECT_ATLASES = ['BadGuys', 'DeadHawg'] as const
+const EFFECT_BLEND_MODES = ['add', 'normal'] as const
+
 export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
   name: 'boneyard-enemy',
   typeId: BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -81,8 +89,11 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       || !Number.isSafeInteger(descriptor[6])
       || descriptor[6] < 0
       || descriptor[6] >= 2 ** BONEYARD_ENEMY_FLAGS.length
+      || (descriptor[7] !== 0 && descriptor[7] !== 1)
     ) return false
-    return BONEYARD_WAVE_ENEMY_TYPES[FAMILIES[descriptor[2]]!] === descriptor[3]
+    const family = FAMILIES[descriptor[2]]!
+    return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
+      && (descriptor[7] === 0 || family === 'SKELETON')
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -100,6 +111,9 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[14] >= 0
       && sample[15] >= 0
       && sample[17] >= 0 && sample[17] <= VALUE_SCALE
+      && sample[29] >= 0
+      && sample[30] >= sample[29]
+      && effectComponentsAreValid(sample)
   },
 }
 
@@ -114,6 +128,7 @@ export function boneyardEnemyDescriptor(
     enemy.spawnTick,
     enemy.maximumHealth,
     encodeFlags(enemy.flags),
+    Number(enemy.armored),
   ]
 }
 
@@ -121,6 +136,7 @@ export function boneyardEnemySample(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntitySample {
   const animation = enemy.animation
+  const effectComponents = encodeEffects(animation.effects)
   return [
     BONEYARD_ENEMY_ENTITY_TYPE_ID,
     enemy.id,
@@ -153,6 +169,10 @@ export function boneyardEnemySample(
     quantize(animation.demonFrontLimbRotationRadians, VALUE_SCALE),
     quantize(animation.demonRearJointRotationRadians, VALUE_SCALE),
     quantize(animation.demonRearLimbRotationRadians, VALUE_SCALE),
+    quantize(enemy.shieldHealth, VALUE_SCALE),
+    quantize(enemy.shieldMaximumHealth, VALUE_SCALE),
+    animation.effects.length,
+    ...effectComponents,
   ]
 }
 
@@ -186,7 +206,7 @@ export function materializeBoneyardEnemy(
       demonFrontLimbRotationRadians: dequantize(sample[26], VALUE_SCALE),
       demonRearJointRotationRadians: dequantize(sample[27], VALUE_SCALE),
       demonRearLimbRotationRadians: dequantize(sample[28], VALUE_SCALE),
-      effects: [],
+      effects: decodeEffects(sample),
       gaitPose: dequantize(sample[16], VALUE_SCALE),
       hitFlash: dequantize(sample[17], VALUE_SCALE),
       impEffectFrame: sample[18],
@@ -199,6 +219,7 @@ export function materializeBoneyardEnemy(
       zombieRearArmPose: dequantize(sample[23], VALUE_SCALE),
       zombieRearArmRotationRadians: dequantize(sample[24], VALUE_SCALE),
     },
+    armored: descriptor[7] === 1,
     currentHealth: dequantize(sample[5], VALUE_SCALE),
     enemyToken: FAMILIES[descriptor[2]]!,
     flags: decodeFlags(descriptor[6]),
@@ -210,7 +231,114 @@ export function materializeBoneyardEnemy(
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),
     },
+    shieldHealth: dequantize(sample[29], VALUE_SCALE),
+    shieldMaximumHealth: dequantize(sample[30], VALUE_SCALE),
     spawnTick: descriptor[4],
+  }
+}
+
+function encodeEffects(effects: readonly BoneyardEnemyEffectSnapshot[]): number[] {
+  if (effects.length > MAX_EFFECTS) {
+    throw new Error(`Boneyard enemy may contain at most ${MAX_EFFECTS} effects`)
+  }
+  if (new Set(effects.map((effect) => effect.id)).size !== effects.length) {
+    throw new Error('Boneyard enemy effects must have unique ids')
+  }
+  if (new Set(effects.map((effect) => effect.role)).size !== effects.length) {
+    throw new Error('Boneyard enemy effects must have unique roles')
+  }
+  const components: number[] = []
+  for (let index = 0; index < MAX_EFFECTS; index += 1) {
+    const effect = effects[index]
+    if (!effect) {
+      components.push(...Array<number>(EFFECT_COMPONENT_COUNT).fill(0))
+      continue
+    }
+    components.push(
+      requiredIndex(BONEYARD_ENEMY_EFFECT_ROLES, effect.role, 'enemy effect role'),
+      requiredIndex(EFFECT_ATLASES, effect.atlas, 'enemy effect atlas'),
+      requiredIndex(EFFECT_BLEND_MODES, effect.blendMode, 'enemy effect blend mode'),
+      effect.entry,
+      effect.id,
+      quantize(effect.alpha, VALUE_SCALE),
+      quantize(effect.offset.x, POSITION_SCALE),
+      quantize(effect.offset.y, POSITION_SCALE),
+      quantize(effect.rotationRadians, VALUE_SCALE),
+      quantize(effect.scale, VALUE_SCALE),
+    )
+  }
+  return components
+}
+
+function decodeEffects(sample: ReplicatedEntitySample): readonly BoneyardEnemyEffectSnapshot[] {
+  return Array.from({ length: sample[31] }, (_, index) => {
+    const offset = EFFECT_COMPONENT_OFFSET + index * EFFECT_COMPONENT_COUNT
+    return {
+      alpha: dequantize(sample[offset + 5], VALUE_SCALE),
+      atlas: EFFECT_ATLASES[sample[offset + 1]]!,
+      blendMode: EFFECT_BLEND_MODES[sample[offset + 2]]!,
+      entry: sample[offset + 3],
+      id: sample[offset + 4],
+      offset: {
+        x: dequantize(sample[offset + 6], POSITION_SCALE),
+        y: dequantize(sample[offset + 7], POSITION_SCALE),
+      },
+      role: BONEYARD_ENEMY_EFFECT_ROLES[sample[offset]]!,
+      rotationRadians: dequantize(sample[offset + 8], VALUE_SCALE),
+      scale: dequantize(sample[offset + 9], VALUE_SCALE),
+    }
+  })
+}
+
+function effectComponentsAreValid(sample: ReplicatedEntitySample): boolean {
+  const count = sample[31]
+  if (!Number.isSafeInteger(count) || count < 0 || count > MAX_EFFECTS) return false
+  const ids = new Set<number>()
+  const roles = new Set<number>()
+  for (let index = 0; index < MAX_EFFECTS; index += 1) {
+    const offset = EFFECT_COMPONENT_OFFSET + index * EFFECT_COMPONENT_COUNT
+    const components = sample.slice(offset, offset + EFFECT_COMPONENT_COUNT)
+    if (index >= count) {
+      if (components.some((component) => component !== 0)) return false
+      continue
+    }
+    const role = sample[offset]
+    const atlas = sample[offset + 1]
+    const blendMode = sample[offset + 2]
+    const entry = sample[offset + 3]
+    const id = sample[offset + 4]
+    if (
+      !arrayIndex(role, BONEYARD_ENEMY_EFFECT_ROLES.length)
+      || !arrayIndex(atlas, EFFECT_ATLASES.length)
+      || !arrayIndex(blendMode, EFFECT_BLEND_MODES.length)
+      || !Number.isSafeInteger(entry)
+      || entry < 0
+      || !entityId(id)
+      || id === 0
+      || sample[offset + 5] < 0
+      || sample[offset + 5] > VALUE_SCALE
+      || sample[offset + 9] <= 0
+      || !effectShapeMatchesRole(role, atlas, blendMode, entry)
+      || ids.has(id)
+      || roles.has(role)
+    ) return false
+    ids.add(id)
+    roles.add(role)
+  }
+  return true
+}
+
+function effectShapeMatchesRole(
+  role: number,
+  atlas: number,
+  blendMode: number,
+  entry: number,
+): boolean {
+  switch (BONEYARD_ENEMY_EFFECT_ROLES[role]) {
+    case 'burning-fire': return atlas === 1 && blendMode === 1 && entry >= 46 && entry <= 77
+    case 'mage-lightning-source': return atlas === 0 && blendMode === 0 && entry === 381
+    case 'mage-lightning-target': return atlas === 0 && blendMode === 0 && entry === 382
+    default: return false
   }
 }
 

@@ -22,6 +22,7 @@ import {
 } from '../core-kernels/boneyard-gate.ts'
 import {
   PLAYER_CHARACTER_PHYSICS,
+  PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
   PLAYER_CHARACTER_RADIUS,
   commitPlayerCharacterTick,
   createIdlePlayerCharacterInput,
@@ -59,6 +60,7 @@ import {
 export interface BoneyardPlayerCombatStatus {
   readonly alive: boolean
   readonly eligible: boolean
+  readonly movementScale: number
 }
 
 export interface BoneyardWorldState {
@@ -164,6 +166,7 @@ export function stepBoneyardWorldTick(
       locked
         ? createIdlePlayerCharacterInput()
         : inputs[playerId] ?? createIdlePlayerCharacterInput(),
+      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1),
     )
     const requested = {
       x: player.position.x + plan.delta.x,
@@ -189,12 +192,15 @@ export function stepBoneyardWorldTick(
   gateLeaves = gateLeaves.map(stepBoneyardGateLeaf)
   const collision = withBoneyardGateCollision(world.collision, gateLeaves)
   const resolvedBodies = resolveActorMotion(
-    plans.map(({ plan, player, playerId }) => ({
-      delta: plan.delta,
-      id: `player-${playerId}`,
-      position: player.position,
-      ...PLAYER_CHARACTER_PHYSICS,
-    })),
+    [
+      ...plans.map(({ plan, player, playerId }) => ({
+        delta: plan.delta,
+        id: `player-${playerId}`,
+        position: player.position,
+        ...PLAYER_CHARACTER_PHYSICS,
+      })),
+      ...boneyardEnemyBodies(world.enemies),
+    ],
     {
       canPlace: (_bodyId, position, radius) => (
         canPlaceBoneyardBody(position, world.bounds, collision, radius)
@@ -221,6 +227,10 @@ export function stepBoneyardWorldTick(
       commitPlayerCharacterTick(player, plan, position),
     ]
   }))
+  const collisionResolvedEnemies = commitBoneyardEnemyCollisionPositions(
+    world.enemies,
+    resolvedPositions,
+  )
   const livingPlayers = Object.fromEntries(Object.entries(nextPlayers).filter(([playerId]) => {
     const combat = playerCombat[playerId]
     return combat?.alive === true && combat.eligible
@@ -248,8 +258,8 @@ export function stepBoneyardWorldTick(
       wavesStarted = true
     }
   }
-  const dynamicBodies = boneyardCombatBodies(nextPlayers, world.enemies)
-  const enemyStep = stepBoneyardEnemyStore(world.enemies, {
+  const dynamicBodies = boneyardCombatBodies(nextPlayers, collisionResolvedEnemies)
+  const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
     firstProjectileWorldContact: ({ end, radius, start }) => (
       firstBoneyardPathBlockProgress(
         start,
@@ -267,6 +277,10 @@ export function stepBoneyardWorldTick(
         connected: true,
         eligible: combat?.eligible ?? false,
         position: player.position,
+        velocityPerTick: {
+          x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+          y: player.velocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+        },
       }]
     })),
     resolveMovement: ({ actorId, delta, position, radius }) => {
@@ -351,15 +365,51 @@ function boneyardCombatBodies(
         position: { ...player.position },
       },
     ]),
-    ...enemies.actors.map((actor): [string, ActorPhysicsBody] => {
-      const id = `enemy-${actor.id}`
-      return [id, enemyCollisionBody(id, actor.position, actor.config.collisionRadius)]
-    }),
-    ...enemies.maggots.map((maggot): [string, ActorPhysicsBody] => {
-      const id = `enemy-${maggot.id}`
-      return [id, enemyCollisionBody(id, maggot.position, maggot.collisionRadius)]
-    }),
+    ...boneyardEnemyBodies(enemies).map((body): [string, ActorPhysicsBody] => [
+      body.id,
+      body,
+    ]),
   ])
+}
+
+function boneyardEnemyBodies(
+  enemies: BoneyardEnemyStore,
+): ActorPhysicsBody[] {
+  return [
+    ...enemies.actors
+      .filter((actor) => actor.lifeState === 'alive')
+      .map((actor) => {
+        const id = `enemy-${actor.id}`
+        return enemyCollisionBody(id, actor.position, actor.config.collisionRadius)
+      }),
+    ...enemies.maggots
+      .filter((maggot) => maggot.lifeState === 'alive')
+      .map((maggot) => {
+        const id = `enemy-${maggot.id}`
+        return enemyCollisionBody(id, maggot.position, maggot.collisionRadius)
+      }),
+  ]
+}
+
+function commitBoneyardEnemyCollisionPositions(
+  enemies: BoneyardEnemyStore,
+  resolvedPositions: ReadonlyMap<string, Readonly<BoneyardPoint>>,
+): BoneyardEnemyStore {
+  return {
+    ...enemies,
+    actors: enemies.actors.map((actor) => {
+      const position = resolvedPositions.get(`enemy-${actor.id}`)
+      return position === undefined
+        ? actor
+        : { ...actor, position: Object.freeze({ ...position }) }
+    }),
+    maggots: enemies.maggots.map((maggot) => {
+      const position = resolvedPositions.get(`enemy-${maggot.id}`)
+      return position === undefined
+        ? maggot
+        : { ...maggot, position: Object.freeze({ ...position }) }
+    }),
+  }
 }
 
 function enemyCollisionBody(

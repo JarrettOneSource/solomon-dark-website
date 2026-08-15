@@ -1,5 +1,7 @@
 import type { Camera } from '../../editor/render.ts'
 import type { Vec2 } from '../../editor/model.ts'
+import type { GameRunPhase } from '../core-kernels/game-run.ts'
+import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
@@ -29,6 +31,171 @@ export interface BoneyardStaticTile {
 export interface BoneyardRenderViewport {
   height: number
   width: number
+}
+
+interface BoneyardSpectatorPlayerSnapshot {
+  readonly config: Readonly<{
+    displayName: string
+  }>
+  readonly position: Vec2
+  readonly progression: Readonly<{
+    lifeState: PlayerLifeState
+  }>
+}
+
+export interface BoneyardSpectatorCameraSnapshot {
+  readonly players: Readonly<Record<string, BoneyardSpectatorPlayerSnapshot>>
+  readonly run: Readonly<{
+    eligiblePlayerIds: readonly string[]
+    phase: GameRunPhase
+    runId: string | null
+  }>
+}
+
+export interface BoneyardSpectatorCameraState {
+  readonly runId: string | null
+  readonly targetPlayerId: string | null
+}
+
+export interface BoneyardCameraFocus {
+  readonly playerId: string | null
+  readonly position: Vec2
+}
+
+export interface BoneyardSpectatorStatusPresentation {
+  readonly accessibleLabel: string
+  readonly instruction: string | null
+  readonly runId: string
+  readonly targetPlayerId: string | null
+  readonly title: string
+}
+
+export const INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE: BoneyardSpectatorCameraState = {
+  runId: null,
+  targetPlayerId: null,
+}
+
+export function boneyardSpectatorCameraState(
+  snapshot: BoneyardSpectatorCameraSnapshot,
+  localPlayerId: string,
+  current: BoneyardSpectatorCameraState,
+  advance = false,
+): BoneyardSpectatorCameraState {
+  const runId = snapshot.run.runId
+  const localPlayer = snapshot.players[localPlayerId]
+  if (
+    snapshot.run.phase !== 'active'
+    || runId === null
+    || localPlayer?.progression.lifeState !== 'spectating'
+  ) return { runId, targetPlayerId: null }
+
+  const currentTargetPlayerId = current.runId === runId
+    ? current.targetPlayerId
+    : null
+  const eligiblePlayerIds = new Set(snapshot.run.eligiblePlayerIds)
+  const currentTarget = currentTargetPlayerId === null
+    ? undefined
+    : snapshot.players[currentTargetPlayerId]
+  if (
+    !advance
+    && currentTargetPlayerId !== null
+    && eligiblePlayerIds.has(currentTargetPlayerId)
+    && currentTarget
+    && spectatorTargetRemainsPresentable(currentTarget.progression.lifeState)
+  ) {
+    return { runId, targetPlayerId: currentTargetPlayerId }
+  }
+
+  const livingPlayerIds = snapshot.run.eligiblePlayerIds
+    .filter((playerId) => (
+      playerId !== localPlayerId
+      && snapshot.players[playerId]?.progression.lifeState === 'alive'
+    ))
+    .toSorted(comparePlayerIds)
+  if (livingPlayerIds.length === 0) return { runId, targetPlayerId: null }
+  if (!advance || currentTargetPlayerId === null) {
+    return { runId, targetPlayerId: livingPlayerIds[0] ?? null }
+  }
+  const currentIndex = livingPlayerIds.indexOf(currentTargetPlayerId)
+  return {
+    runId,
+    targetPlayerId: currentIndex < 0
+      ? (livingPlayerIds[0] ?? null)
+      : (livingPlayerIds[(currentIndex + 1) % livingPlayerIds.length] ?? null),
+  }
+}
+
+export function boneyardCameraFocus(
+  snapshot: BoneyardSpectatorCameraSnapshot,
+  localPlayerId: string,
+  spectator: BoneyardSpectatorCameraState,
+  fallback: Vec2,
+): BoneyardCameraFocus {
+  const localPlayer = snapshot.players[localPlayerId]
+  const targetPlayerId = (
+    snapshot.run.phase === 'active'
+    && snapshot.run.runId === spectator.runId
+    && localPlayer?.progression.lifeState === 'spectating'
+    && spectator.targetPlayerId !== null
+    && snapshot.players[spectator.targetPlayerId]
+  ) ? spectator.targetPlayerId : null
+  const playerId = targetPlayerId ?? (localPlayer ? localPlayerId : null)
+  return {
+    playerId,
+    position: playerId === null ? fallback : snapshot.players[playerId]!.position,
+  }
+}
+
+export function boneyardSpectatorStatus(
+  snapshot: BoneyardSpectatorCameraSnapshot,
+  localPlayerId: string,
+  spectator: BoneyardSpectatorCameraState,
+): BoneyardSpectatorStatusPresentation | null {
+  const runId = snapshot.run.runId
+  if (
+    snapshot.run.phase !== 'active'
+    || runId === null
+    || spectator.runId !== runId
+    || snapshot.players[localPlayerId]?.progression.lifeState !== 'spectating'
+  ) return null
+
+  const targetPlayerId = spectator.targetPlayerId
+  const targetName = targetPlayerId === null
+    ? null
+    : snapshot.players[targetPlayerId]?.config.displayName ?? null
+  if (targetName === null) {
+    const title = 'Spectating - waiting for an alive player'
+    return {
+      accessibleLabel: `${title}.`,
+      instruction: null,
+      runId,
+      targetPlayerId: null,
+      title,
+    }
+  }
+  const title = `Spectating ${targetName}`
+  return {
+    accessibleLabel: `${title}. Left or right click to select the next player.`,
+    instruction: 'Left / Right click: next player',
+    runId,
+    targetPlayerId,
+    title,
+  }
+}
+
+export function boneyardSpectatorStatusesEqual(
+  left: BoneyardSpectatorStatusPresentation | null,
+  right: BoneyardSpectatorStatusPresentation | null,
+): boolean {
+  return left === right || (
+    left !== null
+    && right !== null
+    && left.accessibleLabel === right.accessibleLabel
+    && left.instruction === right.instruction
+    && left.runId === right.runId
+    && left.targetPlayerId === right.targetPlayerId
+    && left.title === right.title
+  )
 }
 
 export function boneyardCamera(
@@ -128,4 +295,14 @@ function clampCameraAxis(
 ): number {
   if (size <= halfView * 2) return start + size / 2
   return Math.min(start + size - halfView, Math.max(start + halfView, position))
+}
+
+function spectatorTargetRemainsPresentable(lifeState: PlayerLifeState): boolean {
+  return lifeState === 'alive'
+    || lifeState === 'lethal-pending'
+    || lifeState === 'dying'
+}
+
+function comparePlayerIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }

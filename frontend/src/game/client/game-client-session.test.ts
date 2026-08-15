@@ -283,8 +283,11 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
     actorId: 4,
     eventId: 7,
     runId: firstRunId,
+    sourcePosition: { x: 100, y: 200 },
+    targetPlayerId: 'player-1',
+    targetPosition: { x: 300, y: 220 },
     tick: 0,
-    type: 'enemy-death',
+    type: 'mage-lightning',
   }]
   receiveWelcome(transport, firstSnapshot)
   const session = await connecting
@@ -294,26 +297,27 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   receiveSnapshot(transport, { ...firstSnapshot, tick: 5 }, 0)
   assert.deepEqual(received, [])
 
-  const impact = {
+  const lightning = {
     actorId: 4,
     eventId: 8,
-    projectileId: 12,
     runId: firstRunId,
+    sourcePosition: { x: 110, y: 205 },
     targetPlayerId: 'player-1',
+    targetPosition: { x: 305, y: 225 },
     tick: 6,
-    type: 'projectile-impact' as const,
+    type: 'mage-lightning' as const,
   }
   const withImpact = {
     ...firstSnapshot,
     tick: 10,
     world: {
       ...firstSnapshot.world,
-      enemyEvents: [...firstSnapshot.world.enemyEvents, impact],
+      enemyEvents: [...firstSnapshot.world.enemyEvents, lightning],
     },
   }
   receiveSnapshot(transport, withImpact, 0)
   receiveSnapshot(transport, { ...withImpact, tick: 15 }, 0)
-  assert.deepEqual(received, [impact])
+  assert.deepEqual(received, [lightning])
 
   const secondRunId = 'enemy-events-two'
   const secondSnapshot = createGameSnapshot(

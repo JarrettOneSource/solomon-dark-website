@@ -18,6 +18,7 @@ import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   nativeFootstepCue,
+  nativeEnemyEventSoundCue,
   newSolomonVoiceEvent,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
@@ -33,13 +34,21 @@ import {
   projectNativeStickAim,
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
-import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  GameSnapshot,
+  LoadedBoneyard,
+} from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
 } from './renderer/boneyard-world-renderer.ts'
+import {
+  boneyardSpectatorStatusesEqual,
+  type BoneyardSpectatorStatusPresentation,
+} from './renderer/boneyard-render-contract.ts'
 import {
   gameViewportLayout,
   type GameViewportLayout,
@@ -68,6 +77,7 @@ interface BoneyardSceneProps {
   progression: ProtocolPlayerProgression
   samplePresentation: (nowMs?: number) => GameSnapshot
   subscribePing: (listener: (pingMs: number) => void) => () => void
+  subscribeEnemyEvent: (listener: (event: BoneyardEnemyEventSnapshot) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
 
@@ -98,6 +108,7 @@ export default function BoneyardScene({
   playerId,
   progression,
   samplePresentation,
+  subscribeEnemyEvent,
   subscribePing,
   subscribe,
 }: BoneyardSceneProps) {
@@ -107,6 +118,7 @@ export default function BoneyardScene({
   const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
+  const pendingEnemyPresentationEventsRef = useRef<BoneyardEnemyEventSnapshot[]>([])
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const lastVoiceEventRef = useRef({
     eventId: initialSnapshot.world.kind === 'boneyard'
@@ -122,6 +134,8 @@ export default function BoneyardScene({
   onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
   const [rendererError, setRendererError] = useState<string | null>(null)
+  const [spectatorStatus, setSpectatorStatus] =
+    useState<BoneyardSpectatorStatusPresentation | null>(null)
   const [run, setRun] = useState<GameRunLifecycleState>(initialSnapshot.run)
   const deathEpochRef = useRef(
     initialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
@@ -140,6 +154,24 @@ export default function BoneyardScene({
     if (deathEpoch > deathEpochRef.current) audio.playStream('death-guitar')
     deathEpochRef.current = deathEpoch
   }), [audio, playerId, subscribe])
+
+  useEffect(() => subscribeEnemyEvent((event) => {
+    if (event.runId !== loaded.runId) return
+    const scene = sceneRef.current
+    if (scene) {
+      scene.dataset.lastEnemyEventActorId = `${event.actorId}`
+      scene.dataset.lastEnemyEventId = `${event.eventId}`
+      scene.dataset.lastEnemyEventType = event.type
+      if (event.output !== undefined) {
+        scene.dataset.lastEnemyEventOutput = event.output
+      }
+    }
+    const cue = nativeEnemyEventSoundCue(event)
+    if (cue) audio.playSound(cue)
+    const renderer = rendererRef.current
+    if (renderer) renderer.consumeEnemyEvent(event)
+    else pendingEnemyPresentationEventsRef.current.push(event)
+  }), [audio, loaded.runId, subscribeEnemyEvent])
 
   useEffect(() => {
     let previousAudioSnapshot = initialSnapshot
@@ -206,6 +238,17 @@ export default function BoneyardScene({
     let cancelled = false
     let stopPresentationLoop: (() => void) | null = null
     const input = createBrowserGameplayInput({
+      claimMouseCastStart: () => {
+        const renderer = rendererRef.current
+        if (!renderer) return false
+        const snapshot = samplePresentation()
+        if (!renderer.cycleSpectatorTarget(snapshot)) return false
+        const nextStatus = renderer.spectatorStatus(snapshot)
+        setSpectatorStatus((current) => (
+          boneyardSpectatorStatusesEqual(current, nextStatus) ? current : nextStatus
+        ))
+        return true
+      },
       mouseTarget: host,
       onInput,
       projectDirection: (direction) => {
@@ -243,6 +286,7 @@ export default function BoneyardScene({
     inputRef.current = input
     setRendererState('loading')
     setRendererError(null)
+    setSpectatorStatus(null)
 
     void createBoneyardWorldRenderer({
       boneyard: loaded,
@@ -255,6 +299,11 @@ export default function BoneyardScene({
         return
       }
       rendererRef.current = renderer
+      const pendingEnemyEvents = pendingEnemyPresentationEventsRef.current
+      pendingEnemyPresentationEventsRef.current = []
+      for (const event of pendingEnemyEvents) {
+        if (event.runId === loaded.runId) renderer.consumeEnemyEvent(event)
+      }
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
       setRendererState('ready')
@@ -277,6 +326,10 @@ export default function BoneyardScene({
         }
         onInput(input.sample().input)
         renderer.render(snapshot)
+        const nextStatus = renderer.spectatorStatus(snapshot)
+        setSpectatorStatus((current) => (
+          boneyardSpectatorStatusesEqual(current, nextStatus) ? current : nextStatus
+        ))
         const camera = renderer.camera(snapshot)
         const darkness = darknessCanvasRef.current
         if (darkness) {
@@ -313,6 +366,7 @@ export default function BoneyardScene({
       audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       input.destroy()
       inputRef.current = null
+      pendingEnemyPresentationEventsRef.current = []
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
@@ -378,6 +432,25 @@ export default function BoneyardScene({
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
         />
+        {spectatorStatus ? (
+          <div
+            className="boneyard-spectator-status"
+            data-run-id={spectatorStatus.runId}
+            data-target-player-id={spectatorStatus.targetPlayerId ?? ''}
+            role="status"
+            aria-atomic="true"
+            aria-label={spectatorStatus.accessibleLabel}
+            aria-live="polite"
+          >
+            <span>{spectatorStatus.title}</span>
+            {spectatorStatus.instruction ? (
+              <>
+                <span className="boneyard-spectator-status-divider" aria-hidden>|</span>
+                <span>{spectatorStatus.instruction}</span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {digIndicatorVisible ? (
           <div
             ref={digIndicatorRef}

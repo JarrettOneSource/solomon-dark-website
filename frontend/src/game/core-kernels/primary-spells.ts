@@ -9,6 +9,7 @@ import {
   type PlayerPrimaryCastState,
   type WizardElement,
 } from './player-character.ts'
+import type { NativePrimarySkillRankStats } from './player-progression.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
   waterFrostJetEmission,
@@ -49,6 +50,7 @@ export type PrimarySpellProjectilePhase = 'flight' | 'held'
 interface PrimarySpellProjectileBaseState {
   ageTicks: number
   charge: number
+  damage: number
   direction: Vector2
   flightTicks: number
   id: number
@@ -107,9 +109,11 @@ export type PrimarySpellChannelTransientState =
   | PrimarySpellWaterTransientState
 
 export interface PrimarySpellChannelEmission {
+  damage: number
   direction: Vector2
   id: number
   kind: 'air' | 'water'
+  manaCost: number
   origin: Vector2
   ownerId: string
   worldKey: string
@@ -183,6 +187,7 @@ export interface PrimarySpellSimulationState {
 export interface PrimarySpellCastAuthority {
   availableMana: number
   eligible: boolean
+  primarySkill: NativePrimarySkillRankStats
 }
 
 export interface PrimarySpellTickContext {
@@ -248,12 +253,21 @@ export const PRIMARY_SPELL_EARTH_CALLED_ROCK_REMOVE_DISTANCE = 5
 export const PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE = Math.fround(
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE + PRIMARY_SPELL_EARTH_CHARGE_STEP,
 )
+export const PRIMARY_SPELL_TICKS_PER_SECOND = 100
 export const PRIMARY_SPELL_RANK_ONE_MANA_COSTS = {
   air: 0.12,
   earth: 0.12,
   ether: 6,
   fire: 12,
   water: 0.125,
+} as const satisfies Readonly<Record<WizardElement, number>>
+
+const PRIMARY_SKILL_ID_BY_ELEMENT = {
+  air: 24,
+  earth: 40,
+  ether: 8,
+  fire: 16,
+  water: 32,
 } as const satisfies Readonly<Record<WizardElement, number>>
 
 const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<0 | 1 | 7 | 8, readonly Vector2[]>> = {
@@ -439,7 +453,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     const previous = context.previousPlayers[playerId] ?? player
     const input = context.inputs[playerId]
     const authority = context.castAuthority[playerId]
-    const manaCost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS[player.config.element]
+    if (authority) assertPrimarySkillMatchesElement(player.config.element, authority.primarySkill)
+    const manaCost = authority
+      ? primarySpellManaCost(player.config.element, authority.primarySkill)
+      : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
     const spendMana = (): boolean => {
@@ -519,6 +536,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             ageTicks: 1,
             assemblyCharge: PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
             charge: PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
+            damage: authority.primarySkill.damageMinimum,
             direction: { ...aimDirection },
             flightTicks: 0,
             id: nextId,
@@ -548,6 +566,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         playerId,
         nextPlayer,
         player.config.element,
+        authority.primarySkill,
         worldKey,
         context.spellTargets(playerId),
       )
@@ -625,9 +644,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             context,
           )
           channelEmissions.push({
+            damage: primarySpellChannelDamage(authority.primarySkill),
             direction: { ...aimDirection },
             id: nextId,
             kind: 'air',
+            manaCost,
             origin: emitter,
             ownerId: playerId,
             worldKey,
@@ -663,9 +684,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           }
           const emitter = primarySpellEmitter(nextPlayer)
           channelEmissions.push({
+            damage: primarySpellChannelDamage(authority.primarySkill),
             direction: { ...aimDirection },
             id: nextId,
             kind: 'water',
+            manaCost,
             origin: emitter,
             ownerId: playerId,
             worldKey,
@@ -1019,6 +1042,7 @@ function createOneShotProjectile(
   ownerId: string,
   player: PlayerCharacterState,
   kind: 'ether' | 'fire',
+  primarySkill: NativePrimarySkillRankStats,
   worldKey: string,
   targets: readonly PrimarySpellTarget[],
 ): PrimarySpellProjectileState {
@@ -1034,6 +1058,9 @@ function createOneShotProjectile(
   const common = {
     ageTicks: 0,
     charge: 1,
+    damage: kind === 'ether' && (id & 1) === 0
+      ? primarySkill.damageMinimum
+      : primarySkill.damageMaximum,
     direction: { ...direction },
     flightTicks: 0,
     id,
@@ -1058,6 +1085,30 @@ function createOneShotProjectile(
     kind: 'ether',
     targetId: target?.id ?? null,
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+  }
+}
+
+function primarySpellManaCost(
+  element: WizardElement,
+  primarySkill: NativePrimarySkillRankStats,
+): number {
+  return element === 'ether' || element === 'fire'
+    ? primarySkill.manaCost
+    : primarySkill.manaCost / PRIMARY_SPELL_TICKS_PER_SECOND
+}
+
+function primarySpellChannelDamage(primarySkill: NativePrimarySkillRankStats): number {
+  return primarySkill.damageMinimum / PRIMARY_SPELL_TICKS_PER_SECOND
+}
+
+function assertPrimarySkillMatchesElement(
+  element: WizardElement,
+  primarySkill: NativePrimarySkillRankStats,
+): void {
+  if (primarySkill.skillId !== PRIMARY_SKILL_ID_BY_ELEMENT[element]) {
+    throw new Error(
+      `primary skill ${primarySkill.skillId} does not match ${element} caster`,
+    )
   }
 }
 
@@ -1148,6 +1199,21 @@ function fireImpact(
     ownerId: spell.ownerId,
     worldKey: spell.worldKey,
   }
+}
+
+export function createPrimarySpellContactImpact(
+  id: number,
+  spell: PrimarySpellProjectileState,
+  origin: Readonly<Vector2>,
+  birthTick: number,
+): PrimarySpellEarthImpactState | PrimarySpellFireImpactState | null {
+  const contactSpell = { ...spell, position: { ...origin } }
+  if (contactSpell.kind === 'earth') {
+    return earthImpact(id, contactSpell, birthTick)
+  }
+  return contactSpell.kind === 'fire'
+    ? fireImpact(id, contactSpell)
+    : null
 }
 
 function earthCalledRockEmits(

@@ -16,6 +16,7 @@ import {
   removePlayerCharacter,
   stepGameSimulation,
   stepGameSimulationTick,
+  type GameSimulationState,
 } from './game-simulation.ts'
 import {
   damageBoneyardEnemy,
@@ -24,6 +25,7 @@ import {
 } from './boneyard-enemy-store.ts'
 import {
   damagePlayerEntity,
+  dazzlePlayerEntity,
   playerCharacterRecords,
   poisonPlayerEntity,
 } from './player-entity-store.ts'
@@ -105,6 +107,28 @@ test('the authoritative tick latches footsteps only while native movement is act
   assert.equal(getPlayerCharacter(state).footstepTick, 100)
 })
 
+test('Boneyard movement consumes the first fractional Dazzle ramp sample', () => {
+  const initial = enterBoneyardWorld(createGameSimulation(), emptyBoneyard())
+  const initialX = getPlayerCharacter(initial).position.x
+  const normal = stepGameSimulationTick(initial, {
+    'local-player': gameplayInput(1, 0),
+  })
+  const dazzled = stepGameSimulationTick({
+    ...initial,
+    playerEntities: dazzlePlayerEntity(
+      initial.playerEntities,
+      'local-player',
+      50,
+    ),
+  }, {
+    'local-player': gameplayInput(1, 0),
+  })
+
+  assert.ok(getPlayerCharacter(normal).position.x > initialX)
+  assert.equal(getPlayerCharacter(dazzled).position.x, initialX)
+  assert.equal(getPlayerProgression(dazzled).dazzleTicksRemaining, 49)
+})
+
 test('disconnect and world replacement clean spell actors and cast ownership', () => {
   const earth = {
     discipline: 'arcane',
@@ -174,6 +198,43 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
   assert.deepEqual(player.position, getPlayerCharacter(state, 'caster').position)
 })
 
+test('simulation wires effective primary rank into debit and captured projectile damage', () => {
+  const fire = {
+    discipline: 'arcane',
+    displayName: 'Fire Caster',
+    element: 'fire',
+  } as const
+  let rankOne = createGameSimulation({ caster: fire })
+  let rankTwo = withEffectivePrimaryRank(createGameSimulation({ caster: fire }), 'caster', 2)
+  const cast = (state: GameSimulationState, primary: boolean) => {
+    const player = getPlayerCharacter(state, 'caster')
+    return {
+      aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary, secondary: false },
+      movement: { x: 0, y: 0 },
+    }
+  }
+
+  rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
+  rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
+  assert.ok(Math.abs(
+    getPlayerProgression(rankOne, 'caster').currentMana
+      - getPlayerProgression(rankTwo, 'caster').currentMana
+      - 3,
+  ) < 1e-12)
+
+  for (let tick = 0; tick < 19; tick += 1) {
+    rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
+    rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
+  }
+  assert.equal(rankOne.primarySpells.projectiles[0]!.damage, 4)
+  assert.equal(rankTwo.primarySpells.projectiles[0]!.damage, 7)
+
+  rankOne = withEffectivePrimaryRank(rankOne, 'caster', 2)
+  rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, false) })
+  assert.equal(rankOne.primarySpells.projectiles[0]!.damage, 4)
+})
+
 test('Boneyard simulation debits mana, applies spell contact, and begins enemy death', () => {
   const fire = {
     discipline: 'arcane',
@@ -194,6 +255,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
         connected: true,
         eligible: true,
         position: getPlayerCharacter(state, 'caster').position,
+        velocityPerTick: { x: 0, y: 0 },
       },
     },
     resolveMovement: ({ requestedPosition }) => requestedPosition,
@@ -240,6 +302,71 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.ok(getPlayerProgression(state, 'caster').experience > experienceBeforeReward)
 })
 
+test('Boneyard swept combat orders an actor before terrain instead of kernel lookahead', () => {
+  const loaded = combatBoneyard('spell-ordering-run')
+  loaded.scene.fences = [{
+    eid: 'ordering-wall',
+    points: [{ x: 130, y: 0 }, { x: 130, y: 500 }],
+    segmentCode: 0,
+    typeId: 3005,
+  }]
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Fire Caster',
+    element: 'fire',
+  } }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON',
+      flags: ['FLAG_HPDOWN'],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 90, y: 250 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const initialEnemyHealth = seeded.store.actors[0]!.currentHealth
+  state = {
+    ...state,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{
+        ageTicks: 5,
+        charge: 1,
+        damage: 4,
+        direction: { x: 1, y: 0 },
+        flightTicks: 5,
+        id: 1,
+        kind: 'fire',
+        ownerId: 'caster',
+        phase: 'flight',
+        position: { x: 50, y: 250 },
+        velocity: { x: 100, y: 0 },
+        worldKey: `boneyard:${loaded.runId}`,
+      }],
+      transients: [],
+    },
+    world: { ...state.world, enemies: seeded.store },
+  }
+
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(state.world.enemies.actors[0]!.currentHealth, initialEnemyHealth - 4)
+  assert.deepEqual(state.primarySpells.projectiles, [])
+  assert.equal(
+    state.primarySpells.transients.filter(({ kind }) => kind === 'fire-impact').length,
+    1,
+  )
+})
+
 test('Boneyard semantic events survive the slowest snapshot cadence and remain bounded', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
@@ -256,6 +383,7 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
         connected: true,
         eligible: true,
         position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
       },
     },
     resolveMovement: ({ requestedPosition }) => requestedPosition,
@@ -327,6 +455,7 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
         connected: true,
         eligible: true,
         position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
       },
     },
     resolveMovement: ({ requestedPosition }) => requestedPosition,
@@ -515,5 +644,31 @@ function combatBoneyard(runId: string): LoadedBoneyard {
     },
     seed: `${runId}-seed`,
     sourceSha256: 'c'.repeat(64),
+  }
+}
+
+function withEffectivePrimaryRank(
+  state: GameSimulationState,
+  playerId: string,
+  rank: number,
+): GameSimulationState {
+  const index = state.playerEntities.identities.findIndex((identity) => (
+    identity.playerId === playerId
+  ))
+  if (index < 0) throw new Error(`missing player ${playerId}`)
+  const skillBook = state.playerEntities.skillBooks[index]!
+  const effectiveRanks = [...skillBook.effectiveRanks]
+  effectiveRanks[skillBook.primarySkillId] = rank
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...skillBook,
+    effectiveRanks: Object.freeze(effectiveRanks),
+  }
+  return {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      skillBooks: Object.freeze(skillBooks),
+    },
   }
 }

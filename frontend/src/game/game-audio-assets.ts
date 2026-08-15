@@ -13,6 +13,7 @@ import lightningStart from '../assets/game/audio/sfx/lightning-start.wav'
 import magicMissile from '../assets/game/audio/sfx/magic-missile.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
+import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
 import startCast from '../assets/game/audio/sfx/start-cast.wav'
 import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
@@ -55,6 +56,7 @@ export const GAME_AUDIO_SOURCES = {
     'magic-missile': magicMissile,
     'pick-skill': pickSkill,
     'rock-hit': rockHit,
+    'skeleton-die': skeletonDie,
     'start-boulder': startBoulder,
     'step-1': step1,
     'step-2': step2,

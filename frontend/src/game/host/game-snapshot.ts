@@ -110,6 +110,12 @@ function protocolBoneyardEnemyEvent(
     ...(event.count === undefined ? {} : { count: event.count }),
     ...(event.output === undefined ? {} : { output: event.output }),
     ...(event.projectileId === undefined ? {} : { projectileId: event.projectileId }),
+    ...(event.sourcePosition === undefined
+      ? {}
+      : { sourcePosition: { ...event.sourcePosition } }),
+    ...(event.targetPosition === undefined
+      ? {}
+      : { targetPosition: { ...event.targetPosition } }),
     ...(event.targetPlayerId === undefined ? {} : { targetPlayerId: event.targetPlayerId }),
   }
 }
@@ -133,8 +139,10 @@ function protocolPlayerState(
     ...player,
     progression: {
       activeWeldBuildId: skillBook.activeWeldBuildId,
+      coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
+      dazzleTicksRemaining: progression.dazzleTicksRemaining,
       deathEpoch: progression.deathEpoch,
       deathTick: progression.deathTick,
       experience: progression.experience,

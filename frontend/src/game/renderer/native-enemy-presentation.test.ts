@@ -13,12 +13,18 @@ import {
   roundHalfToEven,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+import {
+  nativeMageLightningPlan,
+  sampledMageLightningEventIds,
+  shouldRenderSemanticMageLightning,
+} from './native-mage-lightning-presentation.ts'
 
 function enemy(
   enemyToken: NativeEnemyVisualSnapshot['enemyToken'],
   flags: readonly string[] = [],
 ): NativeEnemyVisualSnapshot {
   return {
+    armored: flags.includes('FLAG_ARMOR'),
     enemyToken,
     flags,
     headingDeg: 0,
@@ -34,6 +40,8 @@ function enemy(
       COFFIN: 1013,
     }[enemyToken],
     position: { x: 125, y: 240 },
+    shieldHealth: 0,
+    shieldMaximumHealth: 0,
     spawnTick: 100,
   }
 }
@@ -80,6 +88,104 @@ test('Skeleton flags select native armor, weapon, and headgear banks', () => {
     { atlas: 'BadGuys', entry: 1045, role: 'skeleton-weapon' },
     { atlas: 'BadGuys', entry: 1495, role: 'skeleton-headgear' },
   ])
+})
+
+test('Skeleton ARMORMAYBE consumes the projected armor decision', () => {
+  const source = enemy('SKELETON', ['FLAG_ARMORMAYBE'])
+  const unarmored = nativeEnemyPresentationPlan(source, 100)
+  const armored = nativeEnemyPresentationPlan({ ...source, armored: true }, 100)
+
+  assert.equal(unarmored.layers[1]?.entry, 1117)
+  assert.equal(armored.layers[1]?.entry, 613)
+})
+
+test('authoritative shields append proportional additive body layers', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONMAGE'),
+    shieldHealth: 25,
+    shieldMaximumHealth: 50,
+  }, 100)
+
+  const midpoint = plan.layers.length / 2
+  assert.deepEqual(
+    plan.layers.slice(midpoint).map((layer) => layer.role),
+    plan.layers.slice(0, midpoint).map((layer) => `shield:${layer.role}`),
+  )
+  assert.ok(plan.layers.slice(midpoint).every((layer) => (
+    layer.alpha === 0.5 && layer.blendMode === 'add' && layer.scale === 1.05
+  )))
+})
+
+test('Mage lightning event covers every default cadence phase without doubling a caught sample', () => {
+  for (let onsetPhase = 0; onsetPhase < 5; onsetPhase += 1) {
+    const event = {
+      actorId: 7,
+      eventId: 40 + onsetPhase,
+      runId: 'run-lightning',
+      sourcePosition: { x: 125, y: 240 },
+      targetPlayerId: 'local',
+      targetPosition: { x: 300, y: 260 },
+      tick: 100 + onsetPhase,
+      type: 'mage-lightning' as const,
+    }
+    const localPlan = nativeMageLightningPlan(event, 0)
+    assert.deepEqual(localPlan?.layers.map(({ entry, role }) => ({ entry, role })), [
+      { entry: 381, role: 'mage-lightning-source' },
+      { entry: 382, role: 'mage-lightning-target' },
+    ])
+
+    const nextSnapshotTick = Math.ceil(event.tick / 5) * 5
+    const caughtBySnapshot = nextSnapshotTick - event.tick < 4
+    const sampled = caughtBySnapshot
+      ? [{
+          ...enemy('SKELETONMAGE'),
+          animation: nativeEnemyIdleAnimationSample({
+            effects: [{
+              alpha: 1,
+              atlas: 'BadGuys',
+              blendMode: 'add',
+              entry: 381,
+              id: event.eventId * 4 + 2,
+              offset: { x: 0, y: 0 },
+              role: 'mage-lightning-source',
+              rotationRadians: 0,
+              scale: 1,
+            }, {
+              alpha: 1,
+              atlas: 'BadGuys',
+              blendMode: 'add',
+              entry: 382,
+              id: event.eventId * 4 + 3,
+              offset: { x: 175, y: 20 },
+              role: 'mage-lightning-target',
+              rotationRadians: 0,
+              scale: 1,
+            }],
+          }),
+        }]
+      : []
+    const sampledIds = sampledMageLightningEventIds(sampled)
+    assert.equal(
+      sampledIds.has(event.eventId),
+      caughtBySnapshot,
+      `onset phase ${onsetPhase}`,
+    )
+    assert.equal(
+      shouldRenderSemanticMageLightning(event.eventId, sampledIds),
+      !caughtBySnapshot,
+      `local semantic pair visibility at onset phase ${onsetPhase}`,
+    )
+  }
+  assert.equal(nativeMageLightningPlan({
+    actorId: 7,
+    eventId: 99,
+    runId: 'run-lightning',
+    sourcePosition: { x: 0, y: 0 },
+    targetPlayerId: 'local',
+    targetPosition: { x: 1, y: 1 },
+    tick: 100,
+    type: 'mage-lightning',
+  }, 4), null)
 })
 
 test('Archer and Mage retain the shared stock component order', () => {

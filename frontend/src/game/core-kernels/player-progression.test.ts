@@ -12,6 +12,7 @@ import {
   buildPlayerSkillOffer,
   createPlayerProgression,
   createPlayerSkillBook,
+  effectivePrimarySkillRankStats,
   grantPlayerExperience,
   nativeWeldBuild,
   playerStatBook,
@@ -260,6 +261,56 @@ test('the player stat book exposes the immutable native catalog including its in
   assert.equal(statBook.entries[82]?.maximumLevel, 0)
   assert.ok(Object.isFrozen(statBook.entries))
   assert.ok(Object.isFrozen(statBook.entries[8]?.numericProperties))
+})
+
+test('effective primary rank indexes the native mana and damage catalog', () => {
+  const expected = {
+    air: {
+      rankOne: { damageMaximum: 2.5, damageMinimum: 2.5, manaCost: 12 },
+      rankTwo: { damageMaximum: 4, damageMinimum: 4, manaCost: 14 },
+    },
+    earth: {
+      rankOne: { damageMaximum: 10, damageMinimum: 10, manaCost: 12 },
+      rankTwo: { damageMaximum: 30, damageMinimum: 30, manaCost: 13 },
+    },
+    ether: {
+      rankOne: { damageMaximum: 2, damageMinimum: 1, manaCost: 6 },
+      rankTwo: { damageMaximum: 4, damageMinimum: 2, manaCost: 9 },
+    },
+    fire: {
+      rankOne: { damageMaximum: 4, damageMinimum: 4, manaCost: 12 },
+      rankTwo: { damageMaximum: 7, damageMinimum: 7, manaCost: 15 },
+    },
+    water: {
+      rankOne: { damageMaximum: 2.5, damageMinimum: 2.5, manaCost: 12.5 },
+      rankTwo: { damageMaximum: 3.5, damageMinimum: 3.5, manaCost: 17.5 },
+    },
+  } as const
+
+  for (const [element, values] of Object.entries(expected)) {
+    const rankOneBook = createPlayerSkillBook({
+      ...ETHER_ARCANE,
+      element: element as keyof typeof expected,
+    })
+    assert.deepEqual(effectivePrimarySkillRankStats(rankOneBook), {
+      ...values.rankOne,
+      rank: 1,
+      skillId: rankOneBook.primarySkillId,
+    })
+
+    const effectiveRanks = [...rankOneBook.effectiveRanks]
+    effectiveRanks[rankOneBook.primarySkillId] = 2
+    const rankTwoBook = {
+      ...rankOneBook,
+      effectiveRanks: Object.freeze(effectiveRanks),
+    }
+    assert.equal(rankTwoBook.permanentRanks[rankTwoBook.primarySkillId], 1)
+    assert.deepEqual(effectivePrimarySkillRankStats(rankTwoBook), {
+      ...values.rankTwo,
+      rank: 2,
+      skillId: rankTwoBook.primarySkillId,
+    })
+  }
 })
 
 test('native XP thresholds queue a mandatory deterministic offer and selection only books rank', () => {

@@ -38,7 +38,7 @@ function stepWorld(
     inputs,
     Object.fromEntries(Object.keys(players).map((playerId) => [
       playerId,
-      { alive: true, eligible: true },
+      { alive: true, eligible: true, movementScale: 1 },
     ])),
     tick,
   )
@@ -143,6 +143,7 @@ test('enemy locomotion resolves against players and peer actors before committin
         connected: true,
         eligible: true,
         position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
       },
     },
     resolveMovement: ({ requestedPosition }) => requestedPosition,
@@ -182,6 +183,152 @@ test('enemy locomotion resolves against players and peer actors before committin
       ) >= enemy.config.collisionRadius + PLAYER_CHARACTER_RADIUS,
     )
   }
+})
+
+test('player movement separates from live enemy circles and commits the displaced enemy', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  let world = createBoneyardWorld(loaded)
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'Enemy Pusher',
+      element: 'fire',
+    }, world),
+    position: { x: 100, y: 350 },
+  }
+  const seeded = stepBoneyardEnemyStore(world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON' as const,
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 145, y: 350 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  world = {
+    ...world,
+    enemies: {
+      ...seeded.store,
+      actors: seeded.store.actors.map((actor) => ({
+        ...actor,
+        nextMovementTick: 10_000,
+      })),
+    },
+  }
+  const initialEnemyX = world.enemies.actors[0]!.position.x
+
+  for (let tick = 1; tick <= 80; tick += 1) {
+    const result = stepWorld(
+      world,
+      { player },
+      { player: movementInput(1, 0) },
+      tick,
+    )
+    world = result.world
+    player = result.players.player
+  }
+
+  const enemy = world.enemies.actors[0]!
+  assert.ok(enemy.position.x > initialEnemyX, 'the authoritative enemy position must retain player push')
+  assert.ok(
+    Math.hypot(
+      enemy.position.x - player.position.x,
+      enemy.position.y - player.position.y,
+    ) >= enemy.config.collisionRadius + PLAYER_CHARACTER_RADIUS,
+  )
+  assert.ok(player.position.x < enemy.position.x, 'the player must not pass through the enemy')
+})
+
+test('player movement separates from a live owned Maggot and commits the displaced child', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.fences = []
+  let world = createBoneyardWorld(loaded)
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'mind',
+      displayName: 'Maggot Pusher',
+      element: 'water',
+    }, world),
+    position: { x: 100, y: 350 },
+  }
+  let seeded = stepBoneyardEnemyStore(world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'COFFIN' as const,
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 350, y: 350 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const coffin = seeded.store.actors[0]!
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin brain')
+  seeded = stepBoneyardEnemyStore({
+    ...seeded.store,
+    actors: [{
+      ...coffin,
+      brain: {
+        ...coffin.brain,
+        phase: 'opening',
+        phaseTicksRemaining: 1,
+      },
+    }],
+  }, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 1,
+  })
+  const maggot = seeded.store.maggots[0]!
+  world = {
+    ...world,
+    enemies: {
+      ...seeded.store,
+      maggots: [{
+        ...maggot,
+        nextAttackTick: 10_000,
+        nextMovementTick: 10_000,
+        position: { x: 133, y: 350 },
+      }],
+    },
+  }
+  const initialMaggotX = world.enemies.maggots[0]!.position.x
+
+  for (let tick = 2; tick <= 50; tick += 1) {
+    const result = stepWorld(
+      world,
+      { player },
+      { player: movementInput(1, 0) },
+      tick,
+    )
+    world = result.world
+    player = result.players.player
+  }
+
+  const retained = world.enemies.maggots[0]!
+  assert.ok(retained.position.x > initialMaggotX, 'the authoritative Maggot position must retain player push')
+  assert.ok(
+    Math.hypot(
+      retained.position.x - player.position.x,
+      retained.position.y - player.position.y,
+    ) >= retained.collisionRadius + PLAYER_CHARACTER_RADIUS,
+  )
+  assert.ok(player.position.x < retained.position.x, 'the player must not pass through the Maggot')
 })
 
 test('default Boneyard walks through Solomon dialogue, retreat, then authoritative spawns', () => {
@@ -263,7 +410,7 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
       world,
       { player },
       {},
-      { player: { alive: false, eligible: false } },
+      { player: { alive: false, eligible: false, movementScale: 0 } },
       tick + noTargetTick + 1,
     )
     world = result.world
@@ -285,7 +432,7 @@ test('Solomon ignores dead and ineligible proximity targets', () => {
     world,
     { player },
     {},
-    { player: { alive: false, eligible: false } },
+    { player: { alive: false, eligible: false, movementScale: 0 } },
     1,
   )
   world = result.world
@@ -296,7 +443,7 @@ test('Solomon ignores dead and ineligible proximity targets', () => {
     world,
     { player: result.players.player },
     {},
-    { player: { alive: true, eligible: true } },
+    { player: { alive: true, eligible: true, movementScale: 1 } },
     2,
   )
   assert.equal(result.world.encounter?.phase, 'turning')

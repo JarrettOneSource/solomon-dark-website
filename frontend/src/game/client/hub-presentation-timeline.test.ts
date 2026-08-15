@@ -96,6 +96,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         ageTicks: 1,
         assemblyCharge: Math.fround(0.18),
         charge: 0.2,
+        damage: 10,
         direction: { x: 0, y: -1 },
         flightTicks: 0,
         id: 1,
@@ -109,6 +110,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
       {
         ageTicks: 9,
         charge: 1,
+        damage: 2,
         direction: { x: 1, y: 0 },
         flightTicks: 9,
         headingDegrees: 90,
@@ -151,6 +153,7 @@ test('interpolates primary spells by stable identity without popping lifecycle e
       {
         ageTicks: 1,
         charge: 1,
+        damage: 4,
         direction: { x: 0, y: -1 },
         flightTicks: 1,
         id: 4,

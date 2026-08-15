@@ -3,6 +3,14 @@ import test from 'node:test'
 
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
+  BOUNDED_ARCHER_RANGE_BANDS,
+  BOUNDED_ENEMY_COLD_SLOW_TICKS,
+  BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
+  BOUNDED_MAGE_RANGE_BANDS,
+  NATIVE_WRAITH_DAZZLE_TICKS,
+} from '../core-kernels/boneyard-enemy-modifiers.ts'
+import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
 } from '../core-kernels/boneyard-wave-director.ts'
@@ -14,6 +22,7 @@ import {
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
   NATIVE_SKELETON_ACTION_PROGRAMS,
+  NATIVE_SKELETON_CLAW_MARKERS,
   boneyardEnemyLiveCount,
   createBoneyardEnemyStore,
   damageBoneyardEnemy,
@@ -33,6 +42,7 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
     connected: true,
     eligible: true,
     position: { x: 500, y: 0 },
+    velocityPerTick: { x: 0, y: 0 },
   },
 }
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
@@ -172,9 +182,82 @@ test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks
     pike: { markerProgress: 2, progressPerTick: 0.125, strictEnd: 12 },
     weapon: { markerProgress: 9, progressPerTick: 0.25, strictEnd: 24 },
   })
-  verifySkeletonProgram([], 'claw', 32, 57)
-  verifySkeletonProgram(['FLAG_SWORD'], 'weapon', 36, 97)
-  verifySkeletonProgram(['FLAG_PIKE'], 'pike', 16, 97)
+  assert.deepEqual(NATIVE_SKELETON_CLAW_MARKERS, [4, 8])
+  verifySkeletonProgram([], 'claw', [32, 33, 57], 57)
+  verifySkeletonProgram(['FLAG_SWORD'], 'weapon', [36], 97)
+  verifySkeletonProgram(['FLAG_PIKE'], 'pike', [16], 97)
+})
+
+test('each native claw crossing independently re-checks its staged target and reach', () => {
+  const near = { player: livingTarget(10, 0) }
+  const far = { player: livingTarget(500, 0) }
+  let result = spawnOne('claw-three-contact-recheck', 'SKELETON', { x: 0, y: 0 }, near)
+  result = step(result.store, 1, near)
+
+  const markerTicks: number[] = []
+  const damageTicks: number[] = []
+  for (let tick = 2; tick <= 58; tick += 1) {
+    const players = tick === 34 ? far : near
+    result = step(result.store, tick, players)
+    if (result.events.some((event) => event.type === 'attack-marker')) {
+      markerTicks.push(tick - 1)
+    }
+    if (result.playerDamage.length > 0) {
+      damageTicks.push(tick - 1)
+      assert.deepEqual(result.playerDamage.map(({ amount }) => amount), [3])
+    }
+  }
+
+  assert.deepEqual(markerTicks, [32, 33, 57])
+  assert.deepEqual(damageTicks, [32, 57])
+})
+
+test('melee markers never transfer a scheduled hit to a reacquired target', () => {
+  const originalPlayers = {
+    alpha: livingTarget(10, 0),
+    beta: livingTarget(100, 0),
+  }
+  let result = spawnOne(
+    'locked-melee-target',
+    'SKELETON',
+    { x: 0, y: 0 },
+    originalPlayers,
+  )
+  result = step(result.store, 1, originalPlayers)
+  assert.equal(result.store.actors[0]!.brain.phase, 'attack')
+
+  const reacquiredPlayers = {
+    alpha: { ...livingTarget(10, 0), alive: false },
+    beta: livingTarget(10, 0),
+  }
+  let marker = null as (typeof result.events)[number] | null
+  for (let tick = 2; tick <= 40 && marker === null; tick += 1) {
+    result = step(result.store, tick, reacquiredPlayers)
+    marker = result.events.find((event) => event.type === 'attack-marker') ?? null
+  }
+
+  assert.equal(result.store.actors[0]!.targetPlayerId, 'beta')
+  assert.equal(marker?.targetPlayerId, 'alpha')
+  assert.deepEqual(result.playerDamage, [])
+})
+
+test('melee markers re-check the scheduled target against family reach', () => {
+  const players = { player: livingTarget(10, 0) }
+  let result = spawnOne(
+    'marker-time-reach',
+    'SKELETON',
+    { x: 0, y: 0 },
+    players,
+  )
+  result = step(result.store, 1, players)
+  for (let tick = 2; tick <= 32; tick += 1) {
+    result = step(result.store, tick, players)
+  }
+
+  result = step(result.store, 33, { player: livingTarget(500, 0) })
+
+  assert.ok(result.events.some((event) => event.type === 'attack-marker'))
+  assert.deepEqual(result.playerDamage, [])
 })
 
 test('Archer and Mage use their recovered variable progress programs', () => {
@@ -249,6 +332,261 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     projectile.id,
     projectile.nativeTypeId,
   ]), [[1, 0x7eb]])
+})
+
+test('every Archer and Mage range mode attacks, approaches, and retreats at its own band', () => {
+  const variants = [
+    [[], 0],
+    [['FLAG_RANGEDOWN'], 1],
+    [['FLAG_RANGEUP'], 2],
+    [['FLAG_RANGEEASY'], 3],
+  ] as const
+  for (const [flags, mode] of variants) {
+    for (const [token, range, actionPhase] of [
+      ['SKELETONARCHER', BOUNDED_ARCHER_RANGE_BANDS[mode], 'attack'],
+      ['SKELETONMAGE', BOUNDED_MAGE_RANGE_BANDS[mode], 'cast'],
+    ] as const) {
+      const insideDistance = (range.minimum + range.maximum) / 2
+      let inside = spawnOne(
+        `${token}-${mode}-inside`,
+        token,
+        { x: 0, y: 0 },
+        { player: livingTarget(insideDistance, 0) },
+        flags,
+      )
+      inside = step(inside.store, 1, { player: livingTarget(insideDistance, 0) })
+      assert.equal(inside.store.actors[0]!.brain.phase, actionPhase)
+
+      const nearDistance = range.minimum - 1
+      let near = spawnOne(
+        `${token}-${mode}-near`,
+        token,
+        { x: 0, y: 0 },
+        { player: livingTarget(nearDistance, 0) },
+        flags,
+      )
+      near = step(near.store, 2, { player: livingTarget(nearDistance, 0) })
+      assert.ok(near.store.actors[0]!.position.x < 0, `${token} mode ${mode} must retreat`)
+
+      const farDistance = range.maximum + 1
+      let far = spawnOne(
+        `${token}-${mode}-far`,
+        token,
+        { x: 0, y: 0 },
+        { player: livingTarget(farDistance, 0) },
+        flags,
+      )
+      far = step(far.store, 2, { player: livingTarget(farDistance, 0) })
+      assert.ok(far.store.actors[0]!.position.x > 0, `${token} mode ${mode} must approach`)
+    }
+  }
+})
+
+test('Archer modes consume target velocity and RNG while payload and extra arrows stay orthogonal', () => {
+  const movingTarget = {
+    player: {
+      ...livingTarget(0, -200),
+      velocityPerTick: { x: 1, y: 0 },
+    },
+  }
+  const normal = forcedArcherVolley('archer-normal', [], movingTarget)
+  const leading = forcedArcherVolley('archer-leading', ['FLAG_LEADING'], movingTarget)
+  const scatter = forcedArcherVolley('archer-scatter', ['FLAG_SCATTERSHOT'], movingTarget)
+  const random = forcedArcherVolley('archer-random', ['FLAG_RANDOMSHOT'], movingTarget)
+  assert.equal(normal.store.projectiles[0]!.headingDeg, 0)
+  assert.ok(leading.store.projectiles[0]!.headingDeg > 0)
+  assert.ok(Math.abs(signedHeading(scatter.store.projectiles[0]!.headingDeg)) <= 12)
+  assert.ok(Math.abs(signedHeading(random.store.projectiles[0]!.headingDeg)) <= 25)
+
+  const fire = forcedArcherVolley(
+    'archer-fire-multishot',
+    ['FLAG_FIREARROW'],
+    { player: livingTarget(200, 0) },
+    2,
+  )
+  assert.deepEqual(fire.store.projectiles.map((projectile) => ({
+    damage: projectile.damage,
+    headingDeg: projectile.headingDeg,
+    payload: projectile.payload,
+  })), [
+    { damage: 8, headingDeg: 86, payload: 'fire' },
+    { damage: 8, headingDeg: 90, payload: 'fire' },
+    { damage: 8, headingDeg: 94, payload: 'fire' },
+  ])
+  const poison = forcedArcherVolley(
+    'archer-poison',
+    ['FLAG_POISONARROW'],
+    { player: livingTarget(200, 0) },
+  ).store.projectiles[0]!
+  assert.deepEqual({
+    damage: poison.damage,
+    payload: poison.payload,
+    poisonDamage: poison.poisonDamage,
+    poisonDuration: poison.poisonDuration,
+  }, {
+    damage: 4,
+    payload: 'poison',
+    poisonDamage: 12,
+    poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  })
+})
+
+test('Mage self and ally shields preserve 50/450 strength and 1000/500 cadence', () => {
+  for (const [shieldFlag, strong, expectedStrength, expectedInterval] of [
+    ['FLAG_SHIELD', false, 50, 1_000],
+    ['FLAG_SHIELD', true, 450, 500],
+    ['FLAG_SHIELDOTHERS', false, 50, 1_000],
+    ['FLAG_SHIELDOTHERS', true, 450, 500],
+  ] as const) {
+    const flags = strong
+      ? [shieldFlag, 'FLAG_SHIELDSTRONG', 'FLAG_SHIELDFAST']
+      : [shieldFlag]
+    let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`shield-${flags.join('-')}`), {
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players: { player: livingTarget(150, 0) },
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [
+        intent('SKELETONMAGE', 1, { x: 0, y: 0 }, flags),
+        intent('SKELETON', 2, { x: 20, y: 0 }),
+      ],
+      tick: 0,
+    })
+    const mageBrain = result.store.actors[0]!.brain
+    assert.equal(mageBrain.family, 'mage')
+    if (mageBrain.family !== 'mage') throw new Error('expected Mage brain')
+    assert.equal(mageBrain.shieldTicksRemaining, expectedInterval)
+    result = withActorBrain(result, 0, { ...mageBrain, shieldTicksRemaining: 1 })
+    result = step(result.store, 1, { player: livingTarget(150, 0) })
+    const refreshedBrain = result.store.actors[0]!.brain
+    assert.equal(refreshedBrain.family, 'mage')
+    if (refreshedBrain.family !== 'mage') throw new Error('expected Mage brain')
+    assert.equal(refreshedBrain.shieldTicksRemaining, expectedInterval)
+    const selfShield = shieldFlag === 'FLAG_SHIELD' ? expectedStrength : 0
+    const allyShield = shieldFlag === 'FLAG_SHIELDOTHERS' ? expectedStrength : 0
+    assert.equal(result.store.actors[0]!.shieldHealth, selfShield)
+    assert.equal(result.store.actors[1]!.shieldHealth, allyShield)
+  }
+})
+
+test('enemy damage consumes shields before health and clears exhausted capacity', () => {
+  const players = { player: livingTarget(150, 0) }
+  let result = spawnOne(
+    'shield-absorption',
+    'SKELETONMAGE',
+    { x: 0, y: 0 },
+    players,
+    ['FLAG_SHIELD'],
+  )
+  const brain = result.store.actors[0]!.brain
+  assert.equal(brain.family, 'mage')
+  if (brain.family !== 'mage') throw new Error('expected Mage brain')
+  result = withActorBrain(result, 0, { ...brain, shieldTicksRemaining: 1 })
+  result = step(result.store, 1, players)
+  const initialHealth = result.store.actors[0]!.currentHealth
+
+  const absorbed = damageBoneyardEnemy(result.store, {
+    actorId: result.store.actors[0]!.id,
+    amount: 20,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  assert.equal(absorbed.killed, false)
+  assert.equal(absorbed.store.actors[0]!.currentHealth, initialHealth)
+  assert.equal(absorbed.store.actors[0]!.shieldHealth, 30)
+  assert.equal(absorbed.store.actors[0]!.shieldMaximumHealth, 50)
+
+  const exhausted = damageBoneyardEnemy(absorbed.store, {
+    actorId: absorbed.store.actors[0]!.id,
+    amount: 31,
+    sourcePlayerId: 'player',
+    tick: 1,
+  })
+  assert.equal(exhausted.killed, false)
+  assert.equal(exhausted.store.actors[0]!.currentHealth, initialHealth - 1)
+  assert.equal(exhausted.store.actors[0]!.shieldHealth, 0)
+  assert.equal(exhausted.store.actors[0]!.shieldMaximumHealth, 0)
+})
+
+test('all Mage elements emit their authoritative damage, status, payload, and lightning lifetime', () => {
+  const fire = forcedMageAttack('mage-fire', ['FLAG_CASTFIRE'])
+  assert.deepEqual(mageProjectileSummary(fire), {
+    coldSlowTicks: 0,
+    damage: 24,
+    kind: 'firebolt',
+    payload: 'fire',
+    poisonDamage: 0,
+    poisonDuration: 0,
+  })
+  const frost = forcedMageAttack('mage-frost', ['FLAG_CASTFROST'])
+  assert.deepEqual(mageProjectileSummary(frost), {
+    coldSlowTicks: BOUNDED_ENEMY_COLD_SLOW_TICKS,
+    damage: 6,
+    kind: 'guided-missile',
+    payload: 'cold',
+    poisonDamage: 0,
+    poisonDuration: 0,
+  })
+  const poison = forcedMageAttack('mage-poison', ['FLAG_CASTPOISON'])
+  assert.deepEqual(mageProjectileSummary(poison), {
+    coldSlowTicks: 0,
+    damage: 24,
+    kind: 'guided-missile',
+    payload: 'poison',
+    poisonDamage: 24,
+    poisonDuration: BOUNDED_ENEMY_POISON_DURATION_SECONDS,
+  })
+
+  let lightning = forcedMageAttack('mage-lightning', ['FLAG_CASTLIGHTNING'])
+  assert.equal(lightning.store.projectiles.length, 0)
+  assert.deepEqual(lightning.playerDamage.map((damage) => ({
+    amount: damage.amount,
+    playerId: damage.playerId,
+  })), [{ amount: 12, playerId: 'player' }])
+  const created = lightning.store.actors[0]!.lightningEffect
+  assert.ok(created)
+  const lightningEvent = lightning.events.find((event) => event.type === 'mage-lightning')
+  assert.ok(lightningEvent)
+  assert.deepEqual(lightningEvent, {
+    actorId: lightning.store.actors[0]!.id,
+    eventId: created.eventId,
+    sourcePosition: { x: 0, y: 0 },
+    targetPlayerId: 'player',
+    targetPosition: { x: 150, y: 0 },
+    tick: 1,
+    type: 'mage-lightning',
+  })
+  assert.equal(created.startedTick, 1)
+  for (let age = 1; age < BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS; age += 1) {
+    lightning = step(lightning.store, created.startedTick + age, {
+      player: livingTarget(150, 0),
+    })
+    assert.equal(lightning.store.actors[0]!.lightningEffect?.eventId, created.eventId)
+  }
+  lightning = step(
+    lightning.store,
+    created.startedTick + BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS,
+    { player: livingTarget(150, 0) },
+  )
+  assert.equal(lightning.store.actors[0]!.lightningEffect, null)
+})
+
+test('Wraith contact applies the exact 50-tick Dazzle duration', () => {
+  const players = { player: livingTarget(10, 0) }
+  let result = spawnOne('wraith-dazzle', 'WRAITH', { x: 0, y: 0 }, players)
+  const brain = result.store.actors[0]!.brain
+  assert.equal(brain.family, 'wraith')
+  if (brain.family !== 'wraith') throw new Error('expected Wraith brain')
+  result = withActorBrain(result, 0, {
+    ...brain,
+    actionTick: BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick - 1,
+    contactTargetPlayerId: 'player',
+    markerEmitted: false,
+    phase: 'drain',
+  })
+  result = step(result.store, 1, players)
+
+  assert.equal(result.playerDamage.length, 1)
+  assert.equal(result.playerDamage[0]!.dazzleTicks, NATIVE_WRAITH_DAZZLE_TICKS)
 })
 
 test('unresolved families keep separate bounded approach, special, and cooldown states', () => {
@@ -383,13 +721,14 @@ test('enemy projectiles retire on an earlier static-world contact without damagi
   assert.ok(projectileEvents.every((event) => event.targetPlayerId === null))
 })
 
-test('Coffin phases materialize bounded Maggot actors only on open', () => {
+test('Coffin opening emits exactly three emerging helpers, then replenishes below its owned cap', () => {
   let result = spawnOne(
     'coffin-program',
     'COFFIN',
     { x: 0, y: 0 },
     { player: livingTarget(10, 0) },
   )
+  result = withCoffinMaximumMaggots(result, 4)
   result = withCoffinRemaining(result, 1)
   result = step(result.store, 1, { player: livingTarget(10, 0) })
   assert.equal(result.store.actors[0]!.brain.phase, 'rising')
@@ -406,33 +745,88 @@ test('Coffin phases materialize bounded Maggot actors only on open', () => {
   result = step(result.store, 4, { player: livingTarget(10, 0) })
   assert.equal(result.store.actors[0]!.brain.phase, 'open')
   const release = result.events.find((event) => event.type === 'coffin-maggot-release')
-  assert.equal(release?.count, 20)
-  assert.equal(result.store.maggots.length, 20)
-  assert.equal(boneyardEnemyLiveCount(result.store), 21)
-  assert.equal(new Set(result.store.maggots.map((maggot) => maggot.id)).size, 20)
+  assert.equal(release?.count, 3)
+  assert.equal(result.store.maggots.length, 3)
+  assert.equal(boneyardEnemyLiveCount(result.store), 4)
+  assert.equal(new Set(result.store.maggots.map((maggot) => maggot.id)).size, 3)
+  assert.ok(result.store.maggots.every((maggot) => (
+    (maggot as unknown as { movementPhase?: string }).movementPhase === 'emerging'
+  )))
+  assert.deepEqual(new Set(result.store.maggots.map((maggot) => (
+    (maggot as unknown as { launchTrajectory?: string }).launchTrajectory
+  ))), new Set(['lid', 'edge']))
 
-  result = step(result.store, 24, { player: livingTarget(10, 0) })
-  assert.ok(result.playerDamage.some((damage) => damage.amount === 2))
-  const dyingMaggots = result.store.maggots.filter((maggot) => maggot.lifeState === 'dying')
-  assert.equal(dyingMaggots.length, 2)
-  assert.ok(dyingMaggots.every((maggot) => maggot.deathEpoch !== null))
-  assert.ok(dyingMaggots.every((maggot) => maggot.terminalEmitted))
-  assert.deepEqual(
-    result.events
-      .filter((event) => event.type === 'enemy-death')
-      .map((event) => event.actorId),
-    dyingMaggots.map((maggot) => maggot.id),
-  )
-  result = step(result.store, 36, { player: livingTarget(10, 0) })
-  const laterDeathIds = new Set(result.events
-    .filter((event) => event.type === 'enemy-death')
-    .map((event) => event.actorId))
-  assert.ok(dyingMaggots.every((maggot) => !laterDeathIds.has(maggot.id)))
-  assert.equal(result.store.maggots.length, 18)
-  assert.deepEqual(
-    result.retired.map(({ actorId }) => actorId),
-    dyingMaggots.map(({ id }) => id),
-  )
+  const openingPositions = new Map(result.store.maggots.map((maggot) => [
+    maggot.id,
+    { ...maggot.position },
+  ]))
+  let replenishTick = -1
+  for (let tick = 5; tick <= 500 && replenishTick < 0; tick += 1) {
+    result = step(result.store, tick, FAR_PLAYERS)
+    if (result.events.some((event) => event.type === 'coffin-maggot-release')) {
+      replenishTick = tick
+    }
+  }
+  assert.ok(replenishTick > 4)
+  assert.equal(result.events.find((event) => event.type === 'coffin-maggot-release')?.count, 1)
+  assert.equal(result.store.maggots.filter((maggot) => maggot.lifeState === 'alive').length, 4)
+  assert.ok(result.store.maggots.some((maggot) => {
+    const initial = openingPositions.get(maggot.id)
+    return initial !== undefined
+      && (maggot.position.x !== initial.x || maggot.position.y !== initial.y)
+  }), 'opening helpers must traverse their emergence trajectories')
+
+  for (let tick = replenishTick + 1; tick <= replenishTick + 200; tick += 1) {
+    result = step(result.store, tick, FAR_PLAYERS)
+  }
+  assert.equal(result.store.maggots.filter((maggot) => maggot.lifeState === 'alive').length, 4)
+})
+
+test('a crawling Maggot bites once, enters death, and cannot damage again', () => {
+  let result = openedCoffin('one-bite-maggot', { player: livingTarget(10, 0) })
+  let tick = 5
+  while (result.store.maggots.some((maggot) => (
+    (maggot as unknown as { movementPhase?: string }).movementPhase !== 'crawl'
+  ))) {
+    result = step(result.store, tick, FAR_PLAYERS)
+    tick += 1
+    if (tick > 200) throw new Error('Maggots did not finish emergence')
+  }
+  const source = result.store.maggots[0]!
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      maggots: [{
+        ...source,
+        nextAttackTick: tick,
+        position: { x: 0, y: 0 },
+      }],
+    },
+  }
+
+  result = step(result.store, tick, { player: livingTarget(10, 0) })
+  assert.deepEqual(result.playerDamage.map((damage) => damage.playerId), ['player'])
+  assert.equal(result.store.maggots[0]!.lifeState, 'dying')
+  result = step(result.store, tick + 1, { player: livingTarget(10, 0) })
+  assert.deepEqual(result.playerDamage, [])
+})
+
+test('Maggots retire immediately when their Coffin ownership becomes invalid', () => {
+  let result = openedCoffin('invalid-maggot-owner', FAR_PLAYERS)
+  const coffin = result.store.actors[0]!
+  const childIds = result.store.maggots.map((maggot) => maggot.id)
+  const damaged = damageBoneyardEnemy(result.store, {
+    actorId: coffin.id,
+    amount: coffin.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 4,
+  })
+
+  result = step(damaged.store, 5, FAR_PLAYERS)
+
+  assert.equal(result.store.maggots.length, 0)
+  assert.deepEqual(result.retired.map((retirement) => retirement.actorId), childIds)
 })
 
 test('player-killed Maggot emits one death event before later retirement', () => {
@@ -614,10 +1008,78 @@ test('wave spawn resolution observes post-retirement and terminal-child live cou
   assert.ok(observedLiveCount > 1)
 })
 
+function forcedArcherVolley(
+  seed: string,
+  flags: readonly string[],
+  players: BoneyardEnemyTargets,
+  extraArrows = 0,
+): BoneyardEnemyStoreStepResult {
+  let result = spawnOne(seed, 'SKELETONARCHER', { x: 0, y: 0 }, players, flags)
+  const actor = result.store.actors[0]!
+  if (actor.config.enemyToken !== 'SKELETONARCHER' || actor.brain.family !== 'archer') {
+    throw new Error('expected Archer actor')
+  }
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      actors: [{
+        ...actor,
+        brain: {
+          ...actor.brain,
+          actionProgress: NATIVE_ARCHER_ACTION_PROGRAM.markerProgress,
+          markerEmitted: false,
+          phase: 'attack',
+        },
+        config: {
+          ...actor.config,
+          family: { ...actor.config.family, extraArrows },
+        },
+      }],
+    },
+  }
+  return step(result.store, 1, players)
+}
+
+function forcedMageAttack(
+  seed: string,
+  flags: readonly string[],
+): BoneyardEnemyStoreStepResult {
+  const players = { player: livingTarget(150, 0) }
+  let result = spawnOne(seed, 'SKELETONMAGE', { x: 0, y: 0 }, players, flags)
+  const brain = result.store.actors[0]!.brain
+  if (brain.family !== 'mage') throw new Error('expected Mage brain')
+  result = withActorBrain(result, 0, {
+    ...brain,
+    actionProgress: NATIVE_MAGE_ACTION_PROGRAMS.short.markerProgress,
+    castProgram: 'short',
+    castRoll: 0,
+    markerEmitted: false,
+    phase: 'cast',
+  })
+  return step(result.store, 1, players)
+}
+
+function mageProjectileSummary(result: BoneyardEnemyStoreStepResult) {
+  const projectile = result.store.projectiles[0]!
+  return {
+    coldSlowTicks: projectile.coldSlowTicks,
+    damage: projectile.damage,
+    kind: projectile.kind,
+    payload: projectile.payload,
+    poisonDamage: projectile.poisonDamage,
+    poisonDuration: projectile.poisonDuration,
+  }
+}
+
+function signedHeading(headingDeg: number): number {
+  return ((headingDeg + 180) % 360 + 360) % 360 - 180
+}
+
 function verifySkeletonProgram(
   flags: readonly string[],
   expectedAction: 'claw' | 'pike' | 'weapon',
-  expectedMarkerTick: number,
+  expectedMarkerTicks: readonly number[],
   expectedCompletionTick: number,
 ): void {
   const players = { player: livingTarget(10, 0) }
@@ -628,17 +1090,22 @@ function verifySkeletonProgram(
   if (began.family !== 'skeleton') throw new Error('expected Skeleton brain')
   assert.equal(began.phase, 'attack')
   assert.equal(began.action, expectedAction)
-  let markerTick = -1
+  const markerTicks: number[] = []
+  const damageAmounts: number[] = []
   let completionTick = -1
   for (let tick = 2; tick <= expectedCompletionTick + 2; tick += 1) {
     result = step(result.store, tick, players)
-    if (result.playerDamage.length > 0) markerTick = tick
+    if (result.playerDamage.length > 0) {
+      markerTicks.push(tick - 1)
+      damageAmounts.push(...result.playerDamage.map(({ amount }) => amount))
+    }
     if (completionTick < 0 && result.store.actors[0]!.brain.phase === 'approach') {
       completionTick = tick
       break
     }
   }
-  assert.equal(markerTick - 1, expectedMarkerTick)
+  assert.deepEqual(markerTicks, expectedMarkerTicks)
+  if (expectedAction === 'claw') assert.deepEqual(damageAmounts, [3, 3, 3])
   assert.equal(completionTick - 1, expectedCompletionTick)
 }
 
@@ -692,6 +1159,39 @@ function withCoffinRemaining(
   return withActorBrain(result, 0, { ...brain, phaseTicksRemaining })
 }
 
+function withCoffinMaximumMaggots(
+  result: BoneyardEnemyStoreStepResult,
+  maximumMaggots: number,
+): BoneyardEnemyStoreStepResult {
+  const actor = result.store.actors[0]!
+  if (actor.config.enemyToken !== 'COFFIN') throw new Error('expected Coffin config')
+  return {
+    ...result,
+    store: {
+      ...result.store,
+      actors: [{
+        ...actor,
+        config: {
+          ...actor.config,
+          family: { ...actor.config.family, maximumMaggots },
+        },
+      }],
+    },
+  }
+}
+
+function openedCoffin(
+  seed: string,
+  players: BoneyardEnemyTargets,
+): BoneyardEnemyStoreStepResult {
+  let result = spawnOne(seed, 'COFFIN', { x: 0, y: 0 }, players)
+  for (let tick = 1; tick <= 4; tick += 1) {
+    result = withCoffinRemaining(result, 1)
+    result = step(result.store, tick, players)
+  }
+  return result
+}
+
 function livingTarget(x: number, y: number) {
   return {
     alive: true,
@@ -699,6 +1199,7 @@ function livingTarget(x: number, y: number) {
     connected: true,
     eligible: true,
     position: { x, y },
+    velocityPerTick: { x: 0, y: 0 },
   } as const
 }
 

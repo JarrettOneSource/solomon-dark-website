@@ -38,7 +38,7 @@ export function predictPlayerCharacterInHub(
       }),
     }
   }
-  const plan = planPlayerCharacterTick(previous, input)
+  const plan = planPlayerCharacterTick(previous, input, 1)
   const moved = moveWithHubRegionCollisionState(
     participant.region,
     previous.position,

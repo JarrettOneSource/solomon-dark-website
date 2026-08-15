@@ -9,6 +9,11 @@ import {
   type WizardElement,
 } from './player-character.ts'
 import {
+  createPlayerSkillBook,
+  effectivePrimarySkillRankStats,
+  type NativePrimarySkillRankStats,
+} from './player-progression.ts'
+import {
   createPrimarySpellSimulation,
   PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_CAST_ETHER_ACTION_END_TICK,
@@ -27,6 +32,7 @@ import {
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
   stepPrimarySpells,
+  type PrimarySpellChannelEmission,
   type PrimarySpellSimulationState,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
@@ -102,14 +108,33 @@ function earthChargeAfter(updateCount: number): number {
 
 interface DirectSpellHarness {
   players: Readonly<Record<string, PlayerCharacterState>>
+  primarySkill: NativePrimarySkillRankStats
   spells: PrimarySpellSimulationState
   tick: number
 }
 
-function directSpellHarness(element: WizardElement): DirectSpellHarness {
+function primarySkillRankStats(
+  element: WizardElement,
+  rank: number,
+): NativePrimarySkillRankStats {
+  const book = createPlayerSkillBook({
+    discipline: 'arcane',
+    displayName: 'Caster',
+    element,
+  })
+  const effectiveRanks = [...book.effectiveRanks]
+  effectiveRanks[book.primarySkillId] = rank
+  return effectivePrimarySkillRankStats({
+    ...book,
+    effectiveRanks: Object.freeze(effectiveRanks),
+  })
+}
+
+function directSpellHarness(element: WizardElement, rank = 1): DirectSpellHarness {
   const state = simulation(element)
   return {
     players: { [PLAYER_ID]: getPlayerCharacter(state, PLAYER_ID) },
+    primarySkill: primarySkillRankStats(element, rank),
     spells: createPrimarySpellSimulation(),
     tick: 0,
   }
@@ -121,13 +146,18 @@ function stepSpellKernel(
   availableMana: number,
   eligible = true,
   canPlaceProjectile: () => boolean = () => true,
-): { manaSpent: number, state: DirectSpellHarness } {
+  primarySkill = state.primarySkill,
+): {
+  channelEmissions: readonly PrimarySpellChannelEmission[]
+  manaSpent: number
+  state: DirectSpellHarness
+} {
   const player = state.players[PLAYER_ID]!
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile,
     castAuthority: {
-      [PLAYER_ID]: { availableMana, eligible },
+      [PLAYER_ID]: { availableMana, eligible, primarySkill },
     },
     inputs: {
       [PLAYER_ID]: {
@@ -141,11 +171,17 @@ function stepSpellKernel(
     spells: state.spells,
     tick: state.tick + 1,
     viewScale: 1.35,
-    worldKeyForPlayer: () => 'boneyard:test',
+    worldKeyForPlayer: () => 'hub:courtyard',
   })
   return {
+    channelEmissions: result.channelEmissions,
     manaSpent: result.manaSpent[PLAYER_ID]!,
-    state: { players: result.players, spells: result.spells, tick: state.tick + 1 },
+    state: {
+      players: result.players,
+      primarySkill,
+      spells: result.spells,
+      tick: state.tick + 1,
+    },
   }
 }
 
@@ -179,6 +215,56 @@ test('rank-one one-shot casts debit once on acceptance and reject unaffordable p
   assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
   assert.equal(rejected.state.players[PLAYER_ID]!.primaryCast.castSequence, 0)
   assert.equal(rejected.state.spells.projectiles.length, 0)
+})
+
+test('rank-two spell payloads change debit and damage without rewriting a live projectile', () => {
+  let rankOne = stepSpellKernel(directSpellHarness('fire'), true, 12)
+  assert.equal(rankOne.manaSpent, 12)
+  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    rankOne = stepSpellKernel(rankOne.state, true, 0)
+  }
+  assert.equal(rankOne.state.spells.projectiles[0]!.damage, 4)
+
+  const rankTwoStats = primarySkillRankStats('fire', 2)
+  const advanced = stepSpellKernel(
+    rankOne.state,
+    false,
+    0,
+    true,
+    () => true,
+    rankTwoStats,
+  )
+  assert.equal(advanced.state.spells.projectiles[0]!.damage, 4)
+
+  let rankTwo = stepSpellKernel(directSpellHarness('fire', 2), true, 15)
+  assert.equal(rankTwo.manaSpent, 15)
+  for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    rankTwo = stepSpellKernel(rankTwo.state, true, 0)
+  }
+  assert.equal(rankTwo.state.spells.projectiles[0]!.damage, 7)
+})
+
+test('rank-two channels carry native 100 Hz cost and damage payloads', () => {
+  const air = stepSpellKernel(directSpellHarness('air', 2), true, 0.14)
+  assert.equal(air.manaSpent, 0.14)
+  assert.deepEqual(air.state.spells.projectiles, [])
+  assert.deepEqual(air.state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+  assert.deepEqual(air.state.spells.transients.length, 1)
+  assert.deepEqual(air.channelEmissions.map(({ damage, manaCost }) => ({ damage, manaCost })), [
+    { damage: 0.04, manaCost: 0.14 },
+  ])
+
+  const water = stepSpellKernel(directSpellHarness('water', 2), true, 0.175)
+  assert.deepEqual(water.channelEmissions.map(({ damage, manaCost }) => ({ damage, manaCost })), [
+    { damage: 0.035, manaCost: 0.175 },
+  ])
+  assert.equal(water.manaSpent, 0.175)
+})
+
+test('rank-two Boulder captures base damage while charging at its per-tick cost', () => {
+  const earth = stepSpellKernel(directSpellHarness('earth', 2), true, 0.13)
+  assert.equal(earth.manaSpent, 0.13)
+  assert.equal(earth.state.spells.projectiles[0]!.damage, 30)
 })
 
 test('an unaffordable held press stays rejected and cannot emit later for free', () => {
@@ -318,11 +404,19 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   let players = playerCharacterRecords(initial.playerEntities)
   let previousPlayers = playerCharacterRecords(initial.playerEntities)
   let spells = initial.primarySpells
+  const castAuthority = {
+    [PLAYER_ID]: {
+      availableMana: 1_000_000,
+      eligible: true,
+      primarySkill: primarySkillRankStats('ether', 1),
+    },
+  }
   for (let tick = 1; tick <= PRIMARY_CAST_ETHER_EMISSION_TICK + 1; tick += 1) {
     const result = stepPrimarySpells({
       ...EMPTY_SPELL_WORLD,
       canPlaceProjectile: () => true,
       canTraverseProjectile: () => true,
+      castAuthority,
       inputs: { [PLAYER_ID]: input(initial, true) },
       players,
       previousPlayers,
@@ -352,6 +446,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
+    castAuthority,
     inputs: { [PLAYER_ID]: input(initial, false) },
     players,
     previousPlayers: players,
@@ -368,6 +463,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
+    castAuthority,
     inputs: {},
     players: {},
     previousPlayers: {},
@@ -383,6 +479,7 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
+    castAuthority,
     inputs: {},
     players: {},
     previousPlayers: {},
@@ -451,6 +548,13 @@ test('Fire blocked birth replaces the spawned actor before its first trail tick'
     canTraverseProjectile: (_spell, from, to) => {
       probes.push({ from, to })
       return false
+    },
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 1_000_000,
+        eligible: true,
+        primarySkill: primarySkillRankStats('fire', 1),
+      },
     },
     inputs: { [PLAYER_ID]: input(beforeMarker, true) },
     players,
@@ -785,6 +889,13 @@ test('Earth resamples world aim while held and freezes the last sample on releas
   const next = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 1_000_000,
+        eligible: true,
+        primarySkill: primarySkillRankStats('earth', 1),
+      },
+    },
     inputs: { [PLAYER_ID]: input(state, false) },
     players: playerCharacterRecords(state.playerEntities),
     previousPlayers: playerCharacterRecords(state.playerEntities),
@@ -822,7 +933,13 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
     canTraverseProjectile: () => true,
-    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 1_000_000,
+        eligible: true,
+        primarySkill: primarySkillRankStats('earth', 1),
+      },
+    },
     inputs: { [PLAYER_ID]: input(state, false) },
     players: projectedPlayers,
     previousPlayers: projectedPlayers,
@@ -840,7 +957,13 @@ test('Earth preserves long-held age and has no fixed flight range or timeout', (
       ...EMPTY_SPELL_WORLD,
       canPlaceProjectile: () => true,
       canTraverseProjectile: () => true,
-      castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
+      castAuthority: {
+        [PLAYER_ID]: {
+          availableMana: 1_000_000,
+          eligible: true,
+          primarySkill: primarySkillRankStats('earth', 1),
+        },
+      },
       inputs: { [PLAYER_ID]: input(state, false) },
       players,
       previousPlayers: players,
@@ -873,7 +996,13 @@ test('Earth publishes one authoritative breakup when its next flight position co
       return false
     },
     canTraverseProjectile: () => true,
-    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 1_000_000,
+        eligible: true,
+        primarySkill: primarySkillRankStats('earth', 1),
+      },
+    },
     inputs: { [PLAYER_ID]: input(state, false) },
     players: projectedPlayers,
     previousPlayers: projectedPlayers,
@@ -917,7 +1046,13 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
       return false
     },
     canTraverseProjectile: () => true,
-    castAuthority: { [PLAYER_ID]: { availableMana: 1_000_000, eligible: true } },
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 1_000_000,
+        eligible: true,
+        primarySkill: primarySkillRankStats('earth', 1),
+      },
+    },
     inputs: { [PLAYER_ID]: input(state, false) },
     players: projectedPlayers,
     previousPlayers: projectedPlayers,

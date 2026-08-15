@@ -440,6 +440,37 @@ test('host starts one exact random Boneyard for every connected client', async (
   assert.equal(loadedA.boneyard.scene.solomonDig?.frameProgram.length, 29)
 })
 
+test('host accepts constructor-owned Boneyard entropy without reusing it as run identity', async (context) => {
+  const seedBytes = Buffer.alloc(16, 0x5a)
+  let seedRequests = 0
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    createBoneyardSeedBytes: () => {
+      seedRequests += 1
+      return seedBytes
+    },
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const loaded = nextMessage(client.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+
+  const message = await loaded
+  assert.equal(message.type, 'server-boneyard-loaded')
+  assert.equal(seedRequests, 1)
+  assert.equal(message.boneyard.seed, seedBytes.toString('hex'))
+  assert.match(message.boneyard.runId, /^[0-9a-f]{32}$/)
+  assert.notEqual(message.boneyard.runId, message.boneyard.seed)
+})
+
 test('standalone host resets its run after the final client leaves', async (context) => {
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,

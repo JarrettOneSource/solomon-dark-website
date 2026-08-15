@@ -26,10 +26,11 @@ import {
   type GameRunLifecycleState,
 } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
-import type {
-  PlayerProgressionComponent,
-  PlayerSkillBookComponent,
-  PlayerStatBookComponent,
+import {
+  effectivePrimarySkillRankStats,
+  type PlayerProgressionComponent,
+  type PlayerSkillBookComponent,
+  type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
 import {
   createPrimarySpellSimulation,
@@ -46,7 +47,6 @@ import {
   type BoneyardWorldState,
 } from './boneyard-world.ts'
 import {
-  canPlaceBoneyardBody,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
   withBoneyardGateCollision,
@@ -65,14 +65,17 @@ import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
   applyPlayerEntitySkillChoice,
+  coldSlowPlayerEntity,
   createPlayerEntityStore,
   damagePlayerEntity,
+  dazzlePlayerEntity,
   grantPlayerEntityExperience,
   playerCharacterAt,
   playerCharacterRecords,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityIndex,
+  playerEntityMovementScale,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
@@ -345,6 +348,7 @@ export function stepGameSimulationTick(
           return [playerId, {
             alive: progression.lifeState === 'alive',
             eligible: state.run.eligiblePlayerIds.includes(playerId),
+            movementScale: playerEntityMovementScale(state.playerEntities, playerId),
           }]
         })),
         state.tick + 1,
@@ -360,6 +364,8 @@ function finishGameSimulationTick(
     enemyEvents?: readonly BoneyardEnemySemanticEvent[]
     playerDamage?: readonly Readonly<{
       amount: number
+      coldSlowTicks: number
+      dazzleTicks: number
       playerId: string
       poisonDamage: number
       poisonDuration: number
@@ -375,7 +381,8 @@ function finishGameSimulationTick(
 ): GameSimulationState {
   const tick = previous.tick + 1
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
-  for (const damage of result.playerDamage ?? []) {
+  const playerDamage = result.playerDamage ?? []
+  for (const damage of playerDamage) {
     playerEntities = damagePlayerEntity(
       playerEntities,
       damage.playerId,
@@ -422,17 +429,13 @@ function finishGameSimulationTick(
   const cast = stepPrimarySpells({
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
-        return canPlaceBoneyardBody(
-          position,
-          result.world.bounds,
-          boneyardCollision!,
-          radius,
-        )
+        return true
       }
       const region = result.world.participants[spell.ownerId]?.region
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
     canTraverseProjectile: (spell, from, to) => {
+      if (result.world.kind === 'boneyard') return true
       return spellObstructionPoint(spell.ownerId, from, to) === null
     },
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
@@ -441,6 +444,7 @@ function finishGameSimulationTick(
         availableMana: playerEntities.progressions[index]!.currentMana,
         eligible: playerEntityCanCast(playerEntities, playerId)
           && playerEntities.progressions[index]!.pendingOffer === null,
+        primarySkill: effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!),
       },
     ])),
     inputs,
@@ -533,6 +537,18 @@ function finishGameSimulationTick(
   playerEntities = combat.store
   for (const playerId of combat.deathBurstPlayerIds) {
     playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
+  }
+  for (const damage of playerDamage) {
+    playerEntities = coldSlowPlayerEntity(
+      playerEntities,
+      damage.playerId,
+      damage.coldSlowTicks,
+    )
+    playerEntities = dazzlePlayerEntity(
+      playerEntities,
+      damage.playerId,
+      damage.dazzleTicks,
+    )
   }
   const alivePlayerIds = new Set(playerEntities.identities.flatMap(({ playerId }, index) => (
     playerEntities.progressions[index]!.lifeState === 'alive'

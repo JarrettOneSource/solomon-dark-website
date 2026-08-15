@@ -70,6 +70,36 @@ test('captures independent left and right levels from the world surface', () => 
   input.destroy()
 })
 
+test('a local presentation owner can claim either mouse edge before casting', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const claimed: string[] = []
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    claimMouseCastStart: (lane) => {
+      claimed.push(lane)
+      return true
+    },
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x, y }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  assert.equal(mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30)), false)
+  assert.equal(mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 40, 50)), false)
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 0, 20, 30))
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 40, 50))
+
+  assert.deepEqual(claimed, ['primary', 'secondary'])
+  assert.deepEqual(published, [])
+  assert.deepEqual(input.sample().input, expectedInput(null, false, false))
+  input.destroy()
+})
+
 test('ignores non-world downs but keeps move and release capture outside the surface', () => {
   const mouseTarget = new EventTarget()
   const target = new EventTarget()

@@ -48,6 +48,8 @@ test('flight projectiles sweep to the path-first actor and retire after one cont
   assert.equal(result.enemies.actors[0]!.currentHealth, 5)
   assert.equal(result.enemies.actors[1]!.currentHealth, 1)
   assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['fire-impact'])
+  assert.equal(result.spells.nextId, 101)
 })
 
 test('native projectile radius participates in swept enemy contact', () => {
@@ -98,9 +100,86 @@ test('world contact retires a projectile before an actor hidden behind collision
   assert.deepEqual(result.hits, [])
   assert.equal(result.enemies, enemies)
   assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(result.spells.transients, [{
+    ageTicks: 0,
+    id: 100,
+    kind: 'fire-impact',
+    origin: { x: 40, y: 0 },
+    ownerId: 'wizard',
+    worldKey: WORLD_KEY,
+  }])
 })
 
-test('point contacts use stable Ether parity and Earth charge while retaining death state', () => {
+test('a nearer actor wins over later terrain and publishes one Fire impact', () => {
+  const enemies = spawnSkeletons([{ x: 40, y: 0 }])
+  const spells = spellState({
+    projectiles: [projectile({
+      id: 7,
+      kind: 'fire',
+      position: { x: 100, y: 0 },
+      velocity: { x: 100, y: 0 },
+    })],
+  })
+
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    [],
+    1,
+    WORLD_KEY,
+    () => 0.9,
+  )
+
+  assert.equal(result.hits[0]?.actorId, 1)
+  assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['fire-impact'])
+})
+
+test('terrain wins an exact projectile-contact tie', () => {
+  const spawned = spawnSkeletons([{ x: 50, y: 0 }])
+  const enemy = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{
+      ...enemy,
+      config: { ...enemy.config, collisionRadius: 0 },
+    }],
+  }
+  const spells = spellState({
+    projectiles: [projectile({
+      id: 7,
+      kind: 'fire',
+      position: { x: 100, y: 0 },
+      velocity: { x: 100, y: 0 },
+    })],
+  })
+
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    [],
+    1,
+    WORLD_KEY,
+    () => 0.275,
+  )
+
+  assert.deepEqual(result.hits, [])
+  assert.equal(result.enemies.actors[0]!.currentHealth, 5)
+  const impact = result.spells.transients[0]
+  assert.ok(impact?.kind === 'fire-impact')
+  assert.deepEqual({ ...impact, origin: undefined }, {
+    ageTicks: 0,
+    id: 100,
+    kind: 'fire-impact',
+    origin: undefined,
+    ownerId: 'wizard',
+    worldKey: WORLD_KEY,
+  })
+  assert.ok(Math.abs(impact.origin.x - 27.5) < 1e-12)
+  assert.equal(impact.origin.y, 0)
+})
+
+test('point contacts consume captured damage and multiply Earth base damage by charge', () => {
   const enemies = spawnSkeletons([
     { x: 0, y: 0 },
     { x: 100, y: 0 },
@@ -108,26 +187,41 @@ test('point contacts use stable Ether parity and Earth charge while retaining de
   ])
   const spells = spellState({
     projectiles: [
-      projectile({ id: 4, kind: 'earth', charge: 0.5, position: { x: 200, y: 0 } }),
-      projectile({ id: 3, kind: 'ether', position: { x: 100, y: 0 } }),
-      projectile({ id: 2, kind: 'ether', position: { x: 0, y: 0 } }),
+      projectile({ id: 4, kind: 'earth', charge: 0.5, damage: 30, position: { x: 200, y: 0 } }),
+      projectile({ id: 3, kind: 'ether', damage: 2, position: { x: 100, y: 0 } }),
+      projectile({ id: 2, kind: 'ether', damage: 4, position: { x: 0, y: 0 } }),
     ],
   })
 
   const result = resolveBoneyardSpellCombat(enemies, spells, [], 1, WORLD_KEY)
 
   assert.deepEqual(result.hits.map((hit) => [hit.spellId, hit.amount, hit.actorId]), [
-    [2, 1, 1],
+    [2, 4, 1],
     [3, 2, 2],
-    [4, 5, 3],
+    [4, 15, 3],
   ])
   assert.deepEqual(result.spells.projectiles, [])
-  assert.deepEqual(result.enemies.actors.map((actor) => actor.currentHealth), [4, 3, 0])
+  assert.deepEqual(result.enemies.actors.map((actor) => actor.currentHealth), [1, 3, -10])
   const killed = result.enemies.actors[2]!
   assert.equal(killed.lifeState, 'dying')
   assert.equal(killed.deathStartedTick, 1)
   assert.equal(killed.lastDamagedByPlayerId, 'wizard')
   assert.equal(result.hits[2]!.killed, true)
+  const earthImpact = result.spells.transients.find(({ kind }) => kind === 'earth-impact')
+  assert.ok(earthImpact?.kind === 'earth-impact')
+  assert.equal(earthImpact.birthTick, 1)
+  assert.equal(earthImpact.charge, 0.5)
+  assert.equal(result.spells.transients.length, 1)
+
+  const repeated = resolveBoneyardSpellCombat(
+    result.enemies,
+    result.spells,
+    [],
+    2,
+    WORLD_KEY,
+  )
+  assert.equal(repeated.spells, result.spells)
+  assert.equal(repeated.spells.transients.length, 1)
 })
 
 test('projectiles ignore dying actors and continue to the first living contact', () => {
@@ -159,7 +253,7 @@ test('projectiles ignore dying actors and continue to the first living contact',
   assert.equal(result.enemies.actors[1]!.currentHealth, 1)
 })
 
-test('semantic Air and Water emissions damage intersected circles once per cast tick', () => {
+test('semantic Air and Water emissions consume their rank-indexed tick damage', () => {
   const enemies = spawnSkeletons([
     { x: 50, y: 0 },
     { x: 200, y: 0 },
@@ -170,29 +264,66 @@ test('semantic Air and Water emissions damage intersected circles once per cast 
     transients: [
       transient({ id: 11, kind: 'water' }),
       transient({ id: 12, kind: 'water' }),
-      transient({ id: 10, kind: 'air' }),
+      transient({ id: 10, kind: 'air', targetId: 'enemy:2' }),
     ],
   })
 
   const result = resolveBoneyardSpellCombat(enemies, spells, [
-    emission({ id: 11, kind: 'water' }),
-    emission({ id: 10, kind: 'air' }),
+    emission({ damage: 0.035, id: 11, kind: 'water', manaCost: 0.175 }),
+    emission({ damage: 0.04, id: 10, kind: 'air', manaCost: 0.14 }),
   ], 1, WORLD_KEY)
 
   assert.deepEqual(result.hits.map((hit) => [hit.spellId, hit.actorId, hit.amount]), [
-    [10, 1, 0.025],
-    [10, 2, 0.025],
-    [11, 1, 0.025],
-    [11, 2, 0.025],
+    [10, 2, 0.04],
+    [11, 1, 0.035],
+    [11, 2, 0.035],
   ])
-  assert.ok(Math.abs(result.enemies.actors[0]!.currentHealth - 4.95) < 1e-12)
-  assert.ok(Math.abs(result.enemies.actors[1]!.currentHealth - 4.95) < 1e-12)
+  assert.ok(Math.abs(result.enemies.actors[0]!.currentHealth - 4.965) < 1e-12)
+  assert.ok(Math.abs(result.enemies.actors[1]!.currentHealth - 4.925) < 1e-12)
   assert.equal(result.enemies.actors[2]!.currentHealth, 5)
   assert.equal(result.enemies.actors[3]!.currentHealth, 5)
   assert.equal(result.spells, spells)
 })
 
-for (const kind of ['air', 'water'] as const) {
+test('selected Air contact respects terrain ordering and terrain wins a tie', () => {
+  const spawned = spawnSkeletons([{ x: 100, y: 0 }])
+  const enemy = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{
+      ...enemy,
+      config: { ...enemy.config, collisionRadius: 10 },
+    }],
+  }
+  const spells = spellState({
+    transients: [transient({ id: 10, kind: 'air', targetId: 'enemy:1' })],
+  })
+  const selectedContactProgress = 0.9
+
+  const tied = resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    [emission({ id: 10, kind: 'air' })],
+    1,
+    WORLD_KEY,
+    () => selectedContactProgress,
+  )
+  assert.deepEqual(tied.hits, [])
+  assert.equal(tied.enemies.actors[0]!.currentHealth, 5)
+
+  const actorFirst = resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    [emission({ id: 10, kind: 'air' })],
+    1,
+    WORLD_KEY,
+    () => selectedContactProgress + 0.01,
+  )
+  assert.equal(actorFirst.hits[0]?.actorId, 1)
+  assert.equal(actorFirst.enemies.actors[0]!.currentHealth, 4.975)
+})
+
+for (const kind of ['water'] as const) {
   test(`${kind} terrain contact blocks targets at and beyond the wall`, () => {
     const spawned = spawnSkeletons([
       { x: 50, y: 0 },
@@ -393,6 +524,7 @@ function spellState(options: {
 
 function projectile(options: {
   charge?: number
+  damage?: number
   id: number
   kind: PrimarySpellProjectileState['kind']
   position?: Readonly<{ x: number; y: number }>
@@ -403,6 +535,11 @@ function projectile(options: {
   const common = {
     ageTicks: 1,
     charge: options.charge ?? 1,
+    damage: options.damage ?? {
+      earth: 10,
+      ether: 1 + (options.id & 1),
+      fire: 4,
+    }[options.kind],
     direction: normalized(velocity),
     flightTicks: 1,
     id: options.id,
@@ -437,6 +574,7 @@ function transient(options: {
   direction?: Readonly<{ x: number; y: number }>
   id: number
   kind: 'air' | 'water'
+  targetId?: string | null
   worldKey?: string
 }): PrimarySpellTransientState {
   const direction = { ...(options.direction ?? { x: 1, y: 0 }) }
@@ -456,7 +594,7 @@ function transient(options: {
         endpoint: { x: 205, y: 0 },
         kind: 'air',
         midpoint: { x: 102.5, y: 0 },
-        targetId: null,
+        targetId: options.targetId ?? null,
       }
     case 'water':
       return {
@@ -468,14 +606,18 @@ function transient(options: {
 }
 
 function emission(options: {
+  damage?: number
   id: number
   kind: PrimarySpellChannelEmission['kind']
+  manaCost?: number
   worldKey?: string
 }): PrimarySpellChannelEmission {
   return {
+    damage: options.damage ?? 0.025,
     direction: { x: 1, y: 0 },
     id: options.id,
     kind: options.kind,
+    manaCost: options.manaCost ?? (options.kind === 'air' ? 0.12 : 0.125),
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
     worldKey: options.worldKey ?? WORLD_KEY,

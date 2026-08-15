@@ -19,6 +19,7 @@ import {
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
   nativeFootstepCue,
+  nativeEnemyEventSoundCue,
   newSolomonVoiceEvent,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
@@ -105,6 +106,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
   assert.equal(NATIVE_SOUND_MANIFEST['start-boulder'].registryOffset, 0xf0c)
+  assert.equal(NATIVE_SOUND_MANIFEST['skeleton-die'].registryOffset, 0xdac)
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
@@ -112,6 +114,36 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
+})
+
+test('pins the checked-in Skeleton death cue to the untouched stock WAV', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/skeleton-die.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST['skeleton-die'].sourceSha256,
+  )
+})
+
+test('maps only authoritative Skeleton-family terminal events to the native cue', () => {
+  const death = {
+    actorId: 9,
+    eventId: 3,
+    output: 'archer-shatter' as const,
+    runId: 'run-1',
+    tick: 120,
+    type: 'enemy-terminal-output' as const,
+  }
+  assert.equal(nativeEnemyEventSoundCue(death), 'skeleton-die')
+  assert.equal(nativeEnemyEventSoundCue({
+    ...death,
+    output: 'zombie-collapse',
+  }), null)
+  assert.equal(nativeEnemyEventSoundCue({
+    ...death,
+    type: 'enemy-death',
+  }), null)
 })
 
 test('emits Create entry stream commands on crossed native thresholds', () => {
@@ -177,6 +209,18 @@ test('gives Boneyard the same local authoritative footstep owner', () => {
     boneyardSceneSource,
     /audio\.playSound\(nativeFootstepCue\(footstepTick, playerId\), \{ volume: 0\.5 \}\)/,
   )
+})
+
+test('consumes the host enemy event lane once through the active Boneyard scene', () => {
+  assert.match(
+    mainMenuSceneSource,
+    /<BoneyardScene[\s\S]*?subscribeEnemyEvent=\{session\.onEnemyEvent\}/,
+  )
+  assert.match(boneyardSceneSource, /subscribeEnemyEvent\(\(event\) =>/)
+  assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventId/)
+  assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventOutput/)
+  assert.match(boneyardSceneSource, /if \(event\.output !== undefined\)/)
+  assert.match(boneyardSceneSource, /nativeEnemyEventSoundCue\(event\)/)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

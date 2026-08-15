@@ -328,6 +328,7 @@ function worldFixture(): PrimarySpellSimulationState {
       ageTicks: 30,
       assemblyCharge: 1,
       charge: 1,
+      damage: 10,
       direction: { x: 0, y: -1 },
       flightTicks: 0,
       id: 1,

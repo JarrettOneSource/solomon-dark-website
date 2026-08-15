@@ -24,19 +24,33 @@ export function nativeEnemyProjectilePlan(
 ): NativeEnemyProjectilePlan {
   const age = Math.max(0, Math.floor(projectile.ageTicks))
   switch (projectile.kind) {
-    case 'arrow': return plan(projectile, [{
-      alpha: 1,
-      atlas: 'BadGuys',
-      entry: 255 + facingBucket(projectile.headingDeg, 12),
-      role: 'arrow',
-      rotationRadians: 0,
-      scale: 1,
-    }])
+    case 'arrow': {
+      requirePayload(projectile, ['normal', 'fire', 'poison'])
+      const arrow = {
+        alpha: 1,
+        atlas: 'BadGuys' as const,
+        entry: (projectile.payload === 'poison' ? 271 : 255)
+          + facingBucket(projectile.headingDeg, 12),
+        role: `arrow-${projectile.payload}`,
+        rotationRadians: 0,
+        scale: 1,
+      }
+      return plan(projectile, projectile.payload === 'fire'
+        ? [arrow, {
+            alpha: 1,
+            atlas: 'BadGuys',
+            entry: 2,
+            role: 'arrow-fire-effect',
+            rotationRadians: projectile.headingDeg * Math.PI / 180,
+            scale: 1,
+          }]
+        : [arrow])
+    }
     case 'firebolt': return plan(projectile, [{
       alpha: 1,
       atlas: 'BadGuys',
       entry: 251 + facingBucket(projectile.headingDeg, 16),
-      role: 'firebolt',
+      role: `firebolt-${requirePayload(projectile, ['fire'])}`,
       rotationRadians: 0,
       scale: 1,
     }])
@@ -44,7 +58,7 @@ export function nativeEnemyProjectilePlan(
       alpha: 1,
       atlas: 'BadGuys',
       entry: 110 + age % 3,
-      role: 'guided-missile',
+      role: `guided-missile-${requirePayload(projectile, ['cold', 'poison'])}`,
       rotationRadians: projectile.headingDeg * Math.PI / 180,
       scale: 1,
     }])
@@ -52,7 +66,7 @@ export function nativeEnemyProjectilePlan(
       alpha: 1,
       atlas: 'BadGuys',
       entry: 267 + age % 4,
-      role: 'demon-bomb',
+      role: `demon-bomb-${requirePayload(projectile, ['none'])}`,
       rotationRadians: age * 0.08,
       scale: 1,
     }])
@@ -60,11 +74,23 @@ export function nativeEnemyProjectilePlan(
       alpha: Math.max(0, 1 - age / projectile.lifetimeTicks),
       atlas: 'DeadHawg',
       entry: 46 + Math.min(31, age),
-      role: 'poison-pool',
+      role: `poison-pool-${requirePayload(projectile, ['poison'])}`,
       rotationRadians: 0,
       scale: Math.max(1, projectile.contactRadius / 20),
     }])
   }
+}
+
+function requirePayload<Payload extends BoneyardEnemyProjectileSnapshot['payload']>(
+  projectile: BoneyardEnemyProjectileSnapshot,
+  supported: readonly Payload[],
+): Payload {
+  if (!(supported as readonly string[]).includes(projectile.payload)) {
+    throw new Error(
+      `enemy projectile ${projectile.kind} does not support ${projectile.payload} payload`,
+    )
+  }
+  return projectile.payload as Payload
 }
 
 function plan(

@@ -31,6 +31,7 @@ const SOURCES = {
     'magic-missile': 'magic.wav',
     'pick-skill': 'pick.wav',
     'rock-hit': 'rock.wav',
+    'skeleton-die': 'skeleton.wav',
     'start-boulder': 'boulder.wav',
     'step-1': 'step1.wav',
     'step-2': 'step2.wav',

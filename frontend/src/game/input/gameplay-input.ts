@@ -23,6 +23,8 @@ export interface BrowserGameplayInputSample {
   input: PlayerCharacterInput
 }
 
+export type GameplayMouseCastLane = 'primary' | 'secondary'
+
 export interface BrowserGameplayInput {
   destroy(): void
   sample(): BrowserGameplayInputSample
@@ -32,6 +34,7 @@ export interface BrowserGameplayInput {
 }
 
 interface BrowserGameplayInputOptions {
+  claimMouseCastStart?: (lane: GameplayMouseCastLane) => boolean
   getGamepads?: () => readonly (GamepadLike | null)[]
   mouseTarget: BrowserInputTarget
   onInput: (input: PlayerCharacterInput) => void
@@ -42,6 +45,7 @@ interface BrowserGameplayInputOptions {
 }
 
 export function createBrowserGameplayInput({
+  claimMouseCastStart = () => false,
   getGamepads = () => navigator.getGamepads(),
   mouseTarget,
   onInput,
@@ -101,6 +105,10 @@ export function createBrowserGameplayInput({
     const mouse = mouseEvent(event)
     const lane = mouse && castLane(mouse.button)
     if (!mouse || !lane) return
+    if (claimMouseCastStart(lane)) {
+      event.preventDefault()
+      return
+    }
     const nextAim = projectPointer(mouse)
     if (!nextAim) return
     capturedPointer = mouse
@@ -172,7 +180,7 @@ function primaryDirection(direction: Vector2): Vector2 | null {
     : null
 }
 
-function castLane(button: number): 'primary' | 'secondary' | null {
+function castLane(button: number): GameplayMouseCastLane | null {
   if (button === 0) return 'primary'
   if (button === 2) return 'secondary'
   return null

@@ -1,4 +1,10 @@
-import type { BoneyardEnemyProjectileSnapshot } from './game-state.ts'
+import {
+  BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
+} from './game-state.ts'
+import type {
+  BoneyardEnemyProjectilePayload,
+  BoneyardEnemyProjectileSnapshot,
+} from './game-state.ts'
 import type {
   ReplicatedEntityDescriptor,
   ReplicatedEntitySample,
@@ -9,7 +15,7 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID = 3
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 9
+const DESCRIPTOR_LENGTH = 10
 const SAMPLE_LENGTH = 6
 
 const KINDS = [
@@ -43,8 +49,12 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
       || !positiveInteger(descriptor[6])
       || !positiveInteger(descriptor[7])
       || (descriptor[8] !== 0 && descriptor[8] !== 1)
+      || !arrayIndex(descriptor[9], BONEYARD_ENEMY_PROJECTILE_PAYLOADS.length)
     ) return false
-    return NATIVE_TYPE_IDS[KINDS[descriptor[2]]!] === descriptor[3]
+    const kind = KINDS[descriptor[2]]!
+    const payload = BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!
+    return NATIVE_TYPE_IDS[kind] === descriptor[3]
+      && payloadMatchesKind(kind, payload)
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -69,6 +79,7 @@ export function boneyardEnemyProjectileDescriptor(
     projectile.lifetimeTicks,
     quantize(projectile.contactRadius, VALUE_SCALE),
     Number(projectile.homing),
+    requiredIndex(BONEYARD_ENEMY_PROJECTILE_PAYLOADS, projectile.payload),
   ]
 }
 
@@ -108,11 +119,25 @@ export function materializeBoneyardEnemyProjectile(
     lifetimeTicks: descriptor[6],
     nativeTypeId: descriptor[3] as BoneyardEnemyProjectileSnapshot['nativeTypeId'],
     ownerActorId: descriptor[4],
+    payload: BONEYARD_ENEMY_PROJECTILE_PAYLOADS[descriptor[9]]!,
     position: {
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),
     },
     spawnTick: descriptor[5],
+  }
+}
+
+function payloadMatchesKind(
+  kind: BoneyardEnemyProjectileSnapshot['kind'],
+  payload: BoneyardEnemyProjectilePayload,
+): boolean {
+  switch (kind) {
+    case 'arrow': return payload === 'normal' || payload === 'fire' || payload === 'poison'
+    case 'firebolt': return payload === 'fire'
+    case 'guided-missile': return payload === 'cold' || payload === 'poison'
+    case 'demon-bomb': return payload === 'none'
+    case 'poison-pool': return payload === 'poison'
   }
 }
 

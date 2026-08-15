@@ -30,6 +30,7 @@ function fireball(
   return {
     ageTicks,
     charge: 1,
+    damage: 4,
     direction,
     flightTicks: ageTicks,
     id: 17,

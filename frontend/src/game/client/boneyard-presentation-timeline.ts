@@ -149,7 +149,7 @@ function interpolateSnapshot(
       ),
       enemies: interpolateEnemies(older.world.enemies, newer.world.enemies, blend),
       enemyEvents: (blend < 1 ? older.world.enemyEvents : newer.world.enemyEvents)
-        .map((event) => ({ ...event })),
+        .map(copyEnemyEvent),
       enemyProjectiles: interpolateEnemyProjectiles(
         older.world.enemyProjectiles,
         newer.world.enemyProjectiles,
@@ -192,7 +192,7 @@ function interpolatePlayer(
       ...discrete.primaryCast,
       aimDirection: { ...discrete.primaryCast.aimDirection },
     },
-    progression: discrete.progression,
+    progression: interpolatePlayerProgression(older, newer, blend),
     velocity: {
       x: lerp(older.velocity.x, newer.velocity.x, blend),
       y: lerp(older.velocity.y, newer.velocity.y, blend),
@@ -204,6 +204,25 @@ function interpolatePlayer(
       WALK_FRAME_COUNT,
     ),
   }
+}
+
+function interpolatePlayerProgression(
+  older: ProtocolPlayerState,
+  newer: ProtocolPlayerState,
+  blend: number,
+): ProtocolPlayerState['progression'] {
+  const first = older.progression
+  const second = newer.progression
+  const discrete = blend < 1 ? first : second
+  const sameDeathEpoch = first.deathEpoch === second.deathEpoch
+    && (first.lifeState === 'dying' || first.lifeState === 'spectating')
+    && (second.lifeState === 'dying' || second.lifeState === 'spectating')
+  return sameDeathEpoch
+    ? {
+        ...discrete,
+        deathTick: Math.floor(lerp(first.deathTick, second.deathTick, blend)),
+      }
+    : discrete
 }
 
 function interpolateGateLeaves(
@@ -252,7 +271,7 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
     world: {
       encounter: copySolomon(snapshot.world.encounter),
       enemies: snapshot.world.enemies.map(copyEnemy),
-      enemyEvents: snapshot.world.enemyEvents.map((event) => ({ ...event })),
+      enemyEvents: snapshot.world.enemyEvents.map(copyEnemyEvent),
       enemyProjectiles: snapshot.world.enemyProjectiles.map(copyEnemyProjectile),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
       kind: 'boneyard',
@@ -313,6 +332,7 @@ function interpolateMaggots(
       alpha: lerp(olderMaggot.alpha, newerMaggot.alpha, blend),
       currentHealth: lerp(olderMaggot.currentHealth, newerMaggot.currentHealth, blend),
       deathTick: lerp(olderMaggot.deathTick, newerMaggot.deathTick, blend),
+      emergenceTick: lerp(olderMaggot.emergenceTick, newerMaggot.emergenceTick, blend),
       headingDeg: lerpCycle(olderMaggot.headingDeg, newerMaggot.headingDeg, blend, FULL_CIRCLE),
       hitFlash: lerp(olderMaggot.hitFlash, newerMaggot.hitFlash, blend),
       pose: lerpCycle(olderMaggot.pose, newerMaggot.pose, blend, 2),
@@ -320,6 +340,11 @@ function interpolateMaggots(
         x: lerp(olderMaggot.position.x, newerMaggot.position.x, blend),
         y: lerp(olderMaggot.position.y, newerMaggot.position.y, blend),
       },
+      verticalOffset: lerp(
+        olderMaggot.verticalOffset,
+        newerMaggot.verticalOffset,
+        blend,
+      ),
     }
   })
   if (blend >= 1) {
@@ -421,6 +446,12 @@ function interpolateEnemies(
         x: lerp(olderEnemy.position.x, newerEnemy.position.x, blend),
         y: lerp(olderEnemy.position.y, newerEnemy.position.y, blend),
       },
+      shieldHealth: lerp(olderEnemy.shieldHealth, newerEnemy.shieldHealth, blend),
+      shieldMaximumHealth: lerp(
+        olderEnemy.shieldMaximumHealth,
+        newerEnemy.shieldMaximumHealth,
+        blend,
+      ),
     }
   })
   if (blend >= 1) {
@@ -452,7 +483,7 @@ function copyEnemy(enemy: BoneyardEnemySnapshot): BoneyardEnemySnapshot {
     ...enemy,
     animation: {
       ...enemy.animation,
-      effects: [],
+      effects: enemy.animation.effects.map(copyEnemyEffect),
       maggots: [],
     },
     flags: [...enemy.flags],
@@ -468,6 +499,26 @@ function copyEnemyProjectile(
 
 function copyMaggot(maggot: BoneyardMaggotSnapshot): BoneyardMaggotSnapshot {
   return { ...maggot, position: { ...maggot.position } }
+}
+
+function copyEnemyEvent(
+  event: BoneyardWorldSnapshot['enemyEvents'][number],
+): BoneyardWorldSnapshot['enemyEvents'][number] {
+  return {
+    ...event,
+    ...(event.sourcePosition === undefined
+      ? {}
+      : { sourcePosition: { ...event.sourcePosition } }),
+    ...(event.targetPosition === undefined
+      ? {}
+      : { targetPosition: { ...event.targetPosition } }),
+  }
+}
+
+function copyEnemyEffect(
+  effect: BoneyardEnemySnapshot['animation']['effects'][number],
+): BoneyardEnemySnapshot['animation']['effects'][number] {
+  return { ...effect, offset: { ...effect.offset } }
 }
 
 function interpolateEnemyAnimation(
@@ -509,7 +560,7 @@ function interpolateEnemyAnimation(
       second.demonRearLimbRotationRadians,
       blend,
     ),
-    effects: [],
+    effects: interpolateEnemyEffects(first.effects, second.effects, blend),
     gaitPose: lerpCycle(first.gaitPose, second.gaitPose, blend, ENEMY_GAIT_POSE_COUNT),
     hitFlash: lerp(first.hitFlash, second.hitFlash, blend),
     maggots: [],
@@ -532,6 +583,43 @@ function interpolateEnemyAnimation(
       blend,
     ),
   }
+}
+
+function interpolateEnemyEffects(
+  older: BoneyardEnemySnapshot['animation']['effects'],
+  newer: BoneyardEnemySnapshot['animation']['effects'],
+  blend: number,
+): BoneyardEnemySnapshot['animation']['effects'] {
+  const newerById = new Map(newer.map((effect) => [effect.id, effect]))
+  const effects = older.map((olderEffect) => {
+    const newerEffect = newerById.get(olderEffect.id)
+    if (!newerEffect || olderEffect.role !== newerEffect.role) {
+      return copyEnemyEffect(olderEffect)
+    }
+    const discrete = blend < 1 ? olderEffect : newerEffect
+    return {
+      ...copyEnemyEffect(discrete),
+      alpha: lerp(olderEffect.alpha, newerEffect.alpha, blend),
+      offset: {
+        x: lerp(olderEffect.offset.x, newerEffect.offset.x, blend),
+        y: lerp(olderEffect.offset.y, newerEffect.offset.y, blend),
+      },
+      rotationRadians: lerp(
+        olderEffect.rotationRadians,
+        newerEffect.rotationRadians,
+        blend,
+      ),
+      scale: lerp(olderEffect.scale, newerEffect.scale, blend),
+    }
+  })
+  if (blend >= 1) {
+    const knownIds = new Set(effects.map((effect) => effect.id))
+    for (const effect of newer) {
+      if (!knownIds.has(effect.id)) effects.push(copyEnemyEffect(effect))
+    }
+    return effects.filter((effect) => newerById.has(effect.id))
+  }
+  return effects
 }
 
 function lerp(first: number, second: number, blend: number): number {

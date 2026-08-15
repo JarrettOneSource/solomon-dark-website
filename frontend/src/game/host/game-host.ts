@@ -64,6 +64,7 @@ export interface GameHostOptions {
   authentication: GameHostAuthentication
   boneyards?: BoneyardCatalog
   content?: GameContentManifest
+  createBoneyardSeedBytes?: () => Buffer
   createSimulation?: () => GameSimulationState
   host?: string
   initialPlayerExperience?: number
@@ -380,7 +381,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || loadedBoneyard
           || state.run.phase !== 'hub'
         ) return
-        const selected = materializeBoneyard(boneyards, message.boneyardId)
+        const selected = materializeBoneyard(
+          boneyards,
+          message.boneyardId,
+          options.createBoneyardSeedBytes?.(),
+        )
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
           return

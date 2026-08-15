@@ -192,6 +192,7 @@ export function stepHubWorldTick(
         : planPlayerCharacterTick(
             player,
             inputs[playerId] ?? { movement: { x: 0, y: 0 } },
+            1,
           ),
     )
   }

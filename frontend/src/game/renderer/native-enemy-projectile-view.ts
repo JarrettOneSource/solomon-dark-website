@@ -46,6 +46,10 @@ export class NativeEnemyProjectileViews {
     return this.views.size
   }
 
+  get ids(): readonly number[] {
+    return [...this.views.keys()].sort((left, right) => left - right)
+  }
+
   destroy(): void {
     for (const view of this.views.values()) view.destroy()
     this.views.clear()

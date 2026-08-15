@@ -149,11 +149,14 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `11` welcomes a client with one complete snapshot plus its sequence.
+Protocol `17` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
-discriminated world payload. The Hub world carries a compact replicated-entity
-lane; Boneyard currently carries its small world payload directly until its
-first replicated enemy family exists. Unknown or malformed messages fail
+discriminated world payload. Both Hub and Boneyard carry a compact
+replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling
+state in its direct world payload, while enemy actors, enemy projectiles, and
+Maggots use registered entity descriptors and dynamic samples. Run-scoped
+semantic enemy events remain a separate ordered lane so interpolation cannot
+invent, duplicate, or erase combat edges. Unknown or malformed messages fail
 closed.
 
 Each player projection includes level/XP thresholds, a monotonic progression
@@ -467,7 +470,8 @@ frame phase uses `1/1024` frame. Authoritative state remains full-precision
 JavaScript numbers. Quantization is a transport decision and cannot feed back
 into simulation.
 
-Every future enemy family must satisfy this contract before entering the lane:
+Every future replicated family must satisfy this contract before entering the
+lane:
 
 1. Allocate a stable numeric type ID that is never silently reused.
 2. Register strict descriptor and sample validators and bound every variable
@@ -484,12 +488,15 @@ Every future enemy family must satisfy this contract before entering the lane:
    contract proves that an approaching entity receives its descriptor and at
    least two samples before visibility, with hysteresis at both boundaries.
 
-Boneyard frames remain direct world payloads today because no enemy entity
-family exists in that world yet. The first enemy implementation must add its
-codec to the registry, extend the Boneyard entity lane, bump the exact-match
-protocol version, and pass connected-client recovery tests. The current Student
-codec is infrastructure for that work, not a claim that enemies already
-replicate.
+The registry now assigns type `1` to Hub Students, type `2` to Boneyard enemy
+actors, type `3` to enemy projectiles, and type `4` to Coffin-owned Maggots.
+Enemy descriptors freeze immutable family/configuration state; samples carry
+only authoritative presentation fields such as position, heading, action,
+vitals, shields, effects, payload, and lifecycle clocks. Wave scheduling emits
+spawn intents and consumes the authoritative enemy store's live count; it does
+not own a second enemy list. Connected-client coverage exercises spawn,
+retirement, late join, periodic keyframes, missing-baseline recovery, strict
+codec bounds, and stale-frame rejection for the Boneyard families.
 
 ### Measured gates
 

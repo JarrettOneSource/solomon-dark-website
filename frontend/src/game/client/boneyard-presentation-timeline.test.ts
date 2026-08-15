@@ -5,6 +5,12 @@ import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createPlayerDeathDrawPlan } from '../player-character-presentation.ts'
+import {
+  BOUNDED_PLAYER_DEATH_BURST_PROGRAM,
+  PlayerDeathBurstCrossingTracker,
+  playerDeathBurstLayers,
+} from '../renderer/player-death-burst-presentation.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type {
   BoneyardEnemyProjectileSnapshot,
@@ -54,7 +60,17 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       demonFrontLimbRotationRadians: 0,
       demonRearJointRotationRadians: 0,
       demonRearLimbRotationRadians: 0,
-      effects: [],
+      effects: [{
+        alpha: x / 1_000,
+        atlas: 'DeadHawg',
+        blendMode: 'normal',
+        entry: 46,
+        id: 10,
+        offset: { x: x / 10, y: -2 },
+        role: 'burning-fire',
+        rotationRadians: 0,
+        scale: 1,
+      }],
       gaitPose: x / 10,
       hitFlash: 0,
       impEffectFrame: 0,
@@ -67,6 +83,7 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       zombieRearArmPose: 0,
       zombieRearArmRotationRadians: 0,
     },
+    armored: false,
     currentHealth: 6,
     enemyToken: 'SKELETON',
     flags: ['FLAG_WEAK'],
@@ -75,6 +92,8 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
     maximumHealth: 6,
     nativeTypeId: 1001,
     position: { x, y: 500 },
+    shieldHealth: x / 10,
+    shieldMaximumHealth: 100,
     spawnTick: 90,
   }
 }
@@ -90,6 +109,7 @@ function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
     lifetimeTicks: 300,
     nativeTypeId: 0x7da,
     ownerActorId: 1,
+    payload: 'normal',
     position: { x, y: 475 },
     spawnTick: 90,
   }
@@ -104,12 +124,15 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     headingDeg: 90,
     hitFlash,
     id: 2,
+    emergenceTick: x / 10,
+    launchTrajectory: 'edge',
     maximumHealth: 2,
     ownerCoffinActorId: 1,
     pose: x / 100,
     position: { x, y: 480 },
     spawnTick: 90,
-    state: 'crawl',
+    state: 'emerging',
+    verticalOffset: -x / 10,
   }
 }
 
@@ -177,6 +200,27 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
   }
 }
 
+function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnapshot {
+  const snapshot = snapshotAt(tick, 10, 100)
+  const deathTick = tick - deathEpochTick
+  const player = snapshot.players.local
+  return {
+    ...snapshot,
+    players: {
+      local: {
+        ...player,
+        progression: {
+          ...player.progression,
+          currentHealth: 0,
+          deathEpoch: 1,
+          deathTick,
+          lifeState: deathTick >= 159 ? 'spectating' : 'dying',
+        },
+      },
+    },
+  }
+}
+
 test('interpolates Boneyard actors and gate leaves at display time', () => {
   const timeline = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
@@ -197,8 +241,15 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).world.encounter?.transitionOffsetY, 10)
   assert.deepEqual(timeline.sample(75).world.encounter?.voiceEvents, [])
   assert.equal(timeline.sample(75).world.enemies[0].position.x, 410)
+  assert.equal(timeline.sample(75).world.enemies[0].shieldHealth, 41)
+  assert.ok(Math.abs(
+    timeline.sample(75).world.enemies[0].animation.effects[0]!.alpha - 0.41,
+  ) < 1e-9)
+  assert.equal(timeline.sample(75).world.enemies[0].animation.effects[0]?.offset.x, 41)
   assert.equal(timeline.sample(75).world.enemyProjectiles[0].position.x, 310)
   assert.equal(timeline.sample(75).world.maggots[0].position.x, 210)
+  assert.equal(timeline.sample(75).world.maggots[0].emergenceTick, 21)
+  assert.equal(timeline.sample(75).world.maggots[0].verticalOffset, -21)
   assert.equal(timeline.sample(75).world.maggots[0].hitFlash, 0.5)
   assert.equal(timeline.sample(75).world.waves?.phase, 'dormant')
   assert.equal(timeline.sample(100).players.local.position.x, 20)
@@ -208,6 +259,109 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.deepEqual(timeline.sample(100).world.encounter?.voiceEvents, [
     { cue: 'solomon-hello-1', id: 1 },
   ])
+})
+
+test('preserves every player corpse frame at 20 Hz for all death-epoch alignments', () => {
+  for (let deathEpochTick = 0; deathEpochTick < 5; deathEpochTick += 1) {
+    const timeline = createBoneyardPresentationTimeline({
+      initialReceivedAtMs: 0,
+      initialSnapshot: deathSnapshotAt(145, deathEpochTick),
+      serverTickRate: 100,
+      snapshotRate: 20,
+    })
+    const corpseFrames: number[] = []
+
+    for (let snapshotTick = 150; snapshotTick <= 165; snapshotTick += 5) {
+      const receivedAtMs = (snapshotTick - 145) * 10
+      timeline.push(deathSnapshotAt(snapshotTick, deathEpochTick), receivedAtMs)
+      for (let offsetMs = 0; offsetMs <= 50; offsetMs += 10) {
+        const player = timeline.sample(receivedAtMs + offsetMs).players.local
+        const corpseFrame = createPlayerDeathDrawPlan(
+          player.headingIndex,
+          player.progression.lifeState,
+          player.progression.deathTick,
+        ).frame
+        if (corpseFrames.at(-1) !== corpseFrame) corpseFrames.push(corpseFrame)
+      }
+    }
+
+    assert.deepEqual(corpseFrames, [0, 1, 2, 3], `death epoch tick ${deathEpochTick}`)
+  }
+})
+
+test('emits one finite tick-159 death burst for all five snapshot alignments', () => {
+  for (let deathEpochTick = 0; deathEpochTick < 5; deathEpochTick += 1) {
+    const initial = deathSnapshotAt(145, deathEpochTick)
+    const timeline = createBoneyardPresentationTimeline({
+      initialReceivedAtMs: 0,
+      initialSnapshot: initial,
+      serverTickRate: 100,
+      snapshotRate: 20,
+    })
+    const crossing = new PlayerDeathBurstCrossingTracker(initial)
+    const triggers = []
+    for (let snapshotTick = 150; snapshotTick <= 165; snapshotTick += 5) {
+      const receivedAtMs = (snapshotTick - 145) * 10
+      timeline.push(deathSnapshotAt(snapshotTick, deathEpochTick), receivedAtMs)
+      for (let offsetMs = 0; offsetMs <= 50; offsetMs += 10) {
+        triggers.push(...crossing.update(timeline.sample(receivedAtMs + offsetMs)))
+      }
+    }
+    assert.equal(triggers.length, 1, `death epoch tick ${deathEpochTick}`)
+    const trigger = triggers[0]!
+    const opening = playerDeathBurstLayers(trigger, 0)
+    assert.equal(opening.length, BOUNDED_PLAYER_DEATH_BURST_PROGRAM.particleCount)
+    assert.ok(opening.every((layer) => layer.entry === 10 && layer.alpha === 1))
+    assert.deepEqual(playerDeathBurstLayers(trigger, 0), opening)
+    assert.deepEqual(
+      playerDeathBurstLayers(trigger, BOUNDED_PLAYER_DEATH_BURST_PROGRAM.durationTicks),
+      [],
+    )
+    crossing.destroy()
+    assert.deepEqual(crossing.update(deathSnapshotAt(170, deathEpochTick)), [])
+  }
+})
+
+test('death-burst crossing seeds late joiners and resets without replay on a new run', () => {
+  const late = deathSnapshotAt(165, 0)
+  const crossing = new PlayerDeathBurstCrossingTracker(late)
+  assert.deepEqual(crossing.update(late), [])
+  assert.deepEqual(crossing.update(deathSnapshotAt(170, 0)), [])
+
+  const nextRun = deathSnapshotAt(165, 0)
+  nextRun.world.runId = 'run-2'
+  nextRun.run = { ...nextRun.run, runId: 'run-2' }
+  assert.deepEqual(crossing.update(nextRun), [])
+
+  const beforeNextBurst = deathSnapshotAt(158, 0)
+  beforeNextBurst.world.runId = 'run-2'
+  beforeNextBurst.run = { ...beforeNextBurst.run, runId: 'run-2' }
+  beforeNextBurst.players.local.progression.deathEpoch = 2
+  beforeNextBurst.players.local.progression.deathTick = 158
+  beforeNextBurst.players.local.progression.lifeState = 'dying'
+  assert.deepEqual(crossing.update(beforeNextBurst), [])
+
+  const nextBurst = deathSnapshotAt(159, 0)
+  nextBurst.world.runId = 'run-2'
+  nextBurst.run = { ...nextBurst.run, runId: 'run-2' }
+  nextBurst.players.local.progression.deathEpoch = 2
+  assert.equal(crossing.update(nextBurst).length, 1)
+  assert.deepEqual(crossing.update(nextBurst), [])
+})
+
+test('does not interpolate the player death clock across a new death epoch', () => {
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: snapshotAt(100, 10, 100),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(deathSnapshotAt(105, 103), 50)
+
+  assert.equal(timeline.sample(75).players.local.progression.lifeState, 'alive')
+  assert.equal(timeline.sample(75).players.local.progression.deathTick, 0)
+  assert.equal(timeline.sample(100).players.local.progression.lifeState, 'dying')
+  assert.equal(timeline.sample(100).players.local.progression.deathTick, 2)
 })
 
 test('owns returned state and ignores stale Boneyard snapshots', () => {
@@ -229,6 +383,10 @@ test('owns returned state and ignores stale Boneyard snapshots', () => {
   assert.notEqual(frame.world.encounter, initial.world.encounter)
   assert.notEqual(frame.world.waves, initial.world.waves)
   assert.notEqual(frame.world.enemies[0], initial.world.enemies[0])
+  assert.notEqual(
+    frame.world.enemies[0].animation.effects[0],
+    initial.world.enemies[0].animation.effects[0],
+  )
   assert.notEqual(frame.world.enemyProjectiles[0], initial.world.enemyProjectiles[0])
   assert.notEqual(frame.world.maggots[0], initial.world.maggots[0])
 })

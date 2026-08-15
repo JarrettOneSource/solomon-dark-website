@@ -26,12 +26,15 @@ export type NativeEnemyAtlas = NativeEnemySampleAtlas
 
 export interface NativeEnemyVisualSnapshot {
   animation?: NativeEnemyAnimationSample
+  armored: boolean
   enemyToken: NativeEnemyFamily
   flags: readonly string[]
   headingDeg: number
   id: number
   nativeTypeId: number
   position: Readonly<{ x: number; y: number }>
+  shieldHealth: number
+  shieldMaximumHealth: number
   spawnTick: number
 }
 
@@ -137,9 +140,12 @@ export function nativeEnemyPresentationPlan(
   const baseLayers = animation?.state === 'death'
     ? animation.effects.length > 0 ? [] : deathLayers(family, animation.deathTick)
     : familyLayers(enemy, facing, flags, spawnAgeTicks, animation, actionFrame)
+  const shieldedLayers = animation?.state === 'death'
+    ? baseLayers
+    : [...baseLayers, ...shieldLayers(baseLayers, enemy)]
   const sampledLayers = animation
-    ? [...baseLayers, ...effectLayers(animation.effects)]
-    : baseLayers
+    ? [...shieldedLayers, ...effectLayers(animation.effects)]
+    : shieldedLayers
   const layers = animation
     ? applyAuthoritativeSample(sampledLayers, animation)
     : sampledLayers
@@ -174,7 +180,7 @@ function familyLayers(
   actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   switch (enemy.enemyToken) {
-    case 'SKELETON': return skeletonLayers(enemy, facing, flags, animation, actionFrame)
+    case 'SKELETON': return skeletonLayers(enemy, facing, animation, actionFrame)
     case 'SKELETONARCHER': return skeletonArcherLayers(facing, flags, animation, actionFrame)
     case 'SKELETONMAGE': return skeletonMageLayers(facing, flags, animation, actionFrame)
     case 'IMP': return impLayers(enemy, facing, animation, actionFrame)
@@ -193,15 +199,12 @@ function familyLayers(
 function skeletonLayers(
   enemy: NativeEnemyVisualSnapshot,
   facing: number,
-  flags: ReadonlySet<string>,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
   const weapon = selectedFlagValue(enemy.flags, WEAPON_BY_FLAG, 0)
   const headgear = selectedFlagValue(enemy.flags, HEADGEAR_BY_FLAG, 0)
-  const armored = flags.has('ARMOR') || (
-    flags.has('ARMORMAYBE') && visualChoice(enemy, 0, 2) === 1
-  )
+  const armored = enemy.armored
   const sampledPose = visualPose(animation, actionFrame)
   const limbPose = actionFrame?.program.name === 'skeleton-claw-a'
     || actionFrame?.program.name === 'skeleton-claw-b'
@@ -487,6 +490,21 @@ function effectLayers(
       scale: effect.scale,
     },
   ))
+}
+
+function shieldLayers(
+  bodyLayers: readonly NativeEnemySpriteLayer[],
+  enemy: NativeEnemyVisualSnapshot,
+): NativeEnemySpriteLayer[] {
+  if (enemy.shieldHealth <= 0 || enemy.shieldMaximumHealth <= 0) return []
+  const alpha = boundedUnit(enemy.shieldHealth / enemy.shieldMaximumHealth)
+  return bodyLayers.map((source) => ({
+    ...source,
+    alpha: source.alpha * alpha,
+    blendMode: 'add',
+    role: `shield:${source.role}`,
+    scale: source.scale * 1.05,
+  }))
 }
 
 function applyAuthoritativeSample(
