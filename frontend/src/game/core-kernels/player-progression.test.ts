@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import './native-secondary-ability-contract.test.ts'
+
 import {
   MAX_PLAYER_EXPERIENCE,
   MAX_PLAYER_LEVEL,
