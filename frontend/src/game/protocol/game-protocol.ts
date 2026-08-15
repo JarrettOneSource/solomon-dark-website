@@ -4208,8 +4208,9 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'fire-patch') {
     onlyKeys(source, field, [
-      'ageTicks', 'alpha', 'burnDamage', 'damage', 'drawAlpha', 'id', 'kind',
-      'life', 'nativeType', 'ownerId', 'phase', 'position', 'scale',
+      'ageTicks', 'atlasPhase', 'atlasPhaseStep', 'burnDamage', 'damage',
+      'drawAlpha', 'fadeAlpha', 'id', 'kind', 'life', 'nativeType', 'ownerId',
+      'position', 'scale', 'shapeSample',
       'supplementalContact', 'velocity', 'velocityMultiplier', 'worldKey',
     ])
     if (
@@ -4219,28 +4220,37 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     ) {
       throw new GameProtocolError(`${field}.nativeType is not a Fire patch type`)
     }
-    const alpha = finite(source.alpha, `${field}.alpha`)
-    if (alpha < 0 || alpha > 1) {
-      throw new GameProtocolError(`${field}.alpha is outside [0,1]`)
+    const fadeAlpha = finite(source.fadeAlpha, `${field}.fadeAlpha`)
+    if (fadeAlpha < 0 || fadeAlpha > 1) {
+      throw new GameProtocolError(`${field}.fadeAlpha is outside [0,1]`)
     }
-    const phase = finite(source.phase, `${field}.phase`)
-    if (phase < 0 || phase >= 32) {
-      throw new GameProtocolError(`${field}.phase is outside [0,32)`)
+    const atlasPhase = finite(source.atlasPhase, `${field}.atlasPhase`)
+    if (atlasPhase < 0 || atlasPhase >= 32) {
+      throw new GameProtocolError(`${field}.atlasPhase is outside [0,32)`)
+    }
+    const shapeSample = finite(source.shapeSample, `${field}.shapeSample`)
+    if (shapeSample < 0 || shapeSample > 1) {
+      throw new GameProtocolError(`${field}.shapeSample is outside [0,1]`)
     }
     return {
       ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
-      alpha,
+      atlasPhase,
+      atlasPhaseStep: nonnegativeFinite(
+        source.atlasPhaseStep,
+        `${field}.atlasPhaseStep`,
+      ),
       burnDamage: nonnegativeFinite(source.burnDamage, `${field}.burnDamage`),
       damage: nonnegativeFinite(source.damage, `${field}.damage`),
       drawAlpha: nonnegativeFinite(source.drawAlpha, `${field}.drawAlpha`),
+      fadeAlpha,
       id: positiveInteger(source.id, `${field}.id`),
       kind: 'fire-patch',
       life: positiveFinite(source.life, `${field}.life`),
       nativeType: source.nativeType,
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
-      phase,
       position: vector(source.position, `${field}.position`),
       scale: positiveFinite(source.scale, `${field}.scale`),
+      shapeSample,
       supplementalContact: boolean(
         source.supplementalContact,
         `${field}.supplementalContact`,

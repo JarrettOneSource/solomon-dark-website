@@ -16,7 +16,10 @@ import {
   NATIVE_DEFAULT_MULTIPLE_SHADOWS,
   type NativeBoneyardLightSource,
 } from './boneyard-lighting.ts'
-import { nativeEnemyFacingBucket } from './native-enemy-presentation.ts'
+import {
+  nativeEnemyFacingBucket,
+  roundHalfToEven,
+} from './native-enemy-presentation.ts'
 
 export const NATIVE_FIREBALL_CORE_RECORD = 110
 export const NATIVE_FIREBALL_FRAME_FIRST = 255
@@ -45,6 +48,8 @@ export interface NativeFireActorDraw {
   readonly role: string
   readonly rotation: number
   readonly scale: number
+  readonly scaleX?: number
+  readonly scaleY?: number
   readonly tint: number
 }
 
@@ -62,7 +67,8 @@ export interface NativeFirePatchPlan {
   readonly entry: number
   readonly position: Readonly<{ x: number; y: number }>
   readonly regionLightPoint: null
-  readonly scale: number
+  readonly scaleX: number
+  readonly scaleY: number
   readonly tint: number
   readonly worldY: number
 }
@@ -297,15 +303,17 @@ export function nativeFireEmberPlan(
 export function nativeFirePatchPlan(
   state: PrimarySpellFirePatchState,
 ): NativeFirePatchPlan {
+  const commonScale = 1.1 * state.scale * state.fadeAlpha
   return {
     alpha: Math.min(state.drawAlpha * state.life, 1),
     atlas: 'DeadHawg',
     blend: 'add',
     entry: NATIVE_FIRE_PATCH_FRAME_FIRST
-      + positiveModulo(Math.floor(state.phase), NATIVE_FIRE_PATCH_FRAME_COUNT),
-    position: { ...state.position },
+      + positiveModulo(roundHalfToEven(state.atlasPhase), NATIVE_FIRE_PATCH_FRAME_COUNT),
+    position: { x: state.position.x, y: state.position.y - 20 },
     regionLightPoint: null,
-    scale: 1.1 * state.scale,
+    scaleX: commonScale * state.shapeSample,
+    scaleY: commonScale,
     tint: 0xffffff,
     worldY: state.position.y,
   }

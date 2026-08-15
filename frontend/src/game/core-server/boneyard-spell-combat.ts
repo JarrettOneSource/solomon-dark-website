@@ -352,9 +352,7 @@ export function resolveBoneyardSpellCombat(
     }
   }
 
-  for (const contact of [...fireActorContacts].sort((left, right) => (
-    left.spellId - right.spellId
-  ))) {
+  for (const contact of [...fireActorContacts].sort(byFireActorContactId)) {
     if (contact.worldKey !== worldKey) continue
     const rows = primaryTargetRows(enemies)
     const contacted = contact.kind === 'fire-good-imp'
@@ -363,10 +361,7 @@ export function resolveBoneyardSpellCombat(
           target.active
           && !target.pendingRemove
           && (target.actorFlags & 0x2) !== 0
-          && Math.abs(target.position.x - contact.position.x)
-            < contact.footprintDimension * 0.5
-          && Math.abs(target.position.y - contact.position.y)
-            < contact.footprintDimension * 0.5
+          && squaredDistance(target.position, contact.position) < contact.radius ** 2
         ))
     for (const { actor } of contacted) {
       if (contact.kind === 'fire-patch') {
@@ -621,6 +616,22 @@ function bySpellId(
   right: Readonly<{ id: number }>,
 ): number {
   return left.id - right.id
+}
+
+function byFireActorContactId(
+  left: NativeFireActorContact,
+  right: NativeFireActorContact,
+): number {
+  return left.spellId - right.spellId
+}
+
+function squaredDistance(
+  left: Readonly<Vector2>,
+  right: Readonly<Vector2>,
+): number {
+  const deltaX = left.x - right.x
+  const deltaY = left.y - right.y
+  return deltaX * deltaX + deltaY * deltaY
 }
 
 function validateTick(tick: number): void {

@@ -18,10 +18,13 @@ export const NATIVE_FIRE_EMBER_IMMOLATE_FOOTPRINT = 110
 export const NATIVE_FIRE_EMBER_PHASE_MAGNITUDE = 4
 export const NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR = 3 * 0.5 / 100
 export const NATIVE_FIRE_PATCH_CONTACT_FOOTPRINT = 32
+export const NATIVE_FIRE_PATCH_FRAME_COUNT = 32
 export const NATIVE_FIRE_PATCH_INITIAL_LIFE = 2
 export const NATIVE_FIRE_PATCH_LIFE_STEP = 0.01
-export const NATIVE_FIRE_PATCH_ALPHA_STEP = Math.fround(0.05)
-export const NATIVE_FIRE_PATCH_PHASE_STEP = Math.fround(0.25)
+export const NATIVE_FIRE_PATCH_FADE_STEP = Math.fround(0.05)
+export const NATIVE_FIRE_PATCH_FRAME_STEP = Math.fround(0.25)
+export const NATIVE_MOVING_FIRE_DRAW_ALPHA = 4
+export const NATIVE_MOVING_FIRE_FRAME_STEP = Math.fround(0.12)
 export const NATIVE_GOOD_IMP_ATTACK_RADIUS = 45
 export const NATIVE_GOOD_IMP_ATTACK_REACH_FACTOR = 1.25
 export const NATIVE_GOOD_IMP_BODY_SCALE_BASE = 0.9800000190734863
@@ -35,17 +38,19 @@ export type NativeFirePatchType = 'fire' | 'goodguy' | 'moving'
 
 export interface NativeFirePatchState {
   readonly ageTicks: number
-  readonly alpha: number
+  readonly atlasPhase: number
+  readonly atlasPhaseStep: number
   readonly burnDamage: number
   readonly damage: number
   readonly drawAlpha: number
+  readonly fadeAlpha: number
   readonly id: number
   readonly kind: 'fire-patch'
   readonly life: number
   readonly nativeType: NativeFirePatchType
   readonly ownerId: string
-  readonly phase: number
   readonly position: Vector2
+  readonly shapeSample: number
   readonly scale: number
   readonly supplementalContact: boolean
   readonly velocity: Vector2
@@ -56,10 +61,10 @@ export interface NativeFirePatchState {
 export interface NativeFirePatchContact {
   readonly amount: number
   readonly burnDamage: number
-  readonly footprintDimension: number
   readonly kind: 'fire-patch'
   readonly ownerId: string
   readonly position: Vector2
+  readonly radius: number
   readonly spellId: number
   readonly worldKey: string
 }
@@ -175,21 +180,26 @@ export interface NativeFireEmberStep {
 }
 
 export interface CreateNativeFirePatchOptions {
-  readonly alpha?: number
+  readonly atlasPhaseStep?: number
   readonly burnDamage: number
   readonly damage: number
   readonly drawAlpha?: number
+  readonly fadeAlpha?: number
   readonly id: number
   readonly life?: number
   readonly nativeType: NativeFirePatchType
   readonly ownerId: string
-  readonly phase?: number
   readonly position: Readonly<Vector2>
   readonly scale?: number
   readonly supplementalContact?: boolean
   readonly velocity?: Readonly<Vector2>
   readonly velocityMultiplier?: Readonly<Vector2>
   readonly worldKey: string
+}
+
+export interface NativeFirePatchSpawn {
+  readonly patch: NativeFirePatchState
+  readonly rng: NativeRngState
 }
 
 export interface NativeFireGoodImpStepContext {
@@ -223,6 +233,8 @@ export interface NativeFireGoodImpSpawn {
 
 export function createNativeFirePatch(
   options: CreateNativeFirePatchOptions,
+  atlasPhase: number,
+  shapeSample: number,
 ): NativeFirePatchState {
   validateNonnegative(options.burnDamage, 'Fire patch Burn damage')
   validateNonnegative(options.damage, 'Fire patch damage')
@@ -231,7 +243,12 @@ export function createNativeFirePatch(
   }
   const life = options.life ?? NATIVE_FIRE_PATCH_INITIAL_LIFE
   const scale = options.scale ?? 1
-  const drawAlpha = options.drawAlpha ?? 1
+  const drawAlpha = options.drawAlpha
+    ?? (options.nativeType === 'moving' ? NATIVE_MOVING_FIRE_DRAW_ALPHA : 1)
+  const atlasPhaseStep = options.atlasPhaseStep
+    ?? (options.nativeType === 'moving'
+      ? NATIVE_MOVING_FIRE_FRAME_STEP
+      : NATIVE_FIRE_PATCH_FRAME_STEP)
   if (!Number.isFinite(life) || life <= 0) {
     throw new RangeError('Fire patch life must be finite and positive')
   }
@@ -241,26 +258,49 @@ export function createNativeFirePatch(
   if (!Number.isFinite(drawAlpha) || drawAlpha < 0) {
     throw new RangeError('Fire patch draw alpha must be finite and non-negative')
   }
+  if (!Number.isFinite(atlasPhase) || atlasPhase < 0 || atlasPhase >= NATIVE_FIRE_PATCH_FRAME_COUNT) {
+    throw new RangeError('Fire patch atlas phase must be inside the native frame range')
+  }
+  if (!Number.isFinite(atlasPhaseStep) || atlasPhaseStep < 0) {
+    throw new RangeError('Fire patch atlas phase step must be finite and non-negative')
+  }
+  if (!Number.isFinite(shapeSample) || shapeSample < 0 || shapeSample > 1) {
+    throw new RangeError('Fire patch shape sample must be inside the native unit interval')
+  }
   return Object.freeze({
     ageTicks: 0,
-    alpha: Math.fround(options.alpha ?? 0),
+    atlasPhase: Math.fround(atlasPhase),
+    atlasPhaseStep: Math.fround(atlasPhaseStep),
     burnDamage: options.burnDamage,
     damage: options.damage,
     drawAlpha,
+    fadeAlpha: Math.fround(options.fadeAlpha ?? 0),
     id: options.id,
     kind: 'fire-patch',
     life: Math.fround(life),
     nativeType: options.nativeType,
     ownerId: options.ownerId,
-    phase: Math.fround(options.phase ?? 0),
     position: Object.freeze({ ...options.position }),
     scale: Math.fround(scale),
+    shapeSample: Math.fround(shapeSample),
     supplementalContact: options.supplementalContact ?? false,
     velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
     velocityMultiplier: Object.freeze({
       ...(options.velocityMultiplier ?? { x: 1, y: 1 }),
     }),
     worldKey: options.worldKey,
+  })
+}
+
+export function spawnNativeFirePatch(
+  options: CreateNativeFirePatchOptions,
+  rng: NativeRngState,
+): NativeFirePatchSpawn {
+  const phaseDraw = drawNativeFloat(rng, NATIVE_FIRE_PATCH_FRAME_COUNT)
+  const shapeDraw = drawNativeFloat(phaseDraw.state, 1)
+  return Object.freeze({
+    patch: createNativeFirePatch(options, phaseDraw.value, shapeDraw.value),
+    rng: shapeDraw.state,
   })
 }
 
@@ -271,20 +311,20 @@ export function stepNativeFirePatch(
   if (!Number.isSafeInteger(globalTick) || globalTick < 0) {
     throw new RangeError('Fire patch global tick must be a non-negative safe integer')
   }
-  const phase = positiveModulo(
-    Math.fround(source.phase + NATIVE_FIRE_PATCH_PHASE_STEP),
-    32,
+  const atlasPhase = positiveModulo(
+    Math.fround(source.atlasPhase + source.atlasPhaseStep),
+    NATIVE_FIRE_PATCH_FRAME_COUNT,
   )
   const life = Math.fround(source.life - NATIVE_FIRE_PATCH_LIFE_STEP)
-  const alpha = Math.min(1, Math.fround(source.alpha + NATIVE_FIRE_PATCH_ALPHA_STEP))
+  const fadeAlpha = Math.min(1, Math.fround(source.fadeAlpha + NATIVE_FIRE_PATCH_FADE_STEP))
   const contact = source.damage > 0 && globalTick % 3 === 0
     ? Object.freeze({
         amount: source.damage * NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR,
         burnDamage: source.burnDamage,
-        footprintDimension: NATIVE_FIRE_PATCH_CONTACT_FOOTPRINT * source.scale,
         kind: 'fire-patch' as const,
         ownerId: source.ownerId,
         position: Object.freeze({ ...source.position }),
+        radius: NATIVE_FIRE_PATCH_CONTACT_FOOTPRINT * source.scale,
         spellId: source.id,
         worldKey: source.worldKey,
       })
@@ -303,9 +343,9 @@ export function stepNativeFirePatch(
     patch: Object.freeze({
       ...source,
       ageTicks: source.ageTicks + 1,
-      alpha,
+      atlasPhase,
+      fadeAlpha,
       life,
-      phase,
       position,
       velocity,
     }),

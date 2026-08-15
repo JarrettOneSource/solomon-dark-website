@@ -7,11 +7,13 @@ import {
   createNativeFireDetonation,
   drawNativeFirePrivateSeed,
   NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR,
+  NATIVE_FIRE_PATCH_FRAME_COUNT,
   nativeFireDirectDamage,
   spawnNativeFireGoodImp,
   stepNativeFireGoodImp,
   stepNativeFirePatch,
   stepNativeFireEmber,
+  spawnNativeFirePatch,
   type NativeFireProjectilePayload,
 } from './primary-spell-fire-effects.ts'
 
@@ -105,7 +107,7 @@ test('Ember bounces, settles, and Immolates only on natural grounded retirement'
 })
 
 test('Fire patches own the float animation clock and exact three-tick contact normalization', () => {
-  const patch = createNativeFirePatch({
+  const spawned = spawnNativeFirePatch({
     burnDamage: 9,
     damage: 40,
     id: 7,
@@ -113,25 +115,51 @@ test('Fire patches own the float animation clock and exact three-tick contact no
     ownerId: 'p1',
     position: { x: 10, y: 20 },
     worldKey: 'world',
-  })
+  }, createNativeRng(41))
+  const patch = spawned.patch
   assert.equal(NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR, 0.015)
+  assert.equal(spawned.rng.indexA, 2)
+  assert.equal(patch.atlasPhase >= 0 && patch.atlasPhase < NATIVE_FIRE_PATCH_FRAME_COUNT, true)
+  assert.equal(patch.shapeSample >= 0 && patch.shapeSample <= 1, true)
 
   const first = stepNativeFirePatch(patch, 1)
   assert.equal(first.contact, null)
-  assert.equal(first.patch?.phase, 0.25)
-  assert.equal(first.patch?.alpha, 0.05000000074505806)
+  assert.equal(
+    first.patch?.atlasPhase,
+    Math.fround((patch.atlasPhase + 0.25) % NATIVE_FIRE_PATCH_FRAME_COUNT),
+  )
+  assert.equal(first.patch?.fadeAlpha, 0.05000000074505806)
 
   const contact = stepNativeFirePatch(first.patch!, 3)
   assert.deepEqual(contact.contact, {
     amount: 40 * NATIVE_FIRE_PATCH_CONTACT_DAMAGE_FACTOR,
     burnDamage: 9,
-    footprintDimension: 32,
     kind: 'fire-patch',
     ownerId: 'p1',
     position: { x: 10, y: 20 },
+    radius: 32,
     spellId: 7,
     worldKey: 'world',
   })
+})
+
+test('Fire patch assembly keeps atlas phase, fade, and sampled horizontal shape independent', () => {
+  const patch = createNativeFirePatch({
+    burnDamage: 0,
+    damage: 0,
+    id: 9,
+    nativeType: 'moving',
+    ownerId: 'p1',
+    position: { x: 0, y: 0 },
+    worldKey: 'world',
+  }, 31.95, 0.375)
+  const stepped = stepNativeFirePatch(patch, 1).patch!
+  const accumulatedPhase = Math.fround(Math.fround(31.95) + Math.fround(0.12))
+  assert.equal(stepped.atlasPhase, Math.fround(accumulatedPhase - 32))
+  assert.equal(stepped.atlasPhaseStep, Math.fround(0.12))
+  assert.equal(stepped.fadeAlpha, Math.fround(0.05))
+  assert.equal(stepped.shapeSample, Math.fround(0.375))
+  assert.equal(stepped.drawAlpha, 4)
 })
 
 test('GoodImp preserves the native constructor stream, landing attack, flight state, and targetless expiry', () => {

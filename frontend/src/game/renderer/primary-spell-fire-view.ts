@@ -91,7 +91,9 @@ export class FireActorSpellView {
                 offset: { x: 0, y: 0 },
                 role: 'fire-patch',
                 rotation: 0,
-                scale: patch.scale,
+                scale: 1,
+                scaleX: patch.scaleX,
+                scaleY: patch.scaleY,
                 tint: patch.tint,
               }],
               position: patch.position,
@@ -122,7 +124,7 @@ export class FireActorSpellView {
       sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
       sprite.position.set(draw.offset.x, draw.offset.y)
       sprite.rotation = draw.rotation
-      sprite.scale.set(draw.scale)
+      sprite.scale.set(draw.scaleX ?? draw.scale, draw.scaleY ?? draw.scale)
       sprite.alpha = draw.alpha
       sprite.blendMode = draw.blend
       sprite.tint = draw.tint

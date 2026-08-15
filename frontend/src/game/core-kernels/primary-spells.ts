@@ -38,7 +38,7 @@ import {
 } from './primary-spell-earth-orientation.ts'
 import type { Vector2 } from './vector.ts'
 import {
-  createNativeFirePatch,
+  spawnNativeFirePatch,
   createNativeFireDetonation,
   drawNativeFirePrivateSeed,
   spawnNativeFireGoodImp,
@@ -678,7 +678,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           lightRegistration: effect.lightRegistration,
         })
       } else if (stepped.releaseFire) {
-        transients.push(createNativeFirePatch({
+        const patchSpawn = spawnNativeFirePatch({
           burnDamage: effect.burnDamage,
           damage: effect.damage,
           id: nextId,
@@ -686,7 +686,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ownerId: effect.ownerId,
           position: stepped.releasePosition,
           worldKey: effect.worldKey,
-        }))
+        }, rng)
+        transients.push(patchSpawn.patch)
+        rng = patchSpawn.rng
         nextId += 1
       }
     } else if (effect.kind === 'fire-patch') {
@@ -718,7 +720,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         })
         nextId += 1
       } else if (stepped.retirement.kind === 'imp') {
-        const spawned = spawnNativeFireGoodImp({
+        const goodImpSpawn = spawnNativeFireGoodImp({
           burnDamage: stepped.retirement.burnDamage,
           damage: stepped.retirement.damage,
           id: nextId,
@@ -727,14 +729,14 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           position: stepped.retirement.position,
           worldKey: stepped.retirement.worldKey,
         }, rng)
-        rng = spawned.rng
+        rng = goodImpSpawn.rng
         transients.push({
-          ...spawned.goodImp,
+          ...goodImpSpawn.goodImp,
           kind: 'fire-good-imp',
           lightRegistration: registerLightProvider('actor'),
         })
         nextId += 1
-        transients.push(createNativeFirePatch({
+        const patchSpawn = spawnNativeFirePatch({
           burnDamage: stepped.retirement.burnDamage,
           damage: stepped.retirement.damage,
           id: nextId,
@@ -742,7 +744,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ownerId: stepped.retirement.ownerId,
           position: stepped.retirement.position,
           worldKey: stepped.retirement.worldKey,
-        }))
+        }, rng)
+        transients.push(patchSpawn.patch)
+        rng = patchSpawn.rng
         nextId += 1
       }
     } else if (effect.ageTicks + 1 < transientLifetime(effect)) {

@@ -611,6 +611,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       ...effect,
       position: { ...effect.position },
       velocity: { ...effect.velocity },
+      velocityMultiplier: { ...effect.velocityMultiplier },
     }
   }
   if (effect.kind === 'water') {

@@ -227,25 +227,25 @@ test('projects Ember glow and dual phase passes from native atlas records', () =
 
 test('projects common Fire patches through DeadHawg 46..77 with native alpha and scale', () => {
   const patch = createNativeFirePatch({
-    alpha: 0.75,
     burnDamage: 0,
     damage: 0,
     drawAlpha: 0.8,
+    fadeAlpha: 0.75,
     id: 22,
     life: 0.5,
     nativeType: 'moving',
     ownerId: 'caster',
-    phase: 17.75,
     position: { x: 40, y: 50 },
     scale: 2.75,
     worldKey: 'hub:courtyard',
-  })
+  }, 17.75, 0.5)
   const plan = nativeFirePatchPlan(patch)
-  assert.equal(plan.entry, NATIVE_FIRE_PATCH_FRAME_FIRST + 17)
+  assert.equal(plan.entry, NATIVE_FIRE_PATCH_FRAME_FIRST + 18)
   assert.equal(plan.alpha, 0.4)
-  assert.equal(plan.scale, 1.1 * 2.75)
+  assert.equal(plan.scaleX, 1.1 * 2.75 * 0.75 * 0.5)
+  assert.equal(plan.scaleY, 1.1 * 2.75 * 0.75)
   assert.equal(plan.blend, 'add')
-  assert.deepEqual(plan.position, { x: 40, y: 50 })
+  assert.deepEqual(plan.position, { x: 40, y: 30 })
 })
 
 test('projects GoodImp authoritative flight, upper flame, and detached contact bank', () => {

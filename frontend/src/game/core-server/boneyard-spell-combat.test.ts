@@ -155,7 +155,7 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
   const spawned = spawnEnemies([
     { position: { x: 0, y: 0 }, token: 'SKELETON' },
     { position: { x: 15, y: 0 }, token: 'SKELETON' },
-    { position: { x: 16, y: 0 }, token: 'SKELETON' },
+    { position: { x: 32, y: 0 }, token: 'SKELETON' },
   ])
   const enemies = {
     ...spawned,
@@ -181,10 +181,10 @@ test('persistent Fire and GoodImp contacts use authoritative semantic events', (
       {
         amount: 0.6,
         burnDamage: 9,
-        footprintDimension: 32,
         kind: 'fire-patch',
         ownerId: 'wizard',
         position: { x: 0, y: 0 },
+        radius: 32,
         spellId: 7,
         worldKey: WORLD_KEY,
       },

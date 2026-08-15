@@ -11292,12 +11292,20 @@ children at 12-degree base-heading intervals plus one damaging
 `Shockwave 0x7E7`. MovingFire uses additive `DeadHawg[46..77]`, scale `2.75`,
 life `1.05` decreasing `0.01` per tick, initial speed
 `2.5*(1-U[0,0.025])`, and component acceleration `1.01`; the helper never
-writes its damage lane. Shockwave begins at radius `75`, grows by `6` before
+writes its damage lane. The Fire base constructor separately samples an atlas
+phase with `RandomFloat(32)` and a horizontal-shape factor with
+`RandomFloat(1)`. Tick adds `+0.25` to the phase for Fire/Fire_Goodguy or the
+MovingFire override float32 `+0.12`; draw selects
+`DeadHawg[46+round_to_even(phase)]`, positions the sprite at actor-local
+`(0,-20)`, and scales it by
+`(1.1*scale*fade*shape_sample, 1.1*scale*fade)`. This corrects the former web
+model that collapsed atlas phase and fade into one lane. Shockwave begins at
+radius `75`, grows by `6` before
 each `0.01` life decrement, and starts with life `1.155`. Every ten ticks it
 retains each newly intersected hostile once, deals half the row-21 damage,
 runs Burn, and attaches the fixed 400-tick Dazzle response. It pushes retained
 live contacts radially on its separate two-tick lane and multiplies push by
-`0.8` during the final `0.12375` life band.
+float32 `0.899999976` during the final `0.12375` life band.
 
 Firewalker is a player/progression toggle, not a primary trail. While byte
 `+0x8DC` is active, player mode is not `2`, and the global tick is divisible
@@ -11306,8 +11314,11 @@ by ten, `PlayerWizard::Tick 0x00548B00` creates one owned
 drives signed `U[0,10]` perpendicular and unsigned `U[0,8]` longitudinal birth
 offsets. Each patch copies row-23 damage, uses
 `mDuration*(1.1-U[0,0.25])` life, and scales by `1-U[0,0.5]`. Its common Fire
-tick advances phase `0.25`, life `-0.01`, alpha `+0.05` capped at one, and
-contacts a `32*scale` footprint every third global tick. The sole native
+tick advances atlas phase by `0.25`, life by `-0.01`, fade alpha by `+0.05`
+capped at one, and
+contacts a strict circular radius `32*scale` every third global tick. Each
+accepted target consumes one unsigned `RandomFloat(0.5)` response draw before
+damage is applied. The sole native
 `Game+0xC00` initialization writes exact `100.0`, so that contact resolves as
 `damage/100*3*0.5 = damage*0.015` per accepted pulse. Firewalker reserves
 exactly 50 MP while active; that scalar is neither a percentage nor a cast
