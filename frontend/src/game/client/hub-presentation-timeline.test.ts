@@ -5,6 +5,10 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
+import {
+  EARTH_BOULDER_IDENTITY_ORIENTATION,
+  earthBoulderHeldOrientationStep,
+} from '../core-kernels/primary-spell-earth-orientation.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
@@ -99,8 +103,10 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         damage: 10,
         direction: { x: 0, y: -1 },
         flightTicks: 0,
+        hitTargetIds: [],
         id: 1,
         kind: 'earth',
+        orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
         ownerId: 'local',
         phase: 'held',
         position: { x: 10, y: 20 },
@@ -146,6 +152,11 @@ test('interpolates primary spells by stable identity without popping lifecycle e
         charge: 0.4,
         direction: { x: 1, y: 0 },
         flightTicks: 1,
+        hitTargetIds: ['enemy:7'],
+        orientation: earthBoulderHeldOrientationStep(
+          EARTH_BOULDER_IDENTITY_ORIENTATION,
+          { x: 1, y: 0 },
+        ),
         phase: 'flight',
         position: { x: 20, y: 30 },
         velocity: { x: 3, y: 0 },
@@ -185,6 +196,8 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   assert.equal(halfway.projectiles[0].kind, 'earth')
   if (halfway.projectiles[0].kind === 'earth') {
     assert.equal(halfway.projectiles[0].assemblyCharge, Math.fround(0.18))
+    assert.deepEqual(halfway.projectiles[0].hitTargetIds, [])
+    assert.deepEqual(halfway.projectiles[0].orientation, EARTH_BOULDER_IDENTITY_ORIENTATION)
   }
   assert.equal(halfway.transients[0].ageTicks, 4)
   assert.equal(halfway.transients[0].kind, 'fire')
@@ -198,6 +211,8 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   assert.equal(caughtUp.projectiles[0].kind, 'earth')
   if (caughtUp.projectiles[0].kind === 'earth') {
     assert.equal(caughtUp.projectiles[0].assemblyCharge, 0.4)
+    assert.deepEqual(caughtUp.projectiles[0].hitTargetIds, ['enemy:7'])
+    assert.deepEqual(caughtUp.projectiles[0].orientation, newer.projectiles[0].orientation)
   }
   assert.equal(caughtUp.transients[0].kind, 'fire')
   if (caughtUp.transients[0].kind === 'fire') {
@@ -208,6 +223,10 @@ test('interpolates primary spells by stable identity without popping lifecycle e
   const owned = copyPrimarySpellState(newer)
   assert.deepEqual(owned, newer)
   assert.notEqual(owned.projectiles[0].position, newer.projectiles[0].position)
+  if (owned.projectiles[0].kind === 'earth' && newer.projectiles[0].kind === 'earth') {
+    assert.notEqual(owned.projectiles[0].hitTargetIds, newer.projectiles[0].hitTargetIds)
+    assert.notEqual(owned.projectiles[0].orientation, newer.projectiles[0].orientation)
+  }
   assert.equal(owned.transients[0].kind, 'fire')
   if (owned.transients[0].kind === 'fire') {
     assert.notEqual(owned.transients[0].origin, newer.transients[0].origin)

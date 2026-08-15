@@ -304,7 +304,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.ok(getPlayerProgression(state, 'caster').experience > experienceBeforeReward)
 })
 
-test('Boneyard swept combat orders an actor before terrain instead of kernel lookahead', () => {
+test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {
   const loaded = combatBoneyard('spell-ordering-run')
   loaded.scene.fences = [{
     eid: 'ordering-wall',
@@ -328,7 +328,7 @@ test('Boneyard swept combat orders an actor before terrain instead of kernel loo
       id: 1,
       locationPolicy: 'anywhere',
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
-      position: { x: 90, y: 250 },
+      position: { x: 80, y: 250 },
       spawnTick: 0,
       waveOrdinal: 1,
     }],
@@ -350,7 +350,7 @@ test('Boneyard swept combat orders an actor before terrain instead of kernel loo
         ownerId: 'caster',
         phase: 'flight',
         position: { x: 50, y: 250 },
-        velocity: { x: 100, y: 0 },
+        velocity: { x: 4.5, y: 0 },
         worldKey: `boneyard:${loaded.runId}`,
       }],
       transients: [],

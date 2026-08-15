@@ -4,10 +4,12 @@ import test from 'node:test'
 import type { PrimarySpellWaterTransientState } from './primary-spells.ts'
 import {
   WATER_FROST_PARTICLES_PER_TICK,
-  multiplyWaterFrostTint,
+  packWaterFrostTint,
+  quantizeWaterFrostAlpha,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
-  waterFrostJetObstructionPoint,
+  waterFrostJetObstruction,
+  waterFrostJetPainterLane,
   waterFrostJetPlan,
 } from './primary-spell-water.ts'
 
@@ -17,6 +19,7 @@ function state(id: number, ageTicks = 0, variant = 0): PrimarySpellWaterTransien
     direction: { x: 0, y: -1 },
     id,
     kind: 'water',
+    obstructionDistance: null,
     obstructionPoint: null,
     origin: { x: 100, y: 200 },
     ownerId: 'caster',
@@ -75,7 +78,7 @@ test('birth owns world-tick wiggle while radial jitter stays around the caster h
   assert.ok(Math.abs(Math.atan2(jitter.x, -jitter.y)) <= 45 * Math.PI / 180)
 })
 
-test('Normal snapshots only forward obstruction and replays snap, perpendicular, half-speed splay', () => {
+test('Normal snapshots point and native distance, including the zero-distance immediate-splay quirk', () => {
   const normalId = firstId('normal')
   const overId = firstId('over')
   const emission = {
@@ -84,7 +87,7 @@ test('Normal snapshots only forward obstruction and replays snap, perpendicular,
     origin: { x: 0, y: 0 },
   }
   let clipCalls = 0
-  assert.deepEqual(waterFrostJetObstructionPoint(
+  assert.deepEqual(waterFrostJetObstruction(
     emission,
     { x: 0, y: 0 },
     normalId,
@@ -92,8 +95,8 @@ test('Normal snapshots only forward obstruction and replays snap, perpendicular,
       clipCalls += 1
       return { x: 8, y: 0 }
     },
-  ), { x: 8, y: 0 })
-  assert.equal(waterFrostJetObstructionPoint(
+  ), { distance: 8, point: { x: 8, y: 0 } })
+  assert.equal(waterFrostJetObstruction(
     emission,
     { x: 0, y: 0 },
     overId,
@@ -103,26 +106,57 @@ test('Normal snapshots only forward obstruction and replays snap, perpendicular,
     },
   ), null)
   assert.equal(clipCalls, 1)
-  assert.equal(waterFrostJetObstructionPoint(
+  assert.deepEqual(waterFrostJetObstruction(
     { ...emission, origin: { x: 10, y: 0 } },
     { x: 0, y: 0 },
     normalId,
     () => ({ x: 5, y: 0 }),
-  ), null)
+  ), { distance: 0, point: { x: 5, y: 0 } })
 
   const moving = state(normalId, 3)
   moving.direction = { x: 1, y: 0 }
   moving.origin = { x: 0, y: 0 }
+  moving.obstructionDistance = 8
   moving.obstructionPoint = { x: 8, y: 0 }
   const plan = waterFrostJetPlan(moving)
   assert.equal(plan.position.x, 8)
-  assert.equal(Math.abs(plan.position.y), 2)
+  assert.equal(Math.abs(plan.position.y), 4)
   assert.deepEqual(
     { x: Math.abs(plan.velocity.x), y: Math.abs(plan.velocity.y) },
     { x: 0, y: 2 },
   )
   assert.equal(plan.heading, Math.PI / 2)
   assert.equal(Math.abs(plan.draws.at(-1)!.position.y - plan.position.y), 6)
+})
+
+test('splays when remaining distance becomes exactly zero and keeps born rotation', () => {
+  const normalId = firstId('normal')
+  const moving = state(normalId, 1)
+  moving.direction = { x: 1, y: 0 }
+  moving.origin = { x: 0, y: 0 }
+  moving.obstructionDistance = 4
+  moving.obstructionPoint = { x: 4, y: 0 }
+
+  const plan = waterFrostJetPlan(moving)
+  assert.deepEqual(plan.position, { x: 4, y: Math.sign(plan.velocity.y) * 2 })
+  assert.deepEqual(
+    { x: Math.abs(plan.velocity.x), y: Math.abs(plan.velocity.y) },
+    { x: 0, y: 2 },
+  )
+  assert.equal(plan.heading, Math.PI / 2)
+  for (const draw of plan.draws) assert.equal(draw.rotation, Math.PI / 2)
+})
+
+test('fractional presentation age consumes only completed native updates', () => {
+  const id = firstId('normal')
+  assert.deepEqual(
+    waterFrostJetPlan(state(id, 1.999)).position,
+    waterFrostJetPlan(state(id, 1)).position,
+  )
+  assert.deepEqual(
+    waterFrostJetPlan(state(id, 1.999)).draws,
+    waterFrostJetPlan(state(id, 1)).draws,
+  )
 })
 
 test('Normal uses the native ordinary core, additive half-core, and forward glint', () => {
@@ -232,21 +266,30 @@ test('shares late-life growth and cuts the Normal additive pass after update 14'
   assert.equal(waterFrostJetPlan(state(overId, 8)).coreScale, 0.8324013948440552)
 })
 
-test('converts clockwise screen-up heading and composes float color with world light', () => {
+test('converts clockwise screen-up heading and packs self-lit colors by native truncation', () => {
   const plan = waterFrostJetPlan(state(firstId('normal')))
   assert.ok(Math.abs(plan.velocity.x - Math.sin(plan.heading) * 4) < 1e-6)
   assert.ok(Math.abs(plan.velocity.y + Math.cos(plan.heading) * 4) < 1e-6)
   for (const draw of plan.draws) assert.equal(draw.rotation, plan.heading)
   assert.equal(
-    multiplyWaterFrostTint(0x804020, { blue: 1, green: 1, red: 0 }),
-    0x004020,
+    packWaterFrostTint({ blue: 1, green: 1, red: 0 }),
+    0x00ffff,
   )
   assert.equal(
-    multiplyWaterFrostTint(0x804020, { blue: 1, green: 1, red: 1 }),
-    0x804020,
+    packWaterFrostTint({ blue: 1, green: 1, red: 0.5 }),
+    0x7fffff,
   )
-  assert.equal(
-    multiplyWaterFrostTint(0x804020, waterFrostJetPlan(state(1, 5)).draws[0].color),
-    0x2a4020,
-  )
+  assert.equal(quantizeWaterFrostAlpha(0.5), 127 / 255)
+  assert.equal(quantizeWaterFrostAlpha(1), 1)
+})
+
+test('pins Normal to the late ZAnim sort family and Over to post-world-queue', () => {
+  assert.deepEqual(waterFrostJetPainterLane('normal'), {
+    lane: 'world-sorted',
+    queueFamily: 'zanim',
+  })
+  assert.deepEqual(waterFrostJetPainterLane('over'), {
+    lane: 'post-world-queue',
+    queueFamily: null,
+  })
 })

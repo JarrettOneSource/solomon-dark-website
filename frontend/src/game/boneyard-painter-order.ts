@@ -7,6 +7,7 @@ export interface StaticPainterLayer {
 
 export interface DynamicPainterLayer {
   id: string
+  queueFamily: 'ordinary-dynamic' | 'zanim'
   worldY: number
   sortBias: number
   sourceOrder: number
@@ -37,7 +38,7 @@ interface StaticEntry extends StaticPainterLayer {
 }
 
 interface DynamicEntry extends DynamicPainterLayer {
-  kind: 'dynamic'
+  kind: 'ordinary-dynamic' | 'zanim'
   row: number
 }
 
@@ -60,7 +61,7 @@ export function buildBoneyardPainterOrder({
   const entries: PainterEntry[] = [
     ...dynamicLayers.map((layer): DynamicEntry => ({
       ...layer,
-      kind: 'dynamic',
+      kind: layer.queueFamily,
       row: nativePainterRow(layer.worldY, layer.sortBias, referenceY),
     })),
     ...staticLayers.map((layer): StaticEntry => ({
@@ -71,7 +72,7 @@ export function buildBoneyardPainterOrder({
   ]
   entries.sort((left, right) => (
     left.row - right.row
-    || Number(left.kind === 'static') - Number(right.kind === 'static')
+    || painterFamilyOrder(left.kind) - painterFamilyOrder(right.kind)
     || left.sourceOrder - right.sourceOrder
   ))
 
@@ -109,5 +110,13 @@ export function buildBoneyardPainterOrder({
     bands,
     dynamicLayers: positionedDynamics,
     foregroundZIndex: zIndex,
+  }
+}
+
+function painterFamilyOrder(kind: PainterEntry['kind']): number {
+  switch (kind) {
+    case 'ordinary-dynamic': return 0
+    case 'static': return 1
+    case 'zanim': return 2
   }
 }

@@ -25,7 +25,12 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
+  waterFrostJetKind,
+  waterFrostJetLifetimeTicks,
+} from '../core-kernels/primary-spell-water.ts'
+import {
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+  PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   primaryCastActionEndTick,
   type PrimarySpellEarthProjectileState,
   type PrimarySpellProjectilePhase,
@@ -106,7 +111,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 17
+export const GAME_PROTOCOL_VERSION = 18
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -131,6 +136,7 @@ const MAX_REPLICATED_ENTITIES = 8192
 const MAX_REPLICATED_COMPONENTS = 64
 const MAX_PRIMARY_SPELL_PROJECTILES = 4096
 const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
+const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
 
 const BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES = {
   arrow: 0x7da,
@@ -1438,7 +1444,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   onlyKeys(source, field, [
     'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
     'ownerId', 'phase', 'position', 'velocity', 'worldKey',
-    ...(source.kind === 'earth' ? ['assemblyCharge'] : []),
+    ...(source.kind === 'earth' ? ['assemblyCharge', 'hitTargetIds', 'orientation'] : []),
     ...(source.kind === 'ether' ? ['headingDegrees', 'targetId', 'turnAccumulator'] : []),
   ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
@@ -1484,10 +1490,34 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
         `${field}.assemblyCharge is outside the current native rebuild bucket`,
       )
     }
+    if (!Array.isArray(source.orientation) || source.orientation.length !== 9) {
+      throw new GameProtocolError(`${field}.orientation must contain nine float32 values`)
+    }
+    const orientation = source.orientation.map((value, index) => {
+      const component = finite(value, `${field}.orientation[${index}]`)
+      if (component !== Math.fround(component)) {
+        throw new GameProtocolError(`${field}.orientation[${index}] must be float32`)
+      }
+      return component
+    }) as unknown as PrimarySpellEarthProjectileState['orientation']
+    const hitTargetIds = limitedArray(
+      source.hitTargetIds,
+      `${field}.hitTargetIds`,
+      MAX_PRIMARY_SPELL_HIT_TARGETS,
+    ).map((targetId, index) => limitedString(
+      targetId,
+      `${field}.hitTargetIds[${index}]`,
+      256,
+    ))
+    if (new Set(hitTargetIds).size !== hitTargetIds.length) {
+      throw new GameProtocolError(`${field}.hitTargetIds contains a duplicate target`)
+    }
     return {
       ...projectile,
       assemblyCharge,
+      hitTargetIds,
       kind: 'earth',
+      orientation,
     } satisfies PrimarySpellEarthProjectileState
   }
   if (source.kind === 'ether') {
@@ -1603,6 +1633,24 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }
+  if (source.kind === 'ether-impact') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Ether impact lifetime`)
+    }
+    return {
+      ageTicks,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'ether-impact',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
   if (source.kind === 'fire-impact') {
     onlyKeys(source, field, [
       'ageTicks', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
@@ -1628,9 +1676,9 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     source,
     field,
     source.kind === 'water'
-      ? [...transientKeys, 'obstructionPoint']
+      ? [...transientKeys, 'obstructionDistance', 'obstructionPoint']
       : source.kind === 'air'
-        ? [...transientKeys, 'endpoint', 'midpoint', 'targetId']
+        ? [...transientKeys, 'birthTick', 'endpoint', 'midpoint', 'targetId']
       : transientKeys,
   )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
@@ -1658,17 +1706,37 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
   if (source.kind === 'water') {
+    if (variant > 1) {
+      throw new GameProtocolError(`${field}.variant exceeds the two-per-tick ordinal`)
+    }
+    if (ageTicks < 1 || ageTicks >= waterFrostJetLifetimeTicks(id)) {
+      throw new GameProtocolError(`${field}.ageTicks is outside its visible Frost lifetime`)
+    }
+    const obstructionPoint = source.obstructionPoint === null
+      ? null
+      : vector(source.obstructionPoint, `${field}.obstructionPoint`)
+    const obstructionDistance = source.obstructionDistance === null
+      ? null
+      : nonnegativeFinite(source.obstructionDistance, `${field}.obstructionDistance`)
+    if ((obstructionPoint === null) !== (obstructionDistance === null)) {
+      throw new GameProtocolError(
+        `${field}.obstructionPoint and obstructionDistance must be present together`,
+      )
+    }
+    if (waterFrostJetKind(id) === 'over' && obstructionPoint !== null) {
+      throw new GameProtocolError(`${field} Over particles cannot own obstruction state`)
+    }
     return {
       ...common,
       kind: 'water',
-      obstructionPoint: source.obstructionPoint === null
-        ? null
-        : vector(source.obstructionPoint, `${field}.obstructionPoint`),
+      obstructionDistance,
+      obstructionPoint,
     }
   }
   if (source.kind === 'air') {
     return {
       ...common,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       endpoint: vector(source.endpoint, `${field}.endpoint`),
       kind: 'air',
       midpoint: vector(source.midpoint, `${field}.midpoint`),

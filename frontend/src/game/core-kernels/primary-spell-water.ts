@@ -71,6 +71,16 @@ export interface WaterFrostJetEmission {
   origin: Vector2
 }
 
+export interface WaterFrostJetObstruction {
+  distance: number
+  point: Vector2
+}
+
+export interface WaterFrostJetPainterPolicy {
+  lane: 'post-world-queue' | 'world-sorted'
+  queueFamily: 'zanim' | null
+}
+
 interface WaterFrostJetFields {
   additiveCoreAlpha: number
   colorRamp: number
@@ -112,17 +122,16 @@ export function waterFrostJetEmission(
   }
 }
 
-export function waterFrostJetObstructionPoint(
+export function waterFrostJetObstruction(
   emission: WaterFrostJetEmission,
   casterPosition: Vector2,
   id: number,
   clip: (start: Vector2, end: Vector2) => Vector2 | null,
-): Vector2 | null {
+): WaterFrostJetObstruction | null {
   if (waterFrostJetKind(id) !== 'normal') return null
   const velocity = frostVelocity(emission.direction)
   const predictionSteps = Math.fround(
-    Math.fround(waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP)
-      + emission.jitterRadius,
+    waterFrostJetInitialLifetime(id) / FROST_LIFETIME_STEP + emission.jitterRadius,
   )
   const predictionEnd = {
     x: Math.fround(casterPosition.x + Math.fround(velocity.x * predictionSteps)),
@@ -130,20 +139,33 @@ export function waterFrostJetObstructionPoint(
   }
   const hit = clip(casterPosition, predictionEnd)
   if (!hit) return null
-  if (distanceSquared(casterPosition, hit) < distanceSquared(casterPosition, emission.origin)) {
-    return null
+  const point = float32Vector(hit)
+  const distance = nativeFloat32Distance(emission.origin, point)
+  return {
+    distance: nativeFloat32DistanceSquared(casterPosition, emission.origin)
+        > nativeFloat32DistanceSquared(casterPosition, point)
+      ? 0
+      : distance,
+    point,
   }
-  return float32Vector(hit)
 }
 
 export function waterFrostJetLifetimeTicks(id: number): 32 | 33 {
   let lifetime = waterFrostJetInitialLifetime(id)
   let updates = 0
-  while (lifetime >= 0) {
+  do {
     updates += 1
     lifetime = Math.fround(lifetime - FROST_LIFETIME_STEP)
-  }
+  } while (lifetime > 0)
   return updates === 32 ? 32 : 33
+}
+
+export function waterFrostJetPainterLane(
+  kind: WaterFrostJetKind,
+): WaterFrostJetPainterPolicy {
+  return kind === 'normal'
+    ? { lane: 'world-sorted', queueFamily: 'zanim' }
+    : { lane: 'post-world-queue', queueFamily: null }
 }
 
 export function waterFrostJetPlan(
@@ -220,16 +242,15 @@ export function waterFrostJetPlan(
   }
 }
 
-export function multiplyWaterFrostTint(
-  worldTint: number,
-  localColor: WaterFrostJetColor,
-): number {
-  const channel = (shift: number, multiplier: number): number => Math.round(
-    ((worldTint >>> shift) & 0xff) * multiplier,
-  )
-  return (channel(16, localColor.red) << 16)
-    | (channel(8, localColor.green) << 8)
-    | channel(0, localColor.blue)
+export function packWaterFrostTint(localColor: WaterFrostJetColor): number {
+  const channel = (value: number): number => Math.trunc(clampUnit(Math.fround(value)) * 255)
+  return (channel(localColor.red) << 16)
+    | (channel(localColor.green) << 8)
+    | channel(localColor.blue)
+}
+
+export function quantizeWaterFrostAlpha(alpha: number): number {
+  return Math.trunc(clampUnit(Math.fround(alpha)) * 255) / 255
 }
 
 function waterFrostJetInitialLifetime(id: number): number {
@@ -244,6 +265,7 @@ function waterFrostJetFields(
   ageTicks: number,
   kind: WaterFrostJetKind,
 ): WaterFrostJetFields {
+  const completedUpdates = Math.max(0, Math.floor(ageTicks))
   let lifetime = waterFrostJetInitialLifetime(id)
   let phase = 0
   let additiveCoreAlpha = Math.fround(FROST_ADDITIVE_ALPHA)
@@ -262,7 +284,7 @@ function waterFrostJetFields(
   const opacityMultiplier = Math.fround(FROST_OPACITY_MULTIPLIER)
   const phaseStep = kind === 'normal' ? FROST_NORMAL_PHASE_STEP : FROST_OVER_PHASE_STEP
 
-  for (let tick = 0; tick < ageTicks; tick += 1) {
+  for (let tick = 0; tick < completedUpdates; tick += 1) {
     lifetime = Math.fround(lifetime - FROST_LIFETIME_STEP)
     phase = Math.fround(phase + phaseStep)
     additiveCoreAlpha = Math.fround(additiveCoreAlpha - FROST_ADDITIVE_ALPHA_STEP)
@@ -330,26 +352,22 @@ function waterFrostJetMotion(state: PrimarySpellWaterTransientState): {
 } {
   const velocity = frostVelocity(state.direction)
   const obstructionPoint = state.obstructionPoint
-  let pendingDistance = obstructionPoint === null
-    ? null
-    : Math.fround(Math.hypot(
-      obstructionPoint.x - state.origin.x,
-      obstructionPoint.y - state.origin.y,
-    ))
+  let pendingDistance = state.obstructionDistance
   let currentVelocity = velocity
   const position = float32Vector(state.origin)
-  for (let tick = 0; tick < state.ageTicks; tick += 1) {
+  const completedUpdates = Math.max(0, Math.floor(state.ageTicks))
+  for (let tick = 0; tick < completedUpdates; tick += 1) {
     if (pendingDistance !== null && obstructionPoint !== null) {
       pendingDistance = Math.fround(
-        pendingDistance - Math.hypot(currentVelocity.x, currentVelocity.y),
+        pendingDistance - nativeFloat32Distance({ x: 0, y: 0 }, currentVelocity),
       )
-      if (pendingDistance < 0) {
+      if (pendingDistance <= 0) {
         position.x = Math.fround(obstructionPoint.x)
         position.y = Math.fround(obstructionPoint.y)
         const sign = waterFrostSplaySign(state.id)
         currentVelocity = {
-          x: Math.fround(-currentVelocity.y * 0.5 * sign),
-          y: Math.fround(currentVelocity.x * 0.5 * sign),
+          x: Math.fround(sign * currentVelocity.y * 0.5),
+          y: Math.fround(sign * -currentVelocity.x * 0.5),
         }
         pendingDistance = null
       }
@@ -371,10 +389,14 @@ function waterFrostSplaySign(id: number): -1 | 1 {
   return (waterFrostHash(id, 7) & 1) === 0 ? -1 : 1
 }
 
-function distanceSquared(first: Vector2, second: Vector2): number {
-  const dx = first.x - second.x
-  const dy = first.y - second.y
-  return dx * dx + dy * dy
+function nativeFloat32Distance(first: Vector2, second: Vector2): number {
+  return Math.fround(Math.sqrt(nativeFloat32DistanceSquared(first, second)))
+}
+
+function nativeFloat32DistanceSquared(first: Vector2, second: Vector2): number {
+  const dx = Math.fround(Math.fround(first.x) - Math.fround(second.x))
+  const dy = Math.fround(Math.fround(first.y) - Math.fround(second.y))
+  return Math.fround(dx * dx + dy * dy)
 }
 
 function color(red: number, green: number, blue: number): WaterFrostJetColor {
@@ -383,4 +405,8 @@ function color(red: number, green: number, blue: number): WaterFrostJetColor {
     green: Math.max(0, Math.min(1, green)),
     red: Math.max(0, Math.min(1, red)),
   }
+}
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value))
 }

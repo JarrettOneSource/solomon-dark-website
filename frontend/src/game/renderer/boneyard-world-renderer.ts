@@ -94,6 +94,13 @@ import {
   nativeBoneyardTreeComplexShadowOutline,
   type NativeBoneyardComplexShadowCaster,
 } from './boneyard-complex-shadows.ts'
+import {
+  nativeBuildingShadowOutline,
+  nativeFencepostShadowOutline,
+  nativeGoodieShadowOutline,
+  nativeGravestoneShadowOutline,
+  nativeMonumentShadowOutline,
+} from './boneyard-native-shadow-shapes.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
 import {
   BoneyardTreeOcclusionPresentation,
@@ -106,7 +113,13 @@ import {
   nativeEnemyPainterLayer,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
-import { buildNativeAirContactLightSource } from './primary-spell-air-native.ts'
+import {
+  buildNativeAirContactLightSource,
+  buildNativeAirPathLightSources,
+} from './primary-spell-air-native.ts'
+import {
+  etherPrimaryImpactLightSource,
+} from './primary-spell-ether-native.ts'
 import {
   nativeFireballLightSource,
   nativeFireImpactLightSource,
@@ -778,6 +791,7 @@ class BoneyardDynamicScene {
     this.primarySpells.update(
       snapshot.primarySpells,
       `boneyard:${snapshot.world.runId}`,
+      presentationFrame,
     )
     this.gates.update(snapshot.world.gateLeaves)
     this.enemies.update(enemySnapshots, snapshot.tick)
@@ -808,6 +822,13 @@ class BoneyardDynamicScene {
     }
     for (const effect of snapshot.primarySpells.transients) {
       if (
+        effect.kind === 'ether-impact'
+        && effect.worldKey === `boneyard:${snapshot.world.runId}`
+      ) {
+        lightSourceCandidates.push(etherPrimaryImpactLightSource(effect))
+        continue
+      }
+      if (
         effect.kind === 'fire-impact'
         && effect.worldKey === `boneyard:${snapshot.world.runId}`
       ) {
@@ -825,15 +846,25 @@ class BoneyardDynamicScene {
           y: effect.endpoint.y - effect.origin.y,
         },
         id: effect.id,
-        midpoint: {
-          x: effect.midpoint.x - effect.origin.x,
-          y: effect.midpoint.y - effect.origin.y,
-        },
         origin: effect.origin,
       })
       if (contactLight) lightSourceCandidates.push(contactLight)
     }
     if (lanternLight) lightSourceCandidates.push(lanternLight)
+    for (const effect of snapshot.primarySpells.transients) {
+      if (
+        effect.kind !== 'air'
+        || effect.ageTicks !== 0
+        || effect.worldKey !== `boneyard:${snapshot.world.runId}`
+      ) continue
+      lightSourceCandidates.push(...buildNativeAirPathLightSources({
+        birthTick: effect.birthTick,
+        endpoint: effect.endpoint,
+        id: effect.id,
+        midpoint: effect.midpoint,
+        origin: effect.origin,
+      }))
+    }
     const lightSources = nativeAcceptedBoneyardLightSources(
       lightSourceCandidates,
       this.lightSources,
@@ -942,13 +973,19 @@ class BoneyardDynamicScene {
       const player = snapshot.players[playerId]
       dynamicLayers.push({
         id: `player:${playerId}`,
+        queueFamily: 'ordinary-dynamic',
         worldY: player.position.y,
         sortBias: boneyardPlayerSortBias(player),
         sourceOrder: dynamicLayers.length,
       })
     }
     for (const layer of this.primarySpells.painterLayers()) {
-      dynamicLayers.push({ ...layer, sourceOrder: dynamicLayers.length })
+      if (layer.lane !== 'world-sorted' || layer.queueFamily === null) continue
+      dynamicLayers.push({
+        ...layer,
+        queueFamily: layer.queueFamily,
+        sourceOrder: dynamicLayers.length,
+      })
     }
     for (const enemy of enemySnapshots) {
       dynamicLayers.push(nativeEnemyPainterLayer(enemy, dynamicLayers.length))
@@ -956,6 +993,7 @@ class BoneyardDynamicScene {
     for (const projectile of snapshot.world.enemyProjectiles) {
       dynamicLayers.push({
         id: `enemy-projectile:${projectile.id}`,
+        queueFamily: 'ordinary-dynamic',
         worldY: projectile.position.y,
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
@@ -964,6 +1002,7 @@ class BoneyardDynamicScene {
     for (const maggot of snapshot.world.maggots) {
       dynamicLayers.push({
         id: `maggot:${maggot.id}`,
+        queueFamily: 'ordinary-dynamic',
         worldY: maggot.position.y,
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
@@ -972,6 +1011,7 @@ class BoneyardDynamicScene {
     if (dig) {
       dynamicLayers.push({
         id: 'solomon-grave',
+        queueFamily: 'ordinary-dynamic',
         worldY: dig.position.y,
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
@@ -979,6 +1019,7 @@ class BoneyardDynamicScene {
       if (snapshot.world.encounter?.phase !== 'gone') {
         dynamicLayers.push({
           id: 'solomon-actor',
+          queueFamily: 'ordinary-dynamic',
           worldY: snapshot.world.encounter?.position.y ?? dig.position.y,
           sortBias: 0,
           sourceOrder: dynamicLayers.length,
@@ -986,6 +1027,7 @@ class BoneyardDynamicScene {
       }
       dynamicLayers.push({
         id: 'lantern',
+        queueFamily: 'ordinary-dynamic',
         worldY: dig.lanternPosition.y,
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
@@ -1032,9 +1074,14 @@ class BoneyardDynamicScene {
     for (const layer of this.primarySpells.painterLayers()) {
       this.primarySpells.setDepth(
         layer.id,
-        positionedDynamics.get(layer.id)?.zIndex ?? 1,
+        layer.lane === 'post-world-queue'
+          ? order.foregroundZIndex + 0.5
+          : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
     }
+    this.primarySpells.promoteOwnerOverlays((ownerId) => (
+      positionedDynamics.get(`player:${ownerId}`)?.zIndex
+    ))
     for (const enemy of enemySnapshots) {
       this.enemies.setDepth(
         enemy.id,
@@ -1559,6 +1606,7 @@ function buildMainLayerResident(
     crop.outline ?? [],
     x,
     y,
+    document,
     layer,
     layerIndex,
   )
@@ -1728,17 +1776,106 @@ function mainLayerShadowCaster(
   croppedOutline: readonly Vec2[],
   x: number,
   y: number,
+  document: EditorDoc,
   layer: MainLayer,
   layerIndex: number,
 ): NativeBoneyardComplexShadowCaster | null {
-  const outline = layer.kind === 'object' && layer.object.typeId === NATIVE.tree
-    ? nativeBoneyardTreeComplexShadowOutline(
-        layer.object.variant ?? layer.atlasEntry - 264,
-      )
-    : croppedOutline.map((point) => ({
-        x: x + point.x - layer.pos.x,
-        y: y + point.y - layer.pos.y,
-      }))
+  const fallbackOutline = () => croppedOutline.map((point) => ({
+    x: x + point.x - layer.pos.x,
+    y: y + point.y - layer.pos.y,
+  }))
+  if (
+    layer.kind === 'fence'
+    && layer.part === 'body'
+  ) {
+    const code = layer.fence.segmentCode ?? layer.fence.style ?? 0
+    const start = layer.fence.points[0]
+    const end = layer.fence.points[1]
+    if (!start || !end) return null
+    if (code === 0) {
+      return {
+        id: `main:${layerIndex}`,
+        outline: [],
+        position: { ...layer.pos },
+        program: {
+          construction: 'intact',
+          end: { ...end },
+          kind: 'fence-grate',
+          start: { ...start },
+        },
+      }
+    }
+    if (code === 4) {
+      return {
+        id: `main:${layerIndex}`,
+        outline: [],
+        position: { ...layer.pos },
+        program: { end: { ...end }, kind: 'rails', start: { ...start } },
+      }
+    }
+    if (code === 3) {
+      const direction = normalizedSegment(start, end)
+      const otherWalls = document.fences.filter((fence) => (
+        (fence.segmentCode ?? fence.style ?? 0) === 3
+        && fence.eid !== layer.fence.eid
+      ))
+      const connected = (point: Vec2) => otherWalls.some((fence) => (
+        fence.points.slice(0, 2).some((candidate) => samePoint(candidate, point))
+      ))
+      return {
+        id: `main:${layerIndex}`,
+        outline: [],
+        position: { ...layer.pos },
+        program: {
+          end: connected(end)
+            ? { ...end }
+            : { x: end.x + direction.x * 15, y: end.y + direction.y * 15 },
+          kind: 'wall',
+          start: connected(start)
+            ? { ...start }
+            : { x: start.x - direction.x * 15, y: start.y - direction.y * 15 },
+        },
+      }
+    }
+  }
+  let outline: Vec2[]
+  if (layer.kind === 'fence' && layer.part === 'post') {
+    outline = nativeFencepostShadowOutline(
+      layer.postVariant ?? 0,
+      (layer.fence.segmentCode ?? layer.fence.style ?? 0) === 4 ? 1 : 0,
+    )
+  } else if (layer.kind !== 'object') {
+    outline = fallbackOutline()
+  } else {
+    const variant = layer.object.variant ?? (
+      layer.object.typeId === NATIVE.gravestone ? layer.atlasEntry - 97
+        : layer.object.typeId === NATIVE.monument ? layer.atlasEntry - 156
+          : layer.object.typeId === NATIVE.building ? layer.atlasEntry - 148
+            : layer.object.typeId === NATIVE.goodie ? layer.atlasEntry - 145
+              : 0
+    )
+    switch (layer.object.typeId) {
+      case NATIVE.tree:
+        outline = nativeBoneyardTreeComplexShadowOutline(
+          layer.object.variant ?? layer.atlasEntry - 264,
+        )
+        break
+      case NATIVE.gravestone:
+        outline = nativeGravestoneShadowOutline(variant)
+        break
+      case NATIVE.monument:
+        outline = nativeMonumentShadowOutline(variant)
+        break
+      case NATIVE.building:
+        outline = nativeBuildingShadowOutline(variant)
+        break
+      case NATIVE.goodie:
+        outline = variant === 0 ? nativeGoodieShadowOutline(0) : fallbackOutline()
+        break
+      default:
+        outline = fallbackOutline()
+    }
+  }
   return outline.length < 3
     ? null
     : {
@@ -1746,6 +1883,17 @@ function mainLayerShadowCaster(
         outline,
         position: { ...layer.pos },
       }
+}
+
+function normalizedSegment(start: Vec2, end: Vec2): Vec2 {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = Math.hypot(dx, dy)
+  return length === 0 ? { x: 0, y: 0 } : { x: dx / length, y: dy / length }
+}
+
+function samePoint(left: Vec2, right: Vec2): boolean {
+  return left.x === right.x && left.y === right.y
 }
 
 function isMovingGateBody(layer: MainLayer | undefined): layer is Extract<MainLayer, { kind: 'fence' }> {

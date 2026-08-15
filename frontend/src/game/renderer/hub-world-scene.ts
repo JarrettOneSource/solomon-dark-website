@@ -83,7 +83,9 @@ export class HubWorldScene {
     this.southern.sortableChildren = true
     this.southern.eventMode = 'none'
     this.stage.addChild(this.world, this.southern)
-    this.primarySpells = new PrimarySpellWorldView(this.world, textures)
+    this.primarySpells = new PrimarySpellWorldView(this.world, textures, {
+      postWorldQueueDepth: HUB_WORLD_DEPTH.courtyardForeground - 0.5,
+    })
     this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
     this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
@@ -132,7 +134,7 @@ export class HubWorldScene {
     )
   }
 
-  update(snapshot: HubPresentationFrame): void {
+  update(snapshot: HubPresentationFrame, presentationFrame?: number): void {
     const ambient = snapshot.world.ambient
     const colors = hubSealColors(ambient)
     this.sealGlyphs.tint = colorTint(colors.glyphs)
@@ -156,7 +158,14 @@ export class HubWorldScene {
     this.astronomer.update(snapshot.tick)
     this.updateStudents(snapshot)
     this.updatePlayers(snapshot)
-    this.primarySpells.update(snapshot.primarySpells, 'hub:courtyard')
+    this.primarySpells.update(
+      snapshot.primarySpells,
+      'hub:courtyard',
+      presentationFrame,
+    )
+    this.primarySpells.promoteOwnerOverlays((ownerId) => (
+      this.players.get(ownerId)?.container.zIndex
+    ))
   }
 
   player(playerId: string): HubPlayerView | undefined {

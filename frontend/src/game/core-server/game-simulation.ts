@@ -48,6 +48,7 @@ import {
   type BoneyardWorldState,
 } from './boneyard-world.ts'
 import {
+  canPlaceBoneyardBody,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
   withBoneyardGateCollision,
@@ -431,13 +432,17 @@ function finishGameSimulationTick(
   const cast = stepPrimarySpells({
     canPlaceProjectile: (spell, position, radius) => {
       if (result.world.kind === 'boneyard') {
-        return true
+        return canPlaceBoneyardBody(
+          position,
+          result.world.bounds,
+          boneyardCollision!,
+          radius,
+        )
       }
       const region = result.world.participants[spell.ownerId]?.region
       return region !== undefined && isHubRegionTraversable(region, position, radius)
     },
     canTraverseProjectile: (spell, from, to) => {
-      if (result.world.kind === 'boneyard') return true
       return spellObstructionPoint(spell.ownerId, from, to) === null
     },
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [

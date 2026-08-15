@@ -92,6 +92,7 @@ test('pins Fireball frame clock, heading, transforms, and three-pass blend order
   ])
   assert.deepEqual(plan.draws.map(({ x, y }) => [x, y]), [[0, -10], [0, -10], [0, -10]])
   assert.equal(plan.draws[0].alpha >= 0.2 && plan.draws[0].alpha < 0.45, true)
+  assert.notEqual(plan.draws[0].alpha, nativeFireballPlan(fireball(3), 92).draws[0].alpha)
   assert.deepEqual(plan.draws.slice(1).map(({ alpha }) => alpha), [1, 0.5])
   assert.equal(plan.draws[0].rotation, 0)
   assert.equal(nativeFireballPlan(fireball(3, { x: 1, y: 0 })).draws[0].rotation, Math.PI / 2)
@@ -138,7 +139,7 @@ test('pins outbound Fireball light and self-lit inbound render paths', () => {
   assert.equal(trail.regionLightPoint, null)
   assert.deepEqual(source.position, { x: 400, y: 300 })
   assert.equal(source.intensity, 0.75)
-  assert.equal(source.multipleShadows, false)
+  assert.equal(source.castsDirectionalShadow, false)
   assert.equal(source.radius >= 1 && source.radius < 1.25, true)
 })
 
@@ -168,5 +169,5 @@ test('pins exact Fire impact frame clock, recurrence, blend order, and light own
   assert.deepEqual(light.position, { x: 400, y: 275 })
   assert.equal(light.radius, 1.5)
   assert.equal(light.intensity, 0.4)
-  assert.equal(light.multipleShadows, false)
+  assert.equal(light.castsDirectionalShadow, false)
 })

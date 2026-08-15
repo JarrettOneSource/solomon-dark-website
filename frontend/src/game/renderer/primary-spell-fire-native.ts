@@ -215,7 +215,7 @@ export function nativeFireImpactLightSource(
   const plan = nativeFireImpactPlan(state)
   return {
     intensity: Math.max(0, 1 - state.ageTicks * 0.04),
-    multipleShadows: false,
+    castsDirectionalShadow: false,
     position: plan.position,
     radius: 1.5,
   }
@@ -227,7 +227,7 @@ export function nativeFireballLightSource(
 ): NativeBoneyardLightSource {
   return {
     intensity: 0.75,
-    multipleShadows: false,
+    castsDirectionalShadow: false,
     position: { ...state.position },
     radius: 1 + nativeFirePresentationRandom(
       state.id,

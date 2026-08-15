@@ -63,7 +63,9 @@ export class HubPrivateRoomScene {
     }
     this.primarySpells = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
       region,
-      new PrimarySpellWorldView(this.rooms[region], textures),
+      new PrimarySpellWorldView(this.rooms[region], textures, {
+        postWorldQueueDepth: HUB_PRIVATE_ROOM_EFFECT_DEPTH - 0.5,
+      }),
     ])) as Record<PrivateHubRegionId, PrimarySpellWorldView>
     this.world.addChild(
       this.rooms.mortuary,
@@ -74,13 +76,24 @@ export class HubPrivateRoomScene {
     this.showRegion('mortuary')
   }
 
-  update(snapshot: HubPresentationFrame, localPlayerId: string): void {
+  update(
+    snapshot: HubPresentationFrame,
+    localPlayerId: string,
+    presentationFrame?: number,
+  ): void {
     const localParticipant = snapshot.world.participants[localPlayerId]
     if (!localParticipant || localParticipant.region === 'courtyard') return
     this.showRegion(localParticipant.region)
     this.updatePlayers(snapshot, localParticipant.region)
     for (const region of PRIVATE_HUB_REGIONS) {
-      this.primarySpells[region].update(snapshot.primarySpells, `hub:${region}`)
+      this.primarySpells[region].update(
+        snapshot.primarySpells,
+        `hub:${region}`,
+        presentationFrame,
+      )
+      this.primarySpells[region].promoteOwnerOverlays((ownerId) => (
+        this.players.get(ownerId)?.container.zIndex
+      ))
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
   }

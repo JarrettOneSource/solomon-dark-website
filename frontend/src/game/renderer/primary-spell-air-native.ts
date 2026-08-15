@@ -6,10 +6,15 @@ export const AIR_LIGHTNING_MAX_PARAMETER_STEP = 0.5
 export const AIR_LIGHTNING_FAST_INVERSE_SQRT_MAGIC = 0x5f3759df
 export const AIR_LIGHTNING_CORONA_CIRCLE_RECORD = 110
 export const AIR_LIGHTNING_CORONA_FORK_RECORDS = [1836, 1837, 1838, 1839] as const
+export const AIR_LIGHTNING_BRANCH_RECORDS = [375, 376] as const
 export const AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS = 1
 export const AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER = 0.75
 export const AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY = 1
 export const AIR_LIGHTNING_CONTACT_LIGHT_INTENSITY_DELTA = Math.fround(-0.05)
+export const AIR_LIGHTNING_PATH_STEP = 100
+export const AIR_LIGHTNING_PATH_REMAINDER = 50
+export const AIR_LIGHTNING_PATH_MINIMUM_DISTANCE = 220
+export const AIR_LIGHTNING_PATH_Y_OFFSET = 35
 
 const AIR_LIGHTNING_RIBBON_RECORD = 44
 const AIR_LIGHTNING_BASE_WIDTH = 25
@@ -22,6 +27,16 @@ const CONTACT_OFFSET_RADIUS = 10
 const CORONA_ANGLE_STEP_RADIANS = Math.PI / 180
 const SPLINE_NORMAL_DELTA = 0.001
 const FLOAT_BITS = new DataView(new ArrayBuffer(4))
+const AIR_LIGHTNING_BRANCH_GEOMETRY = [
+  [
+    { x: -38, y: -64 }, { x: 1, y: -64 },
+    { x: -38, y: 9 }, { x: 1, y: 9 },
+  ],
+  [
+    { x: -40, y: -170 }, { x: 0, y: -170 },
+    { x: -40, y: 15 }, { x: 0, y: 15 },
+  ],
+] as const
 
 export interface NativeAirPoint {
   x: number
@@ -30,14 +45,26 @@ export interface NativeAirPoint {
 
 export interface NativeAirRibbonLayer {
   alpha: number
+  branch: NativeAirBranchPlan | null
   indices: Uint32Array
   parameterSamples: Float32Array
+  phaseDegrees: number
   phaseOffset: number
   textureRecord: 44
   tint: number
   uvs: Float32Array
   vertices: Float32Array
   width: number
+}
+
+export interface NativeAirBranchPlan {
+  geometryRecord: typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
+  indices: Uint32Array
+  mirrorX: boolean
+  scale: number
+  textureRecord: typeof AIR_LIGHTNING_BRANCH_RECORDS[number]
+  uvs: Float32Array
+  vertices: Float32Array
 }
 
 export interface NativeAirCoronaCircle {
@@ -63,10 +90,26 @@ export interface NativeAirCoronaPlan {
 }
 
 export interface NativeAirContactLightPlan {
+  castsDirectionalShadow: false
   intensity: number
-  multipleShadows: false
   position: NativeAirPoint
   radius: number
+}
+
+export interface NativeAirPathLightPlan {
+  castsDirectionalShadow: true
+  intensity: number
+  position: NativeAirPoint
+  radius: number
+}
+
+export interface NativeAirPathLightInput {
+  birthTick: number
+  endpoint: NativeAirPoint
+  id: number
+  midpoint: NativeAirPoint
+  origin: NativeAirPoint
+  weakCast?: boolean
 }
 
 export interface NativeAirLightningPlan {
@@ -83,12 +126,16 @@ export interface NativeAirLightningPlan {
 
 export interface NativeAirLightningInput {
   ageTicks: number
+  birthTick: number
   endpoint: NativeAirPoint
   id: number
   midpoint: NativeAirPoint
 }
 
-export interface NativeAirContactLightSourceInput extends NativeAirLightningInput {
+export interface NativeAirContactLightSourceInput {
+  ageTicks: number
+  endpoint: NativeAirPoint
+  id: number
   origin: NativeAirPoint
 }
 
@@ -120,7 +167,7 @@ export function buildNativeAirLightningPlan(
   const endpoint = { ...input.endpoint }
   const midpoint = { ...input.midpoint }
   const points = [source, midpoint, endpoint] as const
-  const basePhaseDegrees = -3 * input.id
+  const basePhaseDegrees = -3 * input.birthTick
   const contactSamples = nativeContactSamples(input.id)
   const contactCenter = {
     x: endpoint.x + Math.cos(contactSamples.offsetAngle) * contactSamples.offsetRadius,
@@ -133,8 +180,26 @@ export function buildNativeAirLightningPlan(
     body: nativeAge < AIR_LIGHTNING_BODY_LIFETIME_TICKS
       ? {
           layers: [
-            buildRibbon(points, input.id, 1, basePhaseDegrees, 0, 0xffffff, 1),
-            buildRibbon(points, input.id, 0.75, basePhaseDegrees, 15, 0x00ffff, 0.5),
+            buildRibbon(
+              points,
+              input.id,
+              input.birthTick,
+              1,
+              basePhaseDegrees,
+              0,
+              0xffffff,
+              1,
+            ),
+            buildRibbon(
+              points,
+              input.id,
+              input.birthTick,
+              0.75,
+              basePhaseDegrees,
+              15,
+              0x00ffff,
+              0.5,
+            ),
           ],
         }
       : null,
@@ -176,8 +241,8 @@ export function buildNativeAirContactLightPlan(
   }
 
   return {
+    castsDirectionalShadow: false,
     intensity: Math.min(intensity, AIR_LIGHTNING_CONTACT_LIGHT_BASE_INTENSITY),
-    multipleShadows: false,
     position: input.position,
     radius: nativeContactSamples(input.id).lightRadius,
   }
@@ -205,9 +270,62 @@ export function buildNativeAirContactLightSource(
   }
 }
 
+export function buildNativeAirPathLightSources(
+  input: NativeAirPathLightInput,
+  random = randomStream(input.id, semanticSeed(input.id, input.birthTick, 0x4d495343)),
+): readonly NativeAirPathLightPlan[] {
+  const intensity = Math.fround(
+    (0.25 + random() * 0.75) * (input.weakCast === true ? 0.25 : 1),
+  )
+  const result: NativeAirPathLightPlan[] = []
+  const tryAppend = (candidate: NativeAirPoint) => {
+    const dx = Math.fround(candidate.x - input.origin.x)
+    const dy = Math.fround(candidate.y - input.origin.y)
+    const distanceSquared = Math.fround(dx * dx + dy * dy)
+    if (distanceSquared < AIR_LIGHTNING_PATH_MINIMUM_DISTANCE ** 2) return
+    result.push({
+      castsDirectionalShadow: true,
+      intensity,
+      position: {
+        x: Math.fround(candidate.x),
+        y: Math.fround(candidate.y + AIR_LIGHTNING_PATH_Y_OFFSET),
+      },
+      radius: Math.fround(0.75 + random() * 0.25),
+    })
+  }
+
+  for (const [start, end] of [
+    [input.origin, input.midpoint],
+    [input.midpoint, input.endpoint],
+  ] as const) {
+    const current = { x: Math.fround(start.x), y: Math.fround(start.y) }
+    const delta = {
+      x: Math.fround(end.x - start.x),
+      y: Math.fround(end.y - start.y),
+    }
+    let remaining = Math.fround(Math.sqrt(Math.fround(
+      delta.x * delta.x + delta.y * delta.y,
+    )))
+    const inverseLength = remaining > 0 ? Math.fround(1 / remaining) : 0
+    const step = {
+      x: Math.fround(Math.fround(inverseLength * delta.x) * AIR_LIGHTNING_PATH_STEP),
+      y: Math.fround(Math.fround(inverseLength * delta.y) * AIR_LIGHTNING_PATH_STEP),
+    }
+    while (remaining > AIR_LIGHTNING_PATH_REMAINDER) {
+      tryAppend(current)
+      current.x = Math.fround(current.x + step.x)
+      current.y = Math.fround(current.y + step.y)
+      remaining = Math.fround(remaining - AIR_LIGHTNING_PATH_STEP)
+    }
+    tryAppend({ x: Math.fround(end.x), y: Math.fround(end.y) })
+  }
+  return result
+}
+
 function buildRibbon(
   points: readonly [NativeAirPoint, NativeAirPoint, NativeAirPoint],
   id: number,
+  birthTick: number,
   width: number,
   basePhaseDegrees: number,
   phaseOffset: number,
@@ -220,8 +338,8 @@ function buildRibbon(
   const vertices = new Float32Array(pairCount * 4)
   const uvs = new Float32Array(pairCount * 4)
   const indices = new Uint32Array(segmentCount * 6)
-  const random = randomStream(id, 0x52494242 ^ phaseOffset)
   const phaseDegrees = basePhaseDegrees + phaseOffset
+  let ribbonRandomState = semanticSeed(id, birthTick, 0x52494242 ^ phaseOffset)
 
   for (let pair = 0; pair < pairCount; pair += 1) {
     const parameter = parameterSamples[pair]
@@ -245,9 +363,10 @@ function buildRibbon(
       centerX += normal.x * normalOffset
       centerY += normal.y * normalOffset
 
-      let randomAngle = random() * AIR_LIGHTNING_RANDOM_ANGLE_DEGREES
-      if (random() < 0.5) randomAngle = -randomAngle
-      const randomRadius = random() * AIR_LIGHTNING_RANDOM_RADIUS * envelope
+      const randomSample = nativeAirRibbonRandomSample(ribbonRandomState)
+      ribbonRandomState = randomSample.nextState
+      const randomAngle = randomSample.angleDegrees
+      const randomRadius = randomSample.radius * envelope
       centerX += Math.sin(degreesToRadians(randomAngle)) * randomRadius
       centerY -= Math.cos(degreesToRadians(randomAngle)) * randomRadius
       halfWidth *= (1 - envelope) * 0.75 + 0.5
@@ -261,7 +380,9 @@ function buildRibbon(
 
     // Record 44's horizontal cyan-white ramp spans the ribbon width; its
     // vertical edge alternates along the strip to repeat the 17 x 14 glyph.
-    const v = pair % 2
+    const v = pair === 0 || pair === pairCount - 1
+      ? 0
+      : pair % 2 === 1 ? 1 : 0.5
     uvs[vertex] = 0
     uvs[vertex + 1] = v
     uvs[vertex + 2] = 1
@@ -282,14 +403,72 @@ function buildRibbon(
 
   return {
     alpha,
+    branch: buildNativeAirBranchPlan(
+      points,
+      randomStream(id, semanticSeed(id, birthTick, 0x4252414e ^ phaseOffset)),
+    ),
     indices,
     parameterSamples,
+    phaseDegrees,
     phaseOffset,
     textureRecord: AIR_LIGHTNING_RIBBON_RECORD,
     tint,
     uvs,
     vertices,
     width,
+  }
+}
+
+export function nativeAirRibbonRandomSample(state: number): {
+  angleDegrees: number
+  nextState: number
+  radius: number
+} {
+  const seed = state >>> 0
+  const angleMagnitude = (seed % 360_000) / 360_000 * AIR_LIGHTNING_RANDOM_ANGLE_DEGREES
+  const signedState = nativeSignedAbs32(nativeAirMixRaw(seed))
+  const radiusState = nativeSignedAbs32(nativeAirMixRaw(signedState))
+  return {
+    angleDegrees: signedState % 2 === 1 ? -angleMagnitude : angleMagnitude,
+    nextState: nativeSignedAbs32(nativeAirMixRaw(radiusState)),
+    radius: (radiusState % 360_000) / 360_000 * AIR_LIGHTNING_RANDOM_RADIUS,
+  }
+}
+
+export function buildNativeAirBranchPlan(
+  points: readonly [NativeAirPoint, NativeAirPoint, NativeAirPoint],
+  random: () => number,
+): NativeAirBranchPlan | null {
+  if (Math.floor(random() * 2) !== 1) return null
+  const attachment = quickSplinePoint(points, random() * AIR_LIGHTNING_SPLINE_DURATION)
+  let scale = 0.25 + random() * 0.5
+  if (Math.floor(random() * 30) === 1) scale = 1
+  const mirrorX = Math.floor(random() * 2) === 1
+  const geometryIndex = Math.floor(random() * 2) as 0 | 1
+  const textureIndex = Math.floor(random() * 2) as 0 | 1
+  const geometryRecord = AIR_LIGHTNING_BRANCH_RECORDS[geometryIndex]
+  const geometry = AIR_LIGHTNING_BRANCH_GEOMETRY[geometryIndex]
+  const first = geometry[0]
+  const baseDegrees = normalizeDegrees(Math.atan2(-first.y, first.x) * 180 / Math.PI)
+  const radians = (baseDegrees + random() * 45) * Math.PI / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  const xScale = (mirrorX ? -1 : 1) * scale
+  const vertices = new Float32Array(8)
+  for (const [index, point] of geometry.entries()) {
+    const x = point.x * xScale
+    const y = point.y * scale
+    vertices[index * 2] = attachment.x + x * cosine - y * sine
+    vertices[index * 2 + 1] = attachment.y + x * sine + y * cosine
+  }
+  return {
+    geometryRecord,
+    indices: Uint32Array.from([0, 1, 2, 1, 3, 2]),
+    mirrorX,
+    scale,
+    textureRecord: AIR_LIGHTNING_BRANCH_RECORDS[textureIndex],
+    uvs: Float32Array.from([0, 0, 1, 0, 0, 1, 1, 1]),
+    vertices,
   }
 }
 
@@ -440,6 +619,10 @@ function degreesToRadians(degrees: number): number {
   return degrees * Math.PI / 180
 }
 
+function normalizeDegrees(degrees: number): number {
+  return (degrees % 360 + 360) % 360
+}
+
 function normalized(direction: NativeAirPoint): NativeAirPoint {
   const length = Math.hypot(direction.x, direction.y)
   return length > 0
@@ -464,4 +647,24 @@ function mix32(value: number): number {
   value ^= value >>> 15
   value = Math.imul(value, 0x846ca68b) >>> 0
   return (value ^ (value >>> 16)) >>> 0
+}
+
+function semanticSeed(id: number, birthTick: number, salt: number): number {
+  return nativeSignedAbs32(nativeAirMixRaw(
+    (id ^ Math.imul(birthTick + 1, 0x9e3779b1) ^ salt) >>> 0,
+  ))
+}
+
+function nativeAirMixRaw(value: number): number {
+  let mixed = value >>> 0
+  mixed = (mixed ^ (mixed << 21)) >>> 0
+  mixed = (mixed ^ (mixed >>> 11)) >>> 0
+  mixed = (mixed ^ (mixed << 4)) >>> 0
+  return Math.imul(mixed, 0x0a67cfcf) >>> 0
+}
+
+function nativeSignedAbs32(value: number): number {
+  return (value | 0) >= 0
+    ? value >>> 0
+    : (0x80000000 - (value & 0x7fffffff)) >>> 0
 }

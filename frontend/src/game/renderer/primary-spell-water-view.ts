@@ -6,7 +6,9 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
-  multiplyWaterFrostTint,
+  packWaterFrostTint,
+  quantizeWaterFrostAlpha,
+  waterFrostJetPainterLane,
   waterFrostJetPlan,
   type WaterFrostJetDraw,
 } from '../core-kernels/primary-spell-water.ts'
@@ -24,7 +26,6 @@ export class WaterPrimarySpellView {
   private state: PrimarySpellWaterTransientState
   private readonly glint: Sprite
   readonly kind = 'water'
-  private worldTint = 0xffffff
 
   constructor(state: PrimarySpellWaterTransientState, textures: WaterPrimarySpellTextures) {
     this.state = state
@@ -57,21 +58,20 @@ export class WaterPrimarySpellView {
   }
 
   painterRoots(): readonly WaterPainterRoot[] {
-    const position = waterFrostJetPlan(this.state).position
+    const plan = waterFrostJetPlan(this.state)
+    const policy = waterFrostJetPainterLane(plan.kind)
     return [{
       container: this.container,
-      regionLightPoint: { ...position },
+      lane: policy.lane,
+      queueFamily: policy.queueFamily,
+      regionLightPoint: null,
       sortBias: 0,
       suffix: '',
       worldY: this.worldY,
     }]
   }
 
-  setTint(suffix: string, tint: number): void {
-    if (suffix !== '') return
-    this.worldTint = tint
-    this.update(this.state)
-  }
+  setTint(_suffix: string, _tint: number): void {}
 
   destroy(): void {
     this.container.destroy({ children: true })
@@ -86,13 +86,15 @@ export class WaterPrimarySpellView {
     sprite.position.set(draw.position.x - origin.x, draw.position.y - origin.y)
     sprite.rotation = draw.rotation
     sprite.scale.set(draw.scale)
-    sprite.alpha = draw.alpha
-    sprite.tint = multiplyWaterFrostTint(this.worldTint, draw.color)
+    sprite.alpha = quantizeWaterFrostAlpha(draw.alpha)
+    sprite.tint = packWaterFrostTint(draw.color)
   }
 }
 
 interface WaterPainterRoot {
   container: Container
+  lane: 'post-world-queue' | 'world-sorted'
+  queueFamily: 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string

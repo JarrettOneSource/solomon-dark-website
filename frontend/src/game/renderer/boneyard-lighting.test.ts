@@ -22,7 +22,7 @@ test('anchors the ordinary player light fifteen units along native heading', () 
     position: { x: 100, y: 200 },
   }), {
     intensity: 1,
-    multipleShadows: true,
+    castsDirectionalShadow: true,
     position: { x: 100, y: 185 },
     radius: 2.6,
   })
@@ -61,19 +61,19 @@ test('takes the native maximum contribution and keeps Lantern flicker cosmetic',
     && sample < NATIVE_LANTERN_LIGHT_MIN_INTENSITY + NATIVE_LANTERN_LIGHT_FLICKER
   )))
   assert.ok(new Set(samples).size > 60)
-  assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).multipleShadows, false)
+  assert.equal(nativeLanternLightSource({ x: 4, y: 5 }, 0).castsDirectionalShadow, false)
 })
 
 test('preserves the native ordered containment gate for overlapping sources', () => {
   const dominant = {
     intensity: 1,
-    multipleShadows: true,
+    castsDirectionalShadow: true,
     position: { x: 0, y: 0 },
     radius: 2,
   }
   const contained = {
     intensity: 0.8,
-    multipleShadows: false,
+    castsDirectionalShadow: false,
     position: { x: 144, y: 0 },
     radius: 1,
   }
@@ -89,12 +89,12 @@ test('preserves the native ordered containment gate for overlapping sources', ()
     nativeAcceptedBoneyardLightSources([
       dominant,
       { ...contained, intensity: 1.1 },
-      { ...contained, multipleShadows: true },
+      { ...contained, castsDirectionalShadow: true },
     ], []),
     [
       dominant,
       { ...contained, intensity: 1.1 },
-      { ...contained, multipleShadows: true },
+      { ...contained, castsDirectionalShadow: true },
     ],
   )
 })

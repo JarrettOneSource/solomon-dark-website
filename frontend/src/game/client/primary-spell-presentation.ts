@@ -72,6 +72,10 @@ function interpolateProjectile(
       x: lerp(older.velocity.x, newer.velocity.x, blend),
       y: lerp(older.velocity.y, newer.velocity.y, blend),
     },
+    ...(discrete.kind === 'earth' ? {
+      hitTargetIds: [...discrete.hitTargetIds],
+      orientation: [...discrete.orientation],
+    } : {}),
   }
 }
 
@@ -124,6 +128,17 @@ function interpolateTransient(
   if (older.kind === 'fire-impact' || newer.kind === 'fire-impact') {
     return copyTransient(discrete)
   }
+  if (older.kind === 'ether-impact' && newer.kind === 'ether-impact') {
+    const impact = blend < 1 ? older : newer
+    return {
+      ...impact,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: { ...impact.origin },
+    }
+  }
+  if (older.kind === 'ether-impact' || newer.kind === 'ether-impact') {
+    return copyTransient(discrete)
+  }
   if (older.kind === 'fire' && newer.kind === 'fire') {
     const fire = blend < 1 ? older : newer
     return {
@@ -172,13 +187,21 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
   return {
     ...spell,
     direction: { ...spell.direction },
+    ...(spell.kind === 'earth' ? {
+      hitTargetIds: [...spell.hitTargetIds],
+      orientation: [...spell.orientation],
+    } : {}),
     position: { ...spell.position },
     velocity: { ...spell.velocity },
   }
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
-  if (effect.kind === 'earth-impact' || effect.kind === 'fire-impact') {
+  if (
+    effect.kind === 'earth-impact'
+    || effect.kind === 'ether-impact'
+    || effect.kind === 'fire-impact'
+  ) {
     return { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'earth-called-rock') {

@@ -177,6 +177,9 @@ test('locks every native primary-cast extraction in one asset manifest', () => {
     'audio/sfx/magic-missile.wav': {
       sha256: 'a7765b778d5cc49546c5e7e7822f38aac6a3edd8636d91e4ae92ec78611ac567',
     },
+    'audio/sfx/magic-missile-hit.wav': {
+      sha256: '2ac1154c78ee7b9cf5b7b0477113293ff8f16aa743269ad3648ed603e1aaf608',
+    },
     'audio/sfx/rolling-stone-loop.wav': {
       sha256: '66a306a2ebe8443cb017ce8c3737477f196600a82af7472201cc123f70cee706',
     },

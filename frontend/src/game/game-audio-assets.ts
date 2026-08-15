@@ -11,6 +11,7 @@ import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import lightningStart from '../assets/game/audio/sfx/lightning-start.wav'
 import magicMissile from '../assets/game/audio/sfx/magic-missile.wav'
+import magicMissileHit from '../assets/game/audio/sfx/magic-missile-hit.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
@@ -54,6 +55,7 @@ export const GAME_AUDIO_SOURCES = {
     'ice-start': iceStart,
     'lightning-start': lightningStart,
     'magic-missile': magicMissile,
+    'magic-missile-hit': magicMissileHit,
     'pick-skill': pickSkill,
     'rock-hit': rockHit,
     'skeleton-die': skeletonDie,

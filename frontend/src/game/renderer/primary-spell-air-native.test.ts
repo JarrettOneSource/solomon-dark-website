@@ -16,14 +16,22 @@ import {
   AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
   AIR_LIGHTNING_FAST_INVERSE_SQRT_MAGIC,
   AIR_LIGHTNING_MAX_PARAMETER_STEP,
+  AIR_LIGHTNING_PATH_MINIMUM_DISTANCE,
+  AIR_LIGHTNING_PATH_REMAINDER,
+  AIR_LIGHTNING_PATH_STEP,
+  AIR_LIGHTNING_PATH_Y_OFFSET,
   AIR_LIGHTNING_SPLINE_DURATION,
+  buildNativeAirBranchPlan,
   buildNativeAirContactLightSource,
   buildNativeAirContactLightPlan,
   buildNativeAirLightningPlan,
+  buildNativeAirPathLightSources,
+  nativeAirRibbonRandomSample,
 } from './primary-spell-air-native.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
 
 const STRAIGHT_BOLT = {
+  birthTick: 40,
   endpoint: { x: 205, y: 0 },
   midpoint: { x: 102.5, y: 0 },
 } as const
@@ -91,8 +99,8 @@ test('native Air builds two independently tessellated record-44 ribbons', () => 
   assert.equal(plan.body.layers[0].uvs.length, 28)
   assert.equal(plan.body.layers[0].indices.length, 36)
   assert.deepEqual(
-    [...plan.body.layers[0].uvs.slice(0, 8)],
-    [0, 0, 1, 0, 0, 1, 1, 1],
+    Array.from({ length: 7 }, (_, pair) => plan.body!.layers[0].uvs[pair * 4 + 1]),
+    [0, 1, 0.5, 1, 0.5, 1, 0],
   )
   assert.deepEqual(
     [...plan.body.layers[0].vertices.slice(0, 4)],
@@ -111,6 +119,7 @@ test('native Air builds two independently tessellated record-44 ribbons', () => 
 test('native Air tessellates the authoritative off-axis target control point', () => {
   const plan = buildNativeAirLightningPlan({
     ageTicks: 0,
+    birthTick: 40,
     endpoint: { x: 100, y: -200 },
     id: 23,
     midpoint: { x: 0, y: -Math.hypot(100, 200) / 2 },
@@ -146,7 +155,7 @@ test('native Air exposes the contact ZAnimLit source without inventing range 50'
     ages.map((light) => light?.intensity),
     [1, 0.949999988079071, 0.8999999761581421, 0.8499999642372131, 0.7999999523162842],
   )
-  assert.ok(ages.every((light) => light?.multipleShadows === false))
+  assert.ok(ages.every((light) => light?.castsDirectionalShadow === false))
   assert.ok(ages.every((light) => light?.position === visual.contactCorona.center))
   assert.ok(ages.every((light) => (
     light !== null
@@ -174,13 +183,103 @@ test('native Air exposes the contact ZAnimLit source without inventing range 50'
   })
 })
 
-test('native Air presentation randomness is stable by semantic transient id', () => {
+test('native Air appends its factory MiscLights after exact 100-unit leg walks', () => {
+  assert.equal(AIR_LIGHTNING_PATH_STEP, 100)
+  assert.equal(AIR_LIGHTNING_PATH_REMAINDER, 50)
+  assert.equal(AIR_LIGHTNING_PATH_MINIMUM_DISTANCE, 220)
+  assert.equal(AIR_LIGHTNING_PATH_Y_OFFSET, 35)
+  const values = [0.5, 0, 0.25, 0.5, 0.75, 0.99]
+  const lights = buildNativeAirPathLightSources({
+    birthTick: 40,
+    endpoint: { x: 650, y: 10 },
+    id: 9,
+    midpoint: { x: 350, y: 10 },
+    origin: { x: 0, y: 10 },
+  }, () => values.shift() ?? 0)
+
+  assert.deepEqual(lights.map(({ position }) => position), [
+    { x: 350, y: 45 },
+    { x: 350, y: 45 },
+    { x: 450, y: 45 },
+    { x: 550, y: 45 },
+    { x: 650, y: 45 },
+  ])
+  assert.ok(lights.every(({ castsDirectionalShadow, intensity }) => (
+    castsDirectionalShadow && intensity === Math.fround(0.625)
+  )))
+  assert.deepEqual(lights.map(({ radius }) => radius), [
+    Math.fround(0.75),
+    Math.fround(0.8125),
+    Math.fround(0.875),
+    Math.fround(0.9375),
+    Math.fround(0.9975),
+  ])
+
+  const boundary = buildNativeAirPathLightSources({
+    birthTick: 40,
+    endpoint: { x: 220, y: 0 },
+    id: 9,
+    midpoint: { x: 219.999, y: 0 },
+    origin: { x: 0, y: 0 },
+  }, () => 0)
+  assert.deepEqual(boundary.map(({ position }) => position.x), [220])
+})
+
+test('native Air body phase is frozen from the semantic birth tick', () => {
   const first = buildNativeAirLightningPlan({ ageTicks: 0, id: 7, ...STRAIGHT_BOLT })
   const replay = buildNativeAirLightningPlan({ ageTicks: 0, id: 7, ...STRAIGHT_BOLT })
-  const next = buildNativeAirLightningPlan({ ageTicks: 0, id: 8, ...STRAIGHT_BOLT })
+  const nextBirth = buildNativeAirLightningPlan({
+    ageTicks: 0,
+    id: 7,
+    ...STRAIGHT_BOLT,
+    birthTick: STRAIGHT_BOLT.birthTick + 1,
+  })
   assert.deepEqual(replay, first)
-  assert.notDeepEqual(next.body?.layers[0].vertices, first.body?.layers[0].vertices)
-  assert.notDeepEqual(next.contactCorona.center, first.contactCorona.center)
+  assert.equal(first.body?.layers[0].phaseDegrees, -3 * STRAIGHT_BOLT.birthTick)
+  assert.equal(
+    nextBirth.body!.layers[0].phaseDegrees - first.body!.layers[0].phaseDegrees,
+    -3,
+  )
+  assert.notDeepEqual(nextBirth.body?.layers[0].vertices, first.body?.layers[0].vertices)
+})
+
+test('native Air ribbon mixer preserves the recovered signed-abs recurrence', () => {
+  const first = nativeAirRibbonRandomSample(0x12345678)
+  assert.deepEqual(first, {
+    angleDegrees: 25.259,
+    nextState: 386390828,
+    radius: 13.595333333333334,
+  })
+  assert.deepEqual(nativeAirRibbonRandomSample(first.nextState), {
+    angleDegrees: -20.01061111111111,
+    nextState: 324155591,
+    radius: 26.963833333333334,
+  })
+})
+
+test('native Air branch independently chooses geometry and texture records', () => {
+  const values = [0.75, 0.25, 0.4, 0.04, 0.75, 0.1, 0.75, 0.5]
+  const branch = buildNativeAirBranchPlan(
+    [{ x: 0, y: 0 }, { x: 102.5, y: 0 }, { x: 205, y: 0 }],
+    () => values.shift() ?? 0,
+  )
+  assert.ok(branch)
+  assert.equal(branch.geometryRecord, 375)
+  assert.equal(branch.textureRecord, 376)
+  assert.equal(branch.scale, 1)
+  assert.equal(branch.mirrorX, true)
+  assert.equal(branch.vertices.length, 8)
+  assert.equal(branch.indices.length, 6)
+  assert.deepEqual([...branch.uvs], [0, 0, 1, 0, 0, 1, 1, 1])
+
+  const reverse = [0.75, 0.25, 0.4, 0.2, 0.1, 0.75, 0.1, 0.5]
+  const reversed = buildNativeAirBranchPlan(
+    [{ x: 0, y: 0 }, { x: 102.5, y: 0 }, { x: 205, y: 0 }],
+    () => reverse.shift() ?? 0,
+  )
+  assert.ok(reversed)
+  assert.equal(reversed.geometryRecord, 376)
+  assert.equal(reversed.textureRecord, 375)
 })
 
 test('native Air corona uses the exact BadGuys circle and fork family', () => {
@@ -207,6 +306,7 @@ test('native Air corona uses the exact BadGuys circle and fork family', () => {
 test('Air body, source glow, and contact corona remain separate painter roots', () => {
   const state = {
     ageTicks: 0,
+    birthTick: 80,
     direction: { x: 1, y: 0 },
     endpoint: { x: 255, y: 70 },
     id: 31,
@@ -219,6 +319,7 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     worldKey: 'hub:courtyard',
   } satisfies PrimarySpellTransientState
   const view = new AirPrimarySpellView(state, {
+    branches: [Texture.EMPTY, Texture.EMPTY],
     circle: Texture.EMPTY,
     forks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
     ribbon: Texture.EMPTY,

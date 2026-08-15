@@ -1,3 +1,6 @@
+import type { PrimarySpellEtherImpactState } from '../core-kernels/primary-spells.ts'
+import type { NativeBoneyardLightSource } from './boneyard-lighting.ts'
+
 export type EtherPrimaryBlend = 'add' | 'normal'
 export type EtherPrimaryRole =
   | 'fixed-spark'
@@ -26,6 +29,13 @@ export interface EtherPrimaryFlightPlan {
   sampledScale: number
 }
 
+export interface EtherPrimaryImpactPlan extends EtherPrimaryFlightPlan {
+  fade: number
+  position: { x: number; y: number }
+  regionLightPoint: null
+  worldY: number
+}
+
 export const ETHER_PRIMARY_FLIGHT_RECORDS = {
   core: 110,
   ray: 112,
@@ -34,6 +44,8 @@ export const ETHER_PRIMARY_FLIGHT_RECORDS = {
 
 export const ETHER_PRIMARY_PHASE_DEGREES_PER_TICK = 9
 export const ETHER_PRIMARY_ROOT_OFFSET = { x: 0, y: -10 } as const
+export const ETHER_PRIMARY_IMPACT_SORT_BIAS = 100
+export const ETHER_PRIMARY_IMPACT_LIGHT_RADIUS = 0.75
 
 const ETHER_PURPLE = 0xff80ff
 const WHITE = 0xffffff
@@ -48,9 +60,63 @@ export function etherPrimaryFlightPlan(
   ageTicks: number,
 ): EtherPrimaryFlightPlan {
   const phase = etherPrimaryPhase(projectileId, ageTicks)
+  return etherPrimaryCompositorPlan(projectileId, Math.floor(ageTicks), phase, 1, 1)
+}
+
+export function etherPrimaryImpactFade(ageTicks: number): number {
+  let fade = Math.fround(2)
+  for (let tick = 0; tick <= Math.floor(ageTicks); tick += 1) {
+    fade = Math.fround(fade - Math.fround(0.1))
+  }
+  return fade
+}
+
+export function etherPrimaryImpactPlan(
+  state: PrimarySpellEtherImpactState,
+): EtherPrimaryImpactPlan {
+  const ageTicks = Math.floor(state.ageTicks)
+  const fade = etherPrimaryImpactFade(ageTicks)
+  const plan = etherPrimaryCompositorPlan(
+    state.id,
+    state.birthTick + ageTicks,
+    state.birthTick + ageTicks,
+    2,
+    fade,
+  )
+  return {
+    ...plan,
+    fade,
+    position: { ...state.origin },
+    regionLightPoint: null,
+    worldY: state.origin.y + ETHER_PRIMARY_IMPACT_SORT_BIAS,
+  }
+}
+
+export function etherPrimaryImpactLightSource(
+  state: PrimarySpellEtherImpactState,
+): NativeBoneyardLightSource {
+  let intensity = Math.fround(1)
+  for (let tick = 0; tick <= Math.floor(state.ageTicks); tick += 1) {
+    intensity = Math.fround(intensity + Math.fround(-0.05))
+  }
+  return {
+    castsDirectionalShadow: false,
+    intensity: Math.min(intensity, 1),
+    position: { ...state.origin },
+    radius: ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
+  }
+}
+
+function etherPrimaryCompositorPlan(
+  projectileId: number,
+  sampleTick: number,
+  phase: number,
+  overallScale: number,
+  alphaMultiplier: number,
+): EtherPrimaryFlightPlan {
   let randomChannel = 0
-  const random = (): number => visualRandom(projectileId, ageTicks, ++randomChannel)
-  const sampledScale = 1 + random() * 0.5
+  const random = (): number => visualRandom(projectileId, sampleTick, ++randomChannel)
+  const sampledScale = (1 + random() * 0.5) * overallScale
   const draws: EtherPrimaryDraw[] = []
   const corePulse = 0.15 * Math.abs(sinDegrees(15 * phase))
 
@@ -95,7 +161,16 @@ export function etherPrimaryFlightPlan(
     }))
   }
 
-  return { draws, phase, sampledScale }
+  return {
+    draws: alphaMultiplier === 1
+      ? draws
+      : draws.map((operation) => ({
+          ...operation,
+          alpha: Math.fround(operation.alpha * alphaMultiplier),
+        })),
+    phase,
+    sampledScale,
+  }
 }
 
 function draw(

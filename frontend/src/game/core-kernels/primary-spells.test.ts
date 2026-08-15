@@ -22,8 +22,8 @@ import {
   PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
   PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
   PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE,
+  PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
-  PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS,
   PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
   primaryCastActionEndTick,
   primaryCastEmissionTick,
@@ -36,6 +36,11 @@ import {
   type PrimarySpellSimulationState,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
+import {
+  EARTH_BOULDER_IDENTITY_ORIENTATION,
+  earthBoulderFlightOrientationStep,
+  earthBoulderHeldOrientationStep,
+} from './primary-spell-earth-orientation.ts'
 import {
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
@@ -67,6 +72,26 @@ const EMPTY_SPELL_WORLD = {
   ) => ({ x: start.x + direction.x * 2_000, y: start.y + direction.y * 2_000 }),
   spellTargets: () => [],
 } as const
+
+function hostileTarget(
+  id: string,
+  position: { x: number; y: number },
+  overrides: Partial<PrimarySpellTarget> = {},
+): PrimarySpellTarget {
+  return {
+    active: true,
+    actorFlags: 0x2,
+    attachment: { x: 0, y: 0 },
+    bodyRadius: 20,
+    id,
+    kind: 'enemy',
+    nativePriority: 0,
+    pendingRemove: false,
+    position,
+    registrationOrder: 1,
+    ...overrides,
+  }
+}
 
 function simulation(element: WizardElement): GameSimulationState {
   const config: PlayerCharacterConfig = {
@@ -395,11 +420,16 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   const initial = simulation('ether')
   const player = getPlayerCharacter(initial, PLAYER_ID)
   const target: PrimarySpellTarget = {
-    airPriority: 0,
+    active: true,
+    actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
+    bodyRadius: 20,
     id: 'enemy:41',
     kind: 'enemy',
+    nativePriority: 0,
+    pendingRemove: false,
     position: { x: player.position.x + 100, y: player.position.y - 140 },
+    registrationOrder: 41,
   }
   let players = playerCharacterRecords(initial.playerEntities)
   let previousPlayers = playerCharacterRecords(initial.playerEntities)
@@ -491,6 +521,99 @@ test('Ether snapshots the forward-probe target and steers after its first moveme
   }).spells.projectiles[0]
   assert.equal(noRankOneRetarget.kind, 'ether')
   assert.equal(noRankOneRetarget.targetId, null)
+})
+
+test('Ether defers actor contact to combat and owns the terrain-impact lifetime', () => {
+  const missile = {
+    ageTicks: 1,
+    charge: 1,
+    direction: { x: 1, y: 0 },
+    flightTicks: 1,
+    headingDegrees: 90,
+    id: 1,
+    kind: 'ether',
+    ownerId: PLAYER_ID,
+    phase: 'flight',
+    position: { x: 100, y: 200 },
+    targetId: 'enemy:7',
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    velocity: { x: 3, y: 0 },
+    worldKey: 'hub:courtyard',
+  } as const
+  const target = hostileTarget('enemy:7', { x: 125, y: 200 })
+  const actorDeferred = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [target],
+    spells: { nextId: 2, projectiles: [missile], transients: [] },
+    tick: 77,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells
+  assert.equal(actorDeferred.projectiles.length, 1)
+  assert.equal(actorDeferred.projectiles[0]?.position.x, 103)
+  assert.deepEqual(actorDeferred.transients, [])
+
+  let result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => false,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: {
+      nextId: 2,
+      projectiles: [{ ...missile, ageTicks: 5, flightTicks: 5 }],
+      transients: [],
+    },
+    tick: 88,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells
+  assert.equal(result.projectiles.length, 0)
+  assert.deepEqual(result.transients, [{
+    ageTicks: 0,
+    birthTick: 88,
+    id: 2,
+    kind: 'ether-impact',
+    origin: missile.position,
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  }])
+
+  for (let age = 1; age < PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS; age += 1) {
+    result = stepPrimarySpells({
+      ...EMPTY_SPELL_WORLD,
+      canPlaceProjectile: () => true,
+      canTraverseProjectile: () => true,
+      inputs: {},
+      players: {},
+      previousPlayers: {},
+      spells: result,
+      tick: 88 + age,
+      viewScale: 1.2,
+      worldKeyForPlayer: () => 'hub:courtyard',
+    }).spells
+    assert.equal(result.transients[0]?.ageTicks, age)
+  }
+  result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: result,
+    tick: 88 + PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells
+  assert.equal(result.transients.length, 0)
+
 })
 
 test('Fire emits its one 4.5-unit missile from the native pushed socket', () => {
@@ -660,8 +783,46 @@ test('Fire terrain lookahead contacts before movement and emits no final particl
   assert.equal(impactState.transients.length, 0)
 })
 
+test('Fire advances and emits its final trail before combat owns actor contact', () => {
+  const fireball = {
+    ageTicks: 1,
+    charge: 1,
+    direction: { x: 1, y: 0 },
+    flightTicks: 1,
+    id: 1,
+    kind: 'fire',
+    ownerId: PLAYER_ID,
+    phase: 'flight',
+    position: { x: 100, y: 200 },
+    velocity: { x: 4.5, y: 0 },
+    worldKey: 'hub:courtyard',
+  } as const
+  const target = hostileTarget('enemy:7', { x: 124.5, y: 200 })
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spellTargets: () => [target],
+    spells: { nextId: 2, projectiles: [fireball], transients: [] },
+    tick: 51,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+
+  assert.equal(result.spells.projectiles.length, 1)
+  assert.deepEqual(result.spells.projectiles[0]?.position, { x: 104.5, y: 200 })
+  assert.deepEqual(result.spells.transients.map(({ id, kind, origin }) => ({
+    id,
+    kind,
+    origin,
+  })), [{ id: 2, kind: 'fire', origin: { x: 104.5, y: 200 } }])
+})
+
 test('Fire has no distance or PoC flight-time range cap', () => {
-  const ageTicks = PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS + 5
+  const ageTicks = 505
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
     canPlaceProjectile: () => true,
@@ -692,6 +853,43 @@ test('Fire has no distance or PoC flight-time range cap', () => {
   })
   assert.equal(result.spells.projectiles[0].ageTicks, ageTicks + 1)
   assert.equal(result.spells.projectiles[0].position.x, 104.5)
+})
+
+test('Ether has no distance or legacy PoC flight-time range cap', () => {
+  const ageTicks = 505
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    spells: {
+      nextId: 2,
+      projectiles: [{
+        ageTicks,
+        charge: 1,
+        direction: { x: 1, y: 0 },
+        flightTicks: ageTicks,
+        headingDegrees: 90,
+        id: 1,
+        kind: 'ether',
+        ownerId: PLAYER_ID,
+        phase: 'flight',
+        position: { x: 100, y: 200 },
+        targetId: null,
+        turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+        velocity: { x: 3, y: 0 },
+        worldKey: 'hub:courtyard',
+      }],
+      transients: [],
+    },
+    tick: 600,
+    viewScale: 1.2,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  assert.equal(result.spells.projectiles[0].ageTicks, ageTicks + 1)
+  assert.equal(result.spells.projectiles[0].position.x, 103)
 })
 
 test('one-shot casts retain accepted facing against movement through projectile birth', () => {
@@ -772,8 +970,10 @@ test('Water emits the shipped Enhanced Effects Frost pair while held and lets it
   let state = step(simulation('water'), true)
   const born = state.primarySpells.transients.filter((effect) => effect.kind === 'water')
   assert.equal(born.length, 2)
+  assert.deepEqual(born.map(({ ageTicks }) => ageTicks), [1, 1])
   assert.equal(born.filter(({ obstructionPoint }) => obstructionPoint !== null).length, 1)
   assert.equal(born.find(({ id }) => id === 2)?.obstructionPoint?.y, 0)
+  assert.ok((born.find(({ id }) => id === 2)?.obstructionDistance ?? -1) >= 0)
   state = step(state, true, 3)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 1)
   assert.equal(primaryCastPose(1, true), 7)
@@ -813,9 +1013,9 @@ test('Water wiggle uses the shared authority tick when player ids interleave', (
 
   state = stepGameSimulationTick(state, heldInputs())
   const secondA = state.primarySpells.transients
-    .filter(({ ageTicks, ownerId }) => ageTicks === 0 && ownerId === 'caster-a')
+    .filter(({ ageTicks, ownerId }) => ageTicks === 1 && ownerId === 'caster-a')
   const secondB = state.primarySpells.transients
-    .filter(({ ageTicks, ownerId }) => ageTicks === 0 && ownerId === 'caster-b')
+    .filter(({ ageTicks, ownerId }) => ageTicks === 1 && ownerId === 'caster-b')
   assert.deepEqual(secondA.map(({ direction }) => direction), secondB.map(({ direction }) => direction))
   assert.notDeepEqual(firstA[0].direction, secondA[0].direction)
 })
@@ -830,6 +1030,10 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(created.flightTicks, 0)
   assert.equal(created.charge, PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE)
   assert.equal(created.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
+  assert.deepEqual(
+    created.orientation,
+    earthBoulderHeldOrientationStep(EARTH_BOULDER_IDENTITY_ORIENTATION, created.direction),
+  )
   assert.equal(created.position.x, player.position.x - 32.5)
   assert.equal(created.position.y, player.position.y - 51.5)
   state = step(state, true)
@@ -837,6 +1041,10 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(constantPose.ageTicks, 2)
   assert.equal(constantPose.charge, earthChargeAfter(2))
   assert.equal(constantPose.assemblyCharge, PRIMARY_SPELL_EARTH_INITIAL_CHARGE)
+  assert.deepEqual(
+    constantPose.orientation,
+    earthBoulderHeldOrientationStep(created.orientation, constantPose.direction),
+  )
   assert.equal(constantPose.position.x, player.position.x + 8.5)
   assert.equal(constantPose.position.y, player.position.y - 41)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, 1)
@@ -859,6 +1067,17 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
   assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
+  const releaseDelta = {
+    x: Math.fround(released.position.x - thresholdRow.position.x),
+    y: Math.fround(released.position.y - thresholdRow.position.y),
+  }
+  assert.deepEqual(released.orientation, earthBoulderFlightOrientationStep(
+    thresholdRow.orientation,
+    released.direction,
+    releaseDelta,
+    released.charge,
+  ))
+  assert.notDeepEqual(released.orientation, thresholdRow.orientation)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence, 1)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.actionTick, -1)
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.channelActive, false)
@@ -907,6 +1126,7 @@ test('Earth resamples world aim while held and freezes the last sample on releas
   const flying = next.spells.projectiles[0]
   assert.deepEqual(flying.direction, released.direction)
   assert.deepEqual(flying.velocity, released.velocity)
+  assert.notDeepEqual(flying.orientation, released.orientation)
 })
 
 test('Earth preserves long-held age and has no fixed flight range or timeout', () => {
@@ -989,10 +1209,12 @@ test('Earth publishes one authoritative breakup when its next flight position co
   const released = state.primarySpells.projectiles[0]
   const checked: { position: { x: number, y: number }, radius: number }[] = []
   const projectedPlayers = playerCharacterRecords(state.playerEntities)
+  let collisionOrientation: readonly number[] | null = null
   const result = stepPrimarySpells({
     ...EMPTY_SPELL_WORLD,
-    canPlaceProjectile: (_spell, position, radius) => {
+    canPlaceProjectile: (spell, position, radius) => {
       checked.push({ position, radius })
+      if (spell.kind === 'earth') collisionOrientation = spell.orientation
       return false
     },
     canTraverseProjectile: () => true,
@@ -1018,6 +1240,17 @@ test('Earth publishes one authoritative breakup when its next flight position co
   }])
   assert.equal(result.spells.projectiles.length, 0)
   assert.notDeepEqual(checked[0].position, released.position)
+  assert.ok(collisionOrientation)
+  assert.notDeepEqual(collisionOrientation, released.orientation)
+  assert.deepEqual(collisionOrientation, earthBoulderFlightOrientationStep(
+    released.orientation,
+    released.direction,
+    {
+      x: Math.fround(checked[0].position.x - released.position.x),
+      y: Math.fround(checked[0].position.y - released.position.y),
+    },
+    released.charge,
+  ))
   const impact = result.spells.transients.find((effect) => effect.kind === 'earth-impact')
   assert.ok(impact)
   assert.deepEqual(impact, {
@@ -1063,7 +1296,10 @@ test('Earth uses the native 45-charge release probe before normal 75-charge flig
   })
 
   assert.deepEqual(checked, [{
-    position: { x: heldBoulder.position.x, y: heldBoulder.position.y - 3 },
+    position: {
+      x: Math.fround(heldBoulder.position.x),
+      y: Math.fround(heldBoulder.position.y - 3),
+    },
     radius: heldBoulder.charge * 45,
   }])
   assert.equal(result.spells.projectiles.length, 0)

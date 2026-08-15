@@ -31,7 +31,6 @@ export class EarthBoulderView {
   private readonly openingFlash: Sprite
   private readonly rockSprites: Sprite[] = []
   private readonly visual = new Container({ label: 'earth-boulder-visual' })
-  private presentationTick = 0
   private state: PrimarySpellEarthProjectileState
   private sortBias = 0
   private readonly textures: EarthBoulderTextures
@@ -57,8 +56,7 @@ export class EarthBoulderView {
     if (!('position' in state) || state.kind !== 'earth') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
-    const plan = earthBoulderPresentationPlan(state, this.presentationTick)
-    this.presentationTick += 1
+    const plan = earthBoulderPresentationPlan(state, state.ageTicks)
     this.sortBias = plan.sortBias
     this.visual.position.set(plan.visualOffset.x, plan.visualOffset.y)
     this.aura.alpha = plan.aura.alpha
@@ -86,6 +84,9 @@ export class EarthBoulderView {
   painterRoots(): readonly EarthPainterRoot[] {
     return [{
       container: this.container,
+      lane: 'world-sorted',
+      overlayOwnerId: this.state.ownerId,
+      queueFamily: 'ordinary-dynamic',
       regionLightPoint: { ...this.state.position },
       sortBias: this.sortBias,
       suffix: '',
@@ -110,16 +111,20 @@ export class EarthCalledRockView {
   readonly container: Container
   readonly containers: readonly Container[]
   readonly kind = 'earth-called-rock'
+  private readonly baseRock: Sprite
   private readonly rock: Sprite
   private state: PrimarySpellEarthCalledRockState
+  private readonly textures: EarthBoulderTextures
 
   constructor(state: PrimarySpellEarthCalledRockState, textures: EarthBoulderTextures) {
     this.state = state
+    this.textures = textures
     this.container = new Container({ label: 'earth-called-rock' })
     this.containers = [this.container]
     this.container.eventMode = 'none'
+    this.baseRock = sprite(textures.litRocks[state.variant])
     this.rock = sprite(textures.litRocks[state.variant])
-    this.container.addChild(this.rock)
+    this.container.addChild(this.baseRock, this.rock)
     this.update(state)
   }
 
@@ -127,6 +132,12 @@ export class EarthCalledRockView {
     if (state.kind !== 'earth-called-rock') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
+    this.baseRock.texture = this.textures.litRocks[state.variant]
+    this.baseRock.position.set(0, 0)
+    this.baseRock.rotation = 0
+    this.baseRock.scale.set(state.scale * 0.75)
+    this.baseRock.renderable = state.height < 0
+    this.rock.texture = this.textures.litRocks[state.variant]
     this.rock.position.set(0, state.height)
     this.rock.rotation = state.rotation * Math.PI / 180
     this.rock.scale.set(state.scale)
@@ -135,6 +146,8 @@ export class EarthCalledRockView {
   painterRoots(): readonly EarthPainterRoot[] {
     return [{
       container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
       regionLightPoint: null,
       sortBias: 0,
       suffix: '',
@@ -204,6 +217,8 @@ export class EarthBoulderImpactView {
       const position = this.fragmentRoots[index].position
       return {
         container: this.fragmentRoots[index],
+        lane: 'world-sorted',
+        queueFamily: 'ordinary-dynamic',
         regionLightPoint: { x: position.x, y: position.y },
         sortBias: -15,
         suffix: `fragment-${index}`,
@@ -229,6 +244,9 @@ export class EarthBoulderImpactView {
 
 interface EarthPainterRoot {
   container: Container
+  lane: 'world-sorted'
+  overlayOwnerId?: string
+  queueFamily: 'ordinary-dynamic'
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string

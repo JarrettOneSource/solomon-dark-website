@@ -4,9 +4,14 @@ import test from 'node:test'
 import { NATIVE_ELEMENT_VFX_SPRITES } from '../element-vfx-native.ts'
 import {
   ETHER_PRIMARY_FLIGHT_RECORDS,
+  ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
+  ETHER_PRIMARY_IMPACT_SORT_BIAS,
   ETHER_PRIMARY_PHASE_DEGREES_PER_TICK,
   ETHER_PRIMARY_ROOT_OFFSET,
   etherPrimaryFlightPlan,
+  etherPrimaryImpactFade,
+  etherPrimaryImpactLightSource,
+  etherPrimaryImpactPlan,
   etherPrimaryPhase,
 } from './primary-spell-ether-native.ts'
 
@@ -81,4 +86,50 @@ test('uses one 15-phase core pulse and the distinct spark and ray phase lanes', 
 test('contains no heading-aligned body, source glow, flight trail, or contact streak', () => {
   const roles = new Set(etherPrimaryFlightPlan(3, 1).draws.map(({ role }) => role))
   assert.deepEqual(roles, new Set(['fixed-spark', 'inner-core', 'outer-core', 'radial-spark', 'ray']))
+})
+
+test('uses the same two-pass compositor for the 19-frame Ether contact fade', () => {
+  const impact = {
+    ageTicks: 0,
+    birthTick: 300,
+    id: 41,
+    kind: 'ether-impact',
+    origin: { x: 120, y: 240 },
+    ownerId: 'caster',
+    worldKey: 'boneyard:run',
+  } as const
+  const plan = etherPrimaryImpactPlan(impact)
+  assert.equal(plan.phase, 300)
+  assert.equal(plan.fade, Math.fround(1.9))
+  assert.ok(plan.sampledScale >= 2 && plan.sampledScale < 3)
+  assert.deepEqual(plan.position, impact.origin)
+  assert.equal(plan.worldY, impact.origin.y + ETHER_PRIMARY_IMPACT_SORT_BIAS)
+  assert.equal(plan.regionLightPoint, null)
+  assert.deepEqual(
+    plan.draws.map(({ role }) => role),
+    etherPrimaryFlightPlan(41, 300).draws.map(({ role }) => role),
+  )
+  assert.equal(etherPrimaryImpactFade(18) > 0, true)
+  assert.equal(etherPrimaryImpactFade(19) <= 0, true)
+})
+
+test('publishes the post-update Ether contact light at the child root', () => {
+  const impact = {
+    ageTicks: 0,
+    birthTick: 300,
+    id: 41,
+    kind: 'ether-impact',
+    origin: { x: 120, y: 240 },
+    ownerId: 'caster',
+    worldKey: 'boneyard:run',
+  } as const
+  const first = etherPrimaryImpactLightSource(impact)
+  const last = etherPrimaryImpactLightSource({ ...impact, ageTicks: 18 })
+  assert.deepEqual(first, {
+    castsDirectionalShadow: false,
+    intensity: Math.fround(0.95),
+    position: impact.origin,
+    radius: ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
+  })
+  assert.ok(last.intensity > 0 && last.intensity < 0.051)
 })

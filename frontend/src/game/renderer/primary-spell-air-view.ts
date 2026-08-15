@@ -11,6 +11,7 @@ import type {
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
+  AIR_LIGHTNING_BRANCH_RECORDS,
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   buildNativeAirLightningPlan,
   type NativeAirCoronaPlan,
@@ -42,10 +43,11 @@ export class AirPrimarySpellView {
     this.bodyContainer.eventMode = 'none'
     const construction = buildNativeAirLightningPlan({
       ageTicks: 0,
+      birthTick: state.birthTick,
       ...localAirGeometry(state),
       id: state.id,
     })
-    this.body = construction.body?.layers.map((layer) => {
+    this.body = construction.body?.layers.flatMap((layer) => {
       const mesh = new MeshSimple({
         indices: layer.indices,
         texture: textures.ribbon,
@@ -58,7 +60,22 @@ export class AirPrimarySpellView {
       mesh.blendMode = 'add'
       mesh.eventMode = 'none'
       mesh.tint = layer.tint
-      return mesh
+      if (!layer.branch) return [mesh]
+      const branch = new MeshSimple({
+        indices: layer.branch.indices,
+        texture: textures.branches[
+          AIR_LIGHTNING_BRANCH_RECORDS.indexOf(layer.branch.textureRecord)
+        ],
+        topology: 'triangle-list',
+        uvs: layer.branch.uvs,
+        vertices: layer.branch.vertices,
+      })
+      branch.alpha = layer.alpha
+      branch.autoUpdate = false
+      branch.blendMode = 'add'
+      branch.eventMode = 'none'
+      branch.tint = layer.tint
+      return [mesh, branch]
     }) ?? []
     this.bodyContainer.addChild(...this.body)
     this.sourceCorona = new AirCoronaView('air-source-corona', textures)
@@ -78,6 +95,7 @@ export class AirPrimarySpellView {
     this.bodyContainer.position.set(state.origin.x, state.origin.y)
     const plan = buildNativeAirLightningPlan({
       ageTicks: state.ageTicks,
+      birthTick: state.birthTick,
       ...localAirGeometry(state),
       id: state.id,
     })
@@ -93,6 +111,8 @@ export class AirPrimarySpellView {
     if (this.plan.body) {
       roots.push({
         container: this.bodyContainer,
+        lane: 'world-sorted',
+        queueFamily: 'ordinary-dynamic',
         regionLightPoint: null,
         sortBias: 0,
         suffix: 'body',
@@ -102,6 +122,8 @@ export class AirPrimarySpellView {
     if (this.plan.sourceCorona) {
       roots.push({
         container: this.sourceCorona.container,
+        lane: 'world-sorted',
+        queueFamily: 'ordinary-dynamic',
         regionLightPoint: null,
         sortBias: 0,
         suffix: 'source',
@@ -111,6 +133,8 @@ export class AirPrimarySpellView {
     if (this.plan.contactCorona.alpha > 0) {
       roots.push({
         container: this.contactCorona.container,
+        lane: 'world-sorted',
+        queueFamily: 'ordinary-dynamic',
         regionLightPoint: null,
         sortBias: 0,
         suffix: 'contact',
@@ -148,6 +172,8 @@ function localAirGeometry(state: PrimarySpellAirTransientState): {
 
 interface AirPainterRoot {
   container: Container
+  lane: 'world-sorted'
+  queueFamily: 'ordinary-dynamic'
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string

@@ -9,6 +9,9 @@ import {
   ETHER_PRIMARY_TURN_FAST_STEP,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
+  firstNativePrimaryPointContact,
+  nativePrimaryConeTargets,
+  nativePrimaryRootTargets,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -19,11 +22,16 @@ const enemy = (
   x: number,
   y: number,
 ): PrimarySpellTarget => ({
-  airPriority: 0,
+  active: true,
+  actorFlags: 0x2,
   attachment: { x: 0, y: 0 },
+  bodyRadius: 20,
   id,
   kind: 'enemy',
+  nativePriority: 0,
+  pendingRemove: false,
   position: { x, y },
+  registrationOrder: Number(id.replace(/\D/g, '')) || 0,
 })
 
 const grave = (
@@ -31,11 +39,16 @@ const grave = (
   x: number,
   y: number,
 ): PrimarySpellTarget => ({
-  airPriority: 1000,
+  active: true,
+  actorFlags: 0x4,
   attachment: { x: 0, y: 0 },
+  bodyRadius: 0,
   id,
   kind: 'gravestone',
+  nativePriority: 1000,
+  pendingRemove: false,
   position: { x, y },
+  registrationOrder: Number(id.replace(/\D/g, '')) || 0,
 })
 
 test('Lightning prioritizes visible combat actors and falls back to a Gravestone', () => {
@@ -121,6 +134,32 @@ test('Magic Missile chooses nearest to its 100-unit forward probe, not nearest t
   }), null)
 })
 
+test('Air and Magic Missile preserve projected native per-cell order on exact target ties', () => {
+  const first = {
+    ...enemy('enemy:first', 0, -100),
+    registrationOrder: 3,
+  }
+  const later = {
+    ...enemy('enemy:later', 0, -100),
+    registrationOrder: 8,
+  }
+  const reversedInput = [later, first]
+
+  assert.equal(selectAirPrimaryTarget({
+    aimDirection: { x: 0, y: -1 },
+    hasLineOfSight: () => true,
+    maxRange: 205,
+    origin: { x: 0, y: 0 },
+    previousTargetId: null,
+    targets: reversedInput,
+  })?.id, first.id)
+  assert.equal(selectEtherPrimaryTarget({
+    aimDirection: { x: 0, y: -1 },
+    origin: { x: 0, y: 0 },
+    targets: reversedInput,
+  })?.id, first.id)
+})
+
 test('Magic Missile moves on the old heading then applies native steering to the next tick', () => {
   assert.equal(ETHER_PRIMARY_INITIAL_TURN, Math.fround(0.01))
   const advanced = advanceEtherPrimaryHoming({
@@ -139,4 +178,143 @@ test('Magic Missile moves on the old heading then applies native steering to the
   )
   assert.ok(advanced.direction.x > 0)
   assert.ok(advanced.direction.y < 0)
+})
+
+test('native point contact uses trunc0 cells, strict radii, and projected slot order', () => {
+  const fartherFirst = { ...enemy('enemy:1', 18, 0), bodyRadius: 2, registrationOrder: 1 }
+  const nearerSecond = { ...enemy('enemy:2', 5, 0), bodyRadius: 20, registrationOrder: 2 }
+  assert.equal(firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: { x: 0, y: 0 },
+    queryRadius: 20,
+    targets: [nearerSecond, fartherFirst],
+  })?.id, fartherFirst.id)
+
+  assert.equal(firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: { x: 0, y: 0 },
+    queryRadius: 20,
+    targets: [{ ...fartherFirst, position: { x: 22, y: 0 } }],
+  }), null, 'strict equality must miss')
+
+  assert.equal(firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: { x: 99, y: 0 },
+    queryRadius: 20,
+    targets: [{ ...nearerSecond, position: { x: 101, y: 0 } }],
+  }), null, 'native point query never crosses a spatial-cell boundary')
+
+  assert.equal(firstNativePrimaryPointContact({
+    actorMask: 0x2,
+    position: { x: -0.25, y: 0 },
+    queryRadius: 20,
+    targets: [{ ...nearerSecond, position: { x: 0.25, y: 0 } }],
+  })?.id, nearerSecond.id, 'native cell conversion truncates float32 toward zero')
+})
+
+test('all primary queries skip inactive, pending, and actor-flag-ineligible Coffins', () => {
+  const coffin = {
+    ...enemy('enemy:1', 0, -20),
+    actorFlags: 0,
+    bodyRadius: 45,
+    registrationOrder: 1,
+  }
+  const skeleton = { ...enemy('enemy:2', 0, -100), registrationOrder: 2 }
+  const targets = [coffin, skeleton]
+
+  assert.equal(selectAirPrimaryTarget({
+    aimDirection: { x: 0, y: -1 },
+    hasLineOfSight: () => true,
+    maxRange: 205,
+    origin: { x: 0, y: 0 },
+    previousTargetId: null,
+    targets,
+  })?.id, skeleton.id)
+  assert.equal(selectEtherPrimaryTarget({
+    aimDirection: { x: 0, y: -1 },
+    origin: { x: 0, y: 0 },
+    targets,
+  })?.id, skeleton.id)
+  assert.deepEqual(nativePrimaryConeTargets({
+    actorMask: 0x1082,
+    aimDirection: { x: 0, y: -1 },
+    halfAngleDegrees: 15,
+    hasLineOfSight: () => true,
+    origin: { x: 0, y: 0 },
+    reach: 205,
+    targets,
+  }).map(({ id }) => id), [skeleton.id])
+})
+
+test('Water cone uses root-only strict reach, LOS, aperture, and column-first cell order', () => {
+  const atAngle = (id: string, distance: number, degrees: number, order: number) => ({
+    ...enemy(id, Math.sin(degrees * Math.PI / 180) * distance, -Math.cos(degrees * Math.PI / 180) * distance),
+    registrationOrder: order,
+  })
+  const laterNear = atAngle('enemy:2', 20, 0, 8)
+  const firstFar = atAngle('enemy:1', 204.999, 14.999, 3)
+  const exactReach = atAngle('enemy:3', 205, 0, 1)
+  const outsideAngle = atAngle('enemy:4', 100, 15.01, 2)
+  const hidden = atAngle('enemy:5', 100, 0, 4)
+  const selected = nativePrimaryConeTargets({
+    actorMask: 0x1082,
+    aimDirection: { x: 0, y: -1 },
+    halfAngleDegrees: 15,
+    hasLineOfSight: ({ id }) => id !== hidden.id,
+    origin: { x: 0, y: 0 },
+    reach: 205,
+    targets: [laterNear, outsideAngle, hidden, exactReach, firstFar],
+  })
+  assert.deepEqual(selected.map(({ id }) => id), [firstFar.id, laterNear.id])
+
+  const leftColumn = {
+    ...enemy('enemy:left-column', 199, 150),
+    registrationOrder: 99,
+  }
+  const rightColumn = {
+    ...enemy('enemy:right-column', 201, 150),
+    registrationOrder: 1,
+  }
+  assert.deepEqual(nativePrimaryConeTargets({
+    actorMask: 0x1082,
+    aimDirection: { x: 0, y: -1 },
+    halfAngleDegrees: 15,
+    hasLineOfSight: () => true,
+    origin: { x: 195, y: 300 },
+    reach: 205,
+    targets: [rightColumn, leftColumn],
+  }).map(({ id }) => id), [leftColumn.id, rightColumn.id])
+})
+
+test('Earth root gather ignores body radius, rejects equality, and keeps column-first cell order', () => {
+  const outsideBodyOverlap = {
+    ...enemy('enemy:3', 76, 0),
+    bodyRadius: 100,
+    registrationOrder: 1,
+  }
+  const exactRoot = { ...enemy('enemy:2', 75, 0), registrationOrder: 2 }
+  const laterNear = { ...enemy('enemy:1', 4, 0), registrationOrder: 8 }
+  const firstFar = { ...enemy('enemy:4', 74.999, 0), registrationOrder: 3 }
+  assert.deepEqual(nativePrimaryRootTargets(
+    { x: 0, y: 0 },
+    75,
+    0x6,
+    [laterNear, outsideBodyOverlap, exactRoot, firstFar],
+  ).map(({ id }) => id), [firstFar.id, laterNear.id])
+
+
+  const firstColumn = {
+    ...enemy('enemy:first-column', 99, 150),
+    registrationOrder: 99,
+  }
+  const nextColumn = {
+    ...enemy('enemy:next-column', 101, 150),
+    registrationOrder: 1,
+  }
+  assert.deepEqual(nativePrimaryRootTargets(
+    { x: 100, y: 150 },
+    75,
+    0x6,
+    [nextColumn, firstColumn],
+  ).map(({ id }) => id), [firstColumn.id, nextColumn.id])
 })

@@ -338,6 +338,7 @@ test('Coffin replays the native hidden, rise, hold, and open spawn states', () =
 test('enemy roots enter the shared painter queue at actor Y', () => {
   assert.deepEqual(nativeEnemyPainterLayer(enemy('COFFIN'), 12), {
     id: 'enemy:7',
+    queueFamily: 'ordinary-dynamic',
     sortBias: 0,
     sourceOrder: 12,
     worldY: 240,

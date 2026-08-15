@@ -11,7 +11,7 @@ import {
   EarthBoulderView,
 } from './earth-boulder-view.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
-import { EtherPrimarySpellView } from './primary-spell-ether-view.ts'
+import { EtherPrimaryImpactView, EtherPrimarySpellView } from './primary-spell-ether-view.ts'
 import {
   FireImpactSpellView,
   FireParticleSpellView,
@@ -23,6 +23,8 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellPainterLayer {
   id: string
+  lane: 'post-world-queue' | 'world-sorted'
+  queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   sourceOrder: number
@@ -35,11 +37,17 @@ interface SpellView {
   destroy(): void
   painterRoots(): readonly SpellPainterRoot[]
   setTint(suffix: string, tint: number): void
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void
+  update(
+    state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    presentationFrame?: number,
+  ): void
 }
 
 interface SpellPainterRoot {
   container: Container
+  lane: 'post-world-queue' | 'world-sorted'
+  overlayOwnerId?: string
+  queueFamily: 'ordinary-dynamic' | 'zanim' | null
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string
@@ -49,15 +57,25 @@ interface SpellPainterRoot {
 export class PrimarySpellWorldView {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
+  private readonly postWorldQueueDepth: number | null
   private readonly textures: PlayerWorldTextures
   private readonly views = new Map<number, SpellView>()
 
-  constructor(root: Container, textures: PlayerWorldTextures) {
+  constructor(
+    root: Container,
+    textures: PlayerWorldTextures,
+    options: { postWorldQueueDepth?: number } = {},
+  ) {
     this.root = root
     this.textures = textures
+    this.postWorldQueueDepth = options.postWorldQueueDepth ?? null
   }
 
-  update(spells: PrimarySpellSimulationState, worldKey: string): void {
+  update(
+    spells: PrimarySpellSimulationState,
+    worldKey: string,
+    presentationFrame?: number,
+  ): void {
     this.liveIds.clear()
     for (const state of [...spells.projectiles, ...spells.transients]) {
       if (state.worldKey !== worldKey) continue
@@ -76,6 +94,12 @@ export class PrimarySpellWorldView {
                   spark: this.textures.elementVfx.spark[0],
                 })
               : new FirePrimarySpellView(state, this.textures.primarySpells.fire)
+        } else if (state.kind === 'ether-impact') {
+          view = new EtherPrimaryImpactView(state, {
+            core: this.textures.elementVfx.core[0],
+            ray: this.textures.elementVfx.ray[0],
+            spark: this.textures.elementVfx.spark[0],
+          })
         } else if (state.kind === 'earth-impact') {
           view = new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
         } else if (state.kind === 'fire-impact') {
@@ -95,11 +119,12 @@ export class PrimarySpellWorldView {
         this.views.set(state.id, view)
         this.root.addChild(...view.containers)
       }
-      view.update(state)
+      view.update(state, presentationFrame)
       for (const painterRoot of view.painterRoots()) {
-        painterRoot.container.zIndex = hubWorldDepthForActor(
-          painterRoot.worldY + painterRoot.sortBias,
-        )
+        painterRoot.container.zIndex = painterRoot.lane === 'post-world-queue'
+          && this.postWorldQueueDepth !== null
+          ? this.postWorldQueueDepth
+          : hubWorldDepthForActor(painterRoot.worldY + painterRoot.sortBias)
       }
     }
     for (const [id, view] of this.views) {
@@ -118,6 +143,8 @@ export class PrimarySpellWorldView {
           id: painterRoot.suffix.length > 0
             ? `primary-spell:${id}:${painterRoot.suffix}`
             : `primary-spell:${id}`,
+          lane: painterRoot.lane,
+          queueFamily: painterRoot.queueFamily,
           regionLightPoint: painterRoot.regionLightPoint,
           sortBias: painterRoot.sortBias,
           sourceOrder: layers.length,
@@ -138,6 +165,17 @@ export class PrimarySpellWorldView {
   setTint(id: string, tint: number): void {
     const { numericId, suffix } = parsePainterId(id)
     this.views.get(numericId)?.setTint(suffix, tint)
+  }
+
+  promoteOwnerOverlays(ownerDepth: (ownerId: string) => number | undefined): void {
+    for (const view of this.views.values()) {
+      for (const painterRoot of view.painterRoots()) {
+        if (!painterRoot.overlayOwnerId) continue
+        const depth = ownerDepth(painterRoot.overlayOwnerId)
+        if (depth === undefined) continue
+        painterRoot.container.zIndex = Math.max(painterRoot.container.zIndex, depth + 0.5)
+      }
+    }
   }
 
   get count(): number {

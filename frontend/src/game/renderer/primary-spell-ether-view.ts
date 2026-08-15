@@ -1,12 +1,15 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
+  PrimarySpellEtherImpactState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
 import {
   ETHER_PRIMARY_ROOT_OFFSET,
   etherPrimaryFlightPlan,
+  etherPrimaryImpactPlan,
+  type EtherPrimaryDraw,
   type EtherPrimarySprite,
 } from './primary-spell-ether-native.ts'
 
@@ -17,11 +20,9 @@ export class EtherPrimarySpellView {
   readonly containers: readonly Container[]
   private readonly compositor = new Container({ label: 'ether-flight-compositor' })
   readonly kind = 'ether'
-  private readonly nativeTints: number[] = []
   private readonly sprites: Sprite[] = []
   private state: PrimarySpellProjectileState
   private readonly textures: EtherPrimaryTextures
-  private worldTint = 0xffffff
 
   constructor(state: PrimarySpellProjectileState, textures: EtherPrimaryTextures) {
     if (state.kind !== 'ether') throw new Error('EtherPrimarySpellView requires an Ether actor')
@@ -52,14 +53,7 @@ export class EtherPrimarySpellView {
       const operation = plan.draws[index]
       sprite.visible = operation !== undefined
       if (!operation) continue
-      sprite.texture = this.textures[operation.sprite]
-      sprite.blendMode = operation.blend
-      sprite.position.set(operation.x, operation.y)
-      sprite.rotation = operation.rotationDegrees * Math.PI / 180
-      sprite.scale.set(operation.scale)
-      sprite.alpha = operation.alpha
-      this.nativeTints[index] = operation.tint
-      sprite.tint = multiplyTints(operation.tint, this.worldTint)
+      applyEtherDraw(sprite, operation, this.textures)
     }
   }
 
@@ -70,39 +64,114 @@ export class EtherPrimarySpellView {
   painterRoots(): readonly EtherPainterRoot[] {
     return [{
       container: this.container,
-      regionLightPoint: { ...this.state.position },
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
+      regionLightPoint: null,
       sortBias: 0,
       suffix: '',
       worldY: this.worldY,
     }]
   }
 
-  setTint(suffix: string, tint: number): void {
-    if (suffix !== '') return
-    this.worldTint = tint
-    for (let index = 0; index < this.sprites.length; index += 1) {
-      this.sprites[index].tint = multiplyTints(this.nativeTints[index] ?? 0xffffff, tint)
-    }
+  setTint(_suffix: string, _tint: number): void {
+    // MagicMissile's direct render slot installs its own compositor colors.
   }
 
   destroy(): void {
     this.container.destroy({ children: true })
-    this.nativeTints.length = 0
+    this.sprites.length = 0
+  }
+}
+
+export class EtherPrimaryImpactView {
+  readonly container = new Container({ label: 'ether-impact' })
+  readonly containers: readonly Container[]
+  readonly kind = 'ether-impact'
+  private readonly sprites: Sprite[] = []
+  private state: PrimarySpellEtherImpactState
+  private readonly textures: EtherPrimaryTextures
+
+  constructor(state: PrimarySpellEtherImpactState, textures: EtherPrimaryTextures) {
+    this.state = state
+    this.textures = textures
+    this.containers = [this.container]
+    this.container.eventMode = 'none'
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (!('origin' in state) || state.kind !== 'ether-impact') return
+    this.state = state
+    const plan = etherPrimaryImpactPlan(state)
+    this.container.position.set(plan.position.x, plan.position.y)
+    while (this.sprites.length < plan.draws.length) {
+      const sprite = new Sprite()
+      sprite.anchor.set(0.5)
+      sprite.eventMode = 'none'
+      this.container.addChild(sprite)
+      this.sprites.push(sprite)
+    }
+    for (let index = 0; index < this.sprites.length; index += 1) {
+      const sprite = this.sprites[index]
+      const operation = plan.draws[index]
+      sprite.visible = operation !== undefined
+      if (operation) applyEtherDraw(sprite, operation, this.textures)
+    }
+  }
+
+  painterRoots(): readonly EtherImpactPainterRoot[] {
+    const plan = etherPrimaryImpactPlan(this.state)
+    return [{
+      container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'zanim',
+      regionLightPoint: plan.regionLightPoint,
+      sortBias: 0,
+      suffix: '',
+      worldY: plan.worldY,
+    }]
+  }
+
+  setTint(_suffix: string, _tint: number): void {
+    // FadeMM/ZAnimLit's child trampoline bypasses common Region-light tint.
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
     this.sprites.length = 0
   }
 }
 
 interface EtherPainterRoot {
   container: Container
+  lane: 'world-sorted'
+  queueFamily: 'ordinary-dynamic'
   regionLightPoint: { x: number, y: number } | null
   sortBias: number
   suffix: string
   worldY: number
 }
 
-function multiplyTints(left: number, right: number): number {
-  const channel = (shift: number): number => Math.round(
-    ((left >> shift) & 0xff) * ((right >> shift) & 0xff) / 0xff,
-  )
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0)
+interface EtherImpactPainterRoot {
+  container: Container
+  lane: 'world-sorted'
+  queueFamily: 'zanim'
+  regionLightPoint: null
+  sortBias: number
+  suffix: string
+  worldY: number
+}
+
+function applyEtherDraw(
+  sprite: Sprite,
+  operation: EtherPrimaryDraw,
+  textures: EtherPrimaryTextures,
+): void {
+  sprite.texture = textures[operation.sprite]
+  sprite.blendMode = operation.blend
+  sprite.position.set(operation.x, operation.y)
+  sprite.rotation = operation.rotationDegrees * Math.PI / 180
+  sprite.scale.set(operation.scale)
+  sprite.alpha = operation.alpha
+  sprite.tint = operation.tint
 }

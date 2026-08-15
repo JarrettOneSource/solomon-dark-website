@@ -231,6 +231,8 @@ import primarySpellFireParticles from '../assets/game/primary-spell-fire-particl
 import primarySpellFireImpact from '../assets/game/primary-spell-fire-impact.png'
 import primarySpellMagicMissile from '../assets/game/primary-spell-magic-missile.png'
 import primarySpellAirRibbon from '../assets/game/boneyard/badguys/0044.png'
+import primarySpellAirBranch375 from '../assets/game/boneyard/badguys/0375.png'
+import primarySpellAirBranch376 from '../assets/game/boneyard/badguys/0376.png'
 import primarySpellAirCircle from '../assets/game/boneyard/badguys/0110.png'
 import primarySpellAirFork1836 from '../assets/game/boneyard/badguys/1836.png'
 import primarySpellAirFork1837 from '../assets/game/boneyard/badguys/1837.png'
@@ -495,6 +497,7 @@ export const elementVfx = {
 /** Registered stock sprites used by the five rank-1 player primaries. */
 export const primarySpells = {
   air: {
+    branches: [primarySpellAirBranch375, primarySpellAirBranch376],
     circle: primarySpellAirCircle,
     forks: [
       primarySpellAirFork1836,

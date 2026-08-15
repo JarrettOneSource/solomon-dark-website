@@ -1,6 +1,6 @@
 import {
   createPrimarySpellContactImpact,
-  PRIMARY_SPELL_AIR_REACH,
+  PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
   PRIMARY_SPELL_WATER_REACH,
@@ -11,6 +11,12 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  firstNativePrimaryPointContact,
+  nativePrimaryConeTargets,
+  nativePrimaryRootTargets,
+  type PrimarySpellTarget,
+} from '../core-kernels/primary-spell-targeting.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   damageBoneyardEnemy,
@@ -43,12 +49,11 @@ export type BoneyardSpellWorldContact = (
   radius: number,
 ) => number | null
 
-const CONTACT_TIE_EPSILON = 1e-9
-
 /**
  * Resolves the spell-contact portion of one authoritative Boneyard tick.
- * Projectile state has already advanced, so its previous position is recovered
- * from the current position and velocity for swept contact.
+ * Projectile state has already advanced. Fire and Ether therefore use the
+ * retail post-move single-cell point query, while Earth keeps its projectile
+ * and records every root contacted by its charge-scaled gather exactly once.
  */
 export function resolveBoneyardSpellCombat(
   sourceEnemies: BoneyardEnemyStore,
@@ -61,6 +66,7 @@ export function resolveBoneyardSpellCombat(
   validateTick(tick)
   let enemies = sourceEnemies
   const consumedProjectileIds = new Set<number>()
+  const updatedProjectiles = new Map<number, PrimarySpellProjectileState>()
   const hits: BoneyardSpellHit[] = []
   const impactTransients: PrimarySpellTransientState[] = []
   let nextSpellId = sourceSpells.nextId
@@ -82,32 +88,52 @@ export function resolveBoneyardSpellCombat(
 
   for (const projectile of [...sourceSpells.projectiles].sort(bySpellId)) {
     if (projectile.phase !== 'flight' || projectile.worldKey !== worldKey) continue
-    const start = previousProjectilePosition(projectile)
-    const contact = firstProjectileContact(enemyTargets(enemies), projectile)
-    const worldContact = firstWorldContact?.(
-      start,
-      projectile.position,
-      projectileCollisionRadius(projectile),
-    ) ?? null
-    if (
-      worldContact !== null
-      && (
-        contact === null
-        || worldContact - contact.pathProgress <= CONTACT_TIE_EPSILON
-      )
-    ) {
-      consumedProjectileIds.add(projectile.id)
-      publishContactImpact(
-        projectile,
-        segmentPoint(start, projectile.position, worldContact),
-      )
+    const rows = primaryTargetRows(enemies)
+    if (projectile.kind === 'earth') {
+      const priorTargets = new Set(projectile.hitTargetIds)
+      const contacts = nativePrimaryRootTargets(
+        projectile.position,
+        projectile.charge * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
+        0x6,
+        rows.map(({ target }) => target),
+      ).filter(({ id }) => !priorTargets.has(id))
+      if (contacts.length === 0) continue
+
+      const hitTargetIds = [...projectile.hitTargetIds]
+      for (const target of contacts) {
+        hitTargetIds.push(target.id)
+        const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+        if (!actor) continue
+        const amount = projectileDamage(projectile)
+        const damaged = damageBoneyardEnemy(enemies, {
+          actorId: actor.id,
+          amount,
+          sourcePlayerId: projectile.ownerId,
+          tick,
+        })
+        if (!damaged.accepted) continue
+        enemies = damaged.store
+        hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+      }
+      updatedProjectiles.set(projectile.id, { ...projectile, hitTargetIds })
       continue
     }
-    if (!contact) continue
+
+    const target = firstNativePrimaryPointContact({
+      actorMask: projectile.kind === 'fire' ? 0x2 : 0x6,
+      position: projectile.position,
+      queryRadius: projectile.kind === 'fire'
+        ? PRIMARY_SPELL_FIRE_COLLISION_RADIUS
+        : PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
+      targets: rows.map(({ target }) => target),
+    })
+    if (!target) continue
+    const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+    if (!actor) continue
 
     const amount = projectileDamage(projectile)
     const damaged = damageBoneyardEnemy(enemies, {
-      actorId: contact.actor.id,
+      actorId: actor.id,
       amount,
       sourcePlayerId: projectile.ownerId,
       tick,
@@ -116,35 +142,32 @@ export function resolveBoneyardSpellCombat(
 
     enemies = damaged.store
     consumedProjectileIds.add(projectile.id)
-    publishContactImpact(
-      projectile,
-      segmentPoint(start, projectile.position, contact.pathProgress),
-    )
-    hits.push({
-      actorId: contact.actor.id,
-      amount,
-      killed: damaged.killed,
-      ownerId: projectile.ownerId,
-      spellId: projectile.id,
-      spellKind: projectile.kind,
-      tick,
-    })
+    publishContactImpact(projectile, projectile.position)
+    hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
   }
 
   for (const emission of [...channelEmissions].sort(bySpellId)) {
     if (emission.worldKey !== worldKey) continue
 
+    const rows = primaryTargetRows(enemies)
     const contacts = emission.kind === 'air'
-      ? selectedAirContacts(
-          enemyTargets(enemies),
-          sourceSpells,
-          emission,
-          firstWorldContact,
-        )
-      : rayContacts(enemyTargets(enemies), emission, firstWorldContact)
-    for (const contact of contacts) {
+      ? selectedAirTargets(rows, sourceSpells, emission)
+      : nativePrimaryConeTargets({
+          actorMask: 0x1082,
+          aimDirection: emission.direction,
+          halfAngleDegrees: 15,
+          hasLineOfSight: (target) => (
+            firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+          ) === null,
+          origin: emission.queryOrigin,
+          reach: PRIMARY_SPELL_WATER_REACH,
+          targets: rows.map(({ target }) => target),
+        })
+    for (const target of contacts) {
+      const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+      if (!actor) continue
       const damaged = damageBoneyardEnemy(enemies, {
-        actorId: contact.actor.id,
+        actorId: actor.id,
         amount: emission.damage,
         sourcePlayerId: emission.ownerId,
         tick,
@@ -153,7 +176,7 @@ export function resolveBoneyardSpellCombat(
 
       enemies = damaged.store
       hits.push({
-        actorId: contact.actor.id,
+        actorId: actor.id,
         amount: emission.damage,
         killed: damaged.killed,
         ownerId: emission.ownerId,
@@ -164,14 +187,16 @@ export function resolveBoneyardSpellCombat(
     }
   }
 
-  const spells = consumedProjectileIds.size === 0 && impactTransients.length === 0
+  const spells = consumedProjectileIds.size === 0
+    && updatedProjectiles.size === 0
+    && impactTransients.length === 0
     ? sourceSpells
     : {
         ...sourceSpells,
         nextId: nextSpellId,
-        projectiles: sourceSpells.projectiles.filter((projectile) => (
-          !consumedProjectileIds.has(projectile.id)
-        )),
+        projectiles: sourceSpells.projectiles
+          .filter((projectile) => !consumedProjectileIds.has(projectile.id))
+          .map((projectile) => updatedProjectiles.get(projectile.id) ?? projectile),
         transients: impactTransients.length === 0
           ? sourceSpells.transients
           : [...sourceSpells.transients, ...impactTransients],
@@ -184,58 +209,18 @@ export function resolveBoneyardSpellCombat(
   }
 }
 
-interface ActorContact {
-  readonly actor: BoneyardSpellTarget
-  readonly pathProgress: number
-}
-
 type BoneyardSpellTarget = BoneyardEnemyActor | BoneyardMaggotActor
 
-function firstProjectileContact(
-  actors: readonly BoneyardSpellTarget[],
-  projectile: PrimarySpellProjectileState,
-): ActorContact | null {
-  const start = previousProjectilePosition(projectile)
-  const end = projectile.position
-  let first: ActorContact | null = null
-
-  for (const actor of actors) {
-    if (actor.lifeState !== 'alive') continue
-    const pathProgress = segmentCircleEntry(
-      start,
-      end,
-      actor.position,
-      targetRadius(actor) + projectileCollisionRadius(projectile),
-    )
-    if (pathProgress === null) continue
-    const candidate = { actor, pathProgress }
-    if (first === null || contactPrecedes(candidate, first)) first = candidate
-  }
-
-  return first
+interface PrimaryTargetRow {
+  readonly actor: BoneyardSpellTarget
+  readonly target: PrimarySpellTarget
 }
 
-function previousProjectilePosition(projectile: PrimarySpellProjectileState): Vector2 {
-  return {
-    x: projectile.position.x - projectile.velocity.x,
-    y: projectile.position.y - projectile.velocity.y,
-  }
-}
-
-function projectileCollisionRadius(projectile: PrimarySpellProjectileState): number {
-  switch (projectile.kind) {
-    case 'earth': return 0
-    case 'ether': return PRIMARY_SPELL_ETHER_COLLISION_RADIUS
-    case 'fire': return PRIMARY_SPELL_FIRE_COLLISION_RADIUS
-  }
-}
-
-function selectedAirContacts(
-  actors: readonly BoneyardSpellTarget[],
+function selectedAirTargets(
+  rows: readonly PrimaryTargetRow[],
   spells: PrimarySpellSimulationState,
   emission: PrimarySpellChannelEmission,
-  firstWorldContact: BoneyardSpellWorldContact | null,
-): readonly ActorContact[] {
+): readonly PrimarySpellTarget[] {
   const transient = spells.transients.find((effect): effect is PrimarySpellAirTransientState => (
     effect.kind === 'air'
     && effect.id === emission.id
@@ -243,127 +228,50 @@ function selectedAirContacts(
     && effect.worldKey === emission.worldKey
   ))
   if (!transient?.targetId) return []
-  const actor = actors.find((candidate) => (
-    candidate.lifeState === 'alive'
-    && transient.targetId === `enemy:${candidate.id}`
-  ))
-  if (!actor) return []
-  const pathProgress = segmentCircleEntry(
-    emission.origin,
-    actor.position,
-    actor.position,
-    targetRadius(actor),
-  ) ?? 1
-  const worldContact = firstWorldContact?.(
-    emission.origin,
-    actor.position,
-    0,
-  ) ?? null
-  return worldContact !== null
-    && worldContact - pathProgress <= CONTACT_TIE_EPSILON
-    ? []
-    : [{ actor, pathProgress }]
+  const row = rows.find(({ target }) => target.id === transient.targetId)
+  return row?.target.active && !row.target.pendingRemove ? [row.target] : []
 }
 
-function rayContacts(
-  actors: readonly BoneyardSpellTarget[],
-  emission: PrimarySpellChannelEmission,
-  firstWorldContact: BoneyardSpellWorldContact | null,
-): readonly ActorContact[] {
-  const directionLength = Math.hypot(emission.direction.x, emission.direction.y)
-  const reach = emission.kind === 'air'
-    ? PRIMARY_SPELL_AIR_REACH
-    : PRIMARY_SPELL_WATER_REACH
-  const end = directionLength > 0
-    ? {
-        x: emission.origin.x + emission.direction.x / directionLength * reach,
-        y: emission.origin.y + emission.direction.y / directionLength * reach,
-      }
-    : emission.origin
-  const worldContact = firstWorldContact?.(emission.origin, end, 0) ?? null
-  const contacts: ActorContact[] = []
-
-  for (const actor of actors) {
-    if (actor.lifeState !== 'alive') continue
-    const pathProgress = segmentCircleEntry(
-      emission.origin,
-      end,
-      actor.position,
-      targetRadius(actor),
-    )
-    if (
-      pathProgress !== null
-      && (worldContact === null || pathProgress < worldContact)
-    ) {
-      contacts.push({ actor, pathProgress })
-    }
-  }
-
-  return contacts.sort((left, right) => (
-    contactPrecedes(left, right) ? -1 : contactPrecedes(right, left) ? 1 : 0
-  ))
-}
-
-function segmentCircleEntry(
-  start: Readonly<Vector2>,
-  end: Readonly<Vector2>,
-  center: Readonly<Vector2>,
-  radius: number,
-): number | null {
-  const segmentX = end.x - start.x
-  const segmentY = end.y - start.y
-  const offsetX = start.x - center.x
-  const offsetY = start.y - center.y
-  const radiusSquared = radius * radius
-  const offsetSquared = offsetX * offsetX + offsetY * offsetY
-  if (offsetSquared <= radiusSquared) return 0
-
-  const segmentSquared = segmentX * segmentX + segmentY * segmentY
-  if (segmentSquared === 0) return null
-
-  const linear = 2 * (offsetX * segmentX + offsetY * segmentY)
-  const discriminant = linear * linear
-    - 4 * segmentSquared * (offsetSquared - radiusSquared)
-  if (discriminant < 0) return null
-
-  const root = Math.sqrt(discriminant)
-  const first = (-linear - root) / (2 * segmentSquared)
-  const second = (-linear + root) / (2 * segmentSquared)
-  if (first >= 0 && first <= 1) return first
-  if (second >= 0 && second <= 1) return second
-  return null
-}
-
-function segmentPoint(
-  start: Readonly<Vector2>,
-  end: Readonly<Vector2>,
-  progress: number,
-): Vector2 {
-  return {
-    x: start.x + (end.x - start.x) * progress,
-    y: start.y + (end.y - start.y) * progress,
-  }
-}
-
-function contactPrecedes(left: ActorContact, right: ActorContact): boolean {
-  const progressDifference = left.pathProgress - right.pathProgress
-  return Math.abs(progressDifference) <= CONTACT_TIE_EPSILON
-    ? left.actor.id < right.actor.id
-    : progressDifference < 0
-}
-
-function enemyTargets(store: BoneyardEnemyStore): readonly BoneyardSpellTarget[] {
-  return [...store.actors, ...store.maggots]
-}
-
-function targetRadius(target: BoneyardSpellTarget): number {
-  return 'config' in target ? target.config.collisionRadius : target.collisionRadius
+function primaryTargetRows(store: BoneyardEnemyStore): readonly PrimaryTargetRow[] {
+  return [...store.actors, ...store.maggots].map((actor, registrationOrder) => ({
+    actor,
+    target: {
+      active: actor.lifeState === 'alive',
+      actorFlags: 'config' in actor && actor.config.enemyToken === 'COFFIN' ? 0 : 0x2,
+      attachment: { x: 0, y: 0 },
+      bodyRadius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
+      id: `enemy:${actor.id}`,
+      kind: 'enemy',
+      nativePriority: 0,
+      pendingRemove: false,
+      position: { ...actor.position },
+      registrationOrder,
+    },
+  }))
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {
   return projectile.kind === 'earth'
     ? projectile.damage * projectile.charge
     : projectile.damage
+}
+
+function spellHit(
+  projectile: PrimarySpellProjectileState,
+  actorId: number,
+  amount: number,
+  killed: boolean,
+  tick: number,
+): BoneyardSpellHit {
+  return {
+    actorId,
+    amount,
+    killed,
+    ownerId: projectile.ownerId,
+    spellId: projectile.id,
+    spellKind: projectile.kind,
+    tick,
+  }
 }
 
 function bySpellId(

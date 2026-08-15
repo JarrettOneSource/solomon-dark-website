@@ -257,8 +257,8 @@ export async function createHubWorldRenderer(
       frameTimeTotal += Math.max(0, frameAt - previousFrameAt)
       previousFrameAt = frameAt
       frameCount += 1
-      courtyardScene.update(snapshot)
-      privateRoomScene.update(snapshot, options.playerId)
+      courtyardScene.update(snapshot, frameCount)
+      privateRoomScene.update(snapshot, options.playerId, frameCount)
       const inCourtyard = participant.region === 'courtyard'
       courtyardScene.stage.visible = inCourtyard
       privateRoomScene.world.visible = !inCourtyard
@@ -332,8 +332,8 @@ export async function createHubWorldRenderer(
     },
   }
 
-  courtyardScene.update(options.initialSnapshot)
-  privateRoomScene.update(options.initialSnapshot, options.playerId)
+  courtyardScene.update(options.initialSnapshot, frameCount)
+  privateRoomScene.update(options.initialSnapshot, options.playerId, frameCount)
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)
   return renderer

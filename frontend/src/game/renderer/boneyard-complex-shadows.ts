@@ -8,10 +8,29 @@ import {
 
 export interface NativeBoneyardComplexShadowCaster {
   id: string
-  /** Object-local, convex silhouette vertices in winding order. */
+  /** Object-local native authored vertices in their original order. */
   outline: readonly Vec2[]
   position: Vec2
+  program?: NativeBoneyardShadowProgram
 }
+
+export type NativeBoneyardShadowProgram =
+  | {
+      construction: 'gate' | 'intact'
+      end: Vec2
+      kind: 'fence-grate'
+      start: Vec2
+    }
+  | {
+      end: Vec2
+      kind: 'rails'
+      start: Vec2
+    }
+  | {
+      end: Vec2
+      kind: 'wall'
+      start: Vec2
+    }
 
 export interface NativeBoneyardComplexShadowRecord {
   baseAlpha: number
@@ -32,8 +51,44 @@ export interface NativeBoneyardProjectedShadowEdge {
   tipStart: Vec2
 }
 
+export interface NativeBoneyardProjectedShadowMesh {
+  alphas: Float32Array
+  indices: Uint32Array
+  vertices: Float32Array
+}
+
+export interface NativeBoneyardFenceGrateShadowPlan {
+  bars: readonly NativeBoneyardProjectedShadowEdge[]
+  rail: {
+    alpha: number
+    end: Vec2
+    start: Vec2
+    width: 4
+  }
+}
+
+export interface NativeBoneyardRailShadowPlan {
+  alpha: number
+  end: Vec2
+  start: Vec2
+  width: 10
+}
+
+export function nativeBoneyardPackedShadowAlpha(alpha: number): number {
+  return Math.trunc(Math.min(1, Math.max(0, alpha)) * 255) / 255
+}
+
 const NATIVE_LIGHT_OUTER_DISTANCE_SQUARED = NATIVE_LIGHT_OUTER_DISTANCE ** 2
 const MAX_ALPHA_OUTLINE_POINTS = 16
+export const NATIVE_FENCE_SHADOW_END_INSET = 12
+export const NATIVE_FENCE_SHADOW_BAR_STEP = 13.333333015441895
+export const NATIVE_GATE_SHADOW_END_INSET = 4
+export const NATIVE_GATE_SHADOW_BAR_DIVISOR = 4.5
+export const NATIVE_FENCE_SHADOW_NEAR_HALF_WIDTH = 2
+export const NATIVE_FENCE_SHADOW_FAR_HALF_WIDTH = 8
+export const NATIVE_FENCE_SHADOW_RAIL_WIDTH = 4
+export const NATIVE_RAIL_SHADOW_END_INSET = 4
+export const NATIVE_RAIL_SHADOW_WIDTH = 10
 const NATIVE_TREE_COMPLEX_SHADOW_OUTLINES: readonly (readonly Vec2[])[] = [
   [{ x: -2, y: 12 }, { x: 18, y: 9 }, { x: 17, y: -8 }, { x: -5, y: -4 }],
   [{ x: 3, y: 14 }, { x: 14, y: -3 }, { x: -4, y: -13 }, { x: -19, y: 3 }],
@@ -105,7 +160,7 @@ export function nativeBoneyardComplexShadowRecords(
 ): NativeBoneyardComplexShadowRecord[] {
   const records: NativeBoneyardComplexShadowRecord[] = []
   sources.forEach((source, sourceIndex) => {
-    if (!source.multipleShadows || source.radius <= 0) return
+    if (!source.castsDirectionalShadow || source.radius <= 0) return
     const worldDx = caster.position.x - source.position.x
     const worldDy = caster.position.y - source.position.y
     const dx = worldDx / source.radius
@@ -158,7 +213,6 @@ export function nativeBoneyardProjectedShadowEdges(
   record: NativeBoneyardComplexShadowRecord,
 ): NativeBoneyardProjectedShadowEdge[] {
   if (caster.outline.length < 3) return []
-  const winding = signedArea(caster.outline) >= 0 ? 1 : -1
   const tipAlpha = clampUnit(
     ((1 - record.behindScalar) * (1 - record.distanceFraction)) ** 3,
   )
@@ -172,16 +226,14 @@ export function nativeBoneyardProjectedShadowEdges(
     const edgeY = baseEnd.y - baseStart.y
     const edgeLength = Math.hypot(edgeX, edgeY)
     if (edgeLength === 0) continue
-    const outward = winding > 0
-      ? { x: edgeY / edgeLength, y: -edgeX / edgeLength }
-      : { x: -edgeY / edgeLength, y: edgeX / edgeLength }
+    const outward = { x: edgeY / edgeLength, y: -edgeX / edgeLength }
     const midpoint = {
       x: (baseStart.x + baseEnd.x) / 2,
       y: (baseStart.y + baseEnd.y) / 2,
     }
     const sourceDirection = {
-      x: record.sourcePosition.x - midpoint.x,
-      y: record.sourcePosition.y - midpoint.y,
+      x: midpoint.x - record.sourcePosition.x,
+      y: midpoint.y - record.sourcePosition.y,
     }
     if (sourceDirection.x * outward.x + sourceDirection.y * outward.y <= 0) continue
     edges.push({
@@ -194,6 +246,178 @@ export function nativeBoneyardProjectedShadowEdges(
     })
   }
   return edges
+}
+
+export function nativeBoneyardProjectedShadowMesh(
+  edge: NativeBoneyardProjectedShadowEdge,
+): NativeBoneyardProjectedShadowMesh {
+  return {
+    alphas: Float32Array.from([
+      edge.baseAlpha,
+      edge.baseAlpha,
+      edge.tipAlpha,
+      edge.tipAlpha,
+    ]),
+    indices: Uint32Array.from([0, 1, 2, 1, 3, 2]),
+    vertices: Float32Array.from([
+      edge.baseStart.x, edge.baseStart.y,
+      edge.baseEnd.x, edge.baseEnd.y,
+      edge.tipStart.x, edge.tipStart.y,
+      edge.tipEnd.x, edge.tipEnd.y,
+    ]),
+  }
+}
+
+export function nativeBoneyardFenceGrateShadows(
+  program: Extract<NativeBoneyardShadowProgram, { kind: 'fence-grate' }>,
+  record: NativeBoneyardComplexShadowRecord,
+): NativeBoneyardFenceGrateShadowPlan {
+  const dx = Math.fround(program.end.x - program.start.x)
+  const dy = Math.fround(program.end.y - program.start.y)
+  const length = nativeStoredLength(dx, dy)
+  const endInset = program.construction === 'gate'
+    ? NATIVE_GATE_SHADOW_END_INSET
+    : NATIVE_FENCE_SHADOW_END_INSET
+  if (length <= endInset * 2) {
+    return {
+      bars: [],
+      rail: { alpha: 0, end: { ...program.end }, start: { ...program.start }, width: 4 },
+    }
+  }
+  const inverseLength = Math.fround(1 / length)
+  const along = {
+    x: Math.fround(dx * inverseLength),
+    y: Math.fround(dy * inverseLength),
+  }
+  const shortStart = {
+    x: Math.fround(program.start.x + Math.fround(along.x * endInset)),
+    y: Math.fround(program.start.y + Math.fround(along.y * endInset)),
+  }
+  const shortEnd = {
+    x: Math.fround(program.end.x - Math.fround(along.x * endInset)),
+    y: Math.fround(program.end.y - Math.fround(along.y * endInset)),
+  }
+  const shortDx = Math.fround(shortEnd.x - shortStart.x)
+  const shortDy = Math.fround(shortEnd.y - shortStart.y)
+  const shortLength = nativeStoredLength(shortDx, shortDy)
+  const nominalStep = program.construction === 'gate'
+    ? Math.fround(shortLength / NATIVE_GATE_SHADOW_BAR_DIVISOR)
+    : NATIVE_FENCE_SHADOW_BAR_STEP
+  const step = {
+    x: Math.fround(along.x * nominalStep),
+    y: Math.fround(along.y * nominalStep),
+  }
+  const storedStepLength = nativeStoredLength(step.x, step.y)
+  const count = Math.max(1, Math.trunc(shortLength / storedStepLength) + 1)
+  const bars = Array.from({ length: count }, (_, index) => {
+    const center = {
+      x: Math.fround(shortStart.x + Math.fround(step.x * (index + 0.5))),
+      y: Math.fround(shortStart.y + Math.fround(step.y * (index + 0.5))),
+    }
+    const away = normalizedFrom(record.sourcePosition, center)
+    const perpendicular = { x: -away.y, y: away.x }
+    const far = {
+      x: center.x + away.x * record.projectionDistance,
+      y: center.y + away.y * record.projectionDistance,
+    }
+    return {
+      baseAlpha: record.baseAlpha,
+      baseEnd: {
+        x: center.x + perpendicular.x * NATIVE_FENCE_SHADOW_NEAR_HALF_WIDTH,
+        y: center.y + perpendicular.y * NATIVE_FENCE_SHADOW_NEAR_HALF_WIDTH,
+      },
+      baseStart: {
+        x: center.x - perpendicular.x * NATIVE_FENCE_SHADOW_NEAR_HALF_WIDTH,
+        y: center.y - perpendicular.y * NATIVE_FENCE_SHADOW_NEAR_HALF_WIDTH,
+      },
+      tipAlpha: 0,
+      tipEnd: {
+        x: far.x + perpendicular.x * NATIVE_FENCE_SHADOW_FAR_HALF_WIDTH,
+        y: far.y + perpendicular.y * NATIVE_FENCE_SHADOW_FAR_HALF_WIDTH,
+      },
+      tipStart: {
+        x: far.x - perpendicular.x * NATIVE_FENCE_SHADOW_FAR_HALF_WIDTH,
+        y: far.y - perpendicular.y * NATIVE_FENCE_SHADOW_FAR_HALF_WIDTH,
+      },
+    }
+  })
+  return {
+    bars,
+    rail: {
+      alpha: clampUnit(0.1 * record.behindScalar + 0.9 * record.baseAlpha),
+      end: projectAway(shortEnd, record.sourcePosition, record.projectionDistance * 0.125),
+      start: projectAway(shortStart, record.sourcePosition, record.projectionDistance * 0.125),
+      width: NATIVE_FENCE_SHADOW_RAIL_WIDTH,
+    },
+  }
+}
+
+export function nativeBoneyardRailsShadows(
+  program: Extract<NativeBoneyardShadowProgram, { kind: 'rails' }>,
+  record: NativeBoneyardComplexShadowRecord,
+): readonly [NativeBoneyardRailShadowPlan, NativeBoneyardRailShadowPlan] {
+  const dx = Math.fround(program.end.x - program.start.x)
+  const dy = Math.fround(program.end.y - program.start.y)
+  const length = nativeStoredLength(dx, dy)
+  const inverseLength = length > 0 ? Math.fround(1 / length) : 0
+  const along = {
+    x: Math.fround(dx * inverseLength),
+    y: Math.fround(dy * inverseLength),
+  }
+  const start = {
+    x: Math.fround(program.start.x + Math.fround(along.x * NATIVE_RAIL_SHADOW_END_INSET)),
+    y: Math.fround(program.start.y + Math.fround(along.y * NATIVE_RAIL_SHADOW_END_INSET)),
+  }
+  const shortenedEnd = {
+    x: Math.fround(program.end.x - Math.fround(along.x * NATIVE_RAIL_SHADOW_END_INSET)),
+    y: Math.fround(program.end.y - Math.fround(along.y * NATIVE_RAIL_SHADOW_END_INSET)),
+  }
+  const shortenedLength = nativeStoredLength(
+    Math.fround(shortenedEnd.x - start.x),
+    Math.fround(shortenedEnd.y - start.y),
+  )
+  const step = {
+    x: Math.fround(along.x * NATIVE_FENCE_SHADOW_BAR_STEP),
+    y: Math.fround(along.y * NATIVE_FENCE_SHADOW_BAR_STEP),
+  }
+  const stepLength = nativeStoredLength(step.x, step.y)
+  const count = stepLength > 0
+    ? Math.trunc(shortenedLength / stepLength) + 1
+    : 0
+  const farBaseline = {
+    x: Math.fround(start.x + Math.fround(count * step.x)),
+    y: Math.fround(start.y + Math.fround(count * step.y)),
+  }
+  const alpha = clampUnit(0.9 * record.baseAlpha + 0.1 * record.behindScalar)
+  const line = (divisor: number): NativeBoneyardRailShadowPlan => ({
+    alpha,
+    end: projectByDivisor(farBaseline, record.sourcePosition, divisor),
+    start: projectByDivisor(start, record.sourcePosition, divisor),
+    width: NATIVE_RAIL_SHADOW_WIDTH,
+  })
+  return [line(5), line(1.5)]
+}
+
+export function nativeBoneyardWallShadow(
+  program: Extract<NativeBoneyardShadowProgram, { kind: 'wall' }>,
+  record: NativeBoneyardComplexShadowRecord,
+): NativeBoneyardProjectedShadowEdge {
+  return {
+    baseAlpha: record.baseAlpha,
+    baseEnd: { ...program.end },
+    baseStart: { ...program.start },
+    tipAlpha: clampUnit(
+      ((1 - record.behindScalar) * (1 - record.distanceFraction)) ** 3,
+    ),
+    tipEnd: projectAway(program.end, record.sourcePosition, record.projectionDistance),
+    tipStart: projectAway(program.start, record.sourcePosition, record.projectionDistance),
+  }
+}
+
+function nativeStoredLength(dx: number, dy: number): number {
+  return Math.fround(Math.sqrt(Math.fround(
+    Math.fround(dx * dx) + Math.fround(dy * dy),
+  )))
 }
 
 /**
@@ -294,6 +518,20 @@ function projectAway(point: Vec2, source: Vec2, distance: number): Vec2 {
   }
 }
 
+function projectByDivisor(point: Vec2, source: Vec2, divisor: number): Vec2 {
+  return {
+    x: point.x - (source.x - point.x) / divisor,
+    y: point.y - (source.y - point.y) / divisor,
+  }
+}
+
+function normalizedFrom(source: Vec2, destination: Vec2): Vec2 {
+  const dx = destination.x - source.x
+  const dy = destination.y - source.y
+  const length = Math.hypot(dx, dy)
+  return length === 0 ? { x: 0, y: 0 } : { x: dx / length, y: dy / length }
+}
+
 function presentationRandom(
   caster: NativeBoneyardComplexShadowCaster,
   source: NativeBoneyardLightSource,
@@ -330,14 +568,4 @@ function cross(origin: Vec2, left: Vec2, right: Vec2): number {
     (left.x - origin.x) * (right.y - origin.y)
     - (left.y - origin.y) * (right.x - origin.x)
   )
-}
-
-function signedArea(points: readonly Vec2[]): number {
-  let area = 0
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index]
-    const next = points[(index + 1) % points.length]
-    area += current.x * next.y - next.x * current.y
-  }
-  return area / 2
 }

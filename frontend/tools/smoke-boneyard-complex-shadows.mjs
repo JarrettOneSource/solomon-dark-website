@@ -45,7 +45,8 @@ try {
     document.body.replaceChildren()
     document.body.style.background = '#000'
     document.body.style.margin = '0'
-    const [rendererModule, playerModule, shadowModule, spellModule] = await Promise.all([
+    const [airModule, rendererModule, playerModule, shadowModule, spellModule] = await Promise.all([
+      import('/src/game/renderer/primary-spell-air-native.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
       import('/src/game/core-kernels/player-character.ts'),
       import('/src/game/renderer/boneyard-complex-shadows.ts'),
@@ -105,32 +106,90 @@ try {
         terrain: [],
       },
     }
-    const snapshotAt = (tick, position, headingIndex) => ({
-      hostPlayerId: 'local',
-      players: {
-        local: {
-          config: {
-            discipline: 'arcane',
-            displayName: 'Shadow Probe',
-            element: 'fire',
+    const longAir = {
+      ageTicks: 0,
+      birthTick: 1_000,
+      direction: { x: 1, y: 0 },
+      endpoint: { x: 725, y: 330 },
+      id: 4_501,
+      kind: 'air',
+      midpoint: { x: 500, y: 330 },
+      origin: { x: 275, y: 330 },
+      ownerId: 'local',
+      targetId: null,
+      variant: 0,
+      worldKey: `boneyard:${runId}`,
+    }
+    const snapshotAt = (tick, position, headingIndex, includeLongAir = false) => {
+      const primarySpells = spellModule.createPrimarySpellSimulation()
+      if (includeLongAir) primarySpells.transients.push(longAir)
+      return {
+        hostPlayerId: 'local',
+        players: {
+          local: {
+            config: {
+              discipline: 'arcane',
+              displayName: 'Shadow Probe',
+              element: 'air',
+            },
+            footstepTick: 0,
+            gaitDegrees: headingIndex * 15,
+            headingIndex,
+            position,
+            primaryCast: playerModule.createIdlePlayerPrimaryCast(),
+            progression: {
+              activeWeldBuildId: null,
+              coldSlowTicksRemaining: 0,
+              currentHealth: 50,
+              currentMana: 100,
+              deathEpoch: 0,
+              deathTick: 0,
+              dazzleTicksRemaining: 0,
+              experience: 0,
+              learnedSkills: [],
+              level: 1,
+              lifeState: 'alive',
+              maximumHealth: 50,
+              maximumMana: 100,
+              nextThreshold: 100,
+              pendingOffer: null,
+              poisonDamagePerTick: 0,
+              poisonTicksRemaining: 0,
+              previousThreshold: 0,
+              revision: 0,
+            },
+            velocity: { x: 0, y: 0 },
+            walkCyclePrimary: 0,
           },
-          footstepTick: 0,
-          gaitDegrees: headingIndex * 15,
-          headingIndex,
-          position,
-          primaryCast: playerModule.createIdlePlayerPrimaryCast(),
-          velocity: { x: 0, y: 0 },
-          walkCyclePrimary: 0,
         },
-      },
-      primarySpells: spellModule.createPrimarySpellSimulation(),
-      tick,
-      world: { gateLeaves: [], kind: 'boneyard', runId },
-    })
+        primarySpells,
+        run: {
+          eligiblePlayerIds: ['local'],
+          gameOverEventId: 0,
+          gameOverTicks: 0,
+          lastCompletedRunId: null,
+          nextGameOverEventId: 1,
+          phase: 'active',
+          runId,
+        },
+        tick,
+        world: {
+          encounter: null,
+          enemies: [],
+          enemyEvents: [],
+          enemyProjectiles: [],
+          gateLeaves: [],
+          kind: 'boneyard',
+          maggots: [],
+          runId,
+          waves: null,
+        },
+      }
+    }
     const renderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
       devicePixelRatio: 1,
-      initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6),
+      initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6, true),
       playerId: 'local',
       viewport,
     })
@@ -147,6 +206,7 @@ try {
     window.__complexShadowProbe = {
       capture,
       leftPixels: capture(),
+      longAirPathLightCount: airModule.buildNativeAirPathLightSources(longAir).length,
       renderer,
       rightSnapshot: snapshotAt(1_010, { x: 800, y: 330 }, 18),
     }
@@ -155,6 +215,7 @@ try {
       complexShadows: renderer.canvas.dataset.complexShadows,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
+      longAirPathLightCount: window.__complexShadowProbe.longAirPathLightCount,
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
       treeComplexShadowOutline: renderer.canvas.dataset.treeComplexShadowOutline,
@@ -185,6 +246,8 @@ try {
   assert.ok(left.frame.complexShadowCasterCount >= 3)
   assert.ok(left.frame.complexShadowRecordCount >= 3)
   assert.ok(left.frame.complexShadowQuadCount >= left.frame.complexShadowCasterCount)
+  assert.ok(left.longAirPathLightCount > 0)
+  assert.ok(left.frame.lightSourceCount >= left.longAirPathLightCount + 1)
 
   const right = await page.evaluate(() => {
     const probe = window.__complexShadowProbe
@@ -211,6 +274,7 @@ try {
   assert.ok(right.frame.complexShadowCasterCount >= 3)
   assert.ok(right.frame.complexShadowRecordCount >= 3)
   assert.ok(right.frame.complexShadowQuadCount >= right.frame.complexShadowCasterCount)
+  assert.ok(right.frame.lightSourceCount < left.frame.lightSourceCount)
   assert.ok(right.changedPixels > 20_000)
   assert.ok(right.channelDelta > 100_000)
 
@@ -260,17 +324,52 @@ try {
             y: template.scene.spawn.y,
           },
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
+          progression: {
+            activeWeldBuildId: null,
+            coldSlowTicksRemaining: 0,
+            currentHealth: 50,
+            currentMana: 100,
+            deathEpoch: 0,
+            deathTick: 0,
+            dazzleTicksRemaining: 0,
+            experience: 0,
+            learnedSkills: [],
+            level: 1,
+            lifeState: 'alive',
+            maximumHealth: 50,
+            maximumMana: 100,
+            nextThreshold: 100,
+            pendingOffer: null,
+            poisonDamagePerTick: 0,
+            poisonTicksRemaining: 0,
+            previousThreshold: 0,
+            revision: 0,
+          },
           velocity: { x: 0, y: 0 },
           walkCyclePrimary: 0,
         },
       },
       primarySpells: spellModule.createPrimarySpellSimulation(),
+      run: {
+        eligiblePlayerIds: ['local'],
+        gameOverEventId: 0,
+        gameOverTicks: 0,
+        lastCompletedRunId: null,
+        nextGameOverEventId: 1,
+        phase: 'active',
+        runId,
+      },
       tick,
       world: {
-        ...(encounter ? { encounter } : {}),
+        encounter: encounter ?? null,
+        enemies: [],
+        enemyEvents: [],
+        enemyProjectiles: [],
         gateLeaves: [],
         kind: 'boneyard',
+        maggots: [],
         runId,
+        waves: null,
       },
     })
     const renderer = await rendererModule.createBoneyardWorldRenderer({

@@ -6,6 +6,7 @@ import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4184'
 const screenshotRoot = process.env.SDR_PRIMARY_SPELL_SCREENSHOT_ROOT || '/tmp'
+const BONEYARD_RENDER_TIMEOUT_MS = 60_000
 const CREATE_MENU_TIMEOUT_MS = 30_000
 const SPELLS = [
   {
@@ -120,6 +121,7 @@ try {
   const errors = []
   let airPage = null
   let earthPage = null
+  let etherPage = null
   let firePage = null
   let waterPage = null
 
@@ -291,6 +293,8 @@ try {
 
     if (spell.kind === 'earth') {
       earthPage = page
+    } else if (spell.kind === 'ether' && selectedSpells.length === 1) {
+      etherPage = page
     } else if (spell.kind === 'air' && selectedSpells.length === 1) {
       airPage = page
     } else if (spell.kind === 'fire' && selectedSpells.length === 1) {
@@ -306,7 +310,9 @@ try {
   const boneyard = earthPage
     ? await castEarthInBoneyard(earthPage)
     : airPage
-      ? await castAirInBoneyard(airPage)
+        ? await castAirInBoneyard(airPage)
+      : etherPage
+        ? await castEtherInBoneyard(etherPage)
       : firePage
         ? await castFireInBoneyard(firePage)
         : waterPage
@@ -373,6 +379,7 @@ async function castEarthInBoneyard(page) {
   assert.equal(gather.loop, true)
   const held = await waitForBoneyardSpell(page, 'earth')
   await page.waitForTimeout(400)
+  const heldWire = await latestWireSpell(page, 'earth')
   const heldScreenshotPath = `${screenshotRoot}/solomon-primary-earth-boneyard-held.png`
   await page.screenshot({ path: heldScreenshotPath })
   await page.mouse.up({ button: 'left' })
@@ -386,15 +393,21 @@ async function castEarthInBoneyard(page) {
     'play',
   )
   assert.equal(rolling.loop, true)
+  const releasedWire = await waitForWireSpell(page, 'earth', heldWire.tick, 10_000)
+  assert.equal(releasedWire.state.phase, 'flight')
+  assert.notDeepEqual(releasedWire.state.orientation, heldWire.state.orientation)
+  assert.notDeepEqual(releasedWire.state.position, heldWire.state.position)
   const released = await waitForBoneyardSpell(page, ['earth', 'earth-impact'])
   await releaseScreenshotPromise
   assert.ok(released.painterBandCount >= 2)
   assert.ok(released.maxDynamicZIndex > 0)
   return {
     held,
+    heldWire,
     heldScreenshotPath,
     releaseScreenshotPath,
     released,
+    releasedWire,
   }
 }
 
@@ -403,10 +416,10 @@ async function enterBoneyard(page) {
   await enter.waitFor({ timeout: 10_000 })
   await enter.click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
-    timeout: 30_000,
+    timeout: BONEYARD_RENDER_TIMEOUT_MS,
   })
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
-  await canvas.waitFor({ timeout: 30_000 })
+  await canvas.waitFor({ timeout: BONEYARD_RENDER_TIMEOUT_MS })
   return canvas
 }
 
@@ -463,10 +476,26 @@ async function castFireInBoneyard(page) {
   await page.mouse.down({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/throw-fire.wav', 'play')
   await page.mouse.up({ button: 'left' })
-  const impact = await waitForWireSpell(page, 'fire-impact', afterTick, 10_000)
+  const impact = await waitForWireSpell(page, 'fire-impact', afterTick, 20_000)
   const screenshotPath = `${screenshotRoot}/solomon-primary-fire-boneyard-impact.png`
   await page.screenshot({ path: screenshotPath })
   await waitForAudio(page, eventStart, '/game/audio/sfx/fireball-hit.wav', 'play')
+  return { impact, screenshotPath }
+}
+
+async function castEtherInBoneyard(page) {
+  const canvas = await enterBoneyard(page)
+  const eventStart = await audioEventCount(page)
+  const afterTick = await latestWireTick(page)
+  const target = await castTarget(canvas, 0.5, 0.05)
+  await page.mouse.move(target.x, target.y)
+  await page.mouse.down({ button: 'left' })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile.wav', 'play')
+  await page.mouse.up({ button: 'left' })
+  const impact = await waitForWireSpell(page, 'ether-impact', afterTick, 10_000)
+  const screenshotPath = `${screenshotRoot}/solomon-primary-ether-boneyard-impact.png`
+  await page.screenshot({ path: screenshotPath })
+  await waitForAudio(page, eventStart, '/game/audio/sfx/magic-missile-hit.wav', 'play')
   return { impact, screenshotPath }
 }
 
@@ -718,7 +747,6 @@ async function waitForWireSpell(page, kind, afterTick, timeout) {
           transientCount: wire.primarySpells.transients.length,
         }
       }
-      return null
     }
     return null
   }, [kind, afterTick], { timeout })

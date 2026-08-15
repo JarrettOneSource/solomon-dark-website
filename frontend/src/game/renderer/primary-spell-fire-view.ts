@@ -26,6 +26,8 @@ export interface PrimarySpellFireTextures {
 
 interface FirePainterRoot {
   container: Container
+  lane: 'world-sorted'
+  queueFamily: 'ordinary-dynamic'
   regionLightPoint: null
   sortBias: number
   suffix: string
@@ -55,10 +57,13 @@ export class FirePrimarySpellView {
     this.update(state)
   }
 
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+  update(
+    state: PrimarySpellProjectileState | PrimarySpellTransientState,
+    presentationFrame?: number,
+  ): void {
     if (!('position' in state) || state.kind !== 'fire') return
     this.state = state
-    const plan = nativeFireballPlan(state)
+    const plan = nativeFireballPlan(state, presentationFrame)
     this.container.position.set(plan.position.x, plan.position.y)
     this.apply(this.core, plan.draws[0])
     this.apply(this.additiveBody, plan.draws[1])
@@ -69,6 +74,8 @@ export class FirePrimarySpellView {
     const plan = nativeFireballPlan(this.state)
     return [{
       container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
       regionLightPoint: plan.regionLightPoint,
       sortBias: 0,
       suffix: '',
@@ -133,6 +140,8 @@ export class FireParticleSpellView {
     const plan = nativeFireParticlePlan(this.state)
     return [{
       container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
       regionLightPoint: plan.regionLightPoint,
       sortBias: 0,
       suffix: '',
@@ -186,6 +195,8 @@ export class FireImpactSpellView {
     const plan = nativeFireImpactPlan(this.state)
     return [{
       container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'ordinary-dynamic',
       regionLightPoint: plan.regionLightPoint,
       sortBias: 0,
       suffix: '',

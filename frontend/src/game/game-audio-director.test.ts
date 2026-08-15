@@ -33,6 +33,7 @@ const SOURCES = {
     'ice-start': 'ice.wav',
     'lightning-start': 'lightning.wav',
     'magic-missile': 'magic.wav',
+    'magic-missile-hit': 'magic-hit.wav',
     'pick-skill': 'pick.wav',
     'rock-hit': 'rock.wav',
     'skeleton-die': 'skeleton.wav',

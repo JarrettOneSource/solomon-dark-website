@@ -169,6 +169,7 @@ export function nativeEnemyPainterLayer(
 ): DynamicPainterLayer {
   return {
     id: `enemy:${enemy.id}`,
+    queueFamily: 'ordinary-dynamic',
     sortBias: 0,
     sourceOrder,
     worldY: enemy.position.y,

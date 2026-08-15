@@ -21,7 +21,13 @@ test('splits scenery into bands so an actor can pass behind a Tree or Gravestone
       { layerIndex: 1, worldY: 200, sortBias: 0, sourceOrder: 1 },
     ],
     dynamicLayers: [
-      { id: 'player', worldY: 150, sortBias: 0, sourceOrder: 0 },
+      {
+        id: 'player',
+        queueFamily: 'ordinary-dynamic',
+        worldY: 150,
+        sortBias: 0,
+        sourceOrder: 0,
+      },
     ],
   })
 
@@ -44,7 +50,13 @@ test('keeps a biased Gate body behind its post and gives actors the native same-
       { layerIndex: 2, worldY: 100, sortBias: 0, sourceOrder: 2 },
     ],
     dynamicLayers: [
-      { id: 'player', worldY: 100, sortBias: 0, sourceOrder: 0 },
+      {
+        id: 'player',
+        queueFamily: 'ordinary-dynamic',
+        worldY: 100,
+        sortBias: 0,
+        sourceOrder: 0,
+      },
     ],
   })
 
@@ -54,5 +66,38 @@ test('keeps a biased Gate body behind its post and gives actors the native same-
   ])
   assert.deepEqual(order.dynamicLayers, [
     { id: 'player', row: 0, zIndex: 2 },
+  ])
+})
+
+test('places same-row Water Normal ZAnim after ordinary actors and scenery', () => {
+  const order = buildBoneyardPainterOrder({
+    referenceY: 100,
+    staticLayers: [
+      { layerIndex: 0, worldY: 100, sortBias: 0, sourceOrder: 0 },
+    ],
+    dynamicLayers: [
+      {
+        id: 'player',
+        queueFamily: 'ordinary-dynamic',
+        worldY: 100,
+        sortBias: 0,
+        sourceOrder: 0,
+      },
+      {
+        id: 'water-normal',
+        queueFamily: 'zanim',
+        worldY: 100,
+        sortBias: 0,
+        sourceOrder: 1,
+      },
+    ],
+  })
+
+  assert.deepEqual(order.dynamicLayers, [
+    { id: 'player', row: 0, zIndex: 1 },
+    { id: 'water-normal', row: 0, zIndex: 3 },
+  ])
+  assert.deepEqual(order.bands, [
+    { id: 'static-0', layerIndexes: [0], row: 0, zIndex: 2 },
   ])
 })

@@ -14,24 +14,33 @@ import {
   WATER_FROST_PARTICLES_PER_TICK,
   waterFrostJetEmission,
   waterFrostJetLifetimeTicks,
-  waterFrostJetObstructionPoint,
+  waterFrostJetObstruction,
 } from './primary-spell-water.ts'
 import {
   earthImpactLifetimeTicks,
   earthVisualRandomInt,
   earthVisualUnitRandom,
 } from './primary-spell-earth.ts'
+import {
+  EARTH_BOULDER_IDENTITY_ORIENTATION,
+  earthBoulderFlightOrientationStep,
+  earthBoulderHeldOrientationStep,
+  type EarthBoulderOrientation,
+} from './primary-spell-earth-orientation.ts'
 import type { Vector2 } from './vector.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
   nativeFireParticleVariant,
 } from './primary-spell-fire-native.ts'
+import { NATIVE_ETHER_IMPACT_VISIBLE_TICKS } from './primary-spell-ether-native.ts'
 import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
+  NATIVE_PRIMARY_HOSTILE_FLAG,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
+  nativePrimaryTargetEligible,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -42,6 +51,7 @@ export type PrimarySpellTransientKind =
   | 'air'
   | 'earth-called-rock'
   | 'earth-impact'
+  | 'ether-impact'
   | 'fire'
   | 'fire-impact'
   | 'water'
@@ -63,7 +73,9 @@ interface PrimarySpellProjectileBaseState {
 
 export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectileBaseState {
   assemblyCharge: number
+  hitTargetIds: readonly string[]
   kind: 'earth'
+  orientation: EarthBoulderOrientation
 }
 
 export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectileBaseState {
@@ -93,6 +105,7 @@ interface PrimarySpellChannelTransientBase {
 }
 
 export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransientBase {
+  birthTick: number
   endpoint: Vector2
   kind: 'air'
   midpoint: Vector2
@@ -101,6 +114,7 @@ export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransi
 
 export interface PrimarySpellWaterTransientState extends PrimarySpellChannelTransientBase {
   kind: 'water'
+  obstructionDistance: number | null
   obstructionPoint: Vector2 | null
 }
 
@@ -116,6 +130,7 @@ export interface PrimarySpellChannelEmission {
   manaCost: number
   origin: Vector2
   ownerId: string
+  queryOrigin: Vector2
   worldKey: string
 }
 
@@ -162,6 +177,16 @@ export interface PrimarySpellFireParticleState {
   worldKey: string
 }
 
+export interface PrimarySpellEtherImpactState {
+  ageTicks: number
+  birthTick: number
+  id: number
+  kind: 'ether-impact'
+  origin: Vector2
+  ownerId: string
+  worldKey: string
+}
+
 export interface PrimarySpellFireImpactState {
   ageTicks: number
   id: number
@@ -175,6 +200,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
+  | PrimarySpellEtherImpactState
   | PrimarySpellFireImpactState
   | PrimarySpellFireParticleState
 
@@ -236,11 +262,11 @@ export const PRIMARY_CAST_ETHER_ACTION_END_TICK = 56
 export const PRIMARY_CAST_ETHER_EMISSION_TICK = 15
 export const PRIMARY_SPELL_AIR_REACH = 205
 export const PRIMARY_SPELL_AIR_LIFETIME_TICKS = 5
+export const PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS = NATIVE_ETHER_IMPACT_VISIBLE_TICKS
 export const PRIMARY_SPELL_WATER_REACH = 205
-export const PRIMARY_SPELL_POC_FLIGHT_LIFETIME_TICKS = 500
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
-export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 15
-export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 22.5
+export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 6
+export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
 export const PRIMARY_SPELL_EARTH_CHARGE_STEP = Math.fround(0.00125)
 export const PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE = Math.fround(0.3)
@@ -420,6 +446,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       if (spell.kind === 'fire') {
         transients = [...transients, fireImpact(nextId, spell)]
         nextId += 1
+      } else {
+        transients = [...transients, etherImpact(nextId, spell, context.tick)]
+        nextId += 1
       }
       continue
     }
@@ -539,8 +568,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             damage: authority.primarySkill.damageMinimum,
             direction: { ...aimDirection },
             flightTicks: 0,
+            hitTargetIds: [],
             id: nextId,
             kind: 'earth',
+            orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
             ownerId: playerId,
             phase: 'held',
             position: { x: emitter.x, y: emitter.y + 15 },
@@ -595,6 +626,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextId += 1
         }
       } else {
+        if (born.kind !== 'ether') throw new Error('Expected an Ether projectile')
         const firstLookaheadClear = context.canTraverseProjectile(
           born,
           born.position,
@@ -604,10 +636,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           },
         )
         if (firstLookaheadClear) {
-          projectiles = [...projectiles, advanceProjectile(
+          const spell = advanceProjectile(
             born,
             context.spellTargets(playerId),
-          )]
+          )
+          if (spell.kind !== 'ether') throw new Error('Expected an Ether projectile')
+          projectiles = [...projectiles, spell]
+        } else {
+          transients = [...transients, etherImpact(nextId, born, context.tick)]
+          nextId += 1
         }
       }
       nextPlayer = {
@@ -651,10 +688,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             manaCost,
             origin: emitter,
             ownerId: playerId,
+            queryOrigin: { ...nextPlayer.position },
             worldKey,
           })
           transients = [...transients, {
             ageTicks: 0,
+            birthTick: context.tick,
             direction: { ...aimDirection },
             endpoint: air.endpoint,
             id: nextId,
@@ -691,6 +730,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             manaCost,
             origin: emitter,
             ownerId: playerId,
+            queryOrigin: { ...nextPlayer.position },
             worldKey,
           })
           const emitted = Array.from(
@@ -704,18 +744,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 variant,
                 id,
               )
-              const obstructionPoint = waterFrostJetObstructionPoint(
+              const obstruction = waterFrostJetObstruction(
                 born,
                 nextPlayer.position,
                 id,
                 (start, end) => context.spellObstructionPoint(playerId, start, end),
               )
               return {
-                ageTicks: 0,
+                ageTicks: 1,
                 direction: born.direction,
                 id,
                 kind: 'water',
-                obstructionPoint,
+                obstructionDistance: obstruction?.distance ?? null,
+                obstructionPoint: obstruction?.point ?? null,
                 origin: born.origin,
                 ownerId: playerId,
                 variant,
@@ -743,6 +784,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             ))
               ? spell.charge
               : Math.min(1, Math.fround(spell.charge + PRIMARY_SPELL_EARTH_CHARGE_STEP))
+            const releasesThisTick = !rawHeld
+              && spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
             return {
               ...spell,
               assemblyCharge: Math.floor(30 * spell.charge) === Math.floor(30 * charge)
@@ -750,6 +793,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 : charge,
               charge,
               direction: { ...aimDirection },
+              orientation: releasesThisTick
+                ? spell.orientation
+                : earthBoulderHeldOrientationStep(spell.orientation, aimDirection),
               position: { x: emitter.x, y: emitter.y + 15 },
               worldKey,
             }
@@ -905,18 +951,29 @@ function releaseHeldEarthProjectiles(
       continue
     }
     const velocity = {
-      x: aimDirection.x * 3,
-      y: aimDirection.y * 3,
+      x: Math.fround(aimDirection.x * 3),
+      y: Math.fround(aimDirection.y * 3),
+    }
+    const position = {
+      x: Math.fround(spell.position.x + velocity.x),
+      y: Math.fround(spell.position.y + velocity.y),
+    }
+    const storedDelta = {
+      x: Math.fround(position.x - spell.position.x),
+      y: Math.fround(position.y - spell.position.y),
     }
     const releasedSpell: PrimarySpellProjectileState = {
       ...spell,
       direction: { ...aimDirection },
       flightTicks: 1,
+      orientation: earthBoulderFlightOrientationStep(
+        spell.orientation,
+        aimDirection,
+        storedDelta,
+        spell.charge,
+      ),
       phase: 'flight',
-      position: {
-        x: spell.position.x + velocity.x,
-        y: spell.position.y + velocity.y,
-      },
+      position,
       velocity,
     }
     if (canPlaceProjectile(
@@ -1120,9 +1177,12 @@ function advanceProjectile(
     return { ...spell, ageTicks: spell.ageTicks + 1 }
   }
   if (spell.kind === 'ether') {
-    const target = spell.targetId === null
+    const candidate = spell.targetId === null
       ? undefined
       : targets.find(({ id }) => id === spell.targetId)
+    const target = candidate && nativePrimaryTargetEligible(candidate, NATIVE_PRIMARY_HOSTILE_FLAG)
+      ? candidate
+      : undefined
     const advanced = advanceEtherPrimaryHoming({
       headingDegrees: spell.headingDegrees,
       movementScalar: 1,
@@ -1146,6 +1206,28 @@ function advanceProjectile(
       },
     }
   }
+  if (spell.kind === 'earth') {
+    const position = {
+      x: Math.fround(spell.position.x + spell.velocity.x),
+      y: Math.fround(spell.position.y + spell.velocity.y),
+    }
+    const storedDelta = {
+      x: Math.fround(position.x - spell.position.x),
+      y: Math.fround(position.y - spell.position.y),
+    }
+    return {
+      ...spell,
+      ageTicks: spell.ageTicks + 1,
+      flightTicks: spell.flightTicks + 1,
+      orientation: earthBoulderFlightOrientationStep(
+        spell.orientation,
+        spell.direction,
+        storedDelta,
+        spell.charge,
+      ),
+      position,
+    }
+  }
   return {
     ...spell,
     ageTicks: spell.ageTicks + 1,
@@ -1162,9 +1244,26 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'air': return PRIMARY_SPELL_AIR_LIFETIME_TICKS
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
+    case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
+  }
+}
+
+function etherImpact(
+  id: number,
+  spell: PrimarySpellProjectileState,
+  birthTick: number,
+): PrimarySpellEtherImpactState {
+  return {
+    ageTicks: 0,
+    birthTick,
+    id,
+    kind: 'ether-impact',
+    origin: { ...spell.position },
+    ownerId: spell.ownerId,
+    worldKey: spell.worldKey,
   }
 }
 
@@ -1206,10 +1305,13 @@ export function createPrimarySpellContactImpact(
   spell: PrimarySpellProjectileState,
   origin: Readonly<Vector2>,
   birthTick: number,
-): PrimarySpellEarthImpactState | PrimarySpellFireImpactState | null {
+): PrimarySpellEarthImpactState | PrimarySpellEtherImpactState | PrimarySpellFireImpactState | null {
   const contactSpell = { ...spell, position: { ...origin } }
   if (contactSpell.kind === 'earth') {
     return earthImpact(id, contactSpell, birthTick)
+  }
+  if (contactSpell.kind === 'ether') {
+    return etherImpact(id, contactSpell, birthTick)
   }
   return contactSpell.kind === 'fire'
     ? fireImpact(id, contactSpell)

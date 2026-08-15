@@ -21,19 +21,32 @@ import {
   earthImpactFragmentsAtAge,
   earthImpactLifetimeTicks,
 } from '../core-kernels/primary-spell-earth.ts'
+import {
+  EARTH_BOULDER_IDENTITY_ORIENTATION,
+  earthBoulderFlightOrientationStep,
+  earthBoulderHeldOrientationStep,
+  type EarthBoulderOrientation,
+} from '../core-kernels/primary-spell-earth-orientation.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const WORLD_KEY = 'boneyard:test'
 
-function held(ageTicks: number, charge: number, id = 17, assemblyCharge = charge) {
+function held(
+  ageTicks: number,
+  charge: number,
+  id = 17,
+  assemblyCharge = charge,
+  orientation: EarthBoulderOrientation = EARTH_BOULDER_IDENTITY_ORIENTATION,
+) {
   return earthBoulderPresentationPlan({
     ageTicks,
     assemblyCharge,
     charge,
     flightTicks: 0,
     id,
+    orientation,
     phase: 'held' as const,
   })
 }
@@ -62,19 +75,31 @@ test('Earth constructs the native center rock and Fibonacci shell counts', () =>
   assert.deepEqual(held(1, Math.fround(0.18)), initial)
 })
 
-test('Earth freezes its native 3D body orientation on release and depth sorts it', () => {
-  const heldPlan = held(97, Math.fround(0.3012498915195465))
+test('Earth renders the authoritative matrix and keeps spinning through released flight', () => {
+  const charge = Math.fround(0.3012498915195465)
+  let heldMatrix: EarthBoulderOrientation = EARTH_BOULDER_IDENTITY_ORIENTATION
+  for (let tick = 0; tick < 97; tick += 1) {
+    heldMatrix = earthBoulderHeldOrientationStep(heldMatrix, { x: 0, y: -1 })
+  }
+  const heldPlan = held(97, charge, 17, charge, heldMatrix)
+  const flightMatrix = earthBoulderFlightOrientationStep(
+    heldMatrix,
+    { x: 1, y: 0 },
+    { x: 3, y: 0 },
+    charge,
+  )
   const released = earthBoulderPresentationPlan({
-    ageTicks: 127,
-    assemblyCharge: Math.fround(0.3012498915195465),
-    charge: Math.fround(0.3012498915195465),
-    flightTicks: 30,
+    ageTicks: 98,
+    assemblyCharge: charge,
+    charge,
+    flightTicks: 1,
     id: 17,
+    orientation: flightMatrix,
     phase: 'flight',
   })
 
-  assert.equal(released.orientationTicks, 97)
-  assert.deepEqual(released.rocks, heldPlan.rocks)
+  assert.deepEqual(released.orientation, flightMatrix)
+  assert.notDeepEqual(released.rocks, heldPlan.rocks)
   for (let index = 1; index < released.rocks.length; index += 1) {
     assert.ok(released.rocks[index - 1].transformed.z <= released.rocks[index].transformed.z)
   }
@@ -170,13 +195,14 @@ test('Earth applies the native charge lift, jitter domain, and dynamic painter b
   )
 })
 
-test('Earth advances draw-owned jitter and opening rotation without spinning the shell', () => {
+test('Earth draw-time jitter changes without mutating an authoritative shell matrix', () => {
   const state = {
     ageTicks: 12,
     assemblyCharge: Math.fround(0.18),
     charge: Math.fround(0.2),
     flightTicks: 0,
     id: 17,
+    orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     phase: 'held' as const,
   }
   const first = earthBoulderPresentationPlan(state, 100)
@@ -276,7 +302,21 @@ test('Earth actors publish independent full-suffix painter and light roots', () 
   const firstRoot = root.children.find(({ label }) => label === 'earth-impact-fragment-0')
   const secondRoot = root.children.find(({ label }) => label === 'earth-impact-fragment-1')
   const calledRoot = root.children.find(({ label }) => label === 'earth-called-rock')
-  assert.ok(firstRoot && secondRoot && calledRoot)
+  const boulderRoot = root.children.find(({ label }) => label === 'earth')
+  assert.ok(firstRoot && secondRoot && calledRoot && boulderRoot)
+  assert.equal(calledRoot.children.length, 2)
+  const calledBase = calledRoot.children[0]
+  const calledMain = calledRoot.children[1]
+  assert.equal(calledBase.renderable, true)
+  assert.equal(calledBase.position.y, 0)
+  assert.equal(calledBase.scale.x, 0.2 * 0.75)
+  assert.equal(calledMain.position.y, -8)
+  assert.equal(calledMain.scale.x, 0.2)
+  const calledDepth = calledRoot.zIndex
+  view.promoteOwnerOverlays((ownerId) => ownerId === 'wizard' ? 500 : undefined)
+  assert.equal(boulderRoot.zIndex, 1245)
+  assert.ok(boulderRoot.zIndex > 500)
+  assert.equal(calledRoot.zIndex, calledDepth)
   view.setTint('primary-spell:2:fragment-0', 0x123456)
   assert.equal(firstRoot.children[0].tint, 0x123456)
   assert.equal(secondRoot.children[0].tint, 0xffffff)
@@ -285,6 +325,13 @@ test('Earth actors publish independent full-suffix painter and light roots', () 
   view.setDepth('primary-spell:2:fragment-1', 999)
   assert.equal(secondRoot.zIndex, 999)
   assert.notEqual(firstRoot.zIndex, 999)
+
+  const landed = worldFixture()
+  landed.transients = landed.transients.map((effect) => (
+    effect.kind === 'earth-called-rock' ? { ...effect, height: 0 } : effect
+  ))
+  view.update(landed, WORLD_KEY)
+  assert.equal(calledBase.renderable, false)
 
   view.update({ nextId: 4, projectiles: [], transients: [] }, WORLD_KEY)
   assert.equal(root.children.length, 0)
@@ -333,6 +380,7 @@ function worldFixture(): PrimarySpellSimulationState {
       flightTicks: 0,
       id: 1,
       kind: 'earth',
+      orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
       ownerId: 'wizard',
       phase: 'held',
       position: { x: 100, y: 200 },

@@ -159,6 +159,36 @@ test('plays each semantic Fire impact once without replaying an initial snapshot
   assert.deepEqual(reconnectAudio.sounds, [])
 })
 
+test('plays each semantic Ether impact once with its native pitch interval', () => {
+  const initial = simulation('ether')
+  const player = getPlayerCharacter(initial, PLAYER_ID)
+  const impact = {
+    ageTicks: 0,
+    birthTick: 40,
+    id: 1,
+    kind: 'ether-impact',
+    origin: { x: player.position.x, y: player.position.y - 50 },
+    ownerId: PLAYER_ID,
+    worldKey: 'hub:courtyard',
+  } as const
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    createGameSnapshot(initial, PLAYER_ID),
+  )
+  const impacted = createGameSnapshot({
+    ...initial,
+    primarySpells: { nextId: 2, projectiles: [], transients: [impact] },
+  }, PLAYER_ID)
+  synchronizer.update(impacted)
+  synchronizer.update(impacted)
+  assert.deepEqual(audio.sounds, ['magic-missile-hit'])
+  assert.equal(audio.soundOptions[0].playbackRate! >= 1, true)
+  assert.equal(audio.soundOptions[0].playbackRate! < 1.1, true)
+  assert.equal(audio.soundOptions[0].volume! > 0, true)
+})
+
 test('consumes Water start once and balances its held loop on release', () => {
   let state = simulation('water')
   const audio = new RecordingAudio()

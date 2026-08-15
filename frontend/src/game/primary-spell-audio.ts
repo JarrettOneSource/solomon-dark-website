@@ -6,6 +6,7 @@ import {
   playerAudioWorldKey,
 } from './game-audio-spatial.ts'
 import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
+import { nativeEtherImpactPitch } from './core-kernels/primary-spell-ether-native.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
   'gather-rocks-loop',
@@ -77,6 +78,23 @@ export class PrimarySpellAudioSynchronizer {
         ) continue
         this.audio.playSound('fireball-hit', {
           playbackRate: nativeFireImpactPitch(effect.id),
+          volume: hubAudioAttenuation(Math.hypot(
+            effect.origin.x - listener.position.x,
+            effect.origin.y - listener.position.y,
+          )),
+        })
+      }
+      const previousEtherImpacts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'ether-impact')
+        .map((effect) => effect.id))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'ether-impact'
+          || effect.worldKey !== listenerWorldKey
+          || previousEtherImpacts.has(effect.id)
+        ) continue
+        this.audio.playSound('magic-missile-hit', {
+          playbackRate: nativeEtherImpactPitch(effect.id),
           volume: hubAudioAttenuation(Math.hypot(
             effect.origin.x - listener.position.x,
             effect.origin.y - listener.position.y,

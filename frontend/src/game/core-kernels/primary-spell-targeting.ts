@@ -12,6 +12,8 @@ export const ETHER_PRIMARY_TURN_FAST_STEP = 0.05000000074505806
 export const ETHER_PRIMARY_TURN_SLOW_STEP = 0.0020000000949949026
 export const ETHER_PRIMARY_TURN_THRESHOLD = 1
 export const ETHER_PRIMARY_TURN_CAP = 10
+export const NATIVE_PRIMARY_ACTOR_CELL_SIZE = 100
+export const NATIVE_PRIMARY_HOSTILE_FLAG = 0x2
 
 const AIR_PRIMARY_CONE_DOT = Math.cos(
   AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES * Math.PI / 180,
@@ -21,11 +23,33 @@ export type PrimarySpellTargetKind = 'enemy' | 'gravestone'
 
 /** A live world actor eligible for one or more native primary queries. */
 export interface PrimarySpellTarget {
-  airPriority: number
+  active: boolean
+  actorFlags: number
   attachment: Vector2
+  bodyRadius: number
   id: string
   kind: PrimarySpellTargetKind
+  nativePriority: number
+  pendingRemove: boolean
   position: Vector2
+  registrationOrder: number
+}
+
+export interface NativePrimaryPointContactQuery {
+  actorMask: number
+  position: Vector2
+  queryRadius: number
+  targets: readonly PrimarySpellTarget[]
+}
+
+export interface NativePrimaryConeQuery {
+  actorMask: number
+  aimDirection: Vector2
+  halfAngleDegrees: number
+  hasLineOfSight: (target: PrimarySpellTarget) => boolean
+  origin: Vector2
+  reach: number
+  targets: readonly PrimarySpellTarget[]
 }
 
 export interface AirPrimaryTargetQuery {
@@ -67,7 +91,12 @@ export function selectAirPrimaryTarget(
   let selected: PrimarySpellTarget | null = null
   let selectedDistanceSquared = Number.POSITIVE_INFINITY
 
-  for (const target of query.targets) {
+  for (const target of nativeBroadphaseOrder(
+    query.origin,
+    query.maxRange,
+    query.targets,
+  )) {
+    if (!nativePrimaryTargetEligible(target, 0x6)) continue
     const delta = subtract(target.position, query.origin)
     const distanceSquared = squaredLength(delta)
     if (distanceSquared >= maxDistanceSquared || distanceSquared === 0) continue
@@ -78,9 +107,9 @@ export function selectAirPrimaryTarget(
     if (!query.hasLineOfSight(target)) continue
     if (
       selected === null
-      || target.airPriority < selected.airPriority
+      || target.nativePriority < selected.nativePriority
       || (
-        target.airPriority === selected.airPriority
+        target.nativePriority === selected.nativePriority
         && distanceSquared < selectedDistanceSquared
       )
     ) {
@@ -93,7 +122,7 @@ export function selectAirPrimaryTarget(
   const previous = query.previousTargetId === null
     ? undefined
     : query.targets.find(({ id }) => id === query.previousTargetId)
-  if (!previous) return null
+  if (!previous || !nativePrimaryTargetEligible(previous, 0x6)) return null
   const retainedDirection = normalized(subtract(previous.position, query.origin))
   return dot(aim, retainedDirection) >= AIR_PRIMARY_RETAIN_DOT ? previous : null
 }
@@ -135,14 +164,81 @@ export function selectEtherPrimaryTarget(
   }
   let selected: PrimarySpellTarget | null = null
   let selectedDistanceSquared = ETHER_PRIMARY_TARGET_DISTANCE_SQUARED
-  for (const target of query.targets) {
-    if (target.kind !== 'enemy') continue
+  for (const target of nativeBroadphaseOrder(
+    probe,
+    Math.sqrt(ETHER_PRIMARY_TARGET_DISTANCE_SQUARED),
+    query.targets,
+  )) {
+    if (
+      target.kind !== 'enemy'
+      || !target.active
+      || (target.actorFlags & NATIVE_PRIMARY_HOSTILE_FLAG) === 0
+    ) continue
     const distanceSquared = squaredLength(subtract(target.position, probe))
     if (distanceSquared >= selectedDistanceSquared) continue
     selected = target
     selectedDistanceSquared = distanceSquared
   }
   return selected
+}
+
+export function firstNativePrimaryPointContact(
+  query: NativePrimaryPointContactQuery,
+): PrimarySpellTarget | null {
+  const cellX = nativeCellCoordinate(query.position.x)
+  const cellY = nativeCellCoordinate(query.position.y)
+  for (const target of nativeRegistrationOrder(query.targets)) {
+    if (!nativePrimaryTargetEligible(target, query.actorMask)) continue
+    if (
+      nativeCellCoordinate(target.position.x) !== cellX
+      || nativeCellCoordinate(target.position.y) !== cellY
+    ) continue
+    const radius = query.queryRadius + target.bodyRadius
+    if (squaredLength(subtract(target.position, query.position)) < radius * radius) {
+      return target
+    }
+  }
+  return null
+}
+
+export function nativePrimaryConeTargets(
+  query: NativePrimaryConeQuery,
+): PrimarySpellTarget[] {
+  const aim = normalized(query.aimDirection)
+  const reachSquared = query.reach * query.reach
+  const coneDot = Math.cos(query.halfAngleDegrees * Math.PI / 180)
+  return nativeBroadphaseOrder(query.origin, query.reach, query.targets).filter((target) => {
+    if (!nativePrimaryTargetEligible(target, query.actorMask)) return false
+    const delta = subtract(target.position, query.origin)
+    const distanceSquared = squaredLength(delta)
+    if (distanceSquared === 0 || distanceSquared >= reachSquared) return false
+    if ((delta.x * aim.x + delta.y * aim.y) / Math.sqrt(distanceSquared) < coneDot) {
+      return false
+    }
+    return query.hasLineOfSight(target)
+  })
+}
+
+export function nativePrimaryRootTargets(
+  origin: Vector2,
+  reach: number,
+  actorMask: number,
+  targets: readonly PrimarySpellTarget[],
+): PrimarySpellTarget[] {
+  const reachSquared = reach * reach
+  return nativeBroadphaseOrder(origin, reach, targets).filter((target) => (
+    nativePrimaryTargetEligible(target, actorMask)
+    && squaredLength(subtract(target.position, origin)) < reachSquared
+  ))
+}
+
+export function nativePrimaryTargetEligible(
+  target: PrimarySpellTarget,
+  actorMask: number,
+): boolean {
+  return target.active
+    && !target.pendingRemove
+    && (target.actorFlags & actorMask) !== 0
 }
 
 export function advanceEtherPrimaryHoming(
@@ -220,4 +316,45 @@ function normalizeDegrees(degrees: number): number {
 
 function signedHeadingDelta(current: number, desired: number): number {
   return ((desired - current + 540) % 360) - 180
+}
+
+function nativeRegistrationOrder(
+  targets: readonly PrimarySpellTarget[],
+): PrimarySpellTarget[] {
+  return [...targets].sort((left, right) => (
+    left.registrationOrder - right.registrationOrder
+  ))
+}
+
+function nativeBroadphaseOrder(
+  origin: Vector2,
+  reach: number,
+  targets: readonly PrimarySpellTarget[],
+): PrimarySpellTarget[] {
+  const minX = Math.fround(origin.x - reach)
+  const minY = Math.fround(origin.y - reach)
+  const diameter = Math.fround(reach + reach)
+  const minCellX = nativeCellCoordinate(minX)
+  const minCellY = nativeCellCoordinate(minY)
+  const maxCellX = nativeCellCoordinate(Math.fround(minX + diameter))
+  const maxCellY = nativeCellCoordinate(Math.fround(minY + diameter))
+  return targets.filter((target) => {
+    const cellX = nativeCellCoordinate(target.position.x)
+    const cellY = nativeCellCoordinate(target.position.y)
+    return cellX >= minCellX
+      && cellX <= maxCellX
+      && cellY >= minCellY
+      && cellY <= maxCellY
+  }).sort((left, right) => {
+    const leftCellX = nativeCellCoordinate(left.position.x)
+    const rightCellX = nativeCellCoordinate(right.position.x)
+    if (leftCellX !== rightCellX) return leftCellX - rightCellX
+    const leftCellY = nativeCellCoordinate(left.position.y)
+    const rightCellY = nativeCellCoordinate(right.position.y)
+    return leftCellY - rightCellY || left.registrationOrder - right.registrationOrder
+  })
+}
+
+function nativeCellCoordinate(position: number): number {
+  return Math.trunc(Math.fround(position / NATIVE_PRIMARY_ACTOR_CELL_SIZE))
 }

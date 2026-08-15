@@ -30,6 +30,7 @@ export type GameSoundCue =
   | 'ice-start'
   | 'lightning-start'
   | 'magic-missile'
+  | 'magic-missile-hit'
   | 'pick-skill'
   | 'rock-hit'
   | 'skeleton-die'
@@ -109,6 +110,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x9e4,
     sourceName: 'sounds\\magicmissile',
     sourceSha256: 'a7765b778d5cc49546c5e7e7822f38aac6a3edd8636d91e4ae92ec78611ac567',
+  },
+  'magic-missile-hit': {
+    registryOffset: 0xa10,
+    sourceName: 'sounds\\magicmissilehit',
+    sourceSha256: '2ac1154c78ee7b9cf5b7b0477113293ff8f16aa743269ad3648ed603e1aaf608',
   },
   'pick-skill': {
     registryOffset: 0x44,

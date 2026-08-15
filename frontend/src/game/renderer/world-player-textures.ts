@@ -39,6 +39,7 @@ export interface PlayerWorldTextures {
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
     air: {
+      branches: readonly Texture[]
       circle: Texture
       forks: readonly Texture[]
       ribbon: Texture
@@ -139,6 +140,7 @@ export function createPlayerWorldTextures(
     players,
     primarySpells: {
       air: {
+        branches: primarySpells.air.branches.map(texture),
         circle: texture(primarySpells.air.circle),
         forks: primarySpells.air.forks.map(texture),
         ribbon: texture(primarySpells.air.ribbon),

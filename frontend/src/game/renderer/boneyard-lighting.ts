@@ -7,7 +7,7 @@ export interface NativeBoneyardLightSample {
 }
 
 export interface NativeBoneyardLightSource extends NativeBoneyardLightSample {
-  multipleShadows: boolean
+  castsDirectionalShadow: boolean
 }
 
 export interface NativeSolomonSetPieceLighting {
@@ -42,7 +42,7 @@ export function nativePlayerLightSource(
   const heading = player.headingIndex * 15 * Math.PI / 180
   return {
     intensity: 1,
-    multipleShadows: true,
+    castsDirectionalShadow: true,
     position: {
       x: player.position.x + Math.sin(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
       y: player.position.y - Math.cos(heading) * NATIVE_PLAYER_LIGHT_OFFSET,
@@ -58,7 +58,7 @@ export function nativeLanternLightSource(
   return {
     intensity: NATIVE_LANTERN_LIGHT_MIN_INTENSITY
       + presentationRandom(presentationFrame) * NATIVE_LANTERN_LIGHT_FLICKER,
-    multipleShadows: false,
+    castsDirectionalShadow: false,
     position,
     radius: NATIVE_LANTERN_LIGHT_RADIUS,
   }
@@ -70,7 +70,7 @@ export function nativeAcceptedBoneyardLightSources(
 ): readonly NativeBoneyardLightSource[] {
   accepted.length = 0
   for (const candidate of candidates) {
-    const contained = !candidate.multipleShadows && accepted.some((existing) => {
+    const contained = !candidate.castsDirectionalShadow && accepted.some((existing) => {
       if (
         existing.intensity < candidate.intensity
         || existing.radius < candidate.radius

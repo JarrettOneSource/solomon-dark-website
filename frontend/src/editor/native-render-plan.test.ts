@@ -74,7 +74,13 @@ test('interleaves every stock main-prop family with actors and keeps proxy art l
       sortBias: layer.sortBias,
       sourceOrder: layer.sourceOrder,
     })),
-    dynamicLayers: [{ id: 'player', worldY: 200, sortBias: 0, sourceOrder: 0 }],
+    dynamicLayers: [{
+      id: 'player',
+      queueFamily: 'ordinary-dynamic',
+      worldY: 200,
+      sortBias: 0,
+      sourceOrder: 0,
+    }],
   })
   const player = order.dynamicLayers[0]
   const eidsAt = (predicate: (zIndex: number) => boolean) => order.bands

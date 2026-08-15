@@ -9,6 +9,7 @@ import {
 } from '../core-server/game-simulation.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
@@ -258,7 +259,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v17 strictly round-trips projected statuses, shields, payloads, and effects', () => {
+test('protocol v18 strictly round-trips projected statuses, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -421,8 +422,8 @@ test('protocol v17 strictly round-trips projected statuses, shields, payloads, a
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidEmergence)), /emergenceTick/)
 })
 
-test('protocol v17 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 17)
+test('protocol v18 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 18)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -513,7 +514,7 @@ test('protocol v17 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v17 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v18 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -878,8 +879,10 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     damage: missile.damage,
     direction: missile.direction,
     flightTicks: 0,
+    hitTargetIds: [],
     id: missile.id,
     kind: 'earth',
+    orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     ownerId: missile.ownerId,
     phase: 'held',
     position: missile.position,
@@ -949,8 +952,18 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ownerId: 'player-1',
     worldKey: 'hub:courtyard',
   }
+  const etherImpact = {
+    ageTicks: 8,
+    birthTick: 91,
+    id: 1,
+    kind: 'ether-impact',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    worldKey: 'hub:courtyard',
+  }
   const airBolt = {
     ageTicks: 0,
+    birthTick: 91,
     direction: { x: 0, y: -1 },
     endpoint: { x: 820, y: 180 },
     id: 1,
@@ -981,6 +994,24 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   })
   assert.equal(decodedFireImpact.type, 'server-snapshot')
   assert.deepEqual(decodedFireImpact.frame.primarySpells.transients, [fireImpact])
+  const decodedEtherImpact = decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [etherImpact],
+    },
+  })
+  assert.equal(decodedEtherImpact.type, 'server-snapshot')
+  assert.deepEqual(decodedEtherImpact.frame.primarySpells.transients, [etherImpact])
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [],
+      transients: [{ ...etherImpact, birthTick: undefined }],
+    },
+  }), /birthTick/)
   const decodedAir = decodeFrame({
     ...frame,
     primarySpells: { nextId: 2, projectiles: [], transients: [airBolt] },
@@ -1026,6 +1057,49 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [],
     },
   }), /assemblyCharge/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, hitTargetIds: undefined }],
+      transients: [],
+    },
+  }), /hitTargetIds/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, hitTargetIds: ['enemy:1', 'enemy:1'] }],
+      transients: [],
+    },
+  }), /duplicate target/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, orientation: undefined }],
+      transients: [],
+    },
+  }), /orientation/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, orientation: [1, 0, 0] }],
+      transients: [],
+    },
+  }), /nine float32 values/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{
+        ...boulder,
+        orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION.slice(0, 8), 1 / 3],
+      }],
+      transients: [],
+    },
+  }), /must be float32/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {
@@ -1129,10 +1203,11 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       nextId: 2,
       projectiles: [missile],
       transients: [{
-        ageTicks: 0,
+        ageTicks: 1,
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
@@ -1147,10 +1222,11 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       nextId: 2,
       projectiles: [],
       transients: [{
-        ageTicks: 0,
+        ageTicks: 1,
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        obstructionDistance: null,
         obstructionPoint: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
@@ -1165,10 +1241,11 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       nextId: 2,
       projectiles: [],
       transients: [{
-        ageTicks: 0,
+        ageTicks: 1,
         direction: { x: 0, y: -1 },
         id: 1,
         kind: 'water',
+        obstructionDistance: null,
         origin: { x: 800, y: 400 },
         ownerId: 'player-1',
         variant: 0,
@@ -1176,6 +1253,25 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       }],
     },
   }), /obstructionPoint must be an object/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 3,
+      projectiles: [],
+      transients: [{
+        ageTicks: 1,
+        direction: { x: 1, y: 0 },
+        id: 2,
+        kind: 'water',
+        obstructionDistance: 0,
+        obstructionPoint: null,
+        origin: { x: 800, y: 400 },
+        ownerId: 'player-1',
+        variant: 0,
+        worldKey: 'hub:courtyard',
+      }],
+    },
+  }), /must be present together/)
   assert.throws(() => decodeFrame({
     ...frame,
     primarySpells: {

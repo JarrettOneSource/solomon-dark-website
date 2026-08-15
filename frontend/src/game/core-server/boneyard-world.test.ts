@@ -697,11 +697,16 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
   )))
   const firstEnemy = world.enemies.actors[0]
   assert.deepEqual(boneyardPrimarySpellTargets(world)[0], {
-    airPriority: 0,
+    active: true,
+    actorFlags: 0x2,
     attachment: { x: 0, y: 0 },
+    bodyRadius: firstEnemy.config.collisionRadius,
     id: `enemy:${firstEnemy.id}`,
     kind: 'enemy',
+    nativePriority: 0,
+    pendingRemove: false,
     position: firstEnemy.position,
+    registrationOrder: world.scenerySpellTargets.length,
   })
   const enemyId = world.enemies.actors[0].id
   const damaged = damageBoneyardEnemy(world.enemies, {
@@ -969,11 +974,16 @@ test('retains Gravestones as stable lower-priority Lightning targets', () => {
     { eid: 'tree-2', typeId: 2001, pos: { x: 400, y: 420 }, variant: 0 },
   ]
   assert.deepEqual(createBoneyardWorld(loaded).scenerySpellTargets, [{
-    airPriority: 1000,
+    active: true,
+    actorFlags: 0x4,
     attachment: { x: 0, y: 0 },
+    bodyRadius: 0,
     id: 'scenery:grave-7',
     kind: 'gravestone',
+    nativePriority: 1000,
+    pendingRemove: false,
     position: { x: 300, y: 320 },
+    registrationOrder: 0,
   }])
 })
 
