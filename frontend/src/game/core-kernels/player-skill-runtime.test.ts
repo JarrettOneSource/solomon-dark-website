@@ -8,6 +8,7 @@ import {
   BODY_SKILL_IDS,
   CONCENTRATABLE_SKILL_IDS,
   MIND_SKILL_IDS,
+  applyPlayerHardenArmor,
   createPlayerSkillRuntime,
   isPlayerSkillConcentrated,
   markPlayerCreativityInsight,
@@ -248,6 +249,59 @@ test('Meditation preserves native idle threshold and concentrated activity ramp'
   )
   stepped = stepPlayerSkillRuntime(state.runtime, derived, { acting: true, moving: true })
   assert.ok(Math.abs(stepped.manaRecoveryPerTick - 0.175) < 1e-12)
+})
+
+test('Hurricane and Harden use player-owned channel clocks and weak Water clears only Harden', () => {
+  const book = rankedBook({ 29: 1, 36: 1 })
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  let state = createPlayerSkillRuntime(book, statBook, economy)
+  assert.equal(state.runtime.hardenArmorMaximum, 25)
+  assert.equal(state.runtime.hardenArmorPerTick, 0.08)
+  assert.equal(state.runtime.hurricaneEnabled, true)
+  const derived = playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+
+  state = {
+    ...state,
+    runtime: stepPlayerSkillRuntime(state.runtime, derived, {
+      acting: true,
+      moving: false,
+      primaryChannel: 'air',
+      primaryUnderpowered: false,
+    }).runtime,
+  }
+  assert.equal(state.runtime.hurricaneCharge, Math.fround(0.0015))
+  state = {
+    ...state,
+    runtime: stepPlayerSkillRuntime(state.runtime, derived, {
+      acting: true,
+      moving: false,
+      primaryChannel: 'water',
+      primaryUnderpowered: false,
+    }).runtime,
+  }
+  assert.equal(state.runtime.hurricaneCharge, 0)
+  assert.equal(state.runtime.hardenArmor, Math.fround(0.08))
+  const reduced = applyPlayerHardenArmor(state.runtime, 1)
+  assert.equal(reduced.damage, 1 - Math.fround(0.08))
+  assert.equal(reduced.runtime, state.runtime, 'Harden is persistent flat armor, not a consumed pool')
+
+  state = {
+    ...state,
+    runtime: stepPlayerSkillRuntime(state.runtime, derived, {
+      acting: true,
+      moving: false,
+      primaryChannel: 'water',
+      primaryUnderpowered: true,
+    }).runtime,
+  }
+  assert.equal(state.runtime.hardenArmor, 0)
 })
 
 test('staff admission comes only from the exact native Staff type', () => {

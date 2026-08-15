@@ -3,8 +3,10 @@ import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { waterFrostJetLifetimeTicks } from '../core-kernels/primary-spell-water.ts'
 import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+  PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
+  PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
   type PrimarySpellProjectileState,
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
@@ -172,8 +174,11 @@ function fixedTransientTiming(
     case 'air': return {
       ageZeroTick: effect.birthTick,
       firstVisibleAge: 0,
-      lifetimeTicks: PRIMARY_SPELL_AIR_LIFETIME_TICKS,
+      lifetimeTicks: effect.underpowered
+        ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
+        : PRIMARY_SPELL_AIR_LIFETIME_TICKS,
     }
+    case 'air-hurricane': return null
     case 'earth-called-rock': return null
     case 'player-staff-contact':
     case 'player-staff-contact-knockback':
@@ -222,6 +227,12 @@ function fixedTransientTiming(
       firstVisibleAge: 1,
       lifetimeTicks: waterFrostJetLifetimeTicks(effect.id),
     }
+    case 'water-aura': return {
+      ageZeroTick: effect.birthTick,
+      firstVisibleAge: 0,
+      lifetimeTicks: PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
+    }
+    case 'water-hail': return null
   }
 }
 
@@ -517,7 +528,57 @@ function interpolateTransient(
     }
   }
   if (older.kind === 'air' || newer.kind === 'air') return copyTransient(discrete)
+  if (older.kind === 'air-hurricane' && newer.kind === 'air-hurricane') {
+    return {
+      ...(blend < 1 ? older : newer),
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      charge: lerp(older.charge, newer.charge, blend),
+      position: {
+        x: lerp(older.position.x, newer.position.x, blend),
+        y: lerp(older.position.y, newer.position.y, blend),
+      },
+    }
+  }
+  if (older.kind === 'water-hail' && newer.kind === 'water-hail') {
+    const hail = blend < 1 ? older : newer
+    return {
+      ...hail,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      height: lerp(older.height, newer.height, blend),
+      horizontalVelocity: {
+        x: lerp(older.horizontalVelocity.x, newer.horizontalVelocity.x, blend),
+        y: lerp(older.horizontalVelocity.y, newer.horizontalVelocity.y, blend),
+      },
+      life: lerp(older.life, newer.life, blend),
+      position: {
+        x: lerp(older.position.x, newer.position.x, blend),
+        y: lerp(older.position.y, newer.position.y, blend),
+      },
+      rotationDegrees: lerp(older.rotationDegrees, newer.rotationDegrees, blend),
+      verticalVelocity: lerp(older.verticalVelocity, newer.verticalVelocity, blend),
+    }
+  }
+  if (older.kind === 'water-aura' && newer.kind === 'water-aura') {
+    return interpolateOriginTransient(older, newer, blend)
+  }
   throw new Error('Unsupported primary spell transient pair')
+}
+
+function interpolateOriginTransient<
+  Transient extends Extract<PrimarySpellTransientState, { origin: unknown }>,
+>(
+  older: Transient,
+  newer: Transient,
+  blend: number,
+): Transient {
+  return {
+    ...(blend < 1 ? older : newer),
+    ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+    origin: {
+      x: lerp(older.origin.x, newer.origin.x, blend),
+      y: lerp(older.origin.y, newer.origin.y, blend),
+    },
+  }
 }
 
 function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProjectileState {
@@ -634,6 +695,19 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       midpoint: { ...effect.midpoint },
       origin: { ...effect.origin },
     }
+  }
+  if (effect.kind === 'air-hurricane') {
+    return { ...effect, position: { ...effect.position } }
+  }
+  if (effect.kind === 'water-hail') {
+    return {
+      ...effect,
+      horizontalVelocity: { ...effect.horizontalVelocity },
+      position: { ...effect.position },
+    }
+  }
+  if (effect.kind === 'water-aura') {
+    return { ...effect, origin: { ...effect.origin } }
   }
   return {
     ...effect,

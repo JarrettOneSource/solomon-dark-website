@@ -216,11 +216,18 @@ export interface NativeSecondaryTargetEffectState {
   readonly frozenTicks: number
   readonly frozenTimeScale: number
   readonly prismaticTicks: number
+  readonly stunFactor: number
+  readonly stunTicks: number
   readonly targetId: number
   readonly timeScale: number
   readonly weakenFactor: number
   readonly worldKey: string
 }
+
+export type NativeSecondaryTargetEffectPatch = Partial<Omit<
+  NativeSecondaryTargetEffectState,
+  'targetId' | 'worldKey'
+>>
 
 export interface NativeSecondarySimulationState {
   readonly actors: readonly NativeSecondaryActorState[]
@@ -1134,6 +1141,7 @@ export function stepNativeSecondaryAbilities(
       const coldSlowTicks = Math.max(0, effect.coldSlowTicks - 1)
       const frozenTicks = Math.max(0, effect.frozenTicks - 1)
       const frostBurnTicks = Math.max(0, effect.frostBurnTicks - 1)
+      const stunTicks = Math.max(0, effect.stunTicks - 1)
       const frozenTimeScale = frozenTicks === 0
         ? 1
         : frozenTicks <= FROZEN_THAW_TICKS
@@ -1158,9 +1166,12 @@ export function stepNativeSecondaryAbilities(
         frozenTicks,
         frozenTimeScale,
         prismaticTicks: Math.max(0, effect.prismaticTicks - 1),
+        stunFactor: stunTicks > 0 ? effect.stunFactor : 1,
+        stunTicks,
         timeScale: Math.min(
           coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
           frozenTicks > 0 ? frozenTimeScale : 1,
+          stunTicks > 0 ? effect.stunFactor : 1,
         ),
       }
       return hasTargetEffect(next) ? [next] : []
@@ -5416,7 +5427,7 @@ function mergeEffect(
   source: NativeSecondarySimulationState,
   worldKey: string,
   targetId: number,
-  patch: Partial<Omit<NativeSecondaryTargetEffectState, 'targetId' | 'worldKey'>>,
+  patch: NativeSecondaryTargetEffectPatch,
 ): NativeSecondarySimulationState {
   const index = source.targetEffects.findIndex((effect) => (
     effect.worldKey === worldKey && effect.targetId === targetId
@@ -5425,6 +5436,7 @@ function mergeEffect(
   const coldSlowTicks = Math.max(current.coldSlowTicks, patch.coldSlowTicks ?? 0)
   const frozenTicks = Math.max(current.frozenTicks, patch.frozenTicks ?? 0)
   const frostBurnTicks = Math.max(current.frostBurnTicks, patch.frostBurnTicks ?? 0)
+  const stunTicks = Math.max(current.stunTicks, patch.stunTicks ?? 0)
   const next = {
     ...current,
     coldSlowFactor: patch.coldSlowTicks === undefined
@@ -5463,9 +5475,15 @@ function mergeEffect(
       ? current.frozenTimeScale
       : Math.min(current.frozenTimeScale, patch.frozenTimeScale ?? 0),
     prismaticTicks: Math.max(current.prismaticTicks, patch.prismaticTicks ?? 0),
+    stunFactor: patch.stunTicks === undefined
+      ? current.stunFactor
+      : Math.min(current.stunFactor, patch.stunFactor ?? 1),
+    stunTicks,
     timeScale: patch.timeScale === undefined
-      ? current.timeScale
-      : Math.min(current.timeScale, patch.timeScale),
+      ? Math.min(current.timeScale, patch.stunTicks === undefined
+          ? 1
+          : patch.stunFactor ?? 1)
+      : Math.min(current.timeScale, patch.timeScale, patch.stunFactor ?? 1),
     weakenFactor: patch.weakenFactor === undefined || current.weakenFactor < 1
       ? current.weakenFactor
       : patch.weakenFactor,
@@ -5474,6 +5492,24 @@ function mergeEffect(
   const targetEffects = [...source.targetEffects]
   targetEffects[index] = next
   return { ...source, targetEffects }
+}
+
+export function applyNativeSecondaryTargetEffect(
+  source: NativeSecondarySimulationState,
+  worldKey: string,
+  targetId: number,
+  patch: NativeSecondaryTargetEffectPatch,
+): NativeSecondarySimulationState {
+  if (!Number.isSafeInteger(targetId) || targetId < 0) {
+    throw new RangeError('target effect id must be a non-negative safe integer')
+  }
+  if (patch.stunTicks !== undefined && (
+    !Number.isSafeInteger(patch.stunTicks) || patch.stunTicks < 0
+  )) throw new RangeError('Stun duration must be a non-negative safe integer')
+  if (patch.stunFactor !== undefined && (
+    !Number.isFinite(patch.stunFactor) || patch.stunFactor < 0 || patch.stunFactor > 1
+  )) throw new RangeError('Stun factor must be inside [0,1]')
+  return mergeEffect(source, worldKey, targetId, patch)
 }
 
 export function applyNativeSecondaryDazzle(
@@ -5578,14 +5614,15 @@ function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryT
     frostBurnDamagePerTick: 0, frostBurnOwnerId: null, frostBurnSkillId: null,
     frostBurnSourceActorId: null, frostBurnTicks: 0,
     frozenTicks: 0, frozenTimeScale: 1,
-    prismaticTicks: 0, targetId, timeScale: 1, weakenFactor: 1, worldKey,
+    prismaticTicks: 0, stunFactor: 1, stunTicks: 0,
+    targetId, timeScale: 1, weakenFactor: 1, worldKey,
   }
 }
 
 function hasTargetEffect(effect: NativeSecondaryTargetEffectState): boolean {
   return effect.coldSlowTicks > 0 || effect.dazzleTicks > 0 || effect.disruptedTicks > 0
     || effect.fleeTicks > 0 || effect.frostBurnTicks > 0 || effect.frozenTicks > 0
-    || effect.prismaticTicks > 0 || effect.weakenFactor < 1
+    || effect.prismaticTicks > 0 || effect.stunTicks > 0 || effect.weakenFactor < 1
 }
 
 function stableTargets(targets: readonly NativeSecondaryTarget[]): readonly NativeSecondaryTarget[] {

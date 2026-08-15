@@ -4,7 +4,6 @@ import {
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
-  PRIMARY_SPELL_WATER_REACH,
   type PrimarySpellAirTransientState,
   type PrimarySpellChannelEmission,
   type PrimarySpellFireEmberState,
@@ -19,18 +18,35 @@ import {
   type NativeFireActorContact,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
+  createNativeWaterHailActor,
+  drawNativeDisintegratePercentile,
+  drawNativeSpellDamage,
+  stepNativeWaterHailActor,
+} from '../core-kernels/air-water-spell-actors.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
+import { waterFrostJetPlan } from '../core-kernels/primary-spell-water.ts'
+import {
+  airPrimaryBoltGeometry,
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
+  nativePrimaryTargetEligible,
+  primarySpellTargetPoint,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import { consumeNativeEarthBoulderContact } from '../core-kernels/native-earth-boulder.ts'
+import type { NativeSecondaryTargetEffectPatch } from '../core-kernels/native-secondary-abilities.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
-import { createNativeRng, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   damageBoneyardEnemy,
+  positionBoneyardEnemy,
   type BoneyardEnemyActor,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
@@ -41,11 +57,13 @@ import {
 export type BoneyardSpellHitKind =
   | PrimarySpellProjectileKind
   | 'air'
+  | 'air-storm'
   | 'fire-ember'
   | 'fire-explosion'
   | 'fire-good-imp'
   | 'fire-patch'
   | 'water'
+  | 'water-hail'
 export const WATER_PRIMARY_ACTOR_MASK = 0x1082
 export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
 
@@ -53,6 +71,12 @@ export interface BoneyardSpellBurnContact {
   readonly damage: number
   readonly ownerId: string
   readonly targetId: number
+}
+
+export interface BoneyardSpellTargetEffectContact {
+  readonly patch: NativeSecondaryTargetEffectPatch
+  readonly targetId: number
+  readonly worldKey: string
 }
 
 export interface BoneyardSpellHit {
@@ -72,6 +96,7 @@ export interface BoneyardSpellCombatResult {
   readonly hits: readonly BoneyardSpellHit[]
   readonly rng: NativeRngState
   readonly spells: PrimarySpellSimulationState
+  readonly targetEffects: readonly BoneyardSpellTargetEffectContact[]
 }
 
 export type BoneyardSpellWorldContact = (
@@ -84,6 +109,13 @@ export type BoneyardSpellDamageMultiplier = (
   actorId: number,
   spellKind: BoneyardSpellHitKind,
 ) => number
+
+export type ResolveBoneyardSpellEnemyMovement = (
+  actorId: number,
+  start: Readonly<Vector2>,
+  requested: Readonly<Vector2>,
+  radius: number,
+) => Readonly<Vector2>
 
 /**
  * Resolves the spell-contact portion of one authoritative Boneyard tick.
@@ -104,21 +136,32 @@ export function resolveBoneyardSpellCombat(
   fireballSceneryTargets: readonly PrimarySpellTarget[] = [],
   lethalObserver?: BoneyardEnemyLethalObserver,
   fireActorContacts: readonly NativeFireActorContact[] = [],
+  resolveEnemyMovement: ResolveBoneyardSpellEnemyMovement = (_actorId, _start, requested) => (
+    requested
+  ),
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
+  let rng = sourceRng
   const consumedProjectileIds = new Set<number>()
   const consumedTransientIds = new Set<number>()
   const updatedProjectiles = new Map<number, PrimarySpellProjectileState>()
   const hits: BoneyardSpellHit[] = []
   const burns: BoneyardSpellBurnContact[] = []
   const events: BoneyardEnemySemanticEvent[] = []
+  const targetEffects: BoneyardSpellTargetEffectContact[] = []
   const impactTransients: PrimarySpellTransientState[] = []
+  const ownedTransients: PrimarySpellTransientState[] = []
   let nextSpellId = sourceSpells.nextId
-  let rng = sourceRng
   const queueBurn = (targetId: number, ownerId: string, damage: number): void => {
     if (damage <= 0) return
     burns.push(Object.freeze({ damage, ownerId, targetId }))
+  }
+  const queueTargetEffect = (
+    targetId: number,
+    patch: NativeSecondaryTargetEffectPatch,
+  ): void => {
+    targetEffects.push(Object.freeze({ patch: Object.freeze({ ...patch }), targetId, worldKey }))
   }
 
   const publishContactImpact = (
@@ -396,55 +439,271 @@ export function resolveBoneyardSpellCombat(
 
   for (const emission of [...channelEmissions].sort(bySpellId)) {
     if (emission.worldKey !== worldKey) continue
+    if (emission.kind === 'air') {
+      if (emission.primarySkill.kind !== 'air') {
+        throw new Error('Air channel emission does not own an Air skill payload')
+      }
+      const rows = primaryTargetRows(enemies)
+      const first = selectedAirTargets(rows, sourceSpells, emission)[0]
+      if (!first) continue
+      const contactedIds = new Set<string>()
+      let target: PrimarySpellTarget | null = first
+      let damage = emission.damage
+      let previousPoint = emission.origin
+      for (let hop = 0; target && hop <= emission.primarySkill.arcCount; hop += 1) {
+        const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+          candidate.id === target!.id
+        ))
+        if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+        contactedIds.add(row.target.id)
+
+        const stun = airStunModifier(emission)
+        if (stun) queueTargetEffect(row.actor.id, stun)
+        let disintegrate = false
+        if (
+          !emission.underpowered
+          && emission.primarySkill.disintegrateChance > 0
+          && (row.target.actorFlags & 0x2) !== 0
+          && tick % 40 === row.target.registrationOrder % 40
+        ) {
+          const draw = drawNativeDisintegratePercentile(
+            rng,
+            emission.primarySkill.disintegrateChance,
+          )
+          rng = draw.rng
+          disintegrate = draw.success
+        }
+        // Lightning consumes this visual scalar after the optional execute
+        // roll even though the web renderer receives semantic bolt geometry.
+        const contactScalar = drawNativeFloat(rng, Math.fround(0.5))
+        rng = contactScalar.state
+        const electricDamage = damage * validatedDamageMultiplier(
+          damageMultiplier(row.actor.id, 'air'),
+        )
+        const contact = applyDamageWithDisintegrate(
+          enemies,
+          row.actor.id,
+          electricDamage,
+          emission.ownerId,
+          tick,
+          disintegrate,
+        )
+        enemies = contact.enemies
+        events.push(...contact.events)
+        if (contact.accepted) {
+          hits.push({
+            actorId: row.actor.id,
+            amount: contact.amount,
+            killed: contact.killed,
+            ownerId: emission.ownerId,
+            spellId: emission.id,
+            spellKind: 'air',
+            tick,
+          })
+        }
+
+        const currentPoint = primarySpellTargetPoint(row.target)
+        if (hop > 0) {
+          const direction = normalizedDifference(previousPoint, currentPoint)
+          const geometry = airPrimaryBoltGeometry(previousPoint, direction, currentPoint)
+          ownedTransients.push({
+            ageTicks: 0,
+            birthTick: tick,
+            direction,
+            endpoint: geometry.endpoint,
+            hurricaneCharge: 0,
+            id: nextSpellId,
+            kind: 'air',
+            lightRegistration: registerLightProvider?.('transient') ?? {
+              managerLane: 'transient',
+              registrationOrdinal: nextSpellId,
+            },
+            midpoint: geometry.midpoint,
+            origin: geometry.source,
+            ownerId: emission.ownerId,
+            targetId: row.target.id,
+            underpowered: emission.underpowered,
+            variant: nextSpellId % 4,
+            worldKey,
+          })
+          nextSpellId += 1
+        }
+        previousPoint = currentPoint
+        damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+        target = emission.underpowered || hop >= emission.primarySkill.arcCount
+          ? null
+          : nearestUnusedAirChainTarget(
+          primaryTargetRows(enemies).map(({ target: candidate }) => candidate),
+          row.target.position,
+          contactedIds,
+          )
+      }
+      continue
+    }
+
+    if (emission.primarySkill.kind !== 'water') {
+      throw new Error('Water channel emission does not own a Water skill payload')
+    }
+    const profile = emission.primarySkill
+    if (!emission.underpowered && profile.hailThreshold > 0) {
+      for (const frost of waterEmissionTransients(sourceSpells, emission)) {
+        const visualGate = drawNativeInteger(rng, 250)
+        rng = visualGate.state
+        if (visualGate.value >= profile.hailThreshold) continue
+        const plan = waterFrostJetPlan(frost)
+        const hail = createNativeWaterHailActor(
+          nextSpellId,
+          emission.ownerId,
+          worldKey,
+          tick,
+          plan.position,
+          frost.direction,
+          rng,
+        )
+        rng = hail.rng
+        ownedTransients.push(hail.actor)
+        nextSpellId += 1
+      }
+    }
+    if (!emission.underpowered && profile.auraRadius > 0) {
+      for (const row of nativePrimaryRootTargetRows(
+        enemies,
+        emission.queryOrigin,
+        profile.auraRadius,
+        0x2,
+      )) {
+        queueTargetEffect(row.actor.id, {
+          coldSlowFactor: profile.auraMovementFactor,
+          coldSlowTicks: profile.coldDurationTicks,
+        })
+      }
+      if (tick % 6 === 0) {
+        ownedTransients.push({
+          ageTicks: 0,
+          birthTick: tick,
+          id: nextSpellId,
+          kind: 'water-aura',
+          origin: { ...emission.queryOrigin },
+          ownerId: emission.ownerId,
+          worldKey,
+        })
+        nextSpellId += 1
+      }
+    }
 
     const rows = primaryTargetRows(enemies)
-    const contacts = emission.kind === 'air'
-      ? selectedAirTargets(rows, sourceSpells, emission)
-      : nativePrimaryConeTargets({
-          actorMask: emission.underpowered
-            ? WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK
-            : WATER_PRIMARY_ACTOR_MASK,
-          aimDirection: emission.direction,
-          halfAngleDegrees: 15,
-          hasLineOfSight: (target) => (
-            firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
-          ) === null,
-          origin: emission.queryOrigin,
-          reach: PRIMARY_SPELL_WATER_REACH,
-          targets: rows.map(({ target }) => target),
-        })
+    const contacts = nativePrimaryConeTargets({
+      actorMask: emission.underpowered
+        ? WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK
+        : WATER_PRIMARY_ACTOR_MASK,
+      aimDirection: emission.direction,
+      halfAngleDegrees: emission.underpowered ? 15 : profile.halfAngleDegrees,
+      hasLineOfSight: (target) => (
+        firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+      ) === null,
+      origin: emission.queryOrigin,
+      reach: emission.underpowered ? 205 : profile.reach,
+      targets: rows.map(({ target }) => target),
+    })
     for (const target of contacts) {
-      const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
-      if (!actor) continue
-      const amount = emission.damage
-        * validatedDamageMultiplier(damageMultiplier(actor.id, emission.kind))
+      const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+        candidate.id === target.id
+      ))
+      if (!row) continue
+      queueTargetEffect(row.actor.id, {
+        coldSlowFactor: emission.underpowered ? 0.75 : profile.coldMovementFactor,
+        coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
+      })
+      if (!emission.underpowered && profile.pushbackPercent > 0) {
+        enemies = applyWaterPushback(
+          enemies,
+          row.actor,
+          emission.queryOrigin,
+          profile.pushbackPercent,
+          profile.reach,
+          resolveEnemyMovement,
+        )
+      }
+      const amount = emission.damage * validatedDamageMultiplier(
+        damageMultiplier(row.actor.id, 'water'),
+      )
       const damaged = damageBoneyardEnemy(enemies, {
-        actorId: actor.id,
+        actorId: row.actor.id,
         amount,
         lethalObserver,
         sourcePlayerId: emission.ownerId,
         tick,
       })
       if (!damaged.accepted) continue
-
       enemies = damaged.store
       events.push(...damaged.events)
       hits.push({
-        actorId: actor.id,
+        actorId: row.actor.id,
         amount,
         killed: damaged.killed,
         ownerId: emission.ownerId,
         spellId: emission.id,
-        spellKind: emission.kind,
+        spellKind: 'water',
+        tick,
+      })
+
+      if (emission.underpowered || profile.hailThreshold <= 0) continue
+      const hail = drawNativeInteger(rng, 3_000)
+      rng = hail.state
+      if (hail.value >= profile.hailThreshold) continue
+      const hailDamage = drawNativeSpellDamage(
+        rng,
+        profile.hailDamageMinimum,
+        profile.hailDamageMaximum,
+      )
+      rng = hailDamage.rng
+      const hailContact = damageBoneyardEnemy(enemies, {
+        actorId: row.actor.id,
+        amount: hailDamage.value,
+        sourcePlayerId: emission.ownerId,
+        tick,
+      })
+      if (!hailContact.accepted) continue
+      enemies = hailContact.store
+      events.push(...hailContact.events)
+      hits.push({
+        actorId: row.actor.id,
+        amount: hailDamage.value,
+        killed: hailContact.killed,
+        ownerId: emission.ownerId,
+        spellId: emission.id,
+        spellKind: 'water-hail',
         tick,
       })
     }
+  }
+
+  const steppedTransients: PrimarySpellTransientState[] = []
+  for (const effect of sourceSpells.transients) {
+    if (effect.worldKey !== worldKey) {
+      steppedTransients.push(effect)
+      continue
+    }
+    if (effect.kind === 'water-hail') {
+      if (effect.birthTick === tick) {
+        steppedTransients.push(effect)
+        continue
+      }
+      const stepped = stepNativeWaterHailActor(effect, rng)
+      rng = stepped.rng
+      if (stepped.actor) steppedTransients.push(stepped.actor)
+      continue
+    }
+    steppedTransients.push(effect)
   }
 
   const spells = consumedProjectileIds.size === 0
     && consumedTransientIds.size === 0
     && updatedProjectiles.size === 0
     && impactTransients.length === 0
+    && ownedTransients.length === 0
+    && steppedTransients.length === sourceSpells.transients.length
+    && steppedTransients.every((effect, index) => effect === sourceSpells.transients[index])
     ? sourceSpells
     : {
         ...sourceSpells,
@@ -452,12 +711,12 @@ export function resolveBoneyardSpellCombat(
         projectiles: sourceSpells.projectiles
           .filter((projectile) => !consumedProjectileIds.has(projectile.id))
           .map((projectile) => updatedProjectiles.get(projectile.id) ?? projectile),
-        transients: impactTransients.length === 0
-          ? sourceSpells.transients.filter((effect) => !consumedTransientIds.has(effect.id))
-          : [
-              ...sourceSpells.transients.filter((effect) => !consumedTransientIds.has(effect.id)),
-              ...impactTransients,
-            ],
+        transients: [
+          ...steppedTransients
+            .filter((effect) => !consumedTransientIds.has(effect.id)),
+          ...impactTransients,
+          ...ownedTransients,
+        ],
       }
 
   return {
@@ -467,7 +726,24 @@ export function resolveBoneyardSpellCombat(
     hits: Object.freeze(hits),
     rng,
     spells,
+    targetEffects: Object.freeze(targetEffects),
   }
+}
+
+function waterEmissionTransients(
+  spells: PrimarySpellSimulationState,
+  emission: PrimarySpellChannelEmission,
+): readonly Extract<PrimarySpellTransientState, { kind: 'water' }>[] {
+  return spells.transients.filter((effect): effect is Extract<
+    PrimarySpellTransientState,
+    { kind: 'water' }
+  > => (
+    effect.kind === 'water'
+    && effect.ownerId === emission.ownerId
+    && effect.worldKey === emission.worldKey
+    && effect.id >= emission.id
+    && effect.id < emission.id + 2
+  )).sort(bySpellId)
 }
 
 function continuePiercingEtherProjectile(
@@ -512,6 +788,193 @@ type BoneyardSpellTarget = BoneyardEnemyActor | BoneyardMaggotActor
 interface PrimaryTargetRow {
   readonly actor: BoneyardSpellTarget | null
   readonly target: PrimarySpellTarget
+}
+
+const NATIVE_LIGHTNING_CHAIN_RADIUS = 200
+const NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR = Math.fround(0.600000024)
+const NATIVE_LIGHTNING_STUN_TICKS = 25
+const NATIVE_CHILL_BASE_REACH_OFFSET = 25
+const NATIVE_CHILL_OUTER_RADIUS_FACTOR = 0.75
+const NATIVE_CHILL_INNER_RADIUS_FACTOR = 0.5
+const NATIVE_CHILL_IMPULSE_FACTOR = 2.5
+
+function nearestUnusedAirChainTarget(
+  targets: readonly PrimarySpellTarget[],
+  origin: Readonly<Vector2>,
+  contactedIds: ReadonlySet<string>,
+): PrimarySpellTarget | null {
+  let selected: PrimarySpellTarget | null = null
+  let selectedDistanceSquared = Number.POSITIVE_INFINITY
+  for (const target of nativePrimaryRootTargets(
+    { ...origin },
+    NATIVE_LIGHTNING_CHAIN_RADIUS,
+    0x2,
+    targets,
+  )) {
+    if (contactedIds.has(target.id)) continue
+    const distanceSquared = squaredDistance(origin, target.position)
+    if (distanceSquared < selectedDistanceSquared) {
+      selected = target
+      selectedDistanceSquared = distanceSquared
+    }
+  }
+  return selected
+}
+
+function airStunModifier(
+  emission: PrimarySpellChannelEmission,
+): NativeSecondaryTargetEffectPatch | null {
+  if (
+    emission.underpowered
+    ||
+    emission.primarySkill.kind !== 'air'
+    || emission.primarySkill.stunMovementFactor >= 1
+  ) return null
+  return {
+    stunFactor: emission.primarySkill.stunMovementFactor,
+    stunTicks: NATIVE_LIGHTNING_STUN_TICKS,
+  }
+}
+
+function applyDamageWithDisintegrate(
+  source: BoneyardEnemyStore,
+  actorId: number,
+  amount: number,
+  ownerId: string,
+  tick: number,
+  disintegrate: boolean,
+): {
+  readonly accepted: boolean
+  readonly amount: number
+  readonly enemies: BoneyardEnemyStore
+  readonly events: readonly BoneyardEnemySemanticEvent[]
+  readonly killed: boolean
+} {
+  const ordinary = damageBoneyardEnemy(source, {
+    actorId,
+    amount,
+    sourcePlayerId: ownerId,
+    tick,
+  })
+  if (!ordinary.accepted || ordinary.killed || !disintegrate) {
+    return {
+      accepted: ordinary.accepted,
+      amount,
+      enemies: ordinary.store,
+      events: ordinary.events,
+      killed: ordinary.killed,
+    }
+  }
+  const target = boneyardSpellTargetById(ordinary.store, actorId)
+  if (!target || target.currentHealth >= targetMaximumHealth(target) * 0.2) {
+    return {
+      accepted: true,
+      amount,
+      enemies: ordinary.store,
+      events: ordinary.events,
+      killed: false,
+    }
+  }
+  const executeAmount = target.currentHealth
+  if (executeAmount <= 0) {
+    return {
+      accepted: true,
+      amount,
+      enemies: ordinary.store,
+      events: ordinary.events,
+      killed: false,
+    }
+  }
+  const executed = damageBoneyardEnemy(ordinary.store, {
+    actorId,
+    amount: executeAmount,
+    sourcePlayerId: ownerId,
+    tick,
+  })
+  return {
+    accepted: true,
+    amount: amount + (executed.accepted ? executeAmount : 0),
+    enemies: executed.store,
+    events: executed.accepted
+      ? Object.freeze([...ordinary.events, ...executed.events])
+      : ordinary.events,
+    killed: executed.accepted && executed.killed,
+  }
+}
+
+function applyWaterPushback(
+  source: BoneyardEnemyStore,
+  actor: BoneyardSpellTarget,
+  origin: Readonly<Vector2>,
+  pushback: number,
+  reach: number,
+  resolveMovement: ResolveBoneyardSpellEnemyMovement,
+): BoneyardEnemyStore {
+  const distanceSquared = squaredDistance(origin, actor.position)
+  const baseRadius = reach - NATIVE_CHILL_BASE_REACH_OFFSET
+  const outerSquared = NATIVE_CHILL_OUTER_RADIUS_FACTOR * baseRadius * baseRadius
+  if (distanceSquared >= outerSquared) return source
+  const innerSquared = NATIVE_CHILL_INNER_RADIUS_FACTOR * outerSquared
+  const attenuation = distanceSquared <= innerSquared
+    ? 1
+    : (outerSquared - distanceSquared) / (outerSquared - innerSquared)
+  const distance = Math.sqrt(distanceSquared)
+  if (distance === 0) return source
+  const magnitude = pushback * NATIVE_CHILL_IMPULSE_FACTOR * attenuation
+  const requested = {
+    x: actor.position.x + (actor.position.x - origin.x) / distance * magnitude,
+    y: actor.position.y + (actor.position.y - origin.y) / distance * magnitude,
+  }
+  const resolved = resolveMovement(
+    actor.id,
+    actor.position,
+    requested,
+    targetBodyRadius(actor),
+  )
+  return positionBoneyardEnemy(source, actor.id, resolved).store
+}
+
+function nativePrimaryRootTargetRows(
+  store: BoneyardEnemyStore,
+  origin: Readonly<Vector2>,
+  reach: number,
+  actorMask: number,
+): readonly PrimaryTargetRow[] {
+  const rows = primaryTargetRows(store)
+  const targets = new Set(nativePrimaryRootTargets(
+    { ...origin },
+    reach,
+    actorMask,
+    rows.map(({ target }) => target),
+  ).map(({ id }) => id))
+  return rows.filter(({ target }) => targets.has(target.id))
+}
+
+function boneyardSpellTargetById(
+  store: BoneyardEnemyStore,
+  actorId: number,
+): BoneyardSpellTarget | null {
+  return store.actors.find(({ id }) => id === actorId)
+    ?? store.maggots.find(({ id }) => id === actorId)
+    ?? null
+}
+
+function targetMaximumHealth(target: BoneyardSpellTarget): number {
+  return 'config' in target ? target.config.maximumHealth : target.maximumHealth
+}
+
+function targetBodyRadius(target: BoneyardSpellTarget): number {
+  return 'config' in target ? target.config.collisionRadius : target.collisionRadius
+}
+
+function normalizedDifference(
+  origin: Readonly<Vector2>,
+  target: Readonly<Vector2>,
+): Vector2 {
+  const x = target.x - origin.x
+  const y = target.y - origin.y
+  const length = Math.hypot(x, y)
+  return length === 0 ? { x: 0, y: -1 } : { x: x / length, y: y / length }
 }
 
 function selectedAirTargets(

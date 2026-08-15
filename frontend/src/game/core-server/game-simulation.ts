@@ -86,6 +86,7 @@ import {
   applyNativeSecondaryDazzle,
   applyNativeSecondaryFireBurn,
   applyNativeSecondaryPlayerDamage,
+  applyNativeSecondaryTargetEffect,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   emitNativePlayerScreenFlash,
@@ -2159,6 +2160,13 @@ function finishGameSimulationTick(
       boneyardWorld.fireballSceneryTargets,
       lethalObserver,
       cast.fireActorContacts,
+      (_actorId, start, requested, radius) => resolveBoneyardMovement(
+        start,
+        requested,
+        boneyardWorld.bounds,
+        collision,
+        radius,
+      ),
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells
@@ -2183,6 +2191,14 @@ function finishGameSimulationTick(
         target,
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })
+    }
+    for (const effect of spellCombat.targetEffects) {
+      secondaryAbilities = applyNativeSecondaryTargetEffect(
+        secondaryAbilities,
+        effect.worldKey,
+        effect.targetId,
+        effect.patch,
+      )
     }
   }
   const players: Record<PlayerId, PlayerCharacterState> = { ...cast.players }

@@ -95,6 +95,8 @@ test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', (
     frozenTicks: 500,
     frozenTimeScale: 0,
     prismaticTicks: 0,
+    stunFactor: 1,
+    stunTicks: 0,
     targetId: 1,
     timeScale: 0,
     weakenFactor: 1,

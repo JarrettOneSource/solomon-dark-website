@@ -54,10 +54,14 @@ export interface NativeWaterPrimarySkillProfile extends NativePrimarySkillProfil
   readonly armorMaximum: number
   readonly armorPerSecond: number
   readonly auraRadius: number
+  readonly auraMovementFactor: number
   readonly auraSlowFactor: number
+  readonly coldDurationTicks: number
+  readonly coldMovementFactor: number
   readonly hailChance: number
   readonly hailDamageMaximum: number
   readonly hailDamageMinimum: number
+  readonly hailThreshold: number
   readonly halfAngleDegrees: number
   readonly kind: 'water'
   readonly minimumColdDurationTicks: number
@@ -198,29 +202,37 @@ export function nativePrimarySkillProfile(
       const hailRank = effectiveRank(skillBook, 38)
       const permafrostRank = effectiveRank(skillBook, 39)
       const widen = rankedOr(statBook, 34, 'mWiden', coneRank, 0)
+      const slowdownScale = 1 + rankedOr(
+        statBook,
+        39,
+        'mSlowdown',
+        permafrostRank,
+        0,
+      ) / 100
+      const minimumColdDurationTicks = permafrostRank > 0 ? 200 : 0
+      const auraSlowFactor = 1 - rankedOr(statBook, 37, 'mPercent', auraRank, 0) / 100
+      const hailChance = rankedOr(statBook, 38, 'mToHit', hailRank, 0)
       return Object.freeze({
         ...common,
         armorMaximum: rankedOr(statBook, 36, 'mMaxArmor', hardenRank, 0),
         armorPerSecond: rankedOr(statBook, 36, 'mArmorPlus', hardenRank, 0),
         auraRadius: rankedOr(statBook, 37, 'mRadius', auraRank, 0),
-        auraSlowFactor: 1 - rankedOr(statBook, 37, 'mPercent', auraRank, 0) / 100,
-        hailChance: rankedOr(statBook, 38, 'mToHit', hailRank, 0),
+        auraMovementFactor: auraSlowFactor,
+        auraSlowFactor,
+        coldDurationTicks: Math.max(25, minimumColdDurationTicks),
+        coldMovementFactor: 0.5 / slowdownScale,
+        hailChance,
         hailDamageMaximum: rankedOr(statBook, 38, 'mDamage2', hailRank, 0)
           * factors.damage,
         hailDamageMinimum: rankedOr(statBook, 38, 'mDamage1', hailRank, 0)
           * factors.damage,
+        hailThreshold: Math.round(hailChance * 30),
         halfAngleDegrees: 15 + widen,
         kind: 'water',
-        minimumColdDurationTicks: permafrostRank > 0 ? 200 : 0,
+        minimumColdDurationTicks,
         pushbackPercent: rankedOr(statBook, 33, 'mPushback', chillRank, 0),
         reach: 205 + 4 * widen,
-        slowdownScale: 1 + rankedOr(
-          statBook,
-          39,
-          'mSlowdown',
-          permafrostRank,
-          0,
-        ) / 100,
+        slowdownScale,
       })
     }
     case 40: {

@@ -795,6 +795,11 @@ interface DamagePresentationWork {
   rngState: number
 }
 
+export interface PositionBoneyardEnemyResult {
+  readonly accepted: boolean
+  readonly store: BoneyardEnemyStore
+}
+
 interface WorkingStep {
   actors: BoneyardEnemyActor[]
   deathEffects: BoneyardEnemyDeathEffect[]
@@ -1162,6 +1167,37 @@ export function breakBoneyardSkeletonPike(
     },
   }
   return { broke: true, store: { ...source, actors } }
+}
+
+/**
+ * Commits a collision-resolved spell impulse to the target-owned enemy row.
+ * The spell system owns the impulse formula; the active world owns collision
+ * resolution and passes only the accepted final root position here.
+ */
+export function positionBoneyardEnemy(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+  position: Readonly<BoneyardPoint>,
+): PositionBoneyardEnemyResult {
+  if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    throw new RangeError('enemy spell-impulse position must be finite')
+  }
+  const actorIndex = source.actors.findIndex((actor) => actor.id === actorId)
+  const actor = source.actors[actorIndex]
+  if (actor) {
+    if (actor.lifeState !== 'alive') return { accepted: false, store: source }
+    const actors = [...source.actors]
+    actors[actorIndex] = { ...actor, position: Object.freeze({ ...position }) }
+    return { accepted: true, store: { ...source, actors } }
+  }
+  const maggotIndex = source.maggots.findIndex((maggot) => maggot.id === actorId)
+  const maggot = source.maggots[maggotIndex]
+  if (!maggot || maggot.lifeState !== 'alive') {
+    return { accepted: false, store: source }
+  }
+  const maggots = [...source.maggots]
+  maggots[maggotIndex] = { ...maggot, position: Object.freeze({ ...position }) }
+  return { accepted: true, store: { ...source, maggots } }
 }
 
 function damageBoneyardMaggot(

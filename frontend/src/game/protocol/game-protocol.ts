@@ -50,6 +50,7 @@ import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
   PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
+  PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
   primaryCastActionEndTick,
   type PrimarySpellEarthProjectileState,
   type PrimarySpellProjectilePhase,
@@ -57,6 +58,9 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import {
+  NATIVE_HAIL_INITIAL_LIFE,
+} from '../core-kernels/air-water-spell-actors.ts'
 import {
   NATIVE_FIRE_IMPACT_LIFETIME_TICKS,
   nativeFireParticleLifetimeTicks,
@@ -3588,8 +3592,8 @@ function nativeSecondaryTargetEffectState(
     'coldSlowFactor', 'coldSlowMaterial', 'coldSlowTicks', 'dazzleMaximumTicks',
     'dazzleTicks', 'disruptedTicks', 'fleeTicks', 'frostBurnDamagePerTick',
     'frostBurnOwnerId', 'frostBurnSkillId', 'frostBurnSourceActorId', 'frostBurnTicks',
-    'frozenTicks', 'frozenTimeScale', 'prismaticTicks', 'targetId', 'timeScale',
-    'weakenFactor', 'worldKey',
+    'frozenTicks', 'frozenTimeScale', 'prismaticTicks', 'stunFactor', 'stunTicks',
+    'targetId', 'timeScale', 'weakenFactor', 'worldKey',
   ])
   const dazzleMaximumTicks = nonnegativeInteger(
     source.dazzleMaximumTicks,
@@ -3628,6 +3632,8 @@ function nativeSecondaryTargetEffectState(
     frozenTicks: nonnegativeInteger(source.frozenTicks, `${field}.frozenTicks`),
     frozenTimeScale: unitInterval(source.frozenTimeScale, `${field}.frozenTimeScale`),
     prismaticTicks: nonnegativeInteger(source.prismaticTicks, `${field}.prismaticTicks`),
+    stunFactor: unitInterval(source.stunFactor, `${field}.stunFactor`),
+    stunTicks: nonnegativeInteger(source.stunTicks, `${field}.stunTicks`),
     targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
     timeScale: unitInterval(source.timeScale, `${field}.timeScale`),
     weakenFactor: unitInterval(source.weakenFactor, `${field}.weakenFactor`),
@@ -3901,6 +3907,135 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   const source = record(value, field)
   if (isNativePlayerStaffTransient(source as { kind: string })) {
     return nativePlayerStaffTransient(source, field)
+  }
+  if (source.kind === 'air-hurricane') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'charge', 'id', 'kind', 'ownerId', 'position',
+      'worldKey',
+    ])
+    const charge = finite(source.charge, `${field}.charge`)
+    if (charge <= 0 || charge > 1) {
+      throw new GameProtocolError(`${field}.charge must be within (0,1]`)
+    }
+    return {
+      ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      charge,
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'air-hurricane',
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      position: vector(source.position, `${field}.position`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'water-aura') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds its native lifetime`)
+    }
+    return {
+      ageTicks,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'water-aura',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'water-hail') {
+    onlyKeys(source, field, [
+      'ageTicks', 'birthTick', 'bounceProgress', 'bounceSoundIndex',
+      'bounceSoundPitch', 'bounceSoundSequence', 'height', 'horizontalVelocity',
+      'id', 'kind', 'life', 'ownerId', 'position', 'rotationDegrees',
+      'rotationStepDegrees', 'savedBounceVelocity', 'scale', 'verticalVelocity',
+      'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= 134) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the native Hail lifecycle`)
+    }
+    const bounceProgress = finite(source.bounceProgress, `${field}.bounceProgress`)
+    if (bounceProgress < 0 || bounceProgress > 1) {
+      throw new GameProtocolError(`${field}.bounceProgress must be within [0,1]`)
+    }
+    const bounceSoundSequence = nonnegativeInteger(
+      source.bounceSoundSequence,
+      `${field}.bounceSoundSequence`,
+    )
+    const bounceSoundIndex = source.bounceSoundIndex === null
+      ? null
+      : nonnegativeInteger(source.bounceSoundIndex, `${field}.bounceSoundIndex`)
+    if (bounceSoundIndex !== null && bounceSoundIndex > 3) {
+      throw new GameProtocolError(`${field}.bounceSoundIndex must be within [0,3]`)
+    }
+    const bounceSoundPitch = source.bounceSoundPitch === null
+      ? null
+      : finite(source.bounceSoundPitch, `${field}.bounceSoundPitch`)
+    if (bounceSoundPitch !== null && (bounceSoundPitch < 1 || bounceSoundPitch > 1.2)) {
+      throw new GameProtocolError(`${field}.bounceSoundPitch must be within [1,1.2]`)
+    }
+    if ((bounceSoundSequence === 0) !== (bounceSoundIndex === null)) {
+      throw new GameProtocolError(`${field}.bounce sound payload is inconsistent`)
+    }
+    if ((bounceSoundIndex === null) !== (bounceSoundPitch === null)) {
+      throw new GameProtocolError(`${field}.bounce sound fields must both be null or present`)
+    }
+    const height = finite(source.height, `${field}.height`)
+    if (height < -20 || height > 0) {
+      throw new GameProtocolError(`${field}.height is outside the native Bouncer range`)
+    }
+    const life = finite(source.life, `${field}.life`)
+    if (life <= 0 || life > NATIVE_HAIL_INITIAL_LIFE) {
+      throw new GameProtocolError(`${field}.life is outside the native Hail lifecycle`)
+    }
+    const rotationDegrees = finite(source.rotationDegrees, `${field}.rotationDegrees`)
+    const rotationStepDegrees = finite(
+      source.rotationStepDegrees,
+      `${field}.rotationStepDegrees`,
+    )
+    if (rotationStepDegrees < 0 || rotationStepDegrees > 11) {
+      throw new GameProtocolError(`${field}.rotationStepDegrees is outside [0,11]`)
+    }
+    const savedBounceVelocity = finite(
+      source.savedBounceVelocity,
+      `${field}.savedBounceVelocity`,
+    )
+    if (savedBounceVelocity < -5 || savedBounceVelocity > 0) {
+      throw new GameProtocolError(`${field}.savedBounceVelocity is outside [-5,0]`)
+    }
+    const scale = finite(source.scale, `${field}.scale`)
+    if (scale < 1 || scale > 2) {
+      throw new GameProtocolError(`${field}.scale is outside [1,2]`)
+    }
+    const verticalVelocity = finite(source.verticalVelocity, `${field}.verticalVelocity`)
+    if (verticalVelocity < -5 || verticalVelocity > 20) {
+      throw new GameProtocolError(`${field}.verticalVelocity is outside the Bouncer range`)
+    }
+    return {
+      ageTicks,
+      birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      bounceProgress,
+      bounceSoundIndex,
+      bounceSoundPitch,
+      bounceSoundSequence,
+      height,
+      horizontalVelocity: vector(source.horizontalVelocity, `${field}.horizontalVelocity`),
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'water-hail',
+      life,
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      position: vector(source.position, `${field}.position`),
+      rotationDegrees,
+      rotationStepDegrees,
+      savedBounceVelocity,
+      scale,
+      verticalVelocity,
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
   }
   if (source.kind === 'earth-called-rock') {
     onlyKeys(source, field, [
@@ -4323,7 +4458,15 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     source.kind === 'water'
       ? [...transientKeys, 'obstructionDistance', 'obstructionPoint', 'underpowered']
       : source.kind === 'air'
-        ? [...transientKeys, 'birthTick', 'endpoint', 'midpoint', 'targetId', 'underpowered']
+        ? [
+            ...transientKeys,
+            'birthTick',
+            'endpoint',
+            'hurricaneCharge',
+            'midpoint',
+            'targetId',
+            'underpowered',
+          ]
       : transientKeys,
   )
   if (source.kind !== 'air' && source.kind !== 'fire' && source.kind !== 'water') {
@@ -4392,10 +4535,15 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     if (ageTicks >= lifetimeTicks) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the Air contact lifetime`)
     }
+    const hurricaneCharge = finite(source.hurricaneCharge, `${field}.hurricaneCharge`)
+    if (hurricaneCharge < 0 || hurricaneCharge > 1) {
+      throw new GameProtocolError(`${field}.hurricaneCharge must be within [0,1]`)
+    }
     return {
       ...common,
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
       endpoint: vector(source.endpoint, `${field}.endpoint`),
+      hurricaneCharge,
       kind: 'air',
       lightRegistration: nativeLightProviderRegistration(
         source.lightRegistration,

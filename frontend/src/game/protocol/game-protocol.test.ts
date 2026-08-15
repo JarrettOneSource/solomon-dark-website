@@ -1875,6 +1875,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     birthTick: 91,
     direction: { x: 0, y: -1 },
     endpoint: { x: 820, y: 180 },
+    hurricaneCharge: 0,
     id: 1,
     kind: 'air',
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
@@ -2509,6 +2510,71 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   }), /lifetimeTicks does not match/)
 })
 
+test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycles', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const effects = [
+    {
+      ageTicks: 20,
+      birthTick: 3,
+      charge: 0.5,
+      id: 1,
+      kind: 'air-hurricane',
+      ownerId: 'player-1',
+      position: { x: 10, y: 20 },
+      worldKey: 'hub:courtyard',
+    },
+    {
+      ageTicks: 2,
+      birthTick: 3,
+      id: 2,
+      kind: 'water-aura',
+      origin: { x: 10, y: 20 },
+      ownerId: 'player-1',
+      worldKey: 'hub:courtyard',
+    },
+    {
+      ageTicks: 20,
+      birthTick: 3,
+      bounceProgress: 0.4,
+      bounceSoundIndex: 2,
+      bounceSoundPitch: 1.1,
+      bounceSoundSequence: 1,
+      height: -4,
+      horizontalVelocity: { x: 3, y: -4 },
+      id: 3,
+      kind: 'water-hail',
+      life: Math.fround(1.7),
+      ownerId: 'player-1',
+      position: { x: 10, y: 20 },
+      rotationDegrees: 200,
+      rotationStepDegrees: 4,
+      savedBounceVelocity: -2,
+      scale: 1.5,
+      verticalVelocity: 1,
+      worldKey: 'hub:courtyard',
+    },
+  ]
+  const decodeEffects = (transients: unknown) => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      primarySpells: { nextId: 4, projectiles: [], transients },
+    },
+    sequence: 2,
+  }))
+  const decoded = decodeEffects(effects)
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.primarySpells.transients, effects)
+  assert.throws(() => decodeEffects([{ ...effects[0], charge: 0 }]), /charge must be within/)
+  assert.throws(() => decodeEffects([{ ...effects[1], ageTicks: 10 }]), /native lifetime/)
+  assert.throws(() => decodeEffects([{ ...effects[2], ageTicks: 134 }]), /Hail lifecycle/)
+})
+
 test('protocol strictly validates nested native Region screen-feedback events', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2629,6 +2695,8 @@ test('protocol v37 round-trips Frozen and FrostBurn target ownership without cli
     frozenTicks: 500,
     frozenTimeScale: 0,
     prismaticTicks: 0,
+    stunFactor: 1,
+    stunTicks: 0,
     targetId: 7,
     timeScale: 0,
     weakenFactor: 1,

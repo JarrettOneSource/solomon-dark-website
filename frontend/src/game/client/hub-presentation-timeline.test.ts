@@ -315,6 +315,7 @@ test('admits retained Air, Water, and Fire births on their owned 100 Hz ticks', 
     birthTick,
     direction: { x: 1, y: 0 },
     endpoint: { x: 300, y: 200 },
+    hurricaneCharge: 0,
     id: 1_000 + birthTick,
     kind: 'air' as const,
     lightRegistration: {

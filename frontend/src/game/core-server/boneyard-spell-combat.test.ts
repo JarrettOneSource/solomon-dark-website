@@ -24,10 +24,43 @@ import {
   resolveBoneyardSpellCombat,
   WATER_PRIMARY_ACTOR_MASK,
   WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK,
+  type BoneyardSpellWorldContact,
 } from './boneyard-spell-combat.ts'
 
 const WORLD_KEY = 'boneyard:combat-test'
 const COMBAT_RNG = createNativeRng(17)
+
+function resolveCombatWithAuthority(
+  enemies: BoneyardEnemyStore,
+  spells: PrimarySpellSimulationState,
+  emissions: readonly PrimarySpellChannelEmission[],
+  tick: number,
+  options: Readonly<{
+    firstWorldContact?: BoneyardSpellWorldContact | null
+    resolveMovement?: (
+      actorId: number,
+      start: Readonly<{ x: number; y: number }>,
+      requested: Readonly<{ x: number; y: number }>,
+      radius: number,
+    ) => Readonly<{ x: number; y: number }>
+    damageMultiplier?: (actorId: number, kind: string) => number
+    rngSeed?: number
+  }> = {},
+) {
+  return resolveBoneyardSpellCombat(
+    enemies,
+    spells,
+    emissions,
+    tick,
+    WORLD_KEY,
+    createNativeRng(options.rngSeed ?? 0),
+    options.firstWorldContact ?? null,
+    undefined,
+    options.damageMultiplier ?? (() => 1),
+    [],
+    options.resolveMovement ?? ((_actorId, _start, requested) => requested),
+  )
+}
 
 test('Fire uses the post-move same-cell point query, projected slot order, and strict radius sum', () => {
   const enemies = spawnEnemies([
@@ -516,6 +549,246 @@ test('Air damages only the hostile selected by its semantic target id', () => {
   assert.equal(result.enemies.actors[1]?.currentHealth, 4.975)
 })
 
+test('Lightning chains to the nearest unused roots, decays in float32, and attaches Stun', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 250, y: 0 }, token: 'SKELETON' },
+  ])
+  const profile = {
+    arcCount: 2,
+    damageMaximum: 100,
+    damageMinimum: 100,
+    damageRollCount: 1,
+    disintegrateChance: 0,
+    hurricaneDamageMaximum: 0,
+    hurricaneDamageMinimum: 0,
+    kind: 'air',
+    manaCost: 12,
+    rank: 1,
+    skillId: 24,
+    stunMovementFactor: 0.3,
+  } as const
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({
+      transients: [transient({ id: 10, kind: 'air', targetId: 'enemy:1' })],
+    }),
+    [emission({ damage: 1, id: 10, kind: 'air', primarySkill: profile })],
+    1,
+    { damageMultiplier: (actorId) => actorId === 2 ? 2 : 1 },
+  )
+
+  const secondHop = Math.fround(1 * Math.fround(0.600000024))
+  const thirdHop = Math.fround(secondHop * Math.fround(0.600000024))
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2, 3])
+  assert.equal(result.hits[0]?.amount, 1)
+  assert.equal(result.hits[1]?.amount, secondHop * 2, 'Prismatic doubles electric damage')
+  assert.equal(result.hits[2]?.amount, thirdHop)
+  assert.deepEqual(result.targetEffects, [1, 2, 3].map((targetId) => ({
+    patch: { stunFactor: 0.3, stunTicks: 25 },
+    targetId,
+    worldKey: WORLD_KEY,
+  })))
+  const chainBodies = result.spells.transients.filter(({ kind }) => kind === 'air')
+  assert.equal(chainBodies.length, 3)
+  assert.deepEqual(chainBodies.slice(1).map((effect) => (
+    effect.kind === 'air' ? effect.targetId : null
+  )), ['enemy:2', 'enemy:3'])
+})
+
+test('Disintegrate executes only below the strict post-hit twenty-percent gate', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+  ])
+  const profile = {
+    arcCount: 0,
+    damageMaximum: 400,
+    damageMinimum: 400,
+    damageRollCount: 1,
+    disintegrateChance: 100,
+    hurricaneDamageMaximum: 0,
+    hurricaneDamageMinimum: 0,
+    kind: 'air',
+    manaCost: 12,
+    rank: 1,
+    skillId: 24,
+    stunMovementFactor: 1,
+  } as const
+  const spells = spellState({
+    transients: [transient({ id: 10, kind: 'air', targetId: 'enemy:1' })],
+  })
+  const equality = resolveCombatWithAuthority(
+    enemies,
+    spells,
+    [emission({ damage: 4, id: 10, kind: 'air', primarySkill: profile })],
+    40,
+  )
+  assert.equal(equality.enemies.actors[0]?.lifeState, 'alive')
+  assert.equal(equality.enemies.actors[0]?.currentHealth, 1)
+
+  const below = resolveCombatWithAuthority(
+    enemies,
+    spells,
+    [emission({ damage: 4.01, id: 10, kind: 'air', primarySkill: profile })],
+    40,
+  )
+  assert.equal(below.enemies.actors[0]?.lifeState, 'dying')
+  assert.equal(below.enemies.actors[0]?.currentHealth, 0)
+  assert.equal(below.hits[0]?.amount, 5)
+})
+
+test('underpowered channels suppress every learned Air and Water branch', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 100 }, token: 'SKELETON' },
+  ])
+  const airProfile = {
+    arcCount: 3,
+    damageMaximum: 100,
+    damageMinimum: 100,
+    damageRollCount: 1,
+    disintegrateChance: 100,
+    hurricaneDamageMaximum: 10,
+    hurricaneDamageMinimum: 5,
+    kind: 'air',
+    manaCost: 12,
+    rank: 1,
+    skillId: 24,
+    stunMovementFactor: 0.2,
+  } as const
+  const air = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [transient({ id: 10, kind: 'air', targetId: 'enemy:1' })] }),
+    [emission({
+      damage: 1,
+      id: 10,
+      kind: 'air',
+      primarySkill: airProfile,
+      underpowered: true,
+    })],
+    40,
+  )
+  assert.deepEqual(air.hits.map(({ actorId }) => actorId), [1])
+  assert.deepEqual(air.targetEffects, [])
+  assert.equal(air.spells.transients.filter(({ kind }) => kind === 'air').length, 1)
+  assert.equal(air.rng.indexA, 1, 'weak Air consumes only its ordinary contact scalar')
+
+  const waterProfile = {
+    armorMaximum: 25,
+    armorPerSecond: 8,
+    auraMovementFactor: 0.4,
+    auraRadius: 120,
+    auraSlowFactor: 0.4,
+    coldDurationTicks: 200,
+    coldMovementFactor: 0.25,
+    damageMaximum: 100,
+    damageMinimum: 100,
+    damageRollCount: 1,
+    hailChance: 100,
+    hailDamageMaximum: 10,
+    hailDamageMinimum: 5,
+    hailThreshold: 3_000,
+    halfAngleDegrees: 25,
+    kind: 'water',
+    manaCost: 12.5,
+    minimumColdDurationTicks: 200,
+    pushbackPercent: 4,
+    rank: 1,
+    reach: 245,
+    skillId: 32,
+    slowdownScale: 2,
+  } as const
+  const movementRequests: unknown[] = []
+  const water = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [emission({
+      damage: 1,
+      id: 11,
+      kind: 'water',
+      primarySkill: waterProfile,
+      underpowered: true,
+    })],
+    1,
+    { resolveMovement: (...request) => {
+      movementRequests.push(request)
+      return request[2]
+    } },
+  )
+  assert.deepEqual(water.hits.map(({ spellKind }) => spellKind), ['water'])
+  assert.deepEqual(water.targetEffects, [{
+    patch: { coldSlowFactor: 0.75, coldSlowTicks: 25 },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+  assert.equal(water.spells.transients.some(({ kind }) => kind === 'water-aura'), false)
+  assert.deepEqual(movementRequests, [])
+  assert.equal(water.rng.indexA, 0)
+})
+
+test('Frost applies widened cone cold, Chill pushback, Aura, Permafrost, and Hail authority', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 50, y: 0 }, token: 'SKELETON' },
+    { position: { x: 230, y: 60 }, token: 'SKELETON' },
+  ])
+  const movementRequests: Readonly<{ x: number; y: number }>[] = []
+  const profile = {
+    armorMaximum: 0,
+    armorPerSecond: 0,
+    auraMovementFactor: 0.4,
+    auraRadius: 120,
+    auraSlowFactor: 0.4,
+    coldDurationTicks: 200,
+    coldMovementFactor: 0.25,
+    damageMaximum: 100,
+    damageMinimum: 100,
+    damageRollCount: 1,
+    hailDamageMaximum: 1,
+    hailDamageMinimum: 1,
+    hailChance: 100,
+    hailThreshold: 3_000,
+    halfAngleDegrees: 25,
+    kind: 'water',
+    manaCost: 12.5,
+    minimumColdDurationTicks: 200,
+    pushbackPercent: 4,
+    rank: 1,
+    reach: 245,
+    skillId: 32,
+    slowdownScale: 2,
+  } as const
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [emission({ damage: 1, id: 11, kind: 'water', primarySkill: profile })],
+    6,
+    {
+      resolveMovement: (_actorId, _start, requested) => {
+        movementRequests.push({ ...requested })
+        return requested
+      },
+    },
+  )
+
+  assert.deepEqual(result.hits.map(({ actorId, spellKind }) => ({ actorId, spellKind })), [
+    { actorId: 1, spellKind: 'water' },
+    { actorId: 1, spellKind: 'water-hail' },
+    { actorId: 2, spellKind: 'water' },
+    { actorId: 2, spellKind: 'water-hail' },
+  ])
+  assert.equal(result.enemies.actors[0]?.currentHealth, 3)
+  assert.equal(result.enemies.actors[0]?.position.x, 60)
+  assert.deepEqual(movementRequests, [{ x: 60, y: 0 }])
+  assert.deepEqual(result.targetEffects, [
+    { patch: { coldSlowFactor: 0.4, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.25, coldSlowTicks: 200 }, targetId: 1, worldKey: WORLD_KEY },
+    { patch: { coldSlowFactor: 0.25, coldSlowTicks: 200 }, targetId: 2, worldKey: WORLD_KEY },
+  ])
+  assert.equal(result.enemies.actors[1]?.currentHealth, 3, 'Cone of Ice widens the acquired wedge')
+  assert.equal(result.spells.transients.some(({ kind }) => kind === 'water-aura'), true)
+})
+
 test('world-mismatched spells remain live without touching Boneyard actors', () => {
   const enemies = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
   const spells = spellState({
@@ -664,6 +937,7 @@ function transient(options: {
         ...common,
         birthTick: 0,
         endpoint: { x: 205, y: 0 },
+        hurricaneCharge: 0,
         kind: 'air',
         lightRegistration: {
           managerLane: 'transient',
@@ -686,6 +960,7 @@ function emission(options: {
   id: number
   kind: PrimarySpellChannelEmission['kind']
   underpowered?: boolean
+  primarySkill?: PrimarySpellChannelEmission['primarySkill']
   worldKey?: string
 }): PrimarySpellChannelEmission {
   return {
@@ -696,6 +971,46 @@ function emission(options: {
     manaCost: options.kind === 'air' ? 0.12 : 0.125,
     origin: { x: -10, y: -10 },
     ownerId: 'wizard',
+    primarySkill: options.primarySkill ?? (options.kind === 'air'
+      ? {
+          arcCount: 0,
+          damageMaximum: 2.5,
+          damageMinimum: 2.5,
+          damageRollCount: 1,
+          disintegrateChance: 0,
+          hurricaneDamageMaximum: 0,
+          hurricaneDamageMinimum: 0,
+          kind: 'air',
+          manaCost: 12,
+          rank: 1,
+          skillId: 24,
+          stunMovementFactor: 1,
+        }
+      : {
+          armorMaximum: 0,
+          armorPerSecond: 0,
+          auraMovementFactor: 1,
+          auraRadius: 0,
+          auraSlowFactor: 1,
+          coldDurationTicks: 25,
+          coldMovementFactor: 0.5,
+          damageMaximum: 2.5,
+          damageMinimum: 2.5,
+          damageRollCount: 1,
+          hailDamageMaximum: 0,
+          hailDamageMinimum: 0,
+          hailChance: 0,
+          hailThreshold: 0,
+          halfAngleDegrees: 15,
+          kind: 'water',
+          manaCost: 12.5,
+          minimumColdDurationTicks: 0,
+          pushbackPercent: 0,
+          rank: 1,
+          reach: 205,
+          skillId: 32,
+          slowdownScale: 1,
+        }),
     queryOrigin: { x: 0, y: 0 },
     underpowered: options.underpowered ?? false,
     worldKey: options.worldKey ?? WORLD_KEY,

@@ -9,7 +9,11 @@ import {
   type PlayerPrimaryCastState,
   type WizardElement,
 } from './player-character.ts'
-import type { NativePrimarySkillProfile } from './native-primary-skill-profile.ts'
+import type {
+  NativeAirPrimarySkillProfile,
+  NativePrimarySkillProfile,
+  NativeWaterPrimarySkillProfile,
+} from './native-primary-skill-profile.ts'
 import {
   drawNativeInteger,
   type NativeRngState,
@@ -82,6 +86,7 @@ import {
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire'
 export type PrimarySpellTransientKind =
   | 'air'
+  | 'air-hurricane'
   | 'earth-called-rock'
   | 'earth-impact'
   | 'ether-impact'
@@ -94,6 +99,8 @@ export type PrimarySpellTransientKind =
   | NativePlayerStaffTransient['kind']
   | 'fire-patch'
   | 'water'
+  | 'water-aura'
+  | 'water-hail'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
 interface PrimarySpellProjectileBaseState {
@@ -167,6 +174,7 @@ interface PrimarySpellChannelTransientBase {
 export interface PrimarySpellAirTransientState extends PrimarySpellChannelTransientBase {
   birthTick: number
   endpoint: Vector2
+  hurricaneCharge: number
   kind: 'air'
   lightRegistration: NativeLightProviderRegistration
   midpoint: Vector2
@@ -192,9 +200,85 @@ export interface PrimarySpellChannelEmission {
   manaCost: number
   origin: Vector2
   ownerId: string
+  primarySkill: NativeAirPrimarySkillProfile | NativeWaterPrimarySkillProfile
   queryOrigin: Vector2
   underpowered: boolean
   worldKey: string
+}
+
+interface PrimarySpellOwnedTransientBase {
+  ageTicks: number
+  birthTick: number
+  id: number
+  ownerId: string
+  worldKey: string
+}
+
+export interface PrimarySpellAirHurricaneState extends PrimarySpellOwnedTransientBase {
+  charge: number
+  kind: 'air-hurricane'
+  position: Vector2
+}
+
+export interface PrimarySpellAirStormState extends PrimarySpellOwnedTransientBase {
+  activeTicksRemaining: number
+  alpha: number
+  damageMaximum: number
+  damageMinimum: number
+  frequencyFactor: number
+  headingDegrees: number
+  kind: 'air-storm'
+  moving: boolean
+  position: Vector2
+  scale: number
+  strikeTicksRemaining: number
+}
+
+export interface PrimarySpellAirStormStrikeState extends PrimarySpellOwnedTransientBase {
+  kind: 'air-storm-strike'
+  origin: Vector2
+  targetId: string
+  targetPosition: Vector2
+}
+
+export interface PrimarySpellAirPrismaticState extends PrimarySpellOwnedTransientBase {
+  durationTicks: number
+  kind: 'air-prismatic'
+  modifierDurationTicks: number
+  origin: Vector2
+  radius: number
+}
+
+export interface PrimarySpellWaterFreezeWaveState extends PrimarySpellOwnedTransientBase {
+  alpha: number
+  freezeDurationTicks: number
+  hitTargetIds: readonly string[]
+  kind: 'water-freeze-wave'
+  life: number
+  origin: Vector2
+  radius: number
+}
+
+export interface PrimarySpellWaterAuraState extends PrimarySpellOwnedTransientBase {
+  kind: 'water-aura'
+  origin: Vector2
+}
+
+export interface PrimarySpellWaterHailState extends PrimarySpellOwnedTransientBase {
+  bounceProgress: number
+  bounceSoundIndex: number | null
+  bounceSoundPitch: number | null
+  bounceSoundSequence: number
+  height: number
+  horizontalVelocity: Vector2
+  kind: 'water-hail'
+  life: number
+  position: Vector2
+  rotationDegrees: number
+  rotationStepDegrees: number
+  savedBounceVelocity: number
+  scale: number
+  verticalVelocity: number
 }
 
 export interface PrimarySpellEarthImpactState {
@@ -295,6 +379,7 @@ export type PrimarySpellFirePatchState = NativeFirePatchState
 
 export type PrimarySpellTransientState =
   | PrimarySpellChannelTransientState
+  | PrimarySpellAirHurricaneState
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellEtherImpactState
@@ -306,6 +391,8 @@ export type PrimarySpellTransientState =
   | PrimarySpellFirePatchState
   | PrimarySpellFireParticleState
   | NativePlayerStaffTransient
+  | PrimarySpellWaterAuraState
+  | PrimarySpellWaterHailState
 
 export interface PrimarySpellSimulationState {
   nextId: number
@@ -374,6 +461,9 @@ export const PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS = 3
 export const PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS = NATIVE_ETHER_IMPACT_VISIBLE_TICKS
 export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
+export const PRIMARY_SPELL_PRISMATIC_LIFETIME_TICKS = 100
+export const PRIMARY_SPELL_STORM_STRIKE_LIFETIME_TICKS = 1
+export const PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS = 10
 export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 6
 export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
@@ -657,7 +747,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   let transients: PrimarySpellTransientState[] = []
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
-    if (effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)) {
+    if (
+      effect.kind === 'earth-called-rock'
+      || isNativePlayerStaffTransient(effect)
+      || effect.kind === 'air-hurricane'
+      || effect.kind === 'water-hail'
+    ) {
       transients.push(effect)
     } else if (effect.kind === 'fire-good-imp') {
       const stepped = stepNativeFireGoodImp(effect, {
@@ -1089,6 +1184,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     if (nextPlayer.primaryCast.channelActive) {
       switch (player.config.element) {
         case 'air': {
+          if (authority.primarySkill.kind !== 'air') {
+            throw new Error('Air caster does not own an Air primary payload')
+          }
           if (!rawHeld) break
           const underpowered = debitMana()
           const emitter = primarySpellEmitter(nextPlayer)
@@ -1107,6 +1205,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             manaCost,
             origin: emitter,
             ownerId: playerId,
+            primarySkill: authority.primarySkill,
             queryOrigin: { ...nextPlayer.position },
             underpowered,
             worldKey,
@@ -1116,6 +1215,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             birthTick: context.tick,
             direction: { ...aimDirection },
             endpoint: air.endpoint,
+            hurricaneCharge: 0,
             id: nextId,
             kind: 'air',
             lightRegistration: registerLightProvider('transient'),
@@ -1139,6 +1239,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           break
         }
         case 'water': {
+          if (authority.primarySkill.kind !== 'water') {
+            throw new Error('Water caster does not own a Water primary payload')
+          }
           if (!rawHeld) break
           const underpowered = debitMana()
           const emitter = primarySpellEmitter(nextPlayer)
@@ -1150,6 +1253,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             manaCost,
             origin: emitter,
             ownerId: playerId,
+            primarySkill: authority.primarySkill,
             queryOrigin: { ...nextPlayer.position },
             underpowered,
             worldKey,
@@ -1773,6 +1877,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'air': return effect.underpowered
       ? PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS
       : PRIMARY_SPELL_AIR_LIFETIME_TICKS
+    case 'air-hurricane': throw new Error('Hurricane lifetime is player-runtime driven')
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
@@ -1793,6 +1898,8 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'player-staff-spin':
     case 'player-staff-pike-break': throw new Error('Staff transient lifetime is system owned')
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
+    case 'water-aura': return PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS
+    case 'water-hail': throw new Error('Hail lifetime is state driven')
   }
 }
 

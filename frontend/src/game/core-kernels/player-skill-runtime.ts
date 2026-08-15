@@ -40,6 +40,8 @@ export const NATIVE_MEDITATION_ACTIVITY_BONUS_SCALE = 0.25
 export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
+export const NATIVE_HURRICANE_CHARGE_PER_TICK = Math.fround(0.0015)
+export const NATIVE_HURRICANE_RELEASE_PER_TICK = Math.fround(0.03)
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -54,6 +56,11 @@ export interface PlayerSkillRuntimeComponent {
   readonly concentrationSkillIdA: number | null
   readonly concentrationSkillIdB: number | null
   readonly equipmentModifiers: NativeEquipmentModifiers
+  readonly hardenArmor: number
+  readonly hardenArmorMaximum: number
+  readonly hardenArmorPerTick: number
+  readonly hurricaneCharge: number
+  readonly hurricaneEnabled: boolean
   readonly meditationActivityRampTicks: number
   readonly meditationIdleElapsedTicks: number
   readonly mindstarActive: boolean
@@ -111,6 +118,12 @@ export interface PlayerCreativityInsightResult {
   readonly rng: NativeRngState
 }
 
+export interface PlayerHardenArmorResult {
+  readonly absorbedDamage: number
+  readonly damage: number
+  readonly runtime: PlayerSkillRuntimeComponent
+}
+
 export interface PlayerStaffAttackResult {
   readonly actionTimingFactor: number
   readonly outcome: PlayerStaffAttackOutcome
@@ -129,6 +142,11 @@ export function createPlayerSkillRuntime(
       skillBook.permanentRanks,
       economy.equipment,
     ).modifiers,
+    hardenArmor: 0,
+    hardenArmorMaximum: 0,
+    hardenArmorPerTick: 0,
+    hurricaneCharge: 0,
+    hurricaneEnabled: false,
     meditationActivityRampTicks: 0,
     meditationIdleElapsedTicks: 0,
     mindstarActive: false,
@@ -163,11 +181,28 @@ export function refreshPlayerSkillRuntime(
     ? validConcentrationSelection(source.concentrationSkillIdB, nextSkillBook)
     : null
   const delay = meditationIdleDelayTicks(nextSkillBook, statBook)
+  const hardenArmorMaximum = effectiveSkillNumericValue(
+    nextSkillBook,
+    statBook,
+    36,
+    'mMaxArmor',
+  )
+  const hurricaneEnabled = rank(nextSkillBook, 29) > 0
   const runtime: PlayerSkillRuntimeComponent = Object.freeze({
     ...source,
     concentrationSkillIdA,
     concentrationSkillIdB,
     equipmentModifiers: equipment.modifiers,
+    hardenArmor: Math.min(source.hardenArmor, hardenArmorMaximum),
+    hardenArmorMaximum,
+    hardenArmorPerTick: effectiveSkillNumericValue(
+      nextSkillBook,
+      statBook,
+      36,
+      'mArmorPlus',
+    ) / 100,
+    hurricaneCharge: hurricaneEnabled ? source.hurricaneCharge : 0,
+    hurricaneEnabled,
     meditationActivityRampTicks: delay < 0
       ? 0
       : Math.min(source.meditationActivityRampTicks, delay),
@@ -333,10 +368,11 @@ export function resolvePlayerHarmfulContact(
       })
     }
   }
-  return Object.freeze({
-    damage: damage * (1 - (kind === 'magic'
+  const resistedDamage = damage * (1 - (kind === 'magic'
       ? derived.magicResistance
-      : derived.damageResistance)),
+      : derived.damageResistance))
+  return Object.freeze({
+    damage: Math.max(0, resistedDamage - runtime.hardenArmor),
     deflectPitch: null,
     deflected: false,
     reflectedDamage: 0,
@@ -429,7 +465,12 @@ export function playerPoisonDurationSeconds(
 export function stepPlayerSkillRuntime(
   source: PlayerSkillRuntimeComponent,
   derived: PlayerSkillDerivedStats,
-  activity: Readonly<{ acting: boolean; moving: boolean }>,
+  activity: Readonly<{
+    acting: boolean
+    moving: boolean
+    primaryChannel?: 'air' | 'earth' | 'ether' | 'fire' | 'water' | null
+    primaryUnderpowered?: boolean
+  }>,
 ): PlayerSkillRuntimeTickResult {
   const active = activity.acting || activity.moving
   let meditationActivityRampTicks = source.meditationActivityRampTicks
@@ -457,13 +498,44 @@ export function stepPlayerSkillRuntime(
     ? derived.manaRecoveryPerTick * activityMultiplier
     : derived.manaRecoveryPerTick
   meditationActivityRampTicks = Math.max(0, meditationActivityRampTicks - 1)
+  const hurricaneCharge = source.hurricaneEnabled
+      && activity.primaryChannel === 'air'
+      && !activity.primaryUnderpowered
+    ? Math.min(1, Math.fround(source.hurricaneCharge + NATIVE_HURRICANE_CHARGE_PER_TICK))
+    : Math.max(0, Math.fround(source.hurricaneCharge - NATIVE_HURRICANE_RELEASE_PER_TICK))
+  const hardenArmor = activity.primaryChannel === 'water'
+    ? activity.primaryUnderpowered
+      ? 0
+      : Math.min(
+          source.hardenArmorMaximum,
+          Math.fround(source.hardenArmor + source.hardenArmorPerTick),
+        )
+    : source.hardenArmor
   return Object.freeze({
     manaRecoveryPerTick,
     runtime: Object.freeze({
       ...source,
+      hardenArmor,
+      hurricaneCharge,
       meditationActivityRampTicks,
       meditationIdleElapsedTicks,
     }),
+  })
+}
+
+/** Native Harden is a persistent flat armor lane; incoming contact never consumes it. */
+export function applyPlayerHardenArmor(
+  source: PlayerSkillRuntimeComponent,
+  damage: number,
+): PlayerHardenArmorResult {
+  if (!Number.isFinite(damage) || damage < 0) {
+    throw new RangeError('incoming Harden damage must be finite and non-negative')
+  }
+  const absorbedDamage = Math.min(source.hardenArmor, damage)
+  return Object.freeze({
+    absorbedDamage,
+    damage: damage - absorbedDamage,
+    runtime: source,
   })
 }
 

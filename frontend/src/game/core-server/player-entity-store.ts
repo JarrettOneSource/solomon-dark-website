@@ -645,6 +645,10 @@ export function stepPlayerEntityCombatTick(
           source.locomotions[index]!.velocity.x,
           source.locomotions[index]!.velocity.y,
         ) > 0.01,
+        primaryChannel: source.primaryCasts[index]!.channelActive
+          ? source.configs[index]!.element
+          : null,
+        primaryUnderpowered: source.primaryCasts[index]!.underpowered,
       },
     )
     skillRuntimes[index] = skillTick.runtime
