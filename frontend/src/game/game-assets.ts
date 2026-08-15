@@ -14,7 +14,10 @@ import {
   skillPicker,
 } from '../lib/assets.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
-import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
+import {
+  GAME_RESIDENT_AUDIO_SOURCES,
+  loadGameAudioAsset,
+} from './game-audio-browser.ts'
 import {
   collectAssetSources,
   loadAssetBatch,
@@ -43,14 +46,12 @@ export const GAME_RESIDENT_IMAGE_SOURCES = collectAssetSources({
   primarySpells,
   skillPicker,
 })
-export const GAME_RESIDENT_AUDIO_SOURCES = collectAssetSources(GAME_AUDIO_SOURCES)
 export const GAME_RESIDENT_ASSET_SOURCES = [
   ...GAME_RESIDENT_IMAGE_SOURCES,
   ...GAME_RESIDENT_AUDIO_SOURCES,
 ]
 
 const imagePromises = new Map<string, Promise<HTMLImageElement>>()
-const audioPromises = new Map<string, Promise<HTMLAudioElement>>()
 const audioSources = new Set(GAME_RESIDENT_AUDIO_SOURCES)
 const boneyardSources = new Set(BONEYARD_RESIDENT_IMAGE_SOURCES)
 
@@ -93,33 +94,6 @@ export function loadGameImage(source: string): Promise<HTMLImageElement> {
   return promise
 }
 
-export function loadGameAudio(source: string): Promise<HTMLAudioElement> {
-  const cached = audioPromises.get(source)
-  if (cached) return cached
-
-  const promise = new Promise<HTMLAudioElement>((resolve, reject) => {
-    const audio = new Audio(source)
-    audio.preload = 'auto'
-    const cleanup = () => {
-      audio.removeEventListener('loadeddata', handleLoaded)
-      audio.removeEventListener('error', handleError)
-    }
-    const handleLoaded = () => {
-      cleanup()
-      resolve(audio)
-    }
-    const handleError = () => {
-      cleanup()
-      reject(new Error(`could not load game audio: ${source}`))
-    }
-    audio.addEventListener('loadeddata', handleLoaded)
-    audio.addEventListener('error', handleError)
-    audio.load()
-  })
-  audioPromises.set(source, promise)
-  return promise
-}
-
 export function loadGameStartupAssets(
   onProgress: (progress: GameStartupProgress) => void,
 ): Promise<void> {
@@ -130,7 +104,9 @@ export function loadGameStartupAssets(
       stage: 'loader',
     },
     {
-      load: (source) => audioSources.has(source) ? loadGameAudio(source) : loadGameImage(source),
+      load: (source) => audioSources.has(source)
+        ? loadGameAudioAsset(source)
+        : loadGameImage(source),
       sources: GAME_RESIDENT_ASSET_SOURCES,
       stage: 'resident',
     },

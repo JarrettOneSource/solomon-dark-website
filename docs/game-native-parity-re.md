@@ -2747,6 +2747,104 @@ that width from application state at `+0x1DC`; the recovered 1600-wide web
 camera therefore uses an 800-unit radius. The audio release must share the
 Teacher presentation clock so the burst and sound cannot drift.
 
+### 2026-08-15 physical-iPhone playback ownership correction
+
+An iPhone XR running iOS 18.7.6 and Safari 26.4 reproduced the reported
+Boneyard stalls while moving and casting Earth. A clean 45.062-second Hub
+receipt held 2,703 animation frames with 17 ms p95, 18 ms p99, a 28 ms
+maximum gap, and no gap above 34 ms. During the exact Boneyard reproduction,
+the same animation-frame and independent 25 ms timer probes both stopped for
+long intervals: only 33 animation callbacks arrived in 30.222 seconds, with
+848 ms median, 1,683 ms p95, and 1,822 ms p99/maximum frame gaps. No resource
+load occurred during that capture. The agreement between both clocks proves
+main-JavaScript-thread blocking rather than a renderer-only missed frame.
+
+WebKit `ScriptProfiler` samples localized more than 53 percent of the active
+stacks to synchronous `HTMLMediaElement.play()` calls reached from
+`GameAudioDirector.playSound`, primary-spell loop starts, and primary-spell
+one-shots. A transparent timing wrapper then retained real playback while
+measuring 115 calls during the exact movement/cast flow. Known synchronous
+time totaled about 4.667 seconds: `step2.wav` blocked for 2.193 seconds over
+40 calls with a 505 ms maximum call; `step1.wav` blocked for 1.543 seconds
+over 35 calls with a 358 ms maximum; and the Earth gather, rolling, and start
+cues supplied most of the remainder. That run reached a 568 ms p99 and
+1,446 ms maximum animation-frame gap. This directly falsifies a GPU,
+snapshot-rate, or asset-download explanation for the reproduced freezes.
+
+The browser loader had already fetched every audio URL, but that byte cache
+was not the playback owner: `GameAudioDirector` constructed a fresh
+`HTMLAudioElement` for every `Sound` request and every `SoundLoop` restart.
+The native registry instead keeps samples resident, creates lightweight
+overlapping channels from a resident `Sound`, retains one channel per
+`SoundStream`, and retains one channel per `SoundLoop`. The browser ownership
+contract is therefore:
+
+- decode all `Sound`, `SoundStream`, and `SoundLoop` WAVs into one resident
+  Web Audio buffer bank during the existing loader stage;
+- create a new buffer-source channel for each overlapping `Sound` request,
+  restart one keyed buffer-source channel for each `SoundStream`, and balance
+  one keyed looping channel across all semantic owners of a `SoundLoop`;
+- keep module-derived music on preloaded media channels so long tracks remain
+  streamed, but reuse those loaded elements and retain the recovered
+  authoritative scene selection and crossfade clocks; and
+- resume the shared interactive audio context from the existing capture-phase
+  user-gesture unlock, stop every owned source on teardown, and never fall
+  back to per-cue `new Audio(...).play()` on the gameplay hot path.
+
+Stock movement dispatch is local-player-only because `PlayerActor::Tick`
+requires byte `+0x5C == 0`. Web multiplayer nevertheless simulates and
+replicates each participant's authoritative `footstepTick`; remote movement
+audio is an explicit multiplayer extension, not a newly claimed stock call
+site. Each client must consume a changed tick once for every participant in
+the listener's current Boneyard run or Hub region, select the deterministic
+Step1/Step2 approximation from `(tick, playerId)`, apply the recovered `0.5`
+base gain and Region distance attenuation, and suppress initial/repeated
+snapshots. Primary-spell sounds and loops already follow the same replicated
+same-world rule. Music selection remains driven by the replicated run/wave
+phase, so clients choose the same gameplay entry without attempting an
+invented cross-client sample clock.
+
+The correction is accepted only if a real-device repeat preserves music,
+Create streams, local and remote footsteps, spell starts/loops/releases, and
+teardown while eliminating the long main-thread stalls. Desktop emulation is
+supporting evidence only; the decisive receipt must again report physical
+iPhone p95, p99, and maximum frame gaps during movement and casting.
+
+The corrected production bundle passed that repeat on the same iPhone XR. An
+idle Boneyard control delivered 601 frames in 10.023 seconds: frame p95 and
+p99 were both 17 ms, the maximum was 27 ms, and neither the animation-frame
+nor independent timer probe recorded a gap above 34 ms. A separate 30.012
+second movement-and-Earth-cast pass delivered 1,800 frames with 17 ms p95,
+18 ms p99, a 31 ms maximum, and zero gaps above 34 ms.
+
+The instrumented audio confirmation then ran for 20.023 seconds while the
+authoritative snapshot advanced from tick `25912.1` to `27913.2`, the player
+traveled 329.27 units horizontally and 176.57 vertically, all five walk poses
+appeared, and the renderer observed Earth, called-rock, and Earth-impact
+states with as many as 40 simultaneous spell presentations. It consumed 47
+distinct authoritative footstep ticks and started 72 resident Web Audio
+buffer sources, including the keyed Earth loop. Every `start()` returned
+within Safari's 1 ms timer resolution and the hot flow made zero
+`HTMLMediaElement.play()` calls. Frame p95 was 20 ms, p99 was 24 ms, maximum
+was 43 ms, with three gaps above 34 ms and none above 50 ms. The independent
+timer reached 26 ms p99 and 56 ms maximum, with no gap above 100 ms. The user
+also visually confirmed that the corrected physical-device flow looked good.
+This replaces the reproduced 568 ms p99 / 1,446 ms maximum audio-stall receipt
+without changing the 100 Hz simulation or 20 Hz snapshot clocks.
+
+An isolated two-client Chromium journey then verified replicated ownership,
+not merely local playback. Both clients consumed the same five-cue Hub
+footstep sequence and the same five-cue Boneyard sequence from the moving
+guest's authoritative ticks. The mover heard each cue at gain `0.5`; the
+observer heard the same cues once with distance attenuation. Both clients
+also consumed one remote Fire emission, started the same keyed Earth gather
+loop, stopped that exact channel when the cast released, and started the
+rolling-stone loop. Academy and Prelude each started once per client at the
+authoritative Hub and Boneyard entries. Neither client made a gameplay-effect
+`HTMLMediaElement.play()` call, and the journey reported no page or console
+errors. Music is therefore scene-synchronized and replicated cue lifecycles
+are client-consistent without claiming sample-accurate network music phase.
+
 ### Web ownership consequence and open questions
 
 The `/game` route must stop and detach the public-site jukebox and its generic

@@ -24,6 +24,7 @@ import {
   REPLICATED_ENTITY_TYPES,
 } from '../src/game/protocol/entity-replication.ts'
 import { decodeServerGameMessage } from '../src/game/protocol/game-protocol.ts'
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
@@ -81,7 +82,7 @@ await page.addInitScript((runtime) => {
     url: host.address.url,
   },
 })
-await page.addInitScript(installAudioPlayProbe)
+await page.addInitScript(installGameAudioSmokeProbe)
 
 try {
   await enterBoneyard(page)
@@ -1279,16 +1280,6 @@ async function boneyardFrame(page) {
   return page.locator('.boneyard-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrBoneyardFrame)
   ))
-}
-
-function installAudioPlayProbe() {
-  const sources = []
-  const nativePlay = HTMLMediaElement.prototype.play
-  Object.defineProperty(window, '__sdrAudioPlaySources', { value: sources })
-  HTMLMediaElement.prototype.play = function play() {
-    sources.push(this.currentSrc || this.src)
-    return nativePlay.call(this)
-  }
 }
 
 async function enterBoneyard(page) {

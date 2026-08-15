@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4184'
 const screenshotRoot = process.env.SDR_PRIMARY_SPELL_SCREENSHOT_ROOT || '/tmp'
 const CREATE_MENU_TIMEOUT_MS = 30_000
@@ -62,6 +64,10 @@ const browser = await chromium.launch({
 
 try {
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+  await context.addInitScript(installGameAudioSmokeProbe, {
+    eventsGlobal: '__primarySpellAudioEvents',
+    sourceMatcherGlobal: '__primarySpellAudioSourceMatches',
+  })
   await context.addInitScript(() => {
     // This is a visual/state acceptance run, not a frame-rate benchmark. Pace
     // headless SwiftShader so full-resolution Water particles cannot starve I/O.
@@ -70,68 +76,12 @@ try {
       1_000 / 30,
     )
     window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
-    const events = []
     const poseEvents = []
     const wireFrames = []
-    let nextChannel = 1
     let previousPose = null
     const nativeJsonParse = JSON.parse
-    const nativePause = HTMLMediaElement.prototype.pause
-    const nativePlay = HTMLMediaElement.prototype.play
-    const sourceMatches = (actual, expected) => {
-      const actualName = new URL(actual).pathname.split('/').pop()
-      const expectedName = expected.split('/').pop()
-      const extensionAt = expectedName.lastIndexOf('.')
-      const stem = expectedName.slice(0, extensionAt)
-      const extension = expectedName.slice(extensionAt)
-      const suffix = actualName.slice(stem.length, -extension.length)
-      return actualName === expectedName
-        || (actualName.startsWith(`${stem}-`)
-          && actualName.endsWith(extension)
-          && /^-[\w-]+$/.test(suffix))
-    }
-    const channel = (media) => {
-      let id = Number(media.dataset.primarySpellAudioChannel)
-      if (id) return id
-      id = nextChannel
-      nextChannel += 1
-      media.dataset.primarySpellAudioChannel = `${id}`
-      return id
-    }
-    HTMLMediaElement.prototype.pause = function () {
-      events.push({
-        at: performance.now(),
-        channelId: channel(this),
-        currentTime: this.currentTime,
-        loop: this.loop,
-        src: this.src,
-        type: 'pause',
-        volume: this.volume,
-      })
-      nativePause.call(this)
-    }
-    HTMLMediaElement.prototype.play = function () {
-      const event = {
-        at: performance.now(),
-        channelId: channel(this),
-        currentTime: this.currentTime,
-        loop: this.loop,
-        src: this.src,
-        type: 'play',
-        volume: this.volume,
-      }
-      events.push(event)
-      const result = nativePlay.call(this)
-      void result.then(
-        () => events.push({ ...event, at: performance.now(), type: 'started' }),
-        () => {},
-      )
-      return result
-    }
     Object.defineProperties(window, {
-      __primarySpellAudioEvents: { value: events },
       __primarySpellPoseEvents: { value: poseEvents },
-      __primarySpellAudioSourceMatches: { value: sourceMatches },
       __primarySpellWireFrames: { value: wireFrames },
     })
     JSON.parse = function (...args) {
@@ -311,11 +261,16 @@ try {
     }
 
     const spellEvents = (await audioEvents(page)).slice(eventStart)
-      .filter((event) => event.type === 'play' || event.type === 'pause')
+      .filter((event) => ['play', 'pause', 'buffer-start', 'buffer-stop']
+        .includes(event.type))
       .map((event) => ({
         loop: event.loop,
         source: new URL(event.src).pathname,
-        type: event.type,
+        type: event.type === 'buffer-start'
+          ? 'play'
+          : event.type === 'buffer-stop'
+            ? 'pause'
+            : event.type,
       }))
     receipts.push({
       castPose: castFrame.playerAttachmentPose,
@@ -821,7 +776,9 @@ async function waitForAudio(page, eventStart, source, type) {
     ({ expected, expectedType, start }) => {
       const events = window.__primarySpellAudioEvents.slice(start)
       return events.find((event) => (
-        event.type === expectedType
+        (event.type === expectedType
+          || (expectedType === 'play' && event.type === 'buffer-start')
+          || (expectedType === 'pause' && event.type === 'buffer-stop'))
         && window.__primarySpellAudioSourceMatches(event.src, expected)
       )) || null
     },
@@ -836,7 +793,9 @@ async function waitForAudio(page, eventStart, source, type) {
 async function findAudio(page, eventStart, source, type) {
   return page.evaluate(({ expected, expectedType, start }) => (
     window.__primarySpellAudioEvents.slice(start).find((event) => (
-      event.type === expectedType
+      (event.type === expectedType
+        || (expectedType === 'play' && event.type === 'buffer-start')
+        || (expectedType === 'pause' && event.type === 'buffer-stop'))
       && window.__primarySpellAudioSourceMatches(event.src, expected)
     )) || null
   ), { expected: source, expectedType: type, start: eventStart })

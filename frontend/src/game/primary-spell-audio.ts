@@ -1,7 +1,10 @@
 import type { GameSnapshot } from './protocol/game-state.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import type { GameLoopCue } from './game-audio-native.ts'
-import { hubAudioAttenuation } from './game-audio-native.ts'
+import { hubAudioAttenuation, type GameLoopCue } from './game-audio-native.ts'
+import {
+  playerAudioAttenuation,
+  playerAudioWorldKey,
+} from './game-audio-spatial.ts'
 import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
@@ -31,16 +34,17 @@ export class PrimarySpellAudioSynchronizer {
 
   update(snapshot: GameSnapshot): void {
     const listener = snapshot.players[this.localPlayerId]
-    const listenerWorldKey = worldKeyForPlayer(snapshot, this.localPlayerId)
+    const listenerWorldKey = playerAudioWorldKey(snapshot, this.localPlayerId)
     if (listener && listenerWorldKey) {
       for (const [playerId, player] of Object.entries(snapshot.players)) {
-        if (worldKeyForPlayer(snapshot, playerId) !== listenerWorldKey) continue
         const previous = this.previous.players[playerId]
         if (!previous) continue
-        const volume = hubAudioAttenuation(Math.hypot(
-          player.position.x - listener.position.x,
-          player.position.y - listener.position.y,
-        ))
+        const volume = playerAudioAttenuation(
+          snapshot,
+          this.localPlayerId,
+          playerId,
+        )
+        if (volume === null) continue
         if (player.primaryCast.castSequence > previous.primaryCast.castSequence) {
           switch (player.config.element) {
             case 'air': this.audio.playSound('lightning-start', { volume }); break
@@ -95,12 +99,12 @@ export class PrimarySpellAudioSynchronizer {
     const desired = new Map<GameLoopCue, Set<string>>(
       LOOP_CUES.map((cue) => [cue, new Set<string>()]),
     )
-    const listenerWorldKey = worldKeyForPlayer(snapshot, this.localPlayerId)
+    const listenerWorldKey = playerAudioWorldKey(snapshot, this.localPlayerId)
     if (listenerWorldKey) {
       for (const [playerId, player] of Object.entries(snapshot.players)) {
         if (
           !player.primaryCast.channelActive
-          || worldKeyForPlayer(snapshot, playerId) !== listenerWorldKey
+          || playerAudioWorldKey(snapshot, playerId) !== listenerWorldKey
         ) continue
         const owner = `primary-player:${playerId}`
         switch (player.config.element) {
@@ -145,11 +149,4 @@ export class PrimarySpellAudioSynchronizer {
       this.loopOwners.set(cue, next)
     }
   }
-}
-
-function worldKeyForPlayer(snapshot: GameSnapshot, playerId: string): string | null {
-  if (!snapshot.players[playerId]) return null
-  return snapshot.world.kind === 'hub'
-    ? `hub:${snapshot.world.participants[playerId]?.region ?? 'courtyard'}`
-    : `boneyard:${snapshot.world.runId}`
 }

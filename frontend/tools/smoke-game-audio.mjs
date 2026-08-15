@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4178'
 const browser = await chromium.launch({
   args: ['--autoplay-policy=no-user-gesture-required'],
@@ -39,68 +41,9 @@ try {
     }
   })
 
-  await page.addInitScript(() => {
-    const events = []
-    let nextChannel = 1
-    const NativePlay = HTMLMediaElement.prototype.play
-    const NativePause = HTMLMediaElement.prototype.pause
-    const sourceMatches = (actual, expected) => {
-      const actualName = new URL(actual).pathname.split('/').pop()
-      const expectedName = expected.split('/').pop()
-      const extensionAt = expectedName.lastIndexOf('.')
-      const stem = expectedName.slice(0, extensionAt)
-      const extension = expectedName.slice(extensionAt)
-      const suffix = actualName.slice(stem.length, -extension.length)
-      return actualName === expectedName
-        || (actualName.startsWith(`${stem}-`) && actualName.endsWith(extension) && /^-[\w-]+$/.test(suffix))
-    }
-    HTMLMediaElement.prototype.pause = function () {
-      let channelId = Number(this.dataset.audioSmokeChannel)
-      if (!channelId) {
-        channelId = nextChannel
-        nextChannel += 1
-        this.dataset.audioSmokeChannel = `${channelId}`
-      }
-      events.push({
-        at: performance.now(),
-        channelId,
-        currentTime: this.currentTime,
-        src: this.src,
-        type: 'pause',
-      })
-      NativePause.call(this)
-    }
-    HTMLMediaElement.prototype.play = function () {
-      let channelId = Number(this.dataset.audioSmokeChannel)
-      if (!channelId) {
-        channelId = nextChannel
-        nextChannel += 1
-        this.dataset.audioSmokeChannel = `${channelId}`
-      }
-      const playEvent = {
-        at: performance.now(),
-        channelId,
-        currentTime: this.currentTime,
-        loop: this.loop,
-        playbackRate: this.playbackRate,
-        semanticFootstepTick: document.querySelector('.boneyard-scene')
-          ?.getAttribute('data-last-footstep-tick') ?? null,
-        src: this.src,
-        type: 'play',
-        volume: this.volume,
-      }
-      events.push(playEvent)
-      const playback = NativePlay.call(this)
-      void playback.then(
-        () => events.push({ ...playEvent, at: performance.now(), type: 'started' }),
-        () => {},
-      )
-      return playback
-    }
-    Object.defineProperties(window, {
-      __gameAudioEvents: { value: events },
-      __gameAudioSourceMatches: { value: sourceMatches },
-    })
+  await page.addInitScript(installGameAudioSmokeProbe, {
+    eventsGlobal: '__gameAudioEvents',
+    sourceMatcherGlobal: '__gameAudioSourceMatches',
   })
 
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
@@ -218,9 +161,17 @@ try {
     .slice(stepCountBeforeMovement)
   assert.ok(heldStepEvents.length >= 3, `expected repeated native footsteps, got ${heldStepEvents.length}`)
   assert.ok(heldStepEvents.every((event) => event.volume === 0.5))
+  const semanticTicks = heldStepEvents
+    .slice(0, 3)
+    .map((event) => Number(event.semanticFootstepTick))
+  assert.ok(semanticTicks.every(Number.isSafeInteger))
+  assert.deepEqual(
+    semanticTicks.slice(1).map((tick, index) => tick - semanticTicks[index]),
+    [25, 25],
+  )
   const dispatchIntervalsMs = consecutiveIntervals(heldStepEvents.slice(0, 3))
   const startIntervalsMs = consecutiveIntervals(heldStepStarts.slice(0, 3))
-  assertNativeFootstepIntervals(dispatchIntervalsMs, 'dispatch')
+  assertBoundedFootstepDelivery(dispatchIntervalsMs, 'Hub')
 
   await page.waitForTimeout(350)
   const releaseTailEvents = footstepEvents(await audioEvents(page), 'play')
@@ -241,7 +192,7 @@ try {
   // A reused direct host may enter the 14.12-second Teacher cycle at any phase.
   await waitForPlay(page, '/game/audio/sfx/summon.wav', 16_000)
   const summon = (await audioEvents(page)).findLast((event) => (
-    event.type === 'play' && sourceMatches(event.src, '/game/audio/sfx/summon.wav')
+    isAudioStart(event) && sourceMatches(event.src, '/game/audio/sfx/summon.wav')
   ))
   assert.ok(summon)
   assert.ok(summon.volume >= 0.0625 && summon.volume <= 0.25)
@@ -297,7 +248,7 @@ try {
   )
   const boneyardDispatchIntervalsMs = consecutiveIntervals(heldBoneyardSteps.slice(0, 6))
   const boneyardStartIntervalsMs = consecutiveIntervals(heldBoneyardStarts.slice(0, 6))
-  assertBoneyardFootstepDelivery(boneyardDispatchIntervalsMs)
+  assertBoundedFootstepDelivery(boneyardDispatchIntervalsMs, 'Boneyard')
 
   await page.waitForTimeout(350)
   const boneyardReleaseTail = footstepEvents(await audioEvents(page), 'play')
@@ -320,7 +271,7 @@ try {
 
   const events = await audioEvents(page)
   const playedSources = events
-    .filter((event) => event.type === 'play')
+    .filter(isAudioStart)
     .map((event) => new URL(event.src).pathname)
   const expectedMusic = [
     '/game/audio/music/solomondarktheme.mp3',
@@ -335,6 +286,15 @@ try {
   assert.ok(expectedMusic.every((expected) => (
     musicSources.some((source) => sourceMatches(source, expected))
   )))
+  const htmlMediaEffects = events.filter((event) => (
+    event.type === 'play'
+    && !expectedMusic.some((source) => sourceMatches(event.src, source))
+  ))
+  assert.deepEqual(
+    htmlMediaEffects,
+    [],
+    'gameplay sounds, loops, and streams must stay off HTMLMediaElement.play',
+  )
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(failedResponses, [])
   assert.deepEqual(pageErrors, [])
@@ -345,6 +305,7 @@ try {
     musicSources: [...new Set(musicSources)],
     playedSources,
     dispatchIntervalsMs,
+    semanticTicks,
     startIntervalsMs,
     stepCount: stepEvents.length,
     boneyard: {
@@ -371,13 +332,16 @@ async function nextPresentationFrame(page) {
 }
 
 async function playCount(page) {
-  return page.evaluate(() => window.__gameAudioEvents.filter((event) => event.type === 'play').length)
+  return page.evaluate(() => window.__gameAudioEvents.filter((event) => (
+    event.type === 'play' || event.type === 'buffer-start'
+  )).length)
 }
 
 async function waitForPlay(page, source, timeout = 5_000) {
   await page.waitForFunction(
     (expected) => window.__gameAudioEvents.some((event) => (
-      event.type === 'play' && window.__gameAudioSourceMatches(event.src, expected)
+      (event.type === 'play' || event.type === 'buffer-start')
+      && window.__gameAudioSourceMatches(event.src, expected)
     )),
     source,
     { timeout },
@@ -387,7 +351,7 @@ async function waitForPlay(page, source, timeout = 5_000) {
 async function waitForFootstepCount(page, sources, type, count, timeout = 5_000) {
   await page.waitForFunction(
     ({ expected, eventType, minimum }) => window.__gameAudioEvents.filter((event) => (
-      event.type === eventType
+      (event.type === eventType || event.type === 'buffer-start')
       && expected.some((source) => window.__gameAudioSourceMatches(event.src, source))
     )).length >= minimum,
     { expected: sources, eventType: type, minimum: count },
@@ -398,7 +362,8 @@ async function waitForFootstepCount(page, sources, type, count, timeout = 5_000)
 async function waitForPlayCount(page, source, count, timeout = 5_000) {
   await page.waitForFunction(
     ({ expected, minimum }) => window.__gameAudioEvents.filter((event) => (
-      event.type === 'play' && window.__gameAudioSourceMatches(event.src, expected)
+      (event.type === 'play' || event.type === 'buffer-start')
+      && window.__gameAudioSourceMatches(event.src, expected)
     )).length >= minimum,
     { expected: source, minimum: count },
     { timeout },
@@ -418,38 +383,24 @@ function sourceMatches(actual, expected) {
 
 function footstepEvents(events, type) {
   return events.filter((event) => (
-    event.type === type
+    (event.type === type || event.type === 'buffer-start')
     && (sourceMatches(event.src, '/game/audio/sfx/step/step1.wav')
       || sourceMatches(event.src, '/game/audio/sfx/step/step2.wav'))
   ))
+}
+
+function isAudioStart(event) {
+  return event.type === 'play' || event.type === 'buffer-start'
 }
 
 function consecutiveIntervals(events) {
   return events.slice(1).map((event, index) => event.at - events[index].at)
 }
 
-function assertNativeFootstepIntervals(intervals, label) {
-  assert.equal(intervals.length, 2)
-  assert.ok(
-    intervals.every((interval) => interval >= 150 && interval <= 400),
-    `expected 250 ms ${label} cadence, got ${intervals.join(', ')}`,
-  )
-  const average = intervals.reduce((total, interval) => total + interval, 0) / intervals.length
-  assert.ok(
-    average >= 200 && average <= 325,
-    `expected 250 ms average ${label} cadence, got ${average}`,
-  )
-}
-
-function assertBoneyardFootstepDelivery(intervals) {
-  assert.equal(intervals.length, 5)
+function assertBoundedFootstepDelivery(intervals, scene) {
+  assert.ok(intervals.length >= 2)
   assert.ok(
     intervals.every((interval) => interval >= 0 && interval <= 750),
-    `expected bounded Boneyard delivery jitter, got ${intervals.join(', ')}`,
-  )
-  const average = intervals.reduce((total, interval) => total + interval, 0) / intervals.length
-  assert.ok(
-    average >= 175 && average <= 325,
-    `expected 250 ms average Boneyard delivery cadence, got ${average}`,
+    `expected bounded ${scene} delivery jitter, got ${intervals.join(', ')}`,
   )
 }

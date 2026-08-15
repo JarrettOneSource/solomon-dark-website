@@ -3,9 +3,13 @@ import test from 'node:test'
 
 import {
   GameAudioDirector,
-  type GameAudioChannel,
+  type GameAudioPlayback,
+  type GameAudioPlaybackOptions,
+  type GameMusicChannel,
 } from './game-audio-director.ts'
 import type { GameAudioSources } from './game-audio-native.ts'
+import './game-audio-web-playback.test.ts'
+import './player-footstep-audio.test.ts'
 import './primary-spell-audio.test.ts'
 
 const SOURCES = {
@@ -59,25 +63,13 @@ class FakeAudio {
   pauseCalls = 0
   paused = true
   playCalls = 0
-  playbackRate = 1
   preload = ''
   rejectNextPlay = false
   src: string
   volume = 1
-  private listeners = new Map<string, Set<() => void>>()
 
   constructor(source: string) {
     this.src = source
-  }
-
-  addEventListener(type: string, listener: () => void): void {
-    const listeners = this.listeners.get(type) ?? new Set()
-    listeners.add(listener)
-    this.listeners.set(type, listeners)
-  }
-
-  removeEventListener(type: string, listener: () => void): void {
-    this.listeners.get(type)?.delete(listener)
   }
 
   pause(): void {
@@ -95,9 +87,43 @@ class FakeAudio {
     this.paused = false
     return Promise.resolve()
   }
+}
 
-  emit(type: string): void {
-    for (const listener of this.listeners.get(type) ?? []) listener()
+interface PlaybackCall {
+  key?: string
+  options: GameAudioPlaybackOptions
+  source: string
+}
+
+class FakePlayback implements GameAudioPlayback {
+  destroyCalls = 0
+  readonly plays: PlaybackCall[] = []
+  readonly restarts: PlaybackCall[] = []
+  readonly stops: string[] = []
+  unlockCalls = 0
+
+  destroy(): void {
+    this.destroyCalls += 1
+  }
+
+  play(source: string, options: GameAudioPlaybackOptions): void {
+    this.plays.push({ options, source })
+  }
+
+  restart(
+    key: string,
+    source: string,
+    options: GameAudioPlaybackOptions,
+  ): void {
+    this.restarts.push({ key, options, source })
+  }
+
+  stop(key: string): void {
+    this.stops.push(key)
+  }
+
+  unlock(): void {
+    this.unlockCalls += 1
   }
 }
 
@@ -132,18 +158,20 @@ function fixture(options: {
 } = {}) {
   const created: FakeAudio[] = []
   const frames = new FakeFrames()
+  const playback = new FakePlayback()
   const director = new GameAudioDirector(SOURCES, {
     cancelFrame: frames.cancel,
-    createAudio: (source) => {
+    createMusicChannel: (source) => {
       const audio = new FakeAudio(source)
       audio.rejectNextPlay = options.rejectSources?.has(source) ?? false
       created.push(audio)
-      return audio as unknown as GameAudioChannel
+      return audio as unknown as GameMusicChannel
     },
     now: frames.now,
+    playback,
     requestFrame: frames.request,
   })
-  return { created, director, frames }
+  return { created, director, frames, playback }
 }
 
 const flushPromises = async () => {
@@ -227,55 +255,68 @@ test('holds a blocked scene at its beginning and retries on unlock', async () =>
 })
 
 test('overlaps Sound instances and reuses restartable SoundStream channels', async () => {
-  const { created, director } = fixture()
+  const { created, director, playback } = fixture()
   director.playSound('click', { playbackRate: 1.05, volume: 0.5 })
   director.playSound('click')
-  assert.equal(created.length, 2)
-  assert.notEqual(created[0], created[1])
-  assert.equal(created[0].volume, 0.5)
-  assert.equal(created[0].playbackRate, 1.05)
+  assert.equal(created.length, 0)
+  assert.deepEqual(playback.plays, [
+    {
+      options: { playbackRate: 1.05, volume: 0.5 },
+      source: 'click.wav',
+    },
+    {
+      options: { playbackRate: 1, volume: 1 },
+      source: 'click.wav',
+    },
+  ])
 
   director.playStream('start-cast')
-  const stream = created[2]
-  stream.currentTime = 0.75
   director.playStream('start-cast')
-  assert.equal(created.length, 3)
-  assert.equal(stream.currentTime, 0)
-  assert.equal(stream.playCalls, 2)
-  assert.equal(stream.pauseCalls, 1)
+  assert.deepEqual(playback.restarts.slice(0, 2), [
+    {
+      key: 'stream:start-cast',
+      options: { playbackRate: 1, volume: 1 },
+      source: 'start.wav',
+    },
+    {
+      key: 'stream:start-cast',
+      options: { playbackRate: 1, volume: 1 },
+      source: 'start.wav',
+    },
+  ])
   director.pauseStream('start-cast')
-  assert.equal(stream.paused, true)
-  stream.currentTime = 0.5
   director.stopStream('start-cast')
-  assert.equal(stream.currentTime, 0)
+  assert.deepEqual(playback.stops, ['stream:start-cast', 'stream:start-cast'])
 
   director.playStream('solomon-hello-1')
   director.playStream('solomon-laugh-1')
-  const hello = created[3]
-  const laugh = created[4]
   director.stopStreams(['solomon-hello-1', 'solomon-laugh-1'])
-  assert.equal(hello.paused, true)
-  assert.equal(laugh.paused, true)
+  assert.deepEqual(playback.stops.slice(-2), [
+    'stream:solomon-hello-1',
+    'stream:solomon-laugh-1',
+  ])
 
-  created[0].emit('ended')
   director.destroy()
-  assert.equal(created[1].paused, true)
+  assert.equal(playback.destroyCalls, 1)
+  assert.equal(created.length, 0)
   await flushPromises()
 })
 
 test('balances one native loop channel across independent semantic owners', async () => {
-  const { created, director } = fixture()
+  const { created, director, playback } = fixture()
   director.startLoop('lightning-loop', 'player:a')
   director.startLoop('lightning-loop', 'player:a')
   director.startLoop('lightning-loop', 'player:b')
-  assert.equal(created.length, 1)
-  assert.equal(created[0].loop, true)
-  assert.equal(created[0].playCalls, 1)
+  assert.equal(created.length, 0)
+  assert.deepEqual(playback.restarts, [{
+    key: 'loop:lightning-loop',
+    options: { loop: true, playbackRate: 1, volume: 1 },
+    source: 'lightning-loop.wav',
+  }])
 
   director.stopLoop('lightning-loop', 'player:a')
-  assert.equal(created[0].paused, false)
+  assert.deepEqual(playback.stops, [])
   director.stopLoop('lightning-loop', 'player:b')
-  assert.equal(created[0].paused, true)
-  assert.equal(created[0].currentTime, 0)
+  assert.deepEqual(playback.stops, ['loop:lightning-loop'])
   await flushPromises()
 })

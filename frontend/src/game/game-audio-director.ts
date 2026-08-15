@@ -8,26 +8,38 @@ import {
   type GameStreamCue,
 } from './game-audio-native.ts'
 
-export type GameAudioChannel = Pick<
+export type GameMusicChannel = Pick<
   HTMLAudioElement,
-  | 'addEventListener'
   | 'currentTime'
   | 'loop'
   | 'muted'
   | 'pause'
   | 'paused'
   | 'play'
-  | 'playbackRate'
   | 'preload'
-  | 'removeEventListener'
   | 'src'
   | 'volume'
 >
 
+export interface GameAudioPlaybackOptions {
+  loop?: boolean
+  playbackRate: number
+  volume: number
+}
+
+export interface GameAudioPlayback {
+  destroy(): void
+  play(source: string, options: GameAudioPlaybackOptions): void
+  restart(key: string, source: string, options: GameAudioPlaybackOptions): void
+  stop(key: string): void
+  unlock(): void
+}
+
 export interface GameAudioDirectorOptions {
   cancelFrame?: (handle: number) => void
-  createAudio?: (source: string) => GameAudioChannel
+  createMusicChannel: (source: string) => GameMusicChannel
   now?: () => number
+  playback: GameAudioPlayback
   requestFrame?: (callback: FrameRequestCallback) => number
 }
 
@@ -39,29 +51,26 @@ export interface PlaySoundOptions {
 const clampUnit = (value: number) => Math.max(0, Math.min(1, value))
 
 export class GameAudioDirector {
-  private activeSounds = new Set<GameAudioChannel>()
   private cancelFrame: (handle: number) => void
-  private createAudio: (source: string) => GameAudioChannel
-  private currentMusic: GameAudioChannel | null = null
+  private createMusicChannel: (source: string) => GameMusicChannel
+  private currentMusic: GameMusicChannel | null = null
   private fadeFrame = 0
   private generation = 0
   private musicScene: GameAudioScene | null = null
-  private loops = new Map<GameLoopCue, {
-    channel: GameAudioChannel
-    owners: Set<string>
-  }>()
+  private loops = new Map<GameLoopCue, Set<string>>()
   private now: () => number
-  private outgoingMusic: GameAudioChannel | null = null
+  private outgoingMusic: GameMusicChannel | null = null
+  private playback: GameAudioPlayback
   private requestFrame: (callback: FrameRequestCallback) => number
   private readonly sources: GameAudioSources
-  private streams = new Map<GameStreamCue, GameAudioChannel>()
 
   constructor(
     sources: GameAudioSources,
-    options: GameAudioDirectorOptions = {},
+    options: GameAudioDirectorOptions,
   ) {
     this.sources = sources
-    this.createAudio = options.createAudio ?? ((source) => new Audio(source))
+    this.createMusicChannel = options.createMusicChannel
+    this.playback = options.playback
     this.now = options.now ?? (() => performance.now())
     this.requestFrame = options.requestFrame ?? ((callback) => requestAnimationFrame(callback))
     this.cancelFrame = options.cancelFrame ?? ((handle) => cancelAnimationFrame(handle))
@@ -71,9 +80,12 @@ export class GameAudioDirector {
     if (scene === this.musicScene && this.currentMusic) return
 
     this.cancelMusicFade()
-    this.outgoingMusic?.pause()
+    this.stopAndReset(this.outgoingMusic)
     this.outgoingMusic = this.currentMusic
-    this.currentMusic = this.makeChannel(this.sources.music[GAME_SCENE_MUSIC[scene].cue])
+    this.currentMusic = this.makeMusicChannel(
+      this.sources.music[GAME_SCENE_MUSIC[scene].cue],
+    )
+    this.currentMusic.currentTime = 0
     this.currentMusic.loop = true
     this.currentMusic.volume = 0
     this.musicScene = scene
@@ -83,12 +95,10 @@ export class GameAudioDirector {
   }
 
   unlock(): void {
+    this.playback.unlock()
     if (this.currentMusic?.paused) {
       this.currentMusic.currentTime = 0
       void this.startCurrentMusic(this.generation)
-    }
-    for (const loop of this.loops.values()) {
-      if (loop.channel.paused) void loop.channel.play().catch(() => {})
     }
   }
 
@@ -97,24 +107,24 @@ export class GameAudioDirector {
     owner: string,
     options: PlaySoundOptions = {},
   ): void {
-    let state = this.loops.get(cue)
-    if (state?.owners.has(owner)) return
-    if (!state) {
-      const channel = this.makeChannel(this.sources.loops[cue])
-      channel.loop = true
-      channel.volume = clampUnit(options.volume ?? 1)
-      channel.playbackRate = options.playbackRate ?? 1
-      state = { channel, owners: new Set() }
-      this.loops.set(cue, state)
-      void channel.play().catch(() => {})
+    let owners = this.loops.get(cue)
+    if (owners?.has(owner)) return
+    if (!owners) {
+      owners = new Set()
+      this.loops.set(cue, owners)
+      this.playback.restart(loopKey(cue), this.sources.loops[cue], {
+        loop: true,
+        playbackRate: options.playbackRate ?? 1,
+        volume: clampUnit(options.volume ?? 1),
+      })
     }
-    state.owners.add(owner)
+    owners.add(owner)
   }
 
   stopLoop(cue: GameLoopCue, owner: string): void {
-    const state = this.loops.get(cue)
-    if (!state || !state.owners.delete(owner) || state.owners.size > 0) return
-    this.stopAndReset(state.channel)
+    const owners = this.loops.get(cue)
+    if (!owners || !owners.delete(owner) || owners.size > 0) return
+    this.playback.stop(loopKey(cue))
     this.loops.delete(cue)
   }
 
@@ -123,44 +133,25 @@ export class GameAudioDirector {
   }
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
-    const channel = this.makeChannel(this.sources.sounds[cue])
-    channel.volume = clampUnit(options.volume ?? 1)
-    channel.playbackRate = options.playbackRate ?? 1
-    this.activeSounds.add(channel)
-
-    const cleanup = () => {
-      channel.removeEventListener('ended', cleanup)
-      channel.removeEventListener('error', cleanup)
-      this.activeSounds.delete(channel)
-    }
-    channel.addEventListener('ended', cleanup)
-    channel.addEventListener('error', cleanup)
-    void channel.play().catch(cleanup)
+    this.playback.play(this.sources.sounds[cue], {
+      playbackRate: options.playbackRate ?? 1,
+      volume: clampUnit(options.volume ?? 1),
+    })
   }
 
   playStream(cue: GameStreamCue, options: PlaySoundOptions = {}): void {
-    let channel = this.streams.get(cue)
-    if (!channel) {
-      channel = this.makeChannel(this.sources.streams[cue])
-      this.streams.set(cue, channel)
-    } else {
-      channel.pause()
-      channel.currentTime = 0
-    }
-    channel.volume = clampUnit(options.volume ?? 1)
-    channel.playbackRate = options.playbackRate ?? 1
-    void channel.play().catch(() => {})
+    this.playback.restart(streamKey(cue), this.sources.streams[cue], {
+      playbackRate: options.playbackRate ?? 1,
+      volume: clampUnit(options.volume ?? 1),
+    })
   }
 
   pauseStream(cue: GameStreamCue): void {
-    this.streams.get(cue)?.pause()
+    this.playback.stop(streamKey(cue))
   }
 
   stopStream(cue: GameStreamCue): void {
-    const channel = this.streams.get(cue)
-    if (!channel) return
-    this.stopAndReset(channel)
-    this.streams.delete(cue)
+    this.playback.stop(streamKey(cue))
   }
 
   stopStreams(cues: readonly GameStreamCue[]): void {
@@ -175,16 +166,12 @@ export class GameAudioDirector {
     this.currentMusic = null
     this.outgoingMusic = null
     this.musicScene = null
-    for (const channel of this.activeSounds) this.stopAndReset(channel)
-    this.activeSounds.clear()
-    for (const loop of this.loops.values()) this.stopAndReset(loop.channel)
     this.loops.clear()
-    for (const channel of this.streams.values()) this.stopAndReset(channel)
-    this.streams.clear()
+    this.playback.destroy()
   }
 
-  private makeChannel(source: string): GameAudioChannel {
-    const channel = this.createAudio(source)
+  private makeMusicChannel(source: string): GameMusicChannel {
+    const channel = this.createMusicChannel(source)
     channel.preload = 'auto'
     return channel
   }
@@ -210,8 +197,8 @@ export class GameAudioDirector {
   }
 
   private beginMusicFade(
-    incoming: GameAudioChannel,
-    outgoing: GameAudioChannel | null,
+    incoming: GameMusicChannel,
+    outgoing: GameMusicChannel | null,
     transitionTicks: number,
   ): void {
     const startedAt = this.now()
@@ -240,9 +227,17 @@ export class GameAudioDirector {
     this.fadeFrame = 0
   }
 
-  private stopAndReset(channel: GameAudioChannel | null): void {
+  private stopAndReset(channel: GameMusicChannel | null): void {
     if (!channel) return
     channel.pause()
     channel.currentTime = 0
   }
+}
+
+function loopKey(cue: GameLoopCue): string {
+  return `loop:${cue}`
+}
+
+function streamKey(cue: GameStreamCue): string {
+  return `stream:${cue}`
 }

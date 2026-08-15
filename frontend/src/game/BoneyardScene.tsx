@@ -17,10 +17,8 @@ import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.t
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
-  nativeFootstepCue,
   nativeEnemyEventSoundCue,
   newSolomonVoiceEvent,
-  newNativeFootstepTick,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
@@ -41,6 +39,7 @@ import type {
 } from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
+import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
@@ -174,22 +173,22 @@ export default function BoneyardScene({
   }), [audio, loaded.runId, subscribeEnemyEvent])
 
   useEffect(() => {
-    let previousAudioSnapshot = initialSnapshot
+    const synchronizer = new PlayerFootstepAudioSynchronizer(
+      audio,
+      playerId,
+      initialSnapshot,
+      (event) => {
+        if (event.playerId !== playerId) return
+        const scene = sceneRef.current
+        if (scene) scene.dataset.lastFootstepTick = `${event.tick}`
+      },
+    )
     return subscribe((snapshot) => {
       if (
         snapshot.world.kind !== 'boneyard'
         || snapshot.world.runId !== loaded.runId
       ) return
-      const player = snapshot.players[playerId]
-      const footstepTick = player
-        ? newNativeFootstepTick(previousAudioSnapshot.players[playerId], player)
-        : undefined
-      if (footstepTick !== undefined) {
-        const scene = sceneRef.current
-        if (scene) scene.dataset.lastFootstepTick = `${footstepTick}`
-        audio.playSound(nativeFootstepCue(footstepTick, playerId), { volume: 0.5 })
-      }
-      previousAudioSnapshot = snapshot
+      synchronizer.update(snapshot)
     })
   }, [audio, initialSnapshot, loaded.runId, playerId, subscribe])
 

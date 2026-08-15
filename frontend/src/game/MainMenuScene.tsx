@@ -17,8 +17,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
-import { GAME_AUDIO_SOURCES } from './game-audio-assets.ts'
-import { GameAudioDirector } from './game-audio-director.ts'
+import { createBrowserGameAudioDirector } from './game-audio-browser.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import type { GameAudioScene } from './game-audio-native.ts'
 import type { GameRunPhase } from './core-kernels/game-run.ts'
@@ -197,7 +196,7 @@ export default function MainMenuScene({
   onCancelCreate,
   prepareNewGame,
 }: MainMenuSceneProps) {
-  const audio = useMemo(() => new GameAudioDirector(GAME_AUDIO_SOURCES), [])
+  const audio = useMemo(createBrowserGameAudioDirector, [])
   const stageRef = useRef<HTMLElement>(null)
   const [screen, setScreen] = useState<MenuScreen>(initialScreen)
   const [fadeState, setFadeState] = useState<FadeState>('idle')

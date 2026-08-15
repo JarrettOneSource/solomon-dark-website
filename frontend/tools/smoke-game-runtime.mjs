@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { chromium } from 'playwright-core'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const CREATE_MENU_TIMEOUT_MS = 30_000
 const HUB_SCENE_TIMEOUT_MS = 30_000
@@ -61,8 +63,8 @@ try {
   })
   if (process.env.SDR_GAME_SMOKE_PROVE_WAVES === '1') {
     await Promise.all([
-      page.addInitScript(installAudioPlayProbe),
-      clientPage.addInitScript(installAudioPlayProbe),
+      page.addInitScript(installGameAudioSmokeProbe),
+      clientPage.addInitScript(installGameAudioSmokeProbe),
     ])
   }
   if (runtime) {
@@ -577,17 +579,6 @@ function assertClose(actual, expected, label, epsilon = 0.05) {
     `${label}: expected ${expected}, received ${actual}`,
   )
 }
-
-function installAudioPlayProbe() {
-  const sources = []
-  const nativePlay = HTMLMediaElement.prototype.play
-  Object.defineProperty(window, '__sdrAudioPlaySources', { value: sources })
-  HTMLMediaElement.prototype.play = function play() {
-    sources.push(this.currentSrc || this.src)
-    return nativePlay.call(this)
-  }
-}
-
 async function provisionProductionRuntime() {
   const origin = new URL(baseUrl)
   if (origin.protocol !== 'https:') return null

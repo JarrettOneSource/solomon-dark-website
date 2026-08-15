@@ -15,8 +15,6 @@ import {
   hubTeacherReleasesBetween,
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
-  nativeFootstepCue,
-  newNativeFootstepTick,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
@@ -31,6 +29,7 @@ import {
 } from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import {
   createHubWorldRenderer,
   type HubWorldRenderer,
@@ -134,22 +133,20 @@ export default function HubScene({
   }, [inputBlocked])
 
   useEffect(() => {
-    let previousAudioSnapshot = hubInitialSnapshot
+    const footstepAudio = new PlayerFootstepAudioSynchronizer(
+      audio,
+      playerId,
+      hubInitialSnapshot,
+      (event) => {
+        if (event.playerId !== playerId) return
+        const scene = sceneRef.current
+        if (scene) scene.dataset.lastFootstepTick = `${event.tick}`
+      },
+    )
     return subscribe((snapshot) => {
       if (!isHubGameSnapshot(snapshot)) return
-      const player = snapshot.players[playerId]
-      const previousParticipant = previousAudioSnapshot.world.participants[playerId]
       const participant = snapshot.world.participants[playerId]
-      if (player && previousParticipant?.region === participant?.region) {
-        const footstepTick = newNativeFootstepTick(
-          previousAudioSnapshot.players[playerId],
-          player,
-        )
-        if (footstepTick !== undefined) {
-          audio.playSound(nativeFootstepCue(footstepTick, playerId), { volume: 0.5 })
-        }
-      }
-      previousAudioSnapshot = snapshot
+      footstepAudio.update(snapshot)
       if (participant) setCurrentRegion((region) => (
         region === participant.region ? region : participant.region
       ))

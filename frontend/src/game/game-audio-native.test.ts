@@ -36,6 +36,10 @@ const mainMenuSceneSource = readFileSync(
   new URL('./MainMenuScene.tsx', import.meta.url),
   'utf8',
 )
+const playerFootstepAudioSource = readFileSync(
+  new URL('./player-footstep-audio.ts', import.meta.url),
+  'utf8',
+)
 
 test('maps each scene to the recovered module entry and transition clock', () => {
   assert.equal(
@@ -200,15 +204,13 @@ test('consumes only the newest unseen Solomon cue after sparse snapshots', () =>
   assert.equal(newSolomonVoiceEvent(0, []), null)
 })
 
-test('gives Boneyard the same local authoritative footstep owner', () => {
+test('gives Boneyard one authoritative same-world footstep synchronizer', () => {
   assert.match(mainMenuSceneSource, /<BoneyardScene[\s\S]*?audio=\{audio\}/)
-  assert.match(boneyardSceneSource, /let previousAudioSnapshot = initialSnapshot/)
-  assert.match(boneyardSceneSource, /snapshot\.players\[playerId\]/)
-  assert.match(boneyardSceneSource, /newNativeFootstepTick\(/)
-  assert.match(
-    boneyardSceneSource,
-    /audio\.playSound\(nativeFootstepCue\(footstepTick, playerId\), \{ volume: 0\.5 \}\)/,
-  )
+  assert.match(boneyardSceneSource, /new PlayerFootstepAudioSynchronizer\(/)
+  assert.match(boneyardSceneSource, /snapshot\.world\.runId !== loaded\.runId/)
+  assert.match(playerFootstepAudioSource, /Object\.entries\(snapshot\.players\)/)
+  assert.match(playerFootstepAudioSource, /newNativeFootstepTick\(/)
+  assert.match(playerFootstepAudioSource, /0\.5 \* attenuation/)
 })
 
 test('consumes the host enemy event lane once through the active Boneyard scene', () => {
