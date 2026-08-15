@@ -34,6 +34,69 @@ export interface NativeBoneyardProjectedShadowEdge {
 
 const NATIVE_LIGHT_OUTER_DISTANCE_SQUARED = NATIVE_LIGHT_OUTER_DISTANCE ** 2
 const MAX_ALPHA_OUTLINE_POINTS = 16
+const NATIVE_TREE_COMPLEX_SHADOW_OUTLINES: readonly (readonly Vec2[])[] = [
+  [{ x: -2, y: 12 }, { x: 18, y: 9 }, { x: 17, y: -8 }, { x: -5, y: -4 }],
+  [{ x: 3, y: 14 }, { x: 14, y: -3 }, { x: -4, y: -13 }, { x: -19, y: 3 }],
+  [{ x: 1, y: 9 }, { x: 15, y: -2 }, { x: 7, y: -13 }, { x: -15, y: -3 }],
+  [{ x: 7, y: 7 }, { x: 27, y: 1 }, { x: 24, y: -16 }, { x: 4, y: -11 }],
+  [{ x: 5, y: 10 }, { x: 12, y: -8 }, { x: -3, y: -17 }, { x: -20, y: -1 }],
+  [{ x: -20, y: 8 }, { x: -12, y: -2 }, { x: 7, y: 6 }, { x: 0, y: 17 }],
+  [
+    { x: -19.5, y: 12.5 },
+    { x: -19.5, y: -12.5 },
+    { x: 19.5, y: -12.5 },
+    { x: 19.5, y: 12.5 },
+  ],
+  [{ x: -6, y: 10 }, { x: -6, y: -1 }, { x: 7, y: -1 }, { x: 8, y: 10 }],
+  [{ x: -6, y: 10 }, { x: -6, y: -1 }, { x: 7, y: -1 }, { x: 8, y: 10 }],
+  [
+    { x: -1.5, y: 1.5 },
+    { x: -1.5, y: -1.5 },
+    { x: 1.5, y: -1.5 },
+    { x: 1.5, y: 1.5 },
+  ],
+  [
+    { x: -1.5, y: 1.5 },
+    { x: -1.5, y: -1.5 },
+    { x: 1.5, y: -1.5 },
+    { x: 1.5, y: 1.5 },
+  ],
+  [
+    { x: 0.5, y: 2.5 },
+    { x: -2.5, y: -0.5 },
+    { x: 0.5, y: -3.5 },
+    { x: 3.5, y: -0.5 },
+  ],
+  [
+    { x: 0.5, y: 2.5 },
+    { x: -2.5, y: -0.5 },
+    { x: 0.5, y: -3.5 },
+    { x: 3.5, y: -0.5 },
+  ],
+  [
+    { x: -1.5, y: 1.5 },
+    { x: -1.5, y: -1.5 },
+    { x: 1.5, y: -1.5 },
+    { x: 1.5, y: 1.5 },
+  ],
+  [
+    { x: -1.5, y: 1.5 },
+    { x: -1.5, y: -1.5 },
+    { x: 1.5, y: -1.5 },
+    { x: 1.5, y: 1.5 },
+  ],
+]
+
+/** Exact Tree shape selected by `0x0081B910 + mainVariant * 0x34`. */
+export function nativeBoneyardTreeComplexShadowOutline(mainVariant: number): Vec2[] {
+  const outline = NATIVE_TREE_COMPLEX_SHADOW_OUTLINES[mainVariant]
+  if (!outline) {
+    throw new RangeError(
+      `Unsupported native Tree complex-shadow variant ${mainVariant}.`,
+    )
+  }
+  return outline.map((point) => ({ ...point }))
+}
 
 export function nativeBoneyardComplexShadowRecords(
   caster: NativeBoneyardComplexShadowCaster,

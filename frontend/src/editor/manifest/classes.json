@@ -118,6 +118,29 @@
           "confidence": "verified"
         },
         {
+          "selector": "main short at +0x140 for materialized variants 0..14",
+          "atlas": "DeadHawg",
+          "entryIdsByVariant": [
+            228,
+            229,
+            230,
+            231,
+            232,
+            233,
+            234,
+            235,
+            236,
+            237,
+            238,
+            239,
+            240,
+            241,
+            242
+          ],
+          "role": "bounds/reference and complex-shadow companion",
+          "confidence": "verified"
+        },
+        {
           "selector": "overlay short at +0x142",
           "atlas": "DeadHawg",
           "entryIdsByVariant": [
@@ -147,9 +170,7 @@
           "confidence": "verified"
         }
       ],
-      "unresolved": [
-        "The selector relation for DeadHawg entries 228 through 242 is not established."
-      ]
+      "unresolved": []
     },
     {
       "id": 2009,

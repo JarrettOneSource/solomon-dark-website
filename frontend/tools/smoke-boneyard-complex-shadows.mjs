@@ -45,9 +45,10 @@ try {
     document.body.replaceChildren()
     document.body.style.background = '#000'
     document.body.style.margin = '0'
-    const [rendererModule, playerModule, spellModule] = await Promise.all([
+    const [rendererModule, playerModule, shadowModule, spellModule] = await Promise.all([
       import('/src/game/renderer/boneyard-world-renderer.ts'),
       import('/src/game/core-kernels/player-character.ts'),
+      import('/src/game/renderer/boneyard-complex-shadows.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
     ])
     const viewport = { displayScale: 1, height: 900, width: 1600 }
@@ -149,12 +150,21 @@ try {
       renderer,
       rightSnapshot: snapshotAt(1_010, { x: 800, y: 330 }, 18),
     }
+    const treeOutline = shadowModule.nativeBoneyardTreeComplexShadowOutline(0)
     return {
       complexShadows: renderer.canvas.dataset.complexShadows,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
+      treeComplexShadowOutline: renderer.canvas.dataset.treeComplexShadowOutline,
+      treeOutline: {
+        maxX: Math.max(...treeOutline.map(({ x }) => x)),
+        maxY: Math.max(...treeOutline.map(({ y }) => y)),
+        minX: Math.min(...treeOutline.map(({ x }) => x)),
+        minY: Math.min(...treeOutline.map(({ y }) => y)),
+        pointCount: treeOutline.length,
+      },
     }
   })
 
@@ -164,6 +174,14 @@ try {
   assert.match(left.rendererName.toLowerCase(), /webgl/)
   assert.equal(left.context, 'webgl2')
   assert.equal(left.complexShadows, 'native-directional-edges')
+  assert.equal(left.treeComplexShadowOutline, 'native-main-variant-table')
+  assert.deepEqual(left.treeOutline, {
+    maxX: 18,
+    maxY: 12,
+    minX: -5,
+    minY: -8,
+    pointCount: 4,
+  })
   assert.ok(left.frame.complexShadowCasterCount >= 3)
   assert.ok(left.frame.complexShadowRecordCount >= 3)
   assert.ok(left.frame.complexShadowQuadCount >= left.frame.complexShadowCasterCount)

@@ -5,6 +5,7 @@ import {
   nativeBoneyardAlphaSilhouette,
   nativeBoneyardComplexShadowRecords,
   nativeBoneyardProjectedShadowEdges,
+  nativeBoneyardTreeComplexShadowOutline,
   type NativeBoneyardComplexShadowCaster,
 } from './boneyard-complex-shadows.ts'
 
@@ -141,4 +142,69 @@ test('derives a bounded non-rectangular convex silhouette from native alpha art'
     },
     { maxX: 5, maxY: 5, minX: 0, minY: 0 },
   )
+})
+
+test('selects the exact native Tree complex-shadow outline by main variant', () => {
+  const expected = [
+    [[-2, 12], [18, 9], [17, -8], [-5, -4]],
+    [[3, 14], [14, -3], [-4, -13], [-19, 3]],
+    [[1, 9], [15, -2], [7, -13], [-15, -3]],
+    [[7, 7], [27, 1], [24, -16], [4, -11]],
+    [[5, 10], [12, -8], [-3, -17], [-20, -1]],
+    [[-20, 8], [-12, -2], [7, 6], [0, 17]],
+    [[-19.5, 12.5], [-19.5, -12.5], [19.5, -12.5], [19.5, 12.5]],
+    [[-6, 10], [-6, -1], [7, -1], [8, 10]],
+    [[-6, 10], [-6, -1], [7, -1], [8, 10]],
+    [[-1.5, 1.5], [-1.5, -1.5], [1.5, -1.5], [1.5, 1.5]],
+    [[-1.5, 1.5], [-1.5, -1.5], [1.5, -1.5], [1.5, 1.5]],
+    [[0.5, 2.5], [-2.5, -0.5], [0.5, -3.5], [3.5, -0.5]],
+    [[0.5, 2.5], [-2.5, -0.5], [0.5, -3.5], [3.5, -0.5]],
+    [[-1.5, 1.5], [-1.5, -1.5], [1.5, -1.5], [1.5, 1.5]],
+    [[-1.5, 1.5], [-1.5, -1.5], [1.5, -1.5], [1.5, 1.5]],
+  ].map((outline) => outline.map(([x, y]) => ({ x, y })))
+
+  assert.deepEqual(
+    expected.map((_, variant) => nativeBoneyardTreeComplexShadowOutline(variant)),
+    expected,
+  )
+  assert.notEqual(
+    nativeBoneyardTreeComplexShadowOutline(0),
+    nativeBoneyardTreeComplexShadowOutline(0),
+  )
+  assert.throws(
+    () => nativeBoneyardTreeComplexShadowOutline(15),
+    /Unsupported native Tree complex-shadow variant 15/,
+  )
+})
+
+test('keeps Tree root edges fixed while native presentation jitter moves only tips', () => {
+  const caster: NativeBoneyardComplexShadowCaster = {
+    id: 'tree:root-stability',
+    outline: nativeBoneyardTreeComplexShadowOutline(0),
+    position: { x: 0, y: 0 },
+  }
+  const source = {
+    intensity: 1,
+    multipleShadows: true,
+    position: { x: -100, y: 0 },
+    radius: 2.6,
+  }
+  const frames = Array.from({ length: 32 }, (_, presentationFrame) => {
+    const record = nativeBoneyardComplexShadowRecords(
+      caster,
+      [source],
+      presentationFrame,
+    )[0]!
+    return nativeBoneyardProjectedShadowEdges(caster, record)
+  })
+  const baseEdges = frames[0]!.map(({ baseEnd, baseStart }) => ({ baseEnd, baseStart }))
+
+  assert.ok(baseEdges.length > 0)
+  for (const edges of frames) {
+    assert.deepEqual(
+      edges.map(({ baseEnd, baseStart }) => ({ baseEnd, baseStart })),
+      baseEdges,
+    )
+  }
+  assert.ok(new Set(frames.map(([edge]) => edge!.tipStart.x)).size > 1)
 })

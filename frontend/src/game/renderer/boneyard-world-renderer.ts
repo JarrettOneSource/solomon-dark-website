@@ -81,6 +81,7 @@ import {
 } from './boneyard-complex-shadow-presentation.ts'
 import {
   nativeBoneyardConvexSilhouette,
+  nativeBoneyardTreeComplexShadowOutline,
   type NativeBoneyardComplexShadowCaster,
 } from './boneyard-complex-shadows.ts'
 import { BoneyardRegionLightField } from './boneyard-region-light-field.ts'
@@ -299,6 +300,7 @@ export async function createBoneyardWorldRenderer(
   canvas.setAttribute('aria-hidden', 'true')
   canvas.dataset.gameRenderer = 'pixi-webgl'
   canvas.dataset.complexShadows = 'native-directional-edges'
+  canvas.dataset.treeComplexShadowOutline = 'native-main-variant-table'
   canvas.dataset.rendererName = application.renderer.name
   canvas.dataset.resolution = `${initialResolution}`
   canvas.dataset.regionLightComposite = 'multiply-pre-main'
@@ -1496,10 +1498,14 @@ function mainLayerShadowCaster(
   layer: MainLayer,
   layerIndex: number,
 ): NativeBoneyardComplexShadowCaster | null {
-  const outline = croppedOutline.map((point) => ({
-    x: x + point.x - layer.pos.x,
-    y: y + point.y - layer.pos.y,
-  }))
+  const outline = layer.kind === 'object' && layer.object.typeId === NATIVE.tree
+    ? nativeBoneyardTreeComplexShadowOutline(
+        layer.object.variant ?? layer.atlasEntry - 264,
+      )
+    : croppedOutline.map((point) => ({
+        x: x + point.x - layer.pos.x,
+        y: y + point.y - layer.pos.y,
+      }))
   return outline.length < 3
     ? null
     : {
