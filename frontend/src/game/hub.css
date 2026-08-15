@@ -420,6 +420,11 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  .hub-hud-allies {
+    transform: scale(2);
+    transform-origin: top left;
+  }
+
   .hub-hud-loadout {
     opacity: 0.88;
     transform: scale(0.82);

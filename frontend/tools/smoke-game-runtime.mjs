@@ -10,6 +10,8 @@ const screenshotPath = process.env.SDR_GAME_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-boneyard-smoke.png'
 const allyScreenshotPath = process.env.SDR_GAME_SMOKE_ALLY_SCREENSHOT
   || screenshotPath.replace(/(\.[^.]+)?$/, '-ally-hub$1')
+const mobileAllyScreenshotPath = process.env.SDR_GAME_SMOKE_MOBILE_ALLY_SCREENSHOT
+  || screenshotPath.replace(/(\.[^.]+)?$/, '-ally-mobile-hub$1')
 const gateScreenshotPath = process.env.SDR_GAME_SMOKE_GATE_SCREENSHOT
   || screenshotPath.replace(/(\.[^.]+)?$/, '-gate-open$1')
 const injectedEndpoint = process.env.SDR_GAME_SMOKE_ENDPOINT?.trim()
@@ -34,7 +36,11 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   const clientPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
-  const thirdPage = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const thirdPage = await browser.newPage({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 844, height: 390 },
+  })
   const pageErrors = []
   const consoleErrors = []
   const clientPageErrors = []
@@ -252,14 +258,10 @@ try {
     thirdPage.locator('.hub-hud-allies[data-ally-count="2"]').waitFor(),
   ])
   const hostMultiAllyReceipt = await allyRosterReceipt(page)
+  const thirdMobileHubAllyReceipt = await allyRosterReceipt(thirdPage)
   assert.deepEqual(hostMultiAllyReceipt.names, ['Helvidius', 'Helvidius'])
   assert.equal(hostMultiAllyReceipt.roster.x, 11)
-  assert.equal(hostMultiAllyReceipt.roster.y, 46)
-  assert.equal(
-    hostMultiAllyReceipt.roster.y
-      - (hostMultiAllyReceipt.skull.y + hostMultiAllyReceipt.skull.height),
-    6,
-  )
+  assert.equal(hostMultiAllyReceipt.roster.y, 62)
   assert.ok(
     hostMultiAllyReceipt.roster.y
       >= hostMultiAllyReceipt.diagnostics.y + hostMultiAllyReceipt.diagnostics.height,
@@ -279,12 +281,51 @@ try {
     10,
   )
   await page.screenshot({ path: allyScreenshotPath })
+  await thirdPage.screenshot({ path: mobileAllyScreenshotPath })
 
-  await thirdPage.close()
-  await Promise.all([
-    page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
-    clientPage.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
-  ])
+  const expectedMobileViewportScale = 390 / 900
+  assert.equal(thirdMobileHubAllyReceipt.coarsePointer, true)
+  assert.equal(
+    thirdMobileHubAllyReceipt.presentationScale,
+    2,
+    JSON.stringify(thirdMobileHubAllyReceipt),
+  )
+  assertClose(
+    thirdMobileHubAllyReceipt.viewportScale,
+    expectedMobileViewportScale,
+    'mobile viewport scale',
+  )
+  assert.deepEqual(thirdMobileHubAllyReceipt.names, ['Helvidius', 'Helvidius'])
+  assertClose(
+    thirdMobileHubAllyReceipt.roster.x,
+    11 * expectedMobileViewportScale,
+    'mobile ally roster x',
+  )
+  assertClose(
+    thirdMobileHubAllyReceipt.roster.y,
+    62 * expectedMobileViewportScale,
+    'mobile ally roster y',
+  )
+  for (const row of thirdMobileHubAllyReceipt.rows) {
+    assertClose(row.bar.width, 100 * expectedMobileViewportScale, 'mobile ally bar width')
+    assertClose(row.bar.height, 10 * expectedMobileViewportScale, 'mobile ally bar height')
+    assertClose(row.fill.width, 100 * expectedMobileViewportScale, 'mobile ally fill width')
+    assertClose(
+      row.identity.x - (row.bar.x + row.bar.width),
+      4 * expectedMobileViewportScale,
+      'mobile ally identity gap',
+    )
+    assert.equal(row.barColor, 'rgb(255, 128, 128)')
+    assert.equal(row.identityColor, 'rgb(217, 186, 112)')
+    assert.equal(row.healthRatio, '1')
+    assert.ok(row.glyphCount > 0)
+  }
+  assertClose(
+    thirdMobileHubAllyReceipt.rows[1].row.y
+      - thirdMobileHubAllyReceipt.rows[0].row.y,
+    20 * expectedMobileViewportScale,
+    'mobile ally row pitch',
+  )
 
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   if (expectedModBoneyard) {
@@ -297,15 +338,33 @@ try {
 
   const hostBoneyard = page.locator('.boneyard-scene')
   const clientBoneyard = clientPage.locator('.boneyard-scene')
+  const thirdBoneyard = thirdPage.locator('.boneyard-scene')
   await Promise.all([
     hostBoneyard.waitFor({ timeout: 30_000 }),
     clientBoneyard.waitFor({ timeout: 30_000 }),
+    thirdBoneyard.waitFor({ timeout: 30_000 }),
     page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
     clientPage.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
+    thirdPage.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 }),
   ])
   const [hostReceipt, clientReceipt] = await Promise.all([
     boneyardReceipt(hostBoneyard),
     boneyardReceipt(clientBoneyard),
+  ])
+  const thirdMobileBoneyardAllyReceipt = await allyRosterReceipt(thirdPage)
+  assert.deepEqual(thirdMobileBoneyardAllyReceipt.names, thirdMobileHubAllyReceipt.names)
+  assert.deepEqual(thirdMobileBoneyardAllyReceipt.rowIds, thirdMobileHubAllyReceipt.rowIds)
+  assert.equal(thirdMobileBoneyardAllyReceipt.presentationScale, 2)
+  assertClose(
+    thirdMobileBoneyardAllyReceipt.rows[0].bar.width,
+    100 * expectedMobileViewportScale,
+    'mobile Boneyard ally bar width',
+  )
+
+  await thirdPage.close()
+  await Promise.all([
+    page.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
+    clientPage.locator('.hub-hud-allies[data-ally-count="1"]').waitFor(),
   ])
   const [hostBoneyardAllyReceipt, clientBoneyardAllyReceipt] = await Promise.all([
     allyRosterReceipt(page),
@@ -492,6 +551,7 @@ try {
     hostSingleAllyReceipt,
     hostPainterReceipt,
     clientPainterReceipt,
+    mobileAllyScreenshotPath,
     encounterReceipt,
     gateCrossing,
     gateScreenshotPath: gateCrossing ? gateScreenshotPath : null,
@@ -502,11 +562,20 @@ try {
     studentCount,
     teacherFrames: [...new Set(teacherFrames)],
     thirdConsoleErrors,
+    thirdMobileBoneyardAllyReceipt,
+    thirdMobileHubAllyReceipt,
     thirdPageErrors,
     walkPoses: [...new Set(presentationSamples.map(({ walkPose }) => walkPose))],
   }) + '\n')
 } finally {
   await browser.close()
+}
+
+function assertClose(actual, expected, label, epsilon = 0.05) {
+  assert.ok(
+    Math.abs(actual - expected) <= epsilon,
+    `${label}: expected ${expected}, received ${actual}`,
+  )
 }
 
 function installAudioPlayProbe() {
@@ -585,13 +654,20 @@ async function allyRosterReceipt(page) {
     }
     const rows = [...roster.querySelectorAll('.hub-hud-ally-row')]
     const skull = requireElement(document.querySelector('.hub-hud-skull'), 'HUD skull')
+    const scene = requireElement(
+      document.querySelector('.hub-scene, .boneyard-scene'),
+      'gameplay scene',
+    )
     const diagnostics = requireElement(
       document.querySelector('.hub-hud-diagnostics'),
       'HUD diagnostics',
     )
+    const transform = getComputedStyle(roster).transform
     return {
+      coarsePointer: matchMedia('(hover: none) and (pointer: coarse)').matches,
       diagnostics: bounds(diagnostics),
       names: rows.map((row) => row.getAttribute('aria-label')),
+      presentationScale: transform === 'none' ? 1 : new DOMMatrixReadOnly(transform).a,
       roster: bounds(roster),
       rowIds: rows.map((row) => row.getAttribute('data-ally-id')),
       rows: rows.map((row) => {
@@ -620,6 +696,7 @@ async function allyRosterReceipt(page) {
         }
       }),
       skull: bounds(skull),
+      viewportScale: Number(scene.getAttribute('data-viewport-scale')),
     }
   })
 }
