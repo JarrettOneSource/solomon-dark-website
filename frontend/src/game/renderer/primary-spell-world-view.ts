@@ -11,7 +11,11 @@ import {
   EarthBoulderView,
 } from './earth-boulder-view.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
-import { EtherPrimaryImpactView, EtherPrimarySpellView } from './primary-spell-ether-view.ts'
+import {
+  EtherPrimaryImpactView,
+  EtherPrimaryPierceStreakView,
+  EtherPrimarySpellView,
+} from './primary-spell-ether-view.ts'
 import {
   FireImpactSpellView,
   FireParticleSpellView,
@@ -119,6 +123,11 @@ export class PrimarySpellWorldView {
             ray: this.textures.elementVfx.ray[0],
             spark: this.textures.elementVfx.spark[0],
           })
+        } else if (state.kind === 'ether-pierce-streak') {
+          view = new EtherPrimaryPierceStreakView(
+            state,
+            this.textures.primarySpells.etherPierceStreak,
+          )
         } else if (state.kind === 'earth-impact') {
           view = new EarthBoulderImpactView(state, this.textures.primarySpells.earth)
         } else if (state.kind === 'fire-impact') {

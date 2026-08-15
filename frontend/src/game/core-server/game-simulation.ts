@@ -222,6 +222,7 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 
 export interface GameSimulationState {
   accumulatorSeconds: number
+  combatRng: NativeRngState
   hallOfFameClockStartedAtTick: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
   lightProviderOrder: NativeLightProviderOrderState
@@ -236,6 +237,7 @@ export interface GameSimulationState {
 }
 
 export interface GameSimulationOptions {
+  combatRngSeed?: number
   hubStudentPopulation?: HubStudentPopulationState
   hubTraderAnimationSeed?: number
   initialPlayerExperience?: number
@@ -321,6 +323,7 @@ export function createGameSimulation(
       )
   return {
     accumulatorSeconds: 0,
+    combatRng: createNativeRng(options.combatRngSeed ?? 0),
     hallOfFameClockStartedAtTick: 0,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),
@@ -2004,6 +2007,7 @@ function finishGameSimulationTick(
     players: secondaryPlayers,
     previousPlayers: playerCharacterRecords(previous.playerEntities),
     registerLightProvider: lightProviderOrder.register,
+    rng: previous.combatRng,
     spells: spellsBeforePrimary,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
@@ -2202,6 +2206,7 @@ function finishGameSimulationTick(
   )))
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
+    combatRng: cast.rng,
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),

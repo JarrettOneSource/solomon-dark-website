@@ -6,6 +6,7 @@ import {
   ETHER_PRIMARY_FLIGHT_RECORDS,
   ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
   ETHER_PRIMARY_IMPACT_SORT_BIAS,
+  ETHER_PRIMARY_PIERCE_STREAK_RECORD,
   ETHER_PRIMARY_PHASE_DEGREES_PER_TICK,
   ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK,
   ETHER_PRIMARY_ROOT_OFFSET,
@@ -14,6 +15,7 @@ import {
   etherPrimaryImpactFade,
   etherPrimaryImpactLightSource,
   etherPrimaryImpactPlan,
+  etherPrimaryPierceStreakPlan,
   etherPrimaryPhase,
 } from './primary-spell-ether-native.ts'
 
@@ -36,8 +38,8 @@ test('pins the native Magic Missile records, sizes, root, and nine-degree phase 
 
 test('underpowered Ether advances at 7.2 degrees and halves the complete flight compositor', () => {
   assert.equal(ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK, 7.2)
-  closeTo(etherPrimaryPhase(41, 19, true) - etherPrimaryPhase(41, 18, true), 7.2)
-  const weak = etherPrimaryFlightPlan(41, 19, true)
+  closeTo(etherPrimaryPhase(41, 19, 2.4) - etherPrimaryPhase(41, 18, 2.4), 7.2)
+  const weak = etherPrimaryFlightPlan(41, 19, 2.4, 1, true)
   const fullAlphaAtWeakPhase = etherPrimaryCompositorPlan(
     41,
     19,
@@ -115,6 +117,7 @@ test('uses the same two-pass compositor for the 19-frame Ether contact fade', ()
     kind: 'ether-impact',
     origin: { x: 120, y: 240 },
     ownerId: 'caster',
+    visualScale: 1,
     worldKey: 'boneyard:run',
   } as const
   const plan = etherPrimaryImpactPlan(impact)
@@ -140,6 +143,7 @@ test('publishes the post-update Ether contact light at the child root', () => {
     kind: 'ether-impact',
     origin: { x: 120, y: 240 },
     ownerId: 'caster',
+    visualScale: 1,
     worldKey: 'boneyard:run',
   } as const
   const first = etherPrimaryImpactLightSource(impact)
@@ -151,4 +155,31 @@ test('publishes the post-update Ether contact light at the child root', () => {
     radius: ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
   })
   assert.ok(last.intensity > 0 && last.intensity < 0.051)
+})
+
+test('renders surviving-pierce record 53 as a ten-tick heading-aligned additive streak', () => {
+  const state = {
+    ageTicks: 0,
+    headingDegrees: 70,
+    id: 91,
+    kind: 'ether-pierce-streak',
+    origin: { x: 12, y: 34 },
+    ownerId: 'caster',
+    visualScale: 0.5,
+    worldKey: 'boneyard:run',
+  } as const
+  assert.equal(ETHER_PRIMARY_PIERCE_STREAK_RECORD, 53)
+  assert.deepEqual(etherPrimaryPierceStreakPlan(state), {
+    alpha: 1,
+    blend: 'add',
+    position: state.origin,
+    record: 53,
+    rotationDegrees: 70,
+    scale: 0.5,
+    worldY: 34,
+  })
+  assert.equal(
+    etherPrimaryPierceStreakPlan({ ...state, ageTicks: 9 }).alpha,
+    Math.fround(0.09999992698431015),
+  )
 })

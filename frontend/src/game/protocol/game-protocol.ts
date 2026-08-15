@@ -3687,9 +3687,11 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'velocity', 'worldKey',
     ...(source.kind === 'earth' ? ['assemblyCharge', 'hitTargetIds', 'orientation'] : []),
-    ...(source.kind === 'ether'
-      ? ['headingDegrees', 'targetId', 'turnAccumulator', 'underpowered']
-      : []),
+    ...(source.kind === 'ether' ? [
+      'damageRetention', 'headingDegrees', 'piercesRemaining', 'reacquiresTarget',
+      'speed', 'targetId', 'turnAccumulator', 'turnInput', 'underpowered',
+      'visualScale',
+    ] : []),
     ...(source.kind === 'fire' ? ['underpowered'] : []),
   ])
   if (source.phase !== 'flight' && source.phase !== 'held') {
@@ -3775,6 +3777,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     } satisfies PrimarySpellEarthProjectileState
   }
   if (source.kind === 'ether') {
+    const damageRetention = finite(source.damageRetention, `${field}.damageRetention`)
+    if (damageRetention < 0 || damageRetention > 1) {
+      throw new GameProtocolError(`${field}.damageRetention is outside [0,1]`)
+    }
     const headingDegrees = finite(source.headingDegrees, `${field}.headingDegrees`)
     if (headingDegrees < 0 || headingDegrees >= 360) {
       throw new GameProtocolError(`${field}.headingDegrees is outside [0,360)`)
@@ -3785,15 +3791,30 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
         `${field}.turnAccumulator is outside [${ETHER_PRIMARY_INITIAL_TURN},10]`,
       )
     }
+    const speed = positiveFinite(source.speed, `${field}.speed`)
+    const turnInput = positiveFinite(source.turnInput, `${field}.turnInput`)
+    const visualScale = positiveFinite(source.visualScale, `${field}.visualScale`)
+    if (speed > 100 || turnInput > 100 || visualScale > 1) {
+      throw new GameProtocolError(`${field} exceeds the native Ether payload range`)
+    }
     return {
       ...projectile,
+      damageRetention,
       headingDegrees,
       kind: 'ether',
+      piercesRemaining: nonnegativeInteger(
+        source.piercesRemaining,
+        `${field}.piercesRemaining`,
+      ),
+      reacquiresTarget: boolean(source.reacquiresTarget, `${field}.reacquiresTarget`),
+      speed,
       targetId: source.targetId === null
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),
+      turnInput,
       turnAccumulator,
       underpowered: boolean(source.underpowered, `${field}.underpowered`),
+      visualScale,
     }
   }
   return {
@@ -3905,12 +3926,17 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'ether-impact') {
     onlyKeys(source, field, [
-      'ageTicks', 'birthTick', 'id', 'kind', 'lightRegistration', 'origin', 'ownerId',
+      'ageTicks', 'birthTick', 'id', 'kind', 'lightRegistration', 'origin',
+      'ownerId', 'visualScale',
       'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
     if (ageTicks >= PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the Ether impact lifetime`)
+    }
+    const visualScale = positiveFinite(source.visualScale, `${field}.visualScale`)
+    if (visualScale > 1) {
+      throw new GameProtocolError(`${field}.visualScale exceeds one`)
     }
     return {
       ageTicks,
@@ -3924,6 +3950,7 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      visualScale,
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }
@@ -3946,6 +3973,34 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
       ),
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+    }
+  }
+  if (source.kind === 'ether-pierce-streak') {
+    onlyKeys(source, field, [
+      'ageTicks', 'headingDegrees', 'id', 'kind', 'origin', 'ownerId',
+      'visualScale', 'worldKey',
+    ])
+    const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+    if (ageTicks >= 10) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the Ether streak lifetime`)
+    }
+    const headingDegrees = finite(source.headingDegrees, `${field}.headingDegrees`)
+    if (headingDegrees < 0 || headingDegrees >= 360) {
+      throw new GameProtocolError(`${field}.headingDegrees is outside [0,360)`)
+    }
+    const visualScale = positiveFinite(source.visualScale, `${field}.visualScale`)
+    if (visualScale > 1) {
+      throw new GameProtocolError(`${field}.visualScale exceeds one`)
+    }
+    return {
+      ageTicks,
+      headingDegrees,
+      id: positiveInteger(source.id, `${field}.id`),
+      kind: 'ether-pierce-streak',
+      origin: vector(source.origin, `${field}.origin`),
+      ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      visualScale,
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }

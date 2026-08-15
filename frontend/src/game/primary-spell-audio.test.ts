@@ -326,6 +326,7 @@ test('plays each semantic Fire impact once without replaying an initial snapshot
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
     origin: { x: player.position.x, y: player.position.y - 50 },
     ownerId: PLAYER_ID,
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   } as const
   const audio = new RecordingAudio()
@@ -366,6 +367,7 @@ test('plays each semantic Ether impact once with its native pitch interval', () 
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
     origin: { x: player.position.x, y: player.position.y - 50 },
     ownerId: PLAYER_ID,
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   } as const
   const audio = new RecordingAudio()

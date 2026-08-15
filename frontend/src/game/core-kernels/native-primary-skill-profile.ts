@@ -12,6 +12,7 @@ export type { NativeOffensiveSpellFactors } from './native-offensive-resolution.
 interface NativePrimarySkillProfileBase {
   readonly damageMaximum: number
   readonly damageMinimum: number
+  readonly damageRollCount: number
   readonly manaCost: number
   readonly rank: number
   readonly skillId: 8 | 16 | 24 | 32 | 40
@@ -95,13 +96,14 @@ export function nativePrimarySkillProfile(
   }
   const primarySkillId = skillId as NativePrimarySkillProfile['skillId']
   const rank = effectiveRank(skillBook, primarySkillId, true)
-  const damageMinimum = damageValue(statBook, primarySkillId, rank, 'minimum')
-    * factors.damage
-  const damageMaximum = damageValue(statBook, primarySkillId, rank, 'maximum')
-    * factors.damage
+  const rawDamageMinimum = damageValue(statBook, primarySkillId, rank, 'minimum')
+  const rawDamageMaximum = damageValue(statBook, primarySkillId, rank, 'maximum')
+  const damageMinimum = rawDamageMinimum * factors.damage
+  const damageMaximum = rawDamageMaximum * factors.damage
   const common = {
     damageMaximum,
     damageMinimum,
+    damageRollCount: rawDamageMaximum - rawDamageMinimum + 1,
     manaCost: primaryManaCost(skillBook, statBook, primarySkillId) * factors.manaCost,
     rank,
     skillId: primarySkillId,

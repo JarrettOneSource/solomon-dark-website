@@ -11,6 +11,10 @@ import {
 } from './player-character.ts'
 import type { NativePrimarySkillProfile } from './native-primary-skill-profile.ts'
 import {
+  drawNativeInteger,
+  type NativeRngState,
+} from './native-rng.ts'
+import {
   WATER_FROST_PARTICLES_PER_TICK,
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   waterFrostJetEmission,
@@ -44,6 +48,8 @@ import {
   ETHER_PRIMARY_INITIAL_TURN,
   airPrimaryBoltGeometry,
   advanceEtherPrimaryHoming,
+  directionFromHeading,
+  nativePrimaryTargetEligible,
   selectAirPrimaryTarget,
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
@@ -60,6 +66,7 @@ export type PrimarySpellTransientKind =
   | 'earth-called-rock'
   | 'earth-impact'
   | 'ether-impact'
+  | 'ether-pierce-streak'
   | 'fire'
   | 'fire-impact'
   | NativePlayerStaffTransient['kind']
@@ -89,11 +96,17 @@ export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectile
 }
 
 export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectileBaseState {
+  damageRetention: number
   headingDegrees: number
   kind: 'ether'
+  piercesRemaining: number
+  reacquiresTarget: boolean
+  speed: number
   targetId: string | null
+  turnInput: number
   turnAccumulator: number
   underpowered: boolean
+  visualScale: number
 }
 
 export interface PrimarySpellFireProjectileState extends PrimarySpellProjectileBaseState {
@@ -205,6 +218,18 @@ export interface PrimarySpellEtherImpactState {
   lightRegistration: NativeLightProviderRegistration
   origin: Vector2
   ownerId: string
+  visualScale: number
+  worldKey: string
+}
+
+export interface PrimarySpellEtherPierceStreakState {
+  ageTicks: number
+  headingDegrees: number
+  id: number
+  kind: 'ether-pierce-streak'
+  origin: Vector2
+  ownerId: string
+  visualScale: number
   worldKey: string
 }
 
@@ -223,6 +248,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellEarthCalledRockState
   | PrimarySpellEarthImpactState
   | PrimarySpellEtherImpactState
+  | PrimarySpellEtherPierceStreakState
   | PrimarySpellFireImpactState
   | PrimarySpellFireParticleState
   | NativePlayerStaffTransient
@@ -256,6 +282,7 @@ export interface PrimarySpellTickContext {
   players: Readonly<Record<string, PlayerCharacterState>>
   previousPlayers: Readonly<Record<string, PlayerCharacterState>>
   registerLightProvider?: RegisterNativeLightProvider
+  rng: NativeRngState
   spells: PrimarySpellSimulationState
   tick: number
   viewScale: number
@@ -278,6 +305,7 @@ export interface PrimarySpellTickResult {
   channelEmissions: readonly PrimarySpellChannelEmission[]
   manaSpent: Readonly<Record<string, number>>
   players: Readonly<Record<string, PlayerCharacterState>>
+  rng: NativeRngState
   spells: PrimarySpellSimulationState
 }
 
@@ -567,6 +595,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   const registerLightProvider = context.registerLightProvider
     ?? standaloneLightProviderOrder.register
   let nextId = context.spells.nextId
+  let rng = context.rng
   const existingCalledRockIds = new Set(context.spells.transients
     .filter((effect) => effect.kind === 'earth-called-rock')
     .map((effect) => effect.id))
@@ -756,7 +785,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       && (player.config.element === 'ether' || player.config.element === 'fire')
     ) {
       const underpowered = debitMana()
-      const born = createOneShotProjectile(
+      const birth = createOneShotProjectiles(
         nextId,
         playerId,
         nextPlayer,
@@ -764,62 +793,65 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         authority.primarySkill,
         worldKey,
         context.spellTargets(playerId),
+        rng,
         underpowered,
-        registerLightProvider('actor'),
+        registerLightProvider,
       )
-      nextId += 1
-      if (born.kind === 'fire') {
-        const initialClear = context.canTraverseProjectile(
-          born,
-          nextPlayer.position,
-          born.position,
-        )
-        const firstLookaheadClear = initialClear && context.canTraverseProjectile(
-          born,
-          born.position,
-          {
-            x: born.position.x + born.velocity.x * 5,
-            y: born.position.y + born.velocity.y * 5,
-          },
-        )
-        if (initialClear && firstLookaheadClear) {
-          const spell = advanceProjectile(born, [])
-          projectiles = [...projectiles, spell]
-          transients = [...transients, createFireParticle(nextId, spell)]
-          nextId += 1
-        } else {
-          transients = [...transients, fireImpact(
-            nextId,
+      rng = birth.rng
+      nextId += birth.projectiles.length
+      for (const born of birth.projectiles) {
+        if (born.kind === 'fire') {
+          const initialClear = context.canTraverseProjectile(
             born,
-            registerLightProvider('transient'),
-          )]
-          nextId += 1
-        }
-      } else {
-        if (born.kind !== 'ether') throw new Error('Expected an Ether projectile')
-        const firstLookaheadClear = context.canTraverseProjectile(
-          born,
-          born.position,
-          {
-            x: born.position.x + born.velocity.x * 5,
-            y: born.position.y + born.velocity.y * 5,
-          },
-        )
-        if (firstLookaheadClear) {
-          const spell = advanceProjectile(
-            born,
-            context.spellTargets(playerId),
+            nextPlayer.position,
+            born.position,
           )
-          if (spell.kind !== 'ether') throw new Error('Expected an Ether projectile')
-          projectiles = [...projectiles, spell]
-        } else {
-          transients = [...transients, etherImpact(
-            nextId,
+          const firstLookaheadClear = initialClear && context.canTraverseProjectile(
             born,
-            context.tick,
-            registerLightProvider('transient'),
-          )]
-          nextId += 1
+            born.position,
+            {
+              x: born.position.x + born.velocity.x * 5,
+              y: born.position.y + born.velocity.y * 5,
+            },
+          )
+          if (initialClear && firstLookaheadClear) {
+            const spell = advanceProjectile(born, [])
+            projectiles = [...projectiles, spell]
+            transients = [...transients, createFireParticle(nextId, spell)]
+            nextId += 1
+          } else {
+            transients = [...transients, fireImpact(
+              nextId,
+              born,
+              registerLightProvider('transient'),
+            )]
+            nextId += 1
+          }
+        } else {
+          const firstLookaheadClear = context.canTraverseProjectile(
+            born,
+            born.position,
+            {
+              x: born.position.x + born.velocity.x * 5,
+              y: born.position.y + born.velocity.y * 5,
+            },
+          )
+          if (firstLookaheadClear) {
+            const spell = advanceProjectile(
+              born,
+              context.spellTargets(playerId),
+            )
+            if (spell.kind !== 'ether') throw new Error('Expected an Ether projectile')
+            projectiles = [...projectiles, spell]
+          } else {
+            transients = [...transients, etherImpact(
+              nextId,
+              born,
+              context.tick,
+              registerLightProvider('transient'),
+            )]
+            nextId += 1
+          }
         }
       }
       nextPlayer = {
@@ -1085,6 +1117,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     channelEmissions,
     manaSpent,
     players,
+    rng,
     spells: { nextId, projectiles, transients },
   }
 }
@@ -1269,60 +1302,135 @@ function advancePrimaryCast(
   }
 }
 
-function createOneShotProjectile(
-  id: number,
+function createOneShotProjectiles(
+  firstId: number,
   ownerId: string,
   player: PlayerCharacterState,
   kind: 'ether' | 'fire',
   primarySkill: NativePrimarySkillProfile,
   worldKey: string,
   targets: readonly PrimarySpellTarget[],
+  sourceRng: NativeRngState,
   underpowered: boolean,
-  lightRegistration: NativeLightProviderRegistration,
-): PrimarySpellProjectileState {
-  const direction = player.primaryCast.aimDirection
+  registerLightProvider: RegisterNativeLightProvider,
+): { projectiles: readonly (PrimarySpellEtherProjectileState | PrimarySpellFireProjectileState)[], rng: NativeRngState } {
+  if (primarySkill.kind !== kind) {
+    throw new Error(`primary profile ${primarySkill.kind} cannot create ${kind}`)
+  }
+  const damageDraw = drawInclusiveDamage(
+    sourceRng,
+    primarySkill.damageMinimum,
+    primarySkill.damageMaximum,
+    primarySkill.damageRollCount,
+  )
+  const aimDirection = player.primaryCast.aimDirection
   const emitter = primarySpellEmitter(player)
-  const speed = kind === 'ether'
-    ? underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
-    : 4.5
-  const alongAim = kind === 'fire' ? 20 : 0
-  const spawn = {
-    x: emitter.x + direction.x * alongAim,
-    y: emitter.y + 10 + direction.y * alongAim,
-  }
-  const velocity = { x: direction.x * speed, y: direction.y * speed }
-  const common = {
-    ageTicks: 0,
-    charge: 1,
-    damage: (kind === 'ether' && (id & 1) === 0
-      ? primarySkill.damageMinimum
-      : primarySkill.damageMaximum) * (underpowered ? 0.5 : 1),
-    direction: { ...direction },
-    flightTicks: 0,
-    id,
-    kind,
-    lightRegistration,
-    ownerId,
-    phase: 'flight' as const,
-    position: spawn,
-    underpowered,
-    velocity,
-    worldKey,
-  }
   if (kind === 'fire') {
-    return { ...common, kind: 'fire' }
+    const speed = 4.5
+    const spawn = {
+      x: emitter.x + aimDirection.x * 20,
+      y: emitter.y + 10 + aimDirection.y * 20,
+    }
+    return {
+      projectiles: [{
+        ageTicks: 0,
+        charge: 1,
+        damage: damageDraw.value * (underpowered ? 0.5 : 1),
+        direction: { ...aimDirection },
+        flightTicks: 0,
+        id: firstId,
+        kind: 'fire',
+        lightRegistration: registerLightProvider('actor'),
+        ownerId,
+        phase: 'flight',
+        position: spawn,
+        underpowered,
+        velocity: { x: aimDirection.x * speed, y: aimDirection.y * speed },
+        worldKey,
+      }],
+      rng: damageDraw.rng,
+    }
   }
-  const target = selectEtherPrimaryTarget({
-    aimDirection: direction,
-    origin: spawn,
-    targets,
+  if (primarySkill.kind !== 'ether') throw new Error('Expected an Ether primary profile')
+  const aimHeading = actorHeadingFromVector(aimDirection.x, aimDirection.y)
+  const quantity = underpowered ? 1 : primarySkill.quantity
+  const speed = underpowered
+    ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED
+    : 3 * primarySkill.speedFactor
+  const projectiles = Array.from({ length: quantity }, (_, index) => {
+    const headingDegrees = nativeMissileFanHeading(aimHeading, quantity, index)
+    const direction = directionFromHeading(headingDegrees)
+    const spawn = { x: emitter.x, y: emitter.y + 10 }
+    const target = selectEtherPrimaryTarget({
+      aimDirection: direction,
+      origin: spawn,
+      targets,
+    })
+    return {
+      ageTicks: 0,
+      charge: 1,
+      damage: damageDraw.value * (underpowered ? 0.5 : 1),
+      damageRetention: underpowered ? 1 : primarySkill.damageRetention,
+      direction,
+      flightTicks: 0,
+      headingDegrees,
+      id: firstId + index,
+      kind: 'ether' as const,
+      lightRegistration: registerLightProvider('actor'),
+      ownerId,
+      phase: 'flight' as const,
+      piercesRemaining: underpowered ? 0 : primarySkill.pierces,
+      position: spawn,
+      reacquiresTarget: underpowered ? false : primarySkill.reacquiresTarget,
+      speed,
+      targetId: target?.id ?? null,
+      turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+      turnInput: underpowered
+        ? PRIMARY_SPELL_ETHER_UNDERPOWERED_TURN_INPUT
+        : 2 * primarySkill.speedFactor * 0.75 ** index,
+      underpowered,
+      velocity: { x: direction.x * speed, y: direction.y * speed },
+      visualScale: 1,
+      worldKey,
+    }
   })
   return {
-    ...common,
-    headingDegrees: Math.fround(actorHeadingFromVector(direction.x, direction.y)),
-    kind: 'ether',
-    targetId: target?.id ?? null,
-    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    projectiles,
+    rng: damageDraw.rng,
+  }
+}
+
+function nativeMissileFanHeading(
+  aimHeading: number,
+  quantity: number,
+  index: number,
+): number {
+  const step = quantity < 4 ? 30 : 20
+  const base = aimHeading + (quantity % 2 === 0 ? step / 2 : 0)
+  const signedOffset = (index % 2 === 0 ? 1 : -1) * index * step
+  return Math.fround(((base + signedOffset) % 360 + 360) % 360)
+}
+
+function drawInclusiveDamage(
+  source: NativeRngState,
+  minimum: number,
+  maximum: number,
+  count: number,
+): { rng: NativeRngState, value: number } {
+  if (
+    !Number.isFinite(minimum)
+    || !Number.isFinite(maximum)
+    || maximum < minimum
+    || !Number.isSafeInteger(count)
+    || count < 1
+  ) {
+    throw new RangeError('one-shot spell damage domain is invalid')
+  }
+  if (count === 1) return { rng: source, value: minimum }
+  const draw = drawNativeInteger(source, count)
+  return {
+    rng: draw.state,
+    value: minimum + draw.value * (maximum - minimum) / (count - 1),
   }
 }
 
@@ -1362,16 +1470,27 @@ function advanceProjectile(
     return { ...spell, ageTicks: spell.ageTicks + 1 }
   }
   if (spell.kind === 'ether') {
-    const target = spell.targetId === null
+    const candidate = spell.targetId === null
       ? undefined
       : targets.find(({ id }) => id === spell.targetId)
+    const retainedTarget = candidate
+      && nativePrimaryTargetEligible(candidate, NATIVE_PRIMARY_HOSTILE_FLAG)
+      ? candidate
+      : undefined
+    const target = retainedTarget ?? (spell.reacquiresTarget
+      ? selectEtherPrimaryTarget({
+          aimDirection: spell.direction,
+          origin: spell.position,
+          targets,
+        }) ?? undefined
+      : undefined)
     const advanced = advanceEtherPrimaryHoming({
       headingDegrees: spell.headingDegrees,
       movementScalar: 1,
       position: spell.position,
-      speed: spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3,
+      speed: spell.speed,
       targetPosition: target?.position ?? null,
-      turnInput: spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_TURN_INPUT : 2,
+      turnInput: spell.turnInput,
       turnAccumulator: spell.turnAccumulator,
     })
     return {
@@ -1381,15 +1500,11 @@ function advanceProjectile(
       flightTicks: spell.flightTicks + 1,
       headingDegrees: advanced.headingDegrees,
       position: advanced.position,
-      targetId: target?.active ? target.id : null,
+      targetId: target?.id ?? null,
       turnAccumulator: advanced.turnAccumulator,
       velocity: {
-        x: Math.fround(advanced.direction.x * (
-          spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
-        )),
-        y: Math.fround(advanced.direction.y * (
-          spell.underpowered ? PRIMARY_SPELL_ETHER_UNDERPOWERED_SPEED : 3
-        )),
+        x: Math.fround(advanced.direction.x * spell.speed),
+        y: Math.fround(advanced.direction.y * spell.speed),
       },
     }
   }
@@ -1434,6 +1549,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'earth-called-rock': throw new Error('Called-rock lifetime is state driven')
     case 'earth-impact': return effect.lifetimeTicks
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
+    case 'ether-pierce-streak': return 10
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'player-staff-contact':
@@ -1455,6 +1571,7 @@ function etherImpact(
   birthTick: number,
   lightRegistration: NativeLightProviderRegistration,
 ): PrimarySpellEtherImpactState {
+  if (spell.kind !== 'ether') throw new Error('Ether impact requires an Ether projectile')
   return {
     ageTicks: 0,
     birthTick,
@@ -1463,6 +1580,7 @@ function etherImpact(
     lightRegistration,
     origin: { ...spell.position },
     ownerId: spell.ownerId,
+    visualScale: spell.visualScale,
     worldKey: spell.worldKey,
   }
 }

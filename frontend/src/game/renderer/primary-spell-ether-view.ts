@@ -2,6 +2,7 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 
 import type {
   PrimarySpellEtherImpactState,
+  PrimarySpellEtherPierceStreakState,
   PrimarySpellProjectileState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
@@ -9,6 +10,7 @@ import {
   ETHER_PRIMARY_ROOT_OFFSET,
   etherPrimaryFlightPlan,
   etherPrimaryImpactPlan,
+  etherPrimaryPierceStreakPlan,
   type EtherPrimaryDraw,
   type EtherPrimarySprite,
 } from './primary-spell-ether-native.ts'
@@ -40,7 +42,13 @@ export class EtherPrimarySpellView {
     if (!('position' in state) || state.kind !== 'ether') return
     this.state = state
     this.container.position.set(state.position.x, state.position.y)
-    const plan = etherPrimaryFlightPlan(state.id, state.ageTicks, state.underpowered)
+    const plan = etherPrimaryFlightPlan(
+      state.id,
+      state.ageTicks,
+      state.speed,
+      state.visualScale,
+      state.underpowered,
+    )
     while (this.sprites.length < plan.draws.length) {
       const sprite = new Sprite()
       sprite.anchor.set(0.5)
@@ -142,6 +150,55 @@ export class EtherPrimaryImpactView {
   }
 }
 
+export class EtherPrimaryPierceStreakView {
+  readonly container = new Container({ label: 'ether-pierce-streak' })
+  readonly containers = [this.container]
+  readonly kind = 'ether-pierce-streak'
+  private readonly sprite: Sprite
+  private state: PrimarySpellEtherPierceStreakState
+
+  constructor(state: PrimarySpellEtherPierceStreakState, texture: Texture) {
+    this.state = state
+    this.sprite = new Sprite(texture)
+    this.sprite.anchor.set(0.5)
+    this.sprite.blendMode = 'add'
+    this.sprite.eventMode = 'none'
+    this.container.eventMode = 'none'
+    this.container.addChild(this.sprite)
+    this.update(state)
+  }
+
+  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+    if (state.kind !== 'ether-pierce-streak') return
+    this.state = state
+    const plan = etherPrimaryPierceStreakPlan(state)
+    this.container.position.set(plan.position.x, plan.position.y)
+    this.sprite.rotation = plan.rotationDegrees * Math.PI / 180
+    this.sprite.scale.set(plan.scale)
+    this.sprite.alpha = plan.alpha
+  }
+
+  painterRoots(): readonly EtherPiercePainterRoot[] {
+    return [{
+      container: this.container,
+      lane: 'world-sorted',
+      queueFamily: 'zanim',
+      regionLightPoint: null,
+      sortBias: 0,
+      suffix: '',
+      worldY: etherPrimaryPierceStreakPlan(this.state).worldY,
+    }]
+  }
+
+  setTint(_suffix: string, _tint: number): void {
+    // Anim_FadeAdditive owns a white self-lit draw.
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true })
+  }
+}
+
 interface EtherPainterRoot {
   container: Container
   lane: 'world-sorted'
@@ -161,6 +218,8 @@ interface EtherImpactPainterRoot {
   suffix: string
   worldY: number
 }
+
+type EtherPiercePainterRoot = EtherImpactPainterRoot
 
 function applyEtherDraw(
   sprite: Sprite,

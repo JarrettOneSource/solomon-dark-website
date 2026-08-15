@@ -168,8 +168,53 @@ test('Ether contact uses its six-unit point query and publishes FadeMM at the ad
     lightRegistration: { managerLane: 'transient', registrationOrdinal: 100 },
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
+    visualScale: 1,
     worldKey: WORLD_KEY,
   }])
+})
+
+test('Piercing keeps the missile, scales payload and art, and emits native contact streaks', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+  ])
+  const base = projectile({
+    id: 8,
+    kind: 'ether',
+    position: { x: 0, y: 0 },
+    velocity: { x: 3, y: 0 },
+  })
+  if (base.kind !== 'ether') throw new Error('Expected an Ether fixture')
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [{
+      ...base,
+      damageRetention: 0.5,
+      piercesRemaining: 1,
+      reacquiresTarget: true,
+    }],
+  }), [], 77, WORLD_KEY)
+
+  assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [{
+    actorId: 1,
+    amount: 2,
+  }])
+  const continued = result.spells.projectiles[0]
+  assert.equal(continued?.kind, 'ether')
+  if (continued?.kind !== 'ether') throw new Error('Expected a surviving Ether missile')
+  assert.equal(continued.damage, 1)
+  assert.equal(continued.piercesRemaining, 0)
+  assert.equal(continued.visualScale, 0.5)
+  assert.deepEqual(continued.position, { x: 20, y: 0 })
+  assert.equal(continued.targetId, 'enemy:2')
+  assert.equal(result.spells.nextId, 104)
+  assert.deepEqual(
+    result.spells.transients.map((effect) => effect.kind),
+    Array.from({ length: 4 }, () => 'ether-pierce-streak'),
+  )
+  assert.deepEqual(
+    result.spells.transients.map((effect) => 'origin' in effect ? effect.origin.x : null),
+    [5, 10, 15, 20],
+  )
 })
 
 test('Earth gathers strict charge-scaled roots once and never fractures on actor contact', () => {
@@ -388,11 +433,17 @@ function projectile(options: {
     case 'ether':
       return {
         ...common,
+        damageRetention: 1,
         headingDegrees: 0,
         kind: 'ether',
+        piercesRemaining: 0,
+        reacquiresTarget: false,
+        speed: 3,
         targetId: null,
+        turnInput: 2,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
         underpowered: false,
+        visualScale: 1,
       }
     case 'fire':
       return { ...common, kind: 'fire', underpowered: false }

@@ -194,6 +194,11 @@ function fixedTransientTiming(
       firstVisibleAge: 0,
       lifetimeTicks: PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
     }
+    case 'ether-pierce-streak': return {
+      ageZeroTick: snapshotTick - effect.ageTicks,
+      firstVisibleAge: 0,
+      lifetimeTicks: 10,
+    }
     case 'fire': return {
       ageZeroTick: snapshotTick - effect.ageTicks,
       firstVisibleAge: 0,
@@ -376,6 +381,23 @@ function interpolateTransient(
   if (older.kind === 'ether-impact' || newer.kind === 'ether-impact') {
     return copyTransient(discrete)
   }
+  if (
+    older.kind === 'ether-pierce-streak'
+    && newer.kind === 'ether-pierce-streak'
+  ) {
+    const streak = blend < 1 ? older : newer
+    return {
+      ...streak,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: { ...streak.origin },
+    }
+  }
+  if (
+    older.kind === 'ether-pierce-streak'
+    || newer.kind === 'ether-pierce-streak'
+  ) {
+    return copyTransient(discrete)
+  }
   if (older.kind === 'fire' && newer.kind === 'fire') {
     const fire = blend < 1 ? older : newer
     return {
@@ -439,6 +461,9 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
   if (effect.kind === 'player-staff-melee' || effect.kind === 'player-staff-spin') {
+    return { ...effect, origin: { ...effect.origin } }
+  }
+  if (effect.kind === 'ether-pierce-streak') {
     return { ...effect, origin: { ...effect.origin } }
   }
   if (effect.kind === 'player-staff-contact') {

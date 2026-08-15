@@ -17,6 +17,11 @@ import {
   type NativePrimarySkillProfile,
 } from './native-primary-skill-profile.ts'
 import {
+  createNativeRng,
+  drawNativeInteger,
+  type NativeRngState,
+} from './native-rng.ts'
+import {
   createPrimarySpellSimulation,
   PRIMARY_CAST_EMISSION_TICK,
   PRIMARY_CAST_ETHER_ACTION_END_TICK,
@@ -77,6 +82,7 @@ const EMPTY_SPELL_WORLD = {
   castAuthority: {
     [PLAYER_ID]: { availableMana: 1_000_000, eligible: true },
   },
+  rng: createNativeRng(0),
   spellObstructionPoint: () => null,
   spellRangeEndpoint: (
     _ownerId: string,
@@ -147,6 +153,7 @@ function earthChargeAfter(updateCount: number): number {
 interface DirectSpellHarness {
   players: Readonly<Record<string, PlayerCharacterState>>
   primarySkill: NativePrimarySkillProfile
+  rng: NativeRngState
   spells: PrimarySpellSimulationState
   tick: number
 }
@@ -169,11 +176,32 @@ function primarySkillRankStats(
   )
 }
 
+function primarySkillWithRanks(
+  element: WizardElement,
+  ranks: Readonly<Record<number, number>>,
+): NativePrimarySkillProfile {
+  const book = createPlayerSkillBook({
+    discipline: 'arcane',
+    displayName: 'Caster',
+    element,
+  })
+  const effectiveRanks = [...book.effectiveRanks]
+  for (const [skillId, rank] of Object.entries(ranks)) {
+    effectiveRanks[Number(skillId)] = rank
+  }
+  return nativePrimarySkillProfile(
+    { ...book, effectiveRanks: Object.freeze(effectiveRanks) },
+    playerStatBook(),
+    { damage: 1, manaCost: 1 },
+  )
+}
+
 function directSpellHarness(element: WizardElement, rank = 1): DirectSpellHarness {
   const state = simulation(element)
   return {
     players: { [PLAYER_ID]: getPlayerCharacter(state, PLAYER_ID) },
     primarySkill: primarySkillRankStats(element, rank),
+    rng: createNativeRng(0),
     spells: createPrimarySpellSimulation(),
     tick: 0,
   }
@@ -207,6 +235,7 @@ function stepSpellKernel(
     },
     players: state.players,
     previousPlayers: state.players,
+    rng: state.rng,
     spells: state.spells,
     tick: state.tick + 1,
     viewScale: 1.35,
@@ -218,6 +247,7 @@ function stepSpellKernel(
     state: {
       players: result.players,
       primarySkill,
+      rng: result.rng,
       spells: result.spells,
       tick: state.tick + 1,
     },
@@ -566,6 +596,80 @@ test('Ether uses its faster native Staff rate and repeats while held', () => {
   assert.equal(getPlayerCharacter(state, PLAYER_ID).primaryCast.emissionSequence, 2)
 })
 
+test('More Missiles shares one damage roll and preserves native fan and turn order', () => {
+  const profile = primarySkillWithRanks('ether', { 8: 2, 9: 2, 10: 3 })
+  assert.equal(profile.kind, 'ether')
+  let harness = directSpellHarness('ether')
+  let outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+  harness = outcome.state
+  while (harness.spells.projectiles.length === 0) {
+    outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+    harness = outcome.state
+    assert.ok(harness.tick <= PRIMARY_CAST_ETHER_EMISSION_TICK + 1)
+  }
+
+  const missiles = harness.spells.projectiles
+  assert.deepEqual(missiles.map(({ id }) => id), [1, 2, 3, 4])
+  assert.deepEqual(
+    missiles.map((spell) => spell.kind === 'ether' ? spell.headingDegrees : null),
+    [10, 350, 50, 310],
+  )
+  assert.equal(new Set(missiles.map(({ damage }) => damage)).size, 1)
+  assert.ok(missiles[0]!.damage >= 2 && missiles[0]!.damage <= 4)
+  assert.deepEqual(
+    missiles.map((spell) => spell.kind === 'ether' ? spell.speed : null),
+    [3.75, 3.75, 3.75, 3.75],
+  )
+  assert.deepEqual(
+    missiles.map((spell) => spell.kind === 'ether' ? spell.turnInput : null),
+    [2.5, 1.875, 1.40625, 1.0546875],
+  )
+  assert.deepEqual(
+    missiles.map((spell) => spell.kind === 'ether' ? spell.visualScale : null),
+    [1, 1, 1, 1],
+  )
+  assert.deepEqual(harness.rng, drawNativeInteger(createNativeRng(0), 3).state)
+})
+
+test('Smart Missiles reacquires after its copied target handle is lost', () => {
+  const profile = primarySkillWithRanks('ether', { 8: 1, 9: 1 })
+  assert.equal(profile.kind, 'ether')
+  let harness = directSpellHarness('ether')
+  let outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+  harness = outcome.state
+  while (harness.spells.projectiles.length === 0) {
+    outcome = stepSpellKernel(harness, true, 1_000_000, true, () => true, profile)
+    harness = outcome.state
+  }
+  const missile = harness.spells.projectiles[0]
+  assert.equal(missile?.kind, 'ether')
+  if (missile?.kind !== 'ether') throw new Error('Expected an Ether missile')
+  const target = hostileTarget('enemy:new', {
+    x: missile.position.x,
+    y: missile.position.y - 100,
+  })
+  const advanced = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    canTraverseProjectile: () => true,
+    inputs: {},
+    players: {},
+    previousPlayers: {},
+    rng: harness.rng,
+    spellTargets: () => [target],
+    spells: {
+      nextId: harness.spells.nextId,
+      projectiles: [{ ...missile, targetId: null }],
+      transients: [],
+    },
+    tick: harness.tick + 1,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  }).spells.projectiles[0]
+  assert.equal(advanced?.kind, 'ether')
+  if (advanced?.kind === 'ether') assert.equal(advanced.targetId, target.id)
+})
+
 test('Ether snapshots the forward-probe target and steers after its first movement', () => {
   const initial = simulation('ether')
   const player = getPlayerCharacter(initial, PLAYER_ID)
@@ -721,6 +825,8 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
   const missile = {
     ageTicks: 1,
     charge: 1,
+    damage: 2,
+    damageRetention: 1,
     direction: { x: 1, y: 0 },
     flightTicks: 1,
     headingDegrees: 90,
@@ -729,10 +835,15 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: PLAYER_ID,
     phase: 'flight',
+    piercesRemaining: 0,
     position: { x: 100, y: 200 },
+    reacquiresTarget: false,
+    speed: 3,
     targetId: 'enemy:7',
+    turnInput: 2,
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
     velocity: { x: 3, y: 0 },
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   } as const
   const target = hostileTarget('enemy:7', { x: 125, y: 200 })
@@ -778,6 +889,7 @@ test('Ether defers actor contact to combat and owns the terrain-impact lifetime'
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: missile.position,
     ownerId: PLAYER_ID,
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   }])
 
@@ -1040,6 +1152,8 @@ test('Fire has no distance or PoC flight-time range cap', () => {
       projectiles: [{
         ageTicks,
         charge: 1,
+        damage: 2,
+        damageRetention: 1,
         direction: { x: 1, y: 0 },
         flightTicks: ageTicks,
         id: 1,
@@ -1083,10 +1197,15 @@ test('Ether has no distance or legacy PoC flight-time range cap', () => {
         lightRegistration: ACTOR_LIGHT_REGISTRATION,
         ownerId: PLAYER_ID,
         phase: 'flight',
+        piercesRemaining: 0,
         position: { x: 100, y: 200 },
+        reacquiresTarget: false,
+        speed: 3,
         targetId: null,
+        turnInput: 2,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
         velocity: { x: 3, y: 0 },
+        visualScale: 1,
         worldKey: 'hub:courtyard',
       }],
       transients: [],

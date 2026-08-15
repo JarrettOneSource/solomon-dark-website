@@ -15,6 +15,7 @@ import {
   firstNativePrimaryPointContact,
   nativePrimaryConeTargets,
   nativePrimaryRootTargets,
+  selectEtherPrimaryTarget,
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -179,9 +180,31 @@ export function resolveBoneyardSpellCombat(
 
     enemies = damaged.store
     events.push(...damaged.events)
+    hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+    if (projectile.kind === 'ether' && projectile.piercesRemaining > 0) {
+      const continuation = continuePiercingEtherProjectile(
+        projectile,
+        target,
+        rows.map(({ target: rowTarget }) => rowTarget),
+      )
+      updatedProjectiles.set(projectile.id, continuation.projectile)
+      for (const origin of continuation.streakOrigins) {
+        impactTransients.push({
+          ageTicks: 0,
+          headingDegrees: projectile.headingDegrees,
+          id: nextSpellId,
+          kind: 'ether-pierce-streak',
+          origin,
+          ownerId: projectile.ownerId,
+          visualScale: continuation.projectile.visualScale,
+          worldKey: projectile.worldKey,
+        })
+        nextSpellId += 1
+      }
+      continue
+    }
     consumedProjectileIds.add(projectile.id)
     publishContactImpact(projectile, projectile.position)
-    hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
   }
 
   for (const emission of [...channelEmissions].sort(bySpellId)) {
@@ -251,6 +274,43 @@ export function resolveBoneyardSpellCombat(
     events: Object.freeze(events),
     hits: Object.freeze(hits),
     spells,
+  }
+}
+
+function continuePiercingEtherProjectile(
+  projectile: Extract<PrimarySpellProjectileState, { kind: 'ether' }>,
+  contacted: PrimarySpellTarget,
+  targets: readonly PrimarySpellTarget[],
+): {
+  projectile: Extract<PrimarySpellProjectileState, { kind: 'ether' }>
+  streakOrigins: readonly Vector2[]
+} {
+  const position = { ...projectile.position }
+  const streakOrigins: Vector2[] = []
+  while (true) {
+    position.x = Math.fround(position.x + projectile.direction.x * 5)
+    position.y = Math.fround(position.y + projectile.direction.y * 5)
+    streakOrigins.push({ ...position })
+    const radius = PRIMARY_SPELL_ETHER_COLLISION_RADIUS + contacted.bodyRadius
+    const dx = contacted.position.x - position.x
+    const dy = contacted.position.y - position.y
+    if (dx * dx + dy * dy >= radius * radius) break
+  }
+  const target = selectEtherPrimaryTarget({
+    aimDirection: projectile.direction,
+    origin: position,
+    targets: targets.filter(({ id }) => id !== contacted.id),
+  })
+  return {
+    projectile: {
+      ...projectile,
+      damage: projectile.damage * projectile.damageRetention,
+      piercesRemaining: projectile.piercesRemaining - 1,
+      position,
+      targetId: target?.id ?? null,
+      visualScale: projectile.visualScale * projectile.damageRetention,
+    },
+    streakOrigins,
   }
 }
 

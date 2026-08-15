@@ -1,4 +1,7 @@
-import type { PrimarySpellEtherImpactState } from '../core-kernels/primary-spells.ts'
+import type {
+  PrimarySpellEtherImpactState,
+  PrimarySpellEtherPierceStreakState,
+} from '../core-kernels/primary-spells.ts'
 import type { NativeBoneyardLightSource } from './boneyard-lighting.ts'
 
 export type EtherPrimaryBlend = 'add' | 'normal'
@@ -36,11 +39,22 @@ export interface EtherPrimaryImpactPlan extends EtherPrimaryFlightPlan {
   worldY: number
 }
 
+export interface EtherPrimaryPierceStreakPlan {
+  alpha: number
+  blend: 'add'
+  position: { x: number; y: number }
+  record: 53
+  rotationDegrees: number
+  scale: number
+  worldY: number
+}
+
 export const ETHER_PRIMARY_FLIGHT_RECORDS = {
   core: 110,
   ray: 112,
   spark: 111,
 } as const
+export const ETHER_PRIMARY_PIERCE_STREAK_RECORD = 53
 
 export const ETHER_PRIMARY_PHASE_DEGREES_PER_TICK = 9
 export const ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK = 7.2
@@ -54,25 +68,25 @@ const WHITE = 0xffffff
 export function etherPrimaryPhase(
   projectileId: number,
   ageTicks: number,
-  underpowered = false,
+  speed = 3,
 ): number {
   return visualRandom(projectileId, 0, 0) * 360
-    + ageTicks * (underpowered
-      ? ETHER_PRIMARY_UNDERPOWERED_PHASE_DEGREES_PER_TICK
-      : ETHER_PRIMARY_PHASE_DEGREES_PER_TICK)
+    + ageTicks * speed * 3
 }
 
 export function etherPrimaryFlightPlan(
   projectileId: number,
   ageTicks: number,
+  speed = 3,
+  visualScale = 1,
   underpowered = false,
 ): EtherPrimaryFlightPlan {
-  const phase = etherPrimaryPhase(projectileId, ageTicks, underpowered)
+  const phase = etherPrimaryPhase(projectileId, ageTicks, speed)
   return etherPrimaryCompositorPlan(
     projectileId,
     Math.floor(ageTicks),
     phase,
-    1,
+    visualScale,
     underpowered ? 0.5 : 1,
   )
 }
@@ -94,7 +108,7 @@ export function etherPrimaryImpactPlan(
     state.id,
     state.birthTick + ageTicks,
     state.birthTick + ageTicks,
-    2,
+    2 * state.visualScale,
     fade,
   )
   return {
@@ -118,6 +132,24 @@ export function etherPrimaryImpactLightSource(
     intensity: Math.min(intensity, 1),
     position: { ...state.origin },
     radius: ETHER_PRIMARY_IMPACT_LIGHT_RADIUS,
+  }
+}
+
+export function etherPrimaryPierceStreakPlan(
+  state: PrimarySpellEtherPierceStreakState,
+): EtherPrimaryPierceStreakPlan {
+  let alpha = Math.fround(1)
+  for (let tick = 0; tick < Math.floor(state.ageTicks); tick += 1) {
+    alpha = Math.fround(alpha - Math.fround(0.1))
+  }
+  return {
+    alpha: Math.max(0, alpha),
+    blend: 'add',
+    position: { ...state.origin },
+    record: ETHER_PRIMARY_PIERCE_STREAK_RECORD,
+    rotationDegrees: state.headingDegrees,
+    scale: state.visualScale,
+    worldY: state.origin.y,
   }
 }
 

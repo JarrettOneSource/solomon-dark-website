@@ -1635,6 +1635,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ageTicks: 1,
     charge: 1,
     damage: 4,
+    damageRetention: 1,
     direction: { x: 0, y: -1 },
     flightTicks: 1,
     headingDegrees: 0,
@@ -1643,11 +1644,16 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
     ownerId: 'player-1',
     phase: 'flight',
+    piercesRemaining: 0,
     position: { x: 800, y: 400 },
+    reacquiresTarget: false,
+    speed: 3,
     targetId: null,
+    turnInput: 2,
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
     underpowered: false,
     velocity: { x: 0, y: -3 },
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   }
   const boulder = {
@@ -1752,6 +1758,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     lightRegistration: TRANSIENT_LIGHT_REGISTRATION,
     origin: { x: 800, y: 400 },
     ownerId: 'player-1',
+    visualScale: 1,
     worldKey: 'hub:courtyard',
   }
   const airBolt = {
