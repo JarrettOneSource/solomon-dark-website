@@ -1,6 +1,7 @@
 import {
   BOUNDED_MAGGOT_PROGRAM,
   NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
+  nativeEnemyHitOverlay,
   type BoneyardEnemyActor,
   type BoneyardEnemyBrain,
   type BoneyardMaggotActor,
@@ -14,10 +15,33 @@ import type {
   BoneyardEnemyAnimationState,
   BoneyardEnemyCoffinState,
   BoneyardEnemyEffectSnapshot,
+  BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMaggotSnapshot,
 } from '../protocol/game-state.ts'
+
+export function projectBoneyardEnemyDeathEffects(
+  store: BoneyardEnemyStore,
+): readonly BoneyardEnemyDeathEffectSnapshot[] {
+  return store.deathEffects.map((effect) => ({
+    ageTicks: effect.ageTicks,
+    alpha: effect.alpha,
+    atlas: effect.atlas,
+    blendMode: effect.blendMode,
+    entry: effect.entry,
+    height: effect.height,
+    id: effect.id,
+    kind: effect.kind,
+    ownerActorId: effect.ownerActorId,
+    position: { ...effect.position },
+    rotationRadians: effect.rotationDeg * Math.PI / 180,
+    scale: effect.scale,
+    shadow: effect.shadow,
+    spawnTick: effect.spawnTick,
+    tint: effect.tint,
+  }))
+}
 
 export function projectBoneyardEnemies(
   store: BoneyardEnemyStore,
@@ -64,9 +88,6 @@ export function projectBoneyardMaggots(
   tick: number,
 ): readonly BoneyardMaggotSnapshot[] {
   return store.maggots.map((maggot) => {
-    const hitAge = maggot.lastDamageTick === null
-      ? Number.POSITIVE_INFINITY
-      : Math.max(0, tick - maggot.lastDamageTick)
     return {
       alpha: 1,
       currentHealth: maggot.currentHealth,
@@ -74,7 +95,7 @@ export function projectBoneyardMaggots(
       deathTick: maggot.deathTick,
       emergenceTick: maggot.emergenceTick,
       headingDeg: maggot.headingDeg,
-      hitFlash: Math.max(0, 1 - hitAge / 5),
+      hitFlash: nativeEnemyHitOverlay(maggot.lastDamageTick, tick),
       id: maggot.id,
       launchTrajectory: maggot.launchTrajectory,
       maximumHealth: maggot.maximumHealth,
@@ -115,9 +136,6 @@ function projectAnimation(
   const impFlight = actor.config.enemyToken === 'IMP' && actor.lifeState === 'alive'
     ? boundedImpFlightAnimationSample(spawnAge)
     : null
-  const hitAge = actor.lastDamageTick === null
-    ? Number.POSITIVE_INFINITY
-    : Math.max(0, tick - actor.lastDamageTick)
   return {
     action,
     actionProgress: actionProgress(actor.brain),
@@ -136,7 +154,7 @@ function projectAnimation(
     demonRearLimbRotationRadians: Math.sin(gaitRadians + Math.PI) * 0.18,
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
-    hitFlash: Math.max(0, 1 - hitAge / 5),
+    hitFlash: nativeEnemyHitOverlay(actor.lastDamageTick, tick),
     impEffectFrame: impFlight?.impEffectFrame ?? -1,
     maggots: [],
     state,

@@ -21,6 +21,11 @@ import {
   type BoneyardSpectatorCameraSnapshot,
   type BoneyardSpectatorCameraState,
 } from './boneyard-render-contract.ts'
+import {
+  NATIVE_ENEMY_WORLD_FEEDBACK,
+  NativeEnemyWorldFeedbackPresentation,
+  nativeEnemyWorldFeedbackTransform,
+} from './native-enemy-world-feedback.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
@@ -73,6 +78,78 @@ test('Boneyard camera clamp and centering follow the logical browser viewport', 
     x: viewport.width / 2 - camera.x * camera.zoom,
     y: viewport.height / 2 - camera.y * camera.zoom,
   })
+})
+
+test('enemy terminal output drives the exact native feedback accumulator and decay', () => {
+  const feedback = new NativeEnemyWorldFeedbackPresentation(0)
+  assert.deepEqual(feedback.sample(1), {
+    accumulator: Math.fround(NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorFloor),
+    lastTick: 1,
+    magnitude: 0,
+  })
+
+  const skeleton = {
+    actorId: 7,
+    eventId: 1,
+    output: 'skeleton-shatter' as const,
+    runId: 'run-1',
+    tick: 1,
+    type: 'enemy-terminal-output' as const,
+  }
+  assert.equal(feedback.consume(skeleton), true)
+  assert.deepEqual(feedback.sample(1), {
+    accumulator: Math.fround(0.1 + 0.20000000298023224),
+    lastTick: 1,
+    magnitude: Math.fround(0.1 * 0.1),
+  })
+  assert.equal(feedback.consume(skeleton), false)
+
+  const tickTwo = feedback.sample(2)
+  assert.equal(tickTwo.accumulator, Math.fround(
+    Math.fround(0.1 + 0.20000000298023224) - 0.0025,
+  ))
+  assert.equal(tickTwo.magnitude, Math.fround(Math.fround(0.1 * 0.1) * 0.94))
+  assert.equal(feedback.consume({
+    ...skeleton,
+    actorId: 8,
+    eventId: 2,
+    output: 'coffin-break',
+    tick: 2,
+  }), true)
+  assert.equal(feedback.sample(2).magnitude, Math.fround(tickTwo.accumulator * 0.2))
+  assert.equal(feedback.sample(1_000).magnitude, 0)
+})
+
+test('enemy feedback scales the world around the local Player without moving its screen point', () => {
+  const camera = { x: 1_000, y: 700, zoom: BONEYARD_CAMERA_ZOOM }
+  const viewport = { height: 900, width: 1_600 }
+  const localPlayer = { x: 1_100, y: 760 }
+  const basePosition = boneyardWorldPosition(camera, viewport)
+  const baseScreen = {
+    x: basePosition.x + localPlayer.x * camera.zoom,
+    y: basePosition.y + localPlayer.y * camera.zoom,
+  }
+  const transform = nativeEnemyWorldFeedbackTransform(
+    camera,
+    viewport,
+    localPlayer,
+    0.03,
+  )
+
+  assert.equal(transform.scale, camera.zoom * 1.03)
+  assert.deepEqual({
+    x: transform.position.x + localPlayer.x * transform.scale,
+    y: transform.position.y + localPlayer.y * transform.scale,
+  }, baseScreen)
+})
+
+test('Boneyard renderer consumes terminal feedback once and applies it after semantic camera placement', () => {
+  assert.match(boneyardRenderer, /worldFeedback\.consume\(event\)/)
+  assert.match(boneyardRenderer, /worldFeedback\.sample\(snapshot\.tick\)/)
+  assert.match(boneyardRenderer, /nativeEnemyWorldFeedbackTransform\(/)
+  assert.match(boneyardRenderer, /worldFeedbackMagnitude/)
+  assert.match(boneyardRenderer, /enemyDeathEffectSamples/)
+  assert.match(boneyardRenderer, /hitFlash: enemy\.animation\.hitFlash/)
 })
 
 test('spectator follow starts after local death presentation and uses the first semantic ID', () => {

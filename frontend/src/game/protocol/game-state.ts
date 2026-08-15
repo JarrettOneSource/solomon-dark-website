@@ -19,6 +19,7 @@ import type {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
+import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
 export interface ProtocolFountainParticleState {
@@ -103,6 +104,7 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  deathEffects: readonly BoneyardEnemyDeathEffectSnapshot[]
   encounter: BoneyardSolomonSnapshot | null
   enemies: readonly BoneyardEnemySnapshot[]
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
@@ -114,10 +116,38 @@ export interface BoneyardWorldSnapshot {
   waves: BoneyardWaveSnapshot | null
 }
 
+export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
+  'banish',
+  'bouncer',
+  'fade',
+  'move-fade',
+  'sprite-array',
+  'unbind',
+] as const
+
+export interface BoneyardEnemyDeathEffectSnapshot {
+  ageTicks: number
+  alpha: number
+  atlas: 'BadGuys' | 'DeadHawg' | 'Demon'
+  blendMode: 'add' | 'normal'
+  entry: number
+  height: number
+  id: number
+  kind: typeof BONEYARD_ENEMY_DEATH_EFFECT_KINDS[number]
+  ownerActorId: number
+  position: Vector2
+  rotationRadians: number
+  scale: number
+  shadow: boolean
+  spawnTick: number
+  tint: number
+}
+
 export const BONEYARD_ENEMY_EVENT_TYPES = [
   'attack-marker',
   'coffin-maggot-release',
   'enemy-death',
+  'enemy-death-sound',
   'enemy-retired',
   'enemy-spawned',
   'enemy-terminal-output',
@@ -126,6 +156,24 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'projectile-retired',
   'projectile-spawned',
   'reward',
+] as const
+
+export const BONEYARD_ENEMY_DEATH_SOUNDS = [
+  'banshee-die',
+  'coffin-break',
+  'demon-die',
+  'firey-death',
+  'flash',
+  'imp-split',
+  'maggot-squeak-1',
+  'maggot-squeak-2',
+  'maggot-squish-1',
+  'maggot-squish-2',
+  'maggot-squish-3',
+  'skeleton-die',
+  'zombie-die',
+  'zombie-die-groan',
+  'zombie-poison-splat',
 ] as const
 
 export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
@@ -140,15 +188,19 @@ export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
 ] as const
 
 export type BoneyardEnemyEventType = typeof BONEYARD_ENEMY_EVENT_TYPES[number]
+export type BoneyardEnemyDeathSound = typeof BONEYARD_ENEMY_DEATH_SOUNDS[number]
 export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS[number]
 
 export interface BoneyardEnemyEventSnapshot {
   actorId: number
   count?: number
   eventId: number
+  gainScale?: number
   output?: BoneyardEnemyTerminalOutput
+  pitch?: number
   projectileId?: number
   runId: string
+  sound?: BoneyardEnemyDeathSound
   sourcePosition?: Vector2
   targetPosition?: Vector2
   targetPlayerId?: string | null
@@ -353,6 +405,7 @@ export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapsh
 
 export interface GameSnapshot {
   hostPlayerId: string | null
+  levelUpBarrier: PlayerLevelUpBarrierState | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
   run: GameRunLifecycleState
@@ -362,6 +415,7 @@ export interface GameSnapshot {
 
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
+  levelUpBarrier: PlayerLevelUpBarrierState | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
   run: GameRunLifecycleState

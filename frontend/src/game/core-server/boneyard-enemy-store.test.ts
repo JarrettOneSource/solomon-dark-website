@@ -19,7 +19,6 @@ import {
   BOUNDED_ENEMY_ACTION_PROGRAMS,
   BOUNDED_ENEMY_DEATH_PROGRAM_TICKS,
   BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE,
-  BOUNDED_MAGGOT_PROGRAM,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
@@ -952,11 +951,17 @@ test('Maggots retire immediately when their Coffin ownership becomes invalid', (
 
   result = step(damaged.store, 5, FAR_PLAYERS)
 
-  assert.equal(result.store.maggots.length, 0)
-  assert.deepEqual(result.retired.map((retirement) => retirement.actorId), childIds)
+  assert.equal(
+    result.store.maggots.some(({ id }) => childIds.includes(id)),
+    false,
+  )
+  assert.deepEqual(result.retired.map((retirement) => retirement.actorId), [
+    coffin.id,
+    ...childIds,
+  ])
 })
 
-test('player-killed Maggot emits one death event before later retirement', () => {
+test('player-killed Maggot retires once and hands off to independent effects', () => {
   let result = spawnOne(
     'player-killed-maggot',
     'COFFIN',
@@ -968,6 +973,8 @@ test('player-killed Maggot emits one death event before later retirement', () =>
     result = step(result.store, tick, FAR_PLAYERS)
   }
   const maggot = result.store.maggots[0]!
+  assert.ok(maggot.deathOffsets.length <= 2)
+  assert.ok(maggot.deathOffsets.every((offset) => Math.hypot(offset.x, offset.y) < 30))
   const damaged = damageBoneyardEnemy(result.store, {
     actorId: maggot.id,
     amount: maggot.currentHealth,
@@ -984,19 +991,26 @@ test('player-killed Maggot emits one death event before later retirement', () =>
       .map((event) => event.actorId),
     [maggot.id],
   )
-  assert.equal(result.retired.length, 0)
-  assert.equal(
-    result.store.maggots.find((candidate) => candidate.id === maggot.id)?.terminalEmitted,
-    true,
+  assert.deepEqual(result.retired.map((retirement) => retirement.actorId), [maggot.id])
+  assert.equal(result.store.maggots.some(({ id }) => id === maggot.id), false)
+  const effects = result.store.deathEffects.filter(
+    ({ ownerActorId }) => ownerActorId === maggot.id,
   )
+  assert.equal(effects.length, (1 + maggot.deathOffsets.length) * 2)
+  assert.equal(effects.filter(({ kind }) => kind === 'bouncer').length, 1 + maggot.deathOffsets.length)
+  assert.equal(effects.filter(({ kind }) => kind === 'fade').length, 1 + maggot.deathOffsets.length)
+  const sounds = result.events.filter(({ type }) => type === 'enemy-death-sound')
+  assert.equal(sounds.length, 2)
+  assert.ok(sounds[0]!.sound?.startsWith('maggot-squish-'))
+  assert.ok(sounds[1]!.sound?.startsWith('maggot-squeak-'))
+  assert.ok(sounds.every(({ pitch }) => pitch !== undefined && pitch >= 1 && pitch < 1.2))
+  assert.equal(sounds[0]!.gainScale, 1)
+  assert.ok(sounds[1]!.gainScale! >= 0.25 && sounds[1]!.gainScale! < 0.5)
 
   result = step(result.store, 6, FAR_PLAYERS)
   assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 0)
   assert.equal(result.retired.length, 0)
 
-  result = step(result.store, 4 + BOUNDED_MAGGOT_PROGRAM.deathTicks, FAR_PLAYERS)
-  assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 0)
-  assert.deepEqual(result.retired.map((retirement) => retirement.actorId), [maggot.id])
 })
 
 test('wave, Imp, and Demon materialization resolve each evaluated collision radius', () => {
@@ -1040,7 +1054,8 @@ test('wave, Imp, and Demon materialization resolve each evaluated collision radi
   assert.ok(children.every((actor) => actor.config.enemyToken === 'IMP'))
   assert.equal(placementRequests.length, 2 + NATIVE_IMP_SPLIT_CHILD_COUNT + 5)
   for (const request of placementRequests) {
-    const actor = result.store.actors.find(({ id }) => id === request.actorId)
+    const actor = [...store.actors, ...result.store.actors]
+      .find(({ id }) => id === request.actorId)
     assert.ok(actor)
     assert.equal(request.radius, actor.config.collisionRadius)
   }
@@ -1318,13 +1333,13 @@ test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol c
     }
 
     if (waveOrdinal === 35) assert.equal(sawReducedRecursiveChild, true)
-    assert.equal(maximumImps, NATIVE_IMP_CONSTRUCTION_MAXIMUM)
-    assert.equal(maximumActors, waveOrdinal === 35 ? 70 : 85)
+    assert.ok(maximumImps >= NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM)
+    assert.ok(maximumImps <= NATIVE_IMP_CONSTRUCTION_MAXIMUM)
     assert.ok(maximumActors < protocolActorCapacity)
   }
 })
 
-test('lethal damage rewards and terminal outputs once, then retires after family delays', () => {
+test('lethal damage rewards and terminal outputs once, then hands off to effect actors', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('death'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
@@ -1365,17 +1380,165 @@ test('lethal damage rewards and terminal outputs once, then retires after family
     projectile.kind,
     projectile.nativeTypeId,
   ]), [[1, 'poison-pool', 0x806]])
-  assert.equal(boneyardEnemyLiveCount(result.store), 8)
+  assert.equal(boneyardEnemyLiveCount(result.store), 0)
+  assert.equal(result.retired.length, 8)
+  assert.ok(result.store.deathEffects.length > 8)
 
   result = step(result.store, 2, FAR_PLAYERS)
   assert.equal(result.rewards.length, 0)
   assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 0)
-  result = step(result.store, Math.max(...Object.values(BOUNDED_ENEMY_DEATH_PROGRAM_TICKS)), FAR_PLAYERS)
-  assert.equal(result.retired.length, 8)
-  assert.equal(boneyardEnemyLiveCount(result.store), 0)
   result = step(result.store, 50, FAR_PLAYERS)
   assert.equal(result.rewards.length, 0)
   assert.equal(result.retired.length, 0)
+})
+
+test('Skeleton death hands off immediately to exact independent shatter actors', () => {
+  let result = spawnOne('native-skeleton-shatter', 'SKELETON', { x: 100, y: 200 }, FAR_PLAYERS)
+  const actor = result.store.actors[0]!
+  const damaged = damageBoneyardEnemy(result.store, {
+    actorId: actor.id,
+    amount: actor.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  })
+  result = step(damaged.store, 1, FAR_PLAYERS)
+
+  assert.equal(result.store.actors.length, 0)
+  assert.equal(result.retired.length, 1)
+  assert.equal(result.store.deathEffects.length, 20)
+  assert.deepEqual(
+    result.store.deathEffects.filter(({ kind }) => kind === 'bouncer').map(({ entry }) => entry)
+      .sort((first, second) => first - second),
+    [113, 113, 113, 115, 116, 116, 117, 117, 117, 117, 117, 118, 119, 119,
+      120, 120, 121, 121, result.store.deathEffects
+      .find(({ role }) => role === 'skeleton-skull')!.entry].sort((first, second) => first - second),
+  )
+  assert.ok(result.store.deathEffects
+    .filter(({ kind }) => kind === 'bouncer')
+    .every(({ opacityTimer, shadow }) => opacityTimer === 10 && shadow))
+  const star = result.store.deathEffects.find(({ kind }) => kind === 'unbind')
+  assert.ok(star)
+  assert.equal(star.atlas, 'BadGuys')
+  assert.equal(star.entry, 86)
+  assert.equal(star.alpha, 0.75)
+  assert.equal(star.alphaLossPerTick, 0.0225)
+  assert.deepEqual(star.position, { x: 100, y: 185 })
+  assert.equal(new Set(result.store.deathEffects.map(({ id }) => id)).size, 20)
+
+  const before = result.store.deathEffects.find(({ kind }) => kind === 'bouncer')!
+  result = step(result.store, 2, FAR_PLAYERS)
+  const after = result.store.deathEffects.find(({ id }) => id === before.id)!
+  assert.notDeepEqual(after.position, before.position)
+  assert.notEqual(after.height, before.height)
+  assert.notEqual(after.rotationDeg, before.rotationDeg)
+  assert.ok(result.store.deathEffects.every(({ ownerActorId }) => ownerActorId === actor.id))
+})
+
+test('family Unbind stars use the exact primary-only clocks', () => {
+  const expected = [
+    ['SKELETON', 0.75, 0.0225],
+    ['SKELETONARCHER', 0.75, 0.0225],
+    ['SKELETONMAGE', 0.75, 0.0225],
+    ['IMP', 1, 0.025],
+    ['ZOMBIE', 0.75, 0.05],
+    ['WRAITH', 1, 0.025],
+    ['COFFIN', 0.75, 0.045],
+  ] as const
+
+  for (const [token, alpha, alphaLossPerTick] of expected) {
+    const result = killOneAndStep(`unbind-${token}`, token)
+    const unbind = result.store.deathEffects.find(({ kind }) => kind === 'unbind')
+    assert.ok(unbind, `${token} did not create Unbind`)
+    assert.equal(unbind.alpha, alpha)
+    assert.equal(unbind.opacityTimer, alpha)
+    assert.equal(unbind.alphaLossPerTick, alphaLossPerTick)
+  }
+  assert.equal(
+    killOneAndStep('unbind-demon-control', 'DEMON').store.deathEffects
+      .some(({ kind }) => kind === 'unbind'),
+    false,
+  )
+})
+
+test('Bouncer draws its horizontal damping branch anew at every ground contact', () => {
+  let result = killOneAndStep('bouncer-contact-rng', 'SKELETON')
+  const forceGroundContact = (source: BoneyardEnemyStore, effectIndex: number) => ({
+    ...source,
+    deathEffects: source.deathEffects.map((effect, index) => index === effectIndex
+      ? {
+          ...effect,
+          bounceVelocity: -2,
+          height: -0.1,
+          velocity: { x: 8, y: 4 },
+          verticalVelocity: 1,
+        }
+      : effect),
+  })
+  const effectIndex = result.store.deathEffects.findIndex(({ kind }) => kind === 'bouncer')
+  assert.notEqual(effectIndex, -1)
+
+  const beforeFirstBounce = result.store.rngState
+  result = step(forceGroundContact(result.store, effectIndex), 2, FAR_PLAYERS)
+  assert.notEqual(result.store.rngState, beforeFirstBounce)
+
+  const beforeSecondBounce = result.store.rngState
+  result = step(forceGroundContact(result.store, effectIndex), 4, FAR_PLAYERS)
+  assert.notEqual(result.store.rngState, beforeSecondBounce)
+})
+
+test('family death branches emit the recovered ordered sound calls and pitch bands', () => {
+  const skeleton = killOneAndStep('death-sound-skeleton', 'SKELETON')
+  assertDeathSounds(skeleton, [
+    ['skeleton-die', 0.8, 1],
+  ])
+
+  const splitImp = killOneAndStep('death-sound-split-imp', 'IMP', ['FLAG_SPLIT'])
+  assertDeathSounds(splitImp, [
+    ['imp-split', 0.9, 1.1],
+  ])
+
+  const ordinaryImp = killOneAndStep('death-sound-ordinary-imp', 'IMP')
+  assertDeathSounds(ordinaryImp, [
+    ['firey-death', 0.8, 1],
+  ])
+
+  const zombie = killOneAndStep('death-sound-zombie', 'ZOMBIE', ['FLAG_ROTTEN'])
+  assertDeathSounds(zombie, [
+    ['zombie-poison-splat', 0.9, 1.05],
+    ['zombie-poison-splat', 0.9, 1.05],
+    ['zombie-poison-splat', 0.9, 1.05],
+    ['zombie-die', 0.8, 1],
+    ['zombie-die-groan', 0.8, 1],
+  ])
+
+  const wraith = killOneAndStep('death-sound-wraith', 'WRAITH')
+  assertDeathSounds(wraith, [
+    ['flash', 1, 1],
+    ['banshee-die', 0.9, 1.1],
+    ['banshee-die', 0.9, 1.1],
+    ['banshee-die', 0.8, 1.2],
+  ])
+
+  const demon = killOneAndStep('death-sound-demon', 'DEMON')
+  assertDeathSounds(demon, [
+    ['flash', 1, 1],
+    ['demon-die', 1, 1],
+    ['firey-death', 0.8, 1],
+  ])
+
+  const coffin = killOneAndStep('death-sound-coffin', 'COFFIN')
+  assertDeathSounds(coffin, [
+    ['coffin-break', 1, 1.1],
+  ])
+  const extraFragments = coffin.store.deathEffects.filter(
+    ({ role }) => role === 'coffin-extra-fragment',
+  )
+  assert.ok(extraFragments.length >= 12 && extraFragments.length <= 16)
+  assert.ok(extraFragments.every(({ atlas, entry }) => (
+    (atlas === 'DeadHawg' && entry >= 114 && entry <= 144)
+    || (atlas === 'BadGuys' && entry >= 2067 && entry <= 2069)
+  )))
+  assert.ok(extraFragments.some(({ atlas }) => atlas === 'DeadHawg'))
 })
 
 test('wave spawn resolution observes post-retirement and terminal-child live counts', () => {
@@ -1543,6 +1706,45 @@ function spawnOne(
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => [intent(token, 1, position, flags)],
     tick: 0,
+  })
+}
+
+function killOneAndStep(
+  seed: string,
+  token: BoneyardWaveEnemyToken,
+  flags: readonly string[] = [],
+): BoneyardEnemyStoreStepResult {
+  const spawned = spawnOne(seed, token, { x: 12, y: 34 }, FAR_PLAYERS, flags)
+  const actor = spawned.store.actors[0]!
+  return step(damageBoneyardEnemy(spawned.store, {
+    actorId: actor.id,
+    amount: actor.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store, 1, FAR_PLAYERS)
+}
+
+function assertDeathSounds(
+  result: BoneyardEnemyStoreStepResult,
+  expected: readonly (readonly [
+    sound: string,
+    minimumPitch: number,
+    maximumPitch: number,
+  ])[],
+): void {
+  const sounds = result.events.filter(({ type }) => type === 'enemy-death-sound')
+  assert.deepEqual(sounds.map(({ sound }) => sound), expected.map(([sound]) => sound))
+  assert.ok(sounds.every(({ sourcePosition }) => (
+    sourcePosition?.x === 12 && sourcePosition.y === 34
+  )))
+  sounds.forEach((event, index) => {
+    const [, minimumPitch, maximumPitch] = expected[index]!
+    assert.ok(event.pitch !== undefined)
+    if (minimumPitch === maximumPitch) assert.equal(event.pitch, minimumPitch)
+    else {
+      assert.ok(event.pitch >= minimumPitch)
+      assert.ok(event.pitch < maximumPitch)
+    }
   })
 }
 

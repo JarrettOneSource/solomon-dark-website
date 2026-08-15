@@ -24,6 +24,7 @@ export function nativeMaggotPresentationPlan(
       : 'maggot-body',
     rotationRadians: 0,
     scale: 1,
+    tint: 0xffffff,
   }
   const hitFlash = boundedUnit(maggot.hitFlash)
   return {
@@ -34,8 +35,9 @@ export function nativeMaggotPresentationPlan(
           {
             ...body,
             alpha: alpha * hitFlash,
-            blendMode: 'add',
-            role: 'maggot-body-hit-flash',
+            blendMode: 'normal',
+            role: 'hit:maggot-body',
+            tint: 0xff0000,
           },
         ],
   }

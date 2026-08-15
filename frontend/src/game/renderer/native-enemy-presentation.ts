@@ -51,6 +51,7 @@ export interface NativeEnemySpriteLayer {
   role: string
   rotationRadians: number
   scale: number
+  tint: number
 }
 
 export interface NativeEnemyPresentationPlan {
@@ -142,7 +143,7 @@ export function nativeEnemyPresentationPlan(
     ? NATIVE_ENEMY_DEATH_PROGRAMS[family]
     : null
   const baseLayers = animation?.state === 'death'
-    ? animation.effects.length > 0 ? [] : deathLayers(family, animation.deathTick)
+    ? []
     : familyLayers(enemy, facing, flags, spawnAgeTicks, animation, actionFrame)
   const shieldedLayers = animation?.state === 'death'
     ? baseLayers
@@ -449,48 +450,6 @@ function coffinSpawnLayers(
   return [layer('BadGuys', 175 + stateFrame, 'coffin-materializing')]
 }
 
-function deathLayers(
-  family: NativeEnemyFamily,
-  sourceDeathTick: number,
-): NativeEnemySpriteLayer[] {
-  const deathTick = Math.max(0, Math.floor(finiteOrZero(sourceDeathTick)))
-  switch (family) {
-    case 'SKELETON':
-    case 'SKELETONARCHER':
-    case 'SKELETONMAGE':
-      return deathTick === 0
-        ? [layer('BadGuys', 86, `${family.toLowerCase()}-shatter-impact`)]
-        : [
-            layer(
-              'BadGuys',
-              113 + boundedPose(Math.floor((deathTick - 1) / 2), 8),
-              `${family.toLowerCase()}-shatter`,
-            ),
-            layer(
-              'BadGuys',
-              1819 + boundedPose(Math.floor((deathTick - 1) / 6), 3),
-              `${family.toLowerCase()}-shatter-secondary`,
-            ),
-          ]
-    case 'IMP':
-      return [layer('BadGuys', 401 + boundedPose(deathTick, 18), 'imp-split')]
-    case 'ZOMBIE':
-      return [
-        layer('DeadHawg', 30, 'zombie-collapse-body'),
-        layer('DeadHawg', 46 + boundedPose(deathTick, 31), 'zombie-collapse-effect'),
-      ]
-    case 'WRAITH':
-      return [
-        layer('BadGuys', 113 + boundedPose(Math.floor(deathTick / 4), 8), 'wraith-dissolve'),
-        layer('BadGuys', 1819 + boundedPose(Math.floor(deathTick / 9), 3), 'wraith-dissolve-core'),
-      ]
-    case 'DEMON':
-      return [layer('Demon', 55 + boundedPose(Math.floor(deathTick / 7), 6), 'demon-split')]
-    case 'COFFIN':
-      return [layer('DeadHawg', 114 + boundedPose(deathTick, 30), 'coffin-break')]
-  }
-}
-
 function effectLayers(
   effects: readonly NativeEnemyEffectSample[],
 ): NativeEnemySpriteLayer[] {
@@ -543,8 +502,9 @@ function applyAuthoritativeSample(
     ...layers.filter((source) => source.alpha > 0).map((source) => ({
       ...source,
       alpha: source.alpha * hitFlash,
-      blendMode: 'add' as const,
-      role: `${source.role}-hit-flash`,
+      blendMode: 'normal' as const,
+      role: `hit:${source.role}`,
+      tint: 0xff0000,
     })),
   ]
 }
@@ -564,7 +524,7 @@ function layer(
   role: string,
   options: Partial<Pick<
     NativeEnemySpriteLayer,
-    'alpha' | 'blendMode' | 'offset' | 'rotationRadians' | 'scale'
+    'alpha' | 'blendMode' | 'offset' | 'rotationRadians' | 'scale' | 'tint'
   >> = {},
 ): NativeEnemySpriteLayer {
   return {
@@ -576,6 +536,7 @@ function layer(
     role,
     rotationRadians: options.rotationRadians ?? 0,
     scale: options.scale ?? 1,
+    tint: options.tint ?? 0xffffff,
   }
 }
 

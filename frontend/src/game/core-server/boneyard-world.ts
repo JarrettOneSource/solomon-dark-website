@@ -33,6 +33,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
+import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
 import {
   createBoneyardWaveDirector,
   startBoneyardWaveDirector,
@@ -305,6 +306,7 @@ export function stepBoneyardWorldTick(
     playerCombat,
   )
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
+    arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
     firstProjectileWorldContact: ({ end, radius, start }) => (
       firstBoneyardPathBlockProgress(
         start,

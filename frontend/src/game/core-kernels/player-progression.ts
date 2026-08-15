@@ -17,6 +17,7 @@ export const MAX_PLAYER_EXPERIENCE = 10_000_000
 export const SPELL_WELDING_SKILL_ID = 52
 export const INITIAL_WELD_OFFER_MARKER = 9_999
 export const SPELL_WELDING_QUICK_DESCRIPTION = 'TWO ATTACK SPELLS TO COMBINE'
+export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
 
 export const NATIVE_LEVEL_THRESHOLDS = [
   0, 90, 160, 275, 390, 520, 650, 800, 1060, 1300, 1600, 2000, 2400,
@@ -115,6 +116,30 @@ export interface NativeWeldBuild {
   readonly id: number
   readonly primarySkillIds: readonly [number, number]
   readonly skillsAtlasIconRecord: number
+}
+
+export interface SharedPlayerLevelMilestone {
+  readonly crossedLevels: readonly number[]
+  readonly experience: number
+  readonly level: number
+}
+
+export interface PlayerLevelUpBarrierState {
+  readonly barrierId: number
+  readonly milestoneExperience: number
+  readonly milestoneLevel: number
+  readonly participantIds: readonly string[]
+  readonly pendingPlayerIds: readonly string[]
+  readonly runId: string | null
+  readonly sourcePlayerId: string
+}
+
+export interface BoneyardEnemyExperienceAward {
+  readonly arenaPlayerCount: number
+  readonly evaluatedActorReward: number
+  readonly gameplayScalar?: number
+  readonly receiverLevel: number
+  readonly receiverXpBonus?: number
 }
 
 interface SkillRule {
@@ -305,8 +330,8 @@ export function grantPlayerExperience(
   skillBook: PlayerSkillBookComponent,
   amount: number,
 ): PlayerProgressionComponent {
-  if (!Number.isSafeInteger(amount) || amount < 0) {
-    throw new RangeError('experience award must be a non-negative safe integer')
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new RangeError('experience award must be finite and non-negative')
   }
   if (amount === 0 || progression.level >= MAX_PLAYER_LEVEL) {
     const experience = Math.min(MAX_PLAYER_EXPERIENCE, progression.experience + amount)
@@ -345,6 +370,110 @@ export function grantPlayerExperience(
     revision: progression.revision + 1,
   }
   if (!next.pendingOffer && crossed.length > 0) {
+    next = withNextSkillOffer(next, skillBook)
+  }
+  return next
+}
+
+export function boneyardEnemyExperienceAward(
+  award: BoneyardEnemyExperienceAward,
+): number {
+  if (!Number.isFinite(award.evaluatedActorReward) || award.evaluatedActorReward < 0) {
+    throw new RangeError('evaluated enemy experience reward must be finite and non-negative')
+  }
+  if (!Number.isSafeInteger(award.arenaPlayerCount) || award.arenaPlayerCount < 1) {
+    throw new RangeError('Arena player count must be a positive safe integer')
+  }
+  if (
+    !Number.isSafeInteger(award.receiverLevel)
+    || award.receiverLevel < 1
+    || award.receiverLevel > MAX_PLAYER_LEVEL
+  ) {
+    throw new RangeError('experience receiver level is out of range')
+  }
+  const gameplayScalar = award.gameplayScalar ?? 1
+  const receiverXpBonus = award.receiverXpBonus ?? 0
+  if (!Number.isFinite(gameplayScalar) || gameplayScalar < 0) {
+    throw new RangeError('Gameplay experience scalar must be finite and non-negative')
+  }
+  if (!Number.isFinite(receiverXpBonus) || receiverXpBonus < 0) {
+    throw new RangeError('receiver experience bonus must be finite and non-negative')
+  }
+  return award.evaluatedActorReward
+    * award.arenaPlayerCount
+    * gameplayScalar
+    * survivalExperienceLevelFactor(award.receiverLevel)
+    * (1 + receiverXpBonus)
+}
+
+export function evaluateBoneyardEnemyExperience(familyBaseline: number): number {
+  if (!Number.isFinite(familyBaseline) || familyBaseline < 0) {
+    throw new RangeError('enemy family experience baseline must be finite and non-negative')
+  }
+  return familyBaseline * RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR
+}
+
+export function survivalExperienceLevelFactor(level: number): number {
+  if (!Number.isSafeInteger(level) || level < 1 || level > MAX_PLAYER_LEVEL) {
+    throw new RangeError('survival experience level is out of range')
+  }
+  if (level === 1) return 1
+  if (level <= 5) return 0.9
+  if (level <= 15) return 0.72
+  if (level <= 30) return 0.504
+  return 0.3024
+}
+
+export function playerExperienceProgress(
+  progression: Pick<
+    PlayerProgressionComponent,
+    'experience' | 'nextThreshold' | 'previousThreshold'
+  >,
+): number {
+  const span = progression.nextThreshold - progression.previousThreshold
+  if (span <= 0) return 1
+  return Math.max(0, Math.min(
+    1,
+    (progression.experience - progression.previousThreshold) / span,
+  ))
+}
+
+export function synchronizePlayerLevelMilestone(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  milestone: SharedPlayerLevelMilestone,
+): PlayerProgressionComponent {
+  if (!Number.isFinite(milestone.experience) || milestone.experience < 0) {
+    throw new RangeError('shared milestone experience must be finite and non-negative')
+  }
+  if (
+    !Number.isSafeInteger(milestone.level)
+    || milestone.level < 1
+    || milestone.level > MAX_PLAYER_LEVEL
+  ) throw new RangeError('shared milestone level is out of range')
+  const crossedLevels = milestone.crossedLevels.map((level, index) => {
+    if (
+      !Number.isSafeInteger(level)
+      || level < 2
+      || level > milestone.level
+      || (index > 0 && level <= milestone.crossedLevels[index - 1]!)
+    ) throw new RangeError('shared crossed levels must be sorted and in range')
+    return level
+  })
+  const pendingLevels = Object.freeze([
+    ...progression.pendingLevels,
+    ...crossedLevels.filter((level) => !progression.pendingLevels.includes(level)),
+  ])
+  let next: PlayerProgressionComponent = {
+    ...progression,
+    experience: Math.min(MAX_PLAYER_EXPERIENCE, milestone.experience),
+    level: milestone.level,
+    nextThreshold: NATIVE_LEVEL_THRESHOLDS[milestone.level]!,
+    pendingLevels,
+    previousThreshold: NATIVE_LEVEL_THRESHOLDS[milestone.level - 1]!,
+    revision: progression.revision + 1,
+  }
+  if (!next.pendingOffer && next.pendingLevels.length > 0) {
     next = withNextSkillOffer(next, skillBook)
   }
   return next

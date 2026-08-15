@@ -5,6 +5,7 @@ import { createHubStudentFixturePopulation } from '../core-server/hub-student-fi
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type {
+  BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemySnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardMaggotSnapshot,
@@ -53,6 +54,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       runId,
     },
     world: {
+      deathEffects: [],
       encounter: null,
       enemies: [enemySnapshot()],
       enemyEvents: [{
@@ -410,6 +412,72 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
   )))
 })
 
+test('enemy death effects replicate independent motion and exact retirement identity', () => {
+  assert.equal(
+    REPLICATED_ENTITY_TYPE_REGISTRY.has(
+      REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect,
+    ),
+    true,
+  )
+  const initial = boneyardSnapshot('death-effect-run')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  initial.world.deathEffects = [enemyDeathEffectSnapshot()]
+  const keyframe = createGameSnapshotFrame(initial, 0, undefined, true)
+  if (keyframe.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  const descriptor = keyframe.world.entities.spawned.find((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
+  ))!
+  const sample = keyframe.world.entities.samples.find((entry) => (
+    entry[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect
+  ))!
+  assert.equal(descriptor.length, 8)
+  assert.equal(sample.length, 11)
+
+  const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(
+    REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect,
+  )!
+  assert.equal(registration.descriptorIsValid(descriptor), true)
+  assert.equal(registration.sampleIsValid(sample), true)
+  assert.equal(registration.sampleIsValid(
+    sample.slice(0, -1) as [number, number, ...number[]],
+  ), false)
+
+  const reconstructor = new EntityReplicationReconstructor()
+  const reconstructed = reconstructor.apply(keyframe, 1)
+  if (reconstructed.world.kind !== 'boneyard') {
+    throw new Error('expected Boneyard snapshot')
+  }
+  const effect = reconstructed.world.deathEffects[0]!
+  const expected = enemyDeathEffectSnapshot()
+  assert.deepEqual(
+    {
+      ...effect,
+      alpha: expected.alpha,
+      height: expected.height,
+      position: expected.position,
+      rotationRadians: expected.rotationRadians,
+      scale: expected.scale,
+    },
+    expected,
+  )
+  assert.ok(Math.abs(effect.position.x - expected.position.x) <= 1 / 16)
+  assert.ok(Math.abs(effect.position.y - expected.position.y) <= 1 / 16)
+  assert.ok(Math.abs(effect.height - expected.height) <= 1 / 16)
+
+  const retired = cloneSnapshot(initial)
+  if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  retired.world.deathEffects = []
+  const delta = createGameSnapshotFrame(
+    retired,
+    1,
+    createReplicatedEntityBaseline(initial),
+  )
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.ok(delta.world.entities.retired.some(([typeId, id]) => (
+    typeId === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect && id === expected.id
+  )))
+})
+
 function cloneSnapshot(snapshot: GameSnapshot): GameSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as GameSnapshot
 }
@@ -513,6 +581,26 @@ function enemyProjectileSnapshot(): BoneyardEnemyProjectileSnapshot {
     payload: 'normal',
     position: { x: 128, y: 456.75 },
     spawnTick: 12,
+  }
+}
+
+function enemyDeathEffectSnapshot(): BoneyardEnemyDeathEffectSnapshot {
+  return {
+    ageTicks: 7,
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 117,
+    height: -4.25,
+    id: 9,
+    kind: 'bouncer',
+    ownerActorId: 7,
+    position: { x: 133.5, y: 463.25 },
+    rotationRadians: 0.5,
+    scale: 1.2,
+    shadow: true,
+    spawnTick: 20,
+    tint: 0xffaa88,
   }
 }
 

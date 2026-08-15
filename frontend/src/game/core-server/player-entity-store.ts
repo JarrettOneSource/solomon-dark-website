@@ -23,7 +23,9 @@ import {
   createPlayerSkillBook,
   grantPlayerExperience,
   playerStatBook,
+  synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
+  type SharedPlayerLevelMilestone,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
@@ -56,6 +58,11 @@ export interface PlayerEntityCombatTickResult {
 
 export interface PlayerEntityManaDebitResult {
   readonly accepted: boolean
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntitySharedExperienceResult {
+  readonly milestone: SharedPlayerLevelMilestone | null
   readonly store: PlayerEntityStore
 }
 
@@ -367,6 +374,51 @@ export function grantPlayerEntityExperience(
     amount,
   )
   return { ...source, progressions }
+}
+
+export function grantSharedPlayerEntityExperience(
+  source: PlayerEntityStore,
+  playerId: string,
+  amount: number,
+  participantIds: readonly string[],
+): PlayerEntitySharedExperienceResult {
+  const sourceIndex = playerEntityIndex(source, playerId)
+  if (sourceIndex < 0) throw new Error(`player entity store has no player ${playerId}`)
+  const stableParticipantIds = [...new Set(participantIds)].sort()
+  if (!stableParticipantIds.includes(playerId)) {
+    throw new Error('shared experience source must belong to the participant cohort')
+  }
+  for (const participantId of stableParticipantIds) {
+    if (playerEntityIndex(source, participantId) < 0) {
+      throw new Error(`shared experience cohort has no player ${participantId}`)
+    }
+  }
+  const previous = source.progressions[sourceIndex]!
+  const awarded = grantPlayerExperience(previous, source.skillBooks[sourceIndex]!, amount)
+  const progressions = [...source.progressions]
+  progressions[sourceIndex] = awarded
+  if (awarded.level === previous.level) {
+    return { milestone: null, store: { ...source, progressions } }
+  }
+  const crossedLevels = Object.freeze(Array.from(
+    { length: awarded.level - previous.level },
+    (_, index) => previous.level + index + 1,
+  ))
+  const milestone: SharedPlayerLevelMilestone = Object.freeze({
+    crossedLevels,
+    experience: awarded.experience,
+    level: awarded.level,
+  })
+  for (const participantId of stableParticipantIds) {
+    const index = playerEntityIndex(source, participantId)
+    if (index === sourceIndex) continue
+    progressions[index] = synchronizePlayerLevelMilestone(
+      source.progressions[index]!,
+      source.skillBooks[index]!,
+      milestone,
+    )
+  }
+  return { milestone, store: { ...source, progressions } }
 }
 
 export function applyPlayerEntitySkillChoice(

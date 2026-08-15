@@ -16,6 +16,7 @@ import type {
 } from '../protocol/game-state.ts'
 import {
   projectBoneyardEnemies,
+  projectBoneyardEnemyDeathEffects,
   projectBoneyardEnemyProjectiles,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
@@ -31,6 +32,7 @@ export function createGameSnapshot(
     case 'hub':
       return {
         hostPlayerId,
+        levelUpBarrier: state.levelUpBarrier,
         players,
         primarySpells: state.primarySpells,
         run: state.run,
@@ -48,11 +50,13 @@ export function createGameSnapshot(
       const runId = state.world.runId
       return {
         hostPlayerId,
+        levelUpBarrier: state.levelUpBarrier,
         players,
         primarySpells: state.primarySpells,
         run: state.run,
         tick: state.tick,
         world: {
+          deathEffects: projectBoneyardEnemyDeathEffects(state.world.enemies),
           encounter: state.world.encounter === null ? null : {
             acceleration: state.world.encounter.acceleration,
             digFrame: state.world.encounter.digFrame,
@@ -108,8 +112,11 @@ function protocolBoneyardEnemyEvent(
     tick: event.tick,
     type: event.type,
     ...(event.count === undefined ? {} : { count: event.count }),
+    ...(event.gainScale === undefined ? {} : { gainScale: event.gainScale }),
     ...(event.output === undefined ? {} : { output: event.output }),
+    ...(event.pitch === undefined ? {} : { pitch: event.pitch }),
     ...(event.projectileId === undefined ? {} : { projectileId: event.projectileId }),
+    ...(event.sound === undefined ? {} : { sound: event.sound }),
     ...(event.sourcePosition === undefined
       ? {}
       : { sourcePosition: { ...event.sourcePosition } }),

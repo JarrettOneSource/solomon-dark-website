@@ -224,6 +224,11 @@ export function connectGameClientSession(
       pendingInputs = pendingInputs.filter(
         (entry) => entry.sequence > message.acknowledgedInputSequence,
       )
+      if (reconstructedSnapshot.levelUpBarrier !== null) {
+        currentInput = copyInput(STOPPED_INPUT)
+        sentInput = copyInput(STOPPED_INPUT)
+        pendingInputs = []
+      }
       const previousWorldKind = snapshot.world.kind
       const receivedAtMs = now()
       if (isHubGameSnapshot(reconstructedSnapshot)) {
@@ -373,7 +378,10 @@ export function connectGameClientSession(
         if (!welcome || !snapshot || destroyed) return
         const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
         const lifeState = snapshot.players[welcome.playerId]?.progression.lifeState
-        const requestedInput = offered || lifeState !== 'alive' || snapshot.run.phase === 'game-over'
+        const requestedInput = snapshot.levelUpBarrier !== null
+          || offered
+          || lifeState !== 'alive'
+          || snapshot.run.phase === 'game-over'
           ? STOPPED_INPUT
           : nextInput
         const movement = requestedInput.movement

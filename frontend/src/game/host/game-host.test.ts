@@ -115,6 +115,7 @@ test('game host pauses a leveling player and authoritatively books the offered s
   assert.equal(offer?.level, 2)
   assert.equal(offer?.options.length, 3)
   assert.ok(offer)
+  assert.deepEqual(client.welcome.snapshot.levelUpBarrier?.pendingPlayerIds, [playerId])
 
   client.socket.send(encodeGameMessage({
     type: 'client-input',
@@ -136,6 +137,7 @@ test('game host pauses a leveling player and authoritatively books the offered s
     .find(([learnedSkillId]) => learnedSkillId === skillId)?.[1] ?? 0
   const selectedSnapshot = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
+    && message.snapshot.levelUpBarrier === null
     && message.snapshot.players[playerId].progression.pendingOffer === null
   ))
   client.socket.send(encodeGameMessage({
@@ -149,6 +151,7 @@ test('game host pauses a leveling player and authoritatively books the offered s
   const booked = selected.snapshot.players[playerId].progression
   assert.equal(booked.level, 2)
   assert.equal(booked.experience, 100)
+  assert.equal(selected.snapshot.levelUpBarrier, null)
   assert.deepEqual(
     booked.learnedSkills.find(([learnedSkillId]) => learnedSkillId === skillId),
     [skillId, previousRank + 1, previousRank + 1],

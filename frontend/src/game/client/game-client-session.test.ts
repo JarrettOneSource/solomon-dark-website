@@ -307,17 +307,28 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
     tick: 6,
     type: 'mage-lightning' as const,
   }
+  const deathSound = {
+    actorId: 4,
+    eventId: 9,
+    gainScale: 1,
+    pitch: 0.91,
+    runId: firstRunId,
+    sound: 'skeleton-die' as const,
+    sourcePosition: { x: 110, y: 205 },
+    tick: 6,
+    type: 'enemy-death-sound' as const,
+  }
   const withImpact = {
     ...firstSnapshot,
     tick: 10,
     world: {
       ...firstSnapshot.world,
-      enemyEvents: [...firstSnapshot.world.enemyEvents, lightning],
+      enemyEvents: [...firstSnapshot.world.enemyEvents, lightning, deathSound],
     },
   }
   receiveSnapshot(transport, withImpact, 0)
   receiveSnapshot(transport, { ...withImpact, tick: 15 }, 0)
-  assert.deepEqual(received, [lightning])
+  assert.deepEqual(received, [lightning, deathSound])
 
   const secondRunId = 'enemy-events-two'
   const secondSnapshot = createGameSnapshot(
@@ -335,7 +346,7 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   }]
   receiveSnapshot(transport, secondSnapshot, 0)
   assert.deepEqual(received.at(-1), secondSnapshot.world.enemyEvents[0])
-  assert.equal(received.length, 2)
+  assert.equal(received.length, 3)
   session.destroy()
 })
 
@@ -357,6 +368,7 @@ test('client suppresses gameplay input while a skill offer is pending and submit
   const initial = session.getSnapshot().players['player-1']
   const offer = initial.progression.pendingOffer
   assert.ok(offer)
+  assert.deepEqual(session.getSnapshot().levelUpBarrier?.pendingPlayerIds, ['player-1'])
 
   const sentBeforeInput = transport.sent.length
   session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 900, y: 450 }, true))

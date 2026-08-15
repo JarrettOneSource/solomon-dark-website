@@ -15,9 +15,14 @@ import {
 } from './boneyard-dig-indicator.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
+import {
+  isBoneyardGameSnapshot,
+  type BoneyardGameSnapshot,
+} from './client/boneyard-presentation-timeline.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
-  nativeEnemyEventSoundCue,
+  nativeBoneyardPointGain,
+  nativeEnemyEventSoundRequest,
   newSolomonVoiceEvent,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
@@ -111,6 +116,12 @@ export default function BoneyardScene({
   subscribePing,
   subscribe,
 }: BoneyardSceneProps) {
+  const [boneyardInitialSnapshot] = useState<BoneyardGameSnapshot>(() => {
+    if (!isBoneyardGameSnapshot(initialSnapshot)) {
+      throw new Error('Boneyard scene requires a Boneyard snapshot')
+    }
+    return initialSnapshot
+  })
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const darknessCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -120,9 +131,7 @@ export default function BoneyardScene({
   const pendingEnemyPresentationEventsRef = useRef<BoneyardEnemyEventSnapshot[]>([])
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const lastVoiceEventRef = useRef({
-    eventId: initialSnapshot.world.kind === 'boneyard'
-      ? (initialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0)
-      : 0,
+    eventId: boneyardInitialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0,
     runId: loaded.runId,
   })
   const inputBlockedRef = useRef(inputBlocked)
@@ -135,9 +144,9 @@ export default function BoneyardScene({
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
-  const [run, setRun] = useState<GameRunLifecycleState>(initialSnapshot.run)
+  const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
   const deathEpochRef = useRef(
-    initialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
+    boneyardInitialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
   )
   const [viewport, setViewport] = useState<GameViewportLayout>(() => (
     gameViewportLayout(1600, 900)
@@ -165,18 +174,36 @@ export default function BoneyardScene({
         scene.dataset.lastEnemyEventOutput = event.output
       }
     }
-    const cue = nativeEnemyEventSoundCue(event)
-    if (cue) audio.playSound(cue)
+    const sound = nativeEnemyEventSoundRequest(event)
+    if (sound) {
+      const renderer = rendererRef.current
+      const snapshot = samplePresentation()
+      const localPlayer = snapshot.players[playerId]
+      const camera = renderer?.camera(snapshot)
+      const spatialGain = camera
+        ? nativeBoneyardPointGain(
+            sound.sourcePosition,
+            camera,
+            viewportRef.current.width / camera.zoom,
+            localPlayer?.progression.lifeState === 'dying'
+              || localPlayer?.progression.lifeState === 'spectating',
+          )
+        : 1
+      audio.playSound(sound.cue, {
+        playbackRate: sound.playbackRate,
+        volume: sound.volume * spatialGain,
+      })
+    }
     const renderer = rendererRef.current
     if (renderer) renderer.consumeEnemyEvent(event)
     else pendingEnemyPresentationEventsRef.current.push(event)
-  }), [audio, loaded.runId, subscribeEnemyEvent])
+  }), [audio, loaded.runId, playerId, samplePresentation, subscribeEnemyEvent])
 
   useEffect(() => {
     const synchronizer = new PlayerFootstepAudioSynchronizer(
       audio,
       playerId,
-      initialSnapshot,
+      boneyardInitialSnapshot,
       (event) => {
         if (event.playerId !== playerId) return
         const scene = sceneRef.current
@@ -190,7 +217,7 @@ export default function BoneyardScene({
       ) return
       synchronizer.update(snapshot)
     })
-  }, [audio, initialSnapshot, loaded.runId, playerId, subscribe])
+  }, [audio, boneyardInitialSnapshot, loaded.runId, playerId, subscribe])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {
@@ -289,7 +316,7 @@ export default function BoneyardScene({
 
     void createBoneyardWorldRenderer({
       boneyard: loaded,
-      initialSnapshot,
+      initialSnapshot: boneyardInitialSnapshot,
       playerId,
       viewport: viewportRef.current,
     }).then((renderer) => {
@@ -369,14 +396,12 @@ export default function BoneyardScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [audio, digPosition, initialSnapshot, loaded, onInput, playerId, samplePresentation])
+  }, [audio, boneyardInitialSnapshot, digPosition, loaded, onInput, playerId, samplePresentation])
 
-  const localPlayer = initialSnapshot.players[playerId]
+  const localPlayer = boneyardInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
   const discipline = localPlayer?.config.discipline ?? 'arcane'
-  const gateLeaves = initialSnapshot.world.kind === 'boneyard'
-    ? initialSnapshot.world.gateLeaves
-    : []
+  const gateLeaves = boneyardInitialSnapshot.world.gateLeaves
   const digIndicatorVisible = Boolean(dig && digIndicatorRunId === loaded.runId)
 
   return (
@@ -424,7 +449,7 @@ export default function BoneyardScene({
           accountUsername={accountUsername}
           element={element}
           getPingMs={getPingMs}
-          initialSnapshot={initialSnapshot}
+          initialSnapshot={boneyardInitialSnapshot}
           mode="run"
           playerId={playerId}
           progression={progression}

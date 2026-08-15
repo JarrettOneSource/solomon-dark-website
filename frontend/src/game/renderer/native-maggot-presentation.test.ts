@@ -19,7 +19,7 @@ test('Maggot crawl, bite, facing, and death select recovered native records', ()
   }])
 })
 
-test('Maggot hit presentation appends the same additive body overlay as enemies', () => {
+test('Maggot hit presentation appends the same native red redraw as enemies', () => {
   const plan = nativeMaggotPresentationPlan(maggot({
     alpha: 0.8,
     hitFlash: 0.5,
@@ -35,16 +35,18 @@ test('Maggot hit presentation appends the same additive body overlay as enemies'
       role: 'maggot-body',
       rotationRadians: 0,
       scale: 1,
+      tint: 0xffffff,
     },
     {
       alpha: 0.4,
       atlas: 'BadGuys',
-      blendMode: 'add',
+      blendMode: 'normal',
       entry: 202,
       offset: { x: 0, y: 0 },
-      role: 'maggot-body-hit-flash',
+      role: 'hit:maggot-body',
       rotationRadians: 0,
       scale: 1,
+      tint: 0xff0000,
     },
   ])
 })

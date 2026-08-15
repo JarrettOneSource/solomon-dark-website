@@ -7,6 +7,7 @@ import {
   CREATE_DISCIPLINE_FINALIZE_MS,
   GAME_SCENE_MUSIC,
   HUB_AUDIO_ATTENUATION_RADIUS,
+  NATIVE_LEVEL_UP_SOUND_REQUESTS,
   NATIVE_MUSIC_MODULE_SHA256,
   NATIVE_LOOP_MANIFEST,
   NATIVE_SOUND_MANIFEST,
@@ -18,8 +19,9 @@ import {
   hubTeacherReleasesBetween,
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
+  nativeBoneyardPointGain,
   nativeFootstepCue,
-  nativeEnemyEventSoundCue,
+  nativeEnemyEventSoundRequest,
   newSolomonVoiceEvent,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
@@ -38,6 +40,10 @@ const mainMenuSceneSource = readFileSync(
 )
 const playerFootstepAudioSource = readFileSync(
   new URL('./player-footstep-audio.ts', import.meta.url),
+  'utf8',
+)
+const skillPickerSource = readFileSync(
+  new URL('./SkillPicker.tsx', import.meta.url),
   'utf8',
 )
 
@@ -107,6 +113,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   )
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
+  assert.equal(NATIVE_SOUND_MANIFEST['level-up'].registryOffset, 0x908)
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
   assert.equal(NATIVE_SOUND_MANIFEST['start-boulder'].registryOffset, 0xf0c)
@@ -120,6 +127,26 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
 })
 
+test('plays the untouched stock level-up cue at the exact two native pitches per offer', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/level-up.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST['level-up'].sourceSha256,
+  )
+  assert.deepEqual(NATIVE_LEVEL_UP_SOUND_REQUESTS, [
+    { cue: 'level-up', playbackRate: 2 },
+    { cue: 'level-up', playbackRate: 3 },
+  ])
+  assert.match(skillPickerSource, /levelUpSoundOfferRef\.current !== soundOfferKey/)
+  assert.match(skillPickerSource, /for \(const request of NATIVE_LEVEL_UP_SOUND_REQUESTS\)/)
+  assert.match(
+    skillPickerSource,
+    /playSound\(request\.cue, \{ playbackRate: request\.playbackRate \}\)/,
+  )
+})
+
 test('pins the checked-in Skeleton death cue to the untouched stock WAV', () => {
   const source = readFileSync(
     new URL('../assets/game/audio/sfx/skeleton-die.wav', import.meta.url),
@@ -130,24 +157,102 @@ test('pins the checked-in Skeleton death cue to the untouched stock WAV', () => 
   )
 })
 
-test('maps only authoritative Skeleton-family terminal events to the native cue', () => {
+test('pins every checked-in enemy death cue to its untouched stock WAV', () => {
+  const filenames = {
+    'banshee-die': 'banshee-die.wav',
+    'coffin-break': 'coffin-break.wav',
+    'demon-die': 'demon-die.wav',
+    'firey-death': 'firey-death.wav',
+    flash: 'enemy-flash.wav',
+    'imp-split': 'imp-split.wav',
+    'maggot-squeak-1': 'maggot-squeak-1.wav',
+    'maggot-squeak-2': 'maggot-squeak-2.wav',
+    'maggot-squish-1': 'maggot-squish-1.wav',
+    'maggot-squish-2': 'maggot-squish-2.wav',
+    'maggot-squish-3': 'maggot-squish-3.wav',
+    'skeleton-die': 'skeleton-die.wav',
+    'zombie-die': 'zombie-die.wav',
+    'zombie-die-groan': 'zombie-die-groan.wav',
+    'zombie-poison-splat': 'zombie-poison-splat.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(filenames)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue as keyof typeof NATIVE_SOUND_MANIFEST].sourceSha256,
+    )
+  }
+})
+
+test('maps only authoritative death-sound events to their host-authored request', () => {
   const death = {
     actorId: 9,
     eventId: 3,
-    output: 'archer-shatter' as const,
+    gainScale: 0.375,
+    pitch: 1.125,
     runId: 'run-1',
+    sound: 'maggot-squeak-2' as const,
+    sourcePosition: { x: 10, y: 20 },
     tick: 120,
-    type: 'enemy-terminal-output' as const,
+    type: 'enemy-death-sound' as const,
   }
-  assert.equal(nativeEnemyEventSoundCue(death), 'skeleton-die')
-  assert.equal(nativeEnemyEventSoundCue({
-    ...death,
-    output: 'zombie-collapse',
-  }), null)
-  assert.equal(nativeEnemyEventSoundCue({
+  assert.deepEqual(nativeEnemyEventSoundRequest(death), {
+    cue: 'maggot-squeak-2',
+    playbackRate: 1.125,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 0.375,
+  })
+  assert.equal(nativeEnemyEventSoundRequest({
     ...death,
     type: 'enemy-death',
   }), null)
+})
+
+test('matches native Boneyard point attenuation and death-presentation damping', () => {
+  const visibleWorldWidth = 1_600 / 1.35
+  const camera = { x: 800, y: 450 }
+  const inner = visibleWorldWidth * 0.25
+  const outer = visibleWorldWidth * 1.1
+  const midpoint = (inner + outer) / 2
+
+  assert.equal(
+    nativeBoneyardPointGain(
+      { x: camera.x + inner, y: camera.y },
+      camera,
+      visibleWorldWidth,
+      false,
+    ),
+    1,
+  )
+  assert.ok(Math.abs(
+    nativeBoneyardPointGain(
+      { x: camera.x + midpoint, y: camera.y },
+      camera,
+      visibleWorldWidth,
+      false,
+    ) - 0.5,
+  ) < 1e-12)
+  assert.equal(
+    nativeBoneyardPointGain(
+      { x: camera.x + outer, y: camera.y },
+      camera,
+      visibleWorldWidth,
+      false,
+    ),
+    0,
+  )
+  assert.equal(
+    nativeBoneyardPointGain(
+      { x: camera.x, y: camera.y },
+      camera,
+      visibleWorldWidth,
+      true,
+    ),
+    0.1,
+  )
 })
 
 test('emits Create entry stream commands on crossed native thresholds', () => {
@@ -207,6 +312,10 @@ test('consumes only the newest unseen Solomon cue after sparse snapshots', () =>
 test('gives Boneyard one authoritative same-world footstep synchronizer', () => {
   assert.match(mainMenuSceneSource, /<BoneyardScene[\s\S]*?audio=\{audio\}/)
   assert.match(boneyardSceneSource, /new PlayerFootstepAudioSynchronizer\(/)
+  assert.match(
+    boneyardSceneSource,
+    /playerId,\s+boneyardInitialSnapshot,/,
+  )
   assert.match(boneyardSceneSource, /snapshot\.world\.runId !== loaded\.runId/)
   assert.match(playerFootstepAudioSource, /Object\.entries\(snapshot\.players\)/)
   assert.match(playerFootstepAudioSource, /newNativeFootstepTick\(/)
@@ -222,7 +331,9 @@ test('consumes the host enemy event lane once through the active Boneyard scene'
   assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventId/)
   assert.match(boneyardSceneSource, /scene\.dataset\.lastEnemyEventOutput/)
   assert.match(boneyardSceneSource, /if \(event\.output !== undefined\)/)
-  assert.match(boneyardSceneSource, /nativeEnemyEventSoundCue\(event\)/)
+  assert.match(boneyardSceneSource, /nativeEnemyEventSoundRequest\(event\)/)
+  assert.match(boneyardSceneSource, /playbackRate: sound\.playbackRate/)
+  assert.match(boneyardSceneSource, /nativeBoneyardPointGain\(/)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

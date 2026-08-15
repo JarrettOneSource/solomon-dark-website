@@ -259,7 +259,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v18 strictly round-trips projected statuses, shields, payloads, and effects', () => {
+test('protocol v19 strictly round-trips projected statuses, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -370,6 +370,23 @@ test('protocol v18 strictly round-trips projected statuses, shields, payloads, a
     state: 'emerging',
     verticalOffset: -20,
   }]
+  snapshot.world.deathEffects = [{
+    ageTicks: 7,
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 117,
+    height: -4.25,
+    id: 4,
+    kind: 'bouncer',
+    ownerActorId: 1,
+    position: { x: 130, y: 100 },
+    rotationRadians: 0.5,
+    scale: 1.2,
+    shadow: true,
+    spawnTick: 1,
+    tint: 0xffaa88,
+  }]
   const welcome: ServerWelcomeMessage = {
     type: 'server-welcome',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -420,10 +437,26 @@ test('protocol v18 strictly round-trips projected statuses, shields, payloads, a
   const invalidEmergence = JSON.parse(encodeGameMessage(welcome))
   invalidEmergence.snapshot.world.maggots[0].state = 'crawl'
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidEmergence)), /emergenceTick/)
+
+  const invalidDeathEffect = JSON.parse(encodeGameMessage(welcome))
+  invalidDeathEffect.snapshot.world.deathEffects[0].alpha = 1.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDeathEffect)),
+    /deathEffects\[0\]\.alpha/,
+  )
+
+  const duplicateDeathEffect = JSON.parse(encodeGameMessage(welcome))
+  duplicateDeathEffect.snapshot.world.deathEffects.push(
+    duplicateDeathEffect.snapshot.world.deathEffects[0],
+  )
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicateDeathEffect)),
+    /deathEffects duplicates id/,
+  )
 })
 
-test('protocol v18 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 18)
+test('protocol v19 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 19)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -514,7 +547,7 @@ test('protocol v18 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v18 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v19 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -581,15 +614,25 @@ test('protocol v18 preserves the bounded run-scoped enemy semantic-event lane', 
     {
       actorId: 3,
       eventId: 9,
+      gainScale: 1,
+      pitch: 0.875,
+      sound: 'skeleton-die',
+      sourcePosition: { x: 120, y: 240 },
+      tick: 13,
+      type: 'enemy-death-sound',
+    },
+    {
+      actorId: 3,
+      eventId: 10,
       targetPlayerId: 'player-1',
       tick: 13,
       type: 'reward',
     },
-    { actorId: 3, eventId: 10, tick: 20, type: 'enemy-retired' },
+    { actorId: 3, eventId: 11, tick: 20, type: 'enemy-retired' },
     {
       actorId: 4,
       count: 20,
-      eventId: 11,
+      eventId: 12,
       tick: 20,
       type: 'coffin-maggot-release',
     },
@@ -661,6 +704,27 @@ test('protocol v18 preserves the bounded run-scoped enemy semantic-event lane', 
     () => decodeServerGameMessage(JSON.stringify(extraLightningPayload)),
     /projectileId is not allowed/,
   )
+
+  const missingDeathSoundPitch = JSON.parse(encodeGameMessage(message))
+  delete missingDeathSoundPitch.frame.world.enemyEvents[8].pitch
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingDeathSoundPitch)),
+    /pitch/,
+  )
+
+  const unsupportedDeathSound = JSON.parse(encodeGameMessage(message))
+  unsupportedDeathSound.frame.world.enemyEvents[8].sound = 'skeleton-ish'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unsupportedDeathSound)),
+    /sound is not supported/,
+  )
+
+  const excessDeathSoundGain = JSON.parse(encodeGameMessage(message))
+  excessDeathSoundGain.frame.world.enemyEvents[8].gainScale = 1.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessDeathSoundGain)),
+    /gainScale must be within/,
+  )
 })
 
 test('progression snapshots carry the next rank needed by the stock picker label', () => {
@@ -674,6 +738,15 @@ test('progression snapshots carry the next rank needed by the stock picker label
   )
   const pendingOffer = snapshot.players['player-1']!.progression.pendingOffer
   assert.ok(pendingOffer)
+  assert.deepEqual(snapshot.levelUpBarrier, {
+    barrierId: 1,
+    milestoneExperience: 100,
+    milestoneLevel: 2,
+    participantIds: ['player-1'],
+    pendingPlayerIds: ['player-1'],
+    runId: null,
+    sourcePlayerId: 'player-1',
+  })
   assert.ok(pendingOffer.options.every(({ skillId, targetRank }) => {
     const learned = snapshot.players['player-1']!.progression.learnedSkills
       .find(([learnedSkillId]) => learnedSkillId === skillId)
@@ -681,6 +754,35 @@ test('progression snapshots carry the next rank needed by the stock picker label
   }))
 
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const fractional = JSON.parse(JSON.stringify(frame))
+  fractional.players['player-1'].progression.experience = 90.85
+  fractional.levelUpBarrier.milestoneExperience = 90.85
+  const fractionalMessage = decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: fractional,
+    sequence: 2,
+  }))
+  assert.equal(fractionalMessage.type, 'server-snapshot')
+  assert.equal(fractionalMessage.frame.players['player-1']!.progression.experience, 90.85)
+
+  const missingBarrierOffer = JSON.parse(JSON.stringify(frame))
+  missingBarrierOffer.players['player-1'].progression.pendingOffer = null
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: missingBarrierOffer,
+    sequence: 2,
+  })), /pending player has no skill offer/)
+
+  const duplicateBarrierParticipant = JSON.parse(JSON.stringify(frame))
+  duplicateBarrierParticipant.levelUpBarrier.participantIds.push('player-1')
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: duplicateBarrierParticipant,
+    sequence: 2,
+  })), /sorted, unique/)
   const malformed = JSON.parse(JSON.stringify(frame))
   delete malformed.players['player-1'].progression.pendingOffer.options[0].targetRank
   assert.throws(() => decodeServerGameMessage(JSON.stringify({

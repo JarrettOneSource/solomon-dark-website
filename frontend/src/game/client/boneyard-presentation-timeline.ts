@@ -4,6 +4,7 @@ import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import type {
+  BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMaggotSnapshot,
@@ -137,6 +138,7 @@ function interpolateSnapshot(
   }
   return {
     hostPlayerId: blend < 1 ? older.hostPlayerId : newer.hostPlayerId,
+    levelUpBarrier: blend < 1 ? older.levelUpBarrier : newer.levelUpBarrier,
     players,
     primarySpells: interpolatePrimarySpellState(
       older.primarySpells,
@@ -146,6 +148,11 @@ function interpolateSnapshot(
     run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
+      deathEffects: interpolateEnemyDeathEffects(
+        older.world.deathEffects,
+        newer.world.deathEffects,
+        blend,
+      ),
       encounter: interpolateSolomon(
         older.world.encounter,
         newer.world.encounter,
@@ -265,6 +272,7 @@ function interpolateGateLeaves(
 function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationFrame {
   return {
     hostPlayerId: snapshot.hostPlayerId,
+    levelUpBarrier: snapshot.levelUpBarrier,
     players: Object.fromEntries(Object.entries(snapshot.players).map(([id, player]) => [
       id,
       copyPlayer(player),
@@ -273,6 +281,7 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
     run: snapshot.run,
     tick: snapshot.tick,
     world: {
+      deathEffects: snapshot.world.deathEffects.map(copyEnemyDeathEffect),
       encounter: copySolomon(snapshot.world.encounter),
       enemies: snapshot.world.enemies.map(copyEnemy),
       enemyEvents: snapshot.world.enemyEvents.map(copyEnemyEvent),
@@ -284,6 +293,44 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function interpolateEnemyDeathEffects(
+  older: readonly BoneyardEnemyDeathEffectSnapshot[],
+  newer: readonly BoneyardEnemyDeathEffectSnapshot[],
+  blend: number,
+): BoneyardEnemyDeathEffectSnapshot[] {
+  const newerById = new Map(newer.map((effect) => [effect.id, effect]))
+  const effects = older.map((olderEffect) => {
+    const newerEffect = newerById.get(olderEffect.id)
+    if (!newerEffect) return copyEnemyDeathEffect(olderEffect)
+    const discrete = blend < 1 ? olderEffect : newerEffect
+    return {
+      ...copyEnemyDeathEffect(discrete),
+      ageTicks: lerp(olderEffect.ageTicks, newerEffect.ageTicks, blend),
+      alpha: lerp(olderEffect.alpha, newerEffect.alpha, blend),
+      height: lerp(olderEffect.height, newerEffect.height, blend),
+      position: {
+        x: lerp(olderEffect.position.x, newerEffect.position.x, blend),
+        y: lerp(olderEffect.position.y, newerEffect.position.y, blend),
+      },
+      rotationRadians: lerpCycle(
+        olderEffect.rotationRadians,
+        newerEffect.rotationRadians,
+        blend,
+        Math.PI * 2,
+      ),
+      scale: lerp(olderEffect.scale, newerEffect.scale, blend),
+    }
+  })
+  if (blend >= 1) {
+    const knownIds = new Set(effects.map((effect) => effect.id))
+    for (const effect of newer) {
+      if (!knownIds.has(effect.id)) effects.push(copyEnemyDeathEffect(effect))
+    }
+    return effects.filter((effect) => newerById.has(effect.id))
+  }
+  return effects
 }
 
 function interpolateEnemyProjectiles(
@@ -499,6 +546,12 @@ function copyEnemyProjectile(
   projectile: BoneyardEnemyProjectileSnapshot,
 ): BoneyardEnemyProjectileSnapshot {
   return { ...projectile, position: { ...projectile.position } }
+}
+
+function copyEnemyDeathEffect(
+  effect: BoneyardEnemyDeathEffectSnapshot,
+): BoneyardEnemyDeathEffectSnapshot {
+  return { ...effect, position: { ...effect.position } }
 }
 
 function copyMaggot(maggot: BoneyardMaggotSnapshot): BoneyardMaggotSnapshot {

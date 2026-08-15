@@ -4,6 +4,7 @@ import AllyHud from './AllyHud.tsx'
 import type { AllyHudRow } from './ally-hud.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import { playerExperienceProgress } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
@@ -107,12 +108,7 @@ export default function GameHud({
   subscribePing,
   subscribeSnapshot,
 }: GameHudProps) {
-  const xpSpan = progression.nextThreshold - progression.previousThreshold
-  const xpProgress = xpSpan > 0
-    ? Math.max(0, Math.min(1, (
-        progression.experience - progression.previousThreshold
-      ) / xpSpan))
-    : 1
+  const xpProgress = playerExperienceProgress(progression)
   const healthProgress = progression.currentHealth / progression.maximumHealth
   const manaProgress = progression.currentMana / progression.maximumMana
   return (

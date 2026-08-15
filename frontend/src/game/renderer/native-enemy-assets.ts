@@ -9,7 +9,10 @@ const spriteFiles = {
   ...import.meta.glob([
     '../../assets/game/boneyard/badguys/0002.png',
     '../../assets/game/boneyard/badguys/0010.png',
+    '../../assets/game/boneyard/badguys/0011.png',
     '../../assets/game/boneyard/badguys/0015.png',
+    '../../assets/game/boneyard/badguys/0021.png',
+    '../../assets/game/boneyard/badguys/0027.png',
     '../../assets/game/boneyard/badguys/0055.png',
     '../../assets/game/boneyard/badguys/00[8-9][0-9].png',
     '../../assets/game/boneyard/badguys/01[0-2][0-9].png',
@@ -59,8 +62,10 @@ const spriteFiles = {
 
 const requiredBadGuysRanges = [
   [2, 2],
-  [10, 10],
+  [10, 11],
   [15, 15],
+  [21, 21],
+  [27, 27],
   [55, 55],
   [86, 86],
   [92, 121],
@@ -80,8 +85,7 @@ const requiredBadGuysRanges = [
   [1333, 1566],
   [1585, 1839],
   [2013, 2069],
-  [2070, 2087],
-  [2095, 2202],
+  [2070, 2202],
   [2203, 2256],
   [2275, 2292],
   [2293, 2346],

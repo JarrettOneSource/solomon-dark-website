@@ -25,12 +25,24 @@ export type GameMusicCue =
   | 'selection'
   | 'solomondarktheme'
 export type GameSoundCue =
+  | 'banshee-die'
   | 'click'
+  | 'coffin-break'
+  | 'demon-die'
   | 'fireball-hit'
+  | 'firey-death'
+  | 'flash'
   | 'ice-start'
+  | 'imp-split'
+  | 'level-up'
   | 'lightning-start'
   | 'magic-missile'
   | 'magic-missile-hit'
+  | 'maggot-squeak-1'
+  | 'maggot-squeak-2'
+  | 'maggot-squish-1'
+  | 'maggot-squish-2'
+  | 'maggot-squish-3'
   | 'pick-skill'
   | 'rock-hit'
   | 'skeleton-die'
@@ -39,6 +51,9 @@ export type GameSoundCue =
   | 'step-2'
   | 'summon'
   | 'throw-fire'
+  | 'zombie-die'
+  | 'zombie-die-groan'
+  | 'zombie-poison-splat'
 export type CreateStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
 export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
 export type GameLoopCue =
@@ -86,20 +101,55 @@ export const NATIVE_MUSIC_MANIFEST = {
 } as const satisfies Readonly<Partial<Record<GameMusicCue, NativeMusicEntry>>>
 
 export const NATIVE_SOUND_MANIFEST = {
+  'banshee-die': {
+    registryOffset: 0x178,
+    sourceName: 'sounds\\bansheedie',
+    sourceSha256: 'e6419e4437ee457dffdf1b2d5e488971f60cdf98e737b1a4443a8333f8a0a80d',
+  },
   click: {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
     sourceSha256: '8aeebcfeb69625bee2ee78fe9c63939e6b40edcc89d5facf2c0d35e1b5920307',
+  },
+  'coffin-break': {
+    registryOffset: 0x2ac,
+    sourceName: 'sounds\\coffinbreak',
+    sourceSha256: '5b1e1bceae4338878309256cfa083a8621efb26250fd72325d635f719b547dca',
+  },
+  'demon-die': {
+    registryOffset: 0x388,
+    sourceName: 'sounds\\demondies',
+    sourceSha256: 'b22c5da10273648ef2f56d3375aaf667e8da408f134f2c2f5cd1a6a29617efa4',
   },
   'fireball-hit': {
     registryOffset: 0x540,
     sourceName: 'sounds\\fireballhit',
     sourceSha256: '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   },
+  'firey-death': {
+    registryOffset: 0x56c,
+    sourceName: 'sounds\\fireydeath',
+    sourceSha256: '171da05d45168042f6042e58279be0b7255161c65d0d1d58caeb4d4d6b2ccc2e',
+  },
+  flash: {
+    registryOffset: 0x5f0,
+    sourceName: 'sounds\\flash',
+    sourceSha256: 'dfbee90531011a439650ee0bbf30a3c5ea9469ccd97a9979c05ba73f3db9c05c',
+  },
   'ice-start': {
     registryOffset: 0x7a8,
     sourceName: 'sounds\\icestart',
     sourceSha256: '28cfda1e9d59f39dfacfd808cdb267465592ae5ce0d34a9aa4495a3f659b9694',
+  },
+  'imp-split': {
+    registryOffset: 0x82c,
+    sourceName: 'sounds\\ImpSplit',
+    sourceSha256: 'd5b3bca86d9d981701a8dba3e17e07e7ad50aa3ed183817813b048997b5103b0',
+  },
+  'level-up': {
+    registryOffset: 0x908,
+    sourceName: 'sounds\\levelup',
+    sourceSha256: 'ca01cafec3167ee5bb37f0cb6605196d38bca45c7b755d5fa11781d3e4a5ea92',
   },
   'lightning-start': {
     registryOffset: 0x960,
@@ -115,6 +165,31 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xa10,
     sourceName: 'sounds\\magicmissilehit',
     sourceSha256: '2ac1154c78ee7b9cf5b7b0477113293ff8f16aa743269ad3648ed603e1aaf608',
+  },
+  'maggot-squeak-1': {
+    registryOffset: 0x2124,
+    sourceName: 'sounds\\MaggotSqueak\\squeak1',
+    sourceSha256: 'cefed419346a320ada92f4fb1332ebf2fce6a0265ed520efd11a98b04751216d',
+  },
+  'maggot-squeak-2': {
+    registryOffset: 0x2150,
+    sourceName: 'sounds\\MaggotSqueak\\squeak2',
+    sourceSha256: '8ca249e20ee5f96ccfa49c9dff37ba5c2040f342aa553170e283c9ee89b5fd3a',
+  },
+  'maggot-squish-1': {
+    registryOffset: 0x2334,
+    sourceName: 'sounds\\Squish\\squish',
+    sourceSha256: '9b4b14b927596642b71a83d02be58459b6e06c78c9a4b5cb659104d86c2fa482',
+  },
+  'maggot-squish-2': {
+    registryOffset: 0x2360,
+    sourceName: 'sounds\\Squish\\SQUISH2',
+    sourceSha256: '48286066eefe73a5d1d3468e9d9fbc668d646ce691335b0115d8a05e4c3a85e2',
+  },
+  'maggot-squish-3': {
+    registryOffset: 0x238c,
+    sourceName: 'sounds\\Squish\\Squish3',
+    sourceSha256: '1e8a7b2bde79e7ed6fe9267c489f9ac085966a56dfd5b2ad072f16ed39c10516',
   },
   'pick-skill': {
     registryOffset: 0x44,
@@ -156,18 +231,65 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\throwfire',
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
   },
+  'zombie-die': {
+    registryOffset: 0x1224,
+    sourceName: 'sounds\\zombiedie',
+    sourceSha256: '983aaff23ce36bdab7ec0d97f5fa783d6b25b109e5c2a2d7ab88c7cd960760a3',
+  },
+  'zombie-die-groan': {
+    registryOffset: 0x1300,
+    sourceName: 'sounds\\zombie_die_groan',
+    sourceSha256: 'd2e664024a50f1153f2874e6feaa08799e1113593da49227dd1fffb3254ae2e9',
+  },
+  'zombie-poison-splat': {
+    registryOffset: 0x12a8,
+    sourceName: 'sounds\\zombiepoisonsplat',
+    sourceSha256: 'd2ca2cc1ec6d61b8bb431582ee7335a239b645c105e3a6b42704ace683513da4',
+  },
 } as const satisfies Readonly<Record<GameSoundCue, NativeSoundEntry>>
 
-export function nativeEnemyEventSoundCue(
+export const NATIVE_LEVEL_UP_SOUND_REQUESTS = Object.freeze([
+  Object.freeze({ cue: 'level-up' as const, playbackRate: 2 }),
+  Object.freeze({ cue: 'level-up' as const, playbackRate: 3 }),
+])
+
+export interface NativeEnemyEventSoundRequest {
+  cue: GameSoundCue
+  playbackRate: number
+  sourcePosition: Readonly<{ x: number; y: number }>
+  volume: number
+}
+
+export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
-): GameSoundCue | null {
-  if (event.type !== 'enemy-terminal-output') return null
-  if (
-    event.output === 'skeleton-shatter'
-    || event.output === 'archer-shatter'
-    || event.output === 'mage-shatter'
-  ) return 'skeleton-die'
-  return null
+): NativeEnemyEventSoundRequest | null {
+  if (event.type !== 'enemy-death-sound') return null
+  return {
+    cue: event.sound as GameSoundCue,
+    playbackRate: event.pitch!,
+    sourcePosition: event.sourcePosition!,
+    volume: event.gainScale!,
+  }
+}
+
+export function nativeBoneyardPointGain(
+  sourcePosition: Readonly<{ x: number; y: number }>,
+  cameraCenter: Readonly<{ x: number; y: number }>,
+  visibleWorldWidth: number,
+  localPlayerInDeathPresentation: boolean,
+): number {
+  const distance = Math.hypot(
+    sourcePosition.x - cameraCenter.x,
+    sourcePosition.y - cameraCenter.y,
+  )
+  const innerRadius = visibleWorldWidth * 0.25
+  const outerRadius = visibleWorldWidth * 1.1
+  const spatialGain = distance <= innerRadius
+    ? 1
+    : distance >= outerRadius
+      ? 0
+      : 1 - (distance - innerRadius) / (outerRadius - innerRadius)
+  return spatialGain * (localPlayerInDeathPresentation ? 0.1 : 1)
 }
 
 export const NATIVE_LOOP_MANIFEST = {

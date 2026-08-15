@@ -48,7 +48,12 @@ test('owns both requested transitions through destination renderer readiness', (
   assert.match(mainScene, /activeBoneyardRunRef\.current !== snapshot\.world\.runId/)
   assert.match(mainScene, /loadedBoneyardRunRef\.current !== nextBoneyard\.runId/)
   assert.match(mainScene, /<MatchLoadingScreen loading=\{loading\} \/>/)
-  assert.match(mainScene, /inputBlocked=\{loading !== null\}/)
+  assert.equal(
+    mainScene.match(
+      /inputBlocked=\{loading !== null \|\| runtimeSnapshot\.levelUpBarrier !== null\}/g,
+    )?.length,
+    2,
+  )
   assert.match(mainScene, /onReady=\{finishHubLoading\}/)
   assert.match(mainScene, /onReady=\{finishBoneyardLoading\}/)
   assert.doesNotMatch(mainScene, /Opening the Boneyard/)
@@ -64,4 +69,19 @@ test('seals scene input until the same renderer reports its initial frame', () =
     assert.match(scene, /onLoadingErrorRef\.current\(\)/)
     assert.match(scene, /onReadyRef\.current\(\)/)
   }
+})
+
+test('keeps the Boneyard renderer resident across run-local snapshot changes', () => {
+  assert.match(
+    boneyardScene,
+    /const \[boneyardInitialSnapshot\] = useState<BoneyardGameSnapshot>/,
+  )
+  assert.match(
+    boneyardScene,
+    /createBoneyardWorldRenderer\(\{[\s\S]*initialSnapshot: boneyardInitialSnapshot/,
+  )
+  assert.doesNotMatch(
+    boneyardScene,
+    /\[audio, digPosition, initialSnapshot, loaded, onInput, playerId, samplePresentation\]/,
+  )
 })

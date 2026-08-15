@@ -9,11 +9,14 @@ import {
   NATIVE_WELD_BUILDS,
   SPELL_WELDING_SKILL_ID,
   applyPlayerSkillChoice,
+  boneyardEnemyExperienceAward,
   buildPlayerSkillOffer,
   createPlayerProgression,
   createPlayerSkillBook,
   effectivePrimarySkillRankStats,
+  evaluateBoneyardEnemyExperience,
   grantPlayerExperience,
+  playerExperienceProgress,
   nativeWeldBuild,
   playerStatBook,
   type PlayerProgressionComponent,
@@ -361,6 +364,40 @@ test('native XP thresholds queue a mandatory deterministic offer and selection o
     offerSequence: offer.sequence,
     skillId: chosen.skillId,
   }), null)
+})
+
+test('Boneyard enemy XP preserves native fractional awards and strict threshold edges', () => {
+  assert.equal(evaluateBoneyardEnemyExperience(10), 4.25)
+  assert.equal(evaluateBoneyardEnemyExperience(2), 0.85)
+  assert.equal(evaluateBoneyardEnemyExperience(4), 1.7)
+  assert.equal(boneyardEnemyExperienceAward({
+    arenaPlayerCount: 1,
+    evaluatedActorReward: 4.25,
+    receiverLevel: 1,
+  }), 4.25)
+  assert.equal(boneyardEnemyExperienceAward({
+    arenaPlayerCount: 2,
+    evaluatedActorReward: 4.25,
+    receiverLevel: 6,
+    receiverXpBonus: 0.25,
+  }), 7.65)
+
+  const book = createPlayerSkillBook(ETHER_ARCANE)
+  const atThreshold = grantPlayerExperience(createPlayerProgression(12), book, 90)
+  assert.equal(atThreshold.experience, 90)
+  assert.equal(atThreshold.level, 1)
+  const fractionalCrossing = grantPlayerExperience(atThreshold, book, 0.85)
+  assert.equal(fractionalCrossing.experience, 90.85)
+  assert.equal(fractionalCrossing.level, 2)
+  assert.ok(fractionalCrossing.pendingOffer)
+  assert.equal(playerExperienceProgress(createPlayerProgression(12)), 0)
+  assert.equal(playerExperienceProgress({
+    experience: 4.25,
+    nextThreshold: 90,
+    previousThreshold: 0,
+  }), 4.25 / 90)
+  assert.ok(Math.abs(playerExperienceProgress(fractionalCrossing) - 0.85 / 70) < 1e-15)
+  assert.throws(() => grantPlayerExperience(atThreshold, book, Number.NaN), /finite/)
 })
 
 test('offer fill preserves the native category collision guards', () => {

@@ -221,6 +221,7 @@ class NativeEnemyView {
       sprite.rotation = layer.rotationRadians
       sprite.alpha = layer.alpha
       sprite.blendMode = layer.blendMode
+      sprite.tint = layer.tint
     })
     this.container.position.set(enemy.position.x, enemy.position.y)
   }

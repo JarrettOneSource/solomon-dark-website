@@ -45,3 +45,15 @@
   font: 18px serif;
   transform: translateX(-50%);
 }
+
+.skill-picker-waiting {
+  z-index: 52;
+  display: grid;
+  place-items: center;
+  color: #efe3bd;
+  background: rgb(0 0 0 / 82%);
+  font: 700 28px/1.2 "IM FELL English", serif;
+  letter-spacing: 0.04em;
+  text-align: center;
+  text-shadow: 0 2px 3px #000;
+}

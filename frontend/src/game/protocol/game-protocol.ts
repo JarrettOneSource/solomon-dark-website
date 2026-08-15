@@ -69,6 +69,7 @@ import type {
 } from '../core-kernels/boneyard.ts'
 import type {
   BoneyardEnemyEventSnapshot,
+  BoneyardEnemyDeathEffectSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
   BoneyardEnemyAction,
@@ -90,6 +91,8 @@ import type {
 } from './game-state.ts'
 import {
   BONEYARD_ENEMY_EFFECT_ROLES,
+  BONEYARD_ENEMY_DEATH_EFFECT_KINDS,
+  BONEYARD_ENEMY_DEATH_SOUNDS,
   BONEYARD_ENEMY_EVENT_TYPES,
   BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
   BONEYARD_ENEMY_TERMINAL_OUTPUTS,
@@ -111,7 +114,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 18
+export const GAME_PROTOCOL_VERSION = 19
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
@@ -123,6 +126,7 @@ const MAX_BONEYARD_SPRITES = 16384
 const MAX_BONEYARD_STRUCTURES = 8192
 const MAX_BONEYARD_ENEMIES = 512
 const MAX_BONEYARD_ENEMY_EVENTS = 512
+const MAX_BONEYARD_ENEMY_DEATH_EFFECTS = 8_192
 const MAX_BONEYARD_ENEMY_PROJECTILES = 2_048
 const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
@@ -763,7 +767,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   }
   const level = positiveInteger(source.level, `${field}.level`)
   if (level > 75) throw new GameProtocolError(`${field}.level is out of range`)
-  const experience = nonnegativeInteger(source.experience, `${field}.experience`)
+  const experience = nonnegativeFinite(source.experience, `${field}.experience`)
   if (experience > 10_000_000) {
     throw new GameProtocolError(`${field}.experience is out of range`)
   }
@@ -1245,10 +1249,99 @@ function hubWorldSnapshot(value: unknown, field: string): HubWorldSnapshot {
   }
 }
 
+function playerLevelUpBarrier(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, ProtocolPlayerState>>,
+  run: GameRunLifecycleState,
+): NonNullable<GameSnapshot['levelUpBarrier']> {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'barrierId',
+    'milestoneExperience',
+    'milestoneLevel',
+    'participantIds',
+    'pendingPlayerIds',
+    'runId',
+    'sourcePlayerId',
+  ])
+  const participantIds = validatedBarrierPlayerIds(
+    source.participantIds,
+    `${field}.participantIds`,
+    players,
+  )
+  if (participantIds.length === 0) {
+    throw new GameProtocolError(`${field}.participantIds must not be empty`)
+  }
+  const pendingPlayerIds = validatedBarrierPlayerIds(
+    source.pendingPlayerIds,
+    `${field}.pendingPlayerIds`,
+    players,
+  )
+  if (pendingPlayerIds.length === 0) {
+    throw new GameProtocolError(`${field}.pendingPlayerIds must not be empty`)
+  }
+  if (pendingPlayerIds.some((playerId) => !participantIds.includes(playerId))) {
+    throw new GameProtocolError(`${field}.pendingPlayerIds must belong to the cohort`)
+  }
+  for (const playerId of pendingPlayerIds) {
+    if (players[playerId]?.progression.pendingOffer === null) {
+      throw new GameProtocolError(`${field} pending player has no skill offer`)
+    }
+  }
+  const sourcePlayerId = validatedPlayerId(source.sourcePlayerId, `${field}.sourcePlayerId`)
+  if (!participantIds.includes(sourcePlayerId)) {
+    throw new GameProtocolError(`${field}.sourcePlayerId must belong to the cohort`)
+  }
+  const runId = source.runId === null
+    ? null
+    : limitedString(source.runId, `${field}.runId`, 256)
+  const expectedRunId = run.phase === 'active' ? run.runId : null
+  if (runId !== expectedRunId) {
+    throw new GameProtocolError(`${field}.runId does not match the active run`)
+  }
+  const milestoneExperience = nonnegativeFinite(
+    source.milestoneExperience,
+    `${field}.milestoneExperience`,
+  )
+  if (milestoneExperience > 10_000_000) {
+    throw new GameProtocolError(`${field}.milestoneExperience is out of range`)
+  }
+  const milestoneLevel = positiveInteger(source.milestoneLevel, `${field}.milestoneLevel`)
+  if (milestoneLevel > 75) {
+    throw new GameProtocolError(`${field}.milestoneLevel is out of range`)
+  }
+  return {
+    barrierId: positiveInteger(source.barrierId, `${field}.barrierId`),
+    milestoneExperience,
+    milestoneLevel,
+    participantIds,
+    pendingPlayerIds,
+    runId,
+    sourcePlayerId,
+  }
+}
+
+function validatedBarrierPlayerIds(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, ProtocolPlayerState>>,
+): readonly string[] {
+  const playerIds = limitedArray(value, field, MAX_PLAYERS).map((entry, index) => (
+    validatedPlayerId(entry, `${field}[${index}]`)
+  ))
+  if (playerIds.some((playerId, index) => (
+    !players[playerId] || (index > 0 && playerId <= playerIds[index - 1]!)
+  ))) {
+    throw new GameProtocolError(`${field} must be sorted, unique, and present in players`)
+  }
+  return playerIds
+}
+
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'hostPlayerId', 'players', 'primarySpells', 'run', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -1271,6 +1364,9 @@ function gameSnapshot(value: unknown): GameSnapshot {
   const tick = nonnegativeInteger(source.tick, 'snapshot.tick')
   const world = gameWorldSnapshot(source.world, 'snapshot.world', tick)
   const run = gameRunLifecycle(source.run, 'snapshot.run')
+  const levelUpBarrier = source.levelUpBarrier === null
+    ? null
+    : playerLevelUpBarrier(source.levelUpBarrier, 'snapshot.levelUpBarrier', players, run)
   validateGameRunWorld(run, world, 'snapshot')
   const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'snapshot.primarySpells')
@@ -1288,6 +1384,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
   }
   return {
     hostPlayerId,
+    levelUpBarrier,
     players,
     primarySpells,
     run,
@@ -1299,7 +1396,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'hostPlayerId', 'players', 'primarySpells', 'run', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -1319,12 +1416,16 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const tick = nonnegativeInteger(source.tick, 'frame.tick')
   const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick)
   const run = gameRunLifecycle(source.run, 'frame.run')
+  const levelUpBarrier = source.levelUpBarrier === null
+    ? null
+    : playerLevelUpBarrier(source.levelUpBarrier, 'frame.levelUpBarrier', players, run)
   validateGameRunWorld(run, world, 'frame')
   const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'frame.primarySpells')
   if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
   return {
     hostPlayerId,
+    levelUpBarrier,
     players,
     primarySpells,
     run,
@@ -1832,6 +1933,7 @@ function gameWorldSnapshot(
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
   if (source.kind === 'boneyard') {
     onlyKeys(source, field, [
+      'deathEffects',
       'encounter',
       'enemies',
       'enemyEvents',
@@ -1867,6 +1969,22 @@ function gameWorldSnapshot(
       enemyIds.add(decoded.id)
       return decoded
     })
+    const deathEffectIds = new Set<number>()
+    const deathEffects = limitedArray(
+      source.deathEffects,
+      `${field}.deathEffects`,
+      MAX_BONEYARD_ENEMY_DEATH_EFFECTS,
+    ).map((effect, index) => {
+      const decoded = boneyardEnemyDeathEffectSnapshot(
+        effect,
+        `${field}.deathEffects[${index}]`,
+      )
+      if (deathEffectIds.has(decoded.id)) {
+        throw new GameProtocolError(`${field}.deathEffects duplicates id ${decoded.id}`)
+      }
+      deathEffectIds.add(decoded.id)
+      return decoded
+    })
     const projectileIds = new Set<number>()
     const enemyProjectiles = limitedArray(
       source.enemyProjectiles,
@@ -1897,6 +2015,7 @@ function gameWorldSnapshot(
       return decoded
     })
     return {
+      deathEffects,
       encounter,
       enemies,
       enemyEvents,
@@ -1916,6 +2035,67 @@ function gameWorldSnapshot(
     }
   }
   throw new GameProtocolError(`${field}.kind is not supported`)
+}
+
+function boneyardEnemyDeathEffectSnapshot(
+  value: unknown,
+  field: string,
+): BoneyardEnemyDeathEffectSnapshot {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'ageTicks',
+    'alpha',
+    'atlas',
+    'blendMode',
+    'entry',
+    'height',
+    'id',
+    'kind',
+    'ownerActorId',
+    'position',
+    'rotationRadians',
+    'scale',
+    'shadow',
+    'spawnTick',
+    'tint',
+  ])
+  const alpha = finite(source.alpha, `${field}.alpha`)
+  if (alpha < 0 || alpha > 1) {
+    throw new GameProtocolError(`${field}.alpha must be within [0,1]`)
+  }
+  const atlas = limitedString(source.atlas, `${field}.atlas`, 32)
+  if (atlas !== 'BadGuys' && atlas !== 'DeadHawg' && atlas !== 'Demon') {
+    throw new GameProtocolError(`${field}.atlas is not supported`)
+  }
+  const blendMode = limitedString(source.blendMode, `${field}.blendMode`, 16)
+  if (blendMode !== 'add' && blendMode !== 'normal') {
+    throw new GameProtocolError(`${field}.blendMode is not supported`)
+  }
+  const kind = limitedString(source.kind, `${field}.kind`, 32)
+  if (!(BONEYARD_ENEMY_DEATH_EFFECT_KINDS as readonly string[]).includes(kind)) {
+    throw new GameProtocolError(`${field}.kind is not supported`)
+  }
+  const tint = nonnegativeInteger(source.tint, `${field}.tint`)
+  if (tint > 0xffffff) {
+    throw new GameProtocolError(`${field}.tint must be a 24-bit RGB value`)
+  }
+  return {
+    ageTicks: nonnegativeFinite(source.ageTicks, `${field}.ageTicks`),
+    alpha,
+    atlas,
+    blendMode,
+    entry: nonnegativeInteger(source.entry, `${field}.entry`),
+    height: finite(source.height, `${field}.height`),
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: kind as BoneyardEnemyDeathEffectSnapshot['kind'],
+    ownerActorId: positiveInteger(source.ownerActorId, `${field}.ownerActorId`),
+    position: boneyardPoint(source.position, `${field}.position`),
+    rotationRadians: finite(source.rotationRadians, `${field}.rotationRadians`),
+    scale: positiveFinite(source.scale, `${field}.scale`),
+    shadow: boolean(source.shadow, `${field}.shadow`),
+    spawnTick: nonnegativeInteger(source.spawnTick, `${field}.spawnTick`),
+    tint,
+  }
 }
 
 function boneyardSolomonSnapshot(
@@ -2094,6 +2274,12 @@ function boneyardEnemyEvents(
         case 'coffin-maggot-release': return ['count']
         case 'enemy-death':
         case 'enemy-retired': return []
+        case 'enemy-death-sound': return [
+          'gainScale',
+          'pitch',
+          'sound',
+          'sourcePosition',
+        ]
         case 'enemy-terminal-output': return ['count', 'output']
         case 'mage-lightning': return [
           'sourcePosition',
@@ -2150,6 +2336,30 @@ function boneyardEnemyEvents(
       }
       case 'enemy-death':
       case 'enemy-retired': return base
+      case 'enemy-death-sound': {
+        const sound = limitedString(source.sound, `${eventField}.sound`, 64)
+        if (!(BONEYARD_ENEMY_DEATH_SOUNDS as readonly string[]).includes(sound)) {
+          throw new GameProtocolError(`${eventField}.sound is not supported`)
+        }
+        const pitch = positiveFinite(source.pitch, `${eventField}.pitch`)
+        if (pitch > 2) {
+          throw new GameProtocolError(`${eventField}.pitch must be within (0,2]`)
+        }
+        const gainScale = nonnegativeFinite(
+          source.gainScale,
+          `${eventField}.gainScale`,
+        )
+        if (gainScale > 1) {
+          throw new GameProtocolError(`${eventField}.gainScale must be within [0,1]`)
+        }
+        return {
+          ...base,
+          gainScale,
+          pitch,
+          sound: sound as BoneyardEnemyEventSnapshot['sound'],
+          sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
+        }
+      }
       case 'mage-lightning': return {
         ...base,
         sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),

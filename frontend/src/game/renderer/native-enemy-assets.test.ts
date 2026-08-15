@@ -88,6 +88,25 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       ...atlasRecordKeys('DeadHawg', 46, 77),
     ].sort())
     assert.equal(used.size, 68)
+
+    const deathEffectRecords = [
+      ...[10, 11, 15, 21, 27, 55, 86].map((entry) => ['BadGuys', entry] as const),
+      ...recordPairs('BadGuys', 92, 121),
+      ...recordPairs('BadGuys', 401, 419),
+      ...recordPairs('BadGuys', 1_819, 1_822),
+      ...recordPairs('BadGuys', 2_013, 2_069),
+      ...[2_088, 2_089, 2_091, 2_093, 2_293, 2_297]
+        .map((entry) => ['BadGuys', entry] as const),
+      ...[28, 30].map((entry) => ['DeadHawg', entry] as const),
+      ...recordPairs('DeadHawg', 114, 144),
+    ]
+    const selectedDeathEffects = new Set<string>()
+    for (const [atlas, entry] of deathEffectRecords) {
+      const record = assetModule.nativeEnemySpriteRecord(atlas, entry)
+      assert.ok(record.source.length > 0)
+      selectedDeathEffects.add(`${atlas}:${entry}`)
+    }
+    assert.equal(selectedDeathEffects.size, 156)
   } finally {
     await server.close()
   }
@@ -124,7 +143,7 @@ test('representative enemy records retain native registration and joints', () =>
   ])
 })
 
-test('every combat, death, and Coffin child plan resolves to extracted records', () => {
+test('every live combat and Coffin child plan resolves to extracted records', () => {
   const plans: ReturnType<typeof nativeEnemyPresentationPlan>[] = []
   const actionFamilies: readonly [NativeEnemyFamily, NativeEnemyActionProgramName][] = [
     ['SKELETON', 'skeleton-claw-a'],
@@ -203,14 +222,22 @@ test('every combat, death, and Coffin child plan resolves to extracted records',
       used.add(`${layer.atlas}:${layer.entry}`)
     }
   }
-  assert.ok(used.has('BadGuys:1819'))
-  assert.ok(used.has('DeadHawg:144'))
-  assert.ok(used.has('Demon:61'))
   assert.ok(used.has('BadGuys:220'))
 })
 
 function manifest(relativePath: string): AtlasManifest {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as AtlasManifest
+}
+
+function recordPairs(
+  atlas: NativeEnemyAtlas,
+  first: number,
+  last: number,
+): readonly (readonly [NativeEnemyAtlas, number])[] {
+  return Array.from(
+    { length: last - first + 1 },
+    (_, index) => [atlas, first + index] as const,
+  )
 }
 
 function enemyProjectileAssetSamples(): readonly BoneyardEnemyProjectileSnapshot[] {

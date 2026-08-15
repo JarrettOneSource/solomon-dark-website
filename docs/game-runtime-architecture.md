@@ -164,12 +164,13 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `17` welcomes a client with one complete snapshot plus its sequence.
+Protocol `19` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. Both Hub and Boneyard carry a compact
 replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling
-state in its direct world payload, while enemy actors, enemy projectiles, and
-Maggots use registered entity descriptors and dynamic samples. Run-scoped
+state in its direct world payload, while enemy actors, enemy projectiles,
+Maggots, and independent enemy-death effects use registered entity descriptors
+and dynamic samples. Run-scoped
 semantic enemy events remain a separate ordered lane so interpolation cannot
 invent, duplicate, or erase combat edges. Unknown or malformed messages fail
 closed.

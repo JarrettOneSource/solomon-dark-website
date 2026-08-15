@@ -7,6 +7,10 @@ import {
   nativeEnemyIdleAnimationSample,
 } from './native-enemy-animation.ts'
 import {
+  nativeEnemyDeathEffectPainterLayer,
+  nativeEnemyDeathEffectPlan,
+} from './native-enemy-death-effect-presentation.ts'
+import {
   nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan,
@@ -113,6 +117,32 @@ test('authoritative shields append proportional additive body layers', () => {
   )
   assert.ok(plan.layers.slice(midpoint).every((layer) => (
     layer.alpha === 0.5 && layer.blendMode === 'add' && layer.scale === 1.05
+  )))
+})
+
+test('native hit feedback redraws the exact current pose red with normal blending', () => {
+  const source = {
+    ...enemy('SKELETON'),
+    animation: nativeEnemyIdleAnimationSample({ hitFlash: 0.65 }),
+  }
+  const plan = nativeEnemyPresentationPlan(source, 100)
+  const midpoint = plan.layers.length / 2
+  const body = plan.layers.slice(0, midpoint)
+  const hit = plan.layers.slice(midpoint)
+
+  assert.deepEqual(
+    hit.map(({ atlas, entry, offset, rotationRadians, scale }) => ({
+      atlas, entry, offset, rotationRadians, scale,
+    })),
+    body.map(({ atlas, entry, offset, rotationRadians, scale }) => ({
+      atlas, entry, offset, rotationRadians, scale,
+    })),
+  )
+  assert.ok(hit.every((layer) => (
+    layer.alpha === 0.65
+    && layer.blendMode === 'normal'
+    && layer.tint === 0xff0000
+    && layer.role.startsWith('hit:')
   )))
 })
 
@@ -429,7 +459,7 @@ test('authoritative gait and exact action selectors choose stock component banks
   assert.deepEqual(mageRelease.layers.slice(0, 2).map((layer) => layer.entry), [1657, 1801])
 })
 
-test('hit presentation preserves body layers and appends additive overlays', () => {
+test('hit presentation preserves body layers and appends native red redraws', () => {
   const plan = nativeEnemyPresentationPlan({
     ...enemy('SKELETON', ['FLAG_SWORD']),
     animation: nativeEnemyIdleAnimationSample({
@@ -443,11 +473,13 @@ test('hit presentation preserves body layers and appends additive overlays', () 
 
   assert.deepEqual(flash.map((layer) => layer.entry), body.map((layer) => layer.entry))
   assert.ok(body.every((layer) => layer.blendMode === 'normal' && layer.alpha === 0.8))
-  assert.ok(flash.every((layer) => layer.blendMode === 'add' && layer.alpha === 0.4))
-  assert.ok(flash.every((layer) => layer.role.endsWith('-hit-flash')))
+  assert.ok(flash.every((layer) => (
+    layer.blendMode === 'normal' && layer.alpha === 0.4 && layer.tint === 0xff0000
+  )))
+  assert.ok(flash.every((layer) => layer.role.startsWith('hit:')))
 })
 
-test('all families retain a terminal death plan until authoritative retirement', () => {
+test('dying bodies render no fallback strip after handing off to effect actors', () => {
   const expected = {
     SKELETON: ['BadGuys:121', 'BadGuys:1822'],
     SKELETONARCHER: ['BadGuys:121', 'BadGuys:1822'],
@@ -467,11 +499,7 @@ test('all families retain a terminal death plan until authoritative retirement',
       }),
     }, 100)
     assert.equal(plan.deathProgram?.provenance, 'bounded-web')
-    assert.deepEqual(
-      plan.layers.map((layer) => `${layer.atlas}:${layer.entry}`),
-      expected[family],
-      family,
-    )
+    assert.deepEqual(plan.layers, [], family)
   }
 })
 
@@ -504,6 +532,7 @@ test('authoritative effect identities replace bounded terminal fallback art', ()
     role: 'effect:9001:split-primary',
     rotationRadians: 0.2,
     scale: 1.5,
+    tint: 0xffffff,
   }])
 })
 
@@ -589,4 +618,56 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
     ],
   )
   assert.deepEqual(coffin.layers[2].offset, { x: 12, y: -3 })
+})
+
+test('death-effect presentation keeps airborne art and enhanced shadow on the ground plane', () => {
+  const effect = {
+    ageTicks: 7,
+    alpha: 0.75,
+    atlas: 'BadGuys' as const,
+    blendMode: 'normal' as const,
+    entry: 117,
+    height: -12,
+    id: 41,
+    kind: 'bouncer' as const,
+    ownerActorId: 7,
+    position: { x: 125, y: 240 },
+    rotationRadians: 0.5,
+    scale: 1.2,
+    shadow: true,
+    spawnTick: 100,
+    tint: 0xff8844,
+  }
+  const plan = nativeEnemyDeathEffectPlan(effect)
+  assert.deepEqual(plan.position, effect.position)
+  assert.deepEqual(plan.effect, {
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 117,
+    offset: { x: 0, y: -12 },
+    rotationRadians: 0.5,
+    scale: { x: 1.2, y: 1.2 },
+    tint: 0xff8844,
+  })
+  assert.deepEqual(plan.shadow && {
+    ...plan.shadow,
+    scale: { ...plan.shadow.scale, y: Number(plan.shadow.scale.y.toFixed(6)) },
+  }, {
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 117,
+    offset: { x: 0, y: 2 },
+    rotationRadians: 0.5,
+    scale: { x: 1.2, y: 0.9 },
+    tint: 0,
+  })
+  assert.deepEqual(nativeEnemyDeathEffectPainterLayer(effect, 3), {
+    id: 'enemy-death-effect:41',
+    queueFamily: 'ordinary-dynamic',
+    sortBias: 0,
+    sourceOrder: 3,
+    worldY: 240,
+  })
 })

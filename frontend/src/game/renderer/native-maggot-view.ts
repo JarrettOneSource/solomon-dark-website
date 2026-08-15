@@ -91,6 +91,7 @@ class NativeMaggotView {
       sprite.rotation = layer.rotationRadians
       sprite.alpha = layer.alpha
       sprite.blendMode = layer.blendMode
+      sprite.tint = layer.tint
     })
     this.container.label = `maggot:${maggot.id}:${maggot.state}`
     this.container.position.set(maggot.position.x, maggot.position.y)

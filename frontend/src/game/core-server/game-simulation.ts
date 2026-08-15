@@ -27,7 +27,9 @@ import {
 } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
 import {
+  boneyardEnemyExperienceAward,
   effectivePrimarySkillRankStats,
+  type PlayerLevelUpBarrierState,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
@@ -72,6 +74,7 @@ import {
   damagePlayerEntity,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
+  grantSharedPlayerEntityExperience,
   playerCharacterAt,
   playerCharacterRecords,
   playerEntityCanAcceptInput,
@@ -97,6 +100,8 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 
 export interface GameSimulationState {
   accumulatorSeconds: number
+  levelUpBarrier: PlayerLevelUpBarrierState | null
+  nextLevelUpBarrierId: number
   playerEntities: PlayerEntityStore
   playerOfferRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
@@ -145,7 +150,9 @@ export function createGameSimulation(
       createPlayerCharacter(config, hubSpawnPoint()),
       draw.value,
     )
-    if (options.initialPlayerExperience) {
+  }
+  if (options.initialPlayerExperience !== undefined) {
+    for (const { playerId } of playerEntities.identities) {
       playerEntities = grantPlayerEntityExperience(
         playerEntities,
         playerId,
@@ -153,8 +160,30 @@ export function createGameSimulation(
       )
     }
   }
+  const participantIds = stableExistingPlayerIds(
+    playerEntities,
+    playerEntities.identities.map(({ playerId }) => playerId),
+  )
+  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, participantIds)
+  const milestoneSourceId = pendingPlayerIds[0] ?? null
+  const milestoneSource = milestoneSourceId === null
+    ? null
+    : playerProgressionAt(playerEntities, milestoneSourceId)
+  const levelUpBarrier = milestoneSourceId === null || milestoneSource === null
+    ? null
+    : createLevelUpBarrier(
+        1,
+        milestoneSourceId,
+        milestoneSource.experience,
+        milestoneSource.level,
+        participantIds,
+        pendingPlayerIds,
+        null,
+      )
   return {
     accumulatorSeconds: 0,
+    levelUpBarrier,
+    nextLevelUpBarrierId: levelUpBarrier === null ? 1 : 2,
     playerEntities,
     playerOfferRng,
     primarySpells: createPrimarySpellSimulation(),
@@ -199,8 +228,13 @@ export function removePlayerCharacter(
 ): GameSimulationState {
   if (playerEntityIndex(state.playerEntities, playerId) < 0) return state
   const playerEntities = removePlayerEntity(state.playerEntities, playerId)
+  const levelUpBarrier = removeLevelUpBarrierParticipant(
+    state.levelUpBarrier,
+    playerId,
+  )
   return {
     ...state,
+    levelUpBarrier,
     playerEntities,
     primarySpells: removePrimarySpellOwner(state.primarySpells, playerId),
     run: synchronizeGameRunParticipants(
@@ -217,10 +251,14 @@ export function enterBoneyardWorld(
   state: GameSimulationState,
   loaded: LoadedBoneyard,
 ): GameSimulationState {
+  if (state.levelUpBarrier !== null) {
+    throw new Error('cannot enter a Boneyard during a level-up barrier')
+  }
   const world = createBoneyardWorld(loaded)
   const placements = placePlayersInBoneyard(playerCharacterRecords(state.playerEntities), world)
   return {
     ...state,
+    levelUpBarrier: null,
     playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
     primarySpells: createPrimarySpellSimulation(),
     run: startGameRun(
@@ -246,6 +284,7 @@ export function acknowledgeGameSimulationOver(
   }))
   return {
     ...state,
+    levelUpBarrier: null,
     playerEntities: resetPlayerEntitiesForNewRun(state.playerEntities, placements),
     primarySpells: createPrimarySpellSimulation(),
     run,
@@ -307,10 +346,7 @@ export function grantGameSimulationPlayerExperience(
   playerId: PlayerId,
   amount: number,
 ): GameSimulationState {
-  return {
-    ...state,
-    playerEntities: grantPlayerEntityExperience(state.playerEntities, playerId, amount),
-  }
+  return grantSharedGameSimulationExperience(state, playerId, amount)
 }
 
 export function selectGameSimulationPlayerSkill(
@@ -319,13 +355,26 @@ export function selectGameSimulationPlayerSkill(
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
 ): GameSimulationState | null {
   const playerEntities = applyPlayerEntitySkillChoice(state.playerEntities, playerId, selection)
-  return playerEntities ? { ...state, playerEntities } : null
+  if (!playerEntities) return null
+  const barrier = state.levelUpBarrier
+  if (barrier === null || !barrier.participantIds.includes(playerId)) {
+    return { ...state, playerEntities }
+  }
+  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, barrier.participantIds)
+  return {
+    ...state,
+    levelUpBarrier: pendingPlayerIds.length === 0
+      ? null
+      : Object.freeze({ ...barrier, pendingPlayerIds }),
+    playerEntities,
+  }
 }
 
 export function stepGameSimulationTick(
   state: GameSimulationState,
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
+  if (state.levelUpBarrier !== null) return state
   const players = playerCharacterRecords(state.playerEntities)
   const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => [
     playerId,
@@ -384,6 +433,8 @@ function finishGameSimulationTick(
 ): GameSimulationState {
   const tick = previous.tick + 1
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
+  let levelUpBarrier = previous.levelUpBarrier
+  let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
   const playerDamage = result.playerDamage ?? []
   for (const damage of playerDamage) {
     playerEntities = damagePlayerEntity(
@@ -400,11 +451,27 @@ function finishGameSimulationTick(
   }
   for (const reward of result.rewards ?? []) {
     if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
-    playerEntities = grantPlayerEntityExperience(
+    const progressionState: GameSimulationState = {
+      ...previous,
+      levelUpBarrier,
+      nextLevelUpBarrierId,
       playerEntities,
+    }
+    const participantIds = levelUpParticipantIds(progressionState)
+    if (!participantIds.includes(reward.playerId)) continue
+    const creditedExperience = boneyardEnemyExperienceAward({
+      arenaPlayerCount: participantIds.length,
+      evaluatedActorReward: reward.experience,
+      receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
+    })
+    const awarded = grantSharedGameSimulationExperience(
+      progressionState,
       reward.playerId,
-      reward.experience,
+      creditedExperience,
     )
+    playerEntities = awarded.playerEntities
+    levelUpBarrier = awarded.levelUpBarrier
+    nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
   }
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
@@ -565,6 +632,8 @@ function finishGameSimulationTick(
   )))
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
+    levelUpBarrier,
+    nextLevelUpBarrierId,
     playerEntities,
     playerOfferRng: previous.playerOfferRng,
     primarySpells,
@@ -584,6 +653,119 @@ function retainBoneyardEnemyEvents(
   return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
     ? retained
     : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+}
+
+function grantSharedGameSimulationExperience(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  amount: number,
+): GameSimulationState {
+  const participantIds = state.levelUpBarrier?.participantIds
+    ?? levelUpParticipantIds(state)
+  const granted = grantSharedPlayerEntityExperience(
+    state.playerEntities,
+    playerId,
+    amount,
+    participantIds,
+  )
+  if (granted.milestone === null) {
+    return { ...state, playerEntities: granted.store }
+  }
+  const pendingPlayerIds = pendingOfferPlayerIds(granted.store, participantIds)
+  if (pendingPlayerIds.length === 0) {
+    throw new Error('shared level milestone did not create a player offer')
+  }
+  const existing = state.levelUpBarrier
+  const levelUpBarrier = existing === null
+    ? createLevelUpBarrier(
+        state.nextLevelUpBarrierId,
+        playerId,
+        granted.milestone.experience,
+        granted.milestone.level,
+        participantIds,
+        pendingPlayerIds,
+        state.run.phase === 'active' ? state.run.runId : null,
+      )
+    : Object.freeze({
+        ...existing,
+        milestoneExperience: granted.milestone.experience,
+        milestoneLevel: granted.milestone.level,
+        pendingPlayerIds,
+        sourcePlayerId: playerId,
+      })
+  return {
+    ...state,
+    levelUpBarrier,
+    nextLevelUpBarrierId: existing === null
+      ? state.nextLevelUpBarrierId + 1
+      : state.nextLevelUpBarrierId,
+    playerEntities: granted.store,
+  }
+}
+
+function levelUpParticipantIds(state: GameSimulationState): readonly string[] {
+  const requested = state.run.phase === 'active'
+    ? state.run.eligiblePlayerIds
+    : state.playerEntities.identities.map(({ playerId }) => playerId)
+  return stableExistingPlayerIds(state.playerEntities, requested)
+}
+
+function stableExistingPlayerIds(
+  playerEntities: PlayerEntityStore,
+  requested: readonly string[],
+): readonly string[] {
+  return Object.freeze([...new Set(requested)]
+    .filter((playerId) => playerEntityIndex(playerEntities, playerId) >= 0)
+    .sort())
+}
+
+function pendingOfferPlayerIds(
+  playerEntities: PlayerEntityStore,
+  participantIds: readonly string[],
+): readonly string[] {
+  return Object.freeze(participantIds.filter((playerId) => {
+    const progression = playerProgressionAt(playerEntities, playerId)
+    return progression !== null
+      && (progression.pendingOffer !== null || progression.pendingLevels.length > 0)
+  }))
+}
+
+function createLevelUpBarrier(
+  barrierId: number,
+  sourcePlayerId: string,
+  milestoneExperience: number,
+  milestoneLevel: number,
+  participantIds: readonly string[],
+  pendingPlayerIds: readonly string[],
+  runId: string | null,
+): PlayerLevelUpBarrierState {
+  return Object.freeze({
+    barrierId,
+    milestoneExperience,
+    milestoneLevel,
+    participantIds: Object.freeze([...participantIds]),
+    pendingPlayerIds: Object.freeze([...pendingPlayerIds]),
+    runId,
+    sourcePlayerId,
+  })
+}
+
+function removeLevelUpBarrierParticipant(
+  barrier: PlayerLevelUpBarrierState | null,
+  playerId: string,
+): PlayerLevelUpBarrierState | null {
+  if (barrier === null || !barrier.participantIds.includes(playerId)) return barrier
+  const participantIds = Object.freeze(barrier.participantIds.filter((id) => id !== playerId))
+  const pendingPlayerIds = Object.freeze(barrier.pendingPlayerIds.filter((id) => id !== playerId))
+  if (participantIds.length === 0 || pendingPlayerIds.length === 0) return null
+  return Object.freeze({
+    ...barrier,
+    participantIds,
+    pendingPlayerIds,
+    sourcePlayerId: barrier.sourcePlayerId === playerId
+      ? participantIds[0]!
+      : barrier.sourcePlayerId,
+  })
 }
 
 export function stepGameSimulation(

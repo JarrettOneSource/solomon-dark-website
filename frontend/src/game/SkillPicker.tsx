@@ -7,6 +7,7 @@ import {
 } from 'react'
 
 import type { GameAudioDirector } from './game-audio-director.ts'
+import { NATIVE_LEVEL_UP_SOUND_REQUESTS } from './game-audio-native.ts'
 import {
   NATIVE_SKILL_CATALOG,
   SPELL_WELDING_QUICK_DESCRIPTION,
@@ -32,6 +33,7 @@ interface SkillPickerProps {
 export default function SkillPicker({ audio, offer, onSelect, style }: SkillPickerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const levelUpSoundOfferRef = useRef<string | null>(null)
   const offerRef = useRef(offer)
   const rendererRef = useRef<SkillPickerRenderer | null>(null)
   const selectedIndexRef = useRef(0)
@@ -44,7 +46,14 @@ export default function SkillPicker({ audio, offer, onSelect, style }: SkillPick
     setSelectedIndex(0)
     setSubmitting(false)
     buttonRefs.current[0]?.focus()
-  }, [offer.sequence])
+    const soundOfferKey = `${offer.level}:${offer.sequence}`
+    if (levelUpSoundOfferRef.current !== soundOfferKey) {
+      levelUpSoundOfferRef.current = soundOfferKey
+      for (const request of NATIVE_LEVEL_UP_SOUND_REQUESTS) {
+        audio.playSound(request.cue, { playbackRate: request.playbackRate })
+      }
+    }
+  }, [audio, offer.level, offer.sequence])
 
   useEffect(() => {
     offerRef.current = offer

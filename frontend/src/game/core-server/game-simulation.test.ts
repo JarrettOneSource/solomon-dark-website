@@ -14,7 +14,9 @@ import {
   enterBoneyardWorld,
   getPlayerCharacter,
   getPlayerProgression,
+  grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  selectGameSimulationPlayerSkill,
   stepGameSimulation,
   stepGameSimulationTick,
   type GameSimulationState,
@@ -87,6 +89,114 @@ test('game simulation owns fixed-step accumulation independently of its world', 
   state = stepGameSimulation(state, {}, 0.005)
   assert.equal(state.tick, 1)
   assert.equal(state.accumulatorSeconds, 0)
+})
+
+test('a shared level milestone freezes every gameplay clock until the fixed cohort chooses', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  let state = createGameSimulation({ first, second })
+  state = grantGameSimulationPlayerExperience(state, 'first', 89)
+
+  const progressions = [...state.playerEntities.progressions]
+  progressions[0] = { ...progressions[0]!, currentHealth: 10, currentMana: 20 }
+  progressions[1] = { ...progressions[1]!, currentHealth: 30, currentMana: 40 }
+  state = {
+    ...state,
+    playerEntities: { ...state.playerEntities, progressions: Object.freeze(progressions) },
+  }
+  state = grantGameSimulationPlayerExperience(state, 'first', 2)
+
+  assert.deepEqual(state.levelUpBarrier, {
+    barrierId: 1,
+    milestoneExperience: 91,
+    milestoneLevel: 2,
+    participantIds: ['first', 'second'],
+    pendingPlayerIds: ['first', 'second'],
+    runId: null,
+    sourcePlayerId: 'first',
+  })
+  assert.equal(getPlayerProgression(state, 'first').currentHealth, 50)
+  assert.equal(getPlayerProgression(state, 'first').currentMana, 100)
+  assert.equal(getPlayerProgression(state, 'second').currentHealth, 30)
+  assert.equal(getPlayerProgression(state, 'second').currentMana, 40)
+  assert.equal(getPlayerProgression(state, 'second').experience, 91)
+  assert.equal(getPlayerProgression(state, 'second').level, 2)
+  assert.ok(getPlayerProgression(state, 'first').pendingOffer)
+  assert.ok(getPlayerProgression(state, 'second').pendingOffer)
+
+  const frozenPlayer = getPlayerCharacter(state, 'first')
+  const frozenWorld = state.world
+  const frozenTick = state.tick
+  state = stepGameSimulation(state, {
+    first: gameplayInput(1, 0),
+    second: gameplayInput(0, 1),
+  }, 0.05)
+  assert.equal(state.tick, frozenTick)
+  assert.equal(state.world, frozenWorld)
+  assert.deepEqual(getPlayerCharacter(state, 'first'), frozenPlayer)
+
+  const firstOffer = getPlayerProgression(state, 'first').pendingOffer!
+  const firstChoice = firstOffer.options[0]!
+  state = selectGameSimulationPlayerSkill(state, 'first', {
+    choiceIndex: 0,
+    offerSequence: firstOffer.sequence,
+    skillId: firstChoice.skillId,
+  })!
+  assert.deepEqual(state.levelUpBarrier?.pendingPlayerIds, ['second'])
+  assert.equal(getPlayerProgression(state, 'first').pendingOffer, null)
+  assert.ok(getPlayerProgression(state, 'second').pendingOffer)
+  assert.equal(stepGameSimulationTick(state, {}).tick, frozenTick)
+
+  const secondOffer = getPlayerProgression(state, 'second').pendingOffer!
+  const secondChoice = secondOffer.options[0]!
+  state = selectGameSimulationPlayerSkill(state, 'second', {
+    choiceIndex: 0,
+    offerSequence: secondOffer.sequence,
+    skillId: secondChoice.skillId,
+  })!
+  assert.equal(state.levelUpBarrier, null)
+  assert.equal(stepGameSimulationTick(state, {}).tick, frozenTick + 1)
+})
+
+test('shared picker cohort excludes late joiners and releases disconnected waiters', () => {
+  const first = {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } as const
+  const second = {
+    discipline: 'mind',
+    displayName: 'Second',
+    element: 'water',
+  } as const
+  const late = {
+    discipline: 'body',
+    displayName: 'Late',
+    element: 'fire',
+  } as const
+  let state = createGameSimulation({ first, second })
+  state = grantGameSimulationPlayerExperience(state, 'first', 91)
+  state = addPlayerCharacter(state, 'late', late)
+  assert.deepEqual(state.levelUpBarrier?.participantIds, ['first', 'second'])
+  assert.deepEqual(state.levelUpBarrier?.pendingPlayerIds, ['first', 'second'])
+  assert.equal(getPlayerProgression(state, 'late').pendingOffer, null)
+
+  const firstOffer = getPlayerProgression(state, 'first').pendingOffer!
+  state = selectGameSimulationPlayerSkill(state, 'first', {
+    choiceIndex: 0,
+    offerSequence: firstOffer.sequence,
+    skillId: firstOffer.options[0]!.skillId,
+  })!
+  state = removePlayerCharacter(state, 'second')
+  assert.equal(state.levelUpBarrier, null)
 })
 
 test('the authoritative tick latches footsteps only while native movement is active', () => {
@@ -249,6 +359,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   )
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    arenaScalars: { experience: 0.425 },
     firstProjectileWorldContact: () => null,
     players: {
       caster: {
@@ -301,7 +412,10 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
 
   const experienceBeforeReward = getPlayerProgression(state, 'caster').experience
   state = stepGameSimulationTick(state, { caster: cast(false) })
-  assert.ok(getPlayerProgression(state, 'caster').experience > experienceBeforeReward)
+  assert.equal(
+    getPlayerProgression(state, 'caster').experience - experienceBeforeReward,
+    4.25,
+  )
 })
 
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {
@@ -415,7 +529,9 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
   assert.deepEqual(firstBatch.map(({ eventId, type }) => ({ eventId, type })), [
     { eventId: 2, type: 'enemy-death' },
     { eventId: 3, type: 'enemy-terminal-output' },
-    { eventId: 4, type: 'reward' },
+    { eventId: 4, type: 'enemy-death-sound' },
+    { eventId: 5, type: 'reward' },
+    { eventId: 6, type: 'enemy-retired' },
   ])
 
   for (let tick = 0; tick < 99; tick += 1) state = stepGameSimulationTick(state, {})

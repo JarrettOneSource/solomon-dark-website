@@ -139,6 +139,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
 function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGameSnapshot {
   return {
     hostPlayerId: 'local',
+    levelUpBarrier: null,
     players: { local: playerAt(playerX) },
     primarySpells: createPrimarySpellSimulation(),
     run: {
@@ -152,6 +153,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     },
     tick,
     world: {
+      deathEffects: [],
       encounter: {
         acceleration: tick >= 105 ? -3 : -7,
         digFrame: tick >= 105 ? 5 : 17,
@@ -283,6 +285,53 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.deepEqual(timeline.sample(100).world.encounter?.voiceEvents, [
     { cue: 'solomon-hello-1', id: 1 },
   ])
+})
+
+test('interpolates independent death-effect transforms without rerolling art identity', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  older.world.deathEffects = [{
+    ageTicks: 0,
+    alpha: 1,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 117,
+    height: -20,
+    id: 9,
+    kind: 'bouncer',
+    ownerActorId: 1,
+    position: { x: 100, y: 200 },
+    rotationRadians: Math.PI * 1.9,
+    scale: 1.2,
+    shadow: false,
+    spawnTick: 100,
+    tint: 0xffffff,
+  }]
+  newer.world.deathEffects = [{
+    ...older.world.deathEffects[0]!,
+    ageTicks: 5,
+    alpha: 0.75,
+    height: -10,
+    position: { x: 110, y: 220 },
+    rotationRadians: Math.PI * 0.1,
+  }]
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const effect = timeline.sample(75).world.deathEffects[0]!
+  assert.equal(effect.id, 9)
+  assert.equal(effect.ownerActorId, 1)
+  assert.equal(effect.entry, 117)
+  assert.equal(effect.ageTicks, 2.5)
+  assert.equal(effect.alpha, 0.875)
+  assert.equal(effect.height, -15)
+  assert.deepEqual(effect.position, { x: 105, y: 210 })
+  assert.ok(Math.abs(effect.rotationRadians) < 1e-9)
 })
 
 test('interpolates the authoritative Imp flight cycle without changing spawn identity', () => {

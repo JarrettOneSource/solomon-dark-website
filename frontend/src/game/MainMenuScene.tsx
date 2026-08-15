@@ -595,7 +595,7 @@ export default function MainMenuScene({
             boneyard={loadedBoneyard}
             canAcknowledgeGameOver={session.isHost}
             getPingMs={session.getPingMs}
-            inputBlocked={loading !== null}
+            inputBlocked={loading !== null || runtimeSnapshot.levelUpBarrier !== null}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
             onAcknowledgeGameOver={session.acknowledgeGameOver}
@@ -614,7 +614,7 @@ export default function MainMenuScene({
             audio={audio}
             boneyards={session.boneyards}
             getPingMs={session.getPingMs}
-            inputBlocked={loading !== null}
+            inputBlocked={loading !== null || runtimeSnapshot.levelUpBarrier !== null}
             playerId={session.playerId}
             progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
             initialSnapshot={runtimeSnapshot}
@@ -628,7 +628,7 @@ export default function MainMenuScene({
           />
         ) : null}
 
-        {screen === 'hub' && session && runtimeProgression?.pendingOffer ? (
+        {session && runtimeProgression?.pendingOffer ? (
           <SkillPicker
             audio={audio}
             offer={runtimeProgression.pendingOffer}
@@ -636,6 +636,21 @@ export default function MainMenuScene({
             style={nativeStageStyle}
           />
         ) : null}
+
+        {session
+          && runtimeSnapshot?.levelUpBarrier
+          && !runtimeProgression?.pendingOffer ? (
+            <div
+              className="main-menu-native-stage skill-picker-stage skill-picker-waiting"
+              style={nativeStageStyle}
+              role="status"
+              aria-live="polite"
+              data-level-up-barrier-id={runtimeSnapshot.levelUpBarrier.barrierId}
+              data-pending-player-ids={runtimeSnapshot.levelUpBarrier.pendingPlayerIds.join(',')}
+            >
+              <p>Waiting for all players to choose a skill…</p>
+            </div>
+          ) : null}
 
         {(preparing || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
@@ -696,6 +711,7 @@ function sameRuntimeScene(
   if (
     !current
     || current.hostPlayerId !== next.hostPlayerId
+    || !sameLevelUpBarrier(current.levelUpBarrier, next.levelUpBarrier)
     || current.run.phase !== next.run.phase
     || current.world.kind !== next.world.kind
   ) return false
@@ -703,6 +719,26 @@ function sameRuntimeScene(
     return current.world.runId === next.world.runId
   }
   return current.world.kind === 'hub'
+}
+
+function sameLevelUpBarrier(
+  first: GameSnapshot['levelUpBarrier'],
+  second: GameSnapshot['levelUpBarrier'],
+): boolean {
+  if (first === null || second === null) return first === second
+  return first.barrierId === second.barrierId
+    && first.milestoneExperience === second.milestoneExperience
+    && first.milestoneLevel === second.milestoneLevel
+    && first.runId === second.runId
+    && first.sourcePlayerId === second.sourcePlayerId
+    && first.participantIds.length === second.participantIds.length
+    && first.participantIds.every((playerId, index) => (
+      playerId === second.participantIds[index]
+    ))
+    && first.pendingPlayerIds.length === second.pendingPlayerIds.length
+    && first.pendingPlayerIds.every((playerId, index) => (
+      playerId === second.pendingPlayerIds[index]
+    ))
 }
 
 function sameRuntimeProgression(

@@ -7,6 +7,7 @@ import {
   BOUNDED_MAGGOT_PROGRAM,
   createBoneyardEnemyStore,
   NATIVE_MAGE_ACTION_PROGRAMS,
+  NATIVE_ENEMY_HIT_LATCH_TICKS,
   stepBoneyardEnemyStore,
   type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
@@ -96,11 +97,12 @@ function solomonSelectionScene(objects: BoneyardScene['objects']): BoneyardScene
   }
 }
 
-test('projects Maggot damage age as the authoritative five-tick hit flash', () => {
+test('projects the native refreshed 20-tick hit latch for Maggots', () => {
   const maggot: BoneyardMaggotActor = {
     collisionRadius: 8,
     currentHealth: 1,
     damage: 2,
+    deathOffsets: [],
     deathEpoch: null,
     deathStartedTick: null,
     deathTick: 0,
@@ -133,12 +135,66 @@ test('projects Maggot damage age as the authoritative five-tick hit flash', () =
   }
 
   assert.equal(projectBoneyardMaggots(store, 10)[0]?.hitFlash, 1)
-  assert.equal(projectBoneyardMaggots(store, 12)[0]?.hitFlash, 0.6)
-  assert.equal(projectBoneyardMaggots(store, 15)[0]?.hitFlash, 0)
+  assert.equal(projectBoneyardMaggots(store, 12)[0]?.hitFlash, 0.9)
+  assert.ok(Math.abs(
+    projectBoneyardMaggots(store, 29)[0]!.hitFlash - 0.05,
+  ) < 1e-12)
+  assert.equal(projectBoneyardMaggots(store, 30)[0]?.hitFlash, 0)
+  assert.equal(NATIVE_ENEMY_HIT_LATCH_TICKS, 20)
   assert.equal(projectBoneyardMaggots({
     ...store,
     maggots: [{ ...maggot, lastDamageTick: null }],
   }, 10)[0]?.hitFlash, 0)
+})
+
+test('projects the native refreshed 20-tick hit latch without changing enemy action state', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('enemy-hit-latch'), {
+    firstProjectileWorldContact: () => null,
+    players: {
+      player: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: { x: 10, y: 0 },
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: 0, y: 0 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const actor = spawned.store.actors[0]!
+  if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton brain')
+  const attacking = {
+    ...actor,
+    brain: {
+      ...actor.brain,
+      actionProgress: 4,
+      markerEmitted: false,
+      phase: 'attack' as const,
+    },
+    lastDamageTick: 10,
+  }
+  const store = { ...spawned.store, actors: [attacking] }
+  const first = projectBoneyardEnemies(store, 10)[0]!
+  const finalVisible = projectBoneyardEnemies(store, 29)[0]!
+  const expired = projectBoneyardEnemies(store, 30)[0]!
+
+  assert.equal(first.animation.hitFlash, 1)
+  assert.ok(Math.abs(finalVisible.animation.hitFlash - 0.05) < 1e-12)
+  assert.equal(expired.animation.hitFlash, 0)
+  assert.equal(first.animation.state, 'action')
+  assert.equal(first.animation.actionProgress, 4)
 })
 
 test('projects Maggot emergence trajectory and vertical launch height', () => {
@@ -359,6 +415,7 @@ function projectedMaggot(
     collisionRadius: 8,
     currentHealth: 2,
     damage: 2,
+    deathOffsets: [],
     deathEpoch: null,
     deathStartedTick: null,
     deathTick: 0,

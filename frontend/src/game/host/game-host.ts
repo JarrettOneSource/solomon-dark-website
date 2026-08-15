@@ -315,11 +315,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
 
       if (message.type === 'client-input') {
         if (message.sequence <= client.lastReceivedSequence) return
-        if (getPlayerProgression(state, client.playerId).pendingOffer) {
+        if (
+          state.levelUpBarrier !== null
+          || getPlayerProgression(state, client.playerId).pendingOffer
+        ) {
           client.lastReceivedSequence = message.sequence
           client.acknowledgedSequence = message.sequence
           client.activeInput = createIdlePlayerCharacterInput()
           client.queuedInputs.clear()
+          broadcastSnapshot()
           return
         }
         if (message.targetTick > state.tick + GAME_TICK_RATE * 2) {
@@ -354,6 +358,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-select-skill') {
+        const barrierBefore = state.levelUpBarrier
         const selected = selectGameSimulationPlayerSkill(state, client.playerId, message)
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
@@ -362,6 +367,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         state = selected
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
+        if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
         broadcastSnapshot()
         return
       }
@@ -388,6 +394,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (
           client.playerId !== hostPlayerId
           || loadedBoneyard
+          || state.levelUpBarrier !== null
           || state.run.phase !== 'hub'
         ) return
         const selected = materializeBoneyard(
@@ -452,9 +459,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
       } else if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
-        broadcastSnapshot()
       }
       options.onPlayerCountChanged?.(clients.size)
+      broadcastSnapshot()
     }
     socket.once('close', release)
     socket.once('error', release)
@@ -474,10 +481,17 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           applyQueuedInput(client, nextTick)
           inputs[client.playerId] = client.activeInput
         }
+        const previousTick = state.tick
+        const previousBarrierId = state.levelUpBarrier?.barrierId ?? null
         state = stepGameSimulationTick(state, inputs)
+        const barrierId = state.levelUpBarrier?.barrierId ?? null
+        if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
         nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
         steps += 1
-        if (state.tick % ticksPerSnapshot === 0) broadcastSnapshot()
+        if (
+          previousBarrierId !== barrierId
+          || (state.tick !== previousTick && state.tick % ticksPerSnapshot === 0)
+        ) broadcastSnapshot()
       }
       if (steps === 25 && now >= nextTickAt) {
         nextTickAt = now + GAME_FIXED_TICK_SECONDS * 1000
@@ -516,6 +530,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.lastSentSnapshotSequence = snapshotSequence
       client.sentReplicationBaselines.set(snapshotSequence, currentBaseline)
       pruneReplicationBaselines(client)
+    }
+  }
+
+  function stopAllClientInputs(): void {
+    for (const client of clients.values()) {
+      client.activeInput = createIdlePlayerCharacterInput()
+      client.queuedInputs.clear()
     }
   }
 
