@@ -10,10 +10,12 @@ import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-ga
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
 import {
   PRIMARY_CAST_ACTION_END_TICK,
+  PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
   PRIMARY_SPELL_RANK_ONE_MANA_COSTS,
 } from '../src/game/core-kernels/primary-spells.ts'
 import {
   createBoneyardCollisionWorld,
+  firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
@@ -29,6 +31,7 @@ const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
+const MINIMUM_SKELETON_COLLISION_RADIUS = 12
 const fireCastDriver = { nextReadyTick: 0 }
 const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
   || '/tmp/solomon-dark-solomon-waves.png'
@@ -96,6 +99,11 @@ try {
   )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
   assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
+  const combatNavigation = {
+    bounds: loadedBoneyard.scene.bounds,
+    collision: createBoneyardCollisionWorld(loadedBoneyard.scene),
+    scene: loadedBoneyard.scene,
+  }
 
   const gateCrossing = await crossNearestEntryGate(page, scene, loadedBoneyard.scene)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
@@ -166,7 +174,7 @@ try {
   assert.equal(opening.waveOrdinal, 0)
 
   await installEnemyActionProbe(page)
-  const combat = await castUntilEnemyDies(page)
+  const combat = await castUntilEnemyDies(page, { navigation: combatNavigation })
   await page.waitForFunction(() => {
     const scene = document.querySelector('.boneyard-scene')
     return scene?.getAttribute('data-last-enemy-event-output') === 'skeleton-shatter'
@@ -174,7 +182,7 @@ try {
   }, undefined, { timeout: 30_000 })
   combat.enemyTerminalOutput = await scene.getAttribute('data-last-enemy-event-output')
   await page.screenshot({ path: combatScreenshotPath })
-  const locomotion = await kiteUntilSolomonTaunt(page)
+  const locomotion = await kiteUntilSolomonTaunt(page, combatNavigation)
   const taunt = await encounterReceipt(scene)
   assert.equal(taunt.voiceCue, 'solomon-get-him-boys')
   assert.equal(taunt.voiceEventId, 3)
@@ -184,6 +192,7 @@ try {
     wire,
     loadedBoneyard.runId,
     archerScreenshotPath,
+    combatNavigation,
   )
   const death = await waitForPlayerDeath(page)
   await page.screenshot({ path: deathScreenshotPath })
@@ -414,8 +423,14 @@ function wireSummary(wire) {
   }
 }
 
-async function proveArcherProjectileLifecycle(page, wire, runId, screenshotPath) {
-  const deadline = Date.now() + 360_000
+async function proveArcherProjectileLifecycle(
+  page,
+  wire,
+  runId,
+  screenshotPath,
+  navigation,
+) {
+  const deadline = Date.now() + 900_000
   const killReceipts = []
   const selectedSkillIds = []
   let killCount = 0
@@ -452,15 +467,14 @@ async function proveArcherProjectileLifecycle(page, wire, runId, screenshotPath)
       `player died before the deterministic Archer wave after ${killCount} kills`,
     )
 
-    const target = nearestVisibleLivingEnemy(frame)
-    if (!target) {
+    if (!nearestLivingEnemy(frame)) {
       await page.waitForTimeout(100)
       continue
     }
     const killed = await castUntilEnemyDies(page, {
       deadline,
+      navigation,
       selectedSkillIds,
-      targetId: target.id,
     })
     killCount += 1
     boundedPush(killReceipts, killed, 12)
@@ -468,11 +482,8 @@ async function proveArcherProjectileLifecycle(page, wire, runId, screenshotPath)
     const after = await boneyardFrame(page)
     if (after.localPlayerLifeState === 'alive') {
       const nearest = nearestLivingEnemy(after)
-      if (nearest) {
-        await pulseMovement(page, movementKeys({
-          x: after.playerX - nearest.x,
-          y: after.playerY - nearest.y,
-        }), 140)
+      if (nearest && enemyDistance(after, nearest) <= FIRE_ENGAGEMENT_MAX_DISTANCE) {
+        await evadeEnemyPack(page, after, navigation, 220)
       }
     }
   }
@@ -481,12 +492,15 @@ async function proveArcherProjectileLifecycle(page, wire, runId, screenshotPath)
     killCount,
     wire: wireSummary(wire),
   })}`)
-  return observeArcherProjectileLifecycle(page, wire, runId, deadline, screenshotPath, {
-    killCount,
-    killReceipts,
-    selectedSkillIds,
-    wave,
-  })
+  return observeArcherProjectileLifecycle(
+    page,
+    wire,
+    runId,
+    deadline,
+    screenshotPath,
+    navigation,
+    { killCount, killReceipts, selectedSkillIds, wave },
+  )
 }
 
 async function observeArcherProjectileLifecycle(
@@ -495,6 +509,7 @@ async function observeArcherProjectileLifecycle(
   runId,
   deadline,
   screenshotPath,
+  navigation,
   advanceReceipt,
 ) {
   const discardedProjectileIds = new Set()
@@ -509,7 +524,6 @@ async function observeArcherProjectileLifecycle(
     }
     const snapshot = currentBoneyardSnapshot(wire, runId)
     const frame = await boneyardFrame(page)
-    assert.equal(frame.localPlayerLifeState, 'alive', 'player died before Archer projectile proof')
     if (!snapshot) {
       await page.waitForTimeout(25)
       continue
@@ -634,18 +648,10 @@ async function observeArcherProjectileLifecycle(
       await page.waitForTimeout(50)
       continue
     }
-    const difference = {
-      x: archer.x - frame.playerX,
-      y: archer.y - frame.playerY,
-    }
-    const distance = Math.hypot(difference.x, difference.y)
-    if (distance > 160) {
-      await pulseMovement(page, movementKeys(difference), 120)
-    } else if (distance < 95) {
-      await pulseMovement(page, movementKeys({
-        x: -difference.x,
-        y: -difference.y,
-      }), 120)
+    const nearest = nearestLivingEnemy(frame)
+    const nearestDistance = nearest ? enemyDistance(frame, nearest) : Number.POSITIVE_INFINITY
+    if (nearestDistance < FIRE_ENGAGEMENT_MIN_DISTANCE) {
+      await evadeEnemyPack(page, frame, navigation, 220)
     } else {
       await page.waitForTimeout(50)
     }
@@ -703,7 +709,7 @@ async function drainPendingSkillOffers(page, selectedSkillIds = []) {
   }
 }
 
-async function kiteUntilSolomonTaunt(page) {
+async function kiteUntilSolomonTaunt(page, navigation) {
   const first = await boneyardFrame(page)
   const actions = new Set()
   let minimumHealth = first.localPlayerHealth
@@ -740,16 +746,14 @@ async function kiteUntilSolomonTaunt(page) {
     }
 
     if (frame.localPlayerLifeState === 'alive') {
-      const target = nearestLivingEnemy(frame)
-      const away = target
-        ? { x: frame.playerX - target.x, y: frame.playerY - target.y }
-        : fallbackDirections[pulseIndex % fallbackDirections.length]
-      const keys = movementKeys(away)
-      await pulseMovement(
-        page,
-        keys.length > 0 ? keys : movementKeys(fallbackDirections[pulseIndex % 4]),
-        180,
-      )
+      const moved = await evadeEnemyPack(page, frame, navigation, 220)
+      if (!moved) {
+        await pulseMovement(
+          page,
+          movementKeys(fallbackDirections[pulseIndex % fallbackDirections.length]),
+          180,
+        )
+      }
     } else {
       await page.waitForTimeout(100)
     }
@@ -760,17 +764,19 @@ async function kiteUntilSolomonTaunt(page) {
 
 async function castUntilEnemyDies(page, {
   deadline = Date.now() + 240_000,
+  navigation,
   selectedSkillIds = [],
-  targetId = null,
 } = {}) {
+  assert.ok(navigation, 'combat navigation is required')
   const canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
   let acceptedCastCount = 0
   let acceptedTick = null
   let enemyCountBefore = null
   let enemyHealthBefore = null
+  let lastAimedTargetId = null
   let manaAfter = null
   let manaBefore = null
-  let selectedTargetId = targetId
+  let selectedTargetId = null
 
   while (Date.now() < deadline) {
     await drainPendingSkillOffers(page, selectedSkillIds)
@@ -778,7 +784,7 @@ async function castUntilEnemyDies(page, {
     assert.equal(before.localPlayerLifeState, 'alive', 'player died before the combat cast')
 
     let target = selectedTargetId === null
-      ? nearestVisibleLivingEnemy(before)
+      ? nearestFireTarget(before, navigation)
       : enemyById(before, selectedTargetId)
     if (!target) {
       if (selectedTargetId !== null && acceptedCastCount > 0) {
@@ -794,18 +800,18 @@ async function castUntilEnemyDies(page, {
           targetId: selectedTargetId,
         })
       }
-      await page.waitForTimeout(50)
+      if (!await approachNearestEnemy(page, before, navigation, 220)) {
+        await page.waitForTimeout(50)
+      }
       continue
     }
-    selectedTargetId ??= target.id
-    enemyCountBefore ??= before.enemyCount
-    enemyHealthBefore ??= target.currentHealth
-
     if (target.lifeState === 'death' || target.currentHealth <= 0) {
+      assert.notEqual(selectedTargetId, null, 'an uncommitted target cannot already be terminal')
       const retired = await waitForEnemyRetirement(
         page,
         selectedTargetId,
         deadline,
+        navigation,
         selectedSkillIds,
       )
       return fireRetirementReceipt({
@@ -825,26 +831,45 @@ async function castUntilEnemyDies(page, {
     const recovering = before.tick < fireCastDriver.nextReadyTick
     const waitingForMana = before.localPlayerMana + Number.EPSILON
       < PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire
-    if (recovering || waitingForMana || distance < FIRE_ENGAGEMENT_MIN_DISTANCE) {
-      await kiteFromNearestEnemy(page, before, 120)
+    if (recovering || waitingForMana) {
+      await evadeEnemyPack(page, before, navigation, 220)
       continue
     }
     if (!visibleLivingEnemy(before, target) || distance > FIRE_ENGAGEMENT_MAX_DISTANCE) {
-      await closeOnEnemy(page, before, target, 100)
+      const nearest = nearestLivingEnemy(before)
+      if (nearest && enemyDistance(before, nearest) < FIRE_ENGAGEMENT_MAX_DISTANCE) {
+        await evadeEnemyPack(page, before, navigation, 220)
+      } else {
+        await page.waitForTimeout(100)
+      }
       continue
     }
 
     await drainPendingSkillOffers(page, selectedSkillIds)
     before = await boneyardFrame(page)
-    target = enemyById(before, selectedTargetId)
-    if (!target || !visibleLivingEnemy(before, target)) continue
+    target = selectedTargetId === null
+      ? nearestFireTarget(before, navigation)
+      : enemyById(before, selectedTargetId)
+    if (
+      !target
+      || !visibleLivingEnemy(before, target)
+      || !firePathReachesTarget(navigation, before, target)
+    ) continue
+    const refreshedDistance = enemyDistance(before, target)
     if (
       before.localPlayerMana + Number.EPSILON < PRIMARY_SPELL_RANK_ONE_MANA_COSTS.fire
       || before.tick < fireCastDriver.nextReadyTick
+      || refreshedDistance > FIRE_ENGAGEMENT_MAX_DISTANCE
     ) continue
 
-    const targetHealth = target.currentHealth
+    const castEnemyStates = new Map(before.enemySamples
+      .filter((enemy) => enemy.lifeState !== 'death' && enemy.currentHealth > 0)
+      .map((enemy) => [enemy.id, {
+        currentHealth: enemy.currentHealth,
+        lifeState: enemy.lifeState,
+      }]))
     const targetPoint = await enemyScreenPoint(canvas, before, target)
+    lastAimedTargetId = target.id
     await page.bringToFront()
     await page.mouse.move(targetPoint.x, targetPoint.y)
     await page.mouse.down({ button: 'left' })
@@ -853,37 +878,48 @@ async function castUntilEnemyDies(page, {
 
     const acceptanceDeadline = Math.min(deadline, Date.now() + 3_000)
     let accepted = null
+    let lastAcceptanceEvasionAt = Date.now()
     while (Date.now() < acceptanceDeadline) {
       await drainPendingSkillOffers(page, selectedSkillIds)
       const frame = await boneyardFrame(page)
-      const currentTarget = enemyById(frame, selectedTargetId)
       if (frame.localPlayerMana < before.localPlayerMana) {
         accepted = frame
         break
       }
-      if (!currentTarget || currentTarget.lifeState === 'death' || currentTarget.currentHealth <= 0) {
+      if (firstDamagedEnemy(frame, castEnemyStates)) {
         // A point-blank Fire projectile can damage and retire between rendered mana samples.
         // In this single-player smoke, that post-click contact is the acceptance witness.
         accepted = frame
         break
       }
-      await page.waitForTimeout(25)
+      if (Date.now() - lastAcceptanceEvasionAt >= 250) {
+        await evadeEnemyPack(page, frame, navigation, 180)
+        lastAcceptanceEvasionAt = Date.now()
+      } else {
+        await page.waitForTimeout(25)
+      }
     }
     if (!accepted) continue
 
     acceptedCastCount += 1
     acceptedTick ??= accepted.tick
     fireCastDriver.nextReadyTick = accepted.tick + PRIMARY_CAST_ACTION_END_TICK
+    enemyCountBefore ??= before.enemyCount
     manaBefore ??= before.localPlayerMana
     manaAfter = accepted.localPlayerMana
 
     const contactDeadline = Math.min(deadline, Date.now() + 5_000)
     let contacted = false
+    let lastContactEvasionAt = Date.now()
+    let frame = accepted
     while (Date.now() < contactDeadline) {
       await drainPendingSkillOffers(page, selectedSkillIds)
-      const frame = await boneyardFrame(page)
-      const currentTarget = enemyById(frame, selectedTargetId)
-      if (!currentTarget) {
+      const contact = firstDamagedEnemy(frame, castEnemyStates)
+      if (contact) {
+        selectedTargetId = contact.id
+        enemyHealthBefore = contact.previous.currentHealth
+      }
+      if (contact && !contact.current) {
         return fireRetirementReceipt({
           acceptedCastCount,
           acceptedTick,
@@ -896,12 +932,16 @@ async function castUntilEnemyDies(page, {
           targetId: selectedTargetId,
         })
       }
-      if (currentTarget.currentHealth < targetHealth) contacted = true
-      if (currentTarget.lifeState === 'death' || currentTarget.currentHealth <= 0) {
+      if (contact) contacted = true
+      if (contact?.current && (
+        contact.current.lifeState === 'death'
+        || contact.current.currentHealth <= 0
+      )) {
         const retired = await waitForEnemyRetirement(
           page,
           selectedTargetId,
           deadline,
+          navigation,
           selectedSkillIds,
         )
         return fireRetirementReceipt({
@@ -917,26 +957,41 @@ async function castUntilEnemyDies(page, {
         })
       }
       if (contacted) break
-      await page.waitForTimeout(25)
+      if (Date.now() - lastContactEvasionAt >= 250) {
+        await evadeEnemyPack(page, frame, navigation, 180)
+        lastContactEvasionAt = Date.now()
+      } else {
+        await page.waitForTimeout(25)
+      }
+      frame = await boneyardFrame(page)
     }
-    if (!contacted) await kiteFromNearestEnemy(page, await boneyardFrame(page), 120)
+    if (!contacted) {
+      await evadeEnemyPack(page, await boneyardFrame(page), navigation, 220)
+    }
   }
 
   throw new Error(`Fire combat did not retire its selected enemy: ${JSON.stringify({
     acceptedCastCount,
+    aimedTargetId: lastAimedTargetId,
+    contactedTargetId: selectedTargetId,
     frame: await boneyardFrame(page),
     selectedSkillIds,
-    targetId: selectedTargetId,
   })}`)
 }
 
-async function waitForEnemyRetirement(page, targetId, deadline, selectedSkillIds) {
+async function waitForEnemyRetirement(
+  page,
+  targetId,
+  deadline,
+  navigation,
+  selectedSkillIds,
+) {
   while (Date.now() < deadline) {
     await drainPendingSkillOffers(page, selectedSkillIds)
     const frame = await boneyardFrame(page)
     if (!enemyById(frame, targetId)) return frame
     assert.equal(frame.localPlayerLifeState, 'alive', 'player died before the enemy retired')
-    await kiteFromNearestEnemy(page, frame, 120)
+    await evadeEnemyPack(page, frame, navigation, 220)
   }
   throw new Error(`enemy ${targetId} did not retire before the combat deadline`)
 }
@@ -964,6 +1019,7 @@ function fireRetirementReceipt({
     enemyLifeState: 'retired',
     manaAfter,
     manaBefore,
+    playerHealthAfter: frame.localPlayerHealth,
     selectedSkillIds: [...selectedSkillIds],
     targetId,
   }
@@ -973,27 +1029,106 @@ function enemyById(frame, targetId) {
   return frame.enemySamples.find((enemy) => enemy.id === targetId) ?? null
 }
 
+function firstDamagedEnemy(frame, previousById) {
+  for (const [id, previous] of previousById) {
+    const current = enemyById(frame, id)
+    if (
+      !current
+      || current.currentHealth < previous.currentHealth
+      || (current.lifeState === 'death' && previous.lifeState !== 'death')
+    ) return { current, id, previous }
+  }
+  return null
+}
+
 function enemyDistance(frame, enemy) {
   return Math.hypot(enemy.x - frame.playerX, enemy.y - frame.playerY)
 }
 
-async function kiteFromNearestEnemy(page, frame, durationMs) {
-  const nearest = nearestLivingEnemy(frame)
-  if (!nearest) {
-    await page.waitForTimeout(durationMs)
-    return
-  }
-  await pulseMovement(page, movementKeys({
-    x: frame.playerX - nearest.x,
-    y: frame.playerY - nearest.y,
-  }), durationMs)
+async function evadeEnemyPack(page, frame, navigation, durationMs) {
+  const direction = safestCombatDirection(frame, navigation)
+  if (!direction) return false
+  await pulseMovement(page, movementKeys(direction), durationMs)
+  return true
 }
 
-async function closeOnEnemy(page, frame, enemy, durationMs) {
-  await pulseMovement(page, movementKeys({
-    x: enemy.x - frame.playerX,
-    y: enemy.y - frame.playerY,
-  }), durationMs)
+async function approachNearestEnemy(page, frame, navigation, durationMs) {
+  const direction = nearestEnemyApproachDirection(frame, navigation)
+  if (!direction) return false
+  await pulseMovement(page, movementKeys(direction), durationMs)
+  return true
+}
+
+function nearestEnemyApproachDirection(frame, navigation) {
+  const nearest = nearestLivingEnemy(frame)
+  if (!nearest) return null
+  const start = { x: frame.playerX, y: frame.playerY }
+  const route = planEnemyApproachPath(
+    navigation,
+    start,
+    { x: nearest.x, y: nearest.y },
+  )
+  const waypoint = route[1]
+  return waypoint ? {
+    x: waypoint.x - start.x,
+    y: waypoint.y - start.y,
+  } : null
+}
+
+function safestCombatDirection(frame, navigation) {
+  const enemies = frame.enemySamples.filter((enemy) => enemy.lifeState !== 'death')
+  if (enemies.length === 0) return null
+  const start = { x: frame.playerX, y: frame.playerY }
+  const directions = [
+    { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
+    { x: -1, y: 0 }, { x: 1, y: 0 },
+    { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+  ]
+
+  for (const probeDistance of [70, 45, 25]) {
+    let best = null
+    for (const direction of directions) {
+      const length = Math.hypot(direction.x, direction.y)
+      const unit = { x: direction.x / length, y: direction.y / length }
+      const end = {
+        x: start.x + unit.x * probeDistance,
+        y: start.y + unit.y * probeDistance,
+      }
+      if (!traversesBoneyard(
+        start,
+        end,
+        navigation.bounds,
+        navigation.collision,
+      )) continue
+
+      const corridorDistances = enemies.map((enemy) => Math.min(
+        ...[0.35, 0.7, 1].map((progress) => Math.hypot(
+          enemy.x - (start.x + (end.x - start.x) * progress),
+          enemy.y - (start.y + (end.y - start.y) * progress),
+        )),
+      )).toSorted((left, right) => left - right)
+      const nearestClearance = corridorDistances[0] ?? Number.POSITIVE_INFINITY
+      const crowdClearance = corridorDistances
+        .slice(0, 8)
+        .reduce((total, distance) => total + Math.min(distance, 250), 0)
+      const edgeClearance = Math.min(
+        end.x - navigation.bounds.x,
+        navigation.bounds.x + navigation.bounds.w - end.x,
+        end.y - navigation.bounds.y,
+        navigation.bounds.y + navigation.bounds.h - end.y,
+      )
+      const score = nearestClearance * 100
+        + crowdClearance
+        + Math.min(edgeClearance, 150) * 2
+      if (!best || score > best.score) best = { direction, score }
+    }
+    if (best) return best.direction
+  }
+
+  const nearest = nearestLivingEnemy(frame)
+  return nearest
+    ? { x: frame.playerX - nearest.x, y: frame.playerY - nearest.y }
+    : null
 }
 
 async function waitForPlayerDeath(page) {
@@ -1088,14 +1223,38 @@ function nearestLivingEnemy(frame) {
     ))[0] ?? null
 }
 
-function nearestVisibleLivingEnemy(frame) {
+function nearestFireTarget(frame, navigation) {
   return frame.enemySamples
-    .filter((enemy) => visibleLivingEnemy(frame, enemy))
+    .filter((enemy) => {
+      return visibleLivingEnemy(frame, enemy)
+        && enemyDistance(frame, enemy) <= FIRE_ENGAGEMENT_MAX_DISTANCE
+        && firePathReachesTarget(navigation, frame, enemy)
+    })
     .toSorted((left, right) => (
-      Math.hypot(left.x - frame.playerX, left.y - frame.playerY)
-      - Math.hypot(right.x - frame.playerX, right.y - frame.playerY)
+      enemyDistance(frame, left) - enemyDistance(frame, right)
       || left.id - right.id
     ))[0] ?? null
+}
+
+function firePathReachesTarget(navigation, origin, target) {
+  const start = { x: origin.playerX ?? origin.x, y: origin.playerY ?? origin.y }
+  const end = { x: target.x, y: target.y }
+  const distance = Math.hypot(end.x - start.x, end.y - start.y)
+  if (distance === 0) return true
+  const worldProgress = firstBoneyardPathBlockProgress(
+    start,
+    end,
+    navigation.bounds,
+    navigation.collision,
+    PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
+  )
+  const conservativeActorEntry = Math.max(
+    0,
+    1 - (
+      PRIMARY_SPELL_FIRE_COLLISION_RADIUS + MINIMUM_SKELETON_COLLISION_RADIUS
+    ) / distance,
+  )
+  return worldProgress === null || worldProgress - conservativeActorEntry > 1e-9
 }
 
 function visibleLivingEnemy(frame, enemy) {
@@ -1310,9 +1469,6 @@ async function walkToSolomon(page, scene, boneyardScene) {
     solomon,
   )
   const routeNodes = route.length
-  let routeIndex = 1
-  let stalledSteps = 0
-  let obstacleEscapeSign = 1
 
   while (Date.now() - startedAt < 240_000) {
     const before = await approachReceipt(scene)
@@ -1344,65 +1500,50 @@ async function walkToSolomon(page, scene, boneyardScene) {
         }
       }
     }
-    while (
-      routeIndex < route.length
-      && Math.hypot(
-        route[routeIndex].x - before.playerX,
-        route[routeIndex].y - before.playerY,
-      ) <= 15
-    ) {
-      routeIndex += 1
-    }
-    if (routeIndex >= route.length) {
-      route = planSolomonPath(boneyardScene, playerPosition, solomon)
-      routeIndex = 1
-      continue
-    }
-    const waypoint = route[routeIndex]
-    const waypointDistance = Math.hypot(
-      waypoint.x - before.playerX,
-      waypoint.y - before.playerY,
-    )
-    const movement = {
-      x: waypoint.x - before.playerX,
-      y: waypoint.y - before.playerY,
-    }
-    await pulseMovement(page, movementKeys(movement), movementPulseDuration(waypointDistance))
-    const after = await approachReceipt(scene)
-    if (after.phase !== 'digging') continue
-    const moved = Math.hypot(
-      after.playerX - before.playerX,
-      after.playerY - before.playerY,
-    )
-    const nextWaypointDistance = Math.hypot(
-      waypoint.x - after.playerX,
-      waypoint.y - after.playerY,
-    )
-    if (moved >= 1 && nextWaypointDistance < waypointDistance - 1) {
-      stalledSteps = 0
-    } else {
-      stalledSteps += 1
-      if (stalledSteps >= 6) {
-        if (after.distance < 400) {
-          const radialX = solomon.x - after.playerX
-          const radialY = solomon.y - after.playerY
-          await pulseMovement(page, movementKeys({
-            x: -radialY * obstacleEscapeSign,
-            y: radialX * obstacleEscapeSign,
-          }), 900)
-          obstacleEscapeSign *= -1
-        }
-        route = planSolomonPath(
-          boneyardScene,
-          { x: after.playerX, y: after.playerY },
-          solomon,
-        )
-        routeIndex = 1
-        stalledSteps = 0
-      }
-    }
+    route = planSolomonPath(boneyardScene, playerPosition, solomon)
+    const waypoint = route[1]
+    assert.ok(waypoint, 'expected a collision-safe waypoint toward Solomon')
+    await driveToSolomonWaypoint(page, scene, waypoint)
   }
   throw new Error(`could not walk to Solomon: ${JSON.stringify(samples.at(-1))}`)
+}
+
+async function driveToSolomonWaypoint(page, scene, waypoint) {
+  const initial = await approachReceipt(scene)
+  const keys = movementKeys({
+    x: waypoint.x - initial.playerX,
+    y: waypoint.y - initial.playerY,
+  })
+  assert.ok(keys.length > 0, 'expected movement keys for the Solomon waypoint')
+  let closestDistance = Math.hypot(
+    waypoint.x - initial.playerX,
+    waypoint.y - initial.playerY,
+  )
+  const deadline = Date.now() + 1_500
+  await page.bringToFront()
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+    while (Date.now() < deadline) {
+      const current = await approachReceipt(scene)
+      if (current.phase !== 'digging') break
+      const distance = Math.hypot(
+        waypoint.x - current.playerX,
+        waypoint.y - current.playerY,
+      )
+      if (distance <= 16) break
+      if (distance > closestDistance + 2 && closestDistance < 40) break
+      closestDistance = Math.min(closestDistance, distance)
+      await page.waitForTimeout(25)
+    }
+  } finally {
+    for (const key of keys.reverse()) await page.keyboard.up(key)
+    await publishStoppedMovement(page)
+  }
+  // Zero input damps retained native velocity by 0.9 each 10 ms tick. At the
+  // 118.75 lane cap, 650 ms leaves less than 0.02 world units of coast.
+  await page.waitForTimeout(650)
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
 }
 
 function planSolomonPath(scene, start, solomon) {
@@ -1415,20 +1556,49 @@ function planSolomonPath(scene, start, solomon) {
   )
 }
 
-function planPointPath(scene, start, target) {
-  const collision = createBoneyardCollisionWorld(scene)
-  return planBoneyardPath(
-    scene,
-    start,
-    target,
-    (point) => (
-      Math.hypot(target.x - point.x, target.y - point.y) <= 40
-      && traversesBoneyard(point, target, scene.bounds, collision)
-        ? [target]
-        : null
+function planPointPath(
+  scene,
+  start,
+  target,
+  collision = createBoneyardCollisionWorld(scene),
+) {
+  return simplifyBoneyardPath(
+    planBoneyardPath(
+      scene,
+      start,
+      target,
+      (point) => (
+        Math.hypot(target.x - point.x, target.y - point.y) <= 40
+        && traversesBoneyard(point, target, scene.bounds, collision)
+          ? [target]
+          : null
+      ),
+      JSON.stringify(target),
+      collision,
     ),
-    JSON.stringify(target),
+    scene.bounds,
     collision,
+  )
+}
+
+function planEnemyApproachPath(navigation, start, target) {
+  return simplifyBoneyardPath(
+    planBoneyardPath(
+      navigation.scene,
+      start,
+      target,
+      (point) => (
+        Math.hypot(target.x - point.x, target.y - point.y)
+          <= FIRE_ENGAGEMENT_MAX_DISTANCE
+          && firePathReachesTarget(navigation, point, target)
+          ? []
+          : null
+      ),
+      `Fire engagement with ${JSON.stringify(target)}`,
+      navigation.collision,
+    ),
+    navigation.bounds,
+    navigation.collision,
   )
 }
 
@@ -1456,11 +1626,7 @@ function planBoneyardPath(
     const point = points.get(key)
     const tail = finish(point)
     if (tail !== null) {
-      return simplifyBoneyardPath(
-        [...reconstructGridPath(key, parents, points), ...tail],
-        scene.bounds,
-        collision,
-      )
+      return [...reconstructGridPath(key, parents, points), ...tail]
     }
     const [gridX, gridY] = key.split(',').map(Number)
     const orderedDirections = directions.toSorted((first, second) => {

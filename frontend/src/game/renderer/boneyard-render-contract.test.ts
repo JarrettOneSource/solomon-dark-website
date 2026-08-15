@@ -8,8 +8,10 @@ import {
   BONEYARD_RENDER_WIDTH,
   BONEYARD_RESIDENT_CULL_PADDING,
   INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE,
+  NATIVE_PLAYER_DEATH_SORT_BIAS,
   boneyardCamera,
   boneyardCameraFocus,
+  boneyardPlayerSortBias,
   boneyardResidentIsVisible,
   boneyardSpectatorCameraState,
   boneyardSpectatorStatus,
@@ -194,6 +196,24 @@ test('spectator status is an atomic accessible product surface', () => {
   assert.match(boneyardScene, /role="status"/)
   assert.match(boneyardScene, /aria-live="polite"/)
   assert.match(boneyardScene, /aria-label=\{spectatorStatus\.accessibleLabel\}/)
+})
+
+test('native death tick 159 moves the corpse to the recovered back render bias', () => {
+  const player = (lifeState: 'alive' | 'lethal-pending' | 'dying' | 'spectating', deathTick: number) => ({
+    progression: { deathTick, lifeState },
+  })
+
+  assert.equal(boneyardPlayerSortBias(player('alive', 159)), 0)
+  assert.equal(boneyardPlayerSortBias(player('lethal-pending', 159)), 0)
+  assert.equal(boneyardPlayerSortBias(player('dying', 158)), 0)
+  assert.equal(
+    boneyardPlayerSortBias(player('dying', 159)),
+    NATIVE_PLAYER_DEATH_SORT_BIAS,
+  )
+  assert.equal(
+    boneyardPlayerSortBias(player('spectating', 500)),
+    NATIVE_PLAYER_DEATH_SORT_BIAS,
+  )
 })
 
 test('static Boneyard tiles cover art overhang without exceeding the GPU tile size', () => {

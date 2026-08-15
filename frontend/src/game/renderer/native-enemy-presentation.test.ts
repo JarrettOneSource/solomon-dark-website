@@ -211,6 +211,49 @@ test('Imp uses four native 12-facing bodies and the registered upper effect', ()
   assert.equal(plan.layers[1].alpha, 0)
 })
 
+test('Imp renderer consumes changing authoritative pose, alpha, bob, and upper effect', () => {
+  const source = enemy('IMP')
+  const opening = nativeEnemyPresentationPlan({
+    ...source,
+    animation: nativeEnemyIdleAnimationSample({
+      alpha: 1,
+      bodyPose: 0,
+      impEffectFrame: 0,
+      verticalOffset: 0,
+    }),
+  }, 100)
+  const airborne = nativeEnemyPresentationPlan({
+    ...source,
+    animation: nativeEnemyIdleAnimationSample({
+      alpha: 0.82,
+      bodyPose: 2,
+      impEffectFrame: 7,
+      verticalOffset: -4,
+    }),
+  }, 120)
+
+  assert.deepEqual(
+    opening.layers.map(({ alpha, entry, offset, role }) => ({ alpha, entry, offset, role })),
+    [{ alpha: 1, entry: 285, offset: { x: 0, y: 0 }, role: 'imp-body' }, {
+      alpha: 1,
+      entry: 333,
+      offset: { x: 0, y: -10 },
+      role: 'imp-upper-effect',
+    }],
+  )
+  assert.deepEqual(
+    airborne.layers.map(({ alpha, entry, offset, role }) => ({ alpha, entry, offset, role })),
+    [{ alpha: 0.82, entry: 309, offset: { x: 0, y: -4 }, role: 'imp-body' }, {
+      alpha: 0.82,
+      entry: 340,
+      offset: { x: 0, y: -14 },
+      role: 'imp-upper-effect',
+    }],
+  )
+  assert.equal(source.id, 7)
+  assert.equal(source.spawnTick, 100)
+})
+
 test('Zombie keeps its native constructor selectors independent', () => {
   const entries = nativeEnemyPresentationPlan(enemy('ZOMBIE'), 100)
     .layers.map((layer) => layer.entry)

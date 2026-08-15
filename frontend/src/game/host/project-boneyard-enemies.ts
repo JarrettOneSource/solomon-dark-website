@@ -7,6 +7,7 @@ import {
   type BoneyardEnemyStore,
 } from '../core-server/boneyard-enemy-store.ts'
 import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import { boundedImpFlightAnimationSample } from '../core-kernels/boneyard-imp-flight.ts'
 import type {
   BoneyardEnemyAction,
   BoneyardEnemyAnimationSnapshot,
@@ -111,14 +112,19 @@ function projectAnimation(
   const gaitPose = actor.gaitPose
   const gaitRadians = gaitPose / 8 * Math.PI * 2
   const coffin = coffinPresentation(actor.brain)
+  const impFlight = actor.config.enemyToken === 'IMP' && actor.lifeState === 'alive'
+    ? boundedImpFlightAnimationSample(spawnAge)
+    : null
   const hitAge = actor.lastDamageTick === null
     ? Number.POSITIVE_INFINITY
     : Math.max(0, tick - actor.lastDamageTick)
   return {
     action,
     actionProgress: actionProgress(actor.brain),
-    alpha: actor.brain.family === 'wraith' ? actor.brain.alpha : 1,
-    bodyPose: Math.floor(gaitPose),
+    alpha: actor.brain.family === 'wraith'
+      ? actor.brain.alpha
+      : impFlight?.alpha ?? 1,
+    bodyPose: impFlight?.bodyPose ?? Math.floor(gaitPose),
     coffinPose: coffin.pose,
     coffinSecondaryPose: null,
     coffinState: coffin.state,
@@ -131,12 +137,10 @@ function projectAnimation(
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
     hitFlash: Math.max(0, 1 - hitAge / 5),
-    impEffectFrame: actor.config.enemyToken === 'IMP' && spawnAge < 10
-      ? Math.floor(spawnAge)
-      : -1,
+    impEffectFrame: impFlight?.impEffectFrame ?? -1,
     maggots: [],
     state,
-    verticalOffset: coffin.verticalOffset,
+    verticalOffset: impFlight?.verticalOffset ?? coffin.verticalOffset,
     zombieAngularOffsetDeg: actor.brain.family === 'zombie'
       ? Math.sin(gaitRadians) * 3
       : 0,

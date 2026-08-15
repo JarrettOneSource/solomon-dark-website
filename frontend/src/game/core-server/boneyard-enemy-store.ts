@@ -1,4 +1,5 @@
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import {
   evaluateBoneyardEnemyConfig,
@@ -39,6 +40,11 @@ export const NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS = 3
 /** Named web presentation bound until family gait distance is closed natively. */
 export const BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE = 2
 
+const NATIVE_IMP_SPLIT_HEADING_OFFSETS = Object.freeze([-90, 90] as const)
+export const NATIVE_IMP_SPLIT_CHILD_COUNT = NATIVE_IMP_SPLIT_HEADING_OFFSETS.length
+export const NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM = 68
+export const NATIVE_IMP_CONSTRUCTION_MAXIMUM = 70
+
 export const NATIVE_SKELETON_ACTION_PROGRAMS = Object.freeze({
   claw: Object.freeze({ markerProgress: 4, progressPerTick: 0.125, strictEnd: 7 }),
   pike: Object.freeze({ markerProgress: 2, progressPerTick: 0.125, strictEnd: 12 }),
@@ -46,6 +52,7 @@ export const NATIVE_SKELETON_ACTION_PROGRAMS = Object.freeze({
 })
 
 export const NATIVE_SKELETON_CLAW_MARKERS = Object.freeze([4, 8] as const)
+export const NATIVE_SKELETON_WEAPON_MARKERS = Object.freeze([9, 20] as const)
 
 export const NATIVE_ARCHER_ACTION_PROGRAM = Object.freeze({
   markerProgress: 13,
@@ -65,6 +72,9 @@ export const BOUNDED_ENEMY_ACTION_PROGRAMS = Object.freeze({
   wraithDrain: Object.freeze({ cooldownTicks: 50, markerTick: 4, strictEndTick: 9 }),
   zombieSwipe: Object.freeze({ knockbackTicks: 24, markerTick: 5, strictEndTick: 9 }),
 })
+
+/** Mod_Knockback magnitude is runtime-authored and remains open in the retail binary. */
+export const BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE = 10
 
 /** Named center-distance bounds; native family attack reach remains unresolved. */
 export const BOUNDED_ENEMY_ATTACK_REACH = Object.freeze({
@@ -355,6 +365,13 @@ export interface BoneyardEnemyPlayerDamage {
   readonly playerId: string
 }
 
+export interface BoneyardEnemyPlayerKnockback {
+  readonly actorId: BoneyardEnemyActorId
+  readonly delta: Readonly<BoneyardPoint>
+  readonly eventId: BoneyardEnemyEventId
+  readonly playerId: string
+}
+
 export interface BoneyardEnemyReward {
   readonly actorId: BoneyardEnemyActorId
   readonly eventId: BoneyardEnemyEventId
@@ -395,6 +412,7 @@ export interface BoneyardEnemyMovementRequest {
   readonly actorId: BoneyardEnemyActorId
   readonly delta: Readonly<BoneyardPoint>
   readonly position: Readonly<BoneyardPoint>
+  readonly purpose: 'movement' | 'spawn-placement'
   readonly radius: number
   readonly requestedPosition: Readonly<BoneyardPoint>
 }
@@ -428,6 +446,7 @@ export interface BoneyardEnemyStoreStepContext {
 export interface BoneyardEnemyStoreStepResult {
   readonly events: readonly BoneyardEnemySemanticEvent[]
   readonly playerDamage: readonly BoneyardEnemyPlayerDamage[]
+  readonly playerKnockbacks: readonly BoneyardEnemyPlayerKnockback[]
   readonly retired: readonly BoneyardEnemyRetirement[]
   readonly rewards: readonly BoneyardEnemyReward[]
   readonly spawnedActorIds: readonly BoneyardEnemyActorId[]
@@ -450,6 +469,7 @@ export interface DamageBoneyardEnemyResult {
 interface WorkingStep {
   actors: BoneyardEnemyActor[]
   events: BoneyardEnemySemanticEvent[]
+  impActorCount: number
   maggots: BoneyardMaggotActor[]
   nextActorId: number
   nextDeathEpoch: number
@@ -457,6 +477,7 @@ interface WorkingStep {
   nextProjectileId: number
   nextSyntheticSpawnIntentId: number
   playerDamage: BoneyardEnemyPlayerDamage[]
+  playerKnockbacks: BoneyardEnemyPlayerKnockback[]
   projectiles: BoneyardEnemyProjectile[]
   retired: BoneyardEnemyRetirement[]
   rewards: BoneyardEnemyReward[]
@@ -591,6 +612,7 @@ export function stepBoneyardEnemyStore(
   const work: WorkingStep = {
     actors: [],
     events: [],
+    impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
     maggots: [...source.maggots],
     nextActorId: source.nextActorId,
     nextDeathEpoch: source.nextDeathEpoch,
@@ -598,6 +620,7 @@ export function stepBoneyardEnemyStore(
     nextProjectileId: source.nextProjectileId,
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     playerDamage: [],
+    playerKnockbacks: [],
     projectiles: [...source.projectiles],
     retired: [],
     rewards: [],
@@ -608,7 +631,11 @@ export function stepBoneyardEnemyStore(
     const stepped = actor.lifeState === 'dying'
       ? stepDyingActor(work, actor, context)
       : stepLivingActor(work, actor, context)
-    if (stepped) work.actors.push(stepped)
+    if (stepped) {
+      work.actors.push(stepped)
+    } else if (actor.config.enemyToken === 'IMP') {
+      work.impActorCount -= 1
+    }
   }
   stepMageShields(work)
   stepMaggots(work, context)
@@ -620,6 +647,7 @@ export function stepBoneyardEnemyStore(
   return {
     events: Object.freeze(work.events),
     playerDamage: Object.freeze(work.playerDamage),
+    playerKnockbacks: Object.freeze(work.playerKnockbacks),
     retired: Object.freeze(work.retired),
     rewards: Object.freeze(work.rewards),
     spawnedActorIds: Object.freeze(work.spawnedActorIds),
@@ -642,6 +670,7 @@ function materializeSpawnIntents(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
   spawnIntents: readonly BoneyardEnemySpawnIntent[],
+  impSplitDepthOverride: number | null = null,
 ): BoneyardEnemyActor[] {
   const actors: BoneyardEnemyActor[] = []
   for (const intent of spawnIntents) {
@@ -649,19 +678,40 @@ function materializeSpawnIntents(
     const radius = nextBoneyardWaveRandom(baseSpeed.state)
     const armor = nextBoneyardWaveRandom(radius.state)
     const split = nextBoneyardWaveRandom(armor.state)
-    work.rngState = split.state
-    const config = evaluateBoneyardEnemyConfig(intent.enemyToken, {
+    const splitMany = intent.flags.includes('FLAG_SPLITMANY')
+      ? nextBoneyardWaveRandom(split.state)
+      : null
+    work.rngState = splitMany?.state ?? split.state
+    const evaluatedConfig = evaluateBoneyardEnemyConfig(intent.enemyToken, {
       arenaScalars: context.arenaScalars,
       flags: intent.flags,
       random: {
         baseSpeedUnit: baseSpeed.value,
         collisionRadiusUnit: radius.value,
         randomArmor: armor.value >= 0.5,
+        splitManyGateUnit: split.value,
+        splitManyUnit: splitMany?.value ?? 0,
         splitUnit: split.value >= 0.5 ? 1 : 0,
       },
       waveOrdinal: intent.waveOrdinal,
     })
-    const targetPlayerId = nearestEligibleTarget(intent.position, context.players)
+    const config = impSplitDepthOverride === null
+      ? evaluatedConfig
+      : withImpSplitDepth(evaluatedConfig, impSplitDepthOverride)
+    if (
+      config.enemyToken === 'IMP'
+      && work.impActorCount >= NATIVE_IMP_CONSTRUCTION_MAXIMUM
+    ) continue
+    const position = context.resolveMovement({
+      actorId: work.nextActorId,
+      delta: { x: 0, y: 0 },
+      position: intent.position,
+      purpose: 'spawn-placement',
+      radius: config.collisionRadius,
+      requestedPosition: intent.position,
+    })
+    validatePoint(position, 'resolved enemy spawn position')
+    const targetPlayerId = nearestEligibleTarget(position, context.players)
     const actor: BoneyardEnemyActor = {
       brain: createBrain(work, config),
       config,
@@ -670,7 +720,7 @@ function materializeSpawnIntents(
       deathStartedTick: null,
       deathTick: 0,
       gaitPose: 0,
-      headingDeg: targetHeading(intent.position, targetPlayerId, context.players),
+      headingDeg: targetHeading(position, targetPlayerId, context.players),
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
       lastDamageTick: null,
@@ -683,7 +733,7 @@ function materializeSpawnIntents(
           ? NATIVE_ENEMY_MISSING_TARGET_REFRESH_TICKS
           : NATIVE_ENEMY_TARGET_REFRESH_TICKS
       ),
-      position: Object.freeze({ ...intent.position }),
+      position: Object.freeze({ ...position }),
       rewardGranted: false,
       shieldHealth: 0,
       shieldMaximumHealth: 0,
@@ -694,6 +744,7 @@ function materializeSpawnIntents(
       waveOrdinal: intent.waveOrdinal,
     }
     work.nextActorId += 1
+    if (config.enemyToken === 'IMP') work.impActorCount += 1
     work.spawnedActorIds.push(actor.id)
     emitEvent(work, context.tick, 'enemy-spawned', actor.id, {
       targetPlayerId,
@@ -701,6 +752,22 @@ function materializeSpawnIntents(
     actors.push(actor)
   }
   return actors
+}
+
+function withImpSplitDepth(
+  config: EvaluatedBoneyardEnemyConfig,
+  splitDepth: number,
+): EvaluatedBoneyardEnemyConfig {
+  if (config.enemyToken !== 'IMP') {
+    throw new Error('only child Imps can inherit reduced split state')
+  }
+  if (!Number.isSafeInteger(splitDepth) || splitDepth < 0) {
+    throw new RangeError('inherited Imp split depth must be a non-negative safe integer')
+  }
+  return Object.freeze({
+    ...config,
+    family: Object.freeze({ ...config.family, splitDepth }),
+  })
 }
 
 function createBrain(
@@ -912,6 +979,9 @@ function stepSkeleton(
     if (brain.action === 'claw') {
       return stepSkeletonClawAction(work, actor, brain, context)
     }
+    if (brain.action === 'weapon') {
+      return stepSkeletonWeaponAction(work, actor, brain, context)
+    }
     const program = NATIVE_SKELETON_ACTION_PROGRAMS[brain.action]
     return stepProgressAction(
       work,
@@ -949,6 +1019,53 @@ function stepSkeleton(
     }
   }
   return moveTowardTarget(actor, brain, context, 1)
+}
+
+function stepSkeletonWeaponAction(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+  brain: BoneyardSkeletonBrain,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyActor {
+  const program = NATIVE_SKELETON_ACTION_PROGRAMS.weapon
+  const previousProgress = brain.actionProgress
+  const actionProgress = previousProgress
+    + program.progressPerTick * actor.config.attackSpeed
+  let markerEmitted = brain.markerEmitted
+  for (const marker of NATIVE_SKELETON_WEAPON_MARKERS) {
+    if (previousProgress >= marker || actionProgress < marker) continue
+    const eventId = attackMarker(
+      work,
+      actor,
+      context.tick,
+      brain.contactTargetPlayerId,
+    )
+    directContactPlayerDamage(
+      work,
+      actor,
+      brain.contactTargetPlayerId,
+      context.players,
+      BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
+      eventId,
+    )
+    markerEmitted = true
+  }
+  if (actionProgress > program.strictEnd) {
+    return {
+      ...actor,
+      brain: {
+        ...brain,
+        actionProgress: 0,
+        contactTargetPlayerId: null,
+        markerEmitted: false,
+        phase: 'approach',
+      },
+    }
+  }
+  return {
+    ...actor,
+    brain: { ...brain, actionProgress, markerEmitted },
+  }
 }
 
 function stepSkeletonClawAction(
@@ -1641,6 +1758,7 @@ function stepMaggots(
       actorId: source.id,
       delta,
       position: source.position,
+      purpose: 'movement',
       radius: source.collisionRadius,
       requestedPosition,
     })
@@ -1709,6 +1827,7 @@ function stepEmergingMaggot(
     actorId: source.id,
     delta,
     position: source.position,
+    purpose: 'movement',
     radius: source.collisionRadius,
     requestedPosition,
   })
@@ -1799,6 +1918,7 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
     actorId: actor.id,
     delta,
     position: actor.position,
+    purpose: 'movement',
     radius: actor.config.collisionRadius,
     requestedPosition,
   })
@@ -1920,7 +2040,9 @@ function targetPlayerWithinAttackReach(
     target.position.y - actor.position.y,
   ) <= Math.max(
     centerReach,
-    actor.config.collisionRadius + target.collisionRadius,
+    actor.config.collisionRadius
+      + target.collisionRadius
+      + NATIVE_ACTOR_SEPARATION_EPSILON,
   )
 }
 
@@ -2043,6 +2165,25 @@ function directContactPlayerDamage(
 ): void {
   if (!targetPlayerWithinAttackReach(actor, targetPlayerId, players, centerReach)) return
   directPlayerDamage(work, actor, targetPlayerId, eventId)
+  if (actor.config.enemyToken === 'ZOMBIE' && targetPlayerId !== null) {
+    const target = players[targetPlayerId]
+    if (!target) return
+    const dx = target.position.x - actor.position.x
+    const dy = target.position.y - actor.position.y
+    const distance = Math.hypot(dx, dy)
+    const headingRadians = actor.headingDeg * Math.PI / 180
+    const unitX = distance === 0 ? Math.sin(headingRadians) : dx / distance
+    const unitY = distance === 0 ? -Math.cos(headingRadians) : dy / distance
+    work.playerKnockbacks.push(Object.freeze({
+      actorId: actor.id,
+      delta: Object.freeze({
+        x: unitX * BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
+        y: unitY * BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
+      }),
+      eventId,
+      playerId: targetPlayerId,
+    }))
+  }
 }
 
 function emitMageAttack(
@@ -2317,23 +2458,16 @@ function firstProjectileContact(
   players: BoneyardEnemyTargets,
   excludedPlayerIds: ReadonlySet<string>,
 ): { playerId: string; progress: number } | null {
-  const vx = end.x - start.x
-  const vy = end.y - start.y
-  const lengthSquared = vx * vx + vy * vy
   let selected: { playerId: string; progress: number } | null = null
   for (const [playerId, player] of Object.entries(players)) {
     if (!targetEligible(player) || excludedPlayerIds.has(playerId)) continue
-    const wx = player.position.x - start.x
-    const wy = player.position.y - start.y
-    const progress = lengthSquared === 0
-      ? 0
-      : Math.min(1, Math.max(0, (wx * vx + wy * vy) / lengthSquared))
-    const nearestX = start.x + vx * progress
-    const nearestY = start.y + vy * progress
-    const dx = player.position.x - nearestX
-    const dy = player.position.y - nearestY
-    const contactRadius = radius + player.collisionRadius
-    if (dx * dx + dy * dy > contactRadius * contactRadius) continue
+    const progress = segmentCircleEntry(
+      start,
+      end,
+      player.position,
+      radius + player.collisionRadius,
+    )
+    if (progress === null) continue
     if (
       selected === null
       || progress < selected.progress
@@ -2341,6 +2475,36 @@ function firstProjectileContact(
     ) selected = { playerId, progress }
   }
   return selected
+}
+
+function segmentCircleEntry(
+  start: Readonly<BoneyardPoint>,
+  end: Readonly<BoneyardPoint>,
+  center: Readonly<BoneyardPoint>,
+  radius: number,
+): number | null {
+  const segmentX = end.x - start.x
+  const segmentY = end.y - start.y
+  const offsetX = start.x - center.x
+  const offsetY = start.y - center.y
+  const radiusSquared = radius * radius
+  const offsetSquared = offsetX * offsetX + offsetY * offsetY
+  if (offsetSquared <= radiusSquared) return 0
+
+  const segmentSquared = segmentX * segmentX + segmentY * segmentY
+  if (segmentSquared === 0) return null
+
+  const linear = 2 * (offsetX * segmentX + offsetY * segmentY)
+  const discriminant = linear * linear
+    - 4 * segmentSquared * (offsetSquared - radiusSquared)
+  if (discriminant < 0) return null
+
+  const root = Math.sqrt(discriminant)
+  const first = (-linear - root) / (2 * segmentSquared)
+  const second = (-linear + root) / (2 * segmentSquared)
+  if (first >= 0 && first <= 1) return first
+  if (second >= 0 && second <= 1) return second
+  return null
 }
 
 function projectileNativeTypeId(
@@ -2368,7 +2532,7 @@ function stepDyingActor(
     emitEvent(work, tick, 'enemy-death', actor.id)
     const output = terminalOutput(actor.config.enemyToken)
     emitEvent(work, tick, 'enemy-terminal-output', actor.id, {
-      count: terminalOutputCount(actor),
+      count: terminalOutputCount(work, actor),
       output,
     })
     spawnTerminalChildren(work, actor, context)
@@ -2409,7 +2573,39 @@ function spawnTerminalChildren(
   actor: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): void {
-  if (actor.config.enemyToken !== 'IMP' && actor.config.enemyToken !== 'DEMON') return
+  if (actor.config.enemyToken === 'IMP') {
+    const splitDepth = actor.config.family.splitDepth
+    if (splitDepth === 0) return
+    if (work.impActorCount > NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM) return
+    const spawnIntents = NATIVE_IMP_SPLIT_HEADING_OFFSETS.map((): BoneyardEnemySpawnIntent => {
+      const intent: BoneyardEnemySpawnIntent = {
+        enemyToken: 'IMP',
+        flags: [],
+        id: work.nextSyntheticSpawnIntentId,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+        position: { ...actor.position },
+        spawnTick: context.tick,
+        waveOrdinal: actor.waveOrdinal,
+      }
+      work.nextSyntheticSpawnIntentId += 1
+      return intent
+    })
+    const children = materializeSpawnIntents(
+      work,
+      context,
+      spawnIntents,
+      splitDepth - 1,
+    ).map((child, index) => ({
+      ...child,
+      headingDeg: (
+        (actor.headingDeg + NATIVE_IMP_SPLIT_HEADING_OFFSETS[index]!) % 360 + 360
+      ) % 360,
+    }))
+    work.actors.push(...children)
+    return
+  }
+  if (actor.config.enemyToken !== 'DEMON') return
   const count = actor.config.family.splitCount
   if (count === 0) return
   const radius = Math.max(10, actor.config.collisionRadius)
@@ -2431,7 +2627,12 @@ function spawnTerminalChildren(
     work.nextSyntheticSpawnIntentId += 1
     return intent
   })
-  work.actors.push(...materializeSpawnIntents(work, context, spawnIntents))
+  work.actors.push(...materializeSpawnIntents(
+    work,
+    context,
+    spawnIntents,
+    0,
+  ))
 }
 
 function terminalOutput(token: EvaluatedBoneyardEnemyConfig['enemyToken']): BoneyardEnemyTerminalOutput {
@@ -2447,9 +2648,21 @@ function terminalOutput(token: EvaluatedBoneyardEnemyConfig['enemyToken']): Bone
   }
 }
 
-function terminalOutputCount(actor: BoneyardEnemyActor): number | undefined {
-  if (actor.config.enemyToken === 'IMP' || actor.config.enemyToken === 'DEMON') {
-    return actor.config.family.splitCount
+function terminalOutputCount(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+): number | undefined {
+  if (actor.config.enemyToken === 'IMP') {
+    return actor.config.family.splitDepth > 0
+      && work.impActorCount <= NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM
+      ? NATIVE_IMP_SPLIT_CHILD_COUNT
+      : 0
+  }
+  if (actor.config.enemyToken === 'DEMON') {
+    return Math.min(
+      actor.config.family.splitCount,
+      Math.max(0, NATIVE_IMP_CONSTRUCTION_MAXIMUM - work.impActorCount),
+    )
   }
   return undefined
 }

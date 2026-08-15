@@ -11,6 +11,10 @@ import {
   type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
 import { BOUNDED_MAGE_LIGHTNING_EFFECT_TICKS } from '../core-kernels/boneyard-enemy-modifiers.ts'
+import {
+  BOUNDED_IMP_FLIGHT_PROGRAM,
+  NATIVE_IMP_BODY_POSE_COUNT,
+} from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { projectBoneyard } from './project-boneyard.ts'
 import {
@@ -125,6 +129,73 @@ test('projects a production Maggot bite before death at every default snapshot p
     lastAttackTick: 100,
     lifeState: 'dying',
   }, 100 + BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks).state, 'death')
+})
+
+test('projects the bounded fixed-tick Imp flight program without changing spawn identity', () => {
+  const spawnTick = 100
+  const position = { x: 80, y: 120 }
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('imp-flight'), {
+    firstProjectileWorldContact: () => null,
+    players: {
+      player: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: { x: 400, y: 120 },
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'IMP',
+      flags: [],
+      id: 17,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+      position,
+      spawnTick,
+      waveOrdinal: 1,
+    }],
+    tick: spawnTick,
+  })
+  const samples = Array.from({ length: NATIVE_IMP_BODY_POSE_COUNT + 1 }, (_, index) => (
+    projectBoneyardEnemies(
+      spawned.store,
+      spawnTick + index * BOUNDED_IMP_FLIGHT_PROGRAM.bodyPoseTicks,
+    )[0]!
+  ))
+
+  assert.deepEqual(samples.map((sample) => sample.animation.bodyPose), [0, 1, 2, 3, 0])
+  assert.equal(samples[0]!.animation.alpha, 1)
+  assert.equal(samples[0]!.animation.verticalOffset, 0)
+  assert.equal(samples[0]!.animation.impEffectFrame, 0)
+  assert.equal(
+    projectBoneyardEnemies(spawned.store, spawnTick + 9)[0]?.animation.impEffectFrame,
+    9,
+  )
+  assert.equal(samples[1]!.animation.impEffectFrame, -1)
+  assert.ok(Math.abs(
+    samples[2]!.animation.alpha - BOUNDED_IMP_FLIGHT_PROGRAM.minimumAlpha,
+  ) < 1e-12)
+  assert.equal(
+    samples[2]!.animation.verticalOffset,
+    -BOUNDED_IMP_FLIGHT_PROGRAM.maximumLift,
+  )
+  assert.deepEqual(
+    samples.map(({ id, nativeTypeId, position: samplePosition, spawnTick: sampleSpawnTick }) => ({
+      id,
+      nativeTypeId,
+      position: samplePosition,
+      spawnTick: sampleSpawnTick,
+    })),
+    samples.map(() => ({
+      id: samples[0]!.id,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
+      position,
+      spawnTick,
+    })),
+  )
 })
 
 test('projects armor, shields, burning, and the named four-tick lightning sample', () => {

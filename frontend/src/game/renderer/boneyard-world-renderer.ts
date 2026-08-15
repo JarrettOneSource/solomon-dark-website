@@ -59,6 +59,7 @@ import {
   type BoneyardBounds,
   boneyardCamera,
   boneyardCameraFocus,
+  boneyardPlayerSortBias,
   boneyardResidentIsVisible,
   boneyardSpectatorCameraState,
   boneyardSpectatorStatus,
@@ -942,7 +943,7 @@ class BoneyardDynamicScene {
       dynamicLayers.push({
         id: `player:${playerId}`,
         worldY: player.position.y,
-        sortBias: 0,
+        sortBias: boneyardPlayerSortBias(player),
         sourceOrder: dynamicLayers.length,
       })
     }

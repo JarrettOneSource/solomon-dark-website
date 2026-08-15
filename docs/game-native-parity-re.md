@@ -12968,6 +12968,25 @@ snapshot interval can skip even though their authoritative clocks are correct:
   players seed the crossing state, repeated frames are idempotent, and new
   runs clear it.
 
+The authoritative Boneyard collision phase must consume the death state that
+the current fixed tick will publish. A player entering the tick at death tick
+`158` is therefore absent from player/enemy collision resolution during the
+same simulation step that publishes tick `159`, emits the death-burst edge,
+and enters spectator state. Collision membership may project that one pending
+death-clock advance, but it must not commit lifecycle state early or reorder
+damage, burst, spectator, or all-dead Game Over ownership. Integrated acceptance
+places a living actor against the tick-158 corpse and requires the living actor
+to take its unobstructed movement while the corpse position remains unchanged.
+
+Implementation receipt: `playerCollisionEnabledAfterCombatTick` projects only
+the pending pure combat tick for Boneyard collision membership. The integrated
+fixture failed first by pushing the tick-158 corpse from x `250` to `250.6`,
+then passed with the corpse at x `250`, the living actor at x `200.5`, published
+death tick `159` in spectator state, and the surviving run still active. The
+focused combat/world/simulation tests pass `32/32`; app/test TypeScript and the
+supported lint/boundary gate pass. No browser flow was run for this phase-only
+correction.
+
 The named browser approximation for the open death-burst distribution is
 `BOUNDED_PLAYER_DEATH_BURST_PROGRAM`: twelve deterministic radial copies of
 exact BadGuys entry `10`, additive, lasting twenty presentation ticks, with
@@ -12976,3 +12995,434 @@ Those visual constants are not retail claims. The acceptance contract covers
 all five default snapshot onset phases, strict protocol decode, once-only
 client delivery, late-join/no-replay, duplicate suppression, run reset, exact
 records `10/381/382`, and finite teardown.
+
+#### Imp split depth and native live-cap correction
+
+The protocol-capacity audit falsified the first Website interpretation of the
+Imp family lane: `splitCount` was used as both the number of children and the
+recursive generation count. At wave 42 that created a factorial expansion.
+Fresh read-only Ghidra evidence against the supported retail executable closes
+the causal chain:
+
+- `BuildEnemyConfig 0x0046B390`, flag `0x16`, writes a remaining depth at
+  recipe `+0x84`. With `q = trunc((wave - 25) / 5)`, it samples inclusive
+  `[q + 1,q + 3]`; a first sample below two writes two, otherwise inclusive
+  helper `0x00448450` supplies a second independent sample from the same range.
+  The only retail uses are waves 35 and 42, so their depths are `3..5` and
+  `4..6`.
+- `Imp::Death 0x004824A0` reads live actor `+0x210`. It branches only when the
+  depth is positive and live Imp global `DAT_00819914 <= 68`. The compiled
+  angle loop starts at `-0x5A`, adds `0xB4`, and continues through `+0x5A`:
+  exactly two children, not `depth` children.
+- Both the raw Imp factory path `0x00462730(0x3EC)` and evaluated-recipe path
+  `0x00463B50(parent +0x1D0)` explicitly overwrite child
+  `+0x210 = parent +0x210 - 1` before `0x0063F6D0` registration. Both children
+  therefore retain the same reduced recursive depth.
+- `Imp::Imp 0x00473E30` increments `DAT_00819914` and marks constructions over
+  70 deleted. Destructors `0x00473FA0`, `0x00474D90`, and `0x004784F0`
+  decrement it. Because the death guard runs before the pair, 68 live Imps may
+  become 70, after which further split attempts are suppressed.
+
+The authoritative store must consequently keep depth separate from fan-out,
+count dying Imps through retirement like the native constructor/destructor
+counter, emit exactly two one-lower children when the 68 guard permits it, and
+reject persistent Imp constructions above 70 from wave, Demon, and recursive
+paths. Focused acceptance drives the worst retail wave-35 and wave-42 group
+compositions through simultaneous recursive deaths and requires the live actor
+array to remain below protocol capacity 8192, the Imp subset to remain at or
+below 70, and nonzero reduced-depth grandchildren to remain observable.
+
+The run-scoped `enemy-terminal-output.count` lane describes accepted terminal
+child materializations, not an enemy recipe field. An Imp therefore publishes
+two only when its remaining depth is positive and the live-counter guard admits
+the native pair; depth zero or a suppressed split publishes zero. Demon outputs
+likewise publish only the child Imps accepted beneath the shared construction
+cap, which may be fewer than the configured five or fifteen. The terminal-output
+event remains ordered before the corresponding child `enemy-spawned` events.
+Focused event assertions must keep each published count equal to that step's
+accepted `spawnedActorIds` for isolated Imp and Demon terminal paths.
+
+Implementation receipt: the config evaluator now consumes the retail two-draw
+formula and produces wave-35 depth `3..5` and wave-42 depth `4..6`. The enemy
+store emits the two co-located children at parent heading `-90/+90`, carries
+one-lower depth into both, counts dying Imps until retirement, suppresses a
+split above 68, and refuses persistent Imp construction above 70 from every
+spawn path. Its terminal event reports the accepted binary fan-out `2/0`
+instead of remaining depth, while Demon reports its cap-clipped accepted child
+count. Both outputs remain ordered before their child-spawn events. The
+adversarial retail group fixtures reached exactly 70 Imps in both waves; total
+retained actors peaked at 70 for wave 35 and 85 for wave 42, well below 8192.
+Focused config/store tests pass `39/39`, test TypeScript is clean, the supported
+Website lint/boundary gate passes with only the existing Fast Refresh warnings,
+and the Loader lifecycle static contract passes.
+
+## Enemy projectile atlas selection and Boneyard preload closure — 2026-08-15
+
+### Reported smell and parity question
+
+The real waves flow reached Archer projectile presentation, then repeatedly
+threw `Native enemy atlas record was not selected for loading` for
+`BadGuys:266` and `BadGuys:255` from `nativeEnemySpriteRecord` before a texture
+could be assigned. The parity question is which stock records every reachable
+enemy-projectile plan can select, and which Website owner must make those
+records resident before the first projectile appears.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Real web runtime | Waves journey; `native-enemy-projectile-view.ts` layer resolution | Archer arrows reached records 266 and 255, but the asset selector rejected both before texture lookup. | high |
+| Preserved native executable/catalog | Beta 0.72.5 `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Mod Loader `native-projectiles-and-effects.md`, `native-game-object-catalog.json`, and `native-atlas-consumers.json` | Direct native consumers pin Arrow `0x7DA`, Firebolt `0x7EB`, GuidedMissile `0x7EC`, and DemonBomb `0x7F7` to the record families below. | high |
+| Current web source | `native-enemy-projectile-presentation.ts`, `native-enemy-assets.ts`, and `boneyard-textures.ts` | Presentation can select six BadGuys families plus DeadHawg 46..77. The eager glob omitted BadGuys 2 and 270..279; the required-range filter omitted BadGuys 2 and 255..282. | high |
+| Deterministic web repro | Vite SSR load of `native-enemy-assets.ts` on the exact Website tree | Resolution failed for BadGuys 2, 255, 266, 270, 271, and 282, while BadGuys 110/112 and DeadHawg 46/77 resolved. | high |
+
+### Native ownership thread and recovered record contract
+
+- Archer callback `0x00477B90` creates Arrow `0x7DA`. Arrow draw
+  `0x0060F590` consumes BadGuys 255..266 and 271..282; trail/draw consumer
+  `0x005E5EC0` also consumes exact record 2.
+- Mage dispatch `0x0047FDE0` can create Firebolt `0x7EB` or GuidedMissile
+  `0x7EC`. Firebolt body/trail consumes BadGuys 255..266, with 251..254 owned
+  by its impact path. GuidedMissile draw `0x00612960` consumes BadGuys 110..112
+  and 381..382.
+- Demon event `0x0049A270` creates DemonBomb `0x7F7`. Draw `0x0061A690`
+  consumes BadGuys 267..270 and DeadHawg 46..77.
+- Rotten Zombie death can create PoisonPool `0x806`. Its native auxiliary draw
+  `0x005EDFA0` has no fixed atlas literal in the closed catalog. The current
+  Website's DeadHawg 46..77 pool animation remains an already named bounded
+  presentation choice; this preload repair does not promote it to an exact
+  PoisonPool art claim.
+- The complete currently reachable Website set is: fire-arrow effect record 2;
+  normal/fire Arrow 255..266; poison Arrow 271..282; Firebolt 251..266;
+  GuidedMissile 110..112; DemonBomb 267..270; and PoisonPool DeadHawg 46..77.
+  GuidedMissile's native 381..382 sibling range is already selected for the
+  recovered Mage lightning presentation.
+
+Nearby presentation findings remain outside this selection-only repair. The
+current Firebolt flight plan spans 251..266 even though stock separates impact
+251..254 from body/trail 255..266; current GuidedMissile flight omits its native
+381..382 sibling effect; current DemonBomb flight omits its native DeadHawg
+46..77 secondary pass; and PoisonPool has no proven fixed atlas record. Making
+the currently reachable records resident does not claim those draw plans are
+otherwise complete native parity.
+
+The host enemy store owns projectile birth and stable snapshots. Client
+presentation maps a snapshot to atlas records. `native-enemy-assets.ts` owns
+the eager asset selection and exports `NATIVE_ENEMY_ASSET_SOURCES`;
+`loadBoneyardWorldTextures` loads that complete list before
+`BoneyardDynamicScene` can construct or update a projectile view. A projectile
+view must therefore never discover a missing allow-list entry during a wave.
+
+### Confidence, implementation consequence, and validation contract
+
+- Confirmed: native direct-art families, current Website reachability, the
+  selector/filter mismatch, and the Boneyard preload owner.
+- Inferred/unchanged: current per-family Website frame cadence and PoisonPool
+  presentation; neither is reclassified as exact native behavior here.
+- Expand only the BadGuys eager-glob coverage and required selector ranges
+  needed by the reachable plan. Do not change projectile simulation,
+  replication, draw behavior, or unrelated enemy assets.
+- A focused test must enumerate every reachable heading/age/payload plan,
+  require all 68 unique atlas records to resolve through the real Vite asset
+  module, and retain exact family boundaries so fixing 255/266 alone cannot
+  pass.
+- App/test TypeScript and the supported Website lint/boundary gate must pass.
+  Browser proof is intentionally deferred because this repair was requested
+  without a browser run; the deterministic selector repro is the original
+  feedback loop.
+
+No Mod Loader document changes are required: this entry consumes existing
+durable native projectile/catalog evidence and recovers no new native fact.
+
+### Implementation validation receipt
+
+- `native-enemy-assets.ts` now includes exact BadGuys record 2, glob coverage
+  for 270..279, and one required 251..282 range covering all reachable Arrow,
+  Firebolt, and DemonBomb records. Existing 110..112 and DeadHawg 46..77
+  selection remains unchanged.
+- `native-enemy-assets.test.ts` enumerates all current projectile headings,
+  payloads, and animation ages, then resolves the resulting 68-record union
+  through the actual Vite-transformed asset module. The test failed first on
+  `BadGuys:255` and passes after the selector repair.
+- The original deterministic resolver now passes BadGuys 2, 110, 112, 255,
+  266, 270, 271, and 282 plus DeadHawg 46 and 77. App and test TypeScript pass;
+  `./scripts/validate.sh lint` passes backend formatting, frontend lint, and
+  game-boundary validation with only the pre-existing Fast Refresh warnings.
+- No browser, runtime simulation, renderer behavior, protocol, or projectile
+  authority was changed or claimed as revalidated in this repair.
+
+## Collision-valid enemy materialization — 2026-08-15
+
+### Captured failure and ownership finding
+
+The real-input waves journey exposed an authoritative spawn defect after the
+projectile preload closure. A living Skeleton materialized at
+`(1723.75, 2189.125)` in generated default Boneyard
+`crv-fulltrio-fadf5a2-0724-client`. That point is inside the collision polygon
+for `scenery:object-213`, the variant-10 grave at
+`(1719.501953125, 2128.44189453125)` with overlay variant 8. Its exact polygon
+is `(1681.501953125,2232.44189453125)`,
+`(1684.501953125,2164.44189453125)`,
+`(1746.501953125,2163.44189453125)`, and
+`(1750.501953125,2233.44189453125)`.
+
+Read-only checks against the same loaded scene established the failure before
+any correction:
+
+- `canPlaceBoneyardBody` rejects the captured point for radii 0, 1, 8, 12, 16,
+  20, 22.5, and 25.
+- At actor radius 16, `resolveBoneyardMovement` returns the unchanged captured
+  point for every cardinal request from 0.5 through 40 units. The first
+  endpoint-only jump that can escape is 50 units, far larger than an ordinary
+  authoritative enemy tick.
+- An exhaustive one-unit polar scan through the complete 40..135 Fire
+  engagement band found no point that was both player-placeable at radius 25
+  and connected to the trapped actor by the authoritative radius-22.5 Fire
+  path. The smoke driver therefore had no legitimate input-only route or cast
+  that could retire this actor.
+
+The ownership trace is local and complete. `boneyard-wave-director.ts` owns
+retail schedule order, RNG, target-neutral raw spawn intents, and their native
+near-player/anywhere policies. `boneyard-world.ts` owns the loaded scene,
+current gate leaves, and the authoritative `BoneyardCollisionWorld`.
+`boneyard-enemy-store.ts` evaluates the actor recipe and therefore first knows
+the actor's actual randomized collision radius; it currently copies the raw
+intent point directly into every wave, Imp-child, and Demon-child actor. The
+ordinary movement resolver cannot recover an actor whose initial body is
+already embedded.
+
+### Parity boundary and implementation contract
+
+No preserved native evidence in this pass establishes the stock engine's exact
+retry direction, distance, or sampling order. The correction is consequently
+a named bounded Website safety rule, not a newly claimed retail placement
+algorithm:
+
+- Keep `resolveSpawnIntents` as the only wave-director seam so schedule state,
+  intent IDs, RNG draws, target-neutral intent positions, and emission order do
+  not change.
+- After recipe evaluation and the native Imp construction guard, route every
+  accepted actor materialization through one required world-owned placement
+  callback with the evaluated collision radius. This includes top-level wave
+  intents and both terminal-child paths; it does not move an already
+  materialized actor.
+- The Boneyard collision module accepts the raw point when it is placeable and
+  admits an ordinary 0.5-unit movement probe. Otherwise it performs a
+  deterministic eight-unit square-ring search and selects the first point with
+  both properties. Exhausting the authored bounds is an error; an invalid actor
+  must never be retained.
+- Target selection remains nearest eligible, connected, living player from the
+  final authoritative spawn point. Initial heading remains the direction from
+  that same point to the selected target. Identity placement therefore leaves
+  all existing targeting and heading results byte-for-byte unchanged.
+- The placement search consumes no wave or actor RNG and neither allocates nor
+  rejects an accepted ID. Spawned actor IDs, semantic event IDs, source intent
+  IDs, event ordering, and evaluated configs must match an identity-placement
+  control run.
+
+The focused regression must use the captured object-213 geometry and raw spawn
+point. It must fail on the direct-copy implementation, then prove that every
+materialized actor is `canPlaceBoneyardBody`-valid and has at least one normal
+tick-sized movement through `resolveBoneyardMovement`. A separate store seam
+check must cover wave, Imp split, and Demon split materialization with their
+evaluated radii while retaining target and heading semantics. App/test
+TypeScript, focused Node tests, the supported lint/boundary gate, and the
+Loader lifecycle diff contract are required. Browser rerun is deliberately
+deferred until review of this product correction.
+
+### Implementation validation receipt
+
+- `BoneyardEnemyMovementRequest.purpose` now distinguishes ordinary movement
+  from `spawn-placement` while retaining one required store-to-world collision
+  authority. `materializeSpawnIntents` issues the placement request only after
+  recipe evaluation and the native Imp construction guard, and supplies the
+  evaluated `config.collisionRadius`. Its three callers remain the wave,
+  recursive Imp, and Demon terminal paths.
+- `resolveBoneyardSpawnPosition` and
+  `BOUNDED_BONEYARD_SPAWN_PLACEMENT` now own the bounded eight-unit lattice and
+  0.5-unit mobility probe in `boneyard-collision.ts`. `boneyard-world.ts`
+  resolves `spawn-placement` against the current static world plus current gate
+  leaves before the actor ID or spawn event is committed. Existing actors
+  continue through the unchanged dynamic movement branch.
+- The captured regression failed first because actor/source-intent 1 remained
+  exactly `(1723.75,2189.125)`. With its evaluated radius
+  `18.97256625443697`, the corrected actor materializes at
+  `(1763.75,2149.125)`: `canPlaceBoneyardBody` accepts it and all four cardinal
+  0.5-unit probes travel the full 0.5 unit. All ten actors in that opening burst
+  satisfy both invariants.
+- A no-grave control run retains identical wave-director state, actor configs,
+  store RNG state, actor/event/source-intent IDs, spawn ticks, wave ordinals,
+  target IDs, and semantic event order. The corrected actors retain nearest
+  eligible target selection and derive initial heading from their final
+  authoritative point. A separate terminal-path test observes the evaluated
+  radius on both parents, both recursive Imp children, and all five Demon
+  children while preserving native child headings and event ordering.
+- The collision/store/world suite passes 53/53 and the two focused regressions
+  pass 2/2. App and test TypeScript pass. `./scripts/validate.sh lint` passes
+  backend formatting, frontend lint, and game-boundary validation with only the
+  existing Fast Refresh warnings. `git diff --check`, the waves-smoke syntax
+  check, and the focused Loader native/web lifecycle static contract pass. No
+  browser run was made after this correction, as requested.
+
+## Enemy melee contact at native circle separation — 2026-08-15
+
+### Captured failure and ownership finding
+
+The deterministic two-player browser journey reached an active 15-Skeleton
+opening with clean page/console error arrays, but its designated host remained
+alive at 16.847 HP after the five-minute death-proof window. The final host
+position was `(600.7841343645737,354.45636087803865)`, surrounded by eight
+authoritative Skeletons at center distances of roughly 40..76 units. Damage
+had occurred, but only intermittently while the input driver forced bodies
+through one another; ordinary settled contact did not sustain an attack.
+
+This joins two already recovered contracts that were implemented separately:
+
+- `PlayerWizard` radius is 25 and evaluated Skeleton radius is 12..20.
+- Native actor response separates an overlapping pair to
+  `radiusA + radiusB + 0.1` (`0x00521E00`, `0x00521EF0`).
+
+The enemy-store reach helper used
+`max(namedCenterReach, actorRadius + playerRadius)`. For Skeletons the named
+temporary center reach is 36, so the helper admits at most 37..45 units while
+the collision owner deliberately settles the same pair at 37.1..45.1 units.
+Imps have the same structural mismatch, and the largest Zombies can encounter
+it too. Damage remains accidentally possible only during a transient overlap
+from a separately driven player epoch. That makes input motion, not an enemy
+action marker at legal contact, the hidden authorization for a hit.
+
+### Parity boundary and implementation contract
+
+The exact per-family native weapon shapes/reaches remain open. This repair does
+not promote the current named center-distance bounds to recovered retail
+geometry. It makes the bounded Website contact rule internally coherent with
+the exact native circle-response rule:
+
+- Export the already recovered `0.1` actor-separation epsilon from the shared
+  physics kernel; do not duplicate or approximate it in enemy code.
+- Marker-time eligibility uses
+  `max(namedCenterReach, actorRadius + targetRadius + separationEpsilon)`.
+  It still requires the staged target to be connected, eligible, living, and
+  within reach on every independent marker.
+- No action clock, damage value, target selection, movement, collision,
+  knockback, projectile, protocol, or renderer behavior changes.
+- A regression must place a real evaluated Skeleton exactly at the shared
+  solver's legal separation, prove it begins its action without player input,
+  and prove its recovered marker damages the staged target. A point beyond the
+  epsilon remains out of reach.
+- The deterministic multiplayer browser journey must then prove organic host
+  death, the native dying-to-spectating transition while the guest remains
+  alive, spectator camera/input lock, all-dead Game Over, host-only retained
+  loadout confirmation, and both peers returning to the same Hub session.
+
+### Implementation validation receipt
+
+- `NATIVE_ACTOR_SEPARATION_EPSILON` is now the one shared exported `0.1`
+  constant used by actor correction and melee eligibility. The enemy-store
+  helper includes that epsilon after both collision radii and retains the
+  existing named family reach as the other branch of the maximum.
+- The focused store regression failed first with the exact settled target in
+  `approach` instead of `attack`. It now proves the real evaluated Skeleton
+  begins its action, reaches a damaging marker, and rejects a target only
+  `0.0001` beyond the settled distance. The world regression starts the pair
+  overlapped, lets authoritative two-way actor response settle it, then proves
+  the same stationary Skeleton enters `attack` and damages the player.
+- Independent replay of the captured zero-seed actors found IDs 10, 12, 13,
+  14, and 15 between `0.0923` and `0.1170` beyond the old threshold. Before
+  the repair, an exact radius-sum fixture produced nine markers and 13.5
+  damage over 200 ticks while radius sum plus 0.1 produced zero markers and
+  zero damage. After the repair, test-project TypeScript passes and the shared
+  physics/store/world suite passes 51/51.
+
+## Final survival-combat browser acceptance — 2026-08-15
+
+The final browser runs use ordinary UI, keyboard, and pointer input against an
+authoritative host. Their deterministic seeds and collision planners exist
+only in the smoke constructors; no debug teleport, damage, spawn, death, wave,
+or loadout control is exposed to production clients.
+
+### Solomon, waves, combat, projectile, death, and second run
+
+The frozen single-player waves journey exited 0 after 527.061 seconds. Its
+exact JSON receipt is
+`/tmp/solomon-dark-waves-spawn-placement-final-receipt.json`, mode 0444,
+17,518 bytes, SHA-256
+`552fe2d3a28e461de3dc18dd0811c6822d2874e43e4aac36acbb7cb88e6bc730`.
+It proves:
+
+- a 47-node physical route crossed the replicated gate and reached Solomon's
+  `speaking` contact; ordered hello/laugh/taunt cues led to the run event and
+  an opening population of 10 with five pending;
+- one accepted Fire cast retired Skeleton actor 3 and emitted the semantic
+  shatter plus stock Skeleton death cue;
+- the retail schedule advanced after 42 kills to Archer actor 61 and Arrow
+  projectile 16; 22 authoritative motion samples were rendered before its
+  once-only retirement event at tick 48012;
+- ordinary enemy damage drove the player from 28.359 HP through dying to
+  spectating, emitted DeathGuitar, and reached Game Over; acknowledged input
+  returned to retained loadout;
+- confirmation created a different run ID with the same zero seed, alive
+  50-HP/100-MP player, zero enemies, active phase, and Solomon digging again;
+  browser/page and wire error arrays were empty.
+
+The 1600x900 artifacts are the `-speaking`, base run/opening, `-combat`,
+`-archer-projectile`, `-death`, `-game-over`, and `-loadout` siblings of
+`/tmp/solomon-dark-waves-spawn-placement-final.png`.
+
+### Two-player spectator, Game Over, and same-session loadout
+
+The final self-hosted two-browser journey exited 0 with empty host and guest
+console/page-error arrays. The designated host died first and reached
+`spectating` at death tick 192 while the guest remained alive at 32.891 HP.
+The host selected semantic `player-2`, and both `cameraFocusX/Y` values exactly
+matched that participant's rendered authoritative sample.
+
+Left and right clicks preserved/wrapped the sole valid target; attempted
+movement and casting produced displacement 0 and mana 100 to 100 while the
+camera continued following the moving guest. After the proof window, ordinary
+combat killed the survivor and both frames entered the same run's `game-over`
+phase. The host Continue control was enabled, the guest control said it was
+waiting for the host, retained Fire/Ether loadouts exposed confirmation only
+to the host, and one host confirmation returned both semantic players to the
+same Hub with player count 2.
+
+Artifacts and SHA-256 values are:
+
+- `/tmp/solomon-dark-multiplayer-first-death.png` —
+  `29edad51524b49cc43899505046ebcc502ea340abcf5e31e63d28bacd1246f1a`;
+- `/tmp/solomon-dark-multiplayer-game-over.png` —
+  `81b5b444d47e1d57eac138c1e4911e6e55c7b780217eb9225c03fa79badea8b0`;
+- `/tmp/solomon-dark-multiplayer-loadout.png` —
+  `a162250068752936af061dc256e08c1c50a184619847ebb308a2660c3d87418d`;
+- `/tmp/solomon-dark-multiplayer-returned-hub.png` —
+  `4c986dfac0a8c8137a5b43f6758beb2ff3805f7aac2789cb6ad1a7730a6d367f`.
+
+### Skill, spell, audio, and collision surfaces
+
+- The real SkillPicker browser journey selected among three offered actions,
+  committed skill 21, and projected booked rank 2 without page/console error.
+- The five-element primary-spell matrix exited 0 with an empty error array.
+  Ether and Fire emitted their one-shot actors/cues; Air and Water emitted and
+  stopped their channel loops; Earth crossed opening, mid, and high assembly,
+  release/impact, and Boneyard held/release states with authoritative mana and
+  pose samples. Its ten screenshots are under
+  `/tmp/solomon-dark-primary-final/`.
+- The audio journey exited 0 with native title/selection/academy/Boneyard
+  music, click/cast/element/skill/spell cues, four Hub footsteps, eight
+  Boneyard footsteps at exact 25-tick semantic spacing, and no browser error.
+- The two-player Boneyard collision journey exited 0 against geometry SHA-256
+  `7877af1cf88fcb133f229106e7ea813974b9411fa47104038980d66af177000d`;
+  the initially coincident actors resolved to 50.29 units and retained 50
+  units of passive displacement. Its artifact is
+  `/tmp/solomon-dark-boneyard-collision-final.png`.
+
+### Final supported validation
+
+After all runtime, test, smoke, package, and ledger changes above,
+`./scripts/validate.sh` exited 0. It restored the pinned toolchain; built the
+backend with zero warnings and errors; passed all 23 Website/backend contract
+tests; passed frontend lint and game architecture boundaries; passed the full
+test-project TypeScript and Node battery; built the production Website and
+authoritative game host; and passed deployment CSP media policy. Output
+contained only the repository's existing Fast Refresh warnings and Vite's
+non-fatal large-chunk advisory.

@@ -1,5 +1,9 @@
 import type { DynamicPainterLayer } from '../boneyard-painter-order.ts'
 import {
+  NATIVE_IMP_BODY_POSE_COUNT,
+  NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
+} from '../core-kernels/boneyard-imp-flight.ts'
+import {
   NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
   type NativeEnemyActionFrame,
@@ -287,14 +291,25 @@ function impLayers(
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
 ): NativeEnemySpriteLayer[] {
-  const variant = visualChoice(enemy, 1, 4)
-  const upperFrame = animation?.impEffectFrame ?? visualChoice(enemy, 2, 10)
+  const pose = animation
+    ? positiveModulo(
+        Math.floor(finiteOrZero(animation.bodyPose)),
+        NATIVE_IMP_BODY_POSE_COUNT,
+      )
+    : visualChoice(enemy, 1, NATIVE_IMP_BODY_POSE_COUNT)
+  const upperFrame = animation?.impEffectFrame
+    ?? visualChoice(enemy, 2, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT)
   const result = [
-    layer('BadGuys', 285 + variant * 12 + facing, 'imp-body'),
-    layer('BadGuys', 333 + boundedPose(upperFrame, 9), 'imp-upper-effect', {
-      alpha: animation && animation.impEffectFrame >= 0 ? 1 : 0,
-      offset: { x: 0, y: -10 },
-    }),
+    layer('BadGuys', 285 + pose * 12 + facing, 'imp-body'),
+    layer(
+      'BadGuys',
+      333 + boundedPose(upperFrame, NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT - 1),
+      'imp-upper-effect',
+      {
+        alpha: animation && animation.impEffectFrame >= 0 ? 1 : 0,
+        offset: { x: 0, y: -10 },
+      },
+    ),
   ]
   if (actionFrame?.program.name === 'imp-contact') {
     result.push(layer('BadGuys', 251 + boundedPose(actionFrame.selector, 3), 'imp-contact'))

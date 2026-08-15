@@ -32,6 +32,7 @@ import {
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
+import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import {
   createPrimarySpellSimulation,
   removePrimarySpellOwner,
@@ -347,6 +348,7 @@ export function stepGameSimulationTick(
           const progression = getPlayerProgression(state, playerId)
           return [playerId, {
             alive: progression.lifeState === 'alive',
+            collisionEnabled: playerCollisionEnabledAfterCombatTick(progression),
             eligible: state.run.eligiblePlayerIds.includes(playerId),
             movementScale: playerEntityMovementScale(state.playerEntities, playerId),
           }]

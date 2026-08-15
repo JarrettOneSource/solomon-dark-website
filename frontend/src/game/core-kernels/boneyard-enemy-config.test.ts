@@ -3,7 +3,6 @@ import test from 'node:test'
 
 import {
   BONEYARD_ENEMY_FLAGS,
-  BOUNDED_SPLIT_MANY_MAXIMUM,
   evaluateBoneyardEnemyConfig,
   type BoneyardEnemyFlag,
 } from './boneyard-enemy-config.ts'
@@ -92,6 +91,24 @@ test('Skeleton equipment flags preserve exact ordered HP and damage transforms',
   assert.equal(pike.primaryDamage, 28)
 })
 
+test('ARMORMAYBE applies recovered armor durability only when selected', () => {
+  const armored = evaluateBoneyardEnemyConfig('SKELETON', {
+    flags: ['FLAG_ARMORMAYBE'],
+    random: { randomArmor: true },
+  })
+  if (armored.enemyToken !== 'SKELETON') throw new Error('expected Skeleton config')
+  assert.equal(armored.family.armor, true)
+  assert.equal(armored.maximumHealth, 30)
+
+  const unarmored = evaluateBoneyardEnemyConfig('SKELETON', {
+    flags: ['FLAG_ARMORMAYBE'],
+    random: { randomArmor: false },
+  })
+  if (unarmored.enemyToken !== 'SKELETON') throw new Error('expected Skeleton config')
+  assert.equal(unarmored.family.armor, false)
+  assert.equal(unarmored.maximumHealth, 5)
+})
+
 test('Archer and Mage flags remain family-specific evaluated lanes', () => {
   const archer = evaluateBoneyardEnemyConfig('SKELETONARCHER', {
     archerExtraArrows: 3,
@@ -133,15 +150,37 @@ test('split, rotten, and Coffin child flags build their recovered payloads', () 
     flags: ['FLAG_SPLIT'],
     random: { splitUnit: 1 },
   })
-  if (!('splitCount' in imp.family)) throw new Error('expected Imp family config')
-  assert.equal(imp.family.splitCount, 2)
+  if (!('splitDepth' in imp.family)) throw new Error('expected Imp family config')
+  assert.equal(imp.family.splitDepth, 2)
 
-  const demon = evaluateBoneyardEnemyConfig('DEMON', {
+  const wave35Minimum = evaluateBoneyardEnemyConfig('IMP', {
     flags: ['FLAG_SPLITMANY'],
-    waveOrdinal: 100,
+    random: { splitManyGateUnit: 0, splitManyUnit: 0 },
+    waveOrdinal: 35,
   })
-  if (!('splitCount' in demon.family)) throw new Error('expected Demon family config')
-  assert.equal(demon.family.splitCount, BOUNDED_SPLIT_MANY_MAXIMUM)
+  const wave35Maximum = evaluateBoneyardEnemyConfig('IMP', {
+    flags: ['FLAG_SPLITMANY'],
+    random: { splitManyGateUnit: 1, splitManyUnit: 1 },
+    waveOrdinal: 35,
+  })
+  const wave42Minimum = evaluateBoneyardEnemyConfig('IMP', {
+    flags: ['FLAG_SPLITMANY'],
+    random: { splitManyGateUnit: 0, splitManyUnit: 0 },
+    waveOrdinal: 42,
+  })
+  const wave42Maximum = evaluateBoneyardEnemyConfig('IMP', {
+    flags: ['FLAG_SPLITMANY'],
+    random: { splitManyGateUnit: 1, splitManyUnit: 1 },
+    waveOrdinal: 42,
+  })
+  if (!('splitDepth' in wave35Minimum.family)) throw new Error('expected Imp family config')
+  if (!('splitDepth' in wave35Maximum.family)) throw new Error('expected Imp family config')
+  if (!('splitDepth' in wave42Minimum.family)) throw new Error('expected Imp family config')
+  if (!('splitDepth' in wave42Maximum.family)) throw new Error('expected Imp family config')
+  assert.equal(wave35Minimum.family.splitDepth, 3)
+  assert.equal(wave35Maximum.family.splitDepth, 5)
+  assert.equal(wave42Minimum.family.splitDepth, 4)
+  assert.equal(wave42Maximum.family.splitDepth, 6)
 
   const zombie = evaluateBoneyardEnemyConfig('ZOMBIE', {
     flags: ['FLAG_ROTTEN'],

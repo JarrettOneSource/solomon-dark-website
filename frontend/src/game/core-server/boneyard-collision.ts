@@ -89,6 +89,12 @@ const GOODIE_POLYGON = rectangle(-25.125, -8.625, 25.875, 16.875)
 const FENCE_POST_RADIUS = 10
 const GOODIE_RADIUS = 8
 
+/** Named web placement bounds until the stock spawn retry algorithm is recovered. */
+export const BOUNDED_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
+  latticeStep: 8,
+  movementProbe: 0.5,
+})
+
 export function createBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {
   const polygons: BoneyardCollisionPolygon[] = []
   const circles: BoneyardCollisionCircle[] = []
@@ -165,6 +171,57 @@ export function canPlaceBoneyardBody(
     || position.y > bounds.y + bounds.h - radius
   ) return false
   return firstContact(position, world, radius, position) === null
+}
+
+export function resolveBoneyardSpawnPosition(
+  position: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): BoneyardPoint {
+  if (isMobileBoneyardPlacement(position, bounds, world, radius)) {
+    return { ...position }
+  }
+
+  const step = BOUNDED_BONEYARD_SPAWN_PLACEMENT.latticeStep
+  const furthestX = Math.max(
+    Math.abs(position.x - (bounds.x + radius)),
+    Math.abs(position.x - (bounds.x + bounds.w - radius)),
+  )
+  const furthestY = Math.max(
+    Math.abs(position.y - (bounds.y + radius)),
+    Math.abs(position.y - (bounds.y + bounds.h - radius)),
+  )
+  const maximumRing = Math.ceil(Math.max(furthestX, furthestY) / step)
+  for (let ring = 1; ring <= maximumRing; ring += 1) {
+    for (let offset = -ring; offset <= ring; offset += 1) {
+      const top = {
+        x: position.x + offset * step,
+        y: position.y - ring * step,
+      }
+      if (isMobileBoneyardPlacement(top, bounds, world, radius)) return top
+      const bottom = {
+        x: position.x + offset * step,
+        y: position.y + ring * step,
+      }
+      if (isMobileBoneyardPlacement(bottom, bounds, world, radius)) return bottom
+    }
+    for (let offset = -ring + 1; offset < ring; offset += 1) {
+      const left = {
+        x: position.x - ring * step,
+        y: position.y + offset * step,
+      }
+      if (isMobileBoneyardPlacement(left, bounds, world, radius)) return left
+      const right = {
+        x: position.x + ring * step,
+        y: position.y + offset * step,
+      }
+      if (isMobileBoneyardPlacement(right, bounds, world, radius)) return right
+    }
+  }
+  throw new Error(
+    `Boneyard has no collision-safe spawn placement for radius ${radius} from (${position.x}, ${position.y})`,
+  )
 }
 
 export function firstBoneyardLineObstruction(
@@ -298,6 +355,34 @@ export function resolveBoneyardMovement(
   return firstContact(slideTarget, world, radius, swept)
     ? sweepToLastClear(swept, slideTarget, world, radius)
     : slideTarget
+}
+
+function isMobileBoneyardPlacement(
+  position: BoneyardPoint,
+  bounds: BoneyardBounds,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): boolean {
+  if (!canPlaceBoneyardBody(position, bounds, world, radius)) return false
+  const probe = BOUNDED_BONEYARD_SPAWN_PLACEMENT.movementProbe
+  return [
+    { x: probe, y: 0 },
+    { x: 0, y: probe },
+    { x: -probe, y: 0 },
+    { x: 0, y: -probe },
+  ].some((delta) => {
+    const resolved = resolveBoneyardMovement(
+      position,
+      { x: position.x + delta.x, y: position.y + delta.y },
+      bounds,
+      world,
+      radius,
+    )
+    return Math.hypot(
+      resolved.x - position.x,
+      resolved.y - position.y,
+    ) >= probe - 0.01
+  })
 }
 
 function appendObjectCollision(

@@ -6,6 +6,8 @@ import {
   createPlayerCombat,
   damagePlayer,
   dazzlePlayer,
+  playerCollisionEnabled,
+  playerCollisionEnabledAfterCombatTick,
   playerMovementScale,
   resetPlayerCombatForNewRun,
   stepPlayerCombatTick,
@@ -47,4 +49,34 @@ test('cold/dazzle clear on death and on a new run', () => {
   assert.equal(reset.coldSlowTicksRemaining, 0)
   assert.equal(reset.dazzleTicksRemaining, 0)
   assert.throws(() => coldSlowPlayer(affected, 1.5), /safe integer/)
+})
+
+test('native death tick 159 disables the player collision body', () => {
+  const combat = createPlayerCombat()
+  const dyingAt158 = {
+    ...combat,
+    deathTick: 158,
+    lifeState: 'dying' as const,
+  }
+
+  assert.equal(playerCollisionEnabled(combat), true)
+  assert.equal(playerCollisionEnabledAfterCombatTick({
+    ...combat,
+    deathTick: 157,
+    lifeState: 'dying',
+  }), true)
+  assert.equal(playerCollisionEnabled(dyingAt158), true)
+  assert.equal(playerCollisionEnabledAfterCombatTick(dyingAt158), false)
+  assert.equal(dyingAt158.deathTick, 158)
+  assert.equal(dyingAt158.lifeState, 'dying')
+  assert.equal(playerCollisionEnabled({
+    ...combat,
+    deathTick: 159,
+    lifeState: 'dying',
+  }), false)
+  assert.equal(playerCollisionEnabled({
+    ...combat,
+    deathTick: 159,
+    lifeState: 'spectating',
+  }), false)
 })

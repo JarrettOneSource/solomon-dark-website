@@ -200,6 +200,30 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
   }
 }
 
+function impSnapshotAt(
+  tick: number,
+  animation: Partial<BoneyardEnemySnapshot['animation']>,
+): BoneyardGameSnapshot {
+  const snapshot = snapshotAt(tick, 10, 100)
+  const source = snapshot.world.enemies[0]!
+  return {
+    ...snapshot,
+    world: {
+      ...snapshot.world,
+      enemies: [{
+        ...source,
+        animation: {
+          ...source.animation,
+          state: 'idle',
+          ...animation,
+        },
+        enemyToken: 'IMP',
+        nativeTypeId: 1004,
+      }],
+    },
+  }
+}
+
 function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnapshot {
   const snapshot = snapshotAt(tick, 10, 100)
   const deathTick = tick - deathEpochTick
@@ -259,6 +283,40 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.deepEqual(timeline.sample(100).world.encounter?.voiceEvents, [
     { cue: 'solomon-hello-1', id: 1 },
   ])
+})
+
+test('interpolates the authoritative Imp flight cycle without changing spawn identity', () => {
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: impSnapshotAt(100, {
+      alpha: 1,
+      bodyPose: 3,
+      impEffectFrame: 5,
+      verticalOffset: 0,
+    }),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(impSnapshotAt(105, {
+    alpha: 0.82,
+    bodyPose: 0,
+    impEffectFrame: -1,
+    verticalOffset: -4,
+  }), 50)
+
+  const midpoint = timeline.sample(75).world.enemies[0]!
+  assert.equal(midpoint.animation.bodyPose, 3.5)
+  assert.ok(Math.abs(midpoint.animation.alpha - 0.91) < 1e-12)
+  assert.equal(midpoint.animation.verticalOffset, -2)
+  assert.equal(midpoint.animation.impEffectFrame, 7.5)
+  assert.equal(midpoint.id, 1)
+  assert.equal(midpoint.spawnTick, 90)
+
+  const completed = timeline.sample(100).world.enemies[0]!
+  assert.equal(completed.animation.bodyPose, 0)
+  assert.equal(completed.animation.impEffectFrame, -1)
+  assert.equal(completed.id, midpoint.id)
+  assert.equal(completed.spawnTick, midpoint.spawnTick)
 })
 
 test('preserves every player corpse frame at 20 Hz for all death-epoch alignments', () => {

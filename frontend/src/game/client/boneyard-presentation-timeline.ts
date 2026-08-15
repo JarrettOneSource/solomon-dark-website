@@ -1,4 +1,8 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
+import {
+  NATIVE_IMP_BODY_POSE_COUNT,
+  NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
+} from '../core-kernels/boneyard-imp-flight.ts'
 import type {
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
@@ -537,7 +541,14 @@ function interpolateEnemyAnimation(
     ...discrete,
     actionProgress: lerp(first.actionProgress, second.actionProgress, blend),
     alpha: lerp(first.alpha, second.alpha, blend),
-    bodyPose: lerp(first.bodyPose, second.bodyPose, blend),
+    bodyPose: older.enemyToken === 'IMP'
+      ? lerpCycle(
+          first.bodyPose,
+          second.bodyPose,
+          blend,
+          NATIVE_IMP_BODY_POSE_COUNT,
+        )
+      : lerp(first.bodyPose, second.bodyPose, blend),
     coffinPose: lerp(first.coffinPose, second.coffinPose, blend),
     deathTick: lerp(first.deathTick, second.deathTick, blend),
     demonFrontJointRotationRadians: lerp(
@@ -563,6 +574,9 @@ function interpolateEnemyAnimation(
     effects: interpolateEnemyEffects(first.effects, second.effects, blend),
     gaitPose: lerpCycle(first.gaitPose, second.gaitPose, blend, ENEMY_GAIT_POSE_COUNT),
     hitFlash: lerp(first.hitFlash, second.hitFlash, blend),
+    impEffectFrame: older.enemyToken === 'IMP'
+      ? interpolateImpEffectFrame(first.impEffectFrame, second.impEffectFrame, blend)
+      : discrete.impEffectFrame,
     maggots: [],
     verticalOffset: lerp(first.verticalOffset, second.verticalOffset, blend),
     zombieAngularOffsetDeg: lerp(
@@ -583,6 +597,17 @@ function interpolateEnemyAnimation(
       blend,
     ),
   }
+}
+
+function interpolateImpEffectFrame(
+  older: number,
+  newer: number,
+  blend: number,
+): number {
+  if (blend >= 1) return newer
+  if (older < 0) return older
+  const target = newer < 0 ? NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT : newer
+  return lerp(older, target, blend)
 }
 
 function interpolateEnemyEffects(

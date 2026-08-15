@@ -242,6 +242,17 @@ export function playerCanCast(source: PlayerCombatComponent): boolean {
   return source.lifeState === 'alive'
 }
 
+export function playerCollisionEnabled(source: PlayerCombatComponent): boolean {
+  return source.lifeState !== 'spectating'
+    && !(source.lifeState === 'dying' && source.deathTick >= PLAYER_DEATH_FRAME_THREE_TICK)
+}
+
+export function playerCollisionEnabledAfterCombatTick(
+  source: PlayerCombatComponent,
+): boolean {
+  return playerCollisionEnabled(stepPlayerCombatTick(source).combat)
+}
+
 export function playerDeathFrame(source: PlayerCombatComponent): 0 | 1 | 2 | 3 | null {
   if (source.lifeState === 'alive' || source.lifeState === 'lethal-pending') return null
   return playerDeathFrameAtTick(source.deathTick)

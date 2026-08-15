@@ -17,6 +17,7 @@ import {
 } from './skill-picker-render-contract.ts'
 
 const ASSET_ROOT = new URL('../../assets/game/', import.meta.url)
+const skillPickerCss = readFileSync(new URL('../skill-picker.css', import.meta.url), 'utf8')
 
 test('the picker keeps the sealed 1600x900 stock card geometry and records', () => {
   assert.deepEqual(SKILL_PICKER_SIZE, { height: 900, width: 1600 })
@@ -65,6 +66,13 @@ test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlase
   assert.deepEqual(
     NATIVE_WELD_BUILDS.map(({ skillsAtlasIconRecord }) => skillsAtlasIconRecord),
     [81, 82, 83, 84, 85, 86, 87, 88, 89, 90],
+  )
+})
+
+test('the picker owns the interactive plane above a live gameplay stage', () => {
+  assert.match(
+    skillPickerCss,
+    /\.main-menu-native-stage\.skill-picker-stage\s*\{[^}]*z-index:\s*80;[^}]*pointer-events:\s*auto;/s,
   )
 })
 

@@ -7,6 +7,7 @@ import type { NativeEnemyAtlas } from './native-enemy-presentation.ts'
 
 const spriteFiles = {
   ...import.meta.glob([
+    '../../assets/game/boneyard/badguys/0002.png',
     '../../assets/game/boneyard/badguys/0010.png',
     '../../assets/game/boneyard/badguys/0015.png',
     '../../assets/game/boneyard/badguys/0055.png',
@@ -14,6 +15,7 @@ const spriteFiles = {
     '../../assets/game/boneyard/badguys/01[0-2][0-9].png',
     '../../assets/game/boneyard/badguys/01[7-8][0-9].png',
     '../../assets/game/boneyard/badguys/02[0-6][0-9].png',
+    '../../assets/game/boneyard/badguys/027[0-9].png',
     '../../assets/game/boneyard/badguys/02[8-9][0-9].png',
     '../../assets/game/boneyard/badguys/03[0-4][0-9].png',
     '../../assets/game/boneyard/badguys/03[8-9][0-9].png',
@@ -56,6 +58,7 @@ const spriteFiles = {
 } as Record<string, string>
 
 const requiredBadGuysRanges = [
+  [2, 2],
   [10, 10],
   [15, 15],
   [55, 55],
@@ -63,7 +66,7 @@ const requiredBadGuysRanges = [
   [92, 121],
   [175, 187],
   [202, 237],
-  [251, 254],
+  [251, 282],
   [285, 342],
   [381, 392],
   [401, 419],

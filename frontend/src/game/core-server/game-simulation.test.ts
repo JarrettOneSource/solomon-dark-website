@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { playerCollisionEnabled } from '../core-kernels/player-combat.ts'
 import {
   acknowledgeGameSimulationOver,
   addPlayerCharacter,
@@ -28,6 +29,7 @@ import {
   dazzlePlayerEntity,
   playerCharacterRecords,
   poisonPlayerEntity,
+  replacePlayerCharacterRecords,
 } from './player-entity-store.ts'
 
 function gameplayInput(x: number, y: number) {
@@ -512,6 +514,72 @@ test('poison begins the native death epoch before all-dead Game Over', () => {
   assert.equal(getPlayerProgression(state).lifeState, 'dying')
   assert.equal(getPlayerProgression(state).deathEpoch, 1)
   assert.equal(state.run.phase, 'game-over')
+})
+
+test('the published tick-159 death frame leaves collision before Boneyard motion resolves', () => {
+  const corpse = {
+    discipline: 'arcane',
+    displayName: 'Corpse',
+    element: 'ether',
+  } as const
+  const living = {
+    discipline: 'mind',
+    displayName: 'Living',
+    element: 'water',
+  } as const
+  let state = enterBoneyardWorld(
+    createGameSimulation({ corpse, living }),
+    combatBoneyard('death-collision-boundary-run'),
+  )
+  const players = playerCharacterRecords(state.playerEntities)
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacterRecords(state.playerEntities, {
+      ...players,
+      corpse: {
+        ...players.corpse!,
+        position: { x: 250, y: 250 },
+        velocity: { x: 0, y: 0 },
+      },
+      living: {
+        ...players.living!,
+        position: { x: 199.5, y: 250 },
+        velocity: { x: 100, y: 0 },
+      },
+    }),
+  }
+  const corpseIndex = state.playerEntities.identities.findIndex(({ playerId }) => (
+    playerId === 'corpse'
+  ))
+  assert.notEqual(corpseIndex, -1)
+  const progressions = [...state.playerEntities.progressions]
+  progressions[corpseIndex] = {
+    ...progressions[corpseIndex]!,
+    currentHealth: -10,
+    deathEpoch: 1,
+    deathTick: 158,
+    lifeState: 'dying',
+  }
+  state = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      progressions: Object.freeze(progressions),
+    },
+  }
+
+  state = stepGameSimulationTick(state, {})
+
+  const publishedCorpse = getPlayerProgression(state, 'corpse')
+  assert.equal(publishedCorpse.deathEpoch, 1)
+  assert.equal(publishedCorpse.deathTick, 159)
+  assert.equal(publishedCorpse.lifeState, 'spectating')
+  assert.equal(playerCollisionEnabled(publishedCorpse), false)
+  assert.deepEqual(getPlayerCharacter(state, 'corpse').position, { x: 250, y: 250 })
+  assert.deepEqual(getPlayerCharacter(state, 'living').position, { x: 200.5, y: 250 })
+  assert.equal(getPlayerProgression(state, 'living').lifeState, 'alive')
+  assert.equal(state.run.phase, 'active')
+  assert.equal(state.run.gameOverEventId, 0)
 })
 
 test('one dead player spectates until all-dead Game Over returns the session through loadout', () => {

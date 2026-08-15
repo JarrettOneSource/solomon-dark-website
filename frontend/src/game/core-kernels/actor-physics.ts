@@ -27,7 +27,7 @@ export type ActorBodyPairFilter = (
   other: Readonly<ActorPhysicsBody>,
 ) => boolean
 
-const NATIVE_SEPARATION_EPSILON = 0.1
+export const NATIVE_ACTOR_SEPARATION_EPSILON = 0.1
 const NATIVE_WEIGHT_MINIMUM = 0.01
 const NATIVE_WEIGHT_RANGE = 0.99
 const NATIVE_PUSH_FACTOR_MINIMUM = 0
@@ -52,7 +52,7 @@ function separation(
   }
 
   const distance = Math.sqrt(distanceSquared)
-  const overlap = radiusSum + NATIVE_SEPARATION_EPSILON - distance
+  const overlap = radiusSum + NATIVE_ACTOR_SEPARATION_EPSILON - distance
   const weight = weighted
     ? (distanceSquared / radiusSumSquared) ** 4 * NATIVE_WEIGHT_RANGE
       + NATIVE_WEIGHT_MINIMUM

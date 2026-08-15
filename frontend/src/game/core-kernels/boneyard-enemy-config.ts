@@ -72,6 +72,10 @@ export interface BoneyardEnemyConfigRandom {
   collisionRadiusUnit: number
   /** Native ARMORMAYBE byte selection. */
   randomArmor: boolean
+  /** First native SPLITMANY inclusive three-way sample. */
+  splitManyGateUnit: number
+  /** Second native SPLITMANY inclusive three-way sample. */
+  splitManyUnit: number
   /** Native SPLIT selection, represented as zero or one before adding one. */
   splitUnit: 0 | 1
 }
@@ -145,7 +149,7 @@ export interface BoneyardMageConfig extends BoneyardEnemyConfigBase {
 
 export interface BoneyardImpConfig extends BoneyardEnemyConfigBase {
   enemyToken: 'IMP'
-  family: Readonly<{ splitCount: number }>
+  family: Readonly<{ splitDepth: number }>
 }
 
 export interface BoneyardZombieConfig extends BoneyardEnemyConfigBase {
@@ -203,9 +207,6 @@ export const DEFAULT_BONEYARD_ENEMY_ARENA_SCALARS: Readonly<BoneyardEnemyArenaSc
 
 /** Wraith's inherited native radius remains open; this is the named web bound. */
 export const BOUNDED_WRAITH_COLLISION_RADIUS = 20
-
-/** SPLITMANY's exact wave formula remains open; this bound preserves wave scaling. */
-export const BOUNDED_SPLIT_MANY_MAXIMUM = 15
 
 const KNOWN_FLAGS = new Set<string>(BONEYARD_ENEMY_FLAGS)
 const BASE_STATS: Readonly<Record<BoneyardWaveEnemyToken, Readonly<{
@@ -364,7 +365,7 @@ export function evaluateBoneyardEnemyConfig(
         shieldInterval: config.shieldInterval,
       },
     })
-    case 'IMP': return frozen({ ...common, enemyToken, family: { splitCount: config.splitCount } })
+    case 'IMP': return frozen({ ...common, enemyToken, family: { splitDepth: config.splitCount } })
     case 'ZOMBIE': return frozen({
       ...common,
       enemyToken,
@@ -477,10 +478,7 @@ function applyFlag(
     case 'FLAG_SHIELDFAST': config.shieldInterval *= 0.5; break
     case 'FLAG_SPLIT': config.splitCount = random.splitUnit + 1; break
     case 'FLAG_SPLITMANY':
-      config.splitCount = Math.min(
-        BOUNDED_SPLIT_MANY_MAXIMUM,
-        Math.max(2, 1 + Math.trunc(waveOrdinal / 3)),
-      )
+      config.splitCount = nativeSplitManyDepth(waveOrdinal, random)
       break
     case 'FLAG_MANYMAGGOTS': config.maximumMaggots = 50; break
     case 'FLAG_STRONGMAGGOTS':
@@ -525,7 +523,9 @@ function applyFlag(
       break
     case 'FLAG_DEATHIMPS': config.splitCount = 5; break
     case 'FLAG_DEATHIMPSMANY': config.splitCount = 15; break
-    case 'FLAG_ARMORMAYBE': config.armor = random.randomArmor; break
+    case 'FLAG_ARMORMAYBE':
+      if (random.randomArmor) applyArmor(config)
+      break
     case 'FLAG_NOSKELETONS': config.skeletonPolicy = 'none'; break
     case 'FLAG_MORESKELETONS':
       config.skeletonPolicy = 'more'
@@ -616,17 +616,36 @@ function validatedRandom(
     baseSpeedUnit: source?.baseSpeedUnit ?? 0,
     collisionRadiusUnit: source?.collisionRadiusUnit ?? 0,
     randomArmor: source?.randomArmor ?? false,
+    splitManyGateUnit: source?.splitManyGateUnit ?? 0,
+    splitManyUnit: source?.splitManyUnit ?? 0,
     splitUnit: source?.splitUnit ?? 0,
   }
   for (const [field, value] of [
     ['baseSpeedUnit', random.baseSpeedUnit],
     ['collisionRadiusUnit', random.collisionRadiusUnit],
+    ['splitManyGateUnit', random.splitManyGateUnit],
+    ['splitManyUnit', random.splitManyUnit],
   ] as const) {
     if (!Number.isFinite(value) || value < 0 || value > 1) {
       throw new RangeError(`${field} must be within 0..1`)
     }
   }
   return random
+}
+
+function nativeSplitManyDepth(
+  waveOrdinal: number,
+  random: BoneyardEnemyConfigRandom,
+): number {
+  const lower = Math.trunc((waveOrdinal - 25) / 5) + 1
+  const gate = lower + inclusiveThreeWayIndex(random.splitManyGateUnit)
+  return gate < 2
+    ? 2
+    : lower + inclusiveThreeWayIndex(random.splitManyUnit)
+}
+
+function inclusiveThreeWayIndex(unit: number): 0 | 1 | 2 {
+  return Math.min(2, Math.floor(unit * 3)) as 0 | 1 | 2
 }
 
 function validatedArenaScalars(

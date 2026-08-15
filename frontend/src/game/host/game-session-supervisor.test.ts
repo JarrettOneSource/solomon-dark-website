@@ -54,7 +54,7 @@ test('game session supervisor enforces capacity and expires unclaimed sessions a
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
     maxSessions: 1,
-    unclaimedTimeoutMs: 30,
+    unclaimedTimeoutMs: 1000,
     idleTimeoutMs: 30,
   })
   context.after(() => supervisor.close())

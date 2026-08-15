@@ -1,4 +1,4 @@
-.skill-picker-stage {
+.main-menu-native-stage.skill-picker-stage {
   z-index: 80;
   overflow: hidden;
   pointer-events: auto;

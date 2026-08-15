@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
 import { readFileSync, statSync } from 'node:fs'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+import { createServer } from 'vite'
 
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
+import type { BoneyardEnemyProjectileSnapshot } from '../protocol/game-state.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
   NATIVE_ENEMY_DEATH_PROGRAMS,
@@ -17,6 +21,7 @@ import {
   type NativeEnemyFamily,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+import { nativeEnemyProjectilePlan } from './native-enemy-projectile-presentation.ts'
 
 const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   BadGuys: manifest('../../editor/manifest/badguys.json'),
@@ -48,6 +53,44 @@ test('every reachable native enemy plan uses a shipped nonempty atlas record', (
     }
   }
   assert.equal(used.size, 665)
+})
+
+test('every reachable enemy projectile record is selected for Boneyard preload', async () => {
+  const server = await createServer({
+    appType: 'custom',
+    logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)),
+    server: { middlewareMode: true },
+  })
+  try {
+    const assetModule = await server.ssrLoadModule(
+      '/src/game/renderer/native-enemy-assets.ts',
+    ) as {
+      nativeEnemySpriteRecord(
+        atlas: NativeEnemyAtlas,
+        entry: number,
+      ): { readonly atlas: NativeEnemyAtlas; readonly entry: number; readonly source: string }
+    }
+    const used = new Set<string>()
+    for (const projectile of enemyProjectileAssetSamples()) {
+      for (const layer of nativeEnemyProjectilePlan(projectile).layers) {
+        const record = assetModule.nativeEnemySpriteRecord(layer.atlas, layer.entry)
+        assert.equal(record.atlas, layer.atlas)
+        assert.equal(record.entry, layer.entry)
+        assert.ok(record.source.length > 0)
+        used.add(`${layer.atlas}:${layer.entry}`)
+      }
+    }
+    assert.deepEqual([...used].sort(), [
+      'BadGuys:2',
+      ...atlasRecordKeys('BadGuys', 110, 112),
+      ...atlasRecordKeys('BadGuys', 251, 282),
+      ...atlasRecordKeys('DeadHawg', 46, 77),
+    ].sort())
+    assert.equal(used.size, 68)
+  } finally {
+    await server.close()
+  }
 })
 
 test('representative enemy records retain native registration and joints', () => {
@@ -168,6 +211,61 @@ test('every combat, death, and Coffin child plan resolves to extracted records',
 
 function manifest(relativePath: string): AtlasManifest {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as AtlasManifest
+}
+
+function enemyProjectileAssetSamples(): readonly BoneyardEnemyProjectileSnapshot[] {
+  const samples: BoneyardEnemyProjectileSnapshot[] = []
+  for (let headingDeg = 0; headingDeg < 360; headingDeg += 1) {
+    for (const payload of ['normal', 'fire', 'poison'] as const) {
+      samples.push(enemyProjectile('arrow', 0x7da, { headingDeg, payload }))
+    }
+    samples.push(enemyProjectile('firebolt', 0x7eb, { headingDeg, payload: 'fire' }))
+  }
+  for (let ageTicks = 0; ageTicks <= 31; ageTicks += 1) {
+    samples.push(enemyProjectile('guided-missile', 0x7ec, {
+      ageTicks,
+      payload: 'cold',
+    }))
+    samples.push(enemyProjectile('guided-missile', 0x7ec, {
+      ageTicks,
+      payload: 'poison',
+    }))
+    samples.push(enemyProjectile('demon-bomb', 0x7f7, { ageTicks, payload: 'none' }))
+    samples.push(enemyProjectile('poison-pool', 0x806, { ageTicks, payload: 'poison' }))
+  }
+  return samples
+}
+
+function enemyProjectile(
+  kind: BoneyardEnemyProjectileSnapshot['kind'],
+  nativeTypeId: BoneyardEnemyProjectileSnapshot['nativeTypeId'],
+  overrides: Partial<BoneyardEnemyProjectileSnapshot>,
+): BoneyardEnemyProjectileSnapshot {
+  return {
+    ageTicks: 0,
+    contactRadius: 20,
+    headingDeg: 0,
+    homing: false,
+    id: 1,
+    kind,
+    lifetimeTicks: 1_000,
+    nativeTypeId,
+    ownerActorId: 2,
+    payload: 'none',
+    position: { x: 0, y: 0 },
+    spawnTick: 0,
+    ...overrides,
+  }
+}
+
+function atlasRecordKeys(
+  atlas: NativeEnemyAtlas,
+  first: number,
+  last: number,
+): readonly string[] {
+  return Array.from({ length: last - first + 1 }, (_, offset) => (
+    `${atlas}:${first + offset}`
+  ))
 }
 
 function enemy(

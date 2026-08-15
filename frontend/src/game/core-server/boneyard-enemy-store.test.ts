@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
@@ -19,10 +20,15 @@ import {
   BOUNDED_ENEMY_DEATH_PROGRAM_TICKS,
   BOUNDED_ENEMY_GAIT_DISTANCE_PER_POSE,
   BOUNDED_MAGGOT_PROGRAM,
+  BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   NATIVE_ARCHER_ACTION_PROGRAM,
   NATIVE_MAGE_ACTION_PROGRAMS,
+  NATIVE_IMP_CONSTRUCTION_MAXIMUM,
+  NATIVE_IMP_SPLIT_CHILD_COUNT,
+  NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM,
   NATIVE_SKELETON_ACTION_PROGRAMS,
   NATIVE_SKELETON_CLAW_MARKERS,
+  NATIVE_SKELETON_WEAPON_MARKERS,
   boneyardEnemyLiveCount,
   createBoneyardEnemyStore,
   damageBoneyardEnemy,
@@ -183,9 +189,51 @@ test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks
     weapon: { markerProgress: 9, progressPerTick: 0.25, strictEnd: 24 },
   })
   assert.deepEqual(NATIVE_SKELETON_CLAW_MARKERS, [4, 8])
+  assert.deepEqual(NATIVE_SKELETON_WEAPON_MARKERS, [9, 20])
   verifySkeletonProgram([], 'claw', [32, 33, 57], 57)
-  verifySkeletonProgram(['FLAG_SWORD'], 'weapon', [36], 97)
+  verifySkeletonProgram(['FLAG_SWORD'], 'weapon', [36, 80], 97)
   verifySkeletonProgram(['FLAG_PIKE'], 'pike', [16], 97)
+})
+
+test('settled native circle contact begins a Skeleton action and reaches its marker', () => {
+  let result = spawnOne(
+    'settled-skeleton-contact',
+    'SKELETON',
+    { x: 0, y: 0 },
+    FAR_PLAYERS,
+  )
+  const actor = result.store.actors[0]!
+  const contactPlayers = {
+    player: livingTarget(
+      actor.config.collisionRadius + 25 + NATIVE_ACTOR_SEPARATION_EPSILON,
+      0,
+    ),
+  }
+
+  result = step(result.store, 1, contactPlayers)
+  assert.equal(result.store.actors[0]!.brain.phase, 'attack')
+
+  const damage = []
+  for (let tick = 2; tick <= 60; tick += 1) {
+    result = step(result.store, tick, contactPlayers)
+    damage.push(...result.playerDamage)
+  }
+  assert.ok(damage.length > 0)
+
+  let beyond = spawnOne(
+    'beyond-settled-skeleton-contact',
+    'SKELETON',
+    { x: 0, y: 0 },
+    FAR_PLAYERS,
+  )
+  const beyondActor = beyond.store.actors[0]!
+  beyond = step(beyond.store, 1, {
+    player: livingTarget(
+      beyondActor.config.collisionRadius + 25 + NATIVE_ACTOR_SEPARATION_EPSILON + 0.0001,
+      0,
+    ),
+  })
+  assert.equal(beyond.store.actors[0]!.brain.phase, 'approach')
 })
 
 test('each native claw crossing independently re-checks its staged target and reach', () => {
@@ -210,6 +258,33 @@ test('each native claw crossing independently re-checks its staged target and re
 
   assert.deepEqual(markerTicks, [32, 33, 57])
   assert.deepEqual(damageTicks, [32, 57])
+})
+
+test('each native weapon marker independently re-checks its staged target and reach', () => {
+  const near = { player: livingTarget(10, 0) }
+  const far = { player: livingTarget(500, 0) }
+  let result = spawnOne(
+    'weapon-two-contact-recheck',
+    'SKELETON',
+    { x: 0, y: 0 },
+    near,
+    ['FLAG_SWORD'],
+  )
+  result = step(result.store, 1, near)
+
+  const markerTicks: number[] = []
+  const damageTicks: number[] = []
+  for (let tick = 2; tick <= 82; tick += 1) {
+    const players = tick === 81 ? far : near
+    result = step(result.store, tick, players)
+    if (result.events.some((event) => event.type === 'attack-marker')) {
+      markerTicks.push(tick - 1)
+    }
+    if (result.playerDamage.length > 0) damageTicks.push(tick - 1)
+  }
+
+  assert.deepEqual(markerTicks, [36, 80])
+  assert.deepEqual(damageTicks, [36])
 })
 
 test('melee markers never transfer a scheduled hit to a reacquired target', () => {
@@ -589,6 +664,31 @@ test('Wraith contact applies the exact 50-tick Dazzle duration', () => {
   assert.equal(result.playerDamage[0]!.dazzleTicks, NATIVE_WRAITH_DAZZLE_TICKS)
 })
 
+test('Zombie contact emits one bounded target-radial knockback request', () => {
+  const players = { player: livingTarget(10, 0) }
+  let result = spawnOne('zombie-knockback', 'ZOMBIE', { x: 0, y: 0 }, players)
+  const brain = result.store.actors[0]!.brain
+  assert.equal(brain.family, 'zombie')
+  if (brain.family !== 'zombie') throw new Error('expected Zombie brain')
+  result = withActorBrain(result, 0, {
+    ...brain,
+    actionTick: BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.markerTick - 1,
+    contactTargetPlayerId: 'player',
+    markerEmitted: false,
+    phase: 'swipe',
+  })
+
+  result = step(result.store, 1, players)
+
+  assert.equal(result.playerDamage.length, 1)
+  assert.deepEqual(result.playerKnockbacks, [{
+    actorId: result.store.actors[0]!.id,
+    delta: { x: BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE, y: 0 },
+    eventId: result.playerDamage[0]!.eventId,
+    playerId: 'player',
+  }])
+})
+
 test('unresolved families keep separate bounded approach, special, and cooldown states', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('bounded-families'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
@@ -719,6 +819,33 @@ test('enemy projectiles retire on an earlier static-world contact without damagi
     'projectile-retired',
   ])
   assert.ok(projectileEvents.every((event) => event.targetPlayerId === null))
+})
+
+test('enemy projectile actor entry wins when it precedes a later world contact', () => {
+  const players = { player: livingTarget(150, 0) }
+  const spawned = forcedMageAttack(
+    'swept-actor-before-world',
+    ['FLAG_CASTFROST'],
+  )
+  assert.equal(spawned.store.projectiles[0]?.position.x, 0)
+
+  const result = stepBoneyardEnemyStore(spawned.store, {
+    firstProjectileWorldContact: () => 0.9,
+    players,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 51,
+  })
+
+  assert.deepEqual(result.playerDamage.map(({ amount, playerId }) => ({
+    amount,
+    playerId,
+  })), [{ amount: 6, playerId: 'player' }])
+  assert.equal(result.store.projectiles.length, 0)
+  assert.equal(
+    result.events.find((event) => event.type === 'projectile-impact')?.targetPlayerId,
+    'player',
+  )
 })
 
 test('Coffin opening emits exactly three emerging helpers, then replenishes below its owned cap', () => {
@@ -872,11 +999,16 @@ test('player-killed Maggot emits one death event before later retirement', () =>
   assert.deepEqual(result.retired.map((retirement) => retirement.actorId), [maggot.id])
 })
 
-test('Imp and Demon terminal split outputs materialize stable child Imp actors', () => {
+test('wave, Imp, and Demon materialization resolve each evaluated collision radius', () => {
+  const placementRequests: BoneyardEnemyMovementRequest[] = []
+  const resolveMovement = (request: BoneyardEnemyMovementRequest) => {
+    if (request.purpose === 'spawn-placement') placementRequests.push(request)
+    return request.requestedPosition
+  }
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('terminal-children'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
-    resolveMovement: DIRECT_MOVEMENT,
+    resolveMovement,
     resolveSpawnIntents: () => [
       intent('IMP', 1, { x: 0, y: 0 }, ['FLAG_SPLIT']),
       intent('DEMON', 2, { x: 100, y: 0 }, ['FLAG_DEATHIMPS']),
@@ -893,14 +1025,303 @@ test('Imp and Demon terminal split outputs materialize stable child Imp actors',
     }).store
   }
 
-  result = step(store, 1, FAR_PLAYERS)
+  result = stepBoneyardEnemyStore(store, {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement,
+    resolveSpawnIntents: () => [],
+    tick: 1,
+  })
   const children = result.store.actors.filter((actor) => actor.lifeState === 'alive')
   const impParent = store.actors.find((actor) => actor.config.enemyToken === 'IMP')!
+  const demonParent = store.actors.find((actor) => actor.config.enemyToken === 'DEMON')!
   if (impParent.config.enemyToken !== 'IMP') throw new Error('expected Imp config')
-  assert.equal(children.length, impParent.config.family.splitCount + 5)
+  assert.equal(children.length, NATIVE_IMP_SPLIT_CHILD_COUNT + 5)
   assert.ok(children.every((actor) => actor.config.enemyToken === 'IMP'))
+  assert.equal(placementRequests.length, 2 + NATIVE_IMP_SPLIT_CHILD_COUNT + 5)
+  for (const request of placementRequests) {
+    const actor = result.store.actors.find(({ id }) => id === request.actorId)
+    assert.ok(actor)
+    assert.equal(request.radius, actor.config.collisionRadius)
+  }
   assert.deepEqual(result.spawnedActorIds, children.map((actor) => actor.id))
   assert.equal(new Set(children.map((actor) => actor.id)).size, children.length)
+  const recursiveChildren = children.slice(0, NATIVE_IMP_SPLIT_CHILD_COUNT)
+  assert.deepEqual(recursiveChildren.map((child) => child.position), [
+    impParent.position,
+    impParent.position,
+  ])
+  assert.deepEqual(recursiveChildren.map((child) => child.headingDeg), [
+    (impParent.headingDeg + 270) % 360,
+    (impParent.headingDeg + 90) % 360,
+  ])
+  const terminalOutputs = result.events.filter((event) => event.type === 'enemy-terminal-output')
+  assert.deepEqual(terminalOutputs.map(({ actorId, count, output }) => ({
+    actorId,
+    count,
+    output,
+  })), [
+    { actorId: impParent.id, count: NATIVE_IMP_SPLIT_CHILD_COUNT, output: 'imp-split' },
+    { actorId: demonParent.id, count: 5, output: 'demon-split' },
+  ])
+  assert.equal(
+    terminalOutputs.reduce((count, event) => count + (event.count ?? 0), 0),
+    result.spawnedActorIds.length,
+  )
+  for (const output of terminalOutputs) {
+    const childIds = output.actorId === impParent.id
+      ? recursiveChildren.map(({ id }) => id)
+      : children.slice(NATIVE_IMP_SPLIT_CHILD_COUNT).map(({ id }) => id)
+    assert.ok(result.events
+      .filter((event) => event.type === 'enemy-spawned' && childIds.includes(event.actorId))
+      .every((event) => event.eventId > output.eventId))
+  }
+})
+
+test('both Imp descendants inherit one fewer split generation until recursion terminates', () => {
+  let result = spawnOne(
+    'recursive-imp-split',
+    'IMP',
+    { x: 0, y: 0 },
+    FAR_PLAYERS,
+    ['FLAG_SPLIT'],
+  )
+  const parent = result.store.actors[0]!
+  if (parent.config.enemyToken !== 'IMP') throw new Error('expected Imp config')
+  result = {
+    ...result,
+    store: {
+      ...result.store,
+      actors: [{
+        ...parent,
+        config: {
+          ...parent.config,
+          family: { ...parent.config.family, splitDepth: 2 },
+        },
+      }],
+    },
+  }
+  let store = damageBoneyardEnemy(result.store, {
+    actorId: parent.id,
+    amount: parent.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store
+
+  result = step(store, 1, FAR_PLAYERS)
+  const children = result.store.actors.filter((actor) => actor.lifeState === 'alive')
+  assert.equal(children.length, 2)
+  assert.ok(children.every((child) => (
+    child.config.enemyToken === 'IMP' && child.config.family.splitDepth === 1
+  )))
+
+  const child = children[0]!
+  store = damageBoneyardEnemy(result.store, {
+    actorId: child.id,
+    amount: child.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 1,
+  }).store
+  result = step(store, 2, FAR_PLAYERS)
+  assert.equal(result.spawnedActorIds.length, NATIVE_IMP_SPLIT_CHILD_COUNT)
+  const output = result.events.find((event) => (
+    event.type === 'enemy-terminal-output' && event.actorId === child.id
+  ))
+  assert.equal(output?.count, NATIVE_IMP_SPLIT_CHILD_COUNT)
+  assert.equal(output?.count, result.spawnedActorIds.length)
+  assert.ok(result.events
+    .filter((event) => event.type === 'enemy-spawned')
+    .every((event) => event.eventId > output!.eventId))
+  const grandchildren = result.store.actors.filter(({ id }) => (
+    result.spawnedActorIds.includes(id)
+  ))
+  assert.ok(grandchildren.every((grandchild) => (
+    grandchild.config.enemyToken === 'IMP' && grandchild.config.family.splitDepth === 0
+  )))
+})
+
+test('SPLITMANY terminal count reports binary fan-out while the live guard reports zero', () => {
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('split-many-output-count'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [{
+      ...intent('IMP', 1, { x: 0, y: 0 }, ['FLAG_SPLITMANY']),
+      waveOrdinal: 35,
+    }],
+    tick: 0,
+  })
+  const splitManyParent = result.store.actors[0]!
+  if (splitManyParent.config.enemyToken !== 'IMP') throw new Error('expected Imp config')
+  assert.ok(splitManyParent.config.family.splitDepth > NATIVE_IMP_SPLIT_CHILD_COUNT)
+  let store = damageBoneyardEnemy(result.store, {
+    actorId: splitManyParent.id,
+    amount: splitManyParent.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store
+  result = step(store, 1, FAR_PLAYERS)
+  const splitManyOutput = result.events.find((event) => event.type === 'enemy-terminal-output')
+  assert.equal(splitManyOutput?.count, NATIVE_IMP_SPLIT_CHILD_COUNT)
+  assert.equal(splitManyOutput?.count, result.spawnedActorIds.length)
+  assert.ok(result.events
+    .filter((event) => event.type === 'enemy-spawned')
+    .every((event) => event.eventId > splitManyOutput!.eventId))
+
+  result = stepBoneyardEnemyStore(createBoneyardEnemyStore('split-guard-output-count'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => Array.from({ length: 69 }, (_, index) => intent(
+      'IMP',
+      index + 1,
+      { x: index * 2, y: 0 },
+      index === 0 ? ['FLAG_SPLIT'] : [],
+    )),
+    tick: 0,
+  })
+  assert.equal(
+    result.store.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM + 1,
+  )
+  const guardedParent = result.store.actors[0]!
+  if (guardedParent.config.enemyToken !== 'IMP') throw new Error('expected Imp config')
+  assert.ok(guardedParent.config.family.splitDepth > 0)
+  store = damageBoneyardEnemy(result.store, {
+    actorId: guardedParent.id,
+    amount: guardedParent.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store
+  result = step(store, 1, FAR_PLAYERS)
+  const guardedOutput = result.events.find((event) => event.type === 'enemy-terminal-output')
+  assert.equal(guardedOutput?.count, 0)
+  assert.equal(guardedOutput?.count, result.spawnedActorIds.length)
+})
+
+test('Demon terminal count reports only child Imps accepted beneath the construction cap', () => {
+  let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('demon-clipped-output-count'), {
+    firstProjectileWorldContact: NO_WORLD_CONTACT,
+    players: FAR_PLAYERS,
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [
+      ...Array.from({ length: 69 }, (_, index) => intent(
+        'IMP',
+        index + 1,
+        { x: index * 2, y: 0 },
+      )),
+      intent('DEMON', 70, { x: 200, y: 0 }, ['FLAG_DEATHIMPS']),
+    ],
+    tick: 0,
+  })
+  const demon = result.store.actors.find((actor) => actor.config.enemyToken === 'DEMON')!
+  assert.equal(
+    result.store.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+    NATIVE_IMP_CONSTRUCTION_MAXIMUM - 1,
+  )
+  if (demon.config.enemyToken !== 'DEMON') throw new Error('expected Demon config')
+  assert.equal(demon.config.family.splitCount, 5)
+  const store = damageBoneyardEnemy(result.store, {
+    actorId: demon.id,
+    amount: demon.currentHealth,
+    sourcePlayerId: 'player',
+    tick: 0,
+  }).store
+  result = step(store, 1, FAR_PLAYERS)
+  const output = result.events.find((event) => event.type === 'enemy-terminal-output')
+  assert.equal(output?.count, 1)
+  assert.equal(output?.count, result.spawnedActorIds.length)
+  assert.ok(result.events
+    .filter((event) => event.type === 'enemy-spawned')
+    .every((event) => event.eventId > output!.eventId))
+})
+
+test('retail wave 35 and 42 recursive deaths obey native Imp caps and protocol capacity', () => {
+  const protocolActorCapacity = 8192
+  assert.equal(NATIVE_IMP_SPLIT_LIVE_GUARD_MAXIMUM, 68)
+  assert.equal(NATIVE_IMP_CONSTRUCTION_MAXIMUM, 70)
+  const scenarios = [
+    { groupRepeats: 20, waveOrdinal: 35 },
+    { groupRepeats: 15, waveOrdinal: 42 },
+  ] as const
+
+  for (const { groupRepeats, waveOrdinal } of scenarios) {
+    const spawnIntents: BoneyardEnemySpawnIntent[] = []
+    let intentId = 1
+    for (let group = 0; group < groupRepeats; group += 1) {
+      if (waveOrdinal === 42) {
+        spawnIntents.push({
+          ...intent('DEMON', intentId, { x: group * 4, y: 0 }, ['FLAG_DEATHIMPSMANY']),
+          waveOrdinal,
+        })
+        intentId += 1
+      }
+      const splitManyPerGroup = waveOrdinal === 42 ? 4 : 1
+      for (let index = 0; index < splitManyPerGroup; index += 1) {
+        spawnIntents.push({
+          ...intent('IMP', intentId, { x: group * 4, y: index * 4 }, ['FLAG_SPLITMANY']),
+          waveOrdinal,
+        })
+        intentId += 1
+      }
+    }
+
+    let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`wave-${waveOrdinal}-cap`), {
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players: FAR_PLAYERS,
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => spawnIntents,
+      tick: 0,
+    })
+    let tick = 0
+    let maximumActors = result.store.actors.length
+    let maximumImps = result.store.actors.filter(({ config }) => config.enemyToken === 'IMP').length
+    let sawReducedRecursiveChild = false
+
+    for (let generation = 0; generation < 8; generation += 1) {
+      const killable = result.store.actors.filter(({ lifeState }) => lifeState === 'alive')
+      if (killable.length === 0) break
+      const parentDepths = new Map(killable.flatMap((actor) => (
+        actor.config.enemyToken === 'IMP'
+          ? [[actor.id, actor.config.family.splitDepth] as const]
+          : []
+      )))
+      let store = result.store
+      for (const actor of killable) {
+        store = damageBoneyardEnemy(store, {
+          actorId: actor.id,
+          amount: actor.currentHealth,
+          sourcePlayerId: 'player',
+          tick,
+        }).store
+      }
+      tick += 1
+      result = step(store, tick, FAR_PLAYERS)
+      for (const actor of result.store.actors) {
+        const config = actor.config
+        if (!result.spawnedActorIds.includes(actor.id) || config.enemyToken !== 'IMP') continue
+        sawReducedRecursiveChild ||= [...parentDepths.values()].some((depth) => (
+          depth > 0 && config.family.splitDepth === depth - 1
+        ))
+      }
+      maximumActors = Math.max(maximumActors, result.store.actors.length)
+      maximumImps = Math.max(
+        maximumImps,
+        result.store.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
+      )
+      assert.ok(maximumImps <= NATIVE_IMP_CONSTRUCTION_MAXIMUM)
+      assert.ok(maximumActors < protocolActorCapacity)
+
+      tick += BOUNDED_ENEMY_DEATH_PROGRAM_TICKS.DEMON
+      result = step(result.store, tick, FAR_PLAYERS)
+      maximumActors = Math.max(maximumActors, result.store.actors.length)
+    }
+
+    if (waveOrdinal === 35) assert.equal(sawReducedRecursiveChild, true)
+    assert.equal(maximumImps, NATIVE_IMP_CONSTRUCTION_MAXIMUM)
+    assert.equal(maximumActors, waveOrdinal === 35 ? 70 : 85)
+    assert.ok(maximumActors < protocolActorCapacity)
+  }
 })
 
 test('lethal damage rewards and terminal outputs once, then retires after family delays', () => {

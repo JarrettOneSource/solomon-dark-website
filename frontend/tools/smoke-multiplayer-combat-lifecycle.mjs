@@ -1,10 +1,41 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
+import { createServer as createViteServer } from 'vite'
 
-const baseUrl = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SMOKE_URL
-  || process.env.SDR_GAME_SMOKE_URL
-  || 'http://127.0.0.1:4187'
+import { solomonContactContains } from '../src/game/core-kernels/boneyard-encounter.ts'
+import { BONEYARD_GATE_INITIAL_SWAY } from '../src/game/core-kernels/boneyard-gate.ts'
+import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import {
+  createBoneyardCollisionWorld,
+  resolveBoneyardMovement,
+} from '../src/game/core-server/boneyard-collision.ts'
+import {
+  createBoneyardCatalog,
+  DEFAULT_BONEYARD_CHOICE,
+  materializeBoneyard,
+} from '../src/game/host/boneyard-catalog.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
+
+const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const credential = randomBytes(32).toString('base64url')
+const deterministicSeedBytes = Buffer.alloc(16)
+const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
+const boneyards = createBoneyardCatalog()
+const loadedBoneyard = materializeBoneyard(
+  boneyards,
+  DEFAULT_BONEYARD_CHOICE.id,
+  Buffer.from(deterministicSeedBytes),
+)
+assert.ok(loadedBoneyard, 'expected the deterministic default Boneyard to materialize')
+assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
+assert.ok(loadedBoneyard.scene.solomonDig, 'expected the loaded Solomon Dig scene')
+const combatNavigation = {
+  bounds: loadedBoneyard.scene.bounds,
+  collision: createBoneyardCollisionWorld(loadedBoneyard.scene),
+}
 const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT || '/tmp'
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
@@ -18,12 +49,42 @@ const browserOptions = {
   headless: true,
 }
 const viewport = { width: 800, height: 450 }
+const vite = await createViteServer({
+  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
+  logLevel: 'error',
+  root: frontendRoot,
+  server: { host: '127.0.0.1', port: 0 },
+})
+await vite.listen()
+const viteAddress = vite.httpServer?.address()
+if (!viteAddress || typeof viteAddress === 'string') {
+  await vite.close()
+  throw new Error('Vite did not expose its local smoke-test port')
+}
+const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+const host = await startGameHost({
+  allowedOrigins: [baseUrl],
+  authentication: { kind: 'shared', credential },
+  boneyards,
+  createBoneyardSeedBytes: () => Buffer.alloc(16),
+  resetWhenEmpty: true,
+  snapshotRate: 20,
+})
 const [hostBrowser, guestBrowser] = await Promise.all([
   chromium.launch(browserOptions),
   chromium.launch(browserOptions),
 ])
 const hostPage = await hostBrowser.newPage({ viewport })
 const guestPage = await guestBrowser.newPage({ viewport })
+await Promise.all([hostPage, guestPage].map((page) => page.addInitScript((runtime) => {
+  window.solomonDarkRuntime = runtime
+}, {
+  gameEndpoint: {
+    credential,
+    kind: 'localhost',
+    url: host.address.url,
+  },
+})))
 const errors = {
   guest: captureErrors(guestPage),
   host: captureErrors(hostPage),
@@ -61,8 +122,13 @@ try {
   assert.equal(guestInitial.playerCount, 2)
 
   await pulseMovement(guestPage, ['a'], 750)
-  const gateCrossing = await crossEntryGate(hostPage, guestPage)
-  const approach = await walkToSolomon(hostPage)
+  const hostScene = hostPage.locator('.boneyard-scene')
+  const gateCrossing = await crossEntryGate(
+    hostPage,
+    guestPage,
+    loadedBoneyard.scene,
+  )
+  const approach = await walkToSolomon(hostPage, hostScene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
   await Promise.all([
     waitForOpeningEnemies(hostPage),
@@ -72,32 +138,44 @@ try {
   const firstDeath = await driveDesignatedHostToSpectating({
     guest: { label: 'guest', page: guestPage },
     host: { label: 'host', page: hostPage },
+    navigation: combatNavigation,
   })
-  assert.equal(firstDeath.fallen.label, 'host')
-  assert.equal(firstDeath.survivor.label, 'guest')
-  assert.equal(firstDeath.fallenFrame.localPlayerLifeState, 'spectating')
-  assert.ok(firstDeath.fallenFrame.localPlayerDeathTick >= 159)
-  assert.equal(firstDeath.fallenFrame.runPhase, 'active')
-  assert.equal(firstDeath.survivorFrame.localPlayerLifeState, 'alive')
-  assert.ok(firstDeath.survivorFrame.localPlayerHealth > 0)
-  assert.equal(firstDeath.survivorFrame.runPhase, 'active')
-  assert.equal(await firstDeath.fallen.page.locator('.boneyard-game-over').count(), 0)
-  assert.equal(await firstDeath.survivor.page.locator('.boneyard-game-over').count(), 0)
-  const firstSpectatorCamera = assertSpectatorCameraFrame(
-    firstDeath.fallenFrame,
-    guestHub.localPlayerId,
+  const survivorEvasion = startSurvivorEvasion(
+    firstDeath.survivor.page,
+    combatNavigation,
   )
-  const spectatorHud = await spectatorStatusReceipt(
-    firstDeath.fallen.page,
-    firstDeath.fallenFrame,
-    guestHub.localPlayerId,
-  )
-  await firstDeath.fallen.page.screenshot({ path: firstDeathScreenshotPath })
+  let firstSpectatorCamera
+  let spectatorHud
+  let inputLock
+  try {
+    assert.equal(firstDeath.fallen.label, 'host')
+    assert.equal(firstDeath.survivor.label, 'guest')
+    assert.equal(firstDeath.fallenFrame.localPlayerLifeState, 'spectating')
+    assert.ok(firstDeath.fallenFrame.localPlayerDeathTick >= 159)
+    assert.equal(firstDeath.fallenFrame.runPhase, 'active')
+    assert.equal(firstDeath.survivorFrame.localPlayerLifeState, 'alive')
+    assert.ok(firstDeath.survivorFrame.localPlayerHealth > 0)
+    assert.equal(firstDeath.survivorFrame.runPhase, 'active')
+    assert.equal(await firstDeath.fallen.page.locator('.boneyard-game-over').count(), 0)
+    assert.equal(await firstDeath.survivor.page.locator('.boneyard-game-over').count(), 0)
+    firstSpectatorCamera = assertSpectatorCameraFrame(
+      firstDeath.fallenFrame,
+      guestHub.localPlayerId,
+    )
+    spectatorHud = await spectatorStatusReceipt(
+      firstDeath.fallen.page,
+      firstDeath.fallenFrame,
+      guestHub.localPlayerId,
+    )
+    await firstDeath.fallen.page.screenshot({ path: firstDeathScreenshotPath })
 
-  const inputLock = await proveSpectatorInputLock(
-    firstDeath.fallen.page,
-    guestHub.localPlayerId,
-  )
+    inputLock = await proveSpectatorInputLock(
+      firstDeath.fallen.page,
+      guestHub.localPlayerId,
+    )
+  } finally {
+    await survivorEvasion.stop()
+  }
   const terminal = await driveSurvivorToGameOver(firstDeath.survivor.page)
   await Promise.all([
     waitForGameOver(firstDeath.fallen.page),
@@ -166,7 +244,12 @@ try {
   })}\n`)
   throw error
 } finally {
-  await Promise.all([hostBrowser.close(), guestBrowser.close()])
+  await Promise.all([
+    hostBrowser.close(),
+    guestBrowser.close(),
+    host.close(),
+    vite.close(),
+  ])
 }
 
 function captureErrors(page) {
@@ -232,16 +315,26 @@ async function boneyardFrame(page) {
   ))
 }
 
-async function driveDesignatedHostToSpectating({ guest, host }) {
+async function boneyardFrameWithSpectatorStatus(page) {
+  return page.locator('.boneyard-scene').evaluate((scene) => ({
+    frame: structuredClone(
+      scene.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame,
+    ),
+    spectatorStatusCount: scene.querySelectorAll('.boneyard-spectator-status').length,
+  }))
+}
+
+async function driveDesignatedHostToSpectating({ guest, host, navigation }) {
   const healthSamples = []
   let sawDeathPresentation = false
   const deadline = Date.now() + 300_000
 
   while (Date.now() < deadline) {
-    const [hostFrame, guestFrame] = await Promise.all([
-      boneyardFrame(host.page),
+    const [hostReceipt, guestFrame] = await Promise.all([
+      boneyardFrameWithSpectatorStatus(host.page),
       boneyardFrame(guest.page),
     ])
+    const hostFrame = hostReceipt.frame
     healthSamples.push({
       guest: guestFrame.localPlayerHealth,
       host: hostFrame.localPlayerHealth,
@@ -258,7 +351,7 @@ async function driveDesignatedHostToSpectating({ guest, host }) {
     if (hostFrame.localPlayerLifeState !== 'alive') {
       if (hostFrame.localPlayerLifeState !== 'spectating') {
         assert.equal(
-          await host.page.locator('.boneyard-spectator-status').count(),
+          hostReceipt.spectatorStatusCount,
           0,
           'spectator status appeared during host death presentation',
         )
@@ -277,16 +370,46 @@ async function driveDesignatedHostToSpectating({ guest, host }) {
           survivorFrame: guestFrame,
         }
       }
-      await pulseAwayFromNearestEnemy(guest.page, guestFrame, 240)
+      await evadeEnemyPack(guest.page, guestFrame, navigation, 240)
       continue
     }
 
     await Promise.all([
       pulseTowardNearestEnemy(host.page, hostFrame, 220),
-      pulseAwayFromNearestEnemy(guest.page, guestFrame, 280),
+      evadeEnemyPack(guest.page, guestFrame, navigation, 280),
     ])
   }
   throw new Error('designated host did not reach the native spectator state')
+}
+
+function startSurvivorEvasion(page, navigation) {
+  let failure = null
+  let stopRequested = false
+  const completed = (async () => {
+    while (!stopRequested) {
+      const frame = await boneyardFrame(page)
+      if (stopRequested) break
+      if (frame.runPhase !== 'active' || frame.localPlayerLifeState !== 'alive') {
+        throw new Error(`designated survivor left active play during spectator proof: ${JSON.stringify({
+          health: frame.localPlayerHealth,
+          lifeState: frame.localPlayerLifeState,
+          runPhase: frame.runPhase,
+          tick: frame.tick,
+        })}`)
+      }
+      await evadeEnemyPack(page, frame, navigation, 220)
+    }
+  })().catch((error) => {
+    failure = error
+  })
+
+  return {
+    async stop() {
+      stopRequested = true
+      await completed
+      if (failure !== null) throw failure
+    },
+  }
 }
 
 async function proveSpectatorInputLock(page, targetPlayerId) {
@@ -357,7 +480,7 @@ async function spectatorStatusReceipt(page, frame, targetPlayerId) {
   const status = page.locator('.boneyard-spectator-status')
   await status.waitFor({ timeout: 30_000 })
   assert.equal(await status.getAttribute('data-target-player-id'), targetPlayerId)
-  const text = (await status.textContent())?.replace(/\s+/g, ' ').trim()
+  const text = (await status.innerText()).replace(/\s+/g, ' ').trim()
   assert.equal(
     text,
     `Spectating ${target.displayName} | Left / Right click: next player`,
@@ -472,16 +595,70 @@ async function pulseTowardNearestEnemy(page, frame, durationMs) {
   }), durationMs)
 }
 
-async function pulseAwayFromNearestEnemy(page, frame, durationMs) {
-  const target = nearestLivingEnemy(frame)
-  if (!target) {
+async function evadeEnemyPack(page, frame, navigation, durationMs) {
+  const direction = safestCombatDirection(frame, navigation)
+  if (!direction) {
     await page.waitForTimeout(100)
-    return
+    return false
   }
-  await pulseMovement(page, movementKeys({
-    x: frame.playerX - target.x,
-    y: frame.playerY - target.y,
-  }), durationMs)
+  await pulseMovement(page, movementKeys(direction), durationMs)
+  return true
+}
+
+function safestCombatDirection(frame, navigation) {
+  const enemies = frame.enemySamples.filter((enemy) => enemy.lifeState !== 'death')
+  if (enemies.length === 0) return null
+  const start = { x: frame.playerX, y: frame.playerY }
+  const directions = [
+    { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
+    { x: -1, y: 0 }, { x: 1, y: 0 },
+    { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+  ]
+
+  for (const probeDistance of [70, 45, 25]) {
+    let best = null
+    for (const direction of directions) {
+      const length = Math.hypot(direction.x, direction.y)
+      const unit = { x: direction.x / length, y: direction.y / length }
+      const end = {
+        x: start.x + unit.x * probeDistance,
+        y: start.y + unit.y * probeDistance,
+      }
+      if (!traversesBoneyard(
+        start,
+        end,
+        navigation.bounds,
+        navigation.collision,
+      )) continue
+
+      const corridorDistances = enemies.map((enemy) => Math.min(
+        ...[0.35, 0.7, 1].map((progress) => Math.hypot(
+          enemy.x - (start.x + (end.x - start.x) * progress),
+          enemy.y - (start.y + (end.y - start.y) * progress),
+        )),
+      )).toSorted((left, right) => left - right)
+      const nearestClearance = corridorDistances[0] ?? Number.POSITIVE_INFINITY
+      const crowdClearance = corridorDistances
+        .slice(0, 8)
+        .reduce((total, distance) => total + Math.min(distance, 250), 0)
+      const edgeClearance = Math.min(
+        end.x - navigation.bounds.x,
+        navigation.bounds.x + navigation.bounds.w - end.x,
+        end.y - navigation.bounds.y,
+        navigation.bounds.y + navigation.bounds.h - end.y,
+      )
+      const score = nearestClearance * 100
+        + crowdClearance
+        + Math.min(edgeClearance, 150) * 2
+      if (!best || score > best.score) best = { direction, score }
+    }
+    if (best) return best.direction
+  }
+
+  const nearest = nearestLivingEnemy(frame)
+  return nearest
+    ? { x: frame.playerX - nearest.x, y: frame.playerY - nearest.y }
+    : null
 }
 
 function nearestLivingEnemy(frame) {
@@ -521,72 +698,70 @@ function movementKeys({ x, y }) {
   return keys
 }
 
-async function crossEntryGate(hostPage, guestPage) {
+async function crossEntryGate(hostPage, guestPage, boneyardScene) {
   const scene = hostPage.locator('.boneyard-scene')
   const guestScene = guestPage.locator('.boneyard-scene')
-  const gate = await alignWithEntryGate(hostPage, scene)
+  const initialX = Number(await scene.getAttribute('data-local-player-x'))
   const initialY = Number(await scene.getAttribute('data-local-player-y'))
   const initialGateState = await scene.getAttribute('data-gate-state')
   const initialGuestGateState = await guestScene.getAttribute('data-gate-state')
-  const direction = Math.sign(gate.targetY - initialY)
+  const target = nearestGateCenter(initialGateState, initialX, initialY)
+  const initialDirection = Math.sign(target.y - initialY)
+  assert.notEqual(initialDirection, 0, 'expected the entry gate to be beyond the player')
+  const approachTarget = {
+    x: target.x,
+    y: target.y - initialDirection * (
+      PLAYER_CHARACTER_RADIUS + BONEYARD_GATE_INITIAL_SWAY + 15
+    ),
+  }
+  const aligned = await walkToPoint(
+    hostPage,
+    scene,
+    boneyardScene,
+    approachTarget,
+    90_000,
+    30,
+  )
+  const direction = Math.sign(target.y - aligned.y)
   assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
   const key = direction < 0 ? 'w' : 's'
-  const crossingDistance = Math.abs(gate.targetY - initialY) + 35
-  let crossed = await pushThroughGate(
+  const crossingDistance = Math.abs(target.y - aligned.y) + 35
+  await holdUntil(
     hostPage,
     key,
-    { crossingDistance, direction, initialY },
-    20_000,
+    () => scene.getAttribute('data-local-player-y').then((value) => (
+      (Number(value) - aligned.y) * direction > crossingDistance
+    )),
+    15_000,
   )
-  if (!crossed) {
-    await pulseMovement(hostPage, ['d'], 250)
-    crossed = await pushThroughGate(
-      hostPage,
-      key,
-      { crossingDistance, direction, initialY },
-      45_000,
-    )
-  }
-  assert.equal(crossed, true, 'physical gate contact did not open a player-width route')
+  const finalY = Number(await scene.getAttribute('data-local-player-y'))
+  const finalGateState = await scene.getAttribute('data-gate-state')
+  assert.equal(
+    (finalY - aligned.y) * direction > crossingDistance,
+    true,
+    'physical gate contact did not open a player-width route',
+  )
+  assert.notEqual(finalGateState, initialGateState)
   await guestPage.bringToFront()
   await guestPage.waitForFunction((initial) => (
     document.querySelector('.boneyard-scene')?.getAttribute('data-gate-state') !== initial
   ), initialGuestGateState, { timeout: 10_000 })
   return {
+    aligned,
     direction,
-    finalGateState: await scene.getAttribute('data-gate-state'),
-    finalY: Number(await scene.getAttribute('data-local-player-y')),
+    finalGateState,
+    finalY,
     initialGateState,
+    initialX,
     initialY,
-    targetY: gate.targetY,
+    targetX: target.x,
+    targetY: target.y,
   }
 }
 
-async function pushThroughGate(page, key, crossing, timeoutMs) {
-  await page.bringToFront()
-  await page.keyboard.down(key)
-  try {
-    const deadline = Date.now() + timeoutMs
-    while (Date.now() < deadline) {
-      const y = Number(await page.locator('.boneyard-scene')
-        .getAttribute('data-local-player-y'))
-      if ((y - crossing.initialY) * crossing.direction > crossing.crossingDistance) {
-        return true
-      }
-      await page.waitForTimeout(100)
-    }
-    return false
-  } finally {
-    await page.keyboard.up(key)
-  }
-}
-
-async function alignWithEntryGate(page, scene) {
-  const initialX = Number(await scene.getAttribute('data-local-player-x'))
-  const initialY = Number(await scene.getAttribute('data-local-player-y'))
-  const gateState = await scene.getAttribute('data-gate-state')
+function nearestGateCenter(serializedState, playerX, playerY) {
   const gates = new Map()
-  for (const serialized of gateState?.split('|') || []) {
+  for (const serialized of serializedState?.split('|') || []) {
     const separator = serialized.lastIndexOf(':')
     if (separator < 0) continue
     const id = serialized.slice(0, separator)
@@ -603,66 +778,86 @@ async function alignWithEntryGate(page, scene) {
       x: (tips[0].x + tips[1].x) / 2,
       y: (tips[0].y + tips[1].y) / 2,
     }))
-  assert.ok(centers.length > 0, `expected an entry gate in ${gateState}`)
-  const target = centers.reduce((nearest, center) => (
-    Math.hypot(center.x - initialX, center.y - initialY)
-      < Math.hypot(nearest.x - initialX, nearest.y - initialY)
+  assert.ok(centers.length > 0, `expected an entry gate in ${serializedState}`)
+  return centers.reduce((nearest, center) => (
+    Math.hypot(center.x - playerX, center.y - playerY)
+      < Math.hypot(nearest.x - playerX, nearest.y - playerY)
       ? center
       : nearest
   ))
-  const delta = target.x - initialX
-  if (Math.abs(delta) > 3) {
-    await walkToPoint(page, scene, { x: target.x, y: initialY }, 60_000)
-  }
-  return { targetX: target.x, targetY: target.y }
 }
 
-async function walkToPoint(page, scene, target, timeoutMs) {
+async function holdUntil(page, key, predicate, timeoutMs) {
+  await page.bringToFront()
+  await page.keyboard.down(key)
+  const deadline = Date.now() + timeoutMs
+  try {
+    while (Date.now() < deadline) {
+      if (await predicate()) return
+      await page.waitForTimeout(50)
+    }
+    throw new Error(`movement ${key} did not reach its target`)
+  } finally {
+    await page.keyboard.up(key)
+    await publishStoppedMovement(page)
+  }
+}
+
+async function walkToPoint(page, scene, boneyardScene, target, timeoutMs, tolerance = 10) {
+  await page.bringToFront()
+  await scene.focus()
   const startedAt = Date.now()
+  let route = planPointPath(
+    boneyardScene,
+    await playerPointReceipt(scene, target),
+    target,
+  )
+  let routeIndex = 1
   let stalledSteps = 0
-  let wallFollow = null
   while (Date.now() - startedAt < timeoutMs) {
     const before = await playerPointReceipt(scene, target)
-    if (before.distance <= 6) return before
-    const dx = target.x - before.x
-    const dy = target.y - before.y
-    let movement = { x: dx, y: dy }
-    if (wallFollow) {
-      movement = {
-        x: dx * 0.25 - dy * wallFollow.sign,
-        y: dy * 0.25 + dx * wallFollow.sign,
-      }
+    if (before.distance <= tolerance) return { x: before.x, y: before.y }
+    while (
+      routeIndex < route.length
+      && Math.hypot(
+        route[routeIndex].x - before.x,
+        route[routeIndex].y - before.y,
+      ) <= 10
+    ) {
+      routeIndex += 1
     }
-    await pulseMovement(page, movementKeys(movement), 150)
+    if (routeIndex >= route.length) {
+      route = planPointPath(boneyardScene, before, target)
+      routeIndex = 1
+      continue
+    }
+    const waypoint = route[routeIndex]
+    const waypointDistance = Math.hypot(
+      waypoint.x - before.x,
+      waypoint.y - before.y,
+    )
+    await pulseSettledMovement(page, movementKeys({
+      x: waypoint.x - before.x,
+      y: waypoint.y - before.y,
+    }), movementPulseDuration(waypointDistance))
     const after = await playerPointReceipt(scene, target)
-    if (wallFollow && after.distance < wallFollow.blockedDistance - 30) {
-      wallFollow = null
-      stalledSteps = 0
-    } else if (wallFollow) {
-      const moved = Math.hypot(after.x - before.x, after.y - before.y)
-      wallFollow.stalledSteps = moved < 1 ? wallFollow.stalledSteps + 1 : 0
-      if (wallFollow.stalledSteps >= 4) {
-        wallFollow = {
-          blockedDistance: after.distance,
-          sign: -wallFollow.sign,
-          stalledSteps: 0,
-        }
-      }
-    } else if (after.distance < before.distance - 1) {
+    const nextWaypointDistance = Math.hypot(
+      waypoint.x - after.x,
+      waypoint.y - after.y,
+    )
+    if (nextWaypointDistance < waypointDistance - 1) {
       stalledSteps = 0
     } else {
       stalledSteps += 1
-      if (stalledSteps >= 4) {
-        wallFollow = {
-          blockedDistance: after.distance,
-          sign: 1,
-          stalledSteps: 0,
-        }
+      if (stalledSteps >= 6) {
+        route = planPointPath(boneyardScene, after, target)
+        routeIndex = 1
         stalledSteps = 0
       }
     }
   }
-  throw new Error(`could not walk to ${JSON.stringify(target)}`)
+  const final = await playerPointReceipt(scene, target)
+  throw new Error(`could not walk to ${JSON.stringify(target)} from ${JSON.stringify(final)}`)
 }
 
 async function playerPointReceipt(scene, target) {
@@ -676,65 +871,254 @@ async function playerPointReceipt(scene, target) {
   }
 }
 
-async function walkToSolomon(page) {
-  const scene = page.locator('.boneyard-scene')
+async function walkToSolomon(page, scene, boneyardScene) {
   await page.bringToFront()
   await scene.focus()
   const startedAt = Date.now()
   const samples = []
-  let stalledSteps = 0
-  let wallFollow = null
+  const initial = await solomonApproachReceipt(scene)
+  const solomon = { x: initial.solomonX, y: initial.solomonY }
+  let route = planSolomonPath(
+    boneyardScene,
+    { x: initial.playerX, y: initial.playerY },
+    solomon,
+  )
+  const routeNodes = route.length
 
-  while (Date.now() - startedAt < 180_000) {
+  while (Date.now() - startedAt < 240_000) {
     const before = await solomonApproachReceipt(scene)
     samples.push(before)
     if (before.phase !== 'digging') {
       return {
         contactPosition: { x: before.playerX, y: before.playerY },
         phase: before.phase,
+        routeNodes,
         samples: samples.length,
         startPosition: { x: samples[0].playerX, y: samples[0].playerY },
       }
     }
-
-    const dx = before.solomonX - before.playerX
-    const dy = before.solomonY - before.playerY
-    let movement = { x: dx, y: dy }
-    if (wallFollow) {
-      movement = {
-        x: dx * 0.25 - dy * wallFollow.sign,
-        y: dy * 0.25 + dx * wallFollow.sign,
-      }
-      wallFollow.steps += 1
-    }
-    await pulseMovement(page, movementKeys(movement), 150)
-
-    const after = await solomonApproachReceipt(scene)
-    if (after.phase !== 'digging') continue
-    if (wallFollow && after.distance < wallFollow.blockedDistance - 30) {
-      wallFollow = null
-      stalledSteps = 0
-    } else if (wallFollow?.steps >= 50) {
-      wallFollow = {
-        blockedDistance: after.distance,
-        sign: -wallFollow.sign,
-        steps: 0,
-      }
-    } else if (!wallFollow && after.distance < before.distance - 1) {
-      stalledSteps = 0
-    } else if (!wallFollow) {
-      stalledSteps += 1
-      if (stalledSteps >= 4) {
-        wallFollow = {
-          blockedDistance: after.distance,
-          sign: 1,
-          steps: 0,
+    const playerPosition = { x: before.playerX, y: before.playerY }
+    if (solomonContactContains(solomon, playerPosition)) {
+      const contactDeadline = Date.now() + 2_000
+      while (Date.now() < contactDeadline) {
+        await page.waitForTimeout(50)
+        const held = await solomonApproachReceipt(scene)
+        samples.push(held)
+        if (held.phase !== 'digging') {
+          return {
+            contactPosition: { x: held.playerX, y: held.playerY },
+            phase: held.phase,
+            routeNodes,
+            samples: samples.length,
+            startPosition: { x: samples[0].playerX, y: samples[0].playerY },
+          }
         }
-        stalledSteps = 0
       }
     }
+    route = planSolomonPath(boneyardScene, playerPosition, solomon)
+    const waypoint = route[1]
+    assert.ok(waypoint, 'expected a collision-safe waypoint toward Solomon')
+    await driveToSolomonWaypoint(page, scene, waypoint)
   }
   throw new Error(`could not walk to Solomon: ${JSON.stringify(samples.at(-1))}`)
+}
+
+async function driveToSolomonWaypoint(page, scene, waypoint) {
+  const initial = await solomonApproachReceipt(scene)
+  const keys = movementKeys({
+    x: waypoint.x - initial.playerX,
+    y: waypoint.y - initial.playerY,
+  })
+  assert.ok(keys.length > 0, 'expected movement keys for the Solomon waypoint')
+  let closestDistance = Math.hypot(
+    waypoint.x - initial.playerX,
+    waypoint.y - initial.playerY,
+  )
+  const deadline = Date.now() + 1_500
+  await page.bringToFront()
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+    while (Date.now() < deadline) {
+      const current = await solomonApproachReceipt(scene)
+      if (current.phase !== 'digging') break
+      const distance = Math.hypot(
+        waypoint.x - current.playerX,
+        waypoint.y - current.playerY,
+      )
+      if (distance <= 16) break
+      if (distance > closestDistance + 2 && closestDistance < 40) break
+      closestDistance = Math.min(closestDistance, distance)
+      await page.waitForTimeout(25)
+    }
+  } finally {
+    for (const key of keys.reverse()) await page.keyboard.up(key)
+    await publishStoppedMovement(page)
+  }
+  // Zero input damps retained native velocity by 0.9 each 10 ms tick. At the
+  // 118.75 lane cap, 650 ms leaves less than 0.02 world units of coast.
+  await page.waitForTimeout(650)
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+}
+
+function planSolomonPath(scene, start, solomon) {
+  return planBoneyardPath(
+    scene,
+    start,
+    solomon,
+    (point) => solomonContactContains(solomon, point) ? [] : null,
+    'Solomon',
+  )
+}
+
+function planPointPath(
+  scene,
+  start,
+  target,
+  collision = createBoneyardCollisionWorld(scene),
+) {
+  return simplifyBoneyardPath(
+    planBoneyardPath(
+      scene,
+      start,
+      target,
+      (point) => (
+        Math.hypot(target.x - point.x, target.y - point.y) <= 40
+        && traversesBoneyard(point, target, scene.bounds, collision)
+          ? [target]
+          : null
+      ),
+      JSON.stringify(target),
+      collision,
+    ),
+    scene.bounds,
+    collision,
+  )
+}
+
+function planBoneyardPath(
+  scene,
+  start,
+  target,
+  finish,
+  targetLabel,
+  collision = createBoneyardCollisionWorld(scene),
+) {
+  const gridStep = 40
+  const directions = [
+    { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
+    { x: -1, y: 0 }, { x: 1, y: 0 },
+    { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+  ]
+  const startKey = '0,0'
+  const parents = new Map([[startKey, null]])
+  const points = new Map([[startKey, { ...start }]])
+  const queue = [startKey]
+
+  for (let cursor = 0; cursor < queue.length && cursor < 25_000; cursor += 1) {
+    const key = queue[cursor]
+    const point = points.get(key)
+    const tail = finish(point)
+    if (tail !== null) {
+      return [...reconstructGridPath(key, parents, points), ...tail]
+    }
+    const [gridX, gridY] = key.split(',').map(Number)
+    const orderedDirections = directions.toSorted((first, second) => {
+      const firstDistance = Math.hypot(
+        start.x + (gridX + first.x) * gridStep - target.x,
+        start.y + (gridY + first.y) * gridStep - target.y,
+      )
+      const secondDistance = Math.hypot(
+        start.x + (gridX + second.x) * gridStep - target.x,
+        start.y + (gridY + second.y) * gridStep - target.y,
+      )
+      return firstDistance - secondDistance
+    })
+    for (const direction of orderedDirections) {
+      const nextGridX = gridX + direction.x
+      const nextGridY = gridY + direction.y
+      const nextKey = `${nextGridX},${nextGridY}`
+      if (parents.has(nextKey)) continue
+      const next = {
+        x: start.x + nextGridX * gridStep,
+        y: start.y + nextGridY * gridStep,
+      }
+      if (!traversesBoneyard(point, next, scene.bounds, collision)) continue
+      parents.set(nextKey, key)
+      points.set(nextKey, next)
+      queue.push(nextKey)
+    }
+  }
+  throw new Error(`no collision-safe route to ${targetLabel} from ${JSON.stringify(start)}`)
+}
+
+function traversesBoneyard(start, target, bounds, collision) {
+  const distance = Math.hypot(target.x - start.x, target.y - start.y)
+  const steps = Math.ceil(distance / 8)
+  let current = { ...start }
+  for (let step = 1; step <= steps; step += 1) {
+    const requested = {
+      x: start.x + (target.x - start.x) * step / steps,
+      y: start.y + (target.y - start.y) * step / steps,
+    }
+    const resolved = resolveBoneyardMovement(
+      current,
+      requested,
+      bounds,
+      collision,
+      PLAYER_CHARACTER_RADIUS,
+    )
+    if (Math.hypot(resolved.x - requested.x, resolved.y - requested.y) > 0.25) {
+      return false
+    }
+    current = resolved
+  }
+  return true
+}
+
+function reconstructGridPath(goalKey, parents, points) {
+  const reversed = []
+  let key = goalKey
+  while (key !== null) {
+    reversed.push(points.get(key))
+    key = parents.get(key)
+  }
+  return reversed.reverse()
+}
+
+function simplifyBoneyardPath(path, bounds, collision) {
+  const simplified = [path[0]]
+  let currentIndex = 0
+  while (currentIndex < path.length - 1) {
+    let nextIndex = path.length - 1
+    while (
+      nextIndex > currentIndex + 1
+      && !traversesBoneyard(path[currentIndex], path[nextIndex], bounds, collision)
+    ) {
+      nextIndex -= 1
+    }
+    simplified.push(path[nextIndex])
+    currentIndex = nextIndex
+  }
+  return simplified
+}
+
+function movementPulseDuration(distance) {
+  return Math.min(1_000, Math.max(250, Math.round(distance * 8)))
+}
+
+async function pulseSettledMovement(page, keys, durationMs) {
+  await pulseMovement(page, keys, durationMs)
+  await publishStoppedMovement(page)
+  // Zero input damps the native 0.9-per-tick velocity tail below 0.02 units.
+  await page.waitForTimeout(650)
+}
+
+async function publishStoppedMovement(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'))
+    return new Promise((resolve) => requestAnimationFrame(resolve))
+  })
 }
 
 async function solomonApproachReceipt(scene) {

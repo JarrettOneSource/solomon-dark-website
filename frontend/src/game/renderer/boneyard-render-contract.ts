@@ -1,7 +1,10 @@
 import type { Camera } from '../../editor/render.ts'
 import type { Vec2 } from '../../editor/model.ts'
 import type { GameRunPhase } from '../core-kernels/game-run.ts'
-import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
+import {
+  PLAYER_DEATH_FRAME_THREE_TICK,
+  type PlayerLifeState,
+} from '../core-kernels/player-combat.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
@@ -13,6 +16,7 @@ export const BONEYARD_CAMERA_ZOOM = 1.35
 export const BONEYARD_STATIC_TILE_SIZE = 1024
 export const BONEYARD_STATIC_ART_MARGIN = 256
 export const BONEYARD_RESIDENT_CULL_PADDING = 32
+export const NATIVE_PLAYER_DEATH_SORT_BIAS = -1000
 
 export interface BoneyardBounds {
   h: number
@@ -60,6 +64,19 @@ export interface BoneyardSpectatorCameraState {
 export interface BoneyardCameraFocus {
   readonly playerId: string | null
   readonly position: Vec2
+}
+
+export function boneyardPlayerSortBias(player: Readonly<{
+  progression: Readonly<{
+    deathTick: number
+    lifeState: PlayerLifeState
+  }>
+}>): number {
+  const { deathTick, lifeState } = player.progression
+  return (
+    (lifeState === 'dying' || lifeState === 'spectating')
+    && deathTick >= PLAYER_DEATH_FRAME_THREE_TICK
+  ) ? NATIVE_PLAYER_DEATH_SORT_BIAS : 0
 }
 
 export interface BoneyardSpectatorStatusPresentation {
