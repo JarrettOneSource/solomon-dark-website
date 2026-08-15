@@ -3686,7 +3686,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   onlyKeys(source, field, [
     'ageTicks', 'charge', 'damage', 'direction', 'flightTicks', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'velocity', 'worldKey',
-    ...(source.kind === 'earth' ? ['assemblyCharge', 'hitTargetIds', 'orientation'] : []),
+    ...(source.kind === 'earth' ? [
+      'assemblyCharge', 'hitTargetIds', 'maximumCharge', 'orientation',
+      'remainingDamage', 'toughness',
+    ] : []),
     ...(source.kind === 'ether' ? [
       'damageRetention', 'headingDegrees', 'piercesRemaining', 'reacquiresTarget',
       'speed', 'targetId', 'turnAccumulator', 'turnInput', 'underpowered',
@@ -3702,8 +3705,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     throw new GameProtocolError(`${field} only permits held Earth actors`)
   }
   const charge = finite(source.charge, `${field}.charge`)
-  if (charge < 0 || charge > 1) {
-    throw new GameProtocolError(`${field}.charge must be within [0,1]`)
+  if (charge < 0 || (source.kind !== 'earth' && charge > 1)) {
+    throw new GameProtocolError(
+      `${field}.charge must be non-negative${source.kind === 'earth' ? '' : ' and at most one'}`,
+    )
   }
   const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
   const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
@@ -3736,6 +3741,15 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
   if (source.kind === 'earth') {
+    const maximumCharge = positiveFinite(source.maximumCharge, `${field}.maximumCharge`)
+    if (maximumCharge < 1 || charge > maximumCharge) {
+      throw new GameProtocolError(`${field}.charge exceeds its native Earth maximum`)
+    }
+    const remainingDamage = positiveFinite(
+      source.remainingDamage,
+      `${field}.remainingDamage`,
+    )
+    const toughness = positiveFinite(source.toughness, `${field}.toughness`)
     const assemblyCharge = finite(source.assemblyCharge, `${field}.assemblyCharge`)
     if (
       assemblyCharge < PRIMARY_SPELL_EARTH_INITIAL_CHARGE
@@ -3773,7 +3787,10 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
       assemblyCharge,
       hitTargetIds,
       kind: 'earth',
+      maximumCharge,
       orientation,
+      remainingDamage,
+      toughness,
     } satisfies PrimarySpellEarthProjectileState
   }
   if (source.kind === 'ether') {

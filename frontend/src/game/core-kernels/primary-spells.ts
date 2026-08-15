@@ -15,6 +15,10 @@ import {
   type NativeRngState,
 } from './native-rng.ts'
 import {
+  advanceNativeEarthBoulderCharge,
+  nativeEarthBoulderReleasedDamage,
+} from './native-earth-boulder.ts'
+import {
   WATER_FROST_PARTICLES_PER_TICK,
   WATER_FROST_UNDERPOWERED_PARTICLES_PER_TICK,
   waterFrostJetEmission,
@@ -92,7 +96,10 @@ export interface PrimarySpellEarthProjectileState extends PrimarySpellProjectile
   assemblyCharge: number
   hitTargetIds: readonly string[]
   kind: 'earth'
+  maximumCharge: number
   orientation: EarthBoulderOrientation
+  remainingDamage: number
+  toughness: number
 }
 
 export interface PrimarySpellEtherProjectileState extends PrimarySpellProjectileBaseState {
@@ -679,12 +686,19 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
-    const debitMana = (): boolean => {
-      const spent = Math.min(Math.max(0, availableMana), manaCost)
+    const debitMana = (cost = manaCost): boolean => {
+      const spent = Math.min(Math.max(0, availableMana), cost)
       availableMana = Math.max(0, availableMana - spent)
       manaSpent[playerId] += spent
       return availableMana <= 0
     }
+    const spendAmount = (cost: number): boolean => {
+      if (availableMana < cost) return false
+      availableMana -= cost
+      manaSpent[playerId] += cost
+      return true
+    }
+    let earthAcceptedUnderpowered: boolean | null = null
     const rawHeld = input?.cast.primary === true && input.aim !== null
     const pressed = rawHeld && !previous.primaryCast.held
     const released = !rawHeld && previous.primaryCast.held
@@ -749,25 +763,76 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           nextPlayer = { ...nextPlayer, primaryCast }
           break
         case 'earth': {
-          primaryCast = { ...nextPlayer.primaryCast, channelActive: true }
+          const earthSkill = authority.primarySkill
+          if (earthSkill.kind !== 'earth') throw new Error('Expected an Earth skill profile')
+          earthAcceptedUnderpowered = debitMana()
+          let surged = false
+          if (earthSkill.rockSurgeChance > 0) {
+            const draw = drawNativeInteger(rng, 10_000)
+            rng = draw.state
+            surged = draw.value < earthSkill.rockSurgeChance * 100
+              && spendAmount(earthSkill.rockSurgeManaCost)
+          }
+          primaryCast = {
+            ...nextPlayer.primaryCast,
+            actionTick: surged ? -1 : nextPlayer.primaryCast.actionTick,
+            channelActive: !surged,
+            emissionSequence: surged
+              ? nextPlayer.primaryCast.emissionSequence + 1
+              : nextPlayer.primaryCast.emissionSequence,
+          }
           nextPlayer = { ...nextPlayer, primaryCast }
           const emitter = primarySpellEmitter(nextPlayer)
+          const initialCharge = surged
+            ? earthSkill.maximumCharge
+            : advanceNativeEarthBoulderCharge(
+                PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+                earthSkill.growthFactor,
+                earthSkill.maximumCharge,
+              )
+          const position = surged
+            ? {
+                x: Math.fround(nextPlayer.position.x + aimDirection.x * 60),
+                y: Math.fround(nextPlayer.position.y + aimDirection.y * 60),
+              }
+            : { x: emitter.x, y: emitter.y + 15 }
+          const velocity = surged
+            ? {
+                x: Math.fround(aimDirection.x * 3),
+                y: Math.fround(aimDirection.y * 3),
+              }
+            : { x: 0, y: 0 }
           projectiles = [...projectiles, {
             ageTicks: 1,
-            assemblyCharge: PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
-            charge: PRIMARY_SPELL_EARTH_FIRST_TICK_CHARGE,
-            damage: authority.primarySkill.damageMinimum,
+            assemblyCharge: surged ? initialCharge : PRIMARY_SPELL_EARTH_INITIAL_CHARGE,
+            charge: initialCharge,
+            damage: earthSkill.damageMinimum,
             direction: { ...aimDirection },
-            flightTicks: 0,
+            flightTicks: surged ? 1 : 0,
             hitTargetIds: [],
             id: nextId,
             kind: 'earth',
             lightRegistration: registerLightProvider('actor'),
-            orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
+            maximumCharge: earthSkill.maximumCharge,
+            orientation: surged
+              ? earthBoulderFlightOrientationStep(
+                  EARTH_BOULDER_IDENTITY_ORIENTATION,
+                  aimDirection,
+                  velocity,
+                  initialCharge,
+              )
+              : [...EARTH_BOULDER_IDENTITY_ORIENTATION],
             ownerId: playerId,
-            phase: 'held',
-            position: { x: emitter.x, y: emitter.y + 15 },
-            velocity: { x: 0, y: 0 },
+            phase: surged ? 'flight' : 'held',
+            position,
+            remainingDamage: surged
+              ? nativeEarthBoulderReleasedDamage(
+                  earthSkill.damageMinimum,
+                  initialCharge,
+                )
+              : earthSkill.damageMinimum,
+            toughness: earthSkill.toughness,
+            velocity,
             worldKey,
           }]
           nextId += 1
@@ -989,7 +1054,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           break
         }
         case 'earth': {
-          const underpowered = debitMana()
+          const earthSkill = authority.primarySkill
+          if (earthSkill.kind !== 'earth') throw new Error('Expected an Earth skill profile')
+          const underpowered = acceptedCast
+            ? earthAcceptedUnderpowered ?? false
+            : debitMana()
           projectiles = projectiles.map((spell) => {
             if (spell.kind !== 'earth' || spell.ownerId !== playerId || spell.phase !== 'held') {
               return spell
@@ -999,7 +1068,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
             )) || (underpowered && spell.charge > PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
               ? spell.charge
-              : Math.min(1, Math.fround(spell.charge + PRIMARY_SPELL_EARTH_CHARGE_STEP))
+              : advanceNativeEarthBoulderCharge(
+                  spell.charge,
+                  earthSkill.growthFactor,
+                  spell.maximumCharge,
+                )
             const releasesThisTick = !rawHeld
               && spell.charge >= PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE
             return {
@@ -1011,6 +1084,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               damage: underpowered && spell.charge < 1
                 ? Math.fround(spell.damage * 0.5)
                 : spell.damage,
+              remainingDamage: underpowered && spell.charge < 1
+                ? Math.fround(spell.remainingDamage * 0.5)
+                : spell.remainingDamage,
               direction: { ...aimDirection },
               orientation: releasesThisTick
                 ? spell.orientation
@@ -1038,7 +1114,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ))
           if ((rawHeld || !earthReleaseEligible)
             && heldBoulder
-            && heldBoulder.charge < 1
+            && heldBoulder.charge < heldBoulder.maximumCharge
             && earthCalledRockEmits(
               heldBoulder,
               context.tick,
@@ -1156,7 +1232,7 @@ function releaseHeldEarthProjectiles(
     }
     const releasedSpell: PrimarySpellProjectileState = {
       ...spell,
-      damage: nativeEarthReleaseDamage(spell.damage, spell.charge),
+      damage: nativeEarthBoulderReleasedDamage(spell.damage, spell.charge),
       direction: { ...aimDirection },
       flightTicks: 1,
       orientation: earthBoulderFlightOrientationStep(
@@ -1167,6 +1243,10 @@ function releaseHeldEarthProjectiles(
       ),
       phase: 'flight',
       position,
+      remainingDamage: nativeEarthBoulderReleasedDamage(
+        spell.remainingDamage,
+        spell.charge,
+      ),
       velocity,
     }
     if (canPlaceProjectile(
@@ -1205,16 +1285,6 @@ export function primarySpellAimDirection(
   return length > 0.0001
     ? { x: dx / length, y: dy / length }
     : { x: 0, y: -1 }
-}
-
-export function nativeEarthReleaseDamage(
-  baseDamage: number,
-  charge: number,
-): number {
-  const baseCharge = Math.fround(baseDamage * charge)
-  const quadratic = Math.fround(baseCharge * charge)
-  const cap = Math.fround(baseDamage * 1.25)
-  return Math.fround(Math.max(0.25, Math.min(quadratic, cap)))
 }
 
 function createAirTransient(

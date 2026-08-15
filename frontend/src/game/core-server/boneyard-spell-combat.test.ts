@@ -270,6 +270,50 @@ test('Earth contact consumes the finalized quadratic release pool without scalin
   assert.equal(result.enemies.actors[0]?.currentHealth, 2.5)
 })
 
+test('Earth contact spends its residual pool in native target order and breaks below threshold', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 40, y: 0 }, token: 'SKELETON' },
+  ])
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({
+      id: 41,
+      kind: 'earth',
+      remainingDamage: 6,
+      toughness: 1,
+    })],
+  }), [], 9, WORLD_KEY)
+
+  assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 5 },
+    { actorId: 2, amount: 3.5 },
+  ])
+  assert.equal(result.enemies.actors[0]?.currentHealth, 0)
+  assert.equal(result.enemies.actors[1]?.currentHealth, 1.5)
+  assert.deepEqual(result.spells.projectiles, [])
+  assert.deepEqual(result.spells.transients.map(({ kind }) => kind), ['earth-impact'])
+})
+
+test('Bind Rocks reduces only pool consumption, never the outgoing target payload', () => {
+  const enemies = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 40, y: 0 }, token: 'SKELETON' },
+  ])
+  const result = resolveBoneyardSpellCombat(enemies, spellState({
+    projectiles: [projectile({
+      id: 42,
+      kind: 'earth',
+      remainingDamage: 10,
+      toughness: 5,
+    })],
+  }), [], 10, WORLD_KEY)
+
+  assert.deepEqual(result.hits.map(({ amount }) => amount), [5, 5])
+  const boulder = result.spells.projectiles[0]
+  assert.ok(boulder?.kind === 'earth')
+  assert.equal(boulder.remainingDamage, 9)
+})
+
 test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () => {
   assert.equal(WATER_PRIMARY_ACTOR_MASK, 0x1082)
   assert.equal(WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK, 0x2)
@@ -403,6 +447,8 @@ function projectile(options: {
   id: number
   kind: PrimarySpellProjectileState['kind']
   position?: Readonly<{ x: number; y: number }>
+  remainingDamage?: number
+  toughness?: number
   velocity?: Readonly<{ x: number; y: number }>
   worldKey?: string
 }): PrimarySpellProjectileState {
@@ -428,7 +474,10 @@ function projectile(options: {
         assemblyCharge: options.charge ?? 1,
         hitTargetIds: [...(options.hitTargetIds ?? [])],
         kind: 'earth',
+        maximumCharge: Math.max(1, options.charge ?? 1),
         orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
+        remainingDamage: options.remainingDamage ?? options.damage ?? 10,
+        toughness: options.toughness ?? 1,
       }
     case 'ether':
       return {

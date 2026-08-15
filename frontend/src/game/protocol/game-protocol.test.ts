@@ -1667,10 +1667,13 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     id: missile.id,
     kind: 'earth',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
+    maximumCharge: 1,
     orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     ownerId: missile.ownerId,
     phase: 'held',
     position: missile.position,
+    remainingDamage: missile.damage,
+    toughness: 1,
     velocity: { x: 0, y: 0 },
     worldKey: missile.worldKey,
   }

@@ -18,6 +18,7 @@ import {
   selectEtherPrimaryTarget,
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
+import { consumeNativeEarthBoulderContact } from '../core-kernels/native-earth-boulder.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
 import {
@@ -129,11 +130,18 @@ export function resolveBoneyardSpellCombat(
       if (contacts.length === 0) continue
 
       const hitTargetIds = [...projectile.hitTargetIds]
+      let remainingDamage = projectile.remainingDamage
       for (const target of contacts) {
+        if (remainingDamage < 0.001) break
         hitTargetIds.push(target.id)
         const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
         if (!actor) continue
-        const amount = projectileDamage(projectile)
+        const contact = consumeNativeEarthBoulderContact(
+          remainingDamage,
+          Math.max(0, actor.currentHealth),
+          projectile.toughness,
+        )
+        const amount = contact.damage
           * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
         const damaged = damageBoneyardEnemy(enemies, {
           actorId: actor.id,
@@ -145,9 +153,19 @@ export function resolveBoneyardSpellCombat(
         if (!damaged.accepted) continue
         enemies = damaged.store
         events.push(...damaged.events)
+        remainingDamage = contact.remainingPool
         hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
       }
-      updatedProjectiles.set(projectile.id, { ...projectile, hitTargetIds })
+      if (remainingDamage < 0.001) {
+        consumedProjectileIds.add(projectile.id)
+        publishContactImpact(projectile, projectile.position)
+      } else {
+        updatedProjectiles.set(projectile.id, {
+          ...projectile,
+          hitTargetIds,
+          remainingDamage,
+        })
+      }
       continue
     }
 

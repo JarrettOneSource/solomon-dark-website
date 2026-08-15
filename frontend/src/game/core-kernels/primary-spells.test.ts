@@ -37,7 +37,6 @@ import {
   primaryCastActionEndTick,
   primaryCastEmissionTick,
   primaryCastPose,
-  nativeEarthReleaseDamage,
   primarySpellAimDirection,
   primarySpellEmitterOffset,
   removePrimarySpellOwner,
@@ -46,6 +45,10 @@ import {
   type PrimarySpellSimulationState,
 } from './primary-spells.ts'
 import { earthImpactLifetimeTicks } from './primary-spell-earth.ts'
+import {
+  advanceNativeEarthBoulderCharge,
+  nativeEarthBoulderReleasedDamage,
+} from './native-earth-boulder.ts'
 import {
   EARTH_BOULDER_IDENTITY_ORIENTATION,
   earthBoulderFlightOrientationStep,
@@ -438,6 +441,84 @@ test('rank-two Boulder captures base damage while charging at its per-tick cost'
   assert.equal(earth.state.spells.projectiles[0]!.damage, 30)
 })
 
+test('Hasten, Bind, and Gargantuan are captured by the authoritative Boulder actor', () => {
+  const primarySkill = primarySkillWithRanks('earth', {
+    40: 1,
+    42: 2,
+    43: 2,
+    47: 2,
+  })
+  const born = stepSpellKernel(
+    directSpellHarness('earth'),
+    true,
+    1,
+    true,
+    () => true,
+    primarySkill,
+  )
+  const boulder = born.state.spells.projectiles[0]
+  assert.ok(boulder?.kind === 'earth')
+  assert.equal(born.manaSpent, primarySkill.manaCost / 100)
+  assert.equal(boulder.charge, advanceNativeEarthBoulderCharge(0.18, 2, 2.2))
+  assert.equal(boulder.maximumCharge, 2.2)
+  assert.equal(boulder.toughness, 5)
+
+  const releasable = {
+    ...born.state,
+    spells: {
+      ...born.state.spells,
+      projectiles: [{ ...boulder, charge: 1.5 }],
+    },
+  }
+  const released = stepSpellKernel(
+    releasable,
+    false,
+    1,
+    true,
+    () => true,
+    primarySkill,
+  ).state.spells.projectiles[0]
+  assert.ok(released?.kind === 'earth')
+  assert.equal(released.phase, 'flight')
+  assert.equal(released.remainingDamage, nativeEarthBoulderReleasedDamage(10, 1.5))
+})
+
+test('Rock Surge consumes one 1/100-percent draw and its one-shot mana only on success', () => {
+  const primarySkill = primarySkillWithRanks('earth', { 40: 1, 44: 2 })
+  if (primarySkill.kind !== 'earth') throw new Error('Expected an Earth skill profile')
+  const source = { ...directSpellHarness('earth'), rng: createNativeRng(3) }
+  const successful = stepSpellKernel(
+    source,
+    true,
+    100,
+    true,
+    () => true,
+    primarySkill,
+  )
+  const surged = successful.state.spells.projectiles[0]
+  assert.ok(surged?.kind === 'earth')
+  assert.equal(successful.manaSpent, primarySkill.manaCost / 100 + primarySkill.rockSurgeManaCost)
+  assert.equal(surged.phase, 'flight')
+  assert.equal(surged.charge, 1)
+  assert.equal(surged.remainingDamage, 10)
+  assert.equal(successful.state.players[PLAYER_ID]?.primaryCast.channelActive, false)
+  assert.notDeepEqual(successful.state.rng, source.rng)
+
+  const unaffordable = stepSpellKernel(
+    source,
+    true,
+    1,
+    true,
+    () => true,
+    primarySkill,
+  )
+  const ordinary = unaffordable.state.spells.projectiles[0]
+  assert.ok(ordinary?.kind === 'earth')
+  assert.equal(unaffordable.manaSpent, primarySkill.manaCost / 100)
+  assert.equal(ordinary.phase, 'held')
+  assert.notDeepEqual(unaffordable.state.rng, source.rng)
+})
+
 test('a partial Ether payment at the emission marker still materializes weak flight', () => {
   let outcome = stepSpellKernel(directSpellHarness('ether'), true, 5)
   let state = outcome.state
@@ -501,6 +582,7 @@ test('Earth keeps charging weak and repeatedly halves its release base at zero',
   assert.equal(totalSpent, 0.24)
   assert.equal(heldBoulder.charge, earthChargeAfter(2))
   assert.equal(heldBoulder.damage, 5)
+  assert.equal(heldBoulder.remainingDamage, 5)
   assert.ok(heldBoulder.charge < PRIMARY_SPELL_EARTH_MIN_RELEASE_CHARGE)
 
   const exhausted = stepSpellKernel(state, true, availableMana)
@@ -509,6 +591,7 @@ test('Earth keeps charging weak and repeatedly halves its release base at zero',
   assert.equal(state.spells.projectiles.length, 1)
   assert.equal(state.spells.projectiles[0]!.charge, earthChargeAfter(3))
   assert.equal(state.spells.projectiles[0]!.damage, 2.5)
+  assert.equal(state.spells.projectiles[0]!.remainingDamage, 2.5)
   assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
   assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, 1)
   assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 0)
@@ -525,9 +608,9 @@ test('Earth publishes its half-gain fizzle sequence only on weak global 50-tick 
 })
 
 test('Earth release finalization uses float32 quadratic damage with its native floor and cap', () => {
-  assert.equal(nativeEarthReleaseDamage(10, 0.5), 2.5)
-  assert.equal(nativeEarthReleaseDamage(0.0001, 0.30125), 0.25)
-  assert.equal(nativeEarthReleaseDamage(10, 2), 12.5)
+  assert.equal(nativeEarthBoulderReleasedDamage(10, 0.5), 2.5)
+  assert.equal(nativeEarthBoulderReleasedDamage(0.0001, 0.30125), 0.25)
+  assert.equal(nativeEarthBoulderReleasedDamage(10, 2), 12.5)
 })
 
 test('Earth zero mana freezes above 0.3 and release still uses the terrain probe', () => {
@@ -1393,7 +1476,7 @@ test('Earth honors the native 0.3 latch and releases the same actor at age 98', 
   assert.equal(released.ageTicks, 98)
   assert.equal(released.flightTicks, 1)
   assert.equal(released.assemblyCharge, thresholdRow.assemblyCharge)
-  assert.equal(released.damage, nativeEarthReleaseDamage(10, released.charge))
+  assert.equal(released.damage, nativeEarthBoulderReleasedDamage(10, released.charge))
   const releaseDelta = {
     x: Math.fround(released.position.x - thresholdRow.position.x),
     y: Math.fround(released.position.y - thresholdRow.position.y),
