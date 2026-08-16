@@ -6,6 +6,12 @@ import {
   validateOffensiveFactors,
   type NativeOffensiveSpellFactors,
 } from './native-offensive-resolution.ts'
+import {
+  nativeWeldPrimaryVector,
+  type NativeWeldBuildId,
+  type NativeWeldCastKind,
+  type NativeWeldPrimaryVector,
+} from './native-weld-primary-profile.ts'
 
 export type { NativeOffensiveSpellFactors } from './native-offensive-resolution.ts'
 
@@ -15,7 +21,7 @@ interface NativePrimarySkillProfileBase {
   readonly damageRollCount: number
   readonly manaCost: number
   readonly rank: number
-  readonly skillId: 8 | 16 | 24 | 32 | 40
+  readonly skillId: 8 | 16 | 24 | 32 | 40 | NativeWeldBuildId
 }
 
 export interface NativeEtherPrimarySkillProfile extends NativePrimarySkillProfileBase {
@@ -79,11 +85,20 @@ export interface NativeEarthPrimarySkillProfile extends NativePrimarySkillProfil
   readonly toughness: number
 }
 
+export interface NativeWeldPrimarySkillProfile extends NativePrimarySkillProfileBase {
+  readonly buildId: NativeWeldBuildId
+  readonly castKind: NativeWeldCastKind
+  readonly damageFactor: number
+  readonly kind: 'weld'
+  readonly vector: NativeWeldPrimaryVector
+}
+
 export type NativePrimarySkillProfile =
   | NativeAirPrimarySkillProfile
   | NativeEarthPrimarySkillProfile
   | NativeEtherPrimarySkillProfile
   | NativeFirePrimarySkillProfile
+  | NativeWeldPrimarySkillProfile
   | NativeWaterPrimarySkillProfile
 
 const PRIMARY_SKILL_IDS = Object.freeze([8, 16, 24, 32, 40] as const)
@@ -95,10 +110,13 @@ export function nativePrimarySkillProfile(
 ): NativePrimarySkillProfile {
   validateOffensiveFactors(factors)
   const skillId = skillBook.primarySkillId
+  if (skillBook.activeWeldBuildId !== null) {
+    return nativeWeldPrimarySkillProfile(skillBook, statBook, factors)
+  }
   if (!(PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
     throw new RangeError(`skill ${skillId} is not an elemental primary`)
   }
-  const primarySkillId = skillId as NativePrimarySkillProfile['skillId']
+  const primarySkillId = skillId as typeof PRIMARY_SKILL_IDS[number]
   const rank = effectiveRank(skillBook, primarySkillId, true)
   const rawDamageMinimum = damageValue(statBook, primarySkillId, rank, 'minimum')
   const rawDamageMaximum = damageValue(statBook, primarySkillId, rank, 'maximum')
@@ -256,10 +274,43 @@ export function nativePrimarySkillProfile(
   }
 }
 
+export function nativeWeldPrimarySkillProfile(
+  skillBook: PlayerSkillBookComponent,
+  statBook: PlayerStatBookComponent,
+  factors: NativeOffensiveSpellFactors,
+  weldEffect = 1,
+): NativeWeldPrimarySkillProfile {
+  validateOffensiveFactors(factors)
+  const buildId = skillBook.activeWeldBuildId
+  if (buildId === null) throw new RangeError('player has no active native weld build')
+  const vector = nativeWeldPrimaryVector(skillBook, statBook, buildId, weldEffect)
+  const rank = effectiveRank(skillBook, 52, true)
+  const damageMinimumIndex = 0
+  const damageMaximumIndex = vector.buildId === 1000
+    || vector.buildId === 1001
+    || vector.buildId === 1002
+    || vector.buildId === 1007
+    ? 1
+    : 0
+  return Object.freeze({
+    buildId: vector.buildId,
+    castKind: vector.castKind,
+    damageFactor: factors.damage,
+    damageMaximum: vector.values[damageMaximumIndex]! * factors.damage,
+    damageMinimum: vector.values[damageMinimumIndex]! * factors.damage,
+    damageRollCount: 1,
+    kind: 'weld',
+    manaCost: vector.values[vector.castKind === 'one-shot' && vector.buildId !== 1009 ? 2 : 1]!
+      * factors.manaCost,
+    rank,
+    skillId: vector.buildId,
+    vector,
+  })
+}
 function primaryManaCost(
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,
-  primarySkillId: NativePrimarySkillProfile['skillId'],
+  primarySkillId: typeof PRIMARY_SKILL_IDS[number],
 ): number {
   const primaryRank = effectiveRank(skillBook, primarySkillId, true)
   const upgrades = primarySkillId === 8

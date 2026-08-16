@@ -147,6 +147,7 @@ export interface PlayerProgressionComponent extends PlayerCombatComponent {
 
 export interface NativeWeldBuild {
   readonly colorRoots: readonly [number, number]
+  readonly componentSkillIds: readonly [number, number, number, number, number, number]
   readonly id: number
   readonly pairDescription: string
   readonly primarySkillIds: readonly [number, number]
@@ -222,17 +223,19 @@ const WELDING_RELATED_SKILLS: Readonly<Record<number, readonly [number, number]>
   40: [43, 42],
 }
 
+const defineNativeWeldBuild = (build: NativeWeldBuild): NativeWeldBuild => Object.freeze(build)
+
 export const NATIVE_WELD_BUILDS: readonly NativeWeldBuild[] = Object.freeze([
-  Object.freeze({ colorRoots: [0, 1] as const, id: 1000, pairDescription: 'Welded Magic Missile + Fireball', primarySkillIds: [8, 16] as const, skillScreenIconRecord: 108, skillsAtlasIconRecord: 81, syntheticName: 'Burning Bolt' }),
-  Object.freeze({ colorRoots: [0, 3] as const, id: 1001, pairDescription: 'Welded Magic Missile + Frost Jet', primarySkillIds: [8, 32] as const, skillScreenIconRecord: 109, skillsAtlasIconRecord: 82, syntheticName: 'Frost Missile' }),
-  Object.freeze({ colorRoots: [0, 2] as const, id: 1002, pairDescription: 'Welded Magic Missile + Lightning', primarySkillIds: [8, 24] as const, skillScreenIconRecord: 110, skillsAtlasIconRecord: 83, syntheticName: 'Ball Lightning' }),
-  Object.freeze({ colorRoots: [2, 1] as const, id: 1003, pairDescription: 'Welded Lightning + Fireball', primarySkillIds: [16, 24] as const, skillScreenIconRecord: 111, skillsAtlasIconRecord: 84, syntheticName: 'Flame Lash' }),
-  Object.freeze({ colorRoots: [2, 3] as const, id: 1004, pairDescription: 'Welded Lightning + Frost Jet', primarySkillIds: [32, 24] as const, skillScreenIconRecord: 112, skillsAtlasIconRecord: 85, syntheticName: 'Blizzard Beam' }),
-  Object.freeze({ colorRoots: [3, 1] as const, id: 1005, pairDescription: 'Welded Fireball + Frost Jet', primarySkillIds: [16, 32] as const, skillScreenIconRecord: 113, skillsAtlasIconRecord: 86, syntheticName: 'Steam Jet' }),
-  Object.freeze({ colorRoots: [0, 4] as const, id: 1006, pairDescription: 'Welded Magic Missile + Boulder', primarySkillIds: [8, 40] as const, skillScreenIconRecord: 114, skillsAtlasIconRecord: 87, syntheticName: 'Ethereal Boulder' }),
-  Object.freeze({ colorRoots: [4, 1] as const, id: 1007, pairDescription: 'Welded Fireball + Boulder', primarySkillIds: [16, 40] as const, skillScreenIconRecord: 115, skillsAtlasIconRecord: 88, syntheticName: 'Meteor Swarm' }),
-  Object.freeze({ colorRoots: [4, 3] as const, id: 1008, pairDescription: 'Welded Frost Jet + Boulder', primarySkillIds: [32, 40] as const, skillScreenIconRecord: 116, skillsAtlasIconRecord: 89, syntheticName: 'Hailstones' }),
-  Object.freeze({ colorRoots: [4, 2] as const, id: 1009, pairDescription: 'Welded Lightning + Boulder', primarySkillIds: [24, 40] as const, skillScreenIconRecord: 117, skillsAtlasIconRecord: 90, syntheticName: 'Crawling Shock' }),
+  defineNativeWeldBuild({ colorRoots: [0, 1], componentSkillIds: [8, 16, 10, 18, 9, 17], id: 1000, pairDescription: 'Welded Magic Missile + Fireball', primarySkillIds: [8, 16], skillScreenIconRecord: 108, skillsAtlasIconRecord: 81, syntheticName: 'Burning Bolt' }),
+  defineNativeWeldBuild({ colorRoots: [0, 3], componentSkillIds: [8, 32, 10, 34, 9, 33], id: 1001, pairDescription: 'Welded Magic Missile + Frost Jet', primarySkillIds: [8, 32], skillScreenIconRecord: 109, skillsAtlasIconRecord: 82, syntheticName: 'Frost Missile' }),
+  defineNativeWeldBuild({ colorRoots: [0, 2], componentSkillIds: [8, 24, 10, 25, 9, 26], id: 1002, pairDescription: 'Welded Magic Missile + Lightning', primarySkillIds: [8, 24], skillScreenIconRecord: 110, skillsAtlasIconRecord: 83, syntheticName: 'Ball Lightning' }),
+  defineNativeWeldBuild({ colorRoots: [2, 1], componentSkillIds: [16, 24, 18, 25, 17, 26], id: 1003, pairDescription: 'Welded Lightning + Fireball', primarySkillIds: [16, 24], skillScreenIconRecord: 111, skillsAtlasIconRecord: 84, syntheticName: 'Flame Lash' }),
+  defineNativeWeldBuild({ colorRoots: [2, 3], componentSkillIds: [32, 24, 34, 25, 33, 26], id: 1004, pairDescription: 'Welded Lightning + Frost Jet', primarySkillIds: [32, 24], skillScreenIconRecord: 112, skillsAtlasIconRecord: 85, syntheticName: 'Blizzard Beam' }),
+  defineNativeWeldBuild({ colorRoots: [3, 1], componentSkillIds: [16, 32, 18, 34, 17, 33], id: 1005, pairDescription: 'Welded Fireball + Frost Jet', primarySkillIds: [16, 32], skillScreenIconRecord: 113, skillsAtlasIconRecord: 86, syntheticName: 'Steam Jet' }),
+  defineNativeWeldBuild({ colorRoots: [0, 4], componentSkillIds: [8, 40, 10, 43, 9, 42], id: 1006, pairDescription: 'Welded Magic Missile + Boulder', primarySkillIds: [8, 40], skillScreenIconRecord: 114, skillsAtlasIconRecord: 87, syntheticName: 'Ethereal Boulder' }),
+  defineNativeWeldBuild({ colorRoots: [4, 1], componentSkillIds: [16, 40, 18, 43, 17, 42], id: 1007, pairDescription: 'Welded Fireball + Boulder', primarySkillIds: [16, 40], skillScreenIconRecord: 115, skillsAtlasIconRecord: 88, syntheticName: 'Meteor Swarm' }),
+  defineNativeWeldBuild({ colorRoots: [4, 3], componentSkillIds: [32, 40, 34, 43, 33, 42], id: 1008, pairDescription: 'Welded Frost Jet + Boulder', primarySkillIds: [32, 40], skillScreenIconRecord: 116, skillsAtlasIconRecord: 89, syntheticName: 'Hailstones' }),
+  defineNativeWeldBuild({ colorRoots: [4, 2], componentSkillIds: [24, 40, 25, 43, 26, 42], id: 1009, pairDescription: 'Welded Lightning + Boulder', primarySkillIds: [24, 40], skillScreenIconRecord: 117, skillsAtlasIconRecord: 90, syntheticName: 'Crawling Shock' }),
 ])
 
 const CATALOG = nativeCatalogJson as unknown as NativeSkillCatalogJson

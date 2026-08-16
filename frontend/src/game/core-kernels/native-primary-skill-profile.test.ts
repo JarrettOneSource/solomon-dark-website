@@ -167,6 +167,41 @@ test('resolves Earth growth, toughness, surge, and Gargantuan ceiling', () => {
   })
 })
 
+test('resolves the selected welded build ahead of the elemental primary', () => {
+  const source = book('ether', {
+    8: 1,
+    9: 1,
+    10: 1,
+    16: 1,
+    17: 1,
+    18: 1,
+    52: 1,
+  })
+  const profile = nativePrimarySkillProfile(
+    { ...source, activeWeldBuildId: 1000 },
+    playerStatBook(),
+    FACTORS,
+  )
+  assert.equal(profile.kind, 'weld')
+  if (profile.kind !== 'weld') return
+  assert.equal(profile.buildId, 1000)
+  assert.equal(profile.castKind, 'one-shot')
+  assert.equal(profile.damageMinimum, 3)
+  assert.ok(Math.abs(profile.damageMaximum - 4) < 0.000_001)
+  assert.equal(profile.manaCost, 23.38349723815918 * 0.75)
+  assert.deepEqual(profile.vector.values, [
+    2,
+    2.6666667461395264,
+    23.38349723815918,
+    2,
+    1.375,
+    3.75,
+    8,
+    1.5,
+    3,
+  ])
+})
+
 function book(
   element: WizardElement,
   ranks: Readonly<Record<number, number>>,
