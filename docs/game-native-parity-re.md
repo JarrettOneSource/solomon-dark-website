@@ -16943,3 +16943,205 @@ This closes content-owned browser defaults on the shipped `/game` tree. It is
 not physical-phone proof: OS/browser-reserved edge navigation, Home/notification
 gestures, and browser chrome remain the explicit platform-owned difference
 outside installed or supported fullscreen mode.
+
+## 2026-08-15 — Air contact-light painter bias over struck targets
+
+### Reported smell and parity question
+
+- Reported web behavior: the Air lightning contact light/corona can paint
+  underneath the Gravestone or enemy it strikes.
+- Stock behavior to recover: the complete player-Air endpoint wrapper order,
+  including normal and underpowered casts, primary and chained contacts,
+  combat-actor and Gravestone targets, clipped world endpoints, and the
+  factory siblings that do not share its painter owner.
+- Reproduction inputs/scenes: cast Air at a Boneyard enemy and at the
+  priority-1000 Gravestone fallback. The authoritative target endpoint is
+  shifted upward by 20 world units before the contact's sub-10-unit radial
+  jitter, so a zero-bias painter sorts behind the target root.
+- Falsifiers: a native post-world overlay, a target-owned composite, a zero
+  `Puppet +0xA0` field, a bias used as light radius, or a separate target-type
+  branch would disprove the shared world-queue model below.
+
+This reopens the Air presentation entry above. That pass recovered and
+documented the `50.0` `Puppet` painter bias but left all three web Air roots at
+`sortBias: 0`. The earlier implementation therefore violated its own native
+contract; fixing only the reported Gravestone or enemy would repeat that
+process failure.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail executable identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000`, verified in the current workspace on 2026-08-15 | The file identity matches the executable used by the existing Air instruction audit. No live PID, ASLR address, or loader-injected observation is reused. | high |
+| Existing native instructions | Mod Loader `origin/main` `6376a42a16bba895fbb628e635c7419cfbcde26a`; `docs/reverse-engineering/native-projectile-and-spell-mechanics.md`; player handler `0x0053F9C0`, factory `0x00531640`, `Anim_FadeLightning` `0x00452E20/0x00476230/0x004572C0`, `ZAnimLit` `0x005E03D0/0x005FD1D0/0x005E48E0`; Air writes at `0x00540072..0x005400F8` | The contact is an independently registered `Anim_FadeLightning` child wrapped by `ZAnimLit`. Constant `50.0` at `0x00784CF8` is written to inherited `Puppet +0xA0`, the shared painter sort bias. It is not a light radius. | high |
+| Existing native xref sweep | same report; five direct `0x00531640` calls plus `Anim_FadeLightning` xrefs | Player primary and chain branches share the wrapper. Skeleton Mage uses direct world or target-embedded contact ownership with no `ZAnimLit`; StormCloud constructs the bolt directly; ElectricBurn and Ball Lightning are separate, currently unmodeled owners. | high |
+| Pre-fix web causal trace | Website `fd0e784092edfdd6c53cec9f55a2d69b22614ddb`; `core-kernels/primary-spell-targeting.ts`, `renderer/primary-spell-air-view.ts`, `primary-spell-world-view.ts`, `boneyard-painter-order.ts`, and `renderer/boneyard-world-renderer.ts` | Target acquisition publishes the native `-20` Y attachment. The Air view preserves the jittered contact world Y but assigns body, source, and contact `sortBias: 0`; the shared queue computes `trunc(worldY)+trunc(sortBias)`. The contact is therefore keyed 10..30 rows before the target instead of the native 20..40 rows after it. | high |
+| Existing authoritative fixture | `core-server/game-simulation.test.ts`, Gravestone root `(250,100)` and published Air endpoint `(250,80)` | The same semantic target path reaches the renderer for the priority-1000 Gravestone fallback; the renderer does not and must not branch on target type. | high |
+
+No new native address, field, asset, or class fact was recovered in this pass.
+The current Mod Loader report already owns the complete reusable instruction
+and xref evidence, so it remains unchanged.
+
+### System boundary and membership inventory
+
+Native system: **player-Air endpoint `Anim_FadeLightning` world-painter
+ownership** — from an accepted Air presentation endpoint through contact
+jitter, `ZAnimLit` wrapping, five-tick fade/light enrollment, shared world-row
+submission, and retirement. The boundary includes every branch that creates
+that wrapper and dispositions every nearby lightning/corona sibling found by
+the factory and class xrefs.
+
+There is no authored variant table in this system. The complete consumed art
+membership remains BadGuys record `110` and fork records `1836..1839`, already
+extracted and hash-pinned in the Air entry.
+
+| Member (class/variant/scene/branch) | Native source | Disposition | Proof / reason |
+| --- | --- | --- | --- |
+| Normal player-Air primary contact | `0x0053F9C0 -> 0x00452E20 -> 0x005E03D0`, `+0xA0=50` | `exact-ported` | focused root contract and Boneyard queue-order assertion |
+| Underpowered player-Air primary contact | parameter-nine branch in `0x0053F9C0/0x00531640`; same wrapper and bias | `exact-ported` | focused weak-root assertion; only alpha/radius/intensity differ |
+| Learned chained Air contacts | chain branch in `0x0053F9C0`; same `Anim_FadeLightning` owner, including the low-detail scale/fade branch | `exact-ported` | all Air transient views consume the shared contact bias independent of target id or visual strength |
+| Combat-actor target | actor attachment plus Y `-20`, then sub-10 contact jitter | `exact-ported` | synthetic enemy-root painter-order regression and real-browser enemy hit |
+| Priority-1000 Gravestone fallback | Air acquisition/attachment path and type `2029` scenery target | `exact-ported` | generated-scene Gravestone painter-order regression and real-browser grave hit |
+| Clipped/untargeted world endpoint | player handler valid-endpoint branch; same independently registered wrapper | `exact-ported` | focused no-target root assertion; remains world-sorted rather than promoted globally |
+| Air contact's five visible ages and outbound `ZAnimLit` light | `0x00476230`, `0x005FD1D0`, `0x005E48E0` | `verified-already-at-parity` | existing alpha/intensity/radius/lifetime tests; painter bias does not change light enrollment |
+| Air bolt body and source `Anim_SpellGlow` | `0x00531640`, `ZAnimSplit`, and source registration | `verified-already-at-parity` | retain separate midpoint/source roots with zero bias |
+| Hub and Boneyard scene consumers | shared `PrimarySpellWorldView`; Boneyard adds the native row queue | `exact-ported` | shared Air-root contract plus Boneyard target receipts; no scene exception |
+| Fireball contact `Anim_FireBurst` in `ZAnimLit` | `0x005E5160 -> 0x005E03D0`, bias `50` | `verified-already-at-parity` | `NATIVE_FIRE_IMPACT_DEPTH_BIAS=50` is already included in its painter key and covered by Fire tests |
+| Ether `Anim_FadeMM` contact in `ZAnimLit` | `0x005F1F00 -> 0x005E03D0`, bias `100` | `verified-already-at-parity` | `ETHER_PRIMARY_IMPACT_SORT_BIAS=100` is already included in its painter key and covered by Ether tests |
+| Earth independently wrapped breakup fragments | `0x0060B700`, `ZAnimLitObject`, bias `-15` | `verified-already-at-parity` | every fragment root exposes `sortBias=-15`; Earth painter tests cover interleaving |
+| Skeleton Mage lightning contact | Mage `0x00490860`; direct world contact or player embedded manager, no `ZAnimLit` contact provider | `out-of-system` (different painter owner and ordering interval) | existing Mage tests pin world roots and target post-main lane |
+| StormCloud contact | `0x006021A0`; direct bolt construction and separate FadeLightning use | `out-of-system` (StormCloud actor is not a Website primary-Air member) | native xref disposition; no Website StormCloud snapshot exists |
+| `Mod_ElectricBurn` and Ball Lightning contacts | `0x00628F10` and sibling `Anim_FadeLightning` xrefs | `out-of-system` (different, currently unmodeled modifier/projectile owners) | native xref disposition; no corresponding Website actor is inferred from shared art |
+
+There are no `blocked-by-platform` members. Pixi/WebGL can represent the exact
+shared painter bias.
+
+### Native ownership thread
+
+- Owner and construction path: every accepted player-Air held tick creates a
+  semantic Air transient. Its endpoint fade is an independent
+  `Anim_FadeLightning` child in a `ZAnimLit`/`Puppet` world-queue wrapper.
+- Upstream state producers/callers: authoritative Air acquisition selects a
+  combat actor before the lower-priority Gravestone fallback, retains or
+  chains targets under the existing rules, applies attachment offsets, and
+  publishes source/midpoint/endpoint and transient identity.
+- State representation and transitions: the contact center is the endpoint
+  plus native-domain radial jitter below 10 units. Normal alpha follows
+  `1,.8,.6,.4,.2`; weak/selected sibling branches change fade or scale but do
+  not change wrapper bias.
+- Downstream consumers/callees: `ZAnimLit` follows the child for outbound
+  Region light enrollment while its inherited `Puppet` root enters the shared
+  painter with `worldY=contactY`, `sortBias=50`. The child draw is self-lit and
+  bypasses inbound Region tint.
+- Sibling systems sharing ownership or data: body `ZAnimSplit`, source
+  `Anim_SpellGlow`, Mage direct/embedded contacts, Fire/Ether `ZAnimLit`
+  impacts, Earth wrappers, StormCloud, ElectricBurn, and Ball Lightning are
+  dispositioned above.
+- Entry, interruption, reset, and teardown: release stops new births; each
+  contact expires after its branch-specific fade; scene/run reset removes the
+  semantic transient and its view. The bias is immutable construction/render
+  metadata and owns no tick or network state.
+
+### Recovered behavioral contract
+
+- Timing: preserve the existing per-held-tick birth and five-age normal or
+  shortened weak/chain fade. Painter bias does not alter clocks.
+- Geometry and coordinate space: retain the contact's exact jittered world
+  center. Do not move its pixels or replace target attachment with a screen
+  overlay.
+- Painter order: submit the contact root with native `sortBias=50` through the
+  existing `trunc(worldY)+trunc(sortBias)` queue. Body and source remain at
+  zero bias. For a zero-attachment target, the `-20` target lift plus sub-10
+  jitter and `+50` bias places the contact's row strictly after the struck
+  target while retaining ordinary occlusion against sufficiently later world
+  residents.
+- Lighting and assets: the same contact root continues to draw records
+  `110/1836..1839` additively and publish the existing jittered outbound light.
+  The number 50 must never be reused as radius or raster distance.
+- Input/network authority: no target selection, contact damage, transient id,
+  snapshot, protocol, RNG, audio, or replication change.
+
+### Confidence and open questions
+
+- Confirmed: native field/address, world-queue ownership, exact bias, complete
+  factory/class xref membership, web omission, target Y lift, and shared
+  painter-row formula.
+- Inferred: none required for the implementation.
+- Unknowns: exact process-global RNG stream identity remains the already named
+  browser presentation substitution. It cannot affect the fixed bias or its
+  ordering guarantee.
+
+### Web implementation consequence
+
+- Correct owner/module: expose the recovered Air contact painter bias beside
+  the Air-native render constants and consume it only for the contact root in
+  `AirPrimarySpellView`.
+- Shared model change: all player-Air endpoint variants receive the one native
+  rule automatically; no target-type or scene branch is permitted.
+- Stock behavior preserved: the contact stays a separately depth-sorted world
+  root. “On top” means the native `+50` row bias over its struck target, not a
+  post-world/HUD z-index that would overpaint every later resident.
+- Browser-specific approximation: none.
+- Obsolete path to remove: the contact root's hard-coded zero bias. Body and
+  source zero-bias paths remain authoritative.
+
+### Validation contract
+
+- Focused automated test: fail first on the current zero-bias root, then pin
+  `+50` for normal, weak, targeted, chained-shaped, and no-target Air
+  transients while body/source remain zero.
+- Painter integration test: feed a Gravestone/static root and enemy/dynamic
+  root together with deterministic Air contacts through
+  `buildBoneyardPainterOrder`; require each contact to paint after its struck
+  root and before a resident whose native row is later than contact+50.
+- Playwright journey: physically cast Air into both a generated Gravestone and
+  a live enemy in `/game`; capture the active corona plus the semantic
+  Gravestone target or authoritative enemy damage edge while the effect is
+  live, with empty page/console error arrays. The focused painter integration
+  test, rather than a browser-only diagnostic field, owns the exact contact /
+  target / later-resident queue comparison.
+- Canonical acceptance: `./scripts/validate.sh` and final Mac mini focused
+  tests/browser journey on the exact tree.
+
+### Implementation validation receipt
+
+Captured on 2026-08-16. The focused and browser receipts were first taken from
+the Website worktree based on `fd0e784092edfdd6c53cec9f55a2d69b22614ddb`.
+Before publication, the focused four-file change was rebased without conflict
+onto `8d2fb1a6e4fced16eaf78dcb72f0d67be1d7ebc4`; the final canonical receipt
+below is from that rebased tree.
+
+- Red proof: the focused Air file initially passed 10 of 12 tests and failed
+  exactly the new root-bias and target-order assertions: all three roots still
+  exposed zero bias and the contact did not sort after the enemy.
+- Focused green proof: `primary-spell-air-native.test.ts` passes 12 of 12. It
+  pins contact `sortBias=50` for normal, weak, targeted, and no-target views,
+  keeps body/source at zero, and sends enemy, Gravestone, contact, and a later
+  resident through the real Boneyard painter queue.
+- Canonical Mac mini gate: `./scripts/validate.sh` exited 0 on macOS 26.4.1
+  arm64 with Node 22.17.0, npm 10.9.2, and .NET SDK 10.0.302. Dependency
+  restore, backend build/contracts/formatting, frontend lint and tests, desktop
+  tests, production build, and production-media policy all passed.
+- Supplemental Windows/WSL gate: backend, contracts, formatting, lint, and the
+  modified Air tests passed. The broad frontend run reached 816 of 817 passing;
+  the unchanged `native-enemy-assets.test.ts` projectile-preload census then
+  hit Vite's 60-second module-transport timeout after 1,102,304 ms. The same
+  complete gate passed on the canonical Mac tree.
+- Gravestone browser receipt: the real `/game` Air smoke acquired
+  `scenery:object-335`, rendered five live Air transients, captured
+  `solomon-primary-air-boneyard-target.png`, emitted `status: ok`, and reported
+  no page or console errors.
+- Enemy browser receipt: a focused path through the existing deterministic
+  multiplayer combat harness struck live actor `7`, reducing health from `2.5`
+  to `2.485933593748483`. The captured frame at tick `10071.280000000446`
+  contained two Air transients and hit flash `0.5540000000597501`; both browser
+  error arrays were empty. Visual inspection of
+  `solomon-dark-multiplayer-enemy-hit.png` and the Gravestone capture confirmed
+  the additive contact corona paints over the struck art. The harness emitted
+  `status: ok`; its existing Playwright cleanup remained open afterward and
+  the task-owned process was terminated only after the receipt and screenshot
+  were complete.
+- The temporary focused browser-only flag used to bypass unrelated level-up
+  and shield coverage was removed after capture. Final scope is four files:
+  this ledger, the Air-native constants, the Air view, and the Air regression
+  test. `git diff --check` passes.

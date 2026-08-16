@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { Texture } from 'pixi.js'
 
+import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import type { PrimarySpellTransientState } from '../core-kernels/primary-spells.ts'
 import {
   AIR_LIGHTNING_BODY_LIFETIME_TICKS,
@@ -11,6 +12,7 @@ import {
   AIR_LIGHTNING_CONTACT_LIGHT_BASE_RADIUS,
   AIR_LIGHTNING_CONTACT_LIGHT_INTENSITY_DELTA,
   AIR_LIGHTNING_CONTACT_LIGHT_RADIUS_JITTER,
+  AIR_LIGHTNING_CONTACT_SORT_BIAS,
   AIR_LIGHTNING_CORONA_CIRCLE_RECORD,
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   AIR_LIGHTNING_ENHANCED_SAMPLE_SPACING,
@@ -396,10 +398,25 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
   })
 
   assert.equal(view.containers.length, 3)
+  assert.equal(AIR_LIGHTNING_CONTACT_SORT_BIAS, 50)
   assert.ok(view.containers.every(({ parent }) => parent === null))
   assert.deepEqual(
     view.painterRoots().map(({ suffix }) => suffix),
     ['body', 'source', 'contact'],
+  )
+  assert.deepEqual(
+    view.painterRoots().map(({ sortBias }) => sortBias),
+    [0, 0, 50],
+  )
+
+  view.update({
+    ...state,
+    targetId: 'enemy:7',
+    underpowered: true,
+  })
+  assert.equal(
+    view.painterRoots().find(({ suffix }) => suffix === 'contact')?.sortBias,
+    50,
   )
 
   view.update({ ...state, ageTicks: 1 })
@@ -412,5 +429,66 @@ test('Air body, source glow, and contact corona remain separate painter roots', 
     view.painterRoots().map(({ suffix }) => suffix),
     ['contact'],
   )
+  view.destroy()
+})
+
+test('Air contact bias paints after struck enemies and Gravestones but stays in world order', () => {
+  const state = {
+    ageTicks: 0,
+    birthTick: 80,
+    direction: { x: 1, y: 0 },
+    endpoint: { x: 250, y: 80 },
+    id: 31,
+    kind: 'air',
+    midpoint: { x: 150, y: 90 },
+    origin: { x: 50, y: 100 },
+    ownerId: 'wizard',
+    targetId: 'scenery:grave-target',
+    underpowered: false,
+    variant: 0,
+    worldKey: 'boneyard:test',
+  } satisfies PrimarySpellTransientState
+  const view = new AirPrimarySpellView(state, {
+    branches: [Texture.EMPTY, Texture.EMPTY],
+    circle: Texture.EMPTY,
+    forks: [Texture.EMPTY, Texture.EMPTY, Texture.EMPTY, Texture.EMPTY],
+    ribbon: Texture.EMPTY,
+  })
+  const contact = view.painterRoots().find(({ suffix }) => suffix === 'contact')!
+  const order = buildBoneyardPainterOrder({
+    referenceY: 100,
+    staticLayers: [
+      { layerIndex: 0, worldY: 100, sortBias: 0, sourceOrder: 0 },
+      { layerIndex: 1, worldY: 200, sortBias: 0, sourceOrder: 1 },
+    ],
+    dynamicLayers: [
+      {
+        id: 'enemy:7',
+        queueFamily: 'ordinary-dynamic',
+        worldY: 100,
+        sortBias: 0,
+        sourceOrder: 0,
+      },
+      {
+        id: 'primary-spell:31:contact',
+        queueFamily: contact.queueFamily,
+        worldY: contact.worldY,
+        sortBias: contact.sortBias,
+        sourceOrder: 1,
+      },
+    ],
+  })
+  const enemyDepth = order.dynamicLayers.find(({ id }) => id === 'enemy:7')!.zIndex
+  const contactDepth = order.dynamicLayers.find(
+    ({ id }) => id === 'primary-spell:31:contact',
+  )!.zIndex
+  const graveDepth = order.bands.find(({ layerIndexes }) => layerIndexes.includes(0))!.zIndex
+  const laterResidentDepth = order.bands.find(
+    ({ layerIndexes }) => layerIndexes.includes(1),
+  )!.zIndex
+
+  assert.ok(contactDepth > enemyDepth)
+  assert.ok(contactDepth > graveDepth)
+  assert.ok(contactDepth < laterResidentDepth)
   view.destroy()
 })

@@ -12,6 +12,7 @@ import type {
 } from '../core-kernels/primary-spells.ts'
 import {
   AIR_LIGHTNING_BRANCH_RECORDS,
+  AIR_LIGHTNING_CONTACT_SORT_BIAS,
   AIR_LIGHTNING_CORONA_FORK_RECORDS,
   buildNativeAirLightningPlan,
   type NativeAirCoronaPlan,
@@ -105,7 +106,7 @@ export class AirPrimarySpellView {
         lane: 'world-sorted',
         queueFamily: 'ordinary-dynamic',
         regionLightPoint: null,
-        sortBias: 0,
+        sortBias: AIR_LIGHTNING_CONTACT_SORT_BIAS,
         suffix: 'contact',
         worldY: this.state.origin.y + this.plan.contactCorona.center.y,
       })
