@@ -3,13 +3,16 @@ import test from 'node:test'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import {
+  createNativeWeldPersistentActor,
   createNativeWeldMeteor,
   drawNativeWeldDamage,
   nativeWeldAudioPlan,
   nativeWeldMissileFanHeading,
+  releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
   stepNativeWeldProjectile,
   stepNativeWeldWorldActor,
+  updateNativeWeldPersistentActor,
 } from './native-weld-primary-runtime.ts'
 
 test('welded missiles share one native float damage draw and consume Fire seeds in fan order', () => {
@@ -147,6 +150,109 @@ test('semantic audio plans retain every native loop/start cue ownership', () => 
 test('fixed damage does not consume the authoritative stream', () => {
   const rng = createNativeRng(9)
   assert.deepEqual(drawNativeWeldDamage(rng, 4.5, 4.5), { rng, value: 4.5 })
+})
+
+test('Ethereal Boulder grows in the native float lane and releases the four-piece template', () => {
+  const source = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 0.6, y: 0.8 },
+    id: 40,
+    origin: { x: 100, y: 200 },
+    ownerId: 'p1',
+    tick: 10,
+    vector: [12, 3, 4, 1.1, 1.5, 1.2],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(source.buildId, 1006)
+  const updated = updateNativeWeldPersistentActor(
+    source,
+    source.origin,
+    source.direction,
+    createNativeRng(1),
+  )
+  assert.equal(updated.actor.buildId, 1006)
+  assert.equal(
+    updated.actor.scale,
+    Math.fround(Math.fround(0.18) + Math.fround(1.2 * 1.5) * 0.0025),
+  )
+  const released = releaseNativeWeldPersistentActor({
+    actor: updated.actor,
+    firstChildId: 90,
+    rng: updated.rng,
+  })
+  assert.equal(released.nextId, 93)
+  assert.deepEqual(released.actors.map(({ id, origin }) => ({ id, origin })), [
+    { id: 40, origin: { x: 118, y: 224 } },
+    { id: 90, origin: { x: 124, y: 182 } },
+    { id: 91, origin: { x: 76, y: 218 } },
+    { id: 92, origin: { x: 91, y: 188 } },
+  ])
+  assert.deepEqual(released.actors.map((actor) => (
+    actor.buildId === 1006 ? actor.speedFactor : null
+  )), [Math.fround(1.1), Math.fround(0.95), Math.fround(0.95), Math.fround(0.9)])
+  assert.deepEqual(released.actors.map((actor) => (
+    actor.buildId === 1006 ? actor.visualScaleFactor : null
+  )), [Math.fround(0.75), Math.fround(0.7125), Math.fround(0.7125), Math.fround(0.675)])
+})
+
+test('Hailstones bucket rebuild consumes native rock RNG in exact field order', () => {
+  const rng = createNativeRng(77)
+  const source = createNativeWeldPersistentActor({
+    buildId: 1008,
+    direction: { x: 1, y: 0 },
+    id: 5,
+    origin: { x: 10, y: 20 },
+    ownerId: 'p1',
+    tick: 4,
+    vector: [8, 2, 8, 1.5, 0.1, 0.5],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(source.buildId, 1008)
+  const updated = updateNativeWeldPersistentActor(
+    source,
+    source.origin,
+    source.direction,
+    rng,
+  )
+  assert.equal(updated.actor.buildId, 1008)
+  assert.equal(updated.actor.scale, Math.fround(Math.fround(0.18) + 20 * 0.0025 * 3))
+  assert.equal(updated.actor.rocks.length, 2)
+  assert.equal(updated.actor.rocks[0]!.decay, 1)
+  assert.equal(updated.actor.rocks[0]!.phase, 0)
+  assert.equal(updated.actor.rocks[0]!.releaseOffset, null)
+
+  let expected = rng
+  for (let index = 0; index < 2; index += 1) {
+    expected = drawNativeInteger(expected, 3).state
+    expected = drawNativeFloat(expected, 50, true).state
+    expected = drawNativeFloat(expected, 50, true).state
+    expected = drawNativeFloat(expected, 50, true).state
+    if (index === 0) expected = drawNativeFloat(expected, 10).state
+    expected = drawNativeFloat(expected, Math.fround(0.75)).state
+  }
+  assert.deepEqual(updated.rng, expected)
+
+  const presentation = drawNativeFloat(expected, Math.fround(0.75))
+  const released = releaseNativeWeldPersistentActor({
+    actor: updated.actor,
+    firstChildId: 6,
+    rng: expected,
+  })
+  assert.deepEqual(released.rng, presentation.state)
+  const actor = released.actors[0]
+  assert.ok(actor?.buildId === 1008)
+  assert.equal(actor.phase, 'flight')
+  assert.deepEqual(actor.origin, { x: 0, y: 20 })
+  assert.equal(actor.presentationScale, Math.fround(presentation.value + 0.75))
+  assert.ok(actor.rocks.every(({ damageRemaining, releaseOffset }) => (
+    damageRemaining === 8 && releaseOffset !== null
+  )))
+
+  const stepped = stepNativeWeldWorldActor(actor)
+  assert.ok(stepped?.kind === 'weld-persistent' && stepped.buildId === 1008)
+  assert.deepEqual(stepped.origin, { x: 10, y: 20 })
+  assert.equal(stepped.rocks[0]!.decay, Math.fround(0.95))
+  assert.equal(stepped.rocks[0]!.phase, Math.fround(0.025))
 })
 
 function profile(

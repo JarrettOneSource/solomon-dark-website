@@ -47,6 +47,11 @@ import type {
   NativeSecondarySteamedPulse,
   NativeSecondaryTargetEffectPatch,
 } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR,
+  retainNativeWeldHailstoneDamage,
+  retainNativeWeldPersistentActorContacts,
+} from '../core-kernels/native-weld-primary-runtime.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
 import {
@@ -164,6 +169,7 @@ export function resolveBoneyardSpellCombat(
   const consumedProjectileIds = new Set<number>()
   const consumedTransientIds = new Set<number>()
   const updatedProjectiles = new Map<number, PrimarySpellProjectileState>()
+  const updatedTransients = new Map<number, PrimarySpellTransientState>()
   const hits: BoneyardSpellHit[] = []
   const burns: BoneyardSpellBurnContact[] = []
   const events: BoneyardEnemySemanticEvent[] = []
@@ -283,6 +289,7 @@ export function resolveBoneyardSpellCombat(
         })
         if (!damaged.accepted) continue
         enemies = damaged.store
+        events.push(...damaged.events)
         events.push(...damaged.events)
         remainingDamage = contact.remainingPool
         hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
@@ -469,6 +476,128 @@ export function resolveBoneyardSpellCombat(
     }
     consumedProjectileIds.add(projectile.id)
     publishContactImpact(projectile, projectile.position)
+  }
+
+  for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
+    if (
+      effect.kind !== 'weld-persistent'
+      || effect.phase !== 'flight'
+      || effect.worldKey !== worldKey
+    ) continue
+    const rows = primaryTargetRows(enemies)
+    if (effect.buildId === 1006) {
+      const priorTargets = new Set(effect.hitTargetIds)
+      const contacts = nativePrimaryRootTargets(
+        effect.origin,
+        effect.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
+        0x6,
+        rows.map(({ target }) => target),
+      ).filter(({ id }) => !priorTargets.has(id))
+      if (contacts.length === 0) continue
+      const hitTargetIds = [...effect.hitTargetIds]
+      let remainingDamage = effect.remainingDamage
+      for (const target of contacts) {
+        if (remainingDamage < 0.001) break
+        hitTargetIds.push(target.id)
+        const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+        if (!actor) continue
+        const contact = consumeNativeEarthBoulderContact(
+          remainingDamage,
+          Math.max(0, actor.currentHealth),
+          effect.toughness,
+        )
+        const damaged = damageBoneyardEnemy(enemies, {
+          actorId: actor.id,
+          amount: contact.damage,
+          sourcePlayerId: effect.ownerId,
+          tick,
+        })
+        if (!damaged.accepted) continue
+        enemies = damaged.store
+        events.push(...damaged.events)
+        remainingDamage = contact.remainingPool
+        hits.push({
+          actorId: actor.id,
+          amount: contact.damage,
+          killed: damaged.killed,
+          ownerId: effect.ownerId,
+          spellId: effect.id,
+          spellKind: 'weld',
+          tick,
+        })
+      }
+      const retained = retainNativeWeldPersistentActorContacts(
+        effect,
+        hitTargetIds,
+        remainingDamage,
+      )
+      if (retained) {
+        updatedTransients.set(effect.id, retained)
+      } else {
+        consumedTransientIds.add(effect.id)
+        impactTransients.push({
+          ageTicks: 0,
+          birthTick: tick,
+          buildId: 1006,
+          direction: { ...effect.direction },
+          id: nextSpellId,
+          kind: 'weld-impact',
+          origin: { ...effect.origin },
+          ownerId: effect.ownerId,
+          position: { ...effect.origin },
+          vector: [...effect.vector],
+          worldKey: effect.worldKey,
+        })
+        nextSpellId += 1
+      }
+      continue
+    }
+    if (effect.buildId !== 1008) continue
+    const damageByIndex = effect.rocks.map(({ damageRemaining }) => damageRemaining)
+    for (let rockIndex = 0; rockIndex < effect.rocks.length; rockIndex += 1) {
+      const rock = effect.rocks[rockIndex]!
+      if (!rock.releaseOffset || damageByIndex[rockIndex]! < 0.001) continue
+      const point = {
+        x: effect.origin.x + rock.releaseOffset.x,
+        y: effect.origin.y + rock.releaseOffset.y,
+      }
+      for (const row of rows) {
+        let remainingDamage = damageByIndex[rockIndex]!
+        if (remainingDamage < 0.001) break
+        if (!nativePrimaryTargetEligible(row.target, 0x2)) continue
+        const dx = point.x - row.target.position.x
+        const dy = point.y - row.target.position.y
+        const radius = row.target.bodyRadius * NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR
+        if (dx * dx + dy * dy >= radius * radius) continue
+        const targetHealth = Math.max(0, row.actor.currentHealth)
+        const amount = Math.min(targetHealth, remainingDamage)
+        const consumed = remainingDamage < targetHealth
+          ? amount
+          : amount / effect.toughness
+        const damaged = damageBoneyardEnemy(enemies, {
+          actorId: row.actor.id,
+          amount,
+          sourcePlayerId: effect.ownerId,
+          tick,
+        })
+        if (!damaged.accepted) continue
+        enemies = damaged.store
+        remainingDamage = Math.max(0, remainingDamage - consumed)
+        damageByIndex[rockIndex] = remainingDamage
+        hits.push({
+          actorId: row.actor.id,
+          amount,
+          killed: damaged.killed,
+          ownerId: effect.ownerId,
+          spellId: effect.id,
+          spellKind: 'weld',
+          tick,
+        })
+      }
+    }
+    const retained = retainNativeWeldHailstoneDamage(effect, damageByIndex)
+    if (retained) updatedTransients.set(effect.id, retained)
+    else consumedTransientIds.add(effect.id)
   }
 
   for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
@@ -1132,12 +1261,13 @@ export function resolveBoneyardSpellCombat(
       if (stepped.actor) steppedTransients.push(stepped.actor)
       continue
     }
-    steppedTransients.push(effect)
+    steppedTransients.push(updatedTransients.get(effect.id) ?? effect)
   }
 
   const spells = consumedProjectileIds.size === 0
     && consumedTransientIds.size === 0
     && updatedProjectiles.size === 0
+    && updatedTransients.size === 0
     && impactTransients.length === 0
     && ownedTransients.length === 0
     && steppedTransients.length === sourceSpells.transients.length

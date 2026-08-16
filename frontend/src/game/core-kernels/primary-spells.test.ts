@@ -1831,7 +1831,7 @@ test('welded one-shot authority spends once at emission and creates the complete
   )), [1000, 1000])
 })
 
-test('all welded sustained families use the one primary latch and retire retained actors on release', () => {
+test('all welded sustained families use one latch and run their native release virtual', () => {
   for (const profile of [
     weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3]),
     weldedProfile(1006, 'persistent', [8, 10, 2, 1.1, 1.5, 1.2]),
@@ -1848,10 +1848,18 @@ test('all welded sustained families use the one primary latch and retire retaine
     )))
     state = stepSpellKernel(state, false, 100, true, () => true, profile).state
     assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
-    assert.equal(
-      state.spells.transients.some(({ kind }) => kind === 'weld-persistent'),
-      false,
-    )
+    const persistent = state.spells.transients.filter((effect) => (
+      effect.kind === 'weld-persistent'
+    ))
+    if (profile.buildId === 1006) {
+      assert.equal(persistent.length, 2)
+      assert.ok(persistent.every((effect) => effect.phase === 'flight'))
+    } else if (profile.buildId === 1008) {
+      assert.equal(persistent.length, 1)
+      assert.equal(persistent[0]!.phase, 'flight')
+    } else {
+      assert.equal(persistent.length, 0)
+    }
   }
 })
 

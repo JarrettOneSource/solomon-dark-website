@@ -968,6 +968,118 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
   ])
 })
 
+test('released Ethereal Boulder pieces own independent native residual pools', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 10, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 4,
+      maximumHealth: 4,
+    })),
+  }
+  const boulder: PrimarySpellTransientState = {
+    ageTicks: 5,
+    birthTick: 0,
+    buildId: 1006,
+    damage: 10,
+    direction: { x: 1, y: 0 },
+    hitTargetIds: [],
+    id: 31,
+    kind: 'weld-persistent',
+    lifetimeTicksRemaining: 1_000,
+    maximumScale: 0.75,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    phase: 'flight',
+    pulseSequence: 1,
+    quantity: 0,
+    remainingDamage: 10,
+    scale: 0.5,
+    speedFactor: 1,
+    toughness: 2,
+    vector: [10, 2, 1, 1, 2, 1],
+    velocity: { x: 3, y: 0 },
+    visualScaleFactor: 0.75,
+    worldKey: WORLD_KEY,
+  }
+  const resolved = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [boulder] }),
+    [],
+    4,
+  )
+  assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 4 },
+    { actorId: 2, amount: 4 },
+  ])
+  const retained = resolved.spells.transients.find(({ id }) => id === 31)
+  assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1006)
+  assert.equal(retained.remainingDamage, 8)
+  assert.deepEqual(retained.hitTargetIds, ['enemy:1', 'enemy:2'])
+})
+
+test('released Hailstones rocks contact at carrier offsets and divide only pool consumption', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 4,
+      maximumHealth: 4,
+    })),
+  }
+  const hailstones: PrimarySpellTransientState = {
+    ageTicks: 1,
+    birthTick: 0,
+    buildId: 1008,
+    damage: 10,
+    direction: { x: 1, y: 0 },
+    id: 32,
+    kind: 'weld-persistent',
+    maximumScale: 1,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    phase: 'flight',
+    presentationScale: 1,
+    pulseSequence: 1,
+    pushback: 0,
+    rocks: [{
+      damageRemaining: 10,
+      decay: 1,
+      localPosition: { x: 0, y: 0, z: 0 },
+      phase: 0,
+      releaseOffset: { x: 0, y: 0 },
+      spriteRecord: 168,
+      visualScale: 0.2,
+    }],
+    scale: 0.5,
+    toughness: 2,
+    vector: [10, 2, 1, 2, 0, 0],
+    widen: 0,
+    worldKey: WORLD_KEY,
+  }
+  const resolved = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [hailstones] }),
+    [],
+    4,
+  )
+  assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 4 },
+    { actorId: 2, amount: 4 },
+  ])
+  const retained = resolved.spells.transients.find(({ id }) => id === 32)
+  assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1008)
+  assert.equal(retained.rocks[0]!.damageRemaining, 6)
+})
+
 test('Disintegrate executes only below the strict post-hit twenty-percent gate', () => {
   const enemies = spawnEnemies([
     { position: { x: 20, y: 0 }, token: 'SKELETON' },

@@ -93,6 +93,7 @@ import {
   drawNativeWeldDamage,
   isChannelBuild,
   isPersistentBuild,
+  releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
   stepNativeWeldProjectile,
   stepNativeWeldWorldActor,
@@ -782,8 +783,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   let transients: PrimarySpellTransientState[] = []
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
-    if (isNativeWeldWorldActor(effect) && effect.kind !== 'weld-persistent') {
-      const stepped = stepNativeWeldWorldActor(effect)
+    if (isNativeWeldWorldActor(effect)) {
+      const stepped = stepNativeWeldWorldActor(effect, (actor, from, to) => (
+        actor.buildId === 1006
+          ? context.canPlaceProjectile(actor, to, actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE)
+          : context.spellObstructionPoint(actor.ownerId, from, to) === null
+      ))
       if (stepped) transients.push(stepped)
     } else if (
       effect.kind === 'earth-called-rock'
@@ -1357,10 +1362,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               effect.kind === 'weld-persistent'
               && effect.ownerId === playerId
               && effect.buildId === buildId
+              && effect.phase === 'held'
             ))
-            const actor = current
-              ? updateNativeWeldPersistentActor(current, emitter, aimDirection)
-              : createNativeWeldPersistentActor({
+            let actor: Extract<NativeWeldWorldActor, { kind: 'weld-persistent' }>
+            if (current) {
+              const updated = updateNativeWeldPersistentActor(
+                current,
+                emitter,
+                aimDirection,
+                rng,
+              )
+              actor = updated.actor
+              rng = updated.rng
+            } else {
+              actor = createNativeWeldPersistentActor({
                   buildId,
                   direction: aimDirection,
                   id: nextId,
@@ -1370,25 +1385,13 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   vector: authority.primarySkill.vector.values,
                   worldKey,
                 })
+            }
             if (current) {
               transients = transients.map((effect) => effect.id === current.id ? actor : effect)
             } else {
               transients = [...transients, actor]
               nextId += 1
             }
-            channelEmissions.push({
-              damage: primarySpellChannelDamage(authority.primarySkill, underpowered),
-              direction: { ...aimDirection },
-              id: actor.id,
-              kind: 'weld',
-              manaCost,
-              origin: emitter,
-              ownerId: playerId,
-              primarySkill: authority.primarySkill,
-              queryOrigin: { ...nextPlayer.position },
-              underpowered,
-              worldKey,
-            })
             if (
               buildId === 1007
               && context.tick % NATIVE_WELD_METEOR_CADENCE_TICKS === 0
@@ -1682,9 +1685,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
         },
       }
       if (authority.primarySkill.kind === 'weld') {
-        transients = transients.filter((effect) => !(
-          effect.kind === 'weld-persistent' && effect.ownerId === playerId
-        ))
+        const releasedWeld = releaseOwnedNativeWeldPersistentActors(
+          transients,
+          playerId,
+          nextId,
+          rng,
+        )
+        transients = releasedWeld.transients
+        nextId = releasedWeld.nextId
+        rng = releasedWeld.rng
       }
     }
 
@@ -1713,6 +1722,40 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     rng,
     spells: { nextId, projectiles, transients },
   }
+}
+
+function releaseOwnedNativeWeldPersistentActors(
+  source: readonly PrimarySpellTransientState[],
+  ownerId: string,
+  sourceNextId: number,
+  sourceRng: NativeRngState,
+): {
+  readonly nextId: number
+  readonly rng: NativeRngState
+  readonly transients: PrimarySpellTransientState[]
+} {
+  let nextId = sourceNextId
+  let rng = sourceRng
+  const transients: PrimarySpellTransientState[] = []
+  for (const effect of source) {
+    if (
+      effect.kind !== 'weld-persistent'
+      || effect.ownerId !== ownerId
+      || effect.phase !== 'held'
+    ) {
+      transients.push(effect)
+      continue
+    }
+    const released = releaseNativeWeldPersistentActor({
+      actor: effect,
+      firstChildId: nextId,
+      rng,
+    })
+    nextId = released.nextId
+    rng = released.rng
+    transients.push(...released.actors)
+  }
+  return { nextId, rng, transients }
 }
 
 function releaseHeldEarthProjectiles(
