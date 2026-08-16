@@ -14,7 +14,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 6
-const SAMPLE_LENGTH = 14
+const SAMPLE_LENGTH = 15
 const EMERGENCE_TICKS = 24
 
 export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
@@ -45,6 +45,7 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && sample[12] <= EMERGENCE_TICKS
       && maggotStateMatchesEmergence(sample[6], sample[12])
       && sample[13] <= 0
+      && arrayIndex(sample[14], 10)
   },
 }
 
@@ -83,6 +84,7 @@ export function boneyardMaggotSample(
     maggot.deathTick,
     maggot.emergenceTick,
     quantize(maggot.verticalOffset, VALUE_SCALE),
+    maggot.emergenceOrientation,
   ]
 }
 
@@ -108,6 +110,7 @@ export function materializeBoneyardMaggot(
     hitFlash: dequantize(sample[9], VALUE_SCALE),
     id: descriptor[1],
     emergenceTick: sample[12],
+    emergenceOrientation: sample[14],
     launchTrajectory: BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[descriptor[5]]!,
     maximumHealth: descriptor[4],
     ownerCoffinActorId: descriptor[2],

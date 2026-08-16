@@ -970,12 +970,13 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
   })
   state = { ...state, world: { ...state.world, enemies: seeded.store } }
 
-  for (let tick = 0; tick < 10; tick += 1) {
+  for (let tick = 0; tick < 100; tick += 1) {
     state = stepGameSimulationTick(state, {})
     if (getPlayerProgression(state).poisonTicksRemaining > 0) break
   }
 
   const progression = getPlayerProgression(state)
+  assert.ok(progression.poisonTicksRemaining > 0)
   assert.ok(progression.currentHealth > 14 && progression.currentHealth < 15)
   assert.equal(progression.poisonDamagePerTick, 35 / 6 / 100)
   assert.equal(progression.poisonTicksRemaining, 999)

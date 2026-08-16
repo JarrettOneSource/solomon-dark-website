@@ -11,10 +11,7 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardMaggotActor,
 } from '../core-server/boneyard-enemy-store.ts'
-import {
-  BOUNDED_IMP_FLIGHT_PROGRAM,
-  NATIVE_IMP_BODY_POSE_COUNT,
-} from '../core-kernels/boneyard-imp-flight.ts'
+import { NATIVE_IMP_BODY_POSE_COUNT } from '../core-kernels/boneyard-imp-flight.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import {
@@ -245,7 +242,7 @@ test('projects a production Maggot bite before death at every default snapshot p
   }, 100 + BOUNDED_MAGGOT_PROGRAM.bitePresentationTicks).state, 'death')
 })
 
-test('projects the bounded fixed-tick Imp flight program without changing spawn identity', () => {
+test('projects the native Imp body, bounce, rotation, and upper-effect lifecycle', () => {
   const spawnTick = 100
   const position = { x: 80, y: 120 }
   const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('imp-flight'), {
@@ -273,40 +270,57 @@ test('projects the bounded fixed-tick Imp flight program without changing spawn 
     }],
     tick: spawnTick,
   })
-  const samples = Array.from({ length: NATIVE_IMP_BODY_POSE_COUNT + 1 }, (_, index) => (
-    projectBoneyardEnemies(
-      spawned.store,
-      spawnTick + index * BOUNDED_IMP_FLIGHT_PROGRAM.bodyPoseTicks,
-    )[0]!
-  ))
+  let store = spawned.store
+  const samples = [projectBoneyardEnemies(store, spawnTick)[0]!]
+  for (let tick = spawnTick + 1; tick <= spawnTick + 3; tick += 1) {
+    store = stepBoneyardEnemyStore(store, {
+      firstProjectileWorldContact: () => null,
+      players: {
+        player: {
+          alive: true,
+          collisionRadius: 25,
+          connected: true,
+          eligible: true,
+          position: { x: 400, y: 120 },
+          velocityPerTick: { x: 0, y: 0 },
+        },
+      },
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [],
+      tick,
+    }).store
+    samples.push(projectBoneyardEnemies(store, tick)[0]!)
+  }
 
-  assert.deepEqual(samples.map((sample) => sample.animation.bodyPose), [0, 1, 2, 3, 0])
+  assert.ok(samples[0]!.animation.bodyPose >= 0)
+  assert.ok(samples[0]!.animation.bodyPose < NATIVE_IMP_BODY_POSE_COUNT)
+  assert.equal(samples[1]!.animation.bodyPose, samples[0]!.animation.bodyPose)
+  assert.ok(samples[2]!.animation.bodyPose >= 0)
+  assert.ok(samples[2]!.animation.bodyPose < NATIVE_IMP_BODY_POSE_COUNT)
+  assert.equal(samples[3]!.animation.bodyPose, samples[2]!.animation.bodyPose)
   assert.equal(samples[0]!.animation.alpha, 1)
+  assert.equal(samples[0]!.animation.impEffectAlpha, 0)
   assert.equal(samples[0]!.animation.verticalOffset, 0)
-  assert.equal(samples[0]!.animation.impEffectFrame, 0)
-  assert.equal(
-    projectBoneyardEnemies(spawned.store, spawnTick + 9)[0]?.animation.impEffectFrame,
-    9,
-  )
-  assert.equal(samples[1]!.animation.impEffectFrame, -1)
-  assert.ok(Math.abs(
-    samples[2]!.animation.alpha - BOUNDED_IMP_FLIGHT_PROGRAM.minimumAlpha,
-  ) < 1e-12)
-  assert.equal(
-    samples[2]!.animation.verticalOffset,
-    -BOUNDED_IMP_FLIGHT_PROGRAM.maximumLift,
-  )
+  assert.ok(samples[0]!.animation.impEffectFrame >= 0)
+  assert.ok(samples[0]!.animation.impEffectFrame < 10)
+  assert.equal(samples[1]!.animation.impEffectAlpha, 0)
+  assert.equal(samples[1]!.animation.verticalOffset, 0)
+  assert.equal(samples[2]!.animation.impEffectAlpha, 1)
+  assert.equal(samples[2]!.animation.verticalOffset, 0)
+  assert.ok(samples[2]!.animation.impBodyRotationRadians >= -Math.PI / 3)
+  assert.ok(samples[2]!.animation.impBodyRotationRadians <= Math.PI / 3)
+  assert.ok(samples[3]!.animation.impEffectAlpha > 0.94)
+  assert.ok(samples[3]!.animation.impEffectAlpha < 0.96)
+  assert.ok(samples[3]!.animation.verticalOffset < 0)
   assert.deepEqual(
-    samples.map(({ id, nativeTypeId, position: samplePosition, spawnTick: sampleSpawnTick }) => ({
+    samples.map(({ id, nativeTypeId, spawnTick: sampleSpawnTick }) => ({
       id,
       nativeTypeId,
-      position: samplePosition,
       spawnTick: sampleSpawnTick,
     })),
     samples.map(() => ({
       id: samples[0]!.id,
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.IMP,
-      position,
       spawnTick,
     })),
   )

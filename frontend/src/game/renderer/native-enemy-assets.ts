@@ -3,7 +3,9 @@ import deadhawg from '../../editor/manifest/deadhawg.json'
 import demon from '../../editor/manifest/demon.json'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
-import type { NativeEnemyAtlas } from './native-enemy-presentation.ts'
+import type { NativeEnemySampleAtlas } from './native-enemy-animation.ts'
+
+type NativeEnemyAtlas = NativeEnemySampleAtlas
 
 const spriteFiles = {
   ...import.meta.glob([
@@ -57,6 +59,7 @@ const spriteFiles = {
     '../../assets/game/boneyard/badguys/250[0-8].png',
     '../../assets/game/boneyard/demon/0[0-9][0-9].png',
     '../../assets/game/boneyard/demon/1[0-1][0-9].png',
+    '../../assets/game/boneyard/deadhawg/000.png',
     '../../assets/game/boneyard/deadhawg/0[2-9][0-9].png',
     '../../assets/game/boneyard/deadhawg/1[1-4][0-9].png',
   ], { eager: true, query: '?url', import: 'default' }),
@@ -95,7 +98,7 @@ const requiredBadGuysRanges = [
   [2293, 2346],
   [2365, 2508],
 ] as const
-const requiredDeadHawgRanges = [[28, 28], [30, 30], [46, 77], [114, 144]] as const
+const requiredDeadHawgRanges = [[0, 0], [28, 28], [30, 30], [46, 77], [114, 144]] as const
 const requiredDemonRanges = [[1, 115]] as const
 const selectedSpriteFiles = Object.fromEntries(Object.entries(spriteFiles).filter(([path]) => {
   const entry = Number(path.match(/(\d+)\.png$/)?.[1])
@@ -119,6 +122,7 @@ export interface NativeEnemySpriteGeometry {
   atlas: NativeEnemyAtlas
   entry: number
   height: number
+  points: readonly Readonly<{ x: number; y: number }>[]
   width: number
 }
 
@@ -143,6 +147,7 @@ export function nativeEnemySpriteGeometry(
     atlas,
     entry,
     height: record.rect.h,
+    points: Object.freeze((record.extras ?? []).map((point) => Object.freeze({ ...point }))),
     width: record.rect.w,
   }
 }

@@ -8,7 +8,16 @@ import {
   type BoneyardMageLightningPulse,
   type BoneyardEnemyStore,
 } from '../core-server/boneyard-enemy-store.ts'
-import { boundedImpFlightAnimationSample } from '../core-kernels/boneyard-imp-flight.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
+import {
+  NATIVE_DEMON_BOMB_CONTROLLER_POSES,
+  nativeDemonArticulationSample,
+} from '../core-kernels/boneyard-demon-articulation.ts'
+import { nativeImpEffectFrame } from '../core-kernels/boneyard-imp-flight.ts'
+import {
+  nativeZombieArticulationPose,
+  nativeZombieBeatPose,
+} from '../core-kernels/boneyard-zombie-beat.ts'
 import type {
   BoneyardEnemyAction,
   BoneyardEnemyAnimationSnapshot,
@@ -17,6 +26,7 @@ import type {
   BoneyardEnemyEffectSnapshot,
   BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMageLightningPulseSnapshot,
   BoneyardMaggotSnapshot,
@@ -83,7 +93,34 @@ export function projectBoneyardEnemyProjectiles(
     ownerActorId: projectile.ownerActorId,
     payload: projectile.payload,
     position: { ...projectile.position },
+    speed: projectile.speed,
     spawnTick: projectile.spawnTick,
+    verticalOffset: projectile.verticalOffset,
+    visualPhaseDeg: ((projectile.visualPhaseDeg % 720) + 720) % 720,
+    visualScale: projectile.visualScale,
+  }))
+}
+
+export function projectBoneyardEnemyProjectileEffects(
+  store: BoneyardEnemyStore,
+): readonly BoneyardEnemyProjectileEffectSnapshot[] {
+  return store.projectileEffects.map((effect) => ({
+    ageTicks: effect.ageTicks,
+    alpha: effect.alpha,
+    atlas: effect.atlas,
+    blendMode: effect.blendMode,
+    entry: effect.entry,
+    id: effect.id,
+    kind: effect.kind,
+    lifetimeTicks: effect.lifetimeTicks,
+    ownerActorId: effect.ownerActorId,
+    ownerProjectileId: effect.ownerProjectileId,
+    phaseOriginTicks: effect.phaseOriginTicks,
+    position: { ...effect.position },
+    rotationRadians: effect.rotationDeg * Math.PI / 180,
+    scale: effect.scale,
+    spawnTick: effect.spawnTick,
+    tint: effect.tint,
   }))
 }
 
@@ -125,6 +162,7 @@ export function projectBoneyardMaggots(
       deathEpoch: maggot.deathEpoch ?? 0,
       deathTick: maggot.deathTick,
       emergenceTick: maggot.emergenceTick,
+      emergenceOrientation: maggotEmergenceOrientation(maggot),
       headingDeg: maggot.headingDeg,
       hitFlash: nativeEnemyHitOverlay(maggot.lastDamageTick, tick),
       id: maggot.id,
@@ -160,43 +198,76 @@ function projectAnimation(
         && tick - actor.lastMovementTick <= NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
         ? 'locomotion'
         : 'idle'
-  const spawnAge = Math.max(0, tick - actor.spawnTick)
   const gaitPose = actor.gaitPose
-  const gaitRadians = gaitPose / 8 * Math.PI * 2
   const coffin = coffinPresentation(actor.brain)
-  const impFlight = actor.config.enemyToken === 'IMP' && actor.lifeState === 'alive'
-    ? boundedImpFlightAnimationSample(spawnAge)
+  const impBrain = actor.brain.family === 'imp' ? actor.brain : null
+  const zombieBrain = actor.brain.family === 'zombie' ? actor.brain : null
+  const zombieBeat = zombieBrain?.phase === 'swipe'
+    ? nativeZombieBeatPose(zombieBrain.actionProgress, zombieBrain.attackSide)
+    : null
+  const zombieArticulation = zombieBrain
+    ? nativeZombieArticulationPose({
+        actionActive: zombieBrain.phase === 'swipe',
+        actionSwing: zombieBrain.actionSwing,
+        attackSide: zombieBrain.attackSide,
+        bodyPhaseDeg: zombieBrain.bodyPhaseDeg,
+        frontArmBaseRotationDeg: zombieBrain.frontArmBaseRotationDeg,
+        headBaseRotationDeg: zombieBrain.headBaseRotationDeg,
+        headPhaseDeg: zombieBrain.headPhaseDeg,
+        rearArmBaseRotationDeg: zombieBrain.rearArmBaseRotationDeg,
+      })
+    : null
+  const demonBrain = actor.brain.family === 'demon' ? actor.brain : null
+  const demonControllerPose = demonBrain?.phase === 'bomb'
+    ? NATIVE_DEMON_BOMB_CONTROLLER_POSES[Math.min(
+        Math.floor(demonBrain.actionProgress),
+        NATIVE_DEMON_BOMB_CONTROLLER_POSES.length - 1,
+      )]!
+    : 0
+  const demonArticulation = demonBrain
+    ? nativeDemonArticulationSample(tick, actor.spawnTick, demonControllerPose)
     : null
   return {
     action,
     actionProgress: actionProgress(actor.brain),
-    alpha: actor.brain.family === 'wraith'
-      ? actor.brain.alpha
-      : impFlight?.alpha ?? 1,
-    bodyPose: impFlight?.bodyPose ?? Math.floor(gaitPose),
+    alpha: 1,
+    bodyPose: impBrain
+      ? impBrain.bodyVariant
+      : demonBrain
+        ? demonControllerPose
+        : Math.floor(gaitPose),
     coffinPose: coffin.pose,
     coffinSecondaryPose: null,
     coffinState: coffin.state,
     deathEpoch: actor.deathEpoch ?? 0,
     deathTick: actor.deathTick,
-    demonFrontJointRotationRadians: Math.sin(gaitRadians + Math.PI) * 0.12,
-    demonFrontLimbRotationRadians: Math.sin(gaitRadians) * 0.18,
-    demonRearJointRotationRadians: Math.sin(gaitRadians) * 0.12,
-    demonRearLimbRotationRadians: Math.sin(gaitRadians + Math.PI) * 0.18,
+    demonFrontJointRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
+    demonFrontLimbRotationRadians: demonArticulation?.frontRotationRadians ?? 0,
+    demonRearJointRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
+    demonRearLimbRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
     hitFlash: nativeEnemyHitOverlay(actor.lastDamageTick, tick),
-    impEffectFrame: impFlight?.impEffectFrame ?? -1,
+    impBodyRotationRadians: (impBrain?.bodyRotationDeg ?? 0) * Math.PI / 180,
+    impEffectAlpha: impBrain?.effectAlpha ?? 0,
+    impEffectFrame: impBrain ? nativeImpEffectFrame(impBrain.effectPhase) : -1,
     maggots: [],
     state,
-    verticalOffset: impFlight?.verticalOffset ?? coffin.verticalOffset,
-    zombieAngularOffsetDeg: actor.brain.family === 'zombie'
-      ? Math.sin(gaitRadians) * 3
-      : 0,
-    zombieFrontArmPose: Math.floor(positiveModulo(gaitPose + 1, 5)),
-    zombieFrontArmRotationRadians: Math.sin(gaitRadians) * 0.16,
-    zombieRearArmPose: Math.floor(positiveModulo(gaitPose + 3, 5)),
-    zombieRearArmRotationRadians: Math.sin(gaitRadians + Math.PI) * 0.16,
+    verticalOffset: impBrain?.verticalOffset
+      ?? zombieBrain?.verticalOffset
+      ?? demonArticulation?.verticalOffset
+      ?? coffin.verticalOffset,
+    zombieAngularOffsetDeg: zombieBrain?.angularOffsetDeg ?? 0,
+    zombieAttackSide: zombieBrain?.attackSide ?? 0,
+    zombieBodyType: zombieBrain?.bodyType ?? -1,
+    zombieFlyblownSide: zombieBrain?.flyblownSide ?? -1,
+    zombieFrontArmPose: zombieBeat?.frontArmPose ?? 0,
+    zombieBodyRotationRadians: zombieArticulation?.bodyRotationRadians ?? 0,
+    zombieFrontArmRotationRadians: zombieArticulation?.frontArmRotationRadians ?? 0,
+    zombieHeadRotationRadians: zombieArticulation?.headRotationRadians ?? 0,
+    zombieHeadType: zombieBrain?.headType ?? -1,
+    zombieRearArmPose: zombieBeat?.rearArmPose ?? 0,
+    zombieRearArmRotationRadians: zombieArticulation?.rearArmRotationRadians ?? 0,
   }
 }
 
@@ -260,10 +331,10 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
       ? brain.castProgram === 'long' ? 'mage-cast-long' : 'mage-cast-short'
       : null
     case 'imp': return brain.phase === 'contact' ? 'imp-contact' : null
-    case 'zombie': return brain.phase === 'swipe' ? 'zombie-swipe' : null
+    case 'zombie': return brain.phase === 'swipe' ? 'zombie-beat' : null
     case 'wraith': return brain.phase === 'drain' ? 'wraith-drain' : null
     case 'demon': return brain.phase === 'bomb' ? 'demon-bomb' : null
-    case 'coffin': return brain.phase === 'opening' ? 'coffin-open' : null
+    case 'coffin': return null
   }
 }
 
@@ -273,13 +344,21 @@ function actionProgress(brain: BoneyardEnemyBrain): number {
     case 'archer':
     case 'mage': return brain.actionProgress
     case 'imp':
+    case 'wraith': return brain.actionTick
     case 'zombie':
-    case 'wraith':
-    case 'demon': return brain.actionTick
+    case 'demon': return brain.actionProgress
     case 'coffin': return brain.phase === 'opening'
       ? Math.min(12, 3 + brain.phaseTick * 0.2)
       : 0
   }
+}
+
+function maggotEmergenceOrientation(maggot: BoneyardMaggotActor): number {
+  const heading = actorHeadingFromVector(
+    maggot.launchVelocity.x,
+    maggot.launchVelocity.y,
+  )
+  return positiveModulo(Math.floor((heading + 18) / 36), 10)
 }
 
 function coffinPresentation(brain: BoneyardEnemyBrain): {

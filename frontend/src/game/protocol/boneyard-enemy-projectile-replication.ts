@@ -16,7 +16,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 12
-const SAMPLE_LENGTH = 6
+const SAMPLE_LENGTH = 10
 
 const KINDS = [
   'arrow',
@@ -67,6 +67,10 @@ export const BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION = {
       && sample.slice(2).every(Number.isSafeInteger)
       && cyclic(sample[4], 360, ANGLE_SCALE)
       && nonnegativeInteger(sample[5])
+      && nonnegativeInteger(sample[6])
+      && sample[7] <= 0
+      && cyclic(sample[8], 720, ANGLE_SCALE)
+      && nonnegativeInteger(sample[9])
   },
 }
 
@@ -101,6 +105,10 @@ export function boneyardEnemyProjectileSample(
     quantize(projectile.position.y, POSITION_SCALE),
     quantizeCyclic(projectile.headingDeg, 360, ANGLE_SCALE),
     projectile.ageTicks,
+    quantize(projectile.speed, VALUE_SCALE),
+    quantize(projectile.verticalOffset, VALUE_SCALE),
+    quantizeCyclic(projectile.visualPhaseDeg, 720, ANGLE_SCALE),
+    quantize(projectile.visualScale, VALUE_SCALE),
   ]
 }
 
@@ -138,7 +146,11 @@ export function materializeBoneyardEnemyProjectile(
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),
     },
+    speed: dequantize(sample[6], VALUE_SCALE),
     spawnTick: descriptor[5],
+    verticalOffset: dequantize(sample[7], VALUE_SCALE),
+    visualPhaseDeg: dequantize(sample[8], ANGLE_SCALE),
+    visualScale: dequantize(sample[9], VALUE_SCALE),
   }
 }
 

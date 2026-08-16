@@ -77,13 +77,21 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
       }],
       gaitPose: x / 10,
       hitFlash: 0,
+      impBodyRotationRadians: 0,
+      impEffectAlpha: 0,
       impEffectFrame: 0,
       maggots: [],
       state: 'locomotion',
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
+      zombieAttackSide: 0,
+      zombieBodyRotationRadians: 0,
+      zombieBodyType: -1,
+      zombieFlyblownSide: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
+      zombieHeadType: -1,
+      zombieHeadRotationRadians: 0,
       zombieRearArmPose: 0,
       zombieRearArmRotationRadians: 0,
     },
@@ -122,7 +130,11 @@ function enemyProjectileAt(x: number): BoneyardEnemyProjectileSnapshot {
     ownerActorId: 1,
     payload: 'normal',
     position: { x, y: 475 },
+    speed: x / 100,
     spawnTick: 90,
+    verticalOffset: -x / 10,
+    visualPhaseDeg: x,
+    visualScale: 1 + x / 1_000,
   }
 }
 
@@ -136,6 +148,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     hitFlash,
     id: 2,
     emergenceTick: x / 10,
+    emergenceOrientation: 0,
     launchTrajectory: 'edge',
     maximumHealth: 2,
     ownerCoffinActorId: 1,
@@ -205,6 +218,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       },
       enemies: [enemyAt(gateTipX + 300)],
       enemyEvents: [],
+      enemyProjectileEffects: [],
       enemyProjectiles: [enemyProjectileAt(gateTipX + 200)],
       gateLeaves: [{
         fenceEid: 'gate-1',
@@ -309,6 +323,10 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   ) < 1e-9)
   assert.equal(timeline.sample(75).world.enemies[0].animation.effects[0]?.offset.x, 41)
   assert.equal(timeline.sample(75).world.enemyProjectiles[0].position.x, 310)
+  assert.equal(timeline.sample(75).world.enemyProjectiles[0].speed, 3.1)
+  assert.equal(timeline.sample(75).world.enemyProjectiles[0].verticalOffset, -31)
+  assert.equal(timeline.sample(75).world.enemyProjectiles[0].visualPhaseDeg, 310)
+  assert.equal(timeline.sample(75).world.enemyProjectiles[0].visualScale, 1.31)
   assert.equal(timeline.sample(75).world.maggots[0].position.x, 210)
   assert.equal(timeline.sample(75).world.maggots[0].emergenceTick, 21)
   assert.equal(timeline.sample(75).world.maggots[0].verticalOffset, -21)
@@ -523,38 +541,114 @@ test('interpolates independent death-effect transforms without rerolling art ide
   assert.ok(Math.abs(effect.rotationRadians) < 1e-9)
 })
 
+test('interpolates projectile-owned effects after their projectile has retired', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  older.world.enemyProjectiles = []
+  newer.world.enemyProjectiles = []
+  older.world.enemyProjectileEffects = [{
+    ageTicks: 5,
+    alpha: 0.75,
+    atlas: 'BadGuys',
+    blendMode: 'add',
+    entry: 260,
+    id: 12,
+    kind: 'firebolt-trail',
+    lifetimeTicks: 12,
+    ownerActorId: 1,
+    ownerProjectileId: 9,
+    phaseOriginTicks: 20,
+    position: { x: 100, y: 200 },
+    rotationRadians: Math.PI * 1.9,
+    scale: 1,
+    spawnTick: 95,
+    tint: 0xff4949,
+  }]
+  newer.world.enemyProjectileEffects = [{
+    ...older.world.enemyProjectileEffects[0]!,
+    ageTicks: 10,
+    alpha: 1 / 6,
+    position: { x: 110, y: 220 },
+    rotationRadians: Math.PI * 0.1,
+    scale: 1.2,
+  }]
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const effect = timeline.sample(75).world.enemyProjectileEffects[0]!
+  assert.equal(effect.id, 12)
+  assert.equal(effect.ownerProjectileId, 9)
+  assert.equal(effect.entry, 260)
+  assert.equal(effect.ageTicks, 7.5)
+  assert.ok(Math.abs(effect.alpha - 11 / 24) < 1e-12)
+  assert.deepEqual(effect.position, { x: 105, y: 210 })
+  assert.ok(Math.abs(effect.rotationRadians) < 1e-9)
+  assert.equal(effect.scale, 1.1)
+})
+
 test('interpolates the authoritative Imp flight cycle without changing spawn identity', () => {
   const timeline = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
     initialSnapshot: impSnapshotAt(100, {
       alpha: 1,
       bodyPose: 3,
-      impEffectFrame: 5,
+      impBodyRotationRadians: -0.2,
+      impEffectAlpha: 1,
+      impEffectFrame: 9,
       verticalOffset: 0,
     }),
     serverTickRate: 100,
     snapshotRate: 20,
   })
   timeline.push(impSnapshotAt(105, {
-    alpha: 0.82,
+    alpha: 1,
     bodyPose: 0,
-    impEffectFrame: -1,
+    impBodyRotationRadians: 0.3,
+    impEffectAlpha: 0.5,
+    impEffectFrame: 1,
     verticalOffset: -4,
   }), 50)
 
   const midpoint = timeline.sample(75).world.enemies[0]!
-  assert.equal(midpoint.animation.bodyPose, 3.5)
-  assert.ok(Math.abs(midpoint.animation.alpha - 0.91) < 1e-12)
+  assert.equal(midpoint.animation.bodyPose, 3)
+  assert.equal(midpoint.animation.alpha, 1)
+  assert.equal(midpoint.animation.impBodyRotationRadians, -0.2)
+  assert.equal(midpoint.animation.impEffectAlpha, 0.75)
   assert.equal(midpoint.animation.verticalOffset, -2)
-  assert.equal(midpoint.animation.impEffectFrame, 7.5)
+  assert.equal(midpoint.animation.impEffectFrame, 0)
   assert.equal(midpoint.id, 1)
   assert.equal(midpoint.spawnTick, 90)
 
   const completed = timeline.sample(100).world.enemies[0]!
   assert.equal(completed.animation.bodyPose, 0)
-  assert.equal(completed.animation.impEffectFrame, -1)
+  assert.equal(completed.animation.impBodyRotationRadians, 0.3)
+  assert.equal(completed.animation.impEffectAlpha, 0.5)
+  assert.equal(completed.animation.impEffectFrame, 1)
   assert.equal(completed.id, midpoint.id)
   assert.equal(completed.spawnTick, midpoint.spawnTick)
+
+  const sameVariant = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: impSnapshotAt(100, {
+      bodyPose: 3,
+      impBodyRotationRadians: -0.2,
+    }),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  sameVariant.push(impSnapshotAt(105, {
+    bodyPose: 3,
+    impBodyRotationRadians: 0.3,
+  }), 50)
+  assert.equal(
+    sameVariant.sample(75).world.enemies[0]!.animation.impBodyRotationRadians,
+    -0.2,
+  )
 })
 
 test('preserves every player corpse frame at 20 Hz for all death-epoch alignments', () => {
@@ -685,5 +779,9 @@ test('owns returned state and ignores stale Boneyard snapshots', () => {
     initial.world.enemies[0].animation.effects[0],
   )
   assert.notEqual(frame.world.enemyProjectiles[0], initial.world.enemyProjectiles[0])
+  assert.notEqual(
+    frame.world.enemyProjectileEffects,
+    initial.world.enemyProjectileEffects,
+  )
   assert.notEqual(frame.world.maggots[0], initial.world.maggots[0])
 })

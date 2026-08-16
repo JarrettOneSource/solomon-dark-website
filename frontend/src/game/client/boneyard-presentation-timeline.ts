@@ -1,11 +1,11 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import {
-  NATIVE_IMP_BODY_POSE_COUNT,
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES } from '../core-kernels/boneyard-mage-lightning.ts'
 import type {
   BoneyardEnemyDeathEffectSnapshot,
+  BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMaggotSnapshot,
@@ -163,6 +163,11 @@ function interpolateSnapshot(
       enemies: interpolateEnemies(older.world.enemies, newer.world.enemies, blend),
       enemyEvents: (blend < 1 ? older.world.enemyEvents : newer.world.enemyEvents)
         .map(copyEnemyEvent),
+      enemyProjectileEffects: interpolateEnemyProjectileEffects(
+        older.world.enemyProjectileEffects,
+        newer.world.enemyProjectileEffects,
+        blend,
+      ),
       enemyProjectiles: interpolateEnemyProjectiles(
         older.world.enemyProjectiles,
         newer.world.enemyProjectiles,
@@ -300,6 +305,8 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       encounter: copySolomon(snapshot.world.encounter),
       enemies: snapshot.world.enemies.map(copyEnemy),
       enemyEvents: snapshot.world.enemyEvents.map(copyEnemyEvent),
+      enemyProjectileEffects: snapshot.world.enemyProjectileEffects
+        .map(copyEnemyProjectileEffect),
       enemyProjectiles: snapshot.world.enemyProjectiles.map(copyEnemyProjectile),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
       kind: 'boneyard',
@@ -379,6 +386,23 @@ function interpolateEnemyProjectiles(
         x: lerp(olderProjectile.position.x, newerProjectile.position.x, blend),
         y: lerp(olderProjectile.position.y, newerProjectile.position.y, blend),
       },
+      speed: lerp(olderProjectile.speed, newerProjectile.speed, blend),
+      verticalOffset: lerp(
+        olderProjectile.verticalOffset,
+        newerProjectile.verticalOffset,
+        blend,
+      ),
+      visualPhaseDeg: lerpCycle(
+        olderProjectile.visualPhaseDeg,
+        newerProjectile.visualPhaseDeg,
+        blend,
+        720,
+      ),
+      visualScale: lerp(
+        olderProjectile.visualScale,
+        newerProjectile.visualScale,
+        blend,
+      ),
     }
   })
   if (blend >= 1) {
@@ -389,6 +413,43 @@ function interpolateEnemyProjectiles(
     return projectiles.filter((projectile) => newerById.has(projectile.id))
   }
   return projectiles
+}
+
+function interpolateEnemyProjectileEffects(
+  older: readonly BoneyardEnemyProjectileEffectSnapshot[],
+  newer: readonly BoneyardEnemyProjectileEffectSnapshot[],
+  blend: number,
+): BoneyardEnemyProjectileEffectSnapshot[] {
+  const newerById = new Map(newer.map((effect) => [effect.id, effect]))
+  const effects = older.map((olderEffect) => {
+    const newerEffect = newerById.get(olderEffect.id)
+    if (!newerEffect) return copyEnemyProjectileEffect(olderEffect)
+    const discrete = blend < 1 ? olderEffect : newerEffect
+    return {
+      ...copyEnemyProjectileEffect(discrete),
+      ageTicks: lerp(olderEffect.ageTicks, newerEffect.ageTicks, blend),
+      alpha: lerp(olderEffect.alpha, newerEffect.alpha, blend),
+      position: {
+        x: lerp(olderEffect.position.x, newerEffect.position.x, blend),
+        y: lerp(olderEffect.position.y, newerEffect.position.y, blend),
+      },
+      rotationRadians: lerpCycle(
+        olderEffect.rotationRadians,
+        newerEffect.rotationRadians,
+        blend,
+        Math.PI * 2,
+      ),
+      scale: lerp(olderEffect.scale, newerEffect.scale, blend),
+    }
+  })
+  if (blend >= 1) {
+    const knownIds = new Set(effects.map((effect) => effect.id))
+    for (const effect of newer) {
+      if (!knownIds.has(effect.id)) effects.push(copyEnemyProjectileEffect(effect))
+    }
+    return effects.filter((effect) => newerById.has(effect.id))
+  }
+  return effects
 }
 
 function interpolateMaggots(
@@ -587,6 +648,12 @@ function copyLightRegistration<T extends { managerLane: 'actor' | 'transient'; r
   return (registration === null ? null : { ...registration }) as T
 }
 
+function copyEnemyProjectileEffect(
+  effect: BoneyardEnemyProjectileEffectSnapshot,
+): BoneyardEnemyProjectileEffectSnapshot {
+  return { ...effect, position: { ...effect.position } }
+}
+
 function copyEnemyDeathEffect(
   effect: BoneyardEnemyDeathEffectSnapshot,
 ): BoneyardEnemyDeathEffectSnapshot {
@@ -667,12 +734,7 @@ function interpolateEnemyAnimation(
     actionProgress: lerp(first.actionProgress, second.actionProgress, blend),
     alpha: lerp(first.alpha, second.alpha, blend),
     bodyPose: older.enemyToken === 'IMP'
-      ? lerpCycle(
-          first.bodyPose,
-          second.bodyPose,
-          blend,
-          NATIVE_IMP_BODY_POSE_COUNT,
-        )
+      ? discrete.bodyPose
       : lerp(first.bodyPose, second.bodyPose, blend),
     coffinPose: lerp(first.coffinPose, second.coffinPose, blend),
     deathTick: lerp(first.deathTick, second.deathTick, blend),
@@ -699,6 +761,8 @@ function interpolateEnemyAnimation(
     effects: interpolateEnemyEffects(first.effects, second.effects, blend),
     gaitPose: lerpCycle(first.gaitPose, second.gaitPose, blend, ENEMY_GAIT_POSE_COUNT),
     hitFlash: lerp(first.hitFlash, second.hitFlash, blend),
+    impBodyRotationRadians: discrete.impBodyRotationRadians,
+    impEffectAlpha: lerp(first.impEffectAlpha, second.impEffectAlpha, blend),
     impEffectFrame: older.enemyToken === 'IMP'
       ? interpolateImpEffectFrame(first.impEffectFrame, second.impEffectFrame, blend)
       : discrete.impEffectFrame,
@@ -709,10 +773,20 @@ function interpolateEnemyAnimation(
       second.zombieAngularOffsetDeg,
       blend,
     ),
+    zombieBodyRotationRadians: lerp(
+      first.zombieBodyRotationRadians,
+      second.zombieBodyRotationRadians,
+      blend,
+    ),
     zombieFrontArmPose: lerp(first.zombieFrontArmPose, second.zombieFrontArmPose, blend),
     zombieFrontArmRotationRadians: lerp(
       first.zombieFrontArmRotationRadians,
       second.zombieFrontArmRotationRadians,
+      blend,
+    ),
+    zombieHeadRotationRadians: lerp(
+      first.zombieHeadRotationRadians,
+      second.zombieHeadRotationRadians,
       blend,
     ),
     zombieRearArmPose: lerp(first.zombieRearArmPose, second.zombieRearArmPose, blend),
@@ -730,9 +804,13 @@ function interpolateImpEffectFrame(
   blend: number,
 ): number {
   if (blend >= 1) return newer
-  if (older < 0) return older
-  const target = newer < 0 ? NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT : newer
-  return lerp(older, target, blend)
+  if (older < 0 || newer < 0) return older
+  return lerpCycle(
+    older,
+    newer,
+    blend,
+    NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
+  )
 }
 
 function interpolateEnemyEffects(

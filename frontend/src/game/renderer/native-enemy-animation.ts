@@ -1,4 +1,5 @@
 import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
+import { NATIVE_DEMON_BOMB_CONTROLLER_POSES } from '../core-kernels/boneyard-demon-articulation.ts'
 
 export type NativeEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
 
@@ -10,15 +11,13 @@ export type NativeEnemyActionProgramName =
   | 'archer-shot'
   | 'mage-cast-short'
   | 'mage-cast-long'
-  | 'imp-contact'
-  | 'zombie-swipe'
-  | 'wraith-drain'
-  | 'demon-claw'
   | 'demon-bomb'
-  | 'coffin-open'
-  | 'maggot-bite'
 
-export type NativeEnemyAnimationProvenance = 'native-exact' | 'bounded-web'
+export type NativeEnemyActionName =
+  | NativeEnemyActionProgramName
+  | 'imp-contact'
+  | 'zombie-beat'
+  | 'wraith-drain'
 
 export type NativeEnemyDeathProgramName =
   | 'skeleton-shatter'
@@ -43,7 +42,7 @@ export interface NativeEnemyActionProgram {
   readonly name: NativeEnemyActionProgramName
   /** Multiplied by the listed authoritative simulation factors each fixed tick. */
   readonly progressPerTick: number
-  readonly provenance: NativeEnemyAnimationProvenance
+  readonly provenance: 'native-exact'
   readonly rateFactors: readonly (
     'attack-speed' | 'marker-multiplier' | 'one-plus-cast-roll'
   )[]
@@ -98,7 +97,7 @@ export interface NativeEnemyEffectSample {
  * disappearance.
  */
 export interface NativeEnemyAnimationSample {
-  action: NativeEnemyActionProgramName | null
+  action: NativeEnemyActionName | null
   actionProgress: number
   alpha: number
   bodyPose: number
@@ -114,16 +113,32 @@ export interface NativeEnemyAnimationSample {
   effects: readonly NativeEnemyEffectSample[]
   gaitPose: number
   hitFlash: number
+  impBodyRotationRadians: number
+  impEffectAlpha: number
   impEffectFrame: number
   maggots: readonly NativeEnemyMaggotSample[]
   state: NativeEnemyAnimationState
   verticalOffset: number
   zombieAngularOffsetDeg: number
+  zombieAttackSide: 0 | 1
+  zombieBodyRotationRadians: number
+  zombieBodyType: number
+  zombieFlyblownSide: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number
+  zombieHeadType: number
+  zombieHeadRotationRadians: number
   zombieRearArmPose: number
   zombieRearArmRotationRadians: number
 }
+
+export {
+  NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM as NATIVE_ZOMBIE_BEAT_PROGRAM,
+  nativeZombieArticulationPose,
+  nativeZombieBeatPose,
+  type NativeZombieArticulationPose,
+  type NativeZombieBeatPose,
+} from '../core-kernels/boneyard-zombie-beat.ts'
 
 const repeated = (selector: number, count: number): number[] => (
   Array.from({ length: count }, () => selector)
@@ -194,40 +209,13 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
     0.253125012,
     ['one-plus-cast-roll', 'attack-speed'],
   ),
-  'imp-contact': boundedProgram(
-    'imp-contact',
-    [0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 1, 0],
-    [6],
-  ),
-  'zombie-swipe': boundedProgram(
-    'zombie-swipe',
-    [0, 0, 1, 1, 2, 2, 2, 1, 1, 0],
-    [5],
-  ),
-  'wraith-drain': boundedProgram(
-    'wraith-drain',
-    [0, 0, 1, 1, 2, 2, 1, 1, 0, 0],
-    [4],
-  ),
-  'demon-claw': boundedProgram(
-    'demon-claw',
-    [0, 0, 1, 1, 2, 2, 3, 3, 2, 1, 0],
-    [6],
-  ),
-  'demon-bomb': boundedProgram(
+  'demon-bomb': exactProgram(
     'demon-bomb',
-    [0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0],
-    [6],
-  ),
-  'coffin-open': boundedProgram(
-    'coffin-open',
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-    [10],
-  ),
-  'maggot-bite': boundedProgram(
-    'maggot-bite',
-    [0, 0, 1, 1, 1, 0],
-    [3],
+    NATIVE_DEMON_BOMB_CONTROLLER_POSES,
+    [4],
+    8,
+    0.09375,
+    ['attack-speed'],
   ),
 }
 
@@ -285,13 +273,21 @@ export function nativeEnemyIdleAnimationSample(
     effects: [],
     gaitPose: 0,
     hitFlash: 0,
+    impBodyRotationRadians: 0,
+    impEffectAlpha: 0,
     impEffectFrame: -1,
     maggots: [],
     state: 'idle',
     verticalOffset: 0,
     zombieAngularOffsetDeg: 0,
+    zombieAttackSide: 0,
+    zombieBodyRotationRadians: 0,
+    zombieBodyType: -1,
+    zombieFlyblownSide: -1,
     zombieFrontArmPose: 0,
     zombieFrontArmRotationRadians: 0,
+    zombieHeadType: -1,
+    zombieHeadRotationRadians: 0,
     zombieRearArmPose: 0,
     zombieRearArmRotationRadians: 0,
     ...overrides,
@@ -314,22 +310,6 @@ function exactProgram(
     provenance: 'native-exact',
     rateFactors,
     strictEnd,
-  }
-}
-
-function boundedProgram(
-  name: NativeEnemyActionProgramName,
-  frames: readonly number[],
-  eventMarkers: readonly number[],
-): NativeEnemyActionProgram {
-  return {
-    eventMarkers,
-    frames,
-    name,
-    progressPerTick: 1,
-    provenance: 'bounded-web',
-    rateFactors: [],
-    strictEnd: frames.length - 1,
   }
 }
 

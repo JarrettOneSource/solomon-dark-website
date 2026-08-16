@@ -96,7 +96,11 @@ class NativeEnemyView {
   }
 
   update(enemy: NativeEnemyVisualSnapshot, tick: number): void {
-    const plan = nativeEnemyPresentationPlan(enemy, tick)
+    const plan = nativeEnemyPresentationPlan(
+      enemy,
+      tick,
+      (atlas, entry) => nativeEnemySpriteRecord(atlas, entry).points,
+    )
     while (this.sprites.length < plan.layers.length) {
       const sprite = new Sprite()
       sprite.eventMode = 'none'

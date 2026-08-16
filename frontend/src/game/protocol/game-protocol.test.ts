@@ -160,7 +160,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v22 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v23 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -274,6 +274,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     currentHealth: 1,
     deathEpoch: 0,
     deathTick: 0,
+    emergenceOrientation: 0,
     headingDeg: 90,
     hitFlash: 0.6,
     id: 2,
@@ -305,7 +306,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v22 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v23 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -361,13 +362,21 @@ test('protocol v22 strictly round-trips projected statuses, lighting, shields, p
       }],
       gaitPose: 0,
       hitFlash: 0,
+      impBodyRotationRadians: 0,
+      impEffectAlpha: 0,
       impEffectFrame: -1,
       maggots: [],
       state: 'idle',
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
+      zombieAttackSide: 0,
+      zombieBodyRotationRadians: 0,
+      zombieBodyType: -1,
+      zombieFlyblownSide: -1,
       zombieFrontArmPose: 0,
       zombieFrontArmRotationRadians: 0,
+      zombieHeadType: -1,
+      zombieHeadRotationRadians: 0,
       zombieRearArmPose: 0,
       zombieRearArmRotationRadians: 0,
     },
@@ -413,7 +422,29 @@ test('protocol v22 strictly round-trips projected statuses, lighting, shields, p
     ownerActorId: 1,
     payload: 'poison',
     position: { x: 110, y: 100 },
+    speed: 5,
     spawnTick: 1,
+    verticalOffset: -25,
+    visualPhaseDeg: 540,
+    visualScale: 1,
+  }]
+  snapshot.world.enemyProjectileEffects = [{
+    ageTicks: 1,
+    alpha: 2,
+    atlas: 'BadGuys',
+    blendMode: 'add',
+    entry: 110,
+    id: 5,
+    kind: 'guided-impact-main',
+    lifetimeTicks: 4,
+    ownerActorId: 1,
+    ownerProjectileId: 2,
+    phaseOriginTicks: 3,
+    position: { x: 115, y: 100 },
+    rotationRadians: 0.25,
+    scale: 1,
+    spawnTick: 3,
+    tint: 0xff4949,
   }]
   snapshot.world.maggots = [{
     alpha: 1,
@@ -421,6 +452,7 @@ test('protocol v22 strictly round-trips projected statuses, lighting, shields, p
     deathEpoch: 0,
     deathTick: 0,
     emergenceTick: 12,
+    emergenceOrientation: 4,
     headingDeg: 90,
     hitFlash: 0,
     id: 3,
@@ -481,11 +513,33 @@ test('protocol v22 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    55,
+    63,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
     fullEffectFrame,
+  )
+
+  const replicatedFrame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  if (replicatedFrame.world.kind !== 'boneyard') {
+    throw new Error('expected replicated Boneyard frame')
+  }
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 63)
+  const replicatedMessage = {
+    type: 'server-snapshot' as const,
+    acknowledgedInputSequence: 0,
+    frame: replicatedFrame,
+    sequence: 2,
+  }
+  assert.deepEqual(
+    decodeServerGameMessage(encodeGameMessage(replicatedMessage)),
+    replicatedMessage,
+  )
+  const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
+  oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(10).fill(0))
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(oversizedReplicatedSample)),
+    /may contain at most 72 entries/,
   )
 
   const missingCold = JSON.parse(encodeGameMessage(welcome))
@@ -647,10 +701,26 @@ test('protocol v22 strictly round-trips projected statuses, lighting, shields, p
     () => decodeServerGameMessage(JSON.stringify(duplicateDeathEffect)),
     /deathEffects duplicates id/,
   )
+
+  const invalidProjectileEffect = JSON.parse(encodeGameMessage(welcome))
+  invalidProjectileEffect.snapshot.world.enemyProjectileEffects[0].blendMode = 'screen'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidProjectileEffect)),
+    /enemyProjectileEffects\[0\]\.blendMode/,
+  )
+
+  const duplicateProjectileEffect = JSON.parse(encodeGameMessage(welcome))
+  duplicateProjectileEffect.snapshot.world.enemyProjectileEffects.push(
+    duplicateProjectileEffect.snapshot.world.enemyProjectileEffects[0],
+  )
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicateProjectileEffect)),
+    /enemyProjectileEffects duplicates id/,
+  )
 })
 
-test('protocol v22 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 22)
+test('protocol v23 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 23)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -742,7 +812,7 @@ test('protocol v22 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v22 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v23 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

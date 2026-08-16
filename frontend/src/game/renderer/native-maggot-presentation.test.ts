@@ -54,13 +54,30 @@ test('Maggot hit presentation appends the same native red redraw as enemies', ()
 test('Maggot emergence consumes its authoritative launch height and trajectory', () => {
   const plan = nativeMaggotPresentationPlan(maggot({
     emergenceTick: 12,
+    emergenceOrientation: 3,
     launchTrajectory: 'lid',
     state: 'emerging',
     verticalOffset: -20,
   }))
 
   assert.equal(plan.layers[0]?.role, 'maggot-body-emerging-lid')
+  assert.equal(plan.layers[0]?.entry, 2036)
   assert.deepEqual(plan.layers[0]?.offset, { x: 0, y: -20 })
+})
+
+test('Maggot ballistic lane enumerates all five phases and ten orientations', () => {
+  const entries = new Set<number>()
+  for (let phase = 0; phase < 5; phase += 1) {
+    for (let orientation = 0; orientation < 10; orientation += 1) {
+      entries.add(nativeMaggotPresentationPlan(maggot({
+        emergenceOrientation: orientation,
+        emergenceTick: Math.ceil(phase * 24 / 5),
+        state: 'emerging',
+      })).layers[0]!.entry)
+    }
+  }
+  assert.deepEqual([...entries].sort((left, right) => left - right),
+    Array.from({ length: 50 }, (_, index) => 2013 + index))
 })
 
 function entries(snapshot: BoneyardMaggotSnapshot) {
@@ -80,6 +97,7 @@ function maggot(overrides: Partial<BoneyardMaggotSnapshot>): BoneyardMaggotSnaps
     hitFlash: 0,
     id: 1,
     emergenceTick: 24,
+    emergenceOrientation: 0,
     launchTrajectory: 'edge',
     maximumHealth: 2,
     ownerCoffinActorId: 2,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
+import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
@@ -1338,7 +1339,7 @@ test('Wraith contact applies the exact 50-tick Dazzle duration', () => {
   assert.equal(result.playerDamage[0]!.dazzleTicks, NATIVE_WRAITH_DAZZLE_TICKS)
 })
 
-test('Zombie contact emits one bounded target-radial knockback request', () => {
+test('Zombie beat emits one target-radial knockback at exact progress 100', () => {
   const players = { player: livingTarget(10, 0) }
   let result = spawnOne('zombie-knockback', 'ZOMBIE', { x: 0, y: 0 }, players)
   const brain = result.store.actors[0]!.brain
@@ -1346,8 +1347,10 @@ test('Zombie contact emits one bounded target-radial knockback request', () => {
   if (brain.family !== 'zombie') throw new Error('expected Zombie brain')
   result = withActorBrain(result, 0, {
     ...brain,
-    actionTick: BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.markerTick - 1,
+    actionProgress: NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress - 1,
+    actionRate: 1,
     contactTargetPlayerId: 'player',
+    impactStateTicksRemaining: 0,
     markerEmitted: false,
     phase: 'swipe',
   })
@@ -1363,7 +1366,72 @@ test('Zombie contact emits one bounded target-radial knockback request', () => {
   }])
 })
 
-test('unresolved families keep separate bounded approach, special, and cooldown states', () => {
+test('Zombie beat keeps its native rate, doubled pre-impact clock, and 125 completion', () => {
+  const players = { player: livingTarget(10, 0) }
+  let result = spawnOne('zombie-beat-clock', 'ZOMBIE', { x: 0, y: 0 }, players)
+  const initial = result.store.actors[0]!.brain
+  assert.equal(initial.family, 'zombie')
+  if (initial.family !== 'zombie') throw new Error('expected Zombie brain')
+  const initialSide = initial.attackSide
+
+  result = step(result.store, 1, players)
+  const started = result.store.actors[0]!.brain
+  assert.equal(started.family, 'zombie')
+  if (started.family !== 'zombie') throw new Error('expected Zombie brain')
+  assert.equal(started.phase, 'swipe')
+  assert.equal(started.attackSide, initialSide === 0 ? 1 : 0)
+  assert.ok(started.actionRate >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.minimumRate)
+  assert.ok(started.actionRate < (
+    NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.minimumRate
+    + NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.randomRateRange
+  ))
+
+  result = step(result.store, 2, players)
+  const doubled = result.store.actors[0]!.brain
+  assert.equal(doubled.family, 'zombie')
+  if (doubled.family !== 'zombie') throw new Error('expected Zombie brain')
+  assert.ok(Math.abs(doubled.actionProgress - started.actionRate * 2) < 1e-12)
+
+  let markerCount = 0
+  let markerProgress = 0
+  let markerRate = 0
+  let tick = 3
+  while (tick < 200) {
+    result = step(result.store, tick, players)
+    markerCount += result.playerDamage.length
+    const brain = result.store.actors[0]!.brain
+    if (brain.family !== 'zombie') throw new Error('expected Zombie brain')
+    if (brain.markerEmitted) {
+      markerProgress = brain.actionProgress
+      markerRate = brain.actionRate
+      break
+    }
+    tick += 1
+  }
+  assert.equal(markerCount, 1)
+  assert.ok(markerProgress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress)
+
+  tick += 1
+  result = step(result.store, tick, players)
+  const postMarker = result.store.actors[0]!.brain
+  assert.equal(postMarker.family, 'zombie')
+  if (postMarker.family !== 'zombie') throw new Error('expected Zombie brain')
+  assert.ok(Math.abs(postMarker.actionProgress - (markerProgress + markerRate)) < 1e-12)
+
+  while (tick < 300 && result.store.actors[0]!.brain.phase === 'swipe') {
+    tick += 1
+    result = step(result.store, tick, players)
+    markerCount += result.playerDamage.length
+  }
+  const completed = result.store.actors[0]!.brain
+  assert.equal(completed.family, 'zombie')
+  if (completed.family !== 'zombie') throw new Error('expected Zombie brain')
+  assert.equal(completed.phase, 'knockback')
+  assert.equal(markerCount, 1)
+  assert.ok(completed.phaseTicksRemaining > 0)
+})
+
+test('remaining bounded families keep separate approach, special, and cooldown states', () => {
   let result = stepBoneyardEnemyStore(createBoneyardEnemyStore('bounded-families'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players: { player: livingTarget(10, 0) },
@@ -1391,12 +1459,12 @@ test('unresolved families keep separate bounded approach, special, and cooldown 
   assert.ok(wraith.phaseTicksRemaining >= 200 && wraith.phaseTicksRemaining <= 800)
 
   const damagedActorIds = new Set<number>()
-  for (let tick = 2; tick <= 7; tick += 1) {
+  let tick = 2
+  for (; tick <= 250 && result.store.projectiles.length === 0; tick += 1) {
     result = step(result.store, tick, { player: livingTarget(10, 0) })
     for (const damage of result.playerDamage) damagedActorIds.add(damage.actorId)
   }
   assert.ok(damagedActorIds.has(1))
-  assert.ok(damagedActorIds.has(2))
   assert.deepEqual(result.store.projectiles.map((projectile) => [
     projectile.id,
     projectile.kind,
@@ -1412,11 +1480,10 @@ test('unresolved families keep separate bounded approach, special, and cooldown 
     phase: 'orbit',
     phaseTicksRemaining: 1,
   })
-  result = step(result.store, 8, { player: livingTarget(10, 0) })
-  assert.ok(result.playerDamage.some((damage) => damage.actorId === 4))
+  result = step(result.store, tick, { player: livingTarget(10, 0) })
   assert.equal(result.store.actors[2]!.brain.phase, 'drain')
-  for (let tick = 9; tick <= 18; tick += 1) {
-    result = step(result.store, tick, { player: livingTarget(10, 0) })
+  for (let drainTick = tick + 1; drainTick <= tick + 10; drainTick += 1) {
+    result = step(result.store, drainTick, { player: livingTarget(10, 0) })
   }
   const postDrain = result.store.actors[2]!.brain
   assert.equal(postDrain.family, 'wraith')
@@ -1467,6 +1534,20 @@ test('GuidedMissile deterministically reacquires, homes, contacts, and retires',
   }
   assert.equal(impacted, true)
   assert.equal(result.store.projectiles.length, 0)
+  assert.deepEqual(result.store.projectileEffects.map((effect) => ({
+    blendMode: effect.blendMode,
+    entry: effect.entry,
+    kind: effect.kind,
+    tint: effect.tint,
+  })), [
+    { blendMode: 'add', entry: 110, kind: 'guided-impact-main', tint: 0xffffff },
+    { blendMode: 'add', entry: 110, kind: 'guided-impact-main', tint: 0xffffff },
+    { blendMode: 'add', entry: 111, kind: 'guided-impact-aura-one', tint: 0x4080ff },
+    { blendMode: 'add', entry: 112, kind: 'guided-impact-aura-two', tint: 0x4080ff },
+  ])
+  assert.ok(result.store.projectileEffects.every(({ alpha, scale }) => (
+    alpha === 2 && scale === 2
+  )))
 })
 
 test('enemy projectiles retire on an earlier static-world contact without damaging a player', () => {
@@ -1504,7 +1585,7 @@ test('enemy projectiles retire on an earlier static-world contact without damagi
 })
 
 test('enemy projectile actor entry wins when it precedes a later world contact', () => {
-  const players = { player: livingTarget(150, 0) }
+  const players = { player: livingTarget(50, 0) }
   const spawned = forcedMageAttack(
     'swept-actor-before-world',
     ['FLAG_CASTFROST'],
@@ -1527,6 +1608,57 @@ test('enemy projectile actor entry wins when it precedes a later world contact',
   assert.equal(
     result.events.find((event) => event.type === 'projectile-impact')?.targetPlayerId,
     'player',
+  )
+})
+
+test('Firebolt trail and impact VFX outlive the retired projectile on native clocks', () => {
+  const spawned = forcedMageAttack('firebolt-vfx', ['FLAG_CASTFIRE'])
+  const projectile = spawned.store.projectiles[0]!
+  assert.equal(projectile.kind, 'firebolt')
+
+  let result = stepBoneyardEnemyStore(spawned.store, {
+    firstProjectileWorldContact: () => 1,
+    players: { player: livingTarget(150, 0) },
+    resolveMovement: DIRECT_MOVEMENT,
+    resolveSpawnIntents: () => [],
+    tick: 3,
+  })
+  assert.equal(result.store.projectiles.length, 0)
+  assert.deepEqual(result.store.projectileEffects.map(({ entry, kind }) => ({ entry, kind })), [
+    { entry: 256, kind: 'firebolt-trail' },
+    { entry: 110, kind: 'fire-burst-glow' },
+    { entry: 251, kind: 'fire-burst-frame' },
+  ])
+
+  result = step(result.store, 4, { player: livingTarget(150, 0) })
+  const trail = result.store.projectileEffects.find(({ kind }) => kind === 'firebolt-trail')
+  const impact = result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')
+  assert.ok(trail)
+  assert.ok(impact)
+  assert.equal(impact.entry, 251)
+  assert.equal(impact.ageTicks, 1)
+  assert.equal(trail.ageTicks, 2)
+  assert.ok(trail.alpha > 0.6 && trail.alpha < 0.7)
+
+  result = step(result.store, 7, { player: livingTarget(150, 0) })
+  assert.equal(
+    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')?.entry,
+    252,
+  )
+  assert.equal(
+    result.store.projectileEffects.some(({ kind }) => kind === 'firebolt-trail'),
+    true,
+  )
+
+  result = step(result.store, 18, { player: livingTarget(150, 0) })
+  assert.equal(
+    result.store.projectileEffects.find(({ kind }) => kind === 'fire-burst-frame')?.entry,
+    254,
+  )
+  result = step(result.store, 19, { player: livingTarget(150, 0) })
+  assert.equal(
+    result.store.projectileEffects.some(({ kind }) => kind === 'fire-burst-frame'),
+    false,
   )
 })
 
@@ -2074,6 +2206,38 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   result = step(result.store, 50, FAR_PLAYERS)
   assert.equal(result.rewards.length, 0)
   assert.equal(result.retired.length, 0)
+
+  result = step(result.store, 3_001, FAR_PLAYERS)
+  assert.equal(result.store.projectiles.length, 0)
+  assert.deepEqual(result.store.projectileEffects.map((effect) => ({
+    alpha: effect.alpha,
+    blendMode: effect.blendMode,
+    entry: effect.entry,
+    kind: effect.kind,
+    scale: effect.scale,
+  })), [{
+    alpha: 0.5,
+    blendMode: 'normal',
+    entry: 0,
+    kind: 'poison-pool-fade-outer',
+    scale: 1.6,
+  }, {
+    alpha: Math.sin(3_000 * Math.PI / 180) * 0.25 + 0.75,
+    blendMode: 'normal',
+    entry: 0,
+    kind: 'poison-pool-fade-inner',
+    scale: 1.2,
+  }])
+
+  result = step(result.store, 3_002, FAR_PLAYERS)
+  const [outer, inner] = result.store.projectileEffects
+  assert.ok(outer)
+  assert.ok(inner)
+  assert.ok(Math.abs(outer.alpha - 0.4975) < 1e-12)
+  assert.ok(Math.abs(
+    inner.alpha
+      - (Math.sin(3_001 * Math.PI / 180) * 0.25 + 0.75) * 0.995,
+  ) < 1e-12)
 })
 
 test('Skeleton death hands off immediately to exact independent shatter actors', () => {

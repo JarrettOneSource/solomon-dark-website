@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
   nativeEnemyActionFrame,
@@ -13,10 +15,30 @@ import {
 import {
   nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
-  nativeEnemyPresentationPlan,
+  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
   roundHalfToEven,
+  type NativeEnemyAtlas,
   type NativeEnemyVisualSnapshot,
 } from './native-enemy-presentation.ts'
+
+const geometryManifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
+  BadGuys: manifest('../../editor/manifest/badguys.json'),
+  DeadHawg: manifest('../../editor/manifest/deadhawg.json'),
+  Demon: manifest('../../editor/manifest/demon.json'),
+}
+
+function nativeEnemyPresentationPlan(
+  snapshot: NativeEnemyVisualSnapshot,
+  tick: number,
+) {
+  return buildNativeEnemyPresentationPlan(snapshot, tick, (atlas, entry) => (
+    geometryManifests[atlas].entries[entry]?.extras ?? []
+  ))
+}
+
+function manifest(relativePath: string): AtlasManifest {
+  return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as AtlasManifest
+}
 
 function enemy(
   enemyToken: NativeEnemyVisualSnapshot['enemyToken'],
@@ -209,13 +231,15 @@ test('Imp uses four native 12-facing bodies and the registered upper effect', ()
   assert.equal(plan.layers[1].alpha, 0)
 })
 
-test('Imp renderer consumes changing authoritative pose, alpha, bob, and upper effect', () => {
+test('Imp renderer consumes native pose, rotation, bounce, and upper-effect alpha', () => {
   const source = enemy('IMP')
   const opening = nativeEnemyPresentationPlan({
     ...source,
     animation: nativeEnemyIdleAnimationSample({
       alpha: 1,
       bodyPose: 0,
+      impBodyRotationRadians: 0.1,
+      impEffectAlpha: 1,
       impEffectFrame: 0,
       verticalOffset: 0,
     }),
@@ -223,29 +247,37 @@ test('Imp renderer consumes changing authoritative pose, alpha, bob, and upper e
   const airborne = nativeEnemyPresentationPlan({
     ...source,
     animation: nativeEnemyIdleAnimationSample({
-      alpha: 0.82,
+      alpha: 1,
       bodyPose: 2,
+      impBodyRotationRadians: 0.25,
+      impEffectAlpha: 0.6,
       impEffectFrame: 7,
       verticalOffset: -4,
     }),
   }, 120)
 
   assert.deepEqual(
-    opening.layers.map(({ alpha, entry, offset, role }) => ({ alpha, entry, offset, role })),
-    [{ alpha: 1, entry: 285, offset: { x: 0, y: 0 }, role: 'imp-body' }, {
+    opening.layers.map(({ alpha, entry, offset, role, rotationRadians }) => ({
+      alpha, entry, offset, role, rotationRadians,
+    })),
+    [{ alpha: 1, entry: 285, offset: { x: 0, y: 0 }, role: 'imp-body', rotationRadians: 0.1 }, {
       alpha: 1,
       entry: 333,
       offset: { x: 0, y: -10 },
       role: 'imp-upper-effect',
+      rotationRadians: 0,
     }],
   )
   assert.deepEqual(
-    airborne.layers.map(({ alpha, entry, offset, role }) => ({ alpha, entry, offset, role })),
-    [{ alpha: 0.82, entry: 309, offset: { x: 0, y: -4 }, role: 'imp-body' }, {
-      alpha: 0.82,
+    airborne.layers.map(({ alpha, entry, offset, role, rotationRadians }) => ({
+      alpha, entry, offset, role, rotationRadians,
+    })),
+    [{ alpha: 1, entry: 309, offset: { x: 0, y: -4 }, role: 'imp-body', rotationRadians: 0.25 }, {
+      alpha: 0.6,
       entry: 340,
       offset: { x: 0, y: -14 },
       role: 'imp-upper-effect',
+      rotationRadians: 0,
     }],
   )
   assert.equal(source.id, 7)
@@ -253,8 +285,15 @@ test('Imp renderer consumes changing authoritative pose, alpha, bob, and upper e
 })
 
 test('Zombie keeps its native constructor selectors independent', () => {
-  const entries = nativeEnemyPresentationPlan(enemy('ZOMBIE'), 100)
-    .layers.map((layer) => layer.entry)
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('ZOMBIE'),
+    animation: nativeEnemyIdleAnimationSample({
+      zombieBodyType: 0,
+      zombieFlyblownSide: 1,
+      zombieHeadType: 0,
+    }),
+  }, 100)
+  const entries = plan.layers.map((layer) => layer.entry)
   const bodyType = (entries[1] - 2203) / 18
   const headType = (entries[4] - 2293) / 18
   assert.ok(Number.isInteger(bodyType) && bodyType >= 0 && bodyType <= 2)
@@ -265,6 +304,13 @@ test('Zombie keeps its native constructor selectors independent', () => {
     2095,
     2149,
     2293 + headType * 18,
+  ])
+  assert.deepEqual(plan.layers.map((layer) => layer.offset), [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+    { x: -12.5, y: -17.5 },
+    { x: 8.5, y: -20.5 },
+    { x: 0, y: -8.5 },
   ])
 
   const rottenEntries = nativeEnemyPresentationPlan(
@@ -286,6 +332,16 @@ test('Wraith, Demon, and Coffin preserve their native spawn compositions', () =>
   assert.deepEqual(
     nativeEnemyPresentationPlan(enemy('DEMON'), 100).layers.map((layer) => layer.entry),
     [62, 98, 19, 1, 80],
+  )
+  assert.deepEqual(
+    nativeEnemyPresentationPlan(enemy('DEMON'), 100).layers.map((layer) => layer.offset),
+    [
+      { x: -14, y: -28 },
+      { x: 10, y: -13 },
+      { x: 0, y: 0 },
+      { x: 15, y: -28 },
+      { x: -8.5, y: -13 },
+    ],
   )
   assert.deepEqual(nativeEnemyPresentationPlan(enemy('COFFIN'), 100).layers, [])
 })
@@ -366,7 +422,7 @@ test('action programs fail closed when sampled for the wrong family', () => {
   )
 })
 
-test('presentation-facing action sampling preserves exact strict ends and bounded labels', () => {
+test('presentation-facing array actions preserve exact strict ends', () => {
   for (const name of [
     'skeleton-claw-a',
     'skeleton-claw-b',
@@ -375,21 +431,12 @@ test('presentation-facing action sampling preserves exact strict ends and bounde
     'archer-shot',
     'mage-cast-short',
     'mage-cast-long',
+    'demon-bomb',
   ] as const) {
     const program = NATIVE_ENEMY_ACTION_PROGRAMS[name]
     assert.equal(program.provenance, 'native-exact')
     assert.equal(nativeEnemyActionFrame(name, program.strictEnd).complete, false)
     assert.equal(nativeEnemyActionFrame(name, program.strictEnd + 1).complete, true)
-  }
-  for (const name of [
-    'imp-contact',
-    'zombie-swipe',
-    'wraith-drain',
-    'demon-claw',
-    'demon-bomb',
-    'coffin-open',
-  ] as const) {
-    assert.equal(NATIVE_ENEMY_ACTION_PROGRAMS[name].provenance, 'bounded-web')
   }
 })
 
@@ -504,16 +551,19 @@ test('authoritative effect identities replace bounded terminal fallback art', ()
   }])
 })
 
-test('Wraith fade and Zombie articulation are sampled rather than wall-clock driven', () => {
+test('Wraith opacity and Zombie articulation are sampled rather than wall-clock driven', () => {
   const wraith = nativeEnemyPresentationPlan({
     ...enemy('WRAITH'),
     animation: nativeEnemyIdleAnimationSample({
-      alpha: 0.25,
-      verticalOffset: -6,
+      action: 'wraith-drain',
+      alpha: 1,
+      state: 'action',
+      verticalOffset: 0,
     }),
   }, 10_000)
-  assert.equal(wraith.layers[0].alpha, 0.25)
-  assert.deepEqual(wraith.layers[0].offset, { x: 0, y: 9 })
+  assert.equal(wraith.layers[0].alpha, 1)
+  assert.deepEqual(wraith.layers[0].offset, { x: 0, y: 15 })
+  assert.equal(wraith.actionFrame, null)
 
   const zombie = nativeEnemyPresentationPlan({
     ...enemy('ZOMBIE'),
@@ -521,18 +571,28 @@ test('Wraith fade and Zombie articulation are sampled rather than wall-clock dri
       gaitPose: 4,
       state: 'locomotion',
       zombieAngularOffsetDeg: 20,
+      zombieBodyRotationRadians: -0.15,
+      zombieBodyType: 0,
+      zombieFlyblownSide: 1,
       zombieFrontArmPose: 2,
       zombieFrontArmRotationRadians: -0.4,
       zombieRearArmPose: 1,
       zombieRearArmRotationRadians: 0.25,
+      zombieHeadType: 0,
+      zombieHeadRotationRadians: 0.35,
     }),
   }, 10_000)
   assert.equal(zombie.facing, 1)
   assert.equal(zombie.layers[0].entry, 2438)
+  assert.equal(zombie.layers[1].rotationRadians, -0.15)
   assert.equal(zombie.layers[2].entry, 2114)
   assert.equal(zombie.layers[2].rotationRadians, 0.25)
+  assert.deepEqual(zombie.layers[2].offset, { x: -13, y: -21 })
   assert.equal(zombie.layers[3].entry, 2186)
   assert.equal(zombie.layers[3].rotationRadians, -0.4)
+  assert.deepEqual(zombie.layers[3].offset, { x: 8, y: -18 })
+  assert.deepEqual(zombie.layers[4].offset, { x: -1, y: -8.5 })
+  assert.equal(zombie.layers[4].rotationRadians, 0.35)
 })
 
 test('Demon joints and Coffin later states consume authoritative articulation samples', () => {
@@ -548,6 +608,24 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
   }, 100)
   assert.deepEqual(demon.layers.map((layer) => layer.rotationRadians), [-0.2, -0.1, 0, 0.2, 0.1])
   assert.equal(demon.layers[2].entry, 37)
+  assert.deepEqual(demon.layers.map((layer) => layer.offset), [
+    { x: -14, y: -31 },
+    { x: 10, y: -13 },
+    { x: 0, y: 0 },
+    { x: 15, y: -31 },
+    { x: -8.5, y: -13 },
+  ])
+
+  const demonBomb = nativeEnemyPresentationPlan({
+    ...enemy('DEMON'),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'demon-bomb',
+      actionProgress: 4,
+      state: 'action',
+    }),
+  }, 100)
+  assert.equal(demonBomb.actionFrame?.selector, 1)
+  assert.equal(demonBomb.layers[2].entry, 37)
 
   const coffin = nativeEnemyPresentationPlan({
     ...enemy('COFFIN'),

@@ -144,6 +144,7 @@ export interface BoneyardWorldSnapshot {
   encounter: BoneyardSolomonSnapshot | null
   enemies: readonly BoneyardEnemySnapshot[]
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
+  enemyProjectileEffects: readonly BoneyardEnemyProjectileEffectSnapshot[]
   enemyProjectiles: readonly BoneyardEnemyProjectileSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseSnapshot[]
   maggots: readonly BoneyardMaggotSnapshot[]
@@ -329,7 +330,42 @@ export interface BoneyardEnemyProjectileSnapshot {
   ownerActorId: number
   payload: BoneyardEnemyProjectilePayload
   position: Vector2
+  speed: number
   spawnTick: number
+  verticalOffset: number
+  visualPhaseDeg: number
+  visualScale: number
+}
+
+export const BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS = [
+  'demon-fire',
+  'fire-burst-frame',
+  'fire-burst-glow',
+  'firebolt-trail',
+  'guided-impact-aura-one',
+  'guided-impact-aura-two',
+  'guided-impact-main',
+  'poison-pool-fade-inner',
+  'poison-pool-fade-outer',
+] as const
+
+export interface BoneyardEnemyProjectileEffectSnapshot {
+  ageTicks: number
+  alpha: number
+  atlas: 'BadGuys' | 'DeadHawg'
+  blendMode: 'add' | 'normal'
+  entry: number
+  id: number
+  kind: typeof BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS[number]
+  lifetimeTicks: number
+  ownerActorId: number
+  ownerProjectileId: number
+  phaseOriginTicks: number
+  position: Vector2
+  rotationRadians: number
+  scale: number
+  spawnTick: number
+  tint: number
 }
 
 export const BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES = ['edge', 'lid'] as const
@@ -344,6 +380,7 @@ export interface BoneyardMaggotSnapshot {
   hitFlash: number
   id: number
   emergenceTick: number
+  emergenceOrientation: number
   launchTrajectory: typeof BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[number]
   maximumHealth: number
   ownerCoffinActorId: number
@@ -364,12 +401,9 @@ export type BoneyardEnemyAction =
   | 'mage-cast-short'
   | 'mage-cast-long'
   | 'imp-contact'
-  | 'zombie-swipe'
+  | 'zombie-beat'
   | 'wraith-drain'
-  | 'demon-claw'
   | 'demon-bomb'
-  | 'coffin-open'
-  | 'maggot-bite'
 export type BoneyardEnemyCoffinState =
   | 'hidden'
   | 'closed'
@@ -394,13 +428,21 @@ export interface BoneyardEnemyAnimationSnapshot {
   effects: readonly BoneyardEnemyEffectSnapshot[]
   gaitPose: number
   hitFlash: number
+  impBodyRotationRadians: number
+  impEffectAlpha: number
   impEffectFrame: number
   maggots: readonly []
   state: BoneyardEnemyAnimationState
   verticalOffset: number
   zombieAngularOffsetDeg: number
+  zombieAttackSide: 0 | 1
+  zombieBodyRotationRadians: number
+  zombieBodyType: number
+  zombieFlyblownSide: number
   zombieFrontArmPose: number
   zombieFrontArmRotationRadians: number
+  zombieHeadType: number
+  zombieHeadRotationRadians: number
   zombieRearArmPose: number
   zombieRearArmRotationRadians: number
 }

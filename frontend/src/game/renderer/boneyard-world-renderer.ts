@@ -112,6 +112,7 @@ import {
   nativeEnemyWorldFeedbackTransform,
 } from './native-enemy-world-feedback.ts'
 import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
+import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effect-view.ts'
 import { NativeMaggotViews } from './native-maggot-view.ts'
 import {
   NATIVE_MAGE_LIGHTNING_TARGET_CONTACT_Z_OFFSET,
@@ -124,6 +125,9 @@ import {
 import {
   nativeEnemyPainterLayer,
 } from './native-enemy-presentation.ts'
+import {
+  nativeEnemyProjectileEffectPainterLayer,
+} from './native-enemy-projectile-effect-presentation.ts'
 import {
   buildNativeAirContactLightSource,
   buildNativeAirPathLightSources,
@@ -179,6 +183,8 @@ interface BoneyardRendererFrameDiagnostics {
     y: number
   }>[]
   enemyProjectileCount: number
+  enemyProjectileEffectCount: number
+  enemyProjectileEffectIds: readonly number[]
   enemyProjectileIds: readonly number[]
   frameCount: number
   foregroundZIndex: number
@@ -451,6 +457,8 @@ export async function createBoneyardWorldRenderer(
     fadedTreeCount: 0,
     enemySamples: [],
     enemyProjectileCount: 0,
+    enemyProjectileEffectCount: 0,
+    enemyProjectileEffectIds: [],
     enemyProjectileIds: [],
     frameCount: 0,
     foregroundZIndex: 0,
@@ -670,6 +678,8 @@ export async function createBoneyardWorldRenderer(
         y: enemy.position.y,
       }))
       frameDiagnostics.enemyProjectileCount = scene.enemyProjectileCount
+      frameDiagnostics.enemyProjectileEffectCount = scene.enemyProjectileEffectCount
+      frameDiagnostics.enemyProjectileEffectIds = scene.enemyProjectileEffectIds
       frameDiagnostics.enemyProjectileIds = scene.enemyProjectileIds
       frameDiagnostics.foregroundZIndex = painter.foregroundZIndex
       frameDiagnostics.gateLeafCount = snapshot.world.gateLeaves.length
@@ -848,6 +858,7 @@ class BoneyardDynamicScene {
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly enemies: NativeEnemyViews
   private readonly enemyDeathEffects: NativeEnemyDeathEffectViews
+  private readonly enemyProjectileEffects: NativeEnemyProjectileEffectViews
   private readonly enemyProjectiles: NativeEnemyProjectileViews
   private readonly foreground: Container
   private readonly gateLeaves = new Map<string, BoneyardGateLeafSnapshot>()
@@ -919,6 +930,7 @@ class BoneyardDynamicScene {
     this.gates = new BoneyardGateViews(root, textures)
     this.enemies = new NativeEnemyViews(root, textures)
     this.enemyDeathEffects = new NativeEnemyDeathEffectViews(root, textures)
+    this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
     this.mageLightningPulses = new NativeMageLightningPulseViews(
@@ -985,7 +997,8 @@ class BoneyardDynamicScene {
     this.gates.update(snapshot.world.gateLeaves)
     this.enemies.update(enemySnapshots, snapshot.tick)
     this.enemyDeathEffects.update(snapshot.world.deathEffects)
-    this.enemyProjectiles.update(snapshot.world.enemyProjectiles)
+    this.enemyProjectileEffects.update(snapshot.world.enemyProjectileEffects)
+    this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
     this.maggots.update(snapshot.world.maggots)
     this.mageLightningPulses.update(
       snapshot.world.mageLightningPulses,
@@ -1282,6 +1295,11 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(projectile.position, this.lightIndex),
       ))
     }
+    for (const effect of snapshot.world.enemyProjectileEffects) {
+      this.enemyProjectileEffects.setWorldTint(effect.id, nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(effect.position, lightSources),
+      ))
+    }
     for (const maggot of snapshot.world.maggots) {
       this.maggots.setTint(maggot.id, nativeBoneyardLightTint(
         nativeBoneyardLightScalar(maggot.position, this.lightIndex),
@@ -1353,6 +1371,12 @@ class BoneyardDynamicScene {
         sortBias: 0,
         sourceOrder: dynamicLayers.length,
       })
+    }
+    for (const effect of snapshot.world.enemyProjectileEffects) {
+      dynamicLayers.push(nativeEnemyProjectileEffectPainterLayer(
+        effect,
+        dynamicLayers.length,
+      ))
     }
     for (const maggot of snapshot.world.maggots) {
       dynamicLayers.push({
@@ -1486,6 +1510,12 @@ class BoneyardDynamicScene {
         positionedDynamics.get(`enemy-projectile:${projectile.id}`)?.zIndex ?? 1,
       )
     }
+    for (const effect of snapshot.world.enemyProjectileEffects) {
+      this.enemyProjectileEffects.setDepth(
+        effect.id,
+        positionedDynamics.get(`enemy-projectile-effect:${effect.id}`)?.zIndex ?? 1,
+      )
+    }
     for (const maggot of snapshot.world.maggots) {
       this.maggots.setDepth(
         maggot.id,
@@ -1570,6 +1600,14 @@ class BoneyardDynamicScene {
     return this.enemyProjectiles.size
   }
 
+  get enemyProjectileEffectCount(): number {
+    return this.enemyProjectileEffects.size
+  }
+
+  get enemyProjectileEffectIds(): readonly number[] {
+    return this.enemyProjectileEffects.ids
+  }
+
   get enemyProjectileIds(): readonly number[] {
     return this.enemyProjectiles.ids
   }
@@ -1611,6 +1649,7 @@ class BoneyardDynamicScene {
     this.primarySpells.destroy()
     this.enemies.destroy()
     this.enemyDeathEffects.destroy()
+    this.enemyProjectileEffects.destroy()
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
     this.mageLightningPulses.destroy()

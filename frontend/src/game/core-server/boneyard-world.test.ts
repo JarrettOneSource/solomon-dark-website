@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
+import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import {
@@ -21,7 +22,6 @@ import {
   stepBoneyardWorldTick,
 } from './boneyard-world.ts'
 import {
-  BOUNDED_ENEMY_ACTION_PROGRAMS,
   BOUNDED_ZOMBIE_KNOCKBACK_DISTANCE,
   damageBoneyardEnemy,
   NATIVE_COFFIN_OPENING_MAGGOT_EMISSIONS,
@@ -472,8 +472,10 @@ test('Zombie contact knockback displaces the authoritative player through world 
         ...zombie,
         brain: {
           ...zombie.brain,
-          actionTick: BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.markerTick - 1,
+          actionProgress: NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress - 1,
+          actionRate: 1,
           contactTargetPlayerId: 'player',
+          impactStateTicksRemaining: 0,
           markerEmitted: false,
           phase: 'swipe',
         },

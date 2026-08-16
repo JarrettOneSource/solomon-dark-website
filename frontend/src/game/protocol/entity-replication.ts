@@ -1,6 +1,7 @@
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type {
   BoneyardEnemyProjectileSnapshot,
+  BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemySnapshot,
   BoneyardMaggotSnapshot,
@@ -33,6 +34,13 @@ import {
   materializeBoneyardEnemy,
 } from './boneyard-enemy-replication.ts'
 import {
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
+  BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
+  boneyardEnemyProjectileEffectDescriptor,
+  boneyardEnemyProjectileEffectSample,
+  materializeBoneyardEnemyProjectileEffect,
+} from './boneyard-enemy-projectile-effect-replication.ts'
+import {
   BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION,
   BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID,
   boneyardEnemyProjectileDescriptor,
@@ -55,6 +63,7 @@ export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
   boneyardEnemyDeathEffect: BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_TYPE_ID,
   boneyardEnemyProjectile: BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID,
+  boneyardEnemyProjectileEffect: BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
   boneyardMaggot: BONEYARD_MAGGOT_ENTITY_TYPE_ID,
   student: 1,
 } as const
@@ -193,6 +202,10 @@ export const REPLICATED_ENTITY_TYPE_REGISTRY: ReadonlyMap<
     BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION.typeId,
     BONEYARD_ENEMY_PROJECTILE_ENTITY_REGISTRATION,
   ],
+  [
+    BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION.typeId,
+    BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
+  ],
   [BONEYARD_MAGGOT_ENTITY_REGISTRATION.typeId, BONEYARD_MAGGOT_ENTITY_REGISTRATION],
   [
     BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.typeId,
@@ -239,6 +252,7 @@ export function createGameSnapshotFrame(
         ...snapshot.world.enemies.map(boneyardEnemySample),
         ...snapshot.world.deathEffects.map(boneyardEnemyDeathEffectSample),
         ...snapshot.world.enemyProjectiles.map(boneyardEnemyProjectileSample),
+        ...snapshot.world.enemyProjectileEffects.map(boneyardEnemyProjectileEffectSample),
         ...snapshot.world.maggots.map(boneyardMaggotSample),
       ]
   const entities: ReplicatedEntityFrame = {
@@ -367,6 +381,7 @@ export class EntityReplicationReconstructor {
     const enemies: BoneyardEnemySnapshot[] = []
     const deathEffects: BoneyardEnemyDeathEffectSnapshot[] = []
     const enemyProjectiles: BoneyardEnemyProjectileSnapshot[] = []
+    const enemyProjectileEffects: BoneyardEnemyProjectileEffectSnapshot[] = []
     const maggots: BoneyardMaggotSnapshot[] = []
     for (const sample of entities.samples) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(sample[0])
@@ -389,6 +404,13 @@ export class EntityReplicationReconstructor {
           throw new EntityReplicationGapError('enemy projectile sample is outside the Boneyard')
         }
         enemyProjectiles.push(materializeBoneyardEnemyProjectile(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardEnemyProjectileEffect) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('enemy projectile-effect sample is outside the Boneyard')
+        }
+        enemyProjectileEffects.push(
+          materializeBoneyardEnemyProjectileEffect(descriptor, sample),
+        )
       } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot) {
         if (frame.world.kind !== 'boneyard') {
           throw new EntityReplicationGapError('Maggot sample is outside the Boneyard')
@@ -432,6 +454,7 @@ export class EntityReplicationReconstructor {
         encounter: frame.world.encounter,
         enemies,
         enemyEvents: frame.world.enemyEvents,
+        enemyProjectileEffects,
         enemyProjectiles,
         gateLeaves: frame.world.gateLeaves,
         kind: 'boneyard',
@@ -469,6 +492,10 @@ function descriptorMap(snapshot: GameSnapshot): Map<string, ReplicatedEntityDesc
     }
     for (const projectile of snapshot.world.enemyProjectiles) {
       const descriptor = boneyardEnemyProjectileDescriptor(projectile)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const effect of snapshot.world.enemyProjectileEffects) {
+      const descriptor = boneyardEnemyProjectileEffectDescriptor(effect)
       descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
     }
     for (const maggot of snapshot.world.maggots) {

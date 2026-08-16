@@ -24,6 +24,7 @@ import {
   projectBoneyardEnemies,
   projectBoneyardEnemyDeathEffects,
   projectBoneyardEnemyProjectiles,
+  projectBoneyardEnemyProjectileEffects,
   projectBoneyardMageLightningPulses,
   projectBoneyardMaggots,
 } from './project-boneyard-enemies.ts'
@@ -90,6 +91,9 @@ export function createGameSnapshot(
             protocolBoneyardEnemyEvent(event, runId)
           )),
           enemyProjectiles: projectBoneyardEnemyProjectiles(state.world.enemies),
+          enemyProjectileEffects: projectBoneyardEnemyProjectileEffects(
+            state.world.enemies,
+          ),
           mageLightningPulses: projectBoneyardMageLightningPulses(state.world.enemies),
           maggots: projectBoneyardMaggots(state.world.enemies, state.tick),
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),

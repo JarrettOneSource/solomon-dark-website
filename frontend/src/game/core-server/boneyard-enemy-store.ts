@@ -1,5 +1,10 @@
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
+import {
+  createNativeImpFlightState,
+  stepNativeImpFlight,
+} from '../core-kernels/boneyard-imp-flight.ts'
+import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
@@ -45,6 +50,7 @@ import {
 export type BoneyardEnemyActorId = number
 export type BoneyardEnemyDeathEffectId = number
 export type BoneyardEnemyProjectileId = number
+export type BoneyardEnemyProjectileEffectId = number
 export type BoneyardEnemyEventId = number
 export type BoneyardMageLightningPulseId = number
 
@@ -80,12 +86,16 @@ export const NATIVE_MAGE_ACTION_PROGRAMS = Object.freeze({
   short: Object.freeze({ markerProgress: 25, progressPerTick: 0.253125012, strictEnd: 41 }),
 })
 
+export const NATIVE_DEMON_BOMB_ACTION_PROGRAM = Object.freeze({
+  markerProgress: 4,
+  progressPerTick: 0.09375,
+  strictEnd: 8,
+})
+
 /** Named deterministic web programs for families whose exact action clocks remain open. */
 export const BOUNDED_ENEMY_ACTION_PROGRAMS = Object.freeze({
-  demonBomb: Object.freeze({ markerTick: 6, strictEndTick: 11, recoveryTicks: 36 }),
   impContact: Object.freeze({ cooldownTicks: 18, markerTick: 6, strictEndTick: 11 }),
   wraithDrain: Object.freeze({ cooldownTicks: 50, markerTick: 4, strictEndTick: 9 }),
-  zombieSwipe: Object.freeze({ knockbackTicks: 24, markerTick: 5, strictEndTick: 9 }),
 })
 
 /** Mod_Knockback magnitude is runtime-authored and remains open in the retail binary. */
@@ -114,13 +124,41 @@ export const BOUNDED_ENEMY_DEATH_PROGRAM_TICKS = Object.freeze({
   ZOMBIE: 36,
 })
 
-/** Named deterministic web bounds until enemy projectile kinematics are closed natively. */
+/**
+ * Contact geometry and the Arrow/Firebolt travel speeds remain named web
+ * bounds. The recovered native lifetime and ownership clocks are exact.
+ */
 export const BOUNDED_ENEMY_PROJECTILE_PROGRAMS = Object.freeze({
   arrow: Object.freeze({ contactRadius: 8, homing: false, lifetimeTicks: 300, speed: 5 }),
-  'demon-bomb': Object.freeze({ contactRadius: 18, homing: true, lifetimeTicks: 400, speed: 2.5 }),
-  firebolt: Object.freeze({ contactRadius: 10, homing: false, lifetimeTicks: 300, speed: 4.5 }),
+  'demon-bomb': Object.freeze({ contactRadius: 35, homing: false, lifetimeTicks: 100, speed: 2 }),
+  firebolt: Object.freeze({ contactRadius: 10, homing: false, lifetimeTicks: 400, speed: 4.5 }),
   'guided-missile': Object.freeze({ contactRadius: 12, homing: true, lifetimeTicks: 400, speed: 3 }),
-  'poison-pool': Object.freeze({ contactRadius: 35, homing: false, lifetimeTicks: 1000, speed: 0 }),
+  'poison-pool': Object.freeze({ contactRadius: 35, homing: false, lifetimeTicks: 3000, speed: 0 }),
+})
+
+export const NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS = Object.freeze({
+  arrowInitialHeight: -25,
+  demonBombBounceMultiplier: 0.85,
+  demonBombDampingPerTick: 0.995,
+  demonBombFireTicks: 500,
+  demonBombGravityPerTick: 0.1,
+  demonBombInitialBounceVelocity: -3,
+  demonBombInitialHeight: -35,
+  demonBombSettledCountdownMinimum: 100,
+  demonBombSettledCountdownRandomCount: 101,
+  demonBombSettledDampingPerTick: 0.98,
+  demonBombSpeedMinimum: 2,
+  demonBombSpeedRange: 1,
+  fireBurstTicks: 16,
+  fireboltTrailCadenceTicks: 2,
+  guidedImpactAlphaLossPerTick: 0.1,
+  guidedMinimumSpeedBase: 0.75,
+  guidedMinimumSpeedRange: 0.45,
+  guidedSpeedLossPerTick: 0.075,
+  poisonPoolInitialScale: 1,
+  poisonPoolAlphaLossPerTick: 0.005,
+  poisonPoolGrowthPerTick: 0.025,
+  poisonPoolMaximumScale: 1.6,
 })
 
 /** Retail Coffin opening calls its Maggot helper exactly three times. */
@@ -193,25 +231,47 @@ export interface BoneyardMageBrain extends ActionClock {
 
 export interface BoneyardImpBrain {
   readonly actionTick: number
+  readonly bodyRotationDeg: number
+  readonly bodyVariant: number
   readonly contactTargetPlayerId: string | null
   readonly cooldownTicks: number
+  readonly effectAlpha: number
+  readonly effectPhase: number
   readonly family: 'imp'
   readonly markerEmitted: boolean
   readonly phase: 'flight' | 'contact' | 'cooldown' | 'death'
+  readonly verticalOffset: number
+  readonly verticalVelocity: number
+  readonly visualRngState: number
 }
 
 export interface BoneyardZombieBrain {
-  readonly actionTick: number
+  readonly actionProgress: number
+  readonly actionRate: number
+  readonly actionSwing: number
+  readonly angularOffsetDeg: number
+  readonly attackSide: 0 | 1
+  readonly bodyPhaseDeg: number
+  readonly bodyType: number
   readonly contactTargetPlayerId: string | null
   readonly family: 'zombie'
+  readonly flyblownSide: 0 | 1
+  readonly frontArmBaseRotationDeg: number
+  readonly headBaseRotationDeg: number
+  readonly headPhaseDeg: number
+  readonly headType: number
+  readonly impactStateTicksRemaining: number
   readonly markerEmitted: boolean
   readonly phase: 'approach' | 'swipe' | 'knockback' | 'death'
   readonly phaseTicksRemaining: number
+  readonly rearArmBaseRotationDeg: number
+  readonly verticalOffset: number
+  readonly verticalVelocity: number
+  readonly visualRngState: number
 }
 
 export interface BoneyardWraithBrain {
   readonly actionTick: number
-  readonly alpha: number
   readonly contactTargetPlayerId: string | null
   readonly family: 'wraith'
   readonly markerEmitted: boolean
@@ -220,11 +280,10 @@ export interface BoneyardWraithBrain {
 }
 
 export interface BoneyardDemonBrain {
-  readonly actionTick: number
+  readonly actionProgress: number
   readonly family: 'demon'
   readonly markerEmitted: boolean
-  readonly phase: 'approach' | 'bomb' | 'recovery' | 'death'
-  readonly phaseTicksRemaining: number
+  readonly phase: 'approach' | 'bomb' | 'death'
 }
 
 export interface BoneyardCoffinBrain {
@@ -303,6 +362,7 @@ export type BoneyardEnemyProjectileKind =
 
 export interface BoneyardEnemyProjectile {
   readonly ageTicks: number
+  readonly bounceVelocity: number
   readonly coldSlowTicks: number
   readonly contactRadius: number
   readonly damage: number
@@ -314,6 +374,7 @@ export interface BoneyardEnemyProjectile {
   readonly lastStepTick: number
   readonly lightRegistration: NativeLightProviderRegistration | null
   readonly lifetimeTicks: number
+  readonly minimumSpeed: number
   readonly nativeTypeId: 0x7da | 0x7eb | 0x7ec | 0x7f7 | 0x806
   readonly ownerActorId: BoneyardEnemyActorId
   readonly payload: BoneyardEnemyProjectilePayload
@@ -321,8 +382,47 @@ export interface BoneyardEnemyProjectile {
   readonly poisonDuration: number
   readonly position: Readonly<BoneyardPoint>
   readonly speed: number
+  readonly settledTicksRemaining: number
   readonly spawnTick: number
   readonly targetPlayerId: string | null
+  readonly verticalOffset: number
+  readonly verticalVelocity: number
+  readonly visualPhaseDeg: number
+  readonly visualScale: number
+}
+
+export type BoneyardEnemyProjectileEffectKind =
+  | 'demon-fire'
+  | 'fire-burst-frame'
+  | 'fire-burst-glow'
+  | 'firebolt-trail'
+  | 'guided-impact-aura-one'
+  | 'guided-impact-aura-two'
+  | 'guided-impact-main'
+  | 'poison-pool-fade-inner'
+  | 'poison-pool-fade-outer'
+
+export interface BoneyardEnemyProjectileEffect {
+  readonly ageTicks: number
+  readonly alpha: number
+  readonly alphaLossPerTick: number
+  readonly angularVelocityDeg: number
+  readonly atlas: 'BadGuys' | 'DeadHawg'
+  readonly blendMode: 'add' | 'normal'
+  readonly entry: number
+  readonly id: BoneyardEnemyProjectileEffectId
+  readonly kind: BoneyardEnemyProjectileEffectKind
+  readonly lastStepTick: number
+  readonly lifetimeTicks: number
+  readonly ownerActorId: BoneyardEnemyActorId
+  readonly ownerProjectileId: BoneyardEnemyProjectileId
+  readonly phaseOriginTicks: number
+  readonly position: Readonly<BoneyardPoint>
+  readonly rotationDeg: number
+  readonly scale: number
+  readonly spawnTick: number
+  readonly tint: number
+  readonly velocity: Readonly<BoneyardPoint>
 }
 
 export interface BoneyardMaggotActor {
@@ -525,8 +625,10 @@ export interface BoneyardEnemyStore {
   readonly nextEventId: BoneyardEnemyEventId
   readonly nextMageLightningPulseId: BoneyardMageLightningPulseId
   readonly nextProjectileId: BoneyardEnemyProjectileId
+  readonly nextProjectileEffectId: BoneyardEnemyProjectileEffectId
   readonly nextSyntheticSpawnIntentId: number
   readonly projectiles: readonly BoneyardEnemyProjectile[]
+  readonly projectileEffects: readonly BoneyardEnemyProjectileEffect[]
   readonly rngState: number
 }
 
@@ -633,10 +735,12 @@ interface WorkingStep {
   nextEventId: number
   nextMageLightningPulseId: number
   nextProjectileId: number
+  nextProjectileEffectId: number
   nextSyntheticSpawnIntentId: number
   playerDamage: BoneyardEnemyPlayerDamage[]
   playerKnockbacks: BoneyardEnemyPlayerKnockback[]
   projectiles: BoneyardEnemyProjectile[]
+  projectileEffects: BoneyardEnemyProjectileEffect[]
   registerLightProvider: RegisterNativeLightProvider
   registerProjectileLightProvider: RegisterNativeLightProvider
   retired: BoneyardEnemyRetirement[]
@@ -669,8 +773,10 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
     nextEventId: 1,
     nextMageLightningPulseId: 1,
     nextProjectileId: 1,
+    nextProjectileEffectId: 1,
     nextSyntheticSpawnIntentId: 1,
     projectiles: [],
+    projectileEffects: [],
     rngState: seedBoneyardWaveRng(`${seed}:enemy-actors`),
   }
 }
@@ -986,10 +1092,12 @@ export function stepBoneyardEnemyStore(
     nextEventId: source.nextEventId,
     nextMageLightningPulseId: source.nextMageLightningPulseId,
     nextProjectileId: source.nextProjectileId,
+    nextProjectileEffectId: source.nextProjectileEffectId,
     nextSyntheticSpawnIntentId: source.nextSyntheticSpawnIntentId,
     playerDamage: [],
     playerKnockbacks: [],
     projectiles: [...source.projectiles],
+    projectileEffects: [],
     registerLightProvider: context.registerLightProvider
       ?? standaloneLightProviderOrder.register,
     registerProjectileLightProvider: context.registerProjectileLightProvider
@@ -1001,6 +1109,7 @@ export function stepBoneyardEnemyStore(
     spawnedActorIds: [],
   }
   stepDeathEffects(work, source.deathEffects, context.tick)
+  stepProjectileEffects(work, source.projectileEffects, context.tick)
   for (const actor of source.actors) {
     const timedActor = stepDamagePresentationTimers(
       actor,
@@ -1041,8 +1150,10 @@ export function stepBoneyardEnemyStore(
       nextEventId: work.nextEventId,
       nextMageLightningPulseId: work.nextMageLightningPulseId,
       nextProjectileId: work.nextProjectileId,
+      nextProjectileEffectId: work.nextProjectileEffectId,
       nextSyntheticSpawnIntentId: work.nextSyntheticSpawnIntentId,
       projectiles: work.projectiles,
+      projectileEffects: work.projectileEffects,
       rngState: work.rngState,
     },
   }
@@ -1195,25 +1306,57 @@ function createBrain(
         ? boundedMageShieldIntervalTicks(config.family.shieldInterval)
         : 0,
     }
-    case 'IMP': return {
-      actionTick: 0,
-      contactTargetPlayerId: null,
-      cooldownTicks: 0,
-      family: 'imp',
-      markerEmitted: false,
-      phase: 'flight',
+    case 'IMP': {
+      const flight = createNativeImpFlightState(() => drawUnit(work))
+      return {
+        actionTick: 0,
+        ...flight,
+        contactTargetPlayerId: null,
+        cooldownTicks: 0,
+        family: 'imp',
+        markerEmitted: false,
+        phase: 'flight',
+        visualRngState: work.rngState,
+      }
     }
-    case 'ZOMBIE': return {
-      actionTick: 0,
-      contactTargetPlayerId: null,
-      family: 'zombie',
-      markerEmitted: false,
-      phase: 'approach',
-      phaseTicksRemaining: 0,
+    case 'ZOMBIE': {
+      const bodyPhaseDeg = drawUnit(work) * 360
+      const headBaseRotationDeg = signedUnit(drawUnit(work)) * 65
+      const headPhaseDeg = drawUnit(work) * 360
+      drawInteger(work, 2) // Native +0x220 idle-turn timer seed.
+      const rearArmBaseRotationDeg = drawUnit(work) * 20
+      const frontArmBaseRotationDeg = drawUnit(work) * 20
+      const attackSide = drawInteger(work, 2) as 0 | 1
+      const bodyType = drawInteger(work, 3)
+      const headRoll = drawInteger(work, 4)
+      const headType = headRoll === 3 ? drawInteger(work, 2) + 1 : 0
+      return {
+        actionProgress: 0,
+        actionRate: 0,
+        actionSwing: 0,
+        angularOffsetDeg: 0,
+        attackSide,
+        bodyPhaseDeg,
+        bodyType,
+        contactTargetPlayerId: null,
+        family: 'zombie',
+        flyblownSide: drawInteger(work, 2) as 0 | 1,
+        frontArmBaseRotationDeg,
+        headBaseRotationDeg,
+        headPhaseDeg,
+        headType,
+        impactStateTicksRemaining: 0,
+        markerEmitted: false,
+        phase: 'approach',
+        phaseTicksRemaining: 0,
+        rearArmBaseRotationDeg,
+        verticalOffset: 0,
+        verticalVelocity: 0,
+        visualRngState: work.rngState,
+      }
     }
     case 'WRAITH': return {
       actionTick: 0,
-      alpha: 1,
       contactTargetPlayerId: null,
       family: 'wraith',
       markerEmitted: false,
@@ -1221,11 +1364,10 @@ function createBrain(
       phaseTicksRemaining: 0,
     }
     case 'DEMON': return {
-      actionTick: 0,
+      actionProgress: 0,
       family: 'demon',
       markerEmitted: false,
       phase: 'approach',
-      phaseTicksRemaining: 0,
     }
     case 'COFFIN': {
       const hidden = randomBoneyardWaveInteger(work.rngState, 2)
@@ -1382,8 +1524,14 @@ function stepLivingActor(
     switch (actor.brain.family) {
       case 'skeleton': return stepSkeleton(work, actor, actor.brain, context)
       case 'archer': return stepArcher(work, actor, actor.brain, context)
-      case 'imp': return stepImp(work, actor, actor.brain, context)
-      case 'zombie': return stepZombie(work, actor, actor.brain, context)
+      case 'imp': return advanceImpVisual(
+        actor,
+        stepImp(work, actor, actor.brain, context),
+      )
+      case 'zombie': return advanceZombieVisual(
+        actor,
+        stepZombie(work, actor, actor.brain, context),
+      )
       case 'wraith': return stepWraith(work, actor, actor.brain, context)
       case 'demon': return stepDemon(work, actor, actor.brain, context)
       case 'coffin': return stepCoffin(work, actor, actor.brain, context)
@@ -1856,8 +2004,10 @@ function stepZombie(
       brain: remaining === 0
         ? {
             ...brain,
-            actionTick: 0,
+            actionProgress: 0,
+            actionRate: 0,
             contactTargetPlayerId: null,
+            impactStateTicksRemaining: 0,
             markerEmitted: false,
             phase: 'approach',
             phaseTicksRemaining: 0,
@@ -1866,9 +2016,20 @@ function stepZombie(
     }
   }
   if (brain.phase === 'swipe') {
-    const nextTick = brain.actionTick + actor.config.attackSpeed
+    const previousProgress = brain.actionProgress
+    const impactStateTicksRemaining = Math.max(
+      0,
+      brain.impactStateTicksRemaining - 1,
+    )
+    const nextProgress = previousProgress
+      + brain.actionRate * (brain.impactStateTicksRemaining === 0 ? 2 : 1)
     let markerEmitted = brain.markerEmitted
-    if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.markerTick) {
+    let nextImpactStateTicksRemaining = impactStateTicksRemaining
+    if (
+      !markerEmitted
+      && previousProgress < NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress
+      && nextProgress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress
+    ) {
       const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
       directContactPlayerDamage(
         work,
@@ -1879,29 +2040,50 @@ function stepZombie(
         eventId,
       )
       markerEmitted = true
+      nextImpactStateTicksRemaining = NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.impactStateTicks
     }
-    if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.strictEndTick) {
+    if (nextProgress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.completionProgress) {
       return {
         ...actor,
         brain: {
           ...brain,
-          actionTick: 0,
+          actionProgress: 0,
+          actionRate: 0,
           contactTargetPlayerId: null,
+          impactStateTicksRemaining: nextImpactStateTicksRemaining,
           markerEmitted: false,
           phase: 'knockback',
-          phaseTicksRemaining: BOUNDED_ENEMY_ACTION_PROGRAMS.zombieSwipe.knockbackTicks,
+          phaseTicksRemaining: nextImpactStateTicksRemaining,
         },
       }
     }
-    return { ...actor, brain: { ...brain, actionTick: nextTick, markerEmitted } }
+    return {
+      ...actor,
+      gaitPose: previousProgress < NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.locomotionEndProgress
+        ? positiveModulo(actor.gaitPose - 0.025, 8)
+        : actor.gaitPose,
+      brain: {
+        ...brain,
+        actionProgress: nextProgress,
+        impactStateTicksRemaining: nextImpactStateTicksRemaining,
+        markerEmitted,
+      },
+    }
   }
   if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.ZOMBIE)) {
+    const attackRate = (
+      NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.minimumRate
+      + drawUnit(work) * NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.randomRateRange
+    ) * actor.config.attackSpeed
     return {
       ...actor,
       brain: {
         ...brain,
-        actionTick: 0,
+        actionProgress: 0,
+        actionRate: attackRate,
+        attackSide: brain.attackSide === 0 ? 1 : 0,
         contactTargetPlayerId: actor.targetPlayerId,
+        impactStateTicksRemaining: 0,
         markerEmitted: false,
         phase: 'swipe',
       },
@@ -1930,7 +2112,7 @@ function stepWraith(
             phase: 'approach',
             phaseTicksRemaining: 0,
           }
-        : { ...brain, alpha: 0.65 + 0.35 * remaining / 50, phaseTicksRemaining: remaining },
+        : { ...brain, phaseTicksRemaining: remaining },
     }
   }
   if (brain.phase === 'orbit') {
@@ -1965,7 +2147,6 @@ function stepWraith(
         brain: {
           ...brain,
           actionTick: 0,
-          alpha: 0.65,
           contactTargetPlayerId: null,
           markerEmitted: false,
           phase: 'cooldown',
@@ -1998,41 +2179,158 @@ function stepDemon(
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
   if (actor.targetPlayerId === null) return resetDemon(actor, brain)
-  if (brain.phase === 'recovery') {
-    const remaining = Math.max(0, brain.phaseTicksRemaining - 1)
-    return {
-      ...actor,
-      brain: remaining === 0
-        ? { ...brain, actionTick: 0, markerEmitted: false, phase: 'approach', phaseTicksRemaining: 0 }
-        : { ...brain, phaseTicksRemaining: remaining },
-    }
-  }
   if (brain.phase === 'bomb') {
-    const nextTick = brain.actionTick + actor.config.attackSpeed
+    const previousProgress = brain.actionProgress
+    const nextProgress = previousProgress
+      + NATIVE_DEMON_BOMB_ACTION_PROGRAM.progressPerTick * actor.config.attackSpeed
     let markerEmitted = brain.markerEmitted
-    if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.demonBomb.markerTick) {
+    if (
+      !markerEmitted
+      && previousProgress < NATIVE_DEMON_BOMB_ACTION_PROGRAM.markerProgress
+      && nextProgress >= NATIVE_DEMON_BOMB_ACTION_PROGRAM.markerProgress
+    ) {
       attackMarker(work, actor, context.tick)
       spawnProjectile(work, actor, context.tick, 'demon-bomb', actor.config.primaryDamage ?? 0)
       markerEmitted = true
     }
-    if (nextTick > BOUNDED_ENEMY_ACTION_PROGRAMS.demonBomb.strictEndTick) {
+    if (nextProgress > NATIVE_DEMON_BOMB_ACTION_PROGRAM.strictEnd) {
       return {
         ...actor,
         brain: {
           ...brain,
-          actionTick: 0,
+          actionProgress: 0,
           markerEmitted: false,
-          phase: 'recovery',
-          phaseTicksRemaining: BOUNDED_ENEMY_ACTION_PROGRAMS.demonBomb.recoveryTicks,
+          phase: 'approach',
         },
       }
     }
-    return { ...actor, brain: { ...brain, actionTick: nextTick, markerEmitted } }
+    return { ...actor, brain: { ...brain, actionProgress: nextProgress, markerEmitted } }
   }
   if (targetWithinAttackReach(actor, context.players, BOUNDED_ENEMY_ATTACK_REACH.DEMON)) {
-    return { ...actor, brain: { ...brain, actionTick: 0, markerEmitted: false, phase: 'bomb' } }
+    return {
+      ...actor,
+      brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'bomb' },
+    }
   }
   return moveTowardTarget(actor, brain, context, 1)
+}
+
+function advanceImpVisual(
+  source: BoneyardEnemyActor,
+  stepped: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  if (source.brain.family !== 'imp' || stepped.brain.family !== 'imp') return stepped
+  let visualRngState = source.brain.visualRngState
+  const random = (): number => {
+    const draw = nextBoneyardWaveRandom(visualRngState)
+    visualRngState = draw.state
+    return draw.value
+  }
+  const horizontalVelocity = source.targetPlayerId === null
+    ? 0
+    : 0.25
+      * source.config.chaseSpeed
+      * source.config.baseSpeed
+      * source.config.scale
+  const flight = stepNativeImpFlight(source.brain, horizontalVelocity, random)
+  return {
+    ...stepped,
+    brain: {
+      ...stepped.brain,
+      ...flight.state,
+      visualRngState,
+    },
+  }
+}
+
+function advanceZombieVisual(
+  source: BoneyardEnemyActor,
+  stepped: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  if (source.brain.family !== 'zombie' || stepped.brain.family !== 'zombie') return stepped
+  const sourceBrain = source.brain
+  let visualRngState = sourceBrain.visualRngState
+  const random = (): number => {
+    const draw = nextBoneyardWaveRandom(visualRngState)
+    visualRngState = draw.state
+    return draw.value
+  }
+  const randomInteger = (count: number): number => Math.min(
+    count - 1,
+    Math.floor(random() * count),
+  )
+  let bodyPhaseDeg = sourceBrain.bodyPhaseDeg
+  let headPhaseDeg = sourceBrain.headPhaseDeg
+  let headBaseRotationDeg = sourceBrain.headBaseRotationDeg
+  let rearArmBaseRotationDeg = sourceBrain.rearArmBaseRotationDeg
+  let frontArmBaseRotationDeg = sourceBrain.frontArmBaseRotationDeg
+  let actionSwing = sourceBrain.actionSwing
+  let verticalOffset = sourceBrain.verticalOffset
+  let verticalVelocity = sourceBrain.verticalVelocity
+
+  if (sourceBrain.phase !== 'swipe') {
+    bodyPhaseDeg += random()
+    headPhaseDeg += random() * 0.75
+    if (randomInteger(100) === 5) {
+      if (randomInteger(2) === 1) {
+        rearArmBaseRotationDeg = random() * 45
+      } else {
+        frontArmBaseRotationDeg = random() * 45
+      }
+      if (randomInteger(15) === 3) {
+        headBaseRotationDeg = signedUnit(random()) * 65
+      }
+      if (source.config.flags.includes('FLAG_ROTTEN')) {
+        rearArmBaseRotationDeg /= 3
+        frontArmBaseRotationDeg /= 3
+        headBaseRotationDeg *= 0.5
+      }
+    }
+  } else {
+    const progressIncrement = sourceBrain.actionRate
+      * (sourceBrain.impactStateTicksRemaining === 0 ? 2 : 1)
+    const nextProgress = sourceBrain.actionProgress + progressIncrement
+    actionSwing += sourceBrain.actionRate
+      * (sourceBrain.impactStateTicksRemaining === 0 ? 0.5 : 0.25)
+    if (sourceBrain.actionProgress < 50 && nextProgress >= 50) {
+      verticalOffset = -0.1
+      verticalVelocity = -(3 + random() * 0.5)
+    }
+    if (
+      sourceBrain.actionProgress < NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress
+      && nextProgress >= NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.markerProgress
+    ) {
+      bodyPhaseDeg = 0
+      actionSwing = 0
+      verticalOffset = -0.1
+      verticalVelocity = -(1 + random() * 0.5)
+    }
+  }
+
+  if (sourceBrain.phase !== 'swipe' && stepped.brain.phase === 'swipe') {
+    actionSwing = 0
+  }
+  if (verticalOffset < 0) {
+    verticalOffset += verticalVelocity
+    verticalVelocity += 0.4
+    if (verticalOffset > 0) verticalOffset = 0
+  }
+  return {
+    ...stepped,
+    brain: {
+      ...stepped.brain,
+      actionSwing,
+      angularOffsetDeg: sourceBrain.angularOffsetDeg * 0.95,
+      bodyPhaseDeg,
+      frontArmBaseRotationDeg,
+      headBaseRotationDeg,
+      headPhaseDeg,
+      rearArmBaseRotationDeg,
+      verticalOffset,
+      verticalVelocity,
+      visualRngState,
+    },
+  }
 }
 
 function stepCoffin(
@@ -2985,8 +3283,31 @@ function spawnProjectile(
   const zombie = actor.config.enemyToken === 'ZOMBIE' ? actor.config.family : null
   const payload = options.payload ?? (kind === 'poison-pool' ? 'poison' : 'none')
   const lightManagerLane = enemyProjectileLightManagerLane(kind, payload)
+  const settledTicksRemaining = kind === 'demon-bomb'
+    ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSettledCountdownMinimum
+      + drawInteger(
+          work,
+          NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSettledCountdownRandomCount,
+        )
+    : 0
+  const minimumSpeed = kind === 'guided-missile'
+    ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.guidedMinimumSpeedBase
+      + drawUnit(work) * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.guidedMinimumSpeedRange
+    : 0
+  const visualScale = kind === 'guided-missile'
+    ? 0.9 + drawUnit(work) * 0.2
+    : kind === 'poison-pool'
+      ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolInitialScale
+      : 1
+  const speed = kind === 'demon-bomb'
+    ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSpeedMinimum
+      + drawUnit(work) * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSpeedRange
+    : program.speed
   const projectile: BoneyardEnemyProjectile = Object.freeze({
     ageTicks: 0,
+    bounceVelocity: kind === 'demon-bomb'
+      ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombInitialBounceVelocity
+      : 0,
     coldSlowTicks: options.coldSlowTicks ?? 0,
     contactRadius: program.contactRadius,
     damage: kind === 'poison-pool' ? 0 : damage + (options.secondaryDamage ?? 0),
@@ -2999,7 +3320,8 @@ function spawnProjectile(
     lightRegistration: lightManagerLane === null
       ? null
       : work.registerProjectileLightProvider(lightManagerLane),
-    lifetimeTicks: program.lifetimeTicks,
+    lifetimeTicks: kind === 'demon-bomb' ? settledTicksRemaining : program.lifetimeTicks,
+    minimumSpeed,
     nativeTypeId: projectileNativeTypeId(kind),
     ownerActorId: actor.id,
     payload,
@@ -3008,9 +3330,18 @@ function spawnProjectile(
       ? (zombie?.poisonDuration ?? 0)
       : (options.poisonDuration ?? 0),
     position: Object.freeze({ ...actor.position }),
-    speed: program.speed,
+    speed,
+    settledTicksRemaining,
     spawnTick: tick,
     targetPlayerId: actor.targetPlayerId,
+    verticalOffset: kind === 'demon-bomb'
+      ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombInitialHeight
+      : kind === 'arrow'
+        ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.arrowInitialHeight
+        : 0,
+    verticalVelocity: 0,
+    visualPhaseDeg: 0,
+    visualScale,
   })
   work.nextProjectileId += 1
   work.projectiles.push(projectile)
@@ -3021,6 +3352,435 @@ function spawnProjectile(
   return projectile
 }
 
+interface SpawnProjectileEffectOptions {
+  readonly alpha?: number
+  readonly alphaLossPerTick?: number
+  readonly angularVelocityDeg?: number
+  readonly atlas?: BoneyardEnemyProjectileEffect['atlas']
+  readonly blendMode?: BoneyardEnemyProjectileEffect['blendMode']
+  readonly entry: number
+  readonly lifetimeTicks: number
+  readonly phaseOriginTicks?: number
+  readonly rotationDeg?: number
+  readonly scale?: number
+  readonly tint?: number
+  readonly velocity?: Readonly<BoneyardPoint>
+}
+
+function spawnProjectileEffect(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  tick: number,
+  position: Readonly<BoneyardPoint>,
+  kind: BoneyardEnemyProjectileEffectKind,
+  options: SpawnProjectileEffectOptions,
+): void {
+  work.projectileEffects.push(Object.freeze({
+    ageTicks: 0,
+    alpha: options.alpha ?? 1,
+    alphaLossPerTick: options.alphaLossPerTick ?? 0,
+    angularVelocityDeg: options.angularVelocityDeg ?? 0,
+    atlas: options.atlas ?? 'BadGuys',
+    blendMode: options.blendMode ?? 'normal',
+    entry: options.entry,
+    id: work.nextProjectileEffectId,
+    kind,
+    lastStepTick: tick,
+    lifetimeTicks: options.lifetimeTicks,
+    ownerActorId: projectile.ownerActorId,
+    ownerProjectileId: projectile.id,
+    phaseOriginTicks: options.phaseOriginTicks ?? projectile.ageTicks,
+    position: Object.freeze({ ...position }),
+    rotationDeg: options.rotationDeg ?? 0,
+    scale: options.scale ?? 1,
+    spawnTick: tick,
+    tint: options.tint ?? 0xffffff,
+    velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),
+  }))
+  work.nextProjectileEffectId += 1
+}
+
+function stepProjectileEffects(
+  work: WorkingStep,
+  sourceEffects: readonly BoneyardEnemyProjectileEffect[],
+  tick: number,
+): void {
+  for (const source of sourceEffects) {
+    const elapsedTicks = tick - source.lastStepTick
+    if (elapsedTicks <= 0) {
+      work.projectileEffects.push(source)
+      continue
+    }
+    const ageTicks = source.ageTicks + elapsedTicks
+    if (ageTicks >= source.lifetimeTicks) continue
+    let alpha = source.alpha - source.alphaLossPerTick * elapsedTicks
+    let entry = source.entry
+    const rotationDeg = source.rotationDeg + source.angularVelocityDeg * elapsedTicks
+    switch (source.kind) {
+      case 'firebolt-trail':
+        break
+      case 'fire-burst-glow':
+        break
+      case 'fire-burst-frame':
+        entry = 251 + Math.min(3, Math.floor(ageTicks / 4))
+        break
+      case 'guided-impact-aura-one':
+      case 'guided-impact-aura-two':
+      case 'guided-impact-main':
+        break
+      case 'demon-fire':
+        entry = 46 + positiveModulo(
+          Math.floor(source.phaseOriginTicks + ageTicks * 0.25),
+          32,
+        )
+        break
+      case 'poison-pool-fade-inner': {
+        const fade = Math.max(
+          0,
+          1 - ageTicks * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolAlphaLossPerTick,
+        )
+        alpha = (Math.sin(
+          (source.phaseOriginTicks + ageTicks) * Math.PI / 180,
+        ) * 0.25 + 0.75) * fade
+        break
+      }
+      case 'poison-pool-fade-outer': {
+        alpha = 0.5 * Math.max(
+          0,
+          1 - ageTicks * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolAlphaLossPerTick,
+        )
+        break
+      }
+    }
+    if (alpha <= 0) continue
+    work.projectileEffects.push(Object.freeze({
+      ...source,
+      ageTicks,
+      alpha,
+      entry,
+      lastStepTick: tick,
+      position: Object.freeze({
+        x: source.position.x + source.velocity.x * elapsedTicks,
+        y: source.position.y + source.velocity.y * elapsedTicks,
+      }),
+      rotationDeg,
+    }))
+  }
+}
+
+function spawnProjectileTrails(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  end: Readonly<BoneyardPoint>,
+  movementTicks: number,
+  maximumProgress: number,
+): void {
+  if (movementTicks <= 0 || projectile.kind !== 'firebolt') return
+  for (let offset = 1; offset <= movementTicks; offset += 1) {
+    const progress = offset / movementTicks
+    if (progress > maximumProgress) break
+    const tick = projectile.lastStepTick + offset
+    if (tick % NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireboltTrailCadenceTicks !== 0) {
+      continue
+    }
+    const position = Object.freeze({
+      x: projectile.position.x + (end.x - projectile.position.x) * progress,
+      y: projectile.position.y + (end.y - projectile.position.y) * progress,
+    })
+    const jitterHeading = drawUnit(work) * Math.PI * 2
+    const jitterMagnitude = drawUnit(work) * 5
+    const alphaLossPerTick = 0.15 + drawUnit(work) * 0.05
+    spawnProjectileEffect(work, projectile, tick, {
+      x: position.x + Math.sin(jitterHeading) * jitterMagnitude,
+      y: position.y - 15 - Math.cos(jitterHeading) * jitterMagnitude,
+    }, 'firebolt-trail', {
+      alphaLossPerTick,
+      entry: 255 + (projectile.ageTicks + offset) % 12,
+      lifetimeTicks: 8,
+      phaseOriginTicks: projectile.ageTicks + offset,
+      rotationDeg: projectile.headingDeg + 180,
+      scale: 0.75 + drawUnit(work) * 0.25,
+    })
+  }
+}
+
+function spawnFireBurst(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  tick: number,
+  position: Readonly<BoneyardPoint>,
+  baseScale: number,
+): void {
+  const scale = baseScale + (drawUnit(work) * 2 - 1) * 0.1
+  const rotationDeg = drawUnit(work) * 360
+  const angularDirection = drawUnit(work) < 0.5 ? -1 : 1
+  const angularVelocityDeg = angularDirection * (0.5 + drawUnit(work))
+  const burstPosition = Object.freeze({ x: position.x, y: position.y - 1 })
+  spawnProjectileEffect(work, projectile, tick, burstPosition, 'fire-burst-glow', {
+    alpha: 0.5,
+    alphaLossPerTick: 0.5 / NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+    entry: 110,
+    lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+    scale: scale * 5,
+    tint: 0xff8000,
+    velocity: { x: 0, y: -1 },
+  })
+  spawnProjectileEffect(work, projectile, tick, burstPosition, 'fire-burst-frame', {
+    angularVelocityDeg,
+    blendMode: 'add',
+    entry: 251,
+    lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+    rotationDeg,
+    scale,
+    tint: 0xffffbf,
+    velocity: { x: 0, y: -1 },
+  })
+}
+
+function spawnDemonFireHandoff(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  tick: number,
+  position: Readonly<BoneyardPoint>,
+): void {
+  const firstPhase = drawInteger(work, 32)
+  spawnProjectileEffect(work, projectile, tick, {
+    x: position.x,
+    y: position.y - 10,
+  }, 'demon-fire', {
+    atlas: 'DeadHawg',
+    entry: 46 + firstPhase,
+    lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks,
+    phaseOriginTicks: firstPhase,
+  })
+  const side = drawUnit(work) < 0.5 ? -1 : 1
+  const secondPhase = drawInteger(work, 32)
+  spawnProjectileEffect(work, projectile, tick, {
+    x: position.x + side * (10 + drawUnit(work) * 10),
+    y: position.y + 5,
+  }, 'demon-fire', {
+    atlas: 'DeadHawg',
+    entry: 46 + secondPhase,
+    lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks,
+    phaseOriginTicks: secondPhase,
+  })
+}
+
+function spawnProjectileImpactEffects(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  tick: number,
+  position: Readonly<BoneyardPoint>,
+): void {
+  switch (projectile.kind) {
+    case 'arrow':
+      if (projectile.payload === 'fire') spawnFireBurst(work, projectile, tick, position, 0.5)
+      return
+    case 'firebolt':
+      spawnFireBurst(work, projectile, tick, position, 0.75)
+      return
+    case 'guided-missile': {
+      const mainEntry = projectile.payload === 'cold' ? 110 : 111
+      const auraTint = projectile.payload === 'cold' ? 0x4080ff : 0x40ff40
+      const phaseDeg = drawUnit(work) * 360
+      for (let index = 0; index < 2; index += 1) {
+        spawnProjectileEffect(work, projectile, tick, position, 'guided-impact-main', {
+          alpha: 2,
+          alphaLossPerTick:
+            NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.guidedImpactAlphaLossPerTick,
+          blendMode: 'add',
+          entry: mainEntry,
+          lifetimeTicks: 20,
+          rotationDeg: phaseDeg,
+          scale: 2,
+        })
+      }
+      for (const [kind, entry] of [
+        ['guided-impact-aura-one', 111],
+        ['guided-impact-aura-two', 112],
+      ] as const) {
+        spawnProjectileEffect(work, projectile, tick, position, kind, {
+          alpha: 2,
+          alphaLossPerTick:
+            NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.guidedImpactAlphaLossPerTick,
+          blendMode: 'add',
+          entry,
+          lifetimeTicks: 20,
+          rotationDeg: phaseDeg,
+          scale: 2,
+          tint: auraTint,
+        })
+      }
+      return
+    }
+    case 'demon-bomb':
+      spawnDemonFireHandoff(work, projectile, tick, position)
+      return
+    case 'poison-pool': return
+  }
+}
+
+function spawnPoisonPoolFade(
+  work: WorkingStep,
+  projectile: BoneyardEnemyProjectile,
+  tick: number,
+): void {
+  const innerAlpha = (
+    Math.sin(projectile.ageTicks * Math.PI / 180) * 0.25 + 0.75
+  )
+  spawnProjectileEffect(
+    work,
+    projectile,
+    tick,
+    projectile.position,
+    'poison-pool-fade-outer',
+    {
+      alpha: 0.5,
+      atlas: 'DeadHawg',
+      entry: 0,
+      lifetimeTicks: 200,
+      phaseOriginTicks: projectile.ageTicks,
+      scale: 1.6,
+    },
+  )
+  spawnProjectileEffect(
+    work,
+    projectile,
+    tick,
+    projectile.position,
+    'poison-pool-fade-inner',
+    {
+      alpha: innerAlpha,
+      atlas: 'DeadHawg',
+      entry: 0,
+      lifetimeTicks: 200,
+      phaseOriginTicks: projectile.ageTicks,
+      scale: 1.2,
+    },
+  )
+}
+
+function stepDemonBomb(
+  work: WorkingStep,
+  source: BoneyardEnemyProjectile,
+  context: BoneyardEnemyStoreStepContext,
+): BoneyardEnemyProjectile | null {
+  let projectile = source
+  for (let tick = source.lastStepTick + 1; tick <= context.tick; tick += 1) {
+    const direction = projectileDirection(projectile, projectile.targetPlayerId, context.players)
+    const requestedPosition = Object.freeze({
+      x: projectile.position.x + direction.x * projectile.speed,
+      y: projectile.position.y + direction.y * projectile.speed,
+    })
+    const worldContact = context.firstProjectileWorldContact({
+      end: requestedPosition,
+      projectileId: projectile.id,
+      radius: projectile.contactRadius,
+      start: projectile.position,
+    })
+    if (
+      worldContact !== null
+      && (!Number.isFinite(worldContact) || worldContact < 0 || worldContact > 1)
+    ) {
+      throw new RangeError('enemy projectile world contact must be null or within [0, 1]')
+    }
+    const actorContact = firstProjectileContact(
+      projectile.position,
+      requestedPosition,
+      projectile.contactRadius,
+      context.players,
+      new Set(),
+    )
+    const settled = worldContact !== null || actorContact !== null
+    const position = worldContact === null
+      ? requestedPosition
+      : Object.freeze({
+          x: projectile.position.x
+            + (requestedPosition.x - projectile.position.x) * worldContact,
+          y: projectile.position.y
+            + (requestedPosition.y - projectile.position.y) * worldContact,
+        })
+    let speed = settled
+      ? 0
+      : projectile.speed
+        * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombDampingPerTick
+    let verticalOffset = projectile.verticalOffset + projectile.verticalVelocity
+    let verticalVelocity = projectile.verticalVelocity
+      + NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombGravityPerTick
+    let bounceVelocity = projectile.bounceVelocity
+    if (verticalOffset > 0) {
+      verticalOffset = 0
+      bounceVelocity *= NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombBounceMultiplier
+      verticalVelocity = bounceVelocity
+      if (verticalVelocity > -0.1) verticalVelocity = 0
+    }
+    if (bounceVelocity > -1) {
+      speed *= NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombSettledDampingPerTick
+    }
+    const settledTicksRemaining = projectile.settledTicksRemaining - (speed < 1 ? 1 : 0)
+    const ageTicks = projectile.ageTicks + 1
+    projectile = Object.freeze({
+      ...projectile,
+      ageTicks,
+      bounceVelocity,
+      lastStepTick: tick,
+      position,
+      settledTicksRemaining,
+      speed,
+      verticalOffset,
+      verticalVelocity,
+    })
+    if (settledTicksRemaining > 0) continue
+
+    spawnDemonFireHandoff(work, projectile, tick, position)
+    const eventId = emitEvent(work, tick, 'projectile-impact', projectile.ownerActorId, {
+      projectileId: projectile.id,
+      targetPlayerId: null,
+    })
+    for (const [playerId, player] of Object.entries(context.players)) {
+      if (!targetEligible(player)) continue
+      if (Math.hypot(
+        player.position.x - position.x,
+        player.position.y - position.y,
+      ) > projectile.contactRadius + player.collisionRadius) continue
+      work.playerDamage.push(Object.freeze({
+        actorId: projectile.ownerActorId,
+        amount: projectile.damage,
+        coldSlowTicks: 0,
+        dazzleTicks: 0,
+        eventId,
+        playerId,
+        poisonDamage: 0,
+        poisonDuration: 0,
+      }))
+    }
+    emitEvent(work, tick, 'projectile-retired', projectile.ownerActorId, {
+      projectileId: projectile.id,
+      targetPlayerId: null,
+    })
+    return null
+  }
+  return projectile
+}
+
+function guidedMotion(
+  projectile: BoneyardEnemyProjectile,
+  ticks: number,
+): Readonly<{ distance: number; phaseDeg: number; speed: number }> {
+  let distance = 0
+  let phaseDeg = projectile.visualPhaseDeg
+  let speed = projectile.speed
+  for (let index = 0; index < ticks; index += 1) {
+    distance += speed
+    phaseDeg += speed * 6
+    speed = Math.max(
+      projectile.minimumSpeed,
+      speed - NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.guidedSpeedLossPerTick,
+    )
+  }
+  return { distance, phaseDeg, speed }
+}
+
 function stepProjectiles(
   work: WorkingStep,
   context: BoneyardEnemyStoreStepContext,
@@ -3029,6 +3789,11 @@ function stepProjectiles(
   for (const source of work.projectiles) {
     if (source.lastStepTick >= context.tick) {
       retained.push(source)
+      continue
+    }
+    if (source.kind === 'demon-bomb') {
+      const projectile = stepDemonBomb(work, source, context)
+      if (projectile) retained.push(projectile)
       continue
     }
     const elapsedTicks = context.tick - source.lastStepTick
@@ -3046,9 +3811,23 @@ function stepProjectiles(
         : nearestEligibleTarget(source.position, context.players)
       : source.targetPlayerId
     const direction = projectileDirection(source, targetPlayerId, context.players)
+    const motion = source.kind === 'guided-missile'
+      ? guidedMotion(source, movementTicks)
+      : {
+          distance: source.speed * movementTicks,
+          phaseDeg: source.visualPhaseDeg,
+          speed: source.speed,
+        }
+    const visualScale = source.kind === 'poison-pool'
+      ? Math.min(
+          NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolMaximumScale,
+          source.visualScale
+            + movementTicks * NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.poisonPoolGrowthPerTick,
+        )
+      : source.visualScale
     const requestedPosition = Object.freeze({
-      x: source.position.x + direction.x * source.speed * movementTicks,
-      y: source.position.y + direction.y * source.speed * movementTicks,
+      x: source.position.x + direction.x * motion.distance,
+      y: source.position.y + direction.y * motion.distance,
     })
     const contact = firstProjectileContact(
       source.position,
@@ -3071,10 +3850,28 @@ function stepProjectiles(
     ) {
       throw new RangeError('enemy projectile world contact must be null or within [0, 1]')
     }
+    const terminalProgress = Math.min(
+      worldContact ?? 1,
+      contact?.progress ?? 1,
+    )
+    spawnProjectileTrails(
+      work,
+      source,
+      requestedPosition,
+      movementTicks,
+      terminalProgress,
+    )
     if (
       worldContact !== null
       && (contact === null || worldContact <= contact.progress)
     ) {
+      const impactPosition = Object.freeze({
+        x: source.position.x
+          + (requestedPosition.x - source.position.x) * worldContact,
+        y: source.position.y
+          + (requestedPosition.y - source.position.y) * worldContact,
+      })
+      spawnProjectileImpactEffects(work, source, context.tick, impactPosition)
       emitEvent(work, context.tick, 'projectile-impact', source.ownerActorId, {
         projectileId: source.id,
         targetPlayerId: null,
@@ -3086,6 +3883,13 @@ function stepProjectiles(
       continue
     }
     if (contact !== null) {
+      const impactPosition = Object.freeze({
+        x: source.position.x
+          + (requestedPosition.x - source.position.x) * contact.progress,
+        y: source.position.y
+          + (requestedPosition.y - source.position.y) * contact.progress,
+      })
+      spawnProjectileImpactEffects(work, source, context.tick, impactPosition)
       const eventId = emitEvent(work, context.tick, 'projectile-impact', source.ownerActorId, {
         projectileId: source.id,
         targetPlayerId: contact.playerId,
@@ -3116,12 +3920,23 @@ function stepProjectiles(
           hitPlayerIds,
           lastStepTick: context.tick,
           position: requestedPosition,
+          speed: motion.speed,
           targetPlayerId,
+          visualPhaseDeg: motion.phaseDeg,
+          visualScale,
         }))
         continue
       }
     }
     if (ageTicks >= source.lifetimeTicks) {
+      if (source.kind === 'poison-pool') {
+        spawnPoisonPoolFade(work, {
+          ...source,
+          ageTicks,
+          position: requestedPosition,
+          visualScale,
+        }, context.tick)
+      }
       emitEvent(work, context.tick, 'projectile-retired', source.ownerActorId, {
         projectileId: source.id,
         targetPlayerId,
@@ -3134,7 +3949,10 @@ function stepProjectiles(
       headingDeg: direction.headingDeg,
       lastStepTick: context.tick,
       position: requestedPosition,
+      speed: motion.speed,
       targetPlayerId,
+      visualPhaseDeg: motion.phaseDeg,
+      visualScale,
     }))
   }
   work.projectiles = retained
@@ -3971,6 +4789,10 @@ function drawInteger(work: WorkingStep, count: number): number {
   return draw.value
 }
 
+function signedUnit(value: number): number {
+  return value * 2 - 1
+}
+
 function spawnTerminalChildren(
   work: WorkingStep,
   actor: BoneyardEnemyActor,
@@ -4156,8 +4978,10 @@ function resetZombie(
     ...actor,
     brain: {
       ...brain,
-      actionTick: 0,
+      actionProgress: 0,
+      actionRate: 0,
       contactTargetPlayerId: null,
+      impactStateTicksRemaining: 0,
       markerEmitted: false,
       phase: 'approach',
       phaseTicksRemaining: 0,
@@ -4187,10 +5011,9 @@ function resetDemon(actor: BoneyardEnemyActor, brain: BoneyardDemonBrain): Boney
     ...actor,
     brain: {
       ...brain,
-      actionTick: 0,
+      actionProgress: 0,
       markerEmitted: false,
       phase: 'approach',
-      phaseTicksRemaining: 0,
     },
   }
 }

@@ -19,7 +19,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 10
-const EFFECT_COMPONENT_OFFSET = 35
+const EFFECT_COMPONENT_OFFSET = 43
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 2
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -45,12 +45,9 @@ const ACTIONS: readonly (BoneyardEnemyAction | null)[] = [
   'mage-cast-short',
   'mage-cast-long',
   'imp-contact',
-  'zombie-swipe',
+  'zombie-beat',
   'wraith-drain',
-  'demon-claw',
   'demon-bomb',
-  'coffin-open',
-  'maggot-bite',
 ]
 
 const ANIMATION_STATES: readonly BoneyardEnemyAnimationState[] = [
@@ -114,11 +111,16 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[14] >= 0
       && sample[15] >= 0
       && sample[17] >= 0 && sample[17] <= VALUE_SCALE
-      && sample[29] >= 0
-      && sample[30] >= sample[29]
-      && sample[32] >= 0 && sample[32] <= VALUE_SCALE
-      && sample[33] >= 0 && sample[33] <= VALUE_SCALE
-      && sample[34] >= 0 && sample[34] <= 2
+      && arrayIndex(sample[29], 2)
+      && sample[30] >= -1 && sample[30] <= 2
+      && sample[31] >= -1 && sample[31] <= 1
+      && sample[32] >= -1 && sample[32] <= 2
+      && sample[33] >= 0
+      && sample[34] >= sample[33]
+      && sample[36] >= 0 && sample[36] <= VALUE_SCALE
+      && sample[40] >= 0 && sample[40] <= VALUE_SCALE
+      && sample[41] >= 0 && sample[41] <= VALUE_SCALE
+      && sample[42] >= 0 && sample[42] <= 2
       && effectComponentsAreValid(sample)
   },
 }
@@ -177,8 +179,16 @@ export function boneyardEnemySample(
     quantize(animation.demonFrontLimbRotationRadians, VALUE_SCALE),
     quantize(animation.demonRearJointRotationRadians, VALUE_SCALE),
     quantize(animation.demonRearLimbRotationRadians, VALUE_SCALE),
+    animation.zombieAttackSide,
+    animation.zombieBodyType,
+    animation.zombieFlyblownSide,
+    animation.zombieHeadType,
     quantize(enemy.shieldHealth, VALUE_SCALE),
     quantize(enemy.shieldMaximumHealth, VALUE_SCALE),
+    quantize(animation.impBodyRotationRadians, VALUE_SCALE),
+    quantize(animation.impEffectAlpha, VALUE_SCALE),
+    quantize(animation.zombieBodyRotationRadians, VALUE_SCALE),
+    quantize(animation.zombieHeadRotationRadians, VALUE_SCALE),
     animation.effects.length,
     quantize(enemy.lighting.glow, VALUE_SCALE),
     quantize(enemy.lighting.charge, VALUE_SCALE),
@@ -221,12 +231,20 @@ export function materializeBoneyardEnemy(
       gaitPose: dequantize(sample[16], VALUE_SCALE),
       hitFlash: dequantize(sample[17], VALUE_SCALE),
       impEffectFrame: sample[18],
+      impBodyRotationRadians: dequantize(sample[35], VALUE_SCALE),
+      impEffectAlpha: dequantize(sample[36], VALUE_SCALE),
       maggots: [],
       state: ANIMATION_STATES[sample[6]]!,
       verticalOffset: dequantize(sample[19], VALUE_SCALE),
       zombieAngularOffsetDeg: dequantize(sample[20], VALUE_SCALE),
+      zombieAttackSide: sample[29] as 0 | 1,
+      zombieBodyRotationRadians: dequantize(sample[37], VALUE_SCALE),
+      zombieBodyType: sample[30],
+      zombieFlyblownSide: sample[31],
       zombieFrontArmPose: dequantize(sample[21], VALUE_SCALE),
       zombieFrontArmRotationRadians: dequantize(sample[22], VALUE_SCALE),
+      zombieHeadType: sample[32],
+      zombieHeadRotationRadians: dequantize(sample[38], VALUE_SCALE),
       zombieRearArmPose: dequantize(sample[23], VALUE_SCALE),
       zombieRearArmRotationRadians: dequantize(sample[24], VALUE_SCALE),
     },
@@ -243,9 +261,9 @@ export function materializeBoneyardEnemy(
           registrationOrdinal: descriptor[9],
         },
     lighting: {
-      charge: dequantize(sample[33], VALUE_SCALE),
-      glow: dequantize(sample[32], VALUE_SCALE),
-      providerCopies: sample[34] as 0 | 1 | 2,
+      charge: dequantize(sample[41], VALUE_SCALE),
+      glow: dequantize(sample[40], VALUE_SCALE),
+      providerCopies: sample[42] as 0 | 1 | 2,
     },
     maximumHealth: descriptor[5],
     nativeTypeId: descriptor[3],
@@ -253,8 +271,8 @@ export function materializeBoneyardEnemy(
       x: dequantize(sample[2], POSITION_SCALE),
       y: dequantize(sample[3], POSITION_SCALE),
     },
-    shieldHealth: dequantize(sample[29], VALUE_SCALE),
-    shieldMaximumHealth: dequantize(sample[30], VALUE_SCALE),
+    shieldHealth: dequantize(sample[33], VALUE_SCALE),
+    shieldMaximumHealth: dequantize(sample[34], VALUE_SCALE),
     spawnTick: descriptor[4],
   }
 }
@@ -293,7 +311,7 @@ function encodeEffects(effects: readonly BoneyardEnemyEffectSnapshot[]): number[
 }
 
 function decodeEffects(sample: ReplicatedEntitySample): readonly BoneyardEnemyEffectSnapshot[] {
-  return Array.from({ length: sample[31] }, (_, index) => {
+  return Array.from({ length: sample[39] }, (_, index) => {
     const offset = EFFECT_COMPONENT_OFFSET + index * EFFECT_COMPONENT_COUNT
     return {
       alpha: dequantize(sample[offset + 5], VALUE_SCALE),
@@ -313,7 +331,7 @@ function decodeEffects(sample: ReplicatedEntitySample): readonly BoneyardEnemyEf
 }
 
 function effectComponentsAreValid(sample: ReplicatedEntitySample): boolean {
-  const count = sample[31]
+  const count = sample[39]
   if (!Number.isSafeInteger(count) || count < 0 || count > MAX_EFFECTS) return false
   const ids = new Set<number>()
   const roles = new Set<number>()

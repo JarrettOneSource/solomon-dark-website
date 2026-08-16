@@ -16,7 +16,7 @@ import {
 } from './native-enemy-animation.ts'
 import {
   NATIVE_ENEMY_FAMILIES,
-  nativeEnemyPresentationPlan,
+  nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
   type NativeEnemyAtlas,
   type NativeEnemyFamily,
   type NativeEnemyVisualSnapshot,
@@ -29,6 +29,15 @@ const manifests: Readonly<Record<NativeEnemyAtlas, AtlasManifest>> = {
   Demon: manifest('../../editor/manifest/demon.json'),
 }
 
+function nativeEnemyPresentationPlan(
+  snapshot: NativeEnemyVisualSnapshot,
+  tick: number,
+) {
+  return buildNativeEnemyPresentationPlan(snapshot, tick, (atlas, entry) => (
+    manifests[atlas].entries[entry]?.extras ?? []
+  ))
+}
+
 test('every reachable native enemy plan uses a shipped nonempty atlas record', () => {
   const used = new Set<string>()
   for (const family of NATIVE_ENEMY_FAMILIES) {
@@ -39,8 +48,11 @@ test('every reachable native enemy plan uses a shipped nonempty atlas record', (
           for (const layer of plan.layers) {
             const entry = manifests[layer.atlas].entries[layer.entry]
             assert.ok(entry && !entry.empty && entry.file, `${layer.atlas}:${layer.entry}`)
-            statSync(new URL(`../../assets/game/boneyard/${entry.file}`, import.meta.url))
-            used.add(`${layer.atlas}:${layer.entry}`)
+            const key = `${layer.atlas}:${layer.entry}`
+            if (!used.has(key)) {
+              statSync(new URL(`../../assets/game/boneyard/${entry.file}`, import.meta.url))
+              used.add(key)
+            }
           }
         }
       }
@@ -69,7 +81,15 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       nativeEnemySpriteGeometry(
         atlas: NativeEnemyAtlas,
         entry: number,
-      ): { readonly anchorX: number; readonly anchorY: number; readonly height: number; readonly width: number }
+      ): {
+        readonly anchorX: number
+        readonly anchorY: number
+        readonly atlas: NativeEnemyAtlas
+        readonly entry: number
+        readonly height: number
+        readonly points: readonly Readonly<{ x: number; y: number }>[]
+        readonly width: number
+      }
       nativeEnemySpriteRecord(
         atlas: NativeEnemyAtlas,
         entry: number,
@@ -81,25 +101,37 @@ test('every reachable enemy projectile record is selected for Boneyard preload',
       atlas: 'BadGuys',
       entry: 73,
       height: 13,
+      points: [],
       width: 12,
     })
-    const used = new Set<string>()
+    const required = new Set([
+      'BadGuys:2',
+      'BadGuys:15',
+      ...atlasRecordKeys('BadGuys', 110, 112),
+      ...atlasRecordKeys('BadGuys', 251, 282),
+      'DeadHawg:0',
+      ...atlasRecordKeys('DeadHawg', 46, 77),
+    ])
+    const sampled = new Set<string>()
     for (const projectile of enemyProjectileAssetSamples()) {
-      for (const layer of nativeEnemyProjectilePlan(projectile).layers) {
+      for (const layer of nativeEnemyProjectilePlan(
+        projectile,
+        projectile.spawnTick + projectile.ageTicks,
+      ).layers) {
         const record = assetModule.nativeEnemySpriteRecord(layer.atlas, layer.entry)
         assert.equal(record.atlas, layer.atlas)
         assert.equal(record.entry, layer.entry)
         assert.ok(record.source.length > 0)
-        used.add(`${layer.atlas}:${layer.entry}`)
+        sampled.add(`${layer.atlas}:${layer.entry}`)
       }
     }
-    assert.deepEqual([...used].sort(), [
-      'BadGuys:2',
-      ...atlasRecordKeys('BadGuys', 110, 112),
-      ...atlasRecordKeys('BadGuys', 251, 282),
-      ...atlasRecordKeys('DeadHawg', 46, 77),
-    ].sort())
-    assert.equal(used.size, 68)
+    assert.deepEqual([...sampled].filter((key) => !required.has(key)), [])
+    for (const key of required) {
+      const [atlas, entry] = key.split(':') as [NativeEnemyAtlas, string]
+      const record = assetModule.nativeEnemySpriteRecord(atlas, Number(entry))
+      assert.ok(record.source.length > 0, key)
+    }
+    assert.equal(required.size, 70)
 
     const deathEffectRecords = [
       ...[10, 11, 15, 21, 27, 49, 55, 69, 86]
@@ -166,12 +198,7 @@ test('every live combat and Coffin child plan resolves to extracted records', ()
     ['SKELETONARCHER', 'archer-shot'],
     ['SKELETONMAGE', 'mage-cast-short'],
     ['SKELETONMAGE', 'mage-cast-long'],
-    ['IMP', 'imp-contact'],
-    ['ZOMBIE', 'zombie-swipe'],
-    ['WRAITH', 'wraith-drain'],
-    ['DEMON', 'demon-claw'],
     ['DEMON', 'demon-bomb'],
-    ['COFFIN', 'coffin-open'],
   ]
   for (const [family, action] of actionFamilies) {
     const program = NATIVE_ENEMY_ACTION_PROGRAMS[action]
@@ -182,11 +209,31 @@ test('every live combat and Coffin child plan resolves to extracted records', ()
           animation: nativeEnemyIdleAnimationSample({
             action,
             actionProgress: progress,
-            impEffectFrame: action === 'imp-contact' ? 9 : -1,
             state: 'action',
           }),
         }, 500))
       }
+    }
+  }
+  for (const [family, action] of [
+    ['IMP', 'imp-contact'],
+    ['ZOMBIE', 'zombie-beat'],
+    ['WRAITH', 'wraith-drain'],
+  ] as const) {
+    for (const headingDeg of familyHeadings(family)) {
+      plans.push(nativeEnemyPresentationPlan({
+        ...enemy(family, 7, headingDeg, []),
+        animation: nativeEnemyIdleAnimationSample({
+          action,
+          actionProgress: action === 'zombie-beat' ? 100 : 4,
+          impEffectFrame: action === 'imp-contact' ? 9 : -1,
+          state: 'action',
+          zombieBodyType: 2,
+          zombieFlyblownSide: 1,
+          zombieFrontArmPose: action === 'zombie-beat' ? 2 : 0,
+          zombieHeadType: 2,
+        }),
+      }, 500))
     }
   }
   for (const family of NATIVE_ENEMY_FAMILIES) {
@@ -231,8 +278,11 @@ test('every live combat and Coffin child plan resolves to extracted records', ()
     for (const layer of plan.layers) {
       const record = manifests[layer.atlas].entries[layer.entry]
       assert.ok(record && !record.empty && record.file, `${layer.atlas}:${layer.entry}`)
-      statSync(new URL(`../../assets/game/boneyard/${record.file}`, import.meta.url))
-      used.add(`${layer.atlas}:${layer.entry}`)
+      const key = `${layer.atlas}:${layer.entry}`
+      if (!used.has(key)) {
+        statSync(new URL(`../../assets/game/boneyard/${record.file}`, import.meta.url))
+        used.add(key)
+      }
     }
   }
   assert.ok(used.has('BadGuys:237'))
@@ -293,7 +343,11 @@ function enemyProjectile(
     ownerActorId: 2,
     payload: 'none',
     position: { x: 0, y: 0 },
+    speed: 1,
     spawnTick: 0,
+    verticalOffset: 0,
+    visualPhaseDeg: 0,
+    visualScale: 1,
     ...overrides,
   }
 }

@@ -16,7 +16,7 @@ export class NativeEnemyProjectileViews {
     this.textures = textures
   }
 
-  update(projectiles: readonly BoneyardEnemyProjectileSnapshot[]): void {
+  update(projectiles: readonly BoneyardEnemyProjectileSnapshot[], tick: number): void {
     this.liveIds.clear()
     for (const projectile of projectiles) {
       this.liveIds.add(projectile.id)
@@ -25,7 +25,7 @@ export class NativeEnemyProjectileViews {
         view = new NativeEnemyProjectileView(this.root, this.textures)
         this.views.set(projectile.id, view)
       }
-      view.update(projectile)
+      view.update(projectile, tick)
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
@@ -75,8 +75,8 @@ class NativeEnemyProjectileView {
     root.addChild(this.container)
   }
 
-  update(projectile: BoneyardEnemyProjectileSnapshot): void {
-    const plan = nativeEnemyProjectilePlan(projectile)
+  update(projectile: BoneyardEnemyProjectileSnapshot, tick: number): void {
+    const plan = nativeEnemyProjectilePlan(projectile, tick)
     while (this.sprites.length < plan.layers.length) {
       const sprite = new Sprite()
       sprite.eventMode = 'none'
@@ -95,8 +95,11 @@ class NativeEnemyProjectileView {
       sprite.texture = requiredTexture(this.textures, record.source)
       sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)
       sprite.alpha = layer.alpha
+      sprite.blendMode = layer.blendMode
+      sprite.position.set(layer.offset.x, layer.offset.y)
       sprite.rotation = layer.rotationRadians
-      sprite.scale.set(layer.scale)
+      sprite.scale.set(layer.scale, layer.scaleY)
+      sprite.tint = layer.tint
     })
     this.container.label = `enemy-projectile:${projectile.kind}:${projectile.id}`
     this.container.position.set(plan.position.x, plan.position.y)
