@@ -19,6 +19,13 @@ import type {
   PrimarySpellSimulationState,
   PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
+import type { NativeWeldPrimarySkillProfile } from '../core-kernels/native-primary-skill-profile.ts'
+import type { NativeSecondarySteamedPulse } from '../core-kernels/native-secondary-abilities.ts'
+import type {
+  NativeWeldBuildId,
+  NativeWeldCastKind,
+} from '../core-kernels/native-weld-primary-profile.ts'
 import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
@@ -50,6 +57,7 @@ function resolveCombatWithAuthority(
     ) => Readonly<{ x: number; y: number }>
     damageMultiplier?: (actorId: number, kind: string) => number
     rngSeed?: number
+    steamedPulses?: readonly NativeSecondarySteamedPulse[]
   }> = {},
 ) {
   return resolveBoneyardSpellCombat(
@@ -64,6 +72,7 @@ function resolveCombatWithAuthority(
     options.damageMultiplier ?? (() => 1),
     [],
     options.resolveMovement ?? ((_actorId, _start, requested) => requested),
+    options.steamedPulses ?? [],
   )
 }
 
@@ -305,6 +314,123 @@ test('Fire consumes on flag-four scenery roots without applying hostile damage',
     [sceneryTarget('grave-edge', 0.01, 20.01)],
   )
   assert.equal(equality.spells, spells, 'strict radius equality must miss the grave root')
+})
+
+test('welded missile contacts preserve each native elemental payload and impact owner', () => {
+  const spawned = spawnEnemies([{ position: { x: 0, y: 0 }, token: 'SKELETON' }])
+  const enemy = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{ ...enemy, currentHealth: 100, maximumHealth: 100 }],
+  }
+
+  const burning = resolveCombatWithAuthority(enemies, spellState({
+    projectiles: [projectile({
+      buildId: 1000,
+      id: 801,
+      kind: 'weld',
+      vector: [5, 5, 10, 1, 1, 6, 10, 0, 0],
+    })],
+  }), [], 31)
+  assert.deepEqual(burning.hits.map(({ amount, spellKind }) => ({ amount, spellKind })), [
+    { amount: 5, spellKind: 'weld' },
+    { amount: 3, spellKind: 'fire-explosion' },
+  ])
+  assert.deepEqual(
+    burning.spells.transients.map(({ kind }) => kind),
+    ['weld-impact', 'fire-explosion'],
+  )
+
+  const frost = resolveCombatWithAuthority(enemies, spellState({
+    projectiles: [projectile({
+      buildId: 1001,
+      id: 802,
+      kind: 'weld',
+      vector: [5, 5, 10, 1, 1, 0.75, 0.2],
+    })],
+  }), [], 32)
+  assert.deepEqual(frost.targetEffects, [{
+    patch: {
+      coldSlowFactor: 0.5,
+      coldSlowMaterial: true,
+      coldSlowTicks: 150,
+      timeScale: 0.5,
+    },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+
+  const lightning = resolveCombatWithAuthority(enemies, spellState({
+    projectiles: [projectile({
+      buildId: 1002,
+      id: 803,
+      kind: 'weld',
+      vector: [5, 5, 10, 1, 1, 2, 0.64],
+    })],
+  }), [], 33)
+  assert.deepEqual(lightning.targetEffects, [{
+    patch: { electricBurn: {
+      arcCount: 2,
+      damagePerTick: 0.05,
+      ownerId: 'wizard',
+      sourceActorId: 803,
+      stunFactor: 0.64,
+      ticks: 100,
+    } },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+})
+
+test('Crawling Shock uses its 15-unit query and survives exactly its captured contacts', () => {
+  const spawned = spawnEnemies([{ position: { x: 28.999, y: 0 }, token: 'SKELETON' }])
+  const enemy = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{
+      ...enemy,
+      config: { ...enemy.config, collisionRadius: 14 },
+      currentHealth: 100,
+      maximumHealth: 100,
+    }],
+  }
+  const source = projectile({
+    buildId: 1009,
+    contactsRemaining: 2,
+    damage: 4,
+    id: 809,
+    kind: 'weld',
+    vector: [4, 10, 2, 0.7, 1, 1.25],
+  })
+  const first = resolveCombatWithAuthority(
+    enemies,
+    spellState({ projectiles: [source] }),
+    [],
+    40,
+  )
+  assert.deepEqual(first.hits.map(({ amount }) => amount), [4])
+  assert.equal(first.spells.projectiles[0]?.kind, 'weld')
+  if (first.spells.projectiles[0]?.kind !== 'weld') throw new Error('expected GroundSpark')
+  assert.equal(first.spells.projectiles[0].contactsRemaining, 1)
+  assert.deepEqual(first.targetEffects, [{
+    patch: { electricBurn: {
+      arcCount: 2,
+      damagePerTick: 0.08,
+      ownerId: 'wizard',
+      sourceActorId: 809,
+      stunFactor: 0.7,
+      ticks: 50,
+    } },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+
+  const last = resolveCombatWithAuthority(first.enemies, first.spells, [], 41)
+  assert.deepEqual(last.spells.projectiles, [])
+  assert.deepEqual(last.spells.transients.map(({ kind }) => kind), [
+    'weld-impact',
+    'weld-impact',
+  ])
 })
 
 test('Ether contact uses its six-unit point query and publishes FadeMM at the advanced root', () => {
@@ -672,6 +798,176 @@ test('Lightning chains to the nearest unused roots, decays in float32, and attac
   )), ['enemy:2', 'enemy:3'])
 })
 
+test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns Fire payloads', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+  }
+  const profile = weldProfile(1003, [200, 10, 1, 0.4, 3, 8, 0, 0], 'channel')
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [{
+      ageTicks: 0,
+      birthTick: 1,
+      buildId: 1003,
+      direction: { x: 1, y: 0 },
+      id: 10,
+      kind: 'weld-channel',
+      origin: { x: 0, y: 0 },
+      ownerId: 'wizard',
+      targetId: 'enemy:1',
+      variant: 0,
+      vector: profile.vector.values,
+      worldKey: WORLD_KEY,
+    }] }),
+    [emission({ damage: 2, id: 10, kind: 'weld', primarySkill: profile })],
+    1,
+  )
+
+  assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 2 },
+    { actorId: 2, amount: Math.fround(2 * Math.fround(0.600000024)) },
+  ])
+  assert.deepEqual(result.targetEffects.filter(({ patch }) => patch.stunTicks !== undefined), [
+    { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 1, worldKey: WORLD_KEY },
+    { patch: { stunFactor: 0.4, stunTicks: 25 }, targetId: 2, worldKey: WORLD_KEY },
+  ])
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'fire-explosion').length, 2)
+  assert.equal(result.spells.transients.some((effect) => (
+    effect.kind === 'weld-channel' && effect.id !== 10 && effect.targetId === 'enemy:2'
+  )), true)
+})
+
+test('Blizzard Beam combines its widened cone with chaining and applies Cold before Stun', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 100, y: 0 }, token: 'SKELETON' },
+    { position: { x: 180, y: 10 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+  }
+  const profile = weldProfile(1004, [200, 10, 1, 0.25, 0, 0.2, 0.04], 'channel')
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({}),
+    [emission({ damage: 2, id: 11, kind: 'weld', primarySkill: profile })],
+    2,
+  )
+
+  assert.deepEqual(result.hits.map(({ actorId }) => actorId), [1, 2])
+  assert.deepEqual(result.targetEffects.map(({ patch, targetId }) => ({
+    kind: patch.coldSlowTicks === undefined ? 'stun' : 'cold',
+    targetId,
+  })), [
+    { kind: 'cold', targetId: 1 }, { kind: 'stun', targetId: 1 },
+    { kind: 'cold', targetId: 2 }, { kind: 'stun', targetId: 2 },
+  ])
+})
+
+test('Steam Jet installs one target-owned ten-tick Steamed payload and exports its combat pulse', () => {
+  const spawned = spawnEnemies([{ position: { x: 80, y: 0 }, token: 'SKELETON' }])
+  const actor = spawned.actors[0]!
+  const enemies = {
+    ...spawned,
+    actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
+  }
+  const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
+  const applied = resolveCombatWithAuthority(
+    enemies,
+    spellState({}),
+    [emission({ damage: 3, id: 12, kind: 'weld', primarySkill: profile })],
+    1,
+  )
+  assert.deepEqual(applied.targetEffects, [{
+    patch: { steamed: {
+      damagePerTick: 3,
+      emberDamage: 2,
+      emberFragments: 3,
+      explodeDamage: 4,
+      explodeRadius: 6,
+      ownerId: 'wizard',
+      sourceActorId: 12,
+      ticks: 10,
+    } },
+    targetId: 1,
+    worldKey: WORLD_KEY,
+  }])
+
+  const pulsed = resolveCombatWithAuthority(
+    applied.enemies,
+    spellState({}),
+    [],
+    2,
+    { steamedPulses: [{
+      emberDamage: 2,
+      emberFragments: 3,
+      explodeDamage: 4,
+      explodeRadius: 6,
+      position: actor.position,
+      sourcePlayerId: 'wizard',
+      targetId: actor.id,
+      worldKey: WORLD_KEY,
+    }] },
+  )
+  assert.equal(pulsed.spells.transients.some(({ kind }) => kind === 'fire-explosion'), true)
+  assert.equal(pulsed.spells.transients.filter(({ kind }) => kind === 'fire-ember').length, 3)
+})
+
+test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pulse', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 20, y: 0 }, token: 'SKELETON' },
+    { position: { x: 70, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({ ...actor, currentHealth: 100, maximumHealth: 100 })),
+  }
+  const meteor: PrimarySpellTransientState = {
+    ageTicks: 51,
+    birthTick: 0,
+    buildId: 1007,
+    damage: 20,
+    direction: { x: 1, y: 0 },
+    fallScalar: 0,
+    id: 20,
+    impactDue: true,
+    impactTicksRemaining: 200,
+    kind: 'weld-meteor',
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    phase: 'impact',
+    position: { x: 0, y: 0 },
+    presentationPhase: 0,
+    privateSeed: 99,
+    pulseDue: false,
+    pulseSequence: 0,
+    pulseTicksRemaining: 10,
+    vector: [10, 20, 2, 1, 2, 0, 0, 0, 0],
+    worldKey: WORLD_KEY,
+  }
+  const impact = resolveCombatWithAuthority(enemies, spellState({ transients: [meteor] }), [], 3)
+  assert.deepEqual(impact.hits.map(({ actorId, amount }) => ({ actorId, amount })), [{
+    actorId: 1,
+    amount: 10,
+  }])
+
+  const pulse = resolveCombatWithAuthority(enemies, spellState({ transients: [{
+    ...meteor,
+    impactDue: false,
+    pulseDue: true,
+    pulseSequence: 1,
+  }] }), [], 4)
+  assert.deepEqual(pulse.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 1 },
+    { actorId: 2, amount: 1 },
+  ])
+})
+
 test('Disintegrate executes only below the strict post-hit twenty-percent gate', () => {
   const enemies = spawnEnemies([
     { position: { x: 20, y: 0 }, token: 'SKELETON' },
@@ -919,7 +1215,9 @@ function spellState(options: {
 }
 
 function projectile(options: {
+  buildId?: NativeWeldOneShotBuildId
   charge?: number
+  contactsRemaining?: number
   damage?: number
   hitTargetIds?: readonly string[]
   id: number
@@ -928,13 +1226,14 @@ function projectile(options: {
   remainingDamage?: number
   toughness?: number
   velocity?: Readonly<{ x: number; y: number }>
+  vector?: readonly number[]
   worldKey?: string
 }): PrimarySpellProjectileState {
   const velocity = options.velocity ?? { x: 0, y: 0 }
   const common = {
     ageTicks: 1,
     charge: options.charge ?? 1,
-    damage: options.damage ?? { earth: 10, ether: 2, fire: 4 }[options.kind],
+    damage: options.damage ?? { earth: 10, ether: 2, fire: 4, weld: 5 }[options.kind],
     direction: normalized(velocity),
     flightTicks: 1,
     id: options.id,
@@ -984,6 +1283,23 @@ function projectile(options: {
         privateSeed: 0,
         spentEmber: { kind: 'none' },
         underpowered: false,
+      }
+    case 'weld':
+      return {
+        ...common,
+        buildId: options.buildId ?? 1000,
+        charge: 1,
+        contactsRemaining: options.contactsRemaining ?? 1,
+        headingDegrees: 0,
+        hitTargetIds: [],
+        kind: 'weld',
+        presentationSeed: 0,
+        projectileIndex: 0,
+        speed: 3,
+        targetId: null,
+        turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+        turnInput: 2,
+        vector: options.vector ?? [5, 5, 10, 1, 1, 0, 0, 0, 0],
       }
   }
 }
@@ -1089,6 +1405,26 @@ function emission(options: {
     queryOrigin: { x: 0, y: 0 },
     underpowered: options.underpowered ?? false,
     worldKey: options.worldKey ?? WORLD_KEY,
+  }
+}
+
+function weldProfile(
+  buildId: NativeWeldBuildId,
+  values: readonly number[],
+  castKind: NativeWeldCastKind,
+): NativeWeldPrimarySkillProfile {
+  return {
+    buildId,
+    castKind,
+    damageFactor: 1,
+    damageMaximum: values[0]!,
+    damageMinimum: values[0]!,
+    damageRollCount: 1,
+    kind: 'weld',
+    manaCost: values[1]!,
+    rank: 1,
+    skillId: buildId,
+    vector: { buildId, castKind, values: Object.freeze([...values]) },
   }
 }
 

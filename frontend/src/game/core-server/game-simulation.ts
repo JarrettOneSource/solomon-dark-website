@@ -2208,6 +2208,7 @@ function finishGameSimulationTick(
         collision,
         radius,
       ),
+      secondaryResult.steamedPulses,
     )
     combatRng = spellCombat.rng
     primarySpells = spellCombat.spells

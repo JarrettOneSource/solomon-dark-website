@@ -1,6 +1,7 @@
 import {
   createPrimarySpellContactImpact,
   createPrimarySpellFireDetonation,
+  createPrimarySpellWeldFireDetonation,
   PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE,
   PRIMARY_SPELL_ETHER_COLLISION_RADIUS,
   PRIMARY_SPELL_FIRE_COLLISION_RADIUS,
@@ -42,7 +43,10 @@ import {
   type PrimarySpellTarget,
 } from '../core-kernels/primary-spell-targeting.ts'
 import { consumeNativeEarthBoulderContact } from '../core-kernels/native-earth-boulder.ts'
-import type { NativeSecondaryTargetEffectPatch } from '../core-kernels/native-secondary-abilities.ts'
+import type {
+  NativeSecondarySteamedPulse,
+  NativeSecondaryTargetEffectPatch,
+} from '../core-kernels/native-secondary-abilities.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { RegisterNativeLightProvider } from '../core-kernels/native-light-provider-order.ts'
 import {
@@ -82,6 +86,15 @@ export interface BoneyardSpellTargetEffectContact {
   readonly targetId: number
   readonly worldKey: string
 }
+
+const NATIVE_WELD_MISSILE_COLLISION_RADIUS = PRIMARY_SPELL_ETHER_COLLISION_RADIUS
+const NATIVE_WELD_GROUND_SPARK_COLLISION_RADIUS = 15
+const NATIVE_WELD_FROST_SLOW_TICKS = 150
+const NATIVE_WELD_FROST_SLOW_FACTOR = 0.5
+const NATIVE_WELD_BALL_LIGHTNING_BURN_TICKS = 100
+const NATIVE_WELD_GROUND_SPARK_BURN_TICKS = 50
+const NATIVE_WELD_CHANNEL_MODIFIER_TICKS = 25
+const NATIVE_WELD_STEAMED_TICKS = 10
 
 export interface BoneyardSpellHit {
   readonly actorId: number
@@ -143,6 +156,7 @@ export function resolveBoneyardSpellCombat(
   resolveEnemyMovement: ResolveBoneyardSpellEnemyMovement = (_actorId, _start, requested) => (
     requested
   ),
+  steamedPulses: readonly NativeSecondarySteamedPulse[] = [],
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -166,6 +180,40 @@ export function resolveBoneyardSpellCombat(
     patch: NativeSecondaryTargetEffectPatch,
   ): void => {
     targetEffects.push(Object.freeze({ patch: Object.freeze({ ...patch }), targetId, worldKey }))
+  }
+
+  for (const pulse of steamedPulses) {
+    if (pulse.worldKey !== worldKey) continue
+    const privateSeed = drawNativeInteger(rng, 1_000_000)
+    rng = privateSeed.state
+    const detonation = createPrimarySpellWeldFireDetonation(
+      nextSpellId,
+      {
+        buildId: 1005,
+        direction: { x: 0, y: -1 },
+        ownerId: pulse.sourcePlayerId,
+        position: { ...pulse.position },
+        vector: [
+          0,
+          0,
+          0,
+          0,
+          pulse.explodeDamage,
+          pulse.explodeRadius,
+          pulse.emberDamage,
+          pulse.emberFragments,
+        ],
+        worldKey,
+      },
+      pulse.position,
+      tick,
+      rng,
+      privateSeed.value,
+      false,
+    )
+    rng = detonation.rng
+    impactTransients.push(...detonation.transients)
+    nextSpellId = detonation.nextId
   }
 
   const publishContactImpact = (
@@ -248,6 +296,90 @@ export function resolveBoneyardSpellCombat(
           hitTargetIds,
           remainingDamage,
         })
+      }
+      continue
+    }
+
+    if (projectile.kind === 'weld') {
+      const target = firstNativePrimaryPointContact({
+        actorMask: 0x2,
+        position: projectile.position,
+        queryRadius: projectile.buildId === 1009
+          ? NATIVE_WELD_GROUND_SPARK_COLLISION_RADIUS
+          : NATIVE_WELD_MISSILE_COLLISION_RADIUS,
+        targets: rows.map(({ target }) => target),
+      })
+      if (!target) continue
+      const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
+      if (!actor) continue
+
+      if (projectile.buildId === 1001 && projectile.vector[5]! > 0) {
+        queueTargetEffect(actor.id, {
+          coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
+          coldSlowMaterial: true,
+          coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
+          timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
+        })
+      }
+      if (projectile.buildId === 1002 || projectile.buildId === 1009) {
+        const burnTicks = projectile.buildId === 1002
+          ? NATIVE_WELD_BALL_LIGHTNING_BURN_TICKS
+          : NATIVE_WELD_GROUND_SPARK_BURN_TICKS
+        const movementFactor = projectile.buildId === 1002
+          ? projectile.vector[6]!
+          : projectile.vector[3]!
+        queueTargetEffect(actor.id, {
+          electricBurn: Object.freeze({
+            arcCount: Math.max(0, Math.round(
+              projectile.buildId === 1002 ? projectile.vector[5]! : projectile.vector[2]!,
+            )),
+            damagePerTick: projectile.damage / burnTicks,
+            ownerId: projectile.ownerId,
+            sourceActorId: projectile.id,
+            stunFactor: movementFactor,
+            ticks: burnTicks,
+          }),
+        })
+      }
+
+      const electric = projectile.buildId === 1002 || projectile.buildId === 1009
+      const amount = electric
+        ? projectile.damage * validatedDamageMultiplier(damageMultiplier(actor.id, 'air'))
+        : projectile.damage
+      const damaged = damageBoneyardEnemy(enemies, {
+        actorId: actor.id,
+        amount,
+        sourcePlayerId: projectile.ownerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      enemies = damaged.store
+      events.push(...damaged.events)
+      hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+
+      if (projectile.buildId === 1009 && projectile.contactsRemaining > 1) {
+        updatedProjectiles.set(projectile.id, {
+          ...projectile,
+          contactsRemaining: projectile.contactsRemaining - 1,
+        })
+        publishContactImpact(projectile, projectile.position)
+        continue
+      }
+      consumedProjectileIds.add(projectile.id)
+      if (projectile.buildId === 1000) {
+        const detonation = createPrimarySpellWeldFireDetonation(
+          nextSpellId,
+          projectile,
+          projectile.position,
+          tick,
+          rng,
+          projectile.presentationSeed ?? 0,
+        )
+        rng = detonation.rng
+        impactTransients.push(...detonation.transients)
+        nextSpellId = detonation.nextId
+      } else {
+        publishContactImpact(projectile, projectile.position)
       }
       continue
     }
@@ -378,6 +510,55 @@ export function resolveBoneyardSpellCombat(
       })
       nextSpellId += 1
     }
+  }
+
+  for (const effect of [...sourceSpells.transients].sort(bySpellId)) {
+    if (effect.kind !== 'weld-meteor' || effect.worldKey !== worldKey) continue
+    const pulse = effect.impactDue
+      ? Object.freeze({ amount: effect.damage * 0.5, radius: 45 })
+      : effect.pulseDue
+        ? Object.freeze({ amount: effect.damage / 20, radius: effect.vector[4]! * 45 })
+        : null
+    if (pulse) {
+      for (const row of nativePrimaryRootTargetRows(
+        enemies,
+        effect.position,
+        pulse.radius,
+        0x2,
+      )) {
+        const damaged = damageBoneyardEnemy(enemies, {
+          actorId: row.actor.id,
+          amount: pulse.amount,
+          sourcePlayerId: effect.ownerId,
+          tick,
+        })
+        if (!damaged.accepted) continue
+        enemies = damaged.store
+        events.push(...damaged.events)
+        hits.push({
+          actorId: row.actor.id,
+          amount: pulse.amount,
+          killed: damaged.killed,
+          ownerId: effect.ownerId,
+          spellId: effect.id,
+          spellKind: 'weld',
+          tick,
+        })
+      }
+    }
+    if (!effect.impactDue) continue
+    const detonation = createPrimarySpellWeldFireDetonation(
+      nextSpellId,
+      effect,
+      effect.position,
+      tick,
+      rng,
+      effect.privateSeed,
+      false,
+    )
+    rng = detonation.rng
+    impactTransients.push(...detonation.transients)
+    nextSpellId = detonation.nextId
   }
 
   const explosions = [...sourceSpells.transients, ...impactTransients]
@@ -545,6 +726,236 @@ export function resolveBoneyardSpellCombat(
           row.target.position,
           contactedIds,
           )
+      }
+      continue
+    }
+
+    if (emission.kind === 'weld') {
+      if (emission.primarySkill.kind !== 'weld') {
+        throw new Error('Weld channel emission does not own a Weld skill payload')
+      }
+      const profile = emission.primarySkill
+      switch (profile.buildId) {
+        case 1003: {
+          const first = selectedWeldTarget(primaryTargetRows(enemies), sourceSpells, emission)
+          if (!first) break
+          const contactedIds = new Set<string>()
+          let target: PrimarySpellTarget | null = first
+          let damage = emission.damage
+          let previousPoint = emission.origin
+          for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
+            const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+              candidate.id === target!.id
+            ))
+            if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+            contactedIds.add(row.target.id)
+            const stunFactor = profile.vector.values[3]!
+            if (stunFactor < 1) {
+              queueTargetEffect(row.actor.id, {
+                stunFactor,
+                stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+              })
+            }
+            const amount = damage * validatedDamageMultiplier(
+              damageMultiplier(row.actor.id, 'air'),
+            )
+            const damaged = damageBoneyardEnemy(enemies, {
+              actorId: row.actor.id,
+              amount,
+              sourcePlayerId: emission.ownerId,
+              tick,
+            })
+            if (damaged.accepted) {
+              enemies = damaged.store
+              events.push(...damaged.events)
+              hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, tick))
+              const point = primarySpellTargetPoint(row.target)
+              const privateSeed = drawNativeInteger(rng, 1_000_000)
+              rng = privateSeed.state
+              const detonation = createPrimarySpellWeldFireDetonation(
+                nextSpellId,
+                {
+                  buildId: 1003,
+                  direction: normalizedDifference(previousPoint, point),
+                  ownerId: emission.ownerId,
+                  position: point,
+                  vector: profile.vector.values,
+                  worldKey,
+                },
+                point,
+                tick,
+                rng,
+                privateSeed.value,
+                false,
+              )
+              rng = detonation.rng
+              ownedTransients.push(...detonation.transients)
+              nextSpellId = detonation.nextId
+            }
+            const currentPoint = primarySpellTargetPoint(row.target)
+            if (hop > 0) {
+              ownedTransients.push({
+                ageTicks: 0,
+                birthTick: tick,
+                buildId: 1003,
+                direction: normalizedDifference(previousPoint, currentPoint),
+                id: nextSpellId,
+                kind: 'weld-channel',
+                origin: { ...previousPoint },
+                ownerId: emission.ownerId,
+                targetId: row.target.id,
+                variant: nextSpellId % 4,
+                vector: Object.freeze([...profile.vector.values]),
+                worldKey,
+              })
+              nextSpellId += 1
+            }
+            previousPoint = currentPoint
+            damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+            target = nearestUnusedAirChainTarget(
+              primaryTargetRows(enemies).map(({ target: candidate }) => candidate),
+              row.target.position,
+              contactedIds,
+            )
+          }
+          break
+        }
+        case 1004: {
+          const widen = profile.vector.values[6]! * 250
+          const roots = nativePrimaryConeTargets({
+            actorMask: 0x1082,
+            aimDirection: emission.direction,
+            halfAngleDegrees: 15 + widen,
+            hasLineOfSight: (target) => (
+              firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+            ) === null,
+            origin: emission.queryOrigin,
+            reach: 205 + 4 * widen,
+            targets: primaryTargetRows(enemies).map(({ target }) => target),
+          })
+          const contactedIds = new Set<string>()
+          for (const root of roots) {
+            let target: PrimarySpellTarget | null = root
+            let damage = emission.damage
+            let previousPoint = emission.origin
+            for (let hop = 0; target && hop <= profile.vector.values[2]!; hop += 1) {
+              if (contactedIds.has(target.id)) break
+              const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+                candidate.id === target!.id
+              ))
+              if (!row || !nativePrimaryTargetEligible(row.target, 0x2)) break
+              contactedIds.add(row.target.id)
+              queueTargetEffect(row.actor.id, {
+                coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
+                coldSlowMaterial: true,
+                coldSlowTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+                timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
+              })
+              const stunFactor = profile.vector.values[3]!
+              if (stunFactor < 1) {
+                queueTargetEffect(row.actor.id, {
+                  stunFactor,
+                  stunTicks: NATIVE_WELD_CHANNEL_MODIFIER_TICKS,
+                })
+              }
+              if (profile.vector.values[5]! > 0) {
+                enemies = applyWaterPushback(
+                  enemies,
+                  row.actor,
+                  emission.queryOrigin,
+                  profile.vector.values[5]!,
+                  205 + 4 * widen,
+                  resolveEnemyMovement,
+                )
+              }
+              const amount = damage * validatedDamageMultiplier(
+                damageMultiplier(row.actor.id, 'air'),
+              )
+              const damaged = damageBoneyardEnemy(enemies, {
+                actorId: row.actor.id,
+                amount,
+                sourcePlayerId: emission.ownerId,
+                tick,
+              })
+              if (damaged.accepted) {
+                enemies = damaged.store
+                events.push(...damaged.events)
+                hits.push(channelSpellHit(emission, row.actor.id, amount, damaged.killed, tick))
+              }
+              const currentPoint = primarySpellTargetPoint(row.target)
+              if (hop > 0) {
+                ownedTransients.push({
+                  ageTicks: 0,
+                  birthTick: tick,
+                  buildId: 1004,
+                  direction: normalizedDifference(previousPoint, currentPoint),
+                  id: nextSpellId,
+                  kind: 'weld-channel',
+                  origin: { ...previousPoint },
+                  ownerId: emission.ownerId,
+                  targetId: row.target.id,
+                  variant: nextSpellId % 4,
+                  vector: Object.freeze([...profile.vector.values]),
+                  worldKey,
+                })
+                nextSpellId += 1
+              }
+              previousPoint = currentPoint
+              damage = Math.fround(damage * NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR)
+              target = nearestUnusedAirChainTarget(
+                primaryTargetRows(enemies).map(({ target: candidate }) => candidate),
+                row.target.position,
+                contactedIds,
+              )
+            }
+          }
+          break
+        }
+        case 1005: {
+          const widen = profile.vector.values[2]!
+          const contacts = nativePrimaryConeTargets({
+            actorMask: 0x1082,
+            aimDirection: emission.direction,
+            halfAngleDegrees: 15 + widen,
+            hasLineOfSight: (target) => (
+              firstWorldContact?.(emission.queryOrigin, target.position, 0) ?? null
+            ) === null,
+            origin: emission.queryOrigin,
+            reach: 205 + 4 * widen,
+            targets: primaryTargetRows(enemies).map(({ target }) => target),
+          })
+          for (const target of contacts) {
+            const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+              candidate.id === target.id
+            ))
+            if (!row) continue
+            queueTargetEffect(row.actor.id, {
+              steamed: Object.freeze({
+                damagePerTick: emission.damage,
+                emberDamage: profile.vector.values[6]!,
+                emberFragments: Math.max(0, Math.round(profile.vector.values[7]!)),
+                explodeDamage: profile.vector.values[4]!,
+                explodeRadius: profile.vector.values[5]!,
+                ownerId: emission.ownerId,
+                sourceActorId: emission.id,
+                ticks: NATIVE_WELD_STEAMED_TICKS,
+              }),
+            })
+            if (profile.vector.values[3]! > 0) {
+              enemies = applyWaterPushback(
+                enemies,
+                row.actor,
+                emission.queryOrigin,
+                profile.vector.values[3]!,
+                205 + 4 * widen,
+                resolveEnemyMovement,
+              )
+            }
+          }
+          break
+        }
+        default:
+          throw new Error(`weld channel build ${profile.buildId} is not supported`)
       }
       continue
     }
@@ -1029,6 +1440,23 @@ function selectedAirTargets(
   return row?.target.active && !row.target.pendingRemove ? [row.target] : []
 }
 
+function selectedWeldTarget(
+  rows: readonly PrimaryTargetRow[],
+  spells: PrimarySpellSimulationState,
+  emission: PrimarySpellChannelEmission,
+): PrimarySpellTarget | null {
+  const transient = spells.transients.find((effect) => (
+    effect.kind === 'weld-channel'
+    && effect.id === emission.id
+    && effect.ownerId === emission.ownerId
+    && effect.worldKey === emission.worldKey
+    && effect.buildId === 1003
+  ))
+  if (transient?.kind !== 'weld-channel' || transient.targetId === null) return null
+  const row = rows.find(({ target }) => target.id === transient.targetId)
+  return row?.target.active && !row.target.pendingRemove ? row.target : null
+}
+
 function primaryTargetRows(
   store: BoneyardEnemyStore,
   registrationOrderBase = 0,
@@ -1114,6 +1542,24 @@ function transientSpellHit(
     ownerId: effect.ownerId,
     spellId: effect.id,
     spellKind: effect.kind,
+    tick,
+  }
+}
+
+function channelSpellHit(
+  emission: PrimarySpellChannelEmission,
+  actorId: number,
+  amount: number,
+  killed: boolean,
+  tick: number,
+): BoneyardSpellHit {
+  return {
+    actorId,
+    amount,
+    killed,
+    ownerId: emission.ownerId,
+    spellId: emission.id,
+    spellKind: 'weld',
     tick,
   }
 }

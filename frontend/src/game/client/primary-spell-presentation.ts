@@ -61,6 +61,19 @@ function interpolateProjectile(
   blend: number,
 ): PrimarySpellProjectileState {
   const discrete = blend < 1 ? older : newer
+  if (older.kind !== newer.kind) return copyProjectile(discrete)
+  if (discrete.kind === 'weld') {
+    return {
+      ...discrete,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      hitTargetIds: [...discrete.hitTargetIds],
+      lightRegistration: { ...discrete.lightRegistration },
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...discrete.vector],
+      velocity: lerpVector(older.velocity, newer.velocity, blend),
+    }
+  }
   return {
     ...discrete,
     ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
@@ -232,6 +245,10 @@ function fixedTransientTiming(
       lifetimeTicks: effect.durationTicks,
     }
     case 'water-hail': return null
+    case 'weld-channel':
+    case 'weld-impact':
+    case 'weld-meteor':
+    case 'weld-persistent': return null
   }
 }
 
@@ -560,6 +577,54 @@ function interpolateTransient(
   if (older.kind === 'water-aura' && newer.kind === 'water-aura') {
     return interpolateOriginTransient(older, newer, blend)
   }
+  if (older.kind === 'weld-channel' && newer.kind === 'weld-channel') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-impact' && newer.kind === 'weld-impact') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-meteor' && newer.kind === 'weld-meteor') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      fallScalar: lerp(older.fallScalar, newer.fallScalar, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-persistent' && newer.kind === 'weld-persistent') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      lightRegistration: null,
+      origin: lerpVector(older.origin, newer.origin, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (isWeldTransient(older) || isWeldTransient(newer)) return copyTransient(discrete)
   throw new Error('Unsupported primary spell transient pair')
 }
 
@@ -581,6 +646,17 @@ function interpolateOriginTransient<
 }
 
 function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProjectileState {
+  if (spell.kind === 'weld') {
+    return {
+      ...spell,
+      direction: { ...spell.direction },
+      hitTargetIds: [...spell.hitTargetIds],
+      lightRegistration: { ...spell.lightRegistration },
+      position: { ...spell.position },
+      vector: [...spell.vector],
+      velocity: { ...spell.velocity },
+    }
+  }
   return {
     ...spell,
     direction: { ...spell.direction },
@@ -592,6 +668,13 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
     position: { ...spell.position },
     velocity: { ...spell.velocity },
   }
+}
+
+function isWeldTransient(effect: PrimarySpellTransientState): boolean {
+  return effect.kind === 'weld-channel'
+    || effect.kind === 'weld-impact'
+    || effect.kind === 'weld-meteor'
+    || effect.kind === 'weld-persistent'
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {

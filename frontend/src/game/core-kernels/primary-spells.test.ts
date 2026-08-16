@@ -1813,3 +1813,65 @@ test('pins native torso aim, Staff pose schedule, and observed socket banks', ()
   assert.deepEqual(primarySpellEmitterOffset(19, 37), { x: -41.5, y: -34.5 })
   assert.deepEqual(primarySpellEmitterOffset(0, 1, true), { x: 8.5, y: -56 })
 })
+test('welded one-shot authority spends once at emission and creates the complete native fan', () => {
+  const profile = weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3])
+  let state = { ...directSpellHarness('ether'), primarySkill: profile }
+  let stepped = stepSpellKernel(state, true, 100, true, () => true, profile)
+  state = stepped.state
+  assert.equal(stepped.manaSpent, 0)
+  for (let tick = 1; tick <= PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    stepped = stepSpellKernel(state, false, 100, true, () => true, profile)
+    state = stepped.state
+  }
+  assert.equal(stepped.manaSpent, 12)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
+  assert.deepEqual(state.spells.projectiles.map((spell) => spell.kind), ['weld', 'weld'])
+  assert.deepEqual(state.spells.projectiles.map((spell) => (
+    spell.kind === 'weld' ? spell.buildId : null
+  )), [1000, 1000])
+})
+
+test('all welded sustained families use the one primary latch and retire retained actors on release', () => {
+  for (const profile of [
+    weldedProfile(1003, 'channel', [8, 10, 2, 0.5, 3, 10, 2, 3]),
+    weldedProfile(1006, 'persistent', [8, 10, 2, 1.1, 1.5, 1.2]),
+    weldedProfile(1007, 'persistent', [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3]),
+    weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5]),
+  ] as const) {
+    let state = { ...directSpellHarness('earth'), primarySkill: profile }
+    const accepted = stepSpellKernel(state, true, 100, true, () => true, profile)
+    state = accepted.state
+    assert.equal(accepted.manaSpent, profile.manaCost / 100)
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+    assert.ok(state.spells.transients.some(({ kind }) => (
+      kind === (profile.castKind === 'channel' ? 'weld-channel' : 'weld-persistent')
+    )))
+    state = stepSpellKernel(state, false, 100, true, () => true, profile).state
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, false)
+    assert.equal(
+      state.spells.transients.some(({ kind }) => kind === 'weld-persistent'),
+      false,
+    )
+  }
+})
+
+function weldedProfile(
+  buildId: 1000 | 1003 | 1006 | 1007 | 1008,
+  castKind: 'channel' | 'one-shot' | 'persistent',
+  values: readonly number[],
+): Extract<NativePrimarySkillProfile, { kind: 'weld' }> {
+  const manaIndex = castKind === 'one-shot' ? 2 : 1
+  return {
+    buildId,
+    castKind,
+    damageFactor: 1,
+    damageMaximum: buildId === 1000 || buildId === 1007 ? values[1]! : values[0]!,
+    damageMinimum: values[0]!,
+    damageRollCount: 1,
+    kind: 'weld',
+    manaCost: values[manaIndex]!,
+    rank: 1,
+    skillId: buildId,
+    vector: { buildId, castKind, values },
+  }
+}

@@ -206,6 +206,26 @@ export interface NativeSecondaryPlayerState {
   readonly stoneskinTicksRemaining: number
 }
 
+export interface NativeSecondaryElectricBurnEffectState {
+  readonly arcCount: number
+  readonly damagePerTick: number
+  readonly ownerId: string
+  readonly sourceActorId: number
+  readonly stunFactor: number
+  readonly ticks: number
+}
+
+export interface NativeSecondarySteamedEffectState {
+  readonly damagePerTick: number
+  readonly emberDamage: number
+  readonly emberFragments: number
+  readonly explodeDamage: number
+  readonly explodeRadius: number
+  readonly ownerId: string
+  readonly sourceActorId: number
+  readonly ticks: number
+}
+
 export interface NativeSecondaryTargetEffectState {
   readonly coldSlowFactor: number
   readonly coldSlowMaterial: boolean
@@ -213,6 +233,7 @@ export interface NativeSecondaryTargetEffectState {
   readonly dazzleMaximumTicks: number
   readonly dazzleTicks: number
   readonly disruptedTicks: number
+  readonly electricBurn: NativeSecondaryElectricBurnEffectState | null
   readonly fleeTicks: number
   readonly frostBurnDamagePerTick: number
   readonly frostBurnOwnerId: string | null
@@ -224,6 +245,7 @@ export interface NativeSecondaryTargetEffectState {
   readonly prismaticTicks: number
   readonly stunFactor: number
   readonly stunTicks: number
+  readonly steamed: NativeSecondarySteamedEffectState | null
   readonly targetId: number
   readonly timeScale: number
   readonly weakenFactor: number
@@ -385,6 +407,17 @@ export interface NativeSecondaryHeadingPerturbation {
   readonly targetId: number
 }
 
+export interface NativeSecondarySteamedPulse {
+  readonly emberDamage: number
+  readonly emberFragments: number
+  readonly explodeDamage: number
+  readonly explodeRadius: number
+  readonly position: Vector2
+  readonly sourcePlayerId: string
+  readonly targetId: number
+  readonly worldKey: string
+}
+
 export interface NativeSecondaryTickResult {
   readonly damage: readonly NativeSecondaryDamageContact[]
   readonly dispelledShieldTargetIds: readonly number[]
@@ -400,6 +433,7 @@ export interface NativeSecondaryTickResult {
   readonly overloadedPlayerIds: readonly string[]
   readonly primaryOverridePlayerIds: readonly string[]
   readonly state: NativeSecondarySimulationState
+  readonly steamedPulses: readonly NativeSecondarySteamedPulse[]
 }
 
 interface NativeFireBurnRequest {
@@ -878,8 +912,10 @@ export function removeNativeSecondaryOwner(
 ): NativeSecondarySimulationState {
   if (!Object.hasOwn(source.players, playerId)
     && !source.actors.some(({ ownerId }) => ownerId === playerId)
-    && !source.targetEffects.some(({ frostBurnOwnerId }) => (
+    && !source.targetEffects.some(({ electricBurn, frostBurnOwnerId, steamed }) => (
       frostBurnOwnerId === playerId
+      || electricBurn?.ownerId === playerId
+      || steamed?.ownerId === playerId
     ))) return source
   const players = { ...source.players }
   delete players[playerId]
@@ -888,14 +924,19 @@ export function removeNativeSecondaryOwner(
     actors: source.actors.filter(({ ownerId }) => ownerId !== playerId),
     players,
     targetEffects: source.targetEffects.flatMap((effect) => {
-      if (effect.frostBurnOwnerId !== playerId) return [effect]
       const next = {
         ...effect,
-        frostBurnDamagePerTick: 0,
-        frostBurnOwnerId: null,
-        frostBurnSkillId: null,
-        frostBurnSourceActorId: null,
-        frostBurnTicks: 0,
+        electricBurn: effect.electricBurn?.ownerId === playerId ? null : effect.electricBurn,
+        frostBurnDamagePerTick: effect.frostBurnOwnerId === playerId
+          ? 0
+          : effect.frostBurnDamagePerTick,
+        frostBurnOwnerId: effect.frostBurnOwnerId === playerId ? null : effect.frostBurnOwnerId,
+        frostBurnSkillId: effect.frostBurnOwnerId === playerId ? null : effect.frostBurnSkillId,
+        frostBurnSourceActorId: effect.frostBurnOwnerId === playerId
+          ? null
+          : effect.frostBurnSourceActorId,
+        frostBurnTicks: effect.frostBurnOwnerId === playerId ? 0 : effect.frostBurnTicks,
+        steamed: effect.steamed?.ownerId === playerId ? null : effect.steamed,
       }
       return hasTargetEffect(next) ? [next] : []
     }),
@@ -1149,6 +1190,16 @@ export function stepNativeSecondaryAbilities(
       const frozenTicks = Math.max(0, effect.frozenTicks - 1)
       const frostBurnTicks = Math.max(0, effect.frostBurnTicks - 1)
       const stunTicks = Math.max(0, effect.stunTicks - 1)
+      const electricBurn = effect.electricBurn === null
+        ? null
+        : effect.electricBurn.ticks > 1
+          ? Object.freeze({ ...effect.electricBurn, ticks: effect.electricBurn.ticks - 1 })
+          : null
+      const steamed = effect.steamed === null
+        ? null
+        : effect.steamed.ticks > 1
+          ? Object.freeze({ ...effect.steamed, ticks: effect.steamed.ticks - 1 })
+          : null
       const frozenTimeScale = frozenTicks === 0
         ? 1
         : frozenTicks <= FROZEN_THAW_TICKS
@@ -1164,6 +1215,7 @@ export function stepNativeSecondaryAbilities(
           : 0,
         dazzleTicks: Math.max(0, effect.dazzleTicks - 1),
         disruptedTicks: Math.max(0, effect.disruptedTicks - 1),
+        electricBurn,
         fleeTicks: Math.max(0, effect.fleeTicks - 1),
         frostBurnDamagePerTick: frostBurnTicks > 0 ? effect.frostBurnDamagePerTick : 0,
         frostBurnOwnerId: frostBurnTicks > 0 ? effect.frostBurnOwnerId : null,
@@ -1175,6 +1227,7 @@ export function stepNativeSecondaryAbilities(
         prismaticTicks: Math.max(0, effect.prismaticTicks - 1),
         stunFactor: stunTicks > 0 ? effect.stunFactor : 1,
         stunTicks,
+        steamed,
         timeScale: Math.min(
           coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
           frozenTicks > 0 ? frozenTimeScale : 1,
@@ -1193,6 +1246,7 @@ export function stepNativeSecondaryAbilities(
   const manaSpent: Record<string, number> = {}
   const healthRecovered: Record<string, number> = {}
   const headingPerturbations: NativeSecondaryHeadingPerturbation[] = []
+  const steamedPulses: NativeSecondarySteamedPulse[] = []
   const facingHeadingIndexes: Record<string, number> = {}
   const relocatedPlayers: Record<string, Vector2> = {}
   const removedProjectileIds = new Set<number>()
@@ -1244,6 +1298,58 @@ export function stepNativeSecondaryAbilities(
   )
 
   for (const effect of source.targetEffects) {
+    if (effect.electricBurn !== null) {
+      const sourceTarget = context.target(effect.worldKey, effect.targetId)
+      if (sourceTarget) {
+        const arcTargets = [...context.targets(effect.worldKey, sourceTarget.position, 200)]
+          .filter((target) => target.id !== sourceTarget.id)
+          .sort((left, right) => (
+            squaredDistance(left.position, sourceTarget.position)
+              - squaredDistance(right.position, sourceTarget.position)
+            || left.id - right.id
+          ))
+          .slice(0, effect.electricBurn.arcCount)
+        for (const target of [sourceTarget, ...arcTargets]) {
+          const targetEffect = nativeSecondaryTargetEffect(state, effect.worldKey, target.id)
+          damage.push({
+            amount: effect.electricBurn.damagePerTick
+              * ((targetEffect?.prismaticTicks ?? 0) > 0 ? 2 : 1),
+            kind: 'lightning',
+            ownerId: effect.electricBurn.ownerId,
+            sourceActorId: effect.electricBurn.sourceActorId,
+            targetId: target.id,
+          })
+          if (effect.electricBurn.stunFactor < 1) {
+            state = mergeEffect(state, effect.worldKey, target.id, {
+              stunFactor: effect.electricBurn.stunFactor,
+              stunTicks: 25,
+            })
+          }
+        }
+      }
+    }
+    if (effect.steamed !== null) {
+      const target = context.target(effect.worldKey, effect.targetId)
+      if (target) {
+        damage.push({
+          amount: effect.steamed.damagePerTick,
+          kind: 'fire',
+          ownerId: effect.steamed.ownerId,
+          sourceActorId: effect.steamed.sourceActorId,
+          targetId: target.id,
+        })
+        steamedPulses.push(Object.freeze({
+          emberDamage: effect.steamed.emberDamage,
+          emberFragments: effect.steamed.emberFragments,
+          explodeDamage: effect.steamed.explodeDamage,
+          explodeRadius: effect.steamed.explodeRadius,
+          position: Object.freeze({ ...target.position }),
+          sourcePlayerId: effect.steamed.ownerId,
+          targetId: target.id,
+          worldKey: effect.worldKey,
+        }))
+      }
+    }
     if (effect.frostBurnTicks <= 0
       || effect.frostBurnOwnerId === null
       || effect.frostBurnSkillId === null
@@ -3409,6 +3515,7 @@ export function stepNativeSecondaryAbilities(
     relocatedPlayers: Object.freeze(relocatedPlayers),
     removedProjectileIds: Object.freeze([...removedProjectileIds].sort((a, b) => a - b)),
     state,
+    steamedPulses: Object.freeze(steamedPulses),
   }
 }
 
@@ -5486,6 +5593,7 @@ function mergeEffect(
     ),
     dazzleTicks: Math.max(current.dazzleTicks, patch.dazzleTicks ?? 0),
     disruptedTicks: Math.max(current.disruptedTicks, patch.disruptedTicks ?? 0),
+    electricBurn: mergeElectricBurnEffect(current.electricBurn, patch.electricBurn),
     fleeTicks: Math.max(current.fleeTicks, patch.fleeTicks ?? 0),
     frostBurnDamagePerTick: frostBurnTicks > current.frostBurnTicks
       ? patch.frostBurnDamagePerTick ?? current.frostBurnDamagePerTick
@@ -5509,6 +5617,7 @@ function mergeEffect(
       ? current.stunFactor
       : Math.min(current.stunFactor, patch.stunFactor ?? 1),
     stunTicks,
+    steamed: mergeSteamedEffect(current.steamed, patch.steamed),
     timeScale: patch.timeScale === undefined
       ? Math.min(current.timeScale, patch.stunTicks === undefined
           ? 1
@@ -5709,19 +5818,82 @@ function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryT
   return {
     coldSlowFactor: 1, coldSlowMaterial: false, coldSlowTicks: 0,
     dazzleMaximumTicks: 0, dazzleTicks: 0,
-    disruptedTicks: 0, fleeTicks: 0,
+    disruptedTicks: 0, electricBurn: null, fleeTicks: 0,
     frostBurnDamagePerTick: 0, frostBurnOwnerId: null, frostBurnSkillId: null,
     frostBurnSourceActorId: null, frostBurnTicks: 0,
     frozenTicks: 0, frozenTimeScale: 1,
-    prismaticTicks: 0, stunFactor: 1, stunTicks: 0,
+    prismaticTicks: 0, stunFactor: 1, stunTicks: 0, steamed: null,
     targetId, timeScale: 1, weakenFactor: 1, worldKey,
   }
 }
 
 function hasTargetEffect(effect: NativeSecondaryTargetEffectState): boolean {
   return effect.coldSlowTicks > 0 || effect.dazzleTicks > 0 || effect.disruptedTicks > 0
-    || effect.fleeTicks > 0 || effect.frostBurnTicks > 0 || effect.frozenTicks > 0
+    || effect.electricBurn !== null || effect.fleeTicks > 0 || effect.frostBurnTicks > 0
+    || effect.frozenTicks > 0 || effect.steamed !== null
     || effect.prismaticTicks > 0 || effect.stunTicks > 0 || effect.weakenFactor < 1
+}
+
+function mergeElectricBurnEffect(
+  current: NativeSecondaryElectricBurnEffectState | null,
+  incoming: NativeSecondaryElectricBurnEffectState | null | undefined,
+): NativeSecondaryElectricBurnEffectState | null {
+  if (incoming === undefined) return current
+  if (incoming === null) return null
+  validateElectricBurnEffect(incoming)
+  if (current === null) return Object.freeze({ ...incoming })
+  const strongest = incoming.damagePerTick >= current.damagePerTick ? incoming : current
+  return Object.freeze({
+    arcCount: Math.max(current.arcCount, incoming.arcCount),
+    damagePerTick: Math.max(current.damagePerTick, incoming.damagePerTick),
+    ownerId: strongest.ownerId,
+    sourceActorId: strongest.sourceActorId,
+    stunFactor: Math.min(current.stunFactor, incoming.stunFactor),
+    ticks: Math.max(current.ticks, incoming.ticks),
+  })
+}
+
+function mergeSteamedEffect(
+  current: NativeSecondarySteamedEffectState | null,
+  incoming: NativeSecondarySteamedEffectState | null | undefined,
+): NativeSecondarySteamedEffectState | null {
+  if (incoming === undefined) return current
+  if (incoming === null) return null
+  validateSteamedEffect(incoming)
+  if (current === null) return Object.freeze({ ...incoming })
+  const strongest = incoming.damagePerTick >= current.damagePerTick ? incoming : current
+  return Object.freeze({
+    damagePerTick: Math.max(current.damagePerTick, incoming.damagePerTick),
+    emberDamage: Math.max(current.emberDamage, incoming.emberDamage),
+    emberFragments: Math.max(current.emberFragments, incoming.emberFragments),
+    explodeDamage: Math.max(current.explodeDamage, incoming.explodeDamage),
+    explodeRadius: Math.max(current.explodeRadius, incoming.explodeRadius),
+    ownerId: strongest.ownerId,
+    sourceActorId: strongest.sourceActorId,
+    ticks: Math.max(current.ticks, incoming.ticks),
+  })
+}
+
+function validateElectricBurnEffect(effect: NativeSecondaryElectricBurnEffectState): void {
+  if (!Number.isSafeInteger(effect.arcCount) || effect.arcCount < 0
+    || !Number.isFinite(effect.damagePerTick) || effect.damagePerTick < 0
+    || !Number.isSafeInteger(effect.sourceActorId) || effect.sourceActorId < 1
+    || !Number.isFinite(effect.stunFactor) || effect.stunFactor < 0 || effect.stunFactor > 1
+    || !Number.isSafeInteger(effect.ticks) || effect.ticks < 1
+    || effect.ownerId.length === 0) {
+    throw new RangeError('ElectricBurn effect is invalid')
+  }
+}
+
+function validateSteamedEffect(effect: NativeSecondarySteamedEffectState): void {
+  if (![effect.damagePerTick, effect.emberDamage, effect.explodeDamage, effect.explodeRadius]
+    .every((value) => Number.isFinite(value) && value >= 0)
+    || !Number.isSafeInteger(effect.emberFragments) || effect.emberFragments < 0
+    || !Number.isSafeInteger(effect.sourceActorId) || effect.sourceActorId < 1
+    || !Number.isSafeInteger(effect.ticks) || effect.ticks < 1
+    || effect.ownerId.length === 0) {
+    throw new RangeError('Steamed effect is invalid')
+  }
 }
 
 function stableTargets(targets: readonly NativeSecondaryTarget[]): readonly NativeSecondaryTarget[] {

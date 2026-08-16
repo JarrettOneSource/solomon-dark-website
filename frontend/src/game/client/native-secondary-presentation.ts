@@ -23,7 +23,11 @@ export function copyNativeSecondaryState(
         cooldownTicksBySkill: [...player.cooldownTicksBySkill],
       },
     ])),
-    targetEffects: source.targetEffects.map((effect) => ({ ...effect })),
+    targetEffects: source.targetEffects.map((effect) => ({
+      ...effect,
+      electricBurn: effect.electricBurn === null ? null : { ...effect.electricBurn },
+      steamed: effect.steamed === null ? null : { ...effect.steamed },
+    })),
   }
 }
 

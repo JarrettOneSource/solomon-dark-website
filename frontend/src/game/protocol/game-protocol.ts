@@ -3603,10 +3603,10 @@ function nativeSecondaryTargetEffectState(
   const source = record(value, field)
   onlyKeys(source, field, [
     'coldSlowFactor', 'coldSlowMaterial', 'coldSlowTicks', 'dazzleMaximumTicks',
-    'dazzleTicks', 'disruptedTicks', 'fleeTicks', 'frostBurnDamagePerTick',
+    'dazzleTicks', 'disruptedTicks', 'electricBurn', 'fleeTicks', 'frostBurnDamagePerTick',
     'frostBurnOwnerId', 'frostBurnSkillId', 'frostBurnSourceActorId', 'frostBurnTicks',
     'frozenTicks', 'frozenTimeScale', 'prismaticTicks', 'stunFactor', 'stunTicks',
-    'targetId', 'timeScale', 'weakenFactor', 'worldKey',
+    'steamed', 'targetId', 'timeScale', 'weakenFactor', 'worldKey',
   ])
   const dazzleMaximumTicks = nonnegativeInteger(
     source.dazzleMaximumTicks,
@@ -3629,6 +3629,7 @@ function nativeSecondaryTargetEffectState(
     dazzleMaximumTicks,
     dazzleTicks,
     disruptedTicks: nonnegativeInteger(source.disruptedTicks, `${field}.disruptedTicks`),
+    electricBurn: nativeSecondaryElectricBurnEffect(source.electricBurn, `${field}.electricBurn`),
     fleeTicks: nonnegativeInteger(source.fleeTicks, `${field}.fleeTicks`),
     frostBurnDamagePerTick: nonnegativeFinite(
       source.frostBurnDamagePerTick,
@@ -3647,10 +3648,52 @@ function nativeSecondaryTargetEffectState(
     prismaticTicks: nonnegativeInteger(source.prismaticTicks, `${field}.prismaticTicks`),
     stunFactor: unitInterval(source.stunFactor, `${field}.stunFactor`),
     stunTicks: nonnegativeInteger(source.stunTicks, `${field}.stunTicks`),
+    steamed: nativeSecondarySteamedEffect(source.steamed, `${field}.steamed`),
     targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
     timeScale: unitInterval(source.timeScale, `${field}.timeScale`),
     weakenFactor: unitInterval(source.weakenFactor, `${field}.weakenFactor`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function nativeSecondaryElectricBurnEffect(
+  value: unknown,
+  field: string,
+): NativeSecondaryTargetEffectState['electricBurn'] {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'arcCount', 'damagePerTick', 'ownerId', 'sourceActorId', 'stunFactor', 'ticks',
+  ])
+  return {
+    arcCount: nonnegativeInteger(source.arcCount, `${field}.arcCount`),
+    damagePerTick: nonnegativeFinite(source.damagePerTick, `${field}.damagePerTick`),
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    sourceActorId: positiveInteger(source.sourceActorId, `${field}.sourceActorId`),
+    stunFactor: unitInterval(source.stunFactor, `${field}.stunFactor`),
+    ticks: positiveInteger(source.ticks, `${field}.ticks`),
+  }
+}
+
+function nativeSecondarySteamedEffect(
+  value: unknown,
+  field: string,
+): NativeSecondaryTargetEffectState['steamed'] {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'damagePerTick', 'emberDamage', 'emberFragments', 'explodeDamage', 'explodeRadius',
+    'ownerId', 'sourceActorId', 'ticks',
+  ])
+  return {
+    damagePerTick: nonnegativeFinite(source.damagePerTick, `${field}.damagePerTick`),
+    emberDamage: nonnegativeFinite(source.emberDamage, `${field}.emberDamage`),
+    emberFragments: nonnegativeInteger(source.emberFragments, `${field}.emberFragments`),
+    explodeDamage: nonnegativeFinite(source.explodeDamage, `${field}.explodeDamage`),
+    explodeRadius: nonnegativeFinite(source.explodeRadius, `${field}.explodeRadius`),
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    sourceActorId: positiveInteger(source.sourceActorId, `${field}.sourceActorId`),
+    ticks: positiveInteger(source.ticks, `${field}.ticks`),
   }
 }
 
