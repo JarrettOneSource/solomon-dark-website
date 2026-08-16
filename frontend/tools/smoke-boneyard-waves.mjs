@@ -32,6 +32,7 @@ const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
+const COMBAT_ENTRY_GATE_MARGIN = 40
 const MINIMUM_SKELETON_COLLISION_RADIUS = 12
 const fireCastDriver = { nextReadyTick: 0 }
 const screenshotPath = process.env.SDR_GAME_WAVES_SMOKE_SCREENSHOT
@@ -107,6 +108,10 @@ try {
   }
 
   const gateCrossing = await crossNearestEntryGate(page, scene, loadedBoneyard.scene)
+  combatNavigation.entryGate = {
+    direction: gateCrossing.direction,
+    y: gateCrossing.target.y,
+  }
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
 
@@ -1061,6 +1066,13 @@ async function approachNearestEnemy(page, frame, navigation, durationMs) {
 }
 
 function nearestEnemyApproachDirection(frame, navigation) {
+  if (!combatInteriorContains(
+    navigation,
+    { x: frame.playerX, y: frame.playerY },
+    COMBAT_ENTRY_GATE_MARGIN,
+  )) {
+    return { x: 0, y: navigation.entryGate.direction }
+  }
   const nearest = nearestLivingEnemy(frame)
   if (!nearest) return null
   const start = { x: frame.playerX, y: frame.playerY }
@@ -1080,6 +1092,9 @@ function safestCombatDirection(frame, navigation) {
   const enemies = frame.enemySamples.filter((enemy) => enemy.lifeState !== 'death')
   if (enemies.length === 0) return null
   const start = { x: frame.playerX, y: frame.playerY }
+  if (!combatInteriorContains(navigation, start, COMBAT_ENTRY_GATE_MARGIN)) {
+    return { x: 0, y: navigation.entryGate.direction }
+  }
   const directions = [
     { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 },
     { x: -1, y: 0 }, { x: 1, y: 0 },
@@ -1095,6 +1110,7 @@ function safestCombatDirection(frame, navigation) {
         x: start.x + unit.x * probeDistance,
         y: start.y + unit.y * probeDistance,
       }
+      if (!combatInteriorContains(navigation, end, COMBAT_ENTRY_GATE_MARGIN)) continue
       if (!traversesBoneyard(
         start,
         end,
@@ -1240,6 +1256,10 @@ function nearestFireTarget(frame, navigation) {
 function firePathReachesTarget(navigation, origin, target) {
   const start = { x: origin.playerX ?? origin.x, y: origin.playerY ?? origin.y }
   const end = { x: target.x, y: target.y }
+  if (
+    !combatInteriorContains(navigation, start)
+    || !combatInteriorContains(navigation, end)
+  ) return false
   const distance = Math.hypot(end.x - start.x, end.y - start.y)
   if (distance === 0) return true
   const worldProgress = firstBoneyardPathBlockProgress(
@@ -1256,6 +1276,11 @@ function firePathReachesTarget(navigation, origin, target) {
     ) / distance,
   )
   return worldProgress === null || worldProgress - conservativeActorEntry > 1e-9
+}
+
+function combatInteriorContains(navigation, point, margin = 0) {
+  const gate = navigation.entryGate
+  return !gate || (point.y - gate.y) * gate.direction >= margin
 }
 
 function visibleLivingEnemy(frame, enemy) {

@@ -16432,7 +16432,8 @@ records separate from live-body selection.
   siblings. Removing a projectile cannot remove an already-created trail or
   impact effect.
 - Mage lightning is an enemy-owned direct effect rather than a projectile. Its
-  source/target records remain tied to the authoritative attack event.
+  per-tick source, midpoint, endpoint, contact attachment, and retirement remain
+  in the authoritative pulse store rather than a renderer-local event clock.
 
 ### Pre-implementation acceptance contract
 
@@ -16452,7 +16453,7 @@ report zero page or console errors. Static/unit evidence closes selector and
 lifecycle math; the browser receipt closes actual texture, blend, transform,
 and ownership integration.
 
-### Website implementation and pre-acceptance diagnostics
+### Website implementation and final Mac mini receipts
 
 The completed Website boundary uses protocol 23. Replicated entity type 2 now
 carries the authoritative Imp, Zombie, Wraith, Demon, Coffin, and shared action
@@ -16475,6 +16476,25 @@ components, the repository-wide finite ceiling remains 72, and the type
 registry still validates the exact 63-component shape. A protocol regression
 round-trips 63 and rejects 73 at the generic bound. No compatibility path or
 unbounded tuple was added.
+
+The Mac mini canonical `./scripts/validate.sh` gate passed with the pinned
+Node 22.17.0, npm 10.9.2, and .NET 10.0.302 toolchain. That receipt includes a
+successful backend release build, 24 Website contract/backend integration
+tests, 812 frontend Boneyard tests, four level-up tests, six diagnostics tests,
+five desktop-shell tests, formatting and architecture checks, lint with zero
+errors, the production frontend build, and the production media-policy check.
+
+The focused Mac mini Chrome compositor receipt is
+`tools/smoke-enemy-animation-projectile-vfx.mjs`. At fractional presentation
+tick `121.75` it retained WebGL2 and `pixi-webgl`, rendered all eight families
+(`COFFIN,DEMON,IMP,SKELETON,SKELETONARCHER,SKELETONMAGE,WRAITH,ZOMBIE`), one
+Coffin Maggot, one authoritative Mage-lightning pulse, eight live
+projectile/payload witnesses, and all nine projectile-effect kinds. Advancing
+every enemy articulation and the projectile clocks changed 815,477 pixels
+with channel delta 84,854,417. Page, console, and failed-response arrays were
+empty. The visually inspected 1600x900 receipt is
+`/tmp/solomon-dark-enemy-animation-projectile-vfx-mac-20260815.png` (SHA-256
+`bef01acfbbd28c585c13372dea7704a4e2cf2e34e7553fe3d93d956844b9a18f`).
 
 Pre-acceptance diagnostics on Windows Node 22.17.0 completed the full
 `test:boneyard` command with 728/728
