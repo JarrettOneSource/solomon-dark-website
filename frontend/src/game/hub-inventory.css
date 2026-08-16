@@ -23,8 +23,13 @@
   pointer-events: auto;
 }
 
-.hub-scene[data-modal-open="true"] .hub-hud {
+.hub-scene:is([data-hub-ui-surface="inventory"], [data-hub-ui-surface="service"]) .hub-hud {
   visibility: hidden;
+}
+
+.main-menu-page:has(.hub-scene:not([data-hub-ui-surface="none"])) .game-fullscreen-control {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .hub-native-ui-renderer,

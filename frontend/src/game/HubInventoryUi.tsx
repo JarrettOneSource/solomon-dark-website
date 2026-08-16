@@ -34,14 +34,21 @@ import {
   createHubInventoryRenderer,
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
+  type HubTraderChatPhase,
 } from './renderer/hub-inventory-renderer.ts'
 import {
-  HUB_DOWSING_INSUFFICIENT_GOLD,
+  HUB_CHAT_PANEL,
   HUB_DOWSING_GRID,
+  HUB_DOWSING_INSUFFICIENT_GOLD,
+  HUB_DOWSING_MSGBOX,
+  HUB_DOWSING_PREROLL,
   HUB_INVENTORY_GRID,
   HUB_NATIVE_UI_TIMING,
   HUB_SHOP_GRID,
+  HUB_SHOP_PANEL,
+  hubDowsingSlotPosition,
   hubInventorySlotPosition,
+  hubShopSlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
 import './hub-inventory.css'
 
@@ -204,11 +211,20 @@ function NativeHubSurface({
   const rendererRef = useRef<HubInventoryRenderer | null>(null)
   const modelRef = useRef<HubInventoryRendererModel | null>(null)
   const revealStartedAtRef = useRef<number | null>(null)
+  const chatCompletionHandledRef = useRef(false)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
   const [notice, setNotice] = useState<typeof HUB_DOWSING_INSUFFICIENT_GOLD | null>(null)
-  const [showPriceExplanation, setShowPriceExplanation] = useState(false)
-  const [page, setPage] = useState(0)
+  const [chat, setChat] = useState<{
+    acceleratedAtMs: number | null
+    phase: HubTraderChatPhase
+    phaseStartedAtMs: number
+  }>(() => ({ acceleratedAtMs: null, phase: 'intro', phaseStartedAtMs: performance.now() }))
   const [selection, setSelection] = useState<{ id: number; owner: 'backpack' | 'storage' | null } | null>(null)
+
+  const beginChatPhase = useCallback((phase: HubTraderChatPhase) => {
+    chatCompletionHandledRef.current = false
+    setChat({ acceleratedAtMs: null, phase, phaseStartedAtMs: performance.now() })
+  }, [])
 
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
@@ -219,20 +235,23 @@ function NativeHubSurface({
       selectedItemId: selection?.id ?? null,
     }
     if (surface.kind === 'dialogue') return {
+      acceleratedAtMs: chat.acceleratedAtMs,
       kind: 'dialogue',
-      priceExplanation: showPriceExplanation,
+      phase: chat.phase,
+      phaseStartedAtMs: chat.phaseStartedAtMs,
       trader: surface.trader,
     }
     return {
+      config,
       economy,
       kind: 'service',
       notice,
-      page,
+      progression,
       selectedItemId: selection?.id ?? null,
       selectedOwner: selection?.owner ?? null,
       trader: surface.trader,
     }
-  }, [config, economy, notice, page, progression, selection, showPriceExplanation, surface])
+  }, [chat, config, economy, notice, progression, selection, surface])
 
   useLayoutEffect(() => {
     modelRef.current = model
@@ -263,9 +282,15 @@ function NativeHubSurface({
       revealStartedAtRef.current ??= nowMs
       const ticks = (nowMs - revealStartedAtRef.current) / 10
       const step = surface.kind === 'dialogue'
-        ? HUB_NATIVE_UI_TIMING.messageBoxRevealPerTick
+        ? HUB_NATIVE_UI_TIMING.chatRevealPerTick
         : HUB_NATIVE_UI_TIMING.inventoryRevealPerTick
-      renderer.render(nowMs, Math.min(1, ticks * step))
+      const frame = renderer.render(nowMs, Math.min(1, ticks * step))
+      const current = modelRef.current
+      if (frame.chatComplete && current?.kind === 'dialogue'
+        && current.phase !== 'choices' && !chatCompletionHandledRef.current) {
+        chatCompletionHandledRef.current = true
+        beginChatPhase('choices')
+      }
     })
     return () => {
       disposed = true
@@ -274,7 +299,7 @@ function NativeHubSurface({
       renderer?.destroy()
       host.replaceChildren()
     }
-  }, [surface.kind])
+  }, [beginChatPhase, surface.kind])
 
   useEffect(() => {
     if (!selection) return
@@ -282,10 +307,17 @@ function NativeHubSurface({
       if (!economy.backpack.some(({ id }) => id === selection.id)) setSelection(null)
       return
     }
-    if (surface.kind !== 'service' || surface.trader !== 'luthacus') return
-    const items = selection.owner === 'backpack' ? economy.backpack : economy.storage
-    if (!items.some(({ id }) => id === selection.id)) setSelection(null)
-  }, [economy.backpack, economy.storage, selection, surface])
+    if (surface.kind !== 'service') return
+    const present = surface.trader === 'luthacus'
+      ? (selection.owner === 'backpack' ? economy.backpack : economy.storage)
+        .some(({ id }) => id === selection.id)
+      : surface.trader === 'fomentius'
+        ? economy.fomentiusStock.some(({ id }) => id === selection.id)
+        : surface.trader === 'hagatha'
+          ? economy.hagathaOffers.some(({ selector }) => selector === selection.id)
+          : economy.dowsingOffers.some(({ id }) => id === selection.id)
+    if (!present) setSelection(null)
+  }, [economy.backpack, economy.dowsingOffers, economy.fomentiusStock, economy.hagathaOffers, economy.storage, selection, surface])
 
   const click = (action: () => void) => {
     audio.playSound('click')
@@ -307,6 +339,7 @@ function NativeHubSurface({
       data-native-ui-schema={nativeAssetsJson.schema}
       data-source-executable={nativeAssetsJson.sourceExecutableSha256}
       data-renderer-state={rendererState}
+      data-native-chat-phase={surface.kind === 'dialogue' ? chat.phase : ''}
       data-native-notice={notice?.title ?? ''}
     >
       <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
@@ -321,32 +354,31 @@ function NativeHubSurface({
             </span>
             <NativeAction
               label={notice.actionLabel}
-              rect={[690, 510, 220, 56]}
+              rect={HUB_DOWSING_MSGBOX.primaryButtonRect}
               onClick={() => click(() => setNotice(null))}
             />
           </>
         ) : surface.kind === 'dialogue' ? (
           <DialogueActions
-            priceExplanation={showPriceExplanation}
+            chat={chat}
             trader={surface.trader}
             onClose={() => click(onClose)}
-            onPrices={() => click(() => setShowPriceExplanation(true))}
+            onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
+              ? { ...current, acceleratedAtMs: performance.now() }
+              : current)}
+            onAdvance={() => click(() => beginChatPhase('choices'))}
+            onPrices={() => click(() => beginChatPhase('prices'))}
             onService={() => click(() => onSurfaceChange({ kind: 'service', trader: surface.trader }))}
           />
         ) : surface.kind === 'service' ? (
           <ServiceActions
             economy={economy}
-            page={page}
             selection={selection}
             trader={surface.trader}
             onAction={(action) => click(() => onAction(action))}
             onClose={() => click(onClose)}
             onInsufficientGold={() => click(() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD))}
-            onPage={(next) => click(() => {
-              setPage(next)
-              setSelection(null)
-            })}
-            onSelect={setSelection}
+            onSelect={(next) => click(() => setSelection(next))}
           />
         ) : (
           <InventoryActions
@@ -366,33 +398,59 @@ function NativeHubSurface({
 }
 
 function DialogueActions({
+  chat,
+  onAccelerate,
+  onAdvance,
   onClose,
   onPrices,
   onService,
-  priceExplanation,
   trader,
 }: {
+  chat: {
+    acceleratedAtMs: number | null
+    phase: HubTraderChatPhase
+    phaseStartedAtMs: number
+  }
+  onAccelerate: () => void
+  onAdvance: () => void
   onClose: () => void
   onPrices: () => void
   onService: () => void
-  priceExplanation: boolean
   trader: HubTraderId
 }) {
   const dialogue = HUB_TRADER_DIALOGUES[trader]
+  const paragraphs = chat.phase === 'prices' ? dialogue.priceExplanation : dialogue.intro
   return (
     <div className="hub-native-dialogue-actions">
       <div className="hub-native-ui-semantic">
-        {(priceExplanation ? dialogue.priceExplanation : dialogue.intro).map((line) => <p key={line}>{line}</p>)}
+        {(chat.phase === 'choices' ? [] : paragraphs).map((line) => <p key={line}>{line}</p>)}
       </div>
-      {priceExplanation ? (
-        <NativeAction label="Done" rect={[690, 650, 220, 56]} onClick={onClose} />
+      {chat.phase === 'choices' ? (
+        <>
+          <NativeAction
+            data={{ 'data-service-trader': trader }}
+            label={dialogue.actionLabel}
+            rect={HUB_CHAT_PANEL.primaryChoiceRect}
+            onClick={onService}
+          />
+          {dialogue.priceLabel ? (
+            <NativeAction label={dialogue.priceLabel} rect={HUB_CHAT_PANEL.secondaryChoiceRect} onClick={onPrices} />
+          ) : null}
+          <NativeAction label="Done" rect={HUB_CHAT_PANEL.doneRect} onClick={onClose} />
+        </>
       ) : (
         <>
-          <NativeAction data={{ 'data-service-trader': trader }} label={dialogue.actionLabel} rect={[410, 650, 240, 56]} onClick={onService} />
-          {dialogue.priceExplanation.length > 0 ? (
-            <NativeAction label="Your Prices" rect={[680, 650, 240, 56]} onClick={onPrices} />
-          ) : null}
-          <NativeAction label="Goodbye" rect={[950, 650, 240, 56]} onClick={onClose} />
+          <NativeAction
+            label="Accelerate dialogue"
+            rect={[
+              HUB_CHAT_PANEL.contentLeft,
+              HUB_CHAT_PANEL.contentTop,
+              HUB_CHAT_PANEL.contentWidth,
+              HUB_CHAT_PANEL.contentHeight,
+            ]}
+            onClick={onAccelerate}
+          />
+          <NativeAction label="Skip" rect={HUB_CHAT_PANEL.doneRect} onClick={onAdvance} />
         </>
       )}
     </div>
@@ -404,9 +462,7 @@ function ServiceActions({
   onAction,
   onClose,
   onInsufficientGold,
-  onPage,
   onSelect,
-  page,
   selection,
   trader,
 }: {
@@ -414,9 +470,7 @@ function ServiceActions({
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
   onInsufficientGold: () => void
-  onPage: (page: number) => void
   onSelect: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void
-  page: number
   selection: { id: number; owner: 'backpack' | 'storage' | null } | null
   trader: HubTraderId
 }) {
@@ -433,39 +487,38 @@ function ServiceActions({
     <>
       <NativeAction
         label={`DOWSE ${economy.dowsingFee.toLocaleString()} gold`}
-        rect={[680, 275, 240, 64]}
+        rect={HUB_DOWSING_PREROLL.buttonRect}
         onClick={() => economy.gold < economy.dowsingFee
           ? onInsufficientGold()
           : onAction({ type: 'dowse' })}
       />
-      <NativeAction label="Done" rect={[1027, 400, 120, 48]} onClick={onClose} />
+      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
   )
 
   if (trader === 'hagatha') {
-    const pageSize = HUB_SHOP_GRID.pageSize
-    const visible = economy.hagathaOffers.slice(page * pageSize, (page + 1) * pageSize)
-    const pages = Math.max(1, Math.ceil(economy.hagathaOffers.length / pageSize))
     return (
       <>
-        {visible.map((offer, index) => (
+        {economy.hagathaOffers.map((offer, index) => (
           <ShopAction
             key={offer.selector}
             index={index}
-            columns={4}
-            disabled={economy.gold < offer.price}
             label={`Buy ${offer.name} for ${offer.price} gold`}
             data={{ 'data-hagatha-selector': offer.selector }}
             price={offer.price}
-            onFocus={() => onSelect({ id: offer.selector, owner: null })}
-            onClick={() => onAction({ type: 'buy-hagatha', selector: offer.selector })}
+            selected={selection?.id === offer.selector && selection.owner === null}
+            onClick={() => activateSelection(
+              selection,
+              { id: offer.selector, owner: null },
+              onSelect,
+              () => onAction({ type: 'buy-hagatha', selector: offer.selector }),
+            )}
           />
         ))}
         <span className="hub-native-ui-semantic hub-charm-capacity">
           Charms and curses: {economy.ownedPerkSelectors.length} / {economy.charmCapacity}
         </span>
-        <PageActions page={page} pages={pages} onPage={onPage} />
-        <NativeAction label="Done" rect={[1027, 400, 120, 48]} onClick={onClose} />
+        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
   }
@@ -473,29 +526,28 @@ function ServiceActions({
   const items = trader === 'fomentius'
     ? economy.fomentiusStock
     : dowsingItems(economy)
-  const pageSize = trader === 'shlorio' ? HUB_DOWSING_GRID.pageSize : HUB_SHOP_GRID.pageSize
-  const columns = trader === 'shlorio' ? 3 : 4
-  const pages = Math.max(1, Math.ceil(items.length / pageSize))
-  const visible = items.slice(page * pageSize, (page + 1) * pageSize)
   return (
     <>
-      {visible.map((item, index) => (
+      {items.map((item, index) => (
         <ShopAction
           key={item.id}
-          columns={columns}
           data={{ 'data-item-id': item.id }}
-          disabled={economy.gold < item.price}
           index={index}
           label={`Buy ${item.name} for ${item.price} gold`}
           price={item.price}
-          onFocus={() => onSelect({ id: item.id, owner: null })}
-          onClick={() => onAction(trader === 'fomentius'
-            ? { type: 'buy-fomentius', itemId: item.id }
-            : { type: 'buy-dowsing', offerId: item.id })}
+          dowsing={trader === 'shlorio'}
+          selected={selection?.id === item.id && selection.owner === null}
+          onClick={() => activateSelection(
+            selection,
+            { id: item.id, owner: null },
+            onSelect,
+            () => onAction(trader === 'fomentius'
+              ? { type: 'buy-fomentius', itemId: item.id }
+              : { type: 'buy-dowsing', offerId: item.id }),
+          )}
         />
       ))}
-      <PageActions page={page} pages={pages} onPage={onPage} />
-      <NativeAction label="Done" rect={[1027, 400, 120, 48]} onClick={onClose} />
+      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
   )
 }
@@ -513,36 +565,33 @@ function InventoryShopActions({
   onSelect: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void
   selection: { id: number; owner: 'backpack' | 'storage' | null } | null
 }) {
-  const selectedItems = selection?.owner === 'backpack' ? economy.backpack : economy.storage
-  const selected = selectedItems.find((item) => item.id === selection?.id)
   return (
     <>
       <SemanticInventoryCollection
-        items={economy.backpack.slice(0, 28)}
+        items={economy.backpack}
         label="Backpack"
-        left={230}
-        top={190}
-        onSelect={(item) => onSelect({ id: item.id, owner: 'backpack' })}
+        owner="backpack"
+        selection={selection}
+        onActivate={(item) => activateSelection(
+          selection,
+          { id: item.id, owner: 'backpack' },
+          onSelect,
+          () => onAction({ type: 'transfer', direction: 'to-storage', itemId: item.id }),
+        )}
       />
       <SemanticInventoryCollection
         items={economy.storage.slice(0, 28)}
         label="Scavenged Goods"
-        left={890}
-        top={190}
-        onSelect={(item) => onSelect({ id: item.id, owner: 'storage' })}
+        owner="storage"
+        selection={selection}
+        onActivate={(item) => activateSelection(
+          selection,
+          { id: item.id, owner: 'storage' },
+          onSelect,
+          () => onAction({ type: 'transfer', direction: 'to-backpack', itemId: item.id }),
+        )}
       />
-      {selection && selected ? (
-        <NativeAction
-          label={selection.owner === 'backpack' ? 'Store' : 'Take'}
-          rect={[680, 695, 240, 54]}
-          onClick={() => onAction({
-            type: 'transfer',
-            direction: selection.owner === 'backpack' ? 'to-storage' : 'to-backpack',
-            itemId: selection.id,
-          })}
-        />
-      ) : null}
-      <NativeAction label="Done" rect={[1290, 780, 125, 48]} onClick={onClose} />
+      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
   )
 }
@@ -610,68 +659,85 @@ function InventoryActions({
 function SemanticInventoryCollection({
   items,
   label,
-  left,
-  onSelect,
-  top,
+  onActivate,
+  owner,
+  selection,
 }: {
   items: readonly HubInventoryItem[]
   label: string
-  left: number
-  onSelect: (item: HubInventoryItem) => void
-  top: number
+  onActivate: (item: HubInventoryItem) => void
+  owner: 'backpack' | 'storage'
+  selection: { id: number; owner: 'backpack' | 'storage' | null } | null
 }) {
   return (
     <section aria-label={label}>
-      {items.map((item, index) => (
-        <NativeAction
-          key={item.id}
-          label={`${item.name}, quantity ${item.quantity}`}
-          rect={[left + (index % 7) * 76, top + Math.floor(index / 7) * 76, 68, 68]}
-          onClick={() => onSelect(item)}
-        />
-      ))}
+      {items.map((item, index) => {
+        const position = owner === 'backpack'
+          ? hubInventorySlotPosition(index)
+          : hubShopSlotPosition(index)
+        const selected = selection?.id === item.id && selection.owner === owner
+        return (
+          <NativeAction
+            key={item.id}
+            data={{ 'data-selected': selected ? 'true' : 'false' }}
+            label={`${item.name}, quantity ${item.quantity}`}
+            rect={[
+              position.x,
+              position.y,
+              owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+              owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+            ]}
+            onClick={() => onActivate(item)}
+          />
+        )
+      })}
     </section>
   )
 }
 
 function ShopAction({
-  columns,
   data,
-  disabled,
+  dowsing = false,
   index,
   label,
   onClick,
-  onFocus,
   price,
+  selected,
 }: {
-  columns: number
   data?: Record<string, number | string>
-  disabled: boolean
+  dowsing?: boolean
   index: number
   label: string
   onClick: () => void
-  onFocus: () => void
   price: number
+  selected: boolean
 }) {
-  const pitch = columns === 3 ? 150 : 135
-  const centerLeft = 800 - ((columns - 1) * pitch) / 2
-  const x = centerLeft + (index % columns) * pitch - 40
-  const y = 80 + Math.floor(index / columns) * 112
+  const position = dowsing ? hubDowsingSlotPosition(index) : hubShopSlotPosition(index)
   return (
-    <NativeAction data={data} disabled={disabled} label={label} rect={[x, y, 80, 100]} onClick={onClick} onFocus={onFocus}>
+    <NativeAction
+      data={{ ...data, 'data-selected': selected ? 'true' : 'false' }}
+      label={label}
+      rect={[
+        position.x,
+        position.y,
+        dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+        dowsing ? HUB_DOWSING_GRID.cellSize : HUB_SHOP_GRID.cellSize,
+      ]}
+      onClick={onClick}
+    >
       <span className="hub-native-ui-semantic hub-trader-price">{price.toLocaleString()}</span>
     </NativeAction>
   )
 }
 
-function PageActions({ page, pages, onPage }: { page: number; pages: number; onPage: (page: number) => void }) {
-  if (pages <= 1) return null
-  return (
-    <>
-      <NativeAction disabled={page === 0} label="Previous page" rect={[690, 360, 90, 46]} onClick={() => onPage(page - 1)} />
-      <NativeAction disabled={page >= pages - 1} label="Next page" rect={[820, 360, 90, 46]} onClick={() => onPage(page + 1)} />
-    </>
-  )
+function activateSelection(
+  current: { id: number; owner: 'backpack' | 'storage' | null } | null,
+  next: { id: number; owner: 'backpack' | 'storage' | null },
+  select: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void,
+  activate: () => void,
+): void {
+  if (current?.id === next.id && current.owner === next.owner) activate()
+  else select(next)
 }
 
 function NativeAction({

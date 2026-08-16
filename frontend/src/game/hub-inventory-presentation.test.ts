@@ -17,9 +17,15 @@ test('merchant dialogue exposes only the four reachable retail service commands'
     ['Buy Charms and Curses', 'Buy', 'Examine Items', 'Dowse'],
   )
   assert.equal(JSON.stringify(HUB_TRADER_DIALOGUES).includes('Outfit me Randomly'), false)
-  assert.equal(HUB_TRADER_DIALOGUES.hagatha.intro[0], 'All right then wizard, what do you need?')
+  assert.equal(HUB_TRADER_DIALOGUES.hagatha.intro[0], 'All right then wizard, what do you want?')
   assert.equal(HUB_TRADER_DIALOGUES.fomentius.intro[0], 'Hello Hello!')
-  assert.equal(HUB_TRADER_DIALOGUES.shlorio.name, 'Shlorio the Dowser')
+  assert.equal(HUB_TRADER_DIALOGUES.fomentius.intro[1], 'Can I interest you in a high quality and *very legal* herbal potion? Brewed with all the best natural magicks, minimal chance of causing intestinal combustion!')
+  assert.equal(HUB_TRADER_DIALOGUES.hagatha.priceLabel, 'Charm Prices?')
+  assert.equal(HUB_TRADER_DIALOGUES.shlorio.priceLabel, 'Dowsing Prices?')
+  assert.equal(HUB_TRADER_DIALOGUES.shlorio.name, 'Shlorio')
+  assert.match(HUB_TRADER_DIALOGUES.luthacus.intro[0], /Official Unreal Crime Scene Investigator/)
+  assert.match(HUB_TRADER_DIALOGUES.luthacus.intro[2], /By order of the Archchancellor, o'course\./)
+  assert.match(HUB_TRADER_DIALOGUES.shlorio.priceExplanation[2], /vapor burns/)
 })
 
 test('merchant proximity uses the exact native radius formula and room ownership', () => {

@@ -15564,7 +15564,7 @@ transactions.
 | Luthacus backpack/storage transfer | `0x0056cd00` | exact-ported | two-way/no-gold/no-copy tests |
 | Shlorio fee, untargeted offers, buy, clear, close | `0x0055faf0`, `0x0056d110` | exact-ported | complete 47-recipe lifecycle tests |
 | Six equipment classes and seven equip sinks | item catalog; `0x00570cd0`, `0x00575850`, `0x00570d80`, `0x0066f020` | exact-ported | per-class/per-sink tests |
-| Shop/PerkShop/InventoryShop, both Dowsing states, InventoryScreen, and trader MsgBox presentation | full vtable/renderer family recorded below; Inventory/Skills/UI/Fonts/Clothes art | exact-ported | render-contract tests plus the two-participant hub-trader browser receipt |
+| Shop/PerkShop/InventoryShop, both Dowsing states, InventoryScreen, trader Chat, and trader MsgBox presentation | full vtable/renderer family recorded below; Inventory/Skills/UI/Fonts/Clothes art | exact-ported | render-contract tests plus the two-participant hub-trader browser receipt |
 | Four reachable introductions and commands | survival dialogue data; `0x0050b720`, `0x004fb890` | exact-ported | exact-copy and reachability tests |
 | Fomentius actor/balloon | `0x0050b110`, `0x0051c1a0`; College 54..58, 160..164 | verified-already-at-parity | existing presentation/render tests |
 | Hagatha body, accessory, and cross-fades | `0x0051adc0`, `0x0051b1d0`; College 45, 89..92, 517..524 | exact-ported | every-bank-member animation tests |
@@ -15581,10 +15581,15 @@ The 2026-08-15 trader pass uses retail `0.72.5` `SolomonDark.exe`, SHA-256
 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
 Static evidence comes from the checked-in Ghidra project and exact retail data
 files; the prior G8 live fixture corroborates the initial trader state and
-transactions. A fresh byte-identical retail process supplied the settled
+transactions. A byte-identical retail process supplied the settled
 1600x900 InventoryScreen witness now committed in Mod Loader as
 `tests/fixtures/webgame/menu-reference-captures/inventory-screen.png`, SHA-256
 `0d99c6bb3f1815aa061fd4ee49e7bfccbd0ee058ea69b0e8936155c7e5156d8b`.
+The complete trader/Chat witness set is recorded in Mod Loader
+`tests/fixtures/webgame/native-hub-trader-ui-captures.json`. Those later images
+are explicitly debugger-instrumented/runtime-staged: a temporary helper invoked
+stock constructors and staged gold/dialogue state, while the byte-identical
+retail executable and native renderers produced every visible surface.
 
 ### Full stock UI correction and recovered screen family
 
@@ -15602,17 +15607,29 @@ single native presentation family with distinct owners:
 | Luthacus | `InventoryShop`, `0x0079044C` | common Shop plus two-owner transfer `0x0056CD00` |
 | Shlorio | `DowsingShop`, `0x00790524` | ctor `0x004F5AB0`; update `0x005512F0`; rebuild `0x0055F9F0`; pre/result root `0x00558160`; grid `0x00554E20`; flash `0x00551350` |
 | Inventory | `InventoryScreen`, `0x00794F54`, with `InventoryGrid`, `0x00794C64` | ctor `0x00560380`; update `0x00551A10`; close `0x00555810`; root `0x00568B90`; detail/help `0x00556940`; grid `0x0055A070` |
-| Trader talk and error branches | `MsgBox`, `0x00788E04`, plus dialogue controls | ctor `0x004A98E0`; fade `0x005AB710`; root `0x005C4530`; line/primary/secondary builders `0x005BCCB0`/`0x005AB7E0`/`0x005AB980` |
+| Trader talk | `Chat`, `0x0079061C` | ctor `0x004F5D90`; init/update `0x004FFEC0`/`0x004FFEE0`; render `0x004F9380`; pointer/action `0x004FFBC0`/`0x004FFC40`; advance `0x004FFB00`; close `0x004FCB40` |
+| Trader error branch | `MsgBox`, `0x00788E04` | ctor `0x004A98E0`; fade `0x005AB710`; root `0x005C4530`; line/primary/secondary builders `0x005BCCB0`/`0x005AB7E0`/`0x005AB980` |
 
 All browser surfaces render in one fixed 1600x900 native stage using the exact
 Fonts, Inventory, Skills, UI, and player/Clothes art. HTML remains only as a
 transparent semantic input layer aligned to native controls. The common Shop
-settles from a 100-logical-pixel vertical slide into a centred 604x400 logical
-rect. Its retained capacity is 28, but the common renderer issues the authored
-4-by-2 normal/overlay grid passes and uses Skills record 4 as paired scroll
-decoration behind the retained StoreGrid controls; it is not one visible
-4-by-7 DOM grid. Dowsing switches result layout to three columns and retains
+settles from a 100-stage-pixel vertical slide at `(498,-20,604,400)`. Every
+service dispatcher branch separately constructs and attaches a full
+InventoryScreen beneath its class-specific overlay. Its retained capacity is
+28 and its visible StoreGrid is seven columns by four rows, filled
+column-major. The `4,2` call at `0x00550DB0` is the repeat count passed to
+texture helper `0x00416020` for UI record 49; it is not grid geometry and does
+not justify paging. Dowsing switches result layout to three columns and retains
 nine offers.
+
+Trader conversation is not a MsgBox. `Chat` uses the UI-record-11 nine-slice
+at `(476.5,26,647,420)`, content rect `(561.5,111,477,250)`, and no full-screen
+curtain. Alpha advances `0.05` per 100 Hz tick. Intro copy scrolls at 0.125
+pixels per tick, or 0.8 while accelerated; natural completion or SKIP reveals
+questions. A price answer starts another scrolling intro and returns to the
+same questions. A command answer replaces Chat with the service. The distinct
+MsgBox still advances `0.035` and draws a `0.75 * alpha` curtain for the
+insufficient-dowsing branch.
 
 The settled InventoryScreen witness proves an opaque black screen, STATS and
 EQUIP upper corners, a central seal and live wizard/equipment preview, Kills
@@ -15622,8 +15639,8 @@ the first column's first two rows. Its reveal advances by `0.025` per native
 tick. Trader MsgBox
 surfaces advance by `0.035` and draw a `0.75 * alpha` black curtain. The full
 mandatory state membership is: four introduction/choice dialogues and the
-Hagatha/Shlorio price explanations; Fomentius paging/detail/buy/reject;
-Hagatha paging/detail/first-mix/bundle/capacity; Luthacus both owners and both
+Hagatha/Shlorio price explanations; Fomentius 28-cell grid/detail/buy/reject;
+Hagatha 28-cell grid/detail/first-mix/bundle/capacity; Luthacus both owners and both
 transfer directions; Shlorio pre-roll, insufficient funds, result, roll flash,
 and close-discard; Inventory selection/detail, seven equip
 sinks, unequip, belt, and close; affordability/selection/focus; and
@@ -15700,9 +15717,9 @@ distanceSquared(player, actor) <= 5 * actorRadius^2 + 1500
 Opening a dialogue blocks spell/movement input. Moving outside that boundary,
 changing region, or entering a region fade closes it. Service selection
 replaces the dialogue with the shop/storage view. The exact introductions and
-choice labels come from
-`data/dialogue/survival/{witch,potionguy,scavenger,dowser}.txt`; no invented
-merchant copy substitutes for them.
+choice labels come from the runtime-loaded aggregate
+`data/dialogue/survival.txt`; retained per-NPC fragments differ in places and
+are not runtime authority. No invented merchant copy substitutes for it.
 
 Luthacus renders College record 10 composited with records 126..129, and
 Shlorio renders Library records 21..24. Their recovered common idle animator
@@ -15750,10 +15767,12 @@ retail hub constructor call sites leave it null. It is omitted because no
 retail hub producer reaches it, not because its cardinality is unknown.
 
 All purchases are buy-only. There is no sale, refund, or buyback action. The
-four-column common shop and three-column dowsing layouts display the replicated
-participant gold and disable unaffordable actions, but the server still
-revalidates every intent. A rejected action changes neither gold, inventory,
-offer stock, perk state, nor dowsing state.
+seven-column common shop and three-column dowsing layouts display replicated
+participant gold. First activation selects a cell; activating that same cell
+again invokes the class callback. Unaffordable cells remain selectable and use
+the stock NEED MORE GOLD overlay instead of a disabled browser control; the
+server still rejects the second activation atomically. A rejected action
+changes neither gold, inventory, offer stock, perk state, nor dowsing state.
 
 ### Focused acceptance boundary
 

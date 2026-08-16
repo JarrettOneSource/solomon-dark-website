@@ -363,6 +363,7 @@ export default function HubScene({
       data-element={element}
       data-gameplay-input-blocked={inputBlocked || modalOpen}
       data-hub-region={currentRegion}
+      data-hub-ui-surface={hubUiSurface?.kind ?? 'none'}
       data-modal-open={modalOpen}
       data-is-host={isHost}
       data-viewport-height={viewport.height}

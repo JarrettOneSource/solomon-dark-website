@@ -8,10 +8,11 @@ import {
 
 import traderAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import fontAssetsJson from '../../assets/game/skill-picker-native-assets.json' with { type: 'json' }
-import { hub, playerCharacter, skillPicker } from '../../lib/assets.ts'
+import { elementVfx, hub, playerCharacter, skillPicker } from '../../lib/assets.ts'
 import { DOWSING_EQUIPMENT_RECIPES, type HubInventoryItem, type HubShopItem, type HubTraderId } from '../core-kernels/hub-economy.ts'
 import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/player-character.ts'
 import { HUB_TRADER_DIALOGUES, equipmentSlotsForItem } from '../hub-inventory-presentation.ts'
+import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
 import {
   createGameWebGlApplication,
@@ -23,14 +24,24 @@ import {
 import {
   HUB_DOWSING_FLASH,
   HUB_DOWSING_GRID,
+  HUB_DOWSING_MSGBOX,
+  HUB_DOWSING_PREROLL,
+  HUB_CHAT_PANEL,
+  HUB_HAGATHA_PERK_PANE,
   HUB_INVENTORY_GRID,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
+  HUB_SHOP_TEXT,
+  hubDowsingFieldTint,
+  hubDowsingSlotPosition,
   hubInventoryPrimarySpellLines,
   hubInventorySlotPosition,
+  hubShopSlotPosition,
 } from './hub-inventory-render-contract.ts'
+import { NativeElementVfxView } from './native-element-vfx-view.ts'
+import { createNativeElementVfxTextures, type PlayerWorldTextures } from './world-player-textures.ts'
 
 type AtlasName = 'Inventory' | 'Skills' | 'UI'
 type FontName = 'body' | 'medium' | 'menu' | 'skill'
@@ -65,6 +76,8 @@ export interface HubInventoryRendererNotice {
   readonly title: string
 }
 
+export type HubTraderChatPhase = 'choices' | 'intro' | 'prices'
+
 export type HubInventoryRendererModel =
   | {
       readonly config: PlayerCharacterConfig
@@ -74,15 +87,18 @@ export type HubInventoryRendererModel =
       readonly selectedItemId: number | null
     }
   | {
+      readonly acceleratedAtMs: number | null
       readonly kind: 'dialogue'
-      readonly priceExplanation: boolean
+      readonly phase: HubTraderChatPhase
+      readonly phaseStartedAtMs: number
       readonly trader: HubTraderId
     }
   | {
+      readonly config: PlayerCharacterConfig
       readonly economy: ProtocolPlayerEconomy
       readonly kind: 'service'
-      readonly page: number
       readonly notice: HubInventoryRendererNotice | null
+      readonly progression: ProtocolPlayerProgression
       readonly selectedItemId: number | null
       readonly selectedOwner: 'backpack' | 'storage' | null
       readonly trader: HubTraderId
@@ -91,7 +107,7 @@ export type HubInventoryRendererModel =
 export interface HubInventoryRenderer {
   readonly canvas: HTMLCanvasElement
   destroy(): void
-  render(nowMs: number, reveal: number): void
+  render(nowMs: number, reveal: number): { readonly chatComplete: boolean }
   setModel(model: HubInventoryRendererModel): void
 }
 
@@ -120,6 +136,8 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
         hub.trader.skillsAtlas,
         hub.trader.uiAtlas,
         skillPicker.fontsAtlas,
+        ...Object.values(elementVfx.common),
+        ...Object.values(elementVfx.frames),
         playerCharacter.staffBack,
         playerCharacter.staffFront,
         ...Object.values(playerCharacter.robeDynamic),
@@ -150,11 +168,19 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
   let curtainAlpha = 1
   let destroyed = false
   let dowsingFlashStartedAt: number | null = null
+  let dowsingFieldTiles: Sprite[] = []
   let noticeRevealStartedAt: number | null = null
   let previousDowsingOfferCount: number | null = null
+  let serviceOverlay: Container | null = null
+  let chatRenderState: ChatRenderState | null = null
+  let playerPreviewVfx: NativeElementVfxView | null = null
+  let currentModel: HubInventoryRendererModel | null = null
+
+  const elementVfxTextures = createNativeElementVfxTextures((source) => textureFrom(textures.textures, source))
 
   const context: RenderContext = {
     atlasTextureCache,
+    elementVfxTextures,
     glyphTextureCache,
     textures,
   }
@@ -167,21 +193,30 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
       application.destroy({ removeView: true })
       for (const texture of atlasTextureCache.values()) texture.destroy(false)
       for (const texture of glyphTextureCache.values()) texture.destroy(false)
+      for (const frames of Object.values(elementVfxTextures)) {
+        for (const texture of frames) texture.destroy(false)
+      }
       textures.destroy()
     },
     render(nowMs, reveal) {
-      if (destroyed) return
+      if (destroyed) return { chatComplete: false }
       const clampedReveal = Math.max(0, Math.min(1, reveal))
       gpu.canvas.dataset.nativeReveal = clampedReveal >= 1 ? 'settled' : 'revealing'
       dimmer.alpha = curtainAlpha * clampedReveal
       surface.alpha = clampedReveal
-      surface.y = currentKind === 'service'
+      surface.y = 0
+      if (serviceOverlay) serviceOverlay.y = currentKind === 'service'
         ? -HUB_SHOP_PANEL.slideDistance * (1 - easeOutCubic(clampedReveal))
         : 0
       const flashAlpha = dowsingFlashStartedAt === null
         ? 0
         : Math.max(0, 1 - (nowMs - dowsingFlashStartedAt) / HUB_DOWSING_FLASH.durationMs)
       dowsingFlash.alpha = flashAlpha
+      if (dowsingFieldTiles.length > 0) {
+        const tint = hubDowsingFieldTint(nowMs / 10)
+        for (const tile of dowsingFieldTiles) tile.tint = tint
+      }
+      playerPreviewVfx?.update(nowMs / 10, 1.25)
       gpu.canvas.dataset.dowsingFlash = flashAlpha > 0 ? 'active' : 'idle'
       const noticeReveal = noticeRevealStartedAt === null
         ? 1
@@ -199,7 +234,25 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
           child.rotation = Number(child.label.slice('native-seal:'.length)) + nowMs / 60_000
         }
       }
+      let chatComplete = false
+      if (currentModel?.kind === 'dialogue' && chatRenderState && currentModel.phase !== 'choices') {
+        const acceleratedAtMs = currentModel.acceleratedAtMs
+        const normalElapsedMs = acceleratedAtMs === null
+          ? Math.max(0, nowMs - currentModel.phaseStartedAtMs)
+          : Math.max(0, acceleratedAtMs - currentModel.phaseStartedAtMs)
+        const acceleratedElapsedMs = acceleratedAtMs === null
+          ? 0
+          : Math.max(0, nowMs - acceleratedAtMs)
+        const travel = normalElapsedMs / 10 * HUB_NATIVE_UI_TIMING.chatScrollPerTick
+          + acceleratedElapsedMs / 10 * HUB_NATIVE_UI_TIMING.chatAcceleratedScrollPerTick
+        chatRenderState.content.y = HUB_CHAT_PANEL.contentHeight - 36 - travel
+        chatComplete = travel > chatRenderState.contentHeight + HUB_CHAT_PANEL.contentHeight - 36
+        gpu.canvas.dataset.nativeChatState = chatComplete ? 'complete' : 'scrolling'
+      } else if (currentModel?.kind === 'dialogue') {
+        gpu.canvas.dataset.nativeChatState = 'choices'
+      } else delete gpu.canvas.dataset.nativeChatState
       application.renderer.render(application.stage)
+      return { chatComplete }
     },
     setModel(model) {
       const nextDowsingOfferCount = model.kind === 'service' && model.trader === 'shlorio'
@@ -215,12 +268,20 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
         noticeRevealStartedAt = performance.now()
       } else if (model.kind !== 'service' || !model.notice) noticeRevealStartedAt = null
       currentKind = model.kind
-      curtainAlpha = model.kind === 'inventory' ? 1 : 0.75
+      currentModel = model
+      curtainAlpha = model.kind === 'dialogue' ? 0 : 1
+      serviceOverlay = null
+      dowsingFieldTiles = []
+      chatRenderState = null
+      playerPreviewVfx = null
       surface.removeChildren().forEach((child) => child.destroy({ children: true }))
-      if (model.kind === 'inventory') buildInventory(context, surface, model)
-      else if (model.kind === 'dialogue') buildDialogue(context, surface, model)
+      if (model.kind === 'inventory') playerPreviewVfx = buildInventory(context, surface, model)
+      else if (model.kind === 'dialogue') chatRenderState = buildDialogue(context, surface, model)
       else {
-        buildService(context, surface, model)
+        serviceOverlay = buildService(context, surface, model)
+        dowsingFieldTiles = serviceOverlay.children.filter(
+          (child): child is Sprite => child instanceof Sprite && child.label === 'native-dowsing-field',
+        )
         if (model.notice) buildNotice(context, surface, model.notice)
       }
       application.renderer.render(application.stage)
@@ -230,65 +291,87 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
 
 interface RenderContext {
   readonly atlasTextureCache: Map<string, Texture>
+  readonly elementVfxTextures: PlayerWorldTextures['elementVfx']
   readonly glyphTextureCache: Map<string, Texture>
   readonly textures: GameTextureMap
+}
+
+interface ChatRenderState {
+  readonly content: Container
+  readonly contentHeight: number
 }
 
 function buildInventory(
   context: RenderContext,
   layer: Container,
-  model: Extract<HubInventoryRendererModel, { kind: 'inventory' }>,
-): void {
+  model: {
+    readonly config: PlayerCharacterConfig
+    readonly economy: ProtocolPlayerEconomy
+    readonly leftPane?: 'hagatha' | 'stats'
+    readonly progression: ProtocolPlayerProgression
+    readonly selectedItemId: number | null
+    readonly showSelectionDetails?: boolean
+  },
+): NativeElementVfxView | null {
   const { economy, progression } = model
+  const companion = model.showSelectionDetails === false
+  const leftShift = companion ? 53 : 0
+  const rightShift = companion ? 0 : 53
   const background = new Graphics().rect(0, 0, 1600, 900).fill({ color: 0x000000 })
   layer.addChild(background)
 
-  addInventorySidePanel(context, layer, 0, false)
-  addInventorySidePanel(context, layer, 1212.5, true)
+  addInventorySidePanel(context, layer, 'left', companion)
+  addInventorySidePanel(context, layer, 'right', companion)
+  if (model.leftPane === 'hagatha') addHagathaInventoryPane(context, layer, economy)
+  else addStats(context, layer, model, companion)
+  const playerPreview = companion ? null : addPlayerPreview(context, layer, model.config.element)
+  addEquipment(context, layer, economy, model.selectedItemId, rightShift)
+
+  addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
   addHorizontalChain(context, layer, 0, 470, 1600)
   addHorizontalChain(context, layer, 0, 800, 1600)
-  addBitmapText(context, layer, 'STATS', 'menu', 208, 84, { tint: 0xaaa2a6 })
-  addBitmapText(context, layer, 'EQUIP', 'menu', 1398, 84, { tint: 0xaaa2a6 })
-  addBitmapText(context, layer, 'BACKPACK', 'menu', 800, 480, { tint: 0xaaa2a6 })
-
-  addStats(context, layer, model)
-  addPlayerPreview(context, layer, model.config.element)
-  addEquipment(context, layer, economy, model.selectedItemId)
-  addTiledAtlas(context, layer, 'UI', 49, 0, 490, 1600, 310)
+  addBackpackFrame(context, layer)
+  addBitmapText(context, layer, 'BACKPACK', 'menu', 800, 489, { tint: 0xaaa2a6 })
 
   for (let index = 0; index < HUB_INVENTORY_GRID.capacity; index += 1) {
     const position = hubInventorySlotPosition(index)
-    addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y, { scale: 0.9375 })
+    const slot = addAtlasSprite(context, layer, 'Inventory', 10, position.x, position.y)
+    slot.alpha = HUB_INVENTORY_GRID.slotAlpha
     const item = economy.backpack[index]
     if (!item) continue
-    addItemIcon(context, layer, item, position.x + 33.75, position.y + 33.75, 57)
+    addItemIcon(context, layer, item, position.x + 36, position.y + 36, 62)
     if (item.quantity > 1) {
-      addBitmapText(context, layer, `${item.quantity}`, 'medium', position.x + 56, position.y + 51, {
+      addBitmapText(context, layer, `${item.quantity}`, 'medium', position.x + 61, position.y + 54, {
         align: 'center',
         tint: 0xf4e5b4,
       })
     }
-    if (item.id === model.selectedItemId) addSelectionGlow(layer, position.x, position.y, 67.5, 67.5)
+    if (item.id === model.selectedItemId) {
+      addSelectionGlow(layer, position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize)
+    }
   }
 
-  addGold(context, layer, economy.gold, 15, 850)
+  addGold(context, layer, economy.gold)
   addBelt(context, layer, economy.backpack)
-  const exit = addAtlasSprite(context, layer, 'UI', 75, 1530, 842, { scale: 1.2 })
-  exit.tint = 0xffdc54
+  addCenteredAtlasSprite(context, layer, 'UI', 75, 1562, 868)
 
-  const primarySpellLines = hubInventoryPrimarySpellLines(model.config.element, progression.learnedSkills)
-  addBitmapText(context, layer, 'PRIMARY SPELL', 'medium', 96, 217, { align: 'left', tint: 0xe4c56d })
-  primarySpellLines.forEach((line, index) => addBitmapText(
-    context,
-    layer,
-    line,
-    'medium',
-    96,
-    247 + index * 19,
-    { align: 'left', tint: 0xd9f7ff },
-  ))
+  if (model.leftPane !== 'hagatha') {
+    const primarySpellLines = hubInventoryPrimarySpellLines(model.config.element, progression.learnedSkills)
+    addBitmapText(context, layer, 'PRIMARY SPELL', 'medium', 96 + leftShift, 226, { align: 'left', tint: 0xe4c56d })
+    primarySpellLines.forEach((line, index) => addBitmapText(
+      context,
+      layer,
+      line,
+      'medium',
+      96 + leftShift,
+      255 + index * 19,
+      { align: 'left', tint: 0xd9f7ff },
+    ))
+  }
 
-  const selected = economy.backpack.find(({ id }) => id === model.selectedItemId)
+  const selected = model.showSelectionDetails === false
+    ? null
+    : economy.backpack.find(({ id }) => id === model.selectedItemId)
   if (selected) {
     addBitmapText(context, layer, selected.name.toUpperCase(), 'body', 800, 390, { tint: 0xf3ead1 })
     addBitmapText(
@@ -305,81 +388,182 @@ function buildInventory(
       addNativeButton(context, layer, `EQUIP ${equipmentSlotLabel(slot)}`, 680 + index * 130, 425, 125, 36)
     })
   }
+  return playerPreview
 }
 
 function addInventorySidePanel(
   context: RenderContext,
   layer: Container,
-  left: number,
-  mirrored: boolean,
+  side: 'left' | 'right',
+  companion: boolean,
 ): void {
-  addTiledAtlas(context, layer, 'UI', 30, left, 0, 387.5, 470)
-  const guardianRecord = mirrored ? 31 : 32
-  const guardianXs = mirrored
-    ? [left + 2, left + 238]
-    : [left - 18, left + 210]
-  for (const x of guardianXs) {
-    addAtlasSprite(context, layer, 'UI', guardianRecord, x, -8)
-    addAtlasSprite(context, layer, 'UI', guardianRecord, x, 306)
+  const shift = companion ? 0 : side === 'left' ? -53 : 53
+  if (side === 'left') {
+    for (const x of [233, 24]) {
+      addCenteredAtlasSprite(context, layer, 'UI', 30, x + shift, 429)
+      addCenteredAtlasSprite(context, layer, 'UI', 30, x + shift, 39)
+    }
+    addCenteredAtlasSprite(context, layer, 'UI', 33, 53 + shift, 249, -1, 1)
+    addCenteredAtlasSprite(context, layer, 'UI', 29, 303 + shift, 449, 1, -1)
+    addCenteredAtlasSprite(context, layer, 'UI', 32, 63 + shift, 439, 0.85, 0.85)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 343 + shift, 449, -0.75, 0.75)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 343 + shift, 39, -1, 1)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 73 + shift, 39)
+    addCenteredAtlasSprite(context, layer, 'UI', 20, 55 + shift, 119)
+  } else {
+    for (const x of [1367, 1576]) {
+      addCenteredAtlasSprite(context, layer, 'UI', 30, x + shift, 429)
+      addCenteredAtlasSprite(context, layer, 'UI', 30, x + shift, 39)
+    }
+    addCenteredAtlasSprite(context, layer, 'UI', 33, 1547 + shift, 279)
+    addCenteredAtlasSprite(context, layer, 'UI', 29, 1297 + shift, 449, -1, -1)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 1527 + shift, 439, 0.85, 0.85)
+    addCenteredAtlasSprite(context, layer, 'UI', 32, 1257 + shift, 459, -0.75, 0.75)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 1257 + shift, 39)
+    addCenteredAtlasSprite(context, layer, 'UI', 31, 1527 + shift, 39, -1, 1)
+    addCenteredAtlasSprite(context, layer, 'UI', 20, 1549 + shift, 119)
   }
-  addTiledAtlas(context, layer, 'UI', 49, left + 31, 74, 330, 352)
-  if (mirrored) addAtlasSprite(context, layer, 'Inventory', 16, left + 203, 148)
-  else addAtlasSprite(context, layer, 'UI', 33, left, 151)
-  addHorizontalChain(context, layer, left + 32, 63, 330)
-  addHorizontalChain(context, layer, left + 32, 407, 330)
-  addVerticalChain(context, layer, left + 29, 73, 350)
-  addVerticalChain(context, layer, left + 345, 73, 350)
-  const corners = [
-    [107, left + (mirrored ? 0 : 32), 68],
-    [108, left + 302, 68],
-    [109, left + (mirrored ? 0 : 32), 337],
-    [110, left + 302, 337],
-  ] as const
-  for (const [record, x, y] of corners) addAtlasSprite(context, layer, 'UI', record, x, y)
+
+  const paneLeft = (side === 'left' ? 103 : 1177) + shift
+  addTiledAtlas(context, layer, 'UI', 49, paneLeft, 89, 320, 320)
+  addInventoryPaneCorners(context, layer, paneLeft, 89)
+
+  const cornerCenters = side === 'left'
+    ? [[107, 128], [108, 398], [109, 128], [110, 398]] as const
+    : [[107, 1202], [108, 1472], [109, 1202], [110, 1472]] as const
+  cornerCenters.forEach(([record, x], index) => {
+    addCenteredAtlasSprite(context, layer, 'UI', record, x + shift, index < 2 ? 114 : 384)
+  })
+  if (side === 'left') addSectionHeader(context, layer, 'STATS', 217 + shift, 309 + shift, 263 + shift)
+  else addSectionHeader(context, layer, 'EQUIP', 1291 + shift, 1383 + shift, 1337 + shift)
+}
+
+function addInventoryPaneCorners(
+  context: RenderContext,
+  layer: Container,
+  left: number,
+  top: number,
+): void {
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 36.5, top + 36.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 283.5, top + 36.5, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 36.5, top + 283.5, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, left + 283.5, top + 283.5, -1, -1)
+}
+
+function addSectionHeader(
+  context: RenderContext,
+  layer: Container,
+  label: string,
+  leftX: number,
+  rightX: number,
+  textX: number,
+): void {
+  addCenteredAtlasSprite(context, layer, 'UI', 4, leftX, 76)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, rightX, 76, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, leftX, 96, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, rightX, 96, -1, -1)
+  addBitmapText(context, layer, label, 'menu', textX, 96, { tint: 0xaaa2a6 })
+}
+
+function addBackpackFrame(context: RenderContext, layer: Container): void {
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 513.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 513.5, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, -63.5, 775.5, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1663.5, 775.5, -1, -1)
+  addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 481)
+  addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 481)
+  addCenteredAtlasSprite(context, layer, 'UI', 71, 21, 809)
+  addCenteredAtlasSprite(context, layer, 'UI', 71, 1631, 809)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 722.5, 470)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 877.5, 470, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 722.5, 490, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 877.5, 490, -1, -1)
 }
 
 function addStats(
   context: RenderContext,
   layer: Container,
-  model: Extract<HubInventoryRendererModel, { kind: 'inventory' }>,
+  model: {
+    readonly config: PlayerCharacterConfig
+    readonly progression: ProtocolPlayerProgression
+  },
+  companion: boolean,
 ): void {
-  addAtlasSprite(context, layer, 'UI', 20, 222, 215)
-  addInset(context, layer, 86, 112, 227, 29)
-  addBitmapText(context, layer, model.config.displayName.toUpperCase(), 'menu', 96, 122, { align: 'left', tint: 0xffffff })
-  addInset(context, layer, 86, 143, 227, 43)
-  addBitmapText(context, layer, `LEVEL ${model.progression.level}`, 'medium', 96, 151, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96, 169, { align: 'left', tint: 0xe4c56d })
-  addInset(context, layer, 86, 208, 227, 102)
-  addInset(context, layer, 86, 330, 227, 54)
-  addBitmapText(context, layer, 'MELEE DAMAGE', 'medium', 96, 339, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, '0.5 - 1 / WHACK', 'medium', 96, 365, { align: 'left', tint: 0xd9f7ff })
+  const decorationShift = companion ? 0 : -53
+  const contentShift = companion ? 53 : 0
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 119 + decorationShift, 151)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 309 + decorationShift, 151)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 164 + decorationShift, 233.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 169 + decorationShift, 284.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 319 + decorationShift, 256.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 16, 119 + decorationShift, 367.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 13, 391 + decorationShift, 379)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 13, 391 + decorationShift, 439, 1, -1)
+  addInset(layer, 86 + contentShift, 112, 227, 29)
+  addInset(layer, 86 + contentShift, 143, 227, 43)
+  addInset(layer, 86 + contentShift, 208, 227, 102)
+  addInset(layer, 86 + contentShift, 330, 227, 54)
+  addBitmapText(context, layer, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
+  addBitmapText(context, layer, `LEVEL ${model.progression.level}`, 'medium', 96 + contentShift, 159, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, layer, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96 + contentShift, 175, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, layer, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
+  addBitmapText(context, layer, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, { align: 'left', tint: 0xd9f7ff })
 }
 
-function addPlayerPreview(context: RenderContext, layer: Container, element: WizardElement): void {
-  const seal = addAtlasSprite(context, layer, 'UI', 62, 800, 250, { anchor: 0.5, scale: 1.25 })
+function addPlayerPreview(context: RenderContext, layer: Container, element: WizardElement): NativeElementVfxView {
+  const seal = addAtlasSprite(context, layer, 'UI', 62, 800, 249, { anchor: 0.5, scale: 1.25 })
   seal.alpha = 0.32
   seal.label = 'native-seal:0'
-  const previewSources = [
-    playerCharacter.staffBack,
-    playerCharacter.robeFixed[element],
-    playerCharacter.robeDynamic[element],
-    playerCharacter.head[element],
-    playerCharacter.staffFront,
-  ]
-  for (const source of previewSources) {
-    const base = textureFrom(context.textures.textures, source)
-    const frame = new Texture({
-      frame: new Rectangle(0, 0, 170, 170),
-      source: base.source,
-    })
-    const sprite = new Sprite(frame)
+  const heading = 9
+  const centerX = 800
+  const centerY = 249
+  const actor = new Container({ label: 'native-inventory-player-preview' })
+  actor.sortableChildren = true
+  actor.position.set(centerX, centerY)
+  actor.scale.set(1.25)
+  layer.addChild(actor)
+  const staffFront = playerCharacterStaffIsFront(heading)
+  const layers = [
+    [playerCharacter.staffBack, 0, staffFront ? -1 : 1],
+    [playerCharacter.robeDynamic[element], 0, 3],
+    [playerCharacter.robeFixed[element], 0, 4],
+    [playerCharacter.staffFront, 0, staffFront ? 5 : -1],
+    [playerCharacter.head[element], null, 7],
+  ] as const
+  for (const [source, column, zIndex] of layers) {
+    if (zIndex < 0) continue
+    const sprite = new Sprite(actorFrameTexture(context, source, heading, column))
     sprite.anchor.set(0.5)
-    sprite.position.set(800, 260)
-    sprite.scale.set(1.25)
-    layer.addChild(sprite)
+    sprite.zIndex = zIndex
+    actor.addChild(sprite)
   }
+  const vfx = new NativeElementVfxView(element, context.elementVfxTextures)
+  const orbOffset = playerCharacterStaffOrbOffset(heading)
+  vfx.container.position.set(orbOffset.x, orbOffset.y)
+  vfx.container.zIndex = staffFront ? 6 : 2
+  actor.addChild(vfx.container)
+  vfx.update(0, 1)
   addBitmapText(context, layer, 'KILLS: 0', 'medium', 800, 337, { tint: 0xe7cc71 })
   addBitmapText(context, layer, 'AWESOMENESS: 0', 'medium', 800, 359, { tint: 0xe7cc71 })
+  return vfx
+}
+
+function actorFrameTexture(
+  context: RenderContext,
+  source: string,
+  heading: number,
+  column: number | null,
+): Texture {
+  const key = `actor.${source}.${heading}.${column ?? 0}`
+  const cached = context.atlasTextureCache.get(key)
+  if (cached) return cached
+  const base = textureFrom(context.textures.textures, source)
+  const texture = new Texture({
+    frame: new Rectangle((column ?? 0) * 170, heading * 170, 170, 170),
+    source: base.source,
+  })
+  context.atlasTextureCache.set(key, texture)
+  return texture
 }
 
 function addEquipment(
@@ -387,146 +571,182 @@ function addEquipment(
   layer: Container,
   economy: ProtocolPlayerEconomy,
   selectedItemId: number | null,
+  xShift: number,
 ): void {
+  for (const [x, y] of [[1337, 224], [1337, 289], [1479, 192], [1479, 256], [1479, 321]] as const) {
+    addCenteredAtlasSprite(context, layer, 'Inventory', 16, x + xShift, y)
+  }
   const slots: [HubInventoryItem | null, number, number, number, number][] = [
-    [economy.equipment.amulet, 1301, 170, 46, 46],
-    [economy.equipment.hat, 1355, 144, 68, 68],
-    [economy.equipment.weapon, 1275, 224, 68, 68],
-    [economy.equipment.robe, 1355, 224, 68, 105],
-    [economy.equipment.weapon, 1435, 224, 68, 68],
-    [economy.equipment.rings[0], 1301, 303, 46, 46],
-    [economy.equipment.rings[1], 1435, 303, 46, 46],
+    [economy.equipment.amulet, 1247, 169, 46, 46],
+    [economy.equipment.hat, 1301, 143, 72, 72],
+    [economy.equipment.weapon, 1221, 223, 72, 72],
+    [economy.equipment.robe, 1301, 231, 72, 92],
+    [economy.equipment.weapon, 1381, 223, 72, 72],
+    [economy.equipment.rings[0], 1247, 303, 46, 46],
+    [economy.equipment.rings[1], 1381, 303, 46, 46],
   ]
   if (economy.ownedPerkSelectors.includes(19)) {
-    slots.push([economy.equipment.rings[2], 1435, 350, 46, 46])
+    slots.push([economy.equipment.rings[2], 1381, 350, 46, 46])
   }
   for (const [item, x, y, width, height] of slots) {
-    addAtlasSprite(context, layer, 'Inventory', width > 46 ? 10 : 9, x, y, {
-      scale: width > 46 ? 0.9375 : 1,
-    })
-    if (item) addItemIcon(context, layer, item, x + width / 2, y + height / 2, Math.min(width - 8, height - 8))
-    if (item?.id === selectedItemId) addSelectionGlow(layer, x, y, width, height)
+    if (height === 46 || height === 72) addAtlasSprite(context, layer, 'Inventory', height === 46 ? 9 : 10, x + xShift, y)
+    if (item) addItemIcon(context, layer, item, x + xShift + width / 2, y + height / 2, Math.min(width - 8, height - 8))
+    if (item?.id === selectedItemId) addSelectionGlow(layer, x + xShift, y, width, height)
   }
 }
 
 function addBelt(context: RenderContext, layer: Container, backpack: readonly HubInventoryItem[]): void {
   const potions = backpack.filter((item) => item.kind.includes('potion')).slice(0, 2)
-  const startX = 468
-  for (let index = 0; index < 11; index += 1) {
-    const x = startX + index * 62
-    addAtlasSprite(context, layer, 'Inventory', 9, x, 849)
-    const item = index === 3 ? potions[0] : index === 7 ? potions[1] : null
-    if (item) addItemIcon(context, layer, item, x + 25.5, 874, 47)
+  const centers = [494.5, 554.5, 614.5, 674.5, 924.5, 984.5, 1044.5, 1104.5]
+  centers.forEach((x, index) => {
+    addCenteredAtlasSprite(context, layer, 'UI', 2, x, 874)
+    const item = index === 3 ? potions[0] : index === 4 ? potions[1] : null
+    if (item) addItemIcon(context, layer, item, x, 874, 51)
+  })
+  addCenteredAtlasSprite(context, layer, 'UI', 82, 800.5, 872)
+  for (const [record, x, y] of [[47, 764.5, 876], [47, 759.5, 871], [48, 844.5, 876], [48, 839.5, 871]] as const) {
+    addCenteredAtlasSprite(context, layer, 'UI', record, x, y)
   }
-  addAtlasSprite(context, layer, 'Inventory', 0, 731, 838, { scale: 0.75 })
-  addAtlasSprite(context, layer, 'Inventory', 10, 810, 839, { scale: 0.38 })
-  addAtlasSprite(context, layer, 'UI', 48, 870, 840, { scale: 0.42 })
 }
 
 function buildDialogue(
   context: RenderContext,
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'dialogue' }>,
-): void {
+): ChatRenderState {
   const dialogue = HUB_TRADER_DIALOGUES[model.trader]
-  const left = 350
-  const top = 150
-  addLeatherPanel(context, layer, left, top, 900, 590)
-  addBitmapText(context, layer, dialogue.name.toUpperCase(), 'medium', 800, top + 55, { tint: 0xe6c76c })
-  const paragraphs = model.priceExplanation ? dialogue.priceExplanation : dialogue.intro
-  let y = top + 115
-  for (const paragraph of paragraphs) {
-    addBitmapText(context, layer, paragraph, 'body', left + 75, y, {
-      align: 'left',
-      lineHeight: 25,
-      maxWidth: 750,
-      tint: 0xf1ead5,
-    })
-    y += Math.max(58, wrapBitmapText(paragraph, FONT_ASSETS.fonts.body, 750).length * 25 + 22)
-  }
-  const labels = model.priceExplanation
-    ? ['DONE']
-    : [dialogue.actionLabel.toUpperCase(), ...(dialogue.priceExplanation.length > 0 ? ['YOUR PRICES'] : []), 'GOODBYE']
-  const width = labels.length === 1 ? 220 : 240
-  const gap = 20
-  const total = labels.length * width + (labels.length - 1) * gap
-  labels.forEach((label, index) => addNativeButton(
+  addChatPanel(context, layer)
+  addBitmapText(
     context,
     layer,
-    label,
-    800 - total / 2 + index * (width + gap),
-    top + 500,
-    width,
-    56,
-  ))
+    dialogue.name.toUpperCase(),
+    'menu',
+    HUB_CHAT_PANEL.titleCenterX,
+    HUB_CHAT_PANEL.titleTextBaselineY,
+    { tint: HUB_CHAT_PANEL.textTint },
+  )
+
+  const viewport = new Container()
+  viewport.position.set(HUB_CHAT_PANEL.contentLeft, HUB_CHAT_PANEL.contentTop)
+  const mask = new Graphics()
+    .rect(0, 0, HUB_CHAT_PANEL.contentWidth, HUB_CHAT_PANEL.contentHeight)
+    .fill({ color: 0xffffff })
+  const content = new Container()
+  viewport.addChild(mask, content)
+  viewport.mask = mask
+  layer.addChild(viewport)
+
+  let contentHeight = 0
+  if (model.phase === 'choices') {
+    const hasPriceQuestion = dialogue.priceLabel !== null
+    addBitmapText(
+      context,
+      content,
+      dialogue.actionLabel,
+      'menu',
+      HUB_CHAT_PANEL.contentWidth / 2,
+      HUB_CHAT_PANEL.primaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
+      {
+      scale: 1.25,
+      tint: HUB_CHAT_PANEL.actionTextTint,
+      },
+    )
+    if (hasPriceQuestion) {
+      addBitmapText(
+        context,
+        content,
+        dialogue.priceLabel!,
+        'menu',
+        HUB_CHAT_PANEL.contentWidth / 2,
+        HUB_CHAT_PANEL.secondaryChoiceTextBaselineY - HUB_CHAT_PANEL.contentTop,
+        { tint: HUB_CHAT_PANEL.textTint },
+      )
+    }
+  } else {
+    const paragraphs = model.phase === 'prices' ? dialogue.priceExplanation : dialogue.intro
+    const lineHeight = 27
+    for (const paragraph of paragraphs) {
+      const copy = dialoguePlainText(paragraph)
+      addBitmapText(context, content, copy, 'menu', 0, contentHeight, {
+        align: 'left',
+        lineHeight,
+        maxWidth: HUB_CHAT_PANEL.contentWidth,
+        tint: HUB_CHAT_PANEL.textTint,
+      })
+      contentHeight += wrapBitmapText(copy, FONT_ASSETS.fonts.menu, HUB_CHAT_PANEL.contentWidth).length * lineHeight + 22
+    }
+  }
+  addBitmapText(
+    context,
+    layer,
+    model.phase === 'choices' ? 'Done' : 'Skip',
+    'menu',
+    800,
+    HUB_CHAT_PANEL.doneTextBaselineY,
+    { tint: HUB_CHAT_PANEL.textTint },
+  )
+  return { content, contentHeight }
 }
 
 function buildService(
   context: RenderContext,
   layer: Container,
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
-): void {
-  if (model.trader === 'luthacus') {
-    buildInventoryShop(context, layer, model)
-    return
-  }
-  const { settledLeft: left, settledTop: top, width, height } = HUB_SHOP_PANEL
-  addLeatherPanel(context, layer, left, top, width, height)
+): Container {
+  buildInventory(context, layer, {
+    config: model.config,
+    economy: model.economy,
+    leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
+    progression: model.progression,
+    selectedItemId: null,
+    showSelectionDetails: false,
+  })
+  const overlay = new Container()
+  overlay.label = 'native-service-overlay'
+  layer.addChild(overlay)
+  const { width } = HUB_SHOP_PANEL
+  addShopPanel(context, overlay, model.trader === 'shlorio' && model.economy.dowsingOffers.length > 0)
   const dialogue = HUB_TRADER_DIALOGUES[model.trader]
-  const titleFont: FontName = measureBitmapText(dialogue.title, FONT_ASSETS.fonts.medium) > width - 100
-    ? 'body'
-    : 'medium'
-  addBitmapText(context, layer, dialogue.title, titleFont, 800, top + 52, { tint: 0xe6c76c })
-  addGold(context, layer, model.economy.gold, left + 22, top + 425)
+  const titleFont: FontName = measureBitmapText(dialogue.title, FONT_ASSETS.fonts.menu) > width - 55
+    ? 'medium'
+    : 'menu'
+  addBitmapText(context, overlay, dialogue.title, titleFont, 800, HUB_SHOP_TEXT.titleTextBaselineY, {
+    tint: HUB_SHOP_TEXT.goldTint,
+  })
 
   if (model.trader === 'shlorio' && model.economy.dowsingOffers.length === 0) {
-    addNativeSeal(context, layer, 800, top + 235, 0.42, 0.58)
-    addNativeButton(context, layer, 'DOWSE', 680, top + 300, 240, 64)
-    addAtlasSprite(context, layer, 'UI', 15, 693, top + 370)
-    addBitmapText(context, layer, `${model.economy.dowsingFee.toLocaleString()} GOLD`, 'medium', 800, top + 420, { tint: 0xf1d274 })
-    addNativeButton(context, layer, 'DONE', left + width - 150, top + 425, 120, 48)
-    return
+    addCenteredAtlasSprite(context, overlay, 'UI', 15, 800, 75)
+    overlay.addChild(new Graphics()
+      .rect(...HUB_DOWSING_PREROLL.referenceDropRect)
+      .fill({ color: 0x000000 }))
+    addDowsingButton(context, overlay, model.economy.dowsingFee)
+    addDoneControl(context, overlay)
+    return overlay
   }
 
-  const items = serviceItems(model)
-  const pageSize = model.trader === 'shlorio' ? HUB_DOWSING_GRID.pageSize : HUB_SHOP_GRID.pageSize
-  const visible = items.slice(model.page * pageSize, (model.page + 1) * pageSize)
-  const columns = model.trader === 'shlorio' ? 3 : 4
-  const pitchX = model.trader === 'shlorio' ? 150 : 135
-  const gridLeft = 800 - ((columns - 1) * pitchX) / 2
-  visible.forEach((item, index) => {
-    const itemLayer = new Container()
-    itemLayer.alpha = item.price > model.economy.gold ? 0.42 : 1
-    layer.addChild(itemLayer)
-    const column = index % columns
-    const row = Math.floor(index / columns)
-    const centerX = gridLeft + column * pitchX
-    const centerY = top + 145 + row * 112
-    addAtlasSprite(context, itemLayer, 'UI', 72, centerX - 85.5, centerY + 34)
-    addAtlasSprite(context, itemLayer, 'UI', 12, centerX - 67.5, centerY + 39)
-    addAtlasSprite(context, itemLayer, 'Inventory', 10, centerX, centerY, { anchor: 0.5, scale: 0.9375 })
-    if (model.trader === 'hagatha') {
-      const selector = item.recipeIndex ?? -1
-      if (selector >= 0) addAtlasSprite(context, itemLayer, 'Skills', 127 + selector, centerX, centerY, { anchor: 0.5 })
-      else addAtlasSprite(context, itemLayer, 'Inventory', 5, centerX, centerY, { anchor: 0.5, scale: 0.6 })
-    } else addItemIcon(context, itemLayer, item, centerX, centerY, 58)
-    const name = item.name.toUpperCase()
-    const nameLines = wrapBitmapText(name, FONT_ASSETS.fonts.body, 122)
-    addBitmapText(context, itemLayer, name, 'body', centerX, centerY + 44, {
-      lineHeight: 13,
-      maxWidth: 122,
-      tint: 0xf3ead1,
-    })
-    addBitmapText(context, itemLayer, `${item.price}`, 'body', centerX, centerY + 48 + nameLines.length * 13, { tint: 0xe7c969 })
-    if (item.id === model.selectedItemId) addSelectionGlow(layer, centerX - 37, centerY - 37, 74, 74)
-  })
-  const pages = Math.max(1, Math.ceil(items.length / pageSize))
-  if (pages > 1) {
-    addShopScrollControl(context, layer, '<', 690, top + 382)
-    addShopScrollControl(context, layer, '>', 820, top + 382)
+  if (model.trader === 'luthacus') {
+    addStoreGrid(context, overlay, model.economy.storage, model, 'storage')
+    if (model.selectedOwner === 'backpack' && model.selectedItemId !== null) {
+      const index = model.economy.backpack.findIndex(({ id }) => id === model.selectedItemId)
+      if (index >= 0) {
+        const position = hubInventorySlotPosition(index)
+        addSelectionGlow(
+          overlay,
+          position.x,
+          position.y,
+          HUB_INVENTORY_GRID.cellSize,
+          HUB_INVENTORY_GRID.cellSize,
+          0x45ff72,
+        )
+      }
+    }
+  } else if (model.trader === 'shlorio') {
+    addDowsingGrid(context, overlay, serviceItems(model), model)
+  } else {
+    addStoreGrid(context, overlay, serviceItems(model), model, null)
   }
-  addBitmapText(context, layer, `PAGE ${model.page + 1} / ${pages}`, 'medium', 800, top + 371, { tint: 0xc9b986 })
-  addNativeButton(context, layer, 'DONE', left + width - 150, top + 425, 120, 48)
+  addDoneControl(context, overlay)
+  return overlay
 }
 
 function buildNotice(
@@ -539,69 +759,143 @@ function buildNotice(
   noticeLayer.addChild(new Graphics()
     .rect(0, 0, HUB_NATIVE_UI_SIZE.width, HUB_NATIVE_UI_SIZE.height)
     .fill({ color: 0x000000, alpha: 0.75 }))
-  const left = 360
-  const top = 205
-  const width = 880
-  const height = 390
-  addLeatherPanel(context, noticeLayer, left, top, width, height)
-  addBitmapText(context, noticeLayer, notice.title, 'menu', 800, top + 62, { tint: 0xe6c76c })
-  addBitmapText(context, noticeLayer, notice.body, 'body', left + 85, top + 135, {
-    align: 'left',
-    lineHeight: 27,
-    maxWidth: width - 170,
-    tint: 0xf1ead5,
+  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, 607, 151.5, 386, 19)
+  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.horizontalEdgeRecord, 607, 529.5, 386, 19)
+  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, 529, 234.5, 21, 231)
+  addTiledAtlas(context, noticeLayer, 'UI', HUB_DOWSING_MSGBOX.verticalEdgeRecord, 1050, 234.5, 21, 231)
+
+  HUB_DOWSING_MSGBOX.outerCornerCenters.forEach(([x, y], index) => {
+    addCenteredAtlasSprite(context, noticeLayer, 'UI', 107 + index, x, y)
   })
-  addNativeButton(context, noticeLayer, notice.actionLabel, 690, top + 305, 220, 56)
+  HUB_DOWSING_MSGBOX.innerCornerCenters.forEach(([x, y], index) => {
+    addCenteredAtlasSprite(
+      context,
+      noticeLayer,
+      'UI',
+      17,
+      x,
+      y,
+      index % 2 === 0 ? 1 : -1,
+      index < 2 ? 1 : -1,
+    )
+  })
+  const skullHeader = addCenteredAtlasSprite(
+    context,
+    noticeLayer,
+    'UI',
+    18,
+    ...HUB_DOWSING_MSGBOX.skullHeaderCenter,
+  )
+  skullHeader.rotation = Math.PI / 2
+  for (const [x, y, scale] of HUB_DOWSING_MSGBOX.arrowCentersAndScales) {
+    addCenteredAtlasSprite(context, noticeLayer, 'UI', 8, x, y, scale)
+  }
+
+  addBitmapText(
+    context,
+    noticeLayer,
+    notice.title,
+    'menu',
+    HUB_DOWSING_MSGBOX.bodyLeft,
+    HUB_DOWSING_MSGBOX.titleTextBaselineY,
+    { align: 'left', tint: 0xffffff },
+  )
+  addBitmapText(context, noticeLayer, notice.body, 'medium', HUB_DOWSING_MSGBOX.bodyLeft, HUB_DOWSING_MSGBOX.bodyTextBaselineY, {
+    align: 'left',
+    lineHeight: 17,
+    maxWidth: HUB_DOWSING_MSGBOX.bodyMaxWidth,
+    tint: 0xffffff,
+  })
+  addMessageBoxButton(context, noticeLayer, notice.actionLabel)
   layer.addChild(noticeLayer)
 }
 
-function buildInventoryShop(
+function addStoreGrid(
   context: RenderContext,
   layer: Container,
+  items: readonly (HubInventoryItem | HubShopItem)[],
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
+  owner: 'storage' | null,
 ): void {
-  const left = 155
-  const top = 45
-  const width = 1290
-  const height = 810
-  addLeatherPanel(context, layer, left, top, width, height)
-  addBitmapText(context, layer, HUB_TRADER_DIALOGUES.luthacus.title, 'menu', 800, top + 48, { tint: 0xe6c76c })
-  addBitmapText(context, layer, 'BACKPACK', 'menu', 470, top + 108, { tint: 0xaaa2a6 })
-  addBitmapText(context, layer, 'SCAVENGED GOODS', 'menu', 1130, top + 108, { tint: 0xaaa2a6 })
-  addInventoryShopCollection(context, layer, model.economy.backpack, 230, top + 145, model.selectedItemId, model.selectedOwner === 'backpack')
-  addInventoryShopCollection(context, layer, model.economy.storage, 890, top + 145, model.selectedItemId, model.selectedOwner === 'storage')
-  const selected = selectedInventoryItem(model)
-  if (selected) {
-    addBitmapText(context, layer, selected.name.toUpperCase(), 'body', 800, top + 610, { tint: 0xf3ead1 })
-    addNativeButton(context, layer, model.selectedOwner === 'backpack' ? 'STORE' : 'TAKE', 680, top + 650, 240, 54)
+  for (let index = 0; index < HUB_SHOP_GRID.retainedCapacity; index += 1) {
+    const { x, y } = hubShopSlotPosition(index)
+    const slot = addAtlasSprite(context, layer, 'Inventory', 10, x, y)
+    slot.alpha = HUB_SHOP_GRID.slotAlpha
+    const item = items[index]
+    if (!item) continue
+    const selected = item.id === model.selectedItemId && model.selectedOwner === owner
+    if (selected) {
+      const record = owner === 'storage'
+        ? 111
+        : item.price > model.economy.gold ? 46 : 84
+      addAtlasSprite(context, layer, 'UI', record, x + (record === 46 ? -0.5 : 3), y + (record === 46 ? 5.5 : 11))
+    } else if (model.trader === 'hagatha') {
+      const selector = 'recipeIndex' in item ? item.recipeIndex ?? -1 : -1
+      if (selector >= 0) addAtlasSprite(context, layer, 'Skills', 127 + selector, x + 36, y + 36, { anchor: 0.5 })
+      else addAtlasSprite(context, layer, 'Inventory', 5, x + 36, y + 36, { anchor: 0.5, scale: 0.6 })
+    } else addItemIcon(context, layer, item, x + 36, y + 36, 62)
+    if ('price' in item) {
+      addBitmapText(
+        context,
+        layer,
+        `${item.price}`,
+        HUB_SHOP_TEXT.priceFont,
+        x + HUB_SHOP_TEXT.priceTextRightOffsetX,
+        y + HUB_SHOP_TEXT.priceTextBaselineOffsetY,
+        {
+          align: 'right',
+          tint: item.price > model.economy.gold
+            ? HUB_SHOP_TEXT.unaffordableTint
+            : HUB_SHOP_TEXT.affordableTint,
+        },
+      )
+    } else if (item.quantity > 1) {
+      addBitmapText(
+        context,
+        layer,
+        `${item.quantity}`,
+        HUB_SHOP_TEXT.priceFont,
+        x + HUB_SHOP_TEXT.priceTextRightOffsetX,
+        y + HUB_SHOP_TEXT.priceTextBaselineOffsetY,
+        {
+          align: 'right',
+          tint: 0xf4e5b4,
+        },
+      )
+    }
   }
-  addGold(context, layer, model.economy.gold, left + 28, top + 735)
-  addNativeButton(context, layer, 'DONE', left + width - 155, top + 735, 125, 48)
 }
 
-function addInventoryShopCollection(
+function addDowsingGrid(
   context: RenderContext,
   layer: Container,
-  items: readonly HubInventoryItem[],
-  left: number,
-  top: number,
-  selectedItemId: number | null,
-  selectedOwner: boolean,
+  items: readonly HubShopItem[],
+  model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
 ): void {
-  for (let index = 0; index < 28; index += 1) {
-    const x = left + (index % 7) * 76
-    const y = top + Math.floor(index / 7) * 76
-    addAtlasSprite(context, layer, 'Inventory', 10, x, y, { scale: 0.9375 })
+  for (let index = 0; index < HUB_DOWSING_GRID.retainedCapacity; index += 1) {
+    const { x, y } = hubDowsingSlotPosition(index)
+    const slot = addAtlasSprite(context, layer, 'Inventory', 10, x, y)
+    slot.alpha = HUB_DOWSING_GRID.slotAlpha
     const item = items[index]
-    if (item) {
-      addItemIcon(context, layer, item, x + 33.75, y + 33.75, 57)
-      if (item.quantity > 1) {
-        addBitmapText(context, layer, `${item.quantity}`, 'medium', x + 56, y + 51, {
-          tint: 0xf4e5b4,
-        })
-      }
-    }
-    if (item?.id === selectedItemId && selectedOwner) addSelectionGlow(layer, x, y, 67.5, 67.5)
+    if (!item) continue
+    const selected = item.id === model.selectedItemId
+    if (selected) {
+      addAtlasSprite(context, layer, 'UI', item.price > model.economy.gold ? 46 : 84, x + 1, y + 11)
+    } else addItemIcon(context, layer, item, x + 36, y + 36, 62)
+    addBitmapText(
+      context,
+      layer,
+      `${item.price}`,
+      HUB_SHOP_TEXT.priceFont,
+      x + HUB_SHOP_TEXT.priceTextRightOffsetX,
+      y + HUB_SHOP_TEXT.priceTextBaselineOffsetY,
+      {
+        align: 'right',
+        tint: item.price > model.economy.gold
+          ? HUB_SHOP_TEXT.unaffordableTint
+          : HUB_SHOP_TEXT.affordableTint,
+      },
+    )
   }
 }
 
@@ -638,10 +932,151 @@ function serviceItems(model: Extract<HubInventoryRendererModel, { kind: 'service
   })
 }
 
-function selectedInventoryItem(model: Extract<HubInventoryRendererModel, { kind: 'service' }>): HubInventoryItem | null {
-  if (model.selectedItemId === null || !model.selectedOwner) return null
-  const items = model.selectedOwner === 'backpack' ? model.economy.backpack : model.economy.storage
-  return items.find((item) => item.id === model.selectedItemId) ?? null
+function addChatPanel(context: RenderContext, layer: Container): void {
+  addNativeNineSlice(
+    context,
+    layer,
+    'UI',
+    HUB_CHAT_PANEL.uiRecord,
+    HUB_CHAT_PANEL.left,
+    HUB_CHAT_PANEL.top,
+    HUB_CHAT_PANEL.width,
+    HUB_CHAT_PANEL.height,
+    HUB_CHAT_PANEL.edgeUvOrigin,
+  )
+}
+
+function addShopPanel(context: RenderContext, layer: Container, purple: boolean): void {
+  const { backgroundHeight, backgroundRepeat, settledLeft: left, settledTop: top, width } = HUB_SHOP_PANEL
+  const backgroundTiles = addRepeatedAtlas(
+    context,
+    layer,
+    'UI',
+    49,
+    left,
+    top,
+    width,
+    backgroundHeight,
+    ...backgroundRepeat,
+  )
+  for (const tile of backgroundTiles) {
+    tile.tint = purple ? hubDowsingFieldTint(0) : HUB_SHOP_TEXT.normalBackgroundTint
+    if (purple) tile.label = 'native-dowsing-field'
+  }
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 557.5, 16.5)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1041.5, 16.5, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 557.5, 333.5, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'Inventory', 8, 1041.5, 333.5, -1, -1)
+  addCenteredAtlasSprite(context, layer, 'Skills', 4, 600, 25)
+  addCenteredAtlasSprite(context, layer, 'Skills', 4, 1000, 25, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 588.5, 13)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 1011.5, 13, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 588.5, 33, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'UI', 4, 1011.5, 33, -1, -1)
+
+  for (let index = 0; index < 5; index += 1) {
+    addCenteredAtlasSprite(context, layer, 'UI', 74, 570.5 + index * 129, -35, 1, -1)
+  }
+  for (let index = 0; index < 10; index += 1) {
+    const leftRail = addCenteredAtlasSprite(context, layer, 'UI', 74, 506, -13 + index * 44)
+    leftRail.rotation = Math.PI / 2
+    const rightRail = addCenteredAtlasSprite(context, layer, 'UI', 74, 1093, -13 + index * 44, 1, -1)
+    rightRail.rotation = Math.PI / 2
+  }
+  addCenteredAtlasSprite(context, layer, 'UI', 73, 1063, 355)
+  addCenteredAtlasSprite(context, layer, 'UI', 73, 536, 355, -1, 1)
+  addCenteredAtlasSprite(context, layer, 'UI', 73, 1063, -5, 1, -1)
+  addCenteredAtlasSprite(context, layer, 'UI', 73, 536, -5, -1, -1)
+}
+
+function addHagathaInventoryPane(
+  context: RenderContext,
+  layer: Container,
+  economy: ProtocolPlayerEconomy,
+): void {
+  const { left, top } = HUB_HAGATHA_PERK_PANE
+  for (const [x, y] of [[323, 227], [166, 247], [166, 312], [166, 182], [111, 125]] as const) {
+    addCenteredAtlasSprite(context, layer, 'Inventory', 16, x, y)
+  }
+  addAtlasSprite(context, layer, 'Inventory', 3, 362, 218)
+  layer.addChild(new Graphics()
+    .rect(left, top, HUB_HAGATHA_PERK_PANE.innerWidth, HUB_HAGATHA_PERK_PANE.innerHeight)
+    .fill({ color: HUB_HAGATHA_PERK_PANE.innerPanelTint })
+    .stroke({ color: 0xffffff, width: 1 }))
+  addBitmapText(
+    context,
+    layer,
+    'CHARMS/CURSES',
+    'medium',
+    HUB_HAGATHA_PERK_PANE.titleCenterX,
+    HUB_HAGATHA_PERK_PANE.titleTextBaselineY,
+    { tint: HUB_HAGATHA_PERK_PANE.titleTint },
+  )
+  for (let index = 0; index < HUB_HAGATHA_PERK_PANE.columns * HUB_HAGATHA_PERK_PANE.rows; index += 1) {
+    const centerX = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[0]
+      + (index % HUB_HAGATHA_PERK_PANE.columns) * HUB_HAGATHA_PERK_PANE.slotPitch
+    const centerY = HUB_HAGATHA_PERK_PANE.slotCenterOrigin[1]
+      + Math.floor(index / HUB_HAGATHA_PERK_PANE.columns) * HUB_HAGATHA_PERK_PANE.slotPitch
+    const selector = economy.ownedPerkSelectors[index]
+    const slot = addCenteredAtlasSprite(
+      context,
+      layer,
+      'Inventory',
+      10,
+      centerX,
+      centerY,
+      HUB_HAGATHA_PERK_PANE.slotScale,
+    )
+    if (selector === undefined) slot.tint = HUB_HAGATHA_PERK_PANE.emptySlotTint
+    else addCenteredAtlasSprite(
+      context,
+      layer,
+      'Skills',
+      127 + selector,
+      centerX,
+      centerY,
+      HUB_HAGATHA_PERK_PANE.slotScale,
+    )
+  }
+  addCenteredAtlasSprite(context, layer, 'Inventory', 5, ...HUB_HAGATHA_PERK_PANE.bundleCenter)
+}
+
+function addDoneControl(context: RenderContext, layer: Container): void {
+  addCenteredAtlasSprite(context, layer, 'UI', 72, 800, 387)
+  const middle = addCenteredAtlasSprite(context, layer, 'UI', 12, 800, 385)
+  middle.alpha = HUB_SHOP_PANEL.doneMiddleAlpha
+  const inner = addCenteredAtlasSprite(context, layer, 'UI', 86, 800, 385)
+  inner.tint = HUB_SHOP_PANEL.doneInnerTint
+  addBitmapText(context, layer, 'DONE', 'menu', 800, HUB_SHOP_TEXT.doneTextBaselineY, { tint: 0xffffff })
+}
+
+function addDowsingButton(
+  context: RenderContext,
+  layer: Container,
+  fee: number,
+): void {
+  addCenteredAtlasSprite(context, layer, 'UI', 101, ...HUB_DOWSING_PREROLL.buttonCenter)
+  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[0])
+  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_PREROLL.buttonSideCenters[1], -1, 1)
+  addBitmapText(context, layer, 'DOWSE', 'menu', 800, HUB_DOWSING_PREROLL.labelTextBaselineY, {
+    tint: HUB_SHOP_TEXT.goldTint,
+  })
+  addBitmapText(context, layer, `${fee} GOLD`, 'medium', 800, HUB_DOWSING_PREROLL.feeTextBaselineY, {
+    tint: HUB_SHOP_TEXT.goldTint,
+  })
+}
+
+function addMessageBoxButton(context: RenderContext, layer: Container, label: string): void {
+  addCenteredAtlasSprite(context, layer, 'UI', 101, ...HUB_DOWSING_MSGBOX.primaryButtonCenter)
+  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[0])
+  addCenteredAtlasSprite(context, layer, 'UI', 54, ...HUB_DOWSING_MSGBOX.primaryButtonSideCenters[1], -1, 1)
+  addBitmapText(context, layer, label, 'menu', 800, HUB_DOWSING_MSGBOX.primaryButtonTextBaselineY, {
+    tint: HUB_DOWSING_MSGBOX.primaryButtonTextTint,
+  })
+}
+
+function dialoguePlainText(text: string): string {
+  return text.replaceAll('*', '')
 }
 
 function equipmentSlotLabel(slot: ReturnType<typeof equipmentSlotsForItem>[number]): string {
@@ -656,40 +1091,13 @@ function equipmentSlotLabel(slot: ReturnType<typeof equipmentSlotsForItem>[numbe
   }
 }
 
-function addLeatherPanel(
-  context: RenderContext,
-  layer: Container,
-  left: number,
-  top: number,
-  width: number,
-  height: number,
-): void {
-  const shadow = new Graphics().rect(left + 8, top + 10, width, height).fill({ color: 0x000000, alpha: 0.8 })
-  layer.addChild(shadow)
-  addTiledAtlas(context, layer, 'UI', 49, left, top, width, height)
-  const shade = new Graphics().rect(left, top, width, height).fill({ color: 0x080706, alpha: 0.32 })
-  layer.addChild(shade)
-  addHorizontalChain(context, layer, left + 8, top - 7, width - 16)
-  addHorizontalChain(context, layer, left + 8, top + height - 13, width - 16)
-  addVerticalChain(context, layer, left - 5, top + 8, height - 16)
-  addVerticalChain(context, layer, left + width - 17, top + 8, height - 16)
-  addAtlasSprite(context, layer, 'UI', 107, left - 17, top - 18)
-  addAtlasSprite(context, layer, 'UI', 108, left + width - 68, top - 18)
-  addAtlasSprite(context, layer, 'UI', 109, left - 17, top + height - 68)
-  addAtlasSprite(context, layer, 'UI', 110, left + width - 68, top + height - 68)
-}
-
 function addHorizontalChain(context: RenderContext, layer: Container, x: number, y: number, width: number): void {
   addTiledAtlas(context, layer, 'UI', 10, x, y, width, 24, 1.25)
 }
 
-function addVerticalChain(context: RenderContext, layer: Container, x: number, y: number, height: number): void {
-  addTiledAtlas(context, layer, 'UI', 79, x, y, 27, height, 1.25)
-}
-
-function addInset(_context: RenderContext, layer: Container, x: number, y: number, width: number, height: number): void {
-  layer.addChild(new Graphics().rect(x, y, width, height).fill({ color: 0x080807, alpha: 0.9 }))
-  layer.addChild(new Graphics().rect(x, y, width, height).stroke({ color: 0xb99b55, width: 2 }))
+function addInset(layer: Container, x: number, y: number, width: number, height: number): void {
+  layer.addChild(new Graphics().rect(x, y, width, height).fill({ color: 0x080807, alpha: 0.94 }))
+  layer.addChild(new Graphics().rect(x, y, width, height).stroke({ color: 0xc4a64d, width: 2 }))
 }
 
 function addNativeButton(
@@ -706,47 +1114,24 @@ function addNativeButton(
   addBitmapText(context, layer, label, 'medium', x + width / 2, y + height / 2 - 5, { tint: 0xf0d77e })
 }
 
-function addShopScrollControl(
-  context: RenderContext,
+function addGold(context: RenderContext, layer: Container, gold: number): void {
+  addCenteredAtlasSprite(context, layer, 'UI', 21, 38, 868)
+  addBitmapText(context, layer, gold.toLocaleString(), 'body', 48, 870, { align: 'left', tint: 0xffffff })
+}
+
+function addSelectionGlow(
   layer: Container,
-  label: string,
   x: number,
   y: number,
+  width: number,
+  height: number,
+  color = 0xf0d56f,
 ): void {
-  const decoration = addAtlasSprite(context, layer, 'Skills', 4, x - 22.5, y + 7, { scale: 1 })
-  decoration.alpha = 0.58
-  decoration.tint = 0xbda45f
-  addBitmapText(context, layer, label, 'medium', x + 45, y + 14, { tint: 0xf0d77e })
-}
-
-function addGold(context: RenderContext, layer: Container, gold: number, x: number, y: number): void {
-  addAtlasSprite(context, layer, 'UI', 21, x, y, { scale: 0.62 })
-  addBitmapText(context, layer, gold.toLocaleString(), 'body', x + 42, y + 20, { align: 'left', tint: 0xffffff })
-}
-
-function addSelectionGlow(layer: Container, x: number, y: number, width: number, height: number): void {
   const glow = new Graphics()
     .rect(x - 2, y - 2, width + 4, height + 4)
-    .stroke({ color: 0xf0d56f, width: 3 })
+    .stroke({ color, width: 3 })
   glow.label = 'native-selection-glow'
   layer.addChild(glow)
-}
-
-function addNativeSeal(
-  context: RenderContext,
-  layer: Container,
-  x: number,
-  y: number,
-  scale: number,
-  alpha: number,
-): void {
-  for (let index = 0; index < 8; index += 1) {
-    const rotation = index * Math.PI / 4
-    const arc = addAtlasSprite(context, layer, 'UI', 3, x, y, { anchor: 0.5, scale })
-    arc.alpha = alpha
-    arc.rotation = rotation
-    arc.label = `native-seal:${rotation}`
-  }
 }
 
 function addItemIcon(
@@ -782,6 +1167,82 @@ function addAtlasSprite(
   return sprite
 }
 
+function addCenteredAtlasSprite(
+  context: RenderContext,
+  layer: Container,
+  atlas: AtlasName,
+  record: number,
+  centerX: number,
+  centerY: number,
+  scaleX = 1,
+  scaleY = scaleX,
+): Sprite {
+  const sprite = addAtlasSprite(context, layer, atlas, record, centerX, centerY, { anchor: 0.5 })
+  sprite.scale.set(scaleX, scaleY)
+  return sprite
+}
+
+function addNativeNineSlice(
+  context: RenderContext,
+  layer: Container,
+  atlas: AtlasName,
+  record: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  edgeUvOrigin: number,
+): void {
+  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
+  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
+  const [cornerWidth, cornerHeight] = definition.logicalSize
+  const middleWidth = width - cornerWidth * 2
+  const middleHeight = height - cornerHeight * 2
+
+  addAtlasSprite(context, layer, atlas, record, x, y)
+  const topRight = addAtlasSprite(context, layer, atlas, record, x + width, y)
+  topRight.scale.x = -1
+  const bottomLeft = addAtlasSprite(context, layer, atlas, record, x, y + height)
+  bottomLeft.scale.y = -1
+  const bottomRight = addAtlasSprite(context, layer, atlas, record, x + width, y + height)
+  bottomRight.scale.set(-1, -1)
+
+  const horizontalEdge = atlasSliceTexture(context, atlas, record, edgeUvOrigin, 0, 1, 1)
+  const verticalEdge = atlasSliceTexture(context, atlas, record, 0, edgeUvOrigin, 1, 1)
+  const center = atlasSliceTexture(context, atlas, record, edgeUvOrigin, edgeUvOrigin, 1, 1)
+  addStretchedTexture(layer, horizontalEdge, x + cornerWidth, y, middleWidth, cornerHeight)
+  addStretchedTexture(layer, horizontalEdge, x + cornerWidth, y + height - cornerHeight, middleWidth, cornerHeight, false, true)
+  addStretchedTexture(layer, verticalEdge, x, y + cornerHeight, cornerWidth, middleHeight)
+  addStretchedTexture(layer, verticalEdge, x + width - cornerWidth, y + cornerHeight, cornerWidth, middleHeight, true)
+  addStretchedTexture(layer, center, x + cornerWidth, y + cornerHeight, middleWidth, middleHeight)
+}
+
+function addStretchedTexture(
+  layer: Container,
+  texture: Texture,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  flipX = false,
+  flipY = false,
+): Sprite {
+  const sprite = new Sprite(texture)
+  sprite.position.set(x, y)
+  sprite.width = width
+  sprite.height = height
+  if (flipX) {
+    sprite.x += width
+    sprite.scale.x *= -1
+  }
+  if (flipY) {
+    sprite.y += height
+    sprite.scale.y *= -1
+  }
+  layer.addChild(sprite)
+  return sprite
+}
+
 function addTiledAtlas(
   context: RenderContext,
   layer: Container,
@@ -808,6 +1269,39 @@ function addTiledAtlas(
   }
 }
 
+function addRepeatedAtlas(
+  context: RenderContext,
+  layer: Container,
+  atlas: AtlasName,
+  record: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  columns: number,
+  rows: number,
+): Sprite[] {
+  const sprites: Sprite[] = []
+  const tileWidth = width / columns
+  const tileHeight = height / rows
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const sprite = addAtlasSprite(
+        context,
+        layer,
+        atlas,
+        record,
+        x + column * tileWidth,
+        y + row * tileHeight,
+      )
+      sprite.width = tileWidth
+      sprite.height = tileHeight
+      sprites.push(sprite)
+    }
+  }
+  return sprites
+}
+
 function atlasTexture(context: RenderContext, atlas: AtlasName, record: number): Texture {
   const key = `${atlas}.${record}`
   const cached = context.atlasTextureCache.get(key)
@@ -828,6 +1322,33 @@ function atlasTexture(context: RenderContext, atlas: AtlasName, record: number):
   return texture
 }
 
+function atlasSliceTexture(
+  context: RenderContext,
+  atlas: AtlasName,
+  record: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): Texture {
+  const key = `${atlas}.${record}:slice:${left},${top},${right},${bottom}`
+  const cached = context.atlasTextureCache.get(key)
+  if (cached) return cached
+  const definition = TRADER_ASSETS.atlases[atlas].records[`${record}`]
+  if (!definition) throw new Error(`native ${atlas}.${record} was not extracted`)
+  const [x, y, width, height] = definition.frame
+  const sliceWidth = width * (right - left)
+  const sliceHeight = height * (bottom - top)
+  const source = textureFrom(context.textures.textures, ATLAS_SOURCE[atlas])
+  const texture = new Texture({
+    frame: new Rectangle(x + width * left, y + height * top, sliceWidth, sliceHeight),
+    orig: new Rectangle(0, 0, sliceWidth, sliceHeight),
+    source: source.source,
+  })
+  context.atlasTextureCache.set(key, texture)
+  return texture
+}
+
 function addBitmapText(
   context: RenderContext,
   layer: Container,
@@ -836,35 +1357,45 @@ function addBitmapText(
   x: number,
   y: number,
   options: {
-    readonly align?: 'center' | 'left'
+    readonly align?: 'center' | 'left' | 'right'
     readonly lineHeight?: number
     readonly maxWidth?: number
+    readonly scale?: number
     readonly tint?: number
   } = {},
 ): void {
   const font = FONT_ASSETS.fonts[fontName]
-  const lines = wrapBitmapText(text, font, options.maxWidth ?? Number.POSITIVE_INFINITY)
-  const lineHeight = options.lineHeight ?? font.metrics[0]
+  const scale = options.scale ?? 1
+  const lines = wrapBitmapText(text, font, (options.maxWidth ?? Number.POSITIVE_INFINITY) / scale)
+  const lineHeight = (options.lineHeight ?? font.metrics[0]) * scale
   lines.forEach((line, lineIndex) => {
-    const width = measureBitmapText(line, font)
-    let cursor = options.align === 'left' ? x : x - width / 2
+    const width = measureBitmapText(line, font) * scale
+    let cursor = options.align === 'left'
+      ? x
+      : options.align === 'right'
+        ? x - width
+        : x - width / 2
     let previous = -1
     for (const character of line) {
       const code = character.codePointAt(0)!
       if (character === ' ') {
-        cursor += font.spaceAdvance
+        cursor += font.spaceAdvance * scale
         previous = code
         continue
       }
       const glyph = font.glyphs[`${code}`]
       if (!glyph?.metrics) continue
-      cursor += kerning(font, previous, code)
+      cursor += kerning(font, previous, code) * scale
       const sprite = new Sprite(glyphTexture(context, glyph, code))
       sprite.anchor.set(0.5)
+      sprite.scale.set(scale)
       sprite.tint = options.tint ?? 0xffffff
-      sprite.position.set(cursor + glyph.metrics[1], y + lineIndex * lineHeight + glyph.metrics[2])
+      sprite.position.set(
+        cursor + glyph.metrics[1] * scale,
+        y + lineIndex * lineHeight + glyph.metrics[2] * scale,
+      )
       layer.addChild(sprite)
-      cursor += glyph.metrics[0]
+      cursor += glyph.metrics[0] * scale
       previous = code
     }
   })

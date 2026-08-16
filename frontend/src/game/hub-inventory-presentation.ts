@@ -11,6 +11,7 @@ export interface HubTraderDialogueDefinition {
   readonly intro: readonly string[]
   readonly name: string
   readonly priceExplanation: readonly string[]
+  readonly priceLabel: string | null
   readonly title: string
 }
 
@@ -18,36 +19,39 @@ export const HUB_TRADER_DIALOGUES: Readonly<Record<HubTraderId, HubTraderDialogu
   hagatha: {
     actionLabel: 'Buy Charms and Curses',
     intro: [
-      'All right then wizard, what do you need?',
+      'All right then wizard, what do you want?',
       'I have a wide variety of charms, blessings, curses and talismans.  Good for the digestion, good for the soul.',
     ],
     name: 'Hagatha',
     priceExplanation: [
       'Well, see here: Mixing up these things is a lot of work.',
-      "But it's a lot less work once I've opened the right bags and cleaned the right tools and measured out the right ingredients.",
+      "But it's a lot *less* work once I've opened the right bags and cleaned the right tools and measured out the right ingredients.",
       "So, fair do's, my embellishments are a lot less expensive if I've mixed them up recently.",
     ],
+    priceLabel: 'Charm Prices?',
     title: "HAGATHA'S CHARMS AND CURSES",
   },
   fomentius: {
     actionLabel: 'Buy',
     intro: [
       'Hello Hello!',
-      'Can I interest you in a high quality and very legal herbal potion? Brewed with all the best natural magicks, minimal chance of causing intestinal combustion.',
+      'Can I interest you in a high quality and *very legal* herbal potion? Brewed with all the best natural magicks, minimal chance of causing intestinal combustion!',
     ],
     name: 'Fomentius',
     priceExplanation: [],
+    priceLabel: null,
     title: "FOMENTIUS' USEFUL THYNGS",
   },
   luthacus: {
     actionLabel: 'Examine Items',
     intro: [
-      "Pleased to meet you, mate.  I'm the College's resident scavenger.",
+      "Pleased to meet you, mate.  I'm the College's Official Unreal Crime Scene Investigator.",
       "Basically, that means it's my humble jobbing duty to trudge out into the field and retrieve the remains-- and by remains, I mean little bits and pieces-- of wizards and witches who've gone and done themselves a magical mishap.  So they can get buried proper.",
-      "Now, between you and me, there's no point burying the dead with all their stuff, eh? They don't need it.  Other people might.  Share and share alike-- right?",
+      "Now, between you and me, there's no point burying the dead with all their stuff, eh?  They don't need it.  Other people might.  Have a look here and see if there's anything you can use.  By order of the Archchancellor, o'course.",
     ],
     name: 'Luthacus',
     priceExplanation: [],
+    priceLabel: null,
     title: "LUTHACUS' SCAVENGED GOODS",
   },
   shlorio: {
@@ -57,13 +61,14 @@ export const HUB_TRADER_DIALOGUES: Readonly<Record<HubTraderId, HubTraderDialogu
       'Are you interested in what can be found within the luminiferous ether?',
       'My magic mirror and I are eager to assist you.  ',
     ],
-    name: 'Shlorio the Dowser',
+    name: 'Shlorio',
     priceExplanation: [
       'I am sure you appreciate that dowsing is an inexact science.  The price varies.',
       'Peering into the mirror is so mentally taxing that I must charge you even to take a look.  ',
-      'Drawing an item out causes actual physical pain, and is understandably expensive. The price of retrieving an item will depend on how entangled it is, as well as how many burns I expect to sustain.',
+      'Drawing an item out causes actual physical pain, and is understandably expensive.  The price of retrieving an item will depend on how entangled it is, as well as how many vapor burns I expect to sustain.',
       'Disturbing the ether changes the entire ethereal contour, so the price will fluctuate depending on the state of the infirmament as well.',
     ],
+    priceLabel: 'Dowsing Prices?',
     title: "SHLORIO'S DISCOUNT DOWSING",
   },
 }

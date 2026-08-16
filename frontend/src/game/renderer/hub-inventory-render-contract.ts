@@ -9,42 +9,143 @@ import {
 import type { WizardElement } from '../core-kernels/player-character.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
-export const HUB_NATIVE_LOGICAL_SIZE = { height: 720, width: 1280 } as const
-export const HUB_NATIVE_UI_SCALE = 1.25
 
 export const HUB_INVENTORY_GRID = {
   capacity: 88,
-  cellSize: 67.5,
+  cellSize: 72,
   columns: 22,
-  left: 27.5,
+  left: 24,
   pitch: 75,
   rows: 4,
-  top: 497.5,
+  slotAlpha: 0.4,
+  top: 496,
 } as const
 
 export const HUB_SHOP_GRID = {
-  columns: 4,
-  pageSize: 8,
+  cellSize: 72,
+  columns: 7,
+  left: 539,
+  pitchX: 75,
+  pitchY: 75,
   retainedCapacity: 28,
-  rows: 2,
+  rows: 4,
+  slotAlpha: 0.6,
+  top: 56.5,
 } as const
 
 export const HUB_DOWSING_GRID = {
+  cellSize: 72,
   columns: 3,
-  pageSize: 9,
+  left: 689,
+  pitchX: 75,
+  pitchY: 75,
   retainedCapacity: 9,
   rows: 3,
+  slotAlpha: 0.6,
+  top: 94,
 } as const
 
 export const HUB_SHOP_PANEL = {
-  height: 500,
-  settledLeft: 422.5,
-  settledTop: -25,
-  slideDistance: 125,
-  width: 755,
+  backgroundHeight: 400,
+  backgroundRepeat: [4, 2] as const,
+  doneInnerTint: 0xbfffbf,
+  doneMiddleAlpha: 0.85,
+  doneRect: [714.5, 358, 171, 58] as const,
+  height: 430,
+  settledLeft: 498,
+  settledTop: -20,
+  slideDistance: 100,
+  width: 604,
+} as const
+
+export const HUB_CHAT_PANEL = {
+  actionTextTint: 0x8cbf8c,
+  contentHeight: 250,
+  contentLeft: 561.5,
+  contentTop: 111,
+  contentWidth: 477,
+  doneRect: [730, 370, 140, 45] as const,
+  doneTextBaselineY: 396,
+  edgeUvOrigin: 0.95,
+  height: 420,
+  left: 476.5,
+  primaryChoiceRect: [590, 195, 420, 43] as const,
+  primaryChoiceTextBaselineY: 226,
+  secondaryChoiceRect: [690, 235, 220, 32] as const,
+  secondaryChoiceTextBaselineY: 256,
+  top: 26,
+  titleCenterX: 800,
+  titleCenterY: 90,
+  titleTextBaselineY: 90,
+  textTint: 0xd9ba70,
+  uiRecord: 11,
+  width: 647,
+} as const
+
+export const HUB_SHOP_TEXT = {
+  affordableTint: 0xd9ba70,
+  goldTint: 0xd9ba70,
+  normalBackgroundTint: 0xd9ffd9,
+  priceFont: 'body',
+  priceTextBaselineOffsetY: 67,
+  priceTextRightOffsetX: 67,
+  doneTextBaselineY: 392,
+  titleTextBaselineY: 32,
+  unaffordableTint: 0xff8080,
+} as const
+
+export const HUB_HAGATHA_PERK_PANE = {
+  bundleCenter: [253, 288] as const,
+  columns: 3,
+  emptySlotTint: 0x808080,
+  innerHeight: 238,
+  innerPanelTint: 0x1a1a17,
+  innerWidth: 227,
+  left: 139,
+  rows: 3,
+  slotCenterOrigin: [193, 198] as const,
+  slotPitch: 60,
+  slotScale: 0.8,
+  titleTint: 0xd9ba70,
+  titleCenterX: 253,
+  titleTextBaselineY: 152.5,
+  top: 129,
+} as const
+
+export const HUB_DOWSING_PREROLL = {
+  buttonCenter: [800, 300] as const,
+  buttonRect: [623.5, 265.5, 353, 69] as const,
+  buttonSideCenters: [[704, 302], [896, 302]] as const,
+  feeTextBaselineY: 322.5,
+  labelTextBaselineY: 302,
+  mirrorPromptRect: [693, 54.5, 214, 41] as const,
+  referenceDropRect: [750, 101, 100, 149] as const,
+} as const
+
+export const HUB_DOWSING_MSGBOX = {
+  arrowCentersAndScales: [[800, 592, 1], [725, 579, 0.75], [875, 579, 0.75]] as const,
+  bodyLeft: 609,
+  bodyMaxWidth: 382,
+  bodyTextBaselineY: 287.5,
+  horizontalEdgeRecord: 10,
+  interiorBackgroundRecord: null,
+  interiorFill: null,
+  innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
+  outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
+  primaryButtonCenter: [800, 432] as const,
+  primaryButtonRect: [623.5, 397.5, 353, 69] as const,
+  primaryButtonSideCenters: [[731, 434], [869, 434]] as const,
+  primaryButtonTextBaselineY: 440,
+  primaryButtonTextTint: 0xd9ba70,
+  skullHeaderCenter: [800, 121] as const,
+  titleTextBaselineY: 252,
+  verticalEdgeRecord: 79,
 } as const
 
 export const HUB_NATIVE_UI_TIMING = {
+  chatAcceleratedScrollPerTick: 0.8,
+  chatRevealPerTick: 0.05,
+  chatScrollPerTick: 0.125,
   inventoryRevealPerTick: 0.025,
   messageBoxCurtainAlpha: 0.75,
   messageBoxRevealPerTick: 0.035,
@@ -54,6 +155,13 @@ export const HUB_DOWSING_FLASH = {
   decrementPerTick: 0.05,
   durationMs: 200,
   durationTicks: 20,
+} as const
+
+export const HUB_DOWSING_FIELD = {
+  greenAmplitude: 0.1,
+  greenBase: 0.7,
+  phaseDegreesPerTick: 0.5,
+  periodTicks: 720,
 } as const
 
 export const HUB_DOWSING_INSUFFICIENT_GOLD = {
@@ -82,6 +190,34 @@ export function hubInventorySlotPosition(index: number): { x: number; y: number 
     x: HUB_INVENTORY_GRID.left + Math.floor(index / HUB_INVENTORY_GRID.rows) * HUB_INVENTORY_GRID.pitch,
     y: HUB_INVENTORY_GRID.top + (index % HUB_INVENTORY_GRID.rows) * HUB_INVENTORY_GRID.pitch,
   }
+}
+
+export function hubShopSlotPosition(index: number): { x: number; y: number } {
+  if (!Number.isInteger(index) || index < 0 || index >= HUB_SHOP_GRID.retainedCapacity) {
+    throw new RangeError('native shop slot index must be within [0, 27]')
+  }
+  return {
+    x: HUB_SHOP_GRID.left + Math.floor(index / HUB_SHOP_GRID.rows) * HUB_SHOP_GRID.pitchX,
+    y: HUB_SHOP_GRID.top + (index % HUB_SHOP_GRID.rows) * HUB_SHOP_GRID.pitchY,
+  }
+}
+
+export function hubDowsingSlotPosition(index: number): { x: number; y: number } {
+  if (!Number.isInteger(index) || index < 0 || index >= HUB_DOWSING_GRID.retainedCapacity) {
+    throw new RangeError('native dowsing slot index must be within [0, 8]')
+  }
+  return {
+    x: HUB_DOWSING_GRID.left + (index % HUB_DOWSING_GRID.columns) * HUB_DOWSING_GRID.pitchX,
+    y: HUB_DOWSING_GRID.top + Math.floor(index / HUB_DOWSING_GRID.columns) * HUB_DOWSING_GRID.pitchY,
+  }
+}
+
+export function hubDowsingFieldTint(nativeTick: number): number {
+  const phaseRadians = nativeTick * HUB_DOWSING_FIELD.phaseDegreesPerTick * Math.PI / 180
+  const green = Math.round((
+    Math.sin(phaseRadians) * HUB_DOWSING_FIELD.greenAmplitude + HUB_DOWSING_FIELD.greenBase
+  ) * 255)
+  return (0xff << 16) | (green << 8) | 0xff
 }
 
 const PRIMARY_SKILL_BY_ELEMENT: Readonly<Record<WizardElement, number>> = {
