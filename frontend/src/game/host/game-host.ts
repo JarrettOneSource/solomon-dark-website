@@ -498,7 +498,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       }
       if (message.type === 'client-hub-action') {
         const applied = applyGameSimulationHubAction(state, client.playerId, message.action)
-        if (applied.accepted) state = applied.state
+        state = applied.state
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()

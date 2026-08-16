@@ -21,6 +21,8 @@
   height: 900px;
   overflow: hidden;
   pointer-events: auto;
+  touch-action: none;
+  user-select: none;
 }
 
 .hub-scene:is([data-hub-ui-surface="inventory"], [data-hub-ui-surface="service"]) .hub-hud {
@@ -59,6 +61,8 @@
   color: transparent;
   cursor: pointer;
   opacity: 0;
+  touch-action: none;
+  user-select: none;
 }
 
 .hub-native-ui-action:disabled {

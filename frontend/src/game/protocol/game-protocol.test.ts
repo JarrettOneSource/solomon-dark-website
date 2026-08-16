@@ -171,15 +171,17 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v27 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v28 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
     { type: 'buy-hagatha', selector: -1 },
     { type: 'close-dowsing' },
+    { type: 'consume', itemId: 5 },
     { type: 'dowse' },
     { type: 'equip', itemId: 3, slot: 'ring-2' },
-    { type: 'transfer', direction: 'to-storage', itemId: 4 },
+    { type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: 4 },
+    { type: 'transfer', direction: 'to-backpack', gesture: 'double-activation', itemId: 4 },
     { type: 'unequip', slot: 'weapon' },
   ] as const
   for (const action of actions) {
@@ -192,7 +194,8 @@ test('protocol v27 accepts every authoritative inventory action and rejects malf
   for (const action of [
     { type: 'buy-hagatha', selector: 8 },
     { type: 'equip', itemId: 1, slot: 'boots' },
-    { type: 'transfer', direction: 'sell', itemId: 1 },
+    { type: 'transfer', direction: 'sell', gesture: 'drag', itemId: 1 },
+    { type: 'transfer', direction: 'to-storage', gesture: 'double-activation', itemId: 1 },
     { type: 'dowse', offerId: 1 },
     { type: 'sell-fomentius', itemId: 1 },
   ]) {
@@ -235,6 +238,32 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.players['player-1'].config, CHARACTER)
   assert.equal(welcome.snapshot.players['player-1'].economy.gold, 10_000)
   assert.equal(welcome.snapshot.players['player-1'].economy.fomentiusStock.length > 0, true)
+  const player = welcome.snapshot.players['player-1']
+  const feedbackWelcome = {
+    ...welcome,
+    snapshot: {
+      ...welcome.snapshot,
+      players: {
+        ...welcome.snapshot.players,
+        'player-1': {
+          ...player,
+          economy: {
+            ...player.economy,
+            actionFeedback: {
+              accepted: true,
+              action: 'dowse',
+              dowsingPitch: 0.875,
+              reason: null,
+              sequence: 1,
+              transferDirection: null,
+              transferGesture: null,
+            },
+          },
+        },
+      },
+    },
+  } as const
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(feedbackWelcome)), feedbackWelcome)
   assert.deepEqual(welcome.snapshot.players['player-1'].lighting, {
     driveActive: false,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
@@ -321,7 +350,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v27 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v28 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -734,8 +763,8 @@ test('protocol v27 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v27 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 27)
+test('protocol v28 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 28)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -845,7 +874,7 @@ test('protocol v27 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v27 strictly owns the generated-arena transition', () => {
+test('protocol v28 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -898,7 +927,8 @@ test('protocol v27 strictly owns the generated-arena transition', () => {
     /must share ownership/,
   )
 })
-test('protocol v27 preserves the bounded run-scoped enemy semantic-event lane', () => {
+
+test('protocol v28 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

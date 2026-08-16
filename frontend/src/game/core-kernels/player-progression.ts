@@ -18,6 +18,9 @@ export const SPELL_WELDING_SKILL_ID = 52
 export const INITIAL_WELD_OFFER_MARKER = 9_999
 export const SPELL_WELDING_QUICK_DESCRIPTION = 'TWO ATTACK SPELLS TO COMBINE'
 export const RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR = 0.425
+export const NATIVE_DAMAGE_X4_POTION_TICKS = 6_000
+export const NATIVE_MIND_CHUG_TICKS = 6_000
+export const NATIVE_ANTIDOTE_IMMUNITY_TICKS = 1_000
 
 export const NATIVE_LEVEL_THRESHOLDS = [
   0, 90, 160, 275, 390, 520, 650, 800, 1060, 1300, 1600, 2000, 2400,
@@ -97,17 +100,20 @@ export interface PlayerSkillOffer {
 
 export interface PlayerProgressionComponent extends PlayerCombatComponent {
   readonly deferredSkillChoices: number
+  readonly damageX4TicksRemaining: number
   readonly disciplineOfferBias: boolean
   readonly excludeActiveWeldBuildFromOffers: boolean
   readonly experience: number
   readonly forcedOfferSkillIds: readonly number[]
   readonly level: number
+  readonly mindChugTicksRemaining: number
   readonly nextThreshold: number
   readonly offerCycle: number
   readonly offerSeed: number
   readonly pendingLevels: readonly number[]
   readonly pendingOffer: PlayerSkillOffer | null
   readonly previousThreshold: number
+  readonly poisonImmunityTicksRemaining: number
   readonly revision: number
   readonly sorcerorsCharmAvailable: boolean
   readonly weldOfferMarker: number
@@ -311,21 +317,97 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
   return {
     ...createPlayerCombat(),
     deferredSkillChoices: 0,
+    damageX4TicksRemaining: 0,
     disciplineOfferBias: false,
     excludeActiveWeldBuildFromOffers: false,
     experience: 0,
     forcedOfferSkillIds: Object.freeze([]),
     level: 1,
+    mindChugTicksRemaining: 0,
     nextThreshold: NATIVE_LEVEL_THRESHOLDS[1],
     offerCycle: 0,
     offerSeed,
     pendingLevels: Object.freeze([]),
     pendingOffer: null,
     previousThreshold: NATIVE_LEVEL_THRESHOLDS[0],
+    poisonImmunityTicksRemaining: 0,
     revision: 0,
     sorcerorsCharmAvailable: false,
     weldOfferMarker: INITIAL_WELD_OFFER_MARKER,
     weldingOfferBias: false,
+  }
+}
+
+export function applyPlayerPotionEffect(
+  source: PlayerProgressionComponent,
+  subtype: number,
+): PlayerProgressionComponent {
+  switch (subtype) {
+    case 0:
+      return { ...source, currentHealth: source.maximumHealth, revision: source.revision + 1 }
+    case 1:
+      return { ...source, currentMana: source.maximumMana, revision: source.revision + 1 }
+    case 2:
+      return {
+        ...source,
+        damageX4TicksRemaining: NATIVE_DAMAGE_X4_POTION_TICKS,
+        revision: source.revision + 1,
+      }
+    case 3:
+      return {
+        ...source,
+        poisonDamagePerTick: 0,
+        poisonImmunityTicksRemaining: NATIVE_ANTIDOTE_IMMUNITY_TICKS,
+        poisonTicksRemaining: 0,
+        revision: source.revision + 1,
+      }
+    case 4:
+      return {
+        ...source,
+        mindChugTicksRemaining: NATIVE_MIND_CHUG_TICKS,
+        revision: source.revision + 1,
+      }
+    case 5:
+      return {
+        ...source,
+        currentHealth: source.maximumHealth,
+        currentMana: source.maximumMana,
+        revision: source.revision + 1,
+      }
+    default:
+      throw new RangeError('native potion subtype must be within [0, 5]')
+  }
+}
+
+export function stepPlayerPotionEffects(
+  source: PlayerProgressionComponent,
+): PlayerProgressionComponent {
+  const damageX4TicksRemaining = Math.max(0, source.damageX4TicksRemaining - 1)
+  const mindChugTicksRemaining = Math.max(0, source.mindChugTicksRemaining - 1)
+  const poisonImmunityTicksRemaining = Math.max(0, source.poisonImmunityTicksRemaining - 1)
+  return damageX4TicksRemaining === source.damageX4TicksRemaining
+      && mindChugTicksRemaining === source.mindChugTicksRemaining
+      && poisonImmunityTicksRemaining === source.poisonImmunityTicksRemaining
+    ? source
+    : {
+        ...source,
+        damageX4TicksRemaining,
+        mindChugTicksRemaining,
+        poisonImmunityTicksRemaining,
+      }
+}
+
+export function resetPlayerPotionEffects(
+  source: PlayerProgressionComponent,
+): PlayerProgressionComponent {
+  if (source.damageX4TicksRemaining === 0
+    && source.mindChugTicksRemaining === 0
+    && source.poisonImmunityTicksRemaining === 0) return source
+  return {
+    ...source,
+    damageX4TicksRemaining: 0,
+    mindChugTicksRemaining: 0,
+    poisonImmunityTicksRemaining: 0,
   }
 }
 

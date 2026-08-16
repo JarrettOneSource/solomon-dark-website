@@ -162,7 +162,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 27
+export const GAME_PROTOCOL_VERSION = 28
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -803,6 +803,10 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     onlyKeys(source, 'action', ['type'])
     return { type }
   }
+  if (type === 'consume') {
+    onlyKeys(source, 'action', ['type', 'itemId'])
+    return { type, itemId: positiveInteger(source.itemId, 'action.itemId') }
+  }
   if (type === 'equip') {
     onlyKeys(source, 'action', ['type', 'itemId', 'slot'])
     return {
@@ -812,14 +816,22 @@ function hubInventoryAction(value: unknown): HubInventoryAction {
     }
   }
   if (type === 'transfer') {
-    onlyKeys(source, 'action', ['type', 'direction', 'itemId'])
+    onlyKeys(source, 'action', ['type', 'direction', 'gesture', 'itemId'])
     const direction = limitedString(source.direction, 'action.direction', 32)
     if (direction !== 'to-backpack' && direction !== 'to-storage') {
       throw new GameProtocolError('action.direction is not supported')
     }
+    const gesture = limitedString(source.gesture, 'action.gesture', 32)
+    if (gesture !== 'double-activation' && gesture !== 'drag') {
+      throw new GameProtocolError('action.gesture is not supported')
+    }
+    if (direction === 'to-storage' && gesture !== 'drag') {
+      throw new GameProtocolError('action.gesture must be drag for a to-storage transfer')
+    }
     return {
       type,
       direction,
+      gesture,
       itemId: positiveInteger(source.itemId, 'action.itemId'),
     }
   }
@@ -891,6 +903,7 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
 function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
   const source = record(value, field)
   onlyKeys(source, field, [
+    'actionFeedback',
     'backpack',
     'charmCapacity',
     'dowsingFee',
@@ -904,7 +917,7 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     'storage',
     'tonicPurchases',
   ])
-  const backpack = inventoryItems(source.backpack, `${field}.backpack`, 28)
+  const backpack = inventoryItems(source.backpack, `${field}.backpack`, 88)
   const storage = inventoryItems(source.storage, `${field}.storage`, 28)
   const equipment = playerEquipment(source.equipment, `${field}.equipment`)
   const fomentiusStock = limitedArray(
@@ -955,6 +968,9 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     throw new GameProtocolError(`${field}.tonicPurchases does not match charmCapacity`)
   }
   return {
+    actionFeedback: source.actionFeedback === null
+      ? null
+      : hubActionFeedback(source.actionFeedback, `${field}.actionFeedback`),
     backpack,
     charmCapacity,
     dowsingFee: boundedInteger(source.dowsingFee, `${field}.dowsingFee`, 500, 950),
@@ -967,6 +983,91 @@ function playerEconomy(value: unknown, field: string): ProtocolPlayerEconomy {
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
     storage,
     tonicPurchases,
+  }
+}
+
+function hubActionFeedback(
+  value: unknown,
+  field: string,
+): NonNullable<ProtocolPlayerEconomy['actionFeedback']> {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'accepted',
+    'action',
+    'dowsingPitch',
+    'reason',
+    'sequence',
+    'transferDirection',
+    'transferGesture',
+  ])
+  const action = limitedString(source.action, `${field}.action`, 32)
+  if (![
+    'buy-dowsing',
+    'buy-fomentius',
+    'buy-hagatha',
+    'close-dowsing',
+    'consume',
+    'dowse',
+    'equip',
+    'transfer',
+    'unequip',
+  ].includes(action)) throw new GameProtocolError(`${field}.action is not supported`)
+  const reason = source.reason === null
+    ? null
+    : limitedString(source.reason, `${field}.reason`, 32)
+  if (reason !== null && ![
+    'capacity-full',
+    'ineligible-item',
+    'insufficient-gold',
+    'invalid-offer',
+    'invalid-slot',
+    'item-not-found',
+    'offers-active',
+    'perk-capacity-full',
+    'required-clothing',
+    'slot-empty',
+    'slot-locked',
+  ].includes(reason)) throw new GameProtocolError(`${field}.reason is not supported`)
+  const transferDirection = source.transferDirection === null
+    ? null
+    : limitedString(source.transferDirection, `${field}.transferDirection`, 32)
+  const transferGesture = source.transferGesture === null
+    ? null
+    : limitedString(source.transferGesture, `${field}.transferGesture`, 32)
+  if (transferDirection !== null
+    && transferDirection !== 'to-backpack' && transferDirection !== 'to-storage') {
+    throw new GameProtocolError(`${field}.transferDirection is not supported`)
+  }
+  if (transferGesture !== null
+    && transferGesture !== 'double-activation' && transferGesture !== 'drag') {
+    throw new GameProtocolError(`${field}.transferGesture is not supported`)
+  }
+  if ((action === 'transfer') !== (transferDirection !== null && transferGesture !== null)) {
+    throw new GameProtocolError(`${field} transfer metadata does not match action`)
+  }
+  const accepted = boolean(source.accepted, `${field}.accepted`)
+  if (accepted !== (reason === null)) {
+    throw new GameProtocolError(`${field}.accepted does not match reason`)
+  }
+  if (transferDirection === 'to-storage' && transferGesture !== 'drag') {
+    throw new GameProtocolError(`${field}.transferGesture must be drag for to-storage`)
+  }
+  const dowsingPitch = source.dowsingPitch === null
+    ? null
+    : finite(source.dowsingPitch, `${field}.dowsingPitch`)
+  const ownsDowsingPitch = accepted && (action === 'dowse' || action === 'buy-dowsing')
+  if (ownsDowsingPitch !== (dowsingPitch !== null)
+    || (dowsingPitch !== null && (dowsingPitch < 0.8 || dowsingPitch > 1.1))) {
+    throw new GameProtocolError(`${field}.dowsingPitch does not match action`)
+  }
+  return {
+    accepted,
+    action: action as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['action'],
+    dowsingPitch,
+    reason: reason as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['reason'],
+    sequence: positiveInteger(source.sequence, `${field}.sequence`),
+    transferDirection: transferDirection as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['transferDirection'],
+    transferGesture: transferGesture as NonNullable<ProtocolPlayerEconomy['actionFeedback']>['transferGesture'],
   }
 }
 
@@ -1018,17 +1119,11 @@ function inventoryItem(
         0,
         DOWSING_EQUIPMENT_RECIPES.length - 1,
       )
-  if ((kind === 'equipment') !== (equipmentType !== null && recipeIndex !== null)) {
-    throw new GameProtocolError(`${field} equipment identity is inconsistent`)
-  }
   const rarity = source.rarity === null
     ? null
     : limitedString(source.rarity, `${field}.rarity`, 8)
   if (rarity !== null && rarity !== 'Epic' && rarity !== 'Rare') {
     throw new GameProtocolError(`${field}.rarity is not supported`)
-  }
-  if ((kind === 'equipment') !== (rarity !== null)) {
-    throw new GameProtocolError(`${field} rarity is inconsistent`)
   }
   const nativeSubtype = source.nativeSubtype === null
     ? null
@@ -1041,18 +1136,57 @@ function inventoryItem(
       83,
     ))
   if (iconRecords.length < 1) throw new GameProtocolError(`${field}.iconRecords is empty`)
+  const name = limitedString(source.name, `${field}.name`, 128)
+  const nativeTypeId = boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7012)
+  const quantity = boundedInteger(source.quantity, `${field}.quantity`, 1, 9_999)
+  if (kind !== 'equipment') {
+    if (equipmentType !== null || recipeIndex !== null || rarity !== null) {
+      throw new GameProtocolError(`${field} equipment identity is inconsistent`)
+    }
+  } else if (equipmentType === null) {
+    throw new GameProtocolError(`${field} equipment identity is inconsistent`)
+  } else if (recipeIndex === null) {
+    if (
+      rarity !== null
+      || nativeSubtype !== null
+      || quantity !== 1
+      || !isStarterEquipmentIdentity(equipmentType as EquipmentType, name, nativeTypeId, iconRecords)
+    ) throw new GameProtocolError(`${field} starter equipment identity is inconsistent`)
+  } else if (rarity === null) {
+    throw new GameProtocolError(`${field} rarity is inconsistent`)
+  }
   return {
     equipmentType: equipmentType as EquipmentType | null,
     iconRecords,
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as HubItemKind,
-    name: limitedString(source.name, `${field}.name`, 128),
+    name,
     nativeSubtype,
-    nativeTypeId: boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7012),
-    quantity: boundedInteger(source.quantity, `${field}.quantity`, 1, 9_999),
+    nativeTypeId,
+    quantity,
     rarity,
     recipeIndex,
   }
+}
+
+function isStarterEquipmentIdentity(
+  equipmentType: EquipmentType,
+  name: string,
+  nativeTypeId: number,
+  iconRecords: readonly number[],
+): boolean {
+  const expected = equipmentType === 'hat'
+    ? ['Hat', 7005, [34, 38]] as const
+    : equipmentType === 'robe'
+      ? ['Robe', 7006, [64, 67]] as const
+      : equipmentType === 'staff'
+        ? ['Staff', 7004, [72]] as const
+        : null
+  return expected !== null
+    && name === expected[0]
+    && nativeTypeId === expected[1]
+    && iconRecords.length === expected[2].length
+    && iconRecords.every((record, index) => record === expected[2][index])
 }
 
 function shopItem(value: unknown, field: string): HubShopItem {

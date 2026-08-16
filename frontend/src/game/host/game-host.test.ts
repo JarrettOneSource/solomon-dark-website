@@ -128,6 +128,26 @@ test('game host routes inventory commands without disconnecting on a stale or un
   assert.equal(snapshot.type, 'server-snapshot')
   assert.equal(snapshot.snapshot.players[playerId].economy.gold, 10_000)
 
+  const rejected = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].economy.revision === initial.revision + 1
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-hub-action',
+    action: { type: 'consume', itemId: 999_999 },
+  }))
+  const rejectedSnapshot = await rejected
+  assert.equal(rejectedSnapshot.type, 'server-snapshot')
+  assert.deepEqual(rejectedSnapshot.snapshot.players[playerId].economy.actionFeedback, {
+    accepted: false,
+    action: 'consume',
+    dowsingPitch: null,
+    reason: 'item-not-found',
+    sequence: 1,
+    transferDirection: null,
+    transferGesture: null,
+  })
+
   const pong = nextMessage(client.socket, (message) => (
     message.type === 'server-pong' && message.nonce === 73
   ))

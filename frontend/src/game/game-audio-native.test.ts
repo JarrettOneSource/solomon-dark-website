@@ -104,6 +104,7 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
 test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['bone-crack'].registryOffset, 0x228)
   assert.equal(NATIVE_SOUND_MANIFEST.click.registryOffset, 0x18)
+  assert.equal(NATIVE_SOUND_MANIFEST.drink.registryOffset, 0x438)
   assert.equal(NATIVE_SOUND_MANIFEST['fireball-hit'].registryOffset, 0x540)
   assert.equal(
     NATIVE_SOUND_MANIFEST['fireball-hit'].sourceSha256,
@@ -146,6 +147,40 @@ test('pins the complete skill-picker lifecycle cues to the untouched stock WAVs'
       NATIVE_SOUND_MANIFEST[cue].sourceSha256,
     )
   }
+})
+
+test('pins potion use to the untouched stock drink cue', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/drink.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST.drink.sourceSha256,
+  )
+})
+
+test('pins every inventory and trader transaction cue to its untouched stock WAV', () => {
+  for (const [cue, filename] of [
+    ['backpack-close', 'backpack-close.wav'],
+    ['bad-action', 'bad-action.wav'],
+    ['distort-reality', 'distort-reality.wav'],
+    ['drop-coins', 'drop-coins.wav'],
+    ['open-panel', 'openpanel.wav'],
+  ] as const) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+    )
+  }
+  assert.equal(NATIVE_SOUND_MANIFEST['backpack-close'].registryOffset, 0xc8)
+  assert.equal(NATIVE_SOUND_MANIFEST['bad-action'].registryOffset, 0x120)
+  assert.equal(NATIVE_SOUND_MANIFEST['distort-reality'].registryOffset, 0x40c)
+  assert.equal(NATIVE_SOUND_MANIFEST['drop-coins'].registryOffset, 0x464)
+  assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
 })
 
 test('plays the untouched stock level-up cue once at scalar one per barrier', () => {

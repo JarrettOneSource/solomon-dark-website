@@ -17,6 +17,7 @@ import type { PlayerLifeState } from '../core-kernels/player-combat.ts'
 import type {
   DowsingOffer,
   HagathaOffer,
+  HubActionFeedback,
   HubEquipmentState,
   HubInventoryItem,
   HubShopItem,
@@ -59,6 +60,7 @@ export type ProtocolPlayerSnapshotFrame = Omit<ProtocolPlayerState, 'economy'> &
 }
 
 export interface ProtocolPlayerEconomy {
+  actionFeedback: HubActionFeedback | null
   backpack: readonly HubInventoryItem[]
   charmCapacity: number
   dowsingFee: number

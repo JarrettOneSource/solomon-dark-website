@@ -32,6 +32,7 @@ import {
   buyFomentiusItem,
   buyHagathaPerk,
   closeDowsingOffers,
+  consumeInventoryItem,
   dowse,
   equipInventoryItem,
   restockFomentius,
@@ -95,6 +96,7 @@ import {
 import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
+  applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
@@ -432,6 +434,9 @@ export function applyGameSimulationHubAction(
     return { accepted: false, reason: 'service-unavailable', state }
   }
 
+  const consumedPotion = action.type === 'consume'
+    ? economy.backpack.find(({ id }) => id === action.itemId) ?? null
+    : null
   const result = (() => {
     switch (action.type) {
       case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
@@ -439,21 +444,43 @@ export function applyGameSimulationHubAction(
       case 'buy-hagatha': return buyHagathaPerk(economy, action.selector)
       case 'close-dowsing': {
         const next = closeDowsingOffers(economy)
-        return { accepted: true, reason: null, state: next }
+        return { accepted: true, dowsingPitch: null, reason: null, state: next }
       }
+      case 'consume': return consumeInventoryItem(economy, action.itemId)
       case 'dowse': return dowse(economy, getPlayerProgression(state, playerId).level)
       case 'equip': return equipInventoryItem(economy, action.itemId, action.slot)
       case 'transfer': return transferInventoryItem(economy, action.itemId, action.direction)
       case 'unequip': return unequipInventorySlot(economy, action.slot)
     }
   })()
-  if (!result.accepted) return { ...result, state }
+  const actionFeedback = {
+    accepted: result.accepted,
+    action: action.type,
+    dowsingPitch: result.dowsingPitch,
+    reason: result.reason,
+    sequence: (economy.actionFeedback?.sequence ?? 0) + 1,
+    transferDirection: action.type === 'transfer' ? action.direction : null,
+    transferGesture: action.type === 'transfer' ? action.gesture : null,
+  } as const
+  const nextEconomy = {
+    ...result.state,
+    actionFeedback,
+    revision: Math.max(result.state.revision, economy.revision + 1),
+  }
+  let playerEntities = replacePlayerEconomy(state.playerEntities, playerId, nextEconomy)
+  if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null) {
+    playerEntities = applyPlayerEntityPotionEffect(
+      playerEntities,
+      playerId,
+      consumedPotion.nativeSubtype,
+    )
+  }
   return {
-    accepted: true,
-    reason: null,
+    accepted: result.accepted,
+    reason: result.reason,
     state: {
       ...state,
-      playerEntities: replacePlayerEconomy(state.playerEntities, playerId, result.state),
+      playerEntities,
     },
   }
 }
@@ -754,15 +781,24 @@ function finishGameSimulationTick(
     canTraverseProjectile: (spell, from, to) => {
       return spellObstructionPoint(spell.ownerId, from, to) === null
     },
-    castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
-      playerId,
-      {
-        availableMana: playerEntities.progressions[index]!.currentMana,
-        eligible: playerEntityCanCast(playerEntities, playerId)
-          && playerEntities.progressions[index]!.pendingOffer === null,
-        primarySkill: effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!),
-      },
-    ])),
+    castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
+      const progression = playerEntities.progressions[index]!
+      const primarySkill = effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!)
+      const damageMultiplier = progression.damageX4TicksRemaining > 0 ? 4 : 1
+      return [
+        playerId,
+        {
+          availableMana: progression.currentMana,
+          eligible: playerEntityCanCast(playerEntities, playerId)
+            && progression.pendingOffer === null,
+          primarySkill: damageMultiplier === 1 ? primarySkill : {
+            ...primarySkill,
+            damageMaximum: primarySkill.damageMaximum * damageMultiplier,
+            damageMinimum: primarySkill.damageMinimum * damageMultiplier,
+          },
+        },
+      ]
+    })),
     inputs,
     players: result.players,
     previousPlayers: playerCharacterRecords(previous.playerEntities),
@@ -916,6 +952,7 @@ function traderForAction(action: HubInventoryAction): HubTraderId | null {
     case 'buy-dowsing':
     case 'dowse': return 'shlorio'
     case 'close-dowsing':
+    case 'consume':
     case 'equip':
     case 'unequip': return null
   }

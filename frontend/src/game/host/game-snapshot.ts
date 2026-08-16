@@ -167,6 +167,7 @@ function protocolPlayerState(
   return {
     ...player,
     economy: {
+      actionFeedback: economy.actionFeedback && { ...economy.actionFeedback },
       backpack: economy.backpack.map(protocolInventoryItem),
       charmCapacity: economy.charmCapacity,
       dowsingFee: economy.dowsingFee,

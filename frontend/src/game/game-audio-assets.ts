@@ -8,9 +8,14 @@ import catchIt from '../assets/game/audio/sfx/catchit.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import bansheeDie from '../assets/game/audio/sfx/banshee-die.wav'
 import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
+import backpackClose from '../assets/game/audio/sfx/backpack-close.wav'
+import badAction from '../assets/game/audio/sfx/bad-action.wav'
 import click from '../assets/game/audio/sfx/click.wav'
 import coffinBreak from '../assets/game/audio/sfx/coffin-break.wav'
 import demonDie from '../assets/game/audio/sfx/demon-die.wav'
+import drink from '../assets/game/audio/sfx/drink.wav'
+import distortReality from '../assets/game/audio/sfx/distort-reality.wav'
+import dropCoins from '../assets/game/audio/sfx/drop-coins.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
@@ -75,11 +80,16 @@ export const GAME_AUDIO_SOURCES = {
     solomondarktheme: solomonDarkTheme,
   },
   sounds: {
+    'backpack-close': backpackClose,
+    'bad-action': badAction,
     'banshee-die': bansheeDie,
     'bone-crack': boneCrack,
     click,
     'coffin-break': coffinBreak,
     'demon-die': demonDie,
+    drink,
+    'distort-reality': distortReality,
+    'drop-coins': dropCoins,
     'fireball-hit': fireballHit,
     'firey-death': fireyDeath,
     fizzle,

@@ -13,6 +13,7 @@ import {
   hubRegionCameraOrigin,
 } from '../src/game/core-kernels/hub-math.ts'
 import { PLAYER_CHARACTER_RADIUS } from '../src/game/core-kernels/player-character.ts'
+import { DOWSING_EQUIPMENT_RECIPES } from '../src/game/core-kernels/hub-economy.ts'
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 
 const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
@@ -87,6 +88,7 @@ try {
   const hostStartingGold = await inventoryGold(hostPage)
   assert.equal(hostStartingGold, 10_000)
   step('both participants start with 10,000 gold')
+  await exerciseStarterInventory(hostPage)
 
   step('walking to Fomentius')
   await navigateRegion(hostPage, canvas, 'courtyard', HUB_TRADER_GEOMETRY.fomentius.position, 70)
@@ -104,7 +106,7 @@ try {
   const fomentius = hostPage.getByRole('dialog', { name: "FOMENTIUS' USEFUL THYNGS" })
   await fomentius.waitFor()
   await waitForNativeSurfaceSettled(fomentius)
-  const stockCell = fomentius.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
+  const stockCell = fomentius.getByRole('button', { name: /^Buy Mana Potion for \d+ gold$/ }).first()
   const stockLabel = await stockCell.getAttribute('aria-label')
   const stock = parsePurchaseLabel(stockLabel)
   const beforeFomentius = await dialogGold(fomentius)
@@ -116,7 +118,7 @@ try {
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius.png` })
   step('Fomentius purchase complete')
   await fomentius.getByRole('button', { name: 'Done' }).click()
-  await assertBackpackQuantity(hostPage, stock.name, stock.name === 'Health Potion' || stock.name === 'Mana Potion' ? 2 : 1)
+  await assertBackpackQuantity(hostPage, stock.name, stock.name === 'Mana Potion' ? 2 : 1)
 
   await navigateRegion(hostPage, canvas, 'courtyard', HUB_TRADER_GEOMETRY.luthacus.position, 60)
   await openNearbyTrader(hostPage, 'luthacus')
@@ -137,21 +139,48 @@ try {
   await backpackItem.click()
   await backpackItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-luthacus-selected.png` })
-  await backpackItem.click()
+  await doubleActivateInventoryPointer(hostPage, backpackItem)
+  await luthacus.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  }).waitFor()
+  assert.equal(await luthacus.getByLabel('Scavenged Goods').getByRole('button', {
+    name: /^Mana Potion, quantity /,
+  }).count(), 0)
+  step('Luthacus backpack double activation retained ordinary potion use')
+
+  const remainingBackpackItem = luthacus.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  })
+  await dragInventoryPointer(hostPage, luthacus, remainingBackpackItem, { x: 575, y: 92.5 })
   const storedItem = luthacus.getByLabel('Scavenged Goods').getByRole('button', {
     name: new RegExp(`^${escapeRegExp(stock.name)}, quantity `),
   })
   await storedItem.waitFor()
   assert.equal(await dialogGold(luthacus), goldBeforeStorage)
-  await storedItem.click()
-  await storedItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
-  await storedItem.click()
-  await backpackItem.waitFor()
+  await doubleActivateInventoryPointer(hostPage, storedItem)
+  await remainingBackpackItem.waitFor()
   assert.equal(await luthacus.getByLabel('Scavenged Goods').getByRole('button', {
     name: new RegExp(`^${escapeRegExp(stock.name)}, quantity `),
   }).count(), 0)
+
+  await dragInventoryPointer(hostPage, luthacus, remainingBackpackItem, { x: 575, y: 92.5 })
+  const storedForDragReturn = luthacus.getByLabel('Scavenged Goods').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  })
+  await storedForDragReturn.waitFor()
+  await dragInventoryPointer(hostPage, luthacus, storedForDragReturn, { x: 800, y: 650 })
+  await remainingBackpackItem.waitFor()
+  await dragInventoryPointer(hostPage, luthacus, remainingBackpackItem, { x: 800, y: 450 })
+  await remainingBackpackItem.waitFor()
+  assert.equal(await luthacus.getByLabel('Scavenged Goods').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  }).count(), 0)
   await hostPage.screenshot({ path: `${screenshotRoot}-luthacus.png` })
-  step('Luthacus round trip complete')
+  step('Luthacus asymmetric activation, both drag directions, and invalid restore complete')
   await luthacus.getByRole('button', { name: 'Done' }).click()
 
   await navigateRegion(hostPage, canvas, 'courtyard', HUB_TRADER_GEOMETRY.hagatha.position, 45)
@@ -285,25 +314,45 @@ try {
   const inventory = hostPage.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
+  assert.equal(await inventory.getByRole('button', { name: /^Equip / }).count(), 0)
+
   const equipmentItem = inventory.getByLabel('Backpack').getByRole('button', {
     name: `${dowsingItem.name}, quantity 1`,
   })
   await equipmentItem.click()
-  const equipAction = inventory.getByRole('button', { name: /^Equip / }).first()
-  const equipmentSlot = (await equipAction.innerText()).replace(/^Equip /, '')
-  await equipAction.click()
+  await equipmentItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await hostPage.waitForTimeout(250)
+  await hostPage.screenshot({ path: `${screenshotRoot}-inventory-equipment-item-info.png` })
+  const equipmentSlot = equipmentSlotForDowsingItem(dowsingItem.name)
+  const equipmentTarget = inventory.locator(`[data-equipment-slot="${equipmentSlot}"]`).first()
+  await dragInventoryPointer(hostPage, inventory, equipmentItem, equipmentTarget)
   const equipped = inventory.getByRole('button', {
     exact: true,
-    name: `${equipmentSlot}, ${dowsingItem.name}`,
-  })
+    name: `${equipmentSlotLabel(equipmentSlot)}, ${dowsingItem.name}`,
+  }).first()
   await equipped.waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-inventory-equipped.png` })
-  await equipped.click()
-  await equipmentItem.waitFor()
-  await inventory.getByRole('button', {
-    exact: true,
-    name: `${equipmentSlot}, empty`,
-  }).waitFor()
+  if (equipmentSlot === 'hat' || equipmentSlot === 'robe') {
+    const starterName = equipmentSlot === 'hat' ? 'Hat' : 'Robe'
+    const displacedStarter = inventory.getByLabel('Backpack').getByRole('button', {
+      exact: true,
+      name: `${starterName}, quantity 1`,
+    })
+    await displacedStarter.waitFor()
+    await dragInventoryPointer(hostPage, inventory, displacedStarter, equipmentTarget)
+    await inventory.getByRole('button', {
+      exact: true,
+      name: `${equipmentSlotLabel(equipmentSlot)}, ${starterName}`,
+    }).waitFor()
+    await equipmentItem.waitFor()
+  } else {
+    await dragInventoryPointer(hostPage, inventory, equipped, { x: 800, y: 650 })
+    await equipmentItem.waitFor()
+    await inventory.getByRole('button', {
+      exact: true,
+      name: `${equipmentSlotLabel(equipmentSlot)}, empty`,
+    }).first().waitFor()
+  }
   await inventory.getByRole('button', { name: 'Done' }).click()
 
   assert.equal(await inventoryGold(hostPage), finalHostGold)
@@ -315,6 +364,9 @@ try {
   await waitForNativeSurfaceSettled(guestInventory)
   assert.equal(await guestInventory.getByLabel(/Health Potion, quantity 1/).count(), 1)
   assert.equal(await guestInventory.getByLabel(/Mana Potion, quantity 1/).count(), 1)
+  await guestInventory.getByRole('button', { exact: true, name: 'Hat, Hat' }).waitFor()
+  await guestInventory.getByRole('button', { exact: true, name: 'Robe, Robe' }).waitFor()
+  await guestInventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first().waitFor()
   await guestPage.screenshot({ path: `${screenshotRoot}-guest-isolated.png` })
 
   assert.deepEqual(browserErrors, [])
@@ -420,6 +472,76 @@ async function inventoryGold(page) {
   const gold = await dialogGold(inventory)
   await inventory.getByRole('button', { name: 'Done' }).click()
   return gold
+}
+
+async function exerciseStarterInventory(page) {
+  await page.keyboard.press('i')
+  const inventory = page.getByRole('dialog', { name: 'Inventory' })
+  await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
+  assert.equal(await inventory.getByRole('button', { name: /^Equip / }).count(), 0)
+
+  const healthPotion = inventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Health Potion, quantity 1',
+  })
+  await activateInventoryPointer(page, healthPotion)
+  await healthPotion.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await page.waitForTimeout(650)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-health-item-info.png` })
+  await doubleActivateInventoryPointer(page, healthPotion)
+  await healthPotion.waitFor({ state: 'detached' })
+  step('native potion double-activation consumed exactly one stack member')
+
+  const equippedStaff = inventory.getByRole('button', {
+    exact: true,
+    name: 'Weapon, Staff',
+  }).first()
+  await dragInventoryPointer(page, inventory, equippedStaff, { x: 800, y: 650 }, async () => {
+    assert.match(await inventory.getAttribute('data-native-inventory-dragging'), /^equipment:weapon$/)
+    await page.screenshot({ path: `${screenshotRoot}-inventory-staff-held.png` })
+  })
+  const backpackStaff = inventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Staff, quantity 1',
+  })
+  await backpackStaff.waitFor()
+  assert.equal(await inventory.getByRole('button', { exact: true, name: 'Weapon, empty' }).count(), 2)
+  await dragInventoryPointer(
+    page,
+    inventory,
+    backpackStaff,
+    inventory.locator('[data-equipment-slot="weapon"]').first(),
+  )
+  await inventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first().waitFor()
+
+  await dragInventoryPointer(
+    page,
+    inventory,
+    inventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first(),
+    { x: 800, y: 250 },
+  )
+  await inventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first().waitFor()
+  assert.equal(await inventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Staff, quantity 1',
+  }).count(), 0)
+
+  await dragInventoryPointer(
+    page,
+    inventory,
+    inventory.getByRole('button', { exact: true, name: 'Hat, Hat' }),
+    { x: 800, y: 650 },
+  )
+  const hatNotice = inventory.getByRole('alert')
+  await hatNotice.waitFor()
+  assert.match(await hatNotice.innerText(), /A WIZARD WOULD NEVER REMOVE HIS HAT!/)
+  assert.match(await hatNotice.innerText(), /jaunty angle/)
+  await page.screenshot({ path: `${screenshotRoot}-inventory-hat-warning.png` })
+  await inventory.getByRole('button', { name: 'OKAY' }).click()
+  await inventory.getByRole('button', { exact: true, name: 'Hat, Hat' }).waitFor()
+  await inventory.getByRole('button', { name: 'Done' }).click()
+  step('native drag, invalid release, and protected Hat branches complete')
 }
 
 async function assertBackpackQuantity(page, name, quantity) {
@@ -743,6 +865,83 @@ function parsePurchaseLabel(label) {
   const match = /^Buy (.+) for (\d+) gold$/.exec(label || '')
   assert.ok(match, `invalid purchase label ${JSON.stringify(label)}`)
   return { name: match[1], price: Number(match[2]) }
+}
+
+async function dragInventoryPointer(page, inventory, source, destination, whileHeld) {
+  const sourceBox = await source.boundingBox()
+  const stageBox = await inventory.boundingBox()
+  assert.ok(sourceBox, 'native inventory drag source has no browser geometry')
+  assert.ok(stageBox, 'native inventory stage has no browser geometry')
+  let destinationPoint
+  if (typeof destination.boundingBox === 'function') {
+    const destinationBox = await destination.boundingBox()
+    assert.ok(destinationBox, 'inventory drag destination has no browser geometry')
+    destinationPoint = {
+      x: destinationBox.x + destinationBox.width / 2,
+      y: destinationBox.y + destinationBox.height / 2,
+    }
+  } else {
+    destinationPoint = {
+      x: stageBox.x + destination.x * stageBox.width / 1600,
+      y: stageBox.y + destination.y * stageBox.height / 900,
+    }
+  }
+  const sourcePoint = {
+    x: sourceBox.x + sourceBox.width / 2,
+    y: sourceBox.y + sourceBox.height / 2,
+  }
+  await page.mouse.move(sourcePoint.x, sourcePoint.y)
+  await page.mouse.down()
+  await page.mouse.move(sourcePoint.x + 15, sourcePoint.y, { steps: 3 })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-native-ui-stage')
+      ?.dataset.nativeInventoryDragging !== ''
+  ))
+  await page.mouse.move(destinationPoint.x, destinationPoint.y, { steps: 6 })
+  if (whileHeld) await whileHeld()
+  await page.mouse.up()
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-native-ui-stage')
+      ?.dataset.nativeInventoryDragging === ''
+  ))
+}
+
+async function activateInventoryPointer(page, source) {
+  const box = await source.boundingBox()
+  assert.ok(box, 'inventory activation source has no browser geometry')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.up()
+}
+
+async function doubleActivateInventoryPointer(page, source) {
+  const box = await source.boundingBox()
+  assert.ok(box, 'inventory double-activation source has no browser geometry')
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+}
+
+function equipmentSlotForDowsingItem(name) {
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find((candidate) => candidate.name === name)
+  assert.ok(recipe, `dowsing item ${JSON.stringify(name)} has no native equipment recipe`)
+  switch (recipe.type) {
+    case 'amulet': return 'amulet'
+    case 'hat': return 'hat'
+    case 'ring': return 'ring-0'
+    case 'robe': return 'robe'
+    case 'staff':
+    case 'wand': return 'weapon'
+    default: throw new Error(`unsupported dowsing equipment type ${JSON.stringify(recipe.type)}`)
+  }
+}
+
+function equipmentSlotLabel(slot) {
+  return {
+    amulet: 'Amulet',
+    hat: 'Hat',
+    'ring-0': 'Ring I',
+    robe: 'Robe',
+    weapon: 'Weapon',
+  }[slot]
 }
 
 function parseDowsingFee(label) {

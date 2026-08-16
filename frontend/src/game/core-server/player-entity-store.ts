@@ -24,6 +24,7 @@ import {
   tryDebitPlayerMana,
 } from '../core-kernels/player-combat.ts'
 import {
+  applyPlayerPotionEffect,
   applyPlayerSkillChoice,
   createPlayerProgression,
   createPlayerSkillBook,
@@ -31,6 +32,8 @@ import {
   grantPlayerExperience,
   playerStatBook,
   rerollPlayerSkillOffer,
+  resetPlayerPotionEffects,
+  stepPlayerPotionEffects,
   synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
   type SharedPlayerLevelMilestone,
@@ -276,6 +279,7 @@ export function poisonPlayerEntity(
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
+  if (source.progressions[index]!.poisonImmunityTicksRemaining > 0) return source
   const progression = poisonPlayer(
     source.progressions[index]!,
     damagePerSecond,
@@ -284,6 +288,20 @@ export function poisonPlayerEntity(
   return progression === source.progressions[index]
     ? source
     : replacePlayerProgression(source, index, progression)
+}
+
+export function applyPlayerEntityPotionEffect(
+  source: PlayerEntityStore,
+  playerId: string,
+  subtype: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  return replacePlayerProgression(
+    source,
+    index,
+    applyPlayerPotionEffect(source.progressions[index]!, subtype),
+  )
 }
 
 export function coldSlowPlayerEntity(
@@ -335,7 +353,7 @@ export function stepPlayerEntityCombatTick(
   const deathBurstPlayerIds: string[] = []
   let changed = false
   const progressions = source.progressions.map((progression, index) => {
-    const result = stepPlayerCombatTick(progression)
+    const result = stepPlayerCombatTick(stepPlayerPotionEffects(progression))
     const playerId = source.identities[index]!.playerId
     if (result.beganDeathEpoch) beganDeathEpochPlayerIds.push(playerId)
     if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
@@ -441,7 +459,9 @@ export function resetPlayerEntitiesForNewRun(
       locomotionComponent(placements[playerId]!)
     )),
     primaryCasts: source.identities.map(({ playerId }) => placements[playerId]!.primaryCast),
-    progressions: source.progressions.map(resetPlayerCombatForNewRun),
+    progressions: source.progressions.map((progression) => (
+      resetPlayerPotionEffects(resetPlayerCombatForNewRun(progression))
+    )),
   }
 }
 

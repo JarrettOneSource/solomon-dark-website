@@ -25,11 +25,16 @@ export type GameMusicCue =
   | 'selection'
   | 'solomondarktheme'
 export type GameSoundCue =
+  | 'backpack-close'
+  | 'bad-action'
   | 'banshee-die'
   | 'bone-crack'
   | 'click'
   | 'coffin-break'
   | 'demon-die'
+  | 'drink'
+  | 'distort-reality'
+  | 'drop-coins'
   | 'fireball-hit'
   | 'firey-death'
   | 'flash'
@@ -111,6 +116,16 @@ export const NATIVE_MUSIC_MANIFEST = {
 } as const satisfies Readonly<Partial<Record<GameMusicCue, NativeMusicEntry>>>
 
 export const NATIVE_SOUND_MANIFEST = {
+  'backpack-close': {
+    registryOffset: 0xc8,
+    sourceName: 'sounds\\backpack_close',
+    sourceSha256: '32fa4ca58d0fe1eb967bb50f20dffc0edb98b25ca74c719edc2b70b9e4312319',
+  },
+  'bad-action': {
+    registryOffset: 0x120,
+    sourceName: 'sounds\\badaction',
+    sourceSha256: '0ca71924473e6a45156f0dbd450ff7a158d39015179697c83c7b04824e3256d6',
+  },
   'banshee-die': {
     registryOffset: 0x178,
     sourceName: 'sounds\\bansheedie',
@@ -135,6 +150,21 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x388,
     sourceName: 'sounds\\demondies',
     sourceSha256: 'b22c5da10273648ef2f56d3375aaf667e8da408f134f2c2f5cd1a6a29617efa4',
+  },
+  drink: {
+    registryOffset: 0x438,
+    sourceName: 'sounds\\drink',
+    sourceSha256: '61fdcc02a31b1c1c43264cb6ed8d02717e9dba2c5123167ad6e309053e28f322',
+  },
+  'distort-reality': {
+    registryOffset: 0x40c,
+    sourceName: 'sounds\\distortreality',
+    sourceSha256: '3fa59accc564838ea1896f95539ee0acecd9345c3e2c1adceaadee0dd870194e',
+  },
+  'drop-coins': {
+    registryOffset: 0x464,
+    sourceName: 'sounds\\dropcoins',
+    sourceSha256: 'b72d44080d99fdae8e7dce83b5f1b6a553d503a753df2deacea7ee8829ba4376',
   },
   'fireball-hit': {
     registryOffset: 0x540,

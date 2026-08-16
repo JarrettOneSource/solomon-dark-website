@@ -1,11 +1,13 @@
 import {
   createNativeRng,
+  drawNativeFloat,
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
 
 export const STARTING_PLAYER_GOLD = 10_000
-export const HUB_INVENTORY_SLOT_CAPACITY = 28
+export const HUB_INVENTORY_SLOT_CAPACITY = 88
+export const HUB_STORAGE_SLOT_CAPACITY = 28
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
 
 export type EquipmentType = 'amulet' | 'hat' | 'ring' | 'robe' | 'staff' | 'wand'
@@ -18,9 +20,15 @@ export type HubInventoryAction =
   | { readonly type: 'buy-fomentius'; readonly itemId: number }
   | { readonly type: 'buy-hagatha'; readonly selector: number }
   | { readonly type: 'close-dowsing' }
+  | { readonly type: 'consume'; readonly itemId: number }
   | { readonly type: 'dowse' }
   | { readonly type: 'equip'; readonly itemId: number; readonly slot: EquipmentSlot }
-  | { readonly type: 'transfer'; readonly direction: 'to-backpack' | 'to-storage'; readonly itemId: number }
+  | {
+      readonly type: 'transfer'
+      readonly direction: 'to-backpack' | 'to-storage'
+      readonly gesture: 'double-activation' | 'drag'
+      readonly itemId: number
+    }
   | { readonly type: 'unequip'; readonly slot: EquipmentSlot }
 export type HubItemKind =
   | 'antidote'
@@ -65,6 +73,7 @@ export interface HubShopItem extends HubInventoryItem {
 
 export interface EquipmentRecipe {
   readonly iconRecords: readonly number[]
+  readonly iconTints: readonly [number | null, number | null]
   readonly level: number
   readonly name: string
   readonly nativeTypeId: number
@@ -101,7 +110,18 @@ export interface HubEquipmentState {
   readonly weapon: HubInventoryItem | null
 }
 
+export interface HubActionFeedback {
+  readonly accepted: boolean
+  readonly action: HubInventoryAction['type']
+  readonly dowsingPitch: number | null
+  readonly reason: HubEconomyRejection | null
+  readonly sequence: number
+  readonly transferDirection: 'to-backpack' | 'to-storage' | null
+  readonly transferGesture: 'double-activation' | 'drag' | null
+}
+
 export interface HubEconomyState {
+  readonly actionFeedback: HubActionFeedback | null
   readonly backpack: readonly HubInventoryItem[]
   readonly charmCapacity: number
   readonly dowsingFee: number
@@ -129,11 +149,13 @@ export type HubEconomyRejection =
   | 'item-not-found'
   | 'offers-active'
   | 'perk-capacity-full'
+  | 'required-clothing'
   | 'slot-empty'
   | 'slot-locked'
 
 export interface HubEconomyResult {
   readonly accepted: boolean
+  readonly dowsingPitch: number | null
   readonly reason: HubEconomyRejection | null
   readonly state: HubEconomyState
 }
@@ -166,36 +188,36 @@ const EQUIPMENT_RECIPE_ROWS = [
   [0, 'Pentaclostic Ring', 'ring', 7002, 0, 'Rare', [63], 'The Arcanus Spectrum Paraclosm'],
   [1, 'Arcanoric Robe', 'robe', 7006, 0, 'Epic', [65, 68], 'The Arcanus Spectrum Paraclosm'],
   [2, 'Cosmofluxic Wand', 'wand', 7011, 0, 'Epic', [80], 'The Arcanus Spectrum Paraclosm'],
-  [3, 'Theptoplasmar Amulet', 'amulet', 7003, 0, 'Rare', [26, 31], 'The Arcanus Spectrum Paraclosm'],
+  [3, 'Theptoplasmar Amulet', 'amulet', 7003, 0, 'Rare', [31, 26], 'The Arcanus Spectrum Paraclosm'],
   [4, 'Synertauxic Ring', 'ring', 7002, 0, 'Rare', [63], 'The Arcanus Spectrum Paraclosm'],
   [5, 'Sublunarous Hat', 'hat', 7005, 0, 'Epic', [34, 38], 'The Arcanus Spectrum Paraclosm'],
   [6, "Combinator's Cap", 'hat', 7005, 0, 'Epic', [36, 40], "Combinator's Coutrement"],
   [7, "Combinator's Cape", 'robe', 7006, 0, 'Epic', [66, 69], "Combinator's Coutrement"],
   [8, "Combinator's Club", 'staff', 7004, 0, 'Epic', [73], "Combinator's Coutrement"],
-  [9, "Combinator's Choker", 'amulet', 7003, 0, 'Rare', [24, 31], "Combinator's Coutrement"],
+  [9, "Combinator's Choker", 'amulet', 7003, 0, 'Rare', [31, 24], "Combinator's Coutrement"],
   [10, "Combinator's Circle", 'ring', 7002, 0, 'Rare', [53], "Combinator's Coutrement"],
   [11, "Bug-Master's Cap", 'hat', 7005, 0, 'Epic', [34, 38], "Pandimensional Bug-Master's Outfit"],
   [12, "Bug-Master's Robe", 'robe', 7006, 0, 'Epic', [64, 67], "Pandimensional Bug-Master's Outfit"],
   [13, "Bug-Master's Wand", 'wand', 7011, 0, 'Rare', [82], "Pandimensional Bug-Master's Outfit"],
   [14, "Bug-Master's Loop", 'ring', 7002, 0, 'Rare', [59], "Pandimensional Bug-Master's Outfit"],
-  [15, 'Pan-Dimensional Strangler', 'amulet', 7003, 0, 'Rare', [23, 30], "Pandimensional Bug-Master's Outfit"],
+  [15, 'Pan-Dimensional Strangler', 'amulet', 7003, 0, 'Rare', [30, 23], "Pandimensional Bug-Master's Outfit"],
   [16, 'Cloudcover Hood', 'hat', 7005, 0, 'Epic', [37, 41], 'Tempest Kit'],
   [17, 'Ozone Cape', 'robe', 7006, 0, 'Epic', [66, 69], 'Tempest Kit'],
   [18, 'Lightning Rod', 'staff', 7004, 0, 'Epic', [75], 'Tempest Kit'],
-  [19, 'Storm Choker', 'amulet', 7003, 0, 'Rare', [22, 30], 'Tempest Kit'],
+  [19, 'Storm Choker', 'amulet', 7003, 0, 'Rare', [30, 22], 'Tempest Kit'],
   [20, 'Burning Hat', 'hat', 7005, 0, 'Epic', [36, 40], 'Burning Man'],
   [21, 'Burning Robe', 'robe', 7006, 0, 'Epic', [64, 67], 'Burning Man'],
   [22, 'Biting Ring', 'ring', 7002, 0, 'Epic', [55], 'Frostburn Jewels'],
   [23, 'Bitter Ring', 'ring', 7002, 0, 'Epic', [55], 'Frostburn Jewels'],
-  [24, 'Glittering Amulet', 'amulet', 7003, 0, 'Epic', [29, 31], 'Frostburn Jewels'],
+  [24, 'Glittering Amulet', 'amulet', 7003, 0, 'Epic', [31, 29], 'Frostburn Jewels'],
   [25, "Potter's Apron", 'robe', 7006, 0, 'Epic', [66, 69], 'Fete of Clay'],
   [26, "Clayshaper's Ring", 'ring', 7002, 0, 'Epic', [57], 'Fete of Clay'],
   [27, "Claybaker's Ring", 'ring', 7002, 0, 'Epic', [57], 'Fete of Clay'],
   [28, 'Kiln', 'wand', 7011, 0, 'Epic', [81], 'Fete of Clay'],
-  [29, "Obfuscate's Meddler", 'amulet', 7003, 8, 'Rare', [18, 30], null],
-  [30, 'Karen You Scandalous Wench', 'amulet', 7003, 15, 'Epic', [26, 31], null],
-  [31, 'Poxproof', 'amulet', 7003, 30, 'Rare', [23, 30], null],
-  [32, 'Ethereal Choker', 'amulet', 7003, 10, 'Epic', [19, 30], null],
+  [29, "Obfuscate's Meddler", 'amulet', 7003, 8, 'Rare', [30, 18], null],
+  [30, 'Karen You Scandalous Wench', 'amulet', 7003, 15, 'Epic', [31, 26], null],
+  [31, 'Poxproof', 'amulet', 7003, 30, 'Rare', [30, 23], null],
+  [32, 'Ethereal Choker', 'amulet', 7003, 10, 'Epic', [30, 19], null],
   [33, "Absolox's Boomstick", 'staff', 7004, 5, 'Rare', [72], null],
   [34, 'Staff of Dawn', 'staff', 7004, 15, 'Rare', [74], null],
   [35, 'Ringwall', 'ring', 7002, 3, 'Rare', [57], null],
@@ -212,6 +234,23 @@ const EQUIPMENT_RECIPE_ROWS = [
   [46, 'Robe of Thaumic Unperturbability', 'robe', 7006, 15, 'Epic', [64, 67], null],
 ] as const
 
+const EQUIPMENT_RECIPE_ICON_TINTS: Readonly<Partial<Record<
+  number,
+  readonly [number | null, number | null]
+>>> = {
+  1: [0x191919, 0x80ffff],
+  5: [0x191919, 0xff80ff],
+  6: [0xc0c0c0, null],
+  7: [0xc0c0c0, null],
+  11: [0xff19ff, null],
+  12: [0xff19ff, null],
+  16: [0x19ffff, null],
+  17: [0x19ffff, null],
+  20: [0xff0000, null],
+  21: [0xff0000, null],
+  25: [0x19ff19, 0xc8ffc8],
+}
+
 export const DOWSING_EQUIPMENT_RECIPES: readonly EquipmentRecipe[] =
   EQUIPMENT_RECIPE_ROWS.map(([
     sourceIndex,
@@ -224,6 +263,7 @@ export const DOWSING_EQUIPMENT_RECIPES: readonly EquipmentRecipe[] =
     setName,
   ]) => ({
     iconRecords,
+    iconTints: EQUIPMENT_RECIPE_ICON_TINTS[sourceIndex] ?? [null, null] as const,
     level,
     name,
     nativeTypeId,
@@ -279,9 +319,10 @@ export function createHubEconomy(
   seed: number,
   options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
 ): HubEconomyState {
-  const stock = rollFomentiusStock(createNativeRng(seed), 3)
+  const stock = rollFomentiusStock(createNativeRng(seed), 6)
   const bundleSelectors = stableSelectors(options.hagathaBundleSelectors ?? [])
   return {
+    actionFeedback: null,
     backpack: [
       starterPotion(1, 'health-potion', 'Health Potion', 0, 46),
       starterPotion(2, 'mana-potion', 'Mana Potion', 1, 47),
@@ -289,7 +330,7 @@ export function createHubEconomy(
     charmCapacity: 3,
     dowsingFee: SHLORIO_INITIAL_DOWSING_FEE,
     dowsingOffers: [],
-    equipment: emptyEquipment(),
+    equipment: starterEquipment(),
     firstMixedSelectors: [],
     fomentiusStock: stock.items,
     gold: STARTING_PLAYER_GOLD,
@@ -404,7 +445,11 @@ export function transferInventoryItem(
   const to = direction === 'to-storage' ? source.storage : source.backpack
   const item = from.find((entry) => entry.id === itemId)
   if (!item) return rejected(source, 'item-not-found')
-  const inserted = insertItem(to, item, HUB_INVENTORY_SLOT_CAPACITY)
+  const inserted = insertItem(
+    to,
+    item,
+    direction === 'to-storage' ? HUB_STORAGE_SLOT_CAPACITY : HUB_INVENTORY_SLOT_CAPACITY,
+  )
   if (!inserted) return rejected(source, 'capacity-full')
   return accepted({
     ...source,
@@ -417,10 +462,31 @@ export function transferInventoryItem(
   })
 }
 
+export function consumeInventoryItem(
+  source: HubEconomyState,
+  itemId: number,
+): HubEconomyResult {
+  const item = source.backpack.find((entry) => entry.id === itemId)
+  if (!item) return rejected(source, 'item-not-found')
+  if (item.nativeTypeId !== 7001 || item.nativeSubtype === null) {
+    return rejected(source, 'ineligible-item')
+  }
+  return accepted({
+    ...source,
+    backpack: item.quantity === 1
+      ? source.backpack.filter((entry) => entry.id !== itemId)
+      : source.backpack.map((entry) => entry.id === itemId
+        ? { ...entry, quantity: entry.quantity - 1 }
+        : entry),
+  })
+}
+
 export function dowse(source: HubEconomyState, playerLevel: number): HubEconomyResult {
   if (source.dowsingOffers.length > 0) return rejected(source, 'offers-active')
   if (source.gold < source.dowsingFee) return rejected(source, 'insufficient-gold')
   let rng = source.rng
+  const pitchDraw = drawNativeFloat(rng, 0.1)
+  rng = pitchDraw.state
   const countDraw = drawNativeInteger(rng, 2)
   rng = countDraw.state
   const requestedCount = countDraw.value + 3
@@ -456,7 +522,7 @@ export function dowse(source: HubEconomyState, playerLevel: number): HubEconomyR
     gold: source.gold - source.dowsingFee,
     nextOfferId,
     rng,
-  })
+  }, Math.fround(0.8) + pitchDraw.value)
 }
 
 export function buyDowsingOffer(
@@ -472,6 +538,7 @@ export function buyDowsingOffer(
   const backpack = insertItem(source.backpack, item, HUB_INVENTORY_SLOT_CAPACITY)
   if (!backpack) return rejected(source, 'capacity-full')
   const feeDraw = drawNativeInteger(source.rng, 10)
+  const pitchDraw = drawNativeFloat(feeDraw.state, 0.1)
   return accepted({
     ...source,
     backpack,
@@ -479,8 +546,8 @@ export function buyDowsingOffer(
     dowsingOffers: [],
     gold: source.gold - offer.price,
     nextItemId: source.nextItemId + 1,
-    rng: feeDraw.state,
-  })
+    rng: pitchDraw.state,
+  }, 1 + pitchDraw.value)
 }
 
 export function closeDowsingOffers(source: HubEconomyState): HubEconomyState {
@@ -540,6 +607,7 @@ export function unequipInventorySlot(
   if (slot === 'ring-2' && !source.ownedPerkSelectors.includes(19)) {
     return rejected(source, 'slot-locked')
   }
+  if (slot === 'hat' || slot === 'robe') return rejected(source, 'required-clothing')
   const item = equippedAt(source.equipment, slot)
   if (!item) return rejected(source, 'slot-empty')
   const backpack = insertItem(source.backpack, item, HUB_INVENTORY_SLOT_CAPACITY)
@@ -619,13 +687,34 @@ function starterPotion(
   }
 }
 
-function emptyEquipment(): HubEquipmentState {
+function starterEquipmentItem(
+  id: number,
+  equipmentType: 'hat' | 'robe' | 'staff',
+  name: string,
+  nativeTypeId: 7004 | 7005 | 7006,
+  iconRecords: readonly number[],
+): HubInventoryItem {
+  return {
+    equipmentType,
+    iconRecords,
+    id,
+    kind: 'equipment',
+    name,
+    nativeSubtype: null,
+    nativeTypeId,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+}
+
+function starterEquipment(): HubEquipmentState {
   return {
     amulet: null,
-    hat: null,
+    hat: starterEquipmentItem(3, 'hat', 'Hat', 7005, [34, 38]),
     rings: [null, null, null],
-    robe: null,
-    weapon: null,
+    robe: starterEquipmentItem(4, 'robe', 'Robe', 7006, [64, 67]),
+    weapon: starterEquipmentItem(5, 'staff', 'Staff', 7004, [72]),
   }
 }
 
@@ -714,9 +803,10 @@ function withEquippedItem(
   return { ...source, [slot]: item }
 }
 
-function accepted(source: HubEconomyState): HubEconomyResult {
+function accepted(source: HubEconomyState, dowsingPitch: number | null = null): HubEconomyResult {
   return {
     accepted: true,
+    dowsingPitch,
     reason: null,
     state: { ...source, revision: source.revision + 1 },
   }
@@ -726,5 +816,5 @@ function rejected(
   state: HubEconomyState,
   reason: HubEconomyRejection,
 ): HubEconomyResult {
-  return { accepted: false, reason, state }
+  return { accepted: false, dowsingPitch: null, reason, state }
 }

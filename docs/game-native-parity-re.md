@@ -15689,10 +15689,17 @@ UI 49 keeps red and blue at 1 and computes green as
 `sin(nativeTick * 0.5 * pi / 180) * 0.1 + 0.7`, spanning 0.6..0.8 over 720
 ticks. Its pre-roll UI-101 body and mirrored UI-54 ends stay white; only DOWSE
 and `%d gold` are gold. `UiPanel_Render` `0x005C3F40` builds the MsgBox frame
-from horizontal UI 10, vertical UI 79, and UI 107..110 corners. It draws no
-UI-49 background or filled interior: the companion InventoryScreen/service
-remains visible beneath the curtain and frame. The MsgBox button art is white
-and only its label is gold.
+from horizontal UI 10, vertical UI 79, and UI 107..110 corners, but that base
+pass is not the entire MsgBox composition. `HoverBox` construction at
+`0x005C38F0` enables object byte `+0xB8`; the MsgBox constructor leaves it set,
+so render branch `0x005C46E5..0x005C4818` repeats UI 49 into the clipped rectangle
+`(535.5,158,529,384)` and then calls nine-slice helper `0x00417760` with UI 17
+over `(540.5,163,519,374)`. The UI atlas array starts at object offset `+0x38`
+with stride `0xC4`, making the branch operands `+0x25BC` and `+0x0D3C` records
+49 and 17 exactly. Stock therefore owns the textured interior and continuous
+gold inner rails; the companion InventoryScreen/service only remains visible
+outside that interior beneath the curtain. The MsgBox button art is white and
+only its label is gold.
 
 ### Participant-owned inventory and temporary gold override
 
@@ -15703,7 +15710,7 @@ clients. Hub transaction messages identify an intent only; the server resolves
 the authenticated participant, active hub region, target range, current offer,
 price, funds, and destination capacity before one atomic mutation.
 
-Protocol 21 carries the complete economy in the welcome and periodic recovery
+Protocol 28 carries the complete economy in the welcome and periodic recovery
 keyframes, then omits it from ordinary player frames while that player's economy
 revision is unchanged. A changed revision carries the complete replacement and
 the client reconstructs it against its last accepted baseline. This keeps the

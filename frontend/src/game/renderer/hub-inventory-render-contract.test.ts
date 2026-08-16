@@ -5,6 +5,7 @@ import test from 'node:test'
 import nativeAssetsJson from '../../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import {
   HUB_CHAT_PANEL,
+  HUB_CHAT_INLINE_EMPHASIS,
   HUB_DOWSING_FIELD,
   HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
@@ -12,16 +13,24 @@ import {
   HUB_DOWSING_INSUFFICIENT_GOLD,
   HUB_DOWSING_GRID,
   HUB_HAGATHA_PERK_PANE,
+  HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_INTERACTION,
+  HUB_ITEM_ICON_TRANSFORMS,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
+  HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
+  HUB_STARTER_EQUIPMENT_PRIMARY_TINT,
   hubDowsingSlotPosition,
   hubDowsingFieldTint,
+  hubChatTextRuns,
   hubInventoryPrimarySpellLines,
+  hubInventoryItemInfoText,
+  hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubShopSlotPosition,
 } from './hub-inventory-render-contract.ts'
@@ -35,6 +44,67 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
   assert.deepEqual(hubInventorySlotPosition(4), { x: 99, y: 496 })
   assert.deepEqual(hubInventorySlotPosition(87), { x: 1599, y: 721 })
   assert.throws(() => hubInventorySlotPosition(88), /\[0, 87\]/)
+  assert.deepEqual(hubInventoryEquipmentSlotRects('weapon'), [
+    [1274, 223, 72, 72],
+    [1434, 223, 72, 72],
+  ])
+  assert.deepEqual(hubInventoryEquipmentSlotRects('weapon', true), [
+    [1221, 223, 72, 72],
+    [1381, 223, 72, 72],
+  ])
+})
+
+test('stock inventory owns native ItemInfo, drag, double activation, and protected clothing copy', () => {
+  assert.deepEqual(HUB_INVENTORY_INTERACTION, {
+    doubleActivationMs: 500,
+    doubleActivationTicks: 50,
+    dragThresholdPixels: 10,
+    itemInfoDelayMs: 200,
+    itemInfoDelayTicks: 20,
+    itemInfoOffset: 40,
+    itemInfoPadding: 20,
+    itemInfoViewportMargin: 25,
+    selectionTint: 0x00c020,
+  })
+  const item = {
+    equipmentType: null,
+    iconRecords: [46],
+    id: 1,
+    kind: 'health-potion',
+    name: 'Health Potion',
+    nativeSubtype: 0,
+    nativeTypeId: 7001,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  } as const
+  assert.deepEqual(hubInventoryItemInfoText(item), {
+    description: 'Restores your health to maximum',
+    instruction: 'Double-click to drink',
+    title: 'Health Potion',
+  })
+  assert.equal(HUB_HAT_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS HAT!')
+  assert.match(HUB_HAT_REMOVAL_MSGBOX.body, /jaunty angle/)
+  assert.equal(HUB_ROBE_REMOVAL_MSGBOX.title, 'A WIZARD WOULD NEVER REMOVE HIS ROBE!')
+  assert.match(HUB_ROBE_REMOVAL_MSGBOX.body, /avoidable disintegration/)
+})
+
+test('stock equipment icons retain class-owned natural transforms and starter appearance colors', () => {
+  assert.deepEqual(HUB_ITEM_ICON_TRANSFORMS, {
+    amulet: { rotationDegrees: 0, translation: [0, -5] },
+    hat: { rotationDegrees: 0, translation: [0, 0] },
+    ring: { rotationDegrees: 0, translation: [0, 0] },
+    robe: { rotationDegrees: 0, translation: [0, 0] },
+    staff: { rotationDegrees: 35, translation: [-22.94306, 32.76608] },
+    wand: { rotationDegrees: 45, translation: [0, 0] },
+  })
+  assert.deepEqual(HUB_STARTER_EQUIPMENT_PRIMARY_TINT, {
+    air: 0xa0c3c3,
+    earth: 0x90b390,
+    ether: 0x886688,
+    fire: 0x998077,
+    water: 0x5e6e81,
+  })
 })
 
 test('stock inventory derives every elemental primary stat pane from native skill ranks', () => {
@@ -100,6 +170,8 @@ test('shop and dowsing screens use the recovered stock grids without invented pa
   })
   assert.deepEqual(hubDowsingSlotPosition(8), { x: 839, y: 244 })
   assert.deepEqual(HUB_SHOP_PANEL, {
+    backgroundBlendModes: ['normal', 'add'],
+    backgroundTileExtent: [264, 264],
     backgroundHeight: 400,
     backgroundRepeat: [4, 2],
     doneInnerTint: 0xbfffbf,
@@ -154,6 +226,23 @@ test('trader Chat owns its stock panel, clip, controls, and timing independently
   assert.equal(HUB_NATIVE_UI_TIMING.messageBoxRevealPerTick, 0.035)
 })
 
+test('trader Chat preserves ExactText inline italic commands and authored spacing', () => {
+  assert.deepEqual(HUB_CHAT_INLINE_EMPHASIS, {
+    exactTextCommand: 'i',
+    exactTextMarker: '_',
+    fontLineHeight: 24,
+    glyphBottomDelta: -3,
+    glyphTopDelta: 3,
+    italicFactor: 0.125,
+    sourceDelimiter: '*',
+  })
+  assert.deepEqual(hubChatTextRuns("But it's a lot *less* work.  Fair do's."), [
+    { italic: false, text: "But it's a lot " },
+    { italic: true, text: 'less' },
+    { italic: false, text: " work.  Fair do's." },
+  ])
+})
+
 test('dowsing preserves the stock red flash and insufficient-gold message branch', () => {
   assert.deepEqual(HUB_DOWSING_FLASH, {
     decrementPerTick: 0.05,
@@ -177,8 +266,12 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
     bodyMaxWidth: 382,
     bodyTextBaselineY: 287.5,
     horizontalEdgeRecord: 10,
-    interiorBackgroundRecord: null,
-    interiorFill: null,
+    interiorBackgroundRecord: 49,
+    interiorClipRect: [535.5, 158, 529, 384],
+    interiorFill: 'tiled-clipped',
+    innerPanelEdgeUvOrigin: 0.95,
+    innerPanelRecord: 17,
+    innerPanelRect: [540.5, 163, 519, 374],
     innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]],
     outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]],
     primaryButtonCenter: [800, 432],
@@ -233,6 +326,9 @@ test('the port exports the complete stock UI membership', () => {
     'shlorio-dowsing-results',
     'shlorio-insufficient-gold-message',
     'inventory',
+    'inventory-item-info',
+    'inventory-dragger',
+    'inventory-required-clothing-message',
   ])
 })
 
@@ -247,6 +343,7 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /atlasSliceTexture\(context, atlas, record, edgeUvOrigin, 0, 1, 1\)/)
   assert.match(rendererSource, /'UI', 73/)
   assert.match(rendererSource, /'UI', 74/)
+  assert.match(rendererSource, /tile\.blendMode = blendMode/)
   assert.match(rendererSource, /item\.price > model\.economy\.gold \? 46 : 84/)
   assert.match(rendererSource, /`\$\{item\.price\}`,[\s\S]*?HUB_SHOP_TEXT\.priceFont/)
   assert.doesNotMatch(rendererSource, /`\$\{item\.price\}`, 'skill'/)
@@ -265,5 +362,30 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.match(rendererSource, /dataset\.nativeNoticeReveal/)
   assert.match(rendererSource, /typeof child\.label === 'string'/)
   assert.doesNotMatch(rendererSource, /Math\.random\(\)/)
-  assert.doesNotMatch(rendererSource, /addTiledAtlas\(context, noticeLayer, 'UI', 49/)
+  assert.match(
+    rendererSource,
+    /addTiledAtlas\([\s\S]*?HUB_DOWSING_MSGBOX\.interiorBackgroundRecord,[\s\S]*?\.\.\.HUB_DOWSING_MSGBOX\.interiorClipRect/,
+  )
+  assert.match(
+    rendererSource,
+    /addNativeNineSlice\([\s\S]*?HUB_DOWSING_MSGBOX\.innerPanelRecord,[\s\S]*?\.\.\.HUB_DOWSING_MSGBOX\.innerPanelRect,[\s\S]*?HUB_DOWSING_MSGBOX\.innerPanelEdgeUvOrigin/,
+  )
+  assert.doesNotMatch(rendererSource, /fit \/ Math\.max/)
+  assert.match(rendererSource, /sprite\.rotation = \(transform\?\.rotationDegrees \?\? 0\) \* Math\.PI \/ 180/)
+  assert.match(rendererSource, /HUB_STARTER_EQUIPMENT_PRIMARY_TINT\[element\]/)
+  assert.doesNotMatch(rendererSource, /`EQUIP \$\{equipmentSlotLabel\(slot\)\}`/)
+  assert.doesNotMatch(rendererSource, /selected\.rarity \?\? selected\.kind/)
+  assert.match(rendererSource, /hubInventoryItemInfoText\(/)
+  assert.match(rendererSource, /native-inventory-dragger/)
+  assert.match(rendererSource, /dragging\.owner === 'storage'/)
+  assert.match(source, /gesture: 'double-activation'/)
+  assert.match(source, /gesture: 'drag'/)
+  assert.match(source, /backpackSecondActivation|activateBackpackSource/)
+  assert.doesNotMatch(source, /direction: 'to-storage'[^}]*gesture: 'double-activation'/s)
+  assert.match(source, /audio\.playSound\('backpack-close'\)/)
+  assert.match(source, /audio\.playSound\('distort-reality', \{ playbackRate: feedback\.dowsingPitch \}\)/)
+  assert.match(source, /audio\.playSound\('open-panel'\)/)
+  assert.match(rendererSource, /hubChatTextRuns\(/)
+  assert.match(rendererSource, /sprite\.skew\.x = -italicAngle/)
+  assert.doesNotMatch(rendererSource, /replaceAll\('\*', ''\)/)
 })

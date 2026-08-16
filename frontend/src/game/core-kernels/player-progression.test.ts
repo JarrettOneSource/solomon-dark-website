@@ -4,11 +4,15 @@ import test from 'node:test'
 import {
   MAX_PLAYER_EXPERIENCE,
   MAX_PLAYER_LEVEL,
+  NATIVE_ANTIDOTE_IMMUNITY_TICKS,
+  NATIVE_DAMAGE_X4_POTION_TICKS,
   NATIVE_LEVEL_THRESHOLDS,
   NATIVE_SKILL_ROW_COUNT,
+  NATIVE_MIND_CHUG_TICKS,
   NATIVE_WELD_BUILDS,
   SPELL_WELDING_SKILL_ID,
   applyPlayerSkillChoice,
+  applyPlayerPotionEffect,
   boneyardEnemyExperienceAward,
   buildPlayerSkillOffer,
   createPlayerProgression,
@@ -21,6 +25,8 @@ import {
   nativeWeldBuild,
   playerStatBook,
   rerollPlayerSkillOffer,
+  resetPlayerPotionEffects,
+  stepPlayerPotionEffects,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
@@ -43,6 +49,52 @@ const ETHER_ARCANE = {
   displayName: 'Helvidius',
   element: 'ether',
 } as const
+
+test('all six native potion subtypes mutate and expire their authoritative progression fields', () => {
+  const damaged = {
+    ...createPlayerProgression(1),
+    currentHealth: 7,
+    currentMana: 9,
+    poisonDamagePerTick: 0.5,
+    poisonTicksRemaining: 700,
+  }
+  assert.equal(applyPlayerPotionEffect(damaged, 0).currentHealth, damaged.maximumHealth)
+  assert.equal(applyPlayerPotionEffect(damaged, 1).currentMana, damaged.maximumMana)
+  assert.equal(
+    applyPlayerPotionEffect(damaged, 2).damageX4TicksRemaining,
+    NATIVE_DAMAGE_X4_POTION_TICKS,
+  )
+  const antidote = applyPlayerPotionEffect(damaged, 3)
+  assert.equal(antidote.poisonDamagePerTick, 0)
+  assert.equal(antidote.poisonTicksRemaining, 0)
+  assert.equal(antidote.poisonImmunityTicksRemaining, NATIVE_ANTIDOTE_IMMUNITY_TICKS)
+  assert.equal(
+    applyPlayerPotionEffect(damaged, 4).mindChugTicksRemaining,
+    NATIVE_MIND_CHUG_TICKS,
+  )
+  const rejuvenated = applyPlayerPotionEffect(damaged, 5)
+  assert.equal(rejuvenated.currentHealth, damaged.maximumHealth)
+  assert.equal(rejuvenated.currentMana, damaged.maximumMana)
+
+  const armed = applyPlayerPotionEffect(
+    applyPlayerPotionEffect(
+      applyPlayerPotionEffect(damaged, 2),
+      3,
+    ),
+    4,
+  )
+  const stepped = stepPlayerPotionEffects(armed)
+  assert.equal(stepped.damageX4TicksRemaining, NATIVE_DAMAGE_X4_POTION_TICKS - 1)
+  assert.equal(stepped.mindChugTicksRemaining, NATIVE_MIND_CHUG_TICKS - 1)
+  assert.equal(stepped.poisonImmunityTicksRemaining, NATIVE_ANTIDOTE_IMMUNITY_TICKS - 1)
+  assert.deepEqual(resetPlayerPotionEffects(stepped), {
+    ...stepped,
+    damageX4TicksRemaining: 0,
+    mindChugTicksRemaining: 0,
+    poisonImmunityTicksRemaining: 0,
+  })
+  assert.throws(() => applyPlayerPotionEffect(damaged, 6), /within \[0, 5\]/)
+})
 
 function offerProgression(
   offerSeed: number,

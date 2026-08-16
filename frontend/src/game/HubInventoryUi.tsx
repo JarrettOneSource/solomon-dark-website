@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 
@@ -32,8 +34,11 @@ import {
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   createHubInventoryRenderer,
+  type HubInventoryDragModel,
   type HubInventoryRenderer,
   type HubInventoryRendererModel,
+  type HubInventoryRendererNotice,
+  type HubInventorySelectionModel,
   type HubTraderChatPhase,
 } from './renderer/hub-inventory-renderer.ts'
 import {
@@ -42,11 +47,16 @@ import {
   HUB_DOWSING_INSUFFICIENT_GOLD,
   HUB_DOWSING_MSGBOX,
   HUB_DOWSING_PREROLL,
+  HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
+  HUB_INVENTORY_INTERACTION,
+  HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_TIMING,
+  HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   hubDowsingSlotPosition,
+  hubInventoryEquipmentSlotRects,
   hubInventorySlotPosition,
   hubShopSlotPosition,
 } from './renderer/hub-inventory-render-contract.ts'
@@ -70,6 +80,12 @@ const EQUIPMENT_SLOT_ORDER: readonly EquipmentSlot[] = [
   'ring-1',
   'ring-2',
 ]
+
+interface HubServiceSelection {
+  readonly id: number
+  readonly owner: 'backpack' | 'storage' | null
+  readonly startedAtMs: number
+}
 
 export type HubUiSurface =
   | { readonly kind: 'dialogue'; readonly trader: HubTraderId }
@@ -136,14 +152,13 @@ export default function HubInventoryUi({
       if (event.key === 'Escape' && surface) {
         event.preventDefault()
         event.stopPropagation()
-        audio.playSound('click')
+        if (surface.kind !== 'dialogue') audio.playSound('open-panel')
         closeSurface()
         return
       }
       if (!surface && !disabled && !transitionActive && event.code === 'KeyI') {
         event.preventDefault()
         event.stopPropagation()
-        audio.playSound('click')
         onSurfaceChange({ kind: 'inventory' })
         return
       }
@@ -213,13 +228,55 @@ function NativeHubSurface({
   const revealStartedAtRef = useRef<number | null>(null)
   const chatCompletionHandledRef = useRef(false)
   const [rendererState, setRendererState] = useState<'error' | 'loading' | 'ready'>('loading')
-  const [notice, setNotice] = useState<typeof HUB_DOWSING_INSUFFICIENT_GOLD | null>(null)
+  const [notice, setNotice] = useState<HubInventoryRendererNotice | null>(null)
   const [chat, setChat] = useState<{
     acceleratedAtMs: number | null
     phase: HubTraderChatPhase
     phaseStartedAtMs: number
   }>(() => ({ acceleratedAtMs: null, phase: 'intro', phaseStartedAtMs: performance.now() }))
-  const [selection, setSelection] = useState<{ id: number; owner: 'backpack' | 'storage' | null } | null>(null)
+  const [serviceSelection, setServiceSelection] = useState<HubServiceSelection | null>(null)
+  const [inventorySelection, setInventorySelection] = useState<HubInventorySelectionModel | null>(null)
+  const [inventoryDrag, setInventoryDrag] = useState<HubInventoryDragModel | null>(null)
+  const feedbackSequenceRef = useRef(economy.actionFeedback?.sequence ?? 0)
+
+  useEffect(() => {
+    const feedback = economy.actionFeedback
+    if (!feedback || feedback.sequence <= feedbackSequenceRef.current) return
+    feedbackSequenceRef.current = feedback.sequence
+    if (!feedback.accepted) {
+      audio.playSound('bad-action')
+      return
+    }
+    if (feedback.action === 'buy-fomentius' || feedback.action === 'buy-hagatha') {
+      audio.playSound('drop-coins')
+      return
+    }
+    if (feedback.action === 'buy-dowsing') {
+      audio.playSound('drop-coins')
+      if (feedback.dowsingPitch !== null) {
+        audio.playSound('distort-reality', { playbackRate: feedback.dowsingPitch })
+      }
+      return
+    }
+    if (feedback.action === 'dowse') {
+      audio.playSound('pick-skill')
+      window.setTimeout(() => audio.playSound('pick-skill', { volume: 0.25 }), 250)
+      window.setTimeout(() => audio.playSound('pick-skill', { volume: 0.0625 }), 500)
+      window.setTimeout(() => audio.playSound('pick-skill', { volume: 0.015625 }), 750)
+      if (feedback.dowsingPitch !== null) {
+        audio.playSound('distort-reality', { playbackRate: feedback.dowsingPitch })
+      }
+      return
+    }
+    if (feedback.action === 'consume') {
+      audio.playSound('drink')
+      return
+    }
+    if (feedback.action === 'transfer') {
+      if (feedback.transferGesture === 'double-activation') audio.playSound('backpack-close')
+      else audio.playSound('click', { playbackRate: 0.75 })
+    }
+  }, [audio, economy.actionFeedback])
 
   const beginChatPhase = useCallback((phase: HubTraderChatPhase) => {
     chatCompletionHandledRef.current = false
@@ -229,10 +286,12 @@ function NativeHubSurface({
   const model = useMemo((): HubInventoryRendererModel => {
     if (surface.kind === 'inventory') return {
       config,
+      dragging: inventoryDrag,
       economy,
       kind: 'inventory',
+      notice,
       progression,
-      selectedItemId: selection?.id ?? null,
+      selection: inventorySelection,
     }
     if (surface.kind === 'dialogue') return {
       acceleratedAtMs: chat.acceleratedAtMs,
@@ -243,15 +302,17 @@ function NativeHubSurface({
     }
     return {
       config,
+      dragging: inventoryDrag,
       economy,
       kind: 'service',
       notice,
       progression,
-      selectedItemId: selection?.id ?? null,
-      selectedOwner: selection?.owner ?? null,
+      selectedItemId: serviceSelection?.id ?? null,
+      selectedOwner: serviceSelection?.owner ?? null,
+      selectionStartedAtMs: serviceSelection?.startedAtMs ?? null,
       trader: surface.trader,
     }
-  }, [chat, config, economy, notice, progression, selection, surface])
+  }, [chat, config, economy, inventoryDrag, inventorySelection, notice, progression, serviceSelection, surface])
 
   useLayoutEffect(() => {
     modelRef.current = model
@@ -302,22 +363,50 @@ function NativeHubSurface({
   }, [beginChatPhase, surface.kind])
 
   useEffect(() => {
-    if (!selection) return
     if (surface.kind === 'inventory') {
-      if (!economy.backpack.some(({ id }) => id === selection.id)) setSelection(null)
+      if (!inventorySelection) return
+      if (inventorySelection.owner === 'backpack') {
+        const item = economy.backpack.find(({ id }) => id === inventorySelection.id)
+        if (item) return
+        const equippedSlot = EQUIPMENT_SLOT_ORDER.find(
+          (slot) => itemAtEquipmentSlot(economy, slot)?.id === inventorySelection.id,
+        )
+        if (equippedSlot) {
+          setInventorySelection({
+            equipmentSlot: equippedSlot,
+            id: inventorySelection.id,
+            owner: 'equipment',
+            startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
+          })
+        } else setInventorySelection(null)
+        return
+      }
+      const equipped = inventorySelection.equipmentSlot === null
+        ? null
+        : itemAtEquipmentSlot(economy, inventorySelection.equipmentSlot)
+      if (equipped?.id === inventorySelection.id) return
+      if (economy.backpack.some(({ id }) => id === inventorySelection.id)) {
+        setInventorySelection({
+          equipmentSlot: null,
+          id: inventorySelection.id,
+          owner: 'backpack',
+          startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
+        })
+      } else setInventorySelection(null)
       return
     }
     if (surface.kind !== 'service') return
+    if (!serviceSelection) return
     const present = surface.trader === 'luthacus'
-      ? (selection.owner === 'backpack' ? economy.backpack : economy.storage)
-        .some(({ id }) => id === selection.id)
+      ? (serviceSelection.owner === 'backpack' ? economy.backpack : economy.storage)
+        .some(({ id }) => id === serviceSelection.id)
       : surface.trader === 'fomentius'
-        ? economy.fomentiusStock.some(({ id }) => id === selection.id)
+        ? economy.fomentiusStock.some(({ id }) => id === serviceSelection.id)
         : surface.trader === 'hagatha'
-          ? economy.hagathaOffers.some(({ selector }) => selector === selection.id)
-          : economy.dowsingOffers.some(({ id }) => id === selection.id)
-    if (!present) setSelection(null)
-  }, [economy.backpack, economy.dowsingOffers, economy.fomentiusStock, economy.hagathaOffers, economy.storage, selection, surface])
+          ? economy.hagathaOffers.some(({ selector }) => selector === serviceSelection.id)
+          : economy.dowsingOffers.some(({ id }) => id === serviceSelection.id)
+    if (!present) setServiceSelection(null)
+  }, [economy, inventorySelection, serviceSelection, surface])
 
   const click = (action: () => void) => {
     audio.playSound('click')
@@ -341,6 +430,12 @@ function NativeHubSurface({
       data-renderer-state={rendererState}
       data-native-chat-phase={surface.kind === 'dialogue' ? chat.phase : ''}
       data-native-notice={notice?.title ?? ''}
+      data-native-inventory-selection={inventorySelection
+        ? `${inventorySelection.owner}:${inventorySelection.equipmentSlot ?? inventorySelection.id}`
+        : ''}
+      data-native-inventory-dragging={inventoryDrag
+        ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
+        : ''}
     >
       <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
       <div className="hub-native-ui-actions">
@@ -362,31 +457,54 @@ function NativeHubSurface({
           <DialogueActions
             chat={chat}
             trader={surface.trader}
-            onClose={() => click(onClose)}
+            onClose={onClose}
             onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
               ? { ...current, acceleratedAtMs: performance.now() }
               : current)}
-            onAdvance={() => click(() => beginChatPhase('choices'))}
+            onAdvance={() => beginChatPhase('choices')}
             onPrices={() => click(() => beginChatPhase('prices'))}
             onService={() => click(() => onSurfaceChange({ kind: 'service', trader: surface.trader }))}
           />
         ) : surface.kind === 'service' ? (
           <ServiceActions
             economy={economy}
-            selection={selection}
+            selection={serviceSelection}
             trader={surface.trader}
-            onAction={(action) => click(() => onAction(action))}
-            onClose={() => click(onClose)}
-            onInsufficientGold={() => click(() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD))}
-            onSelect={(next) => click(() => setSelection(next))}
+            onAction={(action) => {
+              if (action.type.startsWith('buy-')) audio.playSound('click')
+              onAction(action)
+            }}
+            onClose={() => {
+              audio.playSound('open-panel')
+              onClose()
+            }}
+            onDragChange={setInventoryDrag}
+            onDragMove={(point) => rendererRef.current?.moveDrag(point)}
+            onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
+            onInteractionSound={(cue) => {
+              if (cue === 'storage-drag-start' || cue === 'shop-activation') audio.playSound('click')
+            }}
+            onSelect={setServiceSelection}
           />
         ) : (
           <InventoryActions
             economy={economy}
-            selection={selection}
-            onAction={(action) => click(() => onAction(action))}
-            onClose={() => click(onClose)}
-            onSelect={setSelection}
+            selection={inventorySelection}
+            onAction={(action) => {
+              if (action.type !== 'consume') audio.playSound('click')
+              onAction(action)
+            }}
+            onClose={() => {
+              audio.playSound('open-panel')
+              onClose()
+            }}
+            onDragChange={setInventoryDrag}
+            onDragMove={(point) => rendererRef.current?.moveDrag(point)}
+            onNotice={setNotice}
+            onSelect={(next) => {
+              audio.playSound('click')
+              setInventorySelection(next)
+            }}
           />
         )}
       </div>
@@ -461,7 +579,10 @@ function ServiceActions({
   economy,
   onAction,
   onClose,
+  onDragChange,
+  onDragMove,
   onInsufficientGold,
+  onInteractionSound,
   onSelect,
   selection,
   trader,
@@ -469,9 +590,12 @@ function ServiceActions({
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
+  onDragChange: (drag: HubInventoryDragModel | null) => void
+  onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onInsufficientGold: () => void
-  onSelect: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void
-  selection: { id: number; owner: 'backpack' | 'storage' | null } | null
+  onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
+  onSelect: (selection: HubServiceSelection | null) => void
+  selection: HubServiceSelection | null
   trader: HubTraderId
 }) {
   if (trader === 'luthacus') return (
@@ -480,6 +604,9 @@ function ServiceActions({
       selection={selection}
       onAction={onAction}
       onClose={onClose}
+      onDragChange={onDragChange}
+      onDragMove={onDragMove}
+      onInteractionSound={onInteractionSound}
       onSelect={onSelect}
     />
   )
@@ -509,8 +636,11 @@ function ServiceActions({
             selected={selection?.id === offer.selector && selection.owner === null}
             onClick={() => activateSelection(
               selection,
-              { id: offer.selector, owner: null },
-              onSelect,
+              { id: offer.selector, owner: null, startedAtMs: performance.now() },
+              (next) => {
+                onInteractionSound('shop-activation')
+                onSelect(next)
+              },
               () => onAction({ type: 'buy-hagatha', selector: offer.selector }),
             )}
           />
@@ -539,8 +669,11 @@ function ServiceActions({
           selected={selection?.id === item.id && selection.owner === null}
           onClick={() => activateSelection(
             selection,
-            { id: item.id, owner: null },
-            onSelect,
+            { id: item.id, owner: null, startedAtMs: performance.now() },
+            (next) => {
+              onInteractionSound('shop-activation')
+              onSelect(next)
+            },
             () => onAction(trader === 'fomentius'
               ? { type: 'buy-fomentius', itemId: item.id }
               : { type: 'buy-dowsing', offerId: item.id }),
@@ -556,130 +689,187 @@ function InventoryShopActions({
   economy,
   onAction,
   onClose,
+  onDragChange,
+  onDragMove,
+  onInteractionSound,
   onSelect,
   selection,
 }: {
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
-  onSelect: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void
-  selection: { id: number; owner: 'backpack' | 'storage' | null } | null
+  onDragChange: (drag: HubInventoryDragModel | null) => void
+  onDragMove: (point: { readonly x: number; readonly y: number }) => void
+  onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
+  onSelect: (selection: HubServiceSelection | null) => void
+  selection: HubServiceSelection | null
 }) {
-  return (
-    <>
-      <SemanticInventoryCollection
-        items={economy.backpack}
-        label="Backpack"
-        owner="backpack"
-        selection={selection}
-        onActivate={(item) => activateSelection(
-          selection,
-          { id: item.id, owner: 'backpack' },
-          onSelect,
-          () => onAction({ type: 'transfer', direction: 'to-storage', itemId: item.id }),
-        )}
-      />
-      <SemanticInventoryCollection
-        items={economy.storage.slice(0, 28)}
-        label="Scavenged Goods"
-        owner="storage"
-        selection={selection}
-        onActivate={(item) => activateSelection(
-          selection,
-          { id: item.id, owner: 'storage' },
-          onSelect,
-          () => onAction({ type: 'transfer', direction: 'to-backpack', itemId: item.id }),
-        )}
-      />
-      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
-    </>
-  )
-}
-
-function InventoryActions({
-  economy,
-  onAction,
-  onClose,
-  onSelect,
-  selection,
-}: {
-  economy: ProtocolPlayerEconomy
-  onAction: (action: HubInventoryAction) => void
-  onClose: () => void
-  onSelect: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void
-  selection: { id: number; owner: 'backpack' | 'storage' | null } | null
-}) {
+  const pressRef = useRef<ServiceInventoryPointerPress | null>(null)
+  const lastActivationRef = useRef<ServiceInventoryActivation | null>(null)
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
-  const selected = economy.backpack.find((item) => item.id === selection?.id) ?? null
-  return (
-    <>
-      <section aria-label="Backpack">
-        {Array.from({ length: HUB_INVENTORY_GRID.capacity }, (_, index) => {
-          const item = economy.backpack[index]
-          if (!item) return null
-          const position = hubInventorySlotPosition(index)
-          return (
-            <NativeAction
-              key={item.id}
-              label={`${item.name}, quantity ${item.quantity}`}
-              rect={[position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize]}
-              onClick={() => onSelect({ id: item.id, owner: 'backpack' })}
-            />
-          )
-        })}
-      </section>
-      {EQUIPMENT_SLOT_ORDER.map((slot) => {
-        const item = itemAtEquipmentSlot(economy, slot)
-        const locked = slot === 'ring-2' && !thirdRingUnlocked
-        const rect = equipmentRect(slot)
-        return (
-          <NativeAction
-            key={slot}
-            data={{ 'data-equipment-slot': slot }}
-            disabled={locked || !item}
-            label={`${EQUIPMENT_SLOT_LABELS[slot]}${locked ? ', locked' : item ? `, ${item.name}` : ', empty'}`}
-            rect={rect}
-            onClick={() => onAction({ type: 'unequip', slot })}
-          />
-        )
-      })}
-      {selected ? equipmentSlotsForItem(selected, thirdRingUnlocked).map((slot, index) => (
-        <NativeAction
-          key={slot}
-          label={`Equip ${EQUIPMENT_SLOT_LABELS[slot]}`}
-          rect={[680 + index * 130, 425, 125, 36]}
-          onClick={() => onAction({ type: 'equip', itemId: selected.id, slot })}
-        />
-      )) : null}
-      <NativeAction label="Done" rect={[1510, 830, 85, 65]} onClick={onClose} />
-    </>
-  )
-}
 
-function SemanticInventoryCollection({
-  items,
-  label,
-  onActivate,
-  owner,
-  selection,
-}: {
-  items: readonly HubInventoryItem[]
-  label: string
-  onActivate: (item: HubInventoryItem) => void
-  owner: 'backpack' | 'storage'
-  selection: { id: number; owner: 'backpack' | 'storage' | null } | null
-}) {
-  return (
+  const sourceIsSelected = (source: ServiceInventoryPointerSource) => (
+    selection?.id === source.itemId && selection.owner === source.owner
+  )
+  const selectSource = (
+    source: ServiceInventoryPointerSource,
+    startedAtMs = performance.now(),
+  ) => onSelect({ id: source.itemId, owner: source.owner, startedAtMs })
+
+  const activateBackpackSource = (source: ServiceInventoryPointerSource) => {
+    const item = economy.backpack.find(({ id }) => id === source.itemId)
+    if (!item) return
+    if (item.nativeTypeId === 7001) {
+      onAction({ type: 'consume', itemId: item.id })
+      return
+    }
+    const slots = equipmentSlotsForItem(item, thirdRingUnlocked)
+    const slot = slots.find((candidate) => itemAtEquipmentSlot(economy, candidate) === null) ?? slots[0]
+    if (!slot) return
+    onInteractionSound('shop-activation')
+    onAction({ type: 'equip', itemId: item.id, slot })
+  }
+
+  const beginPointer = (source: ServiceInventoryPointerSource) => (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    pressRef.current = {
+      activeDrag: false,
+      pointerId: event.pointerId,
+      source,
+      start: pointerStagePosition(event),
+    }
+  }
+
+  const movePointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    const point = pointerStagePosition(event)
+    if (!press.activeDrag) {
+      const dx = point.x - press.start.x
+      const dy = point.y - press.start.y
+      if (Math.hypot(dx, dy) < HUB_INVENTORY_INTERACTION.dragThresholdPixels) return
+      press.activeDrag = true
+      selectSource(press.source)
+      if (press.source.owner === 'storage') onInteractionSound('storage-drag-start')
+      onDragChange({
+        equipmentSlot: null,
+        itemId: press.source.itemId,
+        owner: press.source.owner,
+        pointer: point,
+      })
+    }
+    onDragMove(point)
+  }
+
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = pointerStagePosition(event)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    pressRef.current = null
+    if (press.activeDrag) {
+      onDragChange(null)
+      selectSource(press.source, performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs)
+      const validDrop = press.source.owner === 'backpack'
+        ? pointInRect(point, [
+            HUB_SHOP_GRID.left,
+            HUB_SHOP_GRID.top,
+            (HUB_SHOP_GRID.columns - 1) * HUB_SHOP_GRID.pitchX + HUB_SHOP_GRID.cellSize,
+            (HUB_SHOP_GRID.rows - 1) * HUB_SHOP_GRID.pitchY + HUB_SHOP_GRID.cellSize,
+          ])
+        : pointInRect(point, [0, 490, 1600, 310])
+      if (validDrop) onAction({
+        type: 'transfer',
+        direction: press.source.owner === 'backpack' ? 'to-storage' : 'to-backpack',
+        gesture: 'drag',
+        itemId: press.source.itemId,
+      })
+      return
+    }
+
+    const nowMs = performance.now()
+    const previous = lastActivationRef.current
+    const doubled = previous
+      && previous.source.itemId === press.source.itemId
+      && previous.source.owner === press.source.owner
+      && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs
+    if (press.source.owner === 'storage' || !doubled) onInteractionSound('shop-activation')
+    if (doubled) {
+      lastActivationRef.current = null
+      if (press.source.owner === 'storage') onAction({
+        type: 'transfer',
+        direction: 'to-backpack',
+        gesture: 'double-activation',
+        itemId: press.source.itemId,
+      })
+      else activateBackpackSource(press.source)
+    } else {
+      lastActivationRef.current = { atMs: nowMs, source: press.source }
+      if (!sourceIsSelected(press.source)) selectSource(press.source, nowMs)
+    }
+  }
+
+  const cancelPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pressRef.current?.pointerId !== event.pointerId) return
+    pressRef.current = null
+    onDragChange(null)
+  }
+
+  const keyboardActivate = (source: ServiceInventoryPointerSource) => (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    const nowMs = performance.now()
+    const previous = lastActivationRef.current
+    const doubled = previous
+      && previous.source.itemId === source.itemId
+      && previous.source.owner === source.owner
+      && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs
+    if (source.owner === 'storage' || !doubled) onInteractionSound('shop-activation')
+    if (doubled) {
+      lastActivationRef.current = null
+      if (source.owner === 'storage') onAction({
+        type: 'transfer',
+        direction: 'to-backpack',
+        gesture: 'double-activation',
+        itemId: source.itemId,
+      })
+      else activateBackpackSource(source)
+    } else {
+      lastActivationRef.current = { atMs: nowMs, source }
+      selectSource(source, nowMs)
+    }
+  }
+
+  const inventoryCollection = (
+    owner: 'backpack' | 'storage',
+    items: readonly HubInventoryItem[],
+    label: string,
+  ) => (
     <section aria-label={label}>
       {items.map((item, index) => {
         const position = owner === 'backpack'
           ? hubInventorySlotPosition(index)
           : hubShopSlotPosition(index)
-        const selected = selection?.id === item.id && selection.owner === owner
+        const source: ServiceInventoryPointerSource = { itemId: item.id, owner }
         return (
           <NativeAction
             key={item.id}
-            data={{ 'data-selected': selected ? 'true' : 'false' }}
+            data={{
+              'data-inventory-item-id': item.id,
+              'data-inventory-owner': owner,
+              'data-selected': sourceIsSelected(source) ? 'true' : 'false',
+            }}
             label={`${item.name}, quantity ${item.quantity}`}
             rect={[
               position.x,
@@ -687,12 +877,331 @@ function SemanticInventoryCollection({
               owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
               owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
             ]}
-            onClick={() => onActivate(item)}
+            onKeyDown={keyboardActivate(source)}
+            onPointerCancel={cancelPointer}
+            onPointerDown={beginPointer(source)}
+            onPointerMove={movePointer}
+            onPointerUp={finishPointer}
           />
         )
       })}
     </section>
   )
+
+  return (
+    <>
+      {inventoryCollection('backpack', economy.backpack, 'Backpack')}
+      {inventoryCollection('storage', economy.storage.slice(0, 28), 'Scavenged Goods')}
+      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+    </>
+  )
+}
+
+interface ServiceInventoryPointerSource {
+  readonly itemId: number
+  readonly owner: 'backpack' | 'storage'
+}
+
+interface ServiceInventoryPointerPress {
+  activeDrag: boolean
+  readonly pointerId: number
+  readonly source: ServiceInventoryPointerSource
+  readonly start: { readonly x: number; readonly y: number }
+}
+
+interface ServiceInventoryActivation {
+  readonly atMs: number
+  readonly source: ServiceInventoryPointerSource
+}
+
+function InventoryActions({
+  economy,
+  onAction,
+  onClose,
+  onDragChange,
+  onDragMove,
+  onNotice,
+  onSelect,
+  selection,
+}: {
+  economy: ProtocolPlayerEconomy
+  onAction: (action: HubInventoryAction) => void
+  onClose: () => void
+  onDragChange: (drag: HubInventoryDragModel | null) => void
+  onDragMove: (point: { readonly x: number; readonly y: number }) => void
+  onNotice: (notice: HubInventoryRendererNotice) => void
+  onSelect: (selection: HubInventorySelectionModel | null) => void
+  selection: HubInventorySelectionModel | null
+}) {
+  const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
+  const pressRef = useRef<InventoryPointerPress | null>(null)
+  const lastActivationRef = useRef<InventoryActivation | null>(null)
+
+  const selectSource = (source: InventoryPointerSource, startedAtMs = performance.now()) => {
+    onSelect({
+      equipmentSlot: source.equipmentSlot,
+      id: source.itemId,
+      owner: source.owner,
+      startedAtMs,
+    })
+  }
+
+  const sourceIsSelected = (source: InventoryPointerSource) => selection?.id === source.itemId
+    && selection.owner === source.owner
+    && selection.equipmentSlot === source.equipmentSlot
+
+  const activateSource = (source: InventoryPointerSource) => {
+    if (source.owner === 'equipment') {
+      if (source.equipmentSlot === 'hat') {
+        onNotice(HUB_HAT_REMOVAL_MSGBOX)
+        return
+      }
+      if (source.equipmentSlot === 'robe') {
+        onNotice(HUB_ROBE_REMOVAL_MSGBOX)
+        return
+      }
+      if (source.equipmentSlot !== null) onAction({ type: 'unequip', slot: source.equipmentSlot })
+      return
+    }
+    const item = economy.backpack.find(({ id }) => id === source.itemId)
+    if (!item) return
+    if (item.nativeTypeId === 7001) {
+      onAction({ type: 'consume', itemId: item.id })
+      return
+    }
+    const slots = equipmentSlotsForItem(item, thirdRingUnlocked)
+    const slot = slots.find((candidate) => itemAtEquipmentSlot(economy, candidate) === null) ?? slots[0]
+    if (slot) onAction({ type: 'equip', itemId: item.id, slot })
+  }
+
+  const beginPointer = (source: InventoryPointerSource) => (
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const startedAtMs = performance.now()
+    pressRef.current = {
+      activeDrag: false,
+      pointerId: event.pointerId,
+      source,
+      start: pointerStagePosition(event),
+    }
+    if (!sourceIsSelected(source)) selectSource(source, startedAtMs)
+  }
+
+  const movePointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    const point = pointerStagePosition(event)
+    if (!press.activeDrag) {
+      const dx = point.x - press.start.x
+      const dy = point.y - press.start.y
+      if (Math.hypot(dx, dy) < HUB_INVENTORY_INTERACTION.dragThresholdPixels) return
+      press.activeDrag = true
+      onDragChange({
+        equipmentSlot: press.source.equipmentSlot,
+        itemId: press.source.itemId,
+        owner: press.source.owner,
+        pointer: point,
+      })
+    }
+    onDragMove(point)
+  }
+
+  const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+    if (!press || press.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const point = pointerStagePosition(event)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    pressRef.current = null
+    if (press.activeDrag) {
+      onDragChange(null)
+      selectSource(press.source, performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs)
+      dropInventorySource(
+        press.source,
+        point,
+        economy,
+        thirdRingUnlocked,
+        onAction,
+        onNotice,
+      )
+      return
+    }
+    const nowMs = performance.now()
+    const previous = lastActivationRef.current
+    if (previous && sameInventorySource(previous.source, press.source)
+      && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs) {
+      lastActivationRef.current = null
+      activateSource(press.source)
+    } else lastActivationRef.current = { atMs: nowMs, source: press.source }
+  }
+
+  const cancelPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pressRef.current?.pointerId !== event.pointerId) return
+    pressRef.current = null
+    onDragChange(null)
+  }
+
+  const keyboardSelect = (source: InventoryPointerSource) => (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    const nowMs = performance.now()
+    const previous = lastActivationRef.current
+    if (!sourceIsSelected(source)) selectSource(source, nowMs)
+    if (previous && sameInventorySource(previous.source, source)
+      && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs) {
+      lastActivationRef.current = null
+      activateSource(source)
+    } else lastActivationRef.current = { atMs: nowMs, source }
+  }
+
+  return (
+    <>
+      <section aria-label="Backpack">
+        {Array.from({ length: HUB_INVENTORY_GRID.capacity }, (_, index) => {
+          const item = economy.backpack[index]
+          if (!item) return null
+          const position = hubInventorySlotPosition(index)
+          const source: InventoryPointerSource = {
+            equipmentSlot: null,
+            itemId: item.id,
+            owner: 'backpack',
+          }
+          return (
+            <NativeAction
+              key={item.id}
+              data={{
+                'data-inventory-item-id': item.id,
+                'data-inventory-owner': 'backpack',
+                'data-selected': selection?.id === item.id && selection.owner === 'backpack' ? 'true' : 'false',
+              }}
+              label={`${item.name}, quantity ${item.quantity}`}
+              rect={[position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize]}
+              onKeyDown={keyboardSelect(source)}
+              onPointerCancel={cancelPointer}
+              onPointerDown={beginPointer(source)}
+              onPointerMove={movePointer}
+              onPointerUp={finishPointer}
+            />
+          )
+        })}
+      </section>
+      {EQUIPMENT_SLOT_ORDER.map((slot) => {
+        const item = itemAtEquipmentSlot(economy, slot)
+        const locked = slot === 'ring-2' && !thirdRingUnlocked
+        const source: InventoryPointerSource | null = item ? {
+          equipmentSlot: slot,
+          itemId: item.id,
+          owner: 'equipment',
+        } : null
+        return hubInventoryEquipmentSlotRects(slot).map((rect, aliasIndex) => (
+          <NativeAction
+            key={`${slot}-${aliasIndex}`}
+            data={{
+              'data-equipment-alias': aliasIndex,
+              'data-equipment-slot': slot,
+              'data-inventory-item-id': item?.id ?? '',
+              'data-inventory-owner': 'equipment',
+              'data-selected': item && selection?.id === item.id
+                && selection.owner === 'equipment' && selection.equipmentSlot === slot
+                ? 'true'
+                : 'false',
+            }}
+            disabled={locked || !source}
+            label={`${EQUIPMENT_SLOT_LABELS[slot]}${locked ? ', locked' : item ? `, ${item.name}` : ', empty'}`}
+            rect={rect}
+            onKeyDown={source ? keyboardSelect(source) : undefined}
+            onPointerCancel={source ? cancelPointer : undefined}
+            onPointerDown={source ? beginPointer(source) : undefined}
+            onPointerMove={source ? movePointer : undefined}
+            onPointerUp={source ? finishPointer : undefined}
+          />
+        ))
+      })}
+      <NativeAction label="Done" rect={[1510, 830, 85, 65]} onClick={onClose} />
+    </>
+  )
+}
+
+interface InventoryPointerSource {
+  readonly equipmentSlot: EquipmentSlot | null
+  readonly itemId: number
+  readonly owner: 'backpack' | 'equipment'
+}
+
+interface InventoryPointerPress {
+  activeDrag: boolean
+  readonly pointerId: number
+  readonly source: InventoryPointerSource
+  readonly start: { readonly x: number; readonly y: number }
+}
+
+interface InventoryActivation {
+  readonly atMs: number
+  readonly source: InventoryPointerSource
+}
+
+function pointerStagePosition(
+  event: ReactPointerEvent<HTMLButtonElement>,
+): { readonly x: number; readonly y: number } {
+  const stage = event.currentTarget.closest('.hub-native-ui-stage')
+  if (!(stage instanceof HTMLElement)) return { x: event.clientX, y: event.clientY }
+  const rect = stage.getBoundingClientRect()
+  return {
+    x: (event.clientX - rect.left) * HUB_NATIVE_UI_SIZE.width / rect.width,
+    y: (event.clientY - rect.top) * HUB_NATIVE_UI_SIZE.height / rect.height,
+  }
+}
+
+function sameInventorySource(left: InventoryPointerSource, right: InventoryPointerSource): boolean {
+  return left.itemId === right.itemId
+    && left.owner === right.owner
+    && left.equipmentSlot === right.equipmentSlot
+}
+
+function pointInRect(
+  point: { readonly x: number; readonly y: number },
+  [left, top, width, height]: readonly [number, number, number, number],
+): boolean {
+  return point.x >= left && point.x <= left + width
+    && point.y >= top && point.y <= top + height
+}
+
+function dropInventorySource(
+  source: InventoryPointerSource,
+  point: { readonly x: number; readonly y: number },
+  economy: ProtocolPlayerEconomy,
+  thirdRingUnlocked: boolean,
+  onAction: (action: HubInventoryAction) => void,
+  onNotice: (notice: HubInventoryRendererNotice) => void,
+): void {
+  if (source.owner === 'backpack') {
+    const item = economy.backpack.find(({ id }) => id === source.itemId)
+    if (!item) return
+    const slot = equipmentSlotsForItem(item, thirdRingUnlocked).find((candidate) => (
+      hubInventoryEquipmentSlotRects(candidate).some((rect) => pointInRect(point, rect))
+    ))
+    if (slot) onAction({ type: 'equip', itemId: item.id, slot })
+    return
+  }
+  if (source.equipmentSlot === null || !pointInRect(point, [0, 490, 1600, 310])) return
+  if (source.equipmentSlot === 'hat') {
+    onNotice(HUB_HAT_REMOVAL_MSGBOX)
+    return
+  }
+  if (source.equipmentSlot === 'robe') {
+    onNotice(HUB_ROBE_REMOVAL_MSGBOX)
+    return
+  }
+  onAction({ type: 'unequip', slot: source.equipmentSlot })
 }
 
 function ShopAction({
@@ -731,9 +1240,9 @@ function ShopAction({
 }
 
 function activateSelection(
-  current: { id: number; owner: 'backpack' | 'storage' | null } | null,
-  next: { id: number; owner: 'backpack' | 'storage' | null },
-  select: (selection: { id: number; owner: 'backpack' | 'storage' | null } | null) => void,
+  current: HubServiceSelection | null,
+  next: HubServiceSelection,
+  select: (selection: HubServiceSelection | null) => void,
   activate: () => void,
 ): void {
   if (current?.id === next.id && current.owner === next.owner) activate()
@@ -747,14 +1256,24 @@ function NativeAction({
   label,
   onClick,
   onFocus,
+  onKeyDown,
+  onPointerCancel,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
   rect,
 }: {
   children?: ReactNode
   data?: Record<string, number | string>
   disabled?: boolean
   label: string
-  onClick: () => void
+  onClick?: () => void
   onFocus?: () => void
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLButtonElement>) => void
+  onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   rect: readonly [number, number, number, number]
 }) {
   return (
@@ -766,7 +1285,12 @@ function NativeAction({
       style={rectStyle(rect)}
       onClick={onClick}
       onFocus={onFocus}
+      onKeyDown={onKeyDown}
+      onPointerCancel={onPointerCancel}
+      onPointerDown={onPointerDown}
       onPointerEnter={onFocus}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
       {...data}
     >
       <span className="hub-native-ui-semantic">{label}</span>
@@ -777,18 +1301,6 @@ function NativeAction({
 
 function rectStyle([left, top, width, height]: readonly [number, number, number, number]): CSSProperties {
   return { height, left, top, width }
-}
-
-function equipmentRect(slot: EquipmentSlot): readonly [number, number, number, number] {
-  switch (slot) {
-    case 'amulet': return [1301, 170, 46, 46]
-    case 'hat': return [1355, 144, 68, 68]
-    case 'weapon': return [1275, 224, 68, 68]
-    case 'robe': return [1355, 224, 68, 105]
-    case 'ring-0': return [1301, 303, 46, 46]
-    case 'ring-1': return [1435, 303, 46, 46]
-    case 'ring-2': return [1435, 350, 46, 46]
-  }
 }
 
 function itemAtEquipmentSlot(economy: ProtocolPlayerEconomy, slot: EquipmentSlot): HubInventoryItem | null {

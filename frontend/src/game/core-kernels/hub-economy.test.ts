@@ -5,11 +5,14 @@ import {
   DOWSING_EQUIPMENT_RECIPES,
   FOMENTIUS_STOCK_DEFINITIONS,
   HAGATHA_PERKS,
+  HUB_INVENTORY_SLOT_CAPACITY,
+  HUB_STORAGE_SLOT_CAPACITY,
   STARTING_PLAYER_GOLD,
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
   closeDowsingOffers,
+  consumeInventoryItem,
   createEquipmentInventoryItem,
   createHubEconomy,
   dowse,
@@ -22,23 +25,35 @@ import {
   type HubEconomyState,
 } from './hub-economy.ts'
 
-test('a fresh participant owns the hard-coded 10k ledger and native starter stacks', () => {
+test('a fresh participant owns the hard-coded 10k ledger and complete native starter loadout', () => {
   const state = createHubEconomy(1)
 
   assert.equal(STARTING_PLAYER_GOLD, 10_000)
+  assert.equal(HUB_INVENTORY_SLOT_CAPACITY, 88)
+  assert.equal(HUB_STORAGE_SLOT_CAPACITY, 28)
   assert.equal(state.gold, 10_000)
   assert.deepEqual(
     state.backpack.map(({ kind, quantity }) => [kind, quantity]),
     [['health-potion', 1], ['mana-potion', 1]],
   )
   assert.deepEqual(state.storage, [])
-  assert.deepEqual(state.equipment, {
-    amulet: null,
-    hat: null,
-    rings: [null, null, null],
-    robe: null,
-    weapon: null,
-  })
+  assert.deepEqual(
+    [state.equipment.hat, state.equipment.robe, state.equipment.weapon].map((item) => ({
+      iconRecords: item?.iconRecords,
+      name: item?.name,
+      nativeTypeId: item?.nativeTypeId,
+      rarity: item?.rarity,
+      recipeIndex: item?.recipeIndex,
+    })),
+    [
+      { iconRecords: [34, 38], name: 'Hat', nativeTypeId: 7005, rarity: null, recipeIndex: null },
+      { iconRecords: [64, 67], name: 'Robe', nativeTypeId: 7006, rarity: null, recipeIndex: null },
+      { iconRecords: [72], name: 'Staff', nativeTypeId: 7004, rarity: null, recipeIndex: null },
+    ],
+  )
+  assert.equal(state.equipment.amulet, null)
+  assert.deepEqual(state.equipment.rings, [null, null, null])
+  assert.ok(state.fomentiusStock.every(({ id }) => id >= 6))
 })
 
 test('Fomentius preserves every native generator row and seed-1 roll order', () => {
@@ -92,6 +107,27 @@ test('ordinary purchase is atomic, removes one stock object, and stacks potions'
   assert.equal(rejected.accepted, false)
   assert.equal(rejected.reason, 'insufficient-gold')
   assert.strictEqual(rejected.state, noFunds)
+})
+
+test('native potion use decrements one stacked object and destroys the empty stack', () => {
+  const initial = createHubEconomy(1)
+  const health = initial.backpack.find(({ kind }) => kind === 'health-potion')!
+  const stacked = {
+    ...initial,
+    backpack: initial.backpack.map((item) => item.id === health.id
+      ? { ...item, quantity: 2 }
+      : item),
+  }
+  const first = consumeInventoryItem(stacked, health.id)
+  assert.equal(first.accepted, true)
+  assert.equal(first.state.backpack.find(({ id }) => id === health.id)?.quantity, 1)
+
+  const second = consumeInventoryItem(first.state, health.id)
+  assert.equal(second.accepted, true)
+  assert.equal(second.state.backpack.some(({ id }) => id === health.id), false)
+
+  const equipment = consumeInventoryItem(initial, initial.equipment.hat!.id)
+  assert.equal(equipment.reason, 'item-not-found')
 })
 
 test('a post-run Fomentius restock advances native entropy without resetting the ledger', () => {
@@ -174,11 +210,25 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
     )).map(([type, rows]) => [type, rows?.length])),
     { ring: 13, robe: 7, wand: 8, amulet: 9, hat: 6, staff: 4 },
   )
+  assert.ok(DOWSING_EQUIPMENT_RECIPES
+    .filter(({ type }) => type === 'amulet')
+    .every(({ iconRecords }) => [30, 31].includes(iconRecords[0]!) && iconRecords[1]! >= 18 && iconRecords[1]! <= 29))
+  assert.deepEqual(DOWSING_EQUIPMENT_RECIPES[1]?.iconTints, [0x191919, 0x80ffff])
+  assert.deepEqual(DOWSING_EQUIPMENT_RECIPES[25]?.iconTints, [0x19ff19, 0xc8ffc8])
+  assert.ok(DOWSING_EQUIPMENT_RECIPES
+    .filter(({ type }) => type === 'ring' || type === 'amulet' || type === 'staff' || type === 'wand')
+    .every(({ iconTints }) => iconTints[0] === null && iconTints[1] === null))
 
   const initial = createHubEconomy(1)
   const rolled = dowse(initial, 75)
   assert.equal(rolled.accepted, true)
+  assert.equal(rolled.dowsingPitch, 0.8968220129609108)
   assert.equal(rolled.state.gold, 9_350)
+  assert.deepEqual(rolled.state.dowsingOffers, [
+    { id: 1, price: 5_550, recipeIndex: 40 },
+    { id: 2, price: 5_000, recipeIndex: 3 },
+    { id: 3, price: 5_050, recipeIndex: 34 },
+  ])
   assert.ok(rolled.state.dowsingOffers.length === 3 || rolled.state.dowsingOffers.length === 4)
   assert.equal(new Set(rolled.state.dowsingOffers.map(({ recipeIndex }) => recipeIndex)).size,
     rolled.state.dowsingOffers.length)
@@ -187,9 +237,10 @@ test('Shlorio consumes the fee, offers unique complete-catalog recipes, and clea
   const offer = rolled.state.dowsingOffers[0]!
   const bought = buyDowsingOffer(rolled.state, offer.id)
   assert.equal(bought.accepted, true)
+  assert.equal(bought.dowsingPitch, 1.0525179989635944)
   assert.equal(bought.state.dowsingOffers.length, 0)
   assert.ok(bought.state.backpack.some(({ recipeIndex }) => recipeIndex === offer.recipeIndex))
-  assert.ok(bought.state.dowsingFee >= 500 && bought.state.dowsingFee <= 950)
+  assert.equal(bought.state.dowsingFee, 700)
 
   const closed = closeDowsingOffers(dowse(createHubEconomy(1), 75).state)
   assert.equal(closed.dowsingOffers.length, 0)
@@ -213,8 +264,13 @@ test('all six equipment classes route through the seven sinks and third ring is 
     const equipped = equipInventoryItem(state, item.id, slot)
     assert.equal(equipped.accepted, true, `${type} equips into ${slot}`)
     const unequipped = unequipInventorySlot(equipped.state, slot)
-    assert.equal(unequipped.accepted, true, `${type} unequips from ${slot}`)
-    assert.ok(unequipped.state.backpack.some(({ id }) => id === item.id))
+    if (slot === 'hat' || slot === 'robe') {
+      assert.equal(unequipped.reason, 'required-clothing', `${type} cannot leave ${slot} empty`)
+      assert.strictEqual(unequipped.state, equipped.state)
+    } else {
+      assert.equal(unequipped.accepted, true, `${type} unequips from ${slot}`)
+      assert.ok(unequipped.state.backpack.some(({ id }) => id === item.id))
+    }
   }
 
   const base = createHubEconomy(1)
@@ -224,6 +280,29 @@ test('all six equipment classes route through the seven sinks and third ring is 
   assert.equal(equipInventoryItem(ringState, ring.id, 'ring-2').reason, 'slot-locked')
   const unlocked = { ...ringState, ownedPerkSelectors: [19] }
   assert.equal(equipInventoryItem(unlocked, ring.id, 'ring-2').accepted, true)
+})
+
+test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct native capacities', () => {
+  const base = createHubEconomy(1)
+  const health = base.backpack[0]!
+  const unique = (index: number) => ({
+    ...health,
+    iconRecords: [42],
+    id: 10_000 + index,
+    kind: 'dye' as const,
+    name: `Dye ${index}`,
+    nativeSubtype: 0,
+    nativeTypeId: 7012,
+    quantity: 1,
+  })
+  const fullStorage = { ...base, storage: Array.from({ length: 28 }, (_, index) => unique(index)) }
+  assert.equal(transferInventoryItem(fullStorage, health.id, 'to-storage').reason, 'capacity-full')
+
+  const backpack = Array.from({ length: 87 }, (_, index) => unique(index))
+  const oneSlot = { ...base, backpack, storage: [unique(999)] }
+  assert.equal(transferInventoryItem(oneSlot, oneSlot.storage[0]!.id, 'to-backpack').accepted, true)
+  const fullBackpack = { ...base, backpack: Array.from({ length: 88 }, (_, index) => unique(index)), storage: [unique(999)] }
+  assert.equal(transferInventoryItem(fullBackpack, fullBackpack.storage[0]!.id, 'to-backpack').reason, 'capacity-full')
 })
 
 test('two participants never share gold, stock, offers, or inventory mutations', () => {

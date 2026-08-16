@@ -6,6 +6,7 @@ import {
   NATIVE_SKILL_CATALOG,
   playerStatBook,
 } from '../core-kernels/player-progression.ts'
+import type { EquipmentSlot, HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 
 export const HUB_NATIVE_UI_SIZE = { height: 900, width: 1600 } as const
@@ -19,6 +20,35 @@ export const HUB_INVENTORY_GRID = {
   rows: 4,
   slotAlpha: 0.4,
   top: 496,
+} as const
+
+export const HUB_INVENTORY_INTERACTION = {
+  doubleActivationMs: 500,
+  doubleActivationTicks: 50,
+  dragThresholdPixels: 10,
+  itemInfoDelayMs: 200,
+  itemInfoDelayTicks: 20,
+  itemInfoOffset: 40,
+  itemInfoPadding: 20,
+  itemInfoViewportMargin: 25,
+  selectionTint: 0x00c020,
+} as const
+
+export const HUB_STARTER_EQUIPMENT_PRIMARY_TINT: Readonly<Record<WizardElement, number>> = {
+  air: 0xa0c3c3,
+  earth: 0x90b390,
+  ether: 0x886688,
+  fire: 0x998077,
+  water: 0x5e6e81,
+}
+
+export const HUB_ITEM_ICON_TRANSFORMS = {
+  amulet: { rotationDegrees: 0, translation: [0, -5] },
+  hat: { rotationDegrees: 0, translation: [0, 0] },
+  ring: { rotationDegrees: 0, translation: [0, 0] },
+  robe: { rotationDegrees: 0, translation: [0, 0] },
+  staff: { rotationDegrees: 35, translation: [-22.94306, 32.76608] },
+  wand: { rotationDegrees: 45, translation: [0, 0] },
 } as const
 
 export const HUB_SHOP_GRID = {
@@ -46,6 +76,8 @@ export const HUB_DOWSING_GRID = {
 } as const
 
 export const HUB_SHOP_PANEL = {
+  backgroundBlendModes: ['normal', 'add'] as const,
+  backgroundTileExtent: [264, 264] as const,
   backgroundHeight: 400,
   backgroundRepeat: [4, 2] as const,
   doneInnerTint: 0xbfffbf,
@@ -81,6 +113,42 @@ export const HUB_CHAT_PANEL = {
   uiRecord: 11,
   width: 647,
 } as const
+
+export const HUB_CHAT_INLINE_EMPHASIS = {
+  exactTextCommand: 'i',
+  exactTextMarker: '_',
+  fontLineHeight: 24,
+  glyphBottomDelta: -3,
+  glyphTopDelta: 3,
+  italicFactor: 0.125,
+  sourceDelimiter: '*',
+} as const
+
+export interface HubChatTextRun {
+  readonly italic: boolean
+  readonly text: string
+}
+
+export function hubChatTextRuns(source: string): readonly HubChatTextRun[] {
+  const runs: HubChatTextRun[] = []
+  let italic = false
+  let text = ''
+  const flush = (): void => {
+    if (!text) return
+    runs.push({ italic, text })
+    text = ''
+  }
+  for (const character of source) {
+    if (character === HUB_CHAT_INLINE_EMPHASIS.sourceDelimiter) {
+      flush()
+      italic = !italic
+    } else {
+      text += character
+    }
+  }
+  flush()
+  return runs
+}
 
 export const HUB_SHOP_TEXT = {
   affordableTint: 0xd9ba70,
@@ -128,8 +196,12 @@ export const HUB_DOWSING_MSGBOX = {
   bodyMaxWidth: 382,
   bodyTextBaselineY: 287.5,
   horizontalEdgeRecord: 10,
-  interiorBackgroundRecord: null,
-  interiorFill: null,
+  interiorBackgroundRecord: 49,
+  interiorClipRect: [535.5, 158, 529, 384] as const,
+  interiorFill: 'tiled-clipped',
+  innerPanelEdgeUvOrigin: 0.95,
+  innerPanelRecord: 17,
+  innerPanelRect: [540.5, 163, 519, 374] as const,
   innerCornerCenters: [[580.5, 204.5], [1019.5, 204.5], [580.5, 495.5], [1019.5, 495.5]] as const,
   outerCornerCenters: [[564.5, 190], [1035.5, 190], [564.5, 510], [1035.5, 510]] as const,
   primaryButtonCenter: [800, 432] as const,
@@ -170,6 +242,18 @@ export const HUB_DOWSING_INSUFFICIENT_GOLD = {
   title: 'NOT ENOUGH GOLD!',
 } as const
 
+export const HUB_HAT_REMOVAL_MSGBOX = {
+  actionLabel: 'OKAY',
+  body: "A wizard might switch hats.  A wizard might even wear his hat at a jaunty angle.  But a wizard would never, under any circumstances, remove his hat altogether.\n\nAfter all, if you're not wearing a wizard hat, how would people know to be awed by the presence of a wizard?",
+  title: 'A WIZARD WOULD NEVER REMOVE HIS HAT!',
+} as const
+
+export const HUB_ROBE_REMOVAL_MSGBOX = {
+  actionLabel: 'OKAY',
+  body: "A long, intimidating flowing robe looks debonaire on both a gluttonously fat slob and a pathetically wasted weakling.\n\nStrip away the robe and people might make comments about the kind of physique you get from years in wizarding school.  And then you'd have a completely avoidable disintegration on your conscience.",
+  title: 'A WIZARD WOULD NEVER REMOVE HIS ROBE!',
+} as const
+
 export const HUB_NATIVE_UI_SURFACES = [
   'dialogue',
   'fomentius-shop',
@@ -180,7 +264,43 @@ export const HUB_NATIVE_UI_SURFACES = [
   'shlorio-dowsing-results',
   'shlorio-insufficient-gold-message',
   'inventory',
+  'inventory-item-info',
+  'inventory-dragger',
+  'inventory-required-clothing-message',
 ] as const
+
+export interface HubInventoryItemInfoText {
+  readonly description: string | null
+  readonly instruction: string | null
+  readonly title: string
+}
+
+export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryItemInfoText {
+  switch (item.kind) {
+    case 'health-potion': return potionInfo(item, 'Restores your health to maximum')
+    case 'mana-potion': return potionInfo(item, 'Restores your mana to maximum')
+    case 'wizard-chug': return potionInfo(item, 'Quadruples the damage of all attacks for 60 seconds')
+    case 'antidote': return potionInfo(item, 'Cures poisoning and grants immunity to poison for 10 seconds')
+    case 'mind-chug': return potionInfo(item, 'Grants concentration of all skills (at once) for 60 seconds')
+    case 'rejuvenation-potion': return potionInfo(item, 'Restores your health and mana to maximum')
+    case 'dye': return {
+      description: 'Double click to dye an article of clothing',
+      instruction: null,
+      title: 'Fabric Dye Kit',
+    }
+    case 'key': return {
+      description: 'Bursts non-magical locks',
+      instruction: null,
+      title: 'Wizard Key',
+    }
+    case 'sack': return { description: 'Currently empty', instruction: null, title: item.name }
+    case 'equipment': return { description: null, instruction: null, title: item.name }
+  }
+}
+
+function potionInfo(item: HubInventoryItem, description: string): HubInventoryItemInfoText {
+  return { description, instruction: 'Double-click to drink', title: item.name }
+}
 
 export function hubInventorySlotPosition(index: number): { x: number; y: number } {
   if (!Number.isInteger(index) || index < 0 || index >= HUB_INVENTORY_GRID.capacity) {
@@ -189,6 +309,22 @@ export function hubInventorySlotPosition(index: number): { x: number; y: number 
   return {
     x: HUB_INVENTORY_GRID.left + Math.floor(index / HUB_INVENTORY_GRID.rows) * HUB_INVENTORY_GRID.pitch,
     y: HUB_INVENTORY_GRID.top + (index % HUB_INVENTORY_GRID.rows) * HUB_INVENTORY_GRID.pitch,
+  }
+}
+
+export function hubInventoryEquipmentSlotRects(
+  slot: EquipmentSlot,
+  companion = false,
+): readonly (readonly [number, number, number, number])[] {
+  const shift = companion ? 0 : 53
+  switch (slot) {
+    case 'amulet': return [[1247 + shift, 169, 46, 46]]
+    case 'hat': return [[1301 + shift, 143, 72, 72]]
+    case 'weapon': return [[1221 + shift, 223, 72, 72], [1381 + shift, 223, 72, 72]]
+    case 'robe': return [[1301 + shift, 231, 72, 92]]
+    case 'ring-0': return [[1247 + shift, 303, 46, 46]]
+    case 'ring-1': return [[1381 + shift, 303, 46, 46]]
+    case 'ring-2': return [[1381 + shift, 350, 46, 46]]
   }
 }
 

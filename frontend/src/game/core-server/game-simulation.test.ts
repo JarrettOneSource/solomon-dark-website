@@ -388,11 +388,34 @@ test('hub trader actions require the authenticated participant to be in native s
   })
   assert.equal(purchased.accepted, true)
   assert.equal(getPlayerEconomy(purchased.state, 'first').gold, 9_850)
+  assert.deepEqual(getPlayerEconomy(purchased.state, 'first').actionFeedback, {
+    accepted: true,
+    action: 'buy-fomentius',
+    dowsingPitch: null,
+    reason: null,
+    sequence: 1,
+    transferDirection: null,
+    transferGesture: null,
+  })
   assert.equal(getPlayerEconomy(purchased.state, 'second').gold, 10_000)
   assert.strictEqual(
     getPlayerEconomy(purchased.state, 'second'),
     getPlayerEconomy(state, 'second'),
   )
+  const rejected = applyGameSimulationHubAction(purchased.state, 'first', {
+    type: 'buy-fomentius',
+    itemId: firstStock.id,
+  })
+  assert.equal(rejected.accepted, false)
+  assert.deepEqual(getPlayerEconomy(rejected.state, 'first').actionFeedback, {
+    accepted: false,
+    action: 'buy-fomentius',
+    dowsingPitch: null,
+    reason: 'invalid-offer',
+    sequence: 2,
+    transferDirection: null,
+    transferGesture: null,
+  })
 
   if (purchased.state.world.kind !== 'hub') throw new Error('expected Hub world')
   const transition = {
@@ -417,6 +440,33 @@ test('hub trader actions require the authenticated participant to be in native s
     type: 'buy-fomentius',
     itemId: getPlayerEconomy(fading, 'first').fomentiusStock[0]!.id,
   }).reason, 'service-unavailable')
+})
+
+test('inventory double activation consumes one potion and applies its participant-owned effect', () => {
+  let state = createGameSimulation()
+  const index = state.playerEntities.identities.findIndex(({ playerId }) => playerId === 'local-player')
+  const progressions = [...state.playerEntities.progressions]
+  progressions[index] = {
+    ...progressions[index]!,
+    currentHealth: 3,
+  }
+  state = {
+    ...state,
+    playerEntities: { ...state.playerEntities, progressions },
+  }
+  const health = getPlayerEconomy(state).backpack.find(({ kind }) => kind === 'health-potion')!
+  const consumed = applyGameSimulationHubAction(state, 'local-player', {
+    type: 'consume',
+    itemId: health.id,
+  })
+
+  assert.equal(consumed.accepted, true)
+  assert.equal(getPlayerEconomy(consumed.state).actionFeedback?.action, 'consume')
+  assert.equal(getPlayerEconomy(consumed.state).backpack.some(({ id }) => id === health.id), false)
+  assert.equal(
+    getPlayerProgression(consumed.state).currentHealth,
+    getPlayerProgression(consumed.state).maximumHealth,
+  )
 })
 
 test('game simulation owns fixed-step accumulation independently of its world', () => {
