@@ -4,7 +4,6 @@
   overflow: hidden;
   background: #000;
   cursor: auto;
-  user-select: none;
 }
 
 .boneyard-game-over {

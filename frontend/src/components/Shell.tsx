@@ -21,6 +21,7 @@ import {
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
 import { MOD_LOADER_DOWNLOAD_URL } from '../lib/links'
+import '../game/game-surface.css'
 
 // The Boneyard editor left the navbar deliberately: it is a maker's tool,
 // reached from the Library's drafting-table CTA and the footer passages.
@@ -165,7 +166,11 @@ export default function Shell() {
 
   if (game) {
     return (
-      <main className="h-dvh overflow-hidden">
+      <main
+        className="game-surface h-dvh overflow-hidden"
+        onContextMenu={(event) => event.preventDefault()}
+        onDragStart={(event) => event.preventDefault()}
+      >
         <Outlet />
       </main>
     )

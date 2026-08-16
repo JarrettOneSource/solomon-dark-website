@@ -5,7 +5,6 @@
   overflow: hidden;
   background: transparent;
   pointer-events: auto;
-  user-select: none;
 }
 
 .match-loading-screen[data-visible='false'] > * { visibility: hidden; }

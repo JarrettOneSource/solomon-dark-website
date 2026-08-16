@@ -85,6 +85,7 @@ export default function TouchJoystick({ lane, onInput }: TouchJoystickProps) {
       aria-label={lane === 'movement' ? 'Movement joystick' : 'Primary attack joystick'}
       tabIndex={-1}
       onPointerDown={(event) => {
+        event.preventDefault()
         if (activePointerRef.current !== null) return
         activePointerRef.current = event.pointerId
         event.currentTarget.setPointerCapture(event.pointerId)
