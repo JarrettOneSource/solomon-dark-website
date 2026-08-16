@@ -433,8 +433,8 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     descriptor[5]!,
     0,
     0,
-    -1,
-    -1,
+    0,
+    7,
   ] as ReplicatedEntityDescriptor
   assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
   assert.equal(registration.descriptorIsValid(invalidActorLane), false)
@@ -442,8 +442,8 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
   assert.equal(registration.descriptorIsValid(zombieDescriptor), true)
   assert.equal(registration.descriptorIsValid([
     ...zombieDescriptor.slice(0, 8),
-    0,
-    7,
+    -1,
+    -1,
   ] as unknown as ReplicatedEntityDescriptor), false)
   assert.equal(registration.sampleIsValid(truncatedSample), false)
   assert.equal(registration.sampleIsValid(mismatchedAction), false)
@@ -594,8 +594,10 @@ test('Coffin Maggots replicate as independently retiring combat actors', () => {
   const descriptor = keyframe.world.entities.spawned.find((entry) => (
     entry[0] === REPLICATED_ENTITY_TYPES.boneyardMaggot && entry[1] === 8
   ))!
-  assert.equal(descriptor.length, 6)
+  assert.equal(descriptor.length, 8)
   assert.equal(descriptor[5], 1)
+  assert.equal(descriptor[6], 0)
+  assert.equal(descriptor[7], 1)
   assert.equal(sample.length, 15)
   assert.equal(sample[9], 768)
   assert.equal(sample[12], 12)
@@ -894,6 +896,7 @@ function maggotSnapshot(): BoneyardMaggotSnapshot {
     emergenceTick: 12,
     emergenceOrientation: 3,
     launchTrajectory: 'lid',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 2,
     ownerCoffinActorId: 7,
     pose: 0.5,

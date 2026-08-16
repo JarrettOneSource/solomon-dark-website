@@ -15382,29 +15382,29 @@ layout—owns the hint tails below the screen.
 
 | ID / member | Native gameplay and lifecycle | Native presentation ownership | Website disposition |
 | --- | --- | --- | --- |
-| `11` Call Leviathan | Aimed Leviathan scales in for 40 ticks, attacks for 1,600 ticks, scales out for 25 ticks, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-port-required |
-| `12` Planewalker | Self toggle installs `Mod_Planewalker`, forces Plane Orb `80`, preserves/restores the prior spell, and expires after `mDuration*100`. Each orb stores per-tick damage `2*sum(effective ranks 8,10,9,13,14,15,12)/100`; Call Leviathan `11` is deliberately excluded. | PlaneOrb actor; on/off streams and `PlaneCross` loop. | exact-port-required |
-| `15` Phasing | Heading cast probes exactly 20 collision-safe destinations at distances `80..270` and relocates only to the first accepted probe. A fully blocked cast still spends mana and enters cooldown. | One additive BadGuys `53` traversal streak at old-position plus 10 units along the successful path, scale `2`, 20-tick fade; `phase` only on success. | exact-port-required |
-| `21` Ring of Fire | Thirty MovingFire segments at 12-degree steps plus a unique-target Shockwave query every 10 ticks. | DeadHawg `46..77`; `bigfire`, then `nuke`. | exact-port-required |
-| `23` Firewalker | Toggle-on immediately creates one contact-enabled Fire_Goodguy, then global 10-tick trail births cycle contact geometry `true,false,false`; all births consume the exact seven-word program, and old patches outlive toggle-off. The toggle reserves an absolute 50 MP. | DeadHawg `46..77` only for the patch; target-owned Burn separately uses BadGuys `333..342`; `ignite` is toggle-on-only, toggle-off is silent, and retained patches renew the `lowfire` loop. | exact-port-required |
-| `27` Magic Storm | Aimed StormCloud lives 1000 active ticks, queries 500 units, rerolls strikes in `30..120`, then fades and stops querying. | Native cloud/lightning children and replicated three-point bolt geometry; `magicstorm`, `lightningstart`, `thunder`, rain/wind loops. | exact-port-required |
-| `30` Prismatic Shock | The cast helper immediately queries mask-`2` hostiles in a caster-centered radius 350 and applies/merges `Mod_Prismatic` for `mDuration*100`. | One caster-following BadGuys `58` core emits two `111` fades and one moving perspective `10/11` child per tick for 100 ticks; prismatic stream plus pitch-0.8 lightning start. | exact-port-required |
-| `35` Ring of Ice | Caster-centered FreezeWave grows from radius 75 by 6/tick, queries every 10 ticks, and retains one contact per target through its 93-tick life. | DeadHawg `114,121` three-burst and wave program; `ringofice`. | exact-port-required |
-| `41` Earthquake | Caster-centered actor runs `mDuration*100`, disrupts every 30 ticks without direct damage, and submits its stock displacement vector to the Region largest-shake reducer until retirement. | DeadHawg `200..202`, BadGuys `2008..2010,62`; quake/crack/rock audio. | exact-port-required |
-| `45` Raise Golem | Ignores cursor aim, consumes signed 45-degree placement 100 units from current facing, commits that facing, collision-adjusts with radius 25 against mask `0x205` but not actor bodies, then assembles at ages `0/50/100/200`; contact enables at 400 and there is no natural expiry. | Complete Golem `1..208` articulation plus exact BadGuys, DeadHawg, and UI children. Terminal audio is `stonebreak`, `flamelashstart`, `GolemDie__Stream`, then `rockhit`, after the separate assembly/provoke/knockback/step owners. | exact-port-required |
-| `46` Stoneskin | Self modifier sets actor material flag `0x1`, merges by maximum duration, and clears on expiry/teardown. | Every composed wizard body/equipment layer receives exact RGBA `(0.5,0.5,0.5,1)`; cast `StoneSkin__Stream`, and modifier apply, refresh, and removal callbacks use `stoneskin`, including exactly one natural-expiry request. | exact-port-required |
-| `48` Teleport | Arena ignores aim, shuffles a 100-unit bounds lattice, selects the first maximum actor-distance score, and runs the radius-40 collision-safe spiral; indoor Regions return `(0,0)`. The world callback has no rejection result. | Separate source/destination BadGuys `90` FadeScale actors and `teleport` requests; source grows from scale `1`, destination shrinks from `8`, both fade from alpha `2` over 20 ticks. | exact-port-required |
-| `49` Magic Circle | Aimed circle lives 1500 native updates, pulses immediately and every 10 ticks, slows targets, and executes the live MP-recovery branch inside exact half extents `210x168`. | One/two centered spinning BadGuys `48` fades per global-tick parity, a player-attached `7` only on successful recovery pulses, a flickering shadow-casting Region light, and `magiccircle`. | exact-port-required |
-| `50` Magic Trap | Choose the bound component before damage: selector `0..4` reads effective-rank primary `8,16,24,32,40`; Ether alone consumes inclusive `FloatRange(mDamage1,mDamage2)`, then the trap stores `f32(base*trap mDamage)`. Aimed trap adds a float32 charge increment through the update-800 clamp. Every age divisible by 25, a 130-wide arming query can trigger one separate 300-wide terminal payload query. Air payloads become one mergeable, target-following 100-update ElectricBurn at `payload/100` per update. | Armed body/shadow BadGuys `111,112,15,85`; 32 independently fading selector-tinted `16` shimmers; trigger `15,158..167,17,74`; set/trigger plus bound-primary start audio and 1.25 camera pulse. ElectricBurn adds only its jittered Region light and `electric__loop`, never a lightning sprite at trap chain count zero. | exact-port-required |
-| `51` Dampen | Caster rectangle dispels shields on `RandomInt(100) < 0x33` (51/100 outcomes despite the 50% UI text) and owns mode-21 CastSpin for 73 strict-boundary ticks. | 360 independently moving/fading BadGuys `10/11` rays plus 30 centered perspective `48` fades; `flash`, `dampen` stream. | exact-port-required |
-| `54` Magic Shield | Player-owned absorb state owns a 40-tick shell pulse. Break emits 20 particles and, when upgraded, applies one full `absorb*mDamage/100` contact over radius 110 plus a zero-damage Dazzle/push Shockwave, then clears both factors. | BadGuys `49,68,15,158..167,17,74`, DeadHawg `2,18`; exact up/hit/pop/explode sequence, 502-word explosion program, Region flash, and 1.25 camera pulse. | exact-port-required |
-| `72` Acid Rain | Aimed rain lives 1500 active ticks plus residue; emits 2 drops/tick or 5 enhanced, owns a one-in-four splash gate, and every 25 ticks hits exactly `min(n,floor(n/3)+1)` shuffled targets for float32 `mDamage/6` direct damage each. | BadGuys `0,10` field, raindrop, and splash program; storm/sizzle/rain audio. | exact-port-required |
-| `73` Fire Wall | Builds one 300-unit aim-perpendicular line from exactly eleven independent Fire_Goodguy patches, spaced 30 units apart; life scalar `7` reaches zero after 700 ticks at `-0.01/tick`, with contact every 3 ticks. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-port-required |
-| `74` Ether Drain | Aimed field scales in for 40 ticks, owns 1,000 active ticks, scales out for 20 ticks, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-port-required |
-| `76` Call Comet | Aimed countdown lasts 400 ticks, creates one trail per fall tick, starts the whistle below 175 ticks remaining, and impacts on tick 400 with damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-port-required |
-| `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | 35 gray perspective BadGuys `48` fades with exact 20-tick growth; the same `levelup` sample at pitches 2, then 3. | exact-port-required |
-| `78` Mindstar | Self toggle changes byte `+0x8DD`, reserves/removes mana, and refreshes temporary ranks immediately and on normal progression refresh. | Cyan Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-port-required |
-| `79` Regenerate | Self toggle changes byte `+0x8DE`, reserves/removes mana, heals `1.5/tickRate`, and stops on overload/death/session teardown. | Orange Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-port-required |
+| `11` Call Leviathan | Aimed Leviathan scales in for 40 ticks, attacks for 1,600 ticks, scales out for 25 ticks, and emits 100-tick EtherBolts. | BadGuys `343..372,11,39`; `LeviathanRoar`, `PlaneCross` loop. | exact-ported |
+| `12` Planewalker | Self toggle installs `Mod_Planewalker`, forces Plane Orb `80`, preserves/restores the prior spell, and expires after `mDuration*100`. Each orb stores per-tick damage `2*sum(effective ranks 8,10,9,13,14,15,12)/100`; Call Leviathan `11` is deliberately excluded. | PlaneOrb actor; on/off streams and `PlaneCross` loop. | exact-ported |
+| `15` Phasing | Heading cast probes exactly 20 collision-safe destinations at distances `80..270` and relocates only to the first accepted probe. A fully blocked cast still spends mana and enters cooldown. | One additive BadGuys `53` traversal streak at old-position plus 10 units along the successful path, scale `2`, 20-tick fade; `phase` only on success. | exact-ported |
+| `21` Ring of Fire | Thirty MovingFire segments at 12-degree steps plus a unique-target Shockwave query every 10 ticks. | DeadHawg `46..77`; `bigfire`, then `nuke`. | exact-ported |
+| `23` Firewalker | Toggle-on immediately creates one contact-enabled Fire_Goodguy, then global 10-tick trail births cycle contact geometry `true,false,false`; all births consume the exact seven-word program, and old patches outlive toggle-off. The toggle reserves an absolute 50 MP. | DeadHawg `46..77` only for the patch; target-owned Burn separately uses BadGuys `333..342`; `ignite` is toggle-on-only, toggle-off is silent, and retained patches renew the `lowfire` loop. | exact-ported |
+| `27` Magic Storm | Aimed StormCloud lives 1000 active ticks, queries 500 units, rerolls strikes in `30..120`, then fades and stops querying. | Native cloud/lightning children and replicated three-point bolt geometry; `magicstorm`, `lightningstart`, `thunder`, rain/wind loops. | exact-ported |
+| `30` Prismatic Shock | The cast helper immediately queries mask-`2` hostiles in a caster-centered radius 350 and applies/merges `Mod_Prismatic` for `mDuration*100`. | One caster-following BadGuys `58` core emits two `111` fades and one moving perspective `10/11` child per tick for 100 ticks; prismatic stream plus pitch-0.8 lightning start. | exact-ported |
+| `35` Ring of Ice | Caster-centered FreezeWave grows from radius 75 by 6/tick, queries every 10 ticks, and retains one contact per target through its 93-tick life. | DeadHawg `114,121` three-burst and wave program; `ringofice`. | exact-ported |
+| `41` Earthquake | Caster-centered actor runs `mDuration*100`, disrupts every 30 ticks without direct damage, and submits its stock displacement vector to the Region largest-shake reducer until retirement. | DeadHawg `200..202`, BadGuys `2008..2010,62`; quake/crack/rock audio. | exact-ported |
+| `45` Raise Golem | Ignores cursor aim, consumes signed 45-degree placement 100 units from current facing, commits that facing, collision-adjusts with radius 25 against mask `0x205` but not actor bodies, then assembles at ages `0/50/100/200`; contact enables at 400 and there is no natural expiry. | Complete Golem `1..208` articulation plus exact BadGuys, DeadHawg, and UI children. Terminal audio is `stonebreak`, `flamelashstart`, `GolemDie__Stream`, then `rockhit`, after the separate assembly/provoke/knockback/step owners. | exact-ported |
+| `46` Stoneskin | Self modifier sets actor material flag `0x1`, merges by maximum duration, and clears on expiry/teardown. | Every composed wizard body/equipment layer receives exact RGBA `(0.5,0.5,0.5,1)`; cast `StoneSkin__Stream`, and modifier apply, refresh, and removal callbacks use `stoneskin`, including exactly one natural-expiry request. | exact-ported |
+| `48` Teleport | Arena ignores aim, shuffles a 100-unit bounds lattice, selects the first maximum actor-distance score, and runs the radius-40 collision-safe spiral; indoor Regions return `(0,0)`. The world callback has no rejection result. | Separate source/destination BadGuys `90` FadeScale actors and `teleport` requests; source grows from scale `1`, destination shrinks from `8`, both fade from alpha `2` over 20 ticks. | exact-ported |
+| `49` Magic Circle | Aimed circle lives 1500 native updates, pulses immediately and every 10 ticks, slows targets, and executes the live MP-recovery branch inside exact half extents `210x168`. | One/two centered spinning BadGuys `48` fades per global-tick parity, a player-attached `7` only on successful recovery pulses, a flickering shadow-casting Region light, and `magiccircle`. | exact-ported |
+| `50` Magic Trap | Choose the bound component before damage: selector `0..4` reads effective-rank primary `8,16,24,32,40`; Ether alone consumes inclusive `FloatRange(mDamage1,mDamage2)`, then the trap stores `f32(base*trap mDamage)`. Aimed trap adds a float32 charge increment through the update-800 clamp. Every age divisible by 25, a 130-wide arming query can trigger one separate 300-wide terminal payload query. Air payloads become one mergeable, target-following 100-update ElectricBurn at `payload/100` per update. | Armed body/shadow BadGuys `111,112,15,85`; 32 independently fading selector-tinted `16` shimmers; trigger `15,158..167,17,74`; set/trigger plus bound-primary start audio and 1.25 camera pulse. ElectricBurn adds only a non-shadow Region light with radius `.5+S(.25)` and intensity one plus `electric__loop`, never a lightning sprite at trap chain count zero. | exact-ported |
+| `51` Dampen | Caster rectangle dispels shields on `RandomInt(100) < 0x33` (51/100 outcomes despite the 50% UI text) and owns mode-21 CastSpin for 73 strict-boundary ticks. | 360 independently moving/fading BadGuys `10/11` rays plus 30 centered perspective `48` fades; `flash`, `dampen` stream. | exact-ported |
+| `54` Magic Shield | Player-owned absorb state owns a 40-tick shell pulse. Break emits 20 particles and, when upgraded, applies one full `absorb*mDamage/100` contact over radius 110 plus a zero-damage Dazzle/push Shockwave, then clears both factors. | BadGuys `49,68,15,158..167,17,74`, DeadHawg `2,18`; exact up/hit/pop/explode sequence, 502-word explosion program, Region flash, and 1.25 camera pulse. | exact-ported |
+| `72` Acid Rain | Aimed rain lives 1500 active ticks plus residue; emits 2 drops/tick or 5 enhanced, owns a one-in-four splash gate, and every 25 ticks hits exactly `min(n,floor(n/3)+1)` shuffled targets for float32 `mDamage/6` direct damage each. | BadGuys `0,10` field, raindrop, and splash program; storm/sizzle/rain audio. | exact-ported |
+| `73` Fire Wall | Builds one 300-unit aim-perpendicular line from exactly eleven independent Fire_Goodguy patches, spaced 30 units apart; life scalar `7` reaches zero after 700 ticks at `-0.01/tick`, with contact every 3 ticks. | DeadHawg `46..77`; ignite/hit plus `lowfire` loop. | exact-ported |
+| `74` Ether Drain | Aimed field scales in for 40 ticks, owns 1,000 active ticks, scales out for 20 ticks, then releases both target arrays and ambient ownership. | DeadHawg `177..179`; distort/lightning plus plane/wind loops. | exact-ported |
+| `76` Call Comet | Aimed countdown lasts 400 ticks, creates one trail per fall tick, starts the whistle below 175 ticks remaining, and impacts on tick 400 with damage/freeze, FreezeWave, debris, and world-color restoration. | DeadHawg `5,203..207,6`, BadGuys `51,15`; comet loop/whistle and four impact layers. | exact-ported |
+| `77` Turn Undead | Aimed area affects only Skeleton, Archer, Mage, and Zombie and assigns `mFlee*100` behavior. | 35 gray perspective BadGuys `48` fades with exact 20-tick growth; the same `levelup` sample at pitches 2, then 3. | exact-ported |
+| `78` Mindstar | Self toggle changes byte `+0x8DD`, reserves/removes mana, and refreshes temporary ranks immediately and on normal progression refresh. | Cyan Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-ported |
+| `79` Regenerate | Self toggle changes byte `+0x8DE`, reserves/removes mana, heals `1.5/tickRate`, and stops on overload/death/session teardown. | Orange Region feedback only; exact shared `mindstar__stream`; no actor or caster overlay. | exact-ported |
 
 Phasing helper `0x0052A0B0` is a post-payment relocation attempt, not a second
 cast-acceptance gate. All twenty failed probes preserve the already accepted
@@ -15875,8 +15875,8 @@ Reattachment keeps the greater remaining duration while replacing the
 payload/group fields; it does not stack parallel damage actors.
 
 Every live modifier update follows its target, consumes signed `Float(.25)`,
-and appends a non-shadow-casting radius-one misc light at intensity
-`.5+jitter`, while renewing `electric__loop`. The authoritative contact path
+and appends a non-shadow-casting misc light with radius `.5+jitter` and
+intensity one, while renewing `electric__loop`. The authoritative contact path
 then consumes `Integer(3)` and, only on result one, another `Float(.5)` for its
 `.25+jitter` native contact scalar before applying the stored damage. Because
 Magic Trap fixes the modifier's chain count to zero, the later
@@ -16063,6 +16063,27 @@ event, peer snapshot, and retirement edge, with no page, console, asset, or
 protocol errors. Final completion additionally requires the canonical Website
 gate and the decisive journey on the Mac mini; Windows and WSL runs are
 diagnostic only.
+
+### Website implementation closure and pre-final validation
+
+The Website now owns this full closed membership. Protocol 29 carries the
+authoritative eight-slot belt, casts, actors, modifiers, toggles, cooldowns,
+audio requests, and native light-provider lane, registration, and attachment
+ordering. The host owns gameplay and lifecycle; Hub and Boneyard share the
+semantic presenter, original extracted art/audio, fixed-tick phase clocks, and
+terminal cleanup. No category-2 member remains represented by the former Acid
+Rain placeholder or a generic particle substitute.
+
+The pre-final local canonical gate passed with 24 backend contracts, all 122
+focused Boneyard/native-secondary contracts, all 939 broad frontend/game
+contracts, the level-up, diagnostics, Hub UI, and desktop auxiliary suites,
+and the production TypeScript, Vite, game-host, and media-policy builds. The
+focused coverage enumerates all 23 IDs and their rank rows, authority,
+targeting, actor/modifier phases, atlas programs, audio ownership, light
+enrollment/order, replication, interpolation, and teardown. Final Mac-mini
+browser acceptance remains the last publication gate and is intentionally not
+claimed by this pre-final receipt.
+
 ## Enemy damage-presenter closure correction (2026-08-15)
 
 This secondary report reopens and supersedes the nonterminal-damage portion of
@@ -16454,7 +16475,7 @@ clients. Hub transaction messages identify an intent only; the server resolves
 the authenticated participant, active hub region, target range, current offer,
 price, funds, and destination capacity before one atomic mutation.
 
-Protocol 28 carries the complete economy in the welcome and periodic recovery
+Protocol 29 carries the complete economy in the welcome and periodic recovery
 keyframes, then omits it from ordinary player frames while that player's economy
 revision is unchanged. A changed revision carries the complete replacement and
 the client reconstructs it against its last accepted baseline. This keeps the
@@ -16913,12 +16934,13 @@ projectile tickets until earlier player spell births have claimed their native
 ordinal. Renderer category buckets such as players-then-enemies-then-spells are
 not evidence-equivalent.
 
-For the currently modeled Misc owners, player and Mage Air factories append
-synchronously from those same actor ticks. Their path-light batches are merged
-by creator actor registration, then birth tick and effect ID, and only then
-replayed after the complete provider batch. No wire `miscAppendOrdinal` is
-needed until a modeled owner can issue multiple distinct Misc-producing calls
-inside one tick; dormant Burn/ElectricBurn/EtherBurn will require that extension.
+The modeled Misc owners now include player and Mage Air factories, MagicCircle,
+Mod_Burn, and Mod_ElectricBurn. Cross-owner order is the creator's actor-manager
+registration. Within one creator, authority publishes a non-negative
+`miscLightAppendOrdinal` for each synchronous producing batch; renderer-local
+sample order resolves only the records inside that batch. All batches replay
+after the complete persistent-provider pass. Mod_EtherBurn remains the dormant
+sibling and must not be synthesized from another burn role.
 
 ### Settings and target quality
 
@@ -16953,7 +16975,7 @@ circle scaled by 145. Ordinary tint query `0x0057F980` takes the maximum source
 contribution with plateau 75, outer radius 145, and vertical scale 0.85.
 
 The static census closes all compiled provider families rather than only those
-currently materialized by Website: player; DemonSkull; Skeleton, Archer, and
+materialized by Website: player; DemonSkull; Skeleton, Archer, and
 Mage; Imp variants; Wraith; Demon; Coffin; DireFaculty; Heartmonger; Portal;
 GameNPC; ZAnimLit; missile families; Fireball; Boulder/Hailstones; Ember;
 Arrow/Firebolt/DarkFireball/Silk; Lantern; Meteor; fire families; GroundSpark;
@@ -16962,6 +16984,20 @@ DemonBomb; weather; EtherDrain; Comet; and OffscreenMagic. The separate
 MiscLight census closes DemonSkull MouthBeam, UltraBanish, three lightning
 factories, MagicCircle, EyeLaser, ElectricBurn, Burn, and EtherBurn. Dormant
 families remain ledger-only until their authoritative actors exist.
+
+The active secondary persistent membership is exhaustive: actor-lane
+MovingFire/Fire_Goodguy, Shockwave/FreezeWave, Leviathan, EtherBolt, Golem,
+MagicTrap, StormCloud/AcidRain, EtherDrain, and Comet, plus transient-lane
+variant-one EtherFade through its ZAnimLit wrapper. Their exact
+radius/intensity/flag rows are respectively `.6/min(1,3*alpha)/MS`,
+`waveRadius/140/alpha/false`, `1/1/MS`, `.5/1/MS`, `1/.75/MS`,
+`.25/1/false`, `2/.5*alpha/false`, `2/min(scale,1)*(.5+U(.5))/MS`,
+`2/.5/MS`, and `scale/min(alpha,1)/MS`. MagicCircle is not a provider: it
+appends a true-flag MiscLight at radius `0.5*scale` and intensity
+`.75+S(.25)`. Burn appends radius `.1+U(.1)` with terminal intensity
+`min(remainingTicks/50,1)`; ElectricBurn appends radius `.5+S(.25)` at
+intensity one. Treating those three one-tick records as provider rows changes
+containment and replay order.
 
 Currently modeled formulas remain exact. Player intensity is one, its true
 flag bypasses containment, and its source is 15 units along heading. Its
@@ -17001,8 +17037,9 @@ Imp adds `0.01`. Archer/Mage charged radius is
 `charge*(0.5+S(0.1))`, Imp radius is `0.25+S(0.1)`, and Demon radius is
 `1.5+S(0.25)`. Coffin emits only in opening, transition-delay, or open state.
 The static `burning-fire` role is family-owned presentation and does not imply
-the separate dormant Mod_Burn MiscLight. Mod_ElectricBurn, Mod_Burn, and
-Mod_EtherBurn remain catalogued but are not current snapshot members.
+the separate Mod_Burn MiscLight. Mod_ElectricBurn and Mod_Burn are active
+target-owned secondary snapshot members; Mod_EtherBurn remains catalogued but
+dormant.
 
 Other modeled members are explicitly negative. The `banish`, `bouncer`,
 `fade`, `move-fade`, `sprite-array`, and `unbind` death-effect union emits no
@@ -17090,25 +17127,36 @@ of adjacent records inside the batch. Arena `0x0046EC80` submits the rebuilt
 persistent provider list at `0x0046ED2B` and only then replays the Misc array
 at `0x0046EE58`; no Misc record can move beside its persistent owner.
 
-Current Website authority already has the smallest exact cross-owner key:
-player and Mage `lightRegistration.registrationOrdinal` is the monotonic proxy
-for their shared actor-manager append order, followed by factory birth tick and
-semantic id for same-owner calls. This is why player Air must not be grouped
+Website authority now carries the complete key: every active secondary
+persistent owner retains `{managerLane,registrationOrdinal}`; MagicCircle
+retains its actor registration; Burn/ElectricBurn copy their target actor's
+registration; and every Misc-producing actor carries the batch-local
+`miscLightAppendOrdinal`. Player and Mage registrations remain the monotonic
+cross-owner proxy, while factory birth tick and semantic ID only break ties
+between otherwise identical batches. This is why player Air must not be grouped
 before Mage Air categorically: a late-joined player may follow an existing
 Mage. Same-tick wave births are also closed: Arena ticks TimeLine at
 `0x0046E641` before Region at `0x0046E68D`; Spawner reaches Region add through
 `0x0046D313..0x0046D31C`, so a newly spawned enemy is appended before that
-Region actor pass and can precede a later player-cast child. No serialized
-`miscAppendOrdinal` is required for the currently modeled Misc membership.
+Region actor pass and can precede a later player-cast child.
 
-That conclusion is deliberately bounded. Direct modifier roots
-`Mod_ElectricBurn 0x00628FE8`, `Mod_Burn 0x00629CAE`, and
-`Mod_EtherBurn 0x00629ED8` can bracket other factory calls inside one actor
-tick, so actor registration alone cannot order them when those dormant owners
-are implemented. Their future authority seam is one tick-scoped append ordinal
-per synchronous producing batch plus its deterministic local sample index,
-not a global ordinal per light sample and not a reuse of persistent-provider
-order.
+The target key belongs to actor-manager membership, not to whether that actor
+currently emits a persistent source. Every Website hostile target therefore
+retains an actor-lane registration, including Zombie and independently managed
+Coffin Maggots, even though neither family has a native provider callback.
+Their entity descriptors serialize that registration so joined and
+resynchronized clients preserve attached Burn/ElectricBurn batch order.
+
+Modifier ordering is instruction-closed. Common actor tick `0x00624AC0` calls
+`0x006247A0` before its subclass body. That helper walks the target's embedded
+Action manager at `actor+0x104` (count `+0x10C`) in stable order and invokes
+each action tick slot `+0x08`; `0x00625150` and `0x006243C0` own attachment.
+Burn/ElectricBurn therefore precede a same-target Mage Air factory, while
+MagicCircle emits at its own actor-manager position and player Air emits from
+the later transient pass. The serialized append ordinal is per synchronous
+batch under one creator, not a global ordinal per light sample and not a reuse
+of persistent-provider order. Protocol 29 carries the creator registration and
+ordinal discretely through snapshot, resync, and presentation interpolation.
 
 The target-attached corona's coordinate owner is not its painter owner.
 `PlayerWizard` constructs an embedded animation `ObjectManager` at `+0x16C`
@@ -17846,7 +17894,7 @@ process failure.
 | --- | --- | --- | --- |
 | Retail executable identity | `SolomonDarkAbandonware/SolomonDark.exe`, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred image base `0x00400000`, verified in the current workspace on 2026-08-15 | The file identity matches the executable used by the existing Air instruction audit. No live PID, ASLR address, or loader-injected observation is reused. | high |
 | Existing native instructions | Mod Loader `origin/main` `6376a42a16bba895fbb628e635c7419cfbcde26a`; `docs/reverse-engineering/native-projectile-and-spell-mechanics.md`; player handler `0x0053F9C0`, factory `0x00531640`, `Anim_FadeLightning` `0x00452E20/0x00476230/0x004572C0`, `ZAnimLit` `0x005E03D0/0x005FD1D0/0x005E48E0`; Air writes at `0x00540072..0x005400F8` | The contact is an independently registered `Anim_FadeLightning` child wrapped by `ZAnimLit`. Constant `50.0` at `0x00784CF8` is written to inherited `Puppet +0xA0`, the shared painter sort bias. It is not a light radius. | high |
-| Existing native xref sweep | same report; five direct `0x00531640` calls plus `Anim_FadeLightning` xrefs | Player primary and chain branches share the wrapper. Skeleton Mage uses direct world or target-embedded contact ownership with no `ZAnimLit`; StormCloud constructs the bolt directly; ElectricBurn and Ball Lightning are separate, currently unmodeled owners. | high |
+| Existing native xref sweep | same report; five direct `0x00531640` calls plus `Anim_FadeLightning` xrefs | Player primary and chain branches share the wrapper. Skeleton Mage uses direct world or target-embedded contact ownership with no `ZAnimLit`; StormCloud constructs the bolt directly. ElectricBurn and Ball Lightning are separate owners: the category-2 implementation now models ElectricBurn's trap-chain-zero light/audio path, while Ball Lightning remains unmodeled. | high |
 | Pre-fix web causal trace | Website `fd0e784092edfdd6c53cec9f55a2d69b22614ddb`; `core-kernels/primary-spell-targeting.ts`, `renderer/primary-spell-air-view.ts`, `primary-spell-world-view.ts`, `boneyard-painter-order.ts`, and `renderer/boneyard-world-renderer.ts` | Target acquisition publishes the native `-20` Y attachment. The Air view preserves the jittered contact world Y but assigns body, source, and contact `sortBias: 0`; the shared queue computes `trunc(worldY)+trunc(sortBias)`. The contact is therefore keyed 10..30 rows before the target instead of the native 20..40 rows after it. | high |
 | Existing authoritative fixture | `core-server/game-simulation.test.ts`, Gravestone root `(250,100)` and published Air endpoint `(250,80)` | The same semantic target path reaches the renderer for the priority-1000 Gravestone fallback; the renderer does not and must not branch on target type. | high |
 
@@ -17882,8 +17930,9 @@ extracted and hash-pinned in the Air entry.
 | Ether `Anim_FadeMM` contact in `ZAnimLit` | `0x005F1F00 -> 0x005E03D0`, bias `100` | `verified-already-at-parity` | `ETHER_PRIMARY_IMPACT_SORT_BIAS=100` is already included in its painter key and covered by Ether tests |
 | Earth independently wrapped breakup fragments | `0x0060B700`, `ZAnimLitObject`, bias `-15` | `verified-already-at-parity` | every fragment root exposes `sortBias=-15`; Earth painter tests cover interleaving |
 | Skeleton Mage lightning contact | Mage `0x00490860`; direct world contact or player embedded manager, no `ZAnimLit` contact provider | `out-of-system` (different painter owner and ordering interval) | existing Mage tests pin world roots and target post-main lane |
-| StormCloud contact | `0x006021A0`; direct bolt construction and separate FadeLightning use | `out-of-system` (StormCloud actor is not a Website primary-Air member) | native xref disposition; no Website StormCloud snapshot exists |
-| `Mod_ElectricBurn` and Ball Lightning contacts | `0x00628F10` and sibling `Anim_FadeLightning` xrefs | `out-of-system` (different, currently unmodeled modifier/projectile owners) | native xref disposition; no corresponding Website actor is inferred from shared art |
+| StormCloud contact | `0x006021A0`; direct bolt construction and separate FadeLightning use | `out-of-system` (different owner, modeled by the Website category-2 system rather than primary Air) | the secondary snapshot/presenter owns StormCloud's native bolt geometry; it does not reuse this primary-Air wrapper |
+| `Mod_ElectricBurn` contact | `0x00628F10` | `out-of-system` (different modifier owner, modeled by the Website category-2 system) | Magic Trap's recovered chain count is zero, so ElectricBurn owns its target-attached misc light and loop audio but creates no FadeLightning actor |
+| Ball Lightning contact | sibling `Anim_FadeLightning` xrefs | `out-of-system` (different, currently unmodeled projectile owner) | native xref disposition; no Website actor is inferred from shared art |
 
 There are no `blocked-by-platform` members. Pixi/WebGL can represent the exact
 shared painter bias.

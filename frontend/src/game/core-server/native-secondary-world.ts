@@ -192,6 +192,7 @@ export function boneyardNativeSecondaryTargets(
     .map((actor) => Object.freeze({
       family: 'config' in actor ? actor.config.enemyToken : 'MAGGOT',
       id: actor.id,
+      lightRegistration: actor.lightRegistration,
       nativeFlags: 0x2,
       position: Object.freeze({ ...actor.position }),
       radius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,
@@ -210,6 +211,7 @@ export function boneyardNativeSecondaryTarget(
   return Object.freeze({
     family: 'config' in actor ? actor.config.enemyToken : 'MAGGOT',
     id: actor.id,
+    lightRegistration: actor.lightRegistration,
     nativeFlags: 0x2,
     position: Object.freeze({ ...actor.position }),
     radius: 'config' in actor ? actor.config.collisionRadius : actor.collisionRadius,

@@ -90,7 +90,8 @@ import {
   nativeEnemyProjectileLightProvider,
   nativeMissileLightSource,
   nativePlayerLightSource,
-  nativeSecondaryLightSource,
+  nativeSecondaryMiscLightSource,
+  nativeSecondaryProviderLightSource,
   nativeSolomonSetPieceLighting,
   type NativeBoneyardLightSource,
   type NativeSolomonSetPieceLighting,
@@ -974,6 +975,7 @@ interface RegisteredBoneyardLightProviderOwner {
 interface RegisteredBoneyardMiscLightBatch extends RegisteredBoneyardLightProviderOwner {
   birthTick: number
   id: number
+  miscLightAppendOrdinal: number
 }
 
 class BoneyardDynamicScene {
@@ -1280,6 +1282,18 @@ class BoneyardDynamicScene {
           })
         }
       }
+      for (const actor of snapshot.secondaryAbilities.actors) {
+        if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+        const source = nativeSecondaryProviderLightSource(actor, presentationFrame)
+        if (!source) continue
+        lightProviderOwners.push({
+          registration: requiredLightRegistration(
+            actor.lightRegistration,
+            `secondary ${actor.kind} ${actor.id}`,
+          ),
+          sources: [source],
+        })
+      }
     }
     if (lanternLight) {
       lightProviderOwners.push({
@@ -1295,13 +1309,6 @@ class BoneyardDynamicScene {
       ({ registration }) => registration,
     )) {
       lightSourceCandidates.push(...owner.sources)
-    }
-    if (!modalActive) {
-      for (const actor of snapshot.secondaryAbilities.actors) {
-        if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
-        const lightSource = nativeSecondaryLightSource(actor, presentationFrame)
-        if (lightSource) lightSourceCandidates.push(lightSource)
-      }
     }
     const lightProviderCandidateCount = lightSourceCandidates.length
     const lightMiscBatches = this.lightMiscBatches
@@ -1329,8 +1336,27 @@ class BoneyardDynamicScene {
         lightMiscBatches.push({
           birthTick: effect.birthTick,
           id: effect.id,
+          miscLightAppendOrdinal: 0,
           registration: owner.lighting.lightRegistration,
           sources: pathSources,
+        })
+      }
+      for (const actor of snapshot.secondaryAbilities.actors) {
+        if (actor.worldKey !== `boneyard:${snapshot.world.runId}`) continue
+        const source = nativeSecondaryMiscLightSource(actor)
+        if (!source) continue
+        if (actor.miscLightAppendOrdinal === null) {
+          throw new Error(`secondary ${actor.kind} ${actor.id} lost its MiscLight append order`)
+        }
+        lightMiscBatches.push({
+          birthTick: snapshot.tick - actor.ageTicks,
+          id: actor.id,
+          miscLightAppendOrdinal: actor.miscLightAppendOrdinal,
+          registration: requiredLightRegistration(
+            actor.lightRegistration,
+            `secondary ${actor.kind} ${actor.id}`,
+          ),
+          sources: [source],
         })
       }
       const enemyLightRegistrations = new Map(snapshot.world.enemies.map((enemy) => [
@@ -1338,9 +1364,20 @@ class BoneyardDynamicScene {
         enemy.lightRegistration,
       ]))
       for (const batch of this.mageLightningPulses.pathLightBatches) {
+        const miscLightAppendOrdinal = snapshot.secondaryAbilities.actors.reduce(
+          (nextOrdinal, actor) => (
+            actor.targetId === batch.ownerActorId
+            && actor.worldKey === `boneyard:${snapshot.world.runId}`
+            && nativeSecondaryMiscLightSource(actor) !== null
+              ? Math.max(nextOrdinal, (actor.miscLightAppendOrdinal ?? -1) + 1)
+              : nextOrdinal
+          ),
+          0,
+        )
         lightMiscBatches.push({
           birthTick: batch.birthTick,
           id: batch.id,
+          miscLightAppendOrdinal,
           registration: requiredLightRegistration(
             enemyLightRegistrations.get(batch.ownerActorId) ?? null,
             `Mage Air factory ${batch.ownerActorId}`,
@@ -1349,15 +1386,17 @@ class BoneyardDynamicScene {
         })
       }
     }
-    const birthOrderedMiscBatches = lightMiscBatches.toSorted((first, second) => (
-      first.birthTick - second.birthTick || first.id - second.id
+    const appendOrderedMiscBatches = lightMiscBatches.toSorted((first, second) => (
+      first.miscLightAppendOrdinal - second.miscLightAppendOrdinal
+      || first.birthTick - second.birthTick
+      || first.id - second.id
     ))
     for (const batch of mergeNativeLightProviderOwners(
-      [birthOrderedMiscBatches],
+      [appendOrderedMiscBatches],
       ({ registration }) => registration,
     )) {
       if (batch.registration.managerLane !== 'actor') {
-        throw new Error('Air factory MiscLight creator is not an actor-manager owner')
+        throw new Error('MiscLight creator is not an actor-manager owner')
       }
       lightMiscTailCandidates.push(...batch.sources)
     }

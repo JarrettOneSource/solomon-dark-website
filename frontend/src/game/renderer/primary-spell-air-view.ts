@@ -21,6 +21,10 @@ import {
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export type NativeAirVfxTextures = PlayerWorldTextures['primarySpells']['air']
+export type NativeAirLightningViewState = Omit<
+  PrimarySpellAirTransientState,
+  'lightRegistration'
+>
 
 const FORK_REGISTRATION = [
   { height: 56, originX: -3, originY: 0.5, record: 1836, width: 45 },
@@ -35,10 +39,10 @@ export class AirPrimarySpellView {
   private readonly contactCorona: NativeAirCoronaView
   readonly kind = 'air'
   private plan: ReturnType<typeof buildNativeAirLightningPlan>
-  private state: PrimarySpellAirTransientState
+  private state: NativeAirLightningViewState
   private readonly sourceCorona: NativeAirCoronaView
 
-  constructor(state: PrimarySpellAirTransientState, textures: NativeAirVfxTextures) {
+  constructor(state: NativeAirLightningViewState, textures: NativeAirVfxTextures) {
     this.state = state
     const construction = buildNativeAirLightningPlan({
       ageTicks: 0,
@@ -59,7 +63,11 @@ export class AirPrimarySpellView {
     this.update(state)
   }
 
-  update(state: PrimarySpellProjectileState | PrimarySpellTransientState): void {
+  update(
+    state: PrimarySpellProjectileState
+      | PrimarySpellTransientState
+      | NativeAirLightningViewState,
+  ): void {
     if (!('origin' in state) || state.kind !== 'air') return
     this.state = state
     this.body.container.position.set(state.origin.x, state.origin.y)
@@ -124,7 +132,7 @@ export class AirPrimarySpellView {
   }
 }
 
-function localAirGeometry(state: PrimarySpellAirTransientState): {
+function localAirGeometry(state: NativeAirLightningViewState): {
   endpoint: { x: number; y: number }
   midpoint: { x: number; y: number }
 } {

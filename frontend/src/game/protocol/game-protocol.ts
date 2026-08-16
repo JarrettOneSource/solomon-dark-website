@@ -90,6 +90,7 @@ import {
   NATIVE_SECONDARY_ACTOR_KINDS,
   NATIVE_SECONDARY_AUDIO_CUES,
   NATIVE_SECONDARY_EVENT_KINDS,
+  nativeSecondaryLightDisposition,
   type NativeSecondaryActorKind,
   type NativeSecondaryAudioCue,
   type NativeSecondaryEventKind,
@@ -2462,8 +2463,8 @@ function nativeSecondaryActor(
   const source = record(value, field)
   onlyKeys(source, field, [
     'ageTicks', 'alpha', 'damage', 'enhanced', 'endpoint', 'frame', 'freezeTicks',
-    'golem', 'hitTargetIds', 'id', 'kind', 'lifetimeTicks', 'ownerId', 'phase', 'position',
-    'midpoint', 'presentationRng',
+    'golem', 'hitTargetIds', 'id', 'kind', 'lifetimeTicks', 'lightRegistration',
+    'midpoint', 'miscLightAppendOrdinal', 'ownerId', 'phase', 'position', 'presentationRng',
     'quantity', 'radius', 'rank', 'rotationRadians', 'scale', 'skillId',
     'slowFactor', 'targetId', 'variant', 'velocity', 'worldKey',
   ])
@@ -2505,6 +2506,27 @@ function nativeSecondaryActor(
   if ((kind === 'golem') !== (golem !== null)) {
     throw new GameProtocolError(`${field}.golem must exist exactly for Golem actors`)
   }
+  const variant = nonnegativeInteger(source.variant, `${field}.variant`)
+  const lightDisposition = nativeSecondaryLightDisposition({ kind, variant })
+  const lightRegistration = lightDisposition === 'none'
+    ? absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      )
+    : nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        lightDisposition === 'transient-provider' ? 'transient' : 'actor',
+      )
+  let miscLightAppendOrdinal: number | null = null
+  if (lightDisposition === 'misc') {
+    miscLightAppendOrdinal = nonnegativeInteger(
+      source.miscLightAppendOrdinal,
+      `${field}.miscLightAppendOrdinal`,
+    )
+  } else if (source.miscLightAppendOrdinal !== null) {
+    throw new GameProtocolError(`${field}.miscLightAppendOrdinal must be null`)
+  }
   return {
     ageTicks,
     alpha: nonnegativeFinite(source.alpha, `${field}.alpha`),
@@ -2518,7 +2540,9 @@ function nativeSecondaryActor(
     id: positiveInteger(source.id, `${field}.id`),
     kind,
     lifetimeTicks,
+    lightRegistration,
     midpoint: vector(source.midpoint, `${field}.midpoint`),
+    miscLightAppendOrdinal,
     ownerId,
     phase: finite(source.phase, `${field}.phase`),
     position: vector(source.position, `${field}.position`),
@@ -2533,7 +2557,7 @@ function nativeSecondaryActor(
     skillId: nativeSecondarySkillId(source.skillId, `${field}.skillId`),
     slowFactor: finite(source.slowFactor, `${field}.slowFactor`),
     targetId,
-    variant: nonnegativeInteger(source.variant, `${field}.variant`),
+    variant,
     velocity: vector(source.velocity, `${field}.velocity`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
@@ -4024,16 +4048,11 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     flags,
     headingDeg,
     id: positiveInteger(source.id, `${field}.id`),
-    lightRegistration: enemyToken === 'ZOMBIE'
-      ? absentNativeLightProviderRegistration(
-          source.lightRegistration,
-          `${field}.lightRegistration`,
-        )
-      : nativeLightProviderRegistration(
-          source.lightRegistration,
-          `${field}.lightRegistration`,
-          'actor',
-        ),
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
     lighting: boneyardEnemyLighting(source.lighting, `${field}.lighting`),
     maximumHealth,
     nativeTypeId,
@@ -4271,6 +4290,7 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     'hitFlash',
     'id',
     'launchTrajectory',
+    'lightRegistration',
     'maximumHealth',
     'ownerCoffinActorId',
     'pose',
@@ -4335,6 +4355,11 @@ function boneyardMaggotSnapshot(value: unknown, field: string): BoneyardMaggotSn
     hitFlash,
     id: positiveInteger(source.id, `${field}.id`),
     launchTrajectory: launchTrajectory as BoneyardMaggotSnapshot['launchTrajectory'],
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
     maximumHealth,
     ownerCoffinActorId: positiveInteger(
       source.ownerCoffinActorId,

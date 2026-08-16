@@ -741,7 +741,11 @@ function copyEnemyDeathEffect(
 }
 
 function copyMaggot(maggot: BoneyardMaggotSnapshot): BoneyardMaggotSnapshot {
-  return { ...maggot, position: { ...maggot.position } }
+  return {
+    ...maggot,
+    lightRegistration: { ...maggot.lightRegistration },
+    position: { ...maggot.position },
+  }
 }
 
 function copyEnemyEvent(

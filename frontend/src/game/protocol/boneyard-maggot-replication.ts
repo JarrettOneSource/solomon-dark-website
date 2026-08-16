@@ -13,7 +13,7 @@ export const BONEYARD_MAGGOT_ENTITY_TYPE_ID = 4
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 6
+const DESCRIPTOR_LENGTH = 8
 const SAMPLE_LENGTH = 15
 const EMERGENCE_TICKS = 24
 
@@ -29,6 +29,8 @@ export const BONEYARD_MAGGOT_ENTITY_REGISTRATION = {
       && Number.isFinite(descriptor[4])
       && descriptor[4] > 0
       && arrayIndex(descriptor[5], BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES.length)
+      && descriptor[6] === 0
+      && nonnegativeInteger(descriptor[7])
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -63,6 +65,8 @@ export function boneyardMaggotDescriptor(
       maggot.launchTrajectory,
       'launch trajectory',
     ),
+    maggot.lightRegistration.managerLane === 'actor' ? 0 : -1,
+    maggot.lightRegistration.registrationOrdinal,
   ]
 }
 
@@ -112,6 +116,10 @@ export function materializeBoneyardMaggot(
     emergenceTick: sample[12],
     emergenceOrientation: sample[14],
     launchTrajectory: BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[descriptor[5]]!,
+    lightRegistration: {
+      managerLane: 'actor',
+      registrationOrdinal: descriptor[7],
+    },
     maximumHealth: descriptor[4],
     ownerCoffinActorId: descriptor[2],
     pose: dequantize(sample[7], VALUE_SCALE),

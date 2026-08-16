@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   NATIVE_SECONDARY_ACTOR_KINDS,
+  nativeSecondaryLightDisposition,
   type NativeSecondaryActorKind,
   type NativeSecondaryActorState,
   type NativeSecondaryEventState,
@@ -15,7 +16,10 @@ import {
   drawNativeInteger,
   drawNativeSign,
 } from '../core-kernels/native-rng.ts'
-import { nativeSecondaryLightSource } from './boneyard-lighting.ts'
+import {
+  nativeSecondaryMiscLightSource,
+  nativeSecondaryProviderLightSource,
+} from './boneyard-lighting.ts'
 import {
   nativeGolemFacing,
   nativeGolemPresentationPlan,
@@ -71,7 +75,9 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     id: 1,
     kind,
     lifetimeTicks: 1_000,
+    lightRegistration: null,
     midpoint: { x: 120, y: 180 },
+    miscLightAppendOrdinal: null,
     ownerId: 'player',
     phase: 0,
     position: { x: 100, y: 200 },
@@ -127,6 +133,83 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     ].includes(kind)) {
       assert.ok(plan.draws.length > 0, `${kind} unexpectedly became invisible`)
     }
+  }
+})
+
+test('the complete secondary light census stays split between providers and MiscLight writers', () => {
+  const actorProviders = new Set<NativeSecondaryActorKind>([
+    'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'fire-patch',
+    'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
+    'ether-drain', 'comet',
+  ])
+  const miscWriters = new Set<NativeSecondaryActorKind>([
+    'magic-circle', 'fire-burn', 'electric-burn',
+  ])
+  for (const kind of KINDS) {
+    const source = actor(kind)
+    const expectedDisposition = actorProviders.has(kind)
+      ? 'actor-provider'
+      : miscWriters.has(kind)
+        ? 'misc'
+        : 'none'
+    assert.equal(nativeSecondaryLightDisposition(source), expectedDisposition, kind)
+    assert.equal(
+      nativeSecondaryProviderLightSource(source) !== null,
+      actorProviders.has(kind),
+      `${kind} provider`,
+    )
+    assert.equal(
+      nativeSecondaryMiscLightSource(source) !== null,
+      miscWriters.has(kind),
+      `${kind} MiscLight`,
+    )
+  }
+
+  const litFade = {
+    ...actor('ether-fade'),
+    ageTicks: 0,
+    alpha: 2,
+    scale: 1.5,
+    slowFactor: 0.1,
+    variant: 1,
+  }
+  assert.equal(nativeSecondaryLightDisposition(litFade), 'transient-provider')
+  assert.deepEqual(nativeSecondaryProviderLightSource(litFade), {
+    castsDirectionalShadow: true,
+    intensity: 1,
+    position: litFade.position,
+    radius: 1.5,
+  })
+})
+
+test('secondary provider adapters preserve every recovered radius, intensity, and shadow flag', () => {
+  const cases = [
+    [
+      { ...actor('moving-fire'), radius: 0.2 },
+      { castsDirectionalShadow: true, intensity: 0.6000000000000001, radius: 0.6 },
+    ],
+    [
+      actor('leviathan'),
+      { castsDirectionalShadow: true, intensity: 1, radius: 1 },
+    ],
+    [
+      actor('ether-bolt'),
+      { castsDirectionalShadow: true, intensity: 1, radius: 0.5 },
+    ],
+    [
+      actor('golem'),
+      { castsDirectionalShadow: true, intensity: 0.75, radius: 1 },
+    ],
+    [
+      actor('magic-trap'),
+      { castsDirectionalShadow: false, intensity: 1, radius: 0.25 },
+    ],
+  ] as const
+  for (const [source, expected] of cases) {
+    assert.deepEqual(nativeSecondaryProviderLightSource(source), {
+      ...expected,
+      position: source.position,
+    }, source.kind)
   }
 })
 
@@ -213,11 +296,11 @@ test('Leviathan owns the portal redraw, authored appendage bank, EtherBolt, Fade
   assert.deepEqual([...new Set(fade.draws.map(({ entry }) => entry))].sort((a, b) => a - b), [110, 111, 112])
   assert.equal(fade.sortBias, 100)
   assert.ok(fade.draws.every(({ alpha }) => alpha >= 0))
-  assert.deepEqual(nativeSecondaryLightSource(fadeActor), {
-    castsDirectionalShadow: false,
-    intensity: Math.fround(0.95),
+  assert.deepEqual(nativeSecondaryProviderLightSource(fadeActor), {
+    castsDirectionalShadow: true,
+    intensity: 1,
     position: fadeActor.position,
-    radius: 0.75,
+    radius: 2,
   })
 })
 
@@ -308,17 +391,19 @@ test('Fire and Burn use the exact additive strip, mirror, scale-in, target flame
 
   const burn = {
     ...actor('fire-burn'),
+    ageTicks: 1,
     alpha: 0.4,
     position: { x: 20, y: 30 },
     radius: 0.17,
   }
   assert.deepEqual(nativeSecondaryPresentationPlan(burn).draws, [])
-  assert.deepEqual(nativeSecondaryLightSource(burn), {
+  assert.deepEqual(nativeSecondaryMiscLightSource(burn), {
     castsDirectionalShadow: false,
     intensity: 0.4,
     position: { x: 20, y: 30 },
     radius: 0.17,
   })
+  assert.equal(nativeSecondaryMiscLightSource({ ...burn, ageTicks: 0 }), null)
 
   const flame = nativeSecondaryPresentationPlan({
     ...actor('fire-burn-flame'),
@@ -426,12 +511,12 @@ test('Ether Drain uses the exact parent painter, child classes, capture pulse, a
   assert.equal(flare.blend, 'add')
   assert.equal(flare.alpha, 1.5)
 
-  const light = nativeSecondaryLightSource(source, 12)!
+  const light = nativeSecondaryProviderLightSource(source, 12)!
   assert.equal(light.radius, 2)
   assert.deepEqual(light.position, source.position)
   assert.ok(light.intensity >= 0.25 && light.intensity < 0.5)
-  assert.deepEqual(nativeSecondaryLightSource(source, 12), light)
-  assert.notEqual(nativeSecondaryLightSource(source, 13)?.intensity, light.intensity)
+  assert.deepEqual(nativeSecondaryProviderLightSource(source, 12), light)
+  assert.notEqual(nativeSecondaryProviderLightSource(source, 13)?.intensity, light.intensity)
 })
 
 test('gameplay waves stay invisible while the independent Ring visual owns exact children', () => {
@@ -772,21 +857,21 @@ test('Magic Trap ElectricBurn is light-only and owns no FadeLightning sprite at 
     ageTicks: 0,
     alpha: 0,
     position: { x: 125, y: -20 },
-    radius: 1,
+    radius: 0.5,
     skillId: 50 as const,
     targetId: 33,
     variant: 2,
   }
   assert.deepEqual(nativeSecondaryPresentationPlan(born).draws, [])
-  assert.equal(nativeSecondaryLightSource(born), null)
+  assert.equal(nativeSecondaryMiscLightSource(born), null)
 
-  const live = { ...born, ageTicks: 1, alpha: Math.fround(0.63) }
+  const live = { ...born, ageTicks: 1, alpha: 1, radius: Math.fround(0.63) }
   assert.deepEqual(nativeSecondaryPresentationPlan(live).draws, [])
-  assert.deepEqual(nativeSecondaryLightSource(live), {
+  assert.deepEqual(nativeSecondaryMiscLightSource(live), {
     castsDirectionalShadow: false,
-    intensity: Math.fround(0.63),
+    intensity: 1,
     position: { x: 125, y: -20 },
-    radius: 1,
+    radius: Math.fround(0.63),
   })
 })
 
@@ -873,13 +958,13 @@ test('Magic Circle owns centered parity-count ring particles, attached record 7,
     role: 'magic-circle-player-recovery-pulse',
     tint: 0x80ffff,
   }])
-  assert.deepEqual(nativeSecondaryLightSource(circle), {
+  assert.deepEqual(nativeSecondaryMiscLightSource(circle), {
     castsDirectionalShadow: true,
     intensity: 0.75,
     position: { x: 100, y: 200 },
     radius: 2,
   })
-  assert.equal(nativeSecondaryLightSource({ ...circle, ageTicks: 1_500 }), null)
+  assert.equal(nativeSecondaryMiscLightSource({ ...circle, ageTicks: 1_500 }), null)
 })
 
 test('Storm and Acid falling drops use the exact native gradient streaks', () => {
@@ -1183,13 +1268,13 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
 
 test('Shockwave and FreezeWave share the expanding Region-light callback', () => {
   const wave = { ...actor('shockwave'), alpha: 0.81, radius: 280 }
-  assert.deepEqual(nativeSecondaryLightSource(wave), {
+  assert.deepEqual(nativeSecondaryProviderLightSource(wave), {
     castsDirectionalShadow: false,
     intensity: 0.81,
     position: { x: 100, y: 200 },
     radius: 2,
   })
-  assert.deepEqual(nativeSecondaryLightSource({
+  assert.deepEqual(nativeSecondaryProviderLightSource({
     ...actor('freeze-wave'),
     alpha: 0.5,
     radius: 140,
@@ -1200,7 +1285,7 @@ test('Shockwave and FreezeWave share the expanding Region-light callback', () =>
     radius: 1,
   })
   for (const kind of ['storm-cloud', 'acid-rain'] as const) {
-    assert.deepEqual(nativeSecondaryLightSource({
+    assert.deepEqual(nativeSecondaryProviderLightSource({
       ...actor(kind),
       alpha: 0.8,
     }), {
@@ -1210,11 +1295,11 @@ test('Shockwave and FreezeWave share the expanding Region-light callback', () =>
       radius: 2,
     })
   }
-  assert.deepEqual(nativeSecondaryLightSource({
+  assert.deepEqual(nativeSecondaryProviderLightSource({
     ...actor('comet'),
     alpha: 0.1,
   }), {
-    castsDirectionalShadow: false,
+    castsDirectionalShadow: true,
     intensity: 0.5,
     position: { x: 100, y: 200 },
     radius: 2,

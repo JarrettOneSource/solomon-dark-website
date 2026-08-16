@@ -91,9 +91,8 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
     const family = FAMILIES[descriptor[2]]!
     return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
       && (descriptor[7] === 0 || family === 'SKELETON')
-      && (family === 'ZOMBIE'
-        ? descriptor[8] === -1 && descriptor[9] === -1
-        : descriptor[8] === 0 && nonnegativeInteger(descriptor[9]))
+      && descriptor[8] === 0
+      && nonnegativeInteger(descriptor[9])
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -137,8 +136,8 @@ export function boneyardEnemyDescriptor(
     enemy.maximumHealth,
     encodeFlags(enemy.flags),
     Number(enemy.armored),
-    enemy.lightRegistration?.managerLane === 'actor' ? 0 : -1,
-    enemy.lightRegistration?.registrationOrdinal ?? -1,
+    enemy.lightRegistration.managerLane === 'actor' ? 0 : -1,
+    enemy.lightRegistration.registrationOrdinal,
   ]
 }
 
@@ -254,12 +253,10 @@ export function materializeBoneyardEnemy(
     flags: decodeFlags(descriptor[6]),
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     id: descriptor[1],
-    lightRegistration: descriptor[8] === -1
-      ? null
-      : {
-          managerLane: 'actor',
-          registrationOrdinal: descriptor[9],
-        },
+    lightRegistration: {
+      managerLane: 'actor',
+      registrationOrdinal: descriptor[9],
+    },
     lighting: {
       charge: dequantize(sample[41], VALUE_SCALE),
       glow: dequantize(sample[40], VALUE_SCALE),

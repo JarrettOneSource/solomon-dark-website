@@ -155,6 +155,7 @@ function maggotAt(x: number, hitFlash: number): BoneyardMaggotSnapshot {
     emergenceTick: x / 10,
     emergenceOrientation: 0,
     launchTrajectory: 'edge',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 2,
     ownerCoffinActorId: 1,
     pose: x / 100,

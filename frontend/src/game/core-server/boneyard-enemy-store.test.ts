@@ -156,11 +156,10 @@ test('materialization gives all eight families stable actor and event identities
   )
   assert.deepEqual(
     result.store.actors.map((actor) => actor.lightRegistration),
-    [0, 1, 2, 3, 4, 5, 6, null].map((registrationOrdinal) => (
-      registrationOrdinal === null
-        ? null
-        : { managerLane: 'actor', registrationOrdinal }
-    )),
+    [0, 1, 2, 3, 4, 5, 6, 7].map((registrationOrdinal) => ({
+      managerLane: 'actor',
+      registrationOrdinal,
+    })),
   )
 })
 
@@ -1576,7 +1575,7 @@ test('remaining bounded families keep separate approach, special, and cooldown s
   ]), [[1, 'demon-bomb', 0x7f7]])
   assert.deepEqual(result.store.projectiles[0]!.lightRegistration, {
     managerLane: 'actor',
-    registrationOrdinal: 4,
+    registrationOrdinal: 5,
   })
 
   result = withActorBrain(result, 2, {

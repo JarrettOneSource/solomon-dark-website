@@ -335,7 +335,7 @@ export interface BoneyardEnemyActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
-  readonly lightRegistration: NativeLightProviderRegistration | null
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly lighting: Readonly<BoneyardEnemyLightingState>
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
@@ -454,6 +454,7 @@ export interface BoneyardMaggotActor {
   readonly lastDamageTick: number | null
   readonly lastMovementTick: number | null
   readonly lifeState: 'alive' | 'dying'
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly maximumHealth: number
   readonly nextAttackTick: number
   readonly nextMovementTick: number
@@ -860,6 +861,7 @@ function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
   for (const registration of [
     ...source.actors.map(({ lightRegistration }) => lightRegistration),
+    ...source.maggots.map(({ lightRegistration }) => lightRegistration),
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
   ]) {
     if (registration === null) continue
@@ -1299,9 +1301,7 @@ function materializeSpawnIntents(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
-      lightRegistration: config.enemyToken === 'ZOMBIE'
-        ? null
-        : work.registerLightProvider('actor'),
+      lightRegistration: work.registerLightProvider('actor'),
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick + (
@@ -2625,6 +2625,7 @@ function spawnCoffinMaggots(
       lastDamageTick: null,
       lastMovementTick: null,
       lifeState: 'alive',
+      lightRegistration: work.registerLightProvider('actor'),
       maximumHealth: family.maggotHealth,
       movementPhase: 'emerging',
       nextAttackTick: context.tick

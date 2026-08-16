@@ -171,7 +171,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v28 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v29 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -325,6 +325,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     id: 2,
     emergenceTick: 24,
     launchTrajectory: 'edge',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 2,
     ownerCoffinActorId: 1,
     pose: 0.5,
@@ -351,7 +352,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v28 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v29 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -502,6 +503,7 @@ test('protocol v28 strictly round-trips projected statuses, lighting, shields, p
     hitFlash: 0,
     id: 3,
     launchTrajectory: 'lid',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     maximumHealth: 2,
     ownerCoffinActorId: 1,
     pose: 0.5,
@@ -875,7 +877,7 @@ test('protocol v29 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v28 strictly owns the generated-arena transition', () => {
+test('protocol v29 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -929,7 +931,7 @@ test('protocol v28 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v28 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v29 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2046,7 +2048,9 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
     id: 1,
     kind: 'earthquake',
     lifetimeTicks: 100,
+    lightRegistration: null,
     midpoint: { x: 0, y: 0 },
+    miscLightAppendOrdinal: null,
     ownerId: 'player-1',
     phase: 0,
     position: { x: 800, y: 400 },
@@ -2081,16 +2085,67 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.secondaryAbilities.actors[0]!.hitTargetIds, [9, 3, 7])
 
-  const continuousFrame = structuredClone(message)
+  const continuousFrame = JSON.parse(JSON.stringify(message))
   continuousFrame.frame.secondaryAbilities.actors[0]!.frame = 0.25
   continuousFrame.frame.secondaryAbilities.actors[0]!.hitTargetIds = []
   continuousFrame.frame.secondaryAbilities.actors[0]!.kind = 'magic-trap'
+  continuousFrame.frame.secondaryAbilities.actors[0]!.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 0,
+  }
   continuousFrame.frame.secondaryAbilities.actors[0]!.skillId = 50
   continuousFrame.frame.secondaryAbilities.actors[0]!.slowFactor = -1
   const continuousDecoded = decodeServerGameMessage(JSON.stringify(continuousFrame))
   assert.equal(continuousDecoded.type, 'server-snapshot')
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.frame, 0.25)
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.slowFactor, -1)
+
+  const miscFrame = JSON.parse(JSON.stringify(message))
+  miscFrame.frame.secondaryAbilities.actors[0]!.hitTargetIds = []
+  miscFrame.frame.secondaryAbilities.actors[0]!.kind = 'magic-circle'
+  miscFrame.frame.secondaryAbilities.actors[0]!.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 4,
+  }
+  miscFrame.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal = 0
+  miscFrame.frame.secondaryAbilities.actors[0]!.skillId = 49
+  const miscDecoded = decodeServerGameMessage(JSON.stringify(miscFrame))
+  assert.equal(miscDecoded.type, 'server-snapshot')
+  assert.equal(
+    miscDecoded.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal,
+    0,
+  )
+
+  const wrongMiscLane = JSON.parse(JSON.stringify(miscFrame))
+  wrongMiscLane.frame.secondaryAbilities.actors[0]!.lightRegistration!.managerLane = 'transient'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongMiscLane)),
+    /lightRegistration\.managerLane must be actor/,
+  )
+
+  const missingMiscOrder = JSON.parse(JSON.stringify(miscFrame))
+  missingMiscOrder.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal = null
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingMiscOrder)),
+    /miscLightAppendOrdinal must be finite/,
+  )
+
+  const providerWithMiscOrder = JSON.parse(JSON.stringify(continuousFrame))
+  providerWithMiscOrder.frame.secondaryAbilities.actors[0]!.miscLightAppendOrdinal = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(providerWithMiscOrder)),
+    /miscLightAppendOrdinal must be null/,
+  )
+
+  const nonOwnerWithRegistration = JSON.parse(JSON.stringify(message))
+  nonOwnerWithRegistration.frame.secondaryAbilities.actors[0]!.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 0,
+  }
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(nonOwnerWithRegistration)),
+    /lightRegistration must be null/,
+  )
 
   const duplicate = structuredClone(message)
   duplicate.frame.secondaryAbilities.actors[0]!.hitTargetIds = [9, 3, 9]

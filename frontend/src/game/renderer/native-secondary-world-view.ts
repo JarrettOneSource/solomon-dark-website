@@ -13,9 +13,11 @@ import type {
   NativeSecondaryActorState,
   NativeSecondarySimulationState,
 } from '../core-kernels/native-secondary-abilities.ts'
-import type { PrimarySpellAirTransientState } from '../core-kernels/primary-spells.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
-import { AirPrimarySpellView } from './primary-spell-air-view.ts'
+import {
+  AirPrimarySpellView,
+  type NativeAirLightningViewState,
+} from './primary-spell-air-view.ts'
 import {
   nativeSecondarySpriteKey,
   nativeSecondarySpriteRecord,
@@ -465,7 +467,7 @@ export class NativeSecondaryWorldView {
 
 function stormStrikeTransient(
   actor: NativeSecondaryActorState,
-): PrimarySpellAirTransientState {
+): NativeAirLightningViewState {
   if (actor.kind !== 'storm-strike') {
     throw new TypeError('Storm lightning presentation requires a strike actor')
   }

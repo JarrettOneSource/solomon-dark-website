@@ -167,6 +167,7 @@ export function projectBoneyardMaggots(
       hitFlash: nativeEnemyHitOverlay(maggot.lastDamageTick, tick),
       id: maggot.id,
       launchTrajectory: maggot.launchTrajectory,
+      lightRegistration: maggot.lightRegistration,
       maximumHealth: maggot.maximumHealth,
       ownerCoffinActorId: maggot.ownerCoffinActorId,
       pose: maggot.gaitPose,

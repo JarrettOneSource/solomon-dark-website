@@ -108,6 +108,7 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     headingDeg: 90,
     id: 1,
     launchTrajectory: 'lid',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     launchVelocity: { x: 0, y: 0 },
     lastAttackTick: null,
     lastDamagedByPlayerId: 'player',
@@ -198,6 +199,7 @@ test('projects Maggot emergence trajectory and vertical launch height', () => {
   const source = projectedMaggot({
     emergenceTick: 12,
     launchTrajectory: 'lid',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     movementPhase: 'emerging',
   })
 
@@ -496,6 +498,7 @@ function projectedMaggot(
     headingDeg: 90,
     id: 1,
     launchTrajectory: 'edge',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 1 },
     launchVelocity: { x: 0, y: 0 },
     lastAttackTick: null,
     lastDamagedByPlayerId: null,

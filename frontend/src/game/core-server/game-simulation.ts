@@ -1061,6 +1061,7 @@ function finishGameSimulationTick(
         worldKey: gameWorldKey(result.world, playerId),
       }]
     })),
+    registerLightProvider: lightProviderOrder.register,
     sceneryTargets: (worldKey, center, radius) => (
       result.world.kind === 'boneyard'
       && worldKey === `boneyard:${result.world.runId}`

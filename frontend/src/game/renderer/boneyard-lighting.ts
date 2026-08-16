@@ -524,10 +524,19 @@ export function nativeRegionLightTargetPlan(
   }
 }
 
-export function nativeSecondaryLightSource(
+export function nativeSecondaryProviderLightSource(
   actor: NativeSecondaryActorState,
   presentationFrame = actor.ageTicks,
 ): NativeBoneyardLightSource | null {
+  if (actor.kind === 'moving-fire' || actor.kind === 'fire-patch') {
+    if (!(actor.radius > 0)) return null
+    return {
+      castsDirectionalShadow: true,
+      intensity: Math.min(1, 3 * actor.radius),
+      position: actor.position,
+      radius: 0.6,
+    }
+  }
   if (actor.kind === 'shockwave' || actor.kind === 'freeze-wave') {
     return {
       castsDirectionalShadow: false,
@@ -544,33 +553,41 @@ export function nativeSecondaryLightSource(
       radius: 2,
     }
   }
-  if (actor.kind === 'magic-circle' && actor.ageTicks < 1_500) {
+  if (actor.kind === 'leviathan') {
     return {
       castsDirectionalShadow: true,
-      intensity: actor.alpha,
-      position: actor.position,
-      radius: actor.scale * 0.5,
-    }
-  }
-  if (actor.kind === 'fire-burn') {
-    return {
-      castsDirectionalShadow: false,
-      intensity: actor.alpha,
-      position: actor.position,
-      radius: actor.radius,
-    }
-  }
-  if (actor.kind === 'electric-burn' && actor.ageTicks > 0) {
-    return {
-      castsDirectionalShadow: false,
-      intensity: actor.alpha,
+      intensity: 1,
       position: actor.position,
       radius: 1,
     }
   }
-  if (actor.kind === 'ether-drain') {
+  if (actor.kind === 'ether-bolt') {
+    return {
+      castsDirectionalShadow: true,
+      intensity: 1,
+      position: actor.position,
+      radius: 0.5,
+    }
+  }
+  if (actor.kind === 'golem') {
+    return {
+      castsDirectionalShadow: true,
+      intensity: 0.75,
+      position: actor.position,
+      radius: 1,
+    }
+  }
+  if (actor.kind === 'magic-trap') {
     return {
       castsDirectionalShadow: false,
+      intensity: 1,
+      position: actor.position,
+      radius: 0.25,
+    }
+  }
+  if (actor.kind === 'ether-drain') {
+    return {
+      castsDirectionalShadow: true,
       intensity: Math.min(actor.scale, 1) * (
         0.5 + presentationRandom(actor.id * 131 + presentationFrame) * 0.5
       ),
@@ -579,23 +596,51 @@ export function nativeSecondaryLightSource(
     }
   }
   if (actor.kind === 'ether-fade' && actor.variant === 1) {
-    let intensity = Math.fround(1)
+    let intensity = Math.fround(actor.alpha)
     for (let tick = 0; tick <= Math.floor(actor.ageTicks); tick += 1) {
-      intensity = Math.fround(intensity - Math.fround(0.05))
+      intensity = Math.fround(intensity - Math.fround(actor.slowFactor))
     }
     return {
-      castsDirectionalShadow: false,
-      intensity: Math.max(0, intensity),
+      castsDirectionalShadow: true,
+      intensity: Math.min(1, Math.max(0, intensity)),
       position: actor.position,
-      radius: 0.75,
+      radius: actor.scale,
     }
   }
   if (actor.kind !== 'comet') return null
   return {
-    castsDirectionalShadow: false,
+    castsDirectionalShadow: true,
     intensity: 0.5,
     position: actor.position,
     radius: 2,
+  }
+}
+
+export function nativeSecondaryMiscLightSource(
+  actor: NativeSecondaryActorState,
+): NativeBoneyardLightSource | null {
+  if (actor.kind === 'magic-circle' && actor.ageTicks < 1_500) {
+    return {
+      castsDirectionalShadow: true,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.scale * 0.5,
+    }
+  }
+  if (actor.kind === 'fire-burn' && actor.ageTicks > 0) {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.radius,
+    }
+  }
+  if (actor.kind !== 'electric-burn' || actor.ageTicks === 0) return null
+  return {
+    castsDirectionalShadow: false,
+    intensity: actor.alpha,
+    position: actor.position,
+    radius: actor.radius,
   }
 }
 

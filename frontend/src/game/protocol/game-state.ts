@@ -410,6 +410,7 @@ export interface BoneyardMaggotSnapshot {
   emergenceTick: number
   emergenceOrientation: number
   launchTrajectory: typeof BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES[number]
+  lightRegistration: NativeLightProviderRegistration
   maximumHealth: number
   ownerCoffinActorId: number
   pose: number
@@ -508,7 +509,7 @@ export interface BoneyardEnemySnapshot {
   flags: readonly string[]
   headingDeg: number
   id: number
-  lightRegistration: NativeLightProviderRegistration | null
+  lightRegistration: NativeLightProviderRegistration
   lighting: BoneyardEnemyLightingSnapshot
   maximumHealth: number
   nativeTypeId: number

@@ -39,6 +39,12 @@ import {
   nativeLeviathanMuzzlePosition,
   nativeLeviathanPhase,
 } from './native-secondary-leviathan.ts'
+import {
+  createNativeLightProviderOrder,
+  type NativeLightManagerLane,
+  type NativeLightProviderRegistration,
+  type RegisterNativeLightProvider,
+} from './native-light-provider-order.ts'
 import type { Vector2 } from './vector.ts'
 
 export type {
@@ -100,7 +106,9 @@ export interface NativeSecondaryActorState {
   readonly id: number
   readonly kind: NativeSecondaryActorKind
   readonly lifetimeTicks: number
+  readonly lightRegistration: NativeLightProviderRegistration | null
   readonly midpoint: Vector2
+  readonly miscLightAppendOrdinal: number | null
   readonly ownerId: string
   readonly phase: number
   readonly position: Vector2
@@ -196,6 +204,7 @@ export interface NativeSecondarySimulationState {
 export interface NativeSecondaryTarget {
   readonly family: string
   readonly id: number
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly nativeFlags?: number
   readonly position: Vector2
   readonly radius: number
@@ -277,6 +286,7 @@ export interface NativeSecondaryTickContext {
     end: Vector2,
   ) => boolean
   readonly players: Readonly<Record<string, NativeSecondaryPlayerAuthority>>
+  readonly registerLightProvider?: RegisterNativeLightProvider
   readonly sceneryTargets?: (
     worldKey: string,
     center: Vector2,
@@ -505,8 +515,8 @@ const MAGIC_TRAP_SHIMMER_LIFETIME_TICKS = 20
 const MAGIC_TRAP_TRIGGER_PRESENTATION_RNG_WORDS = 502
 const MAGIC_TRAP_TRIGGER_PRESENTATION_LIFETIME_TICKS = 116
 const MAGIC_TRAP_ELECTRIC_BURN_LIFETIME_TICKS = 100
-const MAGIC_TRAP_ELECTRIC_BURN_LIGHT_RADIUS = Math.fround(1)
-const MAGIC_TRAP_ELECTRIC_BURN_LIGHT_BASE_INTENSITY = Math.fround(0.5)
+const MAGIC_TRAP_ELECTRIC_BURN_LIGHT_BASE_RADIUS = Math.fround(0.5)
+const MAGIC_TRAP_ELECTRIC_BURN_LIGHT_INTENSITY = Math.fround(1)
 const MAGIC_TRAP_ELECTRIC_BURN_LIGHT_JITTER = Math.fround(0.25)
 const MAGIC_TRAP_ELECTRIC_BURN_CONTACT_SCALAR_BASE = Math.fround(0.25)
 const MAGIC_TRAP_ELECTRIC_BURN_CONTACT_SCALAR_JITTER = Math.fround(0.5)
@@ -1497,6 +1507,7 @@ export function stepNativeSecondaryAbilities(
         actor = {
           ...actor,
           alpha: fade,
+          lightRegistration: target.lightRegistration,
           position: target.position,
           radius: Math.fround(0.1 + lightRadius.value),
           scale: target.scale,
@@ -2224,12 +2235,13 @@ export function stepNativeSecondaryAbilities(
         }
         actor = {
           ...actor,
-          alpha: Math.fround(
-            MAGIC_TRAP_ELECTRIC_BURN_LIGHT_BASE_INTENSITY + light.value,
-          ),
+          alpha: MAGIC_TRAP_ELECTRIC_BURN_LIGHT_INTENSITY,
+          lightRegistration: target.lightRegistration,
           phase: contactScalar,
           position: target.position,
-          radius: MAGIC_TRAP_ELECTRIC_BURN_LIGHT_RADIUS,
+          radius: Math.fround(
+            MAGIC_TRAP_ELECTRIC_BURN_LIGHT_BASE_RADIUS + light.value,
+          ),
         }
         addDamage(actor, target, actor.damage, 'lightning')
         break
@@ -3046,6 +3058,7 @@ export function stepNativeSecondaryAbilities(
       ? state.events
       : state.events.slice(-EVENT_CAPACITY),
   }
+  state = enrollNativeSecondaryLightOwners(state, context)
   return {
     damage: Object.freeze(damage),
     dispelledShieldTargetIds: Object.freeze([...dispelledShieldTargetIds].sort((a, b) => a - b)),
@@ -3902,7 +3915,9 @@ function applyFireBurnRequest(
     return spawn(source, actorSeed({
       damage,
       kind: 'fire-burn',
+      lightRegistration: request.target.lightRegistration,
       lifetimeTicks: FIRE_BURN_LIFETIME_TICKS,
+      miscLightAppendOrdinal: 0,
       ownerId: request.actor.ownerId,
       position: request.target.position,
       rank: request.actor.rank,
@@ -3944,10 +3959,12 @@ function applyElectricBurnRequest(
       alpha: 0,
       damage,
       kind: 'electric-burn',
+      lightRegistration: request.target.lightRegistration,
       lifetimeTicks: MAGIC_TRAP_ELECTRIC_BURN_LIFETIME_TICKS,
+      miscLightAppendOrdinal: 0,
       ownerId: request.actor.ownerId,
       position: request.target.position,
-      radius: MAGIC_TRAP_ELECTRIC_BURN_LIGHT_RADIUS,
+      radius: MAGIC_TRAP_ELECTRIC_BURN_LIGHT_BASE_RADIUS,
       rank: request.actor.rank,
       skillId: request.actor.skillId,
       targetId: request.target.id,
@@ -3968,6 +3985,7 @@ function applyElectricBurnRequest(
       remainingTicks,
       MAGIC_TRAP_ELECTRIC_BURN_LIFETIME_TICKS,
     ),
+    lightRegistration: request.target.lightRegistration,
     ownerId: request.actor.ownerId,
     phase: 0,
     position: request.target.position,
@@ -4197,7 +4215,9 @@ function actorSeed(
     hitTargetIds: [],
     kind,
     lifetimeTicks: 60,
+    lightRegistration: null,
     midpoint: ZERO,
+    miscLightAppendOrdinal: null,
     ownerId,
     phase: 0,
     position: ZERO,
@@ -4215,6 +4235,122 @@ function actorSeed(
     worldKey,
     ...patch,
   }
+}
+
+export type NativeSecondaryLightDisposition =
+  | 'actor-provider'
+  | 'misc'
+  | 'none'
+  | 'transient-provider'
+
+export function nativeSecondaryLightDisposition(
+  actor: Pick<NativeSecondaryActorState, 'kind' | 'variant'>,
+): NativeSecondaryLightDisposition {
+  switch (actor.kind) {
+    case 'leviathan':
+    case 'ether-bolt':
+    case 'moving-fire':
+    case 'shockwave':
+    case 'fire-patch':
+    case 'storm-cloud':
+    case 'freeze-wave':
+    case 'golem':
+    case 'magic-trap':
+    case 'acid-rain':
+    case 'ether-drain':
+    case 'comet':
+      return 'actor-provider'
+    case 'ether-fade':
+      return actor.variant === 1 ? 'transient-provider' : 'none'
+    case 'magic-circle':
+    case 'fire-burn':
+    case 'electric-burn':
+      return 'misc'
+    default:
+      return 'none'
+  }
+}
+
+function enrollNativeSecondaryLightOwners(
+  source: NativeSecondarySimulationState,
+  context: NativeSecondaryTickContext,
+): NativeSecondarySimulationState {
+  const standaloneOrder = createNativeLightProviderOrder(
+    nativeSecondaryLightProviderOrderState(source),
+  )
+  const register = context.registerLightProvider ?? standaloneOrder.register
+  const nextModifierOrdinalByTarget = new Map<string, number>()
+  const actors = source.actors.map((actor) => {
+    const disposition = nativeSecondaryLightDisposition(actor)
+    if (disposition === 'none') {
+      if (actor.lightRegistration === null && actor.miscLightAppendOrdinal === null) {
+        return actor
+      }
+      return Object.freeze({
+        ...actor,
+        lightRegistration: null,
+        miscLightAppendOrdinal: null,
+      })
+    }
+
+    if (actor.kind === 'fire-burn' || actor.kind === 'electric-burn') {
+      if (actor.targetId === null) {
+        throw new Error(`${actor.kind} lost its target-owned light registration`)
+      }
+      const target = context.target(actor.worldKey, actor.targetId)
+      const lightRegistration = target?.lightRegistration ?? actor.lightRegistration
+      if (lightRegistration === null || lightRegistration.managerLane !== 'actor') {
+        throw new Error(`${actor.kind} target is not registered in the actor light manager`)
+      }
+      const key = `${actor.worldKey}\u0000${actor.targetId}`
+      const miscLightAppendOrdinal = nextModifierOrdinalByTarget.get(key) ?? 0
+      nextModifierOrdinalByTarget.set(key, miscLightAppendOrdinal + 1)
+      if (
+        actor.lightRegistration === lightRegistration
+        && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
+      ) return actor
+      return Object.freeze({
+        ...actor,
+        lightRegistration,
+        miscLightAppendOrdinal,
+      })
+    }
+
+    const expectedLane: NativeLightManagerLane = disposition === 'transient-provider'
+      ? 'transient'
+      : 'actor'
+    const lightRegistration = actor.lightRegistration ?? register(expectedLane)
+    if (lightRegistration.managerLane !== expectedLane) {
+      throw new Error(`${actor.kind} changed native light-manager lane`)
+    }
+    const miscLightAppendOrdinal = disposition === 'misc' ? 0 : null
+    if (
+      actor.lightRegistration === lightRegistration
+      && actor.miscLightAppendOrdinal === miscLightAppendOrdinal
+    ) return actor
+    return Object.freeze({
+      ...actor,
+      lightRegistration,
+      miscLightAppendOrdinal,
+    })
+  })
+  return actors.every((actor, index) => actor === source.actors[index])
+    ? source
+    : { ...source, actors }
+}
+
+function nativeSecondaryLightProviderOrderState(
+  source: NativeSecondarySimulationState,
+) {
+  const nextRegistrationOrdinal = { actor: 0, transient: 0 }
+  for (const registration of source.actors.map(({ lightRegistration }) => lightRegistration)) {
+    if (registration === null) continue
+    nextRegistrationOrdinal[registration.managerLane] = Math.max(
+      nextRegistrationOrdinal[registration.managerLane],
+      registration.registrationOrdinal + 1,
+    )
+  }
+  return { nextRegistrationOrdinal }
 }
 
 function spawnFirewalkerPatch(

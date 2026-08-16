@@ -85,6 +85,9 @@ function copyActor(
     golem: actor.golem === null ? null : { ...actor.golem },
     endpoint: { ...actor.endpoint },
     hitTargetIds: [...actor.hitTargetIds],
+    lightRegistration: actor.lightRegistration === null
+      ? null
+      : { ...actor.lightRegistration },
     midpoint: { ...actor.midpoint },
     position: { ...actor.position },
     presentationRng: actor.presentationRng === null

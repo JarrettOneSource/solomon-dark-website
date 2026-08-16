@@ -45,6 +45,11 @@ const CONFIG = {
   element: 'ether',
 } as const
 
+const TARGET_LIGHT_REGISTRATION = Object.freeze({
+  managerLane: 'actor' as const,
+  registrationOrdinal: 100,
+})
+
 const EXPECTED_ACTOR_KIND = new Map<NativeSecondaryAbilityId, string | null>([
   [11, 'leviathan'], [12, null], [15, 'phase-burst'], [21, 'moving-fire'],
   [23, 'fire-patch'], [27, 'storm-cloud'], [30, 'prismatic-wave'], [35, 'freeze-wave'],
@@ -454,7 +459,7 @@ test('native float RNG preserves every retail float32 store and ordered range in
 
 test('Prismatic applies immediately and owns the exact signed constructor plus 19-word emission tick', () => {
   const target = {
-    family: 'ZOMBIE', id: 7, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 7, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   let queriedRadius = 0
   const castContext = {
@@ -522,7 +527,7 @@ test('Prismatic applies immediately and owns the exact signed constructor plus 1
 
 test('Magic Circle performs its stock first pulse, light RNG, parity emitter, and attached player flash', () => {
   const target = {
-    family: 'ZOMBIE', id: 9, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 9, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const initialRng = createNativeRng(123)
   const light = drawNativeFloat(initialRng, 0.25, true)
@@ -545,14 +550,18 @@ test('Magic Circle performs its stock first pulse, light RNG, parity emitter, an
   assert.deepEqual({
     ageTicks: circle.ageTicks,
     alpha: circle.alpha,
+    lightRegistration: circle.lightRegistration,
     lifetimeTicks: circle.lifetimeTicks,
+    miscLightAppendOrdinal: circle.miscLightAppendOrdinal,
     phase: circle.phase,
     presentationRng: circle.presentationRng,
     scale: circle.scale,
   }, {
     ageTicks: 0,
     alpha: Math.fround(0.75 + light.value),
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     lifetimeTicks: 1_519,
+    miscLightAppendOrdinal: 0,
     phase: 1,
     presentationRng: initialRng,
     scale: 4,
@@ -648,6 +657,114 @@ test('actor-owned Region writes occur on the exact first-update and Circle thres
   ])
 })
 
+test('secondary light enrollment preserves actor, transient, and target-action order', () => {
+  const nextOrdinal = { actor: 10, transient: 20 }
+  const registerLightProvider = (managerLane: 'actor' | 'transient') => Object.freeze({
+    managerLane,
+    registrationOrdinal: nextOrdinal[managerLane]++,
+  })
+  const leviathanContext = context(11, 1, 0)
+  const leviathanState = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    { ...leviathanContext, registerLightProvider },
+  ).state
+  const leviathan = leviathanState.actors.find(({ kind }) => kind === 'leviathan')!
+  assert.deepEqual(leviathan.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: 10,
+  })
+  assert.ok(leviathanState.actors
+    .filter(({ kind }) => kind === 'leviathan-appendage')
+    .every(({ lightRegistration }) => lightRegistration === null))
+
+  const fadeSource: NativeSecondarySimulationState = {
+    ...createNativeSecondarySimulation(456),
+    actors: [Object.freeze({
+      ...leviathan,
+      ageTicks: 0,
+      alpha: 2,
+      id: 1,
+      kind: 'ether-fade',
+      lifetimeTicks: 19,
+      lightRegistration: null,
+      miscLightAppendOrdinal: null,
+      scale: 2,
+      slowFactor: Math.fround(0.1),
+      variant: 1,
+    })],
+    nextActorId: 2,
+  }
+  const fadeContext = context(11, 2, null)
+  const fade = stepNativeSecondaryAbilities(fadeSource, {
+    ...fadeContext,
+    registerLightProvider,
+  }).state.actors[0]!
+  assert.deepEqual(fade.lightRegistration, {
+    managerLane: 'transient',
+    registrationOrdinal: 20,
+  })
+
+  const target = {
+    family: 'ZOMBIE',
+    id: 33,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    position: { x: 100, y: 0 },
+    radius: 10,
+    scale: 1,
+    shieldHealth: 0,
+  }
+  const modifiers: NativeSecondarySimulationState = {
+    ...createNativeSecondarySimulation(789),
+    actors: [
+      Object.freeze({
+        ...leviathan,
+        ageTicks: 0,
+        damage: 0.01,
+        id: 1,
+        kind: 'fire-burn',
+        lifetimeTicks: 200,
+        lightRegistration: TARGET_LIGHT_REGISTRATION,
+        miscLightAppendOrdinal: null,
+        targetId: target.id,
+      }),
+      Object.freeze({
+        ...leviathan,
+        ageTicks: 0,
+        damage: 0.01,
+        id: 2,
+        kind: 'electric-burn',
+        lifetimeTicks: 100,
+        lightRegistration: TARGET_LIGHT_REGISTRATION,
+        miscLightAppendOrdinal: null,
+        targetId: target.id,
+      }),
+    ],
+    nextActorId: 3,
+  }
+  const modifierContext = context(50, 2, null)
+  const steppedModifiers = stepNativeSecondaryAbilities(modifiers, {
+    ...modifierContext,
+    target: (_worldKey, targetId) => targetId === target.id ? target : null,
+    targets: () => [target],
+  }).state.actors.filter(({ kind }) => kind === 'fire-burn' || kind === 'electric-burn')
+  assert.deepEqual(steppedModifiers.map((actor) => ({
+    kind: actor.kind,
+    lightRegistration: actor.lightRegistration,
+    miscLightAppendOrdinal: actor.miscLightAppendOrdinal,
+  })), [
+    {
+      kind: 'fire-burn',
+      lightRegistration: TARGET_LIGHT_REGISTRATION,
+      miscLightAppendOrdinal: 0,
+    },
+    {
+      kind: 'electric-burn',
+      lightRegistration: TARGET_LIGHT_REGISTRATION,
+      miscLightAppendOrdinal: 1,
+    },
+  ])
+})
+
 test('toggle Region feedback follows native on/off ownership without synthetic toggle actors', () => {
   for (const skillId of [23, 78, 79] as const) {
     let state = stepNativeSecondaryAbilities(
@@ -717,7 +834,7 @@ test('Planewalker overrides only the active duration and releases the configured
 
 test('Magic Trap selector owns native color, contact kind, and added modifier', () => {
   const target = {
-    family: 'ZOMBIE', id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const rows = [
     { blue: 1, cue: 'magic-missile', damageKind: 'magic', green: 0.1, primarySkillId: 8, red: 1, selector: 0 },
@@ -814,7 +931,7 @@ test('Magic Trap selector owns native color, contact kind, and added modifier', 
 
 test('Magic Trap water payload owns float32 contact and truncating ColdSlow lifetime', () => {
   const target = {
-    family: 'ZOMBIE', id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const castContext = context(50, 1, 0)
   const authority = castContext.players.player!
@@ -873,7 +990,7 @@ test('Magic Trap water payload owns float32 contact and truncating ColdSlow life
 
 test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 100 damage updates', () => {
   const target = {
-    family: 'ZOMBIE', id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const castContext = context(50, 1, 0)
   const authority = castContext.players.player!
@@ -903,14 +1020,18 @@ test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 
   assert.deepEqual({
     ageTicks: born.ageTicks,
     alpha: born.alpha,
+    lightRegistration: born.lightRegistration,
     lifetimeTicks: born.lifetimeTicks,
+    miscLightAppendOrdinal: born.miscLightAppendOrdinal,
     radius: born.radius,
     targetId: born.targetId,
   }, {
     ageTicks: 0,
     alpha: 0,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
     lifetimeTicks: 100,
-    radius: 1,
+    miscLightAppendOrdinal: 0,
+    radius: Math.fround(0.5),
     targetId: target.id,
   })
 
@@ -938,10 +1059,10 @@ test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 
     radius: live.radius,
   }, {
     ageTicks: 1,
-    alpha: Math.fround(Math.fround(0.5) + light.value),
+    alpha: Math.fround(1),
     phase: Math.fround(Math.fround(0.25) + scalar.value),
     position: movedTarget.position,
-    radius: 1,
+    radius: Math.fround(Math.fround(0.5) + light.value),
   })
   assert.deepEqual(result.damage, [{
     amount: born.damage,
@@ -973,7 +1094,7 @@ test('Magic Trap ElectricBurn owns exact target-following RNG, light state, and 
 
 test('Magic Trap ElectricBurn reattachment max-refreshes one target modifier and replaces its payload', () => {
   const target = {
-    family: 'ZOMBIE', id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 33, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const firstCastContext = context(50, 1, 0)
   const firstAuthority = firstCastContext.players.player!
@@ -1047,10 +1168,10 @@ test('Magic Trap ElectricBurn reattachment max-refreshes one target modifier and
 
 test('Magic Trap owns float32 charge, 32 shimmer emissions, split query geometry, and 502-word terminal RNG', () => {
   const armingTarget = {
-    family: 'ZOMBIE', id: 33, position: { x: 150, y: 50 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 33, position: { x: 150, y: 50 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const payloadOnlyTarget = {
-    family: 'ZOMBIE', id: 34, position: { x: 240, y: 140 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 34, position: { x: 240, y: 140 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   let state = cast(50).state
   const fullPayload = state.actors.find(({ kind }) => kind === 'magic-trap')!.damage
@@ -1451,7 +1572,7 @@ test('Plane Orb uses the exact sixth-update contact center, enhanced five-word m
   ).state
   const queryRows: Array<{ position: { x: number; y: number }; radius: number }> = []
   const target = {
-    family: 'ZOMBIE', id: 77, position: { x: 20, y: -15 }, radius: 1, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 77, position: { x: 20, y: -15 }, radius: 1, scale: 1, shieldHealth: 0,
   }
   let pulseDamage = 0
   for (let tick = 3; tick <= 8; tick += 1) {
@@ -1568,11 +1689,11 @@ test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and ow
 
 test('Turn Undead filters the four native families and installs exact flee and weaken state', () => {
   const targets = [
-    { family: 'SKELETON', id: 1, position: { x: 10, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'SKELETONARCHER', id: 2, position: { x: 20, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'SKELETONMAGE', id: 3, position: { x: 30, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 4, position: { x: 40, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'DEMON', id: 5, position: { x: 50, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'SKELETON', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 1, position: { x: 10, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'SKELETONARCHER', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 2, position: { x: 20, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'SKELETONMAGE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 3, position: { x: 30, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 4, position: { x: 40, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'DEMON', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 5, position: { x: 50, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
   ] as const
   const base = context(77, 1, 0)
   const result = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
@@ -1740,7 +1861,7 @@ test('Shockwave applies the summed native damage lane and displacement recurrenc
   let state = cast(21).state
   const wave = state.actors.find(({ kind }) => kind === 'shockwave')!
   const target = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 91,
     position: { x: 10, y: 0 },
     radius: 1,
@@ -1884,11 +2005,11 @@ test('Earthquake keys its strict hostile pulse to post-decrement remaining and c
   const castResult = cast(41)
   const quake = castResult.state.actors.find(({ kind }) => kind === 'earthquake')!
   const targets = [
-    { family: 'ZOMBIE', id: 1, position: { x: 20, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 2, position: { x: 40, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 3, position: { x: 60, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 4, position: { x: 80, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 5, position: { x: 512, y: 0 }, radius: 100, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 1, position: { x: 20, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 2, position: { x: 40, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 3, position: { x: 60, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 4, position: { x: 80, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 5, position: { x: 512, y: 0 }, radius: 100, scale: 1, shieldHealth: 0 },
   ]
   const pulseSource = {
     ...castResult.state,
@@ -2404,7 +2525,7 @@ test('Fire contact uses the global third-tick lane, strict center radius, one re
   assert.equal(patch.enhanced, true)
   const contactRadius = Math.fround(32 * patch.scale)
   const outside = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 401,
     position: { x: patch.position.x + contactRadius, y: patch.position.y },
     radius: 100,
@@ -2480,7 +2601,7 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
   const castState = cast(73).state
   const patch = castState.actors.find(({ kind }) => kind === 'fire-patch')!
   const target = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 403,
     position: { x: patch.position.x, y: patch.position.y },
     radius: 10,
@@ -2517,12 +2638,16 @@ test('Burn owns two RNG words per tick, target-scaled flame and light, max merge
   assert.deepEqual({
     ageTicks: activeBurn.ageTicks,
     alpha: activeBurn.alpha,
+    lightRegistration: activeBurn.lightRegistration,
+    miscLightAppendOrdinal: activeBurn.miscLightAppendOrdinal,
     position: activeBurn.position,
     radius: activeBurn.radius,
     scale: activeBurn.scale,
   }, {
     ageTicks: 1,
     alpha: 1,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    miscLightAppendOrdinal: 0,
     position: target.position,
     radius: Math.fround(0.1 + lightDraw.value),
     scale: target.scale,
@@ -2747,7 +2872,7 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
 
   const contactRadii: number[] = []
   const target = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 92,
     position: { x: 114, y: 5 },
     radius: 1,
@@ -2920,7 +3045,7 @@ test('Leviathan deploys on active update 59, respects visibility, acquires one t
     y: parent.position.y + appendage.endpoint.y,
   }
   const target = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 500,
     position: {
       x: queryOrigin.x + direction.x * 100,
@@ -3020,13 +3145,13 @@ test('Leviathan deploys on active update 59, respects visibility, acquires one t
 
 test('Ether Drain retains its strict ellipse and applies exact pressure, contact tiers, and RNG', () => {
   const targets = [
-    { family: 'ZOMBIE', id: 1, position: { x: 119, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 2, position: { x: 114, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 3, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 4, nativeFlags: 1, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 5, position: { x: 612, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 6, position: { x: 100, y: 820 }, radius: 10, scale: 1, shieldHealth: 0 },
-    { family: 'ZOMBIE', id: 7, position: { x: 1_123, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 1, position: { x: 119, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 2, position: { x: 114, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 3, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 4, nativeFlags: 1, position: { x: 109, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 5, position: { x: 612, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 6, position: { x: 100, y: 820 }, radius: 10, scale: 1, shieldHealth: 0 },
+    { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 7, position: { x: 1_123, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 },
   ]
   const byId = new Map(targets.map((target) => [target.id, target]))
   const queryRadii: number[] = []
@@ -3144,7 +3269,7 @@ test('Ether Drain owns exact SuckCloud/SuckDebris RNG, travel, and callback boun
 
 test('Magic Storm emits drops before its seven-draw strike geometry and owns the 101-step fade', () => {
   const target = {
-    family: 'ZOMBIE',
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
     id: 17,
     position: { x: 400, y: 0 },
     radius: 10,
@@ -3265,7 +3390,7 @@ test('Magic Storm owns the per-tick ambient flash roll and thunder edge through 
 
 test('Ring of Ice owns the float32 93-tick expansion and one-contact ledger', () => {
   const target = {
-    family: 'ZOMBIE', id: 3, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 3, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }
   const source = createNativeSecondarySimulation(123)
   let state = stepNativeSecondaryAbilities(source, context(35, 1, 0)).state
@@ -3463,7 +3588,7 @@ test('death or disconnect cleanup retires player-owned actors and state once', (
 })
 
 test('Magic Storm lightning consumes Prismatic susceptibility and Acid Rain uses exact target count', () => {
-  const target = { family: 'ZOMBIE', id: 1, position: { x: 0, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
+  const target = { family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: 1, position: { x: 0, y: 0 }, radius: 10, scale: 1, shieldHealth: 0 }
   let state = createNativeSecondarySimulation(7)
   state = stepNativeSecondaryAbilities(state, {
     ...context(30, 1, 0),
@@ -3477,7 +3602,7 @@ test('Magic Storm lightning consumes Prismatic susceptibility and Acid Rain uses
 
   const rain = cast(72).state
   const targets = Array.from({ length: 7 }, (_, index) => ({
-    family: 'ZOMBIE', id: index + 1, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION, id: index + 1, position: { x: 100, y: 0 }, radius: 10, scale: 1, shieldHealth: 0,
   }))
   let rainState: NativeSecondarySimulationState = rain
   let pulseDamage = 0

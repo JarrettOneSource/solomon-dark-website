@@ -175,7 +175,7 @@ function enemy(
     flags: [],
     headingDeg: 0,
     id: 23,
-    lightRegistration: null,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     lighting: { charge: 0, glow: 0, providerCopies: 0 },
     maximumHealth: 5,
     nativeTypeId: 1_001,
