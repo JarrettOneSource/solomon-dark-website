@@ -120,7 +120,9 @@ export class PrimarySpellWorldView {
           || state.kind === 'fire-patch'
         ) {
           view = new FireActorSpellView(state, this.textures.fireActors)
-        } else if ('position' in state) {
+        } else if (state.kind === 'earth'
+          || state.kind === 'ether'
+          || (state.kind === 'fire' && 'phase' in state)) {
           view = state.kind === 'earth'
             ? new EarthBoulderView(state, this.textures.primarySpells.earth)
             : state.kind === 'ether'

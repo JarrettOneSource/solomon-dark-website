@@ -164,6 +164,8 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
     worldKey: 'boneyard:1',
   })
   assert.equal(source.buildId, 1006)
+  assert.equal(source.assemblyScale, Math.fround(0.18))
+  assert.equal(source.flightTicks, 0)
   const updated = updateNativeWeldPersistentActor(
     source,
     source.origin,
@@ -171,6 +173,7 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
     createNativeRng(1),
   )
   assert.equal(updated.actor.buildId, 1006)
+  assert.notDeepEqual(updated.actor.orientation, source.orientation)
   assert.equal(
     updated.actor.scale,
     Math.fround(Math.fround(0.18) + Math.fround(1.2 * 1.5) * 0.0025),
@@ -193,6 +196,12 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.deepEqual(released.actors.map((actor) => (
     actor.buildId === 1006 ? actor.visualScaleFactor : null
   )), [Math.fround(0.75), Math.fround(0.7125), Math.fround(0.7125), Math.fround(0.675)])
+  const first = released.actors[0]
+  assert.ok(first?.buildId === 1006)
+  const stepped = stepNativeWeldWorldActor(first)
+  assert.ok(stepped?.kind === 'weld-persistent' && stepped.buildId === 1006)
+  assert.equal(stepped.flightTicks, 1)
+  assert.notDeepEqual(stepped.orientation, first.orientation)
 })
 
 test('Hailstones bucket rebuild consumes native rock RNG in exact field order', () => {

@@ -70,6 +70,23 @@ import {
   type NativeFireSpentEmber,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
+  NATIVE_WELD_CHANNEL_VISIBLE_TICKS,
+  NATIVE_WELD_IMPACT_VISIBLE_TICKS,
+  NATIVE_WELD_METEOR_IMPACT_TICKS,
+  NATIVE_WELD_METEOR_PULSE_TICKS,
+  NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
+  type NativeWeldChannelActorState,
+  type NativeWeldEtherealBoulderState,
+  type NativeWeldHailstoneRockState,
+  type NativeWeldHailstonesState,
+  type NativeWeldImpactActorState,
+  type NativeWeldMeteorActorState,
+  type NativeWeldMeteorFieldState,
+  type NativeWeldProjectileState,
+  type NativeWeldWorldActor,
+} from '../core-kernels/native-weld-primary-runtime.ts'
+import type { NativeWeldBuildId } from '../core-kernels/native-weld-primary-profile.ts'
+import {
   NATIVE_STAFF_MELEE_ACCELERATION,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
   NATIVE_STAFF_CONTACT_EVENT_TICKS,
@@ -3750,6 +3767,7 @@ function primarySpellState(value: unknown, field: string): PrimarySpellSimulatio
 
 function primarySpellProjectile(value: unknown, field: string): PrimarySpellProjectileState {
   const source = record(value, field)
+  if (source.kind === 'weld') return primarySpellWeldProjectile(source, field)
   if (source.kind !== 'earth' && source.kind !== 'ether' && source.kind !== 'fire') {
     throw new GameProtocolError(`${field}.kind is not a projectile primary`)
   }
@@ -3932,6 +3950,469 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
   }
 }
 
+const NATIVE_WELD_VECTOR_LENGTHS: Readonly<Record<NativeWeldBuildId, number>> = {
+  1000: 9,
+  1001: 7,
+  1002: 7,
+  1003: 8,
+  1004: 7,
+  1005: 8,
+  1006: 6,
+  1007: 9,
+  1008: 6,
+  1009: 6,
+}
+
+function primarySpellWeldProjectile(
+  source: Record<string, unknown>,
+  field: string,
+): NativeWeldProjectileState {
+  onlyKeys(source, field, [
+    'ageTicks', 'buildId', 'charge', 'contactsRemaining', 'damage', 'direction',
+    'flightTicks', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
+    'lightRegistration', 'ownerId', 'phase', 'position', 'presentationSeed',
+    'projectileIndex', 'speed', 'targetId', 'turnAccumulator', 'turnInput',
+    'vector', 'velocity', 'worldKey',
+  ])
+  const buildId = weldBuildId(source.buildId, `${field}.buildId`)
+  if (buildId !== 1000 && buildId !== 1001 && buildId !== 1002 && buildId !== 1009) {
+    throw new GameProtocolError(`${field}.buildId is not a welded one-shot build`)
+  }
+  if (source.charge !== 1 || source.phase !== 'flight') {
+    throw new GameProtocolError(`${field} is not a released welded projectile`)
+  }
+  const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+  const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
+  if (flightTicks > ageTicks) {
+    throw new GameProtocolError(`${field}.flightTicks exceeds the actor age`)
+  }
+  const headingDegrees = finite(source.headingDegrees, `${field}.headingDegrees`)
+  if (headingDegrees < 0 || headingDegrees >= 360) {
+    throw new GameProtocolError(`${field}.headingDegrees is outside [0,360)`)
+  }
+  const presentationSeed = source.presentationSeed === null
+    ? null
+    : nonnegativeInteger(source.presentationSeed, `${field}.presentationSeed`)
+  if (presentationSeed !== null && (buildId !== 1000 || presentationSeed >= 100_000)) {
+    throw new GameProtocolError(`${field}.presentationSeed is outside the Burning Bolt lane`)
+  }
+  const targetId = source.targetId === null
+    ? null
+    : limitedString(source.targetId, `${field}.targetId`, 256)
+  if (buildId === 1009 && targetId !== null) {
+    throw new GameProtocolError(`${field}.targetId is invalid for Crawling Shock`)
+  }
+  const turnAccumulator = finite(source.turnAccumulator, `${field}.turnAccumulator`)
+  if (turnAccumulator < ETHER_PRIMARY_INITIAL_TURN || turnAccumulator > 10) {
+    throw new GameProtocolError(`${field}.turnAccumulator is outside the native homing lane`)
+  }
+  const turnInput = nonnegativeFinite(source.turnInput, `${field}.turnInput`)
+  if ((buildId === 1009) !== (turnInput === 0)) {
+    throw new GameProtocolError(`${field}.turnInput does not match its welded build`)
+  }
+  return {
+    ageTicks,
+    buildId,
+    charge: 1,
+    contactsRemaining: positiveInteger(
+      source.contactsRemaining,
+      `${field}.contactsRemaining`,
+    ),
+    damage: positiveFinite(source.damage, `${field}.damage`),
+    direction: unitVector(source.direction, `${field}.direction`),
+    flightTicks,
+    headingDegrees,
+    hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
+    id: positiveInteger(source.id, `${field}.id`),
+    kind: 'weld',
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    phase: 'flight',
+    position: vector(source.position, `${field}.position`),
+    presentationSeed,
+    projectileIndex: nonnegativeInteger(source.projectileIndex, `${field}.projectileIndex`),
+    speed: positiveFinite(source.speed, `${field}.speed`),
+    targetId,
+    turnAccumulator,
+    turnInput,
+    vector: weldVector(source.vector, buildId, `${field}.vector`),
+    velocity: vector(source.velocity, `${field}.velocity`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function weldBuildId(value: unknown, field: string): NativeWeldBuildId {
+  const buildId = integer(value, field)
+  if (buildId < 1000 || buildId > 1009) {
+    throw new GameProtocolError(`${field} is not a native welded build`)
+  }
+  return buildId as NativeWeldBuildId
+}
+
+function weldVector(
+  value: unknown,
+  buildId: NativeWeldBuildId,
+  field: string,
+): readonly number[] {
+  const expected = NATIVE_WELD_VECTOR_LENGTHS[buildId]
+  const source = limitedArray(value, field, 9)
+  if (source.length !== expected) {
+    throw new GameProtocolError(`${field} must contain ${expected} native values`)
+  }
+  return source.map((component, index) => finite(component, `${field}[${index}]`))
+}
+
+function uniqueWeldTargetIds(value: unknown, field: string): readonly string[] {
+  const ids = limitedArray(value, field, MAX_PRIMARY_SPELL_HIT_TARGETS).map(
+    (targetId, index) => limitedString(targetId, `${field}[${index}]`, 256),
+  )
+  if (new Set(ids).size !== ids.length) {
+    throw new GameProtocolError(`${field} contains a duplicate target`)
+  }
+  return ids
+}
+
+function primarySpellWeldActor(
+  source: Record<string, unknown>,
+  field: string,
+): NativeWeldWorldActor {
+  const buildId = weldBuildId(source.buildId, `${field}.buildId`)
+  const commonKeys = [
+    'ageTicks', 'birthTick', 'buildId', 'direction', 'id', 'kind',
+    'lightRegistration', 'origin', 'ownerId', 'vector', 'worldKey',
+  ]
+  const common = {
+    ageTicks: nonnegativeInteger(source.ageTicks, `${field}.ageTicks`),
+    birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+    buildId,
+    direction: unitVector(source.direction, `${field}.direction`),
+    id: positiveInteger(source.id, `${field}.id`),
+    lightRegistration: absentNativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+    ),
+    origin: vector(source.origin, `${field}.origin`),
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    vector: weldVector(source.vector, buildId, `${field}.vector`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+
+  if (source.kind === 'weld-channel') {
+    onlyKeys(source, field, [...commonKeys, 'targetId', 'variant'])
+    if (buildId !== 1003 && buildId !== 1004 && buildId !== 1005) {
+      throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
+    }
+    if (common.ageTicks >= NATIVE_WELD_CHANNEL_VISIBLE_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the welded channel lifetime`)
+    }
+    const variant = nonnegativeInteger(source.variant, `${field}.variant`)
+    if (variant > 3) throw new GameProtocolError(`${field}.variant exceeds the native family`)
+    return {
+      ...common,
+      buildId,
+      kind: 'weld-channel',
+      targetId: source.targetId === null
+        ? null
+        : limitedString(source.targetId, `${field}.targetId`, 256),
+      variant,
+    } satisfies NativeWeldChannelActorState
+  }
+
+  if (source.kind === 'weld-impact') {
+    onlyKeys(source, field, [...commonKeys, 'position'])
+    if (buildId === 1003 || buildId === 1004 || buildId === 1005) {
+      throw new GameProtocolError(`${field}.buildId cannot create a welded impact actor`)
+    }
+    if (common.ageTicks >= NATIVE_WELD_IMPACT_VISIBLE_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks exceeds the welded impact lifetime`)
+    }
+    return {
+      ...common,
+      buildId,
+      kind: 'weld-impact',
+      position: vector(source.position, `${field}.position`),
+    } satisfies NativeWeldImpactActorState
+  }
+
+  if (source.kind === 'weld-meteor') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'damage', 'fallScalar', 'impactDue', 'impactTicksRemaining',
+      'phase', 'position', 'presentationPhase', 'privateSeed', 'pulseDue',
+      'pulseSequence', 'pulseTicksRemaining',
+    ])
+    if (buildId !== 1007) throw new GameProtocolError(`${field}.buildId is not Meteor Swarm`)
+    if (source.phase !== 'fall' && source.phase !== 'impact') {
+      throw new GameProtocolError(`${field}.phase is not a welded Meteor phase`)
+    }
+    const fallScalar = finite(source.fallScalar, `${field}.fallScalar`)
+    if (fallScalar <= -0.021 || fallScalar >= 2) {
+      throw new GameProtocolError(`${field}.fallScalar is outside the native fall lane`)
+    }
+    const presentationPhase = unitInterval(
+      source.presentationPhase,
+      `${field}.presentationPhase`,
+    )
+    if (presentationPhase >= 1) {
+      throw new GameProtocolError(`${field}.presentationPhase must be below one`)
+    }
+    const privateSeed = nonnegativeInteger(source.privateSeed, `${field}.privateSeed`)
+    if (privateSeed >= 10_000_000) {
+      throw new GameProtocolError(`${field}.privateSeed exceeds the native draw bound`)
+    }
+    const impactTicksRemaining = positiveInteger(
+      source.impactTicksRemaining,
+      `${field}.impactTicksRemaining`,
+    )
+    if (impactTicksRemaining > NATIVE_WELD_METEOR_IMPACT_TICKS) {
+      throw new GameProtocolError(`${field}.impactTicksRemaining exceeds its native clock`)
+    }
+    const pulseTicksRemaining = positiveInteger(
+      source.pulseTicksRemaining,
+      `${field}.pulseTicksRemaining`,
+    )
+    if (pulseTicksRemaining > NATIVE_WELD_METEOR_PULSE_TICKS) {
+      throw new GameProtocolError(`${field}.pulseTicksRemaining exceeds its native clock`)
+    }
+    return {
+      ...common,
+      buildId: 1007,
+      damage: positiveFinite(source.damage, `${field}.damage`),
+      fallScalar,
+      impactDue: boolean(source.impactDue, `${field}.impactDue`),
+      impactTicksRemaining,
+      kind: 'weld-meteor',
+      phase: source.phase,
+      position: vector(source.position, `${field}.position`),
+      presentationPhase,
+      privateSeed,
+      pulseDue: boolean(source.pulseDue, `${field}.pulseDue`),
+      pulseSequence: nonnegativeInteger(source.pulseSequence, `${field}.pulseSequence`),
+      pulseTicksRemaining,
+    } satisfies NativeWeldMeteorActorState
+  }
+
+  if (source.kind !== 'weld-persistent') {
+    throw new GameProtocolError(`${field}.kind is not a welded actor`)
+  }
+  if (buildId !== 1006 && buildId !== 1007 && buildId !== 1008) {
+    throw new GameProtocolError(`${field}.buildId is not a welded persistent build`)
+  }
+  const pulseSequence = nonnegativeInteger(source.pulseSequence, `${field}.pulseSequence`)
+  if (buildId === 1007) {
+    onlyKeys(source, field, [...commonKeys, 'phase', 'pulseSequence'])
+    if (source.phase !== 'held') {
+      throw new GameProtocolError(`${field}.phase is not the Meteor Swarm channel phase`)
+    }
+    return {
+      ...common,
+      buildId: 1007,
+      kind: 'weld-persistent',
+      phase: 'held',
+      pulseSequence,
+    } satisfies NativeWeldMeteorFieldState
+  }
+  if (buildId === 1006) {
+    return primarySpellWeldEtherealBoulder(source, field, commonKeys, common, pulseSequence)
+  }
+  return primarySpellWeldHailstones(source, field, commonKeys, common, pulseSequence)
+}
+
+function primarySpellWeldEtherealBoulder(
+  source: Record<string, unknown>,
+  field: string,
+  commonKeys: readonly string[],
+  common: Readonly<{
+    ageTicks: number
+    birthTick: number
+    buildId: NativeWeldBuildId
+    direction: Vector2
+    id: number
+    lightRegistration: null
+    origin: Vector2
+    ownerId: string
+    vector: readonly number[]
+    worldKey: string
+  }>,
+  pulseSequence: number,
+): NativeWeldEtherealBoulderState {
+  onlyKeys(source, field, [
+    ...commonKeys, 'assemblyScale', 'damage', 'flightTicks', 'hitTargetIds',
+    'lifetimeTicksRemaining', 'maximumScale', 'orientation', 'phase',
+    'pulseSequence', 'quantity', 'remainingDamage', 'scale', 'speedFactor',
+    'toughness', 'velocity', 'visualScaleFactor',
+  ])
+  if (source.phase !== 'held' && source.phase !== 'flight') {
+    throw new GameProtocolError(`${field}.phase is not an Ethereal Boulder phase`)
+  }
+  const maximumScale = finite(source.maximumScale, `${field}.maximumScale`)
+  if (maximumScale !== Math.fround(0.75)) {
+    throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
+  }
+  const scale = positiveFinite(source.scale, `${field}.scale`)
+  if (scale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE || scale > maximumScale) {
+    throw new GameProtocolError(`${field}.scale is outside the native growth lane`)
+  }
+  const quantity = nonnegativeInteger(source.quantity, `${field}.quantity`)
+  if ((source.phase === 'held' && (quantity < 1 || quantity > 4))
+    || (source.phase === 'flight' && quantity !== 0)) {
+    throw new GameProtocolError(`${field}.quantity does not match the boulder phase`)
+  }
+  const assemblyScale = positiveFinite(source.assemblyScale, `${field}.assemblyScale`)
+  if (assemblyScale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE
+    || assemblyScale > scale
+    || Math.floor(30 * assemblyScale) !== Math.floor(30 * scale)) {
+    throw new GameProtocolError(`${field}.assemblyScale is outside its native rebuild bucket`)
+  }
+  const flightTicks = nonnegativeInteger(source.flightTicks, `${field}.flightTicks`)
+  if ((source.phase === 'held' && flightTicks !== 0)
+    || (source.phase === 'flight' && flightTicks > common.ageTicks)) {
+    throw new GameProtocolError(`${field}.flightTicks does not match the boulder phase`)
+  }
+  if (!Array.isArray(source.orientation) || source.orientation.length !== 9) {
+    throw new GameProtocolError(`${field}.orientation must contain nine float32 values`)
+  }
+  const orientation = source.orientation.map((value, index) => {
+    const component = finite(value, `${field}.orientation[${index}]`)
+    if (component !== Math.fround(component)) {
+      throw new GameProtocolError(`${field}.orientation[${index}] must be float32`)
+    }
+    return component
+  }) as unknown as NativeWeldEtherealBoulderState['orientation']
+  return {
+    ...common,
+    assemblyScale,
+    buildId: 1006,
+    damage: positiveFinite(source.damage, `${field}.damage`),
+    flightTicks,
+    hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
+    kind: 'weld-persistent',
+    lifetimeTicksRemaining: positiveInteger(
+      source.lifetimeTicksRemaining,
+      `${field}.lifetimeTicksRemaining`,
+    ),
+    maximumScale,
+    orientation,
+    phase: source.phase,
+    pulseSequence,
+    quantity,
+    remainingDamage: positiveFinite(source.remainingDamage, `${field}.remainingDamage`),
+    scale,
+    speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
+    toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
+    velocity: vector(source.velocity, `${field}.velocity`),
+    visualScaleFactor: positiveFinite(source.visualScaleFactor, `${field}.visualScaleFactor`),
+  }
+}
+
+function primarySpellWeldHailstones(
+  source: Record<string, unknown>,
+  field: string,
+  commonKeys: readonly string[],
+  common: Readonly<{
+    ageTicks: number
+    birthTick: number
+    buildId: NativeWeldBuildId
+    direction: Vector2
+    id: number
+    lightRegistration: null
+    origin: Vector2
+    ownerId: string
+    vector: readonly number[]
+    worldKey: string
+  }>,
+  pulseSequence: number,
+): NativeWeldHailstonesState {
+  onlyKeys(source, field, [
+    ...commonKeys, 'damage', 'maximumScale', 'phase', 'presentationScale',
+    'pulseSequence', 'pushback', 'rocks', 'scale', 'toughness', 'widen',
+  ])
+  if (source.phase !== 'held' && source.phase !== 'flight') {
+    throw new GameProtocolError(`${field}.phase is not a Hailstones phase`)
+  }
+  const phase = source.phase
+  if (source.maximumScale !== 1) {
+    throw new GameProtocolError(`${field}.maximumScale is not the native cap`)
+  }
+  const scale = positiveFinite(source.scale, `${field}.scale`)
+  if (scale < NATIVE_WELD_PERSISTENT_INITIAL_SCALE || scale > 1) {
+    throw new GameProtocolError(`${field}.scale is outside the native growth lane`)
+  }
+  const presentationScale = positiveFinite(
+    source.presentationScale,
+    `${field}.presentationScale`,
+  )
+  if ((phase === 'held' && presentationScale !== 1)
+    || (phase === 'flight' && (presentationScale < 0.75 || presentationScale >= 1.5))) {
+    throw new GameProtocolError(`${field}.presentationScale does not match the hail phase`)
+  }
+  const rocks = limitedArray(source.rocks, `${field}.rocks`, 4096).map((rock, index) => (
+    primarySpellWeldHailstone(rock, `${field}.rocks[${index}]`, phase)
+  ))
+  return {
+    ...common,
+    buildId: 1008,
+    damage: positiveFinite(source.damage, `${field}.damage`),
+    kind: 'weld-persistent',
+    maximumScale: 1,
+    phase,
+    presentationScale,
+    pulseSequence,
+    pushback: nonnegativeFinite(source.pushback, `${field}.pushback`),
+    rocks,
+    scale,
+    toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
+    widen: nonnegativeFinite(source.widen, `${field}.widen`),
+  }
+}
+
+function primarySpellWeldHailstone(
+  value: unknown,
+  field: string,
+  actorPhase: 'flight' | 'held',
+): NativeWeldHailstoneRockState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'damageRemaining', 'decay', 'localPosition', 'phase', 'releaseOffset',
+    'spriteRecord', 'visualScale',
+  ])
+  const decay = positiveFinite(source.decay, `${field}.decay`)
+  const phase = unitInterval(source.phase, `${field}.phase`)
+  if (decay > 1) throw new GameProtocolError(`${field}.decay exceeds one`)
+  const local = record(source.localPosition, `${field}.localPosition`)
+  onlyKeys(local, `${field}.localPosition`, ['x', 'y', 'z'])
+  const releaseOffset = source.releaseOffset === null
+    ? null
+    : vector(source.releaseOffset, `${field}.releaseOffset`)
+  if ((actorPhase === 'held') !== (releaseOffset === null)) {
+    throw new GameProtocolError(`${field}.releaseOffset does not match the hail phase`)
+  }
+  const spriteRecord = positiveInteger(source.spriteRecord, `${field}.spriteRecord`)
+  if (spriteRecord !== 168 && spriteRecord !== 169 && spriteRecord !== 170) {
+    throw new GameProtocolError(`${field}.spriteRecord is not a native hail rock`)
+  }
+  const visualScale = positiveFinite(source.visualScale, `${field}.visualScale`)
+  if (visualScale >= 0.25) {
+    throw new GameProtocolError(`${field}.visualScale exceeds the native draw range`)
+  }
+  return {
+    damageRemaining: nonnegativeFinite(source.damageRemaining, `${field}.damageRemaining`),
+    decay,
+    localPosition: {
+      x: finite(local.x, `${field}.localPosition.x`),
+      y: finite(local.y, `${field}.localPosition.y`),
+      z: finite(local.z, `${field}.localPosition.z`),
+    },
+    phase,
+    releaseOffset,
+    spriteRecord,
+    visualScale,
+  }
+}
+
 function primarySpellFireSpentEmber(
   value: unknown,
   field: string,
@@ -3961,6 +4442,12 @@ function primarySpellFireSpentEmber(
 
 function primarySpellTransient(value: unknown, field: string): PrimarySpellTransientState {
   const source = record(value, field)
+  if (source.kind === 'weld-channel'
+    || source.kind === 'weld-impact'
+    || source.kind === 'weld-meteor'
+    || source.kind === 'weld-persistent') {
+    return primarySpellWeldActor(source, field)
+  }
   if (isNativePlayerStaffTransient(source as { kind: string })) {
     return nativePlayerStaffTransient(source, field)
   }

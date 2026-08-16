@@ -157,14 +157,10 @@ function interpolateStateDrivenTransients(
   blend: number,
 ): PrimarySpellTransientState[] {
   const newerById = new Map(newer.transients
-    .filter((effect) => (
-      effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)
-    ))
+    .filter(isStateDrivenTransient)
     .map((effect) => [effect.id, effect]))
   const result = older.transients
-    .filter((effect) => (
-      effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)
-    ))
+    .filter(isStateDrivenTransient)
     .map((effect) => {
       const next = newerById.get(effect.id)
       return next ? interpolateTransient(effect, next, blend) : copyTransient(effect)
@@ -176,6 +172,17 @@ function interpolateStateDrivenTransients(
     if (!knownIds.has(effect.id)) result.push(copyTransient(effect))
   }
   return result.filter((effect) => newerById.has(effect.id))
+}
+
+function isStateDrivenTransient(effect: PrimarySpellTransientState): boolean {
+  return effect.kind === 'air-hurricane'
+    || effect.kind === 'earth-called-rock'
+    || effect.kind === 'fire-ember'
+    || effect.kind === 'fire-good-imp'
+    || effect.kind === 'fire-patch'
+    || effect.kind === 'water-hail'
+    || isNativePlayerStaffTransient(effect)
+    || isWeldTransient(effect)
 }
 
 function fixedTransientTiming(
@@ -614,6 +621,35 @@ function interpolateTransient(
     }
   }
   if (older.kind === 'weld-persistent' && newer.kind === 'weld-persistent') {
+    if (older.buildId !== newer.buildId) return copyTransient(discrete)
+    if (older.buildId === 1006 && newer.buildId === 1006) {
+      const actor = blend < 1 ? older : newer
+      return {
+        ...actor,
+        ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+        direction: lerpVector(older.direction, newer.direction, blend),
+        hitTargetIds: [...actor.hitTargetIds],
+        lightRegistration: null,
+        origin: lerpVector(older.origin, newer.origin, blend),
+        scale: lerp(older.scale, newer.scale, blend),
+        vector: [...actor.vector],
+        velocity: lerpVector(older.velocity, newer.velocity, blend),
+      }
+    }
+    if (older.buildId === 1008 && newer.buildId === 1008) {
+      const actor = blend < 1 ? older : newer
+      return {
+        ...actor,
+        ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+        direction: lerpVector(older.direction, newer.direction, blend),
+        lightRegistration: null,
+        origin: lerpVector(older.origin, newer.origin, blend),
+        presentationScale: lerp(older.presentationScale, newer.presentationScale, blend),
+        rocks: actor.rocks.map(copyWeldHailstone),
+        scale: lerp(older.scale, newer.scale, blend),
+        vector: [...actor.vector],
+      }
+    }
     const actor = blend < 1 ? older : newer
     return {
       ...actor,
@@ -791,6 +827,55 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   if (effect.kind === 'water-aura') {
     return { ...effect, origin: { ...effect.origin } }
   }
+  if (effect.kind === 'weld-meteor' || effect.kind === 'weld-impact') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-channel') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-persistent') {
+    if (effect.buildId === 1006) {
+      return {
+        ...effect,
+        direction: { ...effect.direction },
+        hitTargetIds: [...effect.hitTargetIds],
+        lightRegistration: null,
+        origin: { ...effect.origin },
+        vector: [...effect.vector],
+        velocity: { ...effect.velocity },
+      }
+    }
+    if (effect.buildId === 1008) {
+      return {
+        ...effect,
+        direction: { ...effect.direction },
+        lightRegistration: null,
+        origin: { ...effect.origin },
+        rocks: effect.rocks.map(copyWeldHailstone),
+        vector: [...effect.vector],
+      }
+    }
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      vector: [...effect.vector],
+    }
+  }
   return {
     ...effect,
     direction: { ...effect.direction },
@@ -801,6 +886,19 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
 
 function copyNativeRng(source: NativeRngState) {
   return { ...source, words: [...source.words] }
+}
+
+function copyWeldHailstone<
+  Rock extends Readonly<{
+    localPosition: Readonly<{ x: number; y: number; z: number }>
+    releaseOffset: Readonly<{ x: number; y: number }> | null
+  }>,
+>(rock: Rock): Rock {
+  return {
+    ...rock,
+    localPosition: { ...rock.localPosition },
+    releaseOffset: rock.releaseOffset === null ? null : { ...rock.releaseOffset },
+  }
 }
 
 function lerp(first: number, second: number, blend: number): number {

@@ -983,10 +983,12 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
   }
   const boulder: PrimarySpellTransientState = {
     ageTicks: 5,
+    assemblyScale: 0.5,
     birthTick: 0,
     buildId: 1006,
     damage: 10,
     direction: { x: 1, y: 0 },
+    flightTicks: 5,
     hitTargetIds: [],
     id: 31,
     kind: 'weld-persistent',
@@ -994,6 +996,7 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     maximumScale: 0.75,
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
+    orientation: [...EARTH_BOULDER_IDENTITY_ORIENTATION],
     phase: 'flight',
     pulseSequence: 1,
     quantity: 0,

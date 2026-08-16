@@ -2711,6 +2711,7 @@ test('protocol v37 round-trips Frozen and FrostBurn target ownership without cli
     dazzleMaximumTicks: 0,
     dazzleTicks: 0,
     disruptedTicks: 0,
+    electricBurn: null,
     fleeTicks: 0,
     frostBurnDamagePerTick: Math.fround(0.01),
     frostBurnOwnerId: 'player-1',
@@ -2722,6 +2723,7 @@ test('protocol v37 round-trips Frozen and FrostBurn target ownership without cli
     prismaticTicks: 0,
     stunFactor: 1,
     stunTicks: 0,
+    steamed: null,
     targetId: 7,
     timeScale: 0,
     weakenFactor: 1,
@@ -3377,4 +3379,163 @@ test('party protocol strictly round-trips invite, acceptance, denial, and local 
     () => decodeServerGameMessage(encodeGameMessage(missingInviter)),
     /inviter.*Hub player/,
   )
+})
+
+test('protocol strictly round-trips every welded projectile and persistent actor family', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const decodeFrame = (primarySpells: unknown) => decodeServerGameMessage(JSON.stringify({
+    acknowledgedInputSequence: 0,
+    frame: { ...frame, primarySpells },
+    sequence: 2,
+    type: 'server-snapshot',
+  }))
+  const projectile = {
+    ageTicks: 1,
+    buildId: 1000,
+    charge: 1,
+    contactsRemaining: 1,
+    damage: 8,
+    direction: { x: 0, y: -1 },
+    flightTicks: 1,
+    headingDegrees: 0,
+    hitTargetIds: [],
+    id: 1,
+    kind: 'weld',
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
+    ownerId: 'player-1',
+    phase: 'flight',
+    position: { x: 800, y: 400 },
+    presentationSeed: 42,
+    projectileIndex: 0,
+    speed: 3,
+    targetId: null,
+    turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
+    turnInput: 2,
+    vector: [4, 8, 10, 1, 1, 0, 0, 0, 0],
+    velocity: { x: 0, y: -3 },
+    worldKey: 'hub:courtyard',
+  }
+  const common = {
+    ageTicks: 0,
+    birthTick: 100,
+    direction: { x: 0, y: -1 },
+    id: 1,
+    lightRegistration: null,
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    worldKey: 'hub:courtyard',
+  }
+  const actors = [{
+    ...common,
+    buildId: 1003,
+    kind: 'weld-channel',
+    targetId: null,
+    variant: 1,
+    vector: [8, 2, 1, 0.8, 0, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1000,
+    kind: 'weld-impact',
+    position: { x: 800, y: 350 },
+    vector: [4, 8, 10, 1, 1, 0, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1007,
+    damage: 12,
+    fallScalar: 1,
+    impactDue: false,
+    impactTicksRemaining: 200,
+    kind: 'weld-meteor',
+    phase: 'fall',
+    position: { x: 800, y: 350 },
+    presentationPhase: 0,
+    privateSeed: 42,
+    pulseDue: false,
+    pulseSequence: 0,
+    pulseTicksRemaining: 10,
+    vector: [8, 12, 20, 1, 1, 0, 0, 0, 0],
+  }, {
+    ...common,
+    assemblyScale: Math.fround(0.18),
+    buildId: 1006,
+    damage: 12,
+    flightTicks: 0,
+    hitTargetIds: [],
+    kind: 'weld-persistent',
+    lifetimeTicksRemaining: 1_250,
+    maximumScale: Math.fround(0.75),
+    orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
+    phase: 'held',
+    pulseSequence: 0,
+    quantity: 1,
+    remainingDamage: 12,
+    scale: Math.fround(0.18),
+    speedFactor: 1,
+    toughness: 0,
+    vector: [12, 2, 1, 1, 0, 1],
+    velocity: { x: 0, y: 0 },
+    visualScaleFactor: 1,
+  }, {
+    ...common,
+    buildId: 1007,
+    kind: 'weld-persistent',
+    phase: 'held',
+    pulseSequence: 0,
+    vector: [8, 12, 20, 1, 1, 0, 0, 0, 0],
+  }, {
+    ...common,
+    buildId: 1008,
+    damage: 7,
+    kind: 'weld-persistent',
+    maximumScale: 1,
+    phase: 'held',
+    presentationScale: 1,
+    pulseSequence: 0,
+    pushback: 0.2,
+    rocks: [{
+      damageRemaining: 0,
+      decay: 1,
+      localPosition: { x: 1, y: 2, z: 3 },
+      phase: 0,
+      releaseOffset: null,
+      spriteRecord: 168,
+      visualScale: 0.2,
+    }],
+    scale: Math.fround(0.18),
+    toughness: 0,
+    vector: [7, 2, 1, 0, 0.2, 0.5],
+    widen: 0.5,
+  }]
+
+  const decodedProjectile = decodeFrame({
+    nextId: 2,
+    projectiles: [projectile],
+    transients: [],
+  })
+  assert.equal(decodedProjectile.type, 'server-snapshot')
+  assert.deepEqual(decodedProjectile.frame.primarySpells.projectiles, [projectile])
+  for (const actor of actors) {
+    const decoded = decodeFrame({ nextId: 2, projectiles: [], transients: [actor] })
+    assert.equal(decoded.type, 'server-snapshot')
+    assert.deepEqual(decoded.frame.primarySpells.transients, [actor])
+  }
+  const hailActor = actors[5]
+  if (!hailActor || !('rocks' in hailActor)) throw new Error('expected Hailstones fixture')
+  assert.throws(() => decodeFrame({
+    nextId: 2,
+    projectiles: [{ ...projectile, vector: projectile.vector.slice(1) }],
+    transients: [],
+  }), /must contain 9 native values/)
+  assert.throws(() => decodeFrame({
+    nextId: 2,
+    projectiles: [],
+    transients: [{
+      ...hailActor,
+      rocks: [{ ...hailActor.rocks[0], releaseOffset: { x: 1, y: 2 } }],
+    }],
+  }), /releaseOffset does not match/)
 })

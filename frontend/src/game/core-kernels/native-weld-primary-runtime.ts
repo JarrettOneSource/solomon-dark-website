@@ -20,6 +20,12 @@ import type {
   RegisterNativeLightProvider,
 } from './native-light-provider-order.ts'
 import { nativeEarthBoulderReleasedDamage } from './native-earth-boulder.ts'
+import {
+  EARTH_BOULDER_IDENTITY_ORIENTATION,
+  earthBoulderFlightOrientationStep,
+  earthBoulderHeldOrientationStep,
+  type EarthBoulderOrientation,
+} from './primary-spell-earth-orientation.ts'
 
 export type NativeWeldOneShotBuildId = 1000 | 1001 | 1002 | 1009
 export type NativeWeldChannelBuildId = 1003 | 1004 | 1005
@@ -111,11 +117,14 @@ interface NativeWeldPersistentActorBase extends NativeWeldOwnedActorBase {
 }
 
 export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActorBase {
+  readonly assemblyScale: number
   readonly buildId: 1006
   readonly damage: number
+  readonly flightTicks: number
   readonly hitTargetIds: readonly string[]
   readonly lifetimeTicksRemaining: number
   readonly maximumScale: number
+  readonly orientation: EarthBoulderOrientation
   readonly phase: 'flight' | 'held'
   readonly quantity: number
   readonly remainingDamage: number
@@ -410,11 +419,16 @@ export function createNativeWeldPersistentActor(input: {
   if (input.buildId === 1006) {
     return Object.freeze({
       ...base,
+      assemblyScale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
       buildId: 1006,
       damage: input.vector[0]!,
+      flightTicks: 0,
       hitTargetIds: Object.freeze([]),
       lifetimeTicksRemaining: Math.floor(input.vector[3]! * 1_000 + 250),
       maximumScale: Math.fround(0.75),
+      orientation: Object.freeze([
+        ...EARTH_BOULDER_IDENTITY_ORIENTATION,
+      ]) as EarthBoulderOrientation,
       phase: 'held',
       quantity: Math.max(1, Math.min(4, Math.round(input.vector[2]!))),
       remainingDamage: input.vector[0]!,
@@ -449,20 +463,25 @@ export function updateNativeWeldPersistentActor(
   direction: Vector2,
   sourceRng: NativeRngState,
 ): { readonly actor: NativeWeldPersistentActorState; readonly rng: NativeRngState } {
-  const common = {
-    ...actor,
-    ageTicks: actor.ageTicks + 1,
-    direction: Object.freeze({ ...direction }),
-    origin: Object.freeze({ ...origin }),
-    pulseSequence: actor.pulseSequence + 1,
-  }
   if (actor.buildId === 1006) {
     const growth = Math.fround(actor.vector[5]! * 1.5) * 0.0025
+    const scale = Math.min(actor.maximumScale, Math.fround(actor.scale + growth))
     return {
       actor: Object.freeze({
-        ...common,
+        ...actor,
+        ageTicks: actor.ageTicks + 1,
+        assemblyScale: Math.floor(30 * scale) === Math.floor(30 * actor.scale)
+          ? actor.assemblyScale
+          : scale,
         buildId: 1006,
-        scale: Math.min(actor.maximumScale, Math.fround(actor.scale + growth)),
+        direction: Object.freeze({ ...direction }),
+        origin: Object.freeze({ ...origin }),
+        orientation: Object.freeze(earthBoulderHeldOrientationStep(
+          actor.orientation,
+          direction,
+        )),
+        pulseSequence: actor.pulseSequence + 1,
+        scale,
       }),
       rng: sourceRng,
     }
@@ -480,15 +499,29 @@ export function updateNativeWeldPersistentActor(
     }
     return {
       actor: Object.freeze({
-        ...common,
+        ...actor,
+        ageTicks: actor.ageTicks + 1,
         buildId: 1008,
+        direction: Object.freeze({ ...direction }),
+        origin: Object.freeze({ ...origin }),
+        pulseSequence: actor.pulseSequence + 1,
         rocks,
         scale,
       }),
       rng,
     }
   }
-  return { actor: Object.freeze({ ...common, buildId: 1007 }), rng: sourceRng }
+  return {
+    actor: Object.freeze({
+      ...actor,
+      ageTicks: actor.ageTicks + 1,
+      buildId: 1007,
+      direction: Object.freeze({ ...direction }),
+      origin: Object.freeze({ ...origin }),
+      pulseSequence: actor.pulseSequence + 1,
+    }),
+    rng: sourceRng,
+  }
 }
 
 export function releaseNativeWeldPersistentActor(input: {
@@ -542,6 +575,7 @@ export function releaseNativeWeldPersistentActor(input: {
       lifetimeTicksRemaining: Math.floor(piece.speedFactor * 1_000 + 250),
       origin: piece.origin,
       phase: 'flight',
+      flightTicks: 0,
       pulseSequence: actor.pulseSequence + 1,
       quantity: 0,
       remainingDamage: nativeEarthBoulderReleasedDamage(actor.damage, actor.scale),
@@ -684,8 +718,15 @@ export function stepNativeWeldWorldActor(
     return Object.freeze({
       ...actor,
       ageTicks: actor.ageTicks + 1,
+      flightTicks: actor.flightTicks + 1,
       lifetimeTicksRemaining,
       origin,
+      orientation: Object.freeze(earthBoulderFlightOrientationStep(
+        actor.orientation,
+        actor.direction,
+        actor.velocity,
+        actor.scale,
+      )),
     })
   }
   const lookahead = Object.freeze({

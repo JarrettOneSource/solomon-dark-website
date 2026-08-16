@@ -795,7 +795,6 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       || isNativePlayerStaffTransient(effect)
       || effect.kind === 'air-hurricane'
       || effect.kind === 'water-hail'
-      || effect.kind === 'weld-persistent'
     ) {
       transients.push(effect)
     } else if (effect.kind === 'fire-good-imp') {
