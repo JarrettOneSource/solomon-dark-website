@@ -12,6 +12,10 @@ import {
 } from './earth-boulder-view.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
 import {
+  AirWaterActorSpellView,
+  isNativeAirWaterActorState,
+} from './primary-spell-air-water-actor-view.ts'
+import {
   EtherPrimaryImpactView,
   EtherPrimaryPierceStreakView,
   EtherPrimarySpellView,
@@ -98,7 +102,9 @@ export class PrimarySpellWorldView {
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        if (state.kind === 'player-staff-pike-break') {
+        if (isNativeAirWaterActorState(state)) {
+          view = new AirWaterActorSpellView(state, this.textures.primarySpells)
+        } else if (state.kind === 'player-staff-pike-break') {
           view = new PlayerStaffPikeBreakView(state, this.textures)
         } else if (
           state.kind === 'player-staff-smoke'

@@ -135,6 +135,7 @@ import {
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
+import { synchronizeAirWaterPlayerVisualActors } from './air-water-player-visual-system.ts'
 import {
   boneyardNativeSecondaryDampenCandidates,
   boneyardNativeSecondaryTarget,
@@ -2047,6 +2048,23 @@ function finishGameSimulationTick(
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   let primarySpells = cast.spells
+  primarySpells = synchronizeAirWaterPlayerVisualActors(
+    primarySpells,
+    playerEntities.identities.flatMap(({ playerId }, index) => {
+      const player = cast.players[playerId]
+      const runtime = playerEntities.skillRuntimes[index]
+      if (!player || !runtime) return []
+      return [{
+        hurricaneCharge: runtime.hurricaneCharge,
+        ownerId: playerId,
+        position: player.position,
+        worldKey: result.world.kind === 'hub'
+          ? `hub:${result.world.participants[playerId]?.region ?? 'courtyard'}`
+          : `boneyard:${result.world.runId}`,
+      }]
+    }),
+    tick,
+  )
   let combatRng = cast.rng
   if (world.kind === 'boneyard') {
     const previousEvents = world.enemyEvents

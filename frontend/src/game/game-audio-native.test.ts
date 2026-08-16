@@ -373,6 +373,24 @@ test('pins every ground-loot cue and request to its untouched registry WAV', () 
   })
 })
 
+test('pins every Hail bounce selector to its exact stock registry WAV', () => {
+  const rows = [
+    ['hail-bounce-0', 'hail-bounce-0.wav', 0x1f14],
+    ['hail-bounce-1', 'hail-bounce-1.wav', 0x1f40],
+    ['hail-bounce-2', 'hail-bounce-2.wav', 0x1f6c],
+    ['hail-bounce-3', 'hail-bounce-3.wav', 0x1f98],
+  ] as const
+  for (const [cue, filename, registryOffset] of rows) {
+    const source = readFileSync(new URL(`../assets/game/audio/sfx/${filename}`, import.meta.url))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+      cue,
+    )
+    assert.equal(NATIVE_SOUND_MANIFEST[cue].registryOffset, registryOffset)
+  }
+})
+
 test('plays the untouched stock level-up cue once at scalar one per barrier', () => {
   const source = readFileSync(
     new URL('../assets/game/audio/sfx/level-up.wav', import.meta.url),

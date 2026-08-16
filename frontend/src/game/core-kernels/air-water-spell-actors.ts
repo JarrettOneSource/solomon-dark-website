@@ -8,6 +8,7 @@ import {
   type PrimarySpellAirPrismaticState,
   type PrimarySpellAirStormState,
   type PrimarySpellWaterFreezeWaveState,
+  type PrimarySpellWaterAuraState,
   type PrimarySpellWaterHailState,
 } from './primary-spells.ts'
 import type { Vector2 } from './vector.ts'
@@ -21,6 +22,11 @@ export const NATIVE_TORNADO_MOVEMENT_PER_TICK = Math.fround(0.349999994)
 export const NATIVE_TORNADO_HEADING_STEP_MAXIMUM = 2
 export const NATIVE_STORM_STRIKE_DELAY_MINIMUM = 30
 export const NATIVE_STORM_STRIKE_DELAY_MAXIMUM = 120
+export const NATIVE_STORM_STRIKE_SOURCE_HEIGHT = 175
+export const NATIVE_STORM_STRIKE_SOURCE_RADIUS = 100
+export const NATIVE_STORM_STRIKE_MIDPOINT_HEIGHT = 90
+export const NATIVE_STORM_STRIKE_MIDPOINT_RADIUS = 200
+export const NATIVE_STORM_STRIKE_TARGET_HEIGHT = 15
 export const NATIVE_FREEZE_WAVE_INITIAL_LIFE = Math.fround(0.924)
 export const NATIVE_FREEZE_WAVE_LIFE_PER_TICK = 0.01
 export const NATIVE_FREEZE_WAVE_FADE_THRESHOLD = 0.12375
@@ -37,6 +43,10 @@ export const NATIVE_HAIL_BOUNCE_RESTITUTION = Math.fround(0.65)
 export const NATIVE_HAIL_STOP_VELOCITY = Math.fround(-0.75)
 export const NATIVE_HAIL_BASE_SPEED = Math.fround(4)
 export const NATIVE_HAIL_ANGLE_DIVISIONS = 100_000
+export const NATIVE_WATER_AURA_INITIAL_ALPHA = Math.fround(0.5)
+export const NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR = Math.fround(0.15)
+export const NATIVE_WATER_AURA_SCALE_FACTOR = 1.0149999856948853
+export const NATIVE_WATER_AURA_RED_FADE_PER_TICK = Math.fround(0.02)
 
 export interface NativeAirStormSkillProfile {
   readonly activeTicks: number
@@ -215,6 +225,49 @@ export function drawNativeDisintegratePercentile(
 export interface NativeWaterHailBirthResult {
   readonly actor: PrimarySpellWaterHailState
   readonly rng: NativeRngState
+}
+
+export interface NativeWaterAuraBirthResult {
+  readonly actor: PrimarySpellWaterAuraState
+  readonly rng: NativeRngState
+}
+
+/**
+ * Anim_ColdAura construction at 0x0045AF20 consumes Float(1), then Float(360).
+ * Its final fade is 0.00125 / stock-radius; Website profiles store that radius
+ * in world units (stock-radius * 120), giving the equivalent 0.15 / radius.
+ */
+export function createNativeWaterAuraActor(
+  id: number,
+  ownerId: string,
+  worldKey: string,
+  birthTick: number,
+  origin: Readonly<Vector2>,
+  radius: number,
+  sourceRng: NativeRngState,
+): NativeWaterAuraBirthResult {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new RangeError('Cold Aura radius must be positive and finite')
+  }
+  const rotationStep = drawNativeFloat(sourceRng, 1)
+  const initialRotation = drawNativeFloat(rotationStep.state, 360)
+  const alphaDecay = Math.fround(NATIVE_WATER_AURA_ALPHA_RADIUS_FACTOR / radius)
+  return {
+    actor: {
+      ageTicks: 0,
+      alphaDecay,
+      birthTick,
+      durationTicks: Math.ceil(NATIVE_WATER_AURA_INITIAL_ALPHA / alphaDecay),
+      id,
+      initialRotationDegrees: initialRotation.value,
+      kind: 'water-aura',
+      origin: { ...origin },
+      ownerId,
+      rotationStepDegrees: rotationStep.value,
+      worldKey,
+    },
+    rng: initialRotation.state,
+  }
 }
 
 export interface NativeWaterHailTickResult {

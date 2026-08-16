@@ -301,6 +301,8 @@ import primarySpellAirFork1836 from '../assets/game/boneyard/badguys/1836.png'
 import primarySpellAirFork1837 from '../assets/game/boneyard/badguys/1837.png'
 import primarySpellAirFork1838 from '../assets/game/boneyard/badguys/1838.png'
 import primarySpellAirFork1839 from '../assets/game/boneyard/badguys/1839.png'
+import primarySpellColdAura from '../assets/game/boneyard/badguys/0014.png'
+import primarySpellHail from '../assets/game/boneyard/badguys/0032.png'
 import fxFireball from '../assets/game/fx-fireball.png'
 import animSolomonWalk from '../assets/game/anim-solomon-walk.png'
 import animSolomonDig from '../assets/game/anim-solomon-dig.png'
@@ -559,6 +561,10 @@ export const elementVfx = {
 
 /** Registered stock sprites used by the five rank-1 player primaries. */
 export const primarySpells = {
+  airWaterActors: {
+    coldAura: primarySpellColdAura,
+    hail: primarySpellHail,
+  },
   air: {
     branches: [primarySpellAirBranch375, primarySpellAirBranch376],
     circle: primarySpellAirCircle,

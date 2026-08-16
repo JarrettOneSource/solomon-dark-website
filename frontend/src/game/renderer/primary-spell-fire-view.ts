@@ -23,7 +23,7 @@ import {
   type NativeFireballDraw,
   type NativeFireImpactDraw,
 } from './primary-spell-fire-native.ts'
-import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
+import { nativeEnemySpriteRegistration } from './native-enemy-sprite-registration.ts'
 import type { NativeFireActorTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellFireTextures {
@@ -113,7 +113,7 @@ export class FireActorSpellView {
       sprite.destroy()
     }
     for (const [index, draw] of plan.draws.entries()) {
-      const record = nativeEnemySpriteRecord(draw.atlas, draw.entry)
+      const record = nativeEnemySpriteRegistration(draw.atlas, draw.entry)
       const texture = draw.atlas === 'BadGuys'
         ? this.textures.badGuys[draw.entry]
         : this.textures.deadHawg[draw.entry]

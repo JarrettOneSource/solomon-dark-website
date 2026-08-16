@@ -60,6 +60,10 @@ export type GameSoundCue =
   | 'fizzle'
   | 'hit-shield'
   | 'goto-orb'
+  | 'hail-bounce-0'
+  | 'hail-bounce-1'
+  | 'hail-bounce-2'
+  | 'hail-bounce-3'
   | 'ice-start'
   | 'imp-split'
   | 'imp-vocal-1'
@@ -334,6 +338,26 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x70,
     sourceName: 'sounds\\gotorb',
     sourceSha256: 'e971ea0fcc9fee14e93936b83768862ff24cc61106e741c66e48f709b9c5893a',
+  },
+  'hail-bounce-0': {
+    registryOffset: 0x1f14,
+    sourceName: 'sounds\\hail\\hail3',
+    sourceSha256: '8ea84a40e9193020b3f20d64c6a8c3cf262f641c21c5076d37a6eee24d54ca9f',
+  },
+  'hail-bounce-1': {
+    registryOffset: 0x1f40,
+    sourceName: 'sounds\\hail\\hail4',
+    sourceSha256: '299c21af5030e1b4cf1770f85875fc0afa85ec74a9a0c24d9166d176ce2df4e9',
+  },
+  'hail-bounce-2': {
+    registryOffset: 0x1f6c,
+    sourceName: 'sounds\\hail\\ice1',
+    sourceSha256: 'b7f5133bdc6969de1e62bec2c5d10e7655f350fbf40de6fcc991d058a81e2a24',
+  },
+  'hail-bounce-3': {
+    registryOffset: 0x1f98,
+    sourceName: 'sounds\\hail\\ice2',
+    sourceSha256: 'aef26122ad82c8663ab579bd25a3a37f16120d5dda7ac98590ffdc85c24f1a50',
   },
   'ice-start': {
     registryOffset: 0x7a8,

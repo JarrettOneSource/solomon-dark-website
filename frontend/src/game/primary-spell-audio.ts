@@ -13,6 +13,7 @@ import {
 } from './game-audio-spatial.ts'
 import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
 import { nativeEtherImpactPitch } from './core-kernels/primary-spell-ether-native.ts'
+import { newNativeAirWaterActorSoundRequests } from './air-water-skill-audio.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
   'comet-loop',
@@ -162,6 +163,17 @@ export class PrimarySpellAudioSynchronizer {
             )),
           })
         }
+      }
+      for (const request of newNativeAirWaterActorSoundRequests(
+        this.previous.primarySpells.transients,
+        snapshot.primarySpells.transients,
+        listener.position,
+        listenerWorldKey,
+      )) {
+        this.audio.playSound(request.cue, {
+          playbackRate: request.playbackRate,
+          volume: request.volume,
+        })
       }
       for (const event of snapshot.secondaryAbilities.events) {
         if (

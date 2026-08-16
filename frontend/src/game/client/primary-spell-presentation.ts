@@ -6,7 +6,6 @@ import {
   PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
   PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS,
-  PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
   type PrimarySpellProjectileState,
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
@@ -230,7 +229,7 @@ function fixedTransientTiming(
     case 'water-aura': return {
       ageZeroTick: effect.birthTick,
       firstVisibleAge: 0,
-      lifetimeTicks: PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
+      lifetimeTicks: effect.durationTicks,
     }
     case 'water-hail': return null
   }

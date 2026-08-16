@@ -18,6 +18,7 @@ import {
   type NativeFireActorContact,
 } from '../core-kernels/primary-spell-fire-effects.ts'
 import {
+  createNativeWaterAuraActor,
   createNativeWaterHailActor,
   drawNativeDisintegratePercentile,
   drawNativeSpellDamage,
@@ -578,15 +579,17 @@ export function resolveBoneyardSpellCombat(
         })
       }
       if (tick % 6 === 0) {
-        ownedTransients.push({
-          ageTicks: 0,
-          birthTick: tick,
-          id: nextSpellId,
-          kind: 'water-aura',
-          origin: { ...emission.queryOrigin },
-          ownerId: emission.ownerId,
+        const aura = createNativeWaterAuraActor(
+          nextSpellId,
+          emission.ownerId,
           worldKey,
-        })
+          tick,
+          emission.queryOrigin,
+          profile.auraRadius,
+          rng,
+        )
+        rng = aura.rng
+        ownedTransients.push(aura.actor)
         nextSpellId += 1
       }
     }

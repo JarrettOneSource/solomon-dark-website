@@ -50,7 +50,6 @@ import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
   PRIMARY_SPELL_AIR_UNDERPOWERED_LIFETIME_TICKS,
   PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS,
-  PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS,
   primaryCastActionEndTick,
   type PrimarySpellEarthProjectileState,
   type PrimarySpellProjectilePhase,
@@ -3930,19 +3929,33 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
   }
   if (source.kind === 'water-aura') {
     onlyKeys(source, field, [
-      'ageTicks', 'birthTick', 'id', 'kind', 'origin', 'ownerId', 'worldKey',
+      'ageTicks', 'alphaDecay', 'birthTick', 'durationTicks', 'id',
+      'initialRotationDegrees', 'kind', 'origin', 'ownerId',
+      'rotationStepDegrees', 'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
-    if (ageTicks >= PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS) {
+    const alphaDecay = positiveFinite(source.alphaDecay, `${field}.alphaDecay`)
+    const durationTicks = positiveInteger(source.durationTicks, `${field}.durationTicks`)
+    if (ageTicks >= durationTicks) {
       throw new GameProtocolError(`${field}.ageTicks exceeds its native lifetime`)
     }
     return {
       ageTicks,
+      alphaDecay,
       birthTick: nonnegativeInteger(source.birthTick, `${field}.birthTick`),
+      durationTicks,
       id: positiveInteger(source.id, `${field}.id`),
+      initialRotationDegrees: finite(
+        source.initialRotationDegrees,
+        `${field}.initialRotationDegrees`,
+      ),
       kind: 'water-aura',
       origin: vector(source.origin, `${field}.origin`),
       ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+      rotationStepDegrees: finite(
+        source.rotationStepDegrees,
+        `${field}.rotationStepDegrees`,
+      ),
       worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
     }
   }

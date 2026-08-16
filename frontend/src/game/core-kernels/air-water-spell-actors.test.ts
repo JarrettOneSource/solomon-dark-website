@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   createNativeAirPrismaticActor,
   createNativeAirStormActor,
+  createNativeWaterAuraActor,
   createNativeWaterHailActor,
   createNativeWaterFreezeWave,
   drawNativeDisintegratePercentile,
@@ -123,6 +124,27 @@ test('Hail birth consumes the exact eight-draw Bouncer and handler sequence', ()
   // Float15, Integer100001, Float2.
   assert.equal(born.rng.indexA, (initial.indexA + 8) % 55)
   assert.equal(born.rng.indexB, (initial.indexB + 8) % 55)
+})
+
+test('Cold Aura snapshots native fade and its two cosmetic RNG draws', () => {
+  const initial = createNativeRng(43)
+  const born = createNativeWaterAuraActor(
+    10,
+    'water',
+    'boneyard:run',
+    44,
+    { x: 100, y: 200 },
+    720,
+    initial,
+  )
+  assert.equal(born.actor.alphaDecay, Math.fround(0.15 / 720))
+  assert.equal(born.actor.durationTicks, 2_400)
+  assert.ok(born.actor.rotationStepDegrees >= 0)
+  assert.ok(born.actor.rotationStepDegrees < 1)
+  assert.ok(born.actor.initialRotationDegrees >= 0)
+  assert.ok(born.actor.initialRotationDegrees < 360)
+  assert.equal(born.rng.indexA, (initial.indexA + 2) % 55)
+  assert.equal(born.rng.indexB, (initial.indexB + 2) % 55)
 })
 
 test('Hail owns Bouncer motion, bounce RNG, audio sequence, and 134-tick life', () => {

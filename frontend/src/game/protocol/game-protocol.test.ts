@@ -2529,11 +2529,15 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
     },
     {
       ageTicks: 2,
+      alphaDecay: Math.fround(0.15 / 720),
       birthTick: 3,
+      durationTicks: 2_400,
       id: 2,
+      initialRotationDegrees: 90,
       kind: 'water-aura',
       origin: { x: 10, y: 20 },
       ownerId: 'player-1',
+      rotationStepDegrees: 0.5,
       worldKey: 'hub:courtyard',
     },
     {
@@ -2571,7 +2575,7 @@ test('protocol strictly carries primary Hurricane, Cold Aura, and Hail lifecycle
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.primarySpells.transients, effects)
   assert.throws(() => decodeEffects([{ ...effects[0], charge: 0 }]), /charge must be within/)
-  assert.throws(() => decodeEffects([{ ...effects[1], ageTicks: 10 }]), /native lifetime/)
+  assert.throws(() => decodeEffects([{ ...effects[1], ageTicks: 2_400 }]), /native lifetime/)
   assert.throws(() => decodeEffects([{ ...effects[2], ageTicks: 134 }]), /Hail lifecycle/)
 })
 

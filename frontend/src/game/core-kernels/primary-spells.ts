@@ -236,6 +236,7 @@ export interface PrimarySpellAirStormState extends PrimarySpellOwnedTransientBas
 
 export interface PrimarySpellAirStormStrikeState extends PrimarySpellOwnedTransientBase {
   kind: 'air-storm-strike'
+  midpoint: Vector2
   origin: Vector2
   targetId: string
   targetPosition: Vector2
@@ -260,8 +261,12 @@ export interface PrimarySpellWaterFreezeWaveState extends PrimarySpellOwnedTrans
 }
 
 export interface PrimarySpellWaterAuraState extends PrimarySpellOwnedTransientBase {
+  alphaDecay: number
+  durationTicks: number
+  initialRotationDegrees: number
   kind: 'water-aura'
   origin: Vector2
+  rotationStepDegrees: number
 }
 
 export interface PrimarySpellWaterHailState extends PrimarySpellOwnedTransientBase {
@@ -463,7 +468,6 @@ export const PRIMARY_SPELL_WATER_REACH = 205
 export const PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS = NATIVE_FIRE_IMPACT_LIFETIME_TICKS
 export const PRIMARY_SPELL_PRISMATIC_LIFETIME_TICKS = 100
 export const PRIMARY_SPELL_STORM_STRIKE_LIFETIME_TICKS = 1
-export const PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS = 10
 export const PRIMARY_SPELL_ETHER_COLLISION_RADIUS = 6
 export const PRIMARY_SPELL_FIRE_COLLISION_RADIUS = 20
 export const PRIMARY_SPELL_EARTH_INITIAL_CHARGE = Math.fround(0.18)
@@ -1898,7 +1902,7 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'player-staff-spin':
     case 'player-staff-pike-break': throw new Error('Staff transient lifetime is system owned')
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
-    case 'water-aura': return PRIMARY_SPELL_WATER_AURA_LIFETIME_TICKS
+    case 'water-aura': return effect.durationTicks
     case 'water-hail': throw new Error('Hail lifetime is state driven')
   }
 }

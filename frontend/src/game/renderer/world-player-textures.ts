@@ -101,6 +101,10 @@ export interface PlayerWorldTextures {
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
+    airWaterActors: {
+      coldAura: Texture
+      hail: Texture
+    }
     air: {
       branches: readonly Texture[]
       circle: Texture
@@ -288,6 +292,10 @@ export function createPlayerWorldTextures(
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
+      airWaterActors: {
+        coldAura: texture(primarySpells.airWaterActors.coldAura),
+        hail: texture(primarySpells.airWaterActors.hail),
+      },
       air: {
         branches: primarySpells.air.branches.map(texture),
         circle: texture(primarySpells.air.circle),
