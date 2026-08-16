@@ -1059,8 +1059,8 @@ def write_trader_asset_data(
 ) -> None:
     selected = {
         "Inventory": range(len(inventory_records)),
-        "Skills": (4, *range(127, 155)),
-        "UI": (15, 20, 21, 30, 31, 33, 49, 62, 75, 76, 77),
+        "Skills": range(len(skills_records)),
+        "UI": range(len(ui_records)),
     }
     records = {
         "Inventory": inventory_records,

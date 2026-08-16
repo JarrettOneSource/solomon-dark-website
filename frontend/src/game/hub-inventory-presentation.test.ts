@@ -37,12 +37,13 @@ test('merchant proximity uses the exact native radius formula and room ownership
   assert.equal(hubTraderAtPoint('courtyard', { x: 900, y: 642.5 }), null)
 })
 
-test('native shop membership retains padded grids and every required atlas row', () => {
+test('native shop membership retains padded grids and exports every atlas row', () => {
   assert.deepEqual(HUB_TRADER_GRID_CAPACITY, { fomentius: 28, shlorio: 9 })
-  assert.deepEqual(HUB_TRADER_NATIVE_UI_RECORDS.Skills, [
-    4, ...Array.from({ length: 28 }, (_, index) => 127 + index),
-  ])
-  assert.deepEqual(HUB_TRADER_NATIVE_UI_RECORDS.UI, [15, 20, 21, 30, 31, 33, 49, 62, 75, 76, 77])
+  assert.deepEqual(HUB_TRADER_NATIVE_UI_RECORDS, {
+    Inventory: 84,
+    Skills: 166,
+    UI: 113,
+  })
 })
 
 test('all seven equipment sinks are reachable and the third ring remains gated', () => {

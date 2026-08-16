@@ -405,11 +405,14 @@ export default function HubScene({
         />
 
         <HubInventoryUi
+          audio={audio}
+          config={hubInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || pickerOpen}
           economy={economy}
           onAction={onHubAction}
           onSurfaceChange={setHubUiSurface}
           playerPosition={playerPosition}
+          progression={progression}
           region={currentRegion}
           surface={hubUiSurface}
           transitionActive={transitionActive}

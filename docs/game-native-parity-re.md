@@ -15540,9 +15540,9 @@ producers in this system and remain outside this closure.
 | Asset/data | retail dialogue files; College 10, 45, 54..58, 89..92, 126..129, 160..164, 517..524; Library 21..24; Inventory/Skills/UI records; complete perk/item catalogs | exact copy, animation membership, item identity, and UI art membership | high |
 
 The preferred image base is `0x00400000`; those are preferred image addresses,
-not ASLR runtime addresses. A fresh clean-stock backbuffer was not captured in
-this pass because the available loader rejected the exact retail build stamp
-before process launch; that failed launch is not behavioral evidence.
+not ASLR runtime addresses. The settled InventoryScreen witness described
+below came from a process whose executable independently matches the retail
+digest above.
 
 ### System boundary and membership inventory
 
@@ -15560,7 +15560,7 @@ transactions.
 | Luthacus backpack/storage transfer | `0x0056cd00` | exact-ported | two-way/no-gold/no-copy tests |
 | Shlorio fee, untargeted offers, buy, clear, close | `0x0055faf0`, `0x0056d110` | exact-ported | complete 47-recipe lifecycle tests |
 | Six equipment classes and seven equip sinks | item catalog; `0x00570cd0`, `0x00575850`, `0x00570d80`, `0x0066f020` | exact-ported | per-class/per-sink tests |
-| Shop, DowsingShop, and InventoryScreen presentation | `0x00557d40`, `0x00558160`, `0x00568b90`; Inventory/Skills/UI records | exact-ported | render contract and browser screenshots |
+| Shop/PerkShop/InventoryShop, both Dowsing states, InventoryScreen, and trader MsgBox presentation | full vtable/renderer family recorded below; Inventory/Skills/UI/Fonts/Clothes art | exact-ported | render-contract tests plus the two-participant hub-trader browser receipt |
 | Four reachable introductions and commands | survival dialogue data; `0x0050b720`, `0x004fb890` | exact-ported | exact-copy and reachability tests |
 | Fomentius actor/balloon | `0x0050b110`, `0x0051c1a0`; College 54..58, 160..164 | verified-already-at-parity | existing presentation/render tests |
 | Hagatha body, accessory, and cross-fades | `0x0051adc0`, `0x0051b1d0`; College 45, 89..92, 517..524 | exact-ported | every-bank-member animation tests |
@@ -15577,9 +15577,72 @@ The 2026-08-15 trader pass uses retail `0.72.5` `SolomonDark.exe`, SHA-256
 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
 Static evidence comes from the checked-in Ghidra project and exact retail data
 files; the prior G8 live fixture corroborates the initial trader state and
-transactions. A fresh native backbuffer capture was not possible because the
-available built loader rejected this executable's build stamp before launch,
-so that failed attempt supplies no behavioral evidence.
+transactions. A fresh byte-identical retail process supplied the settled
+1600x900 InventoryScreen witness now committed in Mod Loader as
+`tests/fixtures/webgame/menu-reference-captures/inventory-screen.png`, SHA-256
+`0d99c6bb3f1815aa061fd4ee49e7bfccbd0ee058ea69b0e8936155c7e5156d8b`.
+
+### Full stock UI correction and recovered screen family
+
+The first implementation pass correctly ported the participant economy and
+transaction lifecycle but rendered it through `ModalFrame`, visible HTML
+headings/buttons, CSS-generated leather/gold framing, and a 28-cell backpack.
+Calling that presentation exact was wrong. The new stock witness and complete
+class sweep show that inventory, shops, dowsing, and trader dialogue are a
+single native presentation family with distinct owners:
+
+| Surface | Native owner and vtable | Required renderer/lifecycle closure |
+| --- | --- | --- |
+| Fomentius | `Shop`, `0x00794D7C` | ctor `0x0055E800`; alpha/slide `0x00550D80`; root `0x00557D40`; grid `0x00550DB0`; item detail `0x00565E00`; action `0x0055EF40` |
+| Hagatha | `PerkShop`, `0x00790374` | common Shop plus rebuild `0x0055F270`, detail suffix `0x00554690`, purchase `0x0056C340` |
+| Luthacus | `InventoryShop`, `0x0079044C` | common Shop plus two-owner transfer `0x0056CD00` |
+| Shlorio | `DowsingShop`, `0x00790524` | ctor `0x004F5AB0`; update `0x005512F0`; rebuild `0x0055F9F0`; pre/result root `0x00558160`; grid `0x00554E20`; flash `0x00551350` |
+| Inventory | `InventoryScreen`, `0x00794F54`, with `InventoryGrid`, `0x00794C64` | ctor `0x00560380`; update `0x00551A10`; close `0x00555810`; root `0x00568B90`; detail/help `0x00556940`; grid `0x0055A070` |
+| Trader talk and error branches | `MsgBox`, `0x00788E04`, plus dialogue controls | ctor `0x004A98E0`; fade `0x005AB710`; root `0x005C4530`; line/primary/secondary builders `0x005BCCB0`/`0x005AB7E0`/`0x005AB980` |
+
+All browser surfaces render in one fixed 1600x900 native stage using the exact
+Fonts, Inventory, Skills, UI, and player/Clothes art. HTML remains only as a
+transparent semantic input layer aligned to native controls. The common Shop
+settles from a 100-logical-pixel vertical slide into a centred 604x400 logical
+rect. Its retained capacity is 28, but the common renderer issues the authored
+4-by-2 normal/overlay grid passes and uses Skills record 4 as paired scroll
+decoration behind the retained StoreGrid controls; it is not one visible
+4-by-7 DOM grid. Dowsing switches result layout to three columns and retains
+nine offers.
+
+The settled InventoryScreen witness proves an opaque black screen, STATS and
+EQUIP upper corners, a central seal and live wizard/equipment preview, Kills
+and Awesomeness, an 88-slot 22-by-4 BACKPACK, bottom gold ledger, belt, and
+exit control. Those 88 slots are authored column-major: indices 0 and 1 occupy
+the first column's first two rows. Its reveal advances by `0.025` per native
+tick. Trader MsgBox
+surfaces advance by `0.035` and draw a `0.75 * alpha` black curtain. The full
+mandatory state membership is: four introduction/choice dialogues and the
+Hagatha/Shlorio price explanations; Fomentius paging/detail/buy/reject;
+Hagatha paging/detail/first-mix/bundle/capacity; Luthacus both owners and both
+transfer directions; Shlorio pre-roll, insufficient funds, result, roll flash,
+and close-discard; Inventory selection/detail, seven equip
+sinks, unequip, belt, and close; affordability/selection/focus; and
+range/region/fade teardown. No responsive modal or visible generic browser
+control substitutes for those members.
+
+The closing Website renderer uses Pixi/WebGL for every visible member above.
+Its fixed stage loads all 84 Inventory, 166 Skills, and 113 UI records plus the
+native bitmap fonts and player/Clothes sources. The HTML tree is limited to
+transparent, stage-aligned semantic hit targets and accessibility text. The
+inventory stat pane resolves the equipped elemental primary from the recovered
+skill rows for all five elements, including the native damage, mana-cost, and
+10-per-second mana-heal lines; it no longer substitutes current health/mana or
+the element-root skill name.
+
+The Dowsing flash belongs to the successful roll, not the later purchase.
+`0x0055FC18` writes `1.0` to `DowsingShop+0x360`, `0x005512F0` subtracts the
+image double `0.05` each 100 Hz tick, and `0x00551350` draws a full-screen
+`(1,0,0,alpha)` rectangle. It therefore lasts 20 ticks, or 200 ms. The fee
+rejection is an actionable native branch rather than a disabled button:
+`0x0055FAF0` builds a MsgBox titled `NOT ENOUGH GOLD!`, adds the recovered
+compensation paragraph, and uses executable literal `OKAY` at `0x007930D8`
+without mutating the participant economy.
 
 ### Participant-owned inventory and temporary gold override
 
@@ -15697,7 +15760,11 @@ participant isolation, protocol validation/copying, and recovered animation
 frame selection. Browser acceptance must enter the hub as an ordinary player,
 open a trader through world interaction, buy an item, observe gold and
 inventory update, transfer it through Luthacus, complete one dowsing purchase,
-and show that a second participant's ledger is unchanged. Native-equipment
+capture the successful full-red roll frame, reach the exact insufficient-gold
+MsgBox without mutation, equip and unequip the purchased item, and show that a
+second participant's 10,000-gold ledger and starter inventory are unchanged.
+`frontend/tools/smoke-hub-traders.mjs` owns that complete browser receipt and
+fails on any browser-console/page error. Native-equipment
 combat effects, dormant random outfitting, unreachable targeted dowsing,
 selling, and persistent account storage are not silently invented by this
 milestone.

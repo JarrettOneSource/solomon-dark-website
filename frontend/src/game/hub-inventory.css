@@ -1,487 +1,87 @@
 .hub-trader-interact {
   position: absolute;
   z-index: 12000;
-  bottom: 104px;
+  bottom: 86px;
   left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 228px;
-  justify-content: center;
-  border: 1px solid rgb(214 189 122 / 0.72);
-  border-radius: 3px;
-  background: rgb(12 11 9 / 0.9);
-  box-shadow: 0 3px 14px rgb(0 0 0 / 0.85);
-  color: #e7d49b;
-  cursor: pointer;
-  font: 20px 'IM FELL English', Georgia, serif;
-  padding: 9px 16px;
-  pointer-events: auto;
-  text-shadow: 0 2px 2px #000;
-  transform: translateX(-50%);
-}
-
-.hub-trader-interact-key {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid #cfb66f;
-  border-radius: 3px;
-  background: #30291d;
-  color: #fff2c5;
-  font: 18px Georgia, serif;
-}
-
-.hub-trader-backdrop {
-  position: absolute;
-  z-index: 30000;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgb(0 0 0 / 0.74);
-  pointer-events: auto;
-}
-
-.hub-trader-panel {
-  position: relative;
-  box-sizing: border-box;
-  width: 720px;
-  min-height: 390px;
-  overflow: hidden;
-  border: 2px solid #b79a55;
-  outline: 5px solid rgb(24 18 11 / 0.94);
-  background: #181714;
-  box-shadow: 0 0 0 1px #46361e, 0 18px 60px #000;
-  color: #eee4c5;
-  font-family: 'IM FELL English', Georgia, serif;
-  text-shadow: 0 2px 2px #000;
-}
-
-.hub-trader-panel-wide {
-  width: 1260px;
-  height: 760px;
-}
-
-.hub-trader-leather {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
-  opacity: 0.9;
-  transform: translate(-50%, -50%) scale(4.82, 2.95);
-  transform-origin: center;
-}
-
-.hub-trader-panel h2 {
-  position: relative;
-  z-index: 2;
-  box-sizing: border-box;
-  min-height: 58px;
-  margin: 0;
-  border-bottom: 1px solid rgb(198 171 104 / 0.55);
-  background: rgb(4 4 3 / 0.58);
-  color: #e8cf82;
-  font: 30px 'IM FELL English', Georgia, serif;
-  letter-spacing: 0.045em;
-  line-height: 58px;
-  padding: 0 72px 0 28px;
-  text-align: center;
-}
-
-.hub-trader-close {
-  position: absolute;
-  z-index: 4;
-  top: 10px;
-  right: 13px;
-  width: 38px;
-  height: 38px;
-  border: 1px solid #a98e50;
-  border-radius: 2px;
-  background: #17130d;
-  color: #dfc77f;
-  cursor: pointer;
-  font: 29px/31px Georgia, serif;
-}
-
-.hub-trader-panel-content {
-  position: relative;
-  z-index: 2;
-  box-sizing: border-box;
-  height: calc(100% - 58px);
-  padding: 22px 28px 24px;
-}
-
-.hub-trader-panel-wide .hub-trader-panel-content { padding-top: 64px; }
-
-.hub-trader-dialogue-copy {
-  min-height: 200px;
-  border: 1px solid rgb(194 166 98 / 0.28);
-  background: rgb(6 6 5 / 0.58);
-  color: #efe8d2;
-  font-size: 22px;
-  line-height: 1.34;
-  padding: 18px 22px;
-  white-space: pre-wrap;
-}
-
-.hub-trader-dialogue-copy p { margin: 0 0 12px; }
-.hub-trader-dialogue-copy p:last-child { margin-bottom: 0; }
-.hub-trader-dialogue-copy em { color: #f0dca1; }
-
-.hub-trader-dialogue-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.hub-trader-dialogue-actions button,
-.hub-inventory-selection button,
-.hub-trader-done,
-.hub-dowse-action {
-  border: 1px solid #a98e50;
-  border-radius: 2px;
-  background: #18150f;
-  box-shadow: inset 0 0 0 1px rgb(237 211 137 / 0.12), 0 2px 5px #000;
-  color: #ead391;
-  cursor: pointer;
-  font: 20px 'IM FELL English', Georgia, serif;
-  padding: 9px 18px;
-  text-shadow: 0 2px 2px #000;
-}
-
-.hub-trader-dialogue-actions button:hover:not(:disabled),
-.hub-inventory-selection button:hover:not(:disabled),
-.hub-trader-done:hover:not(:disabled),
-.hub-dowse-action:hover:not(:disabled),
-.hub-shop-cell:hover:not(:disabled),
-.hub-hagatha-offer:hover:not(:disabled),
-.hub-equipment-slot:hover:not(:disabled),
-.hub-inventory-cell:hover:not(:disabled) {
-  border-color: #f0d78c;
-  background-color: #2b2519;
-}
-
-.hub-trader-panel button:disabled {
-  cursor: default;
-  filter: grayscale(0.78);
-  opacity: 0.48;
-}
-
-.hub-native-atlas-sprite {
-  display: block;
-  flex: none;
-  max-width: none;
-  background-repeat: no-repeat;
-  pointer-events: none;
-}
-
-.hub-gold-ledger {
-  position: absolute;
-  z-index: 5;
-  top: 7px;
-  right: 70px;
-  display: flex;
-  height: 42px;
-  align-items: center;
-  gap: 6px;
-  color: #f0d27c;
-  font-family: Georgia, serif;
-  text-shadow: 0 2px 3px #000;
-}
-
-.hub-gold-stack { filter: drop-shadow(0 2px 2px #000); }
-.hub-gold-ledger strong { font-size: 23px; }
-.hub-gold-ledger small { color: #ccb977; font-size: 15px; }
-
-.hub-shop-grid {
-  display: grid;
-  width: max-content;
-  max-height: 620px;
-  grid-template-columns: repeat(var(--hub-shop-columns), 140px);
-  gap: 8px;
-  margin: 0 auto;
-  overflow: auto;
-  padding: 3px 12px 14px 3px;
-  scrollbar-color: #a98e50 #17140f;
-  scrollbar-width: thin;
-}
-
-.hub-shop-cell {
-  position: relative;
-  box-sizing: border-box;
-  width: 140px;
-  height: 76px;
-  overflow: hidden;
-  border: 1px solid rgb(174 146 79 / 0.56);
-  border-radius: 2px;
-  background: rgb(7 7 6 / 0.62);
-  color: #eee2bd;
-  cursor: pointer;
-  font-family: 'IM FELL English', Georgia, serif;
-  text-shadow: 0 1px 2px #000;
-}
-
-.hub-shop-cell-empty { cursor: default; opacity: 0.56; }
-.hub-shop-slot-art,
-.hub-shop-cell-empty > .hub-native-atlas-sprite {
-  position: absolute;
-  top: 10px;
-  left: 8px;
-  opacity: 0.8;
-}
-
-.hub-shop-cell .hub-item-icon {
-  position: absolute;
-  top: 11px;
-  left: 9px;
-}
-
-.hub-shop-item-name {
-  position: absolute;
-  top: 10px;
-  right: 7px;
-  left: 66px;
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 15px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.hub-trader-price {
-  color: #e9c75f;
-  font-family: Georgia, serif;
-}
-
-.hub-shop-cell > .hub-trader-price {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  font-size: 15px;
-}
-
-.hub-item-icon {
-  position: relative;
-  display: block;
-  width: 54px;
-  height: 54px;
-}
-
-.hub-item-icon > .hub-native-atlas-sprite {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.hub-hagatha-layout {
-  position: relative;
-  height: 628px;
-}
-
-.hub-trader-scroll-art { margin: -4px auto 8px; }
-
-.hub-hagatha-offers {
-  display: grid;
-  max-height: 564px;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 7px;
-  overflow: auto;
-  padding: 2px 10px 12px 2px;
-  scrollbar-color: #a98e50 #17140f;
-  scrollbar-width: thin;
-}
-
-.hub-hagatha-offer {
-  position: relative;
-  display: grid;
-  min-height: 82px;
-  grid-template-columns: 56px minmax(0, 1fr);
-  grid-template-rows: 1fr auto;
-  column-gap: 8px;
-  align-items: center;
-  border: 1px solid rgb(174 146 79 / 0.54);
-  border-radius: 2px;
-  background: rgb(7 7 6 / 0.64);
-  color: #efe6cb;
-  cursor: pointer;
-  font-family: 'IM FELL English', Georgia, serif;
-  padding: 6px;
-  text-align: left;
-  text-shadow: 0 1px 2px #000;
-}
-
-.hub-perk-icon { grid-row: 1 / 3; }
-.hub-hagatha-copy { min-width: 0; align-self: end; }
-.hub-hagatha-copy strong { display: block; color: #e3c976; font-size: 15px; }
-.hub-hagatha-copy small {
-  display: -webkit-box;
-  overflow: hidden;
-  color: #c9c1aa;
-  font-size: 11px;
-  line-height: 12px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.hub-hagatha-offer .hub-trader-price { grid-column: 2; font-size: 13px; }
-.hub-charm-capacity {
-  position: absolute;
-  right: 8px;
-  bottom: -2px;
-  margin: 0;
-  color: #d9c58c;
-  font-size: 16px;
-}
-
-.hub-dowsing-start {
-  position: relative;
-  display: grid;
-  height: 590px;
-  place-content: center;
-  justify-items: center;
-}
-
-.hub-dowsing-button-art { margin-bottom: 18px; }
-.hub-dowse-action { display: grid; min-width: 230px; gap: 4px; text-align: center; }
-.hub-dowse-action strong { color: #ead385; font-size: 33px; letter-spacing: 0.08em; }
-.hub-dowse-action span { font-family: Georgia, serif; font-size: 17px; }
-
-.hub-trader-done {
-  position: absolute;
-  right: 28px;
-  bottom: 20px;
-  z-index: 8;
-}
-
-.hub-inventory-layout {
-  position: relative;
-  display: grid;
-  min-height: 610px;
-  grid-template-columns: 218px 264px 1fr;
-  gap: 16px;
-  align-items: start;
-}
-
-.hub-inventory-layout-storage {
-  grid-template-columns: 205px 250px 250px 1fr;
-  gap: 12px;
-}
-
-.hub-inventory-layout > :not(.hub-inventory-native-backdrop) {
-  position: relative;
-  z-index: 2;
-}
-
-.hub-inventory-native-backdrop {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.hub-inventory-stone { position: absolute; right: 0; bottom: 0; opacity: 0.18; transform: scale(4.2, 2.4); transform-origin: right bottom; }
-.hub-inventory-guardian { position: absolute; right: -18px; bottom: -18px; opacity: 0.18; }
-.hub-inventory-filigree { position: absolute; top: 30px; left: 180px; opacity: 0.2; transform: rotate(90deg); }
-.hub-inventory-circle { position: absolute; top: 84px; left: -35px; opacity: 0.12; }
-.hub-inventory-health-plaque { position: absolute; top: 174px; left: 5px; opacity: 0.2; transform: scale(0.76); }
-.hub-inventory-equipment-mark { position: absolute; bottom: 32px; opacity: 0.14; }
-.hub-inventory-equipment-mark-cross { left: 16px; }
-.hub-inventory-equipment-mark-anvil { left: 82px; }
-.hub-inventory-equipment-mark-fire { left: 142px; }
-
-.hub-equipment,
-.hub-inventory-collection,
-.hub-inventory-selection {
-  box-sizing: border-box;
-  border: 1px solid rgb(178 150 83 / 0.38);
-  background: rgb(5 5 4 / 0.57);
-  padding: 10px;
-}
-
-.hub-equipment h3,
-.hub-inventory-collection h3 {
-  margin: 0 0 8px;
-  color: #ddc778;
-  font: 20px 'IM FELL English', Georgia, serif;
-  text-align: center;
-}
-
-.hub-equipment-slots {
-  display: grid;
-  grid-template-columns: repeat(2, 90px);
-  gap: 8px;
-}
-
-.hub-equipment-slot {
-  position: relative;
-  display: grid;
-  box-sizing: border-box;
-  width: 90px;
-  height: 91px;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid #796839;
-  background: rgb(8 8 7 / 0.7);
-  color: #dac98f;
-  cursor: pointer;
-  font: 13px 'IM FELL English', Georgia, serif;
-  padding: 4px;
-}
-
-.hub-equipment-slot > span:first-child { align-self: start; }
-.hub-equipment-slot .hub-item-icon { position: absolute; top: 29px; }
-.hub-equipment-slot small { color: #8e897a; }
-
-.hub-inventory-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 54px);
-  gap: 5px;
-}
-
-.hub-inventory-cell {
-  position: relative;
-  width: 54px;
-  height: 54px;
-  overflow: visible;
+  width: 260px;
+  height: 72px;
   border: 0;
   background: transparent;
   cursor: pointer;
-  padding: 0;
+  opacity: 0;
+  pointer-events: auto;
+  transform: translateX(-50%);
 }
 
-.hub-inventory-cell[aria-pressed='true'] { outline: 2px solid #edcf73; outline-offset: 1px; }
-.hub-inventory-slot-art { position: absolute; inset: 0; opacity: 0.86; }
-.hub-inventory-cell .hub-item-icon { position: absolute; inset: 0; }
-.hub-item-quantity {
+.hub-native-ui-stage {
   position: absolute;
-  z-index: 4;
-  right: 2px;
-  bottom: 1px;
-  min-width: 16px;
-  border-radius: 8px;
-  background: rgb(0 0 0 / 0.84);
-  color: #f3de9d;
-  font: 12px Georgia, serif;
-  line-height: 16px;
-  text-align: center;
+  z-index: 30000;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+  overflow: hidden;
+  pointer-events: auto;
 }
 
-.hub-inventory-selection {
-  display: flex;
-  min-height: 148px;
-  flex-direction: column;
-  gap: 8px;
-  color: #d8cba7;
-  font-size: 17px;
+.hub-scene[data-modal-open="true"] .hub-hud {
+  visibility: hidden;
 }
 
-.hub-inventory-selection strong { color: #ecd47e; font-size: 21px; }
-.hub-inventory-selection > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.hub-inventory-selection button { font-size: 15px; padding: 7px 10px; }
+.hub-native-ui-renderer,
+.hub-native-ui-actions {
+  position: absolute;
+  inset: 0;
+  width: 1600px;
+  height: 900px;
+}
 
-.hub-inventory-screen .hub-inventory-layout { padding-bottom: 56px; }
-.hub-trader-service-luthacus .hub-inventory-layout { padding-bottom: 56px; }
+.hub-inventory-native-canvas {
+  display: block;
+  width: 1600px;
+  height: 900px;
+}
+
+.hub-native-ui-actions {
+  z-index: 2;
+}
+
+.hub-native-ui-action {
+  position: absolute;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.hub-native-ui-action:disabled {
+  cursor: default;
+}
+
+.hub-native-ui-semantic {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.hub-gold-ledger {
+  top: 0;
+  left: 0;
+}
+
+.hub-native-ui-error {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  color: #f4d37b;
+  font: 24px Georgia, serif;
+  transform: translate(-50%, -50%);
+}

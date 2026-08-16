@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
 
 import { chromium } from 'playwright-core'
 
@@ -24,6 +25,7 @@ const hostPage = await browser.newPage({ viewport: { width: 1600, height: 900 } 
 const guestPage = await browser.newPage({ viewport: { width: 960, height: 540 } })
 const browserErrors = []
 for (const page of [hostPage, guestPage]) {
+  await page.addInitScript(bypassStartupAudioPreload)
   await page.addInitScript(() => {
     const NativeWebSocket = window.WebSocket
     window.__sdrSmokeKeyEvents = []
@@ -69,6 +71,8 @@ for (const page of [hostPage, guestPage]) {
 }
 
 try {
+  step('preloading both game clients')
+  await Promise.all([loadGame(hostPage), loadGame(guestPage)])
   step('entering host Hub')
   await enterHub(hostPage, 'Fire')
   step('entering guest Hub')
@@ -91,10 +95,13 @@ try {
   await fomentiusDialogue.waitFor()
   assert.match(await fomentiusDialogue.innerText(), /Hello Hello!/)
   assert.match(await fomentiusDialogue.innerText(), /very legal herbal potion/)
+  await waitForNativeSurfaceSettled(fomentiusDialogue)
+  await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-dialogue.png` })
   await assertInputBlocked(hostPage, canvas)
   await fomentiusDialogue.locator('[data-service-trader="fomentius"]').click()
   const fomentius = hostPage.getByRole('dialog', { name: "FOMENTIUS' USEFUL THYNGS" })
   await fomentius.waitFor()
+  await waitForNativeSurfaceSettled(fomentius)
   const stockCell = fomentius.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
   const stockLabel = await stockCell.getAttribute('aria-label')
   const stock = parsePurchaseLabel(stockLabel)
@@ -116,6 +123,7 @@ try {
   await luthacusDialogue.getByRole('button', { name: 'Examine Items' }).click()
   const luthacus = hostPage.getByRole('dialog', { name: "LUTHACUS' SCAVENGED GOODS" })
   await luthacus.waitFor()
+  await waitForNativeSurfaceSettled(luthacus)
   const goldBeforeStorage = await dialogGold(luthacus)
   const backpackItem = luthacus.getByLabel('Backpack').getByRole('button', {
     name: new RegExp(`^${escapeRegExp(stock.name)}, quantity `),
@@ -142,9 +150,19 @@ try {
   const hagathaDialogue = hostPage.getByRole('dialog', { name: 'Talking to Hagatha' })
   await hagathaDialogue.waitFor()
   assert.match(await hagathaDialogue.innerText(), /charms, blessings, curses and talismans/)
+  await waitForNativeSurfaceSettled(hagathaDialogue)
+  await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-dialogue.png` })
+  await hagathaDialogue.getByRole('button', { name: 'Your Prices' }).click()
+  assert.match(await hagathaDialogue.innerText(), /less expensive if I've mixed them up recently/)
+  await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-prices.png` })
+  await hagathaDialogue.getByRole('button', { name: 'Done' }).click()
+  await hagathaDialogue.waitFor({ state: 'hidden' })
+  await openNearbyTrader(hostPage, 'hagatha')
+  await hagathaDialogue.waitFor()
   await hagathaDialogue.locator('[data-service-trader="hagatha"]').click()
   const hagatha = hostPage.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
   await hagatha.waitFor()
+  await waitForNativeSurfaceSettled(hagatha)
   const lifeCharm = hagatha.locator('[data-hagatha-selector="0"]')
   const lifeCharmPrice = parseInt((await lifeCharm.locator('.hub-trader-price').innerText()).replace(/\D/g, ''), 10)
   const beforeHagatha = await dialogGold(hagatha)
@@ -164,27 +182,88 @@ try {
   const shlorioDialogue = hostPage.getByRole('dialog', { name: 'Talking to Shlorio the Dowser' })
   await shlorioDialogue.waitFor()
   assert.match(await shlorioDialogue.innerText(), /luminiferous ether/)
+  await waitForNativeSurfaceSettled(shlorioDialogue)
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-dialogue.png` })
   await shlorioDialogue.locator('[data-service-trader="shlorio"]').click()
   const shlorio = hostPage.getByRole('dialog', { name: "SHLORIO'S DISCOUNT DOWSING" })
   await shlorio.waitFor()
+  await waitForNativeSurfaceSettled(shlorio)
   const dowse = shlorio.getByRole('button', { name: /DOWSE\s+650 gold/ })
   const beforeDowsing = await dialogGold(shlorio)
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-preroll.png` })
-  await dowse.click()
+  const flashCanvas = shlorio.locator('.hub-inventory-native-canvas')
+  const [flashDataUrl] = await Promise.all([
+    flashCanvas.evaluate((canvas) => new Promise((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        observer.disconnect()
+        reject(new Error('timed out waiting for the dowsing flash'))
+      }, 15_000)
+      const capture = () => {
+        if (canvas.dataset.dowsingFlash !== 'active') return
+        window.clearTimeout(timeout)
+        observer.disconnect()
+        resolve(canvas.toDataURL('image/png'))
+      }
+      const observer = new MutationObserver(capture)
+      observer.observe(canvas, { attributeFilter: ['data-dowsing-flash'], attributes: true })
+      capture()
+    })),
+    dowse.click(),
+  ])
+  assert.match(flashDataUrl, /^data:image\/png;base64,/)
+  await writeFile(
+    `${screenshotRoot}-shlorio-flash.png`,
+    Buffer.from(flashDataUrl.slice(flashDataUrl.indexOf(',') + 1), 'base64'),
+  )
+  await shlorio.locator('.hub-inventory-native-canvas[data-dowsing-flash="idle"]').waitFor({ state: 'attached', timeout: 5_000 })
   await waitForDialogGold(shlorio, beforeDowsing - 650)
   const dowsingCell = shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
   await dowsingCell.waitFor()
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-results.png` })
   const dowsingItem = parsePurchaseLabel(await dowsingCell.getAttribute('aria-label'))
   await dowsingCell.click()
   await waitForDialogGold(shlorio, beforeDowsing - 650 - dowsingItem.price)
   await shlorio.getByRole('button', { name: /DOWSE\s+\d+ gold/ }).waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-purchased.png` })
   step('Shlorio purchase complete')
-  await shlorio.getByRole('button', { name: 'Done' }).click()
+  let finalHostGold = beforeDowsing - 650 - dowsingItem.price
+  let insufficientFee = 0
+  for (let cycle = 0; cycle < 10; cycle += 1) {
+    const nextDowse = shlorio.getByRole('button', { name: /DOWSE\s+[\d,]+ gold/ })
+    await nextDowse.waitFor()
+    const fee = parseDowsingFee(await nextDowse.getAttribute('aria-label'))
+    if (finalHostGold < fee) {
+      insufficientFee = fee
+      await nextDowse.click()
+      const notice = shlorio.getByRole('alert')
+      await notice.waitFor()
+      assert.match(await notice.innerText(), /NOT ENOUGH GOLD!/)
+      assert.match(await notice.innerText(), /endless, swirling, impossible colors/)
+      assert.equal(await dialogGold(shlorio), finalHostGold)
+      await waitForNativeNoticeSettled(shlorio)
+      await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-insufficient-gold.png` })
+      await shlorio.getByRole('button', { name: 'OKAY' }).click()
+      await shlorio.getByRole('button', { name: 'Done' }).click()
+      break
+    }
+    await nextDowse.click()
+    finalHostGold -= fee
+    await waitForDialogGold(shlorio, finalHostGold)
+    await shlorio.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first().waitFor()
+    await shlorio.getByRole('button', { name: 'Done' }).click()
+    await shlorio.waitFor({ state: 'hidden' })
+    await openNearbyTrader(hostPage, 'shlorio')
+    await shlorioDialogue.waitFor()
+    await shlorioDialogue.locator('[data-service-trader="shlorio"]').click()
+    await shlorio.waitFor()
+    await waitForNativeSurfaceSettled(shlorio)
+  }
+  assert.ok(insufficientFee > finalHostGold, JSON.stringify({ finalHostGold, insufficientFee }))
 
   await hostPage.keyboard.press('i')
   const inventory = hostPage.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
   const equipmentItem = inventory.getByLabel('Backpack').getByRole('button', {
     name: `${dowsingItem.name}, quantity 1`,
   })
@@ -206,13 +285,13 @@ try {
   }).waitFor()
   await inventory.getByRole('button', { name: 'Done' }).click()
 
-  const finalHostGold = beforeDowsing - 650 - dowsingItem.price
   assert.equal(await inventoryGold(hostPage), finalHostGold)
   await focusPage(guestPage)
   assert.equal(await inventoryGold(guestPage), 10_000)
   await guestPage.keyboard.press('i')
   const guestInventory = guestPage.getByRole('dialog', { name: 'Inventory' })
   await guestInventory.waitFor()
+  await waitForNativeSurfaceSettled(guestInventory)
   assert.equal(await guestInventory.getByLabel(/Health Potion, quantity 1/).count(), 1)
   assert.equal(await guestInventory.getByLabel(/Mana Potion, quantity 1/).count(), 1)
   await guestPage.screenshot({ path: `${screenshotRoot}-guest-isolated.png` })
@@ -265,8 +344,6 @@ function step(message) {
 
 async function enterHub(page, element) {
   await focusPage(page)
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
@@ -290,6 +367,23 @@ async function enterHub(page, element) {
   }
 }
 
+async function loadGame(page) {
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
+  await page.evaluate(() => window.__sdrRestoreAudioPreload?.())
+}
+
+function bypassStartupAudioPreload() {
+  const nativeLoad = HTMLMediaElement.prototype.load
+  HTMLMediaElement.prototype.load = function loadWithoutDecode() {
+    if (!(this instanceof HTMLAudioElement)) return nativeLoad.call(this)
+    queueMicrotask(() => this.dispatchEvent(new Event('loadeddata')))
+  }
+  Object.defineProperty(window, '__sdrRestoreAudioPreload', {
+    value: () => { HTMLMediaElement.prototype.load = nativeLoad },
+  })
+}
+
 async function focusPage(page) {
   await page.bringToFront()
   await page.waitForFunction(() => document.visibilityState === 'visible' && document.hasFocus(), null, {
@@ -301,6 +395,7 @@ async function inventoryGold(page) {
   await page.keyboard.press('i')
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
   const gold = await dialogGold(inventory)
   await inventory.getByRole('button', { name: 'Done' }).click()
   return gold
@@ -310,6 +405,7 @@ async function assertBackpackQuantity(page, name, quantity) {
   await page.keyboard.press('i')
   const inventory = page.getByRole('dialog', { name: 'Inventory' })
   await inventory.waitFor()
+  await waitForNativeSurfaceSettled(inventory)
   assert.equal(await inventory.getByLabel(`${name}, quantity ${quantity}`).count(), 1)
   await inventory.getByRole('button', { name: 'Done' }).click()
 }
@@ -321,6 +417,20 @@ async function dialogGold(dialog) {
 async function waitForDialogGold(dialog, expected) {
   await dialog.locator(`[data-player-gold="${expected}"]`).waitFor({ timeout: 10_000 })
   assert.equal(await dialogGold(dialog), expected)
+}
+
+async function waitForNativeSurfaceSettled(dialog) {
+  await dialog.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
+    state: 'attached',
+    timeout: 10_000,
+  })
+}
+
+async function waitForNativeNoticeSettled(dialog) {
+  await dialog.locator('.hub-inventory-native-canvas[data-native-notice-reveal="settled"]').waitFor({
+    state: 'attached',
+    timeout: 10_000,
+  })
 }
 
 async function openNearbyTrader(page, trader) {
@@ -606,6 +716,12 @@ function parsePurchaseLabel(label) {
   const match = /^Buy (.+) for (\d+) gold$/.exec(label || '')
   assert.ok(match, `invalid purchase label ${JSON.stringify(label)}`)
   return { name: match[1], price: Number(match[2]) }
+}
+
+function parseDowsingFee(label) {
+  const match = /^DOWSE ([\d,]+) gold$/.exec(label || '')
+  assert.ok(match, `invalid dowsing label ${JSON.stringify(label)}`)
+  return Number(match[1].replaceAll(',', ''))
 }
 
 function distance(first, second) {

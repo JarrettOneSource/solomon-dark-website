@@ -74,9 +74,9 @@ export const HUB_TRADER_GRID_CAPACITY = {
 } as const
 
 export const HUB_TRADER_NATIVE_UI_RECORDS = {
-  Inventory: 'all 84 records',
-  Skills: [4, ...Array.from({ length: 28 }, (_, index) => 127 + index)],
-  UI: [15, 20, 21, 30, 31, 33, 49, 62, 75, 76, 77],
+  Inventory: 84,
+  Skills: 166,
+  UI: 113,
 } as const
 
 export const HUB_TRADER_GEOMETRY: Readonly<Record<HubTraderId, {
