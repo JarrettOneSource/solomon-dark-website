@@ -33,6 +33,7 @@ import {
   type PlayerId,
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
@@ -565,7 +566,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
         if (!acknowledged) return
         state = acknowledged
-        loadedBoneyard = null
         for (const joined of clients.values()) {
           joined.activeInput = createIdlePlayerCharacterInput()
           joined.queuedInputs.clear()
@@ -678,13 +678,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         const previousTick = state.tick
         const previousBarrierId = state.levelUpBarrier?.barrierId ?? null
+        const previousRunPhase = state.run.phase
+        const previousGameOverExitTicks = state.run.gameOverExitTicks
         state = stepGameSimulationTick(state, inputs)
         const barrierId = state.levelUpBarrier?.barrierId ?? null
+        const reachedGameOverBlack = state.run.phase === 'game-over'
+          && state.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+          && previousGameOverExitTicks !== BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+        const completedGameOver = previousRunPhase === 'game-over'
+          && state.run.phase === 'loadout'
+        if (completedGameOver) loadedBoneyard = null
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
         nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
         steps += 1
         if (
           previousBarrierId !== barrierId
+          || reachedGameOverBlack
+          || completedGameOver
           || (state.tick !== previousTick && state.tick % ticksPerSnapshot === 0)
         ) broadcastSnapshot()
       }

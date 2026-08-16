@@ -1,6 +1,6 @@
 # Solomon Dark rebuilt runtime architecture
 
-Status: accepted; authoritative, GPU-client, desktop-solo, headless-crowd, and compact-replication slices implemented, 2026-08-14
+Status: accepted; authoritative, GPU-client, desktop-solo, headless-crowd, and compact-replication slices implemented, 2026-08-16
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -123,6 +123,13 @@ dependencies without revisiting this release invariant.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.
+- The session-owned run lifecycle is `hub -> active -> game-over -> loadout`.
+  An all-eligible-dead edge freezes the terminal Boneyard world while the
+  session tick and two replicated Game Over clocks continue. The entry/hold
+  clock opens input at 1000; host acknowledgement starts a nullable 400-tick
+  exit clock. World retirement and the retained-loadout reset occur atomically
+  on the following fixed tick, so neither client rendering nor acknowledgement
+  can destroy the image beneath an active fade.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry
@@ -164,7 +171,7 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `19` welcomes a client with one complete snapshot plus its sequence.
+Protocol `24` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. Both Hub and Boneyard carry a compact
 replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling

@@ -278,8 +278,24 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
     runId,
   })
 
-  const loadoutState = acknowledgeGameSimulationOver(gameOverState, runId, 1)
-  assert.ok(loadoutState)
+  const exitingState = acknowledgeGameSimulationOver(gameOverState, runId, 1)
+  assert.ok(exitingState)
+  receiveSnapshot(transport, createGameSnapshot(exitingState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'game-over')
+  assert.equal(session.getSnapshot().run.gameOverExitTicks, 0)
+  const loadoutState = {
+    ...exitingState,
+    run: {
+      ...exitingState.run,
+      eligiblePlayerIds: [],
+      gameOverExitTicks: null,
+      gameOverTicks: 0,
+      lastCompletedRunId: runId,
+      phase: 'loadout' as const,
+      runId: null,
+    },
+    world: createGameSimulation({ [playerId]: CHARACTER }).world,
+  }
   receiveSnapshot(transport, createGameSnapshot(loadoutState, playerId), 0)
   assert.equal(session.playerId, playerId)
   assert.equal(session.getSnapshot().run.phase, 'loadout')

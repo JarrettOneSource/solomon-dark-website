@@ -13,11 +13,19 @@ import type {
 import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
+  playerDeathEquipmentAppearance,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
 import type { HubWorldTextures } from './hub-textures.ts'
-import type { PlayerWorldTextures } from './world-player-textures.ts'
+import {
+  playerDeathHatAnchor,
+  type PlayerWorldTextures,
+} from './world-player-textures.ts'
+
+const DEATH_HAT_PRIMARY = 7
+const DEATH_HAT_SECONDARY = 8
+const PLAYER_DEATH_LAYER_COUNT = 9
 
 export class PlayerWorldView {
   readonly container = new Container({ label: 'local-player' })
@@ -28,15 +36,20 @@ export class PlayerWorldView {
   private readonly fixed: Sprite
   private readonly staffFront: Sprite
   private readonly head: Sprite
-  private readonly deathBody: Sprite
-  private readonly deathAttachment: Sprite
   private readonly hitOverlay: Container
   private readonly hitStaffBack: Sprite
   private readonly hitRobe: Sprite
   private readonly hitFixed: Sprite
   private readonly hitStaffFront: Sprite
   private readonly hitHead: Sprite
+  private readonly deathLayers: readonly Sprite[]
+  private readonly deathShadowLayers: readonly Sprite[]
   private readonly textures: PlayerWorldTextures
+  private readonly deathBaseTints = Array.from(
+    { length: PLAYER_DEATH_LAYER_COUNT },
+    () => 0xffffff,
+  )
+  private worldTint = 0xffffff
   private currentWalkPose = 0
   private currentAttachmentPose = 0
 
@@ -58,8 +71,8 @@ export class PlayerWorldView {
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.head = actorSprite(playerTextures.head[0], 7)
-    this.deathBody = actorSprite(playerTextures.death[0][0], 3)
-    this.deathAttachment = actorSprite(playerTextures.deathAttachment[0][0], 4)
+    this.deathShadowLayers = createDeathLayers(playerTextures.death[0][0], 1, 'shadow')
+    this.deathLayers = createDeathLayers(playerTextures.death[0][0], 11, 'color')
     this.hitOverlay = new Container({ label: 'player-hit-overlay' })
     this.hitOverlay.sortableChildren = true
     this.hitOverlay.eventMode = 'none'
@@ -91,8 +104,8 @@ export class PlayerWorldView {
       this.fixed,
       this.staffFront,
       this.head,
-      this.deathBody,
-      this.deathAttachment,
+      ...this.deathShadowLayers,
+      ...this.deathLayers,
       this.hitOverlay,
     )
   }
@@ -115,6 +128,10 @@ export class PlayerWorldView {
       player.progression.lifeState,
       player.progression.deathTick,
     )
+    const deathAppearance = playerDeathEquipmentAppearance(
+      player.config.element,
+      player.economy.equipment,
+    )
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
@@ -125,8 +142,7 @@ export class PlayerWorldView {
     this.fixed.visible = !death.visible
     this.staffFront.visible = !death.visible && staffFront
     this.head.visible = !death.visible
-    this.deathBody.visible = death.visible
-    this.deathAttachment.visible = death.visible
+    this.updateDeathLayers(playerTextures, death, deathAppearance)
     const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
     this.hitOverlay.alpha = hitAlpha
     this.hitOverlay.visible = !death.visible && hitAlpha > 0
@@ -135,8 +151,6 @@ export class PlayerWorldView {
     this.hitFixed.visible = true
     this.hitStaffFront.visible = staffFront
     this.hitHead.visible = true
-    this.deathBody.texture = playerTextures.death[death.facing][death.frame]
-    this.deathAttachment.texture = playerTextures.deathAttachment[death.facing][death.frame]
     this.staffBack.texture = playerTextures.staffBack[heading][attachmentPose]
     this.robe.texture = playerTextures.robe[heading][pose]
     this.fixed.texture = playerTextures.fixed[heading][attachmentPose]
@@ -179,8 +193,8 @@ export class PlayerWorldView {
     this.fixed.tint = tint
     this.staffFront.tint = tint
     this.head.tint = tint
-    this.deathBody.tint = tint
-    this.deathAttachment.tint = tint
+    this.worldTint = tint
+    this.applyDeathTints()
   }
 
   get orbSpriteCount(): number {
@@ -191,6 +205,70 @@ export class PlayerWorldView {
     this.container.removeChild(this.orb.container)
     this.orb.destroy()
     this.container.destroy({ children: true })
+  }
+
+  private updateDeathLayers(
+    playerTextures: PlayerWorldTextures['players'][WizardElement],
+    death: ReturnType<typeof createPlayerDeathDrawPlan>,
+    appearance: ReturnType<typeof playerDeathEquipmentAppearance>,
+  ): void {
+    const { facing, frame, heading } = death
+    const robe = this.textures.death.robe
+    const hat = this.textures.death.hat
+    const selectedTextures = [
+      robe.primary[appearance.robe.selector]![facing]![frame]!,
+      robe.secondary[appearance.robe.selector]![facing]![frame]!,
+      robe.fixedPrimary[0]![facing]![frame]!,
+      robe.fixedPrimary[1]![facing]![frame]!,
+      robe.fixedSecondary[0]![facing]![frame]!,
+      robe.fixedSecondary[1]![facing]![frame]!,
+      playerTextures.death[facing]![frame]!,
+      appearance.hat.selector === 3 && frame === 3
+        ? hat.specialPrimary[facing]!
+        : hat.primary[appearance.hat.selector]![heading]!,
+      appearance.hat.selector === 3 && frame === 3
+        ? hat.specialSecondary[facing]!
+        : hat.secondary[appearance.hat.selector]![heading]!,
+    ]
+    const baseTints = [
+      appearance.robe.primaryTint,
+      appearance.robe.secondaryTint,
+      appearance.robe.primaryTint,
+      appearance.robe.primaryTint,
+      appearance.robe.secondaryTint,
+      appearance.robe.secondaryTint,
+      0xffffff,
+      appearance.hat.primaryTint,
+      appearance.hat.secondaryTint,
+    ]
+    const hatOffset = appearance.hat.selector === 3 && frame === 3
+      ? { x: 0, y: 0 }
+      : playerDeathHatAnchor(frame, facing)
+    for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
+      const layer = this.deathLayers[index]!
+      const shadow = this.deathShadowLayers[index]!
+      layer.visible = death.visible
+      shadow.visible = death.shadow
+      layer.texture = selectedTextures[index]!
+      shadow.texture = selectedTextures[index]!
+      this.deathBaseTints[index] = baseTints[index]!
+      const isHat = index === DEATH_HAT_PRIMARY || index === DEATH_HAT_SECONDARY
+      const x = isHat ? hatOffset.x : 0
+      const y = isHat ? hatOffset.y : 0
+      layer.position.set(x, y)
+      shadow.position.set(x, y + 4)
+    }
+    this.applyDeathTints()
+  }
+
+  private applyDeathTints(): void {
+    for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
+      this.deathLayers[index]!.tint = multiplyTints(
+        this.deathBaseTints[index]!,
+        this.worldTint,
+      )
+      this.deathShadowLayers[index]!.tint = 0x000000
+    }
   }
 }
 
@@ -312,4 +390,35 @@ export function actorSprite(texture: Texture, zIndex: number): Sprite {
   sprite.zIndex = zIndex
   sprite.eventMode = 'none'
   return sprite
+}
+
+function createDeathLayers(
+  texture: Texture,
+  firstZIndex: number,
+  pass: 'color' | 'shadow',
+): readonly Sprite[] {
+  const names = [
+    'robe-primary',
+    'robe-secondary',
+    'robe-fixed-primary-a',
+    'robe-fixed-primary-b',
+    'robe-fixed-secondary-a',
+    'robe-fixed-secondary-b',
+    'body',
+    'hat-primary',
+    'hat-secondary',
+  ]
+  return names.map((name, index) => {
+    const sprite = actorSprite(texture, firstZIndex + index)
+    sprite.label = `player-death:${pass}:${name}`
+    sprite.visible = false
+    return sprite
+  })
+}
+
+function multiplyTints(first: number, second: number): number {
+  const channel = (shift: number): number => Math.round(
+    ((first >> shift) & 0xff) * ((second >> shift) & 0xff) / 255,
+  )
+  return channel(16) << 16 | channel(8) << 8 | channel(0)
 }

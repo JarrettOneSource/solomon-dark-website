@@ -6,7 +6,9 @@ import {
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
+  stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
+import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import {
@@ -169,7 +171,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v26 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v27 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -265,6 +267,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
     gameOverEventId: 0,
+    gameOverExitTicks: null,
     gameOverTicks: 0,
     lastCompletedRunId: null,
     nextGameOverEventId: 1,
@@ -318,7 +321,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v26 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v27 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -731,8 +734,8 @@ test('protocol v26 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v26 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 26)
+test('protocol v27 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 27)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -778,8 +781,26 @@ test('protocol v26 carries run lifecycle and authoritative combat modifiers', ()
     terminalMessage,
   )
 
-  const loadoutState = acknowledgeGameSimulationOver(gameOverState, 'run-v16', 1)
-  assert.ok(loadoutState)
+  const earlyExit = JSON.parse(encodeGameMessage(terminalMessage))
+  earlyExit.frame.run.gameOverExitTicks = 0
+  earlyExit.frame.run.gameOverTicks = 999
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(earlyExit)),
+    /gameOverExitTicks precedes the native input gate/,
+  )
+  const overlongExit = JSON.parse(encodeGameMessage(terminalMessage))
+  overlongExit.frame.run.gameOverExitTicks = BONEYARD_GAME_OVER_EXIT_FADE_TICKS + 1
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(overlongExit)),
+    /gameOverExitTicks exceeds the native fade/,
+  )
+
+  const acknowledgedState = acknowledgeGameSimulationOver(gameOverState, 'run-v16', 1)
+  assert.ok(acknowledgedState)
+  let loadoutState = acknowledgedState
+  for (let tick = 0; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+    loadoutState = stepGameSimulationTick(loadoutState, {})
+  }
   const loadoutSnapshot = createGameSnapshot(loadoutState, 'player-1')
   const loadoutMessage = {
     acknowledgedInputSequence: 0,
@@ -824,7 +845,7 @@ test('protocol v26 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v26 strictly owns the generated-arena transition', () => {
+test('protocol v27 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -877,7 +898,7 @@ test('protocol v26 strictly owns the generated-arena transition', () => {
     /must share ownership/,
   )
 })
-test('protocol v26 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v27 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

@@ -1,5 +1,6 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
+import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
@@ -148,7 +149,7 @@ function interpolateSnapshot(
       blend,
       { newerTick: newer.tick, olderTick: older.tick, targetTick },
     ),
-    run: blend < 1 ? older.run : newer.run,
+    run: interpolateGameRunLifecycle(older.run, newer.run, blend),
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
       arenaTransition: interpolateArenaTransition(
@@ -197,6 +198,27 @@ function interpolateSnapshot(
       runId: newer.world.runId,
       waves: interpolateWaves(older.world.waves, newer.world.waves, blend),
     },
+  }
+}
+
+function interpolateGameRunLifecycle(
+  older: GameRunLifecycleState,
+  newer: GameRunLifecycleState,
+  blend: number,
+): GameRunLifecycleState {
+  const discrete = blend < 1 ? older : newer
+  const sameGameOver = older.phase === 'game-over'
+    && newer.phase === 'game-over'
+    && older.runId === newer.runId
+    && older.gameOverEventId === newer.gameOverEventId
+  if (!sameGameOver) return discrete
+  return {
+    ...discrete,
+    gameOverExitTicks: older.gameOverExitTicks !== null
+      && newer.gameOverExitTicks !== null
+      ? Math.floor(lerp(older.gameOverExitTicks, newer.gameOverExitTicks, blend))
+      : discrete.gameOverExitTicks,
+    gameOverTicks: Math.floor(lerp(older.gameOverTicks, newer.gameOverTicks, blend)),
   }
 }
 

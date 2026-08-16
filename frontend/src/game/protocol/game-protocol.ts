@@ -58,6 +58,8 @@ import {
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import {
+  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
   GAME_RUN_PHASES,
   type GameRunLifecycleState,
   type GameRunPhase,
@@ -160,7 +162,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 26
+export const GAME_PROTOCOL_VERSION = 27
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -2084,6 +2086,7 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
   onlyKeys(source, field, [
     'eligiblePlayerIds',
     'gameOverEventId',
+    'gameOverExitTicks',
     'gameOverTicks',
     'lastCompletedRunId',
     'nextGameOverEventId',
@@ -2128,10 +2131,26 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
   if ((phase === 'hub' || phase === 'active') && gameOverEventId !== 0) {
     throw new GameProtocolError(`${field}.gameOverEventId requires a completed run`)
   }
+  const gameOverTicks = nonnegativeInteger(source.gameOverTicks, `${field}.gameOverTicks`)
+  const gameOverExitTicks = source.gameOverExitTicks === null
+    ? null
+    : nonnegativeInteger(source.gameOverExitTicks, `${field}.gameOverExitTicks`)
+  if (phase !== 'game-over' && gameOverExitTicks !== null) {
+    throw new GameProtocolError(`${field}.gameOverExitTicks requires Game Over`)
+  }
+  if (
+    gameOverExitTicks !== null
+    && gameOverExitTicks > BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+  ) throw new GameProtocolError(`${field}.gameOverExitTicks exceeds the native fade`)
+  if (
+    gameOverExitTicks !== null
+    && gameOverTicks < BONEYARD_GAME_OVER_INPUT_GATE_TICKS
+  ) throw new GameProtocolError(`${field}.gameOverExitTicks precedes the native input gate`)
   return {
     eligiblePlayerIds,
     gameOverEventId,
-    gameOverTicks: nonnegativeInteger(source.gameOverTicks, `${field}.gameOverTicks`),
+    gameOverExitTicks,
+    gameOverTicks,
     lastCompletedRunId,
     nextGameOverEventId,
     phase: phase as GameRunPhase,

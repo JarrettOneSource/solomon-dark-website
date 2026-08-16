@@ -1,5 +1,6 @@
 import { Rectangle, Texture } from 'pixi.js'
 
+import deathHatAnchors from '../../assets/game/player-character-death-hat-anchors.json'
 import {
   elementVfx,
   hub,
@@ -25,7 +26,6 @@ const ACTOR_DEATH_FRAMES = 4
 
 export interface PlayerActorTextureFrames {
   death: readonly (readonly Texture[])[]
-  deathAttachment: readonly (readonly Texture[])[]
   fixed: readonly (readonly Texture[])[]
   head: readonly Texture[]
   robe: readonly (readonly Texture[])[]
@@ -34,6 +34,24 @@ export interface PlayerActorTextureFrames {
 }
 
 export interface PlayerWorldTextures {
+  death: {
+    hat: {
+      primary: readonly (readonly Texture[])[]
+      secondary: readonly (readonly Texture[])[]
+      specialPrimary: readonly Texture[]
+      specialSecondary: readonly Texture[]
+    }
+    robe: {
+      fixedPrimary: readonly (readonly (readonly Texture[])[])[]
+      fixedSecondary: readonly (readonly (readonly Texture[])[])[]
+      primary: readonly (readonly (readonly Texture[])[])[]
+      secondary: readonly (readonly (readonly Texture[])[])[]
+    }
+    weapon: {
+      staff: readonly Texture[]
+      wand: Texture
+    }
+  }
   elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
@@ -86,13 +104,6 @@ export function createPlayerWorldTextures(
       ACTOR_FRAME_SIZE,
       ACTOR_FRAME_SIZE,
     ),
-    deathAttachment: gridFrames(
-      texture(playerCharacter.deathAttachment),
-      ACTOR_DEATH_FRAMES,
-      ACTOR_DEATH_FACINGS,
-      ACTOR_FRAME_SIZE,
-      ACTOR_FRAME_SIZE,
-    ),
     fixed: gridFrames(
       texture(playerCharacter.robeFixed[element]),
       ACTOR_ATTACHMENT_POSES,
@@ -134,7 +145,56 @@ export function createPlayerWorldTextures(
     playerTextures(element),
   ])) as Record<WizardElement, PlayerActorTextureFrames>
   const elementTextures = createNativeElementVfxTextures(texture)
+  const deathGrid = (source: string): Texture[][] => gridFrames(
+    texture(source),
+    ACTOR_DEATH_FRAMES,
+    ACTOR_DEATH_FACINGS,
+    ACTOR_FRAME_SIZE,
+    ACTOR_FRAME_SIZE,
+  )
   return {
+    death: {
+      hat: {
+        primary: playerCharacter.deathHat.primary.map((source) => stripFrames(
+          texture(source),
+          ACTOR_HEADINGS,
+          ACTOR_FRAME_SIZE,
+          ACTOR_FRAME_SIZE,
+          'vertical',
+        )),
+        secondary: playerCharacter.deathHat.secondary.map((source) => stripFrames(
+          texture(source),
+          ACTOR_HEADINGS,
+          ACTOR_FRAME_SIZE,
+          ACTOR_FRAME_SIZE,
+          'vertical',
+        )),
+        specialPrimary: stripFrames(
+          texture(playerCharacter.deathHat.specialPrimary),
+          ACTOR_DEATH_FACINGS,
+          ACTOR_FRAME_SIZE,
+          ACTOR_FRAME_SIZE,
+          'vertical',
+        ),
+        specialSecondary: stripFrames(
+          texture(playerCharacter.deathHat.specialSecondary),
+          ACTOR_DEATH_FACINGS,
+          ACTOR_FRAME_SIZE,
+          ACTOR_FRAME_SIZE,
+          'vertical',
+        ),
+      },
+      robe: {
+        fixedPrimary: playerCharacter.deathRobe.fixedPrimary.map(deathGrid),
+        fixedSecondary: playerCharacter.deathRobe.fixedSecondary.map(deathGrid),
+        primary: playerCharacter.deathRobe.primary.map(deathGrid),
+        secondary: playerCharacter.deathRobe.secondary.map(deathGrid),
+      },
+      weapon: {
+        staff: playerCharacter.deathWeapon.staff.map(texture),
+        wand: texture(playerCharacter.deathWeapon.wand),
+      },
+    },
     elementVfx: elementTextures,
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
@@ -212,17 +272,38 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   const add = (frames: readonly Texture[]) => frames.forEach((frame) => derived.add(frame))
   for (const player of Object.values(textures.players)) {
     player.death.forEach(add)
-    player.deathAttachment.forEach(add)
     player.fixed.forEach(add)
     add(player.head)
     player.robe.forEach(add)
     player.staffBack.forEach(add)
     player.staffFront.forEach(add)
   }
+  textures.death.hat.primary.forEach(add)
+  textures.death.hat.secondary.forEach(add)
+  add(textures.death.hat.specialPrimary)
+  add(textures.death.hat.specialSecondary)
+  textures.death.robe.fixedPrimary.forEach((sheet) => sheet.forEach(add))
+  textures.death.robe.fixedSecondary.forEach((sheet) => sheet.forEach(add))
+  textures.death.robe.primary.forEach((sheet) => sheet.forEach(add))
+  textures.death.robe.secondary.forEach((sheet) => sheet.forEach(add))
   Object.values(textures.elementVfx).forEach(add)
   add(textures.primarySpells.fire.impacts)
   add(textures.primarySpells.fire.particles)
   for (const texture of derived) texture.destroy(false)
+}
+
+export function playerDeathHatAnchor(frame: number, facing: number): {
+  readonly x: number
+  readonly y: number
+} {
+  const offset = deathHatAnchors.offsets[frame]?.[facing]
+  if (
+    offset === undefined
+    || offset.length !== 2
+    || !Number.isFinite(offset[0])
+    || !Number.isFinite(offset[1])
+  ) throw new RangeError(`Missing native death-hat anchor ${frame}:${facing}`)
+  return { x: offset[0], y: offset[1] }
 }
 
 export function stripFrames(

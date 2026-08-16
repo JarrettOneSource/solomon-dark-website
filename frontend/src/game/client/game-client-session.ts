@@ -307,6 +307,7 @@ export function connectGameClientSession(
         if (!welcome || !snapshot || destroyed || !session.isHost) return
         if (
           snapshot.run.phase !== 'game-over'
+          || snapshot.run.gameOverExitTicks !== null
           || snapshot.run.runId !== runId
           || snapshot.run.gameOverEventId !== eventId
         ) return

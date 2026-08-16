@@ -154,6 +154,132 @@ test('keeps recovered Hub parity art at its native registrations', () => {
   }
 })
 
+test('locks every native player-corpse equipment extraction', () => {
+  const manifest: Readonly<Record<string, {
+    dimensions?: readonly [number, number]
+    sha256: string
+  }>> = {
+    'player-character-death-hat-anchors.json': {
+      sha256: '7741695f5a6d628412a8aceb30a55650e6f683c2b179f66c81a345bfef55bf1e',
+    },
+    'player-character-death-hat-primary-0.png': {
+      dimensions: [170, 4080],
+      sha256: '79b99cd9cef3f308ffc7575a982d4b77c0fd54b7f327431fd976d4425e46d0e6',
+    },
+    'player-character-death-hat-primary-1.png': {
+      dimensions: [170, 4080],
+      sha256: 'de96e037006c72ede2d09c066c3dff981ad9395b9561a895f5f0df1d51fd5f49',
+    },
+    'player-character-death-hat-primary-2.png': {
+      dimensions: [170, 4080],
+      sha256: '6bef4ce219352cd471a36744c30fea705ecb151325b7cf2559e7efb9f5391676',
+    },
+    'player-character-death-hat-primary-3.png': {
+      dimensions: [170, 4080],
+      sha256: '25d8b40e8856a966d69a70d6ea5e6894a373572925ed367c1b65c2275135fb05',
+    },
+    'player-character-death-hat-secondary-0.png': {
+      dimensions: [170, 4080],
+      sha256: '7972886582868cfb51a41ae0ad5a11fa3f6c6a3f3aad86e50ab00e795d302f0e',
+    },
+    'player-character-death-hat-secondary-1.png': {
+      dimensions: [170, 4080],
+      sha256: '7972886582868cfb51a41ae0ad5a11fa3f6c6a3f3aad86e50ab00e795d302f0e',
+    },
+    'player-character-death-hat-secondary-2.png': {
+      dimensions: [170, 4080],
+      sha256: '7972886582868cfb51a41ae0ad5a11fa3f6c6a3f3aad86e50ab00e795d302f0e',
+    },
+    'player-character-death-hat-secondary-3.png': {
+      dimensions: [170, 4080],
+      sha256: '689f32f0052b2b4c5778b0026586c8946ce54406369b16a7706249b58b1a7d1f',
+    },
+    'player-character-death-hat-special-primary.png': {
+      dimensions: [170, 1020],
+      sha256: 'fd9980c1d4b3e1611ea6d65181dba6cbf05287a383a36becc913b27f575248e4',
+    },
+    'player-character-death-hat-special-secondary.png': {
+      dimensions: [170, 1020],
+      sha256: '78b6e127543cf5bdec079d46a11353ce6317512e288708dd606b25c6c9ac0f93',
+    },
+    'player-character-death-robe-fixed-primary-a.png': {
+      dimensions: [680, 1020],
+      sha256: 'b9c58c3f53c80017c0d454cd3b9fde31033a16d74b45ce9423b0c2a7fa91f6e6',
+    },
+    'player-character-death-robe-fixed-primary-b.png': {
+      dimensions: [680, 1020],
+      sha256: '9922aaccfd4e9beae7fe6e199ab231528789b171dd817a9853f727527ea2eec5',
+    },
+    'player-character-death-robe-fixed-secondary-a.png': {
+      dimensions: [680, 1020],
+      sha256: '5a054464f92239ff712446139d8c9d9431095fb33396bb18d069b8c07b42cb83',
+    },
+    'player-character-death-robe-fixed-secondary-b.png': {
+      dimensions: [680, 1020],
+      sha256: '8f817a07f7a25c60a53a26b9cd52af7d21d26059c83490f536fa63d5d0d7bc92',
+    },
+    'player-character-death-robe-primary-0.png': {
+      dimensions: [680, 1020],
+      sha256: '32fe5603f6d1370e49c7cc10b992d7e2567c81ec4be2c153ea3250e9da325fb5',
+    },
+    'player-character-death-robe-primary-1.png': {
+      dimensions: [680, 1020],
+      sha256: '1ab120a47c45329b215ae3d613ae739007e7d1cdda8b57350198940bcd48cf74',
+    },
+    'player-character-death-robe-primary-2.png': {
+      dimensions: [680, 1020],
+      sha256: '628492151afc368977d5b582b7f2cc3c8be69966d260b6be73c746fe060aa3d2',
+    },
+    'player-character-death-robe-secondary-0.png': {
+      dimensions: [680, 1020],
+      sha256: '6fb314bc5aece9bedf86add51da0f1737821ce0dbbe6d8f918bebc2a003e0a78',
+    },
+    'player-character-death-robe-secondary-1.png': {
+      dimensions: [680, 1020],
+      sha256: '27e2adcd041fa2917aea748938e3054071bbc1b480257b0c7e0e5825d609bf0c',
+    },
+    'player-character-death-robe-secondary-2.png': {
+      dimensions: [680, 1020],
+      sha256: 'f05524723487811e959d4bc2506aac461cffece3884a4dab26551a854539bdf3',
+    },
+    'player-character-death-staff-0.png': {
+      dimensions: [6, 49],
+      sha256: '3de76341f9f2e270e4c669fad6d096045338018f11936829540a25316baa74cc',
+    },
+    'player-character-death-staff-1.png': {
+      dimensions: [6, 49],
+      sha256: 'eb234eac9d0624ac38a993ba24a635bc178ae6157b26108556be8b78e54db03e',
+    },
+    'player-character-death-staff-2.png': {
+      dimensions: [6, 46],
+      sha256: 'efba33fac0d30f393c069fba4775bc37bb6a784c8d7a33237b2091e7e6a5c48b',
+    },
+    'player-character-death-staff-3.png': {
+      dimensions: [6, 49],
+      sha256: '2795ab8732c3597fe31fb2cfc80b404ed8dac439f5e77f936e376f6cc942053b',
+    },
+    'player-character-death-staff-4.png': {
+      dimensions: [8, 52],
+      sha256: 'e83e5b696718713e3c96f47ece910b002f53bada325bb45900277f4daaaae5b4',
+    },
+    'player-character-death-staff-5.png': {
+      dimensions: [9, 53],
+      sha256: '269274f4d9b272f870dea781d8945f1e4e803b2f7ad0abe9ed039b1cdeb36a6c',
+    },
+    'player-character-death-wand.png': {
+      dimensions: [4, 20],
+      sha256: 'fa61366f9b8969218aa809cc3f83e8e905ab0a20a00a77b72bda977fc547850a',
+    },
+  }
+
+  for (const [name, expected] of Object.entries(manifest)) {
+    assert.equal(assetSha256(name), expected.sha256, name)
+    if (expected.dimensions) {
+      assert.deepEqual(pngDimensions(name), expected.dimensions, name)
+    }
+  }
+})
+
 test('locks every native primary-cast extraction in one asset manifest', () => {
   const manifest: Readonly<Record<string, {
     dimensions?: readonly [number, number]

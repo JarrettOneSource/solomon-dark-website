@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
-import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
+import {
+  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
+} from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
@@ -1259,12 +1262,26 @@ test('one dead player spectates until all-dead Game Over returns the session thr
     })
   }
   assert.equal(state.run.gameOverTicks, BONEYARD_GAME_OVER_INPUT_GATE_TICKS)
-  const loadout = acknowledgeGameSimulationOver(
+  let exiting = acknowledgeGameSimulationOver(
     state,
     'multiplayer-death-run',
     state.run.gameOverEventId,
   )
-  assert.ok(loadout)
+  assert.ok(exiting)
+  assert.equal(exiting.run.phase, 'game-over')
+  assert.equal(exiting.run.gameOverExitTicks, 0)
+  assert.equal(exiting.world.kind, 'boneyard')
+  const frozenWorld = exiting.world
+  for (let tick = 0; tick < BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+    exiting = stepGameSimulationTick(exiting, {
+      first: gameplayInput(1, 0),
+      second: gameplayInput(1, 0),
+    })
+    assert.equal(exiting.world, frozenWorld)
+  }
+  assert.equal(exiting.run.phase, 'game-over')
+  assert.equal(exiting.run.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
+  const loadout = stepGameSimulationTick(exiting, {})
   assert.equal(loadout.run.phase, 'loadout')
   assert.equal(loadout.world.kind, 'hub')
   assert.deepEqual(

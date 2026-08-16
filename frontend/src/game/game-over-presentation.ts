@@ -1,23 +1,29 @@
-import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from './core-kernels/game-run.ts'
-
-/**
- * The stock Boneyard branch is fade-only. The exact retail blend recurrence is
- * not closed, so the web surface uses a named 1.5 second deterministic fade
- * while retaining the exact 1000-tick input gate.
- */
-export const BONEYARD_GAME_OVER_WEB_FADE_TICKS = 150
+import {
+  BONEYARD_GAME_OVER_ENTRY_FADE_TICKS,
+  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
+} from './core-kernels/game-run.ts'
 
 export interface BoneyardGameOverPresentation {
   readonly acceptsInput: boolean
+  readonly acknowledged: boolean
   readonly fadeAlpha: number
 }
 
 export function boneyardGameOverPresentation(
   gameOverTicks: number,
+  gameOverExitTicks: number | null,
 ): BoneyardGameOverPresentation {
   const ticks = Math.max(0, Math.trunc(gameOverTicks))
+  const exitTicks = gameOverExitTicks === null
+    ? null
+    : Math.max(0, Math.trunc(gameOverExitTicks))
   return {
-    acceptsInput: ticks >= BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
-    fadeAlpha: Math.min(1, ticks / BONEYARD_GAME_OVER_WEB_FADE_TICKS),
+    acceptsInput: exitTicks === null && ticks >= BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
+    acknowledged: exitTicks !== null,
+    fadeAlpha: exitTicks === null
+      ? Math.max(0, BONEYARD_GAME_OVER_ENTRY_FADE_TICKS - ticks)
+        / BONEYARD_GAME_OVER_ENTRY_FADE_TICKS
+      : Math.min(1, exitTicks / BONEYARD_GAME_OVER_EXIT_FADE_TICKS),
   }
 }

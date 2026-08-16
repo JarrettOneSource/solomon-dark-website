@@ -141,6 +141,7 @@ import {
 } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { PlayerDeathBurstViews } from './player-death-burst-view.ts'
+import { PlayerDeathWeaponViews } from './player-death-weapon-view.ts'
 import {
   NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
   nativeLevelUpPresentationFrame,
@@ -223,6 +224,7 @@ interface BoneyardRendererFrameDiagnostics {
   painterBandCount: number
   playerCount: number
   playerDeathBurstCount: number
+  playerDeathWeaponCount: number
   playerSamples: readonly Readonly<{
     displayName: string
     id: string
@@ -249,6 +251,7 @@ interface BoneyardRendererFrameDiagnostics {
   regionLightCompositeZIndex: number
   regionLightLogicalSide: number
   regionLightPhysicalSide: number
+  runGameOverExitTicks: number | null
   runGameOverTicks: number
   runId: string | null
   runPhase: string
@@ -499,6 +502,7 @@ export async function createBoneyardWorldRenderer(
     painterBandCount: 0,
     playerCount: 0,
     playerDeathBurstCount: 0,
+    playerDeathWeaponCount: 0,
     playerSamples: [],
     primarySpellCount: 0,
     primarySpellKinds: [],
@@ -519,6 +523,7 @@ export async function createBoneyardWorldRenderer(
     regionLightCompositeZIndex: NATIVE_REGION_LIGHT_COMPOSITE_Z_INDEX,
     regionLightLogicalSide: regionLightField.targetLogicalSide,
     regionLightPhysicalSide: regionLightField.targetPhysicalSide,
+    runGameOverExitTicks: null,
     runGameOverTicks: 0,
     runId: options.initialSnapshot.run.runId,
     runPhase: options.initialSnapshot.run.phase,
@@ -726,6 +731,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.painterBandCount = painter.painterBandCount
       frameDiagnostics.playerCount = scene.playerCount
       frameDiagnostics.playerDeathBurstCount = scene.playerDeathBurstCount
+      frameDiagnostics.playerDeathWeaponCount = scene.playerDeathWeaponCount
       frameDiagnostics.playerSamples = Object.entries(snapshot.players).map(([id, sample]) => ({
         displayName: sample.config.displayName,
         id,
@@ -742,6 +748,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       frameDiagnostics.playerX = player.position.x
       frameDiagnostics.playerY = player.position.y
+      frameDiagnostics.runGameOverExitTicks = snapshot.run.gameOverExitTicks
       frameDiagnostics.runGameOverTicks = snapshot.run.gameOverTicks
       frameDiagnostics.runId = snapshot.run.runId
       frameDiagnostics.runPhase = snapshot.run.phase
@@ -891,6 +898,7 @@ class BoneyardDynamicScene {
   private readonly movingGatePainterLayers: readonly StaticPainterLayer[]
   private readonly players = new Map<string, PlayerWorldView>()
   private readonly playerDeathBursts: PlayerDeathBurstViews
+  private readonly playerDeathWeapons: PlayerDeathWeaponViews
   private readonly maggots: NativeMaggotViews
   private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
@@ -953,6 +961,7 @@ class BoneyardDynamicScene {
       textures.primarySpells.air,
     )
     this.playerDeathBursts = new PlayerDeathBurstViews(root, textures, initialSnapshot)
+    this.playerDeathWeapons = new PlayerDeathWeaponViews(root, textures, initialSnapshot)
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     root.addChild(this.levelUp.container)
     this.solomon = boneyard.scene.solomonDig
@@ -1022,6 +1031,7 @@ class BoneyardDynamicScene {
     )
     const mageLightningPainterLayers = this.mageLightningPulses.painterLayers()
     this.playerDeathBursts.update(snapshot)
+    this.playerDeathWeapons.update(snapshot)
     for (const [id, view] of this.players) {
       view.container.renderable = !modalActive || id === localPlayerId
     }
@@ -1032,6 +1042,7 @@ class BoneyardDynamicScene {
     this.maggots.setRenderable(!modalActive)
     this.mageLightningPulses.setRenderable(!modalActive)
     this.playerDeathBursts.setRenderable(!modalActive)
+    this.playerDeathWeapons.setRenderable(!modalActive)
     this.solomon?.setActorRenderable(!modalActive)
     this.visibleEnemyFamilies = [...new Set(
       enemySnapshots.map((enemy) => enemy.enemyToken),
@@ -1285,6 +1296,11 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(player.position, this.lightIndex),
       ))
     }
+    for (const layer of this.playerDeathWeapons.painterLayers()) {
+      this.playerDeathWeapons.setTint(layer.playerId, nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(layer.position, this.lightIndex),
+      ))
+    }
     for (const layer of this.primarySpells.painterLayers()) {
       if (!layer.regionLightPoint) continue
       this.primarySpells.setTint(
@@ -1351,6 +1367,15 @@ class BoneyardDynamicScene {
         queueFamily: 'ordinary-dynamic',
         worldY: player.position.y,
         sortBias: boneyardPlayerSortBias(player),
+        sourceOrder: dynamicLayers.length,
+      })
+    }
+    for (const layer of this.playerDeathWeapons.painterLayers()) {
+      dynamicLayers.push({
+        id: layer.id,
+        queueFamily: 'ordinary-dynamic',
+        worldY: layer.worldY,
+        sortBias: 0,
         sourceOrder: dynamicLayers.length,
       })
     }
@@ -1483,6 +1508,10 @@ class BoneyardDynamicScene {
       const depth = positionedDynamics.get(`player:${id}`)?.zIndex ?? 1
       view.setDepth(depth)
       this.playerDeathBursts.setDepth(id, depth)
+      this.playerDeathWeapons.setDepth(
+        id,
+        positionedDynamics.get(`player-death-weapon:${id}`)?.zIndex ?? depth,
+      )
     }
     for (const layer of this.primarySpells.painterLayers()) {
       this.primarySpells.setDepth(
@@ -1635,6 +1664,10 @@ class BoneyardDynamicScene {
     return this.playerDeathBursts.size
   }
 
+  get playerDeathWeaponCount(): number {
+    return this.playerDeathWeapons.size
+  }
+
   get currentLightSources(): readonly NativeBoneyardLightSource[] {
     return this.lightIndex.acceptedSources
   }
@@ -1669,6 +1702,7 @@ class BoneyardDynamicScene {
     this.maggots.destroy()
     this.mageLightningPulses.destroy()
     this.playerDeathBursts.destroy()
+    this.playerDeathWeapons.destroy()
     this.root.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     this.gates.destroy()

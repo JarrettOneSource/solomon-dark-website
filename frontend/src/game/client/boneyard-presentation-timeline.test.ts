@@ -190,6 +190,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     run: {
       eligiblePlayerIds: ['local'],
       gameOverEventId: 0,
+      gameOverExitTicks: null,
       gameOverTicks: 0,
       lastCompletedRunId: null,
       nextGameOverEventId: 1,
@@ -729,6 +730,54 @@ test('preserves every player corpse frame at 20 Hz for all death-epoch alignment
   }
 })
 
+test('presents both native Game Over fades at the 100 Hz simulation clock', () => {
+  const gameOverSnapshot = (
+    tick: number,
+    gameOverTicks: number,
+    gameOverExitTicks: number | null,
+  ): BoneyardGameSnapshot => {
+    const snapshot = snapshotAt(tick, 10, 100)
+    return {
+      ...snapshot,
+      run: {
+        ...snapshot.run,
+        gameOverEventId: 1,
+        gameOverExitTicks,
+        gameOverTicks,
+        nextGameOverEventId: 2,
+        phase: 'game-over',
+      },
+    }
+  }
+  const entry = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: gameOverSnapshot(100, 0, null),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  entry.push(gameOverSnapshot(105, 5, null), 50)
+  assert.equal(entry.sample(75).run.gameOverTicks, 2)
+
+  const exit = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: gameOverSnapshot(110, 1_000, 0),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  exit.push(gameOverSnapshot(115, 1_000, 5), 50)
+  assert.equal(exit.sample(75).run.gameOverExitTicks, 2)
+
+  const acknowledgement = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: gameOverSnapshot(120, 1_000, null),
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  acknowledgement.push(gameOverSnapshot(125, 1_000, 0), 50)
+  assert.equal(acknowledgement.sample(75).run.gameOverExitTicks, null)
+  assert.equal(acknowledgement.sample(100).run.gameOverExitTicks, 0)
+})
+
 test('emits one finite tick-159 death burst for all five snapshot alignments', () => {
   for (let deathEpochTick = 0; deathEpochTick < 5; deathEpochTick += 1) {
     const initial = deathSnapshotAt(145, deathEpochTick)
@@ -751,8 +800,33 @@ test('emits one finite tick-159 death burst for all five snapshot alignments', (
     const trigger = triggers[0]!
     const opening = playerDeathBurstLayers(trigger, 0)
     assert.equal(opening.length, BOUNDED_PLAYER_DEATH_BURST_PROGRAM.particleCount)
-    assert.ok(opening.every((layer) => layer.entry === 10 && layer.alpha === 1))
+    assert.equal(opening.length, 18)
+    assert.ok(opening.every((layer) => (
+      layer.entry === 10
+      && layer.alpha === 1
+      && layer.scaleX === 0.5
+      && layer.scaleY === 0.2
+      && layer.tint === 0x808080
+      && Math.hypot(layer.offset.x, layer.offset.y) >= 15
+      && Math.hypot(layer.offset.x, layer.offset.y) <= 20
+    )))
     assert.deepEqual(playerDeathBurstLayers(trigger, 0), opening)
+    const ageOne = playerDeathBurstLayers(trigger, 1)
+    const ageNine = playerDeathBurstLayers(trigger, 9)
+    assert.ok(ageOne.every((layer) => layer.alpha === 0.9))
+    assert.ok(ageNine.every((layer) => Math.abs(layer.alpha - 0.1) < 1e-12))
+    for (let index = 0; index < opening.length; index += 1) {
+      const firstMove = Math.hypot(
+        ageOne[index]!.offset.x - opening[index]!.offset.x,
+        ageOne[index]!.offset.y - opening[index]!.offset.y,
+      )
+      const ninthMove = Math.hypot(
+        ageNine[index]!.offset.x - opening[index]!.offset.x,
+        ageNine[index]!.offset.y - opening[index]!.offset.y,
+      )
+      assert.ok(firstMove >= 3 && firstMove <= 4)
+      assert.ok(ninthMove >= 3 * 6.12579511 && ninthMove <= 4 * 6.12579511)
+    }
     assert.deepEqual(
       playerDeathBurstLayers(trigger, BOUNDED_PLAYER_DEATH_BURST_PROGRAM.durationTicks),
       [],

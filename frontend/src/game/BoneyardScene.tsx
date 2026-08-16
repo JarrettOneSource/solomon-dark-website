@@ -165,7 +165,11 @@ export default function BoneyardScene({
   const digPosition = dig?.position
 
   useEffect(() => subscribe((snapshot) => {
-    setRun(snapshot.run)
+    setRun((current) => (
+      snapshot.run.phase === 'game-over' && current.phase === 'game-over'
+        ? current
+        : snapshot.run
+    ))
     const deathEpoch = snapshot.players[playerId]?.progression.deathEpoch ?? 0
     if (deathEpoch > deathEpochRef.current) audio.playStream('death-guitar')
     deathEpochRef.current = deathEpoch
@@ -355,6 +359,15 @@ export default function BoneyardScene({
       onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
+        if (snapshot.run.phase === 'game-over') {
+          setRun((current) => (
+            current.phase === 'game-over'
+              && current.gameOverTicks === snapshot.run.gameOverTicks
+              && current.gameOverExitTicks === snapshot.run.gameOverExitTicks
+              ? current
+              : snapshot.run
+          ))
+        }
         if (snapshot.world.kind === 'boneyard' && snapshot.world.encounter) {
           if (lastVoiceEventRef.current.runId !== snapshot.world.runId) {
             audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
@@ -521,6 +534,7 @@ export default function BoneyardScene({
           <GameOverOverlay
             canAcknowledge={canAcknowledgeGameOver}
             eventId={run.gameOverEventId}
+            gameOverExitTicks={run.gameOverExitTicks}
             gameOverTicks={run.gameOverTicks}
             onAcknowledge={(eventId) => onAcknowledgeGameOver(run.runId!, eventId)}
             runId={run.runId}

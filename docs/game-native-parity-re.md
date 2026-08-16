@@ -16583,7 +16583,7 @@ and ownership integration.
 
 ### Website implementation and final Mac mini receipts
 
-The completed Website boundary uses protocol 23. Replicated entity type 2 now
+The combined Website boundary uses protocol 27. Replicated entity type 2 now
 carries the authoritative Imp, Zombie, Wraith, Demon, Coffin, and shared action
 state needed by the stock renderers; type 3 carries the five live enemy
 projectiles; type 4 carries independent Coffin Maggots; and new type 6 carries
@@ -17472,9 +17472,10 @@ right-click ability exists.
 
 Implementation follows the recovered ownership boundary rather than deriving a
 reaction from client health changes. Player combat now retains the last
-accepted direct-damage tick and clears it on terminal handoff/new-run reset;
-combined protocol 26 replicates that tick alongside the level-up and generated
-Arena-transition additions already present on current `main`. `PlayerWorldView`
+accepted direct-damage tick and clears it on terminal handoff/new-run reset.
+The damage publication introduced protocol 26 for that tick alongside the
+level-up and generated Arena-transition additions; the terminal lifecycle
+integration below advances the final combined schema to protocol 27. `PlayerWorldView`
 redraws exactly the five
 living body/equipment layers (`staffBack`, `robe`, `fixed`, `staffFront`, and
 `head`) in native red above the unchanged pose. Shadow, orb/VFX, death art, and
@@ -17556,3 +17557,242 @@ point with no collision-safe route, so the planner rejected the route instead
 of bypassing authored collision. Browser and wire error arrays were empty. An
 unchanged exact-tree rerun completed the full journey above; no production
 movement/collision fallback or test-only teleport was added.
+
+## Player terminal presentation and Boneyard Game Over reopening — 2026-08-16
+
+### Why the prior parity claim is reopened
+
+The 2026-08-14 pass recovered the death-frame thresholds and the tick-1000
+Game Over input gate, but stopped one ownership layer too early. The asset
+extractor treated `Clothes[76..99]` as an untinted terminal attachment even
+though native item virtuals own that range as robe style zero. It omitted the
+other robe styles, every equipped-hat branch, and the terminal black corpse
+shadow. The burst retained a named web approximation after its constructor and
+tick were recoverable. Game Over then used one increasing 150-tick black fade,
+which is the opposite direction from the stock entry recurrence and erased the
+authored clear hold. The all-dead acknowledgement also destroyed the Boneyard
+immediately, omitting the stock 400-tick exit fade.
+
+The process failure was accepting address-range adjacency and a black capture
+as semantic proof. This reopening follows the item virtuals, sprite-array
+selectors, object fields, tick recurrence, render order, and surface transition
+gate through their actual consumers before changing the web renderer.
+
+### Evidence and confidence
+
+- Retail artifact: 4,723,200-byte `SolomonDark.exe`, SHA-256
+  `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+- Static owners: `PlayerWizard::Render` `FUN_00538550`, death tick
+  `FUN_00533520`, robe render virtual `FUN_00578510`, hat render virtual
+  `FUN_005758F0`, `Anim_Fade` constructor/tick `FUN_00452E20` /
+  `FUN_00452F20`, Game Over constructor/render/tick `FUN_005CAD40` /
+  `FUN_005C9030` / `FUN_005CF4F0`.
+- Live corroboration: the loaded Clothes singleton exposed three robe style
+  arrays, four hat style arrays, the six-record special hat bank, and the exact
+  range membership listed below. Existing native normal-mode and Boneyard
+  Game Over captures corroborate the semantic branch: normal mode paints the
+  title/prompt; Boneyard is fade-only and reveals the resident Arena.
+- Confidence: high for membership, selection, ordering, transforms, fixed
+  recurrences, and atlas records. The shared retail RNG stream position is not
+  portable to a host-authoritative web client; only its per-draw bounds remain
+  a named deterministic presentation policy.
+
+### Causal trace and state machines
+
+```text
+HP <= -10 -> lethal-pending -> one death epoch at tick 0
+  -> hide living robe/staff/head/orb passes
+  -> one held staff/wand bouncer
+  -> corpse frame 0 through tick 152
+  -> frame 1 at 153, frame 2 at 156
+  -> frame 3 + black y+4 corpse shadow + 18-sprite additive burst at 159
+  -> corpse loses grid collision and receives sort bias -1000
+  -> surviving peers keep the run active; dead local player spectates
+
+last eligible player enters the death epoch
+  -> one host-authored Game Over event for the run nonce
+  -> freeze the terminal Boneyard image
+  -> entry black 1.0 - 0.025/tick, clear at tick 40
+  -> clear hold; host input opens at tick 1000
+  -> accepted input starts exit alpha 0.0 + 0.0025/tick
+  -> exact black at exit tick 400
+  -> following fixed tick retires the run into the web retained-loadout route
+```
+
+Death presentation state is `(runId, playerId, deathEpoch, deathTick)`. The
+corpse is the same player actor, not a spawned corpse entity. Burst and weapon
+drop are one-shot presentation owners keyed to the crossing of that epoch;
+late subscribers seed their crossing trackers and do not replay births. Game
+Over state is `(runId, eventId, gameOverTicks, exitTicks|null)`. Only the host
+may change `exitTicks` from null to zero; every client renders the replicated
+recurrence, and duplicate/stale acknowledgements are rejected.
+
+### Corpse compositor membership
+
+The six-facing index is `frame * 6 + floor((headingIndex + 2) / 4) mod 6`.
+The normal hat retains the 24-way integer `headingIndex`.
+
+| Ordered member | Native records/selector | Web ownership |
+|---|---|---|
+| robe style primary | `76..99`, `100..123`, `124..147`; item image `0..2` | raw 4-by-6 texture bank, item/element primary tint |
+| robe style secondary | `148..171`, `172..195`, `196..219`; item image `0..2` | raw 4-by-6 texture bank, item/element secondary tint |
+| robe fixed primary A/B | `220..243`, `268..291` | two raw 4-by-6 passes in native order |
+| robe fixed secondary A/B | `244..267`, `292..315` | two raw 4-by-6 passes in native order |
+| actor corpse primary/secondary | `28..51`, then `52..75` | existing element-colored body sheet |
+| normal hat primary | `316..339`, `340..363`, `364..387`, `388..411` | selected 24-way raw strip at death anchor |
+| normal hat secondary | `412..435` for selectors `0..2`; `436..459` for selector `3` | selected 24-way raw strip at death anchor |
+| selector-3 terminal hat | primary `16..21`, secondary `22..27` | six-facing strips at actor origin, frame 3 only |
+| terminal shadow | repeat every selected pass black at `(0,+4)` | separate shadow compositor beneath normal pass |
+
+The death anchor is point zero of `Clothes[76 + corpseIndex]` plus `(0,25)`.
+The robe helper always adds all four fixed ranges after its two style ranges.
+Item constructors default both colors to white; explicit native recipe colors
+replace only the declared fields. With no equipped robe/hat, selector zero and
+the element descriptor's primary/secondary palette are used. Equipped recipe
+indices select their catalog image and colors; no name-based inference or
+fallback selector is legal.
+
+### Tick-159 burst contract
+
+The burst owns exactly 18 additive BadGuys record-10 sprites. Base angles are
+`0,20,...,340` degrees; native sampling adds signed jitter bounded by 8 degrees,
+spawn radius `15 + RandomInt(5)`, and speed `3 + RandomInt(1)`. Initial scale is
+`(0.5,0.2)`, color is `(0.5,0.5,0.5,1)`, velocity multiplies by `0.9` after
+each move, and alpha subtracts `0.1` before each move. Age zero therefore draws
+full alpha at the radial spawn offset; ages one through nine use alpha
+`0.9..0.1` and the damped geometric displacement; age ten is retired. The web
+seed stays stable per `(run, player, death epoch)` so render clients agree,
+while the constants, count, recurrence, and consumption edge are exact.
+
+### Held staff/wand bouncer contract
+
+The death transition creates exactly one independently registered weapon
+bouncer. Staff image selectors use `Clothes[5..10]`; the wand uses
+`Clothes[15]`. Native recipes map staff 8/18/33/34 to selectors 1/3/0/2 and
+wand 2/13/28/41..45 to selectors 2/4/3/5. The absent web equipment override
+uses the native default staff selector zero.
+
+The bouncer copies the death origin and heading. Horizontal speed is `1.5`,
+radial placement is `15 + RandomFloat(10)`, perspective height is
+`-RandomFloat(20)`, and both vertical velocity and its retained bounce seed
+start at `-(2 + RandomFloat(3))`. Rotation starts in `[0,360)` with angular
+speed `[1,11)`. Airborne motion runs on two of every three world ticks with
+gravity `0.4`. On ground contact the retained bounce seed, not the
+gravity-adjusted impact velocity, is multiplied by `0.65` and copied to the
+new vertical velocity; angular speed is rerolled, and a fresh 50-percent branch
+damps horizontal velocity by `0.65`. Motion settles when the new vertical
+velocity is greater than `-0.75`. The registered item persists for the terminal
+surface and draws a black shadow at Y plus 2 with Y scale `0.75`, then the
+rotated normal sprite. The Website reconstructs this independent object from
+`(run, player, death epoch, deathTick)` and freezes its copied origin. Its
+stable per-epoch RNG samples/update phase are the named deterministic policy
+for retail's unavailable process-global stream; the ranges, recurrence,
+settlement, art, shadow, painter ownership, and one-shot lifecycle are closed.
+
+### Game Over membership and branch dispositions
+
+| Member/variant | Disposition | Reason/artifact and next step |
+|---|---|---|
+| Boneyard entry overlay, clear hold, input gate, exit overlay, frozen Arena, host/guest authority, replay rejection | `exact-ported` | protocol 27 carries the nullable exit clock alongside the rebased level-up messages, generated-arena transition, and player-damage tick/events; the server freezes the terminal world through entry/hold/exit and resets only on the fixed tick after exit 400; display-time sampling presents both 100 Hz clocks |
+| normal story GAME/OVER atlas and prompt | `out-of-system` | `/game` launches the Boneyard survival route with the native mode flag's fade-only branch; normal story UI is not reachable in this web product surface |
+| native Hall of Fame/MainMenu post-run lineage | `out-of-system` | the accepted Website product deviation returns to retained-choice Create/loadout after the exact Boneyard fade completes |
+| retained learned progression across the next run | `out-of-system` | existing explicitly named Website progression-retention deviation; unrelated to terminal presentation |
+
+### Death-member pre-implementation dispositions
+
+| Member/variant | Disposition | Reason/artifact and next step |
+|---|---|---|
+| five element bodies, four frames, six facings | `verified-already-at-parity` | thresholds, body records, element palettes, and actor position already match focused tests |
+| robe selectors/colors/fixed layers, hats/anchors/special terminal bank, terminal shadow | `exact-ported` | raw native banks, point-zero anchor table, recipe-owned tints, selector-three terminal switch, ordered color pass, and complete black pass are renderer-owned and hash-pinned |
+| 18-member additive burst | `in-scope-approximation` | count, record, radial domains, scale, alpha, damping, timing, and one-shot edge are exact; only the unavailable process-global RNG position is replaced by the documented stable epoch seed |
+| held staff/wand one-shot bouncer | `in-scope-approximation` | art selection, copied origin, independent painter/shadow, retained-seed bounce recurrence, settlement, and epoch ownership are ported; retail global RNG/update phase becomes a stable per-epoch presentation policy |
+| collision disable and `-1000` sort bias at tick 159 | `verified-already-at-parity` | combat and renderer contracts already pin both edges |
+| dead input/cast suppression and living-peer continuation | `verified-already-at-parity` | server authority rejects dead input while active peers continue |
+| fullscreen red Arena blend | `out-of-system` after spectator handoff | the web spectator surface takes camera ownership at tick 159; an unbounded local red overlay would obscure the living target, the exact failure the native multiplayer clamp prevents |
+| all-dead event authority | `verified-already-at-parity` | event is host-authored, run/event scoped, and replay rejected; only its visual/exit lifecycle is reopened |
+
+### Validation contract
+
+- Extractor tests pin every Clothes range, output geometry, death-anchor table,
+  robe/hat selector count, and removal of the false attachment sheet.
+- Presentation tests cover all four frame boundaries, six corpse facings,
+  24 normal-hat headings, every robe/hat recipe selector and color default,
+  selector-three frame-2/frame-3 split, full ordered shadow membership, and
+  lighting-tint multiplication.
+- Burst tests pin count 18, record 10, native bounds, anisotropic scale,
+  alpha/damping samples at ages 0/1/9/10, one crossing per epoch, and no
+  late-subscription replay.
+- Lifecycle/protocol tests pin Game Over entry alphas at 0/1/39/40, input at
+  999/1000, host-only single acknowledgement, exit at 0/1/399/400, one fully
+  black terminal snapshot, transition on the following fixed tick, a frozen
+  Boneyard while the surface owns presentation, and a clean retained-loadout
+  reset.
+- Browser acceptance must show the corpse frames and terminal shadow, a
+  non-opaque Boneyard during the clear hold, rejected early/guest input, the
+  complete clear-to-black exit, and the retained-choice loadout with no page
+  or console errors. Canonical acceptance remains `./scripts/validate.sh` and
+  the final production browser receipt on the Mac mini exact tree.
+
+### Validation receipts
+
+The complete implementation tree passed `./scripts/validate.sh` on WSL before
+the receipt-only smoke-harness and ledger edits. The final exact source tree
+then passed the same gate on the Mac mini, including all 24 backend contracts,
+the complete Boneyard/frontend suite, auxiliary and desktop suites, lint and
+architecture boundaries, the production builds, and the media-policy gate.
+Lint reported only the repository's eight pre-existing Fast Refresh warnings.
+The Mac tree was checksum-identical to the isolated source before acceptance.
+The Mac was `arm64` macOS `26.4.1` with Node `22.17.0`, npm `10.9.2`, .NET
+`10.0.302`, and Google Chrome `151.0.7922.138`.
+
+The focused command
+`npm --prefix frontend run smoke:game:player-death-game-over` exited zero on
+that Mac tree. It used two real, isolated browser clients in one owned Chrome
+process and one loopback authoritative host. The players began 110.54 pixels
+apart; the first browser observed dying tick 5 with one weapon and no burst,
+then spectator handoff at death tick 169 with the persistent weapon after the
+short-lived burst had retired. The terminal snapshots retained two weapons,
+froze the Boneyard with a null exit clock at Game Over tick 5, rejected input
+before tick 1000, and accepted one host acknowledgement. The measured exit
+sample was alpha `0.2575` at tick `103`; the host then alone confirmed the
+retained loadout and both clients returned to the same Hub. Both page- and
+console-error arrays were empty.
+
+The inspected Mac artifacts are under
+`/Users/jarrett/codex-acceptance/player-death-game-over-publish-artifacts-20260816-v27-contexts2/browser`:
+
+- dying corpse and weapon:
+  `solomon-dark-multiplayer-death-animation.png`, SHA-256
+  `bc37d6c50720dca0843be7d0e5daf38b06fc4a83df8b5dfaf48d4d226e5202a9`;
+- terminal corpse after spectator handoff:
+  `solomon-dark-multiplayer-first-death.png`, SHA-256
+  `68da3e784ecff09f961d299d2adaf668054a27aecd154e0eed741ca4e805ef12`;
+- fade-only Boneyard Game Over entry and exit:
+  `solomon-dark-multiplayer-game-over.png`, SHA-256
+  `1d0476f536398919f3812297369661602a8e795b7a24ac4a20bb2803e104a883`,
+  and `solomon-dark-multiplayer-game-over-exit.png`, SHA-256
+  `5a177ce8c9a6919a6454c548ae8bea833c1c4131c8dcbcd7c666e85fda7d7390`;
+- retained loadout and returned Hub:
+  `solomon-dark-multiplayer-loadout.png`, SHA-256
+  `ad564d0d1d722d8de3581bd14374a76d8071a58745dc9af2d73929f1de799256`,
+  and `solomon-dark-multiplayer-returned-hub.png`, SHA-256
+  `1a4a767b563ced905097bfa229012b1947f75dd2765eeea2c2343646b11602b0`.
+
+Visual inspection confirms that the corpse is independently readable from the
+survivor, the held weapon becomes its own grounded object, the terminal corpse
+retains the complete equipment silhouette and black offset pass, the Boneyard
+branch displays no normal-story title/prompt, the exit reveals the frozen
+terminal image, and the retained loadout/Hub transition is intact. An earlier
+broad WSL attempt exhausted the VM's swap under two Chrome processes, and an
+earlier broad Mac run stalled in the unrelated enemy-kill/level-up prelude;
+neither is counted as acceptance. Two attempts to repeat the final WSL gate
+were externally terminated during backend contract enumeration while all 3
+GiB of WSL swap remained consumed; neither reported a failed assertion and
+neither is counted as a gate receipt. Two post-rebase Mac receipts exposed a
+smoke-harness browser-close stall after all behavior assertions had passed;
+they are likewise not counted. The harness now gives both real clients
+isolated browser contexts in one owned browser, then closes both contexts and
+owned servers before that browser. The focused target changes only the lethal
+stimulus and keeps every authoritative death, spectator, Game Over, fade, and
+return assertion live. The required final Mac gate and browser acceptance both
+exited zero, and teardown left no task-owned browser or listener process.

@@ -30,6 +30,19 @@ import {
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
 const editorRenderer = readFileSync(new URL('../../editor/render.ts', import.meta.url), 'utf8')
+const hubActors = readFileSync(new URL('./hub-actors.ts', import.meta.url), 'utf8')
+const deathWeaponView = readFileSync(
+  new URL('./player-death-weapon-view.ts', import.meta.url),
+  'utf8',
+)
+const hubExtractor = readFileSync(
+  new URL('../../../../tools/extract-hub-assets.py', import.meta.url),
+  'utf8',
+)
+const deathHatAnchors = JSON.parse(readFileSync(
+  new URL('../../assets/game/player-character-death-hat-anchors.json', import.meta.url),
+  'utf8',
+))
 
 test('Gate record 7 uses the recovered four-corner consumer in game and editor', () => {
   assert.match(boneyardRenderer, /private readonly gateLeaf: MeshSimple/)
@@ -291,6 +304,36 @@ test('native death tick 159 moves the corpse to the recovered back render bias',
     boneyardPlayerSortBias(player('spectating', 500)),
     NATIVE_PLAYER_DEATH_SORT_BIAS,
   )
+})
+
+test('player corpse restores every item-owned layer, hat branch, and terminal shadow pass', () => {
+  assert.match(hubExtractor, /PLAYER_DEATH_ROBE_PRIMARY_BASES = \(76, 100, 124\)/)
+  assert.match(hubExtractor, /PLAYER_DEATH_ROBE_SECONDARY_BASES = \(148, 172, 196\)/)
+  assert.match(hubExtractor, /"primary-a": 220/)
+  assert.match(hubExtractor, /"secondary-b": 292/)
+  assert.match(hubExtractor, /PLAYER_DEATH_HAT_PRIMARY_BASES = \(316, 340, 364, 388\)/)
+  assert.match(hubExtractor, /PLAYER_DEATH_HAT_SECONDARY_BASES = \(412, 412, 412, 436\)/)
+  assert.doesNotMatch(hubExtractor, /build_player_death_attachment_sheet/)
+
+  assert.equal(deathHatAnchors.schema, 'solomon-dark-player-death-hat-anchors-v1')
+  assert.deepEqual(deathHatAnchors.offsets.map((frame: unknown[]) => frame.length), [6, 6, 6, 6])
+  assert.deepEqual(deathHatAnchors.offsets[0][0], [0.5, -3.5])
+  assert.deepEqual(deathHatAnchors.offsets[3][3], [-0.5, 70.5])
+
+  assert.match(hubActors, /const PLAYER_DEATH_LAYER_COUNT = 9/)
+  assert.match(hubActors, /appearance\.hat\.selector === 3 && frame === 3/)
+  assert.match(hubActors, /playerDeathHatAnchor\(frame, facing\)/)
+  assert.match(hubActors, /shadow\.position\.set\(x, y \+ 4\)/)
+  assert.match(hubActors, /this\.deathShadowLayers\[index\]!\.tint = 0x000000/)
+})
+
+test('held staff or wand is an independent death-epoch bouncer and painter layer', () => {
+  assert.match(boneyardRenderer, /private readonly playerDeathWeapons: PlayerDeathWeaponViews/)
+  assert.match(boneyardRenderer, /this\.playerDeathWeapons\.update\(snapshot\)/)
+  assert.match(deathWeaponView, /id: `player-death-weapon:\$\{playerId\}`/)
+  assert.match(deathWeaponView, /this\.origin = \{ \.\.\.player\.position \}/)
+  assert.match(deathWeaponView, /this\.shadow\.position\.set\(0, 2\)/)
+  assert.match(boneyardRenderer, /this\.playerDeathWeapons\.setDepth/)
 })
 
 test('static Boneyard tiles cover art overhang without exceeding the GPU tile size', () => {

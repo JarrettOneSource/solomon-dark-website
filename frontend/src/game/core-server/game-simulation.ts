@@ -341,7 +341,16 @@ export function acknowledgeGameSimulationOver(
   eventId: number,
 ): GameSimulationState | null {
   const run = acknowledgeGameOver(state.run, runId, eventId)
-  if (!run) return null
+  return run ? { ...state, run } : null
+}
+
+function enterPostRunLoadout(
+  state: GameSimulationState,
+  run: GameRunLifecycleState,
+): GameSimulationState {
+  if (run.phase !== 'loadout') {
+    throw new Error('post-run loadout requires a completed Game Over fade')
+  }
   const world = createHubWorld(state.playerEntities.identities.map(({ playerId }) => playerId))
   const lightProviderOrder = createNativeLightProviderOrder()
   const playerLightRegistrations = Object.fromEntries(
@@ -551,6 +560,14 @@ export function stepGameSimulationTick(
   state: GameSimulationState,
   inputs: PlayerCharacterInputs,
 ): GameSimulationState {
+  if (state.run.phase === 'game-over') {
+    if (state.world.kind !== 'boneyard') {
+      throw new Error('Game Over requires the terminal Boneyard world')
+    }
+    const run = stepGameRunLifecycle(state.run, new Set())
+    const frozen = { ...state, run, tick: state.tick + 1 }
+    return run.phase === 'loadout' ? enterPostRunLoadout(frozen, run) : frozen
+  }
   if (state.levelUpBarrier !== null) return state
   const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const players = playerCharacterRecords(state.playerEntities)

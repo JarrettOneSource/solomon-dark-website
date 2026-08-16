@@ -48,6 +48,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
     run: {
       eligiblePlayerIds: ['wizard'],
       gameOverEventId: 0,
+      gameOverExitTicks: null,
       gameOverTicks: 0,
       lastCompletedRunId: null,
       nextGameOverEventId: 1,

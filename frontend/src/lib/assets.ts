@@ -171,11 +171,37 @@ import playerCharacterHeadEther from '../assets/game/player-character-head-ether
 import playerCharacterHeadFire from '../assets/game/player-character-head-fire.png'
 import playerCharacterHeadWater from '../assets/game/player-character-head-water.png'
 import playerCharacterDeathAir from '../assets/game/player-character-death-air.png'
-import playerCharacterDeathAttachment from '../assets/game/player-character-death-attachment.png'
 import playerCharacterDeathEarth from '../assets/game/player-character-death-earth.png'
 import playerCharacterDeathEther from '../assets/game/player-character-death-ether.png'
 import playerCharacterDeathFire from '../assets/game/player-character-death-fire.png'
+import playerCharacterDeathHatPrimary0 from '../assets/game/player-character-death-hat-primary-0.png'
+import playerCharacterDeathHatPrimary1 from '../assets/game/player-character-death-hat-primary-1.png'
+import playerCharacterDeathHatPrimary2 from '../assets/game/player-character-death-hat-primary-2.png'
+import playerCharacterDeathHatPrimary3 from '../assets/game/player-character-death-hat-primary-3.png'
+import playerCharacterDeathHatSecondary0 from '../assets/game/player-character-death-hat-secondary-0.png'
+import playerCharacterDeathHatSecondary1 from '../assets/game/player-character-death-hat-secondary-1.png'
+import playerCharacterDeathHatSecondary2 from '../assets/game/player-character-death-hat-secondary-2.png'
+import playerCharacterDeathHatSecondary3 from '../assets/game/player-character-death-hat-secondary-3.png'
+import playerCharacterDeathHatSpecialPrimary from '../assets/game/player-character-death-hat-special-primary.png'
+import playerCharacterDeathHatSpecialSecondary from '../assets/game/player-character-death-hat-special-secondary.png'
+import playerCharacterDeathRobeFixedPrimaryA from '../assets/game/player-character-death-robe-fixed-primary-a.png'
+import playerCharacterDeathRobeFixedPrimaryB from '../assets/game/player-character-death-robe-fixed-primary-b.png'
+import playerCharacterDeathRobeFixedSecondaryA from '../assets/game/player-character-death-robe-fixed-secondary-a.png'
+import playerCharacterDeathRobeFixedSecondaryB from '../assets/game/player-character-death-robe-fixed-secondary-b.png'
+import playerCharacterDeathRobePrimary0 from '../assets/game/player-character-death-robe-primary-0.png'
+import playerCharacterDeathRobePrimary1 from '../assets/game/player-character-death-robe-primary-1.png'
+import playerCharacterDeathRobePrimary2 from '../assets/game/player-character-death-robe-primary-2.png'
+import playerCharacterDeathRobeSecondary0 from '../assets/game/player-character-death-robe-secondary-0.png'
+import playerCharacterDeathRobeSecondary1 from '../assets/game/player-character-death-robe-secondary-1.png'
+import playerCharacterDeathRobeSecondary2 from '../assets/game/player-character-death-robe-secondary-2.png'
+import playerCharacterDeathStaff0 from '../assets/game/player-character-death-staff-0.png'
+import playerCharacterDeathStaff1 from '../assets/game/player-character-death-staff-1.png'
+import playerCharacterDeathStaff2 from '../assets/game/player-character-death-staff-2.png'
+import playerCharacterDeathStaff3 from '../assets/game/player-character-death-staff-3.png'
+import playerCharacterDeathStaff4 from '../assets/game/player-character-death-staff-4.png'
+import playerCharacterDeathStaff5 from '../assets/game/player-character-death-staff-5.png'
 import playerCharacterDeathWater from '../assets/game/player-character-death-water.png'
+import playerCharacterDeathWand from '../assets/game/player-character-death-wand.png'
 import hubPrimaryAir from '../assets/game/hub-primary-air.png'
 import hubPrimaryEarth from '../assets/game/hub-primary-earth.png'
 import hubPrimaryEther from '../assets/game/hub-primary-ether.png'
@@ -552,7 +578,53 @@ export const playerCharacter = {
     fire: playerCharacterDeathFire,
     water: playerCharacterDeathWater,
   },
-  deathAttachment: playerCharacterDeathAttachment,
+  deathHat: {
+    primary: [
+      playerCharacterDeathHatPrimary0,
+      playerCharacterDeathHatPrimary1,
+      playerCharacterDeathHatPrimary2,
+      playerCharacterDeathHatPrimary3,
+    ],
+    secondary: [
+      playerCharacterDeathHatSecondary0,
+      playerCharacterDeathHatSecondary1,
+      playerCharacterDeathHatSecondary2,
+      playerCharacterDeathHatSecondary3,
+    ],
+    specialPrimary: playerCharacterDeathHatSpecialPrimary,
+    specialSecondary: playerCharacterDeathHatSpecialSecondary,
+  },
+  deathRobe: {
+    fixedPrimary: [
+      playerCharacterDeathRobeFixedPrimaryA,
+      playerCharacterDeathRobeFixedPrimaryB,
+    ],
+    fixedSecondary: [
+      playerCharacterDeathRobeFixedSecondaryA,
+      playerCharacterDeathRobeFixedSecondaryB,
+    ],
+    primary: [
+      playerCharacterDeathRobePrimary0,
+      playerCharacterDeathRobePrimary1,
+      playerCharacterDeathRobePrimary2,
+    ],
+    secondary: [
+      playerCharacterDeathRobeSecondary0,
+      playerCharacterDeathRobeSecondary1,
+      playerCharacterDeathRobeSecondary2,
+    ],
+  },
+  deathWeapon: {
+    staff: [
+      playerCharacterDeathStaff0,
+      playerCharacterDeathStaff1,
+      playerCharacterDeathStaff2,
+      playerCharacterDeathStaff3,
+      playerCharacterDeathStaff4,
+      playerCharacterDeathStaff5,
+    ],
+    wand: playerCharacterDeathWand,
+  },
   staffBack: playerCharacterStaffBack,
   robeDynamic: {
     air: playerCharacterRobeDynamicAir,

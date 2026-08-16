@@ -3,14 +3,19 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import type { GameSnapshot } from '../protocol/game-state.ts'
 
 export const BOUNDED_PLAYER_DEATH_BURST_PROGRAM = Object.freeze({
-  durationTicks: 20,
+  baseRadius: 15,
+  baseSpeed: 3,
+  damping: 0.9,
+  durationTicks: 10,
   entry: 10,
-  maximumScale: 1.1,
-  maximumSpeed: 4.5,
-  minimumScale: 0.55,
-  minimumSpeed: 1.5,
-  particleCount: 12,
-  verticalSpeedScale: 0.78,
+  jitterDegrees: 8,
+  particleCount: 18,
+  radiusRange: 5,
+  scaleX: 0.5,
+  scaleY: 0.2,
+  speedRange: 1,
+  stepDegrees: 20,
+  tint: 0x808080,
 })
 
 export interface PlayerDeathBurstTrigger {
@@ -25,8 +30,9 @@ export interface PlayerDeathBurstLayer {
   readonly alpha: number
   readonly entry: 10
   readonly offset: Readonly<Vector2>
-  readonly rotationRadians: number
-  readonly scale: number
+  readonly scaleX: number
+  readonly scaleY: number
+  readonly tint: number
 }
 
 interface DeathObservation {
@@ -141,39 +147,38 @@ export function playerDeathBurstLayers(
   ageTicks: number,
 ): readonly PlayerDeathBurstLayer[] {
   if (!Number.isFinite(ageTicks)) throw new RangeError('Player death-burst age must be finite')
-  const age = Math.max(0, ageTicks)
+  const age = Math.max(0, Math.trunc(ageTicks))
   if (age >= BOUNDED_PLAYER_DEATH_BURST_PROGRAM.durationTicks) return []
-  const progress = age / BOUNDED_PLAYER_DEATH_BURST_PROGRAM.durationTicks
-  const alpha = 1 - progress
-  const seed = stableHash(`${trigger.playerId}:${trigger.deathEpoch}`)
-  const phase = unit(seed) * Math.PI * 2
+  const alpha = 1 - age / BOUNDED_PLAYER_DEATH_BURST_PROGRAM.durationTicks
+  const seed = stableHash(`${trigger.runId}:${trigger.playerId}:${trigger.deathEpoch}`)
+  const travelFactor = age === 0
+    ? 0
+    : (1 - BOUNDED_PLAYER_DEATH_BURST_PROGRAM.damping ** age)
+      / (1 - BOUNDED_PLAYER_DEATH_BURST_PROGRAM.damping)
   return Array.from(
     { length: BOUNDED_PLAYER_DEATH_BURST_PROGRAM.particleCount },
     (_, index) => {
-      const value = unit(mix(seed, index + 1))
-      const angle = phase
-        + index / BOUNDED_PLAYER_DEATH_BURST_PROGRAM.particleCount * Math.PI * 2
-        + (value - 0.5) * 0.18
-      const speed = lerp(
-        BOUNDED_PLAYER_DEATH_BURST_PROGRAM.minimumSpeed,
-        BOUNDED_PLAYER_DEATH_BURST_PROGRAM.maximumSpeed,
-        unit(mix(seed, index + 101)),
-      )
-      const scale = lerp(
-        BOUNDED_PLAYER_DEATH_BURST_PROGRAM.minimumScale,
-        BOUNDED_PLAYER_DEATH_BURST_PROGRAM.maximumScale,
-        unit(mix(seed, index + 211)),
-      ) * (1 - progress * 0.35)
+      const jitter = (unit(mix(seed, index * 3 + 1)) * 2 - 1)
+        * BOUNDED_PLAYER_DEATH_BURST_PROGRAM.jitterDegrees
+      const angle = (index * BOUNDED_PLAYER_DEATH_BURST_PROGRAM.stepDegrees + jitter)
+        * Math.PI / 180
+      const radius = BOUNDED_PLAYER_DEATH_BURST_PROGRAM.baseRadius
+        + unit(mix(seed, index * 3 + 2))
+          * BOUNDED_PLAYER_DEATH_BURST_PROGRAM.radiusRange
+      const speed = BOUNDED_PLAYER_DEATH_BURST_PROGRAM.baseSpeed
+        + unit(mix(seed, index * 3 + 3))
+          * BOUNDED_PLAYER_DEATH_BURST_PROGRAM.speedRange
+      const distance = radius + speed * travelFactor
       return {
         alpha,
         entry: 10,
         offset: {
-          x: Math.cos(angle) * speed * age,
-          y: Math.sin(angle) * speed * age
-            * BOUNDED_PLAYER_DEATH_BURST_PROGRAM.verticalSpeedScale,
+          x: Math.cos(angle) * distance,
+          y: Math.sin(angle) * distance,
         },
-        rotationRadians: angle,
-        scale,
+        scaleX: BOUNDED_PLAYER_DEATH_BURST_PROGRAM.scaleX,
+        scaleY: BOUNDED_PLAYER_DEATH_BURST_PROGRAM.scaleY,
+        tint: BOUNDED_PLAYER_DEATH_BURST_PROGRAM.tint,
       }
     },
   )
@@ -210,8 +215,4 @@ function mix(seed: number, salt: number): number {
 
 function unit(value: number): number {
   return value / 0x1_0000_0000
-}
-
-function lerp(first: number, second: number, blend: number): number {
-  return first + (second - first) * blend
 }

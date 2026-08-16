@@ -52,6 +52,16 @@ PLAYER_ATTACHMENT_POSES = 10
 PLAYER_ATTACHMENT_DEPTH_BASELINE = 0.5
 PLAYER_DEATH_FACINGS = 6
 PLAYER_DEATH_FRAMES = 4
+PLAYER_DEATH_ROBE_PRIMARY_BASES = (76, 100, 124)
+PLAYER_DEATH_ROBE_SECONDARY_BASES = (148, 172, 196)
+PLAYER_DEATH_ROBE_FIXED_BASES = {
+    "primary-a": 220,
+    "secondary-a": 244,
+    "primary-b": 268,
+    "secondary-b": 292,
+}
+PLAYER_DEATH_HAT_PRIMARY_BASES = (316, 340, 364, 388)
+PLAYER_DEATH_HAT_SECONDARY_BASES = (412, 412, 412, 436)
 PLAYER_PALETTES = {
     # Skills_Wizard_GetPrimaryColor (0x00660760) is the descriptor-facing
     # source of truth. Do not run those results through the robe mix again.
@@ -901,11 +911,12 @@ def build_player_death_body_sheet(
     return sheet
 
 
-def build_player_death_attachment_sheet(
+def build_player_death_layer_sheet(
     atlas: Image.Image,
     records: list[SpriteRecord],
+    base_record: int,
 ) -> Image.Image:
-    """Preserve Clothes 76..99 as the independent terminal attachment pass."""
+    """Preserve one native four-frame/six-facing corpse layer."""
     sheet = Image.new(
         "RGBA",
         (
@@ -917,12 +928,48 @@ def build_player_death_attachment_sheet(
         for frame in range(PLAYER_DEATH_FRAMES):
             index = frame * PLAYER_DEATH_FACINGS + facing
             cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
-            paste_player_layer(cell, atlas, records[76 + index])
+            paste_player_layer(cell, atlas, records[base_record + index])
             sheet.alpha_composite(
                 cell,
                 (frame * PLAYER_CELL_SIZE, facing * PLAYER_CELL_SIZE),
             )
     return sheet
+
+
+def build_player_death_hat_strip(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    base_record: int,
+    count: int,
+) -> Image.Image:
+    """Preserve a registered normal or special death-hat selector bank."""
+    sheet = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE * count))
+    for index in range(count):
+        cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+        paste_player_layer(cell, atlas, records[base_record + index])
+        sheet.alpha_composite(cell, (0, index * PLAYER_CELL_SIZE))
+    return sheet
+
+
+def write_player_death_anchor_data(
+    records: list[SpriteRecord],
+    output_dir: Path,
+) -> None:
+    offsets: list[list[list[float]]] = []
+    for frame in range(PLAYER_DEATH_FRAMES):
+        frame_offsets: list[list[float]] = []
+        for facing in range(PLAYER_DEATH_FACINGS):
+            record_index = 76 + frame * PLAYER_DEATH_FACINGS + facing
+            points = records[record_index].points
+            if not points:
+                raise ValueError(f"death anchor record {record_index} has no point zero")
+            frame_offsets.append([points[0][0], points[0][1] + 25])
+        offsets.append(frame_offsets)
+    path = output_dir / "player-character-death-hat-anchors.json"
+    path.write_text(json.dumps({
+        "offsets": offsets,
+        "schema": "solomon-dark-player-death-hat-anchors-v1",
+    }, indent=2) + "\n", encoding="utf-8")
 
 
 def build_student_body_sheet(
@@ -1414,11 +1461,69 @@ def main() -> int:
         output_dir,
         "player-character-staff-front",
     )
+    for selector, base_record in enumerate(PLAYER_DEATH_ROBE_PRIMARY_BASES):
+        save(
+            build_player_death_layer_sheet(clothes, clothes_records, base_record),
+            output_dir,
+            f"player-character-death-robe-primary-{selector}",
+        )
+    for selector, base_record in enumerate(PLAYER_DEATH_ROBE_SECONDARY_BASES):
+        save(
+            build_player_death_layer_sheet(clothes, clothes_records, base_record),
+            output_dir,
+            f"player-character-death-robe-secondary-{selector}",
+        )
+    for name, base_record in PLAYER_DEATH_ROBE_FIXED_BASES.items():
+        save(
+            build_player_death_layer_sheet(clothes, clothes_records, base_record),
+            output_dir,
+            f"player-character-death-robe-fixed-{name}",
+        )
+    for selector, base_record in enumerate(PLAYER_DEATH_HAT_PRIMARY_BASES):
+        save(
+            build_player_death_hat_strip(
+                clothes,
+                clothes_records,
+                base_record,
+                PLAYER_HEADINGS,
+            ),
+            output_dir,
+            f"player-character-death-hat-primary-{selector}",
+        )
+    for selector, base_record in enumerate(PLAYER_DEATH_HAT_SECONDARY_BASES):
+        save(
+            build_player_death_hat_strip(
+                clothes,
+                clothes_records,
+                base_record,
+                PLAYER_HEADINGS,
+            ),
+            output_dir,
+            f"player-character-death-hat-secondary-{selector}",
+        )
+    for name, base_record in {"primary": 16, "secondary": 22}.items():
+        save(
+            build_player_death_hat_strip(
+                clothes,
+                clothes_records,
+                base_record,
+                PLAYER_DEATH_FACINGS,
+            ),
+            output_dir,
+            f"player-character-death-hat-special-{name}",
+        )
+    for selector in range(6):
+        save(
+            registered_sprite(clothes, clothes_records[5 + selector]),
+            output_dir,
+            f"player-character-death-staff-{selector}",
+        )
     save(
-        build_player_death_attachment_sheet(clothes, clothes_records),
+        registered_sprite(clothes, clothes_records[15]),
         output_dir,
-        "player-character-death-attachment",
+        "player-character-death-wand",
     )
+    write_player_death_anchor_data(clothes_records, output_dir)
     for element, (primary, secondary) in PLAYER_PALETTES.items():
         player_layers = build_player_colored_layers(
             clothes,

@@ -126,8 +126,8 @@ class PlayerDeathBurstView {
       sprite.alpha = layer.alpha
       sprite.label = `player-death-burst:BadGuys:${layer.entry}`
       sprite.position.set(layer.offset.x, layer.offset.y)
-      sprite.rotation = layer.rotationRadians
-      sprite.scale.set(layer.scale)
+      sprite.scale.set(layer.scaleX, layer.scaleY)
+      sprite.tint = layer.tint
     })
     return true
   }

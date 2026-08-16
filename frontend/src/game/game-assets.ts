@@ -133,7 +133,9 @@ export function hubGameAssetSources(element: WizardElement): string[] {
     tent: hub.tent,
     player: {
       death: playerCharacter.death[element],
-      deathAttachment: playerCharacter.deathAttachment,
+      deathHat: playerCharacter.deathHat,
+      deathRobe: playerCharacter.deathRobe,
+      deathWeapon: playerCharacter.deathWeapon,
       staffBack: playerCharacter.staffBack,
       robeDynamic: playerCharacter.robeDynamic[element],
       robeFixed: playerCharacter.robeFixed[element],

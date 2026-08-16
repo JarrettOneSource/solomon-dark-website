@@ -4,7 +4,10 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
-import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
+import {
+  BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
+  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
+} from '../core-kernels/game-run.ts'
 import {
   createGameSimulation,
   getPlayerEconomy,
@@ -771,17 +774,37 @@ test('host returns the same multiplayer session from Game Over through loadout t
   await new Promise((resolve) => setImmediate(resolve))
   assert.equal(host.state().run.phase, 'game-over')
 
-  const loadoutMessage = nextMessage(first.socket, (message) => (
+  const exitingMessage = nextMessage(first.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.run.phase === 'loadout'
-    && message.snapshot.world.kind === 'hub'
+    && message.snapshot.run.phase === 'game-over'
+    && message.snapshot.run.gameOverExitTicks === 0
   ))
   first.socket.send(encodeGameMessage({
     type: 'client-acknowledge-game-over',
     eventId: 1,
     runId,
   }))
-  const loadout = await loadoutMessage
+  const exiting = await exitingMessage
+  assert.equal(exiting.type, 'server-snapshot')
+  assert.equal(exiting.snapshot.world.kind, 'boneyard')
+  assert.equal(host.loadedBoneyard()?.runId, runId)
+  const blackMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'game-over'
+    && message.snapshot.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+    && message.snapshot.world.kind === 'boneyard'
+  ))
+  const loadoutMessage = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'loadout'
+    && message.snapshot.world.kind === 'hub'
+  ))
+  Object.assign(host.state().run, {
+    gameOverExitTicks: BONEYARD_GAME_OVER_EXIT_FADE_TICKS - 1,
+  })
+  const [black, loadout] = await Promise.all([blackMessage, loadoutMessage])
+  assert.equal(black.type, 'server-snapshot')
+  assert.equal(black.snapshot.world.kind, 'boneyard')
   assert.equal(loadout.type, 'server-snapshot')
   assert.equal(loadout.snapshot.run.lastCompletedRunId, runId)
   assert.ok(loadout.snapshot.players[first.welcome.playerId])

@@ -18,6 +18,7 @@ import {
   firstBoneyardPathBlockProgress,
   resolveBoneyardMovement,
 } from '../src/game/core-server/boneyard-collision.ts'
+import { damagePlayerEntity } from '../src/game/core-server/player-entity-store.ts'
 import { getPlayerProgression } from '../src/game/core-server/game-simulation.ts'
 import {
   createBoneyardCatalog,
@@ -47,20 +48,21 @@ const combatNavigation = {
   scene: loadedBoneyard.scene,
 }
 const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT || '/tmp'
+const deathGameOverOnly = process.argv.includes('--death-game-over-only')
 const featureOnly = process.argv.includes('--feature-only')
+const deathAnimationScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-death-animation.png`
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
 const enemyHitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-hit.png`
 const enemyShieldScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield.png`
 const enemyShieldBreakScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-shield-break.png`
 const gameOverScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over.png`
+const gameOverExitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-game-over-exit.png`
 const levelUpScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up.png`
 const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-level-up-waiting.png`
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
 const returnedHubScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-returned-hub.png`
 const browserOptions = {
-  args: [
-    '--autoplay-policy=no-user-gesture-required',
-  ],
+  args: ['--autoplay-policy=no-user-gesture-required'],
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 }
@@ -87,12 +89,15 @@ const host = await startGameHost({
   resetWhenEmpty: true,
   snapshotRate: 20,
 })
-const [hostBrowser, guestBrowser] = await Promise.all([
-  chromium.launch(browserOptions),
-  chromium.launch(browserOptions),
+const browser = await chromium.launch(browserOptions)
+const [hostContext, guestContext] = await Promise.all([
+  browser.newContext({ viewport }),
+  browser.newContext({ viewport }),
 ])
-const hostPage = await hostBrowser.newPage({ viewport })
-const guestPage = await guestBrowser.newPage({ viewport })
+const [hostPage, guestPage] = await Promise.all([
+  hostContext.newPage(),
+  guestContext.newPage(),
+])
 await Promise.all([hostPage, guestPage].map(async (page) => {
   await page.addInitScript(installGameAudioSmokeProbe)
   await page.addInitScript((runtime) => {
@@ -142,37 +147,60 @@ try {
   assert.equal(hostInitial.playerCount, 2)
   assert.equal(guestInitial.playerCount, 2)
 
-  await pulseMovement(hostPage, ['a'], 750)
-  const guestScene = guestPage.locator('.boneyard-scene')
-  const gateCrossing = await crossEntryGate(
-    guestPage,
-    hostPage,
-    loadedBoneyard.scene,
-  )
-  const approach = await walkToSolomon(guestPage, guestScene, loadedBoneyard.scene)
-  assert.notEqual(approach.phase, 'digging')
-  const casterOpeningEvasion = startSurvivorEvasion(guestPage, combatNavigation)
-  const peerEvasion = startSurvivorEvasion(hostPage, combatNavigation)
-  let progressionAndEffects
-  try {
-    await Promise.all([
-      waitForFirstEnemy(hostPage),
-      waitForFirstEnemy(guestPage),
+  let deathSetup = null
+  if (deathGameOverOnly) {
+    await pulseMovement(hostPage, ['a'], 750)
+    const [hostReady, guestReady] = await Promise.all([
+      boneyardFrame(hostPage),
+      boneyardFrame(guestPage),
     ])
-    progressionAndEffects = await proveSharedLevelUpAndEnemyEffects({
-      casterOpeningEvasion,
+    const separation = Math.hypot(
+      hostReady.playerX - guestReady.playerX,
+      hostReady.playerY - guestReady.playerY,
+    )
+    assert.ok(separation >= PLAYER_CHARACTER_RADIUS * 2)
+    deathSetup = {
+      guest: { x: guestReady.playerX, y: guestReady.playerY },
+      host: { x: hostReady.playerX, y: hostReady.playerY },
+      separation,
+    }
+  }
+
+  let approach = null
+  let gateCrossing = null
+  let progressionAndEffects = null
+  if (!deathGameOverOnly) {
+    await pulseMovement(hostPage, ['a'], 750)
+    const guestScene = guestPage.locator('.boneyard-scene')
+    gateCrossing = await crossEntryGate(
       guestPage,
-      guestPlayerId: guestHub.localPlayerId,
-      host,
       hostPage,
-      hostPlayerId: hostHub.localPlayerId,
-      peerEvasion,
-    })
-  } finally {
-    await Promise.all([
-      casterOpeningEvasion.stop(),
-      peerEvasion.stop(),
-    ])
+      loadedBoneyard.scene,
+    )
+    approach = await walkToSolomon(guestPage, guestScene, loadedBoneyard.scene)
+    assert.notEqual(approach.phase, 'digging')
+    const casterOpeningEvasion = startSurvivorEvasion(guestPage, combatNavigation)
+    const peerEvasion = startSurvivorEvasion(hostPage, combatNavigation)
+    try {
+      await Promise.all([
+        waitForFirstEnemy(hostPage),
+        waitForFirstEnemy(guestPage),
+      ])
+      progressionAndEffects = await proveSharedLevelUpAndEnemyEffects({
+        casterOpeningEvasion,
+        guestPage,
+        guestPlayerId: guestHub.localPlayerId,
+        host,
+        hostPage,
+        hostPlayerId: hostHub.localPlayerId,
+        peerEvasion,
+      })
+    } finally {
+      await Promise.all([
+        casterOpeningEvasion.stop(),
+        peerEvasion.stop(),
+      ])
+    }
   }
 
   if (featureOnly) {
@@ -182,7 +210,7 @@ try {
     })
     process.stdout.write(`${JSON.stringify({
       approach,
-      browserVersion: hostBrowser.version(),
+      browserVersion: browser.version(),
       enemyHitScreenshotPath,
       enemyShieldBreakScreenshotPath,
       enemyShieldScreenshotPath,
@@ -202,6 +230,7 @@ try {
     break smokeFlow
   }
 
+  const firstDeathDamage = applyDeterministicLethalDamage(host, hostHub.localPlayerId)
   const firstDeath = await driveDesignatedHostToSpectating({
     guest: { label: 'guest', page: guestPage },
     host: { label: 'host', page: hostPage },
@@ -220,6 +249,7 @@ try {
     assert.equal(firstDeath.survivor.label, 'guest')
     assert.equal(firstDeath.fallenFrame.localPlayerLifeState, 'spectating')
     assert.ok(firstDeath.fallenFrame.localPlayerDeathTick >= 159)
+    assert.equal(firstDeath.fallenFrame.playerDeathWeaponCount, 1)
     assert.equal(firstDeath.fallenFrame.runPhase, 'active')
     assert.equal(firstDeath.survivorFrame.localPlayerLifeState, 'alive')
     assert.ok(firstDeath.survivorFrame.localPlayerHealth > 0)
@@ -244,6 +274,7 @@ try {
   } finally {
     await survivorEvasion.stop()
   }
+  const terminalDamage = applyDeterministicLethalDamage(host, guestHub.localPlayerId)
   const terminal = await driveSurvivorToGameOver(firstDeath.survivor.page)
   await Promise.all([
     waitForGameOver(firstDeath.fallen.page),
@@ -259,6 +290,10 @@ try {
   assert.equal(survivorTerminalFrame.runPhase, 'game-over')
   assert.equal(fallenTerminalFrame.runId, survivorTerminalFrame.runId)
   assert.ok(survivorTerminalFrame.runGameOverTicks >= 0)
+  assert.equal(fallenTerminalFrame.runGameOverExitTicks, null)
+  assert.equal(survivorTerminalFrame.runGameOverExitTicks, null)
+  assert.equal(fallenTerminalFrame.playerDeathWeaponCount, 2)
+  assert.equal(survivorTerminalFrame.playerDeathWeaponCount, 2)
   assert.equal(fallenTerminalFrame.spectatorTargetPlayerId, null)
   await firstDeath.fallen.page.locator('.boneyard-spectator-status').waitFor({
     state: 'detached',
@@ -274,20 +309,25 @@ try {
   })
   process.stdout.write(`${JSON.stringify({
     approach,
-    browserVersion: hostBrowser.version(),
+    browserVersion: browser.version(),
+    deathSetup,
     errors,
     firstDeath: {
+      deathPresentationFrame: firstDeath.deathPresentationFrame,
       fallen: firstDeath.fallen.label,
       fallenFrame: firstDeath.fallenFrame,
       healthSamples: firstDeath.healthSamples,
+      stimulus: firstDeathDamage,
       survivor: firstDeath.survivor.label,
       survivorFrame: firstDeath.survivorFrame,
     },
+    deathAnimationScreenshotPath,
     firstDeathScreenshotPath,
     enemyHitScreenshotPath,
     enemyShieldBreakScreenshotPath,
     enemyShieldScreenshotPath,
     firstSpectatorCamera,
+    gameOverExitScreenshotPath,
     gameOverScreenshotPath,
     gateCrossing,
     inputLock,
@@ -302,17 +342,22 @@ try {
     spectatorHud,
     returnToHub,
     returnedHubScreenshotPath,
+    scope: deathGameOverOnly ? 'player-death-game-over' : 'multiplayer-combat-lifecycle',
     status: 'ok',
     progressionAndEffects,
     terminal: {
       fallenFrame: fallenTerminalFrame,
       survivorFrame: survivorTerminalFrame,
+      stimulus: terminalDamage,
       ...terminal,
     },
   })}\n`)
   }
 } catch (error) {
   process.stderr.write(`${JSON.stringify({
+    error: error instanceof Error
+      ? { message: error.message, stack: error.stack }
+      : { message: String(error) },
     errors,
     guest: await pageDiagnostics(guestPage),
     host: await pageDiagnostics(hostPage),
@@ -320,11 +365,14 @@ try {
   throw error
 } finally {
   await Promise.all([
-    hostBrowser.close(),
-    guestBrowser.close(),
+    hostContext.close(),
+    guestContext.close(),
+  ])
+  await Promise.all([
     host.close(),
     vite.close(),
   ])
+  await browser.close()
 }
 
 function captureErrors(page) {
@@ -650,6 +698,27 @@ function fortifyShieldProofCaster(host, playerId) {
     ...progression,
     currentHealth: 500,
     maximumHealth: 500,
+  }
+}
+
+function applyDeterministicLethalDamage(host, playerId) {
+  const state = host.state()
+  const before = getPlayerProgression(state, playerId)
+  const damage = before.currentHealth + 10
+  state.playerEntities = damagePlayerEntity(
+    state.playerEntities,
+    playerId,
+    damage,
+    state.tick,
+  )
+  const after = getPlayerProgression(state, playerId)
+  assert.equal(after.currentHealth, -10)
+  assert.equal(after.lifeState, 'lethal-pending')
+  return {
+    damage,
+    healthAfter: after.currentHealth,
+    healthBefore: before.currentHealth,
+    playerId,
   }
 }
 
@@ -1198,6 +1267,7 @@ async function boneyardFrameWithSpectatorStatus(page) {
 
 async function driveDesignatedHostToSpectating({ guest, host, navigation }) {
   const healthSamples = []
+  let deathPresentationFrame = null
   let sawDeathPresentation = false
   const deadline = Date.now() + 300_000
 
@@ -1228,12 +1298,18 @@ async function driveDesignatedHostToSpectating({ guest, host, navigation }) {
           'spectator status appeared during host death presentation',
         )
         if (hostFrame.localPlayerLifeState === 'dying') {
+          if (deathPresentationFrame === null) {
+            assert.equal(hostFrame.playerDeathWeaponCount, 1)
+            deathPresentationFrame = hostFrame
+            await host.page.screenshot({ path: deathAnimationScreenshotPath })
+          }
           sawDeathPresentation = true
         }
       }
       if (hostFrame.localPlayerLifeState === 'spectating') {
         assert.equal(sawDeathPresentation, true)
         return {
+          deathPresentationFrame,
           fallen: host,
           fallenFrame: hostFrame,
           healthSamples: compactHealthSamples(healthSamples),
@@ -1411,7 +1487,40 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   assert.equal(await guestGameOver.isDisabled(), true)
   assert.equal(await guestGameOver.getAttribute('aria-label'), 'Game over. Waiting for host.')
 
+  const readyFrame = await boneyardFrame(hostPage)
+  assert.ok(readyFrame.runGameOverTicks >= 1_000)
+  assert.equal(readyFrame.runGameOverExitTicks, null)
+  assert.equal(readyFrame.playerDeathWeaponCount, 2)
+  assert.equal(await gameOverAlpha(hostGameOver), 0)
+
   await hostGameOver.click()
+  await hostPage.waitForFunction(() => {
+    const overlay = document.querySelector('.boneyard-game-over')
+    const exitTicks = Number(overlay?.getAttribute('data-game-over-exit-ticks'))
+    return exitTicks >= 100 && exitTicks < 400
+  }, undefined, { timeout: 30_000 })
+  const exitReceipt = await hostPage.evaluate(() => {
+    const overlay = document.querySelector('.boneyard-game-over')
+    const canvas = document.querySelector('.boneyard-world-canvas')
+    if (!(overlay instanceof HTMLElement)) throw new Error('Game Over overlay is missing')
+    if (!(canvas instanceof HTMLCanvasElement)) throw new Error('Boneyard canvas is missing')
+    return {
+      alpha: Number(getComputedStyle(overlay).getPropertyValue('--game-over-alpha')),
+      frame: structuredClone(canvas.__sdrBoneyardFrame),
+      ticks: Number(overlay.getAttribute('data-game-over-exit-ticks')),
+    }
+  })
+  const exitFrame = exitReceipt.frame
+  const exitTicks = exitReceipt.ticks
+  const exitAlpha = exitReceipt.alpha
+  assert.equal(exitFrame.runPhase, 'game-over')
+  assert.ok(exitFrame.runGameOverTicks >= 1_000)
+  assert.equal(exitFrame.runGameOverExitTicks, exitTicks)
+  assert.ok(exitTicks >= 100 && exitTicks < 400)
+  assert.ok(Math.abs(exitAlpha - exitTicks / 400) < 1e-9)
+  assert.equal(exitFrame.playerDeathWeaponCount, 2)
+  assert.equal(await hostPage.locator('.boneyard-scene').count(), 1)
+  await hostPage.screenshot({ path: gameOverExitScreenshotPath })
   const hostLoadout = hostPage.locator(
     '.create-menu-scene[data-retained-loadout="true"][data-motion-settled="true"]',
   )
@@ -1448,12 +1557,23 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   assert.notEqual(guestHub.localPlayerId, hostHub.localPlayerId)
   await hostPage.screenshot({ path: returnedHubScreenshotPath })
   return {
+    exitFade: {
+      alpha: exitAlpha,
+      screenshotPath: gameOverExitScreenshotPath,
+      ticks: exitTicks,
+    },
     guestLoadoutCanConfirm: false,
     guestPlayerId: guestHub.localPlayerId,
     hostLoadoutCanConfirm: true,
     hostPlayerId: hostHub.localPlayerId,
     playerCount: hostHub.playerCount,
   }
+}
+
+async function gameOverAlpha(locator) {
+  return locator.evaluate((element) => Number(
+    getComputedStyle(element).getPropertyValue('--game-over-alpha'),
+  ))
 }
 
 async function pulseTowardNearestEnemy(page, frame, durationMs) {

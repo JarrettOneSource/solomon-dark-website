@@ -1,3 +1,5 @@
+export const BONEYARD_GAME_OVER_ENTRY_FADE_TICKS = 40
+export const BONEYARD_GAME_OVER_EXIT_FADE_TICKS = 400
 export const BONEYARD_GAME_OVER_INPUT_GATE_TICKS = 1_000
 
 export const GAME_RUN_PHASES = [
@@ -12,6 +14,7 @@ export type GameRunPhase = typeof GAME_RUN_PHASES[number]
 export interface GameRunLifecycleState {
   readonly eligiblePlayerIds: readonly string[]
   readonly gameOverEventId: number
+  readonly gameOverExitTicks: number | null
   readonly gameOverTicks: number
   readonly lastCompletedRunId: string | null
   readonly nextGameOverEventId: number
@@ -23,6 +26,7 @@ export function createGameRunLifecycle(): GameRunLifecycleState {
   return {
     eligiblePlayerIds: Object.freeze([]),
     gameOverEventId: 0,
+    gameOverExitTicks: null,
     gameOverTicks: 0,
     lastCompletedRunId: null,
     nextGameOverEventId: 1,
@@ -44,6 +48,7 @@ export function startGameRun(
     ...source,
     eligiblePlayerIds: stablePlayerIds(playerIds),
     gameOverEventId: 0,
+    gameOverExitTicks: null,
     gameOverTicks: 0,
     phase: 'active',
     runId,
@@ -66,13 +71,28 @@ export function stepGameRunLifecycle(
   alivePlayerIds: ReadonlySet<string>,
 ): GameRunLifecycleState {
   if (source.phase === 'game-over') {
-    return { ...source, gameOverTicks: source.gameOverTicks + 1 }
+    if (source.gameOverExitTicks === null) {
+      return { ...source, gameOverTicks: source.gameOverTicks + 1 }
+    }
+    if (source.gameOverExitTicks < BONEYARD_GAME_OVER_EXIT_FADE_TICKS) {
+      return { ...source, gameOverExitTicks: source.gameOverExitTicks + 1 }
+    }
+    return {
+      ...source,
+      eligiblePlayerIds: Object.freeze([]),
+      gameOverExitTicks: null,
+      gameOverTicks: 0,
+      lastCompletedRunId: source.runId,
+      phase: 'loadout',
+      runId: null,
+    }
   }
   if (source.phase !== 'active' || source.eligiblePlayerIds.length === 0) return source
   if (source.eligiblePlayerIds.some((playerId) => alivePlayerIds.has(playerId))) return source
   return {
     ...source,
     gameOverEventId: source.nextGameOverEventId,
+    gameOverExitTicks: null,
     gameOverTicks: 0,
     nextGameOverEventId: source.nextGameOverEventId + 1,
     phase: 'game-over',
@@ -81,6 +101,7 @@ export function stepGameRunLifecycle(
 
 export function gameOverAcceptsInput(source: GameRunLifecycleState): boolean {
   return source.phase === 'game-over'
+    && source.gameOverExitTicks === null
     && source.gameOverTicks >= BONEYARD_GAME_OVER_INPUT_GATE_TICKS
 }
 
@@ -96,11 +117,7 @@ export function acknowledgeGameOver(
   ) return null
   return {
     ...source,
-    eligiblePlayerIds: Object.freeze([]),
-    gameOverTicks: 0,
-    lastCompletedRunId: source.runId,
-    phase: 'loadout',
-    runId: null,
+    gameOverExitTicks: 0,
   }
 }
 
