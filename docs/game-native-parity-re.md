@@ -16496,6 +16496,31 @@ empty. The visually inspected 1600x900 receipt is
 `/tmp/solomon-dark-enemy-animation-projectile-vfx-mac-20260815.png` (SHA-256
 `bef01acfbbd28c585c13372dea7704a4e2cf2e34e7553fe3d93d956844b9a18f`).
 
+The authoritative ordinary Mac mini `/game` run used
+`tools/smoke-boneyard-waves.mjs` against the real local host, WebSocket
+transport, entity reconstructor, presentation timeline, and Chrome. It crossed
+the authored entry gate, completed Solomon's speech and escape, killed 44
+enemies to reach deterministic wave 2, and observed Skeleton claw A/B, Archer
+shot, and the native Skeleton terminal handoff. Archer actor 61 created Arrow
+entity 2 with descriptor `[3,2,0,2010,61,17690,300,8192,0,3,-1,-1]`; eight
+changing compact samples were observed, the renderer owned the Arrow at
+presentation tick `17692.44`, and retirement event 399 removed it at
+authoritative tick 17727. The run completed player death, game over, retained
+loadout, and a clean second Boneyard with no enemies, projectiles, or
+projectile effects carried across. Wire and page error arrays were empty.
+Visually inspected receipts are
+`/tmp/solomon-dark-game-waves-mac-20260815-combat.png` (SHA-256
+`e4a683876e792f4b513ffe1dec293567b1f6ae5d89c941404987d525250af3b8`) and
+`/tmp/solomon-dark-game-waves-mac-20260815-archer-projectile.png` (SHA-256
+`1272ce4664d66a9a84ee7bae28683389a98330af518f73e01d3e37c6e4a6bffe`).
+
+The first task-tree Mac run failed closed after its combat driver kited back
+across the authored entry gate and then aimed through the closed leaves. A
+clean `origin/main` A/B run completed, isolating the failure to driver
+navigation rather than game collision. The smoke now carries the observed
+gate crossing direction into combat navigation and remains on the interior
+side; no production movement, collision, or projectile fallback was added.
+
 Pre-acceptance diagnostics on Windows Node 22.17.0 completed the full
 `test:boneyard` command with 728/728
 tests passing, zero failures, cancellations, or skips. The focused closure
