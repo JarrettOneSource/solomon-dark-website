@@ -17776,9 +17776,13 @@ The death anchor is point zero of `Clothes[76 + corpseIndex]` plus `(0,25)`.
 The robe helper always adds all four fixed ranges after its two style ranges.
 Item constructors default both colors to white; explicit native recipe colors
 replace only the declared fields. With no equipped robe/hat, selector zero and
-the element descriptor's primary/secondary palette are used. Equipped recipe
-indices select their catalog image and colors; no name-based inference or
-fallback selector is legal.
+the element descriptor's primary/secondary palette are used. The stock
+new-character Hat, Robe, and Staff are the native recipe-UID-0 loadout, which
+the web economy represents with `recipeIndex: null`; while equipped they own
+the same selector-zero element-palette Hat/Robe and selector-zero Staff death
+appearance as the absent override. Non-null equipped recipe indices select
+their catalog image and colors; no name-based inference or fallback selector
+is legal.
 
 ### Tick-159 burst contract
 

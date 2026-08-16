@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createHubEconomy } from './core-kernels/hub-economy.ts'
 import { createIdlePlayerPrimaryCast } from './core-kernels/player-character.ts'
 import {
   NATIVE_PLAYER_DEATH_WEAPON_BOUNCER,
@@ -108,6 +109,17 @@ test('death equipment uses element defaults and every native recipe selector/col
     robe: null,
     weapon: equipmentItem(13, 'wand'),
   }).weapon, { kind: 'wand', selector: 4 })
+})
+
+test('native starter equipment uses the element death appearance', () => {
+  assert.deepEqual(playerDeathEquipmentAppearance(
+    'air',
+    createHubEconomy(1).equipment,
+  ), {
+    hat: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0xa0c3c3, secondaryTint: 0xffffff, selector: 0 },
+    weapon: { kind: 'staff', selector: 0 },
+  })
 })
 
 test('death weapon owns one deterministic native-shaped bouncer through settlement', () => {

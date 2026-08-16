@@ -129,13 +129,13 @@ export function playerDeathEquipmentAppearance(
 ): PlayerDeathEquipmentAppearance {
   const [primaryTint, secondaryTint] = ELEMENT_DEATH_PALETTES[element]
   return {
-    hat: equipment.hat === null
+    hat: equipment.hat === null || equipment.hat.recipeIndex === null
       ? { primaryTint, secondaryTint, selector: 0 }
       : requiredDeathAppearance(equipment.hat, 'hat', HAT_DEATH_APPEARANCES),
-    robe: equipment.robe === null
+    robe: equipment.robe === null || equipment.robe.recipeIndex === null
       ? { primaryTint, secondaryTint, selector: 0 }
       : requiredDeathAppearance(equipment.robe, 'robe', ROBE_DEATH_APPEARANCES),
-    weapon: equipment.weapon === null
+    weapon: equipment.weapon === null || equipment.weapon.recipeIndex === null
       ? { kind: 'staff', selector: 0 }
       : requiredWeaponDeathAppearance(equipment.weapon),
   }
