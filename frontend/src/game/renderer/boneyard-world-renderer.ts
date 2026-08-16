@@ -149,6 +149,7 @@ import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
+  arenaTransitionPhase: string
   cameraFocusX: number
   cameraFocusY: number
   complexShadowActiveMeshCount: number
@@ -159,6 +160,7 @@ interface BoneyardRendererFrameDiagnostics {
   complexShadowRecordCount: number
   complexShadowZOrderMismatchCount: number
   enemyCount: number
+  enemyOutsideCombatBoundsCount: number
   enemyDeathEffectCount: number
   enemyDeathEffectSamples: readonly Readonly<{
     ageTicks: number
@@ -441,6 +443,7 @@ export async function createBoneyardWorldRenderer(
     INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
   const frameDiagnostics: BoneyardRendererFrameDiagnostics = {
     activeStaticPainterLayerCount: 0,
+    arenaTransitionPhase: 'none',
     cameraFocusX: Number.NaN,
     cameraFocusY: Number.NaN,
     complexShadowActiveMeshCount: 0,
@@ -451,6 +454,7 @@ export async function createBoneyardWorldRenderer(
     complexShadowRecordCount: 0,
     complexShadowZOrderMismatchCount: 0,
     enemyCount: 0,
+    enemyOutsideCombatBoundsCount: 0,
     enemyDeathEffectCount: 0,
     enemyDeathEffectSamples: [],
     enemyFamilies: '',
@@ -551,10 +555,11 @@ export async function createBoneyardWorldRenderer(
   }
 
   const cameraFor = (snapshot: GameSnapshot): Camera => {
+    requireBoneyardSnapshot(snapshot, options.boneyard.runId)
     const focus = cameraFocusFor(snapshot)
     return boneyardCamera(
       focus.position,
-      options.boneyard.scene.bounds,
+      snapshot.world.arenaTransition?.cameraBounds ?? options.boneyard.scene.bounds,
       viewport,
     )
   }
@@ -585,7 +590,7 @@ export async function createBoneyardWorldRenderer(
       const cameraFocus = cameraFocusFor(snapshot)
       const camera = boneyardCamera(
         cameraFocus.position,
-        options.boneyard.scene.bounds,
+        snapshot.world.arenaTransition?.cameraBounds ?? options.boneyard.scene.bounds,
         viewport,
       )
       visibility.update(camera, viewport)
@@ -646,6 +651,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.cameraY = camera.y
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.activeStaticPainterLayerCount = painter.activeStaticPainterLayerCount
+      frameDiagnostics.arenaTransitionPhase = snapshot.world.arenaTransition?.phase ?? 'none'
       frameDiagnostics.complexShadowActiveMeshCount = painter.complexShadowActiveMeshCount
       frameDiagnostics.complexShadowAllocatedQuadCapacity = painter.complexShadowAllocatedQuadCapacity
       frameDiagnostics.complexShadowCasterCount = painter.complexShadowCasterCount
@@ -654,6 +660,15 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
       frameDiagnostics.complexShadowZOrderMismatchCount = painter.complexShadowZOrderMismatchCount
       frameDiagnostics.enemyCount = scene.enemyCount
+      const combatBounds = snapshot.world.arenaTransition?.combatBounds
+      frameDiagnostics.enemyOutsideCombatBoundsCount = combatBounds === undefined
+        ? 0
+        : snapshot.world.enemies.filter(({ position }) => (
+            position.x < combatBounds.x
+            || position.y < combatBounds.y
+            || position.x > combatBounds.x + combatBounds.w
+            || position.y > combatBounds.y + combatBounds.h
+          )).length
       frameDiagnostics.enemyDeathEffectCount = scene.enemyDeathEffectCount
       frameDiagnostics.enemyDeathEffectSamples = snapshot.world.deathEffects.map((effect) => ({
         ageTicks: effect.ageTicks,

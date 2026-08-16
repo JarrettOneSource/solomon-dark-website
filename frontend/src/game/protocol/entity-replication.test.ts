@@ -55,6 +55,7 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       runId,
     },
     world: {
+      arenaTransition: null,
       deathEffects: [],
       encounter: null,
       enemies: [enemySnapshot()],

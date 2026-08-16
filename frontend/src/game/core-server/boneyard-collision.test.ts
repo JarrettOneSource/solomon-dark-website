@@ -9,7 +9,9 @@ import {
   createBoneyardCollisionWorld,
   firstBoneyardLineObstruction,
   firstBoneyardPathBlockProgress,
+  nativeSpawnRingSampleCount,
   resolveBoneyardMovement,
+  resolveBoneyardSpawnPosition,
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
 
@@ -116,6 +118,26 @@ test('full-candidate placement rejects authored collision and arena bounds', () 
   assert.equal(canPlaceBoneyardBody({ x: 180, y: 250 }, bounds, world, 25), true)
   assert.equal(canPlaceBoneyardBody({ x: 200, y: 250 }, bounds, world, 25), false)
   assert.equal(canPlaceBoneyardBody({ x: 24, y: 250 }, bounds, world, 25), false)
+})
+
+test('native spawn retries use actor-radius rings, compressed Y, and combat bounds', () => {
+  const bounds = { x: 0, y: 0, w: 500, h: 400 }
+  const empty = { circles: [], polygons: [], segments: [] }
+  assert.equal(nativeSpawnRingSampleCount(25, 25), 6)
+  assert.equal(nativeSpawnRingSampleCount(50, 25), 4)
+  assert.deepEqual(resolveBoneyardSpawnPosition(
+    { x: 250, y: 450 },
+    bounds,
+    empty,
+    25,
+    0,
+  ), { x: 250, y: 370 })
+  assert.equal(canPlaceBoneyardBody(
+    resolveBoneyardSpawnPosition({ x: 250, y: 450 }, bounds, empty, 25, 0),
+    bounds,
+    empty,
+    25,
+  ), true)
 })
 
 test('clips spell rays against bounds and scenery while excluding the selected target', () => {

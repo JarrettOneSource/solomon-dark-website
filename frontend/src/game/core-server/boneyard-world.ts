@@ -9,6 +9,13 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import {
+  boneyardActiveBounds,
+  createBoneyardArenaTransition,
+  startBoneyardArenaTransition,
+  stepBoneyardArenaTransition,
+  type BoneyardArenaTransitionState,
+} from '../core-kernels/boneyard-arena-transition.ts'
+import {
   createSolomonEncounter,
   isSolomonPlayerLocked,
   stepSolomonEncounter,
@@ -73,6 +80,7 @@ export interface BoneyardPlayerCombatStatus {
 }
 
 export interface BoneyardWorldState {
+  arenaTransition: BoneyardArenaTransitionState | null
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld
   encounter: BoneyardSolomonEncounterState | null
@@ -102,6 +110,9 @@ export function createBoneyardWorld(
   const ownsRetailEncounter = loaded.choice.source === 'default'
     && loaded.scene.solomonDig !== null
   return {
+    arenaTransition: ownsRetailEncounter
+      ? createBoneyardArenaTransition(loaded.scene.bounds, loaded.scene.spawn)
+      : null,
     bounds: { ...loaded.scene.bounds },
     collision: createBoneyardCollisionWorld(loaded.scene),
     encounter: ownsRetailEncounter
@@ -198,6 +209,12 @@ export function stepBoneyardWorldTick(
   registerLightProvider?: RegisterNativeLightProvider,
   registerProjectileLightProvider?: RegisterNativeLightProvider,
 ): BoneyardWorldTickResult {
+  let arenaTransition = world.arenaTransition === null
+    ? null
+    : stepBoneyardArenaTransition(world.arenaTransition)
+  let activeBounds = arenaTransition === null
+    ? world.bounds
+    : boneyardActiveBounds(arenaTransition)
   const plans = Object.entries(players).map(([playerId, player]) => {
     const locked = world.encounter !== null
       && isSolomonPlayerLocked(world.encounter, playerId)
@@ -250,12 +267,12 @@ export function stepBoneyardWorldTick(
     ],
     {
       canPlace: (_bodyId, position, radius) => (
-        canPlaceBoneyardBody(position, world.bounds, collision, radius)
+        canPlaceBoneyardBody(position, activeBounds, collision, radius)
       ),
       move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
         position,
         { x: position.x + delta.x, y: position.y + delta.y },
-        world.bounds,
+        activeBounds,
         collision,
         radius,
       ),
@@ -298,7 +315,7 @@ export function stepBoneyardWorldTick(
       position: resolveBoneyardMovement(
         world.encounter.position,
         encounter.position,
-        world.bounds,
+        activeBounds,
         collision,
         PLAYER_CHARACTER_RADIUS,
       ),
@@ -310,6 +327,10 @@ export function stepBoneyardWorldTick(
     if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
       waves = startBoneyardWaveDirector(waves)
       wavesStarted = true
+      if (arenaTransition !== null) {
+        arenaTransition = startBoneyardArenaTransition(arenaTransition)
+        activeBounds = boneyardActiveBounds(arenaTransition)
+      }
     }
   }
   const dynamicBodies = boneyardCombatBodies(
@@ -322,14 +343,14 @@ export function stepBoneyardWorldTick(
     clipSpellSegment: ({ end, start }) => clipBoneyardSegment(
       start,
       end,
-      world.bounds,
+      activeBounds,
       collision,
     ),
     firstProjectileWorldContact: ({ end, radius, start }) => (
       firstBoneyardPathBlockProgress(
         start,
         end,
-        world.bounds,
+        activeBounds,
         collision,
         radius,
       )
@@ -352,7 +373,7 @@ export function stepBoneyardWorldTick(
       if (purpose === 'spawn-placement') {
         return resolveBoneyardSpawnPosition(
           position,
-          world.bounds,
+          activeBounds,
           collision,
           radius,
         )
@@ -370,14 +391,14 @@ export function stepBoneyardWorldTick(
         {
           canPlace: (_bodyId, candidate, candidateRadius) => canPlaceBoneyardBody(
             candidate,
-            world.bounds,
+            activeBounds,
             collision,
             candidateRadius,
           ),
           move: (_bodyId, current, movement, movementRadius) => resolveBoneyardMovement(
             current,
             { x: current.x + movement.x, y: current.y + movement.y },
-            world.bounds,
+            activeBounds,
             collision,
             movementRadius,
           ),
@@ -398,7 +419,7 @@ export function stepBoneyardWorldTick(
         || Object.keys(livingPlayers).length === 0
       ) return []
       const result = stepBoneyardWaveDirector(waves, {
-        bounds: world.bounds,
+        bounds: activeBounds,
         liveEnemyCount,
         players: livingPlayers,
         tick,
@@ -415,7 +436,7 @@ export function stepBoneyardWorldTick(
     enemyStep.store,
     enemyStep.playerKnockbacks,
     playerCombat,
-    world.bounds,
+    activeBounds,
     collision,
   )
   return {
@@ -425,6 +446,7 @@ export function stepBoneyardWorldTick(
     rewards: enemyStep.rewards,
     world: {
       ...world,
+      arenaTransition,
       encounter,
       enemies: knockback.enemies,
       gateLeaves,

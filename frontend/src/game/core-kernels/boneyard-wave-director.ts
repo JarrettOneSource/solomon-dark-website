@@ -20,6 +20,7 @@ import {
   type BoneyardSpawnLocationPolicy,
 } from './boneyard-wave-timeline.ts'
 import { NATIVE_RETAIL_WAVES } from './native-retail-wave-schedule.ts'
+import { nativeRandomFloatFromSemanticWord } from './native-random-domain.ts'
 
 export { BONEYARD_WAVE_ENEMY_TYPES } from './boneyard-wave-schema.ts'
 
@@ -452,33 +453,38 @@ function placeEnemy(
   rngState: number
 } {
   const entries = Object.entries(players)
-  const playerSample = randomBoneyardWaveInteger(rngState, entries.length)
-  const [, placementPlayer] = entries[playerSample.value]
   if (policy === 'near-player') {
+    const playerSample = randomBoneyardWaveInteger(rngState, entries.length)
+    const [, placementPlayer] = entries[playerSample.value]
     const angleSample = nextBoneyardWaveRandom(playerSample.state)
-    const angle = angleSample.value * Math.PI * 2
+    const angle = nativeRandomFloatFromSemanticWord(
+      angleSample.state,
+      360,
+    ) * Math.PI / 180
     return {
       position: {
-        x: clamp(
+        x: Math.fround(
           placementPlayer.position.x + Math.cos(angle) * SPAWN_RADIUS,
-          bounds.x,
-          bounds.x + bounds.w,
         ),
-        y: clamp(
+        y: Math.fround(
           placementPlayer.position.y + Math.sin(angle) * SPAWN_RADIUS,
-          bounds.y,
-          bounds.y + bounds.h,
         ),
       },
       rngState: angleSample.state,
     }
   }
-  const xSample = nextBoneyardWaveRandom(playerSample.state)
+  const xSample = nextBoneyardWaveRandom(rngState)
   const ySample = nextBoneyardWaveRandom(xSample.state)
   return {
     position: {
-      x: bounds.x + xSample.value * bounds.w,
-      y: bounds.y + ySample.value * bounds.h,
+      x: Math.fround(bounds.x + nativeRandomFloatFromSemanticWord(
+        xSample.state,
+        bounds.w,
+      )),
+      y: Math.fround(bounds.y + nativeRandomFloatFromSemanticWord(
+        ySample.state,
+        bounds.h,
+      )),
     },
     rngState: ySample.state,
   }
@@ -551,8 +557,4 @@ function validateEnemyEntry(entry: WaveGroupEntry, waveIndex: number): void {
   if (BONEYARD_WAVE_ENEMY_TYPES[entry.enemy as BoneyardWaveEnemyToken] === undefined) {
     throw new Error(`wave ${waveIndex} has unknown enemy ${entry.enemy}`)
   }
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }

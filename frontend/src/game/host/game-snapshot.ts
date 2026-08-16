@@ -65,6 +65,14 @@ export function createGameSnapshot(
         run: state.run,
         tick: state.tick,
         world: {
+          arenaTransition: state.world.arenaTransition === null
+            ? null
+            : {
+                ...state.world.arenaTransition,
+                cameraBounds: { ...state.world.arenaTransition.cameraBounds },
+                combatBounds: { ...state.world.arenaTransition.combatBounds },
+                fullBounds: { ...state.world.arenaTransition.fullBounds },
+              },
           deathEffects: projectBoneyardEnemyDeathEffects(state.world.enemies),
           encounter: state.world.encounter === null ? null : {
             acceleration: state.world.encounter.acceleration,

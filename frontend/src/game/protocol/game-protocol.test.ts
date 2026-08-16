@@ -169,7 +169,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v24 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v25 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -317,7 +317,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v24 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v25 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -730,8 +730,8 @@ test('protocol v24 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v24 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 24)
+test('protocol v25 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 25)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -823,7 +823,60 @@ test('protocol v24 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v24 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v25 strictly owns the generated-arena transition', () => {
+  const loaded = loadedBoneyardFixture('arena-transition-run')
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 1],
+    gravePosition: { x: 780, y: 300 },
+    lanternPosition: { x: 740, y: 320 },
+    position: { x: 800, y: 400 },
+    ticksPerFrame: 5,
+  }
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loaded,
+  )
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(
+      createGameSnapshot(active, 'player-1'),
+      0,
+      undefined,
+      true,
+    ),
+    sequence: 2,
+    type: 'server-snapshot' as const,
+  }
+  const decoded = decodeServerGameMessage(encodeGameMessage(message))
+  assert.deepEqual(decoded, message)
+  if (decoded.type !== 'server-snapshot' || decoded.frame.world.kind !== 'boneyard') {
+    throw new Error('expected Boneyard frame')
+  }
+  assert.deepEqual(decoded.frame.world.arenaTransition, {
+    blendFactor: 0,
+    cameraBounds: { h: 1200, w: 1600, x: 0, y: 0 },
+    combatBounds: { h: 800, w: 1600, x: 0, y: 375 },
+    entrySide: 'north',
+    fullBounds: { h: 1200, w: 1600, x: 0, y: 0 },
+    phase: 'open',
+    sealTicksRemaining: 0,
+  })
+
+  const invalidGeometry = JSON.parse(encodeGameMessage(message))
+  invalidGeometry.frame.world.arenaTransition.combatBounds.y = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidGeometry)),
+    /combatBounds do not match the entry side/,
+  )
+
+  const missingOwnership = JSON.parse(encodeGameMessage(message))
+  missingOwnership.frame.world.arenaTransition = null
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingOwnership)),
+    /must share ownership/,
+  )
+})
+test('protocol v25 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

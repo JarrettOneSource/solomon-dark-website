@@ -11,6 +11,13 @@ import {
   type BoneyardSolomonVoiceCue,
 } from '../core-kernels/boneyard-encounter.ts'
 import {
+  BONEYARD_ARENA_ENTRANCE_EXTENSION,
+  BONEYARD_ARENA_NORTH_TARGET_INSET,
+  BONEYARD_ARENA_SEAL_TICKS,
+  BONEYARD_ARENA_TRANSITION_PHASES,
+  type BoneyardArenaTransitionState,
+} from '../core-kernels/boneyard-arena-transition.ts'
+import {
   BONEYARD_WAVE_DIRECTOR_PHASES,
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardWaveDirectorPhase,
@@ -152,7 +159,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 24
+export const GAME_PROTOCOL_VERSION = 25
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -1431,6 +1438,97 @@ function boneyardPoint(value: unknown, field: string): BoneyardPoint {
   return vector(value, field)
 }
 
+function boneyardBounds(value: unknown, field: string): BoneyardBounds {
+  const source = record(value, field)
+  onlyKeys(source, field, ['h', 'w', 'x', 'y'])
+  return {
+    h: positiveFinite(source.h, `${field}.h`),
+    w: positiveFinite(source.w, `${field}.w`),
+    x: finite(source.x, `${field}.x`),
+    y: finite(source.y, `${field}.y`),
+  }
+}
+
+function boneyardArenaTransition(
+  value: unknown,
+  field: string,
+): BoneyardArenaTransitionState | null {
+  if (value === null) return null
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'blendFactor',
+    'cameraBounds',
+    'combatBounds',
+    'entrySide',
+    'fullBounds',
+    'phase',
+    'sealTicksRemaining',
+  ])
+  const blendFactor = finite(source.blendFactor, `${field}.blendFactor`)
+  if (blendFactor < 0 || blendFactor > 1) {
+    throw new GameProtocolError(`${field}.blendFactor must be within [0,1]`)
+  }
+  const phase = limitedString(source.phase, `${field}.phase`, 16)
+  if (!(BONEYARD_ARENA_TRANSITION_PHASES as readonly string[]).includes(phase)) {
+    throw new GameProtocolError(`${field}.phase is not supported`)
+  }
+  const entrySide = limitedString(source.entrySide, `${field}.entrySide`, 8)
+  if (entrySide !== 'north' && entrySide !== 'south') {
+    throw new GameProtocolError(`${field}.entrySide is not supported`)
+  }
+  const sealTicksRemaining = nonnegativeInteger(
+    source.sealTicksRemaining,
+    `${field}.sealTicksRemaining`,
+  )
+  if (sealTicksRemaining > BONEYARD_ARENA_SEAL_TICKS) {
+    throw new GameProtocolError(
+      `${field}.sealTicksRemaining may not exceed ${BONEYARD_ARENA_SEAL_TICKS}`,
+    )
+  }
+  const cameraBounds = boneyardBounds(source.cameraBounds, `${field}.cameraBounds`)
+  const combatBounds = boneyardBounds(source.combatBounds, `${field}.combatBounds`)
+  const fullBounds = boneyardBounds(source.fullBounds, `${field}.fullBounds`)
+  const expectedCombatY = Math.fround(fullBounds.y + (
+    entrySide === 'north' ? BONEYARD_ARENA_NORTH_TARGET_INSET : 0
+  ))
+  if (
+    combatBounds.x !== fullBounds.x
+    || combatBounds.y !== expectedCombatY
+    || combatBounds.w !== fullBounds.w
+    || combatBounds.h !== Math.fround(
+      fullBounds.h - BONEYARD_ARENA_ENTRANCE_EXTENSION,
+    )
+  ) {
+    throw new GameProtocolError(`${field}.combatBounds do not match the entry side`)
+  }
+  if (
+    phase === 'open'
+      ? sealTicksRemaining !== 0 || blendFactor !== 0
+      : phase === 'locking'
+        ? sealTicksRemaining === 0 || blendFactor === 0
+        : sealTicksRemaining !== 0 || blendFactor === 0
+  ) {
+    throw new GameProtocolError(`${field} phase fields are inconsistent`)
+  }
+  if (
+    cameraBounds.x < fullBounds.x
+    || cameraBounds.y < fullBounds.y
+    || cameraBounds.x + cameraBounds.w > fullBounds.x + fullBounds.w
+    || cameraBounds.y + cameraBounds.h > fullBounds.y + fullBounds.h
+  ) {
+    throw new GameProtocolError(`${field}.cameraBounds must remain within fullBounds`)
+  }
+  return {
+    blendFactor,
+    cameraBounds,
+    combatBounds,
+    entrySide,
+    fullBounds,
+    phase: phase as BoneyardArenaTransitionState['phase'],
+    sealTicksRemaining,
+  }
+}
+
 function boneyardChoice(value: unknown, field: string): BoneyardChoice {
   const source = record(value, field)
   onlyKeys(source, field, ['id', 'name', 'source', 'modId', 'modName'])
@@ -2537,6 +2635,7 @@ function gameWorldSnapshot(
   if (source.kind === 'hub') return hubWorldSnapshot(source, field)
   if (source.kind === 'boneyard') {
     onlyKeys(source, field, [
+      'arenaTransition',
       'deathEffects',
       'encounter',
       'enemies',
@@ -2553,8 +2652,17 @@ function gameWorldSnapshot(
     ])
     const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
-    if ((encounter === null) !== (waves === null)) {
-      throw new GameProtocolError(`${field}.encounter and ${field}.waves must share ownership`)
+    const arenaTransition = boneyardArenaTransition(
+      source.arenaTransition,
+      `${field}.arenaTransition`,
+    )
+    if (
+      (encounter === null) !== (waves === null)
+      || (encounter === null) !== (arenaTransition === null)
+    ) {
+      throw new GameProtocolError(
+        `${field}.arenaTransition, ${field}.encounter, and ${field}.waves must share ownership`,
+      )
     }
     const runId = limitedString(source.runId, `${field}.runId`, 128)
     const enemyEvents = boneyardEnemyEvents(
@@ -2645,6 +2753,7 @@ function gameWorldSnapshot(
       return decoded
     })
     return {
+      arenaTransition,
       deathEffects,
       encounter,
       enemies,
@@ -3787,6 +3896,7 @@ function gameWorldSnapshotFrame(
   const source = record(value, field)
   if (source.kind === 'boneyard') {
     onlyKeys(source, field, [
+      'arenaTransition',
       'encounter',
       'entities',
       'enemyEvents',
@@ -3799,11 +3909,21 @@ function gameWorldSnapshotFrame(
     ])
     const encounter = boneyardSolomonSnapshot(source.encounter, `${field}.encounter`)
     const waves = boneyardWaveSnapshot(source.waves, `${field}.waves`)
-    if ((encounter === null) !== (waves === null)) {
-      throw new GameProtocolError(`${field}.encounter and ${field}.waves must share ownership`)
+    const arenaTransition = boneyardArenaTransition(
+      source.arenaTransition,
+      `${field}.arenaTransition`,
+    )
+    if (
+      (encounter === null) !== (waves === null)
+      || (encounter === null) !== (arenaTransition === null)
+    ) {
+      throw new GameProtocolError(
+        `${field}.arenaTransition, ${field}.encounter, and ${field}.waves must share ownership`,
+      )
     }
     const runId = limitedString(source.runId, `${field}.runId`, 128)
     return {
+      arenaTransition,
       encounter,
       entities: replicatedEntityFrame(source.entities, `${field}.entities`),
       enemyEvents: boneyardEnemyEvents(

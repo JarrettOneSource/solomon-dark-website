@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
+import {
+  createBoneyardArenaTransition,
+  startBoneyardArenaTransition,
+  stepBoneyardArenaTransition,
+} from '../core-kernels/boneyard-arena-transition.ts'
 
 import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
@@ -193,6 +198,10 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     },
     tick,
     world: {
+      arenaTransition: createBoneyardArenaTransition(
+        { x: 0, y: 0, w: 1_000, h: 1_000 },
+        { x: 500, y: 100 },
+      ),
       deathEffects: [],
       encounter: {
         acceleration: tick >= 105 ? -3 : -7,
@@ -351,6 +360,29 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
     managerLane: 'actor',
     registrationOrdinal: 7,
   })
+})
+
+test('interpolates the native camera lock while retaining owned combat bounds', () => {
+  const older = snapshotAt(100, 10, 100)
+  const newer = snapshotAt(105, 20, 120)
+  newer.world.arenaTransition = stepBoneyardArenaTransition(
+    startBoneyardArenaTransition(newer.world.arenaTransition!),
+  )
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  const halfway = timeline.sample(75).world.arenaTransition
+  assert.ok(halfway)
+  assert.ok(halfway.cameraBounds.y > older.world.arenaTransition!.cameraBounds.y)
+  assert.ok(halfway.cameraBounds.y < newer.world.arenaTransition.cameraBounds.y)
+  assert.deepEqual(halfway.combatBounds, newer.world.arenaTransition.combatBounds)
+  assert.notEqual(halfway.cameraBounds, newer.world.arenaTransition.cameraBounds)
+  assert.notEqual(halfway.combatBounds, newer.world.arenaTransition.combatBounds)
 })
 
 test('merges every 100 Hz Mage pulse discretely across 20 Hz snapshot boundaries', () => {

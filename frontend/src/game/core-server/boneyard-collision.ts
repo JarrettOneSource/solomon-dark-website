@@ -13,6 +13,7 @@ import {
   nearerLineObstruction,
   type LineObstruction,
 } from '../core-kernels/line-obstruction.ts'
+import { nativeRandomFloatFromSemanticWord } from '../core-kernels/native-random-domain.ts'
 
 export interface BoneyardCollisionPolygon {
   points: readonly BoneyardPoint[]
@@ -89,10 +90,9 @@ const GOODIE_POLYGON = rectangle(-25.125, -8.625, 25.875, 16.875)
 const FENCE_POST_RADIUS = 10
 const GOODIE_RADIUS = 8
 
-/** Named web placement bounds until the stock spawn retry algorithm is recovered. */
-export const BOUNDED_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
-  latticeStep: 8,
+export const NATIVE_BONEYARD_SPAWN_PLACEMENT = Object.freeze({
   movementProbe: 0.5,
+  verticalScale: 0.8,
 })
 
 export function createBoneyardCollisionWorld(scene: BoneyardScene): BoneyardCollisionWorld {
@@ -178,50 +178,43 @@ export function resolveBoneyardSpawnPosition(
   bounds: BoneyardBounds,
   world: BoneyardCollisionWorld,
   radius: number,
+  startingAngleDegrees = semanticSpawnAngle(position, radius),
 ): BoneyardPoint {
   if (isMobileBoneyardPlacement(position, bounds, world, radius)) {
     return { ...position }
   }
 
-  const step = BOUNDED_BONEYARD_SPAWN_PLACEMENT.latticeStep
-  const furthestX = Math.max(
-    Math.abs(position.x - (bounds.x + radius)),
-    Math.abs(position.x - (bounds.x + bounds.w - radius)),
-  )
-  const furthestY = Math.max(
-    Math.abs(position.y - (bounds.y + radius)),
-    Math.abs(position.y - (bounds.y + bounds.h - radius)),
-  )
-  const maximumRing = Math.ceil(Math.max(furthestX, furthestY) / step)
-  for (let ring = 1; ring <= maximumRing; ring += 1) {
-    for (let offset = -ring; offset <= ring; offset += 1) {
-      const top = {
-        x: position.x + offset * step,
-        y: position.y - ring * step,
+  if (!Number.isFinite(radius) || radius <= 0) {
+    throw new RangeError('Boneyard spawn radius must be positive and finite')
+  }
+  const maximumRadius = Math.hypot(bounds.w, bounds.h) + radius * 2
+  for (let ringRadius = radius; ringRadius <= maximumRadius; ringRadius += radius) {
+    const sampleCount = nativeSpawnRingSampleCount(ringRadius, radius)
+    const angleStep = 360 / sampleCount
+    for (let index = 0; index < sampleCount; index += 1) {
+      const angle = (startingAngleDegrees + index * angleStep) * Math.PI / 180
+      const candidate = {
+        x: Math.fround(position.x + Math.sin(angle) * ringRadius),
+        y: Math.fround(
+          position.y
+          - Math.cos(angle) * ringRadius * NATIVE_BONEYARD_SPAWN_PLACEMENT.verticalScale,
+        ),
       }
-      if (isMobileBoneyardPlacement(top, bounds, world, radius)) return top
-      const bottom = {
-        x: position.x + offset * step,
-        y: position.y + ring * step,
-      }
-      if (isMobileBoneyardPlacement(bottom, bounds, world, radius)) return bottom
-    }
-    for (let offset = -ring + 1; offset < ring; offset += 1) {
-      const left = {
-        x: position.x - ring * step,
-        y: position.y + offset * step,
-      }
-      if (isMobileBoneyardPlacement(left, bounds, world, radius)) return left
-      const right = {
-        x: position.x + ring * step,
-        y: position.y + offset * step,
-      }
-      if (isMobileBoneyardPlacement(right, bounds, world, radius)) return right
+      if (isMobileBoneyardPlacement(candidate, bounds, world, radius)) return candidate
     }
   }
   throw new Error(
     `Boneyard has no collision-safe spawn placement for radius ${radius} from (${position.x}, ${position.y})`,
   )
+}
+
+export function nativeSpawnRingSampleCount(
+  ringRadius: number,
+  radiusStep: number,
+): number {
+  return Math.max(1, Math.trunc(
+    Math.PI * (ringRadius + radiusStep) / ringRadius,
+  ))
 }
 
 export function firstBoneyardLineObstruction(
@@ -364,7 +357,7 @@ function isMobileBoneyardPlacement(
   radius: number,
 ): boolean {
   if (!canPlaceBoneyardBody(position, bounds, world, radius)) return false
-  const probe = BOUNDED_BONEYARD_SPAWN_PLACEMENT.movementProbe
+  const probe = NATIVE_BONEYARD_SPAWN_PLACEMENT.movementProbe
   return [
     { x: probe, y: 0 },
     { x: 0, y: probe },
@@ -575,6 +568,23 @@ function mix(start: BoneyardPoint, end: BoneyardPoint, t: number): BoneyardPoint
     x: start.x + (end.x - start.x) * t,
     y: start.y + (end.y - start.y) * t,
   }
+}
+
+function semanticSpawnAngle(position: BoneyardPoint, radius: number): number {
+  let hash = 0x811c9dc5
+  for (const value of [position.x, position.y, radius]) {
+    hash ^= floatBits(value)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return nativeRandomFloatFromSemanticWord(hash, 360)
+}
+
+const FLOAT_BITS_BUFFER = new ArrayBuffer(4)
+const FLOAT_BITS_VIEW = new DataView(FLOAT_BITS_BUFFER)
+
+function floatBits(value: number): number {
+  FLOAT_BITS_VIEW.setFloat32(0, value, true)
+  return FLOAT_BITS_VIEW.getUint32(0, true)
 }
 
 function clampToBounds(

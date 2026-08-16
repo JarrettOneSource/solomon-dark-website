@@ -286,6 +286,7 @@ export function createGameSnapshotFrame(
   return {
     ...common,
     world: {
+      arenaTransition: snapshot.world.arenaTransition,
       encounter: snapshot.world.encounter,
       entities,
       enemyEvents: snapshot.world.enemyEvents,
@@ -450,6 +451,7 @@ export class EntityReplicationReconstructor {
     return {
       ...common,
       world: {
+        arenaTransition: frame.world.arenaTransition,
         deathEffects,
         encounter: frame.world.encounter,
         enemies,

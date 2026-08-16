@@ -30,6 +30,7 @@ const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const credential = randomBytes(32).toString('base64url')
 const deterministicSeedBytes = Buffer.alloc(16)
 const expectedBoneyardSeed = deterministicSeedBytes.toString('hex')
+const entranceOnly = process.argv.includes('--entrance-only')
 const FIRE_ENGAGEMENT_MIN_DISTANCE = 70
 const FIRE_ENGAGEMENT_MAX_DISTANCE = 135
 const COMBAT_ENTRY_GATE_MARGIN = 40
@@ -178,7 +179,28 @@ try {
   assert.ok(opening.liveEnemies >= 10 && opening.liveEnemies <= 15)
   assert.equal(opening.liveEnemies + opening.pendingSpawnBudget, 15)
   assert.equal(opening.waveOrdinal, 0)
+  const entranceRetirement = await proveRetiredEntry(
+    page,
+    scene,
+    wire,
+    loadedBoneyard.runId,
+    gateCrossing,
+  )
 
+  if (entranceOnly) {
+    await page.screenshot({ path: combatScreenshotPath })
+    assert.deepEqual(wire.errors, [])
+    assert.deepEqual(errors, [])
+    process.stdout.write(`${JSON.stringify({
+      entranceRetirement,
+      errors,
+      gateCrossing,
+      opening,
+      screenshotPath: combatScreenshotPath,
+      status: 'ok',
+      wire: wireSummary(wire),
+    })}\n`)
+  } else {
   await installEnemyActionProbe(page)
   const combat = await castUntilEnemyDies(page, { navigation: combatNavigation })
   await page.waitForFunction(() => {
@@ -268,6 +290,7 @@ try {
     death,
     deathScreenshotPath,
     errors,
+    entranceRetirement,
     gateCrossing,
     gameOverFrame,
     gameOverScreenshotPath,
@@ -288,6 +311,7 @@ try {
     status: 'ok',
     taunt,
   })}\n`)
+  }
 } catch (error) {
   await page.screenshot({ path: screenshotPath.replace(/(\.[^.]+)?$/, '-failure$1') })
   process.stderr.write(`${JSON.stringify({
@@ -315,6 +339,7 @@ function observeGameWire(page, endpoint) {
     events: new Map(),
     latestSnapshot: null,
     loadedBoneyard: null,
+    outsideCombatEnemySamples: [],
     projectileSamples: new Map(),
     reconstructor: new EntityReplicationReconstructor(),
     retired: new Map(),
@@ -348,6 +373,7 @@ function recordWireMessage(receipt, message) {
     receipt.sequence = message.snapshotSequence
     receipt.latestSnapshot = message.snapshot
     recordWireEnemyEvents(receipt, message.snapshot)
+    recordCombatBoundViolations(receipt, message.snapshot)
     return
   }
   if (message.type !== 'server-snapshot' || message.sequence <= receipt.sequence) return
@@ -356,6 +382,7 @@ function recordWireMessage(receipt, message) {
   receipt.sequence = message.sequence
   receipt.latestSnapshot = snapshot
   recordWireEnemyEvents(receipt, snapshot)
+  recordCombatBoundViolations(receipt, snapshot)
 }
 
 function recordWireEntityFrame(receipt, entities, sequence) {
@@ -385,6 +412,27 @@ function recordWireEnemyEvents(receipt, snapshot) {
   if (snapshot.world.kind !== 'boneyard') return
   for (const event of snapshot.world.enemyEvents) {
     boundedMapSet(receipt.events, `${event.runId}:${event.eventId}`, event, 512)
+  }
+}
+
+function recordCombatBoundViolations(receipt, snapshot) {
+  if (snapshot.world.kind !== 'boneyard') return
+  const transition = snapshot.world.arenaTransition
+  if (!transition || transition.phase === 'open') return
+  const bounds = transition.combatBounds
+  for (const enemy of snapshot.world.enemies) {
+    if (
+      enemy.position.x >= bounds.x
+      && enemy.position.y >= bounds.y
+      && enemy.position.x <= bounds.x + bounds.w
+      && enemy.position.y <= bounds.y + bounds.h
+    ) continue
+    boundedPush(receipt.outsideCombatEnemySamples, {
+      bounds,
+      enemyId: enemy.id,
+      position: enemy.position,
+      tick: snapshot.tick,
+    }, 16)
   }
 }
 
@@ -422,6 +470,7 @@ function wireSummary(wire) {
     errors: [...wire.errors],
     eventCount: wire.events.size,
     latestTick: wire.latestSnapshot?.tick ?? null,
+    outsideCombatEnemySamples: [...wire.outsideCombatEnemySamples],
     projectileSampleCount: wire.projectileSamples.size,
     retiredCount: wire.retired.size,
     sequence: wire.sequence,
@@ -1305,6 +1354,70 @@ async function boneyardFrame(page) {
   return page.locator('.boneyard-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrBoneyardFrame)
   ))
+}
+
+async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {
+  const snapshot = currentBoneyardSnapshot(wire, runId)
+  assert.ok(snapshot, 'expected the authoritative Boneyard snapshot')
+  const transition = snapshot.world.arenaTransition
+  assert.ok(transition, 'expected generated-arena transition ownership')
+  assert.notEqual(transition.phase, 'open')
+  assert.deepEqual(wire.outsideCombatEnemySamples, [])
+
+  const boundaryY = gateCrossing.direction > 0
+    ? transition.combatBounds.y + PLAYER_CHARACTER_RADIUS
+    : transition.combatBounds.y + transition.combatBounds.h - PLAYER_CHARACTER_RADIUS
+  const beforeY = Number(await scene.getAttribute('data-local-player-y'))
+  const returnKey = gateCrossing.direction > 0 ? 'w' : 's'
+  await page.bringToFront()
+  await page.keyboard.down(returnKey)
+  try {
+    const deadline = Date.now() + 2_000
+    let priorY = beforeY
+    let stableSamples = 0
+    while (Date.now() < deadline && stableSamples < 12) {
+      await page.waitForTimeout(100)
+      const currentY = Number(await scene.getAttribute('data-local-player-y'))
+      const atBoundary = Math.abs(currentY - boundaryY) <= 1
+      stableSamples = atBoundary && Math.abs(currentY - priorY) < 0.05
+        ? stableSamples + 1
+        : 0
+      priorY = currentY
+    }
+  } finally {
+    await page.keyboard.up(returnKey)
+    await publishStoppedMovement(page)
+  }
+
+  const finalY = Number(await scene.getAttribute('data-local-player-y'))
+  const returnProgress = (beforeY - finalY) * gateCrossing.direction
+  assert.ok(
+    (finalY - boundaryY) * gateCrossing.direction >= -0.5,
+    `player crossed retired boundary ${boundaryY}: ${finalY}`,
+  )
+  assert.ok(
+    (finalY - gateCrossing.target.y) * gateCrossing.direction > 0,
+    `player regained retired entry Gate ${gateCrossing.target.y}: ${finalY}`,
+  )
+  assert.ok(returnProgress > 50, `player did not advance toward retired entry: ${returnProgress}`)
+  assert.deepEqual(wire.outsideCombatEnemySamples, [])
+  const frame = await boneyardFrame(page)
+  assert.equal(frame.localPlayerLifeState, 'alive')
+  assert.ok(
+    frame.arenaTransitionPhase === 'locking' || frame.arenaTransitionPhase === 'sealed',
+  )
+  assert.equal(frame.enemyOutsideCombatBoundsCount, 0)
+  return {
+    beforeY,
+    boundaryY,
+    cameraX: frame.cameraX,
+    cameraY: frame.cameraY,
+    finalY,
+    phase: frame.arenaTransitionPhase,
+    reachedBoundary: Math.abs(finalY - boundaryY) <= 2,
+    returnProgress,
+    sampledEnemyCount: snapshot.world.enemies.length,
+  }
 }
 
 async function enterBoneyard(page) {

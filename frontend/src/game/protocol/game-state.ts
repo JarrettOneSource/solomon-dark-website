@@ -1,6 +1,7 @@
 import type {
   BoneyardGateLeafSnapshot,
 } from '../core-kernels/boneyard.ts'
+import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type {
   BoneyardSolomonPhase,
   BoneyardSolomonVoiceEvent,
@@ -142,6 +143,7 @@ export interface HubWorldSnapshot {
 }
 
 export interface BoneyardWorldSnapshot {
+  arenaTransition: BoneyardArenaTransitionState | null
   deathEffects: readonly BoneyardEnemyDeathEffectSnapshot[]
   encounter: BoneyardSolomonSnapshot | null
   enemies: readonly BoneyardEnemySnapshot[]
@@ -535,6 +537,7 @@ export interface HubWorldSnapshotFrame {
 }
 
 export interface BoneyardWorldSnapshotFrame {
+  arenaTransition: BoneyardArenaTransitionState | null
   encounter: BoneyardSolomonSnapshot | null
   entities: ReplicatedEntityFrame
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]

@@ -4,6 +4,7 @@ import test from 'node:test'
 import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
+import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import {
@@ -686,6 +687,13 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     if (tick > 1200) throw new Error('Solomon did not reach the native run edge')
   }
   assert.equal(world.waves?.phase, 'opening')
+  assert.equal(world.arenaTransition?.phase, 'locking')
+  assert.deepEqual(world.arenaTransition?.combatBounds, {
+    h: 1200,
+    w: 2000,
+    x: 0,
+    y: 0,
+  })
   assert.equal(world.enemies.actors.length, 0)
 
   result = stepWorld(world, { player }, {}, tick)
@@ -697,6 +705,12 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
     && enemy.config.flags.includes('FLAG_HPDOWN')
     && enemy.config.flags.includes('FLAG_XPBONUS')
   )))
+  assert.ok(world.enemies.actors.every((enemy) => canPlaceBoneyardBody(
+    enemy.position,
+    world.arenaTransition!.combatBounds,
+    world.collision,
+    enemy.config.collisionRadius,
+  )), 'post-transition enemies must materialize inside the combat arena')
   const firstEnemy = world.enemies.actors[0]
   assert.deepEqual(boneyardPrimarySpellTargets(world)[0], {
     active: true,
@@ -741,6 +755,40 @@ test('default Boneyard walks through Solomon dialogue, retreat, then authoritati
   }
   assert.deepEqual(world.waves, frozenWaves)
   assert.equal(world.enemies.actors.length, 10)
+})
+
+test('the retired entrance is a one-way authoritative movement boundary', () => {
+  let world = createBoneyardWorld(encounterBoneyard('default'))
+  assert.ok(world.arenaTransition)
+  world = {
+    ...world,
+    arenaTransition: startBoneyardArenaTransition(world.arenaTransition),
+    encounter: null,
+    waves: null,
+  }
+  let player = {
+    ...spawnPlayerCharacterInBoneyard({
+      discipline: 'arcane',
+      displayName: 'One Way Tester',
+      element: 'fire',
+    }, world),
+    position: { x: 1000, y: 1180 },
+  }
+
+  for (let tick = 0; tick < 300; tick += 1) {
+    const result = stepWorld(
+      world,
+      { player },
+      { player: movementInput(0, 1) },
+      tick,
+    )
+    world = result.world
+    player = result.players.player
+  }
+
+  assert.ok(player.position.y <= 1200 - PLAYER_CHARACTER_RADIUS)
+  assert.ok(player.position.y < 1400, 'the retired entry Gate must remain unreachable')
+  assert.equal(world.gateLeaves.length, 2, 'the Gate actor remains outside the active arena')
 })
 
 test('wave materialization escapes the captured object-213 grave with a mobile body', () => {
@@ -965,6 +1013,7 @@ test('primary spell targets use live authoritative enemy actors and owned Maggot
 
 test('mod Boneyards retain opaque script ownership instead of receiving retail waves', () => {
   const world = createBoneyardWorld(encounterBoneyard('mod'))
+  assert.equal(world.arenaTransition, null)
   assert.equal(world.encounter, null)
   assert.equal(world.waves, null)
 })
@@ -1065,7 +1114,12 @@ function encounterBoneyard(source: 'default' | 'mod'): LoadedBoneyard {
     scene: {
       bounds: { x: 0, y: 0, w: 2000, h: 1600 },
       environmentMode: 0,
-      fences: [],
+      fences: [{
+        eid: 'retired-entry-gate',
+        points: [{ x: 900, y: 1400 }, { x: 1100, y: 1400 }],
+        segmentCode: 2,
+        typeId: 3005,
+      }],
       name: 'Encounter fixture',
       objects: [],
       roads: [],

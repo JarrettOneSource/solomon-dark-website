@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
+import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import { playerCollisionEnabled } from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
@@ -727,6 +728,49 @@ test('Boneyard Air falls back to a Gravestone and publishes the native curved se
     y: (bolt.origin.y + bolt.endpoint.y) / 2,
   })
   assert.deepEqual(player.position, getPlayerCharacter(state, 'caster').position)
+})
+
+test('sealed generated Arena clips player spell range at the retired entrance boundary', () => {
+  const loaded = emptyBoneyard()
+  loaded.scene.bounds = { x: 0, y: 0, w: 500, h: 900 }
+  loaded.scene.spawn = { facingDeg: 180, x: 250, y: 150 }
+  loaded.scene.solomonDig = {
+    frameProgram: [0, 3, 1],
+    gravePosition: { x: 240, y: 450 },
+    lanternPosition: { x: 245, y: 450 },
+    position: { x: 250, y: 450 },
+    ticksPerFrame: 5,
+  }
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Air Caster',
+    element: 'air',
+  } }), loaded)
+  if (state.world.kind !== 'boneyard' || state.world.arenaTransition === null) {
+    throw new Error('expected generated Arena transition ownership')
+  }
+  const player = getPlayerCharacter(state, 'caster')
+  state = {
+    ...state,
+    playerEntities: replacePlayerCharacter(state.playerEntities, 'caster', {
+      ...player,
+      position: { x: 250, y: 425 },
+    }),
+    world: {
+      ...state.world,
+      arenaTransition: startBoneyardArenaTransition(state.world.arenaTransition),
+    },
+  }
+
+  state = stepGameSimulationTick(state, { caster: {
+    aim: { x: 250, y: 0 },
+    cast: { primary: true, secondary: false },
+    movement: { x: 0, y: 0 },
+  } })
+
+  const bolt = state.primarySpells.transients[0]
+  assert.equal(bolt.kind, 'air')
+  assert.ok(bolt.endpoint.y >= 375, `Air escaped retired boundary: ${bolt.endpoint.y}`)
 })
 
 test('simulation wires effective primary rank into debit and captured projectile damage', () => {

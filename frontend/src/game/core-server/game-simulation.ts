@@ -8,6 +8,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { lineBoundsExitObstruction } from '../core-kernels/line-obstruction.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
@@ -660,6 +661,11 @@ function finishGameSimulationTick(
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
     : null
+  const boneyardSpellBounds = result.world.kind === 'boneyard'
+    ? result.world.arenaTransition === null
+      ? result.world.bounds
+      : boneyardActiveBounds(result.world.arenaTransition)
+    : null
   const spellObstructionPoint = (
     playerId: string,
     start: Vector2,
@@ -670,7 +676,7 @@ function finishGameSimulationTick(
       return firstBoneyardLineObstruction(
         start,
         end,
-        result.world.bounds,
+        boneyardSpellBounds!,
         boneyardCollision!,
         excludedSourceId,
       )
@@ -685,7 +691,7 @@ function finishGameSimulationTick(
       if (result.world.kind === 'boneyard') {
         return canPlaceBoneyardBody(
           position,
-          result.world.bounds,
+          boneyardSpellBounds!,
           boneyardCollision!,
           radius,
         )
@@ -715,7 +721,7 @@ function finishGameSimulationTick(
     spellObstructionPoint,
     spellRangeEndpoint: (playerId, start, direction) => {
       const bounds = result.world.kind === 'boneyard'
-        ? result.world.bounds
+        ? boneyardSpellBounds!
         : (() => {
             const region = result.world.participants[playerId]?.region
             if (region === undefined) return { x: start.x, y: start.y, w: 0, h: 0 }

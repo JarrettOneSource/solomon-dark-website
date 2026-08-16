@@ -77,6 +77,20 @@ test('Solomon run emits the exact ten-plus-five weakened Skeleton opening', () =
   ])
 })
 
+test('near-player Spawner preserves the raw 100-unit point for placement recovery', () => {
+  const state = startBoneyardWaveDirector(createBoneyardWaveDirector('edge-6'))
+  const result = stepBoneyardWaveDirector(state, {
+    bounds: { x: 0, y: 375, w: 1_000, h: 600 },
+    liveEnemyCount: 0,
+    players: { a: { position: { x: 500, y: 375 } } },
+    tick: 0,
+  })
+  const position = result.spawnIntents[0]!.position
+
+  assert.ok(position.y < 375, 'raw spawn should remain outside for the placement search')
+  assert.ok(Math.abs(Math.hypot(position.x - 500, position.y - 375) - 100) < 0.001)
+})
+
 test('external nonterminal live count strictly gates opening and wave spawning', () => {
   const harness = completeOpening('opening-release', [wave({ maxEnemies: 100 })])
   harness.liveEnemyCount = 4

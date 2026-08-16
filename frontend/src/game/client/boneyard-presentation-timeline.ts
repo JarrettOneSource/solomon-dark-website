@@ -1,4 +1,5 @@
 import type { BoneyardGateLeafSnapshot } from '../core-kernels/boneyard.ts'
+import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
@@ -150,6 +151,11 @@ function interpolateSnapshot(
     run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
     world: {
+      arenaTransition: interpolateArenaTransition(
+        older.world.arenaTransition,
+        newer.world.arenaTransition,
+        blend,
+      ),
       deathEffects: interpolateEnemyDeathEffects(
         older.world.deathEffects,
         newer.world.deathEffects,
@@ -301,6 +307,7 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
     run: snapshot.run,
     tick: snapshot.tick,
     world: {
+      arenaTransition: copyArenaTransition(snapshot.world.arenaTransition),
       deathEffects: snapshot.world.deathEffects.map(copyEnemyDeathEffect),
       encounter: copySolomon(snapshot.world.encounter),
       enemies: snapshot.world.enemies.map(copyEnemy),
@@ -323,6 +330,42 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function interpolateArenaTransition(
+  older: BoneyardArenaTransitionState | null,
+  newer: BoneyardArenaTransitionState | null,
+  blend: number,
+): BoneyardArenaTransitionState | null {
+  if (older === null || newer === null) {
+    return copyArenaTransition(blend < 1 ? older : newer)
+  }
+  const discrete = blend < 1 ? older : newer
+  return {
+    ...discrete,
+    blendFactor: lerp(older.blendFactor, newer.blendFactor, blend),
+    cameraBounds: {
+      h: lerp(older.cameraBounds.h, newer.cameraBounds.h, blend),
+      w: lerp(older.cameraBounds.w, newer.cameraBounds.w, blend),
+      x: lerp(older.cameraBounds.x, newer.cameraBounds.x, blend),
+      y: lerp(older.cameraBounds.y, newer.cameraBounds.y, blend),
+    },
+    combatBounds: { ...discrete.combatBounds },
+    fullBounds: { ...discrete.fullBounds },
+  }
+}
+
+function copyArenaTransition(
+  source: BoneyardArenaTransitionState | null,
+): BoneyardArenaTransitionState | null {
+  return source === null
+    ? null
+    : {
+        ...source,
+        cameraBounds: { ...source.cameraBounds },
+        combatBounds: { ...source.combatBounds },
+        fullBounds: { ...source.fullBounds },
+      }
 }
 
 function interpolateEnemyDeathEffects(
