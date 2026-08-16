@@ -96,6 +96,7 @@ export interface PlayerSkillOffer {
 }
 
 export interface PlayerProgressionComponent extends PlayerCombatComponent {
+  readonly deferredSkillChoices: number
   readonly disciplineOfferBias: boolean
   readonly excludeActiveWeldBuildFromOffers: boolean
   readonly experience: number
@@ -108,6 +109,7 @@ export interface PlayerProgressionComponent extends PlayerCombatComponent {
   readonly pendingOffer: PlayerSkillOffer | null
   readonly previousThreshold: number
   readonly revision: number
+  readonly sorcerorsCharmAvailable: boolean
   readonly weldOfferMarker: number
   readonly weldingOfferBias: boolean
 }
@@ -308,6 +310,7 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
   }
   return {
     ...createPlayerCombat(),
+    deferredSkillChoices: 0,
     disciplineOfferBias: false,
     excludeActiveWeldBuildFromOffers: false,
     experience: 0,
@@ -320,6 +323,7 @@ export function createPlayerProgression(offerSeed: number): PlayerProgressionCom
     pendingOffer: null,
     previousThreshold: NATIVE_LEVEL_THRESHOLDS[0],
     revision: 0,
+    sorcerorsCharmAvailable: false,
     weldOfferMarker: INITIAL_WELD_OFFER_MARKER,
     weldingOfferBias: false,
   }
@@ -329,6 +333,7 @@ export function grantPlayerExperience(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   amount: number,
+  sorcerorsCharmOwned = false,
 ): PlayerProgressionComponent {
   if (!Number.isFinite(amount) || amount < 0) {
     throw new RangeError('experience award must be finite and non-negative')
@@ -344,16 +349,26 @@ export function grantPlayerExperience(
 
   const experience = Math.min(MAX_PLAYER_EXPERIENCE, progression.experience + amount)
   let level = progression.level
-  const crossed = [...progression.pendingLevels]
+  let crossedCount = 0
   while (
     level < MAX_PLAYER_LEVEL
     && experience > NATIVE_LEVEL_THRESHOLDS[level]!
   ) {
     level += 1
-    crossed.push(level)
+    crossedCount += 1
   }
   const nextThreshold = NATIVE_LEVEL_THRESHOLDS[level]!
   const previousThreshold = NATIVE_LEVEL_THRESHOLDS[level - 1]!
+  const pendingLevels = crossedCount === 0
+    ? progression.pendingLevels
+    : Object.freeze(Array.from(
+        {
+          length: progression.pendingLevels.length
+            + progression.deferredSkillChoices
+            + crossedCount,
+        },
+        () => level,
+      ))
   let next: PlayerProgressionComponent = {
     ...progression,
     currentHealth: level === progression.level
@@ -365,12 +380,17 @@ export function grantPlayerExperience(
     experience,
     level,
     nextThreshold,
-    pendingLevels: Object.freeze(crossed),
+    deferredSkillChoices: crossedCount === 0 ? progression.deferredSkillChoices : 0,
+    pendingLevels,
+    pendingOffer: crossedCount === 0 ? progression.pendingOffer : null,
     previousThreshold,
     revision: progression.revision + 1,
+    sorcerorsCharmAvailable: crossedCount === 0
+      ? progression.sorcerorsCharmAvailable
+      : false,
   }
-  if (!next.pendingOffer && crossed.length > 0) {
-    next = withNextSkillOffer(next, skillBook)
+  if (!next.pendingOffer && next.pendingLevels.length > 0) {
+    next = withNextSkillOffer(next, skillBook, sorcerorsCharmOwned)
   }
   return next
 }
@@ -442,6 +462,7 @@ export function synchronizePlayerLevelMilestone(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   milestone: SharedPlayerLevelMilestone,
+  sorcerorsCharmOwned = false,
 ): PlayerProgressionComponent {
   if (!Number.isFinite(milestone.experience) || milestone.experience < 0) {
     throw new RangeError('shared milestone experience must be finite and non-negative')
@@ -460,21 +481,32 @@ export function synchronizePlayerLevelMilestone(
     ) throw new RangeError('shared crossed levels must be sorted and in range')
     return level
   })
-  const pendingLevels = Object.freeze([
-    ...progression.pendingLevels,
-    ...crossedLevels.filter((level) => !progression.pendingLevels.includes(level)),
-  ])
+  const pendingLevels = crossedLevels.length === 0
+    ? progression.pendingLevels
+    : Object.freeze(Array.from(
+        {
+          length: progression.pendingLevels.length
+            + progression.deferredSkillChoices
+            + crossedLevels.length,
+        },
+        () => milestone.level,
+      ))
   let next: PlayerProgressionComponent = {
     ...progression,
+    deferredSkillChoices: crossedLevels.length === 0 ? progression.deferredSkillChoices : 0,
     experience: Math.min(MAX_PLAYER_EXPERIENCE, milestone.experience),
     level: milestone.level,
     nextThreshold: NATIVE_LEVEL_THRESHOLDS[milestone.level]!,
     pendingLevels,
+    pendingOffer: crossedLevels.length === 0 ? progression.pendingOffer : null,
     previousThreshold: NATIVE_LEVEL_THRESHOLDS[milestone.level - 1]!,
     revision: progression.revision + 1,
+    sorcerorsCharmAvailable: crossedLevels.length === 0
+      ? progression.sorcerorsCharmAvailable
+      : false,
   }
   if (!next.pendingOffer && next.pendingLevels.length > 0) {
-    next = withNextSkillOffer(next, skillBook)
+    next = withNextSkillOffer(next, skillBook, sorcerorsCharmOwned)
   }
   return next
 }
@@ -483,6 +515,7 @@ export function applyPlayerSkillChoice(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
+  sorcerorsCharmOwned = false,
 ): { progression: PlayerProgressionComponent; skillBook: PlayerSkillBookComponent } | null {
   const offer = progression.pendingOffer
   if (!offer || offer.sequence !== selection.offerSequence) return null
@@ -519,12 +552,63 @@ export function applyPlayerSkillChoice(
     pendingLevels: Object.freeze(progression.pendingLevels.slice(1)),
     pendingOffer: null,
     revision: progression.revision + 1,
+    sorcerorsCharmAvailable: false,
   }
   nextProgression = refreshWeldOfferMarker(nextProgression, nextBook)
   if (nextProgression.pendingLevels.length > 0) {
-    nextProgression = withNextSkillOffer(nextProgression, nextBook)
+    nextProgression = withNextSkillOffer(
+      nextProgression,
+      nextBook,
+      sorcerorsCharmOwned,
+    )
   }
   return { progression: nextProgression, skillBook: nextBook }
+}
+
+export function rerollPlayerSkillOffer(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  offerSequence: number,
+  nextOfferSeed: number,
+): PlayerProgressionComponent | null {
+  if (
+    !progression.sorcerorsCharmAvailable
+    || progression.pendingOffer?.sequence !== offerSequence
+  ) return null
+  if (!Number.isInteger(nextOfferSeed) || nextOfferSeed < 0 || nextOfferSeed >= 1_000_000) {
+    throw new RangeError('player offer seed must be an integer from 0 through 999999')
+  }
+  return withNextSkillOffer({
+    ...progression,
+    offerSeed: nextOfferSeed,
+    pendingOffer: null,
+    sorcerorsCharmAvailable: false,
+  }, skillBook, false)
+}
+
+export function deferPlayerSkillChoice(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  offerSequence: number,
+  sorcerorsCharmOwned: boolean,
+): PlayerProgressionComponent | null {
+  if (
+    !sorcerorsCharmOwned
+    || !progression.sorcerorsCharmAvailable
+    || progression.pendingOffer?.sequence !== offerSequence
+  ) return null
+  let next: PlayerProgressionComponent = {
+    ...progression,
+    deferredSkillChoices: progression.deferredSkillChoices + 1,
+    pendingLevels: Object.freeze(progression.pendingLevels.slice(1)),
+    pendingOffer: null,
+    revision: progression.revision + 1,
+    sorcerorsCharmAvailable: false,
+  }
+  if (next.pendingLevels.length > 0) {
+    next = withNextSkillOffer(next, skillBook, true)
+  }
+  return next
 }
 
 export function buildPlayerSkillOffer(
@@ -798,17 +882,18 @@ function refreshWeldOfferMarker(
 function withNextSkillOffer(
   progression: PlayerProgressionComponent,
   skillBook: PlayerSkillBookComponent,
+  sorcerorsCharmAvailable: boolean,
 ): PlayerProgressionComponent {
-  const level = progression.pendingLevels[0]
-  if (level === undefined) return progression
+  if (progression.pendingLevels.length === 0) return progression
   const sequence = progression.revision + 1
   const offerCycle = (progression.offerCycle + 1) >>> 0
-  const offerProgression = { ...progression, level, offerCycle }
+  const offerProgression = { ...progression, offerCycle }
   return {
     ...progression,
     offerCycle,
     pendingOffer: buildPlayerSkillOffer(offerProgression, skillBook, sequence),
     revision: sequence,
+    sorcerorsCharmAvailable,
   }
 }
 

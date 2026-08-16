@@ -152,7 +152,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 23
+export const GAME_PROTOCOL_VERSION = 24
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -257,6 +257,12 @@ export interface ClientSelectSkillMessage {
   skillId: number
 }
 
+export interface ClientLevelUpActionMessage {
+  type: 'client-level-up-action'
+  action: 'reroll' | 'save'
+  offerSequence: number
+}
+
 export interface ClientHubActionMessage {
   type: 'client-hub-action'
   action: HubInventoryAction
@@ -298,6 +304,7 @@ export type ClientGameMessage =
   | ClientHelloMessage
   | ClientHubActionMessage
   | ClientInputMessage
+  | ClientLevelUpActionMessage
   | ClientSelectSkillMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
@@ -403,6 +410,18 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       choiceIndex,
       offerSequence: nonnegativeInteger(value.offerSequence, 'offerSequence'),
       skillId,
+    }
+  }
+  if (value.type === 'client-level-up-action') {
+    onlyKeys(value, 'message', ['type', 'action', 'offerSequence'])
+    const action = limitedString(value.action, 'action', 16)
+    if (action !== 'reroll' && action !== 'save') {
+      throw new GameProtocolError('level-up action is not supported')
+    }
+    return {
+      type: 'client-level-up-action',
+      action,
+      offerSequence: nonnegativeInteger(value.offerSequence, 'offerSequence'),
     }
   }
   if (value.type === 'client-ping') {
@@ -1226,6 +1245,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'coldSlowTicksRemaining',
     'currentHealth',
     'currentMana',
+    'deferredSkillChoices',
     'dazzleTicksRemaining',
     'deathEpoch',
     'deathTick',
@@ -1241,6 +1261,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'poisonTicksRemaining',
     'previousThreshold',
     'revision',
+    'sorcerorsCharmAvailable',
   ])
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
   const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
@@ -1318,6 +1339,10 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     coldSlowTicksRemaining,
     currentHealth,
     currentMana,
+    deferredSkillChoices: nonnegativeInteger(
+      source.deferredSkillChoices,
+      `${field}.deferredSkillChoices`,
+    ),
     dazzleTicksRemaining,
     deathEpoch: nonnegativeInteger(source.deathEpoch, `${field}.deathEpoch`),
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
@@ -1341,6 +1366,10 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       `${field}.previousThreshold`,
     ),
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
+    sorcerorsCharmAvailable: boolean(
+      source.sorcerorsCharmAvailable,
+      `${field}.sorcerorsCharmAvailable`,
+    ),
   }
 }
 

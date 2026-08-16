@@ -1713,6 +1713,40 @@
             0.0
           ]
         },
+        "56": {
+          "frame": [
+            0,
+            423,
+            149,
+            193
+          ],
+          "logicalSize": [
+            149,
+            193
+          ],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
+        "57": {
+          "frame": [
+            266,
+            552,
+            149,
+            193
+          ],
+          "logicalSize": [
+            149,
+            193
+          ],
+          "rotated": false,
+          "trimOrigin": [
+            0.0,
+            0.0
+          ]
+        },
         "59": {
           "frame": [
             563,

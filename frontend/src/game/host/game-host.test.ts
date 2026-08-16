@@ -5,7 +5,13 @@ import { WebSocket } from 'ws'
 
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { BONEYARD_GAME_OVER_INPUT_GATE_TICKS } from '../core-kernels/game-run.ts'
-import { createGameSimulation, getPlayerEconomy } from '../core-server/game-simulation.ts'
+import {
+  createGameSimulation,
+  getPlayerEconomy,
+  getPlayerProgression,
+  grantGameSimulationPlayerExperience,
+} from '../core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import { createHubStudentFixturePopulation } from '../core-server/hub-student-fixtures.ts'
 import type {
   PlayerCharacterConfig,
@@ -185,6 +191,72 @@ test('game host pauses a leveling player and authoritatively books the offered s
     booked.learnedSkills.find(([learnedSkillId]) => learnedSkillId === skillId),
     [skillId, previousRank + 1, previousRank + 1],
   )
+})
+
+test('game host validates and broadcasts the complete Sorceror action sequence', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const playerId = client.welcome.playerId
+
+  const current = host.state()
+  const withCharm = {
+    ...current,
+    playerEntities: replacePlayerEconomy(current.playerEntities, playerId, {
+      ...getPlayerEconomy(current, playerId),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  Object.assign(current, grantGameSimulationPlayerExperience(withCharm, playerId, 300))
+  const firstOffer = getPlayerProgression(host.state(), playerId).pendingOffer!
+
+  const rerolledSnapshot = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.pendingOffer?.sequence !== firstOffer.sequence
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: firstOffer.sequence,
+  }))
+  const rerolled = await rerolledSnapshot
+  assert.equal(rerolled.type, 'server-snapshot')
+  assert.equal(rerolled.snapshot.players[playerId].progression.sorcerorsCharmAvailable, false)
+  const rerolledOffer = rerolled.snapshot.players[playerId].progression.pendingOffer!
+
+  const selectedSnapshot = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.pendingOffer?.sequence !== rerolledOffer.sequence
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-select-skill',
+    choiceIndex: 0,
+    offerSequence: rerolledOffer.sequence,
+    skillId: rerolledOffer.options[0]!.skillId,
+  }))
+  const selected = await selectedSnapshot
+  assert.equal(selected.type, 'server-snapshot')
+  assert.equal(selected.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
+  const saveOffer = selected.snapshot.players[playerId].progression.pendingOffer!
+
+  const savedSnapshot = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[playerId].progression.deferredSkillChoices === 1
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-level-up-action',
+    action: 'save',
+    offerSequence: saveOffer.sequence,
+  }))
+  const saved = await savedSnapshot
+  assert.equal(saved.type, 'server-snapshot')
+  assert.equal(saved.snapshot.players[playerId].progression.deferredSkillChoices, 1)
+  assert.ok(saved.snapshot.players[playerId].progression.pendingOffer)
+  assert.equal(saved.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
 })
 
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {

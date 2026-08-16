@@ -27,8 +27,10 @@ import {
   applyPlayerSkillChoice,
   createPlayerProgression,
   createPlayerSkillBook,
+  deferPlayerSkillChoice,
   grantPlayerExperience,
   playerStatBook,
+  rerollPlayerSkillOffer,
   synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
   type SharedPlayerLevelMilestone,
@@ -37,6 +39,7 @@ import {
 } from '../core-kernels/player-progression.ts'
 import {
   createHubEconomy,
+  SORCERORS_CHARM_SELECTOR,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
 
@@ -454,6 +457,7 @@ export function grantPlayerEntityExperience(
     previous,
     source.skillBooks[index]!,
     amount,
+    ownsSorcerorsCharm(source, index),
   )
   return { ...source, progressions }
 }
@@ -476,7 +480,12 @@ export function grantSharedPlayerEntityExperience(
     }
   }
   const previous = source.progressions[sourceIndex]!
-  const awarded = grantPlayerExperience(previous, source.skillBooks[sourceIndex]!, amount)
+  const awarded = grantPlayerExperience(
+    previous,
+    source.skillBooks[sourceIndex]!,
+    amount,
+    ownsSorcerorsCharm(source, sourceIndex),
+  )
   const progressions = [...source.progressions]
   progressions[sourceIndex] = awarded
   if (awarded.level === previous.level) {
@@ -499,6 +508,7 @@ export function grantSharedPlayerEntityExperience(
       previousProgression,
       source.skillBooks[index]!,
       milestone,
+      ownsSorcerorsCharm(source, index),
     )
   }
   return { milestone, store: { ...source, progressions } }
@@ -515,6 +525,7 @@ export function applyPlayerEntitySkillChoice(
     source.progressions[index]!,
     source.skillBooks[index]!,
     selection,
+    ownsSorcerorsCharm(source, index),
   )
   if (!applied) return null
   const progressions = [...source.progressions]
@@ -522,6 +533,39 @@ export function applyPlayerEntitySkillChoice(
   progressions[index] = applied.progression
   skillBooks[index] = applied.skillBook
   return { ...source, progressions, skillBooks }
+}
+
+export function rerollPlayerEntitySkillOffer(
+  source: PlayerEntityStore,
+  playerId: string,
+  offerSequence: number,
+  nextOfferSeed: number,
+): PlayerEntityStore | null {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0 || !ownsSorcerorsCharm(source, index)) return null
+  const progression = rerollPlayerSkillOffer(
+    source.progressions[index]!,
+    source.skillBooks[index]!,
+    offerSequence,
+    nextOfferSeed,
+  )
+  return progression === null ? null : replacePlayerProgression(source, index, progression)
+}
+
+export function deferPlayerEntitySkillChoice(
+  source: PlayerEntityStore,
+  playerId: string,
+  offerSequence: number,
+): PlayerEntityStore | null {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return null
+  const progression = deferPlayerSkillChoice(
+    source.progressions[index]!,
+    source.skillBooks[index]!,
+    offerSequence,
+    ownsSorcerorsCharm(source, index),
+  )
+  return progression === null ? null : replacePlayerProgression(source, index, progression)
 }
 
 function withoutIndex<T>(source: readonly T[], index: number): T[] {
@@ -536,6 +580,10 @@ function replacePlayerProgression(
   const progressions = [...source.progressions]
   progressions[index] = progression
   return { ...source, progressions }
+}
+
+function ownsSorcerorsCharm(source: PlayerEntityStore, index: number): boolean {
+  return source.economies[index]!.ownedPerkSelectors.includes(SORCERORS_CHARM_SELECTOR)
 }
 
 function locomotionComponent(character: PlayerCharacterState): PlayerLocomotionComponent {

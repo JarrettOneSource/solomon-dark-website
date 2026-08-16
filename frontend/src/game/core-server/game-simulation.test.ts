@@ -29,6 +29,8 @@ import {
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  rerollGameSimulationPlayerSkill,
+  saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerSkill,
   stepGameSimulation,
   stepGameSimulationTick,
@@ -48,6 +50,7 @@ import {
   poisonPlayerEntity,
   replacePlayerCharacter,
   replacePlayerCharacterRecords,
+  replacePlayerEconomy,
 } from './player-entity-store.ts'
 
 function gameplayInput(x: number, y: number) {
@@ -529,6 +532,62 @@ test('shared picker cohort excludes late joiners and releases disconnected waite
   })!
   state = removePlayerCharacter(state, 'second')
   assert.equal(state.levelUpBarrier, null)
+})
+
+test('Sorceror actions are authoritative, consume the active offer, and preserve saved choices', () => {
+  let state = createGameSimulation({ first: {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } }, { playerOfferRngSeed: 73 })
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
+      ...getPlayerEconomy(state, 'first'),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  state = grantGameSimulationPlayerExperience(state, 'first', 300)
+  const initial = state
+  const firstOffer = getPlayerProgression(state, 'first').pendingOffer!
+  assert.equal(getPlayerProgression(state, 'first').sorcerorsCharmAvailable, true)
+
+  state = rerollGameSimulationPlayerSkill(state, 'first', firstOffer.sequence)!
+  const rerolled = getPlayerProgression(state, 'first')
+  assert.notEqual(rerolled.pendingOffer?.sequence, firstOffer.sequence)
+  assert.equal(rerolled.sorcerorsCharmAvailable, false)
+  assert.notDeepEqual(state.playerOfferRng, initial.playerOfferRng)
+  assert.equal(
+    rerollGameSimulationPlayerSkill(state, 'first', rerolled.pendingOffer!.sequence),
+    null,
+  )
+
+  const saved = saveGameSimulationPlayerSkill(initial, 'first', firstOffer.sequence)!
+  const savedProgression = getPlayerProgression(saved, 'first')
+  assert.equal(savedProgression.deferredSkillChoices, 1)
+  assert.deepEqual(savedProgression.pendingLevels, [4, 4])
+  assert.equal(savedProgression.sorcerorsCharmAvailable, true)
+  assert.ok(saved.levelUpBarrier)
+
+  let single = createGameSimulation({ first: {
+    discipline: 'arcane',
+    displayName: 'First',
+    element: 'ether',
+  } })
+  single = {
+    ...single,
+    playerEntities: replacePlayerEconomy(single.playerEntities, 'first', {
+      ...getPlayerEconomy(single, 'first'),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  single = grantGameSimulationPlayerExperience(single, 'first', 100)
+  const singleOffer = getPlayerProgression(single, 'first').pendingOffer!
+  single = saveGameSimulationPlayerSkill(single, 'first', singleOffer.sequence)!
+  assert.equal(single.levelUpBarrier, null)
+  assert.equal(getPlayerProgression(single, 'first').deferredSkillChoices, 1)
+  single = grantGameSimulationPlayerExperience(single, 'first', 61)
+  assert.deepEqual(getPlayerProgression(single, 'first').pendingLevels, [3, 3])
 })
 
 test('the authoritative tick latches footsteps only while native movement is active', () => {

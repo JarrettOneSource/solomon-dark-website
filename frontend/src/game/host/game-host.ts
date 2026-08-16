@@ -25,6 +25,8 @@ import {
   getPlayerProgression,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
+  rerollGameSimulationPlayerSkill,
+  saveGameSimulationPlayerSkill,
   selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
@@ -471,6 +473,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         state = selected
+        client.activeInput = createIdlePlayerCharacterInput()
+        client.queuedInputs.clear()
+        if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
+        broadcastSnapshot()
+        return
+      }
+      if (message.type === 'client-level-up-action') {
+        const barrierBefore = state.levelUpBarrier
+        const applied = message.action === 'reroll'
+          ? rerollGameSimulationPlayerSkill(state, client.playerId, message.offerSequence)
+          : saveGameSimulationPlayerSkill(state, client.playerId, message.offerSequence)
+        if (!applied) {
+          disconnect(socket, 'invalid-message', 'The level-up action is stale or unavailable.')
+          return
+        }
+        state = applied
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()

@@ -136,6 +136,15 @@ test('client protocol validates character hello, input, acknowledgement, and pin
     skillId: 48,
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: 8,
+  })), {
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: 8,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
     sequence: 12,
@@ -160,7 +169,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v23 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v24 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -234,6 +243,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     currentHealth: 50,
     currentMana: 100,
     coldSlowTicksRemaining: 0,
+    deferredSkillChoices: 0,
     dazzleTicksRemaining: 0,
     deathEpoch: 0,
     deathTick: 0,
@@ -249,6 +259,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
+    sorcerorsCharmAvailable: false,
   })
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
@@ -306,7 +317,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v23 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v24 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -719,8 +730,8 @@ test('protocol v23 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v23 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 23)
+test('protocol v24 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 24)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -812,7 +823,7 @@ test('protocol v23 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v23 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v24 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1187,6 +1198,11 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     offerSequence: 1,
     skillId: 80,
   })), /skillId/)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-level-up-action',
+    action: 'hover',
+    offerSequence: 1,
+  })), /not supported/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-acknowledge-game-over',
     eventId: 0,

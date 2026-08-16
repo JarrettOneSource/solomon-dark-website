@@ -110,6 +110,8 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   )
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
+  assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
+  assert.equal(NATIVE_SOUND_MANIFEST['unlock-skill'].registryOffset, 0x11a0)
   assert.equal(NATIVE_SOUND_MANIFEST['level-up'].registryOffset, 0x908)
   assert.equal(NATIVE_SOUND_MANIFEST['step-1'].registryOffset, 0x23b8)
   assert.equal(NATIVE_SOUND_MANIFEST['step-2'].registryOffset, 0x23e4)
@@ -125,6 +127,22 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
+})
+
+test('pins the complete skill-picker lifecycle cues to the untouched stock WAVs', () => {
+  for (const [cue, filename] of [
+    ['open-panel', 'openpanel.wav'],
+    ['unlock-skill', 'unlockskill.wav'],
+  ] as const) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+    )
+  }
 })
 
 test('plays the untouched stock level-up cue once at scalar one per barrier', () => {

@@ -24,6 +24,8 @@ export interface NativeSkillPickerReveal {
   readonly revealAlpha: number
 }
 
+export type NativeSkillPickerCloseDirection = -1 | -0.75
+
 export interface NativeLevelUpParticle {
   readonly alpha: number
   readonly atlas: 'BadGuys'
@@ -59,10 +61,26 @@ export const NATIVE_LEVEL_UP_MODAL_VISIBILITY = Object.freeze({
 export function nativeSkillPickerReveal(elapsedMs: number): NativeSkillPickerReveal {
   const tick = nativeElapsedTick(elapsedMs)
   const revealAlpha = Math.min(1, tick / NATIVE_SKILL_PICKER_REVEAL_TICKS)
+  return nativeSkillPickerFrame(revealAlpha, revealAlpha === 1)
+}
+
+export function nativeSkillPickerClose(
+  elapsedMs: number,
+  direction: NativeSkillPickerCloseDirection,
+): NativeSkillPickerReveal {
+  const tick = nativeElapsedTick(elapsedMs)
+  const revealAlpha = Math.max(0, 1 + direction * 0.025 * tick)
+  return nativeSkillPickerFrame(revealAlpha, false)
+}
+
+function nativeSkillPickerFrame(
+  revealAlpha: number,
+  interactive: boolean,
+): NativeSkillPickerReveal {
   return {
     ambientAlpha: revealAlpha * 0.1,
     curtainAlpha: revealAlpha * 0.5,
-    interactive: revealAlpha === 1,
+    interactive,
     panelAlpha: revealAlpha ** 3,
     revealAlpha,
   }

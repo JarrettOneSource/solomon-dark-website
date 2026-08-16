@@ -77,6 +77,8 @@ export interface GameClientSession {
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
+  rerollSkill(offerSequence: number): void
+  saveSkill(offerSequence: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
@@ -481,6 +483,34 @@ export function connectGameClientSession(
           choiceIndex,
           offerSequence,
           skillId,
+        }))
+      },
+      rerollSkill(offerSequence) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          !progression?.sorcerorsCharmAvailable
+          || progression.pendingOffer?.sequence !== offerSequence
+        ) throw new Error('Roll Again is not available for the current skill offer.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-level-up-action',
+          action: 'reroll',
+          offerSequence,
+        }))
+      },
+      saveSkill(offerSequence) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          !progression?.sorcerorsCharmAvailable
+          || progression.pendingOffer?.sequence !== offerSequence
+        ) throw new Error('Save Skill is not available for the current skill offer.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-level-up-action',
+          action: 'save',
+          offerSequence,
         }))
       },
       sendHubAction(action) {

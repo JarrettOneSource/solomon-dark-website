@@ -14,6 +14,7 @@ import {
   SKILL_PICKER_PANEL,
   SKILL_PICKER_SIZE,
   skillPickerPanelBounds,
+  skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
 
 const ASSET_ROOT = new URL('../../assets/game/', import.meta.url)
@@ -29,7 +30,7 @@ test('the picker keeps the sealed 1600x900 stock card geometry and records', () 
   assert.deepEqual(SKILL_PICKER_CARD_RECORDS, [0, 13, 164, 5])
   assert.deepEqual(
     SKILL_PICKER_NATIVE_UI_RECORDS,
-    [3, 10, 37, 49, 59, 62, 79, 107, 108, 109, 110],
+    [3, 10, 37, 49, 56, 57, 59, 62, 79, 107, 108, 109, 110],
   )
   assert.deepEqual(SKILL_PICKER_PANEL, {
     cardHeight: 295,
@@ -45,6 +46,14 @@ test('the picker keeps the sealed 1600x900 stock card geometry and records', () 
     top: 272.5,
     width: 660,
   })
+  assert.deepEqual(skillPickerSpecialActionBounds(3), {
+    reroll: { height: 100, left: 1170, top: 322.5, width: 255 },
+    save: { height: 100, left: 330, top: 322.5, width: 255 },
+  })
+  assert.deepEqual(skillPickerSpecialActionBounds(4), {
+    reroll: { height: 100, left: 1270, top: 322.5, width: 255 },
+    save: { height: 100, left: 230, top: 322.5, width: 255 },
+  })
 })
 
 test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlases', () => {
@@ -58,6 +67,8 @@ test('the picker consumes the exact extracted UI, Skills, and bitmap-font atlase
   assert.deepEqual(nativeAssets.atlases.UI.records['49'].logicalSize, [264, 264])
   assert.deepEqual(nativeAssets.atlases.UI.records['10'].logicalSize, [106, 19])
   assert.deepEqual(nativeAssets.atlases.UI.records['79'].logicalSize, [21, 108])
+  assert.ok(nativeAssets.atlases.UI.records['56'])
+  assert.ok(nativeAssets.atlases.UI.records['57'])
   assert.equal(nativeAssets.atlases.UI.records['37'].logicalSize[0], 413)
   assert.deepEqual(nativeAssets.atlases.Skills.records['0'].logicalSize, [90, 90])
   assert.deepEqual(nativeAssets.atlases.Skills.records['5'].logicalSize, [87, 88])

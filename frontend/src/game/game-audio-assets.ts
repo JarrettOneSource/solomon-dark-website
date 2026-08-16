@@ -27,6 +27,7 @@ import maggotSqueak2 from '../assets/game/audio/sfx/maggot-squeak-2.wav'
 import maggotSquish1 from '../assets/game/audio/sfx/maggot-squish-1.wav'
 import maggotSquish2 from '../assets/game/audio/sfx/maggot-squish-2.wav'
 import maggotSquish3 from '../assets/game/audio/sfx/maggot-squish-3.wav'
+import openPanel from '../assets/game/audio/sfx/openpanel.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import popShield from '../assets/game/audio/sfx/pop-shield.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
@@ -36,6 +37,7 @@ import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
+import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
 import zombieDie from '../assets/game/audio/sfx/zombie-die.wav'
 import zombieDieGroan from '../assets/game/audio/sfx/zombie-die-groan.wav'
 import zombieOuch from '../assets/game/audio/sfx/zombie-ouch.wav'
@@ -91,6 +93,7 @@ export const GAME_AUDIO_SOURCES = {
     'maggot-squish-1': maggotSquish1,
     'maggot-squish-2': maggotSquish2,
     'maggot-squish-3': maggotSquish3,
+    'open-panel': openPanel,
     'pick-skill': pickSkill,
     'pop-shield': popShield,
     'rock-hit': rockHit,
@@ -100,6 +103,7 @@ export const GAME_AUDIO_SOURCES = {
     'step-2': step2,
     summon,
     'throw-fire': throwFire,
+    'unlock-skill': unlockSkill,
     'zombie-die': zombieDie,
     'zombie-die-groan': zombieDieGroan,
     'zombie-ouch': zombieOuch,

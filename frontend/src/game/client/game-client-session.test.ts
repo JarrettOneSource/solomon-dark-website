@@ -6,12 +6,15 @@ import {
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
+  getPlayerEconomy,
+  grantGameSimulationPlayerExperience,
 } from '../core-server/game-simulation.ts'
 import {
   createPlayerCharacter,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import {
   createGameSnapshotFrame,
   createReplicatedEntityBaseline,
@@ -427,6 +430,42 @@ test('client suppresses gameplay input while a skill offer is pending and submit
     choiceIndex: 0,
     offerSequence: offer.sequence,
     skillId: option.skillId,
+  })
+  session.destroy()
+})
+
+test('client submits the exact Sorceror action for the current offer only', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  let serverState = createGameSimulation({ 'player-1': CHARACTER })
+  serverState = {
+    ...serverState,
+    playerEntities: replacePlayerEconomy(serverState.playerEntities, 'player-1', {
+      ...getPlayerEconomy(serverState, 'player-1'),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  serverState = grantGameSimulationPlayerExperience(serverState, 'player-1', 100)
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  const offer = session.getSnapshot().players['player-1']!.progression.pendingOffer!
+
+  assert.throws(() => session.rerollSkill(offer.sequence + 1), /not available/)
+  session.rerollSkill(offer.sequence)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: offer.sequence,
+  })
+  session.saveSkill(offer.sequence)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-level-up-action',
+    action: 'save',
+    offerSequence: offer.sequence,
   })
   session.destroy()
 })

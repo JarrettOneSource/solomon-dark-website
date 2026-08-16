@@ -46,6 +46,7 @@ export type GameSoundCue =
   | 'maggot-squish-1'
   | 'maggot-squish-2'
   | 'maggot-squish-3'
+  | 'open-panel'
   | 'pick-skill'
   | 'pop-shield'
   | 'rock-hit'
@@ -55,6 +56,7 @@ export type GameSoundCue =
   | 'step-2'
   | 'summon'
   | 'throw-fire'
+  | 'unlock-skill'
   | 'zombie-die'
   | 'zombie-die-groan'
   | 'zombie-ouch'
@@ -211,6 +213,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\Squish\\Squish3',
     sourceSha256: '1e8a7b2bde79e7ed6fe9267c489f9ac085966a56dfd5b2ad072f16ed39c10516',
   },
+  'open-panel': {
+    registryOffset: 0xb18,
+    sourceName: 'sounds\\openpanel',
+    sourceSha256: '637a76288c852d813921c7789b211f573f88c56d6036e2e1f3e1cf558f0ae743',
+  },
   'pick-skill': {
     registryOffset: 0x44,
     sourceName: 'sounds\\pickskill',
@@ -255,6 +262,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x10c4,
     sourceName: 'sounds\\throwfire',
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
+  },
+  'unlock-skill': {
+    registryOffset: 0x11a0,
+    sourceName: 'sounds\\unlockskill',
+    sourceSha256: '2013053abdd8a969f7c63b2c735cedb5a571fc999bf1474543cd608cee74ffaa',
   },
   'zombie-die': {
     registryOffset: 0x1224,

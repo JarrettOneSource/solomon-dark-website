@@ -95,6 +95,7 @@ export interface ProtocolPlayerProgression {
   coldSlowTicksRemaining: number
   currentHealth: number
   currentMana: number
+  deferredSkillChoices: number
   deathEpoch: number
   deathTick: number
   dazzleTicksRemaining: number
@@ -110,6 +111,7 @@ export interface ProtocolPlayerProgression {
   poisonTicksRemaining: number
   previousThreshold: number
   revision: number
+  sorcerorsCharmAvailable: boolean
 }
 
 export interface ProtocolStudentProp {

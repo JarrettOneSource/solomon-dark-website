@@ -7,10 +7,14 @@ import { createServer as createViteServer } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
+  getPlayerEconomy,
   getPlayerCharacter,
   getPlayerProgression,
   getPlayerSkillBook,
+  grantGameSimulationPlayerExperience,
 } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerCharacter } from '../src/game/core-server/player-entity-store.ts'
+import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -38,7 +42,6 @@ const baseUrl = `http://127.0.0.1:${viteAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
-  initialPlayerExperience: 100,
   snapshotRate: 100,
 })
 const browser = await chromium.launch({
@@ -46,9 +49,9 @@ const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
+const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
 
 try {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
   page.on('pageerror', (error) => pageErrors.push(error.message))
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text())
@@ -64,8 +67,8 @@ try {
     },
   })
 
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  await page.goto(`${baseUrl}/game`, { timeout: 90_000, waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 180_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   await page.getByRole('button', { name: 'New Game' }).click()
   await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
@@ -79,10 +82,49 @@ try {
 
   const hubScene = page.locator('.hub-scene[data-renderer-state="ready"]')
   const hubCanvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
-  const picker = page.getByRole('dialog', { name: 'Level 2. Select a skill.' })
-  await picker.waitFor({ timeout: 30_000 })
+  await Promise.all([
+    hubScene.waitFor({ timeout: 30_000 }),
+    hubCanvas.waitFor({ timeout: 30_000 }),
+  ])
   const playerId = host.hostPlayerId()
   assert.ok(playerId)
+  const beforeCharm = host.state()
+  Object.assign(beforeCharm, {
+    ...beforeCharm,
+    playerEntities: replacePlayerCharacter(
+      beforeCharm.playerEntities,
+      playerId,
+      {
+        ...getPlayerCharacter(beforeCharm, playerId),
+        position: { ...HUB_TRADER_GEOMETRY.hagatha.position },
+        velocity: { x: 0, y: 0 },
+      },
+    ),
+  })
+  const hagathaPrompt = page.locator('.hub-trader-interact[data-hub-trader="hagatha"]')
+  await hagathaPrompt.waitFor({ timeout: 10_000 })
+  await hagathaPrompt.click()
+  const hagathaDialogue = page.getByRole('dialog', { name: 'Talking to Hagatha' })
+  await hagathaDialogue.waitFor()
+  await hagathaDialogue.locator('[data-service-trader="hagatha"]').click()
+  const hagatha = page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES" })
+  await hagatha.waitFor()
+  await hagatha.getByRole('button', { name: 'Next page' }).click()
+  await hagatha.locator('[data-hagatha-selector="9"]').waitFor()
+  await hagatha.getByRole('button', { name: 'Next page' }).click()
+  const sorcerorsCharm = hagatha.locator('[data-hagatha-selector="17"]')
+  await sorcerorsCharm.waitFor()
+  await sorcerorsCharm.click()
+  await sorcerorsCharm.waitFor({ state: 'detached' })
+  await hagatha.getByRole('button', { name: 'Done' }).click()
+  assert.ok(getPlayerEconomy(host.state(), playerId).ownedPerkSelectors.includes(17))
+
+  const leveled = grantGameSimulationPlayerExperience(host.state(), playerId, 300)
+  Object.assign(host.state(), leveled)
+  const picker = page.getByRole('dialog', { name: 'Level 4. Select a skill.' })
+  await page.keyboard.down('d')
+  await picker.waitFor({ timeout: 30_000 })
+  await page.keyboard.up('d')
   const earlyOfferSequence = getPlayerProgression(host.state(), playerId).pendingOffer?.sequence
   assert.equal(await picker.getAttribute('data-reveal-interactive'), 'false')
   assert.equal(await picker.getByRole('button').first().isDisabled(), true)
@@ -94,10 +136,6 @@ try {
     'the native reveal gate must reject a choice before 0.4 seconds',
   )
   await page.screenshot({ path: revealScreenshotPath })
-  await Promise.all([
-    hubScene.waitFor({ timeout: 30_000 }),
-    hubCanvas.waitFor({ timeout: 30_000 }),
-  ])
   const presentationSamples = []
   const presentationDeadline = Date.now() + 5_000
   while (Date.now() < presentationDeadline) {
@@ -173,8 +211,10 @@ try {
     { height: 900, width: 1600 },
   )
 
-  const actions = picker.getByRole('button')
+  const actions = picker.locator('.skill-picker-action')
   assert.equal(await actions.count(), 3)
+  assert.equal(await picker.getByRole('button', { name: 'Save Skill' }).count(), 1)
+  assert.equal(await picker.getByRole('button', { name: 'Roll Again' }).count(), 1)
   const actionReceipt = []
   for (let index = 0; index < 3; index += 1) {
     const action = actions.nth(index)
@@ -190,9 +230,11 @@ try {
   assert.ok(actionReceipt.every(({ label, skillId }) => label && skillId >= 8 && skillId <= 79))
 
   const beforeChoice = getPlayerProgression(host.state(), playerId)
-  assert.equal(beforeChoice.level, 2)
-  assert.equal(beforeChoice.experience, 100)
+  assert.equal(beforeChoice.level, 4)
+  assert.equal(beforeChoice.experience, 300)
+  assert.deepEqual(beforeChoice.pendingLevels, [4, 4, 4])
   assert.equal(beforeChoice.pendingOffer?.options.length, 3)
+  assert.equal(beforeChoice.sorcerorsCharmAvailable, true)
   const playerXBeforeBlockedInput = getPlayerCharacter(host.state(), playerId).position.x
   await page.keyboard.press('Escape')
   assert.equal(await picker.count(), 1, 'Escape must not dismiss the mandatory picker')
@@ -205,25 +247,110 @@ try {
     'the authoritative player must remain paused while choosing a skill',
   )
 
-  await page.keyboard.press('ArrowRight')
-  assert.equal(await actions.nth(1).getAttribute('aria-pressed'), 'true')
-  const selectedSkillId = actionReceipt[1].skillId
-  const previousRank = getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId]
+  const pickSkillCountBeforeFocus = await soundCount(page, 'pickskill')
+  await actions.nth(1).hover()
+  await page.waitForFunction(() => (
+    document.querySelectorAll('.skill-picker-action')[1]?.getAttribute('aria-pressed') === 'true'
+  ), undefined, { timeout: 5_000 })
+  await actions.nth(2).focus()
+  await page.waitForFunction(() => (
+    document.querySelectorAll('.skill-picker-action')[2]?.getAttribute('aria-pressed') === 'true'
+  ), undefined, { timeout: 5_000 })
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForFunction(() => (
+    document.querySelectorAll('.skill-picker-action')[1]?.getAttribute('aria-pressed') === 'true'
+  ), undefined, { timeout: 5_000 })
+  const keyboardSelectionReceipt = await picker.evaluate((stage) => ({
+    activeChoice: document.activeElement?.getAttribute('data-choice-index'),
+    pressed: [...stage.querySelectorAll('.skill-picker-action')]
+      .map((action) => action.getAttribute('aria-pressed')),
+  }))
+  assert.deepEqual(keyboardSelectionReceipt, {
+    activeChoice: '1',
+    pressed: ['false', 'true', 'false'],
+  })
+  assert.equal(await soundCount(page, 'pickskill'), pickSkillCountBeforeFocus)
   await page.screenshot({ path: screenshotPath })
-  await page.keyboard.press('Enter')
-  await picker.waitFor({ state: 'detached', timeout: 15_000 })
 
-  const afterChoice = getPlayerProgression(host.state(), playerId)
-  const afterBook = getPlayerSkillBook(host.state(), playerId)
-  assert.equal(afterChoice.pendingOffer, null)
-  assert.equal(afterBook.permanentRanks[selectedSkillId], previousRank + 1)
-  assert.equal(afterBook.effectiveRanks[selectedSkillId], previousRank + 1)
+  const rerollSequence = beforeChoice.pendingOffer.sequence
+  const rerollRngBefore = { ...host.state().playerOfferRng }
+  await picker.getByRole('button', { name: 'Roll Again' }).click()
+  await waitForHost(() => (
+    getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== rerollSequence
+  ), 'authoritative reroll')
+  await page.waitForFunction((previousSequence) => {
+    const stage = document.querySelector('.skill-picker-stage')
+    return stage?.dataset.pickerPhase === 'settled'
+      && Number(stage.dataset.offerSequence) !== previousSequence
+  }, rerollSequence, { timeout: 10_000 })
+  const rerolled = getPlayerProgression(host.state(), playerId)
+  assert.notDeepEqual(host.state().playerOfferRng, rerollRngBefore)
+  assert.equal(rerolled.sorcerorsCharmAvailable, false)
+  assert.equal(await picker.getByRole('button', { name: 'Roll Again' }).count(), 0)
+  assert.deepEqual(await soundRates(page, 'summon'), [Math.fround(0.8)])
+
+  const selectedSkillId = rerolled.pendingOffer.options[0].skillId
+  const previousRank = getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId]
+  const firstCloseSequence = rerolled.pendingOffer.sequence
+  const firstCloseStartedAt = Date.now()
+  const firstQueuedWaitReceiptPromise = observeQueuedWait(page)
+  await picker.locator('.skill-picker-action').first().click()
+  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  assert.equal(await hubCanvas.getAttribute('data-level-up-dynamic-suppressed'), 'true')
+  await waitForHost(() => (
+    getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== firstCloseSequence
+  ), 'queued offer after card selection')
+  assert.deepEqual(await firstQueuedWaitReceiptPromise, {
+    actionCount: 0,
+    revealAlpha: '1',
+  })
+  await page.waitForFunction((previousSequence) => {
+    const stage = document.querySelector('.skill-picker-stage')
+    return stage?.dataset.pickerPhase === 'settled'
+      && Number(stage.dataset.offerSequence) !== previousSequence
+  }, firstCloseSequence, { timeout: 10_000 })
+  assert.ok(Date.now() - firstCloseStartedAt >= 610)
+  assert.equal(getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId], previousRank + 1)
+  assert.equal(getPlayerProgression(host.state(), playerId).sorcerorsCharmAvailable, true)
+  assert.equal(await picker.getByRole('button', { name: 'Save Skill' }).count(), 1)
+
+  const saveSequence = getPlayerProgression(host.state(), playerId).pendingOffer.sequence
+  const saveCloseStartedAt = Date.now()
+  const saveQueuedWaitReceiptPromise = observeQueuedWait(page)
+  await picker.getByRole('button', { name: 'Save Skill' }).click()
+  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  await waitForHost(() => (
+    getPlayerProgression(host.state(), playerId).pendingOffer?.sequence !== saveSequence
+  ), 'queued offer after Save Skill')
+  assert.deepEqual(await saveQueuedWaitReceiptPromise, {
+    actionCount: 0,
+    revealAlpha: '1',
+  })
+  await page.waitForFunction((previousSequence) => {
+    const stage = document.querySelector('.skill-picker-stage')
+    return stage?.dataset.pickerPhase === 'settled'
+      && Number(stage.dataset.offerSequence) !== previousSequence
+  }, saveSequence, { timeout: 10_000 })
+  assert.ok(Date.now() - saveCloseStartedAt >= 480)
+  const saved = getPlayerProgression(host.state(), playerId)
+  assert.equal(saved.deferredSkillChoices, 1)
+  assert.deepEqual(saved.pendingLevels, [4])
+  assert.equal(saved.sorcerorsCharmAvailable, true)
+
+  const finalFirstScreenCloseStartedAt = Date.now()
+  await picker.locator('.skill-picker-action').first().click()
+  await page.locator('.skill-picker-stage[data-picker-phase="closing"]').waitFor()
+  await picker.waitFor({ state: 'detached', timeout: 15_000 })
+  assert.ok(Date.now() - finalFirstScreenCloseStartedAt >= 520)
+  await waitForHost(() => host.state().levelUpBarrier === null, 'first level-up barrier release')
+  const afterFirstScreen = getPlayerProgression(host.state(), playerId)
+  assert.equal(afterFirstScreen.pendingOffer, null)
+  assert.equal(afterFirstScreen.deferredSkillChoices, 1)
   assert.equal(await initialHubCanvas.evaluate((canvas) => canvas.isConnected), true)
   assert.equal(await page.locator('.hub-world-canvas').count(), 1)
-  const levelUpSoundRates = await page.evaluate(() => window.__sdrAudioEvents
-    .filter(({ src, type }) => type === 'buffer-start' && src.includes('level-up'))
-    .map(({ playbackRate }) => playbackRate))
-  assert.deepEqual(levelUpSoundRates, [1])
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-world-canvas')?.dataset.levelUpDynamicSuppressed === 'false'
+  ), undefined, { timeout: 5_000 })
 
   const playerXBeforeReleasedInput = getPlayerCharacter(host.state(), playerId).position.x
   await page.keyboard.down('d')
@@ -234,20 +361,100 @@ try {
   )
   await page.keyboard.up('d')
 
+  const nextThreshold = grantGameSimulationPlayerExperience(host.state(), playerId, 91)
+  Object.assign(host.state(), nextThreshold)
+  const recoveredPicker = page.getByRole('dialog', { name: 'Level 5. Select a skill.' })
+  await page.keyboard.down('a')
+  await recoveredPicker.waitFor({ timeout: 15_000 })
+  await page.keyboard.up('a')
+  await page.waitForFunction(() => (
+    document.querySelector('.skill-picker-stage')?.getAttribute('data-reveal-interactive')
+      === 'true'
+  ), undefined, { timeout: 15_000 })
+  const recovered = getPlayerProgression(host.state(), playerId)
+  assert.equal(recovered.deferredSkillChoices, 0)
+  assert.deepEqual(recovered.pendingLevels, [5, 5])
+  assert.equal(recovered.pendingOffer.level, 5)
+  assert.equal(await recoveredPicker.getByRole('button', { name: 'Roll Again' }).count(), 1)
+
+  const recoveredFirstSequence = recovered.pendingOffer.sequence
+  await recoveredPicker.locator('.skill-picker-action').first().click()
+  await page.waitForFunction((previousSequence) => {
+    const stage = document.querySelector('.skill-picker-stage')
+    return stage?.dataset.pickerPhase === 'settled'
+      && Number(stage.dataset.offerSequence) !== previousSequence
+  }, recoveredFirstSequence, { timeout: 10_000 })
+  await recoveredPicker.locator('.skill-picker-action').first().click()
+  await recoveredPicker.waitFor({ state: 'detached', timeout: 15_000 })
+  await waitForHost(() => host.state().levelUpBarrier === null, 'recovered barrier release')
+
+  const levelUpSoundRates = await soundRates(page, 'level-up')
+  const openPanelSoundRates = await soundRates(page, 'openpanel')
+  const unlockSkillSoundRates = await soundRates(page, 'unlockskill')
+  assert.deepEqual(levelUpSoundRates, [1, 1])
+  assert.deepEqual(openPanelSoundRates, [1, 0.75, 0.75, 0.75, 1, 0.75, 0.75])
+  assert.deepEqual(unlockSkillSoundRates, [1, 1, 1])
+
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(consoleErrors, [])
   process.stdout.write(`${JSON.stringify({
     actionReceipt,
-    bookedRank: afterBook.permanentRanks[selectedSkillId],
+    bookedRank: getPlayerSkillBook(host.state(), playerId).permanentRanks[selectedSkillId],
+    openPanelSoundRates,
     pickerRenderer,
     presentationReceipt,
     revealScreenshotPath,
     screenshotPath,
     selectedSkillId,
     levelUpSoundRates,
+    unlockSkillSoundRates,
   })}\n`)
+} catch (error) {
+  process.stderr.write(`${JSON.stringify({
+    body: (await page.locator('body').innerText()).slice(0, 2_000),
+    consoleErrors,
+    pageErrors,
+    url: page.url(),
+  })}\n`)
+  throw error
 } finally {
   await browser.close()
   await host.close()
   await vite.close()
+}
+
+async function soundCount(page, sourceFragment) {
+  return page.evaluate((fragment) => window.__sdrAudioEvents
+    .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
+    .length, sourceFragment)
+}
+
+async function soundRates(page, sourceFragment) {
+  return page.evaluate((fragment) => window.__sdrAudioEvents
+    .filter(({ src, type }) => type === 'buffer-start' && src.includes(fragment))
+    .map(({ playbackRate }) => playbackRate), sourceFragment)
+}
+
+async function observeQueuedWait(page) {
+  const receipt = await page.waitForFunction(() => {
+    const stage = document.querySelector('.skill-picker-stage')
+    if (
+      stage?.getAttribute('data-picker-phase') !== 'queued-wait'
+      || stage.getAttribute('data-reveal-alpha') !== '1'
+    ) return false
+    return {
+      actionCount: stage.querySelectorAll('.skill-picker-action').length,
+      revealAlpha: stage.getAttribute('data-reveal-alpha'),
+    }
+  }, undefined, { timeout: 10_000 })
+  return receipt.jsonValue()
+}
+
+async function waitForHost(predicate, label, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`timed out waiting for ${label}`)
 }

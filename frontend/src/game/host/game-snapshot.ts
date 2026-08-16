@@ -198,6 +198,7 @@ function protocolPlayerState(
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
+      deferredSkillChoices: progression.deferredSkillChoices,
       dazzleTicksRemaining: progression.dazzleTicksRemaining,
       deathEpoch: progression.deathEpoch,
       deathTick: progression.deathTick,
@@ -213,6 +214,7 @@ function protocolPlayerState(
       poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
+      sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
     },
   }
 }

@@ -9,6 +9,7 @@ import {
   NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS,
   NATIVE_SKILL_PICKER_REVEAL_TICKS,
   nativeLevelUpPresentationFrame,
+  nativeSkillPickerClose,
   nativeSkillPickerReveal,
 } from './level-up-presentation.ts'
 
@@ -36,6 +37,16 @@ test('replays the stock 40-tick picker reveal and its three alpha lanes', () => 
     panelAlpha: 1,
     revealAlpha: 1,
   })
+})
+
+test('replays the distinct stock card and Save Skill close rates', () => {
+  assert.equal(nativeSkillPickerClose(0, -0.75).revealAlpha, 1)
+  assert.equal(nativeSkillPickerClose(100, -0.75).revealAlpha, 0.8125)
+  assert.equal(nativeSkillPickerClose(530, -0.75).revealAlpha, 0.006249999999999867)
+  assert.equal(nativeSkillPickerClose(540, -0.75).revealAlpha, 0)
+  assert.equal(nativeSkillPickerClose(390, -1).revealAlpha, 0.02499999999999991)
+  assert.equal(nativeSkillPickerClose(400, -1).revealAlpha, 0)
+  assert.equal(nativeSkillPickerClose(100, -0.75).interactive, false)
 })
 
 test('replays the exact BadGuys-73 birth geometry, decay, and sine envelopes', () => {
@@ -119,12 +130,26 @@ test('wires modal suppression through Hub, private rooms, and the complete Boney
     'utf8',
   )
   const main = source('../MainMenuScene.tsx')
+  const picker = source('../SkillPicker.tsx')
   const boneyard = source('./boneyard-world-renderer.ts')
   const hub = source('./hub-world-scene.ts')
   const privateRooms = source('./hub-private-room-scene.ts')
+  const pickerRenderer = source('./skill-picker-renderer.ts')
 
   assert.match(main, /const levelUpModalActive = Boolean\(runtimeSnapshot\?\.levelUpBarrier\)/)
+  assert.ok(main.includes('|| levelUpPickerClosing'))
+  assert.ok(main.includes('&& (runtimeProgression?.pendingOffer || levelUpPickerClosing)'))
   assert.equal((main.match(/levelUpModalActive=\{levelUpModalActive\}/g) ?? []).length, 2)
+  assert.equal((picker.match(/audio\.playSound\('pick-skill'/g) ?? []).length, 1)
+  assert.equal((picker.match(/audio\.playSound\('click'/g) ?? []).length, 1)
+  assert.match(picker, /audio\.playSound\('summon', \{ playbackRate: 0\.8 \}\)/)
+  assert.match(picker, /audio\.playSound\('unlock-skill', \{ playbackRate: 1 \}\)/)
+  assert.equal((picker.match(/playbackRate: 0\.75/g) ?? []).length, 2)
+  assert.match(picker, /const NATIVE_QUEUED_REBUILD_DELAY_MS = 100/)
+  assert.ok(picker.includes("phaseRef.current = 'queued-wait'"))
+  assert.ok(picker.includes('setContentVisible(false)'))
+  assert.match(picker, /const offerContentVisible = phase !== 'queued-wait'/)
+  assert.ok(pickerRenderer.includes('offerLayer.visible = visible'))
   for (const witness of [
     'this.primarySpells.setRenderable(!modalActive)',
     'this.enemies.setRenderable(!modalActive)',

@@ -13,12 +13,14 @@ import {
   buildPlayerSkillOffer,
   createPlayerProgression,
   createPlayerSkillBook,
+  deferPlayerSkillChoice,
   effectivePrimarySkillRankStats,
   evaluateBoneyardEnemyExperience,
   grantPlayerExperience,
   playerExperienceProgress,
   nativeWeldBuild,
   playerStatBook,
+  rerollPlayerSkillOffer,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
@@ -364,6 +366,70 @@ test('native XP thresholds queue a mandatory deterministic offer and selection o
     offerSequence: offer.sequence,
     skillId: chosen.skillId,
   }), null)
+})
+
+test('queued and saved choices use the final current level while Sorceror actions remain one-use', () => {
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const crossed = grantPlayerExperience(
+    createPlayerProgression(41),
+    skillBook,
+    300,
+    true,
+  )
+  assert.equal(crossed.level, 4)
+  assert.deepEqual(crossed.pendingLevels, [4, 4, 4])
+  assert.equal(crossed.pendingOffer?.level, 4)
+  assert.equal(crossed.sorcerorsCharmAvailable, true)
+
+  const firstOffer = crossed.pendingOffer!
+  const rerolled = rerollPlayerSkillOffer(crossed, skillBook, firstOffer.sequence, 79225)
+  assert.ok(rerolled)
+  assert.equal(rerolled.offerSeed, 79225)
+  assert.equal(rerolled.pendingLevels.length, 3)
+  assert.equal(rerolled.pendingOffer?.level, 4)
+  assert.notEqual(rerolled.pendingOffer?.sequence, firstOffer.sequence)
+  assert.equal(rerolled.sorcerorsCharmAvailable, false)
+  assert.equal(
+    rerollPlayerSkillOffer(rerolled, skillBook, rerolled.pendingOffer!.sequence, 7),
+    null,
+  )
+
+  const saved = deferPlayerSkillChoice(crossed, skillBook, firstOffer.sequence, true)
+  assert.ok(saved)
+  assert.equal(saved.deferredSkillChoices, 1)
+  assert.deepEqual(saved.pendingLevels, [4, 4])
+  assert.equal(saved.pendingOffer?.level, 4)
+  assert.equal(saved.sorcerorsCharmAvailable, true)
+
+  const single = grantPlayerExperience(createPlayerProgression(41), skillBook, 100, true)
+  const deferred = deferPlayerSkillChoice(
+    single,
+    skillBook,
+    single.pendingOffer!.sequence,
+    true,
+  )
+  assert.ok(deferred)
+  assert.equal(deferred.pendingOffer, null)
+  assert.deepEqual(deferred.pendingLevels, [])
+  assert.equal(deferred.deferredSkillChoices, 1)
+
+  const reopened = grantPlayerExperience(deferred, skillBook, 61, true)
+  assert.equal(reopened.level, 3)
+  assert.deepEqual(reopened.pendingLevels, [3, 3])
+  assert.equal(reopened.deferredSkillChoices, 0)
+  assert.equal(reopened.pendingOffer?.level, 3)
+  assert.equal(reopened.sorcerorsCharmAvailable, true)
+
+  const ordinary = grantPlayerExperience(createPlayerProgression(41), skillBook, 100)
+  assert.equal(ordinary.sorcerorsCharmAvailable, false)
+  assert.equal(
+    rerollPlayerSkillOffer(ordinary, skillBook, ordinary.pendingOffer!.sequence, 7),
+    null,
+  )
+  assert.equal(
+    deferPlayerSkillChoice(ordinary, skillBook, ordinary.pendingOffer!.sequence, false),
+    null,
+  )
 })
 
 test('Boneyard enemy XP preserves native fractional awards and strict threshold edges', () => {

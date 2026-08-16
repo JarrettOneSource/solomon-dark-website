@@ -35,6 +35,7 @@ import {
   SKILL_PICKER_SIZE,
   skillPickerCardCenters,
   skillPickerPanelBounds,
+  skillPickerSpecialActionBounds,
 } from './skill-picker-render-contract.ts'
 import type { NativeSkillPickerReveal } from './level-up-presentation.ts'
 
@@ -75,7 +76,8 @@ export interface SkillPickerRenderer {
     selectedIndex: number,
     reveal: NativeSkillPickerReveal,
   ): void
-  setOffer(offer: ProtocolPlayerSkillOffer): void
+  setContentVisible(visible: boolean): void
+  setOffer(offer: ProtocolPlayerSkillOffer, specialActionsAvailable: boolean): void
 }
 
 const NATIVE_ASSETS = nativeAssetsJson as unknown as NativeAssets
@@ -191,7 +193,11 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
       }
       application.renderer.render(application.stage)
     },
-    setOffer(offer) {
+    setContentVisible(visible) {
+      offerLayer.visible = visible
+      application.renderer.render(application.stage)
+    },
+    setOffer(offer, specialActionsAvailable) {
       const panel = rebuildPanel(panelLayer, resources, offer.options.length)
       animatedCorners = panel.corners
       selectionPanels = panel.cards
@@ -224,6 +230,21 @@ export async function createSkillPickerRenderer(): Promise<SkillPickerRenderer> 
         if (!skill) throw new Error(`skill picker has no catalog row ${option.skillId}`)
         addSkillCard(offerLayer, resources, skill, option, centers[index]!)
       })
+      if (specialActionsAvailable) {
+        const bounds = skillPickerSpecialActionBounds(offer.options.length)
+        for (const [record, actionBounds] of [
+          [57, bounds.save],
+          [56, bounds.reroll],
+        ] as const) {
+          const action = spriteFor(resources, 'UI', record)
+          action.anchor.set(0.5)
+          action.position.set(
+            actionBounds.left + actionBounds.width / 2,
+            actionBounds.top + actionBounds.height / 2,
+          )
+          offerLayer.addChild(action)
+        }
+      }
       application.renderer.render(application.stage)
     },
   }

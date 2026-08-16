@@ -109,7 +109,9 @@ import {
   playerSkillBookAt,
   playerStatBookAt,
   removePlayerEntity,
+  rerollPlayerEntitySkillOffer,
   resetPlayerEntitiesForNewRun,
+  deferPlayerEntitySkillChoice,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
@@ -485,6 +487,51 @@ export function selectGameSimulationPlayerSkill(
   if (barrier === null || !barrier.participantIds.includes(playerId)) {
     return { ...state, playerEntities }
   }
+  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, barrier.participantIds)
+  return {
+    ...state,
+    levelUpBarrier: pendingPlayerIds.length === 0
+      ? null
+      : Object.freeze({ ...barrier, pendingPlayerIds }),
+    playerEntities,
+  }
+}
+
+export function rerollGameSimulationPlayerSkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  offerSequence: number,
+): GameSimulationState | null {
+  const barrier = state.levelUpBarrier
+  if (barrier === null || !barrier.pendingPlayerIds.includes(playerId)) return null
+  const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
+  const playerEntities = rerollPlayerEntitySkillOffer(
+    state.playerEntities,
+    playerId,
+    offerSequence,
+    draw.value,
+  )
+  if (!playerEntities) return null
+  return {
+    ...state,
+    playerEntities,
+    playerOfferRng: draw.state,
+  }
+}
+
+export function saveGameSimulationPlayerSkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  offerSequence: number,
+): GameSimulationState | null {
+  const barrier = state.levelUpBarrier
+  if (barrier === null || !barrier.pendingPlayerIds.includes(playerId)) return null
+  const playerEntities = deferPlayerEntitySkillChoice(
+    state.playerEntities,
+    playerId,
+    offerSequence,
+  )
+  if (!playerEntities) return null
   const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, barrier.participantIds)
   return {
     ...state,

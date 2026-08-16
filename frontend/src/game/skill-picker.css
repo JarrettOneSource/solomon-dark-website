@@ -36,6 +36,19 @@
 
 .skill-picker-action:disabled { cursor: default; }
 
+.skill-picker-special-action {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.skill-picker-special-action:focus { outline: none; }
+
+.skill-picker-special-action:disabled { cursor: default; }
+
 .skill-picker-error {
   position: absolute;
   top: 760px;

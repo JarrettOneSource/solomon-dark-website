@@ -48,10 +48,12 @@ test('owns both requested transitions through destination renderer readiness', (
   assert.match(mainScene, /activeBoneyardRunRef\.current !== snapshot\.world\.runId/)
   assert.match(mainScene, /loadedBoneyardRunRef\.current !== nextBoneyard\.runId/)
   assert.match(mainScene, /<MatchLoadingScreen loading=\{loading\} \/>/)
+  assert.match(
+    mainScene,
+    /const levelUpModalActive = Boolean\(runtimeSnapshot\?\.levelUpBarrier\) \|\| levelUpPickerClosing/,
+  )
   assert.equal(
-    mainScene.match(
-      /inputBlocked=\{loading !== null \|\| runtimeSnapshot\.levelUpBarrier !== null\}/g,
-    )?.length,
+    mainScene.match(/inputBlocked=\{loading !== null \|\| levelUpModalActive\}/g)?.length,
     2,
   )
   assert.match(mainScene, /onReady=\{finishHubLoading\}/)

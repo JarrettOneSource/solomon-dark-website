@@ -273,6 +273,8 @@ export const HAGATHA_PERKS: readonly HagathaPerkDefinition[] =
     selector,
   }))
 
+export const SORCERORS_CHARM_SELECTOR = 17
+
 export function createHubEconomy(
   seed: number,
   options: { readonly hagathaBundleSelectors?: readonly number[] } = {},
