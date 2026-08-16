@@ -10,6 +10,7 @@ import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
   gridFrames,
+  playerWorldAssetSources,
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
@@ -75,11 +76,16 @@ export interface HubWorldTextures extends PlayerWorldTextures {
   traders: HubTraderTextureFrames
 }
 
-export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
-  const sources = [...new Set([
+export function hubWorldAssetSources(): readonly string[] {
+  return [...new Set([
     ...WIZARD_ELEMENTS.flatMap(hubGameAssetSources),
+    ...playerWorldAssetSources(),
     boneyard.levelUpSparkle,
   ])]
+}
+
+export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
+  const sources = hubWorldAssetSources()
   let images: readonly (readonly [string, HTMLImageElement])[]
   try {
     images = await Promise.all(sources.map(async (source) => [

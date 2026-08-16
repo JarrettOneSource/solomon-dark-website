@@ -21,6 +21,9 @@ test('the stock right-click atlas membership is complete and every row is regist
       NATIVE_SECONDARY_SPRITE_RECORDS: readonly unknown[]
       nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'DeadHawg' | 'Golem', entry: number): { source: string }
     }
+    const hubTextures = await server.ssrLoadModule('/src/game/renderer/hub-textures.ts') as {
+      hubWorldAssetSources(): readonly string[]
+    }
     const membership = module.NATIVE_SECONDARY_SPRITE_MEMBERSHIP
     assert.deepEqual(membership.BadGuys.slice(0, 26), [
       0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 45, 48, 49, 51, 53, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86,
@@ -45,6 +48,10 @@ test('the stock right-click atlas membership is complete and every row is regist
       module.NATIVE_SECONDARY_SPRITE_RECORDS.length + 1,
     )
     assert.ok(module.NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane.includes('etherplane.png'))
+    const hubSources = new Set(hubTextures.hubWorldAssetSources())
+    for (const source of module.NATIVE_SECONDARY_ASSET_SOURCES) {
+      assert.equal(hubSources.has(source), true, `Hub omitted native secondary texture ${source}`)
+    }
     const etherPlane = await readFile(new URL(
       '../../assets/game/boneyard/textures/etherplane.png',
       import.meta.url,
