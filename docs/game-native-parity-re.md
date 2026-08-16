@@ -15613,7 +15613,8 @@ single native presentation family with distinct owners:
 All browser surfaces render in one fixed 1600x900 native stage using the exact
 Fonts, Inventory, Skills, UI, and player/Clothes art. HTML remains only as a
 transparent semantic input layer aligned to native controls. The common Shop
-settles from a 100-stage-pixel vertical slide at `(498,-20,604,400)`. Every
+settles from a 100-stage-pixel vertical slide at `(498,-20,604,430)`; its
+UI-49 background pass alone is 400 pixels high. Every
 service dispatcher branch separately constructs and attaches a full
 InventoryScreen beneath its class-specific overlay. Its retained capacity is
 28 and its visible StoreGrid is seven columns by four rows, filled
@@ -15622,9 +15623,27 @@ texture helper `0x00416020` for UI record 49; it is not grid geometry and does
 not justify paging. Dowsing switches result layout to three columns and retains
 nine offers.
 
+The renderer-state passes are part of that contract. Backpack
+Inventory-record-10 cells are white at alpha `0.4`; common StoreGrid and
+Dowsing result cells use alpha `0.6`, while contained item sprites remain at
+their own opacity. Affordable prices and shared gold labels use native
+`(0.85,0.73,0.44,1)` (`#D9BA70`), and unaffordable prices use
+`(1,0.5,0.5,1)` (`#FF8080`). The DONE stack draws UI 72 white, UI 12 at
+alpha `0.85`, UI 86 tinted `(0.75,1,0.75)`, then white text. Hagatha's
+companion pane paints `(139,129,227,238)` opaque `(0.1,0.1,0.09)` with a
+one-pixel white outline instead of UI 49; empty 0.8-scale cells are 50-percent
+gray, occupied cells are white, and owned Skills record `127 + selector`
+sprites occupy them.
+
 Trader conversation is not a MsgBox. `Chat` uses the UI-record-11 nine-slice
 at `(476.5,26,647,420)`, content rect `(561.5,111,477,250)`, and no full-screen
-curtain. Alpha advances `0.05` per 100 Hz tick. Intro copy scrolls at 0.125
+curtain. Helper `0x00417760` mirrors the full quadrant at the four corners,
+stretches the rightmost 5-percent UV strip across the horizontal edges, the
+bottom 5-percent strip across the vertical edges, and the bottom-right
+5-percent square across the interior. It is not four sprites over a generic
+black rectangle. Chat's default text uses `#D9BA70`; the primary action keeps
+the authored `_c(.55f,.75f,.55f)_s(1.25)` color and scale. Alpha advances
+`0.05` per 100 Hz tick. Intro copy scrolls at 0.125
 pixels per tick, or 0.8 while accelerated; natural completion or SKIP reveals
 questions. A price answer starts another scrolling intro and returns to the
 same questions. A command answer replaces Chat with the service. The distinct
@@ -15664,6 +15683,16 @@ rejection is an actionable native branch rather than a disabled button:
 `0x0055FAF0` builds a MsgBox titled `NOT ENOUGH GOLD!`, adds the recovered
 compensation paragraph, and uses executable literal `OKAY` at `0x007930D8`
 without mutating the participant economy.
+
+The Dowsing result field is deterministic renderer time, not per-frame noise:
+UI 49 keeps red and blue at 1 and computes green as
+`sin(nativeTick * 0.5 * pi / 180) * 0.1 + 0.7`, spanning 0.6..0.8 over 720
+ticks. Its pre-roll UI-101 body and mirrored UI-54 ends stay white; only DOWSE
+and `%d gold` are gold. `UiPanel_Render` `0x005C3F40` builds the MsgBox frame
+from horizontal UI 10, vertical UI 79, and UI 107..110 corners. It draws no
+UI-49 background or filled interior: the companion InventoryScreen/service
+remains visible beneath the curtain and frame. The MsgBox button art is white
+and only its label is gold.
 
 ### Participant-owned inventory and temporary gold override
 
