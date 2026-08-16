@@ -4,6 +4,37 @@ import {
   loadModBoneyardsFromStageReport,
 } from './boneyard-catalog.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
+import {
+  createJsonGameServerLogSink,
+  gameServerErrorDetails,
+  logGameServerEvent,
+  parseGameServerLogLevel,
+} from './game-server-logger.ts'
+
+const log = createJsonGameServerLogSink(
+  parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
+)
+
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  logGameServerEvent(
+    log,
+    'session-supervisor',
+    'error',
+    'process.uncaught_exception',
+    'The game-session supervisor encountered an uncaught exception.',
+    { origin, ...gameServerErrorDetails(error) },
+  )
+})
+process.on('warning', (warning) => {
+  logGameServerEvent(
+    log,
+    'session-supervisor',
+    'warning',
+    'process.warning',
+    'The game-session supervisor emitted a runtime warning.',
+    gameServerErrorDetails(warning),
+  )
+})
 
 const adminSecret = requiredEnvironment('SDR_GAME_SUPERVISOR_SECRET')
 const allowedOrigins = requiredEnvironment('SDR_GAME_ALLOWED_ORIGINS')
@@ -20,6 +51,7 @@ const supervisor = await startGameSessionSupervisor({
   allowedOrigins,
   boneyards,
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
+  log,
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   maxConnectionsPerSession: parseInteger(

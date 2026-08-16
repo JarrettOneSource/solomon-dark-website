@@ -382,6 +382,25 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             headers=headers,
         )
 
+    @classmethod
+    def browser_game_diagnostic_upload(
+        cls,
+        report: dict[str, object],
+        token: str | None = None,
+        include_submission_header: bool = True,
+    ) -> tuple[int, object]:
+        headers = {}
+        if include_submission_header:
+            headers["X-Solomon-Dark-Diagnostics"] = "browser-game"
+        if token is not None:
+            headers["Authorization"] = f"Bearer {token}"
+        return cls.request(
+            "POST",
+            "/api/game/diagnostics",
+            json_body=report,
+            headers=headers,
+        )
+
     def test_game_session_provisioning_fails_closed_when_unconfigured(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")
         self.assertEqual(status, 400)
@@ -594,6 +613,94 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             package_bytes,
             self.steam_token(steam_id),
         )
+        self.assertEqual(status, 200, duplicate)
+        self.assertEqual(duplicate["logId"], receipt["logId"])
+
+    def test_browser_game_diagnostics_are_consent_driven_bounded_and_guest_capable(self) -> None:
+        client_log_id = str(uuid.uuid4())
+        captured_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        report = {
+            "schemaVersion": 1,
+            "clientLogId": client_log_id,
+            "capturedAtUtc": captured_at,
+            "protocolVersion": 21,
+            "pageUrl": "https://solomondarker.com/game",
+            "sessionId": "01234567890123456789012345678901",
+            "online": False,
+            "userAgent": "Contract Browser/1.0",
+            "droppedEntries": 0,
+            "failure": {
+                "code": "connection-lost",
+                "explanation": "The network connection or the game server stopped responding.",
+                "technicalDetail": "WebSocket closed with code 1006.",
+                "transportCode": 1006,
+                "transportReason": "",
+                "transportWasClean": False,
+            },
+            "entries": [
+                {
+                    "atUtc": captured_at,
+                    "level": "warning",
+                    "event": "browser.offline",
+                    "message": "The browser reported that this device is offline.",
+                    "detail": None,
+                },
+                {
+                    "atUtc": captured_at,
+                    "level": "error",
+                    "event": "connection.closed",
+                    "message": "The game connection closed unexpectedly.",
+                    "detail": "close code 1006",
+                },
+            ],
+        }
+
+        status, _ = self.browser_game_diagnostic_upload(
+            report,
+            include_submission_header=False,
+        )
+        self.assertEqual(status, 400)
+
+        status, receipt = self.browser_game_diagnostic_upload(report)
+        self.assertEqual(status, 201, receipt)
+        uuid.UUID(receipt["logId"])
+
+        database_path = Path(self.temp.name) / "sdr.db"
+        with closing(sqlite3.connect(database_path)) as database:
+            row = database.execute(
+                """
+                SELECT SubmitterUserId, SubmitterSteamId, ClientLogId,
+                       LauncherVersion, LaunchToken, ArchivePath,
+                       ArchiveSize, ArchiveSha256
+                FROM DiagnosticLogs
+                WHERE PublicId = ?
+                """,
+                (receipt["logId"],),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+        self.assertEqual(row[2], client_log_id)
+        self.assertEqual(row[3], "browser-game/21")
+        self.assertIsNone(row[4])
+
+        stored_archive = Path(self.temp.name) / "diagnostic-logs" / row[5]
+        with zipfile.ZipFile(stored_archive) as archive:
+            self.assertEqual(archive.namelist(), ["browser/game-client.json"])
+            stored_report = json.loads(archive.read("browser/game-client.json"))
+        self.assertEqual(stored_report["capturedAtUtc"].replace("+00:00", "Z"), captured_at)
+        stored_report["capturedAtUtc"] = captured_at
+        for entry in stored_report["entries"]:
+            self.assertEqual(entry["atUtc"].replace("+00:00", "Z"), captured_at)
+            entry["atUtc"] = captured_at
+        self.assertEqual(stored_report, report)
+        self.assertEqual(row[6], stored_archive.stat().st_size)
+        self.assertEqual(
+            row[7],
+            hashlib.sha256(stored_archive.read_bytes()).hexdigest(),
+        )
+
+        status, duplicate = self.browser_game_diagnostic_upload(report)
         self.assertEqual(status, 200, duplicate)
         self.assertEqual(duplicate["logId"], receipt["logId"])
 

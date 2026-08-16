@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http'
+import type { Duplex } from 'node:stream'
 
 import { WebSocket, WebSocketServer } from 'ws'
 
@@ -37,6 +38,7 @@ import {
 } from './boneyard-catalog.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
+  GAME_HOST_ENDED_SESSION_CLOSE_CODE,
   GAME_PROTOCOL_VERSION,
   PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
@@ -55,6 +57,11 @@ import {
   monitorWebSocketHeartbeat,
   resolveGameHeartbeatInterval,
 } from './websocket-heartbeat.ts'
+import {
+  gameServerErrorDetails,
+  logGameServerEvent,
+  type GameServerLogSink,
+} from './game-server-logger.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
@@ -74,6 +81,8 @@ export interface GameHostOptions {
   host?: string
   heartbeatIntervalMs?: number
   initialPlayerExperience?: number
+  log?: GameServerLogSink
+  logContext?: Readonly<Record<string, unknown>>
   maxPlayers?: number
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
@@ -90,17 +99,21 @@ export interface GameHostAddress {
 
 export interface GameHost {
   address: GameHostAddress
-  close(): Promise<void>
+  close(reason?: GameHostCloseReason): Promise<void>
   hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
   state(): GameSimulationState
 }
 
+export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
+
 interface HostClient {
   acknowledgedSequence: number
   acknowledgedSnapshotSequence: number
   activeInput: PlayerCharacterInput
+  connectedAtMs: number
+  displayName: string
   forceReplicationKeyframe: boolean
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
@@ -146,9 +159,15 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextSnapshotSequence = 1
   let closed = false
   let ticking = false
+  let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
   const pending = new Set<WebSocket>()
+  const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
+  const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
+    ...options.logContext,
+    ...details,
+  })
   const server = createServer((request, response) => {
     if (request.url === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' })
@@ -168,13 +187,55 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     maxPayload: 64 * 1024,
   })
 
+  server.on('clientError', (error, socket) => {
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'warning',
+      'http.client_error',
+      'The game host received an invalid HTTP connection.',
+      logDetails({ remoteAddress: socketRemoteAddress(socket), ...gameServerErrorDetails(error) }),
+    )
+    if (!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
+  })
+  websocketServer.on('error', (error) => {
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'error',
+      'websocket.server_error',
+      'The game host WebSocket server reported an error.',
+      logDetails(gameServerErrorDetails(error)),
+    )
+  })
+
   server.on('upgrade', (request, socket, head) => {
     if (!isAllowedUpgrade(request, host, options.allowedOrigins ?? [])) {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'warning',
+        'connection.upgrade_rejected',
+        'A game connection was rejected because its browser origin is not allowed.',
+        logDetails({
+          origin: request.headers.origin ?? 'none',
+          path: request.url ?? 'none',
+          remoteAddress: socketRemoteAddress(socket),
+        }),
+      )
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
       socket.destroy()
       return
     }
     if (request.url !== '/game') {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'warning',
+        'connection.upgrade_rejected',
+        'A game connection requested an unknown WebSocket path.',
+        logDetails({ path: request.url ?? 'none', remoteAddress: socketRemoteAddress(socket) }),
+      )
       socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n')
       socket.destroy()
       return
@@ -184,9 +245,38 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     })
   })
 
-  websocketServer.on('connection', (socket) => {
+  websocketServer.on('connection', (socket, request) => {
     pending.add(socket)
-    const stopHeartbeat = monitorWebSocketHeartbeat(socket, heartbeatIntervalMs)
+    let released = false
+    const stopHeartbeat = monitorWebSocketHeartbeat(socket, heartbeatIntervalMs, {
+      onTimeout: () => {
+        disconnectCauses.set(socket, {
+          reason: 'connection timed out',
+          source: 'heartbeat-timeout',
+        })
+        const client = clients.get(socket)
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          'warning',
+          'connection.heartbeat_timeout',
+          'The game host stopped receiving transport heartbeat responses from a player.',
+          logDetails({
+            playerId: client?.playerId ?? 'pending',
+            remoteAddress: request.socket.remoteAddress ?? 'unknown',
+          }),
+        )
+      },
+      timeoutReason: 'connection timed out',
+    })
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'debug',
+      'connection.opened',
+      'A WebSocket connection reached the game host.',
+      logDetails({ remoteAddress: request.socket.remoteAddress ?? 'unknown' }),
+    )
     const helloDeadline = setTimeout(() => {
       if (pending.has(socket)) disconnect(socket, 'authentication-failed', 'Handshake timed out.')
     }, 5000)
@@ -272,6 +362,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
+          connectedAtMs: Date.now(),
+          displayName: message.character.displayName,
           forceReplicationKeyframe: false,
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
@@ -280,6 +372,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
         })
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          'info',
+          'player.connected',
+          'A player authenticated with the game host.',
+          logDetails({
+            displayName: message.character.displayName,
+            playerId,
+            playerCount: clients.size,
+            role,
+          }),
+        )
         options.onPlayerCountChanged?.(clients.size)
         socket.send(encodeGameMessage({
           type: 'server-welcome',
@@ -393,6 +498,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (message.sequence <= client.acknowledgedSnapshotSequence) return
         if (!client.sentReplicationBaselines.has(message.sequence)) {
           client.forceReplicationKeyframe = true
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'warning',
+            'replication.baseline_missing',
+            'A player acknowledged a replication baseline the host no longer has.',
+            logDetails({
+              acknowledgedSequence: message.sequence,
+              playerId: client.playerId,
+              lastSentSequence: client.lastSentSnapshotSequence,
+            }),
+          )
           return
         }
         client.acknowledgedSnapshotSequence = message.sequence
@@ -446,16 +563,44 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         broadcastSnapshot()
         return
       }
-      if (message.type === 'client-disconnect') socket.close(1000, 'client disconnect')
+      if (message.type === 'client-disconnect') {
+        disconnectCauses.set(socket, {
+          reason: 'client requested disconnect',
+          source: 'client-request',
+        })
+        socket.close(1000, 'client disconnect')
+      }
       else disconnect(socket, 'invalid-message', 'The client has already joined.')
     })
 
-    const release = () => {
+    const release = (
+      closeCode: number | null,
+      closeReason: string,
+      socketError?: Error,
+    ) => {
+      if (released) return
+      released = true
       clearTimeout(helloDeadline)
       stopHeartbeat()
       pending.delete(socket)
       const client = clients.get(socket)
-      if (!client) return
+      const planned = disconnectCauses.get(socket)
+      if (!client) {
+        logGameServerEvent(
+          options.log,
+          'game-host',
+          closeCode === 1000 ? 'info' : 'warning',
+          'connection.closed_before_authentication',
+          'A game connection closed before a player authenticated.',
+          logDetails({
+            closeCode,
+            closeReason,
+            disconnectSource: planned?.source ?? disconnectSource(closeCode),
+            ...(socketError ? gameServerErrorDetails(socketError) : {}),
+          }),
+        )
+        return
+      }
       clients.delete(socket)
       state = removePlayerCharacter(state, client.playerId)
       if (clients.size === 0 && resetWhenEmpty) {
@@ -470,10 +615,33 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
       options.onPlayerCountChanged?.(clients.size)
+      const source = planned?.source ?? disconnectSource(closeCode)
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        source === 'client-request' || (source === 'client-close' && closeCode === 1000)
+          ? 'info'
+          : 'warning',
+        'player.disconnected',
+        'A player disconnected from the game host.',
+        logDetails({
+          closeCode,
+          closeReason,
+          disconnectReason: planned?.reason || closeReason || 'no reason received',
+          disconnectSource: source,
+          displayName: client.displayName,
+          durationMs: Math.max(0, Date.now() - client.connectedAtMs),
+          lastInputSequence: client.lastReceivedSequence,
+          playerCount: clients.size,
+          playerId: client.playerId,
+          serverTick: state.tick,
+          ...(socketError ? gameServerErrorDetails(socketError) : {}),
+        }),
+      )
       broadcastSnapshot()
     }
-    socket.once('close', release)
-    socket.once('error', release)
+    socket.once('close', (code, reason) => release(code, reason.toString()))
+    socket.once('error', (error) => release(null, '', error))
   })
 
   const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
@@ -503,8 +671,40 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         ) broadcastSnapshot()
       }
       if (steps === 25 && now >= nextTickAt) {
+        if (now - lastTickLagWarningAt >= 10_000) {
+          lastTickLagWarningAt = now
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'warning',
+            'simulation.tick_lag',
+            'The authoritative simulation fell behind and dropped accumulated wall-clock time.',
+            logDetails({
+              behindMs: Math.max(0, Math.round(now - nextTickAt)),
+              playerCount: clients.size,
+              serverTick: state.tick,
+            }),
+          )
+        }
         nextTickAt = now + GAME_FIXED_TICK_SECONDS * 1000
       }
+    } catch (error) {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'error',
+        'simulation.tick_failed',
+        'The authoritative simulation tick failed.',
+        logDetails({ playerCount: clients.size, serverTick: state.tick, ...gameServerErrorDetails(error) }),
+      )
+      for (const socket of clients.keys()) {
+        disconnectCauses.set(socket, {
+          reason: 'authoritative simulation failure',
+          source: 'server-error',
+        })
+        socket.close(1011, 'server error')
+      }
+      throw error
     } finally {
       ticking = false
     }
@@ -561,6 +761,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     code: ServerDisconnectMessage['code'],
     reason: string,
   ): void {
+    disconnectCauses.set(socket, {
+      reason,
+      source: `server-${code}`,
+    })
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(encodeGameMessage({ type: 'server-disconnect', code, reason }))
     }
@@ -578,6 +782,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   if (!address || typeof address === 'string') {
     throw new Error('Game host did not bind a TCP address')
   }
+  logGameServerEvent(
+    options.log,
+    'game-host',
+    'info',
+    'host.listening',
+    'The authoritative game host is listening.',
+    logDetails({ host, port: address.port, snapshotRate }),
+  )
 
   return {
     address: {
@@ -585,21 +797,53 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       port: address.port,
       url: `ws://${formatHost(host)}:${address.port}/game`,
     },
-    async close() {
+    async close(reason: GameHostCloseReason = 'server-shutdown') {
       if (closed) return
       closed = true
       clearInterval(timer)
+      const closeCode = reason === 'host-ended-session'
+        ? GAME_HOST_ENDED_SESSION_CLOSE_CODE
+        : 1012
+      const closeReason = reason === 'host-ended-session'
+        ? 'host ended session'
+        : 'server shutdown'
       for (const socket of [...pending, ...clients.keys()]) {
-        socket.close(1001, 'server shutdown')
+        disconnectCauses.set(socket, {
+          reason: closeReason,
+          source: reason,
+        })
+        socket.close(closeCode, closeReason)
       }
       websocketServer.close()
       await closeHttpServer(server)
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'host.closed',
+        'The authoritative game host stopped.',
+        logDetails({ reason }),
+      )
     },
     hostPlayerId: () => hostPlayerId,
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     state: () => state,
   }
+}
+
+function disconnectSource(closeCode: number | null): string {
+  if (closeCode === 1000) return 'client-close'
+  if (closeCode === 1001) return 'peer-going-away'
+  if (closeCode === 1006 || closeCode === null) return 'transport-lost'
+  return 'transport-close'
+}
+
+function socketRemoteAddress(socket: Duplex): string {
+  if ('remoteAddress' in socket && typeof socket.remoteAddress === 'string') {
+    return socket.remoteAddress
+  }
+  return 'unknown'
 }
 
 function createInitialSimulation(

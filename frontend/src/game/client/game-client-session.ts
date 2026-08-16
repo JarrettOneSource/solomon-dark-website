@@ -27,6 +27,12 @@ import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
+  GameConnectionFailure,
+  failureFromServerDisconnect,
+  failureFromTransportClose,
+} from './game-connection-failure.ts'
+import type { GameClientDiagnostics } from './game-diagnostics.ts'
+import {
   createBoneyardPresentationTimeline,
   isBoneyardGameSnapshot,
   type BoneyardPresentationFrame,
@@ -47,8 +53,9 @@ import {
 export interface GameClientSessionOptions {
   character: PlayerCharacterConfig
   credential: string
+  diagnostics?: GameClientDiagnostics
   now?: () => number
-  onFatal?: (error: Error) => void
+  onFatal?: (failure: GameConnectionFailure) => void
   resumeToken?: string
   transport: GameTransport
 }
@@ -115,6 +122,7 @@ export function connectGameClientSession(
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
+    let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
     let sequence = 0
@@ -144,7 +152,7 @@ export function connectGameClientSession(
         return
       }
       if (message.type === 'server-disconnect') {
-        fail(new Error(message.reason))
+        fail(failureFromServerDisconnect(message.code, message.reason))
         return
       }
       if (message.type === 'server-welcome') {
@@ -198,6 +206,17 @@ export function connectGameClientSession(
         if (sentAtMs === undefined) return
         pendingPings.delete(message.nonce)
         latestPingMs = Math.max(0, Math.round(now() - sentAtMs))
+        if (
+          latestPingMs >= 1_000
+          && now() - lastHighPingLoggedAtMs >= 30_000
+        ) {
+          lastHighPingLoggedAtMs = now()
+          options.diagnostics?.warning(
+            'network.high_latency',
+            'The game server reply took at least one second.',
+            `pingMs=${latestPingMs}`,
+          )
+        }
         for (const listener of pingListeners) listener(latestPingMs)
         return
       }
@@ -210,6 +229,11 @@ export function connectGameClientSession(
           fail(error instanceof Error ? error : new Error('Entity replication failed'))
           return
         }
+        options.diagnostics?.warning(
+          'replication.gap',
+          'A game-state update was missed; the client requested a complete replacement.',
+          `receivedSequence=${message.sequence}; lastSequence=${lastSnapshotSequence}`,
+        )
         options.transport.send(encodeGameMessage({
           type: 'client-snapshot-ack',
           requireKeyframe: true,
@@ -272,8 +296,8 @@ export function connectGameClientSession(
       publishEnemyEvents(snapshot)
       for (const listener of snapshotListeners) listener(snapshot)
     })
-    const removeClose = options.transport.onClose((reason) => {
-      if (!destroyed) fail(new Error(reason))
+    const removeClose = options.transport.onClose((event) => {
+      if (!destroyed) fail(failureFromTransportClose(event))
     })
 
     const session: GameClientSession = {
@@ -318,6 +342,10 @@ export function connectGameClientSession(
         removeClose()
         removeMessage()
         if (options.transport.readyState === 'open') {
+          options.diagnostics?.info(
+            'connection.client_disconnect',
+            'The game client requested a normal disconnect.',
+          )
           options.transport.send(encodeGameMessage({ type: 'client-disconnect' }))
         }
         options.transport.close(1000, 'session destroyed')
@@ -486,8 +514,21 @@ export function connectGameClientSession(
     function sendPing(): void {
       if (!welcome || destroyed || options.transport.readyState !== 'open') return
       const sentAtMs = now()
+      let expiredPings = 0
+      let oldestExpiredAgeMs = 0
       for (const [nonce, pendingAtMs] of pendingPings) {
-        if (sentAtMs - pendingAtMs >= PING_TIMEOUT_MS) pendingPings.delete(nonce)
+        const ageMs = sentAtMs - pendingAtMs
+        if (ageMs < PING_TIMEOUT_MS) continue
+        pendingPings.delete(nonce)
+        expiredPings += 1
+        oldestExpiredAgeMs = Math.max(oldestExpiredAgeMs, ageMs)
+      }
+      if (expiredPings > 0) {
+        options.diagnostics?.warning(
+          'network.ping_timeout',
+          'The game server did not answer one or more client pings within ten seconds.',
+          `expiredPings=${expiredPings}; oldestAgeMs=${Math.round(oldestExpiredAgeMs)}`,
+        )
       }
       const nonce = nextPingNonce
       nextPingNonce = nextPingNonce === 0x7fffffff ? 1 : nextPingNonce + 1
@@ -650,7 +691,8 @@ export function connectGameClientSession(
       if (state.predictedTicks === maximumTicks) state.remainderMs = 0
     }
 
-    function fail(error: Error): void {
+    function fail(error: unknown): void {
+      const failure = GameConnectionFailure.from(error)
       if (!settled) {
         settled = true
         destroyed = true
@@ -658,8 +700,13 @@ export function connectGameClientSession(
         stopPing()
         removeClose()
         removeMessage()
-        options.transport.close(1008, error.message.slice(0, 123))
-        reject(error)
+        options.diagnostics?.error(
+          'connection.failed',
+          failure.message,
+          diagnosticFailureDetail(failure),
+        )
+        options.transport.close(1008, failure.message.slice(0, 123))
+        reject(failure)
         return
       }
       if (destroyed || fatalReported) return
@@ -669,14 +716,26 @@ export function connectGameClientSession(
       stopPing()
       removeClose()
       removeMessage()
-      options.transport.close(1008, error.message.slice(0, 123))
+      options.diagnostics?.error(
+        'connection.failed',
+        failure.message,
+        diagnosticFailureDetail(failure),
+      )
+      options.transport.close(1008, failure.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
       enemyEventListeners.clear()
       pingListeners.clear()
-      options.onFatal?.(error)
+      options.onFatal?.(failure)
     }
   })
+}
+
+function diagnosticFailureDetail(failure: GameConnectionFailure): string | null {
+  if (failure.technicalDetail) return failure.technicalDetail
+  return failure.stack && failure.stack !== `${failure.name}: ${failure.message}`
+    ? failure.stack
+    : null
 }
 
 function initialEnemyEventCursor(

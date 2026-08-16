@@ -4,11 +4,13 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import {
+  GAME_HOST_ENDED_SESSION_CLOSE_CODE,
   GAME_PROTOCOL_VERSION,
   decodeServerGameMessage,
   encodeGameMessage,
   type ServerGameMessage,
 } from '../protocol/game-protocol.ts'
+import type { GameServerLogEntry } from './game-server-logger.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
 
 const ADMIN_SECRET = 'supervisor-test-secret-that-is-long-enough'
@@ -98,6 +100,8 @@ test('game session supervisor owns discoverable lobby lifecycle and reserved hos
 
   const creator = await join(supervisor.address.url, created, BROWSER_ORIGIN)
   context.after(() => creator.socket.close())
+  const guestClosed = socketClosed(guest.socket)
+  const creatorClosed = socketClosed(creator.socket)
   assert.equal(creator.welcome.snapshot.hostPlayerId, creator.welcome.playerId)
   await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.phase === 'hub')
   assert.equal((await listLobbies(supervisor.address.url))[0].players, 2)
@@ -119,7 +123,38 @@ test('game session supervisor owns discoverable lobby lifecycle and reserved hos
     },
   })
   assert.equal(cancelled.status, 204)
+  assert.deepEqual(await guestClosed, {
+    code: GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+    reason: 'host ended session',
+  })
+  assert.deepEqual(await creatorClosed, {
+    code: GAME_HOST_ENDED_SESSION_CLOSE_CODE,
+    reason: 'host ended session',
+  })
   assert.deepEqual(await listLobbies(supervisor.address.url), [])
+})
+
+test('game session supervisor gives connected players a reason when it shuts down', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    log: (entry) => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const client = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  context.after(() => closeSocket(client.socket))
+  const closed = socketClosed(client.socket)
+
+  await supervisor.close()
+
+  assert.deepEqual(await closed, { code: 1012, reason: 'server shutdown' })
+  await waitFor(() => logs.some((entry) => entry.event === 'proxy.browser_closed'))
+  const browserClose = logs.find((entry) => entry.event === 'proxy.browser_closed')
+  assert.equal(browserClose?.details?.closeCode, 1012)
+  assert.equal(browserClose?.details?.closeReason, 'server shutdown')
 })
 
 test('game session supervisor closes a used session after the final player and proxy leave', async (context) => {
@@ -153,10 +188,12 @@ test('game session supervisor closes a used session after the final player and p
 })
 
 test('game session supervisor drops a player that misses its transport heartbeat', async (context) => {
+  const logs: GameServerLogEntry[] = []
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
     heartbeatIntervalMs: 50,
+    log: (entry) => logs.push(entry),
     snapshotRate: 100,
   })
   context.after(() => supervisor.close())
@@ -172,9 +209,19 @@ test('game session supervisor drops a player that misses its transport heartbeat
     false,
   )
   context.after(() => closeSocket(unresponsive.socket))
+  const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+    unresponsive.socket.once('close', (code, reason) => resolve({
+      code,
+      reason: reason.toString(),
+    }))
+  })
 
   assert.equal((await listLobbies(supervisor.address.url))[0]?.players, 2)
   await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.players === 1)
+  assert.deepEqual(await closed, { code: 4000, reason: 'connection timed out' })
+  const timeout = logs.find((entry) => entry.event === 'proxy.heartbeat_timeout')
+  assert.equal(timeout?.level, 'warning')
+  assert.equal(timeout?.details?.sessionId, created.lobbyId)
   assert.equal(supervisor.sessionCount(), 1)
   assert.equal(healthy.socket.readyState, WebSocket.OPEN)
 
@@ -292,6 +339,15 @@ function closeSocket(socket: WebSocket): Promise<void> {
   return new Promise((resolve) => {
     socket.once('close', () => resolve())
     socket.close(1000, 'test complete')
+  })
+}
+
+function socketClosed(socket: WebSocket): Promise<{ code: number; reason: string }> {
+  return new Promise((resolve) => {
+    socket.once('close', (code, reason) => resolve({
+      code,
+      reason: reason.toString(),
+    }))
   })
 }
 

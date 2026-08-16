@@ -8,6 +8,8 @@ import {
   type GameTransport,
 } from './client/game-transport.ts'
 import type { PlayerCharacterConfig } from './core-kernels/player-character.ts'
+import type { GameConnectionFailure } from './client/game-connection-failure.ts'
+import type { GameClientDiagnostics } from './client/game-diagnostics.ts'
 
 /**
  * The only public seam between a platform shell and the rebuilt game client.
@@ -30,8 +32,9 @@ export type GameEndpoint =
 
 export interface SessionOptions {
   character: PlayerCharacterConfig
+  diagnostics?: GameClientDiagnostics
   endpoint: GameEndpoint
-  onFatal?: (error: Error) => void
+  onFatal?: (failure: GameConnectionFailure) => void
   onProgress?: (stage: GameConnectionStage) => void
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
@@ -51,18 +54,34 @@ export const OFFLINE_BUILD_URL: string | null = null
 
 export async function bootGame(options: SessionOptions): Promise<GameSession> {
   validateEndpoint(options.endpoint)
-  const createTransport = options.transportFactory ?? connectWebSocketTransport
+  options.diagnostics?.setEndpoint(options.endpoint.url)
+  const createTransport = options.transportFactory
+    ?? ((url: string) => connectWebSocketTransport(url, options.diagnostics))
   options.onProgress?.('connecting_transport')
+  options.diagnostics?.info(
+    'connection.stage',
+    'Connecting to the game transport.',
+  )
   const transport = await createTransport(options.endpoint.url)
   const connectSession = options.sessionConnector ?? connectGameClientSession
   options.onProgress?.('authenticating_session')
+  options.diagnostics?.info(
+    'connection.stage',
+    'Authenticating the game session.',
+  )
   const session = await connectSession({
     character: options.character,
     transport,
     credential: options.endpoint.credential,
+    ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),
     ...(options.onFatal ? { onFatal: options.onFatal } : {}),
   })
   options.onProgress?.('receiving_host_checkpoint')
+  options.diagnostics?.info(
+    'connection.ready',
+    'The game session is ready.',
+    `playerId=${session.playerId}`,
+  )
   return session
 }
 

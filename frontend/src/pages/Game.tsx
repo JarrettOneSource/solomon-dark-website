@@ -12,6 +12,10 @@ import {
   type GameEndpoint,
   type GameSession,
 } from '../game/engine.ts'
+import {
+  GameConnectionFailure,
+} from '../game/client/game-connection-failure.ts'
+import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import {
   cancelGameLobby,
@@ -23,7 +27,9 @@ import {
 } from '../game/game-bootstrap.ts'
 import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
+import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
+import { getToken } from '../lib/api.ts'
 
 type Readiness = 'loading' | 'ready'
 
@@ -35,9 +41,17 @@ export default function Game() {
   const lobbyId = parseGameLobbyId(requestedParty)
   const hostedLobby = useRef<CreatedGameLobby | null>(null)
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
+  const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
+  diagnosticsRef.current ??= createGameClientDiagnostics()
+  const diagnostics = diagnosticsRef.current
   const [readiness, setReadiness] = useState<Readiness>('loading')
   const [loadProgress, setLoadProgress] = useState(initialGameStartupProgress)
-  const [fatal, setFatal] = useState<string | null>(null)
+  const [fatal, setFatal] = useState<GameConnectionFailure | null>(null)
+
+  useEffect(() => {
+    diagnostics.info('game.page_opened', 'The browser game page opened.')
+    return diagnostics.attachBrowserListeners()
+  }, [diagnostics])
 
   useEffect(() => {
     const robots = document.createElement('meta')
@@ -65,13 +79,16 @@ export default function Game() {
       if (!cancelled) setReadiness('ready')
     }).catch((error: unknown) => {
       if (!cancelled) {
-        setFatal(error instanceof Error
-          ? error.message
-          : 'The game files could not be loaded.')
+        const failure = GameConnectionFailure.from(
+          error instanceof Error ? error : new Error('The game files could not be loaded.'),
+          'asset-load-failed',
+        )
+        diagnostics.error('assets.load_failed', failure.message, failure.stack)
+        setFatal(failure)
       }
     })
     return () => { cancelled = true }
-  }, [])
+  }, [diagnostics])
 
   const accountUsername = user?.username ?? null
   const displayName = accountUsername ?? 'Helvidius'
@@ -86,10 +103,21 @@ export default function Game() {
       preparedEndpoint.current = configured
       return
     }
-    const created = await createGameLobby(displayName)
-    hostedLobby.current = created
-    preparedEndpoint.current = created.endpoint
-  }, [displayName])
+    try {
+      const created = await createGameLobby(displayName)
+      hostedLobby.current = created
+      preparedEndpoint.current = created.endpoint
+      diagnostics.info(
+        'lobby.created',
+        'A browser game lobby was created.',
+        `lobbyId=${created.lobbyId}`,
+      )
+    } catch (error) {
+      const failure = GameConnectionFailure.from(error)
+      diagnostics.error('lobby.create_failed', failure.message, failure.stack)
+      throw failure
+    }
+  }, [diagnostics, displayName])
 
   const cancelCreate = useCallback(async (): Promise<void> => {
     if (lobbyId) {
@@ -106,27 +134,40 @@ export default function Game() {
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
   ): Promise<GameSession> => {
-    const endpoint = lobbyId
-      ? await joinGameLobby(lobbyId)
-      : preparedEndpoint.current
-    if (!endpoint) throw new Error('The web playtest was not prepared.')
-    const session = await bootGame({
-      character,
-      endpoint,
-      onFatal: (error) => setFatal(error.message),
-      onProgress,
-    })
-    if (lobbyId) navigate('/game', { replace: true })
-    hostedLobby.current = null
-    preparedEndpoint.current = null
-    return session
-  }, [lobbyId, navigate])
+    try {
+      const endpoint = lobbyId
+        ? await joinGameLobby(lobbyId)
+        : preparedEndpoint.current
+      if (!endpoint) throw new Error('The web playtest was not prepared.')
+      const session = await bootGame({
+        character,
+        diagnostics,
+        endpoint,
+        onFatal: setFatal,
+        onProgress,
+      })
+      if (lobbyId) navigate('/game', { replace: true })
+      hostedLobby.current = null
+      preparedEndpoint.current = null
+      return session
+    } catch (error) {
+      const failure = GameConnectionFailure.from(error)
+      diagnostics.error('connection.session_failed', failure.message, failure.technicalDetail)
+      setFatal(failure)
+      throw failure
+    }
+  }, [diagnostics, lobbyId, navigate])
 
   if (fatal || (requestedParty !== null && lobbyId === null)) {
+    const failure = fatal ?? GameConnectionFailure.from(
+      new Error('This game lobby link is invalid, so the server could not be contacted.'),
+    )
     return (
-      <div className="game-runtime-error" role="alert">
-        {fatal ?? 'The web playtest lobby link is invalid.'}
-      </div>
+      <GameRuntimeError
+        diagnostics={diagnostics}
+        failure={failure}
+        token={getToken()}
+      />
     )
   }
   return (

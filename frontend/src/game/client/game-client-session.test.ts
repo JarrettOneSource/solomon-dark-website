@@ -25,8 +25,10 @@ import {
   type LoadedBoneyard,
 } from '../protocol/game-protocol.ts'
 import { connectGameClientSession } from './game-client-session.ts'
+import type { GameConnectionFailure } from './game-connection-failure.ts'
+import { createGameClientDiagnostics } from './game-diagnostics.ts'
 import { predictPlayerCharacterInHub } from './hub-prediction.ts'
-import type { GameTransport } from './game-transport.ts'
+import type { GameTransport, GameTransportClose } from './game-transport.ts'
 
 const CHARACTER = {
   discipline: 'arcane',
@@ -179,6 +181,38 @@ test('client carries character config, publishes authority, and tears down', asy
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
+})
+
+test('client logs and explains an unexpected transport disconnect', async () => {
+  const diagnostics = createGameClientDiagnostics({ writeToConsole: false })
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | undefined
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    diagnostics,
+    onFatal: (failure) => { fatal = failure },
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  await connecting
+
+  transport.disconnect({ code: 1006, reason: '', wasClean: false })
+
+  assert.equal(fatal?.code, 'connection-lost')
+  assert.match(fatal?.message ?? '', /network connection.*server/i)
+  const report = diagnostics.createReport(fatal ?? null, {
+    online: true,
+    pageUrl: 'https://solomondarker.com/game',
+    sessionId: null,
+    userAgent: 'Contract Browser',
+  })
+  const logged = report.entries.find((entry) => entry.event === 'connection.failed')
+  assert.equal(logged?.level, 'error')
+  assert.match(logged?.detail ?? '', /1006/)
 })
 
 test('host client keeps one session through Game Over, loadout, and Hub confirmation', async () => {
@@ -916,14 +950,14 @@ function receiveSnapshot(
 class MemoryTransport implements GameTransport {
   readyState: GameTransport['readyState'] = 'open'
   readonly sent: string[] = []
-  private readonly closeListeners = new Set<(reason: string) => void>()
+  private readonly closeListeners = new Set<(event: GameTransportClose) => void>()
   private readonly messageListeners = new Set<(payload: string) => void>()
 
   close(): void {
     this.readyState = 'closed'
   }
 
-  onClose(listener: (reason: string) => void): () => void {
+  onClose(listener: (event: GameTransportClose) => void): () => void {
     this.closeListeners.add(listener)
     return () => this.closeListeners.delete(listener)
   }
@@ -935,6 +969,11 @@ class MemoryTransport implements GameTransport {
 
   receive(payload: string): void {
     for (const listener of this.messageListeners) listener(payload)
+  }
+
+  disconnect(event: GameTransportClose): void {
+    this.readyState = 'closed'
+    for (const listener of this.closeListeners) listener(event)
   }
 
   send(payload: string): void {

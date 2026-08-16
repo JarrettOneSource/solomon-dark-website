@@ -19,6 +19,7 @@ SDR_GAME_SUPERVISOR_PORT=5222
 SDR_GAME_MAX_SESSIONS=64
 SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
+SDR_GAME_LOG_LEVEL=info
 ```
 
 The same secret is supplied to the website through its existing protected
@@ -38,9 +39,19 @@ and do not write the Steam launcher lobby database. Joiners receive the guest
 credential only from `POST /api/game/lobbies/{id}/join`. Unclaimed sessions
 expire after two minutes. A used session shuts down when its final
 authenticated player and in-flight proxy have both left. The game host and
-browser-facing proxy send WebSocket control pings every five seconds and
-terminate a peer after one unanswered interval, bounding half-open player
-detection to ten seconds.
+browser-facing proxy send WebSocket control pings every five seconds. After six
+missed responses, they close the connection with an explicit timeout code and
+reason before force-closing an unresponsive socket.
+
+The supervisor writes structured JSON events to stderr, which systemd captures
+in the `solomon-dark-game.service` journal. `info` records session and player
+lifecycle events; `warning` records lag, heartbeat timeouts, abnormal
+disconnects, rejected connections, and proxy failures; `error` records host,
+simulation, and process failures. Set `SDR_GAME_LOG_LEVEL=debug` temporarily to
+include connection and proxy-open events. Browser players see a plain-English
+disconnect reason and may explicitly send the bounded in-memory client log to
+the website. Those reports use the private diagnostic-log archive rather than
+public uploads.
 
 Deploy the checked-in unit and Caddy site, validate both before reloading, and
 restart the game supervisor together with the website whenever the bundled game

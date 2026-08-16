@@ -6,6 +6,37 @@ import {
   loadModBoneyardsFromStageReport,
 } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
+import {
+  createJsonGameServerLogSink,
+  gameServerErrorDetails,
+  logGameServerEvent,
+  parseGameServerLogLevel,
+} from './game-server-logger.ts'
+
+const log = createJsonGameServerLogSink(
+  parseGameServerLogLevel(process.env.SDR_GAME_LOG_LEVEL),
+)
+
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  logGameServerEvent(
+    log,
+    'game-host',
+    'error',
+    'process.uncaught_exception',
+    'The authoritative game-host process encountered an uncaught exception.',
+    { origin, ...gameServerErrorDetails(error) },
+  )
+})
+process.on('warning', (warning) => {
+  logGameServerEvent(
+    log,
+    'game-host',
+    'warning',
+    'process.warning',
+    'The authoritative game-host process emitted a runtime warning.',
+    gameServerErrorDetails(warning),
+  )
+})
 
 const host = process.env.SDR_GAME_HOST?.trim() || '127.0.0.1'
 const port = parsePort(process.env.SDR_GAME_PORT)
@@ -32,6 +63,7 @@ const boneyards = createBoneyardCatalog(
 const server = await startGameHost({
   authentication: { kind: 'shared', credential },
   host,
+  log,
   port,
   resetWhenEmpty: true,
   boneyards,

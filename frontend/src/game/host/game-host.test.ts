@@ -23,6 +23,7 @@ import { EntityReplicationReconstructor } from '../protocol/entity-replication.t
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
+import type { GameServerLogEntry } from './game-server-logger.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
 
 const FIRST_CHARACTER = {
@@ -247,18 +248,51 @@ test('game host echoes authenticated ping outside the snapshot loop', async (con
 })
 
 test('game host drops an authenticated player that misses its transport heartbeat', async (context) => {
+  const logs: GameServerLogEntry[] = []
   const host = await startGameHost({
     authentication: SHARED_AUTHENTICATION,
     heartbeatIntervalMs: 50,
+    log: (entry) => logs.push(entry),
     snapshotRate: 100,
   })
   context.after(() => host.close())
   const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER, false)
   context.after(() => closeSocket(client.socket))
+  const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+    client.socket.once('close', (code, reason) => resolve({
+      code,
+      reason: reason.toString(),
+    }))
+  })
 
   assert.equal(host.playerCount(), 1)
   await waitFor(() => host.playerCount() === 0)
+  assert.deepEqual(await closed, { code: 4000, reason: 'connection timed out' })
   assert.equal(client.socket.readyState, WebSocket.CLOSED)
+  const disconnect = logs.find((entry) => entry.event === 'player.disconnected')
+  assert.equal(disconnect?.details?.disconnectSource, 'heartbeat-timeout')
+  assert.equal(disconnect?.details?.closeCode, 4000)
+  assert.equal(disconnect?.details?.playerId, client.welcome.playerId)
+})
+
+test('game host records an abnormal player disconnect without inventing a cause', async (context) => {
+  const logs: GameServerLogEntry[] = []
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    log: (entry) => logs.push(entry),
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+
+  client.socket.terminate()
+  await waitFor(() => host.playerCount() === 0)
+
+  const disconnect = logs.find((entry) => entry.event === 'player.disconnected')
+  assert.equal(disconnect?.level, 'warning')
+  assert.equal(disconnect?.details?.disconnectSource, 'transport-lost')
+  assert.equal(disconnect?.details?.closeCode, 1006)
+  assert.equal(disconnect?.details?.closeReason, '')
 })
 
 test('game host tolerates one delayed transport pong before declaring the client dead', async (context) => {

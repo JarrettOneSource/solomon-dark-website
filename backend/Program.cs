@@ -166,6 +166,10 @@ builder.Services.AddRateLimiter(options =>
                 requestPath,
                 "/api/diagnostics/logs",
                 StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    requestPath,
+                    "/api/game/diagnostics",
+                    StringComparison.OrdinalIgnoreCase)
                 ? "Too many log uploads; try again later."
             : string.Equals(
                 requestPath,
@@ -303,6 +307,18 @@ app.UseExceptionHandler(errorApp =>
     errorApp.Run(async context =>
     {
         var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        if (exception is not null)
+        {
+            var logger = context.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("UnhandledRequest");
+            logger.LogError(
+                exception,
+                "Unhandled request failure for {RequestMethod} {RequestPath}; trace {TraceIdentifier}.",
+                context.Request.Method,
+                context.Request.Path,
+                context.TraceIdentifier);
+        }
         var statusCode = exception is BadHttpRequestException badRequest
             ? badRequest.StatusCode
             : StatusCodes.Status500InternalServerError;

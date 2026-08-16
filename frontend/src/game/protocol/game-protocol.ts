@@ -136,6 +136,8 @@ export type {
 
 export const GAME_PROTOCOL_VERSION = 21
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
+export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
+export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
 export const EMPTY_CONTENT_MANIFEST_SHA256 = '0'.repeat(64)
 

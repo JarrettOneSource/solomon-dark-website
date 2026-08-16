@@ -16,6 +16,11 @@ import {
   monitorWebSocketHeartbeat,
   resolveGameHeartbeatInterval,
 } from './websocket-heartbeat.ts'
+import {
+  gameServerErrorDetails,
+  logGameServerEvent,
+  type GameServerLogSink,
+} from './game-server-logger.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
 
@@ -30,6 +35,7 @@ export interface GameSessionSupervisorOptions {
   boneyards?: BoneyardCatalog
   heartbeatIntervalMs?: number
   host?: string
+  log?: GameServerLogSink
   maxConnectionsPerSession?: number
   maxSessions?: number
   port?: number
@@ -88,10 +94,21 @@ export async function startGameSessionSupervisor(
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let provisioning = 0
+  const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
 
   const websocketServer = new WebSocketServer({
     noServer: true,
     maxPayload: 64 * 1024,
+  })
+  websocketServer.on('error', (error) => {
+    logGameServerEvent(
+      options.log,
+      'session-supervisor',
+      'error',
+      'websocket.server_error',
+      'The browser-facing WebSocket supervisor reported an error.',
+      logDetails(gameServerErrorDetails(error)),
+    )
   })
   const server = createServer((request, response) => {
     const path = request.url?.split('?', 1)[0] ?? ''
@@ -110,6 +127,14 @@ export async function startGameSessionSupervisor(
       return
     }
     if (!bearerMatches(request.headers.authorization, options.adminSecret)) {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'warning',
+        'admin.request_rejected',
+        'A game-session supervisor admin request failed authentication.',
+        logDetails({ method: request.method ?? 'unknown', path }),
+      )
       sendJson(response, 401, { error: 'Unauthorized.' })
       return
     }
@@ -171,7 +196,7 @@ export async function startGameSessionSupervisor(
         sendJson(response, 403, { error: 'The web playtest host credential is invalid.' })
         return
       }
-      void closeSession(session).then(() => {
+      void closeSession(session, 'host-cancelled').then(() => {
         response.writeHead(204, { 'cache-control': 'no-store' })
         response.end()
       }).catch(() => {
@@ -181,6 +206,17 @@ export async function startGameSessionSupervisor(
     }
     response.writeHead(404, { 'cache-control': 'no-store' })
     response.end()
+  })
+  server.on('clientError', (error, socket) => {
+    logGameServerEvent(
+      options.log,
+      'session-supervisor',
+      'warning',
+      'http.client_error',
+      'The game-session supervisor received an invalid HTTP connection.',
+      logDetails({ remoteAddress: socketRemoteAddress(socket), ...gameServerErrorDetails(error) }),
+    )
+    if (!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
   })
 
   function provisionIntoResponse(
@@ -200,7 +236,15 @@ export async function startGameSessionSupervisor(
         protocol: GAME_PROTOCOL_NAME,
         ...(kind === 'private' ? { sessionId: session.id } : { lobbyId: session.id }),
       })
-    }).catch(() => {
+    }).catch((error) => {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'error',
+        'session.provision_failed',
+        'A game session could not be provisioned.',
+        logDetails({ kind, ...gameServerErrorDetails(error) }),
+      )
       sendJson(response, 503, { error: 'A game session could not be started.' }, { 'retry-after': '5' })
     }).finally(() => {
       provisioning -= 1
@@ -223,16 +267,40 @@ export async function startGameSessionSupervisor(
 
   server.on('upgrade', (request, socket, head) => {
     if (!originAllowed(request.headers.origin, options.allowedOrigins)) {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'warning',
+        'proxy.upgrade_rejected',
+        'A browser game connection was rejected because its origin is not allowed.',
+        logDetails({ origin: request.headers.origin ?? 'none', path: request.url ?? 'none' }),
+      )
       rejectUpgrade(socket, 403, 'Forbidden')
       return
     }
     const sessionId = sessionIdFromPath(request.url)
     const session = sessionId ? sessions.get(sessionId) : undefined
     if (!session || session.closing) {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'warning',
+        'proxy.session_missing',
+        'A browser tried to connect to a game session that is unavailable.',
+        logDetails({ path: request.url ?? 'none', sessionId: sessionId ?? 'invalid' }),
+      )
       rejectUpgrade(socket, 404, 'Not Found')
       return
     }
     if (session.activeProxies >= maxConnectionsPerSession) {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'warning',
+        'proxy.capacity_rejected',
+        'A browser game connection exceeded the session proxy capacity.',
+        logDetails({ activeProxies: session.activeProxies, sessionId: session.id }),
+      )
       rejectUpgrade(socket, 503, 'Service Unavailable')
       return
     }
@@ -255,6 +323,8 @@ export async function startGameSessionSupervisor(
         ? { kind: 'reserved-host', hostCredential, guestCredential }
         : { kind: 'shared', credential: hostCredential },
       heartbeatIntervalMs,
+      log: options.log,
+      logContext: { sessionId: id, sessionKind: kind },
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)
@@ -286,6 +356,14 @@ export async function startGameSessionSupervisor(
       throw new Error('The game session supervisor closed during provisioning')
     }
     sessions.set(id, session)
+    logGameServerEvent(
+      options.log,
+      'session-supervisor',
+      'info',
+      'session.provisioned',
+      'An isolated browser game session was provisioned.',
+      logDetails({ kind, sessionId: id, sessionCount: sessions.size }),
+    )
     return session
   }
 
@@ -307,7 +385,17 @@ export async function startGameSessionSupervisor(
       closeClaimedSessionIfEmpty(session)
     }
     const timeout = setTimeout(() => {
-      if (!upgraded) rejectUpgrade(socket, 504, 'Gateway Timeout')
+      if (!upgraded) {
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          'warning',
+          'proxy.upstream_timeout',
+          'The supervisor timed out while connecting to an authoritative game host.',
+          logDetails({ sessionId: session.id }),
+        )
+        rejectUpgrade(socket, 504, 'Gateway Timeout')
+      }
       upstream.terminate()
       release()
     }, 5000)
@@ -319,7 +407,15 @@ export async function startGameSessionSupervisor(
       release()
     }
     socket.once('close', abortPending)
-    upstream.once('error', () => {
+    upstream.once('error', (error) => {
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'error',
+        'proxy.upstream_error',
+        'The authoritative game-host side of a proxy reported an error.',
+        logDetails({ sessionId: session.id, ...gameServerErrorDetails(error) }),
+      )
       if (!upgraded && !socket.destroyed) rejectUpgrade(socket, 502, 'Bad Gateway')
       release()
     })
@@ -333,8 +429,28 @@ export async function startGameSessionSupervisor(
       socket.off('close', abortPending)
       websocketServer.handleUpgrade(request, socket, head, (downstream) => {
         upgraded = true
-        stopHeartbeat = monitorWebSocketHeartbeat(downstream, heartbeatIntervalMs)
+        stopHeartbeat = monitorWebSocketHeartbeat(downstream, heartbeatIntervalMs, {
+          onTimeout: () => {
+            logGameServerEvent(
+              options.log,
+              'session-supervisor',
+              'warning',
+              'proxy.heartbeat_timeout',
+              'The supervisor stopped receiving heartbeat responses from a browser player.',
+              logDetails({ sessionId: session.id }),
+            )
+          },
+          timeoutReason: 'connection timed out',
+        })
         downstreamSockets.add(downstream)
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          'debug',
+          'proxy.opened',
+          'A browser WebSocket proxy opened.',
+          logDetails({ activeProxies: session.activeProxies, sessionId: session.id }),
+        )
         downstream.on('message', (data, binary) => {
           if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary })
         })
@@ -343,14 +459,40 @@ export async function startGameSessionSupervisor(
         })
         downstream.once('close', (code, reason) => {
           downstreamSockets.delete(downstream)
+          logGameServerEvent(
+            options.log,
+            'session-supervisor',
+            code === 1000 ? 'info' : 'warning',
+            'proxy.browser_closed',
+            'The browser side of a game-session proxy closed.',
+            logDetails({ closeCode: code, closeReason: reason.toString(), sessionId: session.id }),
+          )
           closePeer(upstream, code, reason.toString())
           release()
         })
         upstream.once('close', (code, reason) => {
+          logGameServerEvent(
+            options.log,
+            'session-supervisor',
+            code === 1000 ? 'info' : 'warning',
+            'proxy.host_closed',
+            'The authoritative host side of a game-session proxy closed.',
+            logDetails({ closeCode: code, closeReason: reason.toString(), sessionId: session.id }),
+          )
           closePeer(downstream, code, reason.toString())
           release()
         })
-        downstream.once('error', () => upstream.terminate())
+        downstream.once('error', (error) => {
+          logGameServerEvent(
+            options.log,
+            'session-supervisor',
+            'warning',
+            'proxy.browser_error',
+            'The browser side of a game-session proxy reported an error.',
+            logDetails({ sessionId: session.id, ...gameServerErrorDetails(error) }),
+          )
+          upstream.terminate()
+        })
         upstream.once('error', () => downstream.terminate())
       })
     })
@@ -364,7 +506,7 @@ export async function startGameSessionSupervisor(
         && !session.claimed
         && session.activeProxies === 0
         && now - session.createdAt >= unclaimedTimeoutMs
-      ) void closeSession(session)
+      ) closeSessionInBackground(session, 'unclaimed-timeout')
     }
   }, Math.min(1000, unclaimedTimeoutMs))
   expiryTimer.unref()
@@ -376,18 +518,50 @@ export async function startGameSessionSupervisor(
       || session.activeProxies > 0
       || session.host.playerCount() > 0
     ) return
-    void closeSession(session)
+    closeSessionInBackground(session, 'empty-after-use')
   }
 
-  function closeSession(session: SessionRecord): Promise<void> {
+  function closeSessionInBackground(session: SessionRecord, reason: string): void {
+    void closeSession(session, reason).catch(() => {})
+  }
+
+  function closeSession(session: SessionRecord, reason: string): Promise<void> {
     if (session.closePromise) return session.closePromise
     session.closing = true
+    logGameServerEvent(
+      options.log,
+      'session-supervisor',
+      'info',
+      'session.closing',
+      'A browser game session is closing.',
+      logDetails({ reason, sessionId: session.id }),
+    )
     session.closePromise = (async () => {
       try {
-        await session.host.close()
+        await session.host.close(
+          reason === 'host-cancelled' ? 'host-ended-session' : 'server-shutdown',
+        )
+      } catch (error) {
+        logGameServerEvent(
+          options.log,
+          'session-supervisor',
+          'error',
+          'session.close_failed',
+          'A browser game session could not close cleanly.',
+          logDetails({ reason, sessionId: session.id, ...gameServerErrorDetails(error) }),
+        )
+        throw error
       } finally {
         sessions.delete(session.id)
       }
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'info',
+        'session.closed',
+        'A browser game session closed.',
+        logDetails({ reason, sessionCount: sessions.size, sessionId: session.id }),
+      )
     })()
     return session.closePromise
   }
@@ -397,6 +571,14 @@ export async function startGameSessionSupervisor(
   if (!address || typeof address === 'string') {
     throw new Error('The game session supervisor did not bind a TCP address')
   }
+  logGameServerEvent(
+    options.log,
+    'session-supervisor',
+    'info',
+    'supervisor.listening',
+    'The browser game-session supervisor is listening.',
+    logDetails({ host, maxSessions, port: address.port }),
+  )
 
   return {
     address: {
@@ -408,10 +590,26 @@ export async function startGameSessionSupervisor(
       if (closed) return
       closed = true
       clearInterval(expiryTimer)
-      for (const socket of downstreamSockets) socket.terminate()
-      await Promise.all([...sessions.values()].map(closeSession))
+      await Promise.all([...sessions.values()].map((session) => (
+        closeSession(session, 'supervisor-shutdown')
+      )))
+      for (const socket of downstreamSockets) {
+        closePeer(socket, 1012, 'server shutdown')
+        const forceClose = setTimeout(() => {
+          if (socket.readyState !== WebSocket.CLOSED) socket.terminate()
+        }, 1_000)
+        forceClose.unref()
+      }
       websocketServer.close()
       await closeHttpServer(server)
+      logGameServerEvent(
+        options.log,
+        'session-supervisor',
+        'info',
+        'supervisor.closed',
+        'The browser game-session supervisor stopped.',
+        logDetails(),
+      )
     },
     sessionCount: () => sessions.size,
   }
@@ -503,6 +701,13 @@ function closePeer(socket: WebSocket, code: number, reason: string): void {
     return
   }
   socket.close()
+}
+
+function socketRemoteAddress(socket: Duplex): string {
+  if ('remoteAddress' in socket && typeof socket.remoteAddress === 'string') {
+    return socket.remoteAddress
+  }
+  return 'unknown'
 }
 
 function positiveDuration(value: number, name: string): number {
