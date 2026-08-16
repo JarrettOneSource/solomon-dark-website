@@ -79,7 +79,11 @@ import {
   withBoneyardGateCollision,
 } from './boneyard-collision.ts'
 import { resolveBoneyardSpellCombat } from './boneyard-spell-combat.ts'
-import type { BoneyardEnemySemanticEvent } from './boneyard-enemy-store.ts'
+import {
+  emitBoneyardPlayerDamageSound,
+  nativeWizardOuchCooldownReady,
+  type BoneyardEnemySemanticEvent,
+} from './boneyard-enemy-store.ts'
 import {
   addHubParticipant,
   createHubWorld,
@@ -598,6 +602,7 @@ function finishGameSimulationTick(
   result: {
     enemyEvents?: readonly BoneyardEnemySemanticEvent[]
     playerDamage?: readonly Readonly<{
+      actorId: number
       amount: number
       coldSlowTicks: number
       dazzleTicks: number
@@ -618,15 +623,45 @@ function finishGameSimulationTick(
 ): GameSimulationState {
   const tick = previous.tick + 1
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
+  let world = result.world
   let levelUpBarrier = previous.levelUpBarrier
   let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
   const playerDamage = result.playerDamage ?? []
+  const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
   for (const damage of playerDamage) {
+    const before = playerProgressionAt(playerEntities, damage.playerId)
     playerEntities = damagePlayerEntity(
       playerEntities,
       damage.playerId,
       damage.amount,
+      tick,
     )
+    const after = playerProgressionAt(playerEntities, damage.playerId)
+    if (
+      world.kind === 'boneyard'
+      && before !== null
+      && after !== null
+      && after.currentHealth < before.currentHealth
+      && after.lifeState === 'alive'
+      && nativeWizardOuchCooldownReady(tick, world.playerOuchDeadlineTick)
+    ) {
+      const player = playerCharacterAt(playerEntities, damage.playerId)
+      if (player !== null) {
+        const emitted = emitBoneyardPlayerDamageSound(world.enemies, {
+          actorId: damage.actorId,
+          currentHealth: after.currentHealth,
+          playerId: damage.playerId,
+          position: player.position,
+          tick,
+        })
+        playerDamageSoundEvents.push(emitted.event)
+        world = {
+          ...world,
+          enemies: emitted.store,
+          playerOuchDeadlineTick: tick + emitted.delayTicks,
+        }
+      }
+    }
     playerEntities = poisonPlayerEntity(
       playerEntities,
       damage.playerId,
@@ -752,7 +787,6 @@ function finishGameSimulationTick(
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   let primarySpells = cast.spells
-  let world = result.world
   if (world.kind === 'boneyard') {
     const previousEvents = previous.world.kind === 'boneyard'
       && previous.world.runId === world.runId
@@ -762,7 +796,7 @@ function finishGameSimulationTick(
       ...world,
       enemyEvents: retainBoneyardEnemyEvents(
         previousEvents,
-        result.enemyEvents ?? [],
+        [...(result.enemyEvents ?? []), ...playerDamageSoundEvents],
         tick,
       ),
     }

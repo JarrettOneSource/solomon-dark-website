@@ -550,9 +550,15 @@ export type BoneyardEnemyDamageSound =
   | 'pop-shield'
   | 'zombie-ouch'
 
-export type BoneyardEnemySound =
+export type BoneyardPlayerDamageSound =
+  | 'wizard-ouch-1'
+  | 'wizard-ouch-2'
+  | 'wizard-ouch-3'
+
+export type BoneyardCombatSound =
   | BoneyardEnemyDamageSound
   | BoneyardEnemyDeathSound
+  | BoneyardPlayerDamageSound
 
 export type BoneyardEnemySemanticEventType =
   | 'attack-marker'
@@ -560,6 +566,7 @@ export type BoneyardEnemySemanticEventType =
   | 'enemy-death'
   | 'enemy-death-sound'
   | 'enemy-damage-sound'
+  | 'player-damage-sound'
   | 'enemy-retired'
   | 'enemy-spawned'
   | 'enemy-terminal-output'
@@ -576,7 +583,7 @@ export interface BoneyardEnemySemanticEvent {
   readonly output?: BoneyardEnemyTerminalOutput
   readonly pitch?: number
   readonly projectileId?: BoneyardEnemyProjectileId
-  readonly sound?: BoneyardEnemySound
+  readonly sound?: BoneyardCombatSound
   readonly sourcePosition?: Readonly<BoneyardPoint>
   readonly targetPlayerId?: string | null
   readonly tick: number
@@ -630,6 +637,20 @@ export interface BoneyardEnemyStore {
   readonly projectiles: readonly BoneyardEnemyProjectile[]
   readonly projectileEffects: readonly BoneyardEnemyProjectileEffect[]
   readonly rngState: number
+}
+
+export interface BoneyardPlayerDamageSoundRequest {
+  readonly actorId: BoneyardEnemyActorId
+  readonly currentHealth: number
+  readonly playerId: string
+  readonly position: Readonly<BoneyardPoint>
+  readonly tick: number
+}
+
+export interface BoneyardPlayerDamageSoundResult {
+  readonly delayTicks: number
+  readonly event: BoneyardEnemySemanticEvent
+  readonly store: BoneyardEnemyStore
 }
 
 export interface BoneyardEnemyTargetCandidate {
@@ -779,6 +800,47 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
     projectileEffects: [],
     rngState: seedBoneyardWaveRng(`${seed}:enemy-actors`),
   }
+}
+
+export function emitBoneyardPlayerDamageSound(
+  source: BoneyardEnemyStore,
+  request: BoneyardPlayerDamageSoundRequest,
+): BoneyardPlayerDamageSoundResult {
+  const cue = randomBoneyardWaveInteger(source.rngState, 3)
+  const delay = randomBoneyardWaveInteger(cue.state, 41)
+  const sound = `wizard-ouch-${cue.value + 1}` as BoneyardPlayerDamageSound
+  const event = Object.freeze({
+    actorId: request.actorId,
+    eventId: source.nextEventId,
+    gainScale: wizardOuchGain(request.currentHealth),
+    pitch: 1,
+    sound,
+    sourcePosition: Object.freeze({ ...request.position }),
+    targetPlayerId: request.playerId,
+    tick: request.tick,
+    type: 'player-damage-sound' as const,
+  })
+  return {
+    delayTicks: 20 + delay.value,
+    event,
+    store: {
+      ...source,
+      nextEventId: source.nextEventId + 1,
+      rngState: delay.state,
+    },
+  }
+}
+
+export function nativeWizardOuchCooldownReady(
+  tick: number,
+  deadlineTick: number,
+): boolean {
+  return tick > deadlineTick
+}
+
+function wizardOuchGain(currentHealth: number): number {
+  const healthScalar = Math.min(1, Math.max(0, (currentHealth - 25) / 20))
+  return 0.25 + 0.75 * (1 - healthScalar)
 }
 
 function standaloneEnemyLightProviderOrderState(source: BoneyardEnemyStore) {

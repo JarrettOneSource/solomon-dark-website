@@ -38,6 +38,9 @@ import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
 import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
+import wizardOuch1 from '../assets/game/audio/sfx/wizard-ouch-1.wav'
+import wizardOuch2 from '../assets/game/audio/sfx/wizard-ouch-2.wav'
+import wizardOuch3 from '../assets/game/audio/sfx/wizard-ouch-3.wav'
 import zombieDie from '../assets/game/audio/sfx/zombie-die.wav'
 import zombieDieGroan from '../assets/game/audio/sfx/zombie-die-groan.wav'
 import zombieOuch from '../assets/game/audio/sfx/zombie-ouch.wav'
@@ -104,6 +107,9 @@ export const GAME_AUDIO_SOURCES = {
     summon,
     'throw-fire': throwFire,
     'unlock-skill': unlockSkill,
+    'wizard-ouch-1': wizardOuch1,
+    'wizard-ouch-2': wizardOuch2,
+    'wizard-ouch-3': wizardOuch3,
     'zombie-die': zombieDie,
     'zombie-die-groan': zombieDieGroan,
     'zombie-ouch': zombieOuch,

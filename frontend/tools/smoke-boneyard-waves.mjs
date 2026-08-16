@@ -223,6 +223,27 @@ try {
     combatNavigation,
   )
   const death = await waitForPlayerDeath(page)
+  const playerDamageEvents = [...wire.events.values()].filter((event) => (
+    event.runId === loadedBoneyard.runId && event.type === 'player-damage-sound'
+  ))
+  assert.ok(playerDamageEvents.length > 0, 'expected an authoritative Wizard ouch event')
+  assert.ok(playerDamageEvents.every((event) => /^wizard-ouch-[123]$/.test(event.sound)))
+  assert.ok(playerDamageEvents.every((event) => event.pitch === 1))
+  assert.ok(playerDamageEvents.every((event) => (
+    event.gainScale >= 0.25 && event.gainScale <= 1
+  )))
+  const playerDamageAudio = await page.evaluate(() => (
+    window.__sdrAudioEvents.filter((event) => (
+      event.type === 'buffer-start'
+        && /wizard-ouch-[123](?:-[\w-]+)?\.wav$/.test(new URL(event.src).pathname)
+    )).map((event) => ({
+      playbackRate: event.playbackRate,
+      src: event.src,
+      volume: event.volume,
+    }))
+  ))
+  assert.ok(playerDamageAudio.length > 0, 'expected decoded Wizard ouch playback')
+  assert.ok(playerDamageAudio.every((event) => event.playbackRate === 1))
   await page.screenshot({ path: deathScreenshotPath })
   const gameOver = page.getByRole('button', { name: 'Game over. Continue to loadout.' })
   await gameOver.waitFor({ timeout: 180_000 })
@@ -277,6 +298,7 @@ try {
   assert.ok(audioPlaySources.some((source) => source.includes('solomon-get-him-boys')))
   assert.ok(audioPlaySources.some((source) => source.includes('throw-fire')))
   assert.ok(audioPlaySources.some((source) => source.includes('skeleton-die')))
+  assert.ok(audioPlaySources.some((source) => source.includes('wizard-ouch-')))
   assert.ok(audioPlaySources.some((source) => source.includes('death-guitar')))
   assert.deepEqual(wire.errors, [])
   assert.deepEqual(errors, [])
@@ -300,6 +322,8 @@ try {
     locomotion,
     mouthPoses: [...new Set(mouthPoses)],
     opening,
+    playerDamageAudio,
+    playerDamageEvents,
     runEdge,
     screenshotPath,
     secondRun,

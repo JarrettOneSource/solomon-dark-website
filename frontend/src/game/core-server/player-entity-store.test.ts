@@ -66,7 +66,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
     overlayEffectPhase: 0,
   })
 
-  store = damagePlayerEntity(store, 'second', 60)
+  store = damagePlayerEntity(store, 'second', 60, 0)
   assert.equal(playerProgressionAt(store, 'second')?.currentHealth, -10)
   assert.equal(playerEntityDisplayHealth(store, 'second'), 0)
 
@@ -125,7 +125,7 @@ test('entity combat APIs update only the indexed progression and publish one-sho
   assert.equal(playerProgressionAt(store, 'first')?.currentMana, 94)
   assert.equal(playerProgressionAt(store, 'second'), untouched)
 
-  store = damagePlayerEntity(store, 'first', 60)
+  store = damagePlayerEntity(store, 'first', 60, 0)
   assert.equal(playerEntityCanAcceptInput(store, 'first'), false)
   assert.equal(playerEntityCanCast(store, 'first'), false)
   assert.equal(playerEntityCanAcceptInput(store, 'second'), true)
@@ -150,7 +150,7 @@ test('new-run placement resets transient combat while retaining dense identity a
   store = poisonPlayerEntity(store, 'first', 5, 10)
   store = coldSlowPlayerEntity(store, 'first', 200)
   store = dazzlePlayerEntity(store, 'first', 50)
-  store = damagePlayerEntity(store, 'first', 75)
+  store = damagePlayerEntity(store, 'first', 75, 0)
   store = stepPlayerEntityCombatTick(store).store
   store = setPlayerEntitySpectating(store, 'first')
 

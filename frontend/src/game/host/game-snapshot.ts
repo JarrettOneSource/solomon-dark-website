@@ -216,6 +216,7 @@ function protocolPlayerState(
       maximumHealth: progression.maximumHealth,
       maximumMana: progression.maximumMana,
       lifeState: progression.lifeState,
+      lastDamageTick: progression.lastDamageTick,
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
       poisonDamagePerTick: progression.poisonDamagePerTick,

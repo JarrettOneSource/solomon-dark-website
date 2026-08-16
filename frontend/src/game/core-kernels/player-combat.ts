@@ -14,6 +14,7 @@ export const PLAYER_DEATH_EFFECT_TICK = 150
 export const PLAYER_DEATH_FRAME_ONE_TICK = 153
 export const PLAYER_DEATH_FRAME_TWO_TICK = 156
 export const PLAYER_DEATH_FRAME_THREE_TICK = 159
+export const PLAYER_HIT_LATCH_TICKS = 20
 
 export const PLAYER_LIFE_STATES = [
   'alive',
@@ -32,6 +33,7 @@ export interface PlayerCombatComponent {
   readonly deathEpoch: number
   readonly deathTick: number
   readonly lifeState: PlayerLifeState
+  readonly lastDamageTick: number | null
   readonly maximumHealth: number
   readonly maximumMana: number
   readonly poisonDamagePerTick: number
@@ -58,6 +60,7 @@ export function createPlayerCombat(): PlayerCombatComponent {
     deathEpoch: 0,
     deathTick: 0,
     lifeState: 'alive',
+    lastDamageTick: null,
     maximumHealth: PLAYER_INITIAL_HEALTH,
     maximumMana: PLAYER_INITIAL_MANA,
     poisonDamagePerTick: 0,
@@ -123,8 +126,10 @@ export function poisonPlayer<T extends PlayerCombatComponent>(
 export function damagePlayer<T extends PlayerCombatComponent>(
   source: T,
   damage: number,
+  tick: number,
 ): T {
   requireNonnegativeFinite(damage, 'player damage')
+  requireNonnegativeTicks(tick, 'player damage tick')
   if (damage === 0 || source.lifeState === 'dying' || source.lifeState === 'spectating') {
     return source
   }
@@ -132,10 +137,23 @@ export function damagePlayer<T extends PlayerCombatComponent>(
   return {
     ...source,
     currentHealth,
+    lastDamageTick: tick,
     lifeState: source.lifeState === 'lethal-pending' || currentHealth <= PLAYER_LETHAL_HEALTH
       ? 'lethal-pending'
       : 'alive',
   }
+}
+
+export function playerHitOverlayAlpha(
+  source: PlayerCombatComponent,
+  tick: number,
+): number {
+  requireNonnegativeFinite(tick, 'player presentation tick')
+  if (source.lastDamageTick === null || source.lifeState !== 'alive') return 0
+  return Math.min(
+    1,
+    Math.max(0, 1 - (tick - source.lastDamageTick) / PLAYER_HIT_LATCH_TICKS),
+  )
 }
 
 export function playerDisplayHealth(source: PlayerCombatComponent): number {
@@ -169,6 +187,7 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
         deathTick: 0,
         coldSlowTicksRemaining: 0,
         dazzleTicksRemaining: 0,
+        lastDamageTick: null,
         lifeState: 'dying',
         poisonDamagePerTick: 0,
         poisonTicksRemaining: 0,
@@ -277,6 +296,7 @@ export function resetPlayerCombatForNewRun<T extends PlayerCombatComponent>(sour
     deathEpoch: 0,
     deathTick: 0,
     dazzleTicksRemaining: 0,
+    lastDamageTick: null,
     lifeState: 'alive',
     poisonDamagePerTick: 0,
     poisonTicksRemaining: 0,

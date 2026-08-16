@@ -169,7 +169,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v25 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v26 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -251,6 +251,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
     level: 1,
     lifeState: 'alive',
+    lastDamageTick: null,
     maximumHealth: 50,
     maximumMana: 100,
     nextThreshold: 90,
@@ -317,7 +318,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v25 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v26 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -730,8 +731,8 @@ test('protocol v25 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v25 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 25)
+test('protocol v26 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 26)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -823,7 +824,7 @@ test('protocol v25 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v25 strictly owns the generated-arena transition', () => {
+test('protocol v26 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -876,7 +877,7 @@ test('protocol v25 strictly owns the generated-arena transition', () => {
     /must share ownership/,
   )
 })
-test('protocol v25 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v26 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -965,6 +966,17 @@ test('protocol v25 preserves the bounded run-scoped enemy semantic-event lane', 
       sourcePosition: { x: 130, y: 250 },
       tick: 20,
       type: 'enemy-damage-sound',
+    },
+    {
+      actorId: 4,
+      eventId: 14,
+      gainScale: 0.625,
+      pitch: 1,
+      sound: 'wizard-ouch-2',
+      sourcePosition: { x: 140, y: 260 },
+      targetPlayerId: 'player-1',
+      tick: 20,
+      type: 'player-damage-sound',
     },
   ]
   const state = {
@@ -1075,6 +1087,20 @@ test('protocol v25 preserves the bounded run-scoped enemy semantic-event lane', 
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(unsupportedDamageSound)),
     /sound is not supported/,
+  )
+
+  const unsupportedPlayerDamageSound = JSON.parse(encodeGameMessage(message))
+  unsupportedPlayerDamageSound.frame.world.enemyEvents[12].sound = 'wizard-ish'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unsupportedPlayerDamageSound)),
+    /sound is not supported/,
+  )
+
+  const missingPlayerDamageTarget = JSON.parse(encodeGameMessage(message))
+  delete missingPlayerDamageTarget.frame.world.enemyEvents[12].targetPlayerId
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingPlayerDamageTarget)),
+    /targetPlayerId/,
   )
 
   const excessDeathSoundGain = JSON.parse(encodeGameMessage(message))

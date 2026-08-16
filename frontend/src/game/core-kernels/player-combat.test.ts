@@ -8,10 +8,43 @@ import {
   dazzlePlayer,
   playerCollisionEnabled,
   playerCollisionEnabledAfterCombatTick,
+  playerHitOverlayAlpha,
   playerMovementScale,
+  poisonPlayer,
   resetPlayerCombatForNewRun,
   stepPlayerCombatTick,
 } from './player-combat.ts'
+
+test('direct damage owns the native 20-tick red redraw without changing poison presentation', () => {
+  const initial = createPlayerCombat()
+  const first = damagePlayer(initial, 5, 100)
+  assert.equal(first.lastDamageTick, 100)
+  assert.equal(playerHitOverlayAlpha(first, 100), 1)
+  assert.equal(playerHitOverlayAlpha(first, 110), 0.5)
+  assert.equal(playerHitOverlayAlpha(first, 120), 0)
+
+  const refreshed = damagePlayer(first, 1, 115)
+  assert.equal(refreshed.lastDamageTick, 115)
+  assert.equal(playerHitOverlayAlpha(refreshed, 115), 1)
+  assert.equal(playerHitOverlayAlpha(refreshed, 125), 0.5)
+
+  const poisoned = stepPlayerCombatTick(poisonPlayer(initial, 2, 1)).combat
+  assert.ok(poisoned.currentHealth < initial.currentHealth)
+  assert.equal(poisoned.lastDamageTick, null)
+  assert.equal(playerHitOverlayAlpha(poisoned, 1), 0)
+
+  const overkillButLiving = damagePlayer(initial, 55, 200)
+  assert.equal(overkillButLiving.lifeState, 'alive')
+  assert.equal(playerHitOverlayAlpha(overkillButLiving, 200), 1)
+  const lethal = damagePlayer(overkillButLiving, 5, 201)
+  assert.equal(lethal.lifeState, 'lethal-pending')
+  assert.equal(playerHitOverlayAlpha(lethal, 201), 0)
+  const dying = stepPlayerCombatTick(lethal).combat
+  assert.equal(dying.lastDamageTick, null)
+
+  assert.equal(resetPlayerCombatForNewRun(refreshed).lastDamageTick, null)
+  assert.throws(() => damagePlayer(initial, 1, 1.5), /safe integer/)
+})
 
 test('cold and dazzle are authoritative bounded counters with only native-supported movement effect', () => {
   const dazzled = dazzlePlayer(createPlayerCombat(), 50)
@@ -39,7 +72,7 @@ test('cold and dazzle are authoritative bounded counters with only native-suppor
 
 test('cold/dazzle clear on death and on a new run', () => {
   const affected = dazzlePlayer(coldSlowPlayer(createPlayerCombat(), 30), 40)
-  const lethal = damagePlayer(affected, 60)
+  const lethal = damagePlayer(affected, 60, 0)
   const dying = stepPlayerCombatTick(lethal).combat
   assert.equal(dying.lifeState, 'dying')
   assert.equal(dying.coldSlowTicksRemaining, 0)

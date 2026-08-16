@@ -1044,34 +1044,7 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
     createGameSimulation(),
     combatBoneyard('poison-combat-run'),
   )
-  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
-  const player = getPlayerCharacter(state)
-  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
-    firstProjectileWorldContact: () => null,
-    players: {
-      'local-player': {
-        alive: true,
-        collisionRadius: 25,
-        connected: true,
-        eligible: true,
-        position: player.position,
-        velocityPerTick: { x: 0, y: 0 },
-      },
-    },
-    resolveMovement: ({ requestedPosition }) => requestedPosition,
-    resolveSpawnIntents: () => [{
-      enemyToken: 'ZOMBIE',
-      flags: ['FLAG_ROTTEN'],
-      id: 1,
-      locationPolicy: 'anywhere',
-      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
-      position: { ...player.position },
-      spawnTick: 0,
-      waveOrdinal: 1,
-    }],
-    tick: 0,
-  })
-  state = { ...state, world: { ...state.world, enemies: seeded.store } }
+  state = withRottenZombieAtPlayer(state)
 
   for (let tick = 0; tick < 100; tick += 1) {
     state = stepGameSimulationTick(state, {})
@@ -1083,10 +1056,59 @@ test('Rotten Zombie contact applies direct damage and authoritative poison over 
   assert.ok(progression.currentHealth > 14 && progression.currentHealth < 15)
   assert.equal(progression.poisonDamagePerTick, 35 / 6 / 100)
   assert.equal(progression.poisonTicksRemaining, 999)
+  assert.notEqual(progression.lastDamageTick, null)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const ouchEvents = state.world.enemyEvents.filter((event) => (
+    event.type === 'player-damage-sound'
+  ))
+  assert.equal(ouchEvents.length, 1)
+  assert.equal(ouchEvents[0]!.gainScale, 1)
+  assert.equal(ouchEvents[0]!.pitch, 1)
+  assert.equal(ouchEvents[0]!.targetPlayerId, 'local-player')
+  assert.match(ouchEvents[0]!.sound!, /^wizard-ouch-[123]$/)
+  assert.ok(state.world.playerOuchDeadlineTick >= state.tick + 20)
+  assert.ok(state.world.playerOuchDeadlineTick <= state.tick + 60)
+  const lastDamageTick = progression.lastDamageTick
   const healthAfterContact = progression.currentHealth
   state = stepGameSimulationTick(state, {})
   assert.ok(getPlayerProgression(state).currentHealth < healthAfterContact)
   assert.equal(getPlayerProgression(state).poisonTicksRemaining, 998)
+  assert.equal(getPlayerProgression(state).lastDamageTick, lastDamageTick)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(
+    state.world.enemyEvents.filter((event) => event.type === 'player-damage-sound').length,
+    1,
+  )
+})
+
+test('terminal direct damage suppresses Wizard ouch and yields to death presentation', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation(),
+    combatBoneyard('terminal-contact-run'),
+  )
+  state = withRottenZombieAtPlayer(state)
+  state = {
+    ...state,
+    playerEntities: damagePlayerEntity(
+      state.playerEntities,
+      'local-player',
+      30,
+      state.tick,
+    ),
+  }
+
+  for (let tick = 0; tick < 100; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (getPlayerProgression(state).lifeState !== 'alive') break
+  }
+
+  assert.equal(getPlayerProgression(state).lifeState, 'dying')
+  assert.equal(getPlayerProgression(state).lastDamageTick, null)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(
+    state.world.enemyEvents.some((event) => event.type === 'player-damage-sound'),
+    false,
+  )
 })
 
 test('poison begins the native death epoch before all-dead Game Over', () => {
@@ -1097,7 +1119,7 @@ test('poison begins the native death epoch before all-dead Game Over', () => {
   state = {
     ...state,
     playerEntities: poisonPlayerEntity(
-      damagePlayerEntity(state.playerEntities, 'local-player', 59.99),
+      damagePlayerEntity(state.playerEntities, 'local-player', 59.99, state.tick),
       'local-player',
       2,
       1,
@@ -1200,7 +1222,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   state = enterBoneyardWorld(state, combatBoneyard('multiplayer-death-run'))
   state = {
     ...state,
-    playerEntities: damagePlayerEntity(state.playerEntities, 'first', 60),
+    playerEntities: damagePlayerEntity(state.playerEntities, 'first', 60, state.tick),
   }
   state = stepGameSimulationTick(state, {
     first: gameplayInput(-1, 0),
@@ -1222,7 +1244,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
 
   state = {
     ...state,
-    playerEntities: damagePlayerEntity(state.playerEntities, 'second', 60),
+    playerEntities: damagePlayerEntity(state.playerEntities, 'second', 60, state.tick),
   }
   state = stepGameSimulationTick(state, {})
   assert.equal(getPlayerProgression(state, 'second').lifeState, 'dying')
@@ -1261,15 +1283,50 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   const secondRun = enterBoneyardWorld(hub, combatBoneyard('clean-second-run'))
   assert.equal(secondRun.run.phase, 'active')
   assert.equal(secondRun.run.nextGameOverEventId, 2)
+  if (secondRun.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(secondRun.world.playerOuchDeadlineTick, 0)
+  assert.deepEqual(secondRun.world.enemyEvents, [])
   for (const playerId of ['first', 'second']) {
     const progression = getPlayerProgression(secondRun, playerId)
     assert.equal(progression.lifeState, 'alive')
+    assert.equal(progression.lastDamageTick, null)
     assert.equal(progression.currentHealth, progression.maximumHealth)
     assert.equal(progression.currentMana, progression.maximumMana)
     assert.equal(progression.deathEpoch, 0)
     assert.equal(progression.deathTick, 0)
   }
 })
+
+function withRottenZombieAtPlayer(state: GameSimulationState): GameSimulationState {
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state)
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      'local-player': {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'ZOMBIE',
+      flags: ['FLAG_ROTTEN'],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: { ...player.position },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+    tick: state.tick,
+  })
+  return { ...state, world: { ...state.world, enemies: seeded.store } }
+}
 
 function emptyBoneyard(): LoadedBoneyard {
   return {

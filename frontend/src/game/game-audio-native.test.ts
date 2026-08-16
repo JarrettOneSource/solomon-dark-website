@@ -120,6 +120,9 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['hit-shield'].registryOffset, 0x750)
   assert.equal(NATIVE_SOUND_MANIFEST['pop-shield'].registryOffset, 0xcd0)
   assert.equal(NATIVE_SOUND_MANIFEST['zombie-ouch'].registryOffset, 0x127c)
+  assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-1'].registryOffset, 0x2620)
+  assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-2'].registryOffset, 0x264c)
+  assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-3'].registryOffset, 0x2678)
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
@@ -226,7 +229,20 @@ test('pins every checked-in enemy damage cue to its untouched stock WAV', () => 
   }
 })
 
-test('maps authoritative enemy damage and death sounds to host-authored requests', () => {
+test('pins all three Wizard ouch variants to the untouched stock WAVs', () => {
+  for (const cue of ['wizard-ouch-1', 'wizard-ouch-2', 'wizard-ouch-3'] as const) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${cue}.wav`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+    )
+  }
+})
+
+test('maps authoritative combat sounds to host-authored requests', () => {
   const death = {
     actorId: 9,
     eventId: 3,
@@ -255,6 +271,20 @@ test('maps authoritative enemy damage and death sounds to host-authored requests
     playbackRate: 0.825,
     sourcePosition: { x: 10, y: 20 },
     volume: 0.375,
+  })
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    ...death,
+    eventId: 5,
+    gainScale: 0.625,
+    pitch: 1,
+    sound: 'wizard-ouch-2',
+    targetPlayerId: 'wizard',
+    type: 'player-damage-sound',
+  }), {
+    cue: 'wizard-ouch-2',
+    playbackRate: 1,
+    sourcePosition: { x: 10, y: 20 },
+    volume: 0.625,
   })
   assert.equal(nativeEnemyEventSoundRequest({
     ...death,

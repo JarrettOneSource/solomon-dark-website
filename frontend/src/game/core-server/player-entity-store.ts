@@ -258,10 +258,11 @@ export function damagePlayerEntity(
   source: PlayerEntityStore,
   playerId: string,
   damage: number,
+  tick: number,
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
-  const progression = damagePlayer(source.progressions[index]!, damage)
+  const progression = damagePlayer(source.progressions[index]!, damage, tick)
   return progression === source.progressions[index]
     ? source
     : replacePlayerProgression(source, index, progression)

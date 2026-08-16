@@ -141,6 +141,7 @@ import {
   BONEYARD_ENEMY_PROJECTILE_PAYLOADS,
   BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS,
   BONEYARD_ENEMY_TERMINAL_OUTPUTS,
+  BONEYARD_PLAYER_DAMAGE_SOUNDS,
   BONEYARD_MAGGOT_LAUNCH_TRAJECTORIES,
   BONEYARD_MAGGOT_STATES,
 } from './game-state.ts'
@@ -159,7 +160,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 25
+export const GAME_PROTOCOL_VERSION = 26
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -1260,6 +1261,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'learnedSkills',
     'level',
     'lifeState',
+    'lastDamageTick',
     'maximumHealth',
     'maximumMana',
     'nextThreshold',
@@ -1357,6 +1359,9 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     learnedSkills,
     level,
     lifeState: lifeState as PlayerLifeState,
+    lastDamageTick: source.lastDamageTick === null
+      ? null
+      : nonnegativeInteger(source.lastDamageTick, `${field}.lastDamageTick`),
     maximumHealth,
     maximumMana,
     nextThreshold: nonnegativeInteger(source.nextThreshold, `${field}.nextThreshold`),
@@ -3034,6 +3039,13 @@ function boneyardEnemyEvents(
           'sound',
           'sourcePosition',
         ]
+        case 'player-damage-sound': return [
+          'gainScale',
+          'pitch',
+          'sound',
+          'sourcePosition',
+          'targetPlayerId',
+        ]
         case 'enemy-terminal-output': return ['count', 'output']
         case 'projectile-impact':
         case 'projectile-retired':
@@ -3086,11 +3098,14 @@ function boneyardEnemyEvents(
       case 'enemy-death':
       case 'enemy-retired': return base
       case 'enemy-damage-sound':
-      case 'enemy-death-sound': {
+      case 'enemy-death-sound':
+      case 'player-damage-sound': {
         const sound = limitedString(source.sound, `${eventField}.sound`, 64)
         const supportedSounds = type === 'enemy-damage-sound'
           ? BONEYARD_ENEMY_DAMAGE_SOUNDS
-          : BONEYARD_ENEMY_DEATH_SOUNDS
+          : type === 'enemy-death-sound'
+            ? BONEYARD_ENEMY_DEATH_SOUNDS
+            : BONEYARD_PLAYER_DAMAGE_SOUNDS
         if (!(supportedSounds as readonly string[]).includes(sound)) {
           throw new GameProtocolError(`${eventField}.sound is not supported`)
         }
@@ -3111,6 +3126,14 @@ function boneyardEnemyEvents(
           pitch,
           sound: sound as BoneyardEnemyEventSnapshot['sound'],
           sourcePosition: vector(source.sourcePosition, `${eventField}.sourcePosition`),
+          ...(type === 'player-damage-sound'
+            ? {
+                targetPlayerId: nullablePlayerId(
+                  source.targetPlayerId,
+                  `${eventField}.targetPlayerId`,
+                ),
+              }
+            : {}),
         }
       }
       case 'enemy-terminal-output': {

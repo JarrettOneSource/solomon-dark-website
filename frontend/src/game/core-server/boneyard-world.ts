@@ -89,6 +89,7 @@ export interface BoneyardWorldState {
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  playerOuchDeadlineTick: number
   runId: string
   scenerySpellTargets: readonly PrimarySpellTarget[]
   spawn: { x: number; y: number; facingDeg: number }
@@ -123,6 +124,7 @@ export function createBoneyardWorld(
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     lanternLightRegistration,
+    playerOuchDeadlineTick: 0,
     runId: loaded.runId,
     scenerySpellTargets: loaded.scene.objects
       .filter(({ typeId }) => typeId === 2029)

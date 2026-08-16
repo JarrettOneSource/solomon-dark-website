@@ -57,6 +57,9 @@ export type GameSoundCue =
   | 'summon'
   | 'throw-fire'
   | 'unlock-skill'
+  | 'wizard-ouch-1'
+  | 'wizard-ouch-2'
+  | 'wizard-ouch-3'
   | 'zombie-die'
   | 'zombie-die-groan'
   | 'zombie-ouch'
@@ -268,6 +271,21 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\unlockskill',
     sourceSha256: '2013053abdd8a969f7c63b2c735cedb5a571fc999bf1474543cd608cee74ffaa',
   },
+  'wizard-ouch-1': {
+    registryOffset: 0x2620,
+    sourceName: 'sounds\\Wizard_Ouch\\SAY_OUCH1',
+    sourceSha256: '3e851ee873c9798923624d2b117c6fc91d656f66d7961a00935cfb182393b638',
+  },
+  'wizard-ouch-2': {
+    registryOffset: 0x264c,
+    sourceName: 'sounds\\Wizard_Ouch\\SAY_OUCH2',
+    sourceSha256: '509ce875de5322ebc4ee883cf2f1db9ba172b1cf22a6a6da6e31a0e2c91d12b7',
+  },
+  'wizard-ouch-3': {
+    registryOffset: 0x2678,
+    sourceName: 'sounds\\Wizard_Ouch\\SAY_OUCH3',
+    sourceSha256: '26cd8bea5d55a47b6476f130481bad26887f7af1cf12ec43b2989e495323e5ea',
+  },
   'zombie-die': {
     registryOffset: 0x1224,
     sourceName: 'sounds\\zombiedie',
@@ -305,7 +323,11 @@ export interface NativeEnemyEventSoundRequest {
 export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
 ): NativeEnemyEventSoundRequest | null {
-  if (event.type !== 'enemy-damage-sound' && event.type !== 'enemy-death-sound') {
+  if (
+    event.type !== 'enemy-damage-sound'
+    && event.type !== 'enemy-death-sound'
+    && event.type !== 'player-damage-sound'
+  ) {
     return null
   }
   return {

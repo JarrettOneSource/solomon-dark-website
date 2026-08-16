@@ -4,6 +4,7 @@ import test from 'node:test'
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
+import { randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -39,6 +40,8 @@ import {
   boneyardEnemyLiveCount,
   createBoneyardEnemyStore,
   damageBoneyardEnemy,
+  emitBoneyardPlayerDamageSound,
+  nativeWizardOuchCooldownReady,
   stepBoneyardEnemyStore,
   type BoneyardEnemyActor,
   type BoneyardEnemyMovementRequest,
@@ -62,6 +65,52 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
 const NO_WORLD_CONTACT = () => null
 const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
+
+test('Wizard ouch consumes cue then inclusive cooldown draws on the active enemy RNG stream', () => {
+  const source = createBoneyardEnemyStore('wizard-ouch')
+  const cueDraw = randomBoneyardWaveInteger(source.rngState, 3)
+  const cooldownDraw = randomBoneyardWaveInteger(cueDraw.state, 41)
+  const sounds = ['wizard-ouch-1', 'wizard-ouch-2', 'wizard-ouch-3'] as const
+  const emitted = emitBoneyardPlayerDamageSound(source, {
+    actorId: 7,
+    currentHealth: 35,
+    playerId: 'wizard',
+    position: { x: 120, y: 240 },
+    tick: 101,
+  })
+
+  assert.deepEqual(emitted.event, {
+    actorId: 7,
+    eventId: 1,
+    gainScale: 0.625,
+    pitch: 1,
+    sound: sounds[cueDraw.value],
+    sourcePosition: { x: 120, y: 240 },
+    targetPlayerId: 'wizard',
+    tick: 101,
+    type: 'player-damage-sound',
+  })
+  assert.equal(emitted.delayTicks, 20 + cooldownDraw.value)
+  assert.equal(emitted.store.nextEventId, 2)
+  assert.equal(emitted.store.rngState, cooldownDraw.state)
+  assert.equal(source.nextEventId, 1)
+  assert.equal(emitBoneyardPlayerDamageSound(source, {
+    actorId: 7,
+    currentHealth: 45,
+    playerId: 'wizard',
+    position: { x: 0, y: 0 },
+    tick: 102,
+  }).event.gainScale, 0.25)
+  assert.equal(emitBoneyardPlayerDamageSound(source, {
+    actorId: 7,
+    currentHealth: 25,
+    playerId: 'wizard',
+    position: { x: 0, y: 0 },
+    tick: 102,
+  }).event.gainScale, 1)
+  assert.equal(nativeWizardOuchCooldownReady(140, 140), false)
+  assert.equal(nativeWizardOuchCooldownReady(141, 140), true)
+})
 
 test('materialization gives all eight families stable actor and event identities', () => {
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {

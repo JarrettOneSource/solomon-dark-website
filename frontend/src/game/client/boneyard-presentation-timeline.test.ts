@@ -302,7 +302,21 @@ function deathSnapshotAt(tick: number, deathEpochTick: number): BoneyardGameSnap
 
 test('interpolates Boneyard actors and gate leaves at display time', () => {
   const older = snapshotAt(100, 10, 100)
-  const newer = snapshotAt(105, 20, 120)
+  const newerBase = snapshotAt(105, 20, 120)
+  const newer = {
+    ...newerBase,
+    players: {
+      ...newerBase.players,
+      local: {
+        ...newerBase.players.local,
+        progression: {
+          ...newerBase.players.local.progression,
+          currentHealth: 40,
+          lastDamageTick: 103,
+        },
+      },
+    },
+  }
   newer.world.lanternLightRegistration = {
     managerLane: 'actor',
     registrationOrdinal: 7,
@@ -318,6 +332,8 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(50).players.local.position.x, 10)
   assert.equal(timeline.sample(75).players.local.position.x, 15)
   assert.equal(timeline.sample(75).players.local.footstepTick, 10)
+  assert.equal(timeline.sample(75).players.local.progression.currentHealth, 50)
+  assert.equal(timeline.sample(75).players.local.progression.lastDamageTick, null)
   assert.equal(timeline.sample(75).world.gateLeaves[0].tip.x, 110)
   assert.equal(timeline.sample(75).world.encounter?.position.x, 315)
   assert.equal(timeline.sample(75).world.encounter?.acceleration, -5)
@@ -351,6 +367,8 @@ test('interpolates Boneyard actors and gate leaves at display time', () => {
   assert.equal(timeline.sample(75).world.waves?.phase, 'dormant')
   assert.equal(timeline.sample(100).players.local.position.x, 20)
   assert.equal(timeline.sample(100).players.local.footstepTick, 20)
+  assert.equal(timeline.sample(100).players.local.progression.currentHealth, 40)
+  assert.equal(timeline.sample(100).players.local.progression.lastDamageTick, 103)
   assert.equal(timeline.sample(100).world.encounter?.phase, 'escaping')
   assert.equal(timeline.sample(100).world.encounter?.digFrame, 5)
   assert.deepEqual(timeline.sample(100).world.encounter?.voiceEvents, [

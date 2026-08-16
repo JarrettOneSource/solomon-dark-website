@@ -87,5 +87,8 @@ copy_sfx rockhit.wav rock-hit.wav 865484cf3d7c2e199fb46f069973c43893122e934f0f46
 copy_sfx summon.wav summon.wav 3c910b3918c0f45558123464301ed423974bf2356dfb8934c7d9321addac38cd
 copy_sfx Step/step1.wav step/step1.wav ded73389ae0481167c73a904f95c1dc12c89c7e807b5815bb65b8a786582322a
 copy_sfx Step/step2.wav step/step2.wav 62c9ef1c7dfd68762dc32aca8d718e385821c102f4ada11502f93bf23ae50dba
+copy_sfx Wizard_Ouch/SAY_OUCH1.wav wizard-ouch-1.wav 3e851ee873c9798923624d2b117c6fc91d656f66d7961a00935cfb182393b638
+copy_sfx Wizard_Ouch/SAY_OUCH2.wav wizard-ouch-2.wav 509ce875de5322ebc4ee883cf2f1db9ba172b1cf22a6a6da6e31a0e2c91d12b7
+copy_sfx Wizard_Ouch/SAY_OUCH3.wav wizard-ouch-3.wav 26cd8bea5d55a47b6476f130481bad26887f7af1cf12ec43b2989e495323e5ea
 
-printf 'Extracted 3 native game tracks and 20 exact native WAV cues.\n'
+printf 'Extracted 3 native game tracks and 23 exact native WAV cues.\n'

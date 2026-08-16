@@ -113,17 +113,17 @@ test('a fresh wizard owns independent 83-row skill bookkeeping and the stock roo
 
 test('player damage preserves internal overkill and arms terminal dispatch only at -10 HP', () => {
   let progression = createPlayerProgression(0)
-  progression = damagePlayer(progression, 55)
+  progression = damagePlayer(progression, 55, 0)
   assert.equal(progression.currentHealth, -5)
   assert.equal(playerDisplayHealth(progression), 0)
   assert.equal(progression.lifeState, 'alive')
 
-  progression = damagePlayer(progression, 5)
+  progression = damagePlayer(progression, 5, 0)
   assert.equal(progression.currentHealth, -10)
   assert.equal(progression.lifeState, 'lethal-pending')
   assert.equal(progression.deathEpoch, 0)
 
-  progression = damagePlayer(progression, 7)
+  progression = damagePlayer(progression, 7, 0)
   assert.equal(progression.currentHealth, -17)
   const transition = stepPlayerCombatTick(progression)
   assert.equal(transition.combat.lifeState, 'dying')
@@ -183,7 +183,7 @@ test('mana debit is atomic, affordability checked, and unavailable outside alive
   assert.equal(unaffordable.accepted, false)
   assert.equal(unaffordable.combat, paid.combat)
 
-  const pending = damagePlayer(paid.combat, 60)
+  const pending = damagePlayer(paid.combat, 60, 0)
   const deadDebit = tryDebitPlayerMana(pending, 1)
   assert.equal(deadDebit.accepted, false)
   assert.equal(deadDebit.combat, pending)
@@ -220,7 +220,7 @@ test('input and casts stop at lethal pending and remain stopped while dying or s
   assert.equal(playerCanAcceptInput(alive), true)
   assert.equal(playerCanCast(alive), true)
 
-  const pending = damagePlayer(alive, 60)
+  const pending = damagePlayer(alive, 60, 0)
   assert.equal(playerCanAcceptInput(pending), false)
   assert.equal(playerCanCast(pending), false)
 
@@ -242,7 +242,7 @@ test('level-up refill survives combat state and new-run reset retains progressio
   assert.equal(leveled.currentHealth, leveled.maximumHealth)
   assert.equal(leveled.currentMana, leveled.maximumMana)
 
-  const dying = stepPlayerCombatTick(damagePlayer(leveled, 75)).combat
+  const dying = stepPlayerCombatTick(damagePlayer(leveled, 75, 0)).combat
   const reset = resetPlayerCombatForNewRun(setPlayerSpectating(dying))
   assert.equal(reset.currentHealth, reset.maximumHealth)
   assert.equal(reset.currentMana, reset.maximumMana)

@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { playerHitOverlayAlpha } from '../core-kernels/player-combat.ts'
 import {
   hubStudentHeadOffset,
   hubStudentPropOffset,
@@ -29,6 +30,12 @@ export class PlayerWorldView {
   private readonly head: Sprite
   private readonly deathBody: Sprite
   private readonly deathAttachment: Sprite
+  private readonly hitOverlay: Container
+  private readonly hitStaffBack: Sprite
+  private readonly hitRobe: Sprite
+  private readonly hitFixed: Sprite
+  private readonly hitStaffFront: Sprite
+  private readonly hitHead: Sprite
   private readonly textures: PlayerWorldTextures
   private currentWalkPose = 0
   private currentAttachmentPose = 0
@@ -53,6 +60,29 @@ export class PlayerWorldView {
     this.head = actorSprite(playerTextures.head[0], 7)
     this.deathBody = actorSprite(playerTextures.death[0][0], 3)
     this.deathAttachment = actorSprite(playerTextures.deathAttachment[0][0], 4)
+    this.hitOverlay = new Container({ label: 'player-hit-overlay' })
+    this.hitOverlay.sortableChildren = true
+    this.hitOverlay.eventMode = 'none'
+    this.hitOverlay.zIndex = 8
+    this.hitStaffBack = actorSprite(playerTextures.staffBack[0][0], 1)
+    this.hitRobe = actorSprite(playerTextures.robe[0][0], 3)
+    this.hitFixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.hitStaffFront = actorSprite(playerTextures.staffFront[0][0], 5)
+    this.hitHead = actorSprite(playerTextures.head[0], 7)
+    for (const sprite of [
+      this.hitStaffBack,
+      this.hitRobe,
+      this.hitFixed,
+      this.hitStaffFront,
+      this.hitHead,
+    ]) sprite.tint = 0xff0000
+    this.hitOverlay.addChild(
+      this.hitStaffBack,
+      this.hitRobe,
+      this.hitFixed,
+      this.hitStaffFront,
+      this.hitHead,
+    )
     this.container.addChild(
       this.shadow,
       this.staffBack,
@@ -63,6 +93,7 @@ export class PlayerWorldView {
       this.head,
       this.deathBody,
       this.deathAttachment,
+      this.hitOverlay,
     )
   }
 
@@ -96,6 +127,14 @@ export class PlayerWorldView {
     this.head.visible = !death.visible
     this.deathBody.visible = death.visible
     this.deathAttachment.visible = death.visible
+    const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
+    this.hitOverlay.alpha = hitAlpha
+    this.hitOverlay.visible = !death.visible && hitAlpha > 0
+    this.hitStaffBack.visible = !staffFront
+    this.hitRobe.visible = true
+    this.hitFixed.visible = true
+    this.hitStaffFront.visible = staffFront
+    this.hitHead.visible = true
     this.deathBody.texture = playerTextures.death[death.facing][death.frame]
     this.deathAttachment.texture = playerTextures.deathAttachment[death.facing][death.frame]
     this.staffBack.texture = playerTextures.staffBack[heading][attachmentPose]
@@ -106,6 +145,14 @@ export class PlayerWorldView {
     this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
     this.head.texture = playerTextures.head[heading]
     this.head.position.set(headOffset.x, headOffset.y)
+    this.hitStaffBack.texture = playerTextures.staffBack[heading][attachmentPose]
+    this.hitRobe.texture = playerTextures.robe[heading][pose]
+    this.hitFixed.texture = playerTextures.fixed[heading][attachmentPose]
+    this.hitFixed.position.set(fixedOffset.x, fixedOffset.y)
+    this.hitStaffFront.texture = playerTextures.staffFront[heading][attachmentPose]
+    this.hitStaffFront.position.set(attachmentOffset.x, attachmentOffset.y)
+    this.hitHead.texture = playerTextures.head[heading]
+    this.hitHead.position.set(headOffset.x, headOffset.y)
     this.orb.container.position.set(
       orbOffset.x + (staffFront ? attachmentOffset.x : 0),
       orbOffset.y + (staffFront ? attachmentOffset.y : 0),

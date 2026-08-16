@@ -106,6 +106,7 @@ export interface ProtocolPlayerProgression {
   maximumHealth: number
   maximumMana: number
   lifeState: PlayerLifeState
+  lastDamageTick: number | null
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
   poisonDamagePerTick: number
@@ -229,6 +230,7 @@ export const BONEYARD_ENEMY_EVENT_TYPES = [
   'attack-marker',
   'coffin-maggot-release',
   'enemy-damage-sound',
+  'player-damage-sound',
   'enemy-death',
   'enemy-death-sound',
   'enemy-retired',
@@ -265,9 +267,20 @@ export const BONEYARD_ENEMY_DEATH_SOUNDS = [
   'zombie-poison-splat',
 ] as const
 
+export const BONEYARD_PLAYER_DAMAGE_SOUNDS = [
+  'wizard-ouch-1',
+  'wizard-ouch-2',
+  'wizard-ouch-3',
+] as const
+
 export const BONEYARD_ENEMY_SOUNDS = [
   ...BONEYARD_ENEMY_DAMAGE_SOUNDS,
   ...BONEYARD_ENEMY_DEATH_SOUNDS,
+] as const
+
+export const BONEYARD_COMBAT_SOUNDS = [
+  ...BONEYARD_ENEMY_SOUNDS,
+  ...BONEYARD_PLAYER_DAMAGE_SOUNDS,
 ] as const
 
 export const BONEYARD_ENEMY_TERMINAL_OUTPUTS = [
@@ -285,6 +298,8 @@ export type BoneyardEnemyEventType = typeof BONEYARD_ENEMY_EVENT_TYPES[number]
 export type BoneyardEnemyDamageSound = typeof BONEYARD_ENEMY_DAMAGE_SOUNDS[number]
 export type BoneyardEnemyDeathSound = typeof BONEYARD_ENEMY_DEATH_SOUNDS[number]
 export type BoneyardEnemySound = typeof BONEYARD_ENEMY_SOUNDS[number]
+export type BoneyardPlayerDamageSound = typeof BONEYARD_PLAYER_DAMAGE_SOUNDS[number]
+export type BoneyardCombatSound = typeof BONEYARD_COMBAT_SOUNDS[number]
 export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS[number]
 
 export interface BoneyardEnemyEventSnapshot {
@@ -296,7 +311,7 @@ export interface BoneyardEnemyEventSnapshot {
   pitch?: number
   projectileId?: number
   runId: string
-  sound?: BoneyardEnemySound
+  sound?: BoneyardCombatSound
   sourcePosition?: Vector2
   targetPlayerId?: string | null
   tick: number
