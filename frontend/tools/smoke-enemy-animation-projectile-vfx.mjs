@@ -79,6 +79,16 @@ try {
     const makeAnimation = (overrides) => (
       animationModule.nativeEnemyIdleAnimationSample(overrides)
     )
+    const enemyLighting = {
+      COFFIN: { charge: 0, glow: 0, providerCopies: 1 },
+      DEMON: { charge: 0, glow: 0, providerCopies: 1 },
+      IMP: { charge: 0, glow: 0.6, providerCopies: 1 },
+      SKELETON: { charge: 0, glow: 0, providerCopies: 0 },
+      SKELETONARCHER: { charge: 0.8, glow: 0, providerCopies: 0 },
+      SKELETONMAGE: { charge: 1, glow: 0, providerCopies: 1 },
+      WRAITH: { charge: 0, glow: 0, providerCopies: 0 },
+      ZOMBIE: { charge: 0, glow: 0, providerCopies: 0 },
+    }
     const makeEnemy = (
       enemyToken,
       id,
@@ -95,6 +105,10 @@ try {
       flags,
       headingDeg: 0,
       id,
+      lightRegistration: enemyToken === 'ZOMBIE'
+        ? null
+        : { managerLane: 'actor', registrationOrdinal: id > 5 ? id - 1 : id },
+      lighting: enemyLighting[enemyToken],
       maximumHealth: 100,
       nativeTypeId,
       position,
@@ -250,6 +264,7 @@ try {
       homing: kind === 'guided-missile',
       id,
       kind,
+      lightRegistration: null,
       lifetimeTicks: 400,
       nativeTypeId,
       ownerActorId: id % 8 + 1,
@@ -264,12 +279,22 @@ try {
     })
     const enemyProjectiles = [
       projectile(101, 'arrow', 0x7da, 'normal', { x: 300, y: 315 }),
-      projectile(102, 'arrow', 0x7da, 'fire', { x: 385, y: 315 }),
+      projectile(102, 'arrow', 0x7da, 'fire', { x: 385, y: 315 }, {
+        lightRegistration: { managerLane: 'transient', registrationOrdinal: 0 },
+      }),
       projectile(103, 'arrow', 0x7da, 'poison', { x: 470, y: 315 }),
-      projectile(104, 'firebolt', 0x7eb, 'fire', { x: 555, y: 315 }),
-      projectile(105, 'guided-missile', 0x7ec, 'cold', { x: 640, y: 315 }),
-      projectile(106, 'guided-missile', 0x7ec, 'poison', { x: 725, y: 315 }),
-      projectile(107, 'demon-bomb', 0x7f7, 'none', { x: 810, y: 315 }),
+      projectile(104, 'firebolt', 0x7eb, 'fire', { x: 555, y: 315 }, {
+        lightRegistration: { managerLane: 'transient', registrationOrdinal: 1 },
+      }),
+      projectile(105, 'guided-missile', 0x7ec, 'cold', { x: 640, y: 315 }, {
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 8 },
+      }),
+      projectile(106, 'guided-missile', 0x7ec, 'poison', { x: 725, y: 315 }, {
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+      }),
+      projectile(107, 'demon-bomb', 0x7f7, 'none', { x: 810, y: 315 }, {
+        lightRegistration: { managerLane: 'actor', registrationOrdinal: 10 },
+      }),
       projectile(108, 'poison-pool', 0x806, 'poison', { x: 895, y: 315 }, {
         speed: 0,
         verticalOffset: 0,
@@ -323,16 +348,20 @@ try {
       effect(208, 'poison-pool-fade-outer', 'DeadHawg', 0, 'normal', { x: 840, y: 375 }),
       effect(209, 'poison-pool-fade-inner', 'DeadHawg', 0, 'normal', { x: 920, y: 375 }),
     ]
-    const lightningEvent = {
-      actorId: 3,
-      eventId: 91,
-      runId,
-      sourcePosition: { x: 700, y: 185 },
-      targetPlayerId: 'local',
-      targetPosition: playerPosition,
+    const mageLightningPulses = [{
+      contact: {
+        kind: 'target-attached',
+        localOffset: { x: 0, y: 0 },
+        targetPlayerId: 'local',
+      },
+      endpoint: { x: playerPosition.x + 2, y: playerPosition.y - 4 },
+      id: 91,
+      midpoint: { x: 646, y: 259 },
+      ownerActorId: 3,
+      seed: 0x5d4a,
+      source: { x: 700, y: 185 },
       tick: 120,
-      type: 'mage-lightning',
-    }
+    }]
     const snapshotAt = (tick, advanced) => ({
       hostPlayerId: 'local',
       players: {
@@ -345,6 +374,11 @@ try {
           footstepTick: 0,
           gaitDegrees: 0,
           headingIndex: 0,
+          lighting: {
+            driveActive: false,
+            lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+            overlayEffectPhase: 0,
+          },
           position: playerPosition,
           primaryCast: playerModule.createIdlePlayerPrimaryCast(),
           progression: {
@@ -387,7 +421,7 @@ try {
         deathEffects: [],
         encounter: null,
         enemies: enemiesAt(advanced),
-        enemyEvents: [lightningEvent],
+        enemyEvents: [],
         enemyProjectileEffects,
         enemyProjectiles: enemyProjectiles.map((source) => ({
           ...source,
@@ -398,6 +432,8 @@ try {
         })),
         gateLeaves: [],
         kind: 'boneyard',
+        lanternLightRegistration: null,
+        mageLightningPulses,
         maggots: [{
           alpha: 1,
           currentHealth: 10,
@@ -453,7 +489,6 @@ try {
     renderer.canvas.id = 'enemy-animation-projectile-vfx-probe'
     document.body.append(renderer.canvas)
     const initialPixels = capture(renderer.canvas)
-    renderer.consumeEnemyEvent(lightningEvent)
     renderer.render(snapshotAt(121.75, true))
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const advancedPixels = capture(renderer.canvas)
