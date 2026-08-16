@@ -188,24 +188,45 @@ test('representative enemy records retain native registration and joints', () =>
   ])
 })
 
-test('every live combat and Coffin child plan resolves to extracted records', () => {
+test('every live combat and Coffin child plan resolves through the runtime preload', async (t) => {
+  const server = await createServer({
+    appType: 'custom',
+    logLevel: 'silent',
+    root: fileURLToPath(new URL('../../../', import.meta.url)),
+    server: { middlewareMode: true },
+  })
+  t.after(() => server.close())
+  const assetModule = await server.ssrLoadModule(
+    '/src/game/renderer/native-enemy-assets.ts',
+  ) as {
+    nativeEnemySpriteRecord(
+      atlas: NativeEnemyAtlas,
+      entry: number,
+    ): { readonly source: string }
+  }
   const plans: ReturnType<typeof nativeEnemyPresentationPlan>[] = []
-  const actionFamilies: readonly [NativeEnemyFamily, NativeEnemyActionProgramName][] = [
-    ['SKELETON', 'skeleton-claw-a'],
-    ['SKELETON', 'skeleton-claw-b'],
-    ['SKELETON', 'skeleton-weapon'],
-    ['SKELETON', 'skeleton-pike'],
-    ['SKELETONARCHER', 'archer-shot'],
-    ['SKELETONMAGE', 'mage-cast-short'],
-    ['SKELETONMAGE', 'mage-cast-long'],
-    ['DEMON', 'demon-bomb'],
+  const actionFamilies: readonly [
+    NativeEnemyFamily,
+    NativeEnemyActionProgramName,
+    readonly string[],
+  ][] = [
+    ['SKELETON', 'skeleton-claw-a', []],
+    ['SKELETON', 'skeleton-claw-b', ['FLAG_ARMOR']],
+    ['SKELETON', 'skeleton-weapon', ['FLAG_SWORD']],
+    ['SKELETON', 'skeleton-weapon', ['FLAG_ARMOR', 'FLAG_SWORD']],
+    ['SKELETON', 'skeleton-pike', ['FLAG_PIKE']],
+    ['SKELETON', 'skeleton-pike', ['FLAG_ARMOR', 'FLAG_PIKE']],
+    ['SKELETONARCHER', 'archer-shot', []],
+    ['SKELETONMAGE', 'mage-cast-short', []],
+    ['SKELETONMAGE', 'mage-cast-long', []],
+    ['DEMON', 'demon-bomb', []],
   ]
-  for (const [family, action] of actionFamilies) {
+  for (const [family, action, flags] of actionFamilies) {
     const program = NATIVE_ENEMY_ACTION_PROGRAMS[action]
     for (let progress = 0; progress <= program.strictEnd + 1; progress += 1) {
       for (const headingDeg of familyHeadings(family)) {
         plans.push(nativeEnemyPresentationPlan({
-          ...enemy(family, 7, headingDeg, actionFlags(action)),
+          ...enemy(family, 7, headingDeg, flags),
           animation: nativeEnemyIdleAnimationSample({
             action,
             actionProgress: progress,
@@ -281,11 +302,13 @@ test('every live combat and Coffin child plan resolves to extracted records', ()
       const key = `${layer.atlas}:${layer.entry}`
       if (!used.has(key)) {
         statSync(new URL(`../../assets/game/boneyard/${record.file}`, import.meta.url))
+        assert.ok(assetModule.nativeEnemySpriteRecord(layer.atlas, layer.entry).source.length > 0)
         used.add(key)
       }
     }
   }
   assert.ok(used.has('BadGuys:237'))
+  assert.ok(used.has('BadGuys:937'))
 })
 
 function manifest(relativePath: string): AtlasManifest {
@@ -411,10 +434,4 @@ function familyHeadings(family: NativeEnemyFamily): readonly number[] {
   return Array.from({ length: count }, (_, facing) => (
     (facing * step - step / 2 + 360) % 360
   ))
-}
-
-function actionFlags(action: NativeEnemyActionProgramName): readonly string[] {
-  if (action === 'skeleton-weapon') return ['FLAG_SWORD']
-  if (action === 'skeleton-pike') return ['FLAG_PIKE']
-  return []
 }

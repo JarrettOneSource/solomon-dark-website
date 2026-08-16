@@ -702,6 +702,31 @@ test('interpolates the authoritative Imp flight cycle without changing spawn ide
   )
 })
 
+test('holds native body selectors discretely between authoritative snapshots', () => {
+  const withBodyPose = (snapshot: BoneyardGameSnapshot, bodyPose: number) => ({
+    ...snapshot,
+    world: {
+      ...snapshot.world,
+      enemies: [{
+        ...snapshot.world.enemies[0]!,
+        animation: { ...snapshot.world.enemies[0]!.animation, bodyPose },
+      }],
+    },
+  })
+  const older = withBodyPose(snapshotAt(100, 10, 100), 2)
+  const newer = withBodyPose(snapshotAt(105, 10, 100), 8)
+  const timeline = createBoneyardPresentationTimeline({
+    initialReceivedAtMs: 0,
+    initialSnapshot: older,
+    serverTickRate: 100,
+    snapshotRate: 20,
+  })
+  timeline.push(newer, 50)
+
+  assert.equal(timeline.sample(75).world.enemies[0]!.animation.bodyPose, 2)
+  assert.equal(timeline.sample(100).world.enemies[0]!.animation.bodyPose, 8)
+})
+
 test('preserves every player corpse frame at 20 Hz for all death-epoch alignments', () => {
   for (let deathEpochTick = 0; deathEpochTick < 5; deathEpochTick += 1) {
     const timeline = createBoneyardPresentationTimeline({

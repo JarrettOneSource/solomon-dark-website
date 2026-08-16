@@ -425,6 +425,60 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
   assert.notEqual(pulses[0]!.contact, attacked.store.mageLightningPulses[0]!.contact)
 })
 
+test('projects Skeleton claw programs from armor and keeps body pose independent of gait', () => {
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('claw-projection'), {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [
+      {
+        enemyToken: 'SKELETON',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position: { x: 0, y: 0 },
+        spawnTick: 0,
+        waveOrdinal: 1,
+      },
+      {
+        enemyToken: 'SKELETON',
+        flags: ['FLAG_ARMOR'],
+        id: 2,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position: { x: 40, y: 0 },
+        spawnTick: 0,
+        waveOrdinal: 1,
+      },
+    ],
+    tick: 0,
+  })
+  const attacking = spawned.store.actors.map((actor, index) => {
+    if (actor.brain.family !== 'skeleton') throw new Error('expected Skeleton brain')
+    return {
+      ...actor,
+      bodyPose: index === 0 ? 4 : 2,
+      brain: {
+        ...actor.brain,
+        actionProgress: 0,
+        phase: 'attack' as const,
+      },
+      gaitPose: 6,
+    }
+  })
+  const projected = projectBoneyardEnemies({ ...spawned.store, actors: attacking }, 1)
+
+  assert.deepEqual(projected.map(({ animation }) => ({
+    action: animation.action,
+    bodyPose: animation.bodyPose,
+    gaitPose: animation.gaitPose,
+  })), [
+    { action: 'skeleton-claw-a', bodyPose: 4, gaitPose: 6 },
+    { action: 'skeleton-claw-b', bodyPose: 2, gaitPose: 6 },
+  ])
+})
+
 function projectedMaggot(
   overrides: Partial<BoneyardMaggotActor>,
   tick = 12,

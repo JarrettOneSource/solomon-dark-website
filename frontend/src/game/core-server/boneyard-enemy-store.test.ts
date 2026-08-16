@@ -373,6 +373,7 @@ test('Mage lighting reads the pre-action pose and only exact native pose four pa
     ...spawned.store,
     actors: [{
       ...source,
+      bodyPose: 3,
       brain: {
         ...source.brain,
         actionProgress: 24.8,
@@ -392,6 +393,7 @@ test('Mage lighting reads the pre-action pose and only exact native pose four pa
     ...spawned.store,
     actors: [{
       ...source,
+      bodyPose: 4,
       brain: {
         ...source.brain,
         actionProgress: 37.8,
@@ -407,15 +409,27 @@ test('Mage lighting reads the pre-action pose and only exact native pose four pa
   assert.equal(Math.floor(leavingPoseFour.brain.actionProgress), 38)
   assert.equal(leavingPoseFour.lighting.charge, 0.3)
 
-  const nonCastPoseFive = step({
+  const nonCastPoseFour = step({
     ...spawned.store,
     actors: [{
       ...source,
+      bodyPose: 4,
       gaitPose: 5,
       lighting: { charge: 0.3, glow: 0, providerCopies: 1 },
     }],
   }, 1, { player: livingTarget(150, 0) }).store.actors[0]!
-  assert.equal(nonCastPoseFive.lighting.charge, 0.32)
+  assert.equal(nonCastPoseFour.lighting.charge, 0.3)
+
+  const gaitPoseFour = step({
+    ...spawned.store,
+    actors: [{
+      ...source,
+      bodyPose: 3,
+      gaitPose: 4,
+      lighting: { charge: 0.3, glow: 0, providerCopies: 1 },
+    }],
+  }, 1, { player: livingTarget(150, 0) }).store.actors[0]!
+  assert.equal(gaitPoseFour.lighting.charge, 0.32)
 
   const lightningSpawned = spawnOne(
     'light-mage-cold-lightning-dispatch',
@@ -430,6 +444,7 @@ test('Mage lighting reads the pre-action pose and only exact native pose four pa
     ...lightningSpawned.store,
     actors: [{
       ...lightningSource,
+      bodyPose: 4,
       brain: {
         ...lightningSource.brain,
         actionProgress: NATIVE_MAGE_ACTION_PROGRAMS.short.markerProgress,
@@ -642,6 +657,29 @@ test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks
   verifySkeletonProgram(['FLAG_PIKE'], 'pike', [16], 97)
 })
 
+test('armor selects the native claw body table and retains its wrapped first pose', () => {
+  const players = { player: livingTarget(10, 0) }
+  let result = spawnOne(
+    'armored-claw-body-table',
+    'SKELETON',
+    { x: 0, y: 0 },
+    players,
+    ['FLAG_ARMOR'],
+  )
+  result = step(result.store, 1, players)
+  assert.equal(result.store.actors[0]!.config.enemyToken, 'SKELETON')
+  assert.equal(result.store.actors[0]!.bodyPose, 2)
+  const bodyPoses = new Set<number>()
+  for (let tick = 2; tick <= 60; tick += 1) {
+    result = step(result.store, tick, players)
+    bodyPoses.add(result.store.actors[0]!.bodyPose)
+    if (result.store.actors[0]!.brain.phase === 'approach') break
+  }
+  assert.deepEqual([...bodyPoses].sort((a, b) => a - b), [2, 3, 4, 5, 6, 7, 8, 9])
+  assert.equal(result.store.actors[0]!.bodyPose, 2)
+  assert.equal(result.store.actors[0]!.gaitPose, 0)
+})
+
 test('settled native circle contact begins a Skeleton action and reaches its marker', () => {
   let result = spawnOne(
     'settled-skeleton-contact',
@@ -821,6 +859,8 @@ test('Archer and Mage use their recovered variable progress programs', () => {
   assert.equal(archerProjectileNativeTypeId, 0x7da)
   assert.equal(archerImpact, true)
   assert.equal(archer.store.projectiles.length, 0)
+  assert.equal(archer.store.actors[0]!.bodyPose, 8)
+  assert.equal(archer.store.actors[0]!.gaitPose, 0)
 
   let mage = spawnOne(
     'mage-program',
@@ -828,7 +868,9 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     { x: 0, y: 0 },
     { player: livingTarget(150, 0) },
   )
+  assert.ok(mage.store.actors[0]!.bodyPose === 0 || mage.store.actors[0]!.bodyPose === 1)
   mage = step(mage.store, 1, { player: livingTarget(150, 0) })
+  assert.equal(mage.store.actors[0]!.bodyPose, 2)
   const began = mage.store.actors[0]!.brain
   assert.equal(began.family, 'mage')
   if (began.family !== 'mage') throw new Error('expected Mage brain')
@@ -845,8 +887,9 @@ test('Archer and Mage use their recovered variable progress programs', () => {
   assert.ok(base.strictEnd === 41 || base.strictEnd === 47)
 
   let sawMarker = false
-  for (let tick = 3; tick < 500 && !sawMarker; tick += 1) {
-    mage = step(mage.store, tick, { player: livingTarget(150, 0) })
+  let mageTick = 3
+  for (; mageTick < 500 && !sawMarker; mageTick += 1) {
+    mage = step(mage.store, mageTick, { player: livingTarget(150, 0) })
     sawMarker = mage.events.some((event) => event.type === 'attack-marker')
   }
   assert.equal(sawMarker, true)
@@ -858,6 +901,12 @@ test('Archer and Mage use their recovered variable progress programs', () => {
     managerLane: 'transient',
     registrationOrdinal: 0,
   })
+  for (; mageTick < 700 && mage.store.actors[0]!.brain.phase === 'cast'; mageTick += 1) {
+    mage = step(mage.store, mageTick, { player: livingTarget(150, 0) })
+  }
+  assert.equal(mage.store.actors[0]!.brain.phase, 'range-control')
+  assert.equal(mage.store.actors[0]!.bodyPose, 0)
+  assert.equal(mage.store.actors[0]!.gaitPose, 0)
 })
 
 test('every Archer and Mage range mode attacks, approaches, and retreats at its own band', () => {
@@ -1239,28 +1288,34 @@ test('Mage body attachment source covers all authored poses and native facing bu
   assert.deepEqual(nativeMageBodyAttachment(99, 0), { x: 4, y: -38.5 })
   assert.equal(nativeMageBodyPose({
     actionProgress: 24,
+    bodyPose: 0,
     castProgram: 'short',
-    gaitPose: 0,
     phase: 'cast',
   }), 3)
   assert.equal(nativeMageBodyPose({
     actionProgress: 25,
+    bodyPose: 0,
     castProgram: 'short',
-    gaitPose: 0,
     phase: 'cast',
   }), 4)
   assert.equal(nativeMageBodyPose({
     actionProgress: 38,
+    bodyPose: 0,
     castProgram: 'short',
-    gaitPose: 0,
     phase: 'cast',
   }), 3)
   assert.equal(nativeMageBodyPose({
     actionProgress: 45,
+    bodyPose: 0,
     castProgram: 'long',
-    gaitPose: 0,
     phase: 'cast',
   }), 0)
+  assert.equal(nativeMageBodyPose({
+    actionProgress: 0,
+    bodyPose: 1,
+    castProgram: 'short',
+    phase: 'range-control',
+  }), 1)
 })
 
 test('all Mage elements emit their authoritative damage, status, payload, and lightning channel', () => {
@@ -2573,11 +2628,15 @@ function verifySkeletonProgram(
   if (began.family !== 'skeleton') throw new Error('expected Skeleton brain')
   assert.equal(began.phase, 'attack')
   assert.equal(began.action, expectedAction)
+  const firstBodyPose = expectedAction === 'claw' ? 4 : 1
+  assert.equal(result.store.actors[0]!.bodyPose, firstBodyPose)
+  const bodyPoses = new Set([firstBodyPose])
   const markerTicks: number[] = []
   const damageAmounts: number[] = []
   let completionTick = -1
   for (let tick = 2; tick <= expectedCompletionTick + 2; tick += 1) {
     result = step(result.store, tick, players)
+    bodyPoses.add(result.store.actors[0]!.bodyPose)
     if (result.playerDamage.length > 0) {
       markerTicks.push(tick - 1)
       damageAmounts.push(...result.playerDamage.map(({ amount }) => amount))
@@ -2590,6 +2649,9 @@ function verifySkeletonProgram(
   assert.deepEqual(markerTicks, expectedMarkerTicks)
   if (expectedAction === 'claw') assert.deepEqual(damageAmounts, [3, 3, 3])
   assert.equal(completionTick - 1, expectedCompletionTick)
+  assert.ok(bodyPoses.size > 1)
+  assert.equal(result.store.actors[0]!.bodyPose, firstBodyPose)
+  assert.equal(result.store.actors[0]!.gaitPose, 0)
 }
 
 function spawnOne(

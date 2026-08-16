@@ -1,5 +1,11 @@
 import { NATIVE_MAGE_CAST_BODY_POSES } from '../core-kernels/boneyard-mage-lightning.ts'
 import { NATIVE_DEMON_BOMB_CONTROLLER_POSES } from '../core-kernels/boneyard-demon-articulation.ts'
+import {
+  NATIVE_ARCHER_SHOT_BODY_POSES,
+  NATIVE_SKELETON_CLAW_BODY_POSES,
+  NATIVE_SKELETON_PIKE_BODY_POSES,
+  NATIVE_SKELETON_WEAPON_BODY_POSES,
+} from '../core-kernels/boneyard-skeleton-family-animation.ts'
 
 export type NativeEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
 
@@ -140,16 +146,12 @@ export {
   type NativeZombieBeatPose,
 } from '../core-kernels/boneyard-zombie-beat.ts'
 
-const repeated = (selector: number, count: number): number[] => (
-  Array.from({ length: count }, () => selector)
-)
-
 export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   Record<NativeEnemyActionProgramName, NativeEnemyActionProgram>
 > = {
   'skeleton-claw-a': exactProgram(
     'skeleton-claw-a',
-    [4, 5, 6, 7, 8, 9, 10, 11],
+    NATIVE_SKELETON_CLAW_BODY_POSES.unarmored,
     [4, 8],
     7,
     0.125,
@@ -157,7 +159,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'skeleton-claw-b': exactProgram(
     'skeleton-claw-b',
-    [2, 3, 4, 5, 6, 7, 8, 9],
+    NATIVE_SKELETON_CLAW_BODY_POSES.armored,
     [4, 8],
     7,
     0.125,
@@ -165,13 +167,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'skeleton-weapon': exactProgram(
     'skeleton-weapon',
-    [
-      ...repeated(1, 8),
-      2,
-      ...repeated(3, 8),
-      ...repeated(2, 4),
-      ...repeated(1, 4),
-    ],
+    NATIVE_SKELETON_WEAPON_BODY_POSES,
     [9, 20],
     24,
     0.25,
@@ -179,7 +175,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'skeleton-pike': exactProgram(
     'skeleton-pike',
-    [1, ...repeated(2, 11), 1],
+    NATIVE_SKELETON_PIKE_BODY_POSES,
     [2],
     12,
     0.125,
@@ -187,7 +183,7 @@ export const NATIVE_ENEMY_ACTION_PROGRAMS: Readonly<
   ),
   'archer-shot': exactProgram(
     'archer-shot',
-    [3, 4, 5, 6, 7, 6, 7, 6, 7, 6, 7, 6, 7, 8, 8, 8, 8],
+    NATIVE_ARCHER_SHOT_BODY_POSES,
     [13],
     16,
     0.0843750015,

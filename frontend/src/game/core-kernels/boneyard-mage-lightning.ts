@@ -1,6 +1,9 @@
 import badguys from '../../editor/manifest/badguys.json' with { type: 'json' }
 
 import type { BoneyardPoint } from './boneyard.ts'
+import { NATIVE_MAGE_CAST_BODY_POSES } from './boneyard-skeleton-family-animation.ts'
+
+export { NATIVE_MAGE_CAST_BODY_POSES } from './boneyard-skeleton-family-animation.ts'
 
 export const NATIVE_MAGE_LIGHTNING_BASE_TICKS = 100 * 0.5
 export const NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES = 5
@@ -12,27 +15,10 @@ const NATIVE_MAGE_SOURCE_Y_OFFSET = -5
 
 type NativeMageCastProgram = 'long' | 'short'
 
-export const NATIVE_MAGE_CAST_BODY_POSES = Object.freeze({
-  long: Object.freeze([
-    ...repeatPose(2, 30),
-    3,
-    ...repeatPose(4, 13),
-    3,
-    ...repeatPose(0, 3),
-  ]),
-  short: Object.freeze([
-    ...repeatPose(2, 24),
-    3,
-    ...repeatPose(4, 13),
-    3,
-    ...repeatPose(0, 3),
-  ]),
-} satisfies Readonly<Record<NativeMageCastProgram, readonly number[]>>)
-
 interface NativeMagePoseState {
   readonly actionProgress: number
+  readonly bodyPose: number
   readonly castProgram: NativeMageCastProgram
-  readonly gaitPose: number
   readonly phase: 'cast' | 'death' | 'range-control'
 }
 
@@ -64,7 +50,7 @@ export function nativeMageLightningDurationTicks(attackSpeed: number): number {
 }
 
 export function nativeMageBodyPose(state: NativeMagePoseState): number {
-  if (state.phase !== 'cast') return boundedPose(state.gaitPose)
+  if (state.phase !== 'cast') return boundedPose(state.bodyPose)
   if (!Number.isFinite(state.actionProgress) || state.actionProgress < 0) {
     throw new RangeError('Mage action progress must be finite and non-negative')
   }
@@ -108,10 +94,6 @@ export function nativeMageLightningSource(
 function boundedPose(value: number): number {
   if (!Number.isFinite(value)) return 0
   return Math.min(NATIVE_MAGE_BODY_POSE_COUNT - 1, Math.max(0, Math.floor(value)))
-}
-
-function repeatPose(pose: number, count: number): number[] {
-  return Array.from({ length: count }, () => pose)
 }
 
 function positiveModulo(value: number, divisor: number): number {

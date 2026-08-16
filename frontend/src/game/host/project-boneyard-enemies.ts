@@ -235,7 +235,7 @@ function projectAnimation(
       ? impBrain.bodyVariant
       : demonBrain
         ? demonControllerPose
-        : Math.floor(gaitPose),
+        : actor.bodyPose,
     coffinPose: coffin.pose,
     coffinSecondaryPose: null,
     coffinState: coffin.state,
@@ -325,7 +325,9 @@ function brainAction(actor: BoneyardEnemyActor): BoneyardEnemyAction | null {
       if (brain.phase !== 'attack') return null
       if (brain.action === 'pike') return 'skeleton-pike'
       if (brain.action === 'weapon') return 'skeleton-weapon'
-      return actor.id % 2 === 0 ? 'skeleton-claw-b' : 'skeleton-claw-a'
+      return actor.config.enemyToken === 'SKELETON' && actor.config.family.armor
+        ? 'skeleton-claw-b'
+        : 'skeleton-claw-a'
     case 'archer': return brain.phase === 'attack' ? 'archer-shot' : null
     case 'mage': return brain.phase === 'cast'
       ? brain.castProgram === 'long' ? 'mage-cast-long' : 'mage-cast-short'

@@ -798,9 +798,7 @@ function interpolateEnemyAnimation(
     ...discrete,
     actionProgress: lerp(first.actionProgress, second.actionProgress, blend),
     alpha: lerp(first.alpha, second.alpha, blend),
-    bodyPose: older.enemyToken === 'IMP'
-      ? discrete.bodyPose
-      : lerp(first.bodyPose, second.bodyPose, blend),
+    bodyPose: discrete.bodyPose,
     coffinPose: lerp(first.coffinPose, second.coffinPose, blend),
     deathTick: lerp(first.deathTick, second.deathTick, blend),
     demonFrontJointRotationRadians: lerp(

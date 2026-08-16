@@ -64,8 +64,8 @@ test('Mage lightning attachment pose shares every renderer action selector', () 
         assert.equal(
           nativeMageBodyPose({
             actionProgress,
+            bodyPose: 0,
             castProgram,
-            gaitPose: 0,
             phase: 'cast',
           }),
           nativeEnemyActionFrame(action, actionProgress).selector,

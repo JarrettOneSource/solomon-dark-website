@@ -449,8 +449,8 @@ test('authoritative gait and exact action selectors choose stock component banks
   }, 100)
   assert.deepEqual(skeletonWalk.layers.slice(0, 3).map((layer) => layer.entry), [
     1639,
-    1387,
-    1099,
+    1333,
+    1045,
   ])
 
   const archerRelease = nativeEnemyPresentationPlan({
@@ -461,7 +461,7 @@ test('authoritative gait and exact action selectors choose stock component banks
       state: 'action',
     }),
   }, 100)
-  assert.deepEqual(archerRelease.layers.slice(0, 2).map((layer) => layer.entry), [1711, 595])
+  assert.deepEqual(archerRelease.layers.slice(0, 2).map((layer) => layer.entry), [1585, 595])
   assert.equal(archerRelease.actionFrame?.selector, 8)
   assert.deepEqual(archerRelease.actionFrame?.eventMarkersReached, [13])
 
@@ -473,7 +473,125 @@ test('authoritative gait and exact action selectors choose stock component banks
       state: 'action',
     }),
   }, 100)
-  assert.deepEqual(mageRelease.layers.slice(0, 2).map((layer) => layer.entry), [1657, 1801])
+  assert.deepEqual(mageRelease.layers.slice(0, 2).map((layer) => layer.entry), [1585, 1801])
+})
+
+test('Skeleton-family attacks keep gait limbs independent from body and equipment selectors', () => {
+  const samples = [
+    {
+      action: 'skeleton-claw-a' as const,
+      bodyEntry: 1315,
+      flags: [],
+      limbEntry: 1693,
+      progress: 7,
+      token: 'SKELETON' as const,
+      weaponEntry: null,
+    },
+    {
+      action: 'skeleton-weapon' as const,
+      bodyEntry: 1387,
+      flags: ['FLAG_SWORD'],
+      limbEntry: 1693,
+      progress: 9,
+      token: 'SKELETON' as const,
+      weaponEntry: 1099,
+    },
+    {
+      action: 'skeleton-weapon' as const,
+      bodyEntry: 973,
+      flags: ['FLAG_ARMOR', 'FLAG_SWORD'],
+      limbEntry: 1693,
+      progress: 9,
+      token: 'SKELETON' as const,
+      weaponEntry: 1099,
+    },
+    {
+      action: 'skeleton-pike' as const,
+      bodyEntry: 1441,
+      flags: ['FLAG_PIKE'],
+      limbEntry: 1693,
+      progress: 1,
+      token: 'SKELETON' as const,
+      weaponEntry: null,
+    },
+    {
+      action: 'skeleton-pike' as const,
+      bodyEntry: 1027,
+      flags: ['FLAG_ARMOR', 'FLAG_PIKE'],
+      limbEntry: 1693,
+      progress: 1,
+      token: 'SKELETON' as const,
+      weaponEntry: null,
+    },
+    {
+      action: 'archer-shot' as const,
+      bodyEntry: 559,
+      flags: [],
+      limbEntry: 1693,
+      progress: 3,
+      token: 'SKELETONARCHER' as const,
+      weaponEntry: null,
+    },
+    {
+      action: 'mage-cast-short' as const,
+      bodyEntry: 1801,
+      flags: [],
+      limbEntry: 1693,
+      progress: 25,
+      token: 'SKELETONMAGE' as const,
+      weaponEntry: null,
+    },
+    {
+      action: 'mage-cast-long' as const,
+      bodyEntry: 1783,
+      flags: [],
+      limbEntry: 1693,
+      progress: 30,
+      token: 'SKELETONMAGE' as const,
+      weaponEntry: null,
+    },
+  ]
+
+  for (const sample of samples) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy(sample.token, sample.flags),
+      animation: nativeEnemyIdleAnimationSample({
+        action: sample.action,
+        actionProgress: sample.progress,
+        bodyPose: 0,
+        gaitPose: 6,
+        state: 'action',
+      }),
+    }, 100)
+    assert.equal(plan.layers[0]?.entry, sample.limbEntry, sample.action)
+    assert.equal(
+      plan.layers.find(({ role }) => role.endsWith('-body'))?.entry,
+      sample.bodyEntry,
+      sample.action,
+    )
+    assert.equal(
+      plan.layers.find(({ role }) => role === 'skeleton-weapon')?.entry ?? null,
+      sample.weaponEntry,
+      sample.action,
+    )
+  }
+})
+
+test('armored Skeleton claw selector 9 preserves the native blank torso slot', () => {
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_ARMOR']),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'skeleton-claw-b',
+      actionProgress: 7,
+      gaitPose: 2,
+      state: 'action',
+    }),
+  }, 100)
+
+  assert.deepEqual(plan.layers.map(({ entry, role }) => ({ entry, role })), [
+    { entry: 1621, role: 'skeleton-limbs' },
+    { entry: 1477, role: 'skeleton-headgear' },
+  ])
 })
 
 test('hit presentation preserves body layers and appends native red redraws', () => {

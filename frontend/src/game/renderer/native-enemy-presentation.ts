@@ -226,23 +226,21 @@ function skeletonLayers(
   const weapon = selectedFlagValue(enemy.flags, WEAPON_BY_FLAG, 0)
   const headgear = selectedFlagValue(enemy.flags, HEADGEAR_BY_FLAG, 0)
   const armored = enemy.armored
-  const sampledPose = visualPose(animation, actionFrame)
-  const limbPose = actionFrame?.program.name === 'skeleton-claw-a'
-    || actionFrame?.program.name === 'skeleton-claw-b'
-    ? actionFrame.frameIndex
-    : sampledPose
+  const limbPose = animation?.gaitPose ?? 0
+  const bodySelector = actionFrame?.selector ?? animation?.bodyPose ?? 0
   const bodyBase = armored
     ? weapon === 0 ? 613 : weapon === 5 ? 991 : 919
     : weapon === 0 ? 1117 : weapon === 5 ? 1405 : 1333
-  const bodyPose = !armored && weapon === 5
-    ? boundedPose(sampledPose, 2)
-    : !armored && weapon !== 0
-      ? boundedPose(sampledPose, 3)
-      : 0
+  const bodyPoseCount = weapon === 0
+    ? armored ? 9 : 12
+    : weapon === 5 ? 3 : 4
+  const bodyPose = bankPose(bodySelector, bodyPoseCount)
   const result = [
     layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'skeleton-limbs'),
-    layer('BadGuys', bodyBase + bodyPose * 18 + facing, 'skeleton-body'),
   ]
+  if (bodyPose !== null) {
+    result.push(layer('BadGuys', bodyBase + bodyPose * 18 + facing, 'skeleton-body'))
+  }
   const weaponBase = weapon === 1
     ? 1045
     : weapon === 2 || weapon === 3
@@ -251,11 +249,14 @@ function skeletonLayers(
         ? 775
         : null
   if (weaponBase !== null) {
-    result.push(layer(
-      'BadGuys',
-      weaponBase + boundedPose(sampledPose, 3) * 18 + facing,
-      'skeleton-weapon',
-    ))
+    const weaponPose = bankPose(bodySelector, 4)
+    if (weaponPose !== null) {
+      result.push(layer(
+        'BadGuys',
+        weaponBase + weaponPose * 18 + facing,
+        'skeleton-weapon',
+      ))
+    }
   }
   result.push(layer(
     'BadGuys',
@@ -274,10 +275,11 @@ function skeletonArcherLayers(
 ): NativeEnemySpriteLayer[] {
   const flags = [...sourceFlags]
   const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
-  const pose = visualPose(animation, actionFrame)
+  const limbPose = animation?.gaitPose ?? 0
+  const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
   return [
-    layer('BadGuys', 1585 + boundedPose(pose, 7) * 18 + facing, 'archer-limbs'),
-    layer('BadGuys', 451 + boundedPose(pose, 8) * 18 + facing, 'archer-body'),
+    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'archer-limbs'),
+    layer('BadGuys', 451 + boundedPose(bodyPose, 8) * 18 + facing, 'archer-body'),
     layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'archer-headgear', {
       offset: { x: 0, y: -4 },
     }),
@@ -292,10 +294,11 @@ function skeletonMageLayers(
 ): NativeEnemySpriteLayer[] {
   const flags = [...sourceFlags]
   const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
-  const pose = visualPose(animation, actionFrame)
+  const limbPose = animation?.gaitPose ?? 0
+  const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
   return [
-    layer('BadGuys', 1585 + boundedPose(pose, 7) * 18 + facing, 'mage-limbs'),
-    layer('BadGuys', 1729 + boundedPose(pose, 4) * 18 + facing, 'mage-body'),
+    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'mage-limbs'),
+    layer('BadGuys', 1729 + boundedPose(bodyPose, 4) * 18 + facing, 'mage-body'),
     layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'mage-headgear', {
       offset: { x: 0, y: -4 },
     }),
@@ -352,7 +355,7 @@ function zombieLayers(
       ? boundedPose(animation.zombieFlyblownSide, 1)
       : visualChoice(enemy, 5, 2)
     : -1
-  const gaitPose = visualPose(animation, null)
+  const gaitPose = animation?.gaitPose ?? 0
   const rearArmPose = animation?.zombieRearArmPose ?? 0
   const frontArmPose = animation?.zombieFrontArmPose ?? 0
   const bodyEntry = 2203 + bodyType * 18 + facing
@@ -534,15 +537,6 @@ function applyAuthoritativeSample(
   ]
 }
 
-function visualPose(
-  animation: NativeEnemyAnimationSample | undefined,
-  actionFrame: NativeEnemyActionFrame | null,
-): number {
-  if (actionFrame) return actionFrame.selector
-  if (!animation) return 0
-  return animation.state === 'locomotion' ? animation.gaitPose : animation.bodyPose
-}
-
 function layer(
   atlas: NativeEnemyAtlas,
   entry: number,
@@ -602,6 +596,11 @@ function visualChoice(
 
 function boundedPose(value: number, maximum: number): number {
   return Math.min(maximum, Math.max(0, Math.floor(finiteOrZero(value))))
+}
+
+function bankPose(value: number, count: number): number | null {
+  const pose = Math.floor(finiteOrZero(value))
+  return pose >= 0 && pose < count ? pose : null
 }
 
 function boundedUnit(value: number): number {

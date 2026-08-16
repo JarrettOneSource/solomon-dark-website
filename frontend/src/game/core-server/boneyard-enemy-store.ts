@@ -27,10 +27,18 @@ import {
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
 import {
   NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES,
+  NATIVE_MAGE_CAST_BODY_POSES,
   nativeMageBodyPose,
   nativeMageLightningDurationTicks,
   nativeMageLightningSource,
 } from '../core-kernels/boneyard-mage-lightning.ts'
+import {
+  NATIVE_ARCHER_SHOT_BODY_POSES,
+  NATIVE_SKELETON_CLAW_BODY_POSES,
+  NATIVE_SKELETON_PIKE_BODY_POSES,
+  NATIVE_SKELETON_WEAPON_BODY_POSES,
+  nativeSkeletonFamilyBodyPose,
+} from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
   type BoneyardEnemySpawnIntent,
@@ -312,6 +320,7 @@ export interface BoneyardEnemyLightingState {
 }
 
 export interface BoneyardEnemyActor {
+  readonly bodyPose: number
   readonly brain: BoneyardEnemyBrain
   readonly config: EvaluatedBoneyardEnemyConfig
   readonly currentHealth: number
@@ -1267,8 +1276,13 @@ function materializeSpawnIntents(
     })
     validatePoint(position, 'resolved enemy spawn position')
     const targetPlayerId = nearestEligibleTarget(position, context.players)
+    const brain = createBrain(work, config)
+    const bodyPose = config.enemyToken === 'SKELETONMAGE'
+      ? drawInteger(work, 2)
+      : 0
     const actor: BoneyardEnemyActor = {
-      brain: createBrain(work, config),
+      bodyPose,
+      brain,
       config,
       currentHealth: config.maximumHealth,
       deathEpoch: null,
@@ -1695,13 +1709,7 @@ function applyMageProviderGateAfterAction(
 }
 
 function magePoseIsFour(actor: BoneyardEnemyActor): boolean {
-  const brain = actor.brain
-  if (brain.family !== 'mage') return false
-  if (brain.phase !== 'cast') return Math.floor(actor.gaitPose) === 4
-  const index = Math.floor(brain.actionProgress)
-  return brain.castProgram === 'short'
-    ? index >= 25 && index <= 37
-    : index >= 31 && index <= 43
+  return actor.brain.family === 'mage' && Math.floor(actor.bodyPose) === 4
 }
 
 function stepSkeleton(
@@ -1724,6 +1732,7 @@ function stepSkeleton(
       actor,
       brain,
       program,
+      NATIVE_SKELETON_PIKE_BODY_POSES,
       context.tick,
       brain.contactTargetPlayerId,
       (eventId) => {
@@ -1743,8 +1752,18 @@ function stepSkeleton(
     context.players,
     BOUNDED_ENEMY_ATTACK_REACH.SKELETON,
   )) {
+    const bodyPose = brain.action === 'claw'
+      ? NATIVE_SKELETON_CLAW_BODY_POSES[
+          actor.config.enemyToken === 'SKELETON' && actor.config.family.armor
+            ? 'armored'
+            : 'unarmored'
+        ][0]!
+      : brain.action === 'weapon'
+        ? NATIVE_SKELETON_WEAPON_BODY_POSES[0]!
+        : NATIVE_SKELETON_PIKE_BODY_POSES[0]!
     return {
       ...actor,
+      bodyPose,
       brain: {
         ...brain,
         actionProgress: 0,
@@ -1789,6 +1808,7 @@ function stepSkeletonWeaponAction(
   if (actionProgress > program.strictEnd) {
     return {
       ...actor,
+      bodyPose: NATIVE_SKELETON_WEAPON_BODY_POSES[0]!,
       brain: {
         ...brain,
         actionProgress: 0,
@@ -1800,6 +1820,10 @@ function stepSkeletonWeaponAction(
   }
   return {
     ...actor,
+    bodyPose: nativeSkeletonFamilyBodyPose(
+      NATIVE_SKELETON_WEAPON_BODY_POSES,
+      actionProgress,
+    ),
     brain: { ...brain, actionProgress, markerEmitted },
   }
 }
@@ -1843,8 +1867,13 @@ function stepSkeletonClawAction(
     markerEmitted = true
   }
   if (completed) {
+    const bodyPoses = actor.config.enemyToken === 'SKELETON'
+      && actor.config.family.armor
+      ? NATIVE_SKELETON_CLAW_BODY_POSES.armored
+      : NATIVE_SKELETON_CLAW_BODY_POSES.unarmored
     return {
       ...actor,
+      bodyPose: bodyPoses[0]!,
       brain: {
         ...brain,
         actionProgress: 0,
@@ -1854,8 +1883,13 @@ function stepSkeletonClawAction(
       },
     }
   }
+  const bodyPoses = actor.config.enemyToken === 'SKELETON'
+    && actor.config.family.armor
+    ? NATIVE_SKELETON_CLAW_BODY_POSES.armored
+    : NATIVE_SKELETON_CLAW_BODY_POSES.unarmored
   return {
     ...actor,
+    bodyPose: nativeSkeletonFamilyBodyPose(bodyPoses, rawProgress),
     brain: { ...brain, actionProgress: rawProgress, markerEmitted },
   }
 }
@@ -1885,6 +1919,7 @@ function stepArcher(
       actor,
       brain,
       NATIVE_ARCHER_ACTION_PROGRAM,
+      NATIVE_ARCHER_SHOT_BODY_POSES,
       context.tick,
       actor.targetPlayerId,
       () => {
@@ -1900,7 +1935,11 @@ function stepArcher(
     ? BOUNDED_ARCHER_RANGE_BANDS[actor.config.family.rangeMode]
     : BOUNDED_ARCHER_RANGE_BANDS[0]
   if (distance >= range.minimum && distance <= range.maximum) {
-    return { ...actor, brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'attack' } }
+    return {
+      ...actor,
+      bodyPose: NATIVE_ARCHER_SHOT_BODY_POSES[0]!,
+      brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'attack' },
+    }
   }
   return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
 }
@@ -1923,6 +1962,7 @@ function stepMage(
       actor,
       brain,
       { ...base, progressPerTick: base.progressPerTick * (1 + brain.castRoll) },
+      NATIVE_MAGE_CAST_BODY_POSES[brain.castProgram],
       context.tick,
       actor.targetPlayerId,
       (eventId) => {
@@ -1949,6 +1989,9 @@ function stepMage(
       work.rngState = roll.state
       stepped = {
         ...actor,
+        bodyPose: NATIVE_MAGE_CAST_BODY_POSES[
+          program.value < 0.5 ? 'short' : 'long'
+        ][0]!,
         brain: {
           ...brain,
           actionProgress: 0,
@@ -2856,6 +2899,7 @@ function stepProgressAction<B extends BoneyardSkeletonBrain | BoneyardArcherBrai
   actor: BoneyardEnemyActor,
   brain: B,
   program: ActionProgram,
+  bodyPoses: readonly number[],
   tick: number,
   markerTargetPlayerId: string | null,
   onMarker: (eventId: number) => void,
@@ -2883,7 +2927,11 @@ function stepProgressAction<B extends BoneyardSkeletonBrain | BoneyardArcherBrai
       brain: completedBrain,
     }
   }
-  return { ...actor, brain: { ...brain, actionProgress, markerEmitted } }
+  return {
+    ...actor,
+    bodyPose: nativeSkeletonFamilyBodyPose(bodyPoses, actionProgress),
+    brain: { ...brain, actionProgress, markerEmitted },
+  }
 }
 
 function moveTowardTarget<B extends BoneyardEnemyBrain>(
@@ -3263,8 +3311,8 @@ function stepMageLightningPulse(
   }
   const pose = nativeMageBodyPose({
     actionProgress: brain.actionProgress,
+    bodyPose: actor.bodyPose,
     castProgram: brain.castProgram,
-    gaitPose: actor.gaitPose,
     phase: brain.phase,
   })
   const source = nativeMageLightningSource(actor.position, pose, actor.headingDeg)

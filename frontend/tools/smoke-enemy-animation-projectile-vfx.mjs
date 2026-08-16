@@ -7,6 +7,10 @@ import { chromium } from 'playwright-core'
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-animation-projectile-vfx-20260815.png')
+const skeletonEarlyScreenshotPath = process.env.SDR_SKELETON_ATTACK_EARLY_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-skeleton-attack-early-20260816.png')
+const skeletonLateScreenshotPath = process.env.SDR_SKELETON_ATTACK_LATE_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-skeleton-attack-late-20260816.png')
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -47,9 +51,18 @@ try {
     document.body.style.background = '#000'
     document.body.style.margin = '0'
 
-    const [animationModule, playerModule, rendererModule, spellModule] = await Promise.all([
+    const [
+      animationModule,
+      economyModule,
+      playerModule,
+      presentationModule,
+      rendererModule,
+      spellModule,
+    ] = await Promise.all([
       import('/src/game/renderer/native-enemy-animation.ts'),
+      import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/core-kernels/player-character.ts'),
+      import('/src/game/renderer/native-enemy-presentation.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
     ])
@@ -371,6 +384,7 @@ try {
             displayName: 'Parity Probe',
             element: 'fire',
           },
+          economy: economyModule.createHubEconomy(1),
           footstepTick: 0,
           gaitDegrees: 0,
           headingIndex: 0,
@@ -492,13 +506,95 @@ try {
     renderer.render(snapshotAt(121.75, true))
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     const advancedPixels = capture(renderer.canvas)
+
+    const skeletonAttackSnapshotAt = (actionProgress) => {
+      const snapshot = snapshotAt(130, false)
+      return {
+        ...snapshot,
+        world: {
+          ...snapshot.world,
+          enemies: [makeEnemy(
+            'SKELETON',
+            1,
+            1001,
+            { x: 300, y: 190 },
+            makeAnimation({
+              action: 'skeleton-claw-a',
+              actionProgress,
+              bodyPose: 4,
+              gaitPose: 6,
+              state: 'action',
+            }),
+          )],
+          enemyProjectileEffects: [],
+          enemyProjectiles: [],
+          mageLightningPulses: [],
+          maggots: [],
+        },
+      }
+    }
+    const skeletonEarlySnapshot = skeletonAttackSnapshotAt(0)
+    const skeletonLateSnapshot = skeletonAttackSnapshotAt(7)
+    const skeletonEarlyRenderer = await rendererModule.createBoneyardWorldRenderer({
+      boneyard: loaded,
+      devicePixelRatio: 1,
+      initialSnapshot: skeletonEarlySnapshot,
+      playerId: 'local',
+      viewport,
+    })
+    const skeletonEarlyPixels = capture(skeletonEarlyRenderer.canvas)
+    const skeletonEarlyImage = document.createElement('img')
+    skeletonEarlyImage.id = 'skeleton-attack-early-probe'
+    skeletonEarlyImage.src = skeletonEarlyRenderer.canvas.toDataURL('image/png')
+    document.body.append(skeletonEarlyImage)
+    const skeletonLateRenderer = await rendererModule.createBoneyardWorldRenderer({
+      boneyard: loaded,
+      devicePixelRatio: 1,
+      initialSnapshot: skeletonLateSnapshot,
+      playerId: 'local',
+      viewport,
+    })
+    const skeletonLatePixels = capture(skeletonLateRenderer.canvas)
+    const skeletonLateImage = document.createElement('img')
+    skeletonLateImage.id = 'skeleton-attack-late-probe'
+    skeletonLateImage.src = skeletonLateRenderer.canvas.toDataURL('image/png')
+    document.body.append(skeletonLateImage)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+    const skeletonPlanAt = (actionProgress) => presentationModule.nativeEnemyPresentationPlan(
+      makeEnemy(
+        'SKELETON',
+        1,
+        1001,
+        { x: 300, y: 190 },
+        makeAnimation({
+          action: 'skeleton-claw-a',
+          actionProgress,
+          bodyPose: 4,
+          gaitPose: 6,
+          state: 'action',
+        }),
+      ),
+      130,
+      () => [],
+    ).layers.map(({ entry, role }) => ({ entry, role }))
     window.__enemyVfxRenderer = renderer
+    window.__skeletonEarlyRenderer = skeletonEarlyRenderer
+    window.__skeletonLateRenderer = skeletonLateRenderer
     return {
       animationDifference: compare(initialPixels, advancedPixels),
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
+      skeletonAttackDifference: compare(
+        skeletonEarlyPixels,
+        skeletonLatePixels,
+      ),
+      skeletonAttackLayers: {
+        early: skeletonPlanAt(0),
+        late: skeletonPlanAt(7),
+      },
     }
   })
 
@@ -525,6 +621,26 @@ try {
   assert.equal(receipt.frame.mageLightningCount, 1)
   assert.ok(receipt.animationDifference.changedPixels > 1_000)
   assert.ok(receipt.animationDifference.channelDelta > 10_000)
+  assert.ok(
+    receipt.skeletonAttackDifference.changedPixels > 100,
+    JSON.stringify(receipt.skeletonAttackDifference),
+  )
+  assert.ok(
+    receipt.skeletonAttackDifference.channelDelta > 1_000,
+    JSON.stringify(receipt.skeletonAttackDifference),
+  )
+  assert.deepEqual(receipt.skeletonAttackLayers, {
+    early: [
+      { entry: 1693, role: 'skeleton-limbs' },
+      { entry: 1189, role: 'skeleton-body' },
+      { entry: 1477, role: 'skeleton-headgear' },
+    ],
+    late: [
+      { entry: 1693, role: 'skeleton-limbs' },
+      { entry: 1315, role: 'skeleton-body' },
+      { entry: 1477, role: 'skeleton-headgear' },
+    ],
+  })
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -532,8 +648,16 @@ try {
   await page.locator('#enemy-animation-projectile-vfx-probe').screenshot({
     path: screenshotPath,
   })
+  await page.locator('#skeleton-attack-early-probe').screenshot({
+    path: skeletonEarlyScreenshotPath,
+  })
+  await page.locator('#skeleton-attack-late-probe').screenshot({
+    path: skeletonLateScreenshotPath,
+  })
   await page.evaluate(() => {
     window.__enemyVfxRenderer.destroy()
+    window.__skeletonEarlyRenderer.destroy()
+    window.__skeletonLateRenderer.destroy()
     document.body.replaceChildren()
   })
 
@@ -543,6 +667,8 @@ try {
     failedResponses,
     pageErrors,
     screenshotPath,
+    skeletonEarlyScreenshotPath,
+    skeletonLateScreenshotPath,
   }, null, 2))
 } finally {
   await browser.close()
