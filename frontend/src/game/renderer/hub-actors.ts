@@ -2,6 +2,7 @@ import { Container, Sprite, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
 import { playerHitOverlayAlpha } from '../core-kernels/player-combat.ts'
+import type { NativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import {
   hubStudentHeadOffset,
   hubStudentPropOffset,
@@ -22,6 +23,11 @@ import {
   playerDeathHatAnchor,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
+import { nativeSecondarySpriteKey, nativeSecondarySpriteRecord } from './native-secondary-assets.ts'
+import {
+  nativePlayerMagicShieldPlan,
+  nativePlayerMaterialTint,
+} from './native-secondary-presentation.ts'
 
 const DEATH_HAT_PRIMARY = 7
 const DEATH_HAT_SECONDARY = 8
@@ -44,6 +50,7 @@ export class PlayerWorldView {
   private readonly hitHead: Sprite
   private readonly deathLayers: readonly Sprite[]
   private readonly deathShadowLayers: readonly Sprite[]
+  private readonly magicShield: Sprite
   private readonly textures: PlayerWorldTextures
   private readonly deathBaseTints = Array.from(
     { length: PLAYER_DEATH_LAYER_COUNT },
@@ -52,6 +59,7 @@ export class PlayerWorldView {
   private worldTint = 0xffffff
   private currentWalkPose = 0
   private currentAttachmentPose = 0
+  private secondaryState: NativeSecondaryPlayerState | undefined
 
   constructor(
     element: WizardElement,
@@ -96,6 +104,17 @@ export class PlayerWorldView {
       this.hitStaffFront,
       this.hitHead,
     )
+    const shieldRecord = nativeSecondarySpriteRecord('BadGuys', 49)
+    this.magicShield = new Sprite(textures.secondary[nativeSecondarySpriteKey('BadGuys', 49)])
+    this.magicShield.anchor.set(
+      shieldRecord.anchorX / shieldRecord.width,
+      shieldRecord.anchorY / shieldRecord.height,
+    )
+    this.magicShield.position.set(0, -30)
+    this.magicShield.zIndex = 8
+    this.magicShield.blendMode = 'add'
+    this.magicShield.eventMode = 'none'
+    this.magicShield.visible = false
     this.container.addChild(
       this.shadow,
       this.staffBack,
@@ -107,6 +126,7 @@ export class PlayerWorldView {
       ...this.deathShadowLayers,
       ...this.deathLayers,
       this.hitOverlay,
+      this.magicShield,
     )
   }
 
@@ -183,17 +203,46 @@ export class PlayerWorldView {
     return this.currentAttachmentPose
   }
 
+  get materialTint(): number {
+    return this.robe.tint
+  }
+
+  get magicShieldScale(): number {
+    return this.magicShield.scale.x
+  }
+
+  get magicShieldVisible(): boolean {
+    return this.magicShield.visible
+  }
+
   setDepth(depth: number): void {
     this.container.zIndex = depth
   }
 
+  setSecondaryState(
+    state: NativeSecondaryPlayerState | undefined,
+    tick: number,
+  ): void {
+    this.secondaryState = state
+    const plan = nativePlayerMagicShieldPlan(state, tick)
+    this.magicShield.visible = plan.visible
+    this.magicShield.tint = plan.tint
+    this.magicShield.scale.set(plan.scale)
+    this.applyMaterialTint()
+  }
+
   setWorldTint(tint: number): void {
+    this.worldTint = tint
+    this.applyMaterialTint()
+  }
+
+  private applyMaterialTint(): void {
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState)
     this.staffBack.tint = tint
     this.robe.tint = tint
     this.fixed.tint = tint
     this.staffFront.tint = tint
     this.head.tint = tint
-    this.worldTint = tint
     this.applyDeathTints()
   }
 
@@ -262,10 +311,11 @@ export class PlayerWorldView {
   }
 
   private applyDeathTints(): void {
+    const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState)
     for (let index = 0; index < PLAYER_DEATH_LAYER_COUNT; index += 1) {
       this.deathLayers[index]!.tint = multiplyTints(
         this.deathBaseTints[index]!,
-        this.worldTint,
+        tint,
       )
       this.deathShadowLayers[index]!.tint = 0x000000
     }

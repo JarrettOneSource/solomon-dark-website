@@ -22,6 +22,10 @@ import {
   copyPrimarySpellState,
   interpolatePrimarySpellState,
 } from './primary-spell-presentation.ts'
+import {
+  copyNativeSecondaryState,
+  interpolateNativeSecondaryState,
+} from './native-secondary-presentation.ts'
 
 export type BoneyardGameSnapshot = Omit<GameSnapshot, 'world'> & {
   world: BoneyardWorldSnapshot
@@ -148,6 +152,11 @@ function interpolateSnapshot(
       newer.primarySpells,
       blend,
       { newerTick: newer.tick, olderTick: older.tick, targetTick },
+    ),
+    secondaryAbilities: interpolateNativeSecondaryState(
+      older.secondaryAbilities,
+      newer.secondaryAbilities,
+      blend,
     ),
     run: interpolateGameRunLifecycle(older.run, newer.run, blend),
     tick: clamp(targetTick, older.tick, newer.tick),
@@ -326,6 +335,7 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       copyPlayer(player),
     ])),
     primarySpells: copyPrimarySpellState(snapshot.primarySpells),
+    secondaryAbilities: copyNativeSecondaryState(snapshot.secondaryAbilities),
     run: snapshot.run,
     tick: snapshot.tick,
     world: {
@@ -569,6 +579,11 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     primaryCast: {
       ...player.primaryCast,
       aimDirection: { ...player.primaryCast.aimDirection },
+    },
+    progression: {
+      ...player.progression,
+      learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
+      secondaryBelt: [...player.progression.secondaryBelt],
     },
     velocity: { ...player.velocity },
   }

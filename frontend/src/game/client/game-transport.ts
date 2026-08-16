@@ -102,7 +102,7 @@ class BrowserWebSocketTransport implements GameTransport {
           'connection.binary_message',
           'The game server sent a binary message that this protocol does not accept.',
         )
-        this.close(1003, `Protocol ${GAME_PROTOCOL_VERSION} accepts text messages only.`)
+        this.close(4003, `Protocol ${GAME_PROTOCOL_VERSION} accepts text messages only.`)
         return
       }
       for (const listener of this.messageListeners) listener(event.data)

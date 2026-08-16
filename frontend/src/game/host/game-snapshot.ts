@@ -43,6 +43,7 @@ export function createGameSnapshot(
         levelUpBarrier: state.levelUpBarrier,
         players,
         primarySpells: state.primarySpells,
+        secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
         run: state.run,
         tick: state.tick,
         world: {
@@ -62,6 +63,7 @@ export function createGameSnapshot(
         levelUpBarrier: state.levelUpBarrier,
         players,
         primarySpells: state.primarySpells,
+        secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
         run: state.run,
         tick: state.tick,
         world: {
@@ -225,8 +227,20 @@ function protocolPlayerState(
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
       sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
+      secondaryBelt: [...skillBook.secondaryBelt],
     },
   }
+}
+
+function protocolSecondaryAbilities(
+  state: GameSimulationState['secondaryAbilities'],
+): Omit<GameSimulationState['secondaryAbilities'], 'firewalkerGeometrySequence' | 'rng'> {
+  const {
+    firewalkerGeometrySequence: _firewalkerGeometrySequence,
+    rng: _rng,
+    ...snapshot
+  } = state
+  return snapshot
 }
 
 function protocolInventoryItem(item: HubInventoryItem): HubInventoryItem {

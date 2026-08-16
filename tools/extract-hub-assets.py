@@ -225,16 +225,23 @@ def parse_font_groups(path: Path) -> list[FontGroup]:
     return groups
 
 
-def write_ally_font_data(group: FontGroup, output_dir: Path) -> None:
+def write_hud_font_data(
+    group: FontGroup,
+    output_dir: Path,
+    *,
+    filename: str,
+    group_index: int,
+    scale: float,
+) -> None:
     data = {
         "atlasHeight": 256,
         "atlasWidth": 512,
         "glyphCount": len(group.glyphs),
-        "group": 6,
+        "group": group_index,
         "header": list(group.header),
         "kerning": group.kerning,
         "kerningCount": len(group.kerning),
-        "scale": 0.25,
+        "scale": scale,
         "glyphs": {
             char: {
                 "advance": glyph.advance,
@@ -252,7 +259,7 @@ def write_ally_font_data(group: FontGroup, output_dir: Path) -> None:
             for char, glyph in group.glyphs.items()
         },
     }
-    path = output_dir / "hub-hud-font-group-6.json"
+    path = output_dir / filename
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
@@ -1736,6 +1743,8 @@ def main() -> int:
         "hub-hud-backpack": 47,
         "hub-hud-bar-blue": 40,
         "hub-hud-bar-red": 26,
+        "hub-hud-key-backing": 22,
+        "hub-hud-mana-reserve": 41,
         "hub-hud-golem": 23,
         "hub-hud-mouse-right": 100,
         "hub-hud-skull": 42,
@@ -1758,7 +1767,25 @@ def main() -> int:
         images_dir / "Fonts.png",
         output_dir / "hub-hud-font-atlas.png",
     )
-    write_ally_font_data(ally_font, output_dir)
+    write_hud_font_data(
+        ally_font,
+        output_dir,
+        filename="hub-hud-font-group-6.json",
+        group_index=6,
+        scale=0.25,
+    )
+    belt_font = font_groups[8]
+    if len(belt_font.glyphs) != 92 or len(belt_font.kerning) != 1:
+        raise ValueError(
+            "Fonts group 8 does not match the native 92-glyph/1-kerning contract"
+        )
+    write_hud_font_data(
+        belt_font,
+        output_dir,
+        filename="hub-hud-font-group-8.json",
+        group_index=8,
+        scale=1.0,
+    )
 
     inventory = Image.open(images_dir / "Inventory.png").convert("RGBA")
     inventory_records = parse_bundle(images_dir / "Inventory.bundle")

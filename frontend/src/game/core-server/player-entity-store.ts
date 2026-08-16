@@ -18,8 +18,11 @@ import {
   playerDisplayHealth,
   poisonPlayer,
   playerMovementScale,
+  restorePlayerHealth,
+  restorePlayerMana,
   resetPlayerCombatForNewRun,
   setPlayerSpectating,
+  setPlayerMana,
   stepPlayerCombatTick,
   tryDebitPlayerMana,
 } from '../core-kernels/player-combat.ts'
@@ -34,6 +37,7 @@ import {
   rerollPlayerSkillOffer,
   resetPlayerPotionEffects,
   stepPlayerPotionEffects,
+  refreshPlayerSkillBookMindstar,
   synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
   type SharedPlayerLevelMilestone,
@@ -344,6 +348,59 @@ export function tryDebitPlayerEntityMana(
       ? source
       : replacePlayerProgression(source, index, debit.combat),
   }
+}
+
+export function restorePlayerEntityHealth(
+  source: PlayerEntityStore,
+  playerId: string,
+  amount: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = restorePlayerHealth(source.progressions[index]!, amount)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function restorePlayerEntityMana(
+  source: PlayerEntityStore,
+  playerId: string,
+  amount: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = restorePlayerMana(source.progressions[index]!, amount)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function setPlayerEntityMana(
+  source: PlayerEntityStore,
+  playerId: string,
+  currentMana: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const progression = setPlayerMana(source.progressions[index]!, currentMana)
+  return progression === source.progressions[index]
+    ? source
+    : replacePlayerProgression(source, index, progression)
+}
+
+export function setPlayerEntityMindstar(
+  source: PlayerEntityStore,
+  playerId: string,
+  active: boolean,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const skillBook = refreshPlayerSkillBookMindstar(source.skillBooks[index]!, active)
+  if (skillBook === source.skillBooks[index]) return source
+  const skillBooks = [...source.skillBooks]
+  skillBooks[index] = skillBook
+  return { ...source, skillBooks }
 }
 
 export function stepPlayerEntityCombatTick(

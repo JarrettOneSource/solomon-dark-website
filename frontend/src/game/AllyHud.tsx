@@ -7,6 +7,7 @@ import {
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
+  deriveGolemAllyHudRows,
   derivePlayerAllyHudRows,
   layoutNativeAllyName,
   NATIVE_ALLY_FONT,
@@ -25,6 +26,25 @@ interface AllyHudProps {
 
 interface AllyHudRosterProps {
   rows: readonly AllyHudRow[]
+}
+
+function snapshotWorldKey(snapshot: GameSnapshot, playerId: string): string {
+  return snapshot.world.kind === 'boneyard'
+    ? `boneyard:${snapshot.world.runId}`
+    : `hub:${snapshot.world.participants[playerId]?.region ?? 'courtyard'}`
+}
+
+function deriveSnapshotAllyHudRows(
+  snapshot: GameSnapshot,
+  playerId: string,
+): AllyHudRow[] {
+  return combineAllyHudRows(
+    derivePlayerAllyHudRows(snapshot.players, playerId),
+    deriveGolemAllyHudRows(
+      snapshot.secondaryAbilities.actors,
+      snapshotWorldKey(snapshot, playerId),
+    ),
+  )
 }
 
 function NativeAllyName({ name }: { name: string }) {
@@ -120,14 +140,14 @@ export default function AllyHud({
   playerId,
   subscribeSnapshot,
 }: AllyHudProps) {
-  const [playerRows, setPlayerRows] = useState<readonly AllyHudRow[]>(() => (
-    derivePlayerAllyHudRows(initialSnapshot.players, playerId)
+  const [snapshotRows, setSnapshotRows] = useState<readonly AllyHudRow[]>(() => (
+    deriveSnapshotAllyHudRows(initialSnapshot, playerId)
   ))
 
   useEffect(() => {
     const publish = (snapshot: GameSnapshot) => {
-      const nextRows = derivePlayerAllyHudRows(snapshot.players, playerId)
-      setPlayerRows((currentRows) => allyHudRowsEqual(currentRows, nextRows)
+      const nextRows = deriveSnapshotAllyHudRows(snapshot, playerId)
+      setSnapshotRows((currentRows) => allyHudRowsEqual(currentRows, nextRows)
         ? currentRows
         : nextRows)
     }
@@ -135,5 +155,5 @@ export default function AllyHud({
     return subscribeSnapshot(publish)
   }, [initialSnapshot, playerId, subscribeSnapshot])
 
-  return <AllyHudRoster rows={combineAllyHudRows(playerRows, additionalRows)} />
+  return <AllyHudRoster rows={combineAllyHudRows(snapshotRows, additionalRows)} />
 }

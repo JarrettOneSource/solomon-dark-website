@@ -54,6 +54,11 @@ export type BoneyardSpellWorldContact = (
   radius: number,
 ) => number | null
 
+export type BoneyardSpellDamageMultiplier = (
+  actorId: number,
+  spellKind: BoneyardSpellHitKind,
+) => number
+
 /**
  * Resolves the spell-contact portion of one authoritative Boneyard tick.
  * Projectile state has already advanced. Fire and Ether therefore use the
@@ -68,6 +73,7 @@ export function resolveBoneyardSpellCombat(
   worldKey: string,
   firstWorldContact: BoneyardSpellWorldContact | null = null,
   registerLightProvider?: RegisterNativeLightProvider,
+  damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -113,6 +119,7 @@ export function resolveBoneyardSpellCombat(
         const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
         if (!actor) continue
         const amount = projectileDamage(projectile)
+          * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
         const damaged = damageBoneyardEnemy(enemies, {
           actorId: actor.id,
           amount,
@@ -141,6 +148,7 @@ export function resolveBoneyardSpellCombat(
     if (!actor) continue
 
     const amount = projectileDamage(projectile)
+      * validatedDamageMultiplier(damageMultiplier(actor.id, projectile.kind))
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: actor.id,
       amount,
@@ -178,9 +186,11 @@ export function resolveBoneyardSpellCombat(
     for (const target of contacts) {
       const actor = rows.find(({ target: candidate }) => candidate.id === target.id)?.actor
       if (!actor) continue
+      const amount = emission.damage
+        * validatedDamageMultiplier(damageMultiplier(actor.id, emission.kind))
       const damaged = damageBoneyardEnemy(enemies, {
         actorId: actor.id,
-        amount: emission.damage,
+        amount,
         sourcePlayerId: emission.ownerId,
         tick,
       })
@@ -190,7 +200,7 @@ export function resolveBoneyardSpellCombat(
       events.push(...damaged.events)
       hits.push({
         actorId: actor.id,
-        amount: emission.damage,
+        amount,
         killed: damaged.killed,
         ownerId: emission.ownerId,
         spellId: emission.id,
@@ -297,4 +307,11 @@ function validateTick(tick: number): void {
   if (!Number.isSafeInteger(tick) || tick < 0) {
     throw new RangeError('Boneyard spell-combat tick must be a non-negative safe integer')
   }
+}
+
+function validatedDamageMultiplier(multiplier: number): number {
+  if (!Number.isFinite(multiplier) || multiplier < 0) {
+    throw new RangeError('Boneyard spell damage multiplier must be finite and non-negative')
+  }
+  return multiplier
 }

@@ -156,6 +156,37 @@ export function playerHitOverlayAlpha(
   )
 }
 
+export function restorePlayerHealth<T extends PlayerCombatComponent>(
+  source: T,
+  amount: number,
+): T {
+  requireNonnegativeFinite(amount, 'player health recovery')
+  if (amount === 0 || source.lifeState !== 'alive') return source
+  const currentHealth = Math.min(source.maximumHealth, source.currentHealth + amount)
+  return currentHealth === source.currentHealth ? source : { ...source, currentHealth }
+}
+
+export function restorePlayerMana<T extends PlayerCombatComponent>(
+  source: T,
+  amount: number,
+): T {
+  requireNonnegativeFinite(amount, 'player mana recovery')
+  if (amount === 0 || source.lifeState !== 'alive') return source
+  const currentMana = Math.min(source.maximumMana, source.currentMana + amount)
+  return currentMana === source.currentMana ? source : { ...source, currentMana }
+}
+
+export function setPlayerMana<T extends PlayerCombatComponent>(
+  source: T,
+  currentMana: number,
+): T {
+  requireNonnegativeFinite(currentMana, 'player current mana')
+  if (currentMana > source.maximumMana) {
+    throw new RangeError('player current mana must not exceed maximum mana')
+  }
+  return currentMana === source.currentMana ? source : { ...source, currentMana }
+}
+
 export function playerDisplayHealth(source: PlayerCombatComponent): number {
   return Math.min(source.maximumHealth, Math.max(0, source.currentHealth))
 }

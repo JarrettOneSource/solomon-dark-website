@@ -1,4 +1,4 @@
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
@@ -27,6 +27,7 @@ import type { HubWorldTextures } from './hub-textures.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 
 const MORTUARY_PAINTING_FRAME = { height: 224, width: 74 } as const
 const MEMORATOR_FRAME = { count: 16, height: 170, width: 170 } as const
@@ -55,6 +56,7 @@ export class HubPrivateRoomScene {
   }
   private readonly primarySpells: Record<PrivateHubRegionId, PrimarySpellWorldView>
   private readonly levelUp: NativeLevelUpWorldView
+  private readonly secondaryAbilities: Record<PrivateHubRegionId, NativeSecondaryWorldView>
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
@@ -67,7 +69,11 @@ export class HubPrivateRoomScene {
   private dowserMarker!: Sprite
   private activeRegion: PrivateHubRegionId = 'mortuary'
 
-  constructor(textures: HubWorldTextures, traderAnimationSeed: number) {
+  constructor(
+    textures: HubWorldTextures,
+    traderAnimationSeed: number,
+    renderer: Renderer,
+  ) {
     this.textures = textures
     this.dowserClock = createHubCommonTraderClock(traderAnimationSeed ^ 5016)
     this.world.sortableChildren = true
@@ -86,6 +92,10 @@ export class HubPrivateRoomScene {
     ])) as Record<PrivateHubRegionId, PrimarySpellWorldView>
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     this.rooms.mortuary.addChild(this.levelUp.container)
+    this.secondaryAbilities = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
+      region,
+      new NativeSecondaryWorldView(this.rooms[region], textures, renderer),
+    ])) as Record<PrivateHubRegionId, NativeSecondaryWorldView>
     this.world.addChild(
       this.rooms.mortuary,
       this.rooms.library,
@@ -119,6 +129,11 @@ export class HubPrivateRoomScene {
       this.primarySpells[region].promoteOwnerOverlays((ownerId) => (
         this.players.get(ownerId)?.container.zIndex
       ))
+      this.secondaryAbilities[region].update(
+        snapshot.secondaryAbilities,
+        `hub:${region}`,
+        presentationFrame,
+      )
     }
     this.updateRoomPresentation(snapshot, localPlayerId, localParticipant.region)
     for (const [playerId, view] of this.players) {
@@ -126,6 +141,7 @@ export class HubPrivateRoomScene {
     }
     for (const region of PRIVATE_HUB_REGIONS) {
       this.primarySpells[region].setRenderable(!modalActive)
+      this.secondaryAbilities[region].setRenderable(!modalActive)
       for (const actor of this.nonPlayerActors[region]) actor.renderable = !modalActive
       for (const flame of this.roomFlames.get(region) ?? []) {
         flame.renderable = !modalActive
@@ -168,10 +184,23 @@ export class HubPrivateRoomScene {
     return this.levelUp.particleCount
   }
 
+  get secondaryAbilityCount(): number {
+    return this.secondaryAbilities[this.activeRegion].count
+  }
+
+  get secondaryAbilityKinds(): readonly string[] {
+    return this.secondaryAbilities[this.activeRegion].kinds
+  }
+
+  get secondaryAbilityPrimitiveCount(): number {
+    return this.secondaryAbilities[this.activeRegion].primitiveCount
+  }
+
   destroy(): void {
     this.levelUp.container.parent?.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     for (const view of Object.values(this.primarySpells)) view.destroy()
+    for (const view of Object.values(this.secondaryAbilities)) view.destroy()
     this.players.clear()
     this.playerElements.clear()
     this.livePlayerIds.clear()
@@ -495,6 +524,7 @@ export class HubPrivateRoomScene {
         room.addChild(view.container)
       }
       view.update(player, snapshot.tick)
+      view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
     }
     for (const [playerId, view] of this.players) {
       if (live.has(playerId)) continue

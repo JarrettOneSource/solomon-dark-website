@@ -227,7 +227,7 @@ test('same-tick player primary actors register before projectiles spawned by lat
   state = stepGameSimulationTick(state, {
     caster: {
       aim: { x: player.position.x, y: 0 },
-      cast: { primary: true, secondary: false },
+      cast: { primary: true, secondary: null },
       movement: { x: 0, y: 0 },
     },
   })
@@ -289,7 +289,7 @@ test('same-tick wave actors register before player primary actors', () => {
   state = stepGameSimulationTick(state, {
     caster: {
       aim: { x: player.position.x, y: 0 },
-      cast: { primary: true, secondary: false },
+      cast: { primary: true, secondary: null },
       movement: { x: 0, y: 0 },
     },
   })
@@ -729,7 +729,7 @@ test('authoritative player ticks reset and decay StaffConstant lighting before p
     const player = getPlayerCharacter(state, 'caster')
     return {
       aim: { x: player.position.x, y: player.position.y - 200 },
-      cast: { primary, secondary: false },
+      cast: { primary, secondary: null },
       movement: { x: 0, y: 0 },
     }
   }
@@ -817,7 +817,7 @@ test('sealed generated Arena clips player spell range at the retired entrance bo
 
   state = stepGameSimulationTick(state, { caster: {
     aim: { x: 250, y: 0 },
-    cast: { primary: true, secondary: false },
+    cast: { primary: true, secondary: null },
     movement: { x: 0, y: 0 },
   } })
 

@@ -1,0 +1,199 @@
+import type { CSSProperties } from 'react'
+
+import nativeAssetsJson from '../assets/game/skill-picker-native-assets.json' with { type: 'json' }
+import { hub } from '../lib/assets.ts'
+import type { NativeSecondaryPlayerState } from './core-kernels/native-secondary-abilities.ts'
+import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
+import {
+  layoutNativeSecondaryBinding,
+  nativeCooldownSectorPath,
+  NATIVE_SECONDARY_BELT_FONT,
+  NATIVE_SECONDARY_BELT_SLOT_OFFSETS,
+} from './secondary-ability-belt.ts'
+
+interface AtlasRecord {
+  frame: readonly [number, number, number, number]
+  logicalSize: readonly [number, number]
+  trimOrigin: readonly [number, number]
+}
+
+interface NativeAssetManifest {
+  atlases: {
+    Skills: {
+      records: Record<string, AtlasRecord>
+    }
+  }
+}
+
+const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
+const ATLAS_WIDTH = 1024
+const ATLAS_HEIGHT = 512
+
+interface SecondaryAbilityBeltProps {
+  belt: readonly (number | null)[]
+  mode: 'hub' | 'run'
+  playerState: NativeSecondaryPlayerState | undefined
+}
+
+export default function SecondaryAbilityBelt({
+  belt,
+  mode,
+  playerState,
+}: SecondaryAbilityBeltProps) {
+  return (
+    <div
+      className="hub-hud-secondary-belt"
+      data-mode={mode}
+      aria-label="Secondary ability belt"
+    >
+      {NATIVE_SECONDARY_BELT_SLOT_OFFSETS.map((offset, slot) => {
+        const skillId = belt[slot] ?? null
+        const skill = skillId === null ? undefined : NATIVE_SKILL_CATALOG[skillId]
+        const remaining = skillId === null
+          ? 0
+          : playerState?.cooldownTicksBySkill[skillId] ?? 0
+        const capacity = skillId === null
+          ? 0
+          : playerState?.cooldownMaximumTicksBySkill[skillId] ?? 0
+        const input = slot === 0 ? 'right mouse button' : `key ${slot}`
+        const active = skillId !== null && secondaryAbilityActive(skillId, playerState)
+        const label = skill === undefined
+          ? `Empty secondary slot ${slot + 1}, ${input}`
+          : `${skill.name}, ${input}${remaining > 0
+            ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
+            : ''}${active ? ', active' : ''}`
+        return (
+          <div
+            className="hub-hud-secondary-slot"
+            data-slot={slot}
+            key={slot}
+            style={{ '--secondary-slot-offset': `${offset}px` } as CSSProperties}
+            aria-label={label}
+          >
+            {remaining > 0 && capacity > 0 ? (
+              <CooldownSector remaining={remaining} capacity={capacity} />
+            ) : null}
+            {skill === undefined ? null : (
+              <NativeSkillIcon
+                cooldown={remaining > 0}
+                record={skill.skills_atlas_icon_record}
+              />
+            )}
+            {slot === 0 && skill !== undefined ? (
+              <img
+                className="hub-hud-secondary-input-mouse"
+                src={hub.hud.mouseRight}
+                alt=""
+              />
+            ) : null}
+            {slot > 0 && skill !== undefined ? (
+              <NativeKeyboardBinding text={`${slot}`} />
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function NativeSkillIcon({ cooldown, record }: { cooldown: boolean; record: number }) {
+  const definition = nativeAssets.atlases.Skills.records[`${record}`]
+  if (!definition) throw new Error(`Missing native Skills record ${record}`)
+  const [x, y] = definition.frame
+  const [logicalWidth, logicalHeight] = definition.logicalSize
+  const [trimX, trimY] = definition.trimOrigin
+  return (
+    <span
+      className="hub-hud-secondary-skill-icon"
+      data-record={record}
+      style={{
+        backgroundImage: `url("${hub.trader.skillsAtlas}")`,
+        backgroundPosition: `${trimX - x}px ${trimY - y}px`,
+        backgroundSize: `${ATLAS_WIDTH}px ${ATLAS_HEIGHT}px`,
+        height: logicalHeight,
+        opacity: cooldown ? 0.25 : 0.375,
+        width: logicalWidth,
+      }}
+      aria-hidden
+    />
+  )
+}
+
+function CooldownSector({ capacity, remaining }: { capacity: number; remaining: number }) {
+  return (
+    <svg className="hub-hud-secondary-cooldown" viewBox="0 0 53 53" aria-hidden>
+      <path d={nativeCooldownSectorPath(remaining, capacity)} />
+    </svg>
+  )
+}
+
+function NativeKeyboardBinding({ text }: { text: string }) {
+  const layout = layoutNativeSecondaryBinding(text)
+  const maskImage = `url("${hub.hud.fontAtlas}")`
+  const backingImage = `url("${hub.hud.keyBacking}")`
+  const maskSize = `${NATIVE_SECONDARY_BELT_FONT.atlasWidth}px ${NATIVE_SECONDARY_BELT_FONT.atlasHeight}px`
+  return (
+    <>
+      <span
+        className="hub-hud-secondary-key-backing"
+        style={{
+          left: layout.backingLeft,
+          width: layout.backingWidth,
+        }}
+        aria-hidden
+      >
+        <span style={{ backgroundImage: backingImage, backgroundPosition: '0 0', left: 0 }} />
+        <span
+          style={{
+            backgroundImage: backingImage,
+            backgroundPosition: '-5px 0',
+            left: 5,
+            width: Math.max(0, layout.backingWidth - 10),
+          }}
+        />
+        <span
+          style={{
+            backgroundImage: backingImage,
+            backgroundPosition: '-10px 0',
+            left: layout.backingWidth - 5,
+          }}
+        />
+      </span>
+      {layout.glyphs.map((glyph, index) => (
+        <span
+          key={`${index}:${glyph.char}`}
+          className="hub-hud-secondary-key-glyph"
+          style={{
+            height: glyph.height,
+            left: glyph.left,
+            maskImage,
+            maskPosition: `${-glyph.atlasX}px ${-glyph.atlasY}px`,
+            maskSize,
+            top: 64 + glyph.top,
+            WebkitMaskImage: maskImage,
+            WebkitMaskPosition: `${-glyph.atlasX}px ${-glyph.atlasY}px`,
+            WebkitMaskSize: maskSize,
+            width: glyph.width,
+          }}
+          aria-hidden
+        />
+      ))}
+    </>
+  )
+}
+
+function secondaryAbilityActive(
+  skillId: number,
+  player: NativeSecondaryPlayerState | undefined,
+): boolean {
+  if (!player) return false
+  if (skillId === 12) return player.planewalkerTicksRemaining > 0
+  if (skillId === 23) return player.firewalker
+  if (skillId === 78) return player.mindstar
+  if (skillId === 79) return player.regenerate
+  return false
+}
+
+function formatCooldown(ticks: number): string {
+  return (ticks / 100).toFixed(2)
+}

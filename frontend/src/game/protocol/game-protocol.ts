@@ -34,6 +34,7 @@ import {
   type NativeLightManagerLane,
   type NativeLightProviderRegistration,
 } from '../core-kernels/native-light-provider-order.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
@@ -86,6 +87,24 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  NATIVE_SECONDARY_ACTOR_KINDS,
+  NATIVE_SECONDARY_AUDIO_CUES,
+  NATIVE_SECONDARY_EVENT_KINDS,
+  type NativeSecondaryActorKind,
+  type NativeSecondaryAudioCue,
+  type NativeSecondaryEventKind,
+  type NativeSecondaryActorState,
+  type NativeSecondaryEventState,
+  type NativeSecondaryGolemState,
+  type NativeSecondaryPlayerState,
+  type NativeSecondaryScreenFlashState,
+  type NativeSecondaryTargetEffectState,
+} from '../core-kernels/native-secondary-abilities.ts'
+import {
+  NATIVE_SECONDARY_ABILITY_IDS,
+  type NativeSecondaryAbilityId,
+} from '../core-kernels/native-secondary-ability-contract.ts'
+import {
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
   NATIVE_WRAITH_DAZZLE_TICKS,
 } from '../core-kernels/boneyard-enemy-modifiers.ts'
@@ -129,6 +148,7 @@ import type {
   ProtocolPlayerState,
   ProtocolPlayerSnapshotFrame,
   ProtocolStudentState,
+  NativeSecondarySnapshotState as ProtocolNativeSecondarySnapshotState,
 } from './game-state.ts'
 import {
   boneyardMageLightningPulseFrameIsValid,
@@ -162,7 +182,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 28
+export const GAME_PROTOCOL_VERSION = 29
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -194,6 +214,9 @@ const MAX_REPLICATED_COMPONENTS = 72
 const MAX_PRIMARY_SPELL_PROJECTILES = 4096
 const MAX_PRIMARY_SPELL_TRANSIENTS = 16384
 const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
+const MAX_SECONDARY_ACTORS = 32_768
+const MAX_SECONDARY_EVENTS = 512
+const MAX_SECONDARY_TARGET_EFFECTS = 8_192
 
 const BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES = {
   arrow: 0x7da,
@@ -612,6 +635,14 @@ function nonnegativeFinite(value: unknown, field: string): number {
   return result
 }
 
+function unitInterval(value: unknown, field: string): number {
+  const result = finite(value, field)
+  if (result < 0 || result > 1) {
+    throw new GameProtocolError(`${field} must be between zero and one`)
+  }
+  return result
+}
+
 function integer(value: unknown, field: string): number {
   const result = finite(value, field)
   if (!Number.isInteger(result)) throw new GameProtocolError(`${field} must be an integer`)
@@ -683,6 +714,18 @@ function limitedString(value: unknown, field: string, maximum: number): string {
     )
   }
   return value
+}
+
+function memberString<const T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  members: T,
+): T[number] {
+  const result = limitedString(value, field, 64)
+  if (!(members as readonly string[]).includes(result)) {
+    throw new GameProtocolError(`${field} is not supported`)
+  }
+  return result as T[number]
 }
 
 function validatedPlayerId(value: unknown, field: string): string {
@@ -1416,6 +1459,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'previousThreshold',
     'revision',
     'sorcerorsCharmAvailable',
+    'secondaryBelt',
   ])
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
   const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
@@ -1474,6 +1518,25 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if (learnedSkills.some((entry, index) => index > 0 && entry[0] <= learnedSkills[index - 1]![0])) {
     throw new GameProtocolError(`${field}.learnedSkills must be unique and sorted`)
   }
+  const secondaryBelt = limitedArray(source.secondaryBelt, `${field}.secondaryBelt`, 8)
+    .map((entry, index) => {
+      if (entry === null) return null
+      const skillId = nonnegativeInteger(entry, `${field}.secondaryBelt[${index}]`)
+      if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
+        throw new GameProtocolError(`${field}.secondaryBelt[${index}] is not a secondary ability`)
+      }
+      if ((learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1) {
+        throw new GameProtocolError(`${field}.secondaryBelt[${index}] is not learned`)
+      }
+      return skillId
+    })
+  if (secondaryBelt.length !== 8) {
+    throw new GameProtocolError(`${field}.secondaryBelt must contain exactly eight slots`)
+  }
+  const equipped = secondaryBelt.filter((skillId): skillId is number => skillId !== null)
+  if (new Set(equipped).size !== equipped.length) {
+    throw new GameProtocolError(`${field}.secondaryBelt must not contain duplicates`)
+  }
   const activeWeldBuildId = source.activeWeldBuildId === null
     ? null
     : integer(source.activeWeldBuildId, `${field}.activeWeldBuildId`)
@@ -1527,6 +1590,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       source.sorcerorsCharmAvailable,
       `${field}.sorcerorsCharmAvailable`,
     ),
+    secondaryBelt,
   }
 }
 
@@ -2131,7 +2195,8 @@ function validatedBarrierPlayerIds(
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run',
+    'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -2160,6 +2225,11 @@ function gameSnapshot(value: unknown): GameSnapshot {
   validateGameRunWorld(run, world, 'snapshot')
   const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'snapshot.primarySpells')
+  const secondaryAbilities = nativeSecondaryState(
+    source.secondaryAbilities,
+    'snapshot.secondaryAbilities',
+    players,
+  )
   if (world.kind === 'hub') {
     const participantIds = Object.keys(world.participants).sort()
     const playerIds = Object.keys(players).sort()
@@ -2177,6 +2247,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
     levelUpBarrier,
     players,
     primarySpells,
+    secondaryAbilities,
     run,
     tick,
     world,
@@ -2186,7 +2257,8 @@ function gameSnapshot(value: unknown): GameSnapshot {
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run', 'tick', 'world',
+    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run',
+    'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
   if (Object.keys(rawPlayers).length > MAX_PLAYERS) {
@@ -2212,12 +2284,18 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   validateGameRunWorld(run, world, 'frame')
   const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'frame.primarySpells')
+  const secondaryAbilities = nativeSecondaryState(
+    source.secondaryAbilities,
+    'frame.secondaryAbilities',
+    players,
+  )
   if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
   return {
     hostPlayerId,
     levelUpBarrier,
     players,
     primarySpells,
+    secondaryAbilities,
     run,
     tick,
     world,
@@ -2312,6 +2390,439 @@ function validateGameRunWorld(
     }
   } else if (world.kind !== 'hub') {
     throw new GameProtocolError(`${field}.run requires a Hub world outside a run`)
+  }
+}
+
+function nativeSecondaryState(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
+): ProtocolNativeSecondarySnapshotState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'actors', 'events', 'nextActorId', 'nextEventId', 'players', 'targetEffects',
+  ])
+  const actors = limitedArray(source.actors, `${field}.actors`, MAX_SECONDARY_ACTORS)
+    .map((actor, index) => nativeSecondaryActor(actor, `${field}.actors[${index}]`, players))
+  uniqueAscendingIds(actors, `${field}.actors`)
+  const events = limitedArray(source.events, `${field}.events`, MAX_SECONDARY_EVENTS)
+    .map((event, index) => nativeSecondaryEvent(event, `${field}.events[${index}]`))
+  uniqueAscendingIds(events, `${field}.events`)
+  const rawPlayerStates = record(source.players, `${field}.players`)
+  if (Object.keys(rawPlayerStates).length > MAX_PLAYERS) {
+    throw new GameProtocolError(`${field}.players may contain at most ${MAX_PLAYERS} entries`)
+  }
+  const playerStates: Record<string, NativeSecondaryPlayerState> = {}
+  for (const [rawPlayerId, state] of Object.entries(rawPlayerStates)) {
+    const playerId = validatedPlayerId(rawPlayerId, `${field} player id`)
+    if (!players[playerId]) {
+      throw new GameProtocolError(`${field}.players.${playerId} has no player snapshot`)
+    }
+    playerStates[playerId] = nativeSecondaryPlayer(state, `${field}.players.${playerId}`)
+  }
+  const targetEffects = limitedArray(
+    source.targetEffects,
+    `${field}.targetEffects`,
+    MAX_SECONDARY_TARGET_EFFECTS,
+  ).map((effect, index) => nativeSecondaryTargetEffectState(
+    effect,
+    `${field}.targetEffects[${index}]`,
+  ))
+  const effectKeys = new Set<string>()
+  for (const effect of targetEffects) {
+    const key = `${effect.worldKey}\u0000${effect.targetId}`
+    if (effectKeys.has(key)) {
+      throw new GameProtocolError(`${field}.targetEffects must have unique world/target keys`)
+    }
+    effectKeys.add(key)
+  }
+  const nextActorId = positiveInteger(source.nextActorId, `${field}.nextActorId`)
+  const nextEventId = positiveInteger(source.nextEventId, `${field}.nextEventId`)
+  if (actors.some(({ id }) => id >= nextActorId)) {
+    throw new GameProtocolError(`${field}.nextActorId is not ahead of live actors`)
+  }
+  if (events.some(({ eventId }) => eventId >= nextEventId)) {
+    throw new GameProtocolError(`${field}.nextEventId is not ahead of retained events`)
+  }
+  return {
+    actors,
+    events,
+    nextActorId,
+    nextEventId,
+    players: playerStates,
+    targetEffects,
+  }
+}
+
+function nativeSecondaryActor(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
+): NativeSecondaryActorState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'ageTicks', 'alpha', 'damage', 'enhanced', 'endpoint', 'frame', 'freezeTicks',
+    'golem', 'hitTargetIds', 'id', 'kind', 'lifetimeTicks', 'ownerId', 'phase', 'position',
+    'midpoint', 'presentationRng',
+    'quantity', 'radius', 'rank', 'rotationRadians', 'scale', 'skillId',
+    'slowFactor', 'targetId', 'variant', 'velocity', 'worldKey',
+  ])
+  const kind = memberString(
+    source.kind,
+    `${field}.kind`,
+    NATIVE_SECONDARY_ACTOR_KINDS,
+  ) as NativeSecondaryActorKind
+  const ownerId = validatedPlayerId(source.ownerId, `${field}.ownerId`)
+  if (!players[ownerId]) throw new GameProtocolError(`${field}.ownerId has no player snapshot`)
+  const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
+  const lifetimeTicks = positiveInteger(source.lifetimeTicks, `${field}.lifetimeTicks`)
+  if (ageTicks >= lifetimeTicks) {
+    throw new GameProtocolError(`${field}.ageTicks is outside the live lifetime`)
+  }
+  const hitTargetIds = limitedArray(
+    source.hitTargetIds,
+    `${field}.hitTargetIds`,
+    MAX_PRIMARY_SPELL_HIT_TARGETS,
+  ).map((targetId, index) => nonnegativeInteger(
+    targetId,
+    `${field}.hitTargetIds[${index}]`,
+  ))
+  const duplicateHitTargetIds = new Set(hitTargetIds).size !== hitTargetIds.length
+  const unsortedHitTargetIds = hitTargetIds.some((id, index) => (
+    index > 0 && id < hitTargetIds[index - 1]!
+  ))
+  if (duplicateHitTargetIds || (kind !== 'earthquake' && unsortedHitTargetIds)) {
+    throw new GameProtocolError(
+      `${field}.hitTargetIds must be unique; only Earthquake preserves pointer-list order`,
+    )
+  }
+  const targetId = source.targetId === null
+    ? null
+    : nonnegativeInteger(source.targetId, `${field}.targetId`)
+  const golem = source.golem === null
+    ? null
+    : nativeSecondaryGolemState(source.golem, `${field}.golem`)
+  if ((kind === 'golem') !== (golem !== null)) {
+    throw new GameProtocolError(`${field}.golem must exist exactly for Golem actors`)
+  }
+  return {
+    ageTicks,
+    alpha: nonnegativeFinite(source.alpha, `${field}.alpha`),
+    damage: nonnegativeFinite(source.damage, `${field}.damage`),
+    enhanced: boolean(source.enhanced, `${field}.enhanced`),
+    endpoint: vector(source.endpoint, `${field}.endpoint`),
+    frame: nonnegativeFinite(source.frame, `${field}.frame`),
+    freezeTicks: nonnegativeInteger(source.freezeTicks, `${field}.freezeTicks`),
+    golem,
+    hitTargetIds,
+    id: positiveInteger(source.id, `${field}.id`),
+    kind,
+    lifetimeTicks,
+    midpoint: vector(source.midpoint, `${field}.midpoint`),
+    ownerId,
+    phase: finite(source.phase, `${field}.phase`),
+    position: vector(source.position, `${field}.position`),
+    presentationRng: source.presentationRng === null
+      ? null
+      : nativeRngState(source.presentationRng, `${field}.presentationRng`),
+    quantity: finite(source.quantity, `${field}.quantity`),
+    radius: nonnegativeFinite(source.radius, `${field}.radius`),
+    rank: positiveInteger(source.rank, `${field}.rank`),
+    rotationRadians: finite(source.rotationRadians, `${field}.rotationRadians`),
+    scale: nonnegativeFinite(source.scale, `${field}.scale`),
+    skillId: nativeSecondarySkillId(source.skillId, `${field}.skillId`),
+    slowFactor: finite(source.slowFactor, `${field}.slowFactor`),
+    targetId,
+    variant: nonnegativeInteger(source.variant, `${field}.variant`),
+    velocity: vector(source.velocity, `${field}.velocity`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function nativeRngState(value: unknown, field: string): NativeRngState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['indexA', 'indexB', 'words'])
+  const words = limitedArray(source.words, `${field}.words`, 55).map((word, index) => (
+    boundedInteger(word, `${field}.words[${index}]`, 0, 0x3fffffff)
+  ))
+  if (words.length !== 55) {
+    throw new GameProtocolError(`${field}.words must contain 55 entries`)
+  }
+  return {
+    indexA: boundedInteger(source.indexA, `${field}.indexA`, 0, 54),
+    indexB: boundedInteger(source.indexB, `${field}.indexB`, 0, 54),
+    words,
+  }
+}
+
+function nativeSecondaryGolemState(
+  value: unknown,
+  field: string,
+): NativeSecondaryGolemState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'actionDurationTicks', 'actionTick', 'currentHealth', 'damageMaximum',
+    'iron', 'maximumHealth', 'orbitDirection', 'orbitHeadingRadians', 'phase',
+    'poseVariant', 'provokeRollBound', 'reflectFactor',
+    'targetPollTicksRemaining',
+  ])
+  const phase = memberString(
+    source.phase,
+    `${field}.phase`,
+    ['active', 'assembly', 'attack', 'provoke'] as const,
+  )
+  const actionDurationTicks = boundedInteger(
+    source.actionDurationTicks,
+    `${field}.actionDurationTicks`,
+    0,
+    151,
+  )
+  const actionTick = nonnegativeInteger(source.actionTick, `${field}.actionTick`)
+  if (actionTick > actionDurationTicks) {
+    throw new GameProtocolError(`${field}.actionTick exceeds its duration`)
+  }
+  const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
+  const currentHealth = positiveFinite(source.currentHealth, `${field}.currentHealth`)
+  if (currentHealth > maximumHealth) {
+    throw new GameProtocolError(`${field}.currentHealth exceeds maximumHealth`)
+  }
+  const orbitDirection = finite(source.orbitDirection, `${field}.orbitDirection`)
+  if (orbitDirection < -1 || orbitDirection > 1) {
+    throw new GameProtocolError(`${field}.orbitDirection must be within [-1,1]`)
+  }
+  const orbitHeadingRadians = source.orbitHeadingRadians === null
+    ? null
+    : finite(source.orbitHeadingRadians, `${field}.orbitHeadingRadians`)
+  return {
+    actionDurationTicks,
+    actionTick,
+    currentHealth,
+    damageMaximum: nonnegativeFinite(source.damageMaximum, `${field}.damageMaximum`),
+    iron: boolean(source.iron, `${field}.iron`),
+    maximumHealth,
+    orbitDirection,
+    orbitHeadingRadians,
+    phase,
+    poseVariant: boundedInteger(source.poseVariant, `${field}.poseVariant`, 0, 1) as 0 | 1,
+    provokeRollBound: boundedInteger(source.provokeRollBound, `${field}.provokeRollBound`, 0, 1_200),
+    reflectFactor: unitInterval(source.reflectFactor, `${field}.reflectFactor`),
+    targetPollTicksRemaining: boundedInteger(
+      source.targetPollTicksRemaining,
+      `${field}.targetPollTicksRemaining`,
+      0,
+      50,
+    ),
+  }
+}
+
+function nativeSecondaryEvent(
+  value: unknown,
+  field: string,
+): NativeSecondaryEventState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'actorId', 'cue', 'eventId', 'kind', 'ownerId', 'pitch', 'position',
+    'screenFlash', 'skillId', 'tick', 'worldKey',
+  ])
+  const cue = source.cue === null
+    ? null
+    : memberString(
+        source.cue,
+        `${field}.cue`,
+        NATIVE_SECONDARY_AUDIO_CUES,
+      ) as NativeSecondaryAudioCue
+  const kind = memberString(
+    source.kind,
+    `${field}.kind`,
+    NATIVE_SECONDARY_EVENT_KINDS,
+  ) as NativeSecondaryEventKind
+  return {
+    actorId: source.actorId === null
+      ? null
+      : positiveInteger(source.actorId, `${field}.actorId`),
+    cue,
+    eventId: positiveInteger(source.eventId, `${field}.eventId`),
+    kind,
+    ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
+    pitch: positiveFinite(source.pitch, `${field}.pitch`),
+    position: vector(source.position, `${field}.position`),
+    screenFlash: source.screenFlash === null
+      ? null
+      : nativeSecondaryScreenFlash(source.screenFlash, `${field}.screenFlash`),
+    skillId: nativeSecondarySkillId(source.skillId, `${field}.skillId`),
+    tick: nonnegativeInteger(source.tick, `${field}.tick`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function nativeSecondaryScreenFlash(
+  value: unknown,
+  field: string,
+): NativeSecondaryScreenFlashState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'alpha', 'blue', 'decayPerTick', 'green', 'pointAttenuated', 'red',
+  ])
+  const decayPerTick = positiveFinite(source.decayPerTick, `${field}.decayPerTick`)
+  if (decayPerTick > 1) {
+    throw new GameProtocolError(`${field}.decayPerTick must be between zero and one`)
+  }
+  return {
+    alpha: unitInterval(source.alpha, `${field}.alpha`),
+    blue: unitInterval(source.blue, `${field}.blue`),
+    decayPerTick,
+    green: unitInterval(source.green, `${field}.green`),
+    pointAttenuated: boolean(source.pointAttenuated, `${field}.pointAttenuated`),
+    red: unitInterval(source.red, `${field}.red`),
+  }
+}
+
+function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPlayerState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'castSequence', 'castSpinTicksRemaining', 'cooldownTicksBySkill', 'firewalker',
+    'cooldownMaximumTicksBySkill',
+    'fizzleSequence', 'heldSlot', 'lastSkillId', 'magicShieldAbsorb',
+    'magicShieldExplosionDamage',
+    'magicShieldMaximum', 'magicShieldPulseTicks', 'mindstar', 'planeOrbHeld',
+    'planewalkerTicksRemaining', 'regenerate', 'reservedMana',
+    'stoneskinTicksRemaining',
+  ])
+  const cooldownMaximumTicksBySkill = limitedArray(
+    source.cooldownMaximumTicksBySkill,
+    `${field}.cooldownMaximumTicksBySkill`,
+    83,
+  ).map((ticks, index) => nonnegativeInteger(
+    ticks,
+    `${field}.cooldownMaximumTicksBySkill[${index}]`,
+  ))
+  if (cooldownMaximumTicksBySkill.length !== 83) {
+    throw new GameProtocolError(`${field}.cooldownMaximumTicksBySkill must contain 83 rows`)
+  }
+  const cooldownTicksBySkill = limitedArray(
+    source.cooldownTicksBySkill,
+    `${field}.cooldownTicksBySkill`,
+    83,
+  ).map((ticks, index) => nonnegativeInteger(
+    ticks,
+    `${field}.cooldownTicksBySkill[${index}]`,
+  ))
+  if (cooldownTicksBySkill.length !== 83) {
+    throw new GameProtocolError(`${field}.cooldownTicksBySkill must contain 83 rows`)
+  }
+  if (cooldownTicksBySkill.some((ticks, index) => (
+    ticks > cooldownMaximumTicksBySkill[index]!
+  ))) {
+    throw new GameProtocolError(`${field}.cooldownTicksBySkill exceeds a capacity`)
+  }
+  const heldSlot = source.heldSlot === null
+    ? null
+    : nonnegativeInteger(source.heldSlot, `${field}.heldSlot`)
+  if (heldSlot !== null && heldSlot >= 8) {
+    throw new GameProtocolError(`${field}.heldSlot is outside the secondary belt`)
+  }
+  const lastSkillId = source.lastSkillId === null
+    ? null
+    : nativeSecondarySkillId(source.lastSkillId, `${field}.lastSkillId`)
+  const magicShieldAbsorb = nonnegativeFinite(
+    source.magicShieldAbsorb,
+    `${field}.magicShieldAbsorb`,
+  )
+  const magicShieldMaximum = nonnegativeFinite(
+    source.magicShieldMaximum,
+    `${field}.magicShieldMaximum`,
+  )
+  if (magicShieldAbsorb > magicShieldMaximum) {
+    throw new GameProtocolError(`${field}.magicShieldAbsorb exceeds its maximum`)
+  }
+  return {
+    castSequence: nonnegativeInteger(source.castSequence, `${field}.castSequence`),
+    castSpinTicksRemaining: nonnegativeInteger(
+      source.castSpinTicksRemaining,
+      `${field}.castSpinTicksRemaining`,
+    ),
+    cooldownMaximumTicksBySkill,
+    cooldownTicksBySkill,
+    firewalker: boolean(source.firewalker, `${field}.firewalker`),
+    fizzleSequence: nonnegativeInteger(source.fizzleSequence, `${field}.fizzleSequence`),
+    heldSlot,
+    lastSkillId,
+    magicShieldAbsorb,
+    magicShieldExplosionDamage: nonnegativeFinite(
+      source.magicShieldExplosionDamage,
+      `${field}.magicShieldExplosionDamage`,
+    ),
+    magicShieldMaximum,
+    magicShieldPulseTicks: nonnegativeInteger(
+      source.magicShieldPulseTicks,
+      `${field}.magicShieldPulseTicks`,
+    ),
+    mindstar: boolean(source.mindstar, `${field}.mindstar`),
+    planeOrbHeld: boolean(source.planeOrbHeld, `${field}.planeOrbHeld`),
+    planewalkerTicksRemaining: nonnegativeInteger(
+      source.planewalkerTicksRemaining,
+      `${field}.planewalkerTicksRemaining`,
+    ),
+    regenerate: boolean(source.regenerate, `${field}.regenerate`),
+    reservedMana: nonnegativeFinite(source.reservedMana, `${field}.reservedMana`),
+    stoneskinTicksRemaining: nonnegativeInteger(
+      source.stoneskinTicksRemaining,
+      `${field}.stoneskinTicksRemaining`,
+    ),
+  }
+}
+
+function nativeSecondaryTargetEffectState(
+  value: unknown,
+  field: string,
+): NativeSecondaryTargetEffectState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'coldSlowTicks', 'dazzleMaximumTicks', 'dazzleTicks', 'disruptedTicks',
+    'fleeTicks', 'prismaticTicks', 'targetId', 'timeScale', 'weakenFactor',
+    'worldKey',
+  ])
+  const dazzleMaximumTicks = nonnegativeInteger(
+    source.dazzleMaximumTicks,
+    `${field}.dazzleMaximumTicks`,
+  )
+  const dazzleTicks = nonnegativeInteger(source.dazzleTicks, `${field}.dazzleTicks`)
+  if (dazzleTicks > dazzleMaximumTicks) {
+    throw new GameProtocolError(`${field}.dazzleTicks exceeds its maximum`)
+  }
+  return {
+    coldSlowTicks: nonnegativeInteger(source.coldSlowTicks, `${field}.coldSlowTicks`),
+    dazzleMaximumTicks,
+    dazzleTicks,
+    disruptedTicks: nonnegativeInteger(source.disruptedTicks, `${field}.disruptedTicks`),
+    fleeTicks: nonnegativeInteger(source.fleeTicks, `${field}.fleeTicks`),
+    prismaticTicks: nonnegativeInteger(source.prismaticTicks, `${field}.prismaticTicks`),
+    targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
+    timeScale: unitInterval(source.timeScale, `${field}.timeScale`),
+    weakenFactor: unitInterval(source.weakenFactor, `${field}.weakenFactor`),
+    worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
+  }
+}
+
+function nativeSecondarySkillId(value: unknown, field: string): NativeSecondaryAbilityId {
+  const skillId = nonnegativeInteger(value, field)
+  if (!(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)) {
+    throw new GameProtocolError(`${field} is not a native secondary ability`)
+  }
+  return skillId as NativeSecondaryAbilityId
+}
+
+function uniqueAscendingIds(
+  values: readonly Readonly<{ id?: number; eventId?: number }>[],
+  field: string,
+): void {
+  let previous = 0
+  for (const value of values) {
+    const id = value.id ?? value.eventId
+    if (id === undefined || id <= previous) {
+      throw new GameProtocolError(`${field} IDs must be unique and sorted`)
+    }
+    previous = id
   }
 }
 

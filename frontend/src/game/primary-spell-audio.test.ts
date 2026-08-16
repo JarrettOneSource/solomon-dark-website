@@ -9,6 +9,12 @@ import {
 import {
   PRIMARY_CAST_ETHER_EMISSION_TICK,
 } from './core-kernels/primary-spells.ts'
+import type {
+  NativeSecondaryActorKind,
+  NativeSecondaryActorState,
+  NativeSecondaryAudioCue,
+  NativeSecondaryEventState,
+} from './core-kernels/native-secondary-abilities.ts'
 import {
   createGameSimulation,
   getPlayerCharacter,
@@ -17,7 +23,11 @@ import {
   type GameSimulationState,
 } from './core-server/game-simulation.ts'
 import type { GameAudioDirector, PlaySoundOptions } from './game-audio-director.ts'
-import type { GameLoopCue, GameSoundCue } from './game-audio-native.ts'
+import type {
+  GameLoopCue,
+  GameSoundCue,
+  SecondaryStreamCue,
+} from './game-audio-native.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 
@@ -29,10 +39,17 @@ class RecordingAudio {
   readonly starts: Array<[GameLoopCue, string]> = []
   readonly startOptions: PlaySoundOptions[] = []
   readonly stops: Array<[GameLoopCue, string]> = []
+  readonly streams: SecondaryStreamCue[] = []
+  readonly streamOptions: PlaySoundOptions[] = []
 
   playSound(cue: GameSoundCue, options: PlaySoundOptions = {}): void {
     this.sounds.push(cue)
     this.soundOptions.push(options)
+  }
+
+  playStream(cue: SecondaryStreamCue, options: PlaySoundOptions = {}): void {
+    this.streams.push(cue)
+    this.streamOptions.push(options)
   }
 
   startLoop(cue: GameLoopCue, owner: string, options: PlaySoundOptions = {}): void {
@@ -53,6 +70,44 @@ function simulation(element: WizardElement): GameSimulationState {
       element,
     },
   })
+}
+
+function secondaryActor(
+  kind: NativeSecondaryActorKind,
+  id: number,
+  ownerId: string,
+  initial: ReturnType<typeof createGameSnapshot>,
+): NativeSecondaryActorState {
+  return {
+    ageTicks: 1,
+    alpha: 1,
+    damage: 1,
+    enhanced: false,
+    endpoint: { x: 0, y: 0 },
+    frame: 0,
+    freezeTicks: 0,
+    golem: null,
+    hitTargetIds: [],
+    id,
+    kind,
+    lifetimeTicks: 100,
+    midpoint: { x: 0, y: 0 },
+    ownerId,
+    phase: 0,
+    position: initial.players[PLAYER_ID].position,
+    presentationRng: null,
+    quantity: 0,
+    radius: 1,
+    rank: 1,
+    rotationRadians: 0,
+    scale: 1,
+    skillId: kind === 'acid-rain' ? 72 : kind === 'comet' ? 76 : 11,
+    slowFactor: 0,
+    targetId: null,
+    variant: 0,
+    velocity: { x: 0, y: 0 },
+    worldKey: 'hub:courtyard',
+  }
 }
 
 function castInput(state: GameSimulationState, primary: boolean): PlayerCharacterInput {
@@ -397,5 +452,217 @@ test('stops Earth gathering at full charge without ending the held cast', () => 
   assert.deepEqual(audio.starts, [['gather-rocks-loop', 'primary-player:caster']])
   assert.deepEqual(audio.stops, [['gather-rocks-loop', 'primary-player:caster']])
   assert.equal(audio.starts.some(([cue]) => cue === 'rolling-stone-loop'), false)
+  synchronizer.destroy()
+})
+
+test('Magic Trap ElectricBurn starts only after its first native update and stops on retirement', () => {
+  const state = simulation('air')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const actor: NativeSecondaryActorState = {
+    ageTicks: 0,
+    alpha: 0,
+    damage: 1,
+    enhanced: false,
+    endpoint: { x: 0, y: 0 },
+    frame: 0,
+    freezeTicks: 0,
+    golem: null,
+    hitTargetIds: [],
+    id: 1,
+    kind: 'electric-burn',
+    lifetimeTicks: 100,
+    midpoint: { x: 0, y: 0 },
+    ownerId: PLAYER_ID,
+    phase: 0,
+    position: initial.players[PLAYER_ID].position,
+    presentationRng: null,
+    quantity: 0,
+    radius: 1,
+    rank: 1,
+    rotationRadians: 0,
+    scale: 1,
+    skillId: 50,
+    slowFactor: 0,
+    targetId: 33,
+    variant: 2,
+    velocity: { x: 0, y: 0 },
+    worldKey: 'hub:courtyard',
+  }
+  const born = {
+    ...initial,
+    secondaryAbilities: {
+      ...initial.secondaryAbilities,
+      actors: [actor],
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(born)
+  assert.deepEqual(audio.starts, [])
+
+  const live = {
+    ...born,
+    secondaryAbilities: {
+      ...born.secondaryAbilities,
+      actors: [{ ...actor, ageTicks: 1, alpha: 0.5 }],
+    },
+    tick: born.tick + 1,
+  }
+  synchronizer.update(live)
+  assert.deepEqual(audio.starts, [[
+    'electric-loop',
+    'secondary-player:caster',
+  ]])
+
+  synchronizer.update({
+    ...live,
+    secondaryAbilities: { ...live.secondaryAbilities, actors: [] },
+    tick: live.tick + 1,
+  })
+  assert.deepEqual(audio.stops, [[
+    'electric-loop',
+    'secondary-player:caster',
+  ]])
+  synchronizer.destroy()
+})
+
+test('secondary one-shots and streams consume new authoritative events once with pitch and attenuation', () => {
+  const state = simulation('air')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const previous = {
+    ...initial,
+    secondaryAbilities: { ...initial.secondaryAbilities, nextEventId: 20 },
+  }
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    previous,
+  )
+  const event = (
+    eventId: number,
+    cue: NativeSecondaryAudioCue,
+    pitch: number,
+    worldKey = 'hub:courtyard',
+  ): NativeSecondaryEventState => ({
+    actorId: null,
+    cue,
+    eventId,
+    kind: 'pulse',
+    ownerId: PLAYER_ID,
+    pitch,
+    position: initial.players[PLAYER_ID].position,
+    screenFlash: null,
+    skillId: 48,
+    tick: initial.tick + 1,
+    worldKey,
+  })
+  const snapshot = {
+    ...previous,
+    secondaryAbilities: {
+      ...previous.secondaryAbilities,
+      events: [
+        event(19, 'teleport', 0.5),
+        event(20, 'teleport', 0.75),
+        event(21, 'planewalker-on', 1.25),
+        event(22, 'rainfall-loop', 1),
+        event(23, 'magic-circle', 1, 'hub:library'),
+      ],
+      nextEventId: 24,
+    },
+    tick: previous.tick + 1,
+  }
+
+  synchronizer.update(snapshot)
+  synchronizer.update(snapshot)
+  assert.deepEqual(audio.sounds, ['teleport'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 0.75, volume: 1 }])
+  assert.deepEqual(audio.streams, ['planewalker-on'])
+  assert.deepEqual(audio.streamOptions, [{ playbackRate: 1.25, volume: 1 }])
+  synchronizer.destroy()
+})
+
+test('every persistent secondary audio owner starts and retires its exact native loop', () => {
+  const state = simulation('air')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const kinds = [
+    ['leviathan', 'leviathan'],
+    ['ether-drain', 'drain'],
+    ['moving-fire', 'moving-fire'],
+    ['fire-patch', 'fire-patch'],
+    ['storm-cloud', 'storm'],
+    ['acid-rain', 'acid'],
+    ['earthquake', 'earthquake'],
+    ['comet', 'comet'],
+    ['electric-burn', 'electric'],
+  ] as const satisfies readonly (readonly [NativeSecondaryActorKind, string])[]
+  const live = {
+    ...initial,
+    secondaryAbilities: {
+      ...initial.secondaryAbilities,
+      actors: kinds.map(([kind, ownerId], index) => (
+        secondaryActor(kind, index + 1, ownerId, initial)
+      )),
+      players: {
+        ...initial.secondaryAbilities.players,
+        [PLAYER_ID]: {
+          ...initial.secondaryAbilities.players[PLAYER_ID],
+          planewalkerTicksRemaining: 1,
+        },
+      },
+    },
+    tick: initial.tick + 1,
+  }
+  synchronizer.update(live)
+
+  const expected = [
+    'comet-loop:secondary-player:comet',
+    'earthquake-loop:secondary-player:earthquake',
+    'electric-loop:secondary-player:electric',
+    'low-fire-loop:secondary-player:fire-patch',
+    'low-fire-loop:secondary-player:moving-fire',
+    'plane-cross-loop:secondary-player:caster',
+    'plane-cross-loop:secondary-player:drain',
+    'plane-cross-loop:secondary-player:leviathan',
+    'rainfall-loop:secondary-player:acid',
+    'rainfall-loop:secondary-player:storm',
+    'steady-wind-loop:secondary-player:drain',
+    'steady-wind-loop:secondary-player:storm',
+  ].sort()
+  assert.deepEqual(
+    audio.starts.map(([cue, owner]) => `${cue}:${owner}`).sort(),
+    expected,
+  )
+
+  synchronizer.update({
+    ...live,
+    secondaryAbilities: {
+      ...live.secondaryAbilities,
+      actors: [],
+      players: {
+        ...live.secondaryAbilities.players,
+        [PLAYER_ID]: {
+          ...live.secondaryAbilities.players[PLAYER_ID],
+          planewalkerTicksRemaining: 0,
+        },
+      },
+    },
+    tick: live.tick + 1,
+  })
+  assert.deepEqual(
+    audio.stops.map(([cue, owner]) => `${cue}:${owner}`).sort(),
+    expected,
+  )
   synchronizer.destroy()
 })

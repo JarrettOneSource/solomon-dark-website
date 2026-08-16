@@ -10,6 +10,7 @@ import type {
 import { playerExperienceProgress } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
+import SecondaryAbilityBelt from './SecondaryAbilityBelt.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 
 interface GameHudProps {
@@ -121,9 +122,36 @@ export default function GameHud({
     const next = snapshot.players[playerId]?.economy
     if (next) setEconomy((current) => current.revision === next.revision ? current : next)
   }), [playerId, subscribeSnapshot])
+  const [secondaryHud, setSecondaryHud] = useState(() => ({
+    belt: initialSnapshot.players[playerId]!.progression.secondaryBelt,
+    playerState: initialSnapshot.secondaryAbilities.players[playerId],
+  }))
+  useEffect(() => subscribeSnapshot((snapshot) => {
+    const player = snapshot.players[playerId]
+    if (!player) return
+    setSecondaryHud({
+      belt: player.progression.secondaryBelt,
+      playerState: snapshot.secondaryAbilities.players[playerId],
+    })
+  }), [playerId, subscribeSnapshot])
   const xpProgress = playerExperienceProgress(progression)
-  const healthProgress = progression.currentHealth / progression.maximumHealth
-  const manaProgress = progression.currentMana / progression.maximumMana
+  const healthProgress = clampUnit(progression.currentHealth / progression.maximumHealth) ** 2
+  const manaProgress = clampUnit(progression.currentMana / progression.maximumMana)
+  const shieldProgress = secondaryHud.playerState === undefined
+    ? 0
+    : clampUnit(
+        secondaryHud.playerState.magicShieldAbsorb
+          / secondaryHud.playerState.magicShieldMaximum,
+      )
+  const reserveProgress = secondaryHud.playerState === undefined
+    ? 0
+    : clampUnit(secondaryHud.playerState.reservedMana / progression.maximumMana)
+  const healthLayers = [
+    { className: 'hub-hud-meter-fill', progress: healthProgress, shield: false },
+    ...(shieldProgress > 0
+      ? [{ className: 'hub-hud-meter-fill hub-hud-meter-shield', progress: shieldProgress, shield: true }]
+      : []),
+  ].sort((left, right) => left.progress - right.progress)
   const healthPotions = inventoryQuantity(economy, 'health-potion')
   const manaPotions = inventoryQuantity(economy, 'mana-potion')
   return (
@@ -142,29 +170,55 @@ export default function GameHud({
       </div>
       <div className="hub-hud-meters">
         <div className="hub-hud-meter hub-hud-meter-health">
-          <img
-            src={hub.hud.barRed}
-            style={{ clipPath: `inset(0 ${(1 - healthProgress) * 100}% 0 0)` }}
-            alt={`Health ${progression.currentHealth} of ${progression.maximumHealth}`}
-          />
+          {healthLayers.map((layer) => (
+            <img
+              className={layer.className}
+              key={layer.shield ? 'shield' : 'health'}
+              src={hub.hud.barRed}
+              style={{ clipPath: `inset(0 ${(1 - layer.progress) * 100}% 0 0)` }}
+              alt={layer.shield
+                ? `Magic shield ${secondaryHud.playerState!.magicShieldAbsorb} of ${secondaryHud.playerState!.magicShieldMaximum}`
+                : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
+            />
+          ))}
         </div>
         <div className="hub-hud-meter hub-hud-meter-mana">
           <img
+            className="hub-hud-meter-fill"
             src={hub.hud.barBlue}
             style={{ clipPath: `inset(0 ${(1 - manaProgress) * 100}% 0 0)` }}
             alt={`Mana ${progression.currentMana} of ${progression.maximumMana}`}
           />
+          {reserveProgress > 0 ? (
+            <span
+              className="hub-hud-mana-reserve"
+              style={{
+                backgroundImage: `url("${hub.hud.manaReserve}")`,
+                width: `${reserveProgress * 100}px`,
+              }}
+              aria-label={`${secondaryHud.playerState!.reservedMana} mana reserved`}
+            />
+          ) : null}
         </div>
       </div>
+      <svg className="hub-hud-native-filters" aria-hidden>
+        <filter id="hub-hud-magic-shield-tint" colorInterpolationFilters="sRGB">
+          <feColorMatrix
+            type="matrix"
+            values="0.5 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"
+          />
+        </filter>
+      </svg>
       <img className="hub-hud-primary" src={hub.primary[element]} alt={`${element} primary spell`} />
       {mode === 'hub' ? (
         <img className="hub-hud-help" src={hub.hud.help} alt="Help" />
       ) : null}
 
-      <div className="hub-hud-secondary" aria-label="Acid Rain, right mouse button">
-        <img className="hub-hud-secondary-ability" src={hub.hud.secondaryAcidRain} alt="Acid Rain" />
-        <img className="hub-hud-secondary-mouse" src={hub.hud.mouseRight} alt="Right mouse button" />
-      </div>
+      <SecondaryAbilityBelt
+        belt={secondaryHud.belt}
+        mode={mode}
+        playerState={secondaryHud.playerState}
+      />
 
       {mode === 'hub' ? (
         <div className="hub-hud-loadout" aria-label="Equipped spells">
@@ -235,4 +289,8 @@ function inventoryQuantity(
   return economy.backpack.reduce((total, item) => (
     item.kind === kind ? total + item.quantity : total
   ), 0)
+}
+
+function clampUnit(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
 }

@@ -1,6 +1,6 @@
 // Installs Pixi's static CSP-safe sync paths; this module removes the need for eval.
 import 'pixi.js/unsafe-eval'
-import { Application, Sprite, Texture } from 'pixi.js'
+import { Application, Graphics, Sprite, Texture } from 'pixi.js'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import {
   HUB_CAMERA_SCALE,
@@ -18,6 +18,7 @@ import {
 import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
 import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS } from './level-up-presentation.ts'
+import { NativeSecondaryScreenFeedbackPresentation } from './native-secondary-presentation.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -42,6 +43,9 @@ interface HubFrameDiagnostics {
   playerCount: number
   playerAttachmentPose: number
   playerHeadingIndex: number
+  playerMagicShieldScale: number
+  playerMagicShieldVisible: boolean
+  playerMaterialTint: number
   playerMoving: boolean
   playerPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
@@ -49,6 +53,11 @@ interface HubFrameDiagnostics {
   playerY: number
   primarySpellCount: number
   primarySpellKinds: readonly string[]
+  secondaryAbilityCount: number
+  secondaryAbilityKinds: readonly string[]
+  secondaryAbilityPrimitiveCount: number
+  secondaryScreenFlashAlpha: number
+  secondaryScreenFlashColor: number
   pooledStudentViewCount: number
   southernArchitectureCount: number
   southernArtRenderable: boolean
@@ -124,11 +133,25 @@ export async function createHubWorldRenderer(
     textures,
     options.initialSnapshot.tick,
     traderAnimationSeed,
+    application.renderer,
   )
-  const privateRoomScene = new HubPrivateRoomScene(textures, traderAnimationSeed)
+  const privateRoomScene = new HubPrivateRoomScene(
+    textures,
+    traderAnimationSeed,
+    application.renderer,
+  )
   courtyardScene.stage.scale.set(HUB_CAMERA_SCALE)
   privateRoomScene.world.scale.set(HUB_CAMERA_SCALE)
   application.stage.addChild(courtyardScene.stage, privateRoomScene.world)
+  const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
+  secondaryScreenFlash.eventMode = 'none'
+  secondaryScreenFlash.visible = false
+  drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
+  application.stage.addChild(secondaryScreenFlash)
+  const secondaryScreenFeedback = new Map<
+    HubRegionId,
+    NativeSecondaryScreenFeedbackPresentation
+  >()
   const fadeCover = new Sprite(Texture.WHITE)
   fadeCover.tint = 0x000000
   fadeCover.width = viewport.width
@@ -172,6 +195,9 @@ export async function createHubWorldRenderer(
     playerCount: Object.keys(options.initialSnapshot.players).length,
     playerAttachmentPose: 0,
     playerHeadingIndex: 0,
+    playerMagicShieldScale: 1.5,
+    playerMagicShieldVisible: false,
+    playerMaterialTint: 0xffffff,
     playerMoving: false,
     playerPositions: {},
     playerWalkPose: 0,
@@ -179,6 +205,11 @@ export async function createHubWorldRenderer(
     playerY: Number.NaN,
     primarySpellCount: 0,
     primarySpellKinds: [],
+    secondaryAbilityCount: 0,
+    secondaryAbilityKinds: [],
+    secondaryAbilityPrimitiveCount: 0,
+    secondaryScreenFlashAlpha: 0,
+    secondaryScreenFlashColor: 0xffffff,
     pooledStudentViewCount: 0,
     southernArchitectureCount: courtyardScene.southernArchitectureCount,
     southernArtRenderable: true,
@@ -228,6 +259,9 @@ export async function createHubWorldRenderer(
     frameDiagnostics.primarySpellCount = currentScene.primarySpellCount
     frameDiagnostics.primarySpellKinds = currentScene.primarySpellKinds
     frameDiagnostics.levelUpParticleCount = currentScene.levelUpParticleCount
+    frameDiagnostics.secondaryAbilityCount = currentScene.secondaryAbilityCount
+    frameDiagnostics.secondaryAbilityKinds = currentScene.secondaryAbilityKinds
+    frameDiagnostics.secondaryAbilityPrimitiveCount = currentScene.secondaryAbilityPrimitiveCount
     frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
     frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
     frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
@@ -256,6 +290,9 @@ export async function createHubWorldRenderer(
       : privateRoomScene.player(options.playerId)
     if (!playerView) return
     frameDiagnostics.playerAttachmentPose = playerView.attachmentPose
+    frameDiagnostics.playerMagicShieldScale = playerView.magicShieldScale
+    frameDiagnostics.playerMagicShieldVisible = playerView.magicShieldVisible
+    frameDiagnostics.playerMaterialTint = playerView.materialTint
     frameDiagnostics.playerWalkPose = playerView.walkPose
     frameDiagnostics.orbSpriteCount = playerView.orbSpriteCount
   }
@@ -335,6 +372,33 @@ export async function createHubWorldRenderer(
         frameDiagnostics.studentVisibleCandidateCount = 0
         frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length
       }
+      let screenFeedback = secondaryScreenFeedback.get(participant.region)
+      if (!screenFeedback) {
+        screenFeedback = new NativeSecondaryScreenFeedbackPresentation(
+          snapshot.tick,
+          `hub:${participant.region}`,
+        )
+        secondaryScreenFeedback.set(participant.region, screenFeedback)
+      }
+      const visibleWorldWidth = viewport.width / HUB_CAMERA_SCALE
+      for (const event of snapshot.secondaryAbilities.events) {
+        screenFeedback.consume(event, {
+          cameraCenter: {
+            x: camera.x + visibleWorldWidth / 2,
+            y: camera.y + viewport.height / HUB_CAMERA_SCALE / 2,
+          },
+          localPlayerAlternate: player.progression.lifeState !== 'alive',
+          visibleWorldWidth,
+        })
+      }
+      const screenOverlay = screenFeedback.sample(snapshot.tick)
+      secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
+      secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
+      secondaryScreenFlash.visible = screenOverlay !== null
+      frameDiagnostics.secondaryScreenFlashAlpha = screenOverlay?.alpha ?? 0
+      frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
+      canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
+      canvas.dataset.secondaryScreenFlashColor = `${screenOverlay?.color ?? 0xffffff}`
       fadeCover.alpha = participant.transition?.alpha ?? 0
       canvas.dataset.hubRegion = participant.region
       canvas.dataset.transitionAlpha = `${fadeCover.alpha}`
@@ -364,6 +428,7 @@ export async function createHubWorldRenderer(
       application.renderer.resize(viewport.width, viewport.height, resolution)
       fadeCover.width = viewport.width
       fadeCover.height = viewport.height
+      drawSecondaryScreenFlash(secondaryScreenFlash, viewport)
       canvas.style.width = `${viewport.width}px`
       canvas.style.height = `${viewport.height}px`
       canvas.dataset.viewportHeight = `${viewport.height}`
@@ -388,9 +453,16 @@ export async function createHubWorldRenderer(
     destroy() {
       if (destroyed) return
       destroyed = true
-      application.stage.removeChild(courtyardScene.stage, privateRoomScene.world, fadeCover)
+      application.stage.removeChild(
+        courtyardScene.stage,
+        privateRoomScene.world,
+        secondaryScreenFlash,
+        fadeCover,
+      )
       courtyardScene.destroy()
       privateRoomScene.destroy()
+      secondaryScreenFeedback.clear()
+      secondaryScreenFlash.destroy()
       fadeCover.destroy()
       destroyHubWorldTextureFrames(textures)
       application.destroy({ removeView: true })
@@ -403,4 +475,13 @@ export async function createHubWorldRenderer(
   renderer.render(options.initialSnapshot)
   publishDiagnostics(options.initialSnapshot, 0)
   return renderer
+}
+
+function drawSecondaryScreenFlash(
+  graphic: Graphics,
+  viewport: GameViewportLayout,
+): void {
+  graphic.clear()
+    .rect(0, 0, viewport.width, viewport.height)
+    .fill({ color: 0xffffff })
 }

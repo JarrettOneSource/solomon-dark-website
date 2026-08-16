@@ -1,6 +1,12 @@
 import type { GameSnapshot } from './protocol/game-state.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
-import { hubAudioAttenuation, type GameLoopCue } from './game-audio-native.ts'
+import {
+  hubAudioAttenuation,
+  type GameLoopCue,
+  type GameSoundCue,
+  type SecondaryStreamCue,
+} from './game-audio-native.ts'
+import type { NativeSecondaryAudioCue } from './core-kernels/native-secondary-abilities.ts'
 import {
   playerAudioAttenuation,
   playerAudioWorldKey,
@@ -9,11 +15,29 @@ import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.
 import { nativeEtherImpactPitch } from './core-kernels/primary-spell-ether-native.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
+  'comet-loop',
+  'electric-loop',
+  'earthquake-loop',
   'gather-rocks-loop',
   'ice-loop',
   'lightning-loop',
+  'low-fire-loop',
+  'plane-cross-loop',
+  'rainfall-loop',
   'rolling-stone-loop',
+  'steady-wind-loop',
 ]
+
+const SECONDARY_STREAM_CUES = new Set<NativeSecondaryAudioCue>([
+  'dampen', 'golem-die', 'golem-provoke', 'leviathan-roar', 'mindstar',
+  'planewalker-off', 'planewalker-on', 'prismatic-shock', 'quake-crack-small',
+  'quake-cracks', 'set-trap', 'stoneskin-on', 'thunder', 'trap',
+])
+
+const SECONDARY_LOOP_CUES = new Set<NativeSecondaryAudioCue>([
+  'comet-loop', 'electric-loop', 'earthquake-loop', 'low-fire-loop', 'plane-cross-loop',
+  'rainfall-loop', 'steady-wind-loop',
+])
 
 export class PrimarySpellAudioSynchronizer {
   private readonly audio: GameAudioDirector
@@ -93,6 +117,29 @@ export class PrimarySpellAudioSynchronizer {
             effect.origin.y - listener.position.y,
           )),
         })
+      }
+      for (const event of snapshot.secondaryAbilities.events) {
+        if (
+          event.eventId < this.previous.secondaryAbilities.nextEventId
+          || event.worldKey !== listenerWorldKey
+          || event.cue === null
+          || SECONDARY_LOOP_CUES.has(event.cue)
+        ) continue
+        const volume = hubAudioAttenuation(Math.hypot(
+          event.position.x - listener.position.x,
+          event.position.y - listener.position.y,
+        ))
+        if (SECONDARY_STREAM_CUES.has(event.cue)) {
+          this.audio.playStream(event.cue as SecondaryStreamCue, {
+            playbackRate: event.pitch,
+            volume,
+          })
+        } else {
+          this.audio.playSound(event.cue as GameSoundCue, {
+            playbackRate: event.pitch,
+            volume,
+          })
+        }
       }
       const previousEtherImpacts = new Set(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'ether-impact')
@@ -185,6 +232,67 @@ export class PrimarySpellAudioSynchronizer {
               spell.position.y - listener.position.y,
             )),
           )
+        }
+      }
+      const listener = snapshot.players[this.localPlayerId]
+      if (listener) {
+        const requestSecondaryLoop = (
+          cue: GameLoopCue,
+          ownerId: string,
+          position: Readonly<{ x: number; y: number }>,
+        ) => {
+          const volume = hubAudioAttenuation(Math.hypot(
+            position.x - listener.position.x,
+            position.y - listener.position.y,
+          ))
+          const owner = `secondary-player:${ownerId}`
+          const loops = desired.get(cue)!
+          loops.set(owner, Math.max(loops.get(owner) ?? 0, volume))
+        }
+        for (const [ownerId, secondaryPlayer] of Object.entries(
+          snapshot.secondaryAbilities.players,
+        )) {
+          if (secondaryPlayer.planewalkerTicksRemaining <= 0) continue
+          if (playerAudioWorldKey(snapshot, ownerId) !== listenerWorldKey) continue
+          const owner = snapshot.players[ownerId]
+          if (!owner) continue
+          requestSecondaryLoop('plane-cross-loop', ownerId, owner.position)
+        }
+        for (const actor of snapshot.secondaryAbilities.actors) {
+          if (actor.worldKey !== listenerWorldKey) continue
+          switch (actor.kind) {
+            case 'leviathan':
+            case 'ether-drain':
+              requestSecondaryLoop('plane-cross-loop', actor.ownerId, actor.position)
+              break
+            case 'moving-fire':
+            case 'fire-patch':
+              requestSecondaryLoop('low-fire-loop', actor.ownerId, actor.position)
+              break
+            case 'storm-cloud':
+              requestSecondaryLoop('rainfall-loop', actor.ownerId, actor.position)
+              requestSecondaryLoop('steady-wind-loop', actor.ownerId, actor.position)
+              break
+            case 'acid-rain':
+              requestSecondaryLoop('rainfall-loop', actor.ownerId, actor.position)
+              break
+            case 'earthquake':
+              requestSecondaryLoop('earthquake-loop', actor.ownerId, actor.position)
+              break
+            case 'comet':
+              requestSecondaryLoop('comet-loop', actor.ownerId, actor.position)
+              break
+            case 'electric-burn':
+              if (actor.ageTicks > 0) {
+                requestSecondaryLoop('electric-loop', actor.ownerId, actor.position)
+              }
+              break
+            default:
+              break
+          }
+          if (actor.kind === 'ether-drain') {
+            requestSecondaryLoop('steady-wind-loop', actor.ownerId, actor.position)
+          }
         }
       }
     }

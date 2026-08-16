@@ -107,10 +107,12 @@ import hubTentShadow from '../assets/game/hub-tent-shadow.png'
 import hubHudBackpack from '../assets/game/hub-hud-backpack.png'
 import hubHudBarBlue from '../assets/game/hub-hud-bar-blue.png'
 import hubHudBarRed from '../assets/game/hub-hud-bar-red.png'
+import hubHudManaReserve from '../assets/game/hub-hud-mana-reserve.png'
 import hubHudFontAtlas from '../assets/game/hub-hud-font-atlas.png'
 import hubHudGolem from '../assets/game/hub-hud-golem.png'
 import hubHudHelp from '../assets/game/hub-hud-help.png'
 import hubHudInventoryDigits from '../assets/game/hub-hud-inventory-digits.png'
+import hubHudKeyBacking from '../assets/game/hub-hud-key-backing.png'
 import hubHudMapCompass from '../assets/game/hub-hud-map-compass.png'
 import hubHudMapPlay from '../assets/game/hub-hud-map-play.png'
 import hubHudMouseRight from '../assets/game/hub-hud-mouse-right.png'
@@ -780,10 +782,12 @@ export const hub = {
     backpack: hubHudBackpack,
     barBlue: hubHudBarBlue,
     barRed: hubHudBarRed,
+    manaReserve: hubHudManaReserve,
     fontAtlas: hubHudFontAtlas,
     golem: hubHudGolem,
     help: hubHudHelp,
     inventoryDigits: hubHudInventoryDigits,
+    keyBacking: hubHudKeyBacking,
     mapCompass: hubHudMapCompass,
     mapPlay: hubHudMapPlay,
     mouseRight: hubHudMouseRight,

@@ -141,6 +141,7 @@
 }
 
 .hub-hud-meter {
+  position: relative;
   display: grid;
   box-sizing: border-box;
   width: 110px;
@@ -152,7 +153,32 @@
   box-shadow: 0 2px 3px #000, inset 0 0 4px #000;
 }
 
-.hub-hud-meter img { width: 102px; height: 10px; }
+.hub-hud-meter-fill {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 102px;
+  height: 10px;
+}
+
+.hub-hud-meter-shield {
+  filter: url('#hub-hud-magic-shield-tint');
+}
+
+.hub-hud-mana-reserve {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  height: 10px;
+  background-position: right center;
+  background-repeat: repeat-x;
+}
+
+.hub-hud-native-filters {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
 
 .hub-hud-help {
   position: absolute;
@@ -161,26 +187,76 @@
   width: 33px;
 }
 
-.hub-hud-secondary-ability,
-.hub-hud-secondary-mouse {
+.hub-hud-secondary-belt {
   position: absolute;
+  inset: 0;
+}
+
+.hub-hud-secondary-slot {
+  position: absolute;
+  bottom: 14.5px;
+  left: calc(50% + var(--secondary-slot-offset));
+  width: 53px;
+  height: 53px;
+}
+
+.hub-hud-secondary-skill-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
   max-width: none;
-}
-
-.hub-hud-secondary-ability {
-  bottom: 20px;
-  left: calc(50% - 325px);
-  width: 45px;
-  height: 43px;
-  opacity: 0.25;
   mix-blend-mode: plus-lighter;
+  transform: translate(-50%, -50%);
 }
 
-.hub-hud-secondary-mouse {
-  bottom: -10px;
-  left: calc(50% - 311px);
+.hub-hud-secondary-belt[data-mode='hub'] .hub-hud-secondary-skill-icon {
+  filter: brightness(0.25);
+}
+
+.hub-hud-secondary-cooldown {
+  position: absolute;
+  inset: 0;
+  width: 53px;
+  height: 53px;
+  fill: rgb(50% 10% 10% / 75%);
+}
+
+.hub-hud-secondary-input-mouse {
+  position: absolute;
+  top: 44.5px;
+  left: 15.5px;
   width: 22px;
   height: 31px;
+  max-width: none;
+  opacity: 0.6;
+}
+
+.hub-hud-secondary-key-backing,
+.hub-hud-secondary-key-backing > span,
+.hub-hud-secondary-key-glyph {
+  position: absolute;
+  display: block;
+}
+
+.hub-hud-secondary-key-backing {
+  top: 53px;
+  height: 15px;
+  opacity: 0.6;
+}
+
+.hub-hud-secondary-key-backing > span {
+  top: 0;
+  width: 5px;
+  height: 15px;
+  background-repeat: no-repeat;
+  background-size: 15px 15px;
+}
+
+.hub-hud-secondary-key-glyph {
+  background: #000;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
 }
 
 .hub-hud-loadout {

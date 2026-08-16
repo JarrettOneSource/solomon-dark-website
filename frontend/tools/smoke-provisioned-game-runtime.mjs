@@ -61,7 +61,7 @@ try {
     type: 'client-input',
     input: {
       aim: null,
-      cast: { primary: false, secondary: false },
+      cast: { primary: false, secondary: null },
       movement: { x: 1, y: 0 },
     },
     sequence: 1,

@@ -27,25 +27,36 @@ export type GameMusicCue =
 export type GameSoundCue =
   | 'backpack-close'
   | 'bad-action'
+  | 'acid-sizzle'
   | 'banshee-die'
+  | 'big-fire'
   | 'bone-crack'
   | 'click'
   | 'coffin-break'
+  | 'comet-whistle'
   | 'demon-die'
   | 'drink'
   | 'distort-reality'
   | 'drop-coins'
+  | 'explode-steam'
   | 'fireball-hit'
   | 'firey-death'
+  | 'flame-lash-start'
   | 'flash'
   | 'fizzle'
   | 'hit-shield'
   | 'ice-start'
   | 'imp-split'
+  | 'ignite'
+  | 'knockback-golem'
   | 'level-up'
   | 'lightning-start'
   | 'magic-missile'
   | 'magic-missile-hit'
+  | 'magic-circle'
+  | 'magic-shield-explode'
+  | 'magic-shield-up'
+  | 'magic-storm'
   | 'maggot-squeak-1'
   | 'maggot-squeak-2'
   | 'maggot-squish-1'
@@ -53,13 +64,20 @@ export type GameSoundCue =
   | 'maggot-squish-3'
   | 'open-panel'
   | 'pick-skill'
+  | 'nuke'
+  | 'phase'
   | 'pop-shield'
   | 'rock-hit'
+  | 'ring-of-ice'
   | 'skeleton-die'
   | 'start-boulder'
+  | 'stone-break'
+  | 'stone-step'
+  | 'stoneskin'
   | 'step-1'
   | 'step-2'
   | 'summon'
+  | 'teleport'
   | 'throw-fire'
   | 'unlock-skill'
   | 'wizard-ouch-1'
@@ -70,12 +88,34 @@ export type GameSoundCue =
   | 'zombie-ouch'
   | 'zombie-poison-splat'
 export type CreateStreamCue = 'catch-it' | 'choose-element' | 'start-cast'
-export type GameStreamCue = CreateStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
+export type SecondaryStreamCue =
+  | 'dampen'
+  | 'golem-die'
+  | 'golem-provoke'
+  | 'leviathan-roar'
+  | 'mindstar'
+  | 'planewalker-off'
+  | 'planewalker-on'
+  | 'prismatic-shock'
+  | 'quake-crack-small'
+  | 'quake-cracks'
+  | 'set-trap'
+  | 'stoneskin-on'
+  | 'thunder'
+  | 'trap'
+export type GameStreamCue = CreateStreamCue | SecondaryStreamCue | BoneyardSolomonVoiceCue | 'death-guitar'
 export type GameLoopCue =
+  | 'comet-loop'
+  | 'electric-loop'
+  | 'earthquake-loop'
   | 'gather-rocks-loop'
   | 'ice-loop'
   | 'lightning-loop'
+  | 'low-fire-loop'
+  | 'plane-cross-loop'
+  | 'rainfall-loop'
   | 'rolling-stone-loop'
+  | 'steady-wind-loop'
 
 export interface GameAudioSources {
   loops: Readonly<Record<GameLoopCue, string>>
@@ -126,6 +166,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\badaction',
     sourceSha256: '0ca71924473e6a45156f0dbd450ff7a158d39015179697c83c7b04824e3256d6',
   },
+  'acid-sizzle': {
+    registryOffset: 0x9c,
+    sourceName: 'sounds\\acidsizzle',
+    sourceSha256: '14b50ede8d3b280d65877a0c5d51a331e0da5c6b0d70da20c9345584c7453341',
+  },
   'banshee-die': {
     registryOffset: 0x178,
     sourceName: 'sounds\\bansheedie',
@@ -136,6 +181,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\bonecrack',
     sourceSha256: '9b42d96a3d505cc1d631d43b6fde4b7fb9670ed2fa758a7692207f2c514047c4',
   },
+  'big-fire': {
+    registryOffset: 0x1a4,
+    sourceName: 'sounds\\bigfire',
+    sourceSha256: 'd70d4a94b490b7ea7f72d26a06edb50e7906a6a5ca095e1e80744fd17bf17868',
+  },
   click: {
     registryOffset: 0x18,
     sourceName: 'sounds\\click',
@@ -145,6 +195,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x2ac,
     sourceName: 'sounds\\coffinbreak',
     sourceSha256: '5b1e1bceae4338878309256cfa083a8621efb26250fd72325d635f719b547dca',
+  },
+  'comet-whistle': {
+    registryOffset: 0x2d8,
+    sourceName: 'sounds\\cometwhistle',
+    sourceSha256: 'd0ca5910d9dbe434937c1d11ddfe1957fd287a13b81b7ee27f63fb969a3d4cb6',
   },
   'demon-die': {
     registryOffset: 0x388,
@@ -166,6 +221,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\dropcoins',
     sourceSha256: 'b72d44080d99fdae8e7dce83b5f1b6a553d503a753df2deacea7ee8829ba4376',
   },
+  'explode-steam': {
+    registryOffset: 0x4bc,
+    sourceName: 'sounds\\explodesteam',
+    sourceSha256: 'f93fca2917072811b96f4ec4c3c864c66f0bb785f05c6113e1931661471df090',
+  },
   'fireball-hit': {
     registryOffset: 0x540,
     sourceName: 'sounds\\fireballhit',
@@ -175,6 +235,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x56c,
     sourceName: 'sounds\\fireydeath',
     sourceSha256: '171da05d45168042f6042e58279be0b7255161c65d0d1d58caeb4d4d6b2ccc2e',
+  },
+  'flame-lash-start': {
+    registryOffset: 0x5c4,
+    sourceName: 'sounds\\flamelashstart',
+    sourceSha256: 'd563633ce5ed2701050884b11806898da500581858238d45fb881e820db0a1dc',
   },
   flash: {
     registryOffset: 0x5f0,
@@ -201,6 +266,16 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\ImpSplit',
     sourceSha256: 'd5b3bca86d9d981701a8dba3e17e07e7ad50aa3ed183817813b048997b5103b0',
   },
+  ignite: {
+    registryOffset: 0x800,
+    sourceName: 'sounds\\ignite',
+    sourceSha256: '0c0a6f6055b0746e8f1921d04214e47a359ee36b6ea88301f73047f7f45e935f',
+  },
+  'knockback-golem': {
+    registryOffset: 0x8dc,
+    sourceName: 'sounds\\KnockbackGolem',
+    sourceSha256: '2452f75de45f6e6c30d7bc9993ba6f86e638ef0b2a101daca38814e65946e090',
+  },
   'level-up': {
     registryOffset: 0x908,
     sourceName: 'sounds\\levelup',
@@ -220,6 +295,26 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xa10,
     sourceName: 'sounds\\magicmissilehit',
     sourceSha256: '2ac1154c78ee7b9cf5b7b0477113293ff8f16aa743269ad3648ed603e1aaf608',
+  },
+  'magic-circle': {
+    registryOffset: 0x9b8,
+    sourceName: 'sounds\\magiccircle',
+    sourceSha256: '18e8efdd324e9c3f96aca245d109d50796418ada18685c8e391c5f122921e4c3',
+  },
+  'magic-shield-explode': {
+    registryOffset: 0xa3c,
+    sourceName: 'sounds\\magicshieldexplode',
+    sourceSha256: '5a3abd93fc1d490b0f9988f1acebc948c5fed9669f070012c97c778010854b8a',
+  },
+  'magic-shield-up': {
+    registryOffset: 0xa68,
+    sourceName: 'sounds\\magicshieldup',
+    sourceSha256: '74305127ff81aaf41abe9001d8498f7c14b46fed099d7b28c49bad4bc23f06cc',
+  },
+  'magic-storm': {
+    registryOffset: 0xa94,
+    sourceName: 'sounds\\magicstorm',
+    sourceSha256: '87a2987ef6a67c21a8c57e8c5f17d88b78e6071b97cf34c6fd9a12ff613ebdcb',
   },
   'maggot-squeak-1': {
     registryOffset: 0x2124,
@@ -256,6 +351,16 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\pickskill',
     sourceSha256: '494d1b973bd3f319199199ec9cf851491caee10c3d72dbe61acda69d28daabe4',
   },
+  nuke: {
+    registryOffset: 0xaec,
+    sourceName: 'sounds\\nuke',
+    sourceSha256: 'a8ab88bb44f30289f7b473bc9f153b4cfc03b1985e77b7b29a7ec0761f8b2cfb',
+  },
+  phase: {
+    registryOffset: 0xb9c,
+    sourceName: 'sounds\\phase',
+    sourceSha256: 'cbd9572e6910191bab3b856120e39c67573efd708514b3443eac27bc0c6f48d3',
+  },
   'pop-shield': {
     registryOffset: 0xcd0,
     sourceName: 'sounds\\popshield',
@@ -266,6 +371,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\rockhit',
     sourceSha256: '865484cf3d7c2e199fb46f069973c43893122e934f0f46ba33d30eeeac4de25b',
   },
+  'ring-of-ice': {
+    registryOffset: 0xd28,
+    sourceName: 'sounds\\ringofice',
+    sourceSha256: 'b6442d06818350c43d135684916f05216ed90dccf2b27f2a5667c2c31482013b',
+  },
   'skeleton-die': {
     registryOffset: 0xdac,
     sourceName: 'sounds\\skeleton_die',
@@ -275,6 +385,21 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xf0c,
     sourceName: 'sounds\\startboulder',
     sourceSha256: 'c7bbd54f293ae2b8a9dbde4d8a6810a5f98f46ee6fb20912b378631a5033d503',
+  },
+  'stone-break': {
+    registryOffset: 0xf64,
+    sourceName: 'sounds\\stonebreak',
+    sourceSha256: '1bb6ea8c298424eddedad619ec713b23f8187986a8ecdc28173a0b17d2070abc',
+  },
+  stoneskin: {
+    registryOffset: 0xf90,
+    sourceName: 'sounds\\stoneskin',
+    sourceSha256: '7d3337d2d05ddfb63f0129406c6f1867de0262535b055b9aa69d633dbd261635',
+  },
+  'stone-step': {
+    registryOffset: 0xfe8,
+    sourceName: 'sounds\\stonestep',
+    sourceSha256: 'd02824968e070e0efdeb3c350afd004ff9252dd6da806aebf9c6b3da5d01c5f5',
   },
   'step-1': {
     registryOffset: 0x23b8,
@@ -290,6 +415,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x1014,
     sourceName: 'sounds\\summon',
     sourceSha256: '3c910b3918c0f45558123464301ed423974bf2356dfb8934c7d9321addac38cd',
+  },
+  teleport: {
+    registryOffset: 0x106c,
+    sourceName: 'sounds\\teleport',
+    sourceSha256: 'a91651f4369aa2147729d043e0b29b758ec1481877b931bb800fe1828ca329a2',
   },
   'throw-fire': {
     registryOffset: 0x10c4,
@@ -389,6 +519,21 @@ export function nativeBoneyardPointGain(
 }
 
 export const NATIVE_LOOP_MANIFEST = {
+  'comet-loop': {
+    registryOffset: 0x14cc,
+    sourceName: 'sounds\\comet__loop',
+    sourceSha256: 'b8c4c69e2220778492eb25118a6c4a72169f5db3ee9e14e56210e8aba6d8fc80',
+  },
+  'electric-loop': {
+    registryOffset: 0x164c,
+    sourceName: 'sounds\\electric__loop',
+    sourceSha256: '809601e64da07ac0adfffec5f5e29dfc61ee79725fdbf85ceb501d80d6cb0db4',
+  },
+  'earthquake-loop': {
+    registryOffset: 0x158c,
+    sourceName: 'sounds\\earthquake__loop',
+    sourceSha256: 'ac56c68d267f5d9c7431b8cadd5b6bd4e73ae6101e144ff9769d2aac1a529068',
+  },
   'gather-rocks-loop': {
     registryOffset: 0x176c,
     sourceName: 'sounds\\gatherrocksloop__loop',
@@ -404,14 +549,104 @@ export const NATIVE_LOOP_MANIFEST = {
     sourceName: 'sounds\\lightningloop__loop',
     sourceSha256: '4bdd74a6734206d1212c52d623d0b7fe994bf4beeaa2119d34f3d1fad7d68281',
   },
+  'low-fire-loop': {
+    registryOffset: 0x18ec,
+    sourceName: 'sounds\\lowfire__loop',
+    sourceSha256: '8d42e14b1848f1f2b45fabb52c1f83620a986557416f59ee08f78e630439ce8a',
+  },
+  'plane-cross-loop': {
+    registryOffset: 0x1a0c,
+    sourceName: 'sounds\\PlaneCross__Loop',
+    sourceSha256: '04d3bc7b433ef47b758933456e9feecb83924fa9b0ec31e0aeedb0946cd14a24',
+  },
+  'rainfall-loop': {
+    registryOffset: 0x1a6c,
+    sourceName: 'sounds\\rainfall__loop',
+    sourceSha256: 'a27e5ea5d44bb5daf6b80dee6f0f5c9123a5bddfc198340c633b8791c4733a79',
+  },
   'rolling-stone-loop': {
     registryOffset: 0x1acc,
     sourceName: 'sounds\\rollingstoneloop__loop',
     sourceSha256: '66a306a2ebe8443cb017ce8c3737477f196600a82af7472201cc123f70cee706',
   },
+  'steady-wind-loop': {
+    registryOffset: 0x1bec,
+    sourceName: 'sounds\\steadywind__loop',
+    sourceSha256: '2c87905f66fa7b02ab18c6b9e5d875ed2c9258ce37c961ba858c17d031141487',
+  },
 } as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 
 export const NATIVE_STREAM_MANIFEST = {
+  dampen: {
+    registryOffset: 0x135c,
+    sourceName: 'sounds\\dampen__stream',
+    sourceSha256: 'afc7ef6fa91604257c17abf6276190343c7a556709426c9c9ba4f7e165c106b1',
+  },
+  'golem-die': {
+    registryOffset: 0x139c,
+    sourceName: 'sounds\\GolemDie__Stream',
+    sourceSha256: 'cee482491c4aa21672bf7bbd4c314ab185a5e15f9daadfaa5351d0e3ca8fea56',
+  },
+  'golem-provoke': {
+    registryOffset: 0x13a4,
+    sourceName: 'sounds\\GolemProvoke__Stream',
+    sourceSha256: '88394eabae8728019803317c69dc8a7e991bb2ce32863f250a2d0726e7f15228',
+  },
+  'leviathan-roar': {
+    registryOffset: 0x13ac,
+    sourceName: 'sounds\\LeviathanRoar__Stream',
+    sourceSha256: '67d19694db3f9865e8083365bdb2986dbae4827868f335a7070b5e46e632fcec',
+  },
+  mindstar: {
+    registryOffset: 0x13d4,
+    sourceName: 'sounds\\mindstar__stream',
+    sourceSha256: '8a4310894e1401f9d47e58ae4f9202aec1e1eb0f6dd34db6987e6e3e753b5de8',
+  },
+  'planewalker-off': {
+    registryOffset: 0x13ec,
+    sourceName: 'sounds\\PlanewalkerOff__Stream',
+    sourceSha256: 'f95191b9c552b177d96d7269259350695727636d6287af7bbf93ffc08dc8d322',
+  },
+  'planewalker-on': {
+    registryOffset: 0x13f4,
+    sourceName: 'sounds\\planewalker__Stream',
+    sourceSha256: '1243f30337c134c4d59f1cf8fbd2eb79fa0ce4a8e6e053866ec82ac0ec7689ea',
+  },
+  'prismatic-shock': {
+    registryOffset: 0x13fc,
+    sourceName: 'sounds\\prismaticspray__stream',
+    sourceSha256: '3eabc7fb5d4ecb30476dc0dee52305f66e47ae212ca47bdf8d087961a77cdc7d',
+  },
+  'quake-crack-small': {
+    registryOffset: 0x1404,
+    sourceName: 'sounds\\QuakeCrackSmall__Stream',
+    sourceSha256: 'bc66694a8413cddaf3ca22b05de99ba3d8d59090317e3d89c983a1d3b09ef09f',
+  },
+  'quake-cracks': {
+    registryOffset: 0x140c,
+    sourceName: 'sounds\\QuakeCracks__Stream',
+    sourceSha256: '86e0ff907b480cde99a14ad4743946214040fca0fb3fe0f26036762f559375c8',
+  },
+  'set-trap': {
+    registryOffset: 0x1414,
+    sourceName: 'sounds\\settrap__Stream',
+    sourceSha256: '32e4b7ab20002a21895d1e314a8641b01b4c17d3bd76789997acbb0cf43b2ea4',
+  },
+  'stoneskin-on': {
+    registryOffset: 0x1424,
+    sourceName: 'sounds\\StoneSkin__Stream',
+    sourceSha256: '033f53f0529caac2f5f59f7501a60917e30b1af44035e1ab92a27d0959511d62',
+  },
+  thunder: {
+    registryOffset: 0x142c,
+    sourceName: 'sounds\\thunder__Stream',
+    sourceSha256: 'c2bc1376ed9a5bc8de7b96f08c16448253a7cfbe35b35a085a282d0a50d12f0a',
+  },
+  trap: {
+    registryOffset: 0x1434,
+    sourceName: 'sounds\\trap__stream',
+    sourceSha256: 'f575c617afd3da0eb5a65016b9eec178e82da536a9bf410e617dd76dc8c158d8',
+  },
   'death-guitar': {
     registryOffset: 118,
     sourceName: 'sounds\\DeathGuitar__Stream',
@@ -432,7 +667,7 @@ export const NATIVE_STREAM_MANIFEST = {
     sourceName: 'sounds\\StartCast__Stream',
     sourceSha256: 'bccf1c352893ee24d515b09df4fd0d44c733dc3bdab71fe2bf0710bdc14d93a8',
   },
-} as const satisfies Readonly<Record<CreateStreamCue | 'death-guitar', NativeSoundEntry>>
+} as const satisfies Readonly<Record<CreateStreamCue | SecondaryStreamCue | 'death-guitar', NativeSoundEntry>>
 
 export const NATIVE_SOLOMON_VOICE_MANIFEST = {
   'solomon-hello-1': {

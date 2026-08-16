@@ -44,6 +44,11 @@ import type {
   NativeLightProviderRegistration,
   RegisterNativeLightProvider,
 } from '../core-kernels/native-light-provider-order.ts'
+import type {
+  NativeSecondaryKnockbackContact,
+  NativeSecondarySceneryTarget,
+  NativeSecondaryTargetEffectState,
+} from '../core-kernels/native-secondary-abilities.ts'
 import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
 import {
   createBoneyardWaveDirector,
@@ -79,10 +84,17 @@ export interface BoneyardPlayerCombatStatus {
   readonly movementScale: number
 }
 
+export interface BoneyardSummonTarget {
+  readonly collisionRadius: number
+  readonly id: string
+  readonly position: Readonly<BoneyardPoint>
+}
+
 export interface BoneyardWorldState {
   arenaTransition: BoneyardArenaTransitionState | null
   bounds: BoneyardBounds
   collision: BoneyardCollisionWorld
+  earthquakeSceneryTargets: readonly NativeSecondarySceneryTarget[]
   encounter: BoneyardSolomonEncounterState | null
   enemies: BoneyardEnemyStore
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
@@ -116,6 +128,11 @@ export function createBoneyardWorld(
       : null,
     bounds: { ...loaded.scene.bounds },
     collision: createBoneyardCollisionWorld(loaded.scene),
+    earthquakeSceneryTargets: loaded.scene.objects.map((object, id) => Object.freeze({
+      id,
+      position: Object.freeze({ ...object.pos }),
+      typeId: object.typeId,
+    })),
     encounter: ownsRetailEncounter
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
       : null,
@@ -210,6 +227,8 @@ export function stepBoneyardWorldTick(
   tick: number,
   registerLightProvider?: RegisterNativeLightProvider,
   registerProjectileLightProvider?: RegisterNativeLightProvider,
+  abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>> = {},
+  summons: readonly BoneyardSummonTarget[] = [],
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -341,6 +360,7 @@ export function stepBoneyardWorldTick(
     playerCombat,
   )
   const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
+    abilityEffects,
     arenaScalars: { experience: RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR },
     clipSpellSegment: ({ end, start }) => clipBoneyardSegment(
       start,
@@ -357,20 +377,30 @@ export function stepBoneyardWorldTick(
         radius,
       )
     ),
-    players: Object.fromEntries(Object.entries(nextPlayers).map(([playerId, player]) => {
-      const combat = playerCombat[playerId]
-      return [playerId, {
-        alive: combat?.alive ?? false,
-        collisionRadius: PLAYER_CHARACTER_RADIUS,
+    players: Object.fromEntries([
+      ...Object.entries(nextPlayers).map(([playerId, player]) => {
+        const combat = playerCombat[playerId]
+        return [playerId, {
+          alive: combat?.alive ?? false,
+          collisionRadius: PLAYER_CHARACTER_RADIUS,
+          connected: true,
+          eligible: combat?.eligible ?? false,
+          position: player.position,
+          velocityPerTick: {
+            x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+            y: player.velocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+          },
+        }] as const
+      }),
+      ...summons.map((summon) => [summon.id, {
+        alive: true,
+        collisionRadius: summon.collisionRadius,
         connected: true,
-        eligible: combat?.eligible ?? false,
-        position: player.position,
-        velocityPerTick: {
-          x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
-          y: player.velocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
-        },
-      }]
-    })),
+        eligible: true,
+        position: summon.position,
+        velocityPerTick: { x: 0, y: 0 },
+      }] as const),
+    ]),
     resolveMovement: ({ actorId, delta, position, purpose, radius }) => {
       if (purpose === 'spawn-placement') {
         return resolveBoneyardSpawnPosition(
@@ -513,6 +543,52 @@ function applyBoneyardPlayerKnockbacks(
           : { ...player, position: { ...position } },
       ]
     })),
+  }
+}
+
+export function applyBoneyardSecondaryEnemyKnockbacks(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  knockbacks: readonly NativeSecondaryKnockbackContact[],
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+): BoneyardWorldState {
+  if (knockbacks.length === 0) return world
+  const collision = withBoneyardGateCollision(world.collision, world.gateLeaves)
+  let bodies = boneyardCombatBodies(players, world.enemies, playerCombat)
+  for (const knockback of knockbacks) {
+    const moverId = `enemy-${knockback.targetId}`
+    if (!bodies.has(moverId)) continue
+    const resolved = resolveActorMotion(
+      [...bodies.values()].map((body) => ({
+        ...body,
+        delta: body.id === moverId ? { ...knockback.delta } : { x: 0, y: 0 },
+        driven: body.id === moverId,
+      })),
+      {
+        canPlace: (_bodyId, position, radius) => canPlaceBoneyardBody(
+          position,
+          world.bounds,
+          collision,
+          radius,
+        ),
+        move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
+          position,
+          { x: position.x + delta.x, y: position.y + delta.y },
+          world.bounds,
+          collision,
+          radius,
+        ),
+      },
+      () => true,
+    )
+    bodies = new Map(resolved.map((body) => [body.id, body]))
+  }
+  return {
+    ...world,
+    enemies: commitBoneyardEnemyCollisionPositions(
+      world.enemies,
+      new Map([...bodies.values()].map((body) => [body.id, body.position])),
+    ),
   }
 }
 

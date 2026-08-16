@@ -10,6 +10,10 @@ import {
   copyPrimarySpellState,
   interpolatePrimarySpellState,
 } from './primary-spell-presentation.ts'
+import {
+  copyNativeSecondaryState,
+  interpolateNativeSecondaryState,
+} from './native-secondary-presentation.ts'
 import type {
   HubParticipantState,
 } from '../core-kernels/hub-regions.ts'
@@ -192,6 +196,11 @@ function interpolateSnapshot(
       newer.primarySpells,
       blend,
       { newerTick: newer.tick, olderTick: older.tick, targetTick },
+    ),
+    secondaryAbilities: interpolateNativeSecondaryState(
+      older.secondaryAbilities,
+      newer.secondaryAbilities,
+      blend,
     ),
     run: blend < 1 ? older.run : newer.run,
     tick: clamp(targetTick, older.tick, newer.tick),
@@ -432,6 +441,7 @@ function presentationCopy(snapshot: HubGameSnapshot): HubPresentationFrame {
       Object.entries(snapshot.players).map(([id, player]) => [id, copyPlayer(player)]),
     ),
     primarySpells: copyPrimarySpellState(snapshot.primarySpells),
+    secondaryAbilities: copyNativeSecondaryState(snapshot.secondaryAbilities),
     run: snapshot.run,
     tick: snapshot.tick,
     world: {
@@ -474,6 +484,11 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     primaryCast: {
       ...player.primaryCast,
       aimDirection: { ...player.primaryCast.aimDirection },
+    },
+    progression: {
+      ...player.progression,
+      learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
+      secondaryBelt: [...player.progression.secondaryBelt],
     },
     velocity: { ...player.velocity },
   }

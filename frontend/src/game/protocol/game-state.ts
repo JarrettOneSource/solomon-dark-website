@@ -28,6 +28,7 @@ import type {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
@@ -116,7 +117,13 @@ export interface ProtocolPlayerProgression {
   previousThreshold: number
   revision: number
   sorcerorsCharmAvailable: boolean
+  secondaryBelt: readonly (number | null)[]
 }
+
+export type NativeSecondarySnapshotState = Omit<
+  NativeSecondarySimulationState,
+  'firewalkerGeometrySequence' | 'rng'
+>
 
 export interface ProtocolStudentProp {
   angle: number
@@ -573,6 +580,7 @@ export interface GameSnapshot {
   levelUpBarrier: PlayerLevelUpBarrierState | null
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
+  secondaryAbilities: NativeSecondarySnapshotState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshot
@@ -583,6 +591,7 @@ export interface GameSnapshotFrame {
   levelUpBarrier: PlayerLevelUpBarrierState | null
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
   primarySpells: PrimarySpellSimulationState
+  secondaryAbilities: NativeSecondarySnapshotState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshotFrame

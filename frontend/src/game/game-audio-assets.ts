@@ -5,6 +5,15 @@ import prelude from '../assets/music/prelude.mp3'
 import combat from '../assets/music/combat.mp3'
 import death from '../assets/music/death.mp3'
 import catchIt from '../assets/game/audio/sfx/catchit.wav'
+import acidSizzle from '../assets/game/audio/sfx/acid-sizzle.wav'
+import bigFire from '../assets/game/audio/sfx/big-fire.wav'
+import cometLoop from '../assets/game/audio/sfx/comet-loop.wav'
+import electricLoop from '../assets/game/audio/sfx/electric-loop.wav'
+import cometWhistle from '../assets/game/audio/sfx/comet-whistle.wav'
+import dampen from '../assets/game/audio/sfx/dampen.wav'
+import distortReality from '../assets/game/audio/sfx/distort-reality.wav'
+import earthquakeLoop from '../assets/game/audio/sfx/earthquake-loop.wav'
+import explodeSteam from '../assets/game/audio/sfx/explode-steam.wav'
 import chooseElement from '../assets/game/audio/sfx/choose-element.wav'
 import bansheeDie from '../assets/game/audio/sfx/banshee-die.wav'
 import boneCrack from '../assets/game/audio/sfx/bone-crack.wav'
@@ -19,14 +28,45 @@ import dropCoins from '../assets/game/audio/sfx/drop-coins.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
+import flameLashStart from '../assets/game/audio/sfx/flame-lash-start.wav'
 import fizzle from '../assets/game/audio/sfx/fizzle.wav'
 import hitShield from '../assets/game/audio/sfx/hit-shield.wav'
+import golemDie from '../assets/game/audio/sfx/golem-die.wav'
+import golemProvoke from '../assets/game/audio/sfx/golem-provoke.wav'
 import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
+import ignite from '../assets/game/audio/sfx/ignite.wav'
+import knockbackGolem from '../assets/game/audio/sfx/knockback-golem.wav'
+import leviathanRoar from '../assets/game/audio/sfx/leviathan-roar.wav'
 import levelUp from '../assets/game/audio/sfx/level-up.wav'
 import lightningStart from '../assets/game/audio/sfx/lightning-start.wav'
 import magicMissile from '../assets/game/audio/sfx/magic-missile.wav'
 import magicMissileHit from '../assets/game/audio/sfx/magic-missile-hit.wav'
+import lowFireLoop from '../assets/game/audio/sfx/low-fire-loop.wav'
+import magicCircle from '../assets/game/audio/sfx/magic-circle.wav'
+import magicShieldExplode from '../assets/game/audio/sfx/magic-shield-explode.wav'
+import magicShieldUp from '../assets/game/audio/sfx/magic-shield-up.wav'
+import magicStorm from '../assets/game/audio/sfx/magic-storm.wav'
+import mindstar from '../assets/game/audio/sfx/mindstar.wav'
+import nuke from '../assets/game/audio/sfx/nuke.wav'
+import phase from '../assets/game/audio/sfx/phase.wav'
+import planeCrossLoop from '../assets/game/audio/sfx/plane-cross-loop.wav'
+import planewalkerOff from '../assets/game/audio/sfx/planewalker-off.wav'
+import planewalkerOn from '../assets/game/audio/sfx/planewalker-on.wav'
+import prismaticShock from '../assets/game/audio/sfx/prismatic-shock.wav'
+import quakeCrackSmall from '../assets/game/audio/sfx/quake-crack-small.wav'
+import quakeCracks from '../assets/game/audio/sfx/quake-cracks.wav'
+import rainfallLoop from '../assets/game/audio/sfx/rainfall-loop.wav'
+import ringOfIce from '../assets/game/audio/sfx/ring-of-ice.wav'
+import setTrap from '../assets/game/audio/sfx/set-trap.wav'
+import steadyWindLoop from '../assets/game/audio/sfx/steady-wind-loop.wav'
+import stoneBreak from '../assets/game/audio/sfx/stone-break.wav'
+import stoneStep from '../assets/game/audio/sfx/stone-step.wav'
+import stoneskin from '../assets/game/audio/sfx/stoneskin.wav'
+import stoneskinOn from '../assets/game/audio/sfx/stoneskin-on.wav'
+import teleport from '../assets/game/audio/sfx/teleport.wav'
+import thunder from '../assets/game/audio/sfx/thunder.wav'
+import trap from '../assets/game/audio/sfx/trap.wav'
 import maggotSqueak1 from '../assets/game/audio/sfx/maggot-squeak-1.wav'
 import maggotSqueak2 from '../assets/game/audio/sfx/maggot-squeak-2.wav'
 import maggotSquish1 from '../assets/game/audio/sfx/maggot-squish-1.wav'
@@ -66,10 +106,17 @@ import type { GameAudioSources } from './game-audio-native.ts'
 
 export const GAME_AUDIO_SOURCES = {
   loops: {
+    'comet-loop': cometLoop,
+    'electric-loop': electricLoop,
+    'earthquake-loop': earthquakeLoop,
     'gather-rocks-loop': gatherRocksLoop,
     'ice-loop': iceLoop,
     'lightning-loop': lightningLoop,
+    'low-fire-loop': lowFireLoop,
+    'plane-cross-loop': planeCrossLoop,
+    'rainfall-loop': rainfallLoop,
     'rolling-stone-loop': rollingStoneLoop,
+    'steady-wind-loop': steadyWindLoop,
   },
   music: {
     academy,
@@ -82,25 +129,36 @@ export const GAME_AUDIO_SOURCES = {
   sounds: {
     'backpack-close': backpackClose,
     'bad-action': badAction,
+    'acid-sizzle': acidSizzle,
     'banshee-die': bansheeDie,
     'bone-crack': boneCrack,
+    'big-fire': bigFire,
     click,
     'coffin-break': coffinBreak,
+    'comet-whistle': cometWhistle,
     'demon-die': demonDie,
     drink,
     'distort-reality': distortReality,
     'drop-coins': dropCoins,
+    'explode-steam': explodeSteam,
     'fireball-hit': fireballHit,
     'firey-death': fireyDeath,
+    'flame-lash-start': flameLashStart,
     fizzle,
     flash: enemyFlash,
     'hit-shield': hitShield,
     'ice-start': iceStart,
     'imp-split': impSplit,
+    ignite,
+    'knockback-golem': knockbackGolem,
     'level-up': levelUp,
     'lightning-start': lightningStart,
     'magic-missile': magicMissile,
     'magic-missile-hit': magicMissileHit,
+    'magic-circle': magicCircle,
+    'magic-shield-explode': magicShieldExplode,
+    'magic-shield-up': magicShieldUp,
+    'magic-storm': magicStorm,
     'maggot-squeak-1': maggotSqueak1,
     'maggot-squeak-2': maggotSqueak2,
     'maggot-squish-1': maggotSquish1,
@@ -108,13 +166,20 @@ export const GAME_AUDIO_SOURCES = {
     'maggot-squish-3': maggotSquish3,
     'open-panel': openPanel,
     'pick-skill': pickSkill,
+    nuke,
+    phase,
     'pop-shield': popShield,
     'rock-hit': rockHit,
+    'ring-of-ice': ringOfIce,
     'skeleton-die': skeletonDie,
     'start-boulder': startBoulder,
+    'stone-break': stoneBreak,
+    'stone-step': stoneStep,
+    stoneskin,
     'step-1': step1,
     'step-2': step2,
     summon,
+    teleport,
     'throw-fire': throwFire,
     'unlock-skill': unlockSkill,
     'wizard-ouch-1': wizardOuch1,
@@ -129,7 +194,21 @@ export const GAME_AUDIO_SOURCES = {
     'catch-it': catchIt,
     'choose-element': chooseElement,
     'death-guitar': deathGuitar,
+    dampen,
+    'golem-die': golemDie,
+    'golem-provoke': golemProvoke,
+    'leviathan-roar': leviathanRoar,
+    mindstar,
+    'planewalker-off': planewalkerOff,
+    'planewalker-on': planewalkerOn,
+    'prismatic-shock': prismaticShock,
+    'quake-crack-small': quakeCrackSmall,
+    'quake-cracks': quakeCracks,
+    'set-trap': setTrap,
     'start-cast': startCast,
+    'stoneskin-on': stoneskinOn,
+    thunder,
+    trap,
     'solomon-get-him-boys': solomonGetHimBoys,
     'solomon-hello-1': solomonHello1,
     'solomon-hello-2': solomonHello2,

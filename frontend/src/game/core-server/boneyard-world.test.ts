@@ -1038,6 +1038,23 @@ test('retains Gravestones as stable lower-priority Lightning targets', () => {
   }])
 })
 
+test('retains every native group-four scene-object family for Earthquake wobble ownership', () => {
+  const loaded = gatedBoneyard()
+  loaded.scene.objects = [
+    { eid: 'tree', typeId: 2001, pos: { x: 80, y: 90 }, variant: 0 },
+    { eid: 'grave', typeId: 2029, pos: { x: 120, y: 130 }, variant: 2 },
+    { eid: 'building', typeId: 2040, pos: { x: 160, y: 170 }, variant: 1 },
+    { eid: 'goodie', typeId: 2061, pos: { x: 200, y: 210 }, variant: 0 },
+  ]
+
+  assert.deepEqual(createBoneyardWorld(loaded).earthquakeSceneryTargets, [
+    { id: 0, position: { x: 80, y: 90 }, typeId: 2001 },
+    { id: 1, position: { x: 120, y: 130 }, typeId: 2029 },
+    { id: 2, position: { x: 160, y: 170 }, typeId: 2040 },
+    { id: 3, position: { x: 200, y: 210 }, typeId: 2061 },
+  ])
+})
+
 test('Solomon escape intent is clipped by authoritative Boneyard collision', () => {
   const loaded = encounterBoneyard('default')
   const world = createBoneyardWorld({

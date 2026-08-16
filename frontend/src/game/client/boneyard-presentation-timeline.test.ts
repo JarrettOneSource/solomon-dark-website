@@ -33,8 +33,8 @@ const CHARACTER = {
   displayName: 'Helvidius',
   element: 'fire',
 } as const
-const DEFAULT_PLAYER = createGameSnapshot(createGameSimulation(), null)
-  .players['local-player']!
+const DEFAULT_SNAPSHOT = createGameSnapshot(createGameSimulation(), null)
+const DEFAULT_PLAYER = DEFAULT_SNAPSHOT.players['local-player']!
 const LIGHTING = DEFAULT_PLAYER.lighting
 
 function playerAt(x: number): ProtocolPlayerState {
@@ -187,6 +187,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
     levelUpBarrier: null,
     players: { local: playerAt(playerX) },
     primarySpells: createPrimarySpellSimulation(),
+    secondaryAbilities: DEFAULT_SNAPSHOT.secondaryAbilities,
     run: {
       eligiblePlayerIds: ['local'],
       gameOverEventId: 0,

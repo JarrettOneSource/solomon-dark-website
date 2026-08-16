@@ -267,6 +267,7 @@ export function createGameSnapshotFrame(
     levelUpBarrier: snapshot.levelUpBarrier,
     players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
     primarySpells: snapshot.primarySpells,
+    secondaryAbilities: snapshot.secondaryAbilities,
     run: snapshot.run,
     tick: snapshot.tick,
   }
@@ -432,6 +433,7 @@ export class EntityReplicationReconstructor {
       levelUpBarrier: frame.levelUpBarrier,
       players,
       primarySpells: frame.primarySpells,
+      secondaryAbilities: frame.secondaryAbilities,
       run: frame.run,
       tick: frame.tick,
     }

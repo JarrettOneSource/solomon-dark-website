@@ -18,6 +18,7 @@ import {
   dowse,
   equipInventoryItem,
   hagathaOffers,
+  hasPandimensionalBugMasterOutfit,
   restockFomentius,
   transferInventoryItem,
   unequipInventorySlot,
@@ -303,6 +304,26 @@ test('the 88-cell backpack and 28-cell scavenged-goods store enforce distinct na
   assert.equal(transferInventoryItem(oneSlot, oneSlot.storage[0]!.id, 'to-backpack').accepted, true)
   const fullBackpack = { ...base, backpack: Array.from({ length: 88 }, (_, index) => unique(index)), storage: [unique(999)] }
   assert.equal(transferInventoryItem(fullBackpack, fullBackpack.storage[0]!.id, 'to-backpack').reason, 'capacity-full')
+})
+
+test("the complete five-piece Bug-Master outfit owns Call Leviathan's maximum and damage effects", () => {
+  const item = (recipeIndex: number) => createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES[recipeIndex]!,
+    100 + recipeIndex,
+  )
+  const equipment = {
+    amulet: item(15),
+    hat: item(11),
+    rings: [null, item(14), null] as const,
+    robe: item(12),
+    weapon: item(13),
+  }
+  assert.equal(hasPandimensionalBugMasterOutfit(equipment), true)
+  assert.equal(hasPandimensionalBugMasterOutfit({ ...equipment, hat: null }), false)
+  assert.equal(hasPandimensionalBugMasterOutfit({
+    ...equipment,
+    rings: [null, null, null],
+  }), false)
 })
 
 test('two participants never share gold, stock, offers, or inventory mutations', () => {

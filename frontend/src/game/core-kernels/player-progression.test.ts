@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import './native-secondary-ability-contract.test.ts'
+import './native-secondary-abilities.test.ts'
 import './secondary-ability-loadout.test.ts'
 
 import {
@@ -10,6 +11,7 @@ import {
   NATIVE_ANTIDOTE_IMMUNITY_TICKS,
   NATIVE_DAMAGE_X4_POTION_TICKS,
   NATIVE_LEVEL_THRESHOLDS,
+  NATIVE_SKILL_CATALOG,
   NATIVE_SKILL_ROW_COUNT,
   NATIVE_MIND_CHUG_TICKS,
   NATIVE_WELD_BUILDS,

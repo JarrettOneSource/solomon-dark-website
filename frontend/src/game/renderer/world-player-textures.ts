@@ -16,6 +16,12 @@ import {
   type NativeElementVfxSprite,
 } from '../element-vfx-native.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
+import {
+  NATIVE_SECONDARY_ASSET_SOURCES,
+  NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES,
+  NATIVE_SECONDARY_SPRITE_RECORDS,
+  nativeSecondarySpriteKey,
+} from './native-secondary-assets.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -82,6 +88,10 @@ export interface PlayerWorldTextures {
     }
     etherPierceStreak: Texture
   }
+  secondary: Readonly<Record<string, Texture>>
+  secondarySpecial: {
+    etherPlane: Texture
+  }
 }
 
 export function playerWorldAssetSources(): string[] {
@@ -90,6 +100,7 @@ export function playerWorldAssetSources(): string[] {
     playerCharacter,
     playerShadow: hub.npcs.teacher.shadow,
     primarySpells,
+    secondary: NATIVE_SECONDARY_ASSET_SOURCES,
   })
 }
 
@@ -152,6 +163,8 @@ export function createPlayerWorldTextures(
     ACTOR_FRAME_SIZE,
     ACTOR_FRAME_SIZE,
   )
+  const etherPlane = texture(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane)
+  etherPlane.source.addressMode = 'repeat'
   return {
     death: {
       hat: {
@@ -237,6 +250,11 @@ export function createPlayerWorldTextures(
       },
       etherPierceStreak: texture(primarySpells.etherPierceStreak),
     },
+    secondary: Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map((record) => [
+      nativeSecondarySpriteKey(record.atlas, record.entry),
+      texture(record.source),
+    ])),
+    secondarySpecial: { etherPlane },
   }
 }
 

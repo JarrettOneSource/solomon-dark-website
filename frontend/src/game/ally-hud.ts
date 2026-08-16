@@ -1,4 +1,8 @@
 import nativeFontData from '../assets/game/hub-hud-font-group-6.json' with { type: 'json' }
+import type {
+  NativeSecondaryActorState,
+  NativeSecondaryGolemState,
+} from './core-kernels/native-secondary-abilities.ts'
 import type { ProtocolPlayerState } from './protocol/game-state.ts'
 
 export type AllyHudIdentity =
@@ -71,6 +75,36 @@ export function derivePlayerAllyHudRows(
         displayName: player.config.displayName,
       },
     }))
+}
+
+type GolemAllyHudActor = Pick<
+  NativeSecondaryActorState,
+  'id' | 'kind' | 'worldKey'
+> & {
+  readonly golem: Pick<
+    NativeSecondaryGolemState,
+    'currentHealth' | 'maximumHealth'
+  > | null
+}
+
+export function deriveGolemAllyHudRows(
+  actors: readonly GolemAllyHudActor[],
+  worldKey: string,
+): AllyHudRow[] {
+  return [...actors]
+    .sort((left, right) => left.id - right.id)
+    .flatMap((actor) => {
+      if (actor.kind !== 'golem' || actor.golem === null || actor.worldKey !== worldKey) {
+        return []
+      }
+      return [{
+        healthRatio: clampAllyHudHealthRatio(
+          actor.golem.currentHealth / actor.golem.maximumHealth,
+        ),
+        id: `golem:${actor.id}`,
+        identity: { kind: 'golem' as const },
+      }]
+    })
 }
 
 export function combineAllyHudRows(

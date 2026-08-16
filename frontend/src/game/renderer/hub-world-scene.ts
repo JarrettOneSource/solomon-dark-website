@@ -1,4 +1,4 @@
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js'
+import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
@@ -51,6 +51,7 @@ import type { HubWorldTextures } from './hub-textures.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
 import { nativeLevelUpPresentationFrame } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
+import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
 
 export class HubWorldScene {
   readonly stage = new Container({ label: 'college-courtyard-camera-banks' })
@@ -76,6 +77,7 @@ export class HubWorldScene {
   private readonly playerElements = new Map<string, WizardElement>()
   private readonly primarySpells: PrimarySpellWorldView
   private readonly levelUp: NativeLevelUpWorldView
+  private readonly secondaryAbilities: NativeSecondaryWorldView
   private readonly livePlayerIds = new Set<string>()
   private readonly students = new Map<number, HubStudentView>()
   private readonly retiredStudentViews: HubStudentView[] = []
@@ -86,7 +88,12 @@ export class HubWorldScene {
   private createdStudentViewCount = 0
   private reusedStudentViewCount = 0
 
-  constructor(textures: HubWorldTextures, createdAtTick: number, traderAnimationSeed: number) {
+  constructor(
+    textures: HubWorldTextures,
+    createdAtTick: number,
+    traderAnimationSeed: number,
+    renderer: Renderer,
+  ) {
     this.textures = textures
     this.stage.eventMode = 'none'
     this.world.sortableChildren = true
@@ -99,6 +106,7 @@ export class HubWorldScene {
     })
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     this.world.addChild(this.levelUp.container)
+    this.secondaryAbilities = new NativeSecondaryWorldView(this.world, textures, renderer)
     this.world.addChild(this.worldLayer(textures.base[hub.courtyard], HUB_WORLD_DEPTH.courtyard))
     this.sealGlyphs = this.worldLayer(textures.base[hub.seals.glyphs], HUB_WORLD_DEPTH.sealGlyphs, HUB_WORLD_LAYER_BOUNDS.sealGlyphs)
     this.sealGlyphs.blendMode = 'add'
@@ -191,6 +199,11 @@ export class HubWorldScene {
       'hub:courtyard',
       presentationFrame,
     )
+    this.secondaryAbilities.update(
+      snapshot.secondaryAbilities,
+      'hub:courtyard',
+      presentationFrame,
+    )
     this.primarySpells.promoteOwnerOverlays((ownerId) => (
       this.players.get(ownerId)?.container.zIndex
     ))
@@ -210,6 +223,7 @@ export class HubWorldScene {
     this.astronomer.telescope.renderable = !modalActive
     this.astronomer.front.renderable = !modalActive
     this.primarySpells.setRenderable(!modalActive)
+    this.secondaryAbilities.setRenderable(!modalActive)
     const player = snapshot.players[localPlayerId]
     const playerView = this.players.get(localPlayerId)
     const levelUpFrame = levelUpPresentation === null
@@ -295,10 +309,23 @@ export class HubWorldScene {
     return this.levelUp.particleCount
   }
 
+  get secondaryAbilityCount(): number {
+    return this.secondaryAbilities.count
+  }
+
+  get secondaryAbilityKinds(): readonly string[] {
+    return this.secondaryAbilities.kinds
+  }
+
+  get secondaryAbilityPrimitiveCount(): number {
+    return this.secondaryAbilities.primitiveCount
+  }
+
   destroy(): void {
     this.world.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     this.primarySpells.destroy()
+    this.secondaryAbilities.destroy()
     for (const view of this.retiredStudentViews) view.destroy()
     this.retiredStudentViews.length = 0
     this.players.clear()
@@ -485,6 +512,7 @@ export class HubWorldScene {
         this.world.addChild(view.container)
       }
       view.update(player, snapshot.tick)
+      view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
     }
     for (const [playerId, view] of this.players) {
       if (live.has(playerId)) continue

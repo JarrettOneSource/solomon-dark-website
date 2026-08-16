@@ -259,10 +259,20 @@ export function playerStatBook(): PlayerStatBookComponent {
   return SHARED_STAT_BOOK
 }
 
+export function nativeSkillCategory(skillId: number): number | null {
+  return RULES[skillId]?.category ?? null
+}
+
 export function effectivePrimarySkillRankStats(
   skillBook: PlayerSkillBookComponent,
 ): NativePrimarySkillRankStats {
-  const skillId = skillBook.primarySkillId
+  return effectiveElementalPrimarySkillRankStats(skillBook, skillBook.primarySkillId)
+}
+
+export function effectiveElementalPrimarySkillRankStats(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+): NativePrimarySkillRankStats {
   return nativePrimarySkillRankStats(skillId, skillBook.effectiveRanks[skillId])
 }
 
@@ -318,6 +328,20 @@ export function equipPlayerSecondaryAbility(
     ...skillBook,
     secondaryBelt: freezeSecondaryBelt(belt),
   }
+}
+
+export function refreshPlayerSkillBookMindstar(
+  skillBook: PlayerSkillBookComponent,
+  active: boolean,
+): PlayerSkillBookComponent {
+  const effectiveRanks = skillBook.permanentRanks.map((permanentRank, skillId) => {
+    if (!active || skillId < 8 || skillId > 77 || permanentRank < 1) return permanentRank
+    const maximumLevel = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
+    return Math.min(maximumLevel, permanentRank + 1)
+  })
+  return effectiveRanks.every((rank, index) => rank === skillBook.effectiveRanks[index])
+    ? skillBook
+    : { ...skillBook, effectiveRanks: Object.freeze(effectiveRanks) }
 }
 
 function nativePrimarySkillRankStats(

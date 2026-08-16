@@ -8,6 +8,7 @@ import type {
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
 } from '../protocol/game-state.ts'
+import type { NativeSecondaryActorState } from '../core-kernels/native-secondary-abilities.ts'
 
 export interface NativeBoneyardLightSample {
   intensity: number
@@ -520,6 +521,81 @@ export function nativeRegionLightTargetPlan(
     logicalSide,
     physicalSide,
     renderResolution: physicalSide / logicalSide,
+  }
+}
+
+export function nativeSecondaryLightSource(
+  actor: NativeSecondaryActorState,
+  presentationFrame = actor.ageTicks,
+): NativeBoneyardLightSource | null {
+  if (actor.kind === 'shockwave' || actor.kind === 'freeze-wave') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.radius / 140,
+    }
+  }
+  if (actor.kind === 'storm-cloud' || actor.kind === 'acid-rain') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha * 0.5,
+      position: actor.position,
+      radius: 2,
+    }
+  }
+  if (actor.kind === 'magic-circle' && actor.ageTicks < 1_500) {
+    return {
+      castsDirectionalShadow: true,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.scale * 0.5,
+    }
+  }
+  if (actor.kind === 'fire-burn') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.radius,
+    }
+  }
+  if (actor.kind === 'electric-burn' && actor.ageTicks > 0) {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: 1,
+    }
+  }
+  if (actor.kind === 'ether-drain') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: Math.min(actor.scale, 1) * (
+        0.5 + presentationRandom(actor.id * 131 + presentationFrame) * 0.5
+      ),
+      position: actor.position,
+      radius: 2,
+    }
+  }
+  if (actor.kind === 'ether-fade' && actor.variant === 1) {
+    let intensity = Math.fround(1)
+    for (let tick = 0; tick <= Math.floor(actor.ageTicks); tick += 1) {
+      intensity = Math.fround(intensity - Math.fround(0.05))
+    }
+    return {
+      castsDirectionalShadow: false,
+      intensity: Math.max(0, intensity),
+      position: actor.position,
+      radius: 0.75,
+    }
+  }
+  if (actor.kind !== 'comet') return null
+  return {
+    castsDirectionalShadow: false,
+    intensity: 0.5,
+    position: actor.position,
+    radius: 2,
   }
 }
 

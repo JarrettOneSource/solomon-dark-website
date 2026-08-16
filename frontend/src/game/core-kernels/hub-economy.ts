@@ -160,6 +160,16 @@ export interface HubEconomyResult {
   readonly state: HubEconomyState
 }
 
+export function hasPandimensionalBugMasterOutfit(
+  equipment: HubEquipmentState,
+): boolean {
+  return equipment.hat?.recipeIndex === 11
+    && equipment.robe?.recipeIndex === 12
+    && equipment.weapon?.recipeIndex === 13
+    && equipment.rings.some((ring) => ring?.recipeIndex === 14)
+    && equipment.amulet?.recipeIndex === 15
+}
+
 export interface FomentiusStockDefinition {
   readonly gateValue?: number
   readonly iconRecords: readonly number[]

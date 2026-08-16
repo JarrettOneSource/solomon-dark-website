@@ -30,7 +30,7 @@ SHARED_PARSER_PATH = SOLOMON_DARK_DIR / "Mod Loader" / "tools" / "extract_bundle
 # Goodie renders its placed sprite from DeadHawg, but its native render/tick path
 # also owns BadGuys indicator and effect sprites. Survival actors consume those
 # records plus the Lesser Demon's dedicated articulated atlas.
-ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys", "Demon")
+ATLAS_NAMES = ("DeadHawg", "Bonedit", "BadGuys", "Demon", "Golem")
 
 THUMB_SIZE = 80
 LABEL_HEIGHT = 18
@@ -52,14 +52,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_shared_parser() -> ModuleType:
-    if not SHARED_PARSER_PATH.is_file():
-        raise FileNotFoundError(f"missing shared bundle parser: {SHARED_PARSER_PATH}")
+def load_shared_parser(images_dir: Path) -> ModuleType:
+    parser_path = SHARED_PARSER_PATH
+    if not parser_path.is_file():
+        parser_path = images_dir.parent.parent / "Mod Loader" / "tools" / "extract_bundles.py"
+    if not parser_path.is_file():
+        raise FileNotFoundError(f"missing shared bundle parser: {parser_path}")
     spec = importlib.util.spec_from_file_location(
-        "solomon_dark_extract_bundles", SHARED_PARSER_PATH
+        "solomon_dark_extract_bundles", parser_path
     )
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load shared bundle parser: {SHARED_PARSER_PATH}")
+        raise RuntimeError(f"cannot load shared bundle parser: {parser_path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -624,6 +627,13 @@ def write_classes_manifest() -> None:
                         "confidence": "verified",
                     },
                     {
+                        "selector": "main short at +0x140 for materialized variants 0..14",
+                        "atlas": "DeadHawg",
+                        "entryIdsByVariant": list(range(228, 243)),
+                        "role": "bounds/reference and complex-shadow companion",
+                        "confidence": "verified",
+                    },
+                    {
                         "selector": "overlay short at +0x142",
                         "atlas": "DeadHawg",
                         "entryIdsByVariant": list(range(243, 264)),
@@ -631,9 +641,7 @@ def write_classes_manifest() -> None:
                         "confidence": "verified",
                     },
                 ],
-                "unresolved": [
-                    "The selector relation for DeadHawg entries 228 through 242 is not established."
-                ],
+                "unresolved": [],
             },
             {
                 "id": 2009,
@@ -953,7 +961,7 @@ def write_classes_manifest() -> None:
 def main() -> int:
     args = parse_args()
     images_dir = args.images_dir.resolve()
-    shared_parser = load_shared_parser()
+    shared_parser = load_shared_parser(images_dir)
     results = [
         extract_atlas(images_dir, atlas_name, shared_parser)
         for atlas_name in ATLAS_NAMES

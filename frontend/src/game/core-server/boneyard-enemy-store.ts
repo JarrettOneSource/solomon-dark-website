@@ -6,6 +6,7 @@ import {
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   evaluateBoneyardEnemyConfig,
@@ -604,6 +605,8 @@ export interface BoneyardEnemyPlayerDamage {
   readonly amount: number
   readonly coldSlowTicks: number
   readonly dazzleTicks: number
+  readonly deflectable: boolean
+  readonly damageKind: 'magic' | 'physical'
   readonly eventId: BoneyardEnemyEventId
   readonly poisonDamage: number
   readonly poisonDuration: number
@@ -707,6 +710,7 @@ export type ClipBoneyardEnemySpellSegment = (
 ) => Readonly<BoneyardPoint>
 
 export interface BoneyardEnemyStoreStepContext {
+  readonly abilityEffects?: Readonly<Record<number, NativeSecondaryTargetEffectState>>
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
   readonly clipSpellSegment?: ClipBoneyardEnemySpellSegment
   readonly firstProjectileWorldContact: FirstBoneyardEnemyProjectileWorldContact
@@ -1195,7 +1199,7 @@ export function stepBoneyardEnemyStore(
       work.impActorCount -= 1
     }
   }
-  stepMageShields(work)
+  stepMageShields(work, context)
   stepMaggots(work, context)
   stepProjectiles(work, context)
   const spawnIntents = context.resolveSpawnIntents(
@@ -1462,11 +1466,16 @@ function createBrain(
   }
 }
 
-function stepMageShields(work: WorkingStep): void {
+function stepMageShields(
+  work: WorkingStep,
+  context: BoneyardEnemyStoreStepContext,
+): void {
   for (let index = 0; index < work.actors.length; index += 1) {
     const source = work.actors[index]!
+    const effect = context.abilityEffects?.[source.id]
     if (
       source.lifeState !== 'alive'
+      || (effect?.disruptedTicks ?? 0) > 0
       || source.brain.family !== 'mage'
       || source.config.enemyToken !== 'SKELETONMAGE'
       || source.config.family.shieldInterval <= 0
@@ -1586,10 +1595,37 @@ function stepLivingActor(
   source: BoneyardEnemyActor,
   context: BoneyardEnemyStoreStepContext,
 ): BoneyardEnemyActor {
-  const targeted = refreshTarget(source, context)
+  const effect = context.abilityEffects?.[source.id]
+  const affected = effect === undefined
+    ? source
+    : withNativeSecondaryEffect(source, effect)
+  const targeted = refreshTarget(affected, context)
   const actor = targeted.brain.family === 'coffin'
     ? targeted
     : faceTarget(targeted, context.players)
+  if ((effect?.disruptedTicks ?? 0) > 0) {
+    const interrupted = interruptNativeSecondaryAction(actor)
+    const lit = stepEnemyLighting(interrupted)
+    return lit.brain.family === 'mage'
+      ? applyMageProviderGateAfterAction(lit)
+      : lit
+  }
+  if (effect?.timeScale === 0) {
+    const lit = stepEnemyLighting(actor)
+    return lit.brain.family === 'mage'
+      ? applyMageProviderGateAfterAction(lit)
+      : lit
+  }
+  if ((effect?.fleeTicks ?? 0) > 0 && actor.brain.family !== 'coffin') {
+    const interrupted = interruptNativeSecondaryAction(actor)
+    const fled = moveTowardTarget(
+      interrupted,
+      interrupted.brain,
+      context,
+      -1,
+    )
+    return stepEnemyLighting(fled)
+  }
   if (actor.brain.family === 'mage') {
     const enrolled = stepEnemyLighting(actor)
     return applyMageProviderGateAfterAction(
@@ -2641,6 +2677,7 @@ function stepMaggots(
 ): void {
   const retained: BoneyardMaggotActor[] = []
   for (const source of work.maggots) {
+    const effect = context.abilityEffects?.[source.id]
     if (!hasLiveCoffinOwner(work.actors, source.ownerCoffinActorId)) {
       retireMaggot(work, source, context.tick)
       continue
@@ -2663,6 +2700,11 @@ function stepMaggots(
       continue
     }
 
+    if ((effect?.disruptedTicks ?? 0) > 0 || effect?.timeScale === 0) {
+      retained.push(source)
+      continue
+    }
+
     if (source.movementPhase === 'emerging') {
       retained.push(stepEmergingMaggot(source, context))
       continue
@@ -2679,7 +2721,8 @@ function stepMaggots(
       target.position.x - source.position.x,
       target.position.y - source.position.y,
     )
-    if (distance <= Math.max(
+    const fleeing = (effect?.fleeTicks ?? 0) > 0
+    if (!fleeing && distance <= Math.max(
       BOUNDED_MAGGOT_PROGRAM.attackReach,
       source.collisionRadius + target.collisionRadius,
     )) {
@@ -2689,9 +2732,11 @@ function stepMaggots(
         })
         work.playerDamage.push(Object.freeze({
           actorId: source.id,
-          amount: source.damage,
+          amount: source.damage * (effect?.weakenFactor ?? 1),
           coldSlowTicks: 0,
           dazzleTicks: 0,
+          deflectable: true,
+          damageKind: 'physical',
           eventId,
           playerId: targetPlayerId,
           poisonDamage: source.poisonDamage,
@@ -2718,11 +2763,13 @@ function stepMaggots(
       retained.push({ ...source, targetPlayerId })
       continue
     }
-    const unitX = (target.position.x - source.position.x) / distance
-    const unitY = (target.position.y - source.position.y) / distance
+    const direction = fleeing ? -1 : 1
+    const unitX = direction * (target.position.x - source.position.x) / distance
+    const unitY = direction * (target.position.y - source.position.y) / distance
+    const speedScale = nativeSecondaryActorSpeedScale(effect)
     const delta = Object.freeze({
-      x: unitX * BOUNDED_MAGGOT_PROGRAM.movementStep,
-      y: unitY * BOUNDED_MAGGOT_PROGRAM.movementStep,
+      x: unitX * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale,
+      y: unitY * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale,
     })
     const requestedPosition = Object.freeze({
       x: source.position.x + delta.x,
@@ -2991,6 +3038,57 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
   }
 }
 
+function withNativeSecondaryEffect(
+  actor: BoneyardEnemyActor,
+  effect: NativeSecondaryTargetEffectState,
+): BoneyardEnemyActor {
+  const speedScale = nativeSecondaryActorSpeedScale(effect)
+  const weakenFactor = effect.weakenFactor
+  if (speedScale === 1 && weakenFactor === 1) return actor
+  return {
+    ...actor,
+    config: {
+      ...actor.config,
+      attackSpeed: actor.config.attackSpeed * speedScale,
+      baseSpeed: actor.config.baseSpeed * speedScale,
+      extraDamage: actor.config.extraDamage * weakenFactor,
+      primaryDamage: actor.config.primaryDamage === null
+        ? null
+        : actor.config.primaryDamage * weakenFactor,
+      secondaryDamage: actor.config.secondaryDamage * weakenFactor,
+      tertiaryDamage: actor.config.tertiaryDamage * weakenFactor,
+    },
+  }
+}
+
+function nativeSecondaryActorSpeedScale(
+  effect: NativeSecondaryTargetEffectState | undefined,
+): number {
+  if (effect === undefined) return 1
+  const dazzleScale = effect.dazzleTicks <= 0 || effect.dazzleMaximumTicks <= 0
+    ? 1
+    : Math.max(
+        1 / effect.dazzleMaximumTicks,
+        1 - effect.dazzleTicks / effect.dazzleMaximumTicks,
+      )
+  return Math.min(effect.timeScale, dazzleScale)
+}
+
+function interruptNativeSecondaryAction(
+  actor: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  switch (actor.brain.family) {
+    case 'skeleton': return resetSkeleton(actor, actor.brain)
+    case 'archer': return resetArcher(actor, actor.brain)
+    case 'mage': return resetMage(actor, actor.brain)
+    case 'imp': return resetImp(actor, actor.brain)
+    case 'zombie': return resetZombie(actor, actor.brain)
+    case 'wraith': return resetWraith(actor, actor.brain)
+    case 'demon': return resetDemon(actor, actor.brain)
+    case 'coffin': return actor
+  }
+}
+
 function positiveModulo(value: number, period: number): number {
   return ((value % period) + period) % period
 }
@@ -3148,6 +3246,11 @@ function directPlayerDamage(
     dazzleTicks: actor.config.enemyToken === 'WRAITH'
       ? NATIVE_WRAITH_DAZZLE_TICKS
       : 0,
+    deflectable: true,
+    damageKind: actor.config.enemyToken === 'SKELETONMAGE'
+      || actor.config.enemyToken === 'WRAITH'
+      ? 'magic'
+      : 'physical',
     eventId,
     playerId: targetPlayerId,
     poisonDamage: zombie?.poisonPunchDamage ?? 0,
@@ -3858,6 +3961,8 @@ function stepDemonBomb(
         amount: projectile.damage,
         coldSlowTicks: 0,
         dazzleTicks: 0,
+        deflectable: true,
+        damageKind: 'magic',
         eventId,
         playerId,
         poisonDamage: 0,
@@ -4009,6 +4114,8 @@ function stepProjectiles(
         amount: source.damage,
         coldSlowTicks: source.coldSlowTicks,
         dazzleTicks: 0,
+        deflectable: source.kind !== 'poison-pool',
+        damageKind: source.kind === 'arrow' ? 'physical' : 'magic',
         eventId,
         playerId: contact.playerId,
         poisonDamage: source.poisonDamage,

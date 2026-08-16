@@ -744,7 +744,7 @@ export function connectGameClientSession(
           failure.message,
           diagnosticFailureDetail(failure),
         )
-        options.transport.close(1008, failure.message.slice(0, 123))
+        options.transport.close(4008, failure.message.slice(0, 123))
         reject(failure)
         return
       }
@@ -760,7 +760,7 @@ export function connectGameClientSession(
         failure.message,
         diagnosticFailureDetail(failure),
       )
-      options.transport.close(1008, failure.message.slice(0, 123))
+      options.transport.close(4008, failure.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
       enemyEventListeners.clear()
@@ -811,6 +811,7 @@ function copyPlayer(player: ProtocolPlayerState): ProtocolPlayerState {
     progression: {
       ...player.progression,
       learnedSkills: player.progression.learnedSkills.map((entry) => [...entry]),
+      secondaryBelt: [...player.progression.secondaryBelt],
       pendingOffer: player.progression.pendingOffer
         ? {
             ...player.progression.pendingOffer,

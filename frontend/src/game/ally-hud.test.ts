@@ -10,6 +10,7 @@ import {
   allyHudRowsEqual,
   clampAllyHudHealthRatio,
   combineAllyHudRows,
+  deriveGolemAllyHudRows,
   derivePlayerAllyHudRows,
   layoutNativeAllyName,
   NATIVE_ALLY_FONT,
@@ -93,6 +94,24 @@ test('ally HUD appends the explicit stock Golem presentation through the shared 
     accessibleName: 'Golem',
     visual: 'stock-golem',
   })
+})
+
+test('ally HUD derives every live in-world Golem row in stable actor order', () => {
+  const health = (currentHealth: number, maximumHealth = 100) => ({
+    currentHealth,
+    maximumHealth,
+  })
+  const rows = deriveGolemAllyHudRows([
+    { golem: health(25), id: 9, kind: 'golem', worldKey: 'boneyard:run' },
+    { golem: health(60), id: 2, kind: 'golem', worldKey: 'boneyard:run' },
+    { golem: health(80), id: 1, kind: 'golem', worldKey: 'boneyard:other' },
+    { golem: health(0), id: 3, kind: 'golem-death', worldKey: 'boneyard:run' },
+  ], 'boneyard:run')
+
+  assert.deepEqual(rows, [
+    { healthRatio: 0.6, id: 'golem:2', identity: { kind: 'golem' } },
+    { healthRatio: 0.25, id: 'golem:9', identity: { kind: 'golem' } },
+  ])
 })
 
 test('ally HUD clamps ratios without smoothing and compares semantic rows', () => {

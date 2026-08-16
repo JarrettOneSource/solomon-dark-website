@@ -292,6 +292,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
     previousThreshold: 0,
     revision: 0,
     sorcerorsCharmAvailable: false,
+    secondaryBelt: [11, null, null, null, null, null, null, null],
   })
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
@@ -763,8 +764,8 @@ test('protocol v28 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v28 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 28)
+test('protocol v29 carries run lifecycle and authoritative combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 29)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1952,6 +1953,158 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [{ ...earthImpact, lifetimeTicks: earthImpact.lifetimeTicks + 1 }],
     },
   }), /lifetimeTicks does not match/)
+})
+
+test('protocol strictly validates nested native Region screen-feedback events', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const event = {
+    actorId: null,
+    cue: 'teleport',
+    eventId: 1,
+    kind: 'pulse',
+    ownerId: 'player-1',
+    pitch: 1,
+    position: { x: 800, y: 400 },
+    screenFlash: {
+      alpha: 1,
+      blue: 1,
+      decayPerTick: 0.025,
+      green: 1,
+      pointAttenuated: true,
+      red: 1,
+    },
+    skillId: 48,
+    tick: 0,
+    worldKey: 'hub:courtyard',
+  }
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      secondaryAbilities: {
+        ...frame.secondaryAbilities,
+        events: [event],
+        nextEventId: 2,
+      },
+    },
+    sequence: 2,
+  }
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.secondaryAbilities.events, [event])
+
+  const missing = JSON.parse(JSON.stringify(message))
+  delete missing.frame.secondaryAbilities.events[0].screenFlash
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missing)),
+    /screenFlash must be an object/,
+  )
+
+  const extra = JSON.parse(JSON.stringify(message))
+  extra.frame.secondaryAbilities.events[0].screenFlash.mode = 'additive'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(extra)),
+    /screenFlash\.mode is not allowed/,
+  )
+
+  const invalidAlpha = JSON.parse(JSON.stringify(message))
+  invalidAlpha.frame.secondaryAbilities.events[0].screenFlash.alpha = 1.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidAlpha)),
+    /screenFlash\.alpha must be between zero and one/,
+  )
+
+  const invalidDecay = JSON.parse(JSON.stringify(message))
+  invalidDecay.frame.secondaryAbilities.events[0].screenFlash.decayPerTick = 0
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDecay)),
+    /screenFlash\.decayPerTick must be positive/,
+  )
+})
+
+test('protocol preserves Earthquake pointer-list order while retaining unique-target validation', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const actor = {
+    ageTicks: 0,
+    alpha: 1,
+    damage: 0,
+    enhanced: false,
+    endpoint: { x: 0, y: 0 },
+    frame: 0,
+    freezeTicks: 0,
+    golem: null,
+    hitTargetIds: [9, 3, 7],
+    id: 1,
+    kind: 'earthquake',
+    lifetimeTicks: 100,
+    midpoint: { x: 0, y: 0 },
+    ownerId: 'player-1',
+    phase: 0,
+    position: { x: 800, y: 400 },
+    presentationRng: null,
+    quantity: 0,
+    radius: 512,
+    rank: 1,
+    rotationRadians: 0,
+    scale: 1,
+    skillId: 41,
+    slowFactor: 1,
+    targetId: null,
+    variant: 0,
+    velocity: { x: 0, y: 0 },
+    worldKey: 'hub:courtyard',
+  }
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      secondaryAbilities: {
+        ...frame.secondaryAbilities,
+        actors: [actor],
+        nextActorId: 2,
+      },
+    },
+    sequence: 2,
+  }
+
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.secondaryAbilities.actors[0]!.hitTargetIds, [9, 3, 7])
+
+  const continuousFrame = structuredClone(message)
+  continuousFrame.frame.secondaryAbilities.actors[0]!.frame = 0.25
+  continuousFrame.frame.secondaryAbilities.actors[0]!.hitTargetIds = []
+  continuousFrame.frame.secondaryAbilities.actors[0]!.kind = 'magic-trap'
+  continuousFrame.frame.secondaryAbilities.actors[0]!.skillId = 50
+  continuousFrame.frame.secondaryAbilities.actors[0]!.slowFactor = -1
+  const continuousDecoded = decodeServerGameMessage(JSON.stringify(continuousFrame))
+  assert.equal(continuousDecoded.type, 'server-snapshot')
+  assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.frame, 0.25)
+  assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.slowFactor, -1)
+
+  const duplicate = structuredClone(message)
+  duplicate.frame.secondaryAbilities.actors[0]!.hitTargetIds = [9, 3, 9]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(duplicate)),
+    /hitTargetIds must be unique/,
+  )
+
+  const sortedOwner = structuredClone(message)
+  sortedOwner.frame.secondaryAbilities.actors[0]!.kind = 'shockwave'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(sortedOwner)),
+    /only Earthquake preserves pointer-list order/,
+  )
 })
 
 test('protocol rejects player ids reserved by ordinary JavaScript records', () => {

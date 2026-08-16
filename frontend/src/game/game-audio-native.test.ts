@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+import { NATIVE_SECONDARY_ABILITY_CONTRACTS } from './core-kernels/native-secondary-ability-contract.ts'
+
 import {
   CREATE_DISCIPLINE_FINALIZE_MS,
   GAME_SCENE_MUSIC,
@@ -110,6 +112,11 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     NATIVE_SOUND_MANIFEST['fireball-hit'].sourceSha256,
     '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   )
+  assert.equal(NATIVE_SOUND_MANIFEST['flame-lash-start'].registryOffset, 0x5c4)
+  assert.equal(
+    NATIVE_SOUND_MANIFEST['flame-lash-start'].sourceSha256,
+    'd563633ce5ed2701050884b11806898da500581858238d45fb881e820db0a1dc',
+  )
   assert.equal(NATIVE_SOUND_MANIFEST['pick-skill'].registryOffset, 0x44)
   assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
   assert.equal(NATIVE_SOUND_MANIFEST['unlock-skill'].registryOffset, 0x11a0)
@@ -124,6 +131,11 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-1'].registryOffset, 0x2620)
   assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-2'].registryOffset, 0x264c)
   assert.equal(NATIVE_SOUND_MANIFEST['wizard-ouch-3'].registryOffset, 0x2678)
+  assert.equal(NATIVE_LOOP_MANIFEST['electric-loop'].registryOffset, 0x164c)
+  assert.equal(
+    NATIVE_LOOP_MANIFEST['electric-loop'].sourceSha256,
+    '809601e64da07ac0adfffec5f5e29dfc61ee79725fdbf85ceb501d80d6cb0db4',
+  )
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
@@ -145,6 +157,41 @@ test('pins the complete skill-picker lifecycle cues to the untouched stock WAVs'
     assert.equal(
       createHash('sha256').update(source).digest('hex'),
       NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+    )
+  }
+})
+
+test('pins Magic Trap ElectricBurn loop to the untouched stock WAV', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/electric-loop.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_LOOP_MANIFEST['electric-loop'].sourceSha256,
+  )
+})
+
+test('pins every contracted right-click cue to its untouched stock WAV', () => {
+  const manifestByCue = {
+    ...NATIVE_SOUND_MANIFEST,
+    ...NATIVE_STREAM_MANIFEST,
+    ...NATIVE_LOOP_MANIFEST,
+  } as Readonly<Record<string, Readonly<{ sourceSha256: string }>>>
+  const cues = new Set(NATIVE_SECONDARY_ABILITY_CONTRACTS.flatMap(({ audio }) => (
+    audio.map(({ event }) => event)
+  )))
+  for (const cue of cues) {
+    const manifest = manifestByCue[cue]
+    assert.ok(manifest, `missing native audio manifest for ${cue}`)
+    const filename = cue === 'flash' ? 'enemy-flash.wav' : `${cue}.wav`
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      manifest.sourceSha256,
+      cue,
     )
   }
 })
