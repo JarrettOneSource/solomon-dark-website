@@ -18066,6 +18066,114 @@ below is from that rebased tree.
   and shield coverage was removed after capture. Final scope is four files:
   this ledger, the Air-native constants, the Air view, and the Air regression
   test. `git diff --check` passes.
+
+### Production verification follow-up — 2026-08-16
+
+The first live audit found production healthy at Website revision
+`6826e62bc981c53b7c1f9800a6de1c97c6da18db`, with `e68372a9617aef51f241f85f0c519d701c8c8e4d`
+in its ancestry. The installed deployment worker matched current `origin/main`,
+its last-success receipt named the same deployed revision, Caddy and the game
+supervisor were active with zero restarts, SQLite integrity was `ok`, the public
+and loopback `/game` routes returned 200, and the public index hash matched the
+deployed artifact. There is intentionally no `solomon-dark-website.service` on
+this host: Caddy serves the deployed static release directly. The supervisor
+reported protocol `solomon-dark/29` with zero sessions and zero lobbies before
+acceptance.
+
+The first Mac mini production Air run exposed an acceptance-harness defect,
+not a game or deployment defect. `smoke-primary-spells.mjs` reached the live Hub
+and cast Air, then attempted to import
+`/src/game/core-kernels/primary-spells.ts` inside the browser. The built site
+correctly does not publish Vite source modules, so Chrome rejected that import
+before the Boneyard target assertion. The provisioned production session
+retired immediately; five successive supervisor samples remained at zero
+sessions and zero lobbies.
+
+The permanent repair is limited to the smoke owner. Browser pose evidence must
+come from the renderer-owned `__primarySpellPoseEvents` already captured by the
+journey, so built and development bundles use the same observable contract. The
+Gravestone leg records the loaded generated Boneyard, crosses the real entry
+Gate, and aims at visible type-2029 objects instead of blindly sweeping across a
+closed Fence. A temporary acceptance-only enemy driver additionally crossed the
+Gate, activated the real Solomon/wave lifecycle, aimed at a live rendered actor,
+retained the authoritative `enemy:*` target id, observed its health decrease
+while Air contacts remained live, and captured the frame with empty browser
+error arrays. The exact target/contact/later-resident depth inequality remains
+owned by the focused painter test; the production browser journey owns deployed
+bundle, target membership, live damage, audio, presentation, and visual evidence.
+
+The repaired smoke passed a supplemental WSL production preflight against that
+same deployed revision. Gravestone mode acquired `scenery:object-195`, retained
+five rendered Air contacts, emitted no browser errors, and captured a 1600x900
+PNG with SHA-256
+`69a31ed69c060952cd30dcb3dedbe4832986dd95582daed36920a4677f3b3d27`.
+Enemy mode crossed the generated Gate, contacted Solomon, escaped during the
+opening, and kept a collision-independent movement lane active while aiming so
+the ten stock opening Skeletons could not turn a visual acceptance wait into a
+death test. It acquired `enemy:3`, reduced health from `2.5` to
+`0.9248046875`, retained five rendered Air contacts in the captured frame,
+reported no page or console errors, and wrote a 1600x900 PNG with SHA-256
+`63419e8d9a27738d86c6f7924b3e727c17177c4a2006727068d12bbfa1c49e15`.
+Visual inspection shows the additive contact disk over the target art in both
+captures. The supervisor returned to zero sessions and zero lobbies after each
+attempt. These are useful live-production preflights, but the required final
+acceptance remains repeated runs on the Mac mini and the exact published tree.
+
+The Mac mini then completed three consecutive generated-Gravestone production
+runs on macOS 26.4.1 with Chrome 151. Each run crossed its generated Gate,
+acquired a real scenery target (`scenery:object-368`, `scenery:object-23`, and
+`scenery:object-45`), retained five rendered Air contacts, and reported no page
+or console errors. The three 1600x900 target captures have SHA-256 values
+`97e74e6e7a353b2b811c7122a1a9e23b3ccb3b7411300c47aa4fb4406401d6fb`,
+`d3446515edf4b7fdbe067e0d06b8024323eb1cbbf5ea2a8865396f4cc69d6d9b`,
+and `d7d7bec08112a45cb45f1ea0d1b496cd15bcbc4f9c217753cdc2ca0dd1645406`.
+
+The temporary enemy driver first exhausted one 120-second generated-scene
+navigation budget; that attempt produced no target capture and is not counted.
+The diagnostic rerun then passed, followed by three consecutive clean Mac runs.
+Those three acquired `enemy:2`, `enemy:2`, and `enemy:4`; reduced health from
+`2.5` to `2.297054687514901`, `2.120249999985094`, and
+`2.302554687485099`; observed `hitFlash=1` with five live Air contacts; and
+reported empty browser-error arrays. Their target-capture SHA-256 values are
+`470b9812cadfc3e87661ef9d887884e18059e61d777990ef8e16f0eb670b7697`,
+`34957864520226e5aa94b63812a1f40cc2e80e0dc27dc52a1b08b2a7269bdbc5`,
+and `4536ddd78cb4ab95921e9aa03a4e5fa0576e530d253b7d24f7997fbaa12beee9`.
+Visual inspection of all six counted frames confirms that the additive contact
+corona paints over the struck Gravestone or Skeleton art while remaining in the
+world painter. The supervisor returned to zero sessions and zero lobbies after
+the sequence. The temporary enemy driver was removed after capture; the final
+permanent smoke change contains only the built-bundle pose repair, deterministic
+generated-Gravestone targeting/Gate traversal, and failure diagnostics.
+
+The first run from the trimmed exact candidate completed every gameplay and
+visual assertion (`scenery:object-23`, five live contacts, and no browser
+errors), saved its target frame, and retired its production session, but the Mac
+Node process retained an `fsevents` handle after Chrome closed. That manually
+terminated attempt is not counted. A process sample identified the idle libuv
+loop and watcher; the smoke now closes its owned Playwright context before its
+owned browser, matching the repository's multiplayer-smoke teardown order.
+The first WSL teardown-repair check then exposed a random-layout Gate timeout:
+the movement helper published a zero-input `blur` but did not restore page focus
+before pressing the crossing key. That attempt never cast and is not counted.
+Restoring focus at the same edge used by the established Gate drivers produced
+three consecutive clean production runs against `scenery:object-18`,
+`scenery:object-368`, and `scenery:object-23`; all three rendered five contacts,
+reported no browser errors, exited normally, and retired their sessions.
+
+The corrected behavior-bearing candidate
+`af7fe2eb3cd89c71341fac7a2f652c9835282e14` then passed three consecutive Mac
+mini production runs with normal teardown. It crossed three independently
+generated Gates, acquired `scenery:object-381`, `scenery:object-30`, and
+`scenery:object-21`, retained five live Air contacts in every capture, and
+reported empty page/console error arrays. The target-frame SHA-256 values are
+`47a90b3b62c0b9f599aa27ffc7ea932010ac73168181649192885a27f423593c`,
+`c9b15e1e71c30d12fc957d9897b11c59e5ddb13a9242cda395d2805c8395ab82`,
+and `8b79f8402d76ccedf8a006c85e6903fe559f451d6125d79d83801231ea863675`.
+Visual inspection confirms that the contact corona paints in front of each
+struck Gravestone while the source/body remain world-sorted. No task-owned
+Chrome or smoke process remained, and the supervisor returned to zero sessions
+and zero lobbies.
+
 ## Generated Boneyard entrance retirement and wave placement — 2026-08-16
 
 ### Problem and scope

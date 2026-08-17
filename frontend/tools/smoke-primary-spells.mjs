@@ -71,9 +71,10 @@ const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 })
+let context = null
 
 try {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
+  context = await browser.newContext({ viewport: { width: 1600, height: 900 } })
   if (gameEndpointUrl && gameEndpointCredential) {
     await context.addInitScript((runtime) => {
       window.solomonDarkRuntime = runtime
@@ -99,14 +100,17 @@ try {
     window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
     const poseEvents = []
     const wireFrames = []
+    let loadedBoneyard = null
     let previousPose = null
     const nativeJsonParse = JSON.parse
     Object.defineProperties(window, {
       __primarySpellPoseEvents: { value: poseEvents },
+      __primarySpellBoneyard: { get: () => loadedBoneyard },
       __primarySpellWireFrames: { value: wireFrames },
     })
     JSON.parse = function (...args) {
       const value = nativeJsonParse.apply(this, args)
+      if (value?.type === 'server-boneyard-loaded') loadedBoneyard = value.boneyard
       const frame = value?.type === 'server-welcome'
         ? value.snapshot
         : value?.type === 'server-snapshot'
@@ -399,6 +403,7 @@ try {
     status: 'ok',
   })}\n`)
 } finally {
+  await context?.close()
   await browser.close()
 }
 
@@ -504,48 +509,76 @@ async function enterBoneyard(page) {
 
 async function castAirInBoneyard(page) {
   const canvas = await enterBoneyard(page)
+  const gate = await crossEntryGate(page, page.locator('.boneyard-scene'))
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
-  const frame = await canvas.evaluate((node) => ({ ...node.__sdrBoneyardFrame }))
-  const playerScreen = {
-    x: bounds.x + frame.playerScreenX * bounds.width / 1600,
-    y: bounds.y + frame.playerScreenY * bounds.height / 900,
-  }
-  const radius = Math.min(bounds.width, bounds.height) * 0.38
+  const frame = await boneyardFrame(page)
+  assert.equal(frame.localPlayerLifeState, 'alive')
+  assert.equal(frame.runPhase, 'active')
+  const gravestones = await visibleGravestones(page, frame)
+  assert.ok(gravestones.length > 0, 'expected a visible generated Gravestone')
   const eventStart = await audioEventCount(page)
   const afterTick = await latestWireTick(page)
-  await page.mouse.move(playerScreen.x + radius, playerScreen.y)
+  await page.bringToFront()
+  const initialAimPoint = worldScreenPoint(bounds, frame, gravestones[0].pos)
+  await page.mouse.move(initialAimPoint.x, initialAimPoint.y)
   await page.mouse.down({ button: 'left' })
-  await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-start.wav', 'play')
-  const loop = await waitForAudio(
-    page,
-    eventStart,
-    '/game/audio/sfx/lightning-loop.wav',
-    'play',
-  )
-  assert.equal(loop.loop, true)
-
-  let targeted = null
-  for (let index = 0; index < 24 && targeted === null; index += 1) {
-    const angle = index * Math.PI * 2 / 24
-    await page.mouse.move(
-      playerScreen.x + Math.cos(angle) * radius,
-      playerScreen.y + Math.sin(angle) * radius,
+  let receipt
+  try {
+    try {
+      await waitForWireSpell(page, 'air', afterTick, 5_000)
+    } catch (error) {
+      const diagnostics = await page.evaluate((point) => {
+        const target = document.elementFromPoint(point.x, point.y)
+        return {
+          body: document.body.innerText.slice(0, 1_000),
+          frame: structuredClone(
+            document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame,
+          ),
+          latestWire: window.__primarySpellWireFrames.at(-1),
+          pointerTarget: target
+            ? { className: target.className, tagName: target.tagName }
+            : null,
+          skillPicker: Boolean(document.querySelector('.skill-picker-stage')),
+        }
+      }, initialAimPoint)
+      throw new Error(`Air cast did not start: ${JSON.stringify(diagnostics)}`, { cause: error })
+    }
+    await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-start.wav', 'play')
+    const loop = await waitForAudio(
+      page,
+      eventStart,
+      '/game/audio/sfx/lightning-loop.wav',
+      'play',
     )
-    await page.waitForTimeout(90)
-    targeted = await targetedAirWire(page, afterTick)
+    assert.equal(loop.loop, true)
+
+    let targeted = null
+    for (let index = 0; index < gravestones.length && targeted === null; index += 1) {
+      const point = worldScreenPoint(bounds, frame, gravestones[index].pos)
+      await page.mouse.move(point.x, point.y)
+      await page.waitForTimeout(90)
+      targeted = await targetedAirWire(page, afterTick)
+    }
+    assert.ok(targeted, 'expected held Air to acquire a Boneyard Gravestone')
+    assert.match(targeted.state.targetId, /^scenery:/)
+    assert.equal(targeted.playerTargetId, targeted.state.targetId)
+    if (lowManaAcceptance) assert.equal(targeted.state.underpowered, true)
+    const held = await waitForBoneyardSpell(page, 'air')
+    if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
+    const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
+    await page.screenshot({ path: screenshotPath })
+    receipt = {
+      gate,
+      held,
+      screenshotPath,
+      targeted,
+    }
+  } finally {
+    await page.mouse.up({ button: 'left' })
   }
-  assert.ok(targeted, 'expected held Air to acquire a Boneyard Gravestone')
-  assert.match(targeted.state.targetId, /^scenery:/)
-  assert.equal(targeted.playerTargetId, targeted.state.targetId)
-  if (lowManaAcceptance) assert.equal(targeted.state.underpowered, true)
-  const held = await waitForBoneyardSpell(page, 'air')
-  if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
-  const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
-  await page.screenshot({ path: screenshotPath })
-  await page.mouse.up({ button: 'left' })
   await waitForAudio(page, eventStart, '/game/audio/sfx/lightning-loop.wav', 'pause')
-  return { held, screenshotPath, targeted }
+  return receipt
 }
 
 async function castFireInBoneyard(page) {
@@ -662,6 +695,136 @@ async function targetedAirWire(page, afterTick) {
   }, afterTick)
 }
 
+async function crossEntryGate(page, scene) {
+  const gate = await alignWithEntryGate(page, scene)
+  await settleMovement(page)
+  const initialY = Number(await scene.getAttribute('data-local-player-y'))
+  const initialGateState = await scene.getAttribute('data-gate-state')
+  const direction = Math.sign(gate.targetY - initialY)
+  assert.notEqual(direction, 0, 'expected the entry gate to be beyond the player')
+  const key = direction < 0 ? 'w' : 's'
+  const crossingDistance = Math.abs(gate.targetY - initialY) + 35
+  await page.bringToFront()
+  await page.keyboard.down(key)
+  try {
+    await page.waitForFunction(
+      ({ distance, initial, sign }) => {
+        const value = Number(document.querySelector('.boneyard-scene')
+          ?.getAttribute('data-local-player-y'))
+        return Number.isFinite(value) && (value - initial) * sign > distance
+      },
+      { distance: crossingDistance, initial: initialY, sign: direction },
+      { timeout: 15_000 },
+    )
+  } finally {
+    await page.keyboard.up(key)
+  }
+  await settleMovement(page)
+  const finalGateState = await scene.getAttribute('data-gate-state')
+  const finalY = Number(await scene.getAttribute('data-local-player-y'))
+  assert.notEqual(finalGateState, initialGateState)
+  return { ...gate, direction, finalY, initialY }
+}
+
+async function alignWithEntryGate(page, scene) {
+  const initialX = Number(await scene.getAttribute('data-local-player-x'))
+  const initialY = Number(await scene.getAttribute('data-local-player-y'))
+  const gateState = await scene.getAttribute('data-gate-state')
+  const gates = new Map()
+  for (const serialized of gateState?.split('|') || []) {
+    const separator = serialized.lastIndexOf(':')
+    if (separator < 0) continue
+    const id = serialized.slice(0, separator)
+    const [x, y] = serialized.slice(separator + 1).split(',').map(Number)
+    const gateId = id.slice(0, id.lastIndexOf(':'))
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !gateId) continue
+    const tips = gates.get(gateId) || []
+    tips.push({ x, y })
+    gates.set(gateId, tips)
+  }
+  const centers = [...gates.values()]
+    .filter((tips) => tips.length === 2)
+    .map((tips) => ({
+      x: (tips[0].x + tips[1].x) / 2,
+      y: (tips[0].y + tips[1].y) / 2,
+    }))
+  assert.ok(centers.length > 0, `expected an entry gate in ${gateState}`)
+  const target = centers.reduce((nearest, center) => (
+    Math.hypot(center.x - initialX, center.y - initialY)
+      < Math.hypot(nearest.x - initialX, nearest.y - initialY)
+      ? center
+      : nearest
+  ))
+  const delta = target.x - initialX
+  if (Math.abs(delta) > 3) {
+    const direction = Math.sign(delta)
+    const key = direction > 0 ? 'd' : 'a'
+    await page.keyboard.down(key)
+    try {
+      await page.waitForFunction(
+        ({ initial, sign, targetX }) => {
+          const value = Number(document.querySelector('.boneyard-scene')
+            ?.getAttribute('data-local-player-x'))
+          return Number.isFinite(value)
+            && (value - initial) * sign >= Math.abs(targetX - initial) - 3
+        },
+        { initial: initialX, sign: direction, targetX: target.x },
+        { timeout: 3_000 },
+      )
+    } finally {
+      await page.keyboard.up(key)
+    }
+  }
+  return {
+    playerX: Number(await scene.getAttribute('data-local-player-x')),
+    targetX: target.x,
+    targetY: target.y,
+  }
+}
+
+async function visibleGravestones(page, frame) {
+  return page.evaluate((currentFrame) => {
+    const objects = window.__primarySpellBoneyard?.scene?.objects ?? []
+    return objects.filter((object) => {
+      if (object.typeId !== 2029) return false
+      const x = currentFrame.playerScreenX + (object.pos.x - currentFrame.playerX) * 1.35
+      const y = currentFrame.playerScreenY + (object.pos.y - currentFrame.playerY) * 1.35
+      return x >= 30 && x <= 1_570 && y >= 30 && y <= 870
+    }).toSorted((left, right) => (
+      Math.hypot(left.pos.x - currentFrame.playerX, left.pos.y - currentFrame.playerY)
+        - Math.hypot(right.pos.x - currentFrame.playerX, right.pos.y - currentFrame.playerY)
+    ))
+  }, frame)
+}
+
+function canvasScreenPoint(bounds, logical) {
+  return {
+    x: bounds.x + logical.x / 1_600 * bounds.width,
+    y: bounds.y + logical.y / 900 * bounds.height,
+  }
+}
+
+function worldScreenPoint(bounds, frame, world) {
+  return canvasScreenPoint(bounds, {
+    x: frame.playerScreenX + (world.x - frame.playerX) * 1.35,
+    y: frame.playerScreenY + (world.y - frame.playerY) * 1.35,
+  })
+}
+
+async function boneyardFrame(page) {
+  return page.locator('.boneyard-world-canvas').evaluate((node) => (
+    structuredClone(node.__sdrBoneyardFrame)
+  ))
+}
+
+async function settleMovement(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'))
+    return new Promise((resolve) => requestAnimationFrame(resolve))
+  })
+  await page.waitForTimeout(650)
+}
+
 async function waitForHubCastPose(page, eventStart, expectedPose) {
   let handle
   try {
@@ -748,16 +911,31 @@ async function waitForHubFacing(page, kind, expectedHeadingIndex) {
 
 async function waitForBoneyardSpell(page, kind) {
   const expectedKinds = Array.isArray(kind) ? kind : [kind]
-  const handle = await page.waitForFunction(
-    (kinds) => {
-      const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
-      return kinds.some((expectedKind) => frame?.primarySpellKinds?.includes(expectedKind))
-        ? { ...frame }
-        : null
-    },
-    expectedKinds,
-    { timeout: 10_000 },
-  )
+  let handle
+  try {
+    handle = await page.waitForFunction(
+      (kinds) => {
+        const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+        return kinds.some((expectedKind) => frame?.primarySpellKinds?.includes(expectedKind))
+          ? { ...frame }
+          : null
+      },
+      expectedKinds,
+      { timeout: 10_000 },
+    )
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      body: document.body.innerText.slice(0, 1_000),
+      frame: structuredClone(
+        document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame,
+      ),
+      latestWire: window.__primarySpellWireFrames.at(-1),
+      skillPicker: Boolean(document.querySelector('.skill-picker-stage')),
+    }))
+    throw new Error(`Boneyard ${expectedKinds.join(', ')} was not rendered: ${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    })
+  }
   const result = await handle.jsonValue()
   await handle.dispose()
   return result
@@ -968,25 +1146,9 @@ function audioPathMatches(pathname, filename) {
 async function latestWireSpell(page, kind, projectileOnly = false) {
   const expectedKinds = Array.isArray(kind) ? kind : [kind]
   return page.evaluate(async ([kinds, requireProjectile]) => {
-    const { primaryCastPose } = await import('/src/game/core-kernels/primary-spells.ts')
-    const observedAttachmentPoses = window.__primarySpellWireFrames.flatMap((wire) => {
-      const projectile = [...wire.primarySpells.projectiles].reverse().find(
-        (candidate) => kinds.includes(candidate.kind),
-      )
-      const state = projectile ?? (requireProjectile ? undefined : (
-        [...wire.primarySpells.transients].reverse().find(
-          (candidate) => kinds.includes(candidate.kind),
-        )
-      ))
-      const player = state ? wire.players[state.ownerId] : null
-      return player
-        ? [primaryCastPose(
-            player.primaryCast.actionTick,
-            player.primaryCast.channelActive,
-            player.config.element,
-          )]
-        : []
-    })
+    const observedAttachmentPoses = window.__primarySpellPoseEvents.map(
+      ({ playerAttachmentPose }) => playerAttachmentPose,
+    )
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       const states = [
@@ -1021,11 +1183,8 @@ async function latestWireSpell(page, kind, projectileOnly = false) {
           observedAttachmentPoses,
           currentMana: player.progression.currentMana,
           minimumCurrentMana: Math.min(...manaSamples),
-          playerAttachmentPose: primaryCastPose(
-            player.primaryCast.actionTick,
-            player.primaryCast.channelActive,
-            player.config.element,
-          ),
+          playerAttachmentPose: window.__primarySpellPoseEvents.at(-1)
+            ?.playerAttachmentPose ?? 0,
           projectileCount: wire.primarySpells.projectiles.length,
           playerHeadingIndex: player.headingIndex,
           playerUnderpowered: player.primaryCast.underpowered,
