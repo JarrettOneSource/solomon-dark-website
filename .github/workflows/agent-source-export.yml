@@ -1,0 +1,24 @@
+name: Agent source export
+
+on:
+  push:
+    branches:
+      - agent/gpt56-run-start-lighting-fps-network-re
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Package checked-out source
+        run: tar --exclude=.git -czf /tmp/website-source.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-source
+          path: /tmp/website-source.tgz
+          if-no-files-found: error
+          retention-days: 1
