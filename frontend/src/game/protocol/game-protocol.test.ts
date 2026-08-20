@@ -195,7 +195,7 @@ test('client protocol validates character hello, input, match, loadout, and ping
   })), /ownerDisplayName/)
 })
 
-test('protocol v31 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v32 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -377,7 +377,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v31 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v32 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -397,8 +397,8 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   assert.equal(snapshot.players['player-1']?.progression.dazzleTicksRemaining, 50)
   snapshot.world.enemies = [{
     animation: {
-      action: null,
-      actionProgress: 0,
+      action: 'skeleton-claw-a',
+      actionProgress: 4,
       alpha: 1,
       bodyPose: 0,
       coffinPose: 0,
@@ -422,12 +422,13 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
         scale: 1.599609375,
       }],
       gaitPose: 0,
+      headFacingOffset: -1,
       hitFlash: 0,
       impBodyRotationRadians: 0,
       impEffectAlpha: 0,
       impEffectFrame: -1,
       maggots: [],
-      state: 'idle',
+      state: 'action',
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,
@@ -577,7 +578,7 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    53,
+    54,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -588,7 +589,7 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 53)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 54)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -599,6 +600,7 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
     decodeServerGameMessage(encodeGameMessage(replicatedMessage)),
     replicatedMessage,
   )
+  assert.equal(replicatedFrame.world.entities.samples[0]?.[43], -1)
   const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
   oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(20).fill(0))
   assert.throws(
@@ -662,6 +664,28 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidMagicShield)),
     /fields do not match role/,
+  )
+
+  const missingHeadFacing = JSON.parse(encodeGameMessage(welcome))
+  delete missingHeadFacing.snapshot.world.enemies[0].animation.headFacingOffset
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingHeadFacing)),
+    /headFacingOffset/,
+  )
+
+  const inactiveHeadFacing = JSON.parse(encodeGameMessage(welcome))
+  inactiveHeadFacing.snapshot.world.enemies[0].animation.action = null
+  inactiveHeadFacing.snapshot.world.enemies[0].animation.state = 'idle'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(inactiveHeadFacing)),
+    /headFacingOffset requires an active Skeleton or Mage action/,
+  )
+
+  const invalidHeadFacing = JSON.parse(encodeGameMessage(replicatedMessage))
+  invalidHeadFacing.frame.world.entities.samples[0][43] = 2
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidHeadFacing)),
+    /invalid registered sample shape/,
   )
 
   const missingLighting = JSON.parse(encodeGameMessage(welcome))
@@ -783,8 +807,8 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v31 carries gameplay pause, Solomon Dig audio, Game Over, and combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 31)
+test('protocol v32 carries gameplay pause, Skeleton head-facing, Solomon Dig audio, Game Over, and combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 32)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -905,7 +929,7 @@ test('protocol v31 carries gameplay pause, Solomon Dig audio, Game Over, and com
   )
 })
 
-test('protocol v31 strictly owns the generated-arena transition', () => {
+test('protocol v32 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -959,7 +983,7 @@ test('protocol v31 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v31 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v32 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2066,7 +2090,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v31 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v32 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -2540,7 +2564,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v31 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v32 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

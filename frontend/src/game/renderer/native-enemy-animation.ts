@@ -5,6 +5,7 @@ import {
   NATIVE_SKELETON_CLAW_BODY_POSES,
   NATIVE_SKELETON_PIKE_BODY_POSES,
   NATIVE_SKELETON_WEAPON_BODY_POSES,
+  type NativeSkeletonHeadFacingOffset,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 
 export type NativeEnemyAnimationState = 'idle' | 'locomotion' | 'action' | 'death'
@@ -118,6 +119,7 @@ export interface NativeEnemyAnimationSample {
   demonRearLimbRotationRadians: number
   effects: readonly NativeEnemyEffectSample[]
   gaitPose: number
+  headFacingOffset: NativeSkeletonHeadFacingOffset
   hitFlash: number
   impBodyRotationRadians: number
   impEffectAlpha: number
@@ -268,6 +270,7 @@ export function nativeEnemyIdleAnimationSample(
     demonRearLimbRotationRadians: 0,
     effects: [],
     gaitPose: 0,
+    headFacingOffset: 0,
     hitFlash: 0,
     impBodyRotationRadians: 0,
     impEffectAlpha: 0,

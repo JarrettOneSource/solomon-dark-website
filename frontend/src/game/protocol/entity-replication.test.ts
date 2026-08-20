@@ -292,7 +292,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
   assert.equal(frame.world.entities.spawned[0]!.length, 11)
-  assert.equal(frame.world.entities.samples[0]!.length, 53)
+  assert.equal(frame.world.entities.samples[0]!.length, 54)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
   assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0])
   assert.equal(frame.world.entities.samples[0]![33], 25 * 1024)
@@ -301,6 +301,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(frame.world.entities.samples[0]![40], 0.375 * 1024)
   assert.equal(frame.world.entities.samples[0]![41], 0)
   assert.equal(frame.world.entities.samples[0]![42], 1)
+  assert.equal(frame.world.entities.samples[0]![43], 1)
 
   const reconstructor = new EntityReplicationReconstructor()
   const reconstructed = reconstructor.apply(frame, 1)
@@ -320,6 +321,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.deepEqual(enemy.animation.effects, enemySnapshot().animation.effects)
   assert.equal(enemy.animation.impBodyRotationRadians, 0.125)
   assert.equal(enemy.animation.impEffectAlpha, 0.75)
+  assert.equal(enemy.animation.headFacingOffset, 1)
   assert.ok(Math.abs(enemy.animation.zombieBodyRotationRadians + 0.2) <= 1 / 1024)
   assert.ok(Math.abs(enemy.animation.zombieHeadRotationRadians - 0.3) <= 1 / 1024)
   assert.ok(Math.abs(enemy.position.x - 123.45) <= 1 / 16)
@@ -407,9 +409,9 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(8),
   ] as [number, number, ...number[]]
   const invalidEffectRole = [
-    ...sample.slice(0, 43),
+    ...sample.slice(0, 44),
     1,
-    ...sample.slice(44),
+    ...sample.slice(45),
   ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 40),
@@ -425,6 +427,11 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     ...sample.slice(0, 42),
     3,
     ...sample.slice(43),
+  ] as unknown as ReplicatedEntitySample
+  const invalidHeadFacing = [
+    ...sample.slice(0, 43),
+    2,
+    ...sample.slice(44),
   ] as unknown as ReplicatedEntitySample
   const invalidActorLane = [
     ...descriptor.slice(0, 8),
@@ -481,6 +488,21 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
   assert.equal(registration.sampleIsValid(invalidGlow), false)
   assert.equal(registration.sampleIsValid(invalidCharge), false)
   assert.equal(registration.sampleIsValid(invalidProviderCopies), false)
+  assert.equal(registration.sampleIsValid(invalidHeadFacing), false)
+
+  const archerHead = cloneSnapshot(snapshot)
+  if (archerHead.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  archerHead.world.enemies = [{
+    ...archerHead.world.enemies[0]!,
+    armored: false,
+    enemyToken: 'SKELETONARCHER',
+    flags: [],
+    nativeTypeId: 1002,
+  }]
+  assert.throws(
+    () => createGameSnapshotFrame(archerHead, 0, undefined, true),
+    /head-facing offset requires an active Skeleton or Mage/,
+  )
 })
 
 test('Boneyard enemy projectiles replicate motion and exact spawn-retire identity', () => {
@@ -944,8 +966,8 @@ function cyclicDistance(first: number, second: number, period: number): number {
 function enemySnapshot(): BoneyardEnemySnapshot {
   return {
     animation: {
-      action: null,
-      actionProgress: 0,
+      action: 'skeleton-claw-a',
+      actionProgress: 4,
       alpha: 1,
       bodyPose: 2,
       coffinPose: 0,
@@ -969,12 +991,13 @@ function enemySnapshot(): BoneyardEnemySnapshot {
         scale: 1.599609375,
       }],
       gaitPose: 2.75,
+      headFacingOffset: 1,
       hitFlash: 0.5,
       impBodyRotationRadians: 0.125,
       impEffectAlpha: 0.75,
       impEffectFrame: -1,
       maggots: [],
-      state: 'locomotion',
+      state: 'action',
       verticalOffset: 0,
       zombieAngularOffsetDeg: 0,
       zombieAttackSide: 0,

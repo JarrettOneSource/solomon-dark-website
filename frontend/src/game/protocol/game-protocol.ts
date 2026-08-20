@@ -193,7 +193,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 31
+export const GAME_PROTOCOL_VERSION = 32
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -4682,8 +4682,20 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
   if (mageCloak && enemyToken !== 'SKELETONMAGE') {
     throw new GameProtocolError(`${field}.mageCloak is only valid for SKELETONMAGE`)
   }
+  const animation = boneyardEnemyAnimation(source.animation, `${field}.animation`)
+  if (
+    animation.headFacingOffset !== 0
+    && (
+      animation.state !== 'action'
+      || (enemyToken !== 'SKELETON' && enemyToken !== 'SKELETONMAGE')
+    )
+  ) {
+    throw new GameProtocolError(
+      `${field}.animation.headFacingOffset requires an active Skeleton or Mage action`,
+    )
+  }
   return {
-    animation: boneyardEnemyAnimation(source.animation, `${field}.animation`),
+    animation,
     armored,
     currentHealth,
     enemyToken: enemyToken as BoneyardEnemySnapshot['enemyToken'],
@@ -5037,6 +5049,7 @@ function boneyardEnemyAnimation(
     'demonRearLimbRotationRadians',
     'effects',
     'gaitPose',
+    'headFacingOffset',
     'hitFlash',
     'impBodyRotationRadians',
     'impEffectAlpha',
@@ -5132,6 +5145,12 @@ function boneyardEnemyAnimation(
     ),
     effects,
     gaitPose: nonnegativeFinite(source.gaitPose, `${field}.gaitPose`),
+    headFacingOffset: integerWithin(
+      source.headFacingOffset,
+      `${field}.headFacingOffset`,
+      -1,
+      1,
+    ) as BoneyardEnemyAnimationSnapshot['headFacingOffset'],
     hitFlash,
     impBodyRotationRadians: finite(
       source.impBodyRotationRadians,

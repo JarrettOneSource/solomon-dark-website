@@ -19,7 +19,7 @@ const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
 const DESCRIPTOR_LENGTH = 11
-const EFFECT_COMPONENT_OFFSET = 43
+const EFFECT_COMPONENT_OFFSET = 44
 const EFFECT_COMPONENT_COUNT = 10
 const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
@@ -122,6 +122,8 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       && sample[40] >= 0 && sample[40] <= VALUE_SCALE
       && sample[41] >= 0 && sample[41] <= VALUE_SCALE
       && sample[42] >= 0 && sample[42] <= 2
+      && sample[43] >= -1 && sample[43] <= 1
+      && (sample[43] === 0 || sample[6] === 2)
       && effectComponentsAreValid(sample)
   },
 }
@@ -148,6 +150,15 @@ export function boneyardEnemySample(
   enemy: BoneyardEnemySnapshot,
 ): ReplicatedEntitySample {
   const animation = enemy.animation
+  if (
+    animation.headFacingOffset !== 0
+    && (
+      animation.state !== 'action'
+      || (enemy.enemyToken !== 'SKELETON' && enemy.enemyToken !== 'SKELETONMAGE')
+    )
+  ) {
+    throw new Error('Boneyard enemy head-facing offset requires an active Skeleton or Mage')
+  }
   const effectComponents = encodeEffects(animation.effects)
   return [
     BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -195,6 +206,7 @@ export function boneyardEnemySample(
     quantize(enemy.lighting.glow, VALUE_SCALE),
     quantize(enemy.lighting.charge, VALUE_SCALE),
     enemy.lighting.providerCopies,
+    animation.headFacingOffset,
     ...effectComponents,
   ]
 }
@@ -211,6 +223,14 @@ export function materializeBoneyardEnemy(
   }
   if (descriptor[1] !== sample[1]) {
     throw new Error('Boneyard enemy sample identity does not match its descriptor')
+  }
+  const family = FAMILIES[descriptor[2]]!
+  if (
+    sample[43] !== 0
+    && family !== 'SKELETON'
+    && family !== 'SKELETONMAGE'
+  ) {
+    throw new Error('Boneyard enemy head-facing offset is invalid for its family')
   }
   return {
     animation: {
@@ -231,6 +251,7 @@ export function materializeBoneyardEnemy(
       demonRearLimbRotationRadians: dequantize(sample[28], VALUE_SCALE),
       effects: decodeEffects(sample),
       gaitPose: dequantize(sample[16], VALUE_SCALE),
+      headFacingOffset: sample[43] as -1 | 0 | 1,
       hitFlash: dequantize(sample[17], VALUE_SCALE),
       impEffectFrame: sample[18],
       impBodyRotationRadians: dequantize(sample[35], VALUE_SCALE),
@@ -252,7 +273,7 @@ export function materializeBoneyardEnemy(
     },
     armored: descriptor[7] === 1,
     currentHealth: dequantize(sample[5], VALUE_SCALE),
-    enemyToken: FAMILIES[descriptor[2]]!,
+    enemyToken: family,
     flags: decodeFlags(descriptor[6]),
     headingDeg: dequantize(sample[4], ANGLE_SCALE),
     id: descriptor[1],

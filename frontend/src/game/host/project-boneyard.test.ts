@@ -466,6 +466,7 @@ test('projects Skeleton claw programs from armor and keeps body pose independent
         phase: 'attack' as const,
       },
       gaitPose: 6,
+      headFacingOffset: index === 0 ? -1 as const : 1 as const,
     }
   })
   const projected = projectBoneyardEnemies({ ...spawned.store, actors: attacking }, 1)
@@ -474,9 +475,10 @@ test('projects Skeleton claw programs from armor and keeps body pose independent
     action: animation.action,
     bodyPose: animation.bodyPose,
     gaitPose: animation.gaitPose,
+    headFacingOffset: animation.headFacingOffset,
   })), [
-    { action: 'skeleton-claw-a', bodyPose: 4, gaitPose: 6 },
-    { action: 'skeleton-claw-b', bodyPose: 2, gaitPose: 6 },
+    { action: 'skeleton-claw-a', bodyPose: 4, gaitPose: 6, headFacingOffset: -1 },
+    { action: 'skeleton-claw-b', bodyPose: 2, gaitPose: 6, headFacingOffset: 1 },
   ])
 })
 

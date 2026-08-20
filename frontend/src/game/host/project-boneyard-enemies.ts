@@ -259,6 +259,7 @@ function projectAnimation(
     demonRearLimbRotationRadians: demonArticulation?.rearRotationRadians ?? 0,
     effects: projectEnemyEffects(actor, tick),
     gaitPose,
+    headFacingOffset: actor.headFacingOffset,
     hitFlash: nativeEnemyHitOverlay(actor.lastDamageTick, tick),
     impBodyRotationRadians: (impBrain?.bodyRotationDeg ?? 0) * Math.PI / 180,
     impEffectAlpha: impBrain?.effectAlpha ?? 0,

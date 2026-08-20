@@ -32,6 +32,7 @@ import type { NativeLightProviderRegistration } from '../core-kernels/native-lig
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
+import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { ReplicatedEntityFrame } from './replicated-entity-types.ts'
 
 export interface ProtocolFountainParticleState {
@@ -530,6 +531,7 @@ export interface BoneyardEnemyAnimationSnapshot {
   demonRearLimbRotationRadians: number
   effects: readonly BoneyardEnemyEffectSnapshot[]
   gaitPose: number
+  headFacingOffset: NativeSkeletonHeadFacingOffset
   hitFlash: number
   impBodyRotationRadians: number
   impEffectAlpha: number

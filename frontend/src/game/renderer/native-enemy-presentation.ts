@@ -4,6 +4,7 @@ import {
   NATIVE_IMP_UPPER_EFFECT_FRAME_COUNT,
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
+import { nativeSkeletonHeadFacing } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import {
   createNativeRng,
   drawNativeFloat,
@@ -555,7 +556,10 @@ function skeletonLayers(
   }
   result.push(layer(
     'BadGuys',
-    HEADGEAR_BASES[headgear] + facing,
+    HEADGEAR_BASES[headgear] + nativeSkeletonHeadFacing(
+      facing,
+      animation?.headFacingOffset ?? 0,
+    ),
     'skeleton-headgear',
     { offset: { x: 0, y: -4 } },
   ))
@@ -575,7 +579,10 @@ function skeletonArcherLayers(
   return [
     layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'archer-limbs'),
     layer('BadGuys', 451 + boundedPose(bodyPose, 8) * 18 + facing, 'archer-body'),
-    layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'archer-headgear', {
+    layer('BadGuys', HEADGEAR_BASES[headgear] + nativeSkeletonHeadFacing(
+      facing,
+      animation?.headFacingOffset ?? 0,
+    ), 'archer-headgear', {
       offset: { x: 0, y: -4 },
     }),
   ]
@@ -607,7 +614,10 @@ function skeletonMageLayers(
   )
   const headgearLayer = layer(
     'BadGuys',
-    HEADGEAR_BASES[headgear] + facing,
+    HEADGEAR_BASES[headgear] + nativeSkeletonHeadFacing(
+      facing,
+      animation?.headFacingOffset ?? 0,
+    ),
     'mage-headgear',
     {
       offset: { x: 0, y: -4 },

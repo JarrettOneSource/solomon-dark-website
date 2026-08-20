@@ -122,6 +122,25 @@ test('Skeleton flags select native armor, weapon, and headgear banks', () => {
   ])
 })
 
+test('all four Skeleton headgear banks consume the independent wrapped facing', () => {
+  for (const [flag, base] of [
+    [null, 1477],
+    ['FLAG_HELM', 1531],
+    ['FLAG_HORNED', 1549],
+    ['FLAG_HOODED', 1495],
+  ] as const) {
+    const flags = flag === null ? [] : [flag]
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy('SKELETON', flags),
+      animation: nativeEnemyIdleAnimationSample({ headFacingOffset: -1 }),
+    }, 100)
+    assert.equal(
+      plan.layers.find(({ role }) => role === 'skeleton-headgear')?.entry,
+      base + 17,
+    )
+  }
+})
+
 test('Skeleton ARMORMAYBE consumes the projected armor decision', () => {
   const source = enemy('SKELETON', ['FLAG_ARMORMAYBE'])
   const unarmored = nativeEnemyPresentationPlan(source, 100)
@@ -194,12 +213,17 @@ test('ordinary body hit redraw does not tint the independent shield shell', () =
 test('native hit feedback redraws the exact current pose red with normal blending', () => {
   const source = {
     ...enemy('SKELETON'),
-    animation: nativeEnemyIdleAnimationSample({ hitFlash: 0.65 }),
+    animation: nativeEnemyIdleAnimationSample({
+      headFacingOffset: -1,
+      hitFlash: 0.65,
+    }),
   }
   const plan = nativeEnemyPresentationPlan(source, 100)
   const midpoint = plan.layers.length / 2
   const body = plan.layers.slice(0, midpoint)
   const hit = plan.layers.slice(midpoint)
+
+  assert.equal(body.find(({ role }) => role === 'skeleton-headgear')?.entry, 1494)
 
   assert.deepEqual(
     hit.map(({ atlas, entry, offset, rotationRadians, scale }) => ({
@@ -604,6 +628,53 @@ test('Skeleton-family attacks keep gait limbs independent from body and equipmen
       sample.weaponEntry,
       sample.action,
     )
+  }
+})
+
+test('stock Skeleton head-facing edge remains independent from limbs and attack body', () => {
+  const animation = {
+    ...nativeEnemyIdleAnimationSample({
+      action: 'skeleton-claw-a',
+      actionProgress: 4,
+      bodyPose: 8,
+      gaitPose: 2,
+      state: 'action',
+    }),
+    headFacingOffset: -1,
+  }
+  const plan = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON'),
+    animation,
+    headingDeg: 151.796188,
+  }, 19_948)
+
+  assert.deepEqual(
+    plan.layers.map(({ entry, role }) => ({ entry, role })),
+    [
+      { entry: 1629, role: 'skeleton-limbs' },
+      { entry: 1269, role: 'skeleton-body' },
+      { entry: 1484, role: 'skeleton-headgear' },
+    ],
+  )
+})
+
+test('all Skeleton-family renderers wrap only the sampled head-facing lane', () => {
+  for (const token of [
+    'SKELETON',
+    'SKELETONARCHER',
+    'SKELETONMAGE',
+  ] as const) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy(token),
+      animation: nativeEnemyIdleAnimationSample({ headFacingOffset: 1 }),
+      headingDeg: 340,
+    }, 100)
+    const head = plan.layers.find(({ role }) => role.endsWith('headgear'))
+    const body = plan.layers.find(({ role }) => role.endsWith('body'))
+
+    assert.equal(head?.entry, 1477, token)
+    assert.ok(body, `${token} body is missing`)
+    assert.notEqual(body.entry, 1477, token)
   }
 })
 

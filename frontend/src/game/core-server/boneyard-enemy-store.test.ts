@@ -3,8 +3,18 @@ import test from 'node:test'
 
 import { NATIVE_ACTOR_SEPARATION_EPSILON } from '../core-kernels/actor-physics.ts'
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
+import {
+  NATIVE_SKELETON_HEAD_FACING_OFFSETS,
+  NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
+  NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
+} from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import { randomBoneyardWaveInteger } from '../core-kernels/boneyard-wave-timeline.ts'
+import {
+  createNativeRng,
+  drawNativeInteger,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
 import {
   BOUNDED_ARCHER_RANGE_BANDS,
   BOUNDED_ENEMY_COLD_SLOW_TICKS,
@@ -719,6 +729,85 @@ test('two-tick movement sends the recovered delta and radius through collision a
   )
   assert.equal(result.store.actors[0]!.lastMovementTick, 2)
   assert.equal(result.store.actors[0]!.nextMovementTick, 4)
+})
+
+test('Skeleton and Mage own the native head turn while Archer remains constructor-zero', () => {
+  const winningState = skeletonHeadTurnState(0)
+  const winningGate = drawNativeInteger(
+    winningState,
+    NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
+  )
+  const winningOffset = drawNativeInteger(
+    winningGate.state,
+    NATIVE_SKELETON_HEAD_FACING_OFFSETS.length,
+  )
+
+  const contactPlayers = { player: livingTarget(10, 0) }
+  let skeleton = spawnOne(
+    'skeleton-head-turn',
+    'SKELETON',
+    { x: 0, y: 0 },
+    contactPlayers,
+  )
+  skeleton = step({
+    ...skeleton.store,
+    headFacingRngState: winningState,
+  }, 1, contactPlayers)
+  assert.equal(skeleton.store.actors[0]!.brain.phase, 'attack')
+  assert.equal(skeleton.store.actors[0]!.headFacingOffset, -1)
+  assert.deepEqual(skeleton.store.headFacingRngState, winningOffset.state)
+
+  const activeSkeleton = skeleton.store.actors[0]!
+  const activeSkeletonBrain = activeSkeleton.brain
+  if (activeSkeletonBrain.family !== 'skeleton') throw new Error('expected Skeleton brain')
+  skeleton = step({
+    ...skeleton.store,
+    actors: [{
+      ...activeSkeleton,
+      brain: {
+        ...activeSkeletonBrain,
+        actionProgress: 0,
+        contactTargetPlayerId: null,
+        phase: 'approach',
+      },
+    }],
+    headFacingRngState: nonWinningSkeletonHeadTurnState(),
+  }, 2, FAR_PLAYERS)
+  assert.equal(skeleton.store.actors[0]!.headFacingOffset, 0)
+
+  const rangedPlayers = { player: livingTarget(150, 0) }
+  let mage = spawnOne(
+    'mage-head-turn',
+    'SKELETONMAGE',
+    { x: 0, y: 0 },
+    rangedPlayers,
+  )
+  mage = step({
+    ...mage.store,
+    headFacingRngState: winningState,
+  }, 1, rangedPlayers)
+  assert.equal(mage.store.actors[0]!.brain.phase, 'cast')
+  assert.equal(mage.store.actors[0]!.headFacingOffset, 0)
+  assert.deepEqual(mage.store.headFacingRngState, winningOffset.state)
+  mage = step({
+    ...mage.store,
+    headFacingRngState: winningState,
+  }, 2, rangedPlayers)
+  assert.equal(mage.store.actors[0]!.headFacingOffset, -1)
+
+  let archer = spawnOne(
+    'archer-static-head',
+    'SKELETONARCHER',
+    { x: 0, y: 0 },
+    rangedPlayers,
+  )
+  archer = step({
+    ...archer.store,
+    headFacingRngState: winningState,
+  }, 1, rangedPlayers)
+  assert.equal(archer.store.actors[0]!.brain.phase, 'attack')
+  assert.equal(archer.store.actors[0]!.headFacingOffset, 0)
+  assert.deepEqual(archer.store.headFacingRngState, winningState)
 })
 
 test('Skeleton claw, weapon, and Pike preserve exact marker and strict-end ticks', () => {
@@ -2752,6 +2841,31 @@ function mageProjectileSummary(result: BoneyardEnemyStoreStepResult) {
 
 function signedHeading(headingDeg: number): number {
   return ((headingDeg + 180) % 360 + 360) % 360 - 180
+}
+
+function skeletonHeadTurnState(offsetIndex: number): NativeRngState {
+  for (let seed = 1; seed < 1_000_000; seed += 1) {
+    const source = createNativeRng(seed)
+    const gate = drawNativeInteger(source, NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT)
+    if (gate.value !== NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER) continue
+    const offset = drawNativeInteger(
+      gate.state,
+      NATIVE_SKELETON_HEAD_FACING_OFFSETS.length,
+    )
+    if (offset.value === offsetIndex) return source
+  }
+  throw new Error(`could not find a Skeleton head-turn seed for offset ${offsetIndex}`)
+}
+
+function nonWinningSkeletonHeadTurnState(): NativeRngState {
+  for (let seed = 1; seed < 1_000; seed += 1) {
+    const source = createNativeRng(seed)
+    if (
+      drawNativeInteger(source, NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT).value
+      !== NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER
+    ) return source
+  }
+  throw new Error('could not find a non-winning Skeleton head-turn seed')
 }
 
 function verifySkeletonProgram(

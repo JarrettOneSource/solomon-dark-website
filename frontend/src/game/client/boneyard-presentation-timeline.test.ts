@@ -81,6 +81,7 @@ function enemyAt(x: number): BoneyardEnemySnapshot {
         scale: 1,
       }],
       gaitPose: x / 10,
+      headFacingOffset: 0,
       hitFlash: 0,
       impBodyRotationRadians: 0,
       impEffectAlpha: 0,
@@ -709,19 +710,27 @@ test('interpolates the authoritative Imp flight cycle without changing spawn ide
   )
 })
 
-test('holds native body selectors discretely between authoritative snapshots', () => {
-  const withBodyPose = (snapshot: BoneyardGameSnapshot, bodyPose: number) => ({
+test('holds native body and head-facing selectors discretely between authoritative snapshots', () => {
+  const withSelectors = (
+    snapshot: BoneyardGameSnapshot,
+    bodyPose: number,
+    headFacingOffset: -1 | 0 | 1,
+  ) => ({
     ...snapshot,
     world: {
       ...snapshot.world,
       enemies: [{
         ...snapshot.world.enemies[0]!,
-        animation: { ...snapshot.world.enemies[0]!.animation, bodyPose },
+        animation: {
+          ...snapshot.world.enemies[0]!.animation,
+          bodyPose,
+          headFacingOffset,
+        },
       }],
     },
   })
-  const older = withBodyPose(snapshotAt(100, 10, 100), 2)
-  const newer = withBodyPose(snapshotAt(105, 10, 100), 8)
+  const older = withSelectors(snapshotAt(100, 10, 100), 2, -1)
+  const newer = withSelectors(snapshotAt(105, 10, 100), 8, 1)
   const timeline = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
     initialSnapshot: older,
@@ -731,7 +740,9 @@ test('holds native body selectors discretely between authoritative snapshots', (
   timeline.push(newer, 50)
 
   assert.equal(timeline.sample(75).world.enemies[0]!.animation.bodyPose, 2)
+  assert.equal(timeline.sample(75).world.enemies[0]!.animation.headFacingOffset, -1)
   assert.equal(timeline.sample(100).world.enemies[0]!.animation.bodyPose, 8)
+  assert.equal(timeline.sample(100).world.enemies[0]!.animation.headFacingOffset, 1)
 })
 
 test('preserves every player corpse frame at 20 Hz for all death-epoch alignments', () => {

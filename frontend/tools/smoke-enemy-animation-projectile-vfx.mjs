@@ -13,6 +13,8 @@ const skeletonEarlyScreenshotPath = process.env.SDR_SKELETON_ATTACK_EARLY_SCREEN
   || join(tmpdir(), 'solomon-dark-skeleton-attack-early-20260816.png')
 const skeletonLateScreenshotPath = process.env.SDR_SKELETON_ATTACK_LATE_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-skeleton-attack-late-20260816.png')
+const skeletonHeadTurnScreenshotPath = process.env.SDR_SKELETON_HEAD_TURN_SCREENSHOT
+  || join(tmpdir(), 'solomon-dark-skeleton-head-turn-20260820.png')
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -172,6 +174,7 @@ try {
           action: 'skeleton-weapon',
           actionProgress: advanced ? 18 : 2,
           gaitPose: advanced ? 3 : 0,
+          headFacingOffset: advanced ? -1 : 0,
           state: 'action',
         }),
         ['FLAG_ARMOR', 'FLAG_HOODED', 'FLAG_MACE', 'FLAG_BURNING'],
@@ -198,6 +201,7 @@ try {
           action: 'mage-cast-long',
           actionProgress: advanced ? 13 : 2,
           effects: mageEffects,
+          headFacingOffset: advanced ? 1 : 0,
           state: 'action',
         }),
         ['FLAG_HORNED', 'FLAG_CASTLIGHTNING'],
@@ -492,8 +496,11 @@ try {
             : source.visualPhaseDeg,
         })),
         gateLeaves: [],
+        goodies: [],
         kind: 'boneyard',
         lanternLightRegistration: null,
+        loot: [],
+        lootEvents: [],
         mageLightningPulses,
         maggots: [{
           alpha: 1,
@@ -628,7 +635,7 @@ try {
     document.body.append(enemyVfxImage)
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
-    const skeletonAttackSnapshotAt = (actionProgress) => {
+    const skeletonAttackSnapshotAt = (actionProgress, headFacingOffset = 0) => {
       const snapshot = snapshotAt(130, false)
       return {
         ...snapshot,
@@ -644,6 +651,7 @@ try {
               actionProgress,
               bodyPose: 4,
               gaitPose: 6,
+              headFacingOffset,
               state: 'action',
             }),
           )],
@@ -656,6 +664,7 @@ try {
     }
     const skeletonEarlySnapshot = skeletonAttackSnapshotAt(0)
     const skeletonLateSnapshot = skeletonAttackSnapshotAt(7)
+    const skeletonHeadTurnSnapshot = skeletonAttackSnapshotAt(7, -1)
     const skeletonRenderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
       devicePixelRatio: 1,
@@ -682,25 +691,38 @@ try {
     skeletonLateImage.id = 'skeleton-attack-late-probe'
     skeletonLateImage.src = skeletonLateCrop.toDataURL('image/png')
     document.body.append(skeletonLateImage)
+    skeletonRenderer.render(skeletonHeadTurnSnapshot)
+    const skeletonHeadTurnCopy = copyCanvas(skeletonRenderer.canvas)
+    const skeletonHeadTurnCrop = cropCanvas(skeletonHeadTurnCopy, 600, 375, 160, 160)
+    const skeletonHeadTurnPixels = skeletonHeadTurnCrop
+      .getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, skeletonHeadTurnCrop.width, skeletonHeadTurnCrop.height).data
+    const skeletonHeadTurnImage = document.createElement('img')
+    skeletonHeadTurnImage.id = 'skeleton-head-turn-probe'
+    skeletonHeadTurnImage.src = skeletonHeadTurnCrop.toDataURL('image/png')
+    document.body.append(skeletonHeadTurnImage)
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
-    const skeletonPlanAt = (actionProgress) => presentationModule.nativeEnemyPresentationPlan(
-      makeEnemy(
-        'SKELETON',
-        1,
-        1001,
-        { x: 500, y: 333 },
-        makeAnimation({
-          action: 'skeleton-claw-a',
-          actionProgress,
-          bodyPose: 4,
-          gaitPose: 6,
-          state: 'action',
-        }),
-      ),
-      130,
-      () => [],
-    ).layers.map(({ entry, role }) => ({ entry, role }))
+    const skeletonPlanAt = (actionProgress, headFacingOffset = 0) => (
+      presentationModule.nativeEnemyPresentationPlan(
+        makeEnemy(
+          'SKELETON',
+          1,
+          1001,
+          { x: 500, y: 333 },
+          makeAnimation({
+            action: 'skeleton-claw-a',
+            actionProgress,
+            bodyPose: 4,
+            gaitPose: 6,
+            headFacingOffset,
+            state: 'action',
+          }),
+        ),
+        130,
+        () => [],
+      ).layers.map(({ entry, role }) => ({ entry, role }))
+    )
     window.__enemyVfxRenderer = renderer
     window.__skeletonRenderer = skeletonRenderer
     return {
@@ -719,6 +741,14 @@ try {
       skeletonAttackLayers: {
         early: skeletonPlanAt(0),
         late: skeletonPlanAt(7),
+      },
+      skeletonHeadDifference: compare(
+        skeletonLatePixels,
+        skeletonHeadTurnPixels,
+      ),
+      skeletonHeadLayers: {
+        base: skeletonPlanAt(7),
+        turned: skeletonPlanAt(7, -1),
       },
     }
   })
@@ -812,6 +842,26 @@ try {
       { entry: 1477, role: 'skeleton-headgear' },
     ],
   })
+  assert.ok(
+    receipt.skeletonHeadDifference.changedPixels > 10,
+    JSON.stringify(receipt.skeletonHeadDifference),
+  )
+  assert.ok(
+    receipt.skeletonHeadDifference.channelDelta > 100,
+    JSON.stringify(receipt.skeletonHeadDifference),
+  )
+  assert.deepEqual(receipt.skeletonHeadLayers, {
+    base: [
+      { entry: 1693, role: 'skeleton-limbs' },
+      { entry: 1315, role: 'skeleton-body' },
+      { entry: 1477, role: 'skeleton-headgear' },
+    ],
+    turned: [
+      { entry: 1693, role: 'skeleton-limbs' },
+      { entry: 1315, role: 'skeleton-body' },
+      { entry: 1494, role: 'skeleton-headgear' },
+    ],
+  })
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
   assert.deepEqual(failedResponses, [])
@@ -824,6 +874,9 @@ try {
   })
   await page.locator('#skeleton-attack-late-probe').screenshot({
     path: skeletonLateScreenshotPath,
+  })
+  await page.locator('#skeleton-head-turn-probe').screenshot({
+    path: skeletonHeadTurnScreenshotPath,
   })
   await page.evaluate(() => {
     window.__enemyVfxRenderer.destroy()
@@ -838,6 +891,7 @@ try {
     pageErrors,
     screenshotPath,
     skeletonEarlyScreenshotPath,
+    skeletonHeadTurnScreenshotPath,
     skeletonLateScreenshotPath,
   }, null, 2))
 } finally {

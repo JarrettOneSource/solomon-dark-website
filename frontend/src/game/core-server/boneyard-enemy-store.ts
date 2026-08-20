@@ -7,6 +7,11 @@ import {
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  createNativeRng,
+  drawNativeInteger,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   evaluateBoneyardEnemyConfig,
@@ -36,9 +41,13 @@ import {
 import {
   NATIVE_ARCHER_SHOT_BODY_POSES,
   NATIVE_SKELETON_CLAW_BODY_POSES,
+  NATIVE_SKELETON_HEAD_FACING_OFFSETS,
+  NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
+  NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER,
   NATIVE_SKELETON_PIKE_BODY_POSES,
   NATIVE_SKELETON_WEAPON_BODY_POSES,
   nativeSkeletonFamilyBodyPose,
+  type NativeSkeletonHeadFacingOffset,
 } from '../core-kernels/boneyard-skeleton-family-animation.ts'
 import {
   BONEYARD_WAVE_ENEMY_TYPES,
@@ -329,6 +338,7 @@ export interface BoneyardEnemyActor {
   readonly deathStartedTick: number | null
   readonly deathTick: number
   readonly gaitPose: number
+  readonly headFacingOffset: NativeSkeletonHeadFacingOffset
   readonly headingDeg: number
   readonly id: BoneyardEnemyActorId
   readonly lastDamagedByPlayerId: string | null
@@ -646,6 +656,7 @@ export interface BoneyardEnemyRetirement {
 export interface BoneyardEnemyStore {
   readonly actors: readonly BoneyardEnemyActor[]
   readonly deathEffects: readonly BoneyardEnemyDeathEffect[]
+  readonly headFacingRngState: NativeRngState
   readonly lastStepTick: number
   readonly mageLightningPulses: readonly BoneyardMageLightningPulse[]
   readonly maggots: readonly BoneyardMaggotActor[]
@@ -772,6 +783,7 @@ interface WorkingStep {
   actors: BoneyardEnemyActor[]
   deathEffects: BoneyardEnemyDeathEffect[]
   events: BoneyardEnemySemanticEvent[]
+  headFacingRngState: NativeRngState
   impActorCount: number
   mageLightningPulses: BoneyardMageLightningPulse[]
   maggots: BoneyardMaggotActor[]
@@ -810,6 +822,9 @@ export function createBoneyardEnemyStore(seed: string): BoneyardEnemyStore {
   return {
     actors: [],
     deathEffects: [],
+    headFacingRngState: createNativeRng(
+      seedBoneyardWaveRng(`${seed}:skeleton-head-facing`),
+    ),
     lastStepTick: -1,
     mageLightningPulses: [],
     maggots: [],
@@ -1169,6 +1184,7 @@ export function stepBoneyardEnemyStore(
     actors: [],
     deathEffects: [],
     events: [],
+    headFacingRngState: source.headFacingRngState,
     impActorCount: source.actors.filter(({ config }) => config.enemyToken === 'IMP').length,
     mageLightningPulses: source.mageLightningPulses.filter((pulse) => (
       context.tick - pulse.tick < NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
@@ -1229,6 +1245,7 @@ export function stepBoneyardEnemyStore(
     store: {
       actors: work.actors,
       deathEffects: work.deathEffects,
+      headFacingRngState: work.headFacingRngState,
       lastStepTick: context.tick,
       mageLightningPulses: work.mageLightningPulses,
       maggots: work.maggots,
@@ -1307,6 +1324,7 @@ function materializeSpawnIntents(
       deathStartedTick: null,
       deathTick: 0,
       gaitPose: 0,
+      headFacingOffset: 0,
       headingDeg: targetHeading(position, targetPlayerId, context.players),
       id: work.nextActorId,
       lastDamagedByPlayerId: null,
@@ -1617,7 +1635,9 @@ function stepLivingActor(
     ? targeted
     : faceTarget(targeted, context.players)
   if ((effect?.disruptedTicks ?? 0) > 0) {
-    const interrupted = interruptNativeSecondaryAction(actor)
+    const interrupted = clearSkeletonFamilyHeadFacing(
+      interruptNativeSecondaryAction(actor),
+    )
     const lit = stepEnemyLighting(interrupted)
     return lit.brain.family === 'mage'
       ? applyMageProviderGateAfterAction(lit)
@@ -1630,7 +1650,9 @@ function stepLivingActor(
       : lit
   }
   if ((effect?.fleeTicks ?? 0) > 0 && actor.brain.family !== 'coffin') {
-    const interrupted = interruptNativeSecondaryAction(actor)
+    const interrupted = clearSkeletonFamilyHeadFacing(
+      interruptNativeSecondaryAction(actor),
+    )
     const fled = moveTowardTarget(
       interrupted,
       interrupted.brain,
@@ -1639,30 +1661,86 @@ function stepLivingActor(
     )
     return stepEnemyLighting(fled)
   }
-  if (actor.brain.family === 'mage') {
-    const enrolled = stepEnemyLighting(actor)
+  const articulated = rollSkeletonFamilyHeadFacing(work, actor)
+  if (articulated.brain.family === 'mage') {
+    const enrolled = stepEnemyLighting(articulated)
     return applyMageProviderGateAfterAction(
-      stepMage(work, enrolled, actor.brain, context),
+      finalizeSkeletonFamilyHeadFacing(
+        articulated,
+        stepMage(work, enrolled, articulated.brain, context),
+      ),
     )
   }
   const stepped = (() => {
-    switch (actor.brain.family) {
-      case 'skeleton': return stepSkeleton(work, actor, actor.brain, context)
-      case 'archer': return stepArcher(work, actor, actor.brain, context)
+    switch (articulated.brain.family) {
+      case 'skeleton': return stepSkeleton(work, articulated, articulated.brain, context)
+      case 'archer': return stepArcher(work, articulated, articulated.brain, context)
       case 'imp': return advanceImpVisual(
-        actor,
-        stepImp(work, actor, actor.brain, context),
+        articulated,
+        stepImp(work, articulated, articulated.brain, context),
       )
       case 'zombie': return advanceZombieVisual(
-        actor,
-        stepZombie(work, actor, actor.brain, context),
+        articulated,
+        stepZombie(work, articulated, articulated.brain, context),
       )
-      case 'wraith': return stepWraith(work, actor, actor.brain, context)
-      case 'demon': return stepDemon(work, actor, actor.brain, context)
-      case 'coffin': return stepCoffin(work, actor, actor.brain, context)
+      case 'wraith': return stepWraith(work, articulated, articulated.brain, context)
+      case 'demon': return stepDemon(work, articulated, articulated.brain, context)
+      case 'coffin': return stepCoffin(work, articulated, articulated.brain, context)
     }
   })()
-  return stepEnemyLighting(stepped)
+  return stepEnemyLighting(finalizeSkeletonFamilyHeadFacing(articulated, stepped))
+}
+
+function rollSkeletonFamilyHeadFacing(
+  work: WorkingStep,
+  actor: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  if (
+    (actor.brain.family !== 'skeleton' && actor.brain.family !== 'mage')
+    || actor.targetPlayerId === null
+  ) return actor
+  const gate = drawNativeInteger(
+    work.headFacingRngState,
+    NATIVE_SKELETON_HEAD_TURN_ROLL_COUNT,
+  )
+  work.headFacingRngState = gate.state
+  if (gate.value !== NATIVE_SKELETON_HEAD_TURN_ROLL_WINNER) return actor
+  const offset = drawNativeInteger(
+    work.headFacingRngState,
+    NATIVE_SKELETON_HEAD_FACING_OFFSETS.length,
+  )
+  work.headFacingRngState = offset.state
+  const headFacingOffset = NATIVE_SKELETON_HEAD_FACING_OFFSETS[
+    offset.value
+  ]!
+  return headFacingOffset === actor.headFacingOffset
+    ? actor
+    : { ...actor, headFacingOffset }
+}
+
+function finalizeSkeletonFamilyHeadFacing(
+  source: BoneyardEnemyActor,
+  stepped: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  if (
+    stepped.brain.family === 'skeleton'
+    && stepped.brain.phase === 'attack'
+  ) return stepped
+  if (
+    source.brain.family === 'mage'
+    && source.brain.phase === 'cast'
+    && stepped.brain.family === 'mage'
+    && stepped.brain.phase === 'cast'
+  ) return stepped
+  return clearSkeletonFamilyHeadFacing(stepped)
+}
+
+function clearSkeletonFamilyHeadFacing(
+  actor: BoneyardEnemyActor,
+): BoneyardEnemyActor {
+  return actor.headFacingOffset === 0
+    ? actor
+    : { ...actor, headFacingOffset: 0 }
 }
 
 function stepEnemyLighting(actor: BoneyardEnemyActor): BoneyardEnemyActor {

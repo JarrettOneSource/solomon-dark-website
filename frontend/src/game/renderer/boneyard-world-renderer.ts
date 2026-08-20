@@ -195,6 +195,7 @@ interface BoneyardRendererFrameDiagnostics {
   enemySamples: readonly Readonly<{
     action: string | null
     currentHealth: number
+    headFacingOffset: number
     hitFlash: number
     id: number
     lifeState: string
@@ -797,6 +798,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.enemySamples = snapshot.world.enemies.map((enemy) => ({
         action: enemy.animation.action,
         currentHealth: enemy.currentHealth,
+        headFacingOffset: enemy.animation.headFacingOffset,
         hitFlash: enemy.animation.hitFlash,
         id: enemy.id,
         lifeState: enemy.animation.state,

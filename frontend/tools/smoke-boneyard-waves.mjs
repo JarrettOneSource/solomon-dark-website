@@ -233,6 +233,16 @@ try {
   )
   const death = await waitForPlayerDeath(page)
   const deathRender = await waitForRenderedDeathSequence(page)
+  const enemyHeadFacingSamples = await page.evaluate(() => (
+    window.__sdrEnemyHeadFacingSamples ?? []
+  ))
+  assert.ok(
+    enemyHeadFacingSamples.some((sample) => (
+      (sample.headFacingOffset === -1 || sample.headFacingOffset === 1)
+      && /^(?:skeleton-|mage-)/.test(sample.action)
+    )),
+    'expected a naturally rolled Skeleton-family head-facing turn during combat',
+  )
   const playerDamageEvents = [...wire.events.values()].filter((event) => (
     event.runId === loadedBoneyard.runId && event.type === 'player-damage-sound'
   ))
@@ -326,6 +336,7 @@ try {
     digAudio,
     errors,
     entranceRetirement,
+    enemyHeadFacingSamples,
     gateCrossing,
     gameOverFrame,
     gameOverScreenshotPath,
@@ -1288,6 +1299,7 @@ async function waitForPlayerDeath(page) {
 async function installEnemyActionProbe(page) {
   await page.evaluate(() => {
     const samples = []
+    const headFacingSamples = []
     const origins = new Map()
     const movedIds = []
     Object.defineProperty(window, '__sdrEnemyActionSamples', {
@@ -1298,10 +1310,29 @@ async function installEnemyActionProbe(page) {
       configurable: true,
       value: movedIds,
     })
+    Object.defineProperty(window, '__sdrEnemyHeadFacingSamples', {
+      configurable: true,
+      value: headFacingSamples,
+    })
     const observe = () => {
       const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
       for (const enemy of frame?.enemySamples ?? []) {
         if (enemy.action && !samples.includes(enemy.action)) samples.push(enemy.action)
+        if (
+          enemy.action
+          && enemy.headFacingOffset !== 0
+          && !headFacingSamples.some((sample) => (
+            sample.id === enemy.id
+            && sample.action === enemy.action
+            && sample.headFacingOffset === enemy.headFacingOffset
+          ))
+        ) {
+          headFacingSamples.push({
+            action: enemy.action,
+            headFacingOffset: enemy.headFacingOffset,
+            id: enemy.id,
+          })
+        }
         const origin = origins.get(enemy.id)
         if (!origin) {
           origins.set(enemy.id, { x: enemy.x, y: enemy.y })

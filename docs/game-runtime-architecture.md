@@ -545,9 +545,11 @@ The registry now assigns type `1` to Hub Students, type `2` to Boneyard enemy
 actors, type `3` to enemy projectiles, and type `4` to Coffin-owned Maggots.
 Enemy descriptors freeze immutable family/configuration state; samples carry
 only authoritative presentation fields such as position, heading, action,
-vitals, shields, effects, payload, and lifecycle clocks. Wave scheduling emits
-spawn intents and consumes the authoritative enemy store's live count; it does
-not own a second enemy list. Connected-client coverage exercises spawn,
+the Skeleton/Mage head-facing offset, vitals, shields, effects, payload, and
+lifecycle clocks. Protocol 32 adds that signed fixed-tick field to type 2's
+54-component sample; clients hold it discretely and never reroll it. Wave
+scheduling emits spawn intents and consumes the authoritative enemy store's
+live count; it does not own a second enemy list. Connected-client coverage exercises spawn,
 retirement, late join, periodic keyframes, missing-baseline recovery, strict
 codec bounds, and stale-frame rejection for the Boneyard families.
 
