@@ -21005,7 +21005,7 @@ given variant's PCM finishes before that variant can recur.
 - `core-kernels/boneyard-encounter.ts` now owns the exact float32 cursor
   perturbation/slowdown, native 55-word RNG draw order, strict shovel/dirt
   gates, wrap rearming, bounded monotonic cue history, and contact cutoff. The
-  former uniform five-tick approximation is gone. Protocol 32 carries the
+  former uniform five-tick approximation is gone. Protocol 34 carries the
   bounded cue rows through snapshots and interpolation without replaying
   hydration or a new run.
 - `game-audio-native.ts`, `game-audio-assets.ts`, and `BoneyardScene.tsx` own
