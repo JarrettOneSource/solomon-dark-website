@@ -10,6 +10,7 @@ import {
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import { lineBoundsExitObstruction } from '../core-kernels/line-obstruction.ts'
 import { HUB_CAMERA_SCALE } from '../core-kernels/hub-math.ts'
@@ -217,6 +218,10 @@ export interface GameSimulationInventoryActionResult {
 }
 
 export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInput>>
+
+export interface GameSimulationTickOptions {
+  readonly enemySpawnIntents?: readonly BoneyardEnemySpawnIntent[]
+}
 
 export const DEFAULT_PLAYER_ID = 'local-player'
 export const GAME_FIXED_TICK_SECONDS = PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS
@@ -641,6 +646,7 @@ export function saveGameSimulationPlayerSkill(
 export function stepGameSimulationTick(
   state: GameSimulationState,
   inputs: PlayerCharacterInputs,
+  options: GameSimulationTickOptions = {},
 ): GameSimulationState {
   if (state.run.phase === 'game-over') {
     if (state.world.kind !== 'boneyard') {
@@ -727,6 +733,7 @@ export function stepGameSimulationTick(
             id: `golem:${actor.id}`,
             position: actor.position,
           })),
+        options.enemySpawnIntents ?? [],
       )
       return finishGameSimulationTick(
         state,

@@ -215,6 +215,7 @@ test('client projects authoritative gameplay pause and blocks input until releas
   transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
   assert.deepEqual(session.getGameplayPause(), pause)
   assert.deepEqual(received, [pause])
+  await assert.rejects(session.executeLua('return 1'), /paused/)
 
   const messageCount = transport.sent.length
   session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 100, y: 100 }, true, 2))
@@ -228,6 +229,71 @@ test('client projects authoritative gameplay pause and blocks input until releas
 
   removePause()
   session.destroy()
+})
+
+test('client correlates bounded host Lua results and rejects guest or retired execution', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const execution = session.executeLua('print("hello"); return 42')
+  const request = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(request.type, 'client-lua-execute')
+  if (request.type !== 'client-lua-execute') assert.fail('expected Lua request')
+  transport.receive(encodeGameMessage({
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: ['hello'],
+    requestId: request.requestId,
+    values: [42],
+  }))
+  assert.deepEqual(await execution, {
+    error: null,
+    ok: true,
+    output: ['hello'],
+    values: [42],
+  })
+
+  const pending = session.executeLua('return 1')
+  session.destroy()
+  await assert.rejects(pending, /destroyed/)
+
+  const guestTransport = new MemoryTransport()
+  const guestConnecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport: guestTransport,
+  })
+  const guestState = createGameSimulation({
+    'player-1': CHARACTER,
+    'player-2': { ...CHARACTER, displayName: 'Authority' },
+  })
+  guestTransport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    kernelVersion: PLAYER_CHARACTER_KERNEL_VERSION,
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    snapshot: createGameSnapshot(guestState, 'player-2'),
+    snapshotSequence: 1,
+  }))
+  const guest = await guestConnecting
+  await assert.rejects(guest.executeLua('return 1'), /session host/)
+  guest.destroy()
 })
 
 test('client logs and explains an unexpected transport disconnect', async () => {

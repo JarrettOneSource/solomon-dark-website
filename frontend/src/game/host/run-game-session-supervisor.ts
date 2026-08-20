@@ -4,6 +4,7 @@ import {
   loadModBoneyardsFromStageReport,
 } from './boneyard-catalog.ts'
 import { startGameSessionSupervisor } from './game-session-supervisor.ts'
+import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
 import {
   createJsonGameServerLogSink,
   gameServerErrorDetails,
@@ -52,6 +53,7 @@ const supervisor = await startGameSessionSupervisor({
   boneyards,
   host: process.env.SDR_GAME_SUPERVISOR_HOST?.trim() || '127.0.0.1',
   log,
+  luaWasmPath: resolveWebLuaWasmPath(import.meta.url),
   port: parseInteger(process.env.SDR_GAME_SUPERVISOR_PORT, 5222, 0, 65535),
   maxSessions: parseInteger(process.env.SDR_GAME_MAX_SESSIONS, 64, 1, 10_000),
   maxConnectionsPerSession: parseInteger(

@@ -6,6 +6,7 @@ import {
   loadModBoneyardsFromStageReport,
 } from './boneyard-catalog.ts'
 import { startGameHost } from './game-host.ts'
+import { resolveWebLuaWasmPath } from './lua/web-lua-wasm-path.ts'
 import {
   createJsonGameServerLogSink,
   gameServerErrorDetails,
@@ -64,6 +65,7 @@ const server = await startGameHost({
   authentication: { kind: 'shared', credential },
   host,
   log,
+  luaWasmPath: resolveWebLuaWasmPath(import.meta.url),
   port,
   resetWhenEmpty: true,
   boneyards,

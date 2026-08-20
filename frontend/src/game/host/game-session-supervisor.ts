@@ -37,6 +37,7 @@ export interface GameSessionSupervisorOptions {
   heartbeatIntervalMs?: number
   host?: string
   log?: GameServerLogSink
+  luaWasmPath?: string
   maxConnectionsPerSession?: number
   maxSessions?: number
   port?: number
@@ -327,6 +328,7 @@ export async function startGameSessionSupervisor(
       heartbeatIntervalMs,
       log: options.log,
       logContext: { sessionId: id, sessionKind: kind },
+      luaWasmPath: options.luaWasmPath,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)

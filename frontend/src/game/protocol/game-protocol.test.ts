@@ -28,6 +28,7 @@ import { createGameSnapshot } from '../host/game-snapshot.ts'
 import {
   EMPTY_CONTENT_MANIFEST_SHA256,
   GAME_PROTOCOL_VERSION,
+  MAX_LUA_CONSOLE_CODE_LENGTH,
   PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeClientGameMessage,
@@ -74,7 +75,16 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
   }
 }
 
-test('client protocol validates character hello, input, match, loadout, and ping messages', () => {
+test('client protocol validates character, input, lifecycle, Lua, and ping messages', () => {
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'return sd.runtime.get_frame_state()',
+    requestId: 9,
+  })), {
+    type: 'client-lua-execute',
+    code: 'return sd.runtime.get_frame_state()',
+    requestId: 9,
+  })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -161,6 +171,21 @@ test('client protocol validates character hello, input, match, loadout, and ping
   })), {
     type: 'client-ping',
     nonce: 41,
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: ['tick\t42'],
+    requestId: 9,
+    values: [42, true, null, { phase: 'hub', players: ['player-1'] }],
+  })), {
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: ['tick\t42'],
+    requestId: 9,
+    values: [42, true, null, { phase: 'hub', players: ['player-1'] }],
   })
   assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
     type: 'server-pong',
@@ -195,7 +220,68 @@ test('client protocol validates character hello, input, match, loadout, and ping
   })), /ownerDisplayName/)
 })
 
-test('protocol v32 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v33 bounds Lua requests and structured results by wire bytes and shape', () => {
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-lua-execute',
+    code: '😀'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 4 + 1),
+    requestId: 1,
+  })), GameProtocolError)
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-lua-execute',
+    code: '\\'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 2),
+    requestId: 1,
+  })), GameProtocolError)
+  for (const requestId of [0, -1, 0x8000_0000]) {
+    assert.throws(() => decodeClientGameMessage(JSON.stringify({
+      type: 'client-lua-execute',
+      code: 'return true',
+      requestId,
+    })), GameProtocolError)
+  }
+
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: [''],
+    requestId: 1,
+    values: ['', null],
+  })), {
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: [''],
+    requestId: 1,
+    values: ['', null],
+  })
+
+  const deep: Record<string, unknown> = {}
+  let cursor = deep
+  for (let depth = 0; depth < 18; depth += 1) {
+    cursor.next = {}
+    cursor = cursor.next as Record<string, unknown>
+  }
+  const tooManyNodes = Array.from(
+    { length: 128 },
+    () => Array.from({ length: 16 }, () => 1),
+  )
+  for (const [label, malformed] of [
+    ['success with error', { error: 'failed', ok: true, output: [], values: [] }],
+    ['failure without error', { error: null, ok: false, output: [], values: [] }],
+    ['aggregate output', { error: null, ok: true, output: ['x'.repeat(4_096), 'x'.repeat(4_096), 'x'.repeat(4_096), 'x'.repeat(4_096), 'x'], values: [] }],
+    ['aggregate returns', { error: null, ok: true, output: [], values: ['x'.repeat(12_288), 'x'.repeat(12_288)] }],
+    ['value depth', { error: null, ok: true, output: [], values: [deep] }],
+    ['value nodes', { error: null, ok: true, output: [], values: [tooManyNodes] }],
+  ] as const) {
+    assert.throws(() => decodeServerGameMessage(JSON.stringify({
+      type: 'server-lua-result',
+      requestId: 1,
+      ...malformed,
+    })), GameProtocolError, label)
+  }
+})
+
+test('protocol v33 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -377,7 +463,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v32 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v33 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -807,8 +893,8 @@ test('protocol v32 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v32 carries gameplay pause, Skeleton head-facing, Solomon Dig audio, Game Over, and combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 32)
+test('protocol v33 carries gameplay pause, Skeleton head-facing, Solomon Dig audio, Game Over, and combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 33)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -929,7 +1015,7 @@ test('protocol v32 carries gameplay pause, Skeleton head-facing, Solomon Dig aud
   )
 })
 
-test('protocol v32 strictly owns the generated-arena transition', () => {
+test('protocol v33 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -983,7 +1069,7 @@ test('protocol v32 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v32 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v33 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2090,7 +2176,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v32 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v33 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -2564,7 +2650,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v32 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v33 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

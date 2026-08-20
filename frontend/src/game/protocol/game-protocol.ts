@@ -193,7 +193,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 32
+export const GAME_PROTOCOL_VERSION = 33
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -233,6 +233,18 @@ const MAX_PRIMARY_SPELL_HIT_TARGETS = 1024
 const MAX_SECONDARY_ACTORS = 32_768
 const MAX_SECONDARY_EVENTS = 512
 const MAX_SECONDARY_TARGET_EFFECTS = 8_192
+export const MAX_LUA_CONSOLE_CODE_LENGTH = 48 * 1_024
+export const MAX_LUA_CONSOLE_OUTPUT_LINES = 64
+export const MAX_LUA_CONSOLE_OUTPUT_LINE_LENGTH = 4_096
+export const MAX_LUA_CONSOLE_OUTPUT_BYTES = 16 * 1_024
+export const MAX_LUA_CONSOLE_RETURN_VALUES = 16
+export const MAX_LUA_CONSOLE_RETURN_BYTES = 24 * 1_024
+export const MAX_LUA_CONSOLE_VALUE_DEPTH = 16
+export const MAX_LUA_CONSOLE_VALUE_NODES = 2_048
+export const MAX_LUA_CONSOLE_VALUE_FIELDS = 128
+export const MAX_LUA_CONSOLE_VALUE_STRING_LENGTH = 16_384
+
+const luaTextEncoder = new TextEncoder()
 
 const BONEYARD_ENEMY_PROJECTILE_NATIVE_TYPES = {
   arrow: 0x7da,
@@ -351,6 +363,12 @@ export interface ClientGameplayPauseMessage {
   paused: boolean
 }
 
+export interface ClientLuaExecuteMessage {
+  type: 'client-lua-execute'
+  code: string
+  requestId: number
+}
+
 export type ClientGameMessage =
   | ClientConfirmLoadoutMessage
   | ClientGameplayPauseMessage
@@ -358,6 +376,7 @@ export type ClientGameMessage =
   | ClientHubActionMessage
   | ClientInputMessage
   | ClientLevelUpActionMessage
+  | ClientLuaExecuteMessage
   | ClientSelectSkillMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
@@ -402,6 +421,29 @@ export interface ServerGameplayPauseMessage {
   pause: GameplayPauseState | null
 }
 
+export interface LuaConsoleArray extends ReadonlyArray<LuaConsoleValue> {}
+
+export interface LuaConsoleObject {
+  readonly [key: string]: LuaConsoleValue
+}
+
+export type LuaConsoleValue =
+  | null
+  | boolean
+  | number
+  | string
+  | LuaConsoleArray
+  | LuaConsoleObject
+
+export interface ServerLuaResultMessage {
+  type: 'server-lua-result'
+  error: string | null
+  ok: boolean
+  output: readonly string[]
+  requestId: number
+  values: readonly LuaConsoleValue[]
+}
+
 export type GameDisconnectCode =
   | 'authentication-failed'
   | 'invalid-message'
@@ -419,6 +461,7 @@ export type ServerGameMessage =
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
+  | ServerLuaResultMessage
   | ServerPongMessage
   | ServerDisconnectMessage
 
@@ -514,6 +557,18 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       paused: boolean(value.paused, 'paused'),
     }
   }
+  if (value.type === 'client-lua-execute') {
+    onlyKeys(value, 'message', ['type', 'code', 'requestId'])
+    const code = limitedString(value.code, 'code', MAX_LUA_CONSOLE_CODE_LENGTH)
+    if (encodedByteLength(code) > MAX_LUA_CONSOLE_CODE_LENGTH) {
+      throw new GameProtocolError(`code may contain at most ${MAX_LUA_CONSOLE_CODE_LENGTH} bytes`)
+    }
+    return {
+      type: 'client-lua-execute',
+      code,
+      requestId: luaRequestId(value.requestId),
+    }
+  }
   if (value.type === 'client-disconnect') {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
@@ -597,6 +652,57 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       pause: value.pause === null ? null : gameplayPauseState(value.pause, 'pause'),
     }
   }
+  if (value.type === 'server-lua-result') {
+    onlyKeys(value, 'message', [
+      'type',
+      'error',
+      'ok',
+      'output',
+      'requestId',
+      'values',
+    ])
+    const budget = { nodes: 0 }
+    const ok = boolean(value.ok, 'ok')
+    const error = value.error === null
+      ? null
+      : byteLimitedString(value.error, 'error', MAX_LUA_CONSOLE_OUTPUT_LINE_LENGTH)
+    if (ok !== (error === null)) {
+      throw new GameProtocolError('Lua result ok and error fields are inconsistent')
+    }
+    const output = limitedArray(
+      value.output,
+      'output',
+      MAX_LUA_CONSOLE_OUTPUT_LINES,
+    ).map((line, index) => boundedString(
+      line,
+      `output[${index}]`,
+      MAX_LUA_CONSOLE_OUTPUT_LINE_LENGTH,
+    ))
+    if (encodedByteLength(output) > MAX_LUA_CONSOLE_OUTPUT_BYTES) {
+      throw new GameProtocolError('Lua result output exceeds its byte limit')
+    }
+    const values = limitedArray(
+      value.values,
+      'values',
+      MAX_LUA_CONSOLE_RETURN_VALUES,
+    ).map((entry, index) => luaConsoleValue(
+      entry,
+      `values[${index}]`,
+      budget,
+      0,
+    ))
+    if (encodedByteLength(values) > MAX_LUA_CONSOLE_RETURN_BYTES) {
+      throw new GameProtocolError('Lua result values exceed their byte limit')
+    }
+    return {
+      type: 'server-lua-result',
+      error,
+      ok,
+      output,
+      requestId: luaRequestId(value.requestId),
+      values,
+    }
+  }
   if (value.type === 'server-disconnect') {
     onlyKeys(value, 'message', ['type', 'code', 'reason'])
     const code = limitedString(value.code, 'code', 64)
@@ -617,6 +723,41 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
 
 export class GameProtocolError extends Error {
   override name = 'GameProtocolError'
+}
+
+function luaConsoleValue(
+  value: unknown,
+  field: string,
+  budget: { nodes: number },
+  depth: number,
+): LuaConsoleValue {
+  budget.nodes += 1
+  if (budget.nodes > MAX_LUA_CONSOLE_VALUE_NODES) {
+    throw new GameProtocolError(`${field} exceeds the Lua value node limit`)
+  }
+  if (depth > MAX_LUA_CONSOLE_VALUE_DEPTH) {
+    throw new GameProtocolError(`${field} exceeds the Lua value depth limit`)
+  }
+  if (value === null) return null
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return finite(value, field)
+  if (typeof value === 'string') {
+    return boundedString(value, field, MAX_LUA_CONSOLE_VALUE_STRING_LENGTH)
+  }
+  if (Array.isArray(value)) {
+    return limitedArray(value, field, MAX_LUA_CONSOLE_VALUE_FIELDS).map(
+      (entry, index) => luaConsoleValue(entry, `${field}[${index}]`, budget, depth + 1),
+    )
+  }
+  const source = record(value, field)
+  const entries = Object.entries(source)
+  if (entries.length > MAX_LUA_CONSOLE_VALUE_FIELDS) {
+    throw new GameProtocolError(`${field} has too many Lua value fields`)
+  }
+  return Object.fromEntries(entries.map(([key, entry]) => [
+    byteLimitedString(key, `${field} key`, 128),
+    luaConsoleValue(entry, `${field}.${key}`, budget, depth + 1),
+  ]))
 }
 
 function parseObject(payload: string): Record<string, unknown> {
@@ -735,6 +876,12 @@ function pingNonce(value: unknown): number {
   return result
 }
 
+function luaRequestId(value: unknown): number {
+  const result = positiveInteger(value, 'requestId')
+  if (result > 0x7fffffff) throw new GameProtocolError('requestId is out of range')
+  return result
+}
+
 function boolean(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') throw new GameProtocolError(`${field} must be boolean`)
   return value
@@ -756,6 +903,25 @@ function limitedString(value: unknown, field: string, maximum: number): string {
     )
   }
   return value
+}
+
+function boundedString(value: unknown, field: string, maximumBytes: number): string {
+  if (typeof value !== 'string' || luaTextEncoder.encode(value).byteLength > maximumBytes) {
+    throw new GameProtocolError(`${field} must be a string of at most ${maximumBytes} bytes`)
+  }
+  return value
+}
+
+function byteLimitedString(value: unknown, field: string, maximumBytes: number): string {
+  const result = limitedString(value, field, maximumBytes)
+  if (luaTextEncoder.encode(result).byteLength > maximumBytes) {
+    throw new GameProtocolError(`${field} may contain at most ${maximumBytes} bytes`)
+  }
+  return result
+}
+
+function encodedByteLength(value: unknown): number {
+  return luaTextEncoder.encode(JSON.stringify(value)).byteLength
 }
 
 function memberString<const T extends readonly string[]>(

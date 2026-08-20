@@ -9,7 +9,7 @@ import {
   useState,
   type AnimationEvent,
   type CSSProperties,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import CreateMenuScene from './CreateMenuScene.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
@@ -29,6 +29,15 @@ import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
+import GameSettingsDialog from './GameSettingsDialog.tsx'
+import { installGameLuaConsole } from './game-lua-console.ts'
+import {
+  GAME_SETTINGS_STORAGE_KEY,
+  readGameSettings,
+  setGameSettings,
+  subscribeGameSettings,
+  type GameSettings,
+} from './game-settings.ts'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import MatchLoadingScreen from './MatchLoadingScreen.tsx'
 import {
@@ -133,7 +142,7 @@ function MenuButton({
         onPressState(null)
       }}
       onPointerUp={() => onPressState(null)}
-      onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+      onKeyDown={(event: ReactKeyboardEvent<HTMLButtonElement>) => {
         if (!disabled && !event.repeat && (event.key === 'Enter' || event.key === ' ')) {
           onPressState(action)
           onPress?.()
@@ -157,12 +166,13 @@ function RootActions({
   onPlay,
   onPress,
   onPressState,
-}: ActionGroupProps & { onPlay: () => void }) {
+  onSettings,
+}: ActionGroupProps & { onPlay: () => void; onSettings: () => void }) {
   return (
     <>
       <MenuButton action="play" accessibleLabel="Play" defaultFocus onClick={onPlay} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
-      <MenuButton action="settings" accessibleLabel="Settings" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="settings" accessibleLabel="Settings" onClick={onSettings} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="hall" accessibleLabel="Hall of Fame" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
@@ -232,6 +242,8 @@ export default function MainMenuScene({
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [hoveredTitleAction, setHoveredTitleAction] = useState<TitleMenuAction | null>(null)
   const [pressedTitleAction, setPressedTitleAction] = useState<TitleMenuAction | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
   ))
@@ -282,6 +294,38 @@ export default function MainMenuScene({
     () => cancelLoading('boneyard'),
     [cancelLoading],
   )
+
+  useEffect(() => {
+    const unsubscribe = subscribeGameSettings(setLocalGameSettings)
+    const syncStoredSettings = (event: StorageEvent) => {
+      if (event.key === GAME_SETTINGS_STORAGE_KEY) {
+        setLocalGameSettings(readGameSettings())
+      }
+    }
+    window.addEventListener('storage', syncStoredSettings)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('storage', syncStoredSettings)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!session || !gameSettings.enableCheats || !session.isHost) return
+    return installGameLuaConsole(window, session)
+  }, [gameSettings.enableCheats, runtimeSnapshot?.hostPlayerId, session])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [settingsOpen])
+
+  const updateGameSettings = useCallback((settings: GameSettings) => {
+    setLocalGameSettings(setGameSettings(settings))
+  }, [])
 
   useLayoutEffect(() => {
     const stage = stageRef.current
@@ -422,10 +466,10 @@ export default function MainMenuScene({
   }, [audio, session])
 
   useEffect(() => {
-    if (screen === 'hub' || !stageRef.current) return
+    if (screen === 'hub' || settingsOpen || !stageRef.current) return
     const navigation = createGamepadMenuNavigation({ root: stageRef.current })
     return () => navigation.destroy()
-  }, [screen])
+  }, [screen, settingsOpen])
 
   const transitionTo = (target: MenuScreen) => {
     if (fadeState !== 'idle') return
@@ -613,6 +657,7 @@ export default function MainMenuScene({
                     onPlay={() => setScreen('play')}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}
+                    onSettings={() => setSettingsOpen(true)}
                   />
                 ) : (
                   <PlayActions
@@ -755,6 +800,14 @@ export default function MainMenuScene({
             {connectionError ?? 'Opening the web playtest…'}
           </div>
         )}
+
+        {settingsOpen && titleScreen ? (
+          <GameSettingsDialog
+            onChange={updateGameSettings}
+            onClose={() => setSettingsOpen(false)}
+            settings={gameSettings}
+          />
+        ) : null}
 
         <div
           className={`main-menu-screen-fade main-menu-screen-fade-${fadeState}`}

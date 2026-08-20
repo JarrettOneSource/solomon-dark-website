@@ -743,3 +743,47 @@ the final exact-`16` Hub probe measured `143.54 FPS` in ordinary Chrome,
 and `1,634.73 FPS` with both limits disabled. Every run retained `20 Hz`
 snapshots, three camera render groups, `16` southern architecture sprites, `19`
 southern-bank children, and the Astronomer ensemble without errors.
+
+## Web Lua extension boundary
+
+Lua is an authority extension, not another world model. The portable Node game
+host owns one lazily initialized Lua 5.4 VM for the browser developer console;
+future resolved mods receive separate VM lifetimes behind the same interface.
+The VM imports `core-server` only through `host/lua` semantic adapters. Core
+kernels, protocol codecs, snapshots, clients, React, and Pixi never import the
+VM.
+
+The fixed-tick order is:
+
+```text
+accepted host console requests + due Lua timers + runtime.tick callbacks
+  -> validate and apply queued semantic player commands
+  -> pass queued enemy spawn intents into the existing Boneyard materializer
+  -> authoritative simulation tick
+  -> derive subscribed run/wave/enemy/gold/level notifications from before/after state
+  -> dispatch Lua notifications (their commands wait for the next tick)
+  -> publish ordinary snapshots/results
+```
+
+This preserves one mutation boundary and prevents Lua callbacks from entering
+the simulation recursively. The host checks dynamic session host identity on
+every console request. `Enable Cheats` controls only whether the browser
+installs its DevTools API; it is never trusted as network authorization.
+
+The VM is cold by default. Its JavaScript bridge is bundled into both portable
+server entry points and its immutable Lua 5.4 WASM sits beside them. Lazy
+creation, callback/timer registries, UTF-8/JSON wire expansion, output capture,
+state, queued commands, and the allocator all have explicit bounds.
+Instruction hooks interrupt both fresh chunks and stored callbacks. An unused
+runtime adds no dispatch loop, worker, VM allocation, or browser bytes; an
+initialized idle VM does not project players or actors.
+
+The first API version exposes only semantic owners already implemented in
+`/game`: runtime/state/events/timer, run seed, scene/gameplay/Hub reads,
+player resource reads/mutations, world/wave reads, and the bounded stock-enemy
+descriptor/spawn subset. Client
+presentation, durable mod storage/settings, multi-mod bus, raw Lua networking,
+dynamic content registries, bots, input synthesis, time scaling, navigation,
+and every native-memory/debug path remain absent until their web owners exist.
+The complete disposition is recorded in `game-native-parity-re.md` and the Mod
+Loader's `web-lua-runtime-parity-contract.md`.

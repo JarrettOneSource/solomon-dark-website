@@ -21,6 +21,11 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest"
              Condition="Exists('../frontend/dist-game-host/game-session-supervisor.mjs')" />
+    <Content Include="../frontend/dist-game-host/lua54.wasm"
+             Link="GameHost/lua54.wasm"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Condition="Exists('../frontend/dist-game-host/lua54.wasm')" />
   </ItemGroup>
 
 </Project>

@@ -208,6 +208,99 @@
   background: rgb(7 6 14 / 0.94);
 }
 
+.game-settings-backdrop {
+  position: absolute;
+  z-index: 2000;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.72);
+  place-items: center;
+}
+
+.game-settings-dialog {
+  display: flex;
+  box-sizing: border-box;
+  width: min(520px, 100%);
+  max-height: 100%;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid #cdb169;
+  color: #f0dca7;
+  background: rgb(7 6 14 / 0.98);
+  box-shadow: 0 12px 48px #000, inset 0 0 28px rgb(185 151 78 / 0.12);
+  font-family: var(--font-display);
+}
+
+.game-settings-dialog h2 {
+  margin: 0;
+  color: #fff0b7;
+  font: 700 28px var(--font-heading);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.game-settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgb(205 177 105 / 0.42);
+  cursor: pointer;
+}
+
+.game-settings-toggle input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: #cdb169;
+}
+
+.game-settings-toggle span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.game-settings-toggle strong { color: #fff0b7; }
+
+.game-settings-toggle small {
+  color: #c7b783;
+  line-height: 1.35;
+}
+
+.game-settings-console-help {
+  margin: 0;
+  color: #c7b783;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.game-settings-console-help code {
+  overflow-wrap: anywhere;
+  color: #fff0b7;
+  font-family: var(--font-mono);
+}
+
+.game-settings-close {
+  align-self: center;
+  min-width: 120px;
+  padding: 8px 18px;
+  border: 1px solid #cdb169;
+  color: #fff0b7;
+  background: #18151c;
+  font: 700 16px var(--font-display);
+  cursor: pointer;
+}
+
+.game-settings-close:hover,
+.game-settings-close:focus-visible {
+  border-color: #fff0b7;
+  outline: none;
+}
+
 .main-menu-page[data-game-scene='root'] .game-fullscreen-message,
 .main-menu-page[data-game-scene='play'] .game-fullscreen-message {
   top: auto;

@@ -198,6 +198,7 @@ if [[ -z "$artifact_checksum" ]]; then
     for required_file in \
         Server.dll \
         GameHost/game-session-supervisor.mjs \
+        GameHost/lua54.wasm \
         wwwroot/index.html \
         DEPLOYED_GIT_SHA; do
         [[ -f "$publish_dir/$required_file" ]] ||
@@ -328,6 +329,7 @@ tar --extract --gzip --file "$artifact" --directory "$stage"
 for required_file in \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
+    GameHost/lua54.wasm \
     wwwroot/index.html \
     DEPLOYED_GIT_SHA; do
     [[ -f "$stage/$required_file" ]]

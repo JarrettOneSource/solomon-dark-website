@@ -59,6 +59,7 @@ import {
   createBoneyardWaveDirector,
   startBoneyardWaveDirector,
   stepBoneyardWaveDirector,
+  type BoneyardEnemySpawnIntent,
   type BoneyardWaveDirectorState,
 } from '../core-kernels/boneyard-wave-director.ts'
 import {
@@ -266,6 +267,7 @@ export function stepBoneyardWorldTick(
   registerProjectileLightProvider?: RegisterNativeLightProvider,
   abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>> = {},
   summons: readonly BoneyardSummonTarget[] = [],
+  externalSpawnIntents: readonly BoneyardEnemySpawnIntent[] = [],
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -408,6 +410,7 @@ export function stepBoneyardWorldTick(
   }
   let waves = world.waves
   let wavesStarted = false
+  let pendingExternalSpawnIntents = externalSpawnIntents
   if (waves !== null && encounter !== null) {
     if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
       waves = startBoneyardWaveDirector(waves)
@@ -507,13 +510,15 @@ export function stepBoneyardWorldTick(
       return mover.position
     },
     resolveSpawnIntents: (liveEnemyCount) => {
+      const external = pendingExternalSpawnIntents
+      pendingExternalSpawnIntents = []
       if (
         waves === null
         || encounter === null
         || wavesStarted
         || waves.phase === 'dormant'
         || Object.keys(livingPlayers).length === 0
-      ) return []
+      ) return external
       const result = stepBoneyardWaveDirector(waves, {
         bounds: activeBounds,
         liveEnemyCount,
@@ -521,7 +526,7 @@ export function stepBoneyardWorldTick(
         tick,
       })
       waves = result.director
-      return result.spawnIntents
+      return [...external, ...result.spawnIntents]
     },
     registerLightProvider,
     registerProjectileLightProvider,

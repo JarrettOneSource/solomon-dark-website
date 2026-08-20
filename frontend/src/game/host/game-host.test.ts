@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import test from 'node:test'
 
 import { WebSocket } from 'ws'
@@ -48,6 +49,8 @@ const SECOND_CHARACTER = {
   element: 'water',
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
+const require = createRequire(import.meta.url)
+const luaWasmPath = require.resolve('wasmoon/dist/glue.wasm')
 
 type MaterializedServerSnapshotMessage = ServerSnapshotMessage & { snapshot: GameSnapshot }
 type TestServerGameMessage =
@@ -150,6 +153,20 @@ test('Hub pause is first-request owned, survives late join, and releases on owne
   await new Promise((resolve) => setTimeout(resolve, 100))
   assert.equal(host.state().tick, heldTick)
   assert.equal(JSON.stringify(gameSimulationPlayerRecords(host.state())), heldPlayers)
+
+  const pausedLuaResult = nextMessage(first.socket, (message) => (
+    message.type === 'server-lua-result' && message.requestId === 99
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'return 1',
+    requestId: 99,
+  }))
+  const luaResult = await pausedLuaResult
+  assert.equal(luaResult.type, 'server-lua-result')
+  assert.equal(luaResult.ok, false)
+  assert.match(luaResult.error ?? '', /paused/)
+  assert.equal((await hostHealth(host.address.url)).lua, null)
 
   second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: true }))
   second.socket.send(encodeGameMessage({ type: 'client-gameplay-pause', paused: false }))
@@ -1054,6 +1071,116 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
   )
 })
 
+test('host lazily executes bounded Lua for authority and applies semantic commands', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    luaWasmPath,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const authority = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const guest = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => authority.socket.close())
+  context.after(() => guest.socket.close())
+  assert.equal((await hostHealth(host.address.url)).lua, null)
+
+  const guestRejected = nextMessage(guest.socket, (message) => (
+    message.type === 'server-lua-result' && message.requestId === 1
+  ))
+  guest.socket.send(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'return 1',
+    requestId: 1,
+  }))
+  const rejected = await guestRejected
+  assert.equal(rejected.type, 'server-lua-result')
+  assert.equal(rejected.ok, false)
+  assert.match(rejected.error ?? '', /session host/)
+  assert.equal((await hostHealth(host.address.url)).lua, null)
+
+  const firstResult = nextMessage(authority.socket, (message) => (
+    message.type === 'server-lua-result' && message.requestId === 2
+  ))
+  authority.socket.send(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: `
+      print('authority', sd.runtime.get_multiplayer_state().is_authority)
+      sd.player.set_gold(4321)
+      sd.rng.set_seed(42)
+      return sd.player.get_state().display_name, sd.runtime.api_version
+    `,
+    requestId: 2,
+  }))
+  const executed = await firstResult
+  assert.equal(executed.type, 'server-lua-result')
+  assert.equal(executed.ok, true)
+  assert.deepEqual(executed.output, ['authority\ttrue'])
+  assert.deepEqual(executed.values, ['Helvidius', '0.1.0'])
+  await waitFor(() => getPlayerEconomy(host.state(), authority.welcome.playerId).gold === 4321)
+  assert.notEqual((await hostHealth(host.address.url)).lua, null)
+
+  const loadedMessage = nextMessage(authority.socket, (message) => (
+    message.type === 'server-boneyard-loaded'
+  ))
+  authority.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const loaded = await loadedMessage
+  assert.equal(loaded.type, 'server-boneyard-loaded')
+  assert.equal(loaded.boneyard.seed, `0000002a${'00'.repeat(12)}`)
+
+  const spawnResult = nextMessage(authority.socket, (message) => (
+    message.type === 'server-lua-result' && message.requestId === 3
+  ))
+  authority.socket.send(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'return sd.enemies.spawn("skeleton", {x = 250, y = 250}).request_id',
+    requestId: 3,
+  }))
+  const spawned = await spawnResult
+  assert.equal(spawned.type, 'server-lua-result')
+  assert.deepEqual(spawned.values, [1])
+  await waitFor(() => {
+    const current = host.state()
+    return current.world.kind === 'boneyard' && current.world.enemies.actors.length === 1
+  })
+  const current = host.state()
+  if (current.world.kind !== 'boneyard') assert.fail('expected Boneyard')
+  assert.equal(current.world.enemies.actors[0]?.config.enemyToken, 'SKELETON')
+})
+
+test('Lua authority migrates and reset-when-empty retires the VM', async (context) => {
+  const host = await startGameHost({
+    authentication: SHARED_AUTHENTICATION,
+    luaWasmPath,
+    resetWhenEmpty: true,
+    snapshotRate: 100,
+  })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => second.socket.close())
+  await closeSocket(first.socket)
+  await waitFor(() => host.hostPlayerId() === second.welcome.playerId)
+
+  const resultMessage = nextMessage(second.socket, (message) => (
+    message.type === 'server-lua-result' && message.requestId === 4
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-lua-execute',
+    code: 'persistent = 99; return persistent',
+    requestId: 4,
+  }))
+  const result = await resultMessage
+  assert.equal(result.type, 'server-lua-result')
+  assert.deepEqual(result.values, [99])
+  assert.notEqual((await hostHealth(host.address.url)).lua, null)
+  await closeSocket(second.socket)
+  await waitFor(() => host.playerCount() === 0)
+  assert.equal((await hostHealth(host.address.url)).lua, null)
+})
+
 test('host authority transfers to the earliest remaining client', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())
@@ -1170,6 +1297,15 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     if (Date.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))
   }
+}
+
+async function hostHealth(url: string): Promise<{ lua: unknown }> {
+  const endpoint = new URL(url)
+  endpoint.protocol = endpoint.protocol === 'wss:' ? 'https:' : 'http:'
+  endpoint.pathname = '/health'
+  const response = await fetch(endpoint)
+  assert.equal(response.status, 200)
+  return response.json() as Promise<{ lua: unknown }>
 }
 
 function openSocket(url: string, origin?: string, autoPong = true): Promise<WebSocket> {

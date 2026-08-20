@@ -114,6 +114,7 @@ function inertSession() {
     playerId: 'p',
     resumeToken: 'r',
     confirmLoadout() {},
+    executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),
     destroy() {},
     getBoneyard: () => null,
     getGameplayPause: () => null,

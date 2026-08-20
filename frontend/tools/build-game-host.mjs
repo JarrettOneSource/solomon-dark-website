@@ -1,11 +1,14 @@
 import { build } from 'esbuild'
-import { rm } from 'node:fs/promises'
+import { copyFile, rm } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 await rm('dist-game-host', { force: true, recursive: true })
 
 await build({
   banner: {
-    js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+    js: "import { createRequire } from 'node:module'; import { fileURLToPath as __fileURLToPath } from 'node:url'; import { dirname as __pathDirname } from 'node:path'; const require = createRequire(import.meta.url); const __filename = __fileURLToPath(import.meta.url); const __dirname = __pathDirname(__filename);",
   },
   bundle: true,
   entryPoints: {
@@ -19,3 +22,5 @@ await build({
   platform: 'node',
   target: 'node22.17',
 })
+
+await copyFile(require.resolve('wasmoon/dist/glue.wasm'), 'dist-game-host/lua54.wasm')

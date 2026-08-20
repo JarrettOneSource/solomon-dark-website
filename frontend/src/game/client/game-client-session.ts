@@ -12,6 +12,7 @@ import {
 } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
+  MAX_LUA_CONSOLE_CODE_LENGTH,
   PLAYER_CHARACTER_KERNEL_VERSION,
   GameProtocolError,
   decodeServerGameMessage,
@@ -21,6 +22,7 @@ import {
   type GameSnapshot,
   type GameplayPauseState,
   type LoadedBoneyard,
+  type ServerLuaResultMessage,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
@@ -68,6 +70,7 @@ export interface GameClientSession {
   readonly resumeToken: string
   confirmLoadout(): void
   destroy(): void
+  executeLua(code: string): Promise<GameLuaExecutionResult>
   getBoneyard(): LoadedBoneyard | null
   getGameplayPause(): GameplayPauseState | null
   getPingMs(): number | null
@@ -87,6 +90,11 @@ export interface GameClientSession {
   sendInput(input: PlayerCharacterInput): void
   startMatch(boneyardId: string): void
 }
+
+export type GameLuaExecutionResult = Omit<
+  ServerLuaResultMessage,
+  'requestId' | 'type'
+>
 
 export type GameSessionConnector = (
   options: GameClientSessionOptions,
@@ -112,6 +120,15 @@ interface LocalHubPresentationState {
 const STOPPED_INPUT = createIdlePlayerCharacterInput()
 const PING_INTERVAL_MS = 2_000
 const PING_TIMEOUT_MS = 10_000
+const LUA_EXECUTION_TIMEOUT_MS = 10_000
+const MAX_PENDING_LUA_EXECUTIONS = 8
+const luaTextEncoder = new TextEncoder()
+
+interface PendingLuaExecution {
+  reject: (error: Error) => void
+  resolve: (result: GameLuaExecutionResult) => void
+  timeout: ReturnType<typeof globalThis.setTimeout>
+}
 
 export function connectGameClientSession(
   options: GameClientSessionOptions,
@@ -130,6 +147,7 @@ export function connectGameClientSession(
     let latestPingMs: number | null = null
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
+    let nextLuaRequestId = 1
     let pingTimer: ReturnType<typeof globalThis.setInterval> | undefined
     let sequence = 0
     let predictionEnabled = false
@@ -145,6 +163,7 @@ export function connectGameClientSession(
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const pendingPings = new Map<number, number>()
+    const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
     const entityReplication = new EntityReplicationReconstructor()
     let pendingInputs: PendingInput[] = []
     const handshakeDeadline = globalThis.setTimeout(() => {
@@ -234,6 +253,19 @@ export function connectGameClientSession(
           )
         }
         for (const listener of pingListeners) listener(latestPingMs)
+        return
+      }
+      if (message.type === 'server-lua-result') {
+        const pending = pendingLuaExecutions.get(message.requestId)
+        if (!pending) return
+        pendingLuaExecutions.delete(message.requestId)
+        globalThis.clearTimeout(pending.timeout)
+        pending.resolve({
+          error: message.error,
+          ok: message.ok,
+          output: message.output,
+          values: message.values,
+        })
         return
       }
       if (message.sequence <= lastSnapshotSequence) return
@@ -352,11 +384,54 @@ export function connectGameClientSession(
           options.transport.send(encodeGameMessage({ type: 'client-disconnect' }))
         }
         options.transport.close(1000, 'session destroyed')
+        rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
         snapshotListeners.clear()
         boneyardListeners.clear()
         gameplayPauseListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
+      },
+      executeLua(code) {
+        if (!welcome || !snapshot || destroyed) {
+          return Promise.reject(new Error('The game session is not connected.'))
+        }
+        if (!session.isHost) {
+          return Promise.reject(new Error('Only the session host may execute Lua.'))
+        }
+        if (gameplayPause !== null) {
+          return Promise.reject(new Error('Lua execution is unavailable while gameplay is paused.'))
+        }
+        if (typeof code !== 'string' || code.length === 0) {
+          return Promise.reject(new Error('Lua code must not be empty.'))
+        }
+        if (
+          code.length > MAX_LUA_CONSOLE_CODE_LENGTH
+          || luaTextEncoder.encode(JSON.stringify(code)).byteLength
+            > MAX_LUA_CONSOLE_CODE_LENGTH
+        ) {
+          return Promise.reject(new Error('Lua code exceeds the console limit.'))
+        }
+        if (pendingLuaExecutions.size >= MAX_PENDING_LUA_EXECUTIONS) {
+          return Promise.reject(new Error('Too many Lua executions are pending.'))
+        }
+        const requestId = nextAvailableLuaRequestId(nextLuaRequestId, pendingLuaExecutions)
+        nextLuaRequestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
+        return new Promise<GameLuaExecutionResult>((resolveExecution, rejectExecution) => {
+          const timeout = globalThis.setTimeout(() => {
+            pendingLuaExecutions.delete(requestId)
+            rejectExecution(new Error('Lua execution timed out.'))
+          }, LUA_EXECUTION_TIMEOUT_MS)
+          pendingLuaExecutions.set(requestId, {
+            reject: rejectExecution,
+            resolve: resolveExecution,
+            timeout,
+          })
+          options.transport.send(encodeGameMessage({
+            type: 'client-lua-execute',
+            code,
+            requestId,
+          }))
+        })
       },
       getBoneyard() {
         return loadedBoneyard
@@ -603,6 +678,14 @@ export function connectGameClientSession(
       pendingPings.clear()
     }
 
+    function rejectPendingLuaExecutions(error: Error): void {
+      for (const pending of pendingLuaExecutions.values()) {
+        globalThis.clearTimeout(pending.timeout)
+        pending.reject(error)
+      }
+      pendingLuaExecutions.clear()
+    }
+
     function createPresentationTimeline(
       hubSnapshot: Parameters<typeof createHubPresentationTimeline>[0]['initialSnapshot'],
       receivedAtMs: number,
@@ -760,6 +843,7 @@ export function connectGameClientSession(
         destroyed = true
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
+        rejectPendingLuaExecutions(failure)
         removeClose()
         removeMessage()
         options.diagnostics?.error(
@@ -776,6 +860,7 @@ export function connectGameClientSession(
       destroyed = true
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
+      rejectPendingLuaExecutions(failure)
       removeClose()
       removeMessage()
       options.diagnostics?.error(
@@ -786,11 +871,24 @@ export function connectGameClientSession(
       options.transport.close(4008, failure.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
+      gameplayPauseListeners.clear()
       enemyEventListeners.clear()
       pingListeners.clear()
       options.onFatal?.(failure)
     }
   })
+}
+
+function nextAvailableLuaRequestId(
+  start: number,
+  pending: ReadonlyMap<number, PendingLuaExecution>,
+): number {
+  let requestId = start
+  while (pending.has(requestId)) {
+    requestId = requestId === 0x7fff_ffff ? 1 : requestId + 1
+    if (requestId === start) throw new Error('Lua request ID space is exhausted.')
+  }
+  return requestId
 }
 
 function diagnosticFailureDetail(failure: GameConnectionFailure): string | null {

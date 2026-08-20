@@ -66,6 +66,14 @@ import {
   logGameServerEvent,
   type GameServerLogSink,
 } from './game-server-logger.ts'
+import {
+  applyWebLuaCommands,
+  createWebLuaFrameState,
+  deriveWebLuaEvents,
+  type WebLuaDerivedEvent,
+} from './lua/web-lua-game-api.ts'
+import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
+import { WEB_LUA_MAX_PENDING_EXECUTIONS } from './lua/web-lua-contract.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 
@@ -87,6 +95,7 @@ export interface GameHostOptions {
   initialPlayerExperience?: number
   log?: GameServerLogSink
   logContext?: Readonly<Record<string, unknown>>
+  luaWasmPath?: string
   maxPlayers?: number
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
@@ -123,6 +132,7 @@ interface HostClient {
   lastSentSnapshotSequence: number
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
+  pendingLuaRequestIds: Set<number>
   sentReplicationBaselines: Map<number, ReplicatedEntityBaseline>
   socket: WebSocket
 }
@@ -162,11 +172,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let reservedHostClaimed = false
   let loadedBoneyard: LoadedBoneyard | null = null
   let nextSnapshotSequence = 1
+  let nextLuaRunSeed: number | null = null
+  let luaRuntime: WebLuaRuntime | null = null
+  let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
+  let luaRuntimeGeneration = 0
   let closed = false
   let ticking = false
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const pendingLuaEvents: WebLuaDerivedEvent[] = []
   const pending = new Set<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
@@ -180,6 +195,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         status: 'ok',
         tick: state.tick,
         players: clients.size,
+        lua: luaRuntime?.metrics ?? null,
         scene: state.world.kind,
       }))
       return
@@ -374,6 +390,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
           playerId,
+          pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
@@ -544,6 +561,90 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         broadcastSnapshot()
         return
       }
+      if (message.type === 'client-lua-execute') {
+        const sendLuaResult = (
+          result: Readonly<{
+            error: string | null
+            ok: boolean
+            output: readonly string[]
+            values: readonly import('../protocol/game-protocol.ts').LuaConsoleValue[]
+          }>,
+        ) => {
+          if (socket.readyState !== WebSocket.OPEN) return
+          socket.send(encodeGameMessage({
+            type: 'server-lua-result',
+            requestId: message.requestId,
+            ...result,
+          }))
+        }
+        if (client.playerId !== hostPlayerId) {
+          sendLuaResult({
+            error: 'Only the current session host may execute authoritative Lua.',
+            ok: false,
+            output: [],
+            values: [],
+          })
+          return
+        }
+        if (gameplayPause !== null) {
+          sendLuaResult({
+            error: 'Lua execution is unavailable while gameplay is paused.',
+            ok: false,
+            output: [],
+            values: [],
+          })
+          return
+        }
+        if (client.pendingLuaRequestIds.has(message.requestId)) {
+          disconnect(socket, 'invalid-message', 'Lua request ID is already pending.')
+          return
+        }
+        if (client.pendingLuaRequestIds.size >= WEB_LUA_MAX_PENDING_EXECUTIONS) {
+          sendLuaResult({
+            error: 'Too many Lua executions are pending.',
+            ok: false,
+            output: [],
+            values: [],
+          })
+          return
+        }
+        client.pendingLuaRequestIds.add(message.requestId)
+        const completeRequest = (result: Parameters<typeof sendLuaResult>[0]) => {
+          client.pendingLuaRequestIds.delete(message.requestId)
+          sendLuaResult(result)
+        }
+        void ensureLuaRuntime().then((runtime) => {
+          if (closed || !clients.has(socket)) {
+            completeRequest({
+              error: 'The game session closed before Lua initialized.',
+              ok: false,
+              output: [],
+              values: [],
+            })
+            return
+          }
+          if (!runtime.enqueueExecution({
+            code: message.code,
+            playerId: client.playerId,
+            respond: completeRequest,
+          })) {
+            completeRequest({
+              error: 'The Lua execution queue is full or the code is invalid.',
+              ok: false,
+              output: [],
+              values: [],
+            })
+          }
+        }).catch((error: unknown) => {
+          completeRequest({
+            error: error instanceof Error ? error.message : 'Lua initialization failed.',
+            ok: false,
+            output: [],
+            values: [],
+          })
+        })
+        return
+      }
       if (message.type === 'client-ping') {
         socket.send(encodeGameMessage({ type: 'server-pong', nonce: message.nonce }))
         return
@@ -586,14 +687,22 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const selected = materializeBoneyard(
           boneyards,
           message.boneyardId,
-          options.createBoneyardSeedBytes?.(),
+          consumeBoneyardSeed(),
         )
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
           return
         }
         loadedBoneyard = selected
+        const previousState = state
         state = enterBoneyardWorld(state, selected)
+        if (luaRuntime !== null) {
+          pendingLuaEvents.push(...deriveWebLuaEvents(
+            previousState,
+            state,
+            (name) => luaRuntime!.wantsEvent(name),
+          ))
+        }
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         broadcastSnapshot()
         return
@@ -647,15 +756,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       clients.delete(socket)
       const releasedGameplayPause = gameplayPause?.ownerPlayerId === client.playerId
       state = removePlayerCharacter(state, client.playerId)
-      if (clients.size === 0 && resetWhenEmpty) {
-        state = createInitialSimulation(options.createSimulation)
-        nextPlayerId = 1
+      if (clients.size === 0) {
         hostPlayerId = null
-        reservedHostClaimed = false
-        loadedBoneyard = null
-        nextSnapshotSequence = 1
-        gameplayPause = null
-        resetNextTickDeadline()
+        resetLuaRuntime()
+        if (resetWhenEmpty) {
+          state = createInitialSimulation(options.createSimulation)
+          nextPlayerId = 1
+          reservedHostClaimed = false
+          loadedBoneyard = null
+          nextSnapshotSequence = 1
+          gameplayPause = null
+          resetNextTickDeadline()
+        }
       } else if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
@@ -716,7 +828,29 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const previousBarrierId = state.levelUpBarrier?.barrierId ?? null
         const previousRunPhase = state.run.phase
         const previousGameOverExitTicks = state.run.gameOverExitTicks
-        state = stepGameSimulationTick(state, inputs)
+        const stateBeforeLua = state
+        let enemySpawnIntents = [] as import('../core-kernels/boneyard-wave-director.ts').BoneyardEnemySpawnIntent[]
+        if (luaRuntime !== null) {
+          luaRuntime.beginTick(nextTick)
+          const applied = applyWebLuaCommands(state, luaRuntime.drainCommands())
+          state = applied.state
+          enemySpawnIntents = [...applied.enemySpawnIntents]
+          if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
+        }
+        state = stepGameSimulationTick(state, inputs, { enemySpawnIntents })
+        if (luaRuntime !== null) {
+          const events = [
+            ...pendingLuaEvents.splice(0),
+            ...deriveWebLuaEvents(
+              stateBeforeLua,
+              state,
+              (name) => luaRuntime!.wantsEvent(name),
+            ),
+          ]
+          for (const event of events) {
+            luaRuntime.dispatch(event.name, event.payload)
+          }
+        }
         const barrierId = state.levelUpBarrier?.barrierId ?? null
         const reachedGameOverBlack = state.run.phase === 'game-over'
           && state.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
@@ -900,6 +1034,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       if (closed) return
       closed = true
       clearInterval(timer)
+      resetLuaRuntime()
       const closeCode = reason === 'host-ended-session'
         ? GAME_HOST_ENDED_SESSION_CLOSE_CODE
         : 1012
@@ -928,6 +1063,69 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
     state: () => state,
+  }
+
+  async function ensureLuaRuntime(): Promise<WebLuaRuntime> {
+    if (luaRuntime !== null) return luaRuntime
+    if (!options.luaWasmPath) throw new Error('Lua runtime is not configured for this game host.')
+    if (luaRuntimeInitialization !== null) return luaRuntimeInitialization
+    const generation = luaRuntimeGeneration
+    let initialization: Promise<WebLuaRuntime>
+    initialization = WebLuaRuntime.create({
+      bindings: {
+        getAuthorityPlayerId: () => hostPlayerId,
+        getFrame: () => createWebLuaFrameState(state, hostPlayerId, loadedBoneyard),
+      },
+      log: (level, event, detail) => logGameServerEvent(
+        options.log,
+        'game-host',
+        level,
+        event,
+        detail,
+        logDetails({ playerCount: clients.size, serverTick: state.tick }),
+      ),
+      wasmPath: options.luaWasmPath,
+    }).then((runtime) => {
+      if (closed || generation !== luaRuntimeGeneration) {
+        runtime.close()
+        throw new Error('Lua runtime initialization was superseded.')
+      }
+      luaRuntime = runtime
+      if (luaRuntimeInitialization === initialization) luaRuntimeInitialization = null
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'info',
+        'lua.initialized',
+        'The authoritative web Lua runtime initialized.',
+        logDetails({ ...runtime.metrics, playerCount: clients.size, serverTick: state.tick }),
+      )
+      return runtime
+    }, (error) => {
+      if (luaRuntimeInitialization === initialization) luaRuntimeInitialization = null
+      throw error
+    })
+    luaRuntimeInitialization = initialization
+    return initialization
+  }
+
+  function resetLuaRuntime(): void {
+    luaRuntimeGeneration += 1
+    luaRuntime?.close()
+    luaRuntime = null
+    pendingLuaEvents.length = 0
+    const initializing = luaRuntimeInitialization
+    luaRuntimeInitialization = null
+    if (initializing) void initializing.then((runtime) => runtime.close(), () => {})
+    nextLuaRunSeed = null
+  }
+
+  function consumeBoneyardSeed(): Buffer | undefined {
+    if (nextLuaRunSeed === null) return options.createBoneyardSeedBytes?.()
+    const bytes = Buffer.alloc(16)
+    bytes.writeUInt32BE(nextLuaRunSeed)
+    nextLuaRunSeed = null
+    return bytes
   }
 }
 
