@@ -3,13 +3,13 @@ import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import {
+  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
-  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
 } from '../core-kernels/game-run.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
-import { playerCollisionEnabled } from '../core-kernels/player-combat.ts'
+import { playerCollisionEnabled, playerDeathFrame } from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
@@ -21,7 +21,6 @@ import {
   mergeNativeLightProviderOwners,
 } from '../core-kernels/native-light-provider-order.ts'
 import {
-  acknowledgeGameSimulationOver,
   addPlayerCharacter,
   applyGameSimulationHubAction,
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
@@ -1305,33 +1304,50 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(state.run.gameOverEventId, 1)
   assert.equal(state.run.gameOverTicks, 0)
 
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_INPUT_GATE_TICKS; tick += 1) {
+  const frozenWorld = state.world
+  for (let deathTick = 1; deathTick <= 152; deathTick += 1) {
     state = stepGameSimulationTick(state, {
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
     })
+    assert.equal(state.world, frozenWorld)
+    assert.equal(getPlayerProgression(state, 'second').deathTick, deathTick)
   }
-  assert.equal(state.run.gameOverTicks, BONEYARD_GAME_OVER_INPUT_GATE_TICKS)
-  let exiting = acknowledgeGameSimulationOver(
-    state,
-    'multiplayer-death-run',
-    state.run.gameOverEventId,
-  )
-  assert.ok(exiting)
-  assert.equal(exiting.run.phase, 'game-over')
-  assert.equal(exiting.run.gameOverExitTicks, 0)
-  assert.equal(exiting.world.kind, 'boneyard')
-  const frozenWorld = exiting.world
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
-    exiting = stepGameSimulationTick(exiting, {
+  assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 0)
+  state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state, 'second').deathTick, 153)
+  assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 1)
+  for (let deathTick = 154; deathTick <= 156; deathTick += 1) {
+    state = stepGameSimulationTick(state, {})
+  }
+  assert.equal(getPlayerProgression(state, 'second').deathTick, 156)
+  assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 2)
+  for (let deathTick = 157; deathTick <= 159; deathTick += 1) {
+    state = stepGameSimulationTick(state, {})
+  }
+  assert.equal(getPlayerProgression(state, 'second').deathTick, 159)
+  assert.equal(getPlayerProgression(state, 'second').lifeState, 'spectating')
+  assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 3)
+
+  while (state.run.gameOverTicks < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1) {
+    state = stepGameSimulationTick(state, {
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
     })
-    assert.equal(exiting.world, frozenWorld)
+    assert.equal(state.world, frozenWorld)
   }
-  assert.equal(exiting.run.phase, 'game-over')
-  assert.equal(exiting.run.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
-  const loadout = stepGameSimulationTick(exiting, {})
+  assert.equal(state.run.gameOverExitTicks, null)
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.run.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.equal(state.run.gameOverExitTicks, 1)
+  for (let exitTick = 2; exitTick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; exitTick += 1) {
+    state = stepGameSimulationTick(state, {})
+    assert.equal(state.world, frozenWorld)
+    assert.equal(state.run.gameOverExitTicks, exitTick)
+  }
+  assert.equal(state.run.phase, 'game-over')
+  assert.equal(state.run.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
+  const loadout = stepGameSimulationTick(state, {})
   assert.equal(loadout.run.phase, 'loadout')
   assert.equal(loadout.world.kind, 'hub')
   assert.deepEqual(

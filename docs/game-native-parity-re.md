@@ -12719,7 +12719,8 @@ late Dig contact
   -> spectator while another eligible participant lives
   -> all-eligible-dead terminal event
   -> Boneyard Game Over
-  -> acknowledged same-session return to retained-choice loadout
+  -> automatic tick-1000 acceptance and 400-tick exit fade
+  -> same-session return to retained-choice loadout
 ```
 
 The wave director owns only schedule state and deterministic spawn intents.
@@ -12828,13 +12829,15 @@ fallbacks.
 
 ### Deliberate post-run product deviation
 
-Native Boneyard Game Over is a fade-only surface. Tick 1000 merely opens its
-input gate; accepted input then traverses native cleanup, front-end/Hall of
-Fame/MainMenu ownership, and finally Create. The preceding element and
-discipline are preselected but still require confirmation.
+Native Boneyard Game Over is a fade-only surface. Its tick method synthesizes
+acceptance automatically when the surface counter becomes exactly 1000; no
+player input owns that edge. The accepted state runs a 400-tick exit fade,
+then traverses native cleanup, front-end/Hall of Fame/MainMenu ownership, and
+finally Create. The preceding element and discipline are preselected but still
+require confirmation.
 
-For this requested web milestone, acknowledged Game Over returns directly to
-the retained-choice Create/loadout screen while keeping the authenticated
+For this requested web milestone, completed Game Over returns directly to the
+retained-choice Create/loadout screen while keeping the authenticated
 session/lobby alive. Skipping Hall of Fame/MainMenu is an explicit product
 deviation, not a native-parity claim. A new run nonce resets Solomon, waves,
 actors/children/projectiles, player placement/cast/life/status, replication
@@ -12847,11 +12850,11 @@ retaining identity, progression books, and loadout preselection.
   default enemy stats and flag transforms; target authority; exact
   Skeleton/Archer action boundaries; HP thresholds; resource defaults and
   recovery; player corpse boundaries; spectator/all-dead semantics; native
-  Boneyard Game Over gate and retained-choice Create ownership.
+  Boneyard Game Over automatic transition and retained-choice Create ownership.
 - Safe bounded web contract: deterministic family-specific action timing where
   an exact native program remains unresolved; interpolation of authoritative
   continuous state; exact PCM duration for Solomon's isolated serialized cue;
-  direct acknowledged Game Over-to-loadout as the named product deviation.
+  direct completed Game Over-to-loadout as the named product deviation.
 - Still open: exact Imp/Zombie/Wraith/Demon/Coffin action programs and several
   terminal clocks; Wraith radius/attack reaches; upgraded HUD denominator;
   every welded spell debit edge; Solomon global-dialogue/camera/ray details;
@@ -12869,16 +12872,18 @@ retaining identity, progression books, and loadout preselection.
   spell contact/damage, lethal thresholds, once-only reward, delayed
   retirement, and wave continuation.
 - Protocol/host tests cover dead/picker/Solomon input suppression, individual
-  spectator versus all-dead terminal, duplicate/stale terminal commands,
-  same-session retained loadout, and a clean second run.
+  spectator versus all-dead terminal, automatic acceptance and exit-clock
+  invariants, rejection of the retired terminal message, same-session retained
+  loadout, and a clean second run.
 - Render/asset/audio tests cover legal enemy records/layer order, locomotion and
   action poses, hit-without-body-reset, player corpse boundaries, semantic
   once-only audio, and no historical replay on late join.
 - Chromium proof must physically trigger Solomon, hear/observe the ordered
   cues, see visible enemies move/attack, spend mana and damage/kill an enemy,
   observe enemy and player death, continue after one multiplayer death, reach
-  all-dead Game Over, acknowledge into retained-choice loadout, and begin a
-  second clean run with no page/console errors.
+  all-dead Game Over, observe the input-free native hold and exit fade into
+  retained-choice loadout, and begin a second clean run with no page/console
+  errors.
 - Completion requires `./scripts/validate.sh` plus the focused skill-picker,
   primary-spell, wave, collision, audio, and combat lifecycle smokes, followed
   by a residual scan for duplicate authorities, inert combat fields, generic
@@ -12929,11 +12934,11 @@ retaining identity, progression books, and loadout preselection.
   open. Poison-created lethal pending state survives until the following tick
   begins the explicit death epoch, so Game Over cannot precede death. Wave
   scheduling pauses while there is no living eligible target.
-- Game Over remains host/run-nonce authoritative and once-only. Accepted input
-  returns to retained-choice Create without closing the authenticated session;
-  confirming the loadout creates a fresh run nonce and resets all run-scoped
-  combat, replication, presentation, event, and audio state. This is the
-  deliberate post-run product deviation documented above.
+- Game Over remains host/run-nonce authoritative and once-only. Automatic
+  completion returns to retained-choice Create without closing the
+  authenticated session; confirming the loadout creates a fresh run nonce and
+  resets all run-scoped combat, replication, presentation, event, and audio
+  state. This is the deliberate post-run product deviation documented above.
 - Solomon contact is again a real gameplay edge: strict proximity triggers one
   seeded hello, the recovered turn/speech/hold cadence, laugh then
   `get-him-boys`, retreat/escape animation, and the wave handoff. Target loss
@@ -12961,7 +12966,7 @@ retaining identity, progression books, and loadout preselection.
   triggered Solomon before 15 Skeletons spawned. One player reached spectator
   while the survivor remained active at 20.922 HP; spectator movement and mana
   stayed unchanged. After the survivor died, both peers observed the same Game
-  Over, only the host could acknowledge it, both received retained loadouts,
+  Over, both followed the host-authored automatic clock into retained loadouts,
   only the host could confirm, and both returned to a two-player Hub with empty
   console/page-error captures. Captures are
   `/tmp/solomon-dark-final-multiplayer.lEnWnX/solomon-dark-multiplayer-first-death.png`,
@@ -13501,8 +13506,9 @@ It proves:
   projectile 16; 22 authoritative motion samples were rendered before its
   once-only retirement event at tick 48012;
 - ordinary enemy damage drove the player from 28.359 HP through dying to
-  spectating, emitted DeathGuitar, and reached Game Over; acknowledged input
-  returned to retained loadout;
+  spectating, emitted DeathGuitar, and reached Game Over; the then-current
+  manual acknowledgement returned to retained loadout. This receipt is now
+  superseded for Game Over lifecycle acceptance by the 2026-08-16 reopening;
 - confirmation created a different run ID with the same zero seed, alive
   50-HP/100-MP player, zero enemies, active phase, and Solomon digging again;
   browser/page and wire error arrays were empty.
@@ -18592,7 +18598,7 @@ movement/collision fallback or test-only teleport was added.
 ### Why the prior parity claim is reopened
 
 The 2026-08-14 pass recovered the death-frame thresholds and the tick-1000
-Game Over input gate, but stopped one ownership layer too early. The asset
+Game Over edge, but stopped one ownership layer too early. The asset
 extractor treated `Clothes[76..99]` as an untinted terminal attachment even
 though native item virtuals own that range as robe style zero. It omitted the
 other robe styles, every equipped-hat branch, and the terminal black corpse
@@ -18603,9 +18609,13 @@ authored clear hold. The all-dead acknowledgement also destroyed the Boneyard
 immediately, omitting the stock 400-tick exit fade.
 
 The process failure was accepting address-range adjacency and a black capture
-as semantic proof. This reopening follows the item virtuals, sprite-array
-selectors, object fields, tick recurrence, render order, and surface transition
-gate through their actual consumers before changing the web renderer.
+as semantic proof. A second audit also found that the recovered internal
+tick-1000 acceptance write had been mistranslated into a host click gate, and
+that browser acceptance clicked the invisible overlay instead of falsifying
+that invented authority. This reopening follows the item virtuals,
+sprite-array selectors, object fields, tick recurrence, render order, and
+surface transition gate through their actual consumers before changing the web
+renderer.
 
 ### Evidence and confidence
 
@@ -18621,6 +18631,13 @@ gate through their actual consumers before changing the web renderer.
   range membership listed below. Existing native normal-mode and Boneyard
   Game Over captures corroborate the semantic branch: normal mode paints the
   title/prompt; Boneyard is fade-only and reveals the resident Arena.
+- Fresh last-player corroboration: an isolated one-participant retail run on
+  exact loader source `a816dba38a9219a44fe479e1259e8c9900d8fa55` sampled the
+  native death drive while GameOver already owned the surface. The drive stayed
+  one and PlayerWizard `+0x1BC` advanced monotonically from 3 through 201 over
+  33 read-only samples; the GameOver object later reported counter 637 in the
+  Boneyard fade-only branch. The surface freezes interaction, not the corpse
+  clock.
 - Confidence: high for membership, selection, ordering, transforms, fixed
   recurrences, and atlas records. The shared retail RNG stream position is not
   portable to a host-authoritative web client; only its per-draw bounds remain
@@ -18640,10 +18657,11 @@ HP <= -10 -> lethal-pending -> one death epoch at tick 0
 
 last eligible player enters the death epoch
   -> one host-authored Game Over event for the run nonce
-  -> freeze the terminal Boneyard image
+  -> freeze Arena gameplay but continue every dying player's corpse clock
+  -> frames 1/2/3 and the tick-159 burst still occur beneath Game Over
   -> entry black 1.0 - 0.025/tick, clear at tick 40
-  -> clear hold; host input opens at tick 1000
-  -> accepted input starts exit alpha 0.0 + 0.0025/tick
+  -> clear hold; GameOver::Tick synthesizes acceptance at tick 1000
+  -> the same tick starts exit alpha at 0.0025; no client message exists
   -> exact black at exit tick 400
   -> following fixed tick retires the run into the web retained-loadout route
 ```
@@ -18652,9 +18670,10 @@ Death presentation state is `(runId, playerId, deathEpoch, deathTick)`. The
 corpse is the same player actor, not a spawned corpse entity. Burst and weapon
 drop are one-shot presentation owners keyed to the crossing of that epoch;
 late subscribers seed their crossing trackers and do not replay births. Game
-Over state is `(runId, eventId, gameOverTicks, exitTicks|null)`. Only the host
-may change `exitTicks` from null to zero; every client renders the replicated
-recurrence, and duplicate/stale acknowledgements are rejected.
+Over state is `(runId, eventId, gameOverTicks, exitTicks|null)`. The host's
+fixed simulation clock changes `exitTicks` automatically at tick 1000; every
+client renders the replicated recurrence. There is no Game Over input message,
+host button, guest wait state, or acknowledgement replay surface.
 
 ### Corpse compositor membership
 
@@ -18726,7 +18745,7 @@ settlement, art, shadow, painter ownership, and one-shot lifecycle are closed.
 
 | Member/variant | Disposition | Reason/artifact and next step |
 |---|---|---|
-| Boneyard entry overlay, clear hold, input gate, exit overlay, frozen Arena, host/guest authority, replay rejection | `exact-ported` | protocol 27 carries the nullable exit clock alongside the rebased level-up messages, generated-arena transition, and player-damage tick/events; the server freezes the terminal world through entry/hold/exit and resets only on the fixed tick after exit 400; display-time sampling presents both 100 Hz clocks |
+| Boneyard entry overlay, clear hold, automatic tick-1000 acceptance, exit overlay, frozen Arena gameplay, live terminal-player clocks | `exact-ported` | protocol 30 carries the nullable exit clock and death ticks; the server freezes world dynamics but advances dying players through frame 3, starts exit at tick 1000 without input, and resets only on the fixed tick after exit 400; display-time sampling presents both 100 Hz clocks |
 | normal story GAME/OVER atlas and prompt | `out-of-system` | `/game` launches the Boneyard survival route with the native mode flag's fade-only branch; normal story UI is not reachable in this web product surface |
 | native Hall of Fame/MainMenu post-run lineage | `out-of-system` | the accepted Website product deviation returns to retained-choice Create/loadout after the exact Boneyard fade completes |
 | retained learned progression across the next run | `out-of-system` | existing explicitly named Website progression-retention deviation; unrelated to terminal presentation |
@@ -18737,8 +18756,10 @@ settlement, art, shadow, painter ownership, and one-shot lifecycle are closed.
 |---|---|---|
 | five element bodies, four frames, six facings | `verified-already-at-parity` | thresholds, body records, element palettes, and actor position already match focused tests |
 | robe selectors/colors/fixed layers, hats/anchors/special terminal bank, terminal shadow | `exact-ported` | raw native banks, point-zero anchor table, recipe-owned tints, selector-three terminal switch, ordered color pass, and complete black pass are renderer-owned and hash-pinned |
-| 18-member additive burst | `in-scope-approximation` | count, record, radial domains, scale, alpha, damping, timing, and one-shot edge are exact; only the unavailable process-global RNG position is replaced by the documented stable epoch seed |
-| held staff/wand one-shot bouncer | `in-scope-approximation` | art selection, copied origin, independent painter/shadow, retained-seed bounce recurrence, settlement, and epoch ownership are ported; retail global RNG/update phase becomes a stable per-epoch presentation policy |
+| 18-member additive burst mechanics | `exact-ported` | count, record, radial domains, scale, alpha, damping, timing, and one-shot edge are exact |
+| burst process-global RNG cursor | `blocked-by-platform` | the browser has no access to retail's shared process-global draw position; the documented stable death-epoch seed is an explicit deterministic authority policy |
+| held staff/wand one-shot bouncer mechanics | `exact-ported` | art selection, copied origin, independent painter/shadow, retained-seed bounce recurrence, settlement, and epoch ownership are exact |
+| bouncer process-global RNG cursor and absolute world-tick phase | `blocked-by-platform` | those process-global inputs do not exist in the host-authoritative browser runtime; stable per-epoch samples and phase preserve every recovered domain and recurrence |
 | collision disable and `-1000` sort bias at tick 159 | `verified-already-at-parity` | combat and renderer contracts already pin both edges |
 | dead input/cast suppression and living-peer continuation | `verified-already-at-parity` | server authority rejects dead input while active peers continue |
 | fullscreen red Arena blend | `out-of-system` after spectator handoff | the web spectator surface takes camera ownership at tick 159; an unbounded local red overlay would obscure the living target, the exact failure the native multiplayer clamp prevents |
@@ -18755,20 +18776,27 @@ settlement, art, shadow, painter ownership, and one-shot lifecycle are closed.
 - Burst tests pin count 18, record 10, native bounds, anisotropic scale,
   alpha/damping samples at ages 0/1/9/10, one crossing per epoch, and no
   late-subscription replay.
-- Lifecycle/protocol tests pin Game Over entry alphas at 0/1/39/40, input at
-  999/1000, host-only single acknowledgement, exit at 0/1/399/400, one fully
-  black terminal snapshot, transition on the following fixed tick, a frozen
-  Boneyard while the surface owns presentation, and a clean retained-loadout
-  reset.
-- Browser acceptance must show the corpse frames and terminal shadow, a
-  non-opaque Boneyard during the clear hold, rejected early/guest input, the
-  complete clear-to-black exit, and the retained-choice loadout with no page
+- Lifecycle/protocol tests pin Game Over entry alphas at 0/1/39/40, automatic
+  acceptance and first exit step at 999/1000, exit at 1/399/400, one fully
+  black terminal snapshot, transition on the following fixed tick, frozen
+  Boneyard dynamics with advancing dying-player clocks, absence of every
+  acknowledgement message/API/button, and a clean retained-loadout reset.
+- Browser acceptance must show all four corpse frames and terminal shadow for
+  the last player beneath Game Over, a non-opaque Boneyard during the clear
+  hold, the input-free tick-1000 transition, the complete clear-to-black exit,
+  and the retained-choice loadout with no page
   or console errors. Canonical acceptance remains `./scripts/validate.sh` and
   the final production browser receipt on the Mac mini exact tree.
 
 ### Validation receipts
 
-The complete implementation tree passed `./scripts/validate.sh` on WSL before
+The following receipt belongs to the superseded implementation and is retained
+only as diagnostic history. It is not acceptance for the corrected lifecycle:
+the browser sampled only the first and terminal corpse states, froze the last
+player at death tick zero, and explicitly clicked the invented Game Over input
+surface. Those assertions could pass while both reported bugs remained.
+
+The superseded implementation tree passed `./scripts/validate.sh` on WSL before
 the receipt-only smoke-harness and ledger edits. The final exact source tree
 then passed the same gate on the Mac mini, including all 24 backend contracts,
 the complete Boneyard/frontend suite, auxiliary and desktop suites, lint and
@@ -18827,5 +18855,8 @@ they are likewise not counted. The harness now gives both real clients
 isolated browser contexts in one owned browser, then closes both contexts and
 owned servers before that browser. The focused target changes only the lethal
 stimulus and keeps every authoritative death, spectator, Game Over, fade, and
-return assertion live. The required final Mac gate and browser acceptance both
-exited zero, and teardown left no task-owned browser or listener process.
+return assertion live. Those historical commands exited zero and teardown left
+no task-owned browser or listener process, but their behavioral receipt is
+invalidated by the native ownership evidence above. Corrected Mac and
+production receipts are recorded only after the automatic transition and all
+four last-player frames pass.

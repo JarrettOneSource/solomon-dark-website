@@ -65,7 +65,6 @@ export interface GameClientSession {
   readonly isHost: boolean
   readonly playerId: string
   readonly resumeToken: string
-  acknowledgeGameOver(runId: string, eventId: number): void
   confirmLoadout(): void
   destroy(): void
   getBoneyard(): LoadedBoneyard | null
@@ -303,20 +302,6 @@ export function connectGameClientSession(
     })
 
     const session: GameClientSession = {
-      acknowledgeGameOver(runId, eventId) {
-        if (!welcome || !snapshot || destroyed || !session.isHost) return
-        if (
-          snapshot.run.phase !== 'game-over'
-          || snapshot.run.gameOverExitTicks !== null
-          || snapshot.run.runId !== runId
-          || snapshot.run.gameOverEventId !== eventId
-        ) return
-        options.transport.send(encodeGameMessage({
-          type: 'client-acknowledge-game-over',
-          eventId,
-          runId,
-        }))
-      },
       confirmLoadout() {
         if (!welcome || !snapshot || destroyed || !session.isHost) return
         if (snapshot.run.phase !== 'loadout') return

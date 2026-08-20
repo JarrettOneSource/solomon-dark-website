@@ -223,6 +223,7 @@ try {
     combatNavigation,
   )
   const death = await waitForPlayerDeath(page)
+  const deathRender = await waitForRenderedDeathSequence(page)
   const playerDamageEvents = [...wire.events.values()].filter((event) => (
     event.runId === loadedBoneyard.runId && event.type === 'player-damage-sound'
   ))
@@ -245,13 +246,14 @@ try {
   assert.ok(playerDamageAudio.length > 0, 'expected decoded Wizard ouch playback')
   assert.ok(playerDamageAudio.every((event) => event.playbackRate === 1))
   await page.screenshot({ path: deathScreenshotPath })
-  const gameOver = page.getByRole('button', { name: 'Game over. Continue to loadout.' })
-  await gameOver.waitFor({ timeout: 180_000 })
+  const gameOver = page.getByRole('status', { name: 'Game over.' })
+  await gameOver.waitFor({ timeout: 30_000 })
+  assert.equal(await page.locator('.boneyard-game-over button').count(), 0)
   const gameOverFrame = await boneyardFrame(page)
   assert.equal(gameOverFrame.runPhase, 'game-over')
-  assert.ok(gameOverFrame.runGameOverTicks >= 1_000)
+  assert.ok(gameOverFrame.runGameOverTicks < 1_000)
+  assert.equal(gameOverFrame.runGameOverExitTicks, null)
   await page.screenshot({ path: gameOverScreenshotPath })
-  await gameOver.click()
   const retainedLoadout = page.locator(
     '.create-menu-scene[data-retained-loadout="true"][data-motion-settled="true"]',
   )
@@ -310,6 +312,7 @@ try {
     combat,
     combatScreenshotPath,
     death,
+    deathRender,
     deathScreenshotPath,
     errors,
     entranceRetirement,
@@ -1378,6 +1381,36 @@ async function boneyardFrame(page) {
   return page.locator('.boneyard-world-canvas').evaluate((node) => (
     structuredClone(node.__sdrBoneyardFrame)
   ))
+}
+
+async function waitForRenderedDeathSequence(page) {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.playerDeathFrame === 3
+      && frame.playerDeathFrameSamples?.[0]?.frame === 0
+  }, undefined, { timeout: 30_000 })
+  const frame = await boneyardFrame(page)
+  const samples = frame.playerDeathFrameSamples
+  const renderedFrames = samples.map((sample) => sample.frame)
+  assert.equal(renderedFrames[0], 0)
+  assert.equal(renderedFrames.at(-1), 3)
+  assert.ok(renderedFrames.every((value, index) => (
+    index === 0 || value > renderedFrames[index - 1]
+  )))
+  for (const sample of samples) {
+    assert.equal(sample.colorLayerCount, 9)
+    assert.equal(sample.shadowLayerCount, sample.frame === 3 ? 9 : 0)
+    if (sample.frame === 0) assert.ok(sample.deathTick >= 0 && sample.deathTick <= 152)
+    if (sample.frame === 1) assert.ok(sample.deathTick >= 153 && sample.deathTick <= 155)
+    if (sample.frame === 2) assert.ok(sample.deathTick >= 156 && sample.deathTick <= 158)
+    if (sample.frame === 3) assert.ok(sample.deathTick >= 159)
+  }
+  return {
+    currentColorLayerCount: frame.playerDeathColorLayerCount,
+    currentFrame: frame.playerDeathFrame,
+    currentShadowLayerCount: frame.playerDeathShadowLayerCount,
+    samples,
+  }
 }
 
 async function proveRetiredEntry(page, scene, wire, runId, gateCrossing) {

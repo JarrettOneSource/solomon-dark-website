@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  acknowledgeGameSimulationOver,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
   stepGameSimulationTick,
+  type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
@@ -72,7 +72,7 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
   }
 }
 
-test('client protocol validates character hello, input, acknowledgement, and ping messages', () => {
+test('client protocol validates character hello, input, match, loadout, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
@@ -111,15 +111,6 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })), {
     type: 'client-start-match',
     boneyardId: 'default-random',
-  })
-  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
-    type: 'client-acknowledge-game-over',
-    eventId: 3,
-    runId: 'run-three',
-  })), {
-    type: 'client-acknowledge-game-over',
-    eventId: 3,
-    runId: 'run-three',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-confirm-loadout',
@@ -171,7 +162,7 @@ test('client protocol validates character hello, input, acknowledgement, and pin
   })
 })
 
-test('protocol v29 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v30 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -352,7 +343,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v29 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v30 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -766,8 +757,8 @@ test('protocol v29 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v29 carries run lifecycle and authoritative combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 29)
+test('protocol v30 carries native automatic Game Over lifecycle and combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 30)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -778,7 +769,7 @@ test('protocol v29 carries run lifecycle and authoritative combat modifiers', ()
     run: {
       ...active.run,
       gameOverEventId: 1,
-      gameOverTicks: 1_000,
+      gameOverTicks: 999,
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
     },
@@ -813,12 +804,25 @@ test('protocol v29 carries run lifecycle and authoritative combat modifiers', ()
     terminalMessage,
   )
 
-  const earlyExit = JSON.parse(encodeGameMessage(terminalMessage))
-  earlyExit.frame.run.gameOverExitTicks = 0
-  earlyExit.frame.run.gameOverTicks = 999
+  const missingAutomaticFade = JSON.parse(encodeGameMessage(terminalMessage))
+  missingAutomaticFade.frame.run.gameOverTicks = 1_000
   assert.throws(
-    () => decodeServerGameMessage(JSON.stringify(earlyExit)),
-    /gameOverExitTicks precedes the native input gate/,
+    () => decodeServerGameMessage(JSON.stringify(missingAutomaticFade)),
+    /gameOverExitTicks misses the native automatic fade/,
+  )
+  const zeroExit = JSON.parse(encodeGameMessage(terminalMessage))
+  zeroExit.frame.run.gameOverExitTicks = 0
+  zeroExit.frame.run.gameOverTicks = 1_000
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(zeroExit)),
+    /gameOverExitTicks must begin at one/,
+  )
+  const outOfStepExit = JSON.parse(encodeGameMessage(terminalMessage))
+  outOfStepExit.frame.run.gameOverExitTicks = 2
+  outOfStepExit.frame.run.gameOverTicks = 1_000
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(outOfStepExit)),
+    /gameOverExitTicks is out of step with Game Over/,
   )
   const overlongExit = JSON.parse(encodeGameMessage(terminalMessage))
   overlongExit.frame.run.gameOverExitTicks = BONEYARD_GAME_OVER_EXIT_FADE_TICKS + 1
@@ -827,9 +831,7 @@ test('protocol v29 carries run lifecycle and authoritative combat modifiers', ()
     /gameOverExitTicks exceeds the native fade/,
   )
 
-  const acknowledgedState = acknowledgeGameSimulationOver(gameOverState, 'run-v16', 1)
-  assert.ok(acknowledgedState)
-  let loadoutState = acknowledgedState
+  let loadoutState: GameSimulationState = gameOverState
   for (let tick = 0; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
     loadoutState = stepGameSimulationTick(loadoutState, {})
   }
@@ -877,7 +879,7 @@ test('protocol v29 carries run lifecycle and authoritative combat modifiers', ()
   )
 })
 
-test('protocol v29 strictly owns the generated-arena transition', () => {
+test('protocol v30 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -931,7 +933,7 @@ test('protocol v29 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v29 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v30 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1340,7 +1342,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
     type: 'client-acknowledge-game-over',
     eventId: 0,
     runId: 'run-one',
-  })), /eventId/)
+  })), /unknown client message type/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-confirm-loadout',
     runId: 'run-one',

@@ -59,8 +59,8 @@ import {
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import {
+  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
-  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
   GAME_RUN_PHASES,
   type GameRunLifecycleState,
   type GameRunPhase,
@@ -183,7 +183,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 29
+export const GAME_PROTOCOL_VERSION = 30
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -322,18 +322,11 @@ export interface ClientStartMatchMessage {
   boneyardId: string
 }
 
-export interface ClientAcknowledgeGameOverMessage {
-  type: 'client-acknowledge-game-over'
-  eventId: number
-  runId: string
-}
-
 export interface ClientConfirmLoadoutMessage {
   type: 'client-confirm-loadout'
 }
 
 export type ClientGameMessage =
-  | ClientAcknowledgeGameOverMessage
   | ClientConfirmLoadoutMessage
   | ClientHelloMessage
   | ClientHubActionMessage
@@ -475,14 +468,6 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-start-match',
       boneyardId: limitedString(value.boneyardId, 'boneyardId', 256),
-    }
-  }
-  if (value.type === 'client-acknowledge-game-over') {
-    onlyKeys(value, 'message', ['type', 'eventId', 'runId'])
-    return {
-      type: 'client-acknowledge-game-over',
-      eventId: positiveInteger(value.eventId, 'eventId'),
-      runId: limitedString(value.runId, 'runId', 128),
     }
   }
   if (value.type === 'client-confirm-loadout') {
@@ -2365,9 +2350,17 @@ function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState 
     && gameOverExitTicks > BONEYARD_GAME_OVER_EXIT_FADE_TICKS
   ) throw new GameProtocolError(`${field}.gameOverExitTicks exceeds the native fade`)
   if (
+    phase === 'game-over'
+    && gameOverExitTicks === null
+    && gameOverTicks >= BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK
+  ) throw new GameProtocolError(`${field}.gameOverExitTicks misses the native automatic fade`)
+  if (gameOverExitTicks !== null && gameOverExitTicks < 1) {
+    throw new GameProtocolError(`${field}.gameOverExitTicks must begin at one`)
+  }
+  if (
     gameOverExitTicks !== null
-    && gameOverTicks < BONEYARD_GAME_OVER_INPUT_GATE_TICKS
-  ) throw new GameProtocolError(`${field}.gameOverExitTicks precedes the native input gate`)
+    && gameOverTicks !== BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK + gameOverExitTicks - 1
+  ) throw new GameProtocolError(`${field}.gameOverExitTicks is out of step with Game Over`)
   return {
     eligiblePlayerIds,
     gameOverEventId,

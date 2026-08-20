@@ -2,12 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
-  BONEYARD_GAME_OVER_INPUT_GATE_TICKS,
-  acknowledgeGameOver,
   confirmPostRunLoadout,
   createGameRunLifecycle,
-  gameOverAcceptsInput,
   startGameRun,
   stepGameRunLifecycle,
   synchronizeGameRunParticipants,
@@ -29,27 +27,28 @@ test('all eligible participants dead emits one run-scoped terminal event', () =>
   assert.equal(later.gameOverTicks, 1)
 })
 
-test('Boneyard Game Over rejects input before tick 1000 and owns the exact exit fade', () => {
+test('Boneyard Game Over accepts itself at tick 1000 and owns the exact exit fade', () => {
   let state = stepGameRunLifecycle(
     startGameRun(createGameRunLifecycle(), 'run-a', ['a']),
     new Set(),
   )
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_INPUT_GATE_TICKS; tick += 1) {
-    assert.equal(gameOverAcceptsInput(state), tick === BONEYARD_GAME_OVER_INPUT_GATE_TICKS)
-    if (tick < BONEYARD_GAME_OVER_INPUT_GATE_TICKS) {
-      assert.equal(acknowledgeGameOver(state, 'run-a', 1), null)
-    }
+  for (let tick = 1; tick < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
+    assert.equal(state.gameOverTicks, tick)
+    assert.equal(state.gameOverExitTicks, null)
   }
-  assert.equal(gameOverAcceptsInput(state), true)
-  const exiting = acknowledgeGameOver(state, 'run-a', 1)
-  assert.equal(exiting?.phase, 'game-over')
-  assert.equal(exiting?.gameOverExitTicks, 0)
-  assert.equal(exiting?.lastCompletedRunId, null)
-  assert.equal(acknowledgeGameOver(exiting!, 'run-a', 1), null)
-  state = exiting!
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+  state = stepGameRunLifecycle(state, new Set())
+  assert.equal(state.phase, 'game-over')
+  assert.equal(state.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
+  assert.equal(state.gameOverExitTicks, 1)
+  assert.equal(state.lastCompletedRunId, null)
+  for (let exitTick = 2; exitTick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; exitTick += 1) {
     state = stepGameRunLifecycle(state, new Set())
+    assert.equal(state.gameOverExitTicks, exitTick)
+    assert.equal(
+      state.gameOverTicks,
+      BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK + exitTick - 1,
+    )
   }
   assert.equal(state.phase, 'game-over')
   assert.equal(state.gameOverExitTicks, BONEYARD_GAME_OVER_EXIT_FADE_TICKS)
@@ -72,13 +71,10 @@ test('a second run receives a fresh terminal identity without losing session lin
     startGameRun(createGameRunLifecycle(), 'run-a', ['a']),
     new Set(),
   )
-  for (let tick = 0; tick < BONEYARD_GAME_OVER_INPUT_GATE_TICKS; tick += 1) {
+  for (let tick = 0; tick < BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
   }
-  const exiting = acknowledgeGameOver(state, 'run-a', 1)
-  assert.ok(exiting)
-  state = exiting!
-  for (let tick = 0; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
+  for (let tick = 1; tick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; tick += 1) {
     state = stepGameRunLifecycle(state, new Set())
   }
   const hub = confirmPostRunLoadout(state)

@@ -59,6 +59,7 @@ export class PlayerWorldView {
   private worldTint = 0xffffff
   private currentWalkPose = 0
   private currentAttachmentPose = 0
+  private currentDeathFrame: number | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
 
   constructor(
@@ -152,6 +153,7 @@ export class PlayerWorldView {
       player.config.element,
       player.economy.equipment,
     )
+    this.currentDeathFrame = death.visible ? death.frame : null
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
@@ -201,6 +203,18 @@ export class PlayerWorldView {
 
   get attachmentPose(): number {
     return this.currentAttachmentPose
+  }
+
+  get deathColorLayerCount(): number {
+    return this.deathLayers.filter((layer) => layer.visible).length
+  }
+
+  get deathFrame(): number | null {
+    return this.currentDeathFrame
+  }
+
+  get deathShadowLayerCount(): number {
+    return this.deathShadowLayers.filter((layer) => layer.visible).length
   }
 
   get materialTint(): number {

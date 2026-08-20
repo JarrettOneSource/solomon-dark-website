@@ -19,10 +19,6 @@
   cursor: default;
 }
 
-.boneyard-game-over[data-input-ready='true']:not(:disabled) {
-  cursor: pointer;
-}
-
 .boneyard-scene:focus { outline: none; }
 
 .boneyard-native-frame {

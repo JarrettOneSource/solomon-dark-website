@@ -19,7 +19,6 @@ import {
   isHubRegionTraversable,
 } from '../core-kernels/hub-regions.ts'
 import {
-  acknowledgeGameOver,
   confirmPostRunLoadout,
   createGameRunLifecycle,
   startGameRun,
@@ -381,15 +380,6 @@ export function enterBoneyardWorld(
   }
 }
 
-export function acknowledgeGameSimulationOver(
-  state: GameSimulationState,
-  runId: string,
-  eventId: number,
-): GameSimulationState | null {
-  const run = acknowledgeGameOver(state.run, runId, eventId)
-  return run ? { ...state, run } : null
-}
-
 function enterPostRunLoadout(
   state: GameSimulationState,
   run: GameRunLifecycleState,
@@ -637,8 +627,23 @@ export function stepGameSimulationTick(
     if (state.world.kind !== 'boneyard') {
       throw new Error('Game Over requires the terminal Boneyard world')
     }
+    let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
+    const combat = stepPlayerEntityCombatTick(playerEntities)
+    playerEntities = combat.store
+    let secondaryAbilities = state.secondaryAbilities
+    for (const playerId of combat.deathBurstPlayerIds) {
+      playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
+      playerEntities = setPlayerEntityMindstar(playerEntities, playerId, false)
+      secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
+    }
     const run = stepGameRunLifecycle(state.run, new Set())
-    const frozen = { ...state, run, tick: state.tick + 1 }
+    const frozen = {
+      ...state,
+      playerEntities,
+      run,
+      secondaryAbilities,
+      tick: state.tick + 1,
+    }
     return run.phase === 'loadout' ? enterPostRunLoadout(frozen, run) : frozen
   }
   if (state.levelUpBarrier !== null) return state

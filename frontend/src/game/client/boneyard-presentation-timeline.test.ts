@@ -787,22 +787,23 @@ test('presents both native Game Over fades at the 100 Hz simulation clock', () =
 
   const exit = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(110, 1_000, 0),
+    initialSnapshot: gameOverSnapshot(110, 1_000, 1),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  exit.push(gameOverSnapshot(115, 1_000, 5), 50)
-  assert.equal(exit.sample(75).run.gameOverExitTicks, 2)
+  exit.push(gameOverSnapshot(115, 1_005, 6), 50)
+  assert.equal(exit.sample(75).run.gameOverExitTicks, 3)
+  assert.equal(exit.sample(75).run.gameOverTicks, 1_002)
 
-  const acknowledgement = createBoneyardPresentationTimeline({
+  const automaticAcceptance = createBoneyardPresentationTimeline({
     initialReceivedAtMs: 0,
-    initialSnapshot: gameOverSnapshot(120, 1_000, null),
+    initialSnapshot: gameOverSnapshot(120, 999, null),
     serverTickRate: 100,
     snapshotRate: 20,
   })
-  acknowledgement.push(gameOverSnapshot(125, 1_000, 0), 50)
-  assert.equal(acknowledgement.sample(75).run.gameOverExitTicks, null)
-  assert.equal(acknowledgement.sample(100).run.gameOverExitTicks, 0)
+  automaticAcceptance.push(gameOverSnapshot(125, 1_004, 5), 50)
+  assert.equal(automaticAcceptance.sample(75).run.gameOverExitTicks, null)
+  assert.equal(automaticAcceptance.sample(100).run.gameOverExitTicks, 5)
 })
 
 test('emits one finite tick-159 death burst for all five snapshot alignments', () => {

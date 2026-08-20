@@ -17,7 +17,6 @@ import {
   GAME_FIXED_TICK_SECONDS,
   GAME_TICK_RATE,
   addPlayerCharacter,
-  acknowledgeGameSimulationOver,
   applyGameSimulationHubAction,
   confirmGameSimulationLoadout,
   createGameSimulation,
@@ -557,22 +556,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         broadcastSnapshot()
         return
       }
-      if (message.type === 'client-acknowledge-game-over') {
-        if (client.playerId !== hostPlayerId) return
-        const acknowledged = acknowledgeGameSimulationOver(
-          state,
-          message.runId,
-          message.eventId,
-        )
-        if (!acknowledged) return
-        state = acknowledged
-        for (const joined of clients.values()) {
-          joined.activeInput = createIdlePlayerCharacterInput()
-          joined.queuedInputs.clear()
-        }
-        broadcastSnapshot()
-        return
-      }
       if (message.type === 'client-confirm-loadout') {
         if (client.playerId !== hostPlayerId) return
         const confirmed = confirmGameSimulationLoadout(state)
@@ -685,14 +668,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const reachedGameOverBlack = state.run.phase === 'game-over'
           && state.run.gameOverExitTicks === BONEYARD_GAME_OVER_EXIT_FADE_TICKS
           && previousGameOverExitTicks !== BONEYARD_GAME_OVER_EXIT_FADE_TICKS
+        const enteredGameOver = previousRunPhase === 'active'
+          && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'
           && state.run.phase === 'loadout'
         if (completedGameOver) loadedBoneyard = null
+        if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
         nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
         steps += 1
         if (
           previousBarrierId !== barrierId
+          || enteredGameOver
           || reachedGameOverBlack
           || completedGameOver
           || (state.tick !== previousTick && state.tick % ticksPerSnapshot === 0)

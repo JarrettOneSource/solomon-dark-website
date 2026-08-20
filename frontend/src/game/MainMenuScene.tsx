@@ -624,14 +624,12 @@ export default function MainMenuScene({
             accountUsername={accountUsername}
             audio={audio}
             boneyard={loadedBoneyard}
-            canAcknowledgeGameOver={session.isHost}
             getPingMs={session.getPingMs}
             inputBlocked={loading !== null || levelUpModalActive}
             levelUpModalActive={levelUpModalActive}
             levelUpPresentationId={levelUpPresentationId}
             playerId={session.playerId}
             initialSnapshot={runtimeSnapshot}
-            onAcknowledgeGameOver={session.acknowledgeGameOver}
             onInput={session.sendInput}
             onLoadingError={cancelBoneyardLoading}
             onReady={finishBoneyardLoading}

@@ -113,7 +113,6 @@ function inertSession() {
     isHost: true,
     playerId: 'p',
     resumeToken: 'r',
-    acknowledgeGameOver() {},
     confirmLoadout() {},
     destroy() {},
     getBoneyard: () => null,

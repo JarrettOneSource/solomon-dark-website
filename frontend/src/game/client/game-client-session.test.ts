@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  acknowledgeGameSimulationOver,
   confirmGameSimulationLoadout,
   createGameSimulation,
   enterBoneyardWorld,
@@ -250,6 +249,7 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
     run: {
       ...activeState.run,
       gameOverEventId: 1,
+      gameOverExitTicks: 1,
       gameOverTicks: 1_000,
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
@@ -266,27 +266,13 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
   if (stoppedInput.type !== 'client-input') assert.fail('expected stopped client input')
   assert.deepEqual(stoppedInput.input, gameplayInput({ x: 0, y: 0 }))
 
-  const beforeStaleAcknowledgements = transport.sent.length
-  session.acknowledgeGameOver('stale-run', 1)
-  session.acknowledgeGameOver(runId, 2)
-  assert.equal(transport.sent.length, beforeStaleAcknowledgements)
-
-  session.acknowledgeGameOver(runId, 1)
-  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
-    type: 'client-acknowledge-game-over',
-    eventId: 1,
-    runId,
-  })
-
-  const exitingState = acknowledgeGameSimulationOver(gameOverState, runId, 1)
-  assert.ok(exitingState)
-  receiveSnapshot(transport, createGameSnapshot(exitingState, playerId), 0)
+  receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
   assert.equal(session.getSnapshot().run.phase, 'game-over')
-  assert.equal(session.getSnapshot().run.gameOverExitTicks, 0)
+  assert.equal(session.getSnapshot().run.gameOverExitTicks, 1)
   const loadoutState = {
-    ...exitingState,
+    ...gameOverState,
     run: {
-      ...exitingState.run,
+      ...gameOverState.run,
       eligiblePlayerIds: [],
       gameOverExitTicks: null,
       gameOverTicks: 0,

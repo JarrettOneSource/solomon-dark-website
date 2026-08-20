@@ -50,6 +50,7 @@ const combatNavigation = {
 const screenshotRoot = process.env.SDR_GAME_MULTIPLAYER_COMBAT_SCREENSHOT_ROOT || '/tmp'
 const deathGameOverOnly = process.argv.includes('--death-game-over-only')
 const featureOnly = process.argv.includes('--feature-only')
+const requireAllDeathFrames = process.argv.includes('--require-all-death-frames')
 const deathAnimationScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-death-animation.png`
 const firstDeathScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-first-death.png`
 const enemyHitScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-enemy-hit.png`
@@ -62,7 +63,12 @@ const levelUpWaitingScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer
 const loadoutScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-loadout.png`
 const returnedHubScreenshotPath = `${screenshotRoot}/solomon-dark-multiplayer-returned-hub.png`
 const browserOptions = {
-  args: ['--autoplay-policy=no-user-gesture-required'],
+  args: [
+    '--autoplay-policy=no-user-gesture-required',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+  ],
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
   headless: true,
 }
@@ -280,6 +286,7 @@ try {
     waitForGameOver(firstDeath.fallen.page),
     waitForGameOver(firstDeath.survivor.page),
   ])
+  const terminalDeathRender = await waitForRenderedDeathSequence(firstDeath.survivor.page)
   const [fallenTerminalFrame, survivorTerminalFrame] = await Promise.all([
     boneyardFrame(firstDeath.fallen.page),
     boneyardFrame(firstDeath.survivor.page),
@@ -313,6 +320,7 @@ try {
     deathSetup,
     errors,
     firstDeath: {
+      deathRender: firstDeath.deathRender,
       deathPresentationFrame: firstDeath.deathPresentationFrame,
       fallen: firstDeath.fallen.label,
       fallenFrame: firstDeath.fallenFrame,
@@ -346,6 +354,7 @@ try {
     status: 'ok',
     progressionAndEffects,
     terminal: {
+      deathRender: terminalDeathRender,
       fallenFrame: fallenTerminalFrame,
       survivorFrame: survivorTerminalFrame,
       stimulus: terminalDamage,
@@ -1309,6 +1318,7 @@ async function driveDesignatedHostToSpectating({ guest, host, navigation }) {
       if (hostFrame.localPlayerLifeState === 'spectating') {
         assert.equal(sawDeathPresentation, true)
         return {
+          deathRender: assertRenderedDeathSequence(hostFrame),
           deathPresentationFrame,
           fallen: host,
           fallenFrame: hostFrame,
@@ -1475,25 +1485,62 @@ async function waitForGameOver(page) {
   ), undefined, { timeout: 30_000 })
 }
 
+async function waitForRenderedDeathSequence(page) {
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame
+    return frame?.playerDeathFrame === 3
+      && frame.playerDeathFrameSamples?.[0]?.frame === 0
+  }, undefined, { timeout: 30_000 })
+  return assertRenderedDeathSequence(await boneyardFrame(page))
+}
+
+function assertRenderedDeathSequence(frame) {
+  const samples = frame.playerDeathFrameSamples
+  const renderedFrames = samples.map((sample) => sample.frame)
+  assert.equal(renderedFrames[0], 0)
+  assert.equal(renderedFrames.at(-1), 3)
+  assert.ok(renderedFrames.every((value, index) => (
+    index === 0 || value > renderedFrames[index - 1]
+  )))
+  if (requireAllDeathFrames) assert.deepEqual(renderedFrames, [0, 1, 2, 3])
+  for (const sample of samples) {
+    assert.equal(sample.colorLayerCount, 9)
+    assert.equal(sample.shadowLayerCount, sample.frame === 3 ? 9 : 0)
+    if (sample.frame === 0) assert.ok(sample.deathTick >= 0 && sample.deathTick <= 152)
+    if (sample.frame === 1) assert.ok(sample.deathTick >= 153 && sample.deathTick <= 155)
+    if (sample.frame === 2) assert.ok(sample.deathTick >= 156 && sample.deathTick <= 158)
+    if (sample.frame === 3) assert.ok(sample.deathTick >= 159)
+  }
+  assert.equal(frame.playerDeathFrame, 3)
+  assert.equal(frame.playerDeathColorLayerCount, 9)
+  assert.equal(frame.playerDeathShadowLayerCount, 9)
+  return {
+    currentColorLayerCount: frame.playerDeathColorLayerCount,
+    currentFrame: frame.playerDeathFrame,
+    currentShadowLayerCount: frame.playerDeathShadowLayerCount,
+    requiredAllFrames: requireAllDeathFrames,
+    samples,
+  }
+}
+
 async function returnBothPlayersToHub(hostPage, guestPage) {
-  const hostGameOver = hostPage.locator('.boneyard-game-over[data-input-ready="true"]')
-  const guestGameOver = guestPage.locator('.boneyard-game-over[data-input-ready="true"]')
+  const hostGameOver = hostPage.locator('.boneyard-game-over[role="status"]')
+  const guestGameOver = guestPage.locator('.boneyard-game-over[role="status"]')
   await Promise.all([
-    hostGameOver.waitFor({ timeout: 180_000 }),
-    guestGameOver.waitFor({ timeout: 180_000 }),
+    hostGameOver.waitFor({ timeout: 30_000 }),
+    guestGameOver.waitFor({ timeout: 30_000 }),
   ])
-  assert.equal(await hostGameOver.isEnabled(), true)
-  assert.equal(await hostGameOver.getAttribute('aria-label'), 'Game over. Continue to loadout.')
-  assert.equal(await guestGameOver.isDisabled(), true)
-  assert.equal(await guestGameOver.getAttribute('aria-label'), 'Game over. Waiting for host.')
+  assert.equal(await hostGameOver.getAttribute('aria-label'), 'Game over.')
+  assert.equal(await guestGameOver.getAttribute('aria-label'), 'Game over.')
+  assert.equal(await hostPage.locator('.boneyard-game-over button').count(), 0)
+  assert.equal(await guestPage.locator('.boneyard-game-over button').count(), 0)
 
   const readyFrame = await boneyardFrame(hostPage)
-  assert.ok(readyFrame.runGameOverTicks >= 1_000)
+  assert.ok(readyFrame.runGameOverTicks < 1_000)
   assert.equal(readyFrame.runGameOverExitTicks, null)
   assert.equal(readyFrame.playerDeathWeaponCount, 2)
   assert.equal(await gameOverAlpha(hostGameOver), 0)
 
-  await hostGameOver.click()
   await hostPage.waitForFunction(() => {
     const overlay = document.querySelector('.boneyard-game-over')
     const exitTicks = Number(overlay?.getAttribute('data-game-over-exit-ticks'))
@@ -1514,7 +1561,7 @@ async function returnBothPlayersToHub(hostPage, guestPage) {
   const exitTicks = exitReceipt.ticks
   const exitAlpha = exitReceipt.alpha
   assert.equal(exitFrame.runPhase, 'game-over')
-  assert.ok(exitFrame.runGameOverTicks >= 1_000)
+  assert.equal(exitFrame.runGameOverTicks, 999 + exitTicks)
   assert.equal(exitFrame.runGameOverExitTicks, exitTicks)
   assert.ok(exitTicks >= 100 && exitTicks < 400)
   assert.ok(Math.abs(exitAlpha - exitTicks / 400) < 1e-9)

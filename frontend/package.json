@@ -39,6 +39,7 @@
     "smoke:game:combat": "node --experimental-strip-types tools/smoke-boneyard-waves.mjs",
     "smoke:game:multiplayer-combat": "node --experimental-strip-types tools/smoke-multiplayer-combat-lifecycle.mjs",
     "smoke:game:player-death-game-over": "node --experimental-strip-types tools/smoke-multiplayer-combat-lifecycle.mjs --death-game-over-only",
+    "smoke:game:player-death-game-over:strict": "node --experimental-strip-types tools/smoke-multiplayer-combat-lifecycle.mjs --death-game-over-only --require-all-death-frames",
     "smoke:game:multiplayer-audio": "node --experimental-strip-types tools/smoke-multiplayer-audio.mjs",
     "smoke:game:skill-picker": "node --experimental-strip-types tools/smoke-skill-picker.mjs",
     "smoke:game:hub-rooms": "node --experimental-strip-types tools/smoke-hub-rooms.mjs",

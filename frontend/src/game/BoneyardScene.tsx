@@ -69,13 +69,11 @@ interface BoneyardSceneProps {
   accountUsername: string | null
   audio: GameAudioDirector
   boneyard: LoadedBoneyard
-  canAcknowledgeGameOver: boolean
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   levelUpModalActive: boolean
   levelUpPresentationId: number | null
-  onAcknowledgeGameOver: (runId: string, eventId: number) => void
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
   onReady: () => void
@@ -103,13 +101,11 @@ export default function BoneyardScene({
   accountUsername,
   audio,
   boneyard: loaded,
-  canAcknowledgeGameOver,
   getPingMs,
   initialSnapshot,
   inputBlocked,
   levelUpModalActive,
   levelUpPresentationId,
-  onAcknowledgeGameOver,
   onInput,
   onLoadingError,
   onReady,
@@ -532,11 +528,9 @@ export default function BoneyardScene({
 
         {run.phase === 'game-over' && run.runId ? (
           <GameOverOverlay
-            canAcknowledge={canAcknowledgeGameOver}
             eventId={run.gameOverEventId}
             gameOverExitTicks={run.gameOverExitTicks}
             gameOverTicks={run.gameOverTicks}
-            onAcknowledge={(eventId) => onAcknowledgeGameOver(run.runId!, eventId)}
             runId={run.runId}
           />
         ) : null}

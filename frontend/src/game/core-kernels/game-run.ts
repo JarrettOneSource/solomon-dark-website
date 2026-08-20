@@ -1,6 +1,6 @@
 export const BONEYARD_GAME_OVER_ENTRY_FADE_TICKS = 40
 export const BONEYARD_GAME_OVER_EXIT_FADE_TICKS = 400
-export const BONEYARD_GAME_OVER_INPUT_GATE_TICKS = 1_000
+export const BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK = 1_000
 
 export const GAME_RUN_PHASES = [
   'hub',
@@ -72,10 +72,21 @@ export function stepGameRunLifecycle(
 ): GameRunLifecycleState {
   if (source.phase === 'game-over') {
     if (source.gameOverExitTicks === null) {
-      return { ...source, gameOverTicks: source.gameOverTicks + 1 }
+      const gameOverTicks = source.gameOverTicks + 1
+      return {
+        ...source,
+        gameOverExitTicks: gameOverTicks === BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK
+          ? 1
+          : null,
+        gameOverTicks,
+      }
     }
     if (source.gameOverExitTicks < BONEYARD_GAME_OVER_EXIT_FADE_TICKS) {
-      return { ...source, gameOverExitTicks: source.gameOverExitTicks + 1 }
+      return {
+        ...source,
+        gameOverExitTicks: source.gameOverExitTicks + 1,
+        gameOverTicks: source.gameOverTicks + 1,
+      }
     }
     return {
       ...source,
@@ -96,28 +107,6 @@ export function stepGameRunLifecycle(
     gameOverTicks: 0,
     nextGameOverEventId: source.nextGameOverEventId + 1,
     phase: 'game-over',
-  }
-}
-
-export function gameOverAcceptsInput(source: GameRunLifecycleState): boolean {
-  return source.phase === 'game-over'
-    && source.gameOverExitTicks === null
-    && source.gameOverTicks >= BONEYARD_GAME_OVER_INPUT_GATE_TICKS
-}
-
-export function acknowledgeGameOver(
-  source: GameRunLifecycleState,
-  runId: string,
-  eventId: number,
-): GameRunLifecycleState | null {
-  if (
-    !gameOverAcceptsInput(source)
-    || source.runId !== runId
-    || source.gameOverEventId !== eventId
-  ) return null
-  return {
-    ...source,
-    gameOverExitTicks: 0,
   }
 }
 

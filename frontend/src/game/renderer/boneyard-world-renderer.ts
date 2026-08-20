@@ -230,6 +230,15 @@ interface BoneyardRendererFrameDiagnostics {
   minTreeLightScalar: number
   painterBandCount: number
   playerCount: number
+  playerDeathColorLayerCount: number
+  playerDeathFrame: number | null
+  playerDeathFrameSamples: readonly Readonly<{
+    colorLayerCount: number
+    deathTick: number
+    frame: number
+    shadowLayerCount: number
+  }>[]
+  playerDeathShadowLayerCount: number
   playerDeathBurstCount: number
   playerDeathWeaponCount: number
   playerLightRadius: number
@@ -539,6 +548,10 @@ export async function createBoneyardWorldRenderer(
     minTreeLightScalar: 0,
     painterBandCount: 0,
     playerCount: 0,
+    playerDeathColorLayerCount: 0,
+    playerDeathFrame: null,
+    playerDeathFrameSamples: [],
+    playerDeathShadowLayerCount: 0,
     playerDeathBurstCount: 0,
     playerDeathWeaponCount: 0,
     playerLightRadius: 0,
@@ -818,6 +831,24 @@ export async function createBoneyardWorldRenderer(
         + viewport.height / 2
       frameDiagnostics.playerWalkPose = scene.playerWalkPose(options.playerId)
       const playerView = scene.player(options.playerId)
+      const deathFrame = playerView?.deathFrame ?? null
+      frameDiagnostics.playerDeathColorLayerCount = playerView?.deathColorLayerCount ?? 0
+      frameDiagnostics.playerDeathFrame = deathFrame
+      frameDiagnostics.playerDeathShadowLayerCount = playerView?.deathShadowLayerCount ?? 0
+      if (
+        deathFrame !== null
+        && frameDiagnostics.playerDeathFrameSamples.at(-1)?.frame !== deathFrame
+      ) {
+        frameDiagnostics.playerDeathFrameSamples = [
+          ...frameDiagnostics.playerDeathFrameSamples,
+          {
+            colorLayerCount: playerView?.deathColorLayerCount ?? 0,
+            deathTick: player.progression.deathTick,
+            frame: deathFrame,
+            shadowLayerCount: playerView?.deathShadowLayerCount ?? 0,
+          },
+        ]
+      }
       frameDiagnostics.playerMagicShieldScale = playerView?.magicShieldScale ?? 1.5
       frameDiagnostics.playerMagicShieldVisible = playerView?.magicShieldVisible ?? false
       frameDiagnostics.playerMaterialTint = playerView?.materialTint ?? 0xffffff
