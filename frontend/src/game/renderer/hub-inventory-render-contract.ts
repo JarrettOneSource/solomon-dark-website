@@ -318,7 +318,18 @@ export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryIt
       instruction: null,
       title: 'Wizard Key',
     }
-    case 'sack': return { description: 'Currently empty', instruction: null, title: item.name }
+    case 'sack': {
+      const count = item.contents?.length ?? 0
+      return {
+        description: count === 0
+          ? 'Currently empty'
+          : count === 1
+            ? 'Contains 1 item'
+            : `Contains ${count} items`,
+        instruction: null,
+        title: item.name,
+      }
+    }
     case 'equipment': return { description: null, instruction: null, title: item.name }
   }
 }

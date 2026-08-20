@@ -24,6 +24,7 @@ import {
   nativeBoneyardPointGain,
   nativeFootstepCue,
   nativeEnemyEventSoundRequest,
+  nativeLootEventSoundRequest,
   newSolomonVoiceEvent,
   newNativeFootstepTick,
 } from './game-audio-native.ts'
@@ -249,6 +250,42 @@ test('pins every inventory and trader transaction cue to its untouched stock WAV
   assert.equal(NATIVE_SOUND_MANIFEST['distort-reality'].registryOffset, 0x40c)
   assert.equal(NATIVE_SOUND_MANIFEST['drop-coins'].registryOffset, 0x464)
   assert.equal(NATIVE_SOUND_MANIFEST['open-panel'].registryOffset, 0xb18)
+})
+
+test('pins every ground-loot cue and request to its untouched registry WAV', () => {
+  const rows = [
+    ['drop-bag-1', 'drop-bag-1.wav', 0x1fe4],
+    ['drop-bag-2', 'drop-bag-2.wav', 0x2010],
+    ['drop-coins', 'drop-coins.wav', 0x464],
+    ['drop-potion', 'drop-potion.wav', 0x490],
+    ['goto-orb', 'goto-orb.wav', 0x70],
+    ['pickup-bag', 'pickup-bag.wav', 0xbc8],
+    ['pickup-coin', 'pickup-coin.wav', 0xbf4],
+  ] as const
+  for (const [cue, filename, registryOffset] of rows) {
+    const source = readFileSync(new URL(`../assets/game/audio/sfx/${filename}`, import.meta.url))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue].sourceSha256,
+      cue,
+    )
+    assert.equal(NATIVE_SOUND_MANIFEST[cue].registryOffset, registryOffset)
+  }
+  assert.deepEqual(nativeLootEventSoundRequest({
+    actorId: 8,
+    eventId: 4,
+    playbackRate: 1.05,
+    position: { x: 20, y: 30 },
+    runId: 'loot-audio',
+    sound: 'pickup-coin',
+    tick: 9,
+    type: 'loot-pickup',
+  }), {
+    cue: 'pickup-coin',
+    playbackRate: 1.05,
+    sourcePosition: { x: 20, y: 30 },
+    volume: 1,
+  })
 })
 
 test('plays the untouched stock level-up cue once at scalar one per barrier', () => {

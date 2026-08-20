@@ -122,6 +122,36 @@ test('native starter equipment uses the element death appearance', () => {
   })
 })
 
+test('generated loot equipment keeps its live selector and wearable colors after equip and death', () => {
+  const generated = (equipmentType: 'hat' | 'robe' | 'staff' | 'wand', selector: number) => ({
+    equipmentType,
+    generatedLevel: 20,
+    iconRecords: [],
+    ...(equipmentType === 'hat' || equipmentType === 'robe'
+      ? { iconTints: [0x123456, 0xffffff] as const }
+      : {}),
+    id: selector + 100,
+    kind: 'equipment' as const,
+    name: `generated-${equipmentType}`,
+    nativeEffects: [{ kind: 9, magnitude: 5, operator: 0 as const, target: 0 }],
+    nativeSelector: selector,
+    nativeSubtype: null,
+    nativeTypeId: 7_000,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  })
+  assert.deepEqual(playerDeathEquipmentAppearance('fire', {
+    hat: generated('hat', 3),
+    robe: generated('robe', 2),
+    weapon: generated('wand', 5),
+  }), {
+    hat: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 3 },
+    robe: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 2 },
+    weapon: { kind: 'wand', selector: 5 },
+  })
+})
+
 test('death weapon owns one deterministic native-shaped bouncer through settlement', () => {
   const trigger = {
     deathEpoch: 1,

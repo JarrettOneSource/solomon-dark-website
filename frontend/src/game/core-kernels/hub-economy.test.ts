@@ -13,9 +13,12 @@ import {
   buyHagathaPerk,
   closeDowsingOffers,
   consumeInventoryItem,
+  consumeWizardKey,
+  creditLootGold,
   createEquipmentInventoryItem,
   createHubEconomy,
   dowse,
+  economyHasWizardKey,
   equipInventoryItem,
   hagathaOffers,
   hasBurningManOutfit,
@@ -23,6 +26,7 @@ import {
   hasFrostburnJewels,
   hasPandimensionalBugMasterOutfit,
   hasTempestOutfit,
+  insertLootInventoryItem,
   restockFomentius,
   transferInventoryItem,
   unequipInventorySlot,
@@ -369,4 +373,87 @@ test('two participants never share gold, stock, offers, or inventory mutations',
   assert.equal(second.gold, 10_000)
   assert.equal(second.backpack.length, 2)
   assert.notDeepEqual(bought.state.fomentiusStock, second.fomentiusStock)
+})
+
+test('authoritative loot credit owns Gold and exact inventory transfer semantics', () => {
+  const initial = createHubEconomy(1)
+  const credited = creditLootGold(initial, 37)
+  assert.equal(credited.gold, 10_037)
+  assert.equal(credited.revision, initial.revision + 1)
+
+  const potion = { ...initial.backpack[0]!, id: 99_001, quantity: 2 }
+  const stacked = insertLootInventoryItem(initial, potion)
+  assert.equal(stacked.accepted, true)
+  assert.equal(stacked.state.backpack[0]?.quantity, 3)
+  assert.equal(stacked.state.backpack.length, initial.backpack.length)
+
+  const dye = {
+    ...initial.backpack[0]!,
+    iconRecords: [42],
+    id: 99_002,
+    kind: 'dye' as const,
+    name: 'Fabric Dye Kit',
+    nativeSubtype: 0,
+    nativeTypeId: 7012,
+    quantity: 1,
+  }
+  const inserted = insertLootInventoryItem(initial, dye)
+  assert.equal(inserted.accepted, true)
+  assert.equal(inserted.state.backpack.at(-1)?.id, initial.nextItemId)
+  assert.equal(inserted.state.nextItemId, initial.nextItemId + 1)
+
+  const full = {
+    ...initial,
+    backpack: Array.from({ length: HUB_INVENTORY_SLOT_CAPACITY }, (_, index) => ({
+      ...dye,
+      id: 50_000 + index,
+    })),
+  }
+  const overflow = insertLootInventoryItem(full, dye)
+  assert.equal(overflow.accepted, true)
+  assert.equal(overflow.state.backpack.length, HUB_INVENTORY_SLOT_CAPACITY + 1)
+  assert.equal(overflow.state.backpack.at(-1)?.id, full.nextItemId)
+})
+
+test('loot Item_Sacks receive unique participant IDs and Wizard Keys are consumed recursively', () => {
+  const initial = createHubEconomy(1)
+  const nestedKey = {
+    ...initial.backpack[0]!,
+    id: 3,
+    iconRecords: [43],
+    kind: 'key' as const,
+    name: 'Wizard Key',
+    nativeSubtype: 1,
+    nativeTypeId: 7012,
+  }
+  const nestedPotion = { ...initial.backpack[0]!, id: 4 }
+  const sack = {
+    ...initial.backpack[0]!,
+    contents: [nestedKey, nestedPotion],
+    id: 2,
+    iconRecords: [70],
+    kind: 'sack' as const,
+    name: 'Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+  }
+
+  const inserted = insertLootInventoryItem(initial, sack)
+  assert.equal(inserted.accepted, true)
+  const insertedSack = inserted.state.backpack.at(-1)!
+  assert.deepEqual(
+    [insertedSack.id, ...insertedSack.contents!.map(({ id }) => id)],
+    [initial.nextItemId, initial.nextItemId + 1, initial.nextItemId + 2],
+  )
+  assert.equal(inserted.state.nextItemId, initial.nextItemId + 3)
+  assert.equal(economyHasWizardKey(inserted.state), true)
+
+  const consumed = consumeWizardKey(inserted.state)
+  assert.equal(consumed.consumed, true)
+  assert.equal(economyHasWizardKey(consumed.state), false)
+  assert.equal(consumed.state.backpack.at(-1)?.contents?.length, 1)
+  assert.equal(consumed.state.revision, inserted.state.revision + 1)
+  const absent = consumeWizardKey(consumed.state)
+  assert.equal(absent.consumed, false)
+  assert.strictEqual(absent.state, consumed.state)
 })

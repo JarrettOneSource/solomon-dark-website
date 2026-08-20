@@ -19687,7 +19687,6 @@ This reopens the Complete Region lighting entry above. The earlier pass proved
 settled-frame formulas and resources but did not make the first environment
 overlay part of the scene-ready contract. A correct settled frame does not
 prove the first visible member of the same render system.
-
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -19973,3 +19972,243 @@ retaining Chrome or a supervisor session; its log SHA-256 was
 `2344a09388273127b033530eda31c2c1c55b102bb014f6f64c53fa7b8c0123db`.
 The acceptance-tool and ledger follow-up changes no gameplay, lighting,
 simulation, snapshot, or transport runtime contract.
+
+## 2026-08-16 — Native loot selection, ground actors, pickup, and reward credit
+
+### Reported smell and parity question
+
+- Reported web behavior: enemy death retires the actor and grants XP, but the
+  Boneyard owns no Gold, Potion, Item, Powerup, or health/mana Orb actors. There
+  is consequently no drop selection, ground presentation, pickup audio,
+  authoritative contention, inventory transfer, or reward effect.
+- Stock behavior to recover: one actor-private six-category death selector
+  materializes one of four ground actor classes, while Goodies and explicit
+  Boneyard actions enter the same materializers. Each actor then owns its native
+  art, clock, strict-radius pickup, sound, credit, and teardown.
+- Reproduction scenes: the default generated Boneyard's eight wave families,
+  every Goodie selector, two players competing for one drop, all four Hagatha
+  drop modifiers, run reset, and a full inventory.
+- Falsifiers: a uniform picker, client-side roll, nearest-player arbitration,
+  despawning Gold/Sacks, magnetized non-Orb loot, one RNG domain, item-icon
+  ground art, or a category-only screenshot would disprove parity.
+
+### Evidence and provenance
+
+| Retail artifact | 4,723,200-byte `SolomonDarkAbandonware/SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, reverified 2026-08-16 | same preserved retail 0.72.5 image as the current web ledger | high |
+| Live retail pair | Mod Loader `tests/fixtures/webgame/loot-goldens.json`, reviewed SHA-256 `dabdd9cdd87dc78b4b800477d2765a1afd63f86da22cf19427b5eb077cc6be26` | 100 deaths retain complete private/shared RNG boundaries; outcomes are 84 none, 10 Orb, 6 Gold; three Orb trajectories and the farther-host first-retirement case are live | high |
+| Static instructions | `0x0047C070`, `0x0046A360`, `0x0046AA90`, `0x0046AE20`, `0x005E62E0`, `0x005E66B0`, `0x005E6B50`, `0x006039C0`, `0x0061F4C0`, placement `0x00645910/0x00645820`, item transfer `0x0055FF20`, random FX `0x0057A000/0x00579E90`, message insert/update/draw `0x005CA7C0/0x005D7EF0/0x005CF000`, plus the Goodie writer chain `0x00646D00 -> 0x00552A10/0x005601B0 -> 0x005F0E50`, decompiled read-only from Ghidra replica slot 6 | fixes candidate order, two RNG domains, collision placement, materializers, motion/lifetimes, full-inventory transfer, generated-equipment metadata, notification lifecycle, recursive key consumption, Goodie unlock geometry/rows, and pickup/application | high |
+| Static presentation | `0x0060FC10`, `0x0060FFE0`, `0x006104F0`, `0x006105F0`, `0x0061A260`, atlas manifests | drains every Orb/Gold/Sack/Bonus record and frame branch | high |
+| Static modifiers | `Skills_FinalizePass 0x0067C360` | Item Charm `0.75`, Gold Charm amount `1.25`/bound `0.75`, Scatter Curse Orb bound `0.5`/value `1.25`, Arcane Attractor `0.800000011920929` | high |
+| Audio registry | Mod Loader `native-audio-events.md` and stock WAV hashes | Gold, Sack/Potion, and Orb drop/pickup cues have distinct registry ownership | high |
+| Web baseline | Website `origin/main` `6826e62`; `boneyard-enemy-store.ts`, `boneyard-world.ts`, protocol 29, inventory/economy modules | XP rewards and participant-owned inventory exist, but no ground-loot owner or replicated family exists | high |
+
+Injected-loader captures are supporting runtime evidence; the decision tables,
+render functions, assets, and modifiers are independently instruction/data
+derived from the clean retail image.
+
+### System boundary and membership inventory
+
+Native system: from enemy death, Goodie timer, or explicit drop action through
+selection/materialization, authoritative ground lifetime, presentation,
+pickup, credit, and scene teardown. The dispositions below are the publication
+contract; no row may remain unproved when the receipt is finalized.
+
+| Member (class/variant/scene/branch) | Native source | Closure disposition | Required proof |
+| --- | --- | --- | --- |
+| Skeleton, Archer, Mage seed rewrites and all other hostile constructor seeds | `0x00473390`, `0x00473980`, `0x00473B40`, `0x00478290`, `0x00490860` | `exact-ported` | constructor/scheduler seed-order tests |
+| Enemy early exits, null recipe, disable mask, special suppression, emergency health potion | `0x0047C070` | `exact-ported` | one assertion per branch |
+| key -> Orb -> Gold -> Item -> Potion -> Powerup candidate order and biased choice weights for counts 1..6 | `0x0047C070`, private `Integer` | `exact-ported` | live-golden replay plus forced table cases |
+| eight shipped web wave families | common hostile death path | `exact-ported` | each family emits one selector source; Coffin child Maggots do not |
+| GoodImp, Crow, Maggot, Cocoon | native family death census | `out-of-system` (not drop-bearing hostile members; Maggot/Cocoon explicitly return early) | negative family tests |
+| Gold tiers 0/1/2/3, sentinel/explicit amount, >25 chunking, policy 5 | `0x0046AA90`, `0x005E13C0` | `exact-ported` | every tier, total, and randomized chunk invariant |
+| health and mana Orb, Scatter value branch | `0x005E1220` | `exact-ported` | kind weights, float32 endpoints, value scaling |
+| health/mana enemy Potions | `0x0046AE20` | `exact-ported` | subtype 0/1 and scene-force branch |
+| named definition Item, 110-placeholder random equipment, all six equipment classes/selectors | `0x0046A360`, `0x004699B0`, `0x004645B0` | `exact-ported` at loot identity/art/transfer boundary | candidate, ownership filter, class bias, selector/icon/color tests |
+| Wizard Key and next-key level bands | load `0x0046DC60`, gate `0x00463500`, materializer `0x00468440` | `exact-ported` | initial shared `Integer(8)+5`, unopened count, bands 15..25/30..40/50..70, Item_Misc subtype 1 carrier/credit test |
+| Bonus skill point, random learned rank, DAMAGE x4 | `0x005E2D90`, `0x005D5910` | `exact-ported` | each kind, eligibility, effect, modal/barrier test |
+| Goodie selectors 0..17 and phases 0/1/2 | `0x0061F4C0` | `exact-ported` from the activation edge through materialization | all eighteen rows, timer 100/200/250, phase/art/teardown tests |
+| Goodie unlock, recursive Wizard Key consumption, and unopened counter | Region `MyCollider` `0x00646D00`, key check/remove `0x00552A10`/`0x005601B0`, activation `0x005F0E50` | `exact-ported` | local-player facing probe at +25, strict radius 50, nearest eligible Goodie, nested key removal, no-key negative case |
+| explicit/random Item, Gold, Potion, Key actions and drop limit/enable actions | IDs 1008,1015,1016,1017,1018,1059,1086,1087; helpers `0x00469FE0`, `0x00466D20`, `0x00466D90`, `0x00466DF0`, `0x00462690`, `0x00466B50`, `0x0046A0F0`, `0x00463520` | `exact-ported` materializer/range/mask API; arbitrary script predicate execution is `out-of-system` with the geometry-only importer | all six action materializers plus limit/mask contract tests |
+| Solomon Dig direct reward and implicit wave-end reward | eight live Dig trials and Bonus xref census | `out-of-system` (stock has neither producer) | zero-producer tests |
+| Orb pull/capture/decay | `0x005E62E0` | `exact-ported` | three recorded trajectories, strict boundaries, 1024..1250 lifetime |
+| Gold scatter/persistence/pickup | `0x005E66B0` | `exact-ported` | 17 half-unit scatter updates through 8.5, strict 37.5 stock radius, no despawn |
+| Potion/Item/Key/nested Sack bounce/pickup | `0x005E6B50`, inventory insertion `0x0055FF20` | `exact-ported` | float32 bounce, recursive identity, potion stacking, and native hidden overflow beyond the 88 visible cells |
+| Bonus lifetime/pickup | `0x006039C0` | `exact-ported` | 1200 countdown plus 101-update float32 fade (retire update 1300), strict 25-unit stock radius |
+| world allocation IDs 1..2047/full field | `0x0063E750`, `0x0063F6D0` | `exact-ported` | fail without eviction/replacement |
+| first valid retirement across host/guests | loader live golden plus retail slot facts | `exact-ported` | simultaneous two-client deterministic order, no nearest arbitration |
+| Orb/Gold/Sack/Bonus/Goodie art and painter branches | render functions above | `exact-ported` | per-record render-plan tests and inspected browser frame |
+| drop/pickup sound families | registry 2,25,26,68,69,185,186 | `exact-ported` | exact WAV hashes, pitch/gain, once-only event consumption |
+| scene exit, new run, disconnect, snapshot gaps | world/run authority | `exact-ported` | complete retirement and no stale replay |
+
+No member is `blocked-by-platform`: Canvas/WebGL, Web Audio, the authoritative
+Node host, and the existing inventory/skill state can represent every recovered
+mechanism. Retail's process-global RNG starting position is replaced only at
+the run-input boundary by one host-owned native RNG seeded from the authoritative
+Boneyard seed; all subsequent words, private actor seeds, bounds, float32
+rounding, and draw order inside this system remain native.
+
+### Native ownership thread
+
+- Owner and construction: `Badguy_Ctor` draws `Integer(10000000)` into
+  `actor+0x1C0`; three Skeleton-family schedulers replace it. Death constructs
+  a private 0xE8-byte RNG from that value. Category materializers continue on
+  the active shared stream and register actors in the world allocator.
+- State transitions: ground actors are preselected outcomes. Orb decays after
+  900 ticks; Gold/Sack persist; Bonus begins its fade after the 1200 countdown
+  and retires on update 1300; Goodie phases at exact timers 100/200/250.
+- Downstream consumers: strict center-distance pickup applies participant-owned
+  Gold, HP/MP, inventory object, or Bonus effect, emits feedback/audio, and
+  retires the actor once.
+- Siblings: Goodie, explicit Boneyard actions, Hagatha selectors 3/4/9/23,
+  Item recipe/random-equipment stores, inventory stacking, skill offers, and
+  run teardown all share this boundary.
+- Multiplayer: only the host rolls. Clients receive stable IDs/state and send
+  movement through the existing host simulation; canonical participant order,
+  not client proximity ranking, decides simultaneous valid pickups.
+
+### Recovered behavioral contract
+
+- Candidate and amount tables are the complete tables in Mod Loader
+  `native-loot-selector.md`; they are inputs to code, not prose approximations.
+- Pickup factor is 1.25. Orb pull/capture radii are 75/25 and motion is exactly
+  1.5 units per 100 Hz actor tick. Gold/Sack capture is 37.5; Bonus is 25.
+- Sack bounce starts `height=-25`, `velocity=0.10000000149011612`, then
+  `height+=velocity; velocity*=1.5` until positive, where both clamp to zero.
+- Gold/Sack have no despawn. Bonus stays full-alpha through its 1200 countdown,
+  then subtracts float32 `0.009999999776482582` for 101 updates and retires on
+  update 1300. Orb untouched life is value-dependent and uses float32
+  subtraction `0.0020000000949949026`.
+- Render art is BadGuys Orb 434..435, Gold 188..201/73/83, Sack 33/67/436..445,
+  Bonus 7/61/122..157, Goodie break 377..380, and DeadHawg Goodie 145..147.
+- Inventory objects preserve native type/subtype/recipe/selector/icon/color and
+  potion stack count. Ground Sacks draw the carrier family, never the inventory
+  icon as a replacement shell.
+- Key eligibility is authoritative arena state. The next threshold begins at
+  shared `Integer(8)+5`, requires at least one unopened Goodie, and advances to
+  random bands 15..25, 30..40, then 50..70 after successful key drops.
+- Goodie timer 100 is part of shared loot entropy: the BadGuys-52 flash and all
+  twenty BadGuys 377..380 `Anim_Bouncer` children consume their native
+  constructor/customization draw program before any later reward selection.
+
+### 2026-08-20 residual closure
+
+- Emergency Potion density is not a 500-radius query. `0x0047C070` passes a
+  500-unit diameter to `0x00642280`, which halves it; the strict mask-2 census
+  therefore counts other hostile actors within radius 250 and excludes the
+  dying actor. Both the global `>79` and local `>49` thresholds remain strict.
+- Carrier placement is the shared `0x00645910` radial search. Potion and Item
+  use one radius-15, mask-4 pass; Key uses two; Gold draws `Float(3)+1` and uses
+  mask `0x404`, adding the actor-overlap ellipse from `0x00645820`. A blocked
+  ring starts at a shared `Float(360)`, uses
+  `trunc(pi*(searchRadius+baseRadius)/searchRadius)` angular samples, scales Y
+  by float32 `0.800000011920929`, and grows successive rings by the cumulative
+  `(1+Float(1))` factor.
+- `Arena_CreateGold` constructs each actor before placement, increments a
+  cumulative delay by `trunc(100*(Float(0.04)+0.009999999776482582))` after
+  chunks six onward, constructs one otherwise-unused stack Gold (spending its
+  four constructor words), stable-sorts actors by world Y, then assigns every
+  remaining zero delay as `trunc(100*Float(0.25))`. Those draws, the sort, and
+  the delays are authoritative state rather than decorative scatter.
+- Explicit Gold is not clamped upward: a post-multiplier total at or below zero
+  emits no actors, while the unused sorter-probe constructor still spends its
+  four shared words.
+- `0x0057A000` has three separate target pools: row `+0x28` for Wielding,
+  `+0x28 || category==3` for Ingenious, and every enabled row 8..79 for the
+  dynamic skill affix. Advanced rows 72..79 remain gated by their eight native
+  unlock bytes. The item level byte begins at zero, becomes 8 for a two-affix
+  item, and selector 8 raises it to at least the target row's compiled minimum
+  level. Dynamic affixes use the native skill name, not a numeric placeholder.
+  The two-affix path exists only above requested level 18 and short-circuits
+  `Integer(2)==1`, then `Integer(5)==3`, then `Integer(10)==3`; lower levels
+  spend none of those words. Wearable halving applies only in the switch
+  branches that contain the compiled half-and-round block.
+- Random Hat/Robe colors use the exact nine-row palette
+  `(red, orange, yellow, pale-green, cyan, blue, magenta, .4 gray, .8 gray)`,
+  optional signed per-channel `Float(.1)`, optional `*1.85`, clamping, then an
+  80-percent luminance blend with weights
+  `.3086000085/.6093999743/.0820000023`; layer two remains native white.
+- Ground Sack pickup calls `0x0055FF20` with forced insertion. It stacks a
+  matching Potion, replaces the first Item_None cell when one exists, and
+  otherwise appends past the 88 visible cells. The actor still retires; dropping
+  the item merely because the web grid is full is not native behavior.
+- Gold pickup creates two additive BadGuys-83 fades (gold `.05` loss and white
+  `.1` loss); Orb pickup creates the normal scale-1.5 BadGuys-15 `.05` fade.
+  Orb's `gotorb` playback rate is fixed `1`; Gold and Sack alone consume the
+  signed `.1` pickup-pitch draw. The shared notification manager starts at
+  lifetime `1.5`, loses float32 `.005` per update (300 updates), rises from
+  offset `-18`, merges an active `GOLD` suffix above lifetime one, and draws the
+  extracted body bitmap font at native screen center/Y 67 with its black +2
+  shadow and per-message color. The decompiled draw uses the offset only in
+  `1-max(0,offset)/250`; ordered text rows, not another Y translation, own the
+  vertical stack.
+
+### Nearby-system findings
+
+- `Skills_FinalizePass 0x0067C360` is the missing exact writer for all four
+  purchased drop modifiers; the current Hub catalog descriptions were not
+  enough to implement them.
+- The previously unnamed Goodie activation edge is not an authored script or
+  damage predicate. Region `MyCollider` owns it: local-player class 101 probes
+  25 units along facing with a strict radius-50 nearest query, recursively
+  consumes one Wizard Key, and activates the unopened Goodie. There is no
+  keyboard-interact input in this path.
+- The existing `HubInventoryItem` representation already owns native type,
+  subtype, recipe and icon identity. Random Hat/Robe drops additionally require
+  their live two-color state instead of falling back to the starter element
+  palette.
+- Native report updated: Mod Loader
+  `docs/reverse-engineering/native-loot-selector.md` now owns the complete
+  presentation/modifier/membership closure.
+
+### Confidence and open questions
+
+- Confirmed: every selector/category/amount row, actor seed lifecycle, Goodie
+  row, ground clock, pickup radius, art record, audio cue, purchased modifier,
+  credit owner, and non-producer named above.
+- Inferred: none used for implementation constants. The web-only starting seed
+  for the one authoritative shared stream remains the declared run-input policy.
+- Unknowns: none inside the declared boundary. Downstream equipment-FX
+  application remains the separately documented equipment system, not a silent
+  loot row.
+
+### Web implementation consequence
+
+- Correct owner: a pure native loot kernel plus one authoritative Boneyard loot
+  store under `core-server`; the renderer and audio director consume replicated
+  outcomes and never roll.
+- Shared model: hostile actors retain their current native loot seed; world
+  state retains the shared loot RNG, actor allocator, Goodie states, drops,
+  events, and last successful Item level.
+- Participant state: economy/progression helpers apply one serialized pickup;
+  no client-local currency or inventory mutation is accepted.
+- Protocol: compact Loot/Goodie entity registrations, recursively validated
+  item identity/effects/colors, and one ordered loot event lane are carried by
+  wire version 30.
+- Obsolete path: enemy death's XP-only terminal output is extended at its owner;
+  no renderer inference or CSS pickup substitute is added.
+
+### Validation contract
+
+- Focused tests: replay the reviewed live cases; exhaust category weights,
+  policies, modifiers, amounts, all Goodie selectors, four ground families,
+  all Bonus kinds, strict boundaries, collision order, capacity, and teardown.
+- Protocol tests: reject every unknown kind/cue/shape, round-trip keyframes and
+  deltas, retire once, and reset baselines between runs.
+- Renderer/audio tests: assert every atlas membership row, frame/phase branch,
+  lighting/painter lane, WAV hash, and once-only semantic event.
+- Playwright: two real clients enter a deterministic Boneyard, witness all five
+  requested families in the native renderer, collect them, inspect Gold,
+  potion/item inventory, HP/MP, Bonus effect, audio plays, first-retirement,
+  screenshots, and empty page/console/network error arrays.
+- The executable acceptance harness is
+  `npm --prefix frontend run smoke:game:loot-drops`; it uses two isolated
+  browser contexts and the real local host, not a DOM-only renderer fixture.
+- Final gates: exact-tree `./scripts/validate.sh` and the focused browser journey
+  must pass on the Mac mini before publication is accepted; production is a
+  separate post-push SHA/service/browser verification.
+
+### Implementation validation receipt
+
+Pending implementation. This marker must be replaced with exact changed files,
+per-member tests, Mac receipts, pushed SHAs, and production deployment evidence
+before the system may be called complete.

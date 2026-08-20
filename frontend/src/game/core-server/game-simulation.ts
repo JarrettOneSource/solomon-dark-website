@@ -27,12 +27,14 @@ import {
   type GameRunLifecycleState,
 } from '../core-kernels/game-run.ts'
 import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
+import { nativeLootModifiers, type NativeLootItem } from '../core-kernels/native-loot.ts'
 import {
   buyDowsingOffer,
   buyFomentiusItem,
   buyHagathaPerk,
   closeDowsingOffers,
   consumeInventoryItem,
+  economyHasWizardKey,
   dowse,
   equipInventoryItem,
   hasBurningManOutfit,
@@ -45,12 +47,14 @@ import {
   unequipInventorySlot,
   type HubEconomyRejection,
   type HubEconomyState,
+  type HubInventoryItem,
   type HubInventoryAction,
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
 import {
   boneyardEnemyExperienceAward,
   effectivePrimarySkillRankStats,
+  NATIVE_SKILL_CATALOG,
   type PlayerLevelUpBarrierState,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
@@ -136,10 +140,13 @@ import {
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   coldSlowPlayerEntity,
+  consumePlayerEntityWizardKey,
   createPlayerEntityStore,
+  creditPlayerEntityLootGold,
   damagePlayerEntity,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
+  grantPlayerEntityBonusSkillChoice,
   grantSharedPlayerEntityExperience,
   playerCharacterAt,
   playerEconomyAt,
@@ -152,6 +159,8 @@ import {
   playerProgressionAt,
   playerSkillBookAt,
   playerStatBookAt,
+  increaseRandomPlayerEntitySkill,
+  insertPlayerEntityLootItem,
   removePlayerEntity,
   rerollPlayerEntitySkillOffer,
   resetPlayerEntitiesForNewRun,
@@ -169,6 +178,12 @@ import {
   replacePlayerEconomy,
   type PlayerEntityStore,
 } from './player-entity-store.ts'
+import {
+  NATIVE_LOOT_EVENT_RETENTION_TICKS,
+  type BoneyardGoodieUnlock,
+  type BoneyardLootEvent,
+  type BoneyardLootPickup,
+} from './boneyard-loot-store.ts'
 
 export type PlayerId = string
 
@@ -675,11 +690,19 @@ export function stepGameSimulationTick(
         activeInputs,
         Object.fromEntries(Object.keys(players).map((playerId) => {
           const progression = getPlayerProgression(state, playerId)
+          const economy = getPlayerEconomy(state, playerId)
+          const skillBook = getPlayerSkillBook(state, playerId)
           return [playerId, {
             alive: progression.lifeState === 'alive',
             collisionEnabled: playerCollisionEnabledAfterCombatTick(progression),
             eligible: state.run.eligiblePlayerIds.includes(playerId),
+            inventoryHasHealthPotion: economyContainsHealthPotion(economy),
+            inventoryHasWizardKey: economyHasWizardKey(economy),
+            level: progression.level,
+            lootModifiers: nativeLootModifiers(economy.ownedPerkSelectors),
             movementScale: playerEntityMovementScale(state.playerEntities, playerId),
+            ownedRecipeIndexes: economyOwnedRecipeIndexes(economy),
+            advancedUnlocks: skillBook.advancedUnlocks,
           }]
         })),
         state.tick + 1,
@@ -720,6 +743,9 @@ function finishGameSimulationTick(
   previous: GameSimulationState,
   result: {
     enemyEvents?: readonly BoneyardEnemySemanticEvent[]
+    goodieUnlocks?: readonly BoneyardGoodieUnlock[]
+    lootEvents?: readonly BoneyardLootEvent[]
+    lootPickups?: readonly BoneyardLootPickup[]
     playerDamage?: readonly Readonly<{
       actorId: number
       amount: number
@@ -867,6 +893,94 @@ function finishGameSimulationTick(
     playerEntities = awarded.playerEntities
     levelUpBarrier = awarded.levelUpBarrier
     nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
+  }
+  for (const unlock of result.goodieUnlocks ?? []) {
+    const consumed = consumePlayerEntityWizardKey(playerEntities, unlock.playerId)
+    if (!consumed.accepted) {
+      throw new Error(`Goodie ${unlock.goodieId} activated without its Wizard Key`)
+    }
+    playerEntities = consumed.store
+  }
+  const bonusSkillChoicePlayerIds: string[] = []
+  const lootTextOverrides = new Map<number, string>()
+  for (const pickup of result.lootPickups ?? []) {
+    if (playerEntityIndex(playerEntities, pickup.playerId) < 0) continue
+    switch (pickup.kind) {
+      case 'gold':
+        playerEntities = creditPlayerEntityLootGold(
+          playerEntities,
+          pickup.playerId,
+          pickup.amount,
+        )
+        break
+      case 'sack':
+        if (pickup.item !== null) {
+          playerEntities = insertPlayerEntityLootItem(
+            playerEntities,
+            pickup.playerId,
+            pickup.item,
+          ).store
+        }
+        break
+      case 'orb':
+        if (pickup.orbKind === 'health') {
+          playerEntities = restorePlayerEntityHealth(
+            playerEntities,
+            pickup.playerId,
+            Math.fround(pickup.orbValue * 25),
+          )
+        } else if (pickup.orbKind === 'mana') {
+          playerEntities = restorePlayerEntityMana(
+            playerEntities,
+            pickup.playerId,
+            Math.fround(pickup.orbValue * 40),
+          )
+        }
+        break
+      case 'bonus':
+        if (pickup.bonusKind === 0) {
+          playerEntities = grantPlayerEntityBonusSkillChoice(playerEntities, pickup.playerId)
+          bonusSkillChoicePlayerIds.push(pickup.playerId)
+        } else if (pickup.bonusKind === 1 && world.kind === 'boneyard') {
+          const increased = increaseRandomPlayerEntitySkill(
+            playerEntities,
+            pickup.playerId,
+            world.loot.sharedRng,
+          )
+          playerEntities = increased.store
+          world = { ...world, loot: { ...world.loot, sharedRng: increased.rng } }
+          if (increased.skillId !== null) {
+            lootTextOverrides.set(
+              pickup.actorId,
+              `${NATIVE_SKILL_CATALOG[increased.skillId]?.name ?? `Skill ${increased.skillId}`} +1`,
+            )
+          }
+        } else if (pickup.bonusKind === 2) {
+          playerEntities = applyPlayerEntityPotionEffect(playerEntities, pickup.playerId, 2)
+        }
+        break
+    }
+  }
+  if (bonusSkillChoicePlayerIds.length > 0 && levelUpBarrier === null) {
+    const sourcePlayerId = bonusSkillChoicePlayerIds[0]!
+    const sourceProgression = playerProgressionAt(playerEntities, sourcePlayerId)
+    if (sourceProgression !== null) {
+      const participantIds = stableExistingPlayerIds(
+        playerEntities,
+        previous.run.eligiblePlayerIds,
+      )
+      const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, participantIds)
+      levelUpBarrier = createLevelUpBarrier(
+        nextLevelUpBarrierId,
+        sourcePlayerId,
+        sourceProgression.experience,
+        sourceProgression.level,
+        participantIds,
+        pendingPlayerIds,
+        world.kind === 'boneyard' ? world.runId : null,
+      )
+      nextLevelUpBarrierId += 1
+    }
   }
   const boneyardCollision = result.world.kind === 'boneyard'
     ? withBoneyardGateCollision(result.world.collision, result.world.gateLeaves)
@@ -1296,11 +1410,25 @@ function finishGameSimulationTick(
       && previous.world.runId === world.runId
       ? previous.world.enemyEvents
       : []
+    const previousLootEvents = previous.world.kind === 'boneyard'
+      && previous.world.runId === world.runId
+      ? previous.world.lootEvents
+      : []
     world = {
       ...world,
       enemyEvents: retainBoneyardEnemyEvents(
         previousEvents,
         [...(result.enemyEvents ?? []), ...playerDamageSoundEvents],
+        tick,
+      ),
+      lootEvents: retainBoneyardLootEvents(
+        previousLootEvents,
+        (result.lootEvents ?? []).map((event) => {
+          const text = lootTextOverrides.get(event.actorId)
+          return text === undefined || event.type !== 'loot-pickup'
+            ? event
+            : { ...event, text }
+        }),
         tick,
       ),
     }
@@ -1533,6 +1661,44 @@ function retainBoneyardEnemyEvents(
   return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
     ? retained
     : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+}
+
+function retainBoneyardLootEvents(
+  previous: readonly BoneyardLootEvent[],
+  emitted: readonly BoneyardLootEvent[],
+  tick: number,
+): readonly BoneyardLootEvent[] {
+  const minimumTick = tick - NATIVE_LOOT_EVENT_RETENTION_TICKS
+  const retained = [...previous, ...emitted].filter((event) => event.tick >= minimumTick)
+  return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
+    ? retained
+    : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+}
+
+function economyOwnedRecipeIndexes(economy: HubEconomyState): readonly number[] {
+  const equipment = [
+    economy.equipment.amulet,
+    economy.equipment.hat,
+    ...economy.equipment.rings,
+    economy.equipment.robe,
+    economy.equipment.weapon,
+  ]
+  const flatten = (item: HubInventoryItem): readonly HubInventoryItem[] => [
+    item,
+    ...(item.contents ?? []).flatMap(flatten),
+  ]
+  return Object.freeze([...new Set([
+    ...economy.backpack,
+    ...economy.storage,
+    ...equipment.filter((item): item is HubInventoryItem => item !== null),
+  ].flatMap(flatten).flatMap(({ recipeIndex }) => recipeIndex === null ? [] : [recipeIndex]))])
+}
+
+function economyContainsHealthPotion(economy: HubEconomyState): boolean {
+  const contains = (item: HubInventoryItem): boolean => item.nativeTypeId === 7001
+    && item.nativeSubtype === 0
+    || ((item as NativeLootItem).contents ?? []).some(contains)
+  return economy.backpack.some(contains)
 }
 
 function grantSharedGameSimulationExperience(

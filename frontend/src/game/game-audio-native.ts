@@ -6,7 +6,10 @@ import type {
   BoneyardSolomonVoiceCue,
   BoneyardSolomonVoiceEvent,
 } from './core-kernels/boneyard-encounter.ts'
-import type { BoneyardEnemyEventSnapshot } from './protocol/game-state.ts'
+import type {
+  BoneyardEnemyEventSnapshot,
+  BoneyardLootEventSnapshot,
+} from './protocol/game-state.ts'
 
 export const NATIVE_AUDIO_TICK_MS = 10
 
@@ -37,7 +40,10 @@ export type GameSoundCue =
   | 'demon-die'
   | 'drink'
   | 'distort-reality'
+  | 'drop-bag-1'
+  | 'drop-bag-2'
   | 'drop-coins'
+  | 'drop-potion'
   | 'explode-steam'
   | 'fireball-hit'
   | 'firey-death'
@@ -45,6 +51,7 @@ export type GameSoundCue =
   | 'flash'
   | 'fizzle'
   | 'hit-shield'
+  | 'goto-orb'
   | 'ice-start'
   | 'imp-split'
   | 'ignite'
@@ -67,6 +74,8 @@ export type GameSoundCue =
   | 'nuke'
   | 'phase'
   | 'pop-shield'
+  | 'pickup-bag'
+  | 'pickup-coin'
   | 'rock-hit'
   | 'ring-of-ice'
   | 'skeleton-die'
@@ -219,10 +228,25 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\distortreality',
     sourceSha256: '3fa59accc564838ea1896f95539ee0acecd9345c3e2c1adceaadee0dd870194e',
   },
+  'drop-bag-1': {
+    registryOffset: 0x1fe4,
+    sourceName: 'sounds\\dropbag\\dropbag1',
+    sourceSha256: 'c2f0b7f9111d727a9e66b7e47e80aa79ba21dc5bc83781e01be0409755651379',
+  },
+  'drop-bag-2': {
+    registryOffset: 0x2010,
+    sourceName: 'sounds\\dropbag\\dropbag2',
+    sourceSha256: '1ec0a6ecf46d8d7ca0b92bb4ed62f78ca4582abc5365aa8d17c2916f05c22203',
+  },
   'drop-coins': {
     registryOffset: 0x464,
     sourceName: 'sounds\\dropcoins',
     sourceSha256: 'b72d44080d99fdae8e7dce83b5f1b6a553d503a753df2deacea7ee8829ba4376',
+  },
+  'drop-potion': {
+    registryOffset: 0x490,
+    sourceName: 'sounds\\droppotion',
+    sourceSha256: 'c538d651ff612cfb56b9c618cec60eaa4b96da78ecc81b20950977cade359e45',
   },
   'explode-steam': {
     registryOffset: 0x4bc,
@@ -258,6 +282,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x750,
     sourceName: 'sounds\\hitshield',
     sourceSha256: 'ad5a4870955e5393c17a03c847af274f7a054b62a4c712582206623d1d92ad3f',
+  },
+  'goto-orb': {
+    registryOffset: 0x70,
+    sourceName: 'sounds\\gotorb',
+    sourceSha256: 'e971ea0fcc9fee14e93936b83768862ff24cc61106e741c66e48f709b9c5893a',
   },
   'ice-start': {
     registryOffset: 0x7a8,
@@ -368,6 +397,16 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xcd0,
     sourceName: 'sounds\\popshield',
     sourceSha256: 'b4d6bf4d9a68f11bab92def6e823a53f6b8534c49b96e80bbf25d99972af2503',
+  },
+  'pickup-bag': {
+    registryOffset: 0xbc8,
+    sourceName: 'sounds\\pickupbag',
+    sourceSha256: '8b299623b5b51dc6b56dfb1acc3821664d8857a02a70179f6ba3330182443902',
+  },
+  'pickup-coin': {
+    registryOffset: 0xbf4,
+    sourceName: 'sounds\\pickupcoin',
+    sourceSha256: '04a1ea7b62cdaf0fd55cf237911594d75d79c0cf5cdf7962078f2949b9f4da34',
   },
   'rock-hit': {
     registryOffset: 0xd54,
@@ -498,6 +537,18 @@ export function nativeEnemyEventSoundRequest(
     playbackRate: event.pitch!,
     sourcePosition: event.sourcePosition!,
     volume: event.gainScale!,
+  }
+}
+
+export function nativeLootEventSoundRequest(
+  event: BoneyardLootEventSnapshot,
+): NativeEnemyEventSoundRequest | null {
+  if (event.sound === undefined || event.playbackRate === undefined) return null
+  return {
+    cue: event.sound as GameSoundCue,
+    playbackRate: event.playbackRate,
+    sourcePosition: event.position,
+    volume: 1,
   }
 }
 

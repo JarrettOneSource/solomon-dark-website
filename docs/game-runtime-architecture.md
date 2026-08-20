@@ -115,6 +115,13 @@ dependencies without revisiting this release invariant.
   clocks. Protocol messages identify simulation ticks, not wall-clock time.
 - The server owns actors, collision response, AI, RNG, pause policy, and save
   serialization. Clients submit intent rather than positions.
+- Boneyard loot is one authoritative subsystem, not a renderer consequence.
+  Hostile death publishes the actor-private seed at the enemy owner; the
+  Boneyard loot store alone advances the shared native stream, applies native
+  collision placement, allocates Gold/Orb/Sack/Bonus actors, advances Goodies,
+  resolves strict pickup order, and emits semantic audio/text edges. Currency,
+  resources, inventory, and Bonus state are committed at the session-owned
+  player-entity boundary after that one accepted pickup.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
   publish immediately; the authoritative queue preserves each level transition
@@ -172,7 +179,7 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `24` welcomes a client with one complete snapshot plus its sequence.
+Protocol `30` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. Both Hub and Boneyard carry a compact
 replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling
@@ -182,6 +189,14 @@ and dynamic samples. Run-scoped
 semantic enemy events remain a separate ordered lane so interpolation cannot
 invent, duplicate, or erase combat edges. Unknown or malformed messages fail
 closed.
+
+Loot and Goodie use their own registered descriptors and fixed numeric samples;
+the nested carried item remains in authoritative server state until pickup and
+is projected through the player's economy afterward. A separate ordered loot
+event lane carries drop settlement, pickup, and Goodie edges so sound and the
+native 300-update notification manager consume each event once rather than
+inferring a disappearance between snapshots. Item trees, generated FX, wearable
+colors, actor IDs, and event order are bounded and recursively validated.
 
 Each player projection includes level/XP thresholds, a monotonic progression
 revision, compact nonzero permanent/effective rank rows, and at most one
@@ -244,6 +259,12 @@ There is one composed client, not one DOM client and one canvas client.
   depths. Neither path reruns the Canvas2D native painter at the `20 Hz`
   snapshot cadence.
   Players, Solomon Dig, and moving gate leaves remain dynamic GPU residents.
+  Loot actors and Goodie phases are also dynamic GPU residents in the recovered
+  effective-Y queue. Gold/Orb pickup fades reuse the world effect lane; the
+  screen notification layer uses the extracted native body-font atlas and is
+  driven only by the ordered semantic event stream.
+  `npm --prefix frontend run smoke:game:loot-drops` is the deterministic
+  two-client browser acceptance for this boundary.
   The recovered mode-1/2 darkness compositor remains a small screen-space
   post-process between the world canvas and HUD.
 - Gameplay camera motion is isolated at Pixi render-group boundaries. Boneyard

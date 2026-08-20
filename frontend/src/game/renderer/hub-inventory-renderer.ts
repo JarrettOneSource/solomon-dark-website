@@ -1407,7 +1407,7 @@ function addInventoryDragger(
 function addItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'recipeIndex'>,
+  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'iconTints' | 'recipeIndex'>,
   centerX: number,
   centerY: number,
   element: WizardElement,
@@ -1423,7 +1423,9 @@ function addItemIcon(
     ? null
     : DOWSING_EQUIPMENT_RECIPES[item.recipeIndex]
   const iconTints = item.equipmentType === 'hat' || item.equipmentType === 'robe'
-    ? recipe?.iconTints ?? [HUB_STARTER_EQUIPMENT_PRIMARY_TINT[element], 0xffffff]
+    ? item.iconTints
+      ?? recipe?.iconTints
+      ?? [HUB_STARTER_EQUIPMENT_PRIMARY_TINT[element], 0xffffff]
     : [null, null]
   const sprites: Sprite[] = []
   for (const [index, record] of item.iconRecords.entries()) {

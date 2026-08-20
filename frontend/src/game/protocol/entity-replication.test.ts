@@ -9,6 +9,7 @@ import type {
   BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemySnapshot,
   BoneyardEnemyProjectileSnapshot,
+  BoneyardLootSnapshot,
   BoneyardMaggotSnapshot,
   GameSnapshot,
   ProtocolStudentState,
@@ -25,6 +26,12 @@ import {
   createGameSnapshotFrame,
   createReplicatedEntityBaseline,
 } from './entity-replication.ts'
+import {
+  BONEYARD_LOOT_ENTITY_REGISTRATION,
+  boneyardLootDescriptor,
+  boneyardLootSample,
+  materializeBoneyardLoot,
+} from './boneyard-loot-replication.ts'
 
 function hubSnapshot(studentCount: number): GameSnapshot {
   return createGameSnapshot(createGameSimulation({}, {
@@ -71,8 +78,11 @@ function boneyardSnapshot(runId: string): GameSnapshot {
       enemyProjectileEffects: [],
       enemyProjectiles: [],
       gateLeaves: [],
+      goodies: [],
       kind: 'boneyard',
       lanternLightRegistration: null,
+      loot: [],
+      lootEvents: [],
       mageLightningPulses: [{
         contact: {
           kind: 'target-attached',
@@ -750,6 +760,170 @@ test('enemy death effects replicate independent motion and exact retirement iden
   assert.ok(delta.world.entities.retired.some(([typeId, id]) => (
     typeId === REPLICATED_ENTITY_TYPES.boneyardEnemyDeathEffect && id === expected.id
   )))
+})
+
+test('loot and Goodies replicate compact state, ordered events, and retirement', () => {
+  const initial = boneyardSnapshot('loot-run')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  initial.world.loot = [{
+    activationDelayTicks: 0,
+    ageTicks: 7,
+    alpha: 0,
+    amount: 11,
+    animationPhase: 18.25,
+    bonusKind: null,
+    bounceHeight: 0,
+    framePhase: 0,
+    id: 41,
+    itemNativeSubtype: null,
+    itemNativeTypeId: null,
+    kind: 'gold',
+    nativeTypeId: 2012,
+    orbKind: null,
+    orbValue: 0,
+    position: { x: 1500, y: 1750 },
+    rotationDeg: -7.5,
+    scatterActive: false,
+    scatterProgress: 8.5,
+    scatterSeed: 12_345,
+    source: 'enemy',
+    spawnTick: 4,
+    tier: 3,
+  }]
+  initial.world.goodies = [{
+    active: true,
+    exhausted: false,
+    id: 2,
+    phase: 1,
+    position: { x: 400, y: 500 },
+    subtype: 0,
+    timer: 100,
+  }]
+  initial.world.lootEvents = [{
+    actorId: 41,
+    eventId: 1,
+    playbackRate: 1,
+    position: { x: 1500, y: 1750 },
+    runId: 'loot-run',
+    sound: 'drop-coins',
+    tick: 7,
+    type: 'loot-drop-sound',
+  }]
+  initial.tick = 7
+
+  const frame = createGameSnapshotFrame(initial, 0, undefined, true)
+  if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.equal(REPLICATED_ENTITY_TYPE_REGISTRY.has(REPLICATED_ENTITY_TYPES.boneyardLoot), true)
+  assert.equal(REPLICATED_ENTITY_TYPE_REGISTRY.has(REPLICATED_ENTITY_TYPES.boneyardGoodie), true)
+  assert.ok(frame.world.entities.samples.some(([typeId, id]) => (
+    typeId === REPLICATED_ENTITY_TYPES.boneyardLoot && id === 41
+  )))
+  const reconstructor = new EntityReplicationReconstructor()
+  const reconstructed = reconstructor.apply(frame, 1)
+  if (reconstructed.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  assert.equal(reconstructed.world.loot[0]?.amount, 11)
+  assert.equal(reconstructed.world.goodies[0]?.timer, 100)
+  assert.deepEqual(reconstructed.world.lootEvents, initial.world.lootEvents)
+
+  const retired = cloneSnapshot(initial)
+  if (retired.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+  retired.world.loot = []
+  const delta = createGameSnapshotFrame(retired, 1, createReplicatedEntityBaseline(initial))
+  if (delta.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+  assert.ok(delta.world.entities.retired.some(([typeId, id]) => (
+    typeId === REPLICATED_ENTITY_TYPES.boneyardLoot && id === 41
+  )))
+})
+
+test('loot registration rejects cross-kind descriptor and sample identities', () => {
+  const gold: BoneyardLootSnapshot = {
+    activationDelayTicks: -4,
+    ageTicks: 20,
+    alpha: 0,
+    amount: 11,
+    animationPhase: 90,
+    bonusKind: null,
+    bounceHeight: 0,
+    framePhase: 0,
+    id: 41,
+    itemNativeSubtype: null,
+    itemNativeTypeId: null,
+    kind: 'gold',
+    nativeTypeId: 2012,
+    orbKind: null,
+    orbValue: 0,
+    position: { x: 100, y: 200 },
+    rotationDeg: -7.5,
+    scatterActive: false,
+    scatterProgress: 8.5,
+    scatterSeed: 99_999,
+    source: 'enemy',
+    spawnTick: 1,
+    tier: 3,
+  }
+  const descriptor = boneyardLootDescriptor(gold)
+  const sample = boneyardLootSample(gold)
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(descriptor), true)
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.sampleIsValid(sample), true)
+  assert.deepEqual(materializeBoneyardLoot(descriptor, sample), gold)
+
+  for (const [index, value] of [
+    [1, 2_048],
+    [5, 7],
+    [6, 0],
+    [11, 100_000],
+  ] as const) {
+    const malformed = [...descriptor]
+    malformed[index] = value
+    assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(
+      malformed as unknown as ReplicatedEntityDescriptor,
+    ), false)
+  }
+
+  const wrongTier = [...descriptor]
+  wrongTier[7] = 2
+  assert.throws(
+    () => materializeBoneyardLoot(
+      wrongTier as unknown as ReplicatedEntityDescriptor,
+      sample,
+    ),
+    /descriptor and sample are inconsistent/,
+  )
+  const wrongAmount = [...sample]
+  wrongAmount[6] = 0
+  assert.throws(
+    () => materializeBoneyardLoot(
+      descriptor,
+      wrongAmount as unknown as ReplicatedEntitySample,
+    ),
+    /descriptor and sample are inconsistent/,
+  )
+
+  const sack: BoneyardLootSnapshot = {
+    ...gold,
+    activationDelayTicks: 0,
+    ageTicks: 0,
+    amount: 0,
+    animationPhase: 0,
+    bounceHeight: -25,
+    id: 42,
+    itemNativeSubtype: 0,
+    itemNativeTypeId: 7001,
+    kind: 'sack',
+    nativeTypeId: 2013,
+    rotationDeg: 0,
+    scatterProgress: 0,
+    scatterSeed: 0,
+    source: 'goodie',
+    tier: 0,
+  }
+  const sackDescriptor = boneyardLootDescriptor(sack)
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(sackDescriptor), true)
+  const invalidPotion = [...sackDescriptor]
+  invalidPotion[9] = 6
+  assert.equal(BONEYARD_LOOT_ENTITY_REGISTRATION.descriptorIsValid(
+    invalidPotion as unknown as ReplicatedEntityDescriptor,
+  ), false)
 })
 
 function cloneSnapshot(snapshot: GameSnapshot): GameSnapshot {

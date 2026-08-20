@@ -23,6 +23,7 @@ import type {
 import {
   projectBoneyardEnemies,
   projectBoneyardEnemyDeathEffects,
+  projectBoneyardEnemyDeathEffect,
   projectBoneyardEnemyProjectiles,
   projectBoneyardEnemyProjectileEffects,
   projectBoneyardMageLightningPulses,
@@ -75,7 +76,10 @@ export function createGameSnapshot(
                 combatBounds: { ...state.world.arenaTransition.combatBounds },
                 fullBounds: { ...state.world.arenaTransition.fullBounds },
               },
-          deathEffects: projectBoneyardEnemyDeathEffects(state.world.enemies),
+          deathEffects: [
+            ...projectBoneyardEnemyDeathEffects(state.world.enemies),
+            ...state.world.loot.effects.map(projectBoneyardEnemyDeathEffect),
+          ],
           encounter: state.world.encounter === null ? null : {
             acceleration: state.world.encounter.acceleration,
             digFrame: state.world.encounter.digFrame,
@@ -107,8 +111,47 @@ export function createGameSnapshot(
           mageLightningPulses: projectBoneyardMageLightningPulses(state.world.enemies),
           maggots: projectBoneyardMaggots(state.world.enemies, state.tick),
           gateLeaves: state.world.gateLeaves.map(boneyardGateSnapshot),
+          goodies: state.world.loot.goodies.map((goodie) => ({
+            active: goodie.active,
+            exhausted: goodie.exhausted,
+            id: goodie.id,
+            phase: goodie.phase,
+            position: { ...goodie.position },
+            subtype: goodie.subtype,
+            timer: goodie.timer,
+          })),
           kind: 'boneyard',
           lanternLightRegistration: state.world.lanternLightRegistration,
+          loot: state.world.loot.actors.map((actor) => ({
+            activationDelayTicks: actor.activationDelayTicks,
+            ageTicks: actor.ageTicks,
+            alpha: actor.alpha,
+            amount: actor.amount,
+            animationPhase: actor.animationPhase,
+            bonusKind: actor.bonusKind,
+            bounceHeight: actor.bounceHeight,
+            framePhase: actor.framePhase,
+            id: actor.id,
+            itemNativeSubtype: actor.item?.nativeSubtype ?? null,
+            itemNativeTypeId: actor.item?.nativeTypeId ?? null,
+            kind: actor.kind,
+            nativeTypeId: actor.nativeTypeId,
+            orbKind: actor.orbKind,
+            orbValue: actor.orbValue,
+            position: { ...actor.position },
+            rotationDeg: actor.rotationDeg,
+            scatterActive: actor.scatterActive,
+            scatterProgress: actor.scatterProgress,
+            scatterSeed: actor.scatterSeed,
+            source: actor.source,
+            spawnTick: actor.spawnTick,
+            tier: actor.tier,
+          })),
+          lootEvents: state.world.lootEvents.map((event) => ({
+            ...event,
+            position: { ...event.position },
+            runId,
+          })),
           runId,
           waves: state.world.waves === null ? null : {
             interwaveDelayTicks: state.world.waves.interwaveDelayTicks,
@@ -244,7 +287,17 @@ function protocolSecondaryAbilities(
 }
 
 function protocolInventoryItem(item: HubInventoryItem): HubInventoryItem {
-  return { ...item, iconRecords: [...item.iconRecords] }
+  return {
+    ...item,
+    ...(item.contents === undefined
+      ? {}
+      : { contents: item.contents.map(protocolInventoryItem) }),
+    iconRecords: [...item.iconRecords],
+    ...(item.iconTints === undefined ? {} : { iconTints: [...item.iconTints] }),
+    ...(item.nativeEffects === undefined
+      ? {}
+      : { nativeEffects: item.nativeEffects.map((effect) => ({ ...effect })) }),
+  }
 }
 
 function protocolStudentState(

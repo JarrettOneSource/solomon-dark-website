@@ -7,6 +7,8 @@ import {
 
 export const STARTING_PLAYER_GOLD = 10_000
 export const HUB_INVENTORY_SLOT_CAPACITY = 88
+/** Native ground pickup appends beyond the 88 visible cells when no Item_None slot remains. */
+export const NATIVE_LOOT_BACKPACK_REPLICATION_LIMIT = 2_048
 export const HUB_STORAGE_SLOT_CAPACITY = 28
 export const SHLORIO_INITIAL_DOWSING_FEE = 650
 
@@ -55,16 +57,28 @@ export const HUB_ITEM_KINDS = [
 ] as const
 
 export interface HubInventoryItem {
+  readonly contents?: readonly HubInventoryItem[]
   readonly equipmentType: EquipmentType | null
+  readonly generatedLevel?: number
   readonly iconRecords: readonly number[]
+  readonly iconTints?: readonly [number | null, number | null]
   readonly id: number
   readonly kind: HubItemKind
   readonly name: string
   readonly nativeSubtype: number | null
+  readonly nativeSelector?: number
+  readonly nativeEffects?: readonly NativeEquipmentEffect[]
   readonly nativeTypeId: number
   readonly quantity: number
   readonly rarity: 'Epic' | 'Rare' | null
   readonly recipeIndex: number | null
+}
+
+export interface NativeEquipmentEffect {
+  readonly kind: number
+  readonly magnitude: number
+  readonly operator: 0 | 1 | 2
+  readonly target: number
 }
 
 export interface HubShopItem extends HubInventoryItem {
@@ -157,6 +171,16 @@ export interface HubEconomyResult {
   readonly accepted: boolean
   readonly dowsingPitch: number | null
   readonly reason: HubEconomyRejection | null
+  readonly state: HubEconomyState
+}
+
+export interface HubLootInventoryResult {
+  readonly accepted: boolean
+  readonly state: HubEconomyState
+}
+
+export interface HubWizardKeyResult {
+  readonly consumed: boolean
   readonly state: HubEconomyState
 }
 
@@ -594,6 +618,74 @@ export function closeDowsingOffers(source: HubEconomyState): HubEconomyState {
     : { ...source, dowsingOffers: [], revision: source.revision + 1 }
 }
 
+export function creditLootGold(
+  source: HubEconomyState,
+  amount: number,
+): HubEconomyState {
+  if (!Number.isSafeInteger(amount) || amount < 1) {
+    throw new RangeError('loot Gold credit must be a positive safe integer')
+  }
+  const gold = source.gold + amount
+  if (!Number.isSafeInteger(gold)) throw new RangeError('loot Gold credit overflowed')
+  return { ...source, gold, revision: source.revision + 1 }
+}
+
+export function insertLootInventoryItem(
+  source: HubEconomyState,
+  item: HubInventoryItem,
+): HubLootInventoryResult {
+  if (item.quantity < 1 || !Number.isSafeInteger(item.quantity)) {
+    throw new RangeError('loot inventory quantity must be a positive safe integer')
+  }
+  if (item.nativeTypeId === 7001) {
+    const stackIndex = source.backpack.findIndex((entry) => (
+      entry.nativeTypeId === item.nativeTypeId
+      && entry.nativeSubtype === item.nativeSubtype
+    ))
+    if (stackIndex >= 0) {
+      return {
+        accepted: true,
+        state: {
+          ...source,
+          backpack: source.backpack.map((entry, index) => index === stackIndex
+            ? { ...entry, quantity: entry.quantity + item.quantity }
+            : entry),
+          revision: source.revision + 1,
+        },
+      }
+    }
+  }
+  const identified = identifyLootItemTree(item, source.nextItemId)
+  return {
+    accepted: true,
+    state: {
+      ...source,
+      backpack: [...source.backpack, identified.item],
+      nextItemId: identified.nextItemId,
+      revision: source.revision + 1,
+    },
+  }
+}
+
+export function economyHasWizardKey(source: HubEconomyState): boolean {
+  return source.backpack.some(itemHasWizardKey)
+}
+
+export function consumeWizardKey(source: HubEconomyState): HubWizardKeyResult {
+  for (let index = 0; index < source.backpack.length; index += 1) {
+    const consumed = consumeWizardKeyFromItem(source.backpack[index]!)
+    if (!consumed.consumed) continue
+    const backpack = [...source.backpack]
+    if (consumed.item === null) backpack.splice(index, 1)
+    else backpack[index] = consumed.item
+    return {
+      consumed: true,
+      state: { ...source, backpack, revision: source.revision + 1 },
+    }
+  }
+  return { consumed: false, state: source }
+}
+
 export function createEquipmentInventoryItem(
   recipe: EquipmentRecipe,
   id: number,
@@ -610,6 +702,51 @@ export function createEquipmentInventoryItem(
     rarity: recipe.rarity,
     recipeIndex: recipe.sourceIndex,
   }
+}
+
+function identifyLootItemTree(
+  source: HubInventoryItem,
+  firstItemId: number,
+): { readonly item: HubInventoryItem; readonly nextItemId: number } {
+  let nextItemId = firstItemId + 1
+  const contents = source.contents?.map((item) => {
+    const identified = identifyLootItemTree(item, nextItemId)
+    nextItemId = identified.nextItemId
+    return identified.item
+  })
+  return {
+    item: {
+      ...source,
+      id: firstItemId,
+      ...(contents === undefined ? {} : { contents }),
+    },
+    nextItemId,
+  }
+}
+
+function itemHasWizardKey(item: HubInventoryItem): boolean {
+  return item.nativeTypeId === 7012 && item.nativeSubtype === 1
+    || item.contents?.some(itemHasWizardKey) === true
+}
+
+function consumeWizardKeyFromItem(
+  source: HubInventoryItem,
+): { readonly consumed: boolean; readonly item: HubInventoryItem | null } {
+  if (source.nativeTypeId === 7012 && source.nativeSubtype === 1) {
+    return source.quantity > 1
+      ? { consumed: true, item: { ...source, quantity: source.quantity - 1 } }
+      : { consumed: true, item: null }
+  }
+  if (source.contents === undefined) return { consumed: false, item: source }
+  for (let index = 0; index < source.contents.length; index += 1) {
+    const consumed = consumeWizardKeyFromItem(source.contents[index]!)
+    if (!consumed.consumed) continue
+    const contents = [...source.contents]
+    if (consumed.item === null) contents.splice(index, 1)
+    else contents[index] = consumed.item
+    return { consumed: true, item: { ...source, contents } }
+  }
+  return { consumed: false, item: source }
 }
 
 export function equipInventoryItem(

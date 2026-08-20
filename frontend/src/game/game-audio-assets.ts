@@ -24,6 +24,12 @@ import coffinBreak from '../assets/game/audio/sfx/coffin-break.wav'
 import demonDie from '../assets/game/audio/sfx/demon-die.wav'
 import drink from '../assets/game/audio/sfx/drink.wav'
 import dropCoins from '../assets/game/audio/sfx/drop-coins.wav'
+import dropBag1 from '../assets/game/audio/sfx/drop-bag-1.wav'
+import dropBag2 from '../assets/game/audio/sfx/drop-bag-2.wav'
+import dropPotion from '../assets/game/audio/sfx/drop-potion.wav'
+import gotoOrb from '../assets/game/audio/sfx/goto-orb.wav'
+import pickupBag from '../assets/game/audio/sfx/pickup-bag.wav'
+import pickupCoin from '../assets/game/audio/sfx/pickup-coin.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
@@ -144,7 +150,10 @@ export const GAME_AUDIO_SOURCES = {
     'demon-die': demonDie,
     drink,
     'distort-reality': distortReality,
+    'drop-bag-1': dropBag1,
+    'drop-bag-2': dropBag2,
     'drop-coins': dropCoins,
+    'drop-potion': dropPotion,
     'explode-steam': explodeSteam,
     'fireball-hit': fireballHit,
     'firey-death': fireyDeath,
@@ -152,6 +161,7 @@ export const GAME_AUDIO_SOURCES = {
     fizzle,
     flash: enemyFlash,
     'hit-shield': hitShield,
+    'goto-orb': gotoOrb,
     'ice-start': iceStart,
     'imp-split': impSplit,
     ignite,
@@ -174,6 +184,8 @@ export const GAME_AUDIO_SOURCES = {
     nuke,
     phase,
     'pop-shield': popShield,
+    'pickup-bag': pickupBag,
+    'pickup-coin': pickupCoin,
     'rock-hit': rockHit,
     'ring-of-ice': ringOfIce,
     'skeleton-die': skeletonDie,

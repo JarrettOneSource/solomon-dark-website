@@ -9,6 +9,7 @@ import {
   type PlayerLightingState,
 } from '../core-kernels/player-lighting.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import {
   coldSlowPlayer,
   dazzlePlayer,
@@ -33,6 +34,8 @@ import {
   createPlayerSkillBook,
   deferPlayerSkillChoice,
   grantPlayerExperience,
+  grantPlayerBonusSkillChoice,
+  increaseRandomLearnedSkill,
   playerStatBook,
   rerollPlayerSkillOffer,
   resetPlayerPotionEffects,
@@ -45,8 +48,12 @@ import {
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
 import {
+  consumeWizardKey,
+  creditLootGold,
   createHubEconomy,
+  insertLootInventoryItem,
   SORCERORS_CHARM_SELECTOR,
+  type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
 
@@ -85,6 +92,17 @@ export interface PlayerEntityManaDebitResult {
 
 export interface PlayerEntitySharedExperienceResult {
   readonly milestone: SharedPlayerLevelMilestone | null
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityLootItemResult {
+  readonly accepted: boolean
+  readonly store: PlayerEntityStore
+}
+
+export interface PlayerEntityRandomSkillIncreaseResult {
+  readonly rng: NativeRngState
+  readonly skillId: number | null
   readonly store: PlayerEntityStore
 }
 
@@ -538,6 +556,80 @@ export function grantPlayerEntityExperience(
     ownsSorcerorsCharm(source, index),
   )
   return { ...source, progressions }
+}
+
+export function creditPlayerEntityLootGold(
+  source: PlayerEntityStore,
+  playerId: string,
+  amount: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  const economies = [...source.economies]
+  economies[index] = creditLootGold(economies[index]!, amount)
+  return { ...source, economies }
+}
+
+export function insertPlayerEntityLootItem(
+  source: PlayerEntityStore,
+  playerId: string,
+  item: HubInventoryItem,
+): PlayerEntityLootItemResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { accepted: false, store: source }
+  const inserted = insertLootInventoryItem(source.economies[index]!, item)
+  if (!inserted.accepted) return { accepted: false, store: source }
+  const economies = [...source.economies]
+  economies[index] = inserted.state
+  return { accepted: true, store: { ...source, economies } }
+}
+
+export function consumePlayerEntityWizardKey(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityLootItemResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { accepted: false, store: source }
+  const consumed = consumeWizardKey(source.economies[index]!)
+  if (!consumed.consumed) return { accepted: false, store: source }
+  const economies = [...source.economies]
+  economies[index] = consumed.state
+  return { accepted: true, store: { ...source, economies } }
+}
+
+export function grantPlayerEntityBonusSkillChoice(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  return replacePlayerProgression(
+    source,
+    index,
+    grantPlayerBonusSkillChoice(
+      source.progressions[index]!,
+      source.skillBooks[index]!,
+      ownsSorcerorsCharm(source, index),
+    ),
+  )
+}
+
+export function increaseRandomPlayerEntitySkill(
+  source: PlayerEntityStore,
+  playerId: string,
+  rng: NativeRngState,
+): PlayerEntityRandomSkillIncreaseResult {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return { rng, skillId: null, store: source }
+  const increased = increaseRandomLearnedSkill(source.skillBooks[index]!, rng)
+  if (increased.skillId === null) return { ...increased, store: source }
+  const skillBooks = [...source.skillBooks]
+  skillBooks[index] = increased.skillBook
+  return {
+    rng: increased.rng,
+    skillId: increased.skillId,
+    store: { ...source, skillBooks },
+  }
 }
 
 export function grantSharedPlayerEntityExperience(

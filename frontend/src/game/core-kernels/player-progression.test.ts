@@ -26,6 +26,8 @@ import {
   effectivePrimarySkillRankStats,
   evaluateBoneyardEnemyExperience,
   grantPlayerExperience,
+  grantPlayerBonusSkillChoice,
+  increaseRandomLearnedSkill,
   nativeSkillCategory,
   playerExperienceProgress,
   nativeWeldBuild,
@@ -728,4 +730,26 @@ test('the browser keeps the recovered curve but safely clamps the stock level-76
   assert.equal(capped.previousThreshold, 8_500_000)
   assert.equal(capped.nextThreshold, MAX_PLAYER_EXPERIENCE)
   assert.equal(capped.pendingLevels.length, 74)
+})
+
+test('Bonus kinds 0 and 1 queue a picker or increase one learned below-cap skill', () => {
+  const progression = createPlayerProgression(17)
+  const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  const queued = grantPlayerBonusSkillChoice(progression, skillBook)
+  assert.equal(queued.pendingLevels.length, 1)
+  assert.equal(queued.pendingOffer?.level, progression.level)
+  assert.ok(queued.pendingOffer?.options.length)
+
+  const increased = increaseRandomLearnedSkill(skillBook, createNativeRng(123))
+  assert.ok(increased.skillId === 8 || increased.skillId === 11)
+  assert.equal(
+    increased.skillBook.permanentRanks[increased.skillId],
+    skillBook.permanentRanks[increased.skillId]! + 1,
+  )
+  assert.deepEqual(
+    increased.skillBook.permanentRanks.flatMap((rank, id) => (
+      rank === skillBook.permanentRanks[id] ? [] : [id]
+    )),
+    [increased.skillId],
+  )
 })

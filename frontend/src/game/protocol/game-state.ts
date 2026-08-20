@@ -163,10 +163,82 @@ export interface BoneyardWorldSnapshot {
   mageLightningPulses: readonly BoneyardMageLightningPulseSnapshot[]
   maggots: readonly BoneyardMaggotSnapshot[]
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
+  goodies: readonly BoneyardGoodieSnapshot[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  loot: readonly BoneyardLootSnapshot[]
+  lootEvents: readonly BoneyardLootEventSnapshot[]
   runId: string
   waves: BoneyardWaveSnapshot | null
+}
+
+export const BONEYARD_LOOT_KINDS = ['bonus', 'gold', 'orb', 'sack'] as const
+export const BONEYARD_LOOT_SOURCES = ['enemy', 'goodie', 'script'] as const
+export const BONEYARD_LOOT_SOUNDS = [
+  'drop-bag-1',
+  'drop-bag-2',
+  'drop-coins',
+  'drop-potion',
+  'goto-orb',
+  'pickup-bag',
+  'pickup-coin',
+] as const
+export const BONEYARD_LOOT_EVENT_TYPES = [
+  'goodie-key-needed',
+  'goodie-phase',
+  'loot-drop-sound',
+  'loot-pickup',
+] as const
+
+export interface BoneyardLootSnapshot {
+  activationDelayTicks: number
+  ageTicks: number
+  alpha: number
+  amount: number
+  animationPhase: number
+  bonusKind: 0 | 1 | 2 | null
+  bounceHeight: number
+  framePhase: number
+  id: number
+  itemNativeSubtype: number | null
+  itemNativeTypeId: number | null
+  kind: typeof BONEYARD_LOOT_KINDS[number]
+  nativeTypeId: 2011 | 2012 | 2013 | 2038
+  orbKind: 'health' | 'mana' | null
+  orbValue: number
+  position: Vector2
+  rotationDeg: number
+  scatterActive: boolean
+  scatterProgress: number
+  scatterSeed: number
+  source: typeof BONEYARD_LOOT_SOURCES[number]
+  spawnTick: number
+  tier: number
+}
+
+export interface BoneyardGoodieSnapshot {
+  active: boolean
+  exhausted: boolean
+  id: number
+  phase: 0 | 1 | 2
+  position: Vector2
+  subtype: number
+  timer: number
+}
+
+export interface BoneyardLootEventSnapshot {
+  actorId: number
+  eventId: number
+  goodieId?: number
+  phase?: 0 | 1 | 2
+  playbackRate?: number
+  playerId?: string
+  position: Vector2
+  runId: string
+  sound?: typeof BONEYARD_LOOT_SOUNDS[number]
+  text?: string
+  tick: number
+  type: typeof BONEYARD_LOOT_EVENT_TYPES[number]
 }
 
 export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
@@ -570,6 +642,7 @@ export interface BoneyardWorldSnapshotFrame {
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  lootEvents: readonly BoneyardLootEventSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseFrame[]
   runId: string
   waves: BoneyardWaveSnapshot | null

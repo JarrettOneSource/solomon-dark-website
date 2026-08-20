@@ -145,9 +145,15 @@ test('Wizard ouch consumes cue then inclusive cooldown draws on the active enemy
 })
 
 test('materialization gives all eight families stable actor and event identities', () => {
+  const lootSeedWrites: number[] = []
   const result = stepBoneyardEnemyStore(createBoneyardEnemyStore('families'), {
     firstProjectileWorldContact: NO_WORLD_CONTACT,
     players: FAR_PLAYERS,
+    rollLootSeed: () => {
+      const seed = 1_000 + lootSeedWrites.length
+      lootSeedWrites.push(seed)
+      return seed
+    },
     resolveMovement: DIRECT_MOVEMENT,
     resolveSpawnIntents: () => TOKENS.map((token, index) => intent(
       token,
@@ -163,6 +169,8 @@ test('materialization gives all eight families stable actor and event identities
     41, 42, 43, 44, 45, 46, 47, 48,
   ])
   assert.deepEqual(result.store.actors.map((actor) => actor.config.enemyToken), TOKENS)
+  assert.deepEqual(lootSeedWrites, [1_000, 1_001, 1_002, 1_003, 1_004, 1_005, 1_006, 1_007])
+  assert.deepEqual(result.store.actors.map(({ lootSeed }) => lootSeed), lootSeedWrites)
   assert.deepEqual(result.store.actors.map((actor) => actor.brain.family), [
     'coffin',
     'demon',
@@ -193,6 +201,44 @@ test('materialization gives all eight families stable actor and event identities
       registrationOrdinal,
     })),
   )
+})
+
+test('Skeleton, Archer, and Mage schedulers replace the retained loot seed in native order', () => {
+  for (const [token, distance, phase, expectedWrites, expectedSeed] of [
+    ['SKELETON', 10, 'attack', [100, 101], 101],
+    ['SKELETONARCHER', 200, 'attack', [100, 101], 101],
+    ['SKELETONMAGE', 150, 'cast', [100, 101, 102], 102],
+  ] as const) {
+    const writes: number[] = []
+    const rollLootSeed = () => {
+      const seed = 100 + writes.length
+      writes.push(seed)
+      return seed
+    }
+    const players = { player: livingTarget(distance, 0) }
+    let result = stepBoneyardEnemyStore(createBoneyardEnemyStore(`loot-seed-${token}`), {
+      clipSpellSegment: CLEAR_SPELL_SEGMENT,
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players,
+      rollLootSeed,
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [intent(token, 1, { x: 0, y: 0 })],
+      tick: 0,
+    })
+    assert.equal(result.store.actors[0]?.lootSeed, 100)
+    result = stepBoneyardEnemyStore(result.store, {
+      clipSpellSegment: CLEAR_SPELL_SEGMENT,
+      firstProjectileWorldContact: NO_WORLD_CONTACT,
+      players,
+      rollLootSeed,
+      resolveMovement: DIRECT_MOVEMENT,
+      resolveSpawnIntents: () => [],
+      tick: 1,
+    })
+    assert.equal(result.store.actors[0]?.brain.phase, phase)
+    assert.equal(result.store.actors[0]?.lootSeed, expectedSeed)
+    assert.deepEqual(writes, expectedWrites)
+  }
 })
 
 test('enemy fixed ticks own every native persistent-light writer, reset, and enrollment gate', () => {
@@ -2303,6 +2349,15 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
     tick: 0,
   })
   let store = result.store
+  const expectedLootSources = store.actors.map(({ config, id, lootSeed, position }) => ({
+    actorId: id,
+    lootSource: {
+      actorSeed: lootSeed,
+      enemyToken: config.enemyToken,
+      participantSlot: 0,
+      position,
+    },
+  }))
   for (const actor of store.actors) {
     const damaged = damageBoneyardEnemy(store, {
       actorId: actor.id,
@@ -2323,6 +2378,10 @@ test('lethal damage rewards and terminal outputs once, then hands off to effect 
   assert.deepEqual(result.rewards.map((reward) => reward.experience), [
     200, 800, 2, 10, 10, 10, 4, 210,
   ])
+  assert.deepEqual(result.rewards.map(({ actorId, lootSource }) => ({
+    actorId,
+    lootSource,
+  })), expectedLootSources)
   assert.equal(result.events.filter((event) => event.type === 'enemy-death').length, 8)
   assert.equal(result.events.filter((event) => event.type === 'enemy-terminal-output').length, 8)
   assert.deepEqual(result.store.projectiles.map((projectile) => [

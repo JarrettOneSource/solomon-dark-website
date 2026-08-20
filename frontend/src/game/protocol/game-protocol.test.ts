@@ -19,6 +19,7 @@ import {
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
+import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
   coldSlowPlayerEntity,
   dazzlePlayerEntity,
@@ -2470,5 +2471,72 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(duplicateEnemies)),
     /duplicates 2:1/,
+  )
+})
+
+test('protocol v30 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+  const runId = 'loot-protocol-run'
+  let state = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    {
+      ...loadedBoneyardFixture(runId),
+      scene: {
+        ...loadedBoneyardFixture(runId).scene,
+        objects: [{ eid: 'goodie-1', typeId: 2061, pos: { x: 300, y: 400 } }],
+      },
+    },
+  )
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+    activationDelayTicks: 0,
+    amount: 11,
+    id: 1,
+    kind: 'gold',
+    nativeTypeId: 2012,
+    phase: 30,
+    position: { x: 1500, y: 1750 },
+    source: 'enemy',
+    tier: 3,
+  }], 1)
+  state = {
+    ...state,
+    tick: 1,
+    world: {
+      ...state.world,
+      loot: spawned.store,
+      lootEvents: [{
+        actorId: 1,
+        eventId: 1,
+        playbackRate: 1,
+        position: { x: 1500, y: 1750 },
+        sound: 'drop-coins',
+        tick: 1,
+        type: 'loot-drop-sound',
+      }],
+    },
+  }
+  const snapshot = createGameSnapshot(state, 'player-1')
+  const message = {
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence: 1,
+    type: 'server-snapshot' as const,
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const invalidCue = JSON.parse(encodeGameMessage(message))
+  invalidCue.frame.world.lootEvents[0].sound = 'drop-maybe'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidCue)),
+    /sound is not supported/,
+  )
+  const invalidDescriptor = JSON.parse(encodeGameMessage(message))
+  const descriptor = invalidDescriptor.frame.world.entities.spawned.find(
+    (entry: number[]) => entry[0] === 7,
+  )
+  descriptor[3] = 2011
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDescriptor)),
+    /invalid registered descriptor shape/,
   )
 })

@@ -4,6 +4,7 @@ import {
   nativeEnemyHitOverlay,
   type BoneyardEnemyActor,
   type BoneyardEnemyBrain,
+  type BoneyardEnemyDeathEffect,
   type BoneyardMaggotActor,
   type BoneyardMageLightningPulse,
   type BoneyardEnemyStore,
@@ -37,7 +38,13 @@ export function projectBoneyardEnemyDeathEffects(
 ): readonly BoneyardEnemyDeathEffectSnapshot[] {
   return store.deathEffects.filter((effect) => (
     effect.spawnTick <= store.lastStepTick
-  )).map((effect) => ({
+  )).map(projectBoneyardEnemyDeathEffect)
+}
+
+export function projectBoneyardEnemyDeathEffect(
+  effect: BoneyardEnemyDeathEffect,
+): BoneyardEnemyDeathEffectSnapshot {
+  return {
     ageTicks: effect.ageTicks,
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -53,7 +60,7 @@ export function projectBoneyardEnemyDeathEffects(
     shadow: effect.shadow,
     spawnTick: effect.spawnTick,
     tint: effect.tint,
-  }))
+  }
 }
 
 export function projectBoneyardEnemies(

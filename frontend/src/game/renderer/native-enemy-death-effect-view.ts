@@ -4,6 +4,7 @@ import type { BoneyardEnemyDeathEffectSnapshot } from '../protocol/game-state.ts
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
 import { nativeEnemySpriteRecord } from './native-enemy-assets.ts'
 import { nativeEnemyDeathEffectPlan } from './native-enemy-death-effect-presentation.ts'
+import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 
 export class NativeEnemyDeathEffectViews {
   private readonly liveIds = new Set<number>()
@@ -111,7 +112,15 @@ function applyLayer(
   layer: ReturnType<typeof nativeEnemyDeathEffectPlan>['effect'],
   textures: BoneyardWorldTextures,
 ): void {
-  const record = nativeEnemySpriteRecord(layer.atlas, layer.entry)
+  const record = layer.atlas === 'BadGuys'
+    && (
+      layer.entry === 15
+      || layer.entry === 52
+      || layer.entry === 83
+      || (layer.entry >= 377 && layer.entry <= 380)
+    )
+    ? nativeLootSpriteRecord('BadGuys', layer.entry)
+    : nativeEnemySpriteRecord(layer.atlas, layer.entry)
   sprite.label = `${layer.atlas}:${layer.entry}`
   sprite.texture = requiredTexture(textures, record.source)
   sprite.anchor.set(record.anchorX / record.width, record.anchorY / record.height)

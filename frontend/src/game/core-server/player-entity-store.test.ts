@@ -6,6 +6,7 @@ import {
   createPlayerCharacter,
 } from '../core-kernels/player-character.ts'
 import { buyFomentiusItem } from '../core-kernels/hub-economy.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
   NATIVE_PLAYER_STAFF_CAST_ONE_OVERLAY,
@@ -16,9 +17,13 @@ import {
   addPlayerEntity,
   coldSlowPlayerEntity,
   createPlayerEntityStore,
+  creditPlayerEntityLootGold,
   damagePlayerEntity,
   dazzlePlayerEntity,
   grantPlayerEntityExperience,
+  grantPlayerEntityBonusSkillChoice,
+  increaseRandomPlayerEntitySkill,
+  insertPlayerEntityLootItem,
   playerEntityCanAcceptInput,
   playerEntityCanCast,
   playerEntityDisplayHealth,
@@ -227,4 +232,29 @@ test('player lighting owns exact cast overlay recurrence', () => {
   assert.equal(playerLightDriveActive({ ...idle, actionTick: 0 }, 'alive'), true)
   assert.equal(playerLightDriveActive(idle, 'dying'), true)
   assert.equal(playerLightDriveActive(idle, 'spectating'), true)
+})
+
+test('loot credits exactly one dense participant economy or skill row', () => {
+  let store = createPlayerEntityStore()
+  store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
+  const untouchedEconomy = playerEconomyAt(store, 'second')
+  const untouchedSkills = playerSkillBookAt(store, 'second')
+
+  store = creditPlayerEntityLootGold(store, 'first', 11)
+  assert.equal(playerEconomyAt(store, 'first')?.gold, 10_011)
+  assert.strictEqual(playerEconomyAt(store, 'second'), untouchedEconomy)
+
+  const potion = { ...playerEconomyAt(store, 'first')!.backpack[0]!, id: 99_000 }
+  const inserted = insertPlayerEntityLootItem(store, 'first', potion)
+  assert.equal(inserted.accepted, true)
+  store = inserted.store
+  assert.equal(playerEconomyAt(store, 'first')?.backpack[0]?.quantity, 2)
+
+  store = grantPlayerEntityBonusSkillChoice(store, 'first')
+  assert.ok(playerProgressionAt(store, 'first')?.pendingOffer)
+  const increased = increaseRandomPlayerEntitySkill(store, 'first', createNativeRng(123))
+  assert.notEqual(increased.skillId, null)
+  store = increased.store
+  assert.strictEqual(playerSkillBookAt(store, 'second'), untouchedSkills)
 })

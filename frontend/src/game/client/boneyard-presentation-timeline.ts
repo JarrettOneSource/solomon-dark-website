@@ -10,6 +10,9 @@ import type {
   BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemyProjectileSnapshot,
   BoneyardEnemySnapshot,
+  BoneyardGoodieSnapshot,
+  BoneyardLootEventSnapshot,
+  BoneyardLootSnapshot,
   BoneyardMaggotSnapshot,
   BoneyardSolomonSnapshot,
   BoneyardWaveSnapshot,
@@ -194,10 +197,15 @@ function interpolateSnapshot(
         newer.world.gateLeaves,
         blend,
       ),
+      goodies: (blend < 1 ? older.world.goodies : newer.world.goodies)
+        .map(copyGoodie),
       kind: 'boneyard',
       lanternLightRegistration: copyLightRegistration(
         (blend < 1 ? older : newer).world.lanternLightRegistration,
       ),
+      loot: interpolateLoot(older.world.loot, newer.world.loot, blend),
+      lootEvents: (blend < 1 ? older.world.lootEvents : newer.world.lootEvents)
+        .map(copyLootEvent),
       mageLightningPulses: mergeMageLightningPulses(
         older.world.mageLightningPulses,
         newer.world.mageLightningPulses,
@@ -348,10 +356,13 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
         .map(copyEnemyProjectileEffect),
       enemyProjectiles: snapshot.world.enemyProjectiles.map(copyEnemyProjectile),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
+      goodies: snapshot.world.goodies.map(copyGoodie),
       kind: 'boneyard',
       lanternLightRegistration: copyLightRegistration(
         snapshot.world.lanternLightRegistration,
       ),
+      loot: snapshot.world.loot.map(copyLoot),
+      lootEvents: snapshot.world.lootEvents.map(copyLootEvent),
       mageLightningPulses: mergeMageLightningPulses(
         snapshot.world.mageLightningPulses,
         [],
@@ -362,6 +373,52 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function interpolateLoot(
+  older: readonly BoneyardLootSnapshot[],
+  newer: readonly BoneyardLootSnapshot[],
+  blend: number,
+): readonly BoneyardLootSnapshot[] {
+  const newerById = new Map(newer.map((actor) => [actor.id, actor]))
+  const actors = older.map((source) => {
+    const target = newerById.get(source.id)
+    if (target === undefined || source.kind !== target.kind) return copyLoot(source)
+    const discrete = blend < 1 ? source : target
+    return {
+      ...discrete,
+      alpha: lerp(source.alpha, target.alpha, blend),
+      animationPhase: lerpCycle(source.animationPhase, target.animationPhase, blend, 360),
+      bounceHeight: lerp(source.bounceHeight, target.bounceHeight, blend),
+      framePhase: lerpCycle(source.framePhase, target.framePhase, blend, 18),
+      position: {
+        x: lerp(source.position.x, target.position.x, blend),
+        y: lerp(source.position.y, target.position.y, blend),
+      },
+      rotationDeg: lerpCycle(source.rotationDeg, target.rotationDeg, blend, 360),
+      scatterProgress: lerp(source.scatterProgress, target.scatterProgress, blend),
+    }
+  })
+  if (blend >= 1) {
+    const knownIds = new Set(actors.map(({ id }) => id))
+    for (const actor of newer) {
+      if (!knownIds.has(actor.id)) actors.push(copyLoot(actor))
+    }
+    return actors.filter(({ id }) => newerById.has(id))
+  }
+  return actors
+}
+
+function copyLoot(source: BoneyardLootSnapshot): BoneyardLootSnapshot {
+  return { ...source, position: { ...source.position } }
+}
+
+function copyGoodie(source: BoneyardGoodieSnapshot): BoneyardGoodieSnapshot {
+  return { ...source, position: { ...source.position } }
+}
+
+function copyLootEvent(source: BoneyardLootEventSnapshot): BoneyardLootEventSnapshot {
+  return { ...source, position: { ...source.position } }
 }
 
 function interpolateArenaTransition(

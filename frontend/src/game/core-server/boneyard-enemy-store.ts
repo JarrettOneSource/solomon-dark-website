@@ -337,6 +337,7 @@ export interface BoneyardEnemyActor {
   readonly lifeState: 'alive' | 'dying'
   readonly lightRegistration: NativeLightProviderRegistration
   readonly lighting: Readonly<BoneyardEnemyLightingState>
+  readonly lootSeed: number
   readonly nextMovementTick: number
   readonly nextTargetRefreshTick: number
   readonly position: Readonly<BoneyardPoint>
@@ -626,7 +627,15 @@ export interface BoneyardEnemyReward {
   readonly actorId: BoneyardEnemyActorId
   readonly eventId: BoneyardEnemyEventId
   readonly experience: number
+  readonly lootSource: BoneyardEnemyLootSource
   readonly playerId: string | null
+}
+
+export interface BoneyardEnemyLootSource {
+  readonly actorSeed: number
+  readonly enemyToken: EvaluatedBoneyardEnemyConfig['enemyToken']
+  readonly participantSlot: 0
+  readonly position: Readonly<BoneyardPoint>
 }
 
 export interface BoneyardEnemyRetirement {
@@ -719,6 +728,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly players: BoneyardEnemyTargets
   readonly registerLightProvider?: RegisterNativeLightProvider
   readonly registerProjectileLightProvider?: RegisterNativeLightProvider
+  readonly rollLootSeed?: () => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
   readonly resolveSpawnIntents: (
     liveEnemyCount: number,
@@ -1305,6 +1315,7 @@ function materializeSpawnIntents(
       lifeState: 'alive',
       lightRegistration: work.registerLightProvider('actor'),
       lighting: Object.freeze({ charge: 0, glow: 0, providerCopies: 0 }),
+      lootSeed: nextLootSeed(work, context),
       nextMovementTick: context.tick + NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS,
       nextTargetRefreshTick: context.tick + (
         targetPlayerId === null
@@ -1809,6 +1820,7 @@ function stepSkeleton(
         markerEmitted: false,
         phase: 'attack',
       },
+      lootSeed: nextLootSeed(work, context),
     }
   }
   return moveTowardTarget(actor, brain, context, 1)
@@ -1977,6 +1989,7 @@ function stepArcher(
       ...actor,
       bodyPose: NATIVE_ARCHER_SHOT_BODY_POSES[0]!,
       brain: { ...brain, actionProgress: 0, markerEmitted: false, phase: 'attack' },
+      lootSeed: nextLootSeed(work, context),
     }
   }
   return moveTowardTarget(actor, brain, context, distance < range.minimum ? -1 : 1)
@@ -2025,6 +2038,10 @@ function stepMage(
       const program = nextBoneyardWaveRandom(work.rngState)
       const roll = nextBoneyardWaveRandom(program.state)
       work.rngState = roll.state
+      // Mage action scheduling and cast scheduling are separate native writers;
+      // the second value is the death-time seed retained by the actor.
+      nextLootSeed(work, context)
+      const lootSeed = nextLootSeed(work, context)
       stepped = {
         ...actor,
         bodyPose: NATIVE_MAGE_CAST_BODY_POSES[
@@ -2038,6 +2055,7 @@ function stepMage(
           markerEmitted: false,
           phase: 'cast',
         },
+        lootSeed,
       }
     } else {
       stepped = moveTowardTarget(
@@ -4310,6 +4328,12 @@ function stepDyingActor(
     actorId: source.id,
     eventId: rewardEventId,
     experience: source.config.experience,
+    lootSource: Object.freeze({
+      actorSeed: source.lootSeed,
+      enemyToken: source.config.enemyToken,
+      participantSlot: 0 as const,
+      position: Object.freeze({ ...source.position }),
+    }),
     playerId: source.lastDamagedByPlayerId,
   }))
   const eventId = emitEvent(work, tick, 'enemy-retired', source.id)
@@ -5089,6 +5113,22 @@ function drawUnit(work: WorkingStep): number {
 
 function drawInteger(work: WorkingStep, count: number): number {
   const draw = randomBoneyardWaveInteger(work.rngState, count)
+  work.rngState = draw.state
+  return draw.value
+}
+
+function nextLootSeed(
+  work: WorkingStep,
+  context: BoneyardEnemyStoreStepContext,
+): number {
+  const seed = context.rollLootSeed?.()
+  if (seed !== undefined) {
+    if (!Number.isSafeInteger(seed) || seed < 0 || seed >= 10_000_000) {
+      throw new RangeError('native loot seed writer returned an invalid seed')
+    }
+    return seed
+  }
+  const draw = randomBoneyardWaveInteger(work.rngState, 10_000_000)
   work.rngState = draw.state
   return draw.value
 }

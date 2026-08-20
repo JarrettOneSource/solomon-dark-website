@@ -129,16 +129,51 @@ export function playerDeathEquipmentAppearance(
 ): PlayerDeathEquipmentAppearance {
   const [primaryTint, secondaryTint] = ELEMENT_DEATH_PALETTES[element]
   return {
-    hat: equipment.hat === null || equipment.hat.recipeIndex === null
-      ? { primaryTint, secondaryTint, selector: 0 }
-      : requiredDeathAppearance(equipment.hat, 'hat', HAT_DEATH_APPEARANCES),
-    robe: equipment.robe === null || equipment.robe.recipeIndex === null
-      ? { primaryTint, secondaryTint, selector: 0 }
-      : requiredDeathAppearance(equipment.robe, 'robe', ROBE_DEATH_APPEARANCES),
-    weapon: equipment.weapon === null || equipment.weapon.recipeIndex === null
-      ? { kind: 'staff', selector: 0 }
-      : requiredWeaponDeathAppearance(equipment.weapon),
+    hat: deathTintedAppearance(
+      equipment.hat,
+      'hat',
+      HAT_DEATH_APPEARANCES,
+      { primaryTint, secondaryTint, selector: 0 },
+    ),
+    robe: deathTintedAppearance(
+      equipment.robe,
+      'robe',
+      ROBE_DEATH_APPEARANCES,
+      { primaryTint, secondaryTint, selector: 0 },
+    ),
+    weapon: deathWeaponAppearance(equipment.weapon),
   }
+}
+
+function deathTintedAppearance(
+  item: HubInventoryItem | null,
+  expectedType: 'hat' | 'robe',
+  appearances: Readonly<Record<number, PlayerDeathTintedSelector>>,
+  fallback: PlayerDeathTintedSelector,
+): PlayerDeathTintedSelector {
+  if (item === null) return fallback
+  if (item.recipeIndex !== null) return requiredDeathAppearance(item, expectedType, appearances)
+  if (item.nativeSelector === undefined) return fallback
+  const tints = item.iconTints
+  if (
+    item.equipmentType !== expectedType
+    || tints === undefined
+    || tints[0] === null
+    || tints[1] === null
+  ) throw new Error(`Unsupported generated native ${expectedType} death appearance`)
+  return { primaryTint: tints[0], secondaryTint: tints[1], selector: item.nativeSelector }
+}
+
+function deathWeaponAppearance(
+  item: HubInventoryItem | null,
+): { readonly kind: 'staff' | 'wand'; readonly selector: number } {
+  if (item === null) return { kind: 'staff', selector: 0 }
+  if (item.recipeIndex !== null) return requiredWeaponDeathAppearance(item)
+  if (item.nativeSelector === undefined) return { kind: 'staff', selector: 0 }
+  if (item.equipmentType !== 'staff' && item.equipmentType !== 'wand') {
+    throw new Error('Unsupported generated native death weapon appearance')
+  }
+  return { kind: item.equipmentType, selector: item.nativeSelector }
 }
 
 export function createPlayerCharacterDrawPlan(

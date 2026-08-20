@@ -20,6 +20,7 @@ import {
   createNativeLightProviderOrder,
   mergeNativeLightProviderOwners,
 } from '../core-kernels/native-light-provider-order.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -30,6 +31,7 @@ import {
   getPlayerCharacter,
   getPlayerEconomy,
   getPlayerProgression,
+  getPlayerSkillBook,
   grantGameSimulationPlayerExperience,
   removePlayerCharacter,
   rerollGameSimulationPlayerSkill,
@@ -45,6 +47,7 @@ import {
   stepBoneyardEnemyStore,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
+import { spawnBoneyardLootSpecs } from './boneyard-loot-store.ts'
 import {
   damagePlayerEntity,
   dazzlePlayerEntity,
@@ -1091,6 +1094,118 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
   assert.equal(state.world.enemyEvents[0]!.eventId, 2)
 })
 
+test('enemy retirement carries its death-time private seed into one authoritative ground drop', () => {
+  for (const [actorSeed, expectedKind] of [
+    [9_974_658, 'gold'],
+    [6_778_989, 'orb'],
+  ] as const) {
+    let state = enterBoneyardWorld(
+      createGameSimulation(),
+      emptyBoneyard(),
+    )
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    const player = getPlayerCharacter(state)
+    const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+      firstProjectileWorldContact: () => null,
+      players: {
+        'local-player': {
+          alive: true,
+          collisionRadius: 25,
+          connected: true,
+          eligible: true,
+          position: player.position,
+          velocityPerTick: { x: 0, y: 0 },
+        },
+      },
+      rollLootSeed: () => actorSeed,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [{
+        enemyToken: 'SKELETON',
+        flags: [],
+        id: 1,
+        locationPolicy: 'anywhere',
+        nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+        position: { x: player.position.x + 200, y: player.position.y },
+        spawnTick: 0,
+        waveOrdinal: 1,
+      }],
+      tick: 0,
+    })
+    assert.equal(spawned.store.actors[0]?.lootSeed, actorSeed)
+    const killed = damageBoneyardEnemy(spawned.store, {
+      actorId: spawned.store.actors[0]!.id,
+      amount: spawned.store.actors[0]!.currentHealth,
+      sourcePlayerId: 'local-player',
+      tick: 0,
+    })
+    state = {
+      ...state,
+      world: {
+        ...state.world,
+        enemies: killed.store,
+        loot: { ...state.world.loot, sharedRng: createNativeRng(100) },
+      },
+    }
+
+    state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    assert.deepEqual(state.world.loot.actors.map(({ kind, source }) => ({ kind, source })), [
+      { kind: expectedKind, source: 'enemy' },
+    ])
+    assert.deepEqual(state.world.enemies.actors, [])
+  }
+})
+
+test('all three Bonus pickups apply once through authoritative progression and feedback', () => {
+  for (const bonusKind of [0, 1, 2] as const) {
+    let state = enterBoneyardWorld(
+      createGameSimulation(),
+      emptyBoneyard(),
+    )
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    const position = getPlayerCharacter(state).position
+    const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+      activationDelayTicks: 0,
+      bonusKind,
+      id: 1,
+      kind: 'bonus',
+      nativeTypeId: 2038,
+      phase: 0,
+      position,
+      source: 'script',
+    }], state.tick)
+    assert.equal(spawned.rejectedCount, 0)
+    const ranksBefore = [...getPlayerSkillBook(state).permanentRanks]
+    const lootRngBefore = spawned.store.sharedRng
+    state = {
+      ...state,
+      world: { ...state.world, loot: spawned.store },
+    }
+
+    state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    assert.deepEqual(state.world.loot.actors, [])
+    const pickup = state.world.lootEvents.find(({ type }) => type === 'loot-pickup')
+    assert.equal(pickup?.playerId, 'local-player')
+    if (bonusKind === 0) {
+      assert.equal(pickup?.text, 'BONUS SKILL POINT')
+      assert.ok(getPlayerProgression(state).pendingOffer)
+      assert.ok(state.levelUpBarrier)
+      assert.deepEqual(state.levelUpBarrier.pendingPlayerIds, ['local-player'])
+    } else if (bonusKind === 1) {
+      assert.match(pickup?.text ?? '', / \+1$/u)
+      const ranksAfter = getPlayerSkillBook(state).permanentRanks
+      assert.equal(ranksAfter.flatMap((rank, skillId) => (
+        rank === ranksBefore[skillId] ? [] : [skillId]
+      )).length, 1)
+      assert.notStrictEqual(state.world.loot.sharedRng, lootRngBefore)
+    } else {
+      assert.equal(pickup?.text, 'DAMAGE x4')
+      assert.ok(getPlayerProgression(state).damageX4TicksRemaining > 0)
+    }
+  }
+})
+
 test('Rotten Zombie contact applies direct damage and authoritative poison over time', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
@@ -1369,6 +1484,11 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   if (secondRun.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   assert.equal(secondRun.world.playerOuchDeadlineTick, 0)
   assert.deepEqual(secondRun.world.enemyEvents, [])
+  assert.deepEqual(secondRun.world.loot.actors, [])
+  assert.deepEqual(secondRun.world.loot.effects, [])
+  assert.deepEqual(secondRun.world.lootEvents, [])
+  assert.equal(secondRun.world.loot.nextActorId, 1)
+  assert.equal(secondRun.world.loot.nextEventId, 1)
   for (const playerId of ['first', 'second']) {
     const progression = getPlayerProgression(secondRun, playerId)
     assert.equal(progression.lifeState, 'alive')

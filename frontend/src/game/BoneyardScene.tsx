@@ -24,12 +24,14 @@ import { loadGameImage } from './game-assets.ts'
 import {
   nativeBoneyardPointGain,
   nativeEnemyEventSoundRequest,
+  nativeLootEventSoundRequest,
   newSolomonVoiceEvent,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
+import NativeLootBitmapText from './NativeLootBitmapText.tsx'
 import {
   createBrowserGameplayInput,
   type BrowserGameplayInput,
@@ -46,6 +48,11 @@ import type {
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
+import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
+import {
+  NativeLootMessagePresentation,
+  type NativeLootMessageVisual,
+} from './loot-message-presentation.ts'
 import {
   createBoneyardWorldRenderer,
   type BoneyardWorldRenderer,
@@ -150,6 +157,13 @@ export default function BoneyardScene({
   onLoadingErrorRef.current = onLoadingError
   onReadyRef.current = onReady
   const [rendererState, setRendererState] = useState<RendererState>('loading')
+  const [lootEventSynchronizer] = useState(() => (
+    new BoneyardLootEventSynchronizer(boneyardInitialSnapshot)
+  ))
+  const [lootMessagePresentation] = useState(() => (
+    new NativeLootMessagePresentation(boneyardInitialSnapshot.tick)
+  ))
+  const [lootMessages, setLootMessages] = useState<readonly NativeLootMessageVisual[]>([])
   const [rendererError, setRendererError] = useState<string | null>(null)
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
@@ -166,6 +180,36 @@ export default function BoneyardScene({
   const digPosition = dig?.position
 
   useEffect(() => subscribe((snapshot) => {
+    lootEventSynchronizer.consume(snapshot, (event) => {
+      const scene = sceneRef.current
+      if (scene) {
+        scene.dataset.lastLootActorId = `${event.actorId}`
+        scene.dataset.lastLootEventId = `${event.eventId}`
+        scene.dataset.lastLootEventType = event.type
+        if (event.sound !== undefined) scene.dataset.lastLootSound = event.sound
+        if (event.text !== undefined) scene.dataset.lastLootText = event.text
+      }
+      if (event.playerId === playerId) lootMessagePresentation.consume(event)
+      const sound = nativeLootEventSoundRequest(event)
+      if (!sound) return
+      const renderer = rendererRef.current
+      const localPlayer = snapshot.players[playerId]
+      const camera = renderer?.camera(snapshot)
+      const spatialGain = camera
+        ? nativeBoneyardPointGain(
+            sound.sourcePosition,
+            camera,
+            viewportRef.current.width / camera.zoom,
+            localPlayer?.progression.lifeState === 'dying'
+              || localPlayer?.progression.lifeState === 'spectating',
+          )
+        : 1
+      audio.playSound(sound.cue, {
+        playbackRate: sound.playbackRate,
+        volume: sound.volume * spatialGain,
+      })
+    })
+    setLootMessages(lootMessagePresentation.sample(snapshot.tick))
     setRun((current) => (
       snapshot.run.phase === 'game-over' && current.phase === 'game-over'
         ? current
@@ -174,7 +218,7 @@ export default function BoneyardScene({
     const deathEpoch = snapshot.players[playerId]?.progression.deathEpoch ?? 0
     if (deathEpoch > deathEpochRef.current) audio.playStream('death-guitar')
     deathEpochRef.current = deathEpoch
-  }), [audio, playerId, subscribe])
+  }), [audio, lootEventSynchronizer, lootMessagePresentation, playerId, subscribe])
 
   useEffect(() => subscribeEnemyEvent((event) => {
     if (event.runId !== loaded.runId) return
@@ -529,6 +573,21 @@ export default function BoneyardScene({
             aria-hidden
           />
         ) : null}
+
+        <div className="boneyard-loot-messages" aria-live="polite" aria-atomic="false">
+          {lootMessages.map((message) => (
+            <span
+              key={message.eventId}
+              aria-label={message.text}
+              style={{
+                opacity: message.alpha,
+                transform: `scale(${message.scale})`,
+              }}
+            >
+              <NativeLootBitmapText text={message.text} tint={message.tint} />
+            </span>
+          ))}
+        </div>
 
         <GameHud
           accountUsername={accountUsername}

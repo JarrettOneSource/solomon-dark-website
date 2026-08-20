@@ -51,6 +51,11 @@ import type {
 } from '../core-kernels/native-secondary-abilities.ts'
 import { RETAIL_BONEYARD_EXPERIENCE_RECIPE_SCALAR } from '../core-kernels/player-progression.ts'
 import {
+  NATIVE_LOOT_DEFAULT_MODIFIERS,
+  type NativeLootModifiers,
+  type NativeLootPlacement,
+} from '../core-kernels/native-loot.ts'
+import {
   createBoneyardWaveDirector,
   startBoneyardWaveDirector,
   stepBoneyardWaveDirector,
@@ -76,12 +81,28 @@ import {
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
+import {
+  createBoneyardLootStore,
+  materializeBoneyardEnemyLoot,
+  rollBoneyardLootSeed,
+  stepBoneyardLootStore,
+  type BoneyardGoodieUnlock,
+  type BoneyardLootEvent,
+  type BoneyardLootPickup,
+  type BoneyardLootStore,
+} from './boneyard-loot-store.ts'
 
 export interface BoneyardPlayerCombatStatus {
   readonly alive: boolean
   readonly collisionEnabled: boolean
   readonly eligible: boolean
   readonly movementScale: number
+  readonly inventoryHasHealthPotion?: boolean
+  readonly inventoryHasWizardKey?: boolean
+  readonly level?: number
+  readonly lootModifiers?: NativeLootModifiers
+  readonly ownedRecipeIndexes?: readonly number[]
+  readonly advancedUnlocks?: readonly boolean[]
 }
 
 export interface BoneyardSummonTarget {
@@ -101,6 +122,8 @@ export interface BoneyardWorldState {
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  loot: BoneyardLootStore
+  lootEvents: readonly BoneyardLootEvent[]
   playerOuchDeadlineTick: number
   runId: string
   scenerySpellTargets: readonly PrimarySpellTarget[]
@@ -110,6 +133,9 @@ export interface BoneyardWorldState {
 
 export interface BoneyardWorldTickResult {
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
+  goodieUnlocks: readonly BoneyardGoodieUnlock[]
+  lootEvents: readonly BoneyardLootEvent[]
+  lootPickups: readonly BoneyardLootPickup[]
   playerDamage: readonly BoneyardEnemyPlayerDamage[]
   players: Readonly<Record<string, PlayerCharacterState>>
   rewards: readonly BoneyardEnemyReward[]
@@ -141,6 +167,17 @@ export function createBoneyardWorld(
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     lanternLightRegistration,
+    loot: createBoneyardLootStore(
+      loaded.seed,
+      loaded.scene.objects
+        .filter(({ typeId }) => typeId === 2061)
+        .map((object) => ({
+          eid: object.eid,
+          position: Object.freeze({ ...object.pos }),
+          subtype: 0,
+        })),
+    ),
+    lootEvents: [],
     playerOuchDeadlineTick: 0,
     runId: loaded.runId,
     scenerySpellTargets: loaded.scene.objects
@@ -327,6 +364,33 @@ export function stepBoneyardWorldTick(
     const combat = playerCombat[playerId]
     return combat?.alive === true && combat.eligible
   }))
+  const lootParticipants = Object.entries(nextPlayers).map(([playerId, player]) => {
+    const combat = playerCombat[playerId]
+    return {
+      advancedUnlocks: combat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      alive: combat?.alive ?? false,
+      connected: true,
+      hasWizardKey: combat?.inventoryHasWizardKey ?? false,
+      headingIndex: player.headingIndex,
+      level: combat?.level ?? 1,
+      modifiers: combat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      ownedRecipeIndexes: combat?.ownedRecipeIndexes ?? [],
+      playerId,
+      position: player.position,
+    }
+  })
+  const lootPlacement = createNativeLootPlacement(
+    activeBounds,
+    collision,
+    nextPlayers,
+    collisionResolvedEnemies,
+  )
+  const lootStep = stepBoneyardLootStore(world.loot, {
+    participants: lootParticipants,
+    placement: lootPlacement,
+    tick,
+  })
+  let loot = lootStep.store
   let encounter = world.encounter === null
     ? null
     : stepSolomonEncounter(world.encounter, livingPlayers)
@@ -461,8 +525,58 @@ export function stepBoneyardWorldTick(
     },
     registerLightProvider,
     registerProjectileLightProvider,
+    rollLootSeed: () => {
+      const rolled = rollBoneyardLootSeed(loot)
+      loot = rolled.store
+      return rolled.seed
+    },
     tick,
   })
+  const authorityId = Object.keys(nextPlayers)[0]
+  const authorityCombat = authorityId === undefined ? undefined : playerCombat[authorityId]
+  const badguyCountBeforeDeaths = collisionResolvedEnemies.actors.length
+    + collisionResolvedEnemies.maggots.length
+  for (const [rewardIndex, reward] of enemyStep.rewards.entries()) {
+    const materialized = materializeBoneyardEnemyLoot(loot, {
+      actorSeed: reward.lootSource.actorSeed,
+      advancedUnlocks: authorityCombat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      arena: {
+        disableMask: 0,
+        itemLevelMaximum: 100,
+        itemLevelMinimum: 0,
+        level: waves?.waveOrdinal ?? 0,
+        mode: 0,
+        specialSuppression: false,
+      },
+      inventoryHasHealthPotion: authorityCombat?.inventoryHasHealthPotion ?? false,
+      modifiers: authorityCombat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      nearbyMaskTwoCount: nearbyNativeMaskTwoCount(
+        collisionResolvedEnemies,
+        reward.actorId,
+        reward.lootSource.position,
+      ),
+      ownedRecipeIndexes: authorityCombat?.ownedRecipeIndexes ?? [],
+      participantLevel: authorityCombat?.level ?? 1,
+      participantSlot: reward.lootSource.participantSlot,
+      placement: createNativeLootPlacement(
+        activeBounds,
+        collision,
+        nextPlayers,
+        enemyStep.store,
+      ),
+      policies: { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 },
+      position: reward.lootSource.position,
+      sceneForcesHealthPotion: false,
+      tick,
+      worldBadguyCount: Math.max(0, badguyCountBeforeDeaths - rewardIndex),
+      worldHasHealthPotionSack: loot.actors.some(({ item, kind }) => (
+        kind === 'sack'
+        && item?.nativeTypeId === 7001
+        && item.nativeSubtype === 0
+      )),
+    })
+    loot = materialized.store
+  }
   const knockback = applyBoneyardPlayerKnockbacks(
     nextPlayers,
     enemyStep.store,
@@ -473,6 +587,9 @@ export function stepBoneyardWorldTick(
   )
   return {
     enemyEvents: enemyStep.events,
+    goodieUnlocks: lootStep.unlocks,
+    lootEvents: lootStep.events,
+    lootPickups: lootStep.pickups,
     playerDamage: enemyStep.playerDamage,
     players: knockback.players,
     rewards: enemyStep.rewards,
@@ -482,9 +599,69 @@ export function stepBoneyardWorldTick(
       encounter,
       enemies: knockback.enemies,
       gateLeaves,
+      loot,
       waves,
     },
   }
+}
+
+function createNativeLootPlacement(
+  bounds: BoneyardBounds,
+  collision: BoneyardCollisionWorld,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  enemies: BoneyardEnemyStore,
+): NativeLootPlacement {
+  const bodies = [
+    ...Object.values(players).map(({ position }) => ({
+      position,
+      radius: PLAYER_CHARACTER_RADIUS,
+    })),
+    ...enemies.actors.map((actor) => ({
+      position: actor.position,
+      radius: actor.config.collisionRadius,
+    })),
+    ...enemies.maggots.map((actor) => ({
+      position: actor.position,
+      radius: actor.collisionRadius,
+    })),
+  ]
+  const placement: NativeLootPlacement = {
+    canPlace: (position, radius, avoidActors) => {
+      if (!canPlaceBoneyardBody(position, bounds, collision, radius)) return false
+      if (!avoidActors) return true
+      for (const body of bodies) {
+        const horizontal = radius + body.radius
+        const vertical = horizontal * 0.8
+        const dx = position.x - body.position.x
+        const dy = position.y - body.position.y
+        if (dx * dx / (horizontal * horizontal) + dy * dy / (vertical * vertical) < 1) {
+          return false
+        }
+      }
+      return true
+    },
+  }
+  return Object.freeze(placement)
+}
+
+function nearbyNativeMaskTwoCount(
+  enemies: BoneyardEnemyStore,
+  excludedActorId: number,
+  position: Readonly<BoneyardPoint>,
+): number {
+  const radiusSquared = 250 * 250
+  const within = (candidate: Readonly<BoneyardPoint>) => {
+    const dx = candidate.x - position.x
+    const dy = candidate.y - position.y
+    return dx * dx + dy * dy < radiusSquared
+  }
+  return enemies.actors.filter((actor) => (
+    actor.id !== excludedActorId
+    && within(actor.position)
+  )).length + enemies.maggots.filter((actor) => (
+    actor.id !== excludedActorId
+    && within(actor.position)
+  )).length
 }
 
 function applyBoneyardPlayerKnockbacks(

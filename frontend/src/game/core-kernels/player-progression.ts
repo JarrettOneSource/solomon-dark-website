@@ -171,6 +171,12 @@ export interface BoneyardEnemyExperienceAward {
   readonly receiverXpBonus?: number
 }
 
+export interface NativeRandomSkillIncreaseResult {
+  readonly rng: NativeRngState
+  readonly skillBook: PlayerSkillBookComponent
+  readonly skillId: number | null
+}
+
 interface SkillRule {
   readonly all?: readonly number[]
   readonly any?: readonly number[]
@@ -254,6 +260,12 @@ const SHARED_STAT_BOOK: PlayerStatBookComponent = Object.freeze({
 const PRIMARY_SKILL_RANK_STATS_CACHE = new Map<number, NativePrimarySkillRankStats>()
 
 const RULES: Readonly<Record<number, SkillRule>> = createSkillRules()
+
+export function nativeSkillMinimumLevel(skillId: number): number {
+  const rule = RULES[skillId]
+  if (!rule) throw new RangeError(`native skill ${skillId} has no level rule`)
+  return rule.minimumLevel
+}
 
 export function playerStatBook(): PlayerStatBookComponent {
   return SHARED_STAT_BOOK
@@ -808,6 +820,54 @@ export function deferPlayerSkillChoice(
     next = withNextSkillOffer(next, skillBook, true)
   }
   return next
+}
+
+export function grantPlayerBonusSkillChoice(
+  progression: PlayerProgressionComponent,
+  skillBook: PlayerSkillBookComponent,
+  sorcerorsCharmOwned = false,
+): PlayerProgressionComponent {
+  const pendingLevels = Object.freeze([...progression.pendingLevels, progression.level])
+  const queued: PlayerProgressionComponent = {
+    ...progression,
+    pendingLevels,
+    revision: progression.pendingOffer === null
+      ? progression.revision
+      : progression.revision + 1,
+  }
+  return progression.pendingOffer === null
+    ? withNextSkillOffer(queued, skillBook, sorcerorsCharmOwned)
+    : queued
+}
+
+export function increaseRandomLearnedSkill(
+  skillBook: PlayerSkillBookComponent,
+  sourceRng: NativeRngState,
+): NativeRandomSkillIncreaseResult {
+  const eligible: number[] = []
+  for (let skillId = 8; skillId < 82; skillId += 1) {
+    const rank = skillBook.permanentRanks[skillId] ?? 0
+    const maximum = SHARED_STAT_BOOK.entries[skillId]?.maximumLevel ?? 0
+    if (rank > 0 && rank < maximum) eligible.push(skillId)
+  }
+  if (eligible.length === 0) {
+    return { rng: sourceRng, skillBook, skillId: null }
+  }
+  const selected = drawNativeInteger(sourceRng, eligible.length)
+  const skillId = eligible[selected.value]!
+  const permanentRanks = [...skillBook.permanentRanks]
+  const effectiveRanks = [...skillBook.effectiveRanks]
+  permanentRanks[skillId] = permanentRanks[skillId]! + 1
+  effectiveRanks[skillId] = effectiveRanks[skillId]! + 1
+  return {
+    rng: selected.state,
+    skillBook: {
+      ...skillBook,
+      effectiveRanks: Object.freeze(effectiveRanks),
+      permanentRanks: Object.freeze(permanentRanks),
+    },
+    skillId,
+  }
 }
 
 export function buildPlayerSkillOffer(

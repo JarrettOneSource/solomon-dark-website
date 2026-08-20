@@ -18,6 +18,7 @@ import {
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
 import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
+import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
 
 export interface BoneyardWorldTextures extends PlayerWorldTextures {
   assetSources: readonly string[]
@@ -51,12 +52,14 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
   const liftedSourceSet = new Set([
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
+    ...NATIVE_LOOT_ASSET_SOURCES,
     solomonShadowSource,
   ])
   const sources = [...new Set([
     ...playerWorldAssetSources(),
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
+    ...NATIVE_LOOT_ASSET_SOURCES,
     boneyard.graveDirt,
     boneyard.lantern,
     boneyard.levelUpSparkle,

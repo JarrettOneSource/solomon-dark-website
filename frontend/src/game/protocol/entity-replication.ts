@@ -4,6 +4,8 @@ import type {
   BoneyardEnemyProjectileEffectSnapshot,
   BoneyardEnemyDeathEffectSnapshot,
   BoneyardEnemySnapshot,
+  BoneyardGoodieSnapshot,
+  BoneyardLootSnapshot,
   BoneyardMaggotSnapshot,
   GameSnapshot,
   GameSnapshotFrame,
@@ -58,6 +60,20 @@ import {
   boneyardMageLightningPulseFrame,
   materializeBoneyardMageLightningPulse,
 } from './boneyard-mage-lightning-replication.ts'
+import {
+  BONEYARD_LOOT_ENTITY_REGISTRATION,
+  BONEYARD_LOOT_ENTITY_TYPE_ID,
+  boneyardLootDescriptor,
+  boneyardLootSample,
+  materializeBoneyardLoot,
+} from './boneyard-loot-replication.ts'
+import {
+  BONEYARD_GOODIE_ENTITY_REGISTRATION,
+  BONEYARD_GOODIE_ENTITY_TYPE_ID,
+  boneyardGoodieDescriptor,
+  boneyardGoodieSample,
+  materializeBoneyardGoodie,
+} from './boneyard-goodie-replication.ts'
 
 export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemy: BONEYARD_ENEMY_ENTITY_TYPE_ID,
@@ -65,6 +81,8 @@ export const REPLICATED_ENTITY_TYPES = {
   boneyardEnemyProjectile: BONEYARD_ENEMY_PROJECTILE_ENTITY_TYPE_ID,
   boneyardEnemyProjectileEffect: BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_TYPE_ID,
   boneyardMaggot: BONEYARD_MAGGOT_ENTITY_TYPE_ID,
+  boneyardLoot: BONEYARD_LOOT_ENTITY_TYPE_ID,
+  boneyardGoodie: BONEYARD_GOODIE_ENTITY_TYPE_ID,
   student: 1,
 } as const
 
@@ -207,6 +225,8 @@ export const REPLICATED_ENTITY_TYPE_REGISTRY: ReadonlyMap<
     BONEYARD_ENEMY_PROJECTILE_EFFECT_ENTITY_REGISTRATION,
   ],
   [BONEYARD_MAGGOT_ENTITY_REGISTRATION.typeId, BONEYARD_MAGGOT_ENTITY_REGISTRATION],
+  [BONEYARD_LOOT_ENTITY_REGISTRATION.typeId, BONEYARD_LOOT_ENTITY_REGISTRATION],
+  [BONEYARD_GOODIE_ENTITY_REGISTRATION.typeId, BONEYARD_GOODIE_ENTITY_REGISTRATION],
   [
     BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION.typeId,
     BONEYARD_ENEMY_DEATH_EFFECT_ENTITY_REGISTRATION,
@@ -254,6 +274,8 @@ export function createGameSnapshotFrame(
         ...snapshot.world.enemyProjectiles.map(boneyardEnemyProjectileSample),
         ...snapshot.world.enemyProjectileEffects.map(boneyardEnemyProjectileEffectSample),
         ...snapshot.world.maggots.map(boneyardMaggotSample),
+        ...snapshot.world.loot.map(boneyardLootSample),
+        ...snapshot.world.goodies.map(boneyardGoodieSample),
       ]
   const entities: ReplicatedEntityFrame = {
     baselineSequence: keyframe ? 0 : baselineSequence,
@@ -291,6 +313,7 @@ export function createGameSnapshotFrame(
       encounter: snapshot.world.encounter,
       entities,
       enemyEvents: snapshot.world.enemyEvents,
+      lootEvents: snapshot.world.lootEvents,
       gateLeaves: snapshot.world.gateLeaves,
       kind: 'boneyard',
       lanternLightRegistration: snapshot.world.lanternLightRegistration,
@@ -385,6 +408,8 @@ export class EntityReplicationReconstructor {
     const enemyProjectiles: BoneyardEnemyProjectileSnapshot[] = []
     const enemyProjectileEffects: BoneyardEnemyProjectileEffectSnapshot[] = []
     const maggots: BoneyardMaggotSnapshot[] = []
+    const loot: BoneyardLootSnapshot[] = []
+    const goodies: BoneyardGoodieSnapshot[] = []
     for (const sample of entities.samples) {
       const registration = REPLICATED_ENTITY_TYPE_REGISTRY.get(sample[0])
       const descriptor = this.descriptors.get(entityKey(sample[0], sample[1]))
@@ -423,6 +448,16 @@ export class EntityReplicationReconstructor {
           throw new EntityReplicationGapError('enemy death-effect sample is outside the Boneyard')
         }
         deathEffects.push(materializeBoneyardEnemyDeathEffect(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardLoot) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('loot sample is outside the Boneyard')
+        }
+        loot.push(materializeBoneyardLoot(descriptor, sample))
+      } else if (sample[0] === REPLICATED_ENTITY_TYPES.boneyardGoodie) {
+        if (frame.world.kind !== 'boneyard') {
+          throw new EntityReplicationGapError('Goodie sample is outside the Boneyard')
+        }
+        goodies.push(materializeBoneyardGoodie(descriptor, sample))
       }
     }
     const players = materializePlayerSnapshotFrames(frame.players, this.playerEconomies)
@@ -461,8 +496,11 @@ export class EntityReplicationReconstructor {
         enemyProjectileEffects,
         enemyProjectiles,
         gateLeaves: frame.world.gateLeaves,
+        goodies,
         kind: 'boneyard',
         lanternLightRegistration: frame.world.lanternLightRegistration,
+        loot,
+        lootEvents: frame.world.lootEvents,
         mageLightningPulses: frame.world.mageLightningPulses.map(
           materializeBoneyardMageLightningPulse,
         ),
@@ -504,6 +542,14 @@ function descriptorMap(snapshot: GameSnapshot): Map<string, ReplicatedEntityDesc
     }
     for (const maggot of snapshot.world.maggots) {
       const descriptor = boneyardMaggotDescriptor(maggot)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const loot of snapshot.world.loot) {
+      const descriptor = boneyardLootDescriptor(loot)
+      descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
+    }
+    for (const goodie of snapshot.world.goodies) {
+      const descriptor = boneyardGoodieDescriptor(goodie)
       descriptors.set(entityKey(descriptor[0], descriptor[1]), descriptor)
     }
   }

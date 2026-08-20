@@ -21,6 +21,38 @@
 
 .boneyard-scene:focus { outline: none; }
 
+.boneyard-loot-messages {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  top: 67px;
+  transform: translateX(-50%);
+  transform-origin: center top;
+  z-index: 45;
+}
+
+.boneyard-loot-messages > span {
+  display: block;
+  filter: drop-shadow(0 2px 0 #000);
+  height: 18px;
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+.boneyard-loot-bitmap-text {
+  display: block;
+  position: relative;
+}
+
+.boneyard-loot-bitmap-text > i {
+  display: block;
+  position: absolute;
+}
+
 .boneyard-native-frame {
   position: absolute;
   top: 0;
