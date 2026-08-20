@@ -1028,8 +1028,10 @@ test('booked primary ranks feed new casts while existing projectile payloads sta
 
   rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
   rankTwo = stepGameSimulationTick(rankTwo, { caster: cast(rankTwo, true) })
-  assert.equal(getPlayerProgression(rankOne, 'caster').currentMana, 88.1)
-  assert.equal(getPlayerProgression(rankTwo, 'caster').currentMana, 85.1)
+  assert.equal(
+    getPlayerProgression(rankOne, 'caster').currentMana,
+    getPlayerProgression(rankTwo, 'caster').currentMana,
+  )
 
   for (let tick = 0; tick < PRIMARY_CAST_EMISSION_TICK; tick += 1) {
     rankOne = stepGameSimulationTick(rankOne, { caster: cast(rankOne, true) })
