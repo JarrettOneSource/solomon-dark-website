@@ -10,7 +10,9 @@ import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-se
 import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   createNativeRng,
+  drawNativeFloat,
   drawNativeInteger,
+  drawNativeSign,
   type NativeRngState,
 } from '../core-kernels/native-rng.ts'
 import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
@@ -416,6 +418,7 @@ export interface BoneyardEnemyProjectile {
 }
 
 export type BoneyardEnemyProjectileEffectKind =
+  | 'arrow-tumble'
   | 'demon-fire'
   | 'fire-burst-frame'
   | 'fire-burst-glow'
@@ -798,6 +801,13 @@ interface DamagePresentationWork {
 export interface PositionBoneyardEnemyResult {
   readonly accepted: boolean
   readonly store: BoneyardEnemyStore
+}
+
+export interface TumbleBoneyardArrowResult {
+  readonly events: readonly BoneyardEnemySemanticEvent[]
+  readonly rng: NativeRngState
+  readonly store: BoneyardEnemyStore
+  readonly tumbled: boolean
 }
 
 interface WorkingStep {
@@ -1198,6 +1208,90 @@ export function positionBoneyardEnemy(
   const maggots = [...source.maggots]
   maggots[maggotIndex] = { ...maggot, position: Object.freeze({ ...position }) }
   return { accepted: true, store: { ...source, maggots } }
+}
+
+/**
+ * Arrow::vslot+0x64 removes the projectile once Chill Wind crosses its tumble
+ * threshold, then transfers record 2 into one world-owned Anim_SpinAway.
+ * The two Float calls plus the signed-direction word stay on combat RNG.
+ */
+export function tumbleBoneyardArrow(
+  source: BoneyardEnemyStore,
+  projectileId: BoneyardEnemyProjectileId,
+  direction: Readonly<BoneyardPoint>,
+  tick: number,
+  sourceRng: NativeRngState,
+): TumbleBoneyardArrowResult {
+  validateTick(tick)
+  if (tick < source.lastStepTick) {
+    throw new RangeError('arrow tumble tick must not precede the store clock')
+  }
+  if (!Number.isFinite(direction.x) || !Number.isFinite(direction.y)) {
+    throw new RangeError('arrow tumble direction must be finite')
+  }
+  const length = Math.hypot(direction.x, direction.y)
+  if (!(length > 0)) {
+    throw new RangeError('arrow tumble direction must be nonzero')
+  }
+  const index = source.projectiles.findIndex(({ id }) => id === projectileId)
+  const projectile = source.projectiles[index]
+  if (!projectile || projectile.kind !== 'arrow') {
+    return { events: [], rng: sourceRng, store: source, tumbled: false }
+  }
+
+  const rotation = drawNativeFloat(sourceRng, 360)
+  const angularMagnitude = drawNativeFloat(rotation.state, 1)
+  const angularVelocity = drawNativeSign(
+    angularMagnitude.state,
+    Math.fround(1 + angularMagnitude.value),
+  )
+  const projectiles = [...source.projectiles]
+  projectiles.splice(index, 1)
+  const effect: BoneyardEnemyProjectileEffect = Object.freeze({
+    ageTicks: 0,
+    alpha: Math.fround(6),
+    alphaLossPerTick: Math.fround(0.1),
+    angularVelocityDeg: angularVelocity.value,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 2,
+    id: source.nextProjectileEffectId,
+    kind: 'arrow-tumble',
+    lastStepTick: tick,
+    lifetimeTicks: 60,
+    ownerActorId: projectile.ownerActorId,
+    ownerProjectileId: projectile.id,
+    phaseOriginTicks: projectile.ageTicks,
+    position: Object.freeze({ ...projectile.position }),
+    rotationDeg: rotation.value,
+    scale: 1,
+    spawnTick: tick,
+    tint: 0xffffff,
+    velocity: Object.freeze({
+      x: Math.fround(direction.x / length),
+      y: Math.fround(direction.y / length),
+    }),
+  })
+  const event: BoneyardEnemySemanticEvent = Object.freeze({
+    actorId: projectile.ownerActorId,
+    eventId: source.nextEventId,
+    projectileId: projectile.id,
+    targetPlayerId: null,
+    tick,
+    type: 'projectile-retired',
+  })
+  return {
+    events: Object.freeze([event]),
+    rng: angularVelocity.state,
+    store: {
+      ...source,
+      nextEventId: source.nextEventId + 1,
+      nextProjectileEffectId: source.nextProjectileEffectId + 1,
+      projectileEffects: Object.freeze([...source.projectileEffects, effect]),
+      projectiles: Object.freeze(projectiles),
+    },
+    tumbled: true,
+  }
 }
 
 function damageBoneyardMaggot(
@@ -3916,6 +4010,35 @@ function stepProjectileEffects(
     let entry = source.entry
     const rotationDeg = source.rotationDeg + source.angularVelocityDeg * elapsedTicks
     switch (source.kind) {
+      case 'arrow-tumble': {
+        let tumbleAlpha = source.alpha
+        let tumblePosition = { ...source.position }
+        let tumbleRotation = source.rotationDeg
+        let tumbleVelocity = { ...source.velocity }
+        for (let step = 0; step < elapsedTicks; step += 1) {
+          tumbleAlpha = Math.fround(tumbleAlpha - Math.fround(0.1))
+          tumblePosition = {
+            x: Math.fround(tumblePosition.x + tumbleVelocity.x),
+            y: Math.fround(tumblePosition.y + tumbleVelocity.y),
+          }
+          tumbleRotation = Math.fround(tumbleRotation + source.angularVelocityDeg)
+          tumbleVelocity = {
+            x: Math.fround(tumbleVelocity.x * Math.fround(0.98)),
+            y: Math.fround(tumbleVelocity.y * Math.fround(0.98)),
+          }
+        }
+        if (tumbleAlpha <= 0) break
+        work.projectileEffects.push(Object.freeze({
+          ...source,
+          ageTicks,
+          alpha: tumbleAlpha,
+          lastStepTick: tick,
+          position: Object.freeze(tumblePosition),
+          rotationDeg: tumbleRotation,
+          velocity: Object.freeze(tumbleVelocity),
+        }))
+        continue
+      }
       case 'firebolt-trail':
         break
       case 'fire-burst-glow':

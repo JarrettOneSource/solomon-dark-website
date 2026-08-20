@@ -48,8 +48,10 @@ import type { RegisterNativeLightProvider } from '../core-kernels/native-light-p
 import {
   damageBoneyardEnemy,
   positionBoneyardEnemy,
+  tumbleBoneyardArrow,
   type BoneyardEnemyActor,
   type BoneyardEnemyLethalObserver,
+  type BoneyardEnemyProjectile,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
   type BoneyardMaggotActor,
@@ -67,6 +69,7 @@ export type BoneyardSpellHitKind =
   | 'water-hail'
 export const WATER_PRIMARY_ACTOR_MASK = 0x1082
 export const WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK = 0x2
+export const NATIVE_CHILL_ARROW_TUMBLE_FACTOR = Math.fround(0.3199999928474426)
 
 export interface BoneyardSpellBurnContact {
   readonly damage: number
@@ -191,7 +194,11 @@ export function resolveBoneyardSpellCombat(
     )
     const rows = projectile.kind === 'fire'
       ? [
-          ...fireballSceneryTargets.map((target) => ({ actor: null, target })),
+          ...fireballSceneryTargets.map((target) => ({
+            actor: null,
+            kind: 'scenery' as const,
+            target,
+          })),
           ...enemyRows,
         ]
       : enemyRows
@@ -594,7 +601,7 @@ export function resolveBoneyardSpellCombat(
       }
     }
 
-    const rows = primaryTargetRows(enemies)
+    const rows = primaryWaterTargetRows(enemies)
     const contacts = nativePrimaryConeTargets({
       actorMask: emission.underpowered
         ? WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK
@@ -609,10 +616,27 @@ export function resolveBoneyardSpellCombat(
       targets: rows.map(({ target }) => target),
     })
     for (const target of contacts) {
-      const row = primaryTargetRows(enemies).find(({ target: candidate }) => (
+      const row = rows.find(({ target: candidate }) => (
         candidate.id === target.id
       ))
       if (!row) continue
+      if (row.kind === 'arrow') {
+        const tumbleGain = Math.fround(
+          profile.pushbackPercent * NATIVE_CHILL_ARROW_TUMBLE_FACTOR,
+        )
+        if (tumbleGain < 1) continue
+        const tumbled = tumbleBoneyardArrow(
+          enemies,
+          row.projectile.id,
+          emission.direction,
+          tick,
+          rng,
+        )
+        enemies = tumbled.store
+        rng = tumbled.rng
+        events.push(...tumbled.events)
+        continue
+      }
       queueTargetEffect(row.actor.id, {
         coldSlowFactor: emission.underpowered ? 0.75 : profile.coldMovementFactor,
         coldSlowTicks: emission.underpowered ? 25 : profile.coldDurationTicks,
@@ -789,9 +813,18 @@ function continuePiercingEtherProjectile(
 type BoneyardSpellTarget = BoneyardEnemyActor | BoneyardMaggotActor
 
 interface PrimaryTargetRow {
-  readonly actor: BoneyardSpellTarget | null
+  readonly actor: BoneyardSpellTarget
+  readonly kind: 'enemy'
   readonly target: PrimarySpellTarget
 }
+
+interface PrimaryProjectileTargetRow {
+  readonly kind: 'arrow'
+  readonly projectile: BoneyardEnemyProjectile
+  readonly target: PrimarySpellTarget
+}
+
+type PrimaryWaterTargetRow = PrimaryTargetRow | PrimaryProjectileTargetRow
 
 const NATIVE_LIGHTNING_CHAIN_RADIUS = 200
 const NATIVE_LIGHTNING_CHAIN_DAMAGE_FACTOR = Math.fround(0.600000024)
@@ -1002,6 +1035,7 @@ function primaryTargetRows(
 ): readonly PrimaryTargetRow[] {
   return [...store.actors, ...store.maggots].map((actor, registrationOrder) => ({
     actor,
+    kind: 'enemy',
     target: {
       active: actor.lifeState === 'alive',
       actorFlags: 'config' in actor && actor.config.enemyToken === 'COFFIN' ? 0 : 0x2,
@@ -1022,6 +1056,31 @@ function nextRegistrationOrder(targets: readonly PrimarySpellTarget[]): number {
     (next, target) => Math.max(next, target.registrationOrder + 1),
     0,
   )
+}
+
+function primaryWaterTargetRows(
+  store: BoneyardEnemyStore,
+): readonly PrimaryWaterTargetRow[] {
+  const enemies = primaryTargetRows(store)
+  const arrows = store.projectiles
+    .filter((projectile) => projectile.kind === 'arrow')
+    .map((projectile, index): PrimaryProjectileTargetRow => ({
+      kind: 'arrow',
+      projectile,
+      target: {
+        active: projectile.ageTicks < projectile.lifetimeTicks,
+        actorFlags: 0x80,
+        attachment: { x: 0, y: 0 },
+        bodyRadius: projectile.contactRadius,
+        id: `projectile:${projectile.id}`,
+        kind: 'projectile',
+        nativePriority: 0,
+        pendingRemove: false,
+        position: { ...projectile.position },
+        registrationOrder: enemies.length + index,
+      },
+    }))
+  return [...enemies, ...arrows]
 }
 
 function projectileDamage(projectile: PrimarySpellProjectileState): number {

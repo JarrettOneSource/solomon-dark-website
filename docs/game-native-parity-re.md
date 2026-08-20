@@ -24811,21 +24811,21 @@ merge, simulation tick, replication, presentation, audio, and teardown.
 | 24 Lightning | `0x0053F9C0` | exact-ported | per-tick ranked damage/cost and typed electric contact |
 | 25 Chaining | `0x0053F9C0`, `0x00641340` | exact-ported | exact distinct-target hop order and float32 `0.600000024` decay |
 | 26 Stun | `0x1B6A`, `0x006231B0`, `0x00625850` | exact-ported | 25-tick minimum-factor merge and movement consumer |
-| 27 Magic Storm | dispatcher `+0x6C`, `StormCloud 0x7F0` | exact-ported; presentation residual below | paid secondary, persistent 1,000-tick actor, RNG strike lifecycle |
-| 28 Magic Tornado | `0x005E2440`, `0x006021A0` | exact-ported; presentation residual below | frequency factor, extra duration, moving-cloud presentation mode |
+| 27 Magic Storm | dispatcher `+0x6C`, `StormCloud 0x7F0` | exact-ported | paid secondary, persistent 1,000-tick actor, RNG strike and registered rain-child lifecycle |
+| 28 Magic Tornado | `0x005E2440`, `0x006021A0` | exact-ported | frequency factor, extra duration, moving-cloud compositor and presentation controls |
 | 29 Hurricane | `0x0053F9C0`, `0x00548B00`, progression `+0x8D4/+0x8D8` | exact-ported | shipped visual-only owner aura; charge `+0.0015` held, release decay `-0.03`; authored damage caches have no combat consumer |
-| 30 Prismatic Shock | `0x00645540`, `Mod_Prismatic 0x1B76` | exact-ported; presentation residual below | 350-unit circular application, duration merge, electric secondary-damage doubling |
+| 30 Prismatic Shock | `0x00645540`, `Mod_Prismatic 0x1B76` | exact-ported | 350-unit circular application, duration merge, electric secondary-damage doubling, retained child fade/motion |
 | 31 Disintegrate | `0x0053F9C0`, `Badguy_Contact 0x0048A290` | exact-ported | event-scoped percentile roll and strict post-hit 20% execute gate |
 | 32 Frost Jet | `0x00543860`, `0x00641B10` | exact-ported | ranked damage/cost and cold modifier contact |
-| 33 Chill Wind | `0x00543860`, target impulse vslot `+0x64` | exact-ported for current hostiles; projectile ABI residual below | distance-aware push/tumble payload and hostile-arrow branch; exact inner/outer squared-radius taper |
+| 33 Chill Wind | `0x00543860`, target impulse vslot `+0x64` | exact-ported | distance-aware actor push plus hostile Arrow `Anim_SpinAway`; exact inner/outer squared-radius taper |
 | 34 Cone of Ice | `0x00543860`, `0x00641B10` | exact-ported | reach `205 + 4*widen`, half aperture `15+widen`, visual density/speed inputs |
-| 35 Ring of Ice | `0x00644460`, `FreezeWave 0x7E8` | exact-ported; presentation residual below | paid expanding one-contact-per-target wave and freeze/cold application |
+| 35 Ring of Ice | `0x00644460`, `FreezeWave 0x7E8` | exact-ported | paid expanding one-contact-per-target wave, freeze/cold application, three bursts, ring, and 100/200 WhirlSnow children |
 | 36 Harden | Water handler, progression `+0x8B8/+0x8BC` | exact-ported | held accrual, actor-private cap, persistent armor pool and damage consumer |
 | 37 Cold Aura | Water handler, record 14, progression `+0x8AC/+0x8B0` | exact-ported | held radius query, six-tick presentation cadence, slow merge |
 | 38 Hail | Water handler, `Anim_Hail 0x00454030`, record 32 | exact-ported | native 3,000-cell hit roll, event-time damage draw, presentation actor |
 | 39 Permafrost | progression `+0x8B4`, cold/freeze modifier construction | exact-ported | slowdown scaling and 200-tick minimum-duration rule across both Water spells |
-| 72 Acid Rain (advanced Air root) | dispatcher `0x0054CC50`, `AcidRain 0x7FE`, tick `0x00604E90` | exact-ported; light residual below | paid aimed field, 1,500-tick activity, 25-tick authoritative direct-damage pulses, shuffled target subset, rain/fade residue, audio, replication, teardown |
-| 76 Call Comet (advanced Water root) | dispatcher `0x0054CC50`, factory `0x0063FD00`, `Comet 0x80C`, impact `0x0061E9C0` | exact-ported; presentation residual below | paid aimed falling actor, impact-area damage/freeze contact, shared FreezeWave materialization, audio, replication, teardown |
+| 72 Acid Rain (advanced Air root) | dispatcher `0x0054CC50`, `AcidRain 0x7FE`, tick `0x00604E90` | exact-ported | paid aimed field, 1,500-tick activity, 25-tick authoritative direct-damage pulses, shuffled target subset, registered rain/splash children, field composite/light, audio, replication, teardown |
+| 76 Call Comet (advanced Water root) | dispatcher `0x0054CC50`, factory `0x0063FD00`, `Comet 0x80C`, impact `0x0061E9C0` | exact-ported | paid aimed falling actor, impact-area damage/freeze contact, shared FreezeWave, burst/ring/debris children, audio, replication, teardown |
 
 Sibling uses of Lightning/Frost/Freeze modifiers by welded spells, Magic Trap,
 enemy projectiles, and Skeleton Mage are outside the player Air/Water cast
@@ -24964,19 +24964,28 @@ than becoming an Air/Water-only boolean.
   duration conversion; and Harden's production contact order. The Website
   shared secondary-action dispatcher owns press edge, payment, cast sequence,
   recharge, and Focus RNG; the Air/Water callback never latches input itself.
-- Proven-only presentation deliberately leaves five exact residuals instead of
-  inventing children: StormCloud's registered `Anim_Raindrop` fall/puddle actor
-  accumulation; Prismatic's retained child fade/movement actors beyond the
-  newly emitted native batch; Ring/FreezeWave's radial debris record selector;
-  Call Comet impact children (BadGuys 15 and DeadHawg 6, 203..207); and Acid
-  Rain's 350-unit region-light contribution. Their parent actors, direct atlas
-  layers, transforms, blend modes, clocks, contact, audio, and teardown are
-  ported. The exact instructions are known, but the current shared transient
-  and light painter ABIs do not yet carry those child/region-light records.
-- Chill Wind's `0x40` hostile-projectile tumble branch is also not consumable:
-  the current Boneyard enemy-projectile store has no actor-contact/push ABI.
-  Current Boneyard hostiles take the recovered ordinary actor branch. No
-  projectile behavior or visual child is guessed in these open lanes.
+- The prior presentation-residual list is closed by the unified secondary
+  actor/painter model. Storm registers and advances every `Anim_Raindrop`
+  fall/puddle child. Prismatic retains the exact 19-word emission batches and
+  replays their independently fading/moving records 10, 11, and 111 from the
+  replicated pre-emission RNG state. Ring/FreezeWave creates the three
+  DeadHawg-114 bursts, DeadHawg-121 ring, and 100/200 `Anim_WhirlSnow`
+  children; constructor `0x004588E0`, vtable `0x007853A8`, and the native asset
+  map pin WhirlSnow to BadGuys record 72. Call Comet owns BadGuys-15,
+  DeadHawg-6, and Bouncer debris records 203..207 as separately retiring
+  actors. Acid Rain owns its record-0 drops, record-10 parent/splash passes,
+  actor-provider light, and the 350-unit `PuppetPointer` scene-submission
+  extent at `0x005E3600 -> 0x0064E910`; that 350 scalar is not a second light
+  radius.
+- Chill Wind now queries the full native `0x1082` target membership. Arrow
+  constructor `0x005E1000` writes flag `0x80`; the Water handler passes
+  float32 `mPushback*0.3199999928474426` to Arrow vslot `+0x64`.
+  Every learned rank crosses the Arrow's one-point accumulator on the first
+  eligible contact, retires it, and creates one world-owned record-2
+  `Anim_SpinAway`: life 6, loss 0.1, unit cast-direction velocity damped by
+  float32 0.98, `Float(360)` rotation, and signed `1+Float(1)` angular speed.
+  Firebolt/GuidedMissile use flag `0x100`, so they are intentionally outside
+  this query branch; underpowered Water uses mask `0x2` and suppresses it.
 
 ### Web implementation consequence
 
@@ -24991,7 +25000,7 @@ than becoming an Air/Water-only boolean.
   never depends on a sprite lifetime.
 - One combat RNG stream advances only on authoritative event draws. Offer and
   cosmetic deterministic streams remain separate.
-- Protocol 34 validates every added numeric range, target owner, modifier,
+- Protocol 35 validates every added numeric range, target owner, modifier,
   effect ID, sequence edge, and lifecycle field. Clients copy/interpolate the
   semantic state without rerolling combat or reconstructing lifetimes.
 

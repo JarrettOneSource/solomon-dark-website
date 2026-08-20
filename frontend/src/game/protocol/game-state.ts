@@ -459,6 +459,7 @@ export interface BoneyardEnemyProjectileSnapshot {
 }
 
 export const BONEYARD_ENEMY_PROJECTILE_EFFECT_KINDS = [
+  'arrow-tumble',
   'demon-fire',
   'fire-burst-frame',
   'fire-burst-glow',

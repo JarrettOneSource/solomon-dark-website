@@ -16,6 +16,7 @@ const manifests = {
 
 test('every projectile-owned transient resolves its exact atlas record and layer state', () => {
   const effects = [
+    effect('arrow-tumble', 'BadGuys', 2, 'normal'),
     effect('fire-burst-frame', 'BadGuys', 253, 'add'),
     effect('fire-burst-glow', 'BadGuys', 110, 'normal'),
     effect('firebolt-trail', 'BadGuys', 260, 'normal'),

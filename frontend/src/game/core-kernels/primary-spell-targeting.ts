@@ -19,7 +19,7 @@ const AIR_PRIMARY_CONE_DOT = Math.cos(
   AIR_PRIMARY_CONE_HALF_ANGLE_DEGREES * Math.PI / 180,
 )
 
-export type PrimarySpellTargetKind = 'enemy' | 'gravestone' | 'scenery'
+export type PrimarySpellTargetKind = 'enemy' | 'gravestone' | 'projectile' | 'scenery'
 
 /** A live world actor eligible for one or more native primary queries. */
 export interface PrimarySpellTarget {

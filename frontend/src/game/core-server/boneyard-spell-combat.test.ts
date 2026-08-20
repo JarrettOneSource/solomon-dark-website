@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeSign,
+} from '../core-kernels/native-rng.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import type { PrimarySpellTarget } from '../core-kernels/primary-spell-targeting.ts'
 import {
@@ -18,6 +22,7 @@ import type {
 import {
   createBoneyardEnemyStore,
   stepBoneyardEnemyStore,
+  type BoneyardEnemyProjectile,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
 import {
@@ -506,6 +511,76 @@ test('Water uses the root-only 205-unit 15-degree cone and per-target LOS', () =
   assert.equal(result.enemies.actors[1]?.currentHealth, 5, 'LOS blocks this root')
   assert.equal(result.enemies.actors[2]?.currentHealth, 5, 'strict reach equality misses')
   assert.equal(result.enemies.actors[3]?.currentHealth, 5, 'root is outside 15 degrees')
+})
+
+test('Chill Wind tumbles hostile Arrows through the native vslot and SpinAway program', () => {
+  const base = spawnEnemies([])
+  const arrow = enemyArrow({ id: 7, position: { x: 50, y: 0 } })
+  const enemies: BoneyardEnemyStore = {
+    ...base,
+    nextProjectileEffectId: 20,
+    projectiles: [arrow],
+  }
+  const water = emission({ id: 11, kind: 'water' })
+  assert.equal(water.primarySkill.kind, 'water')
+  const profile = { ...water.primarySkill, pushbackPercent: 10 }
+  const initialRng = createNativeRng(23)
+  const rotation = drawNativeFloat(initialRng, 360)
+  const angularMagnitude = drawNativeFloat(rotation.state, 1)
+  const angularVelocity = drawNativeSign(
+    angularMagnitude.state,
+    Math.fround(1 + angularMagnitude.value),
+  )
+  const result = resolveBoneyardSpellCombat(
+    enemies,
+    spellState({ transients: [transient({ id: 11, kind: 'water' })] }),
+    [{ ...water, primarySkill: profile }],
+    1,
+    WORLD_KEY,
+    initialRng,
+  )
+
+  assert.deepEqual(result.enemies.projectiles, [])
+  assert.deepEqual(result.events.map(({ projectileId, type }) => ({ projectileId, type })), [{
+    projectileId: 7,
+    type: 'projectile-retired',
+  }])
+  assert.deepEqual(result.rng, angularVelocity.state)
+  assert.deepEqual(result.enemies.projectileEffects, [{
+    ageTicks: 0,
+    alpha: 6,
+    alphaLossPerTick: Math.fround(0.1),
+    angularVelocityDeg: angularVelocity.value,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    entry: 2,
+    id: 20,
+    kind: 'arrow-tumble',
+    lastStepTick: 1,
+    lifetimeTicks: 60,
+    ownerActorId: 3,
+    ownerProjectileId: 7,
+    phaseOriginTicks: 8,
+    position: { x: 50, y: 0 },
+    rotationDeg: rotation.value,
+    scale: 1,
+    spawnTick: 1,
+    tint: 0xffffff,
+    velocity: { x: 1, y: 0 },
+  }])
+
+  const advanced = stepBoneyardEnemyStore(result.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: (request) => request.requestedPosition,
+    resolveSpawnIntents: () => [],
+    tick: 2,
+  }).store.projectileEffects[0]!
+  assert.equal(advanced.ageTicks, 1)
+  assert.equal(advanced.alpha, Math.fround(6 - Math.fround(0.1)))
+  assert.deepEqual(advanced.position, { x: 51, y: 0 })
+  assert.equal(advanced.rotationDeg, Math.fround(rotation.value + angularVelocity.value))
+  assert.deepEqual(advanced.velocity, { x: Math.fround(0.98), y: 0 })
 })
 
 test('underpowered Water carries half damage through the narrow actor-mask lane', () => {
@@ -1036,5 +1111,41 @@ function sceneryTarget(id: string, bodyRadius: number, x: number): PrimarySpellT
     pendingRemove: false,
     position: { x, y: 0 },
     registrationOrder: 0,
+  }
+}
+
+function enemyArrow(options: {
+  id: number
+  position: Readonly<{ x: number; y: number }>
+}): BoneyardEnemyProjectile {
+  return {
+    ageTicks: 8,
+    bounceVelocity: 0,
+    coldSlowTicks: 0,
+    contactRadius: 8,
+    damage: 1,
+    headingDeg: 90,
+    hitPlayerIds: [],
+    homing: false,
+    id: options.id,
+    kind: 'arrow',
+    lastStepTick: 0,
+    lightRegistration: null,
+    lifetimeTicks: 300,
+    minimumSpeed: 0,
+    nativeTypeId: 0x7da,
+    ownerActorId: 3,
+    payload: 'normal',
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { ...options.position },
+    speed: 5,
+    settledTicksRemaining: 0,
+    spawnTick: 0,
+    targetPlayerId: null,
+    verticalOffset: 0,
+    verticalVelocity: 0,
+    visualPhaseDeg: 0,
+    visualScale: 1,
   }
 }
