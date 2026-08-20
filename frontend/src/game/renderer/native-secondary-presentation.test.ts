@@ -1591,6 +1591,85 @@ test('active Golem draws stock connectors and depth-sorted articulated records',
   assert.equal(body.filter(({ entry }) => entry === 65 || entry === 73).length, 5)
 })
 
+test('Golem keeps visible transforms separate from internal sort keys', () => {
+  const source = actor('golem')
+  const plan = nativeGolemPresentationPlan({
+    ...source,
+    golem: {
+      ...source.golem!,
+      leftConnectorOffset: { x: 2, y: -12 },
+      leftFootRotationDegrees: 7,
+      rightConnectorOffset: { x: -3, y: -12 },
+      rightFootRotationDegrees: -6,
+    },
+  })
+  const draw = (role: string) => plan.draws.find((entry) => entry.role === role)!
+  assert.deepEqual(draw('golem-core-lower').offset, { x: 0, y: -11 })
+  assert.deepEqual(draw('golem-core-upper').offset, { x: 0, y: -6 })
+  assert.deepEqual(draw('golem-limb-left').offset, { x: 38, y: -11 })
+  assert.deepEqual(draw('golem-limb-right').offset, { x: -38, y: -11 })
+  assert.deepEqual(draw('golem-piece-forward-right').offset, { x: -12, y: 4 })
+  assert.deepEqual(draw('golem-piece-forward-left').offset, { x: 12, y: 7 })
+  assert.deepEqual(draw('golem-piece-center').offset, { x: 0, y: 9 })
+  assert.deepEqual(draw('golem-piece-rear-right').offset, { x: -12, y: -7 })
+  assert.deepEqual(draw('golem-piece-rear-left').offset, { x: 12, y: -10 })
+  assert.equal(draw('golem-limb-left').rotationRadians, 7 * Math.PI / 180)
+  assert.equal(draw('golem-limb-right').rotationRadians, -6 * Math.PI / 180)
+  assert.equal(draw('golem-connector-endpoint-left').rotationRadians, 0)
+  assert.equal(draw('golem-connector-endpoint-right').rotationRadians, 0)
+  assert.deepEqual(draw('golem-connector-endpoint-left').offset, { x: 12, y: 7 })
+  assert.deepEqual(draw('golem-connector-endpoint-right').offset, { x: -13, y: 7 })
+  assert.deepEqual(draw('golem-connector-cap-left').offset, { x: 12, y: -8 })
+  assert.deepEqual(draw('golem-connector-cap-right').offset, { x: -13, y: -8 })
+  assert.deepEqual(draw('golem-connector-glow-left').offset, { x: 12, y: -4.25 })
+  assert.deepEqual(draw('golem-connector-glow-right').offset, { x: -13, y: -4.25 })
+})
+
+test('Golem preserves every visible body formula through all sixteen headings', () => {
+  const position = { x: 100, y: 200 }
+  const base = actor('golem')
+  const expectedRecords = [
+    ['golem-core-lower', 0, 0, 10],
+    ['golem-limb-left', -5, -38, 5],
+    ['golem-limb-right', -5, 38, 5],
+    ['golem-piece-forward-right', -20, 12, 5],
+    ['golem-piece-forward-left', -20, -12, 8],
+    ['golem-piece-center', -15, 0, 15],
+    ['golem-piece-rear-right', 1, 12, 15],
+    ['golem-piece-rear-left', 1, -12, 12],
+  ] as const
+  for (let facing = 0; facing < 16; facing += 1) {
+    const rotationRadians = facing * Math.PI * 2 / 16
+    const articulation = nativeInitialGolemArticulation(position, rotationRadians)
+    const plan = nativeGolemPresentationPlan({
+      ...base,
+      position,
+      rotationRadians,
+      golem: { ...base.golem!, ...articulation },
+    })
+    const forward = {
+      x: Math.sin(rotationRadians),
+      y: -Math.cos(rotationRadians),
+    }
+    const lateral = { x: forward.y, y: -forward.x }
+    const center = {
+      x: (articulation.leftFoot.x + articulation.rightFoot.x) * 0.5 - position.x,
+      y: (articulation.leftFoot.y + articulation.rightFoot.y) * 0.5 - position.y,
+    }
+    for (const [role, forwardOffset, lateralOffset, verticalOffset] of expectedRecords) {
+      const actual = plan.draws.find((draw) => draw.role === role)?.offset
+      assert.ok(actual, `${role} heading ${facing}`)
+      const expected = {
+        x: center.x + forward.x * forwardOffset + lateral.x * lateralOffset,
+        y: center.y + forward.y * forwardOffset + lateral.y * lateralOffset
+          - 40 + verticalOffset,
+      }
+      assert.ok(Math.abs(actual.x - expected.x) < 1e-5, `${role} heading ${facing} x`)
+      assert.ok(Math.abs(actual.y - expected.y) < 1e-5, `${role} heading ${facing} y`)
+    }
+  }
+})
+
 test('Golem attack and provoke phases select the native limb banks and rotations', () => {
   const base = actor('golem')
   const attack = nativeGolemPresentationPlan({

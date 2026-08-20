@@ -31,6 +31,7 @@ const requestedSkillIds = (process.env.SDR_SECONDARY_ABILITY_ID || '')
   .filter(Boolean)
   .map(Number)
 const requestedScene = process.env.SDR_SECONDARY_ABILITY_SCENE || 'hub'
+const singleGolemCapture = process.env.SDR_SECONDARY_GOLEM_SINGLE === '1'
 assert.ok(requestedScene === 'hub' || requestedScene === 'boneyard')
 
 const PROOFS = Object.freeze({
@@ -322,19 +323,36 @@ try {
       await waitForPlayerPresentation(page, contract.skillId)
     }
     if (contract.skillId === 45) {
-      const secondCastSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
-      await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
-      await waitUntil(() => (
-        (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
-          > secondCastSequence
-        && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+      if (singleGolemCapture) {
+        const golem = host.state().secondaryAbilities.actors.find(({ kind, ownerId }) => (
           kind === 'golem' && ownerId === playerId
-        )).length === 2
-        && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
-          kind === 'golem' && ownerId === playerId
-        )).every(({ ageTicks }) => ageTicks >= 400)
-      ), 'Fete of Clay did not retain and assemble two authoritative Golems', 10_000)
-      maximumSet = maximumSetReceipt(host.state(), playerId, contract.skillId)
+        ))
+        assert.ok(golem)
+        for (const ageTicks of [2, 50, 100, 200, 400]) {
+          await waitUntil(() => (
+            (host.state().secondaryAbilities.actors.find(({ id }) => id === golem.id)?.ageTicks ?? 0)
+              >= ageTicks
+          ), `single Golem did not reach age ${ageTicks}`, 10_000)
+          await page.screenshot({
+            path: `${screenshotRoot}/45-raise-golem-age-${ageTicks}.png`,
+          })
+        }
+        maximumSet = { expectedSummonCap: 1, summons: 1 }
+      } else {
+        const secondCastSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
+        await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
+        await waitUntil(() => (
+          (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
+            > secondCastSequence
+          && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+            kind === 'golem' && ownerId === playerId
+          )).length === 2
+          && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+            kind === 'golem' && ownerId === playerId
+          )).every(({ ageTicks }) => ageTicks >= 400)
+        ), 'Fete of Clay did not retain and assemble two authoritative Golems', 10_000)
+        maximumSet = maximumSetReceipt(host.state(), playerId, contract.skillId)
+      }
     }
     const combatProof = await collectCombatProof(
       host,
@@ -542,7 +560,9 @@ function armMaximumSet(host, playerId, skillId, baseEquipment) {
   const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
   assert.notEqual(index, -1)
   const equipment = structuredClone(baseEquipment)
-  const recipes = MAXIMUM_SET_RECIPES.get(skillId) || []
+  const recipes = skillId === 45 && singleGolemCapture
+    ? []
+    : MAXIMUM_SET_RECIPES.get(skillId) || []
   let ringSlot = 0
   for (const recipeIndex of recipes) {
     const item = createEquipmentInventoryItem(

@@ -1566,8 +1566,15 @@ export function nativeGolemPresentationPlan(
       tint: options.tint ?? tint,
     })
   }
-  const addRecord = (...draws: NativeSecondarySpriteDraw[]): void => {
-    records.push({ draws, sourceOrder: records.length, y: draws[0]!.offset.y })
+  const addRecord = (
+    sortYOffset: number,
+    ...draws: NativeSecondarySpriteDraw[]
+  ): void => {
+    records.push({
+      draws,
+      sortY: draws[0]!.offset.y + sortYOffset,
+      sourceOrder: records.length,
+    })
   }
 
   const front = part(
@@ -1589,11 +1596,12 @@ export function nativeGolemPresentationPlan(
       tint: nativeGolemGreenTint(cosmeticGolemUnit(actor, presentationFrame, 1)),
     }))
   }
-  addRecord(...frontDraws)
-  addRecord(part(129 + facing, 'golem-chassis-rear', -5, 0, 0))
+  addRecord(0, ...frontDraws)
+  addRecord(0, part(129 + facing, 'golem-chassis-rear', -5, 0, 0))
 
   const sideLeft = part(145 + facing, 'golem-chassis-left', -5, -30, 5)
   addRecord(
+    0,
     sideLeft,
     ...(actor.golem.iron
       ? [part(177 + facing, 'iron-golem-left-overlay', -5, -30, 5, { tint: WHITE })]
@@ -1601,6 +1609,7 @@ export function nativeGolemPresentationPlan(
   )
   const sideRight = part(161 + facing, 'golem-chassis-right', -5, 30, 5)
   addRecord(
+    0,
     sideRight,
     ...(actor.golem.iron
       ? [part(193 + facing, 'iron-golem-right-overlay', -5, 30, 5, { tint: WHITE })]
@@ -1608,9 +1617,10 @@ export function nativeGolemPresentationPlan(
   )
 
   if (actor.ageTicks >= 100) {
-    const coreOffset = golemPoint(center, drawHeadingDegrees, 0, 0, elevation - 40)
+    const coreOffset = golemPoint(center, drawHeadingDegrees, 0, 0, elevation + 10)
     const coreRed = cosmeticGolemUnit(actor, presentationFrame, 2)
     addRecord(
+      -50,
       secondarySprite(actor, 'BadGuys', 15, 'golem-core-lower', {
         offset: coreOffset,
         scaleX: actor.scale * (2 + cosmeticGolemUnit(actor, presentationFrame, 3) * 0.25),
@@ -1625,33 +1635,39 @@ export function nativeGolemPresentationPlan(
       }),
     )
 
-    addRecord(part(
-      (pose.leftMode > 1 ? 17 : 1) + facing,
-      'golem-limb-left',
-      -5,
-      -38,
-      -45,
-      { rotationDegrees: pose.leftRotationDegrees },
-    ))
-    addRecord(part(
-      (pose.rightMode > 1 ? 49 : 33) + facing,
-      'golem-limb-right',
-      -5,
-      38,
-      -45,
-      { rotationDegrees: pose.rightRotationDegrees },
-    ))
-    addRecord(part(65 + facing, 'golem-piece-forward-right', -20, 12, -45))
-    addRecord(part(65 + facing, 'golem-piece-forward-left', -20, -12, -42, {
+    addRecord(
+      -50,
+      part(
+        (pose.leftMode > 1 ? 17 : 1) + facing,
+        'golem-limb-left',
+        -5,
+        -38,
+        5,
+        { rotationDegrees: pose.leftRotationDegrees },
+      ),
+    )
+    addRecord(
+      -50,
+      part(
+        (pose.rightMode > 1 ? 49 : 33) + facing,
+        'golem-limb-right',
+        -5,
+        38,
+        5,
+        { rotationDegrees: pose.rightRotationDegrees },
+      ),
+    )
+    addRecord(-50, part(65 + facing, 'golem-piece-forward-right', -20, 12, 5))
+    addRecord(-50, part(65 + facing, 'golem-piece-forward-left', -20, -12, 8, {
       rotationDegrees: 10,
     }))
-    addRecord(part(65 + facing, 'golem-piece-center', -15, 0, -55, { scale: 0.8 }))
-    addRecord(part(65 + oppositeFacing, 'golem-piece-rear-right', 1, 12, -35))
-    addRecord(part(65 + oppositeFacing, 'golem-piece-rear-left', 1, -12, -38))
+    addRecord(-70, part(65 + facing, 'golem-piece-center', -15, 0, 15, { scale: 0.8 }))
+    addRecord(-50, part(65 + oppositeFacing, 'golem-piece-rear-right', 1, 12, 15))
+    addRecord(-50, part(65 + oppositeFacing, 'golem-piece-rear-left', 1, -12, 12))
   }
 
   const sortedBody = records
-    .sort((left, right) => left.y - right.y || left.sourceOrder - right.sourceOrder)
+    .sort((left, right) => left.sortY - right.sortY || left.sourceOrder - right.sourceOrder)
     .flatMap(({ draws }) => draws)
   const connectors = actor.ageTicks >= 200
     ? nativeGolemConnectorDraws(
@@ -1659,6 +1675,7 @@ export function nativeGolemPresentationPlan(
         presentationFrame,
         leftFoot,
         rightFoot,
+        drawHeadingDegrees,
         facing,
         tint,
       )
@@ -1745,8 +1762,8 @@ export function nativeGolemFacing(headingDegrees: number): number {
 
 interface GolemDrawRecord {
   readonly draws: readonly NativeSecondarySpriteDraw[]
+  readonly sortY: number
   readonly sourceOrder: number
-  readonly y: number
 }
 
 interface GolemPose {
@@ -1762,9 +1779,9 @@ function nativeGolemPose(actor: NativeSecondaryActorState): GolemPose {
   return {
     headingOffsetDegrees: golem.actionHeadingOffsetDegrees,
     leftMode: golem.leftLimbMode,
-    leftRotationDegrees: golem.leftLimbMode === 1 ? 45 : 0,
+    leftRotationDegrees: golem.leftLimbMode === 1 ? 45 : golem.leftFootRotationDegrees,
     rightMode: golem.rightLimbMode,
-    rightRotationDegrees: golem.rightLimbMode === 1 ? -45 : 0,
+    rightRotationDegrees: golem.rightLimbMode === 1 ? -45 : golem.rightFootRotationDegrees,
   }
 }
 
@@ -1773,22 +1790,43 @@ function nativeGolemConnectorDraws(
   presentationFrame: number,
   leftFoot: Vector2,
   rightFoot: Vector2,
+  drawHeadingDegrees: number,
   facing: number,
   tint: number,
 ): NativeSecondarySpriteDraw[] {
   const golem = actor.golem!
-  const leftJoint = {
+  const center = {
+    x: (leftFoot.x + rightFoot.x) * 0.5,
+    y: (leftFoot.y + rightFoot.y) * 0.5,
+  }
+  const headingRadians = degreesToRadians(drawHeadingDegrees)
+  const lateral = {
+    x: -Math.cos(headingRadians),
+    y: -Math.sin(headingRadians),
+  }
+  const leftEndpoint = {
     x: leftFoot.x + golem.leftConnectorOffset.x,
-    y: leftFoot.y - 15 + golem.leftConnectorOffset.y,
+    y: leftFoot.y + golem.leftConnectorOffset.y,
+  }
+  const rightEndpoint = {
+    x: rightFoot.x + golem.rightConnectorOffset.x,
+    y: rightFoot.y + golem.rightConnectorOffset.y,
+  }
+  const leftJoint = {
+    x: golem.leftConnectorOffset.x
+      + (leftFoot.x + center.x + lateral.x * -10) * 0.5,
+    y: golem.leftConnectorOffset.y
+      + (leftFoot.y + center.y + lateral.y * -10) * 0.5 - 15,
   }
   const rightJoint = {
-    x: rightFoot.x + golem.rightConnectorOffset.x,
-    y: rightFoot.y - 15 + golem.rightConnectorOffset.y,
+    x: golem.rightConnectorOffset.x
+      + (rightFoot.x + center.x + lateral.x * 10) * 0.5,
+    y: golem.rightConnectorOffset.y
+      + (rightFoot.y + center.y + lateral.y * 10) * 0.5 - 15,
   }
   const endpoint = (
     offset: Vector2,
     side: string,
-    rotationDegrees: number,
   ): NativeSecondarySpriteDraw => secondarySprite(
     actor,
     'Golem',
@@ -1796,18 +1834,22 @@ function nativeGolemConnectorDraws(
     `golem-connector-endpoint-${side}`,
     {
       offset,
-      rotationRadians: degreesToRadians(rotationDegrees),
       scaleX: actor.scale * GOLEM_DRAW_SCALE,
       scaleY: actor.scale * GOLEM_DRAW_SCALE,
       tint,
     },
   )
-  const glow = (joint: Vector2, foot: Vector2, side: string, salt: number): NativeSecondarySpriteDraw => {
+  const glow = (
+    joint: Vector2,
+    connectorEndpoint: Vector2,
+    side: string,
+    salt: number,
+  ): NativeSecondarySpriteDraw => {
     const scale = 0.75 + cosmeticGolemUnit(actor, presentationFrame, salt + 1) * 0.5
     return secondarySprite(actor, 'BadGuys', 15, `golem-connector-glow-${side}`, {
       offset: {
-        x: (joint.x * 3 + foot.x) * 0.25,
-        y: (joint.y * 3 + foot.y) * 0.25,
+        x: (joint.x * 3 + connectorEndpoint.x) * 0.25,
+        y: (joint.y * 3 + connectorEndpoint.y) * 0.25,
       },
       scaleX: actor.scale * scale,
       scaleY: actor.scale * scale,
@@ -1830,15 +1872,15 @@ function nativeGolemConnectorDraws(
   return [
     ...(leftFirst
       ? [
-          endpoint(leftFoot, 'left', golem.leftFootRotationDegrees),
-          endpoint(rightFoot, 'right', golem.rightFootRotationDegrees),
+          endpoint(leftEndpoint, 'left'),
+          endpoint(rightEndpoint, 'right'),
         ]
       : [
-          endpoint(rightFoot, 'right', golem.rightFootRotationDegrees),
-          endpoint(leftFoot, 'left', golem.leftFootRotationDegrees),
+          endpoint(rightEndpoint, 'right'),
+          endpoint(leftEndpoint, 'left'),
         ]),
-    glow(leftJoint, leftFoot, 'left', 10),
-    glow(rightJoint, rightFoot, 'right', 12),
+    glow(leftJoint, leftEndpoint, 'left', 10),
+    glow(rightJoint, rightEndpoint, 'right', 12),
     ...(leftFirst
       ? [cap(leftJoint, 'left'), cap(rightJoint, 'right')]
       : [cap(rightJoint, 'right'), cap(leftJoint, 'left')]),
