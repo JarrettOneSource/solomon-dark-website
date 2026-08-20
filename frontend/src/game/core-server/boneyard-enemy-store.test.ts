@@ -48,6 +48,7 @@ import {
   NATIVE_SKELETON_CLAW_MARKERS,
   NATIVE_SKELETON_WEAPON_MARKERS,
   boneyardEnemyLiveCount,
+  applyBoneyardStaffDisable,
   createBoneyardEnemyStore,
   damageBoneyardEnemy,
   emitBoneyardPlayerDamageSound,
@@ -885,6 +886,62 @@ test('settled native circle contact begins a Skeleton action and reaches its mar
     ),
   })
   assert.equal(beyond.store.actors[0]!.brain.phase, 'approach')
+})
+
+test('Staff Disable persistently composes native action and movement factors', () => {
+  const near = { player: livingTarget(10, 0) }
+  let attack = spawnOne('staff-disable-action', 'SKELETON', { x: 0, y: 0 }, near)
+  attack = {
+    ...attack,
+    store: applyBoneyardStaffDisable(attack.store, attack.store.actors[0]!.id),
+  }
+  attack = step(attack.store, 1, near)
+  let markerTick = -1
+  for (let tick = 2; tick <= 100 && markerTick < 0; tick += 1) {
+    attack = step(attack.store, tick, near)
+    if (attack.events.some((event) => event.type === 'attack-marker')) markerTick = tick
+  }
+  assert.equal(markerTick, 65)
+  assert.equal(attack.store.actors[0]!.staffActionFactor, 0.5)
+
+  let baseline = spawnOne(
+    'staff-disable-movement',
+    'SKELETON',
+    { x: 0, y: 0 },
+    FAR_PLAYERS,
+  )
+  let slowed = {
+    ...baseline,
+    store: applyBoneyardStaffDisable(baseline.store, baseline.store.actors[0]!.id),
+  }
+  const initialPosition = baseline.store.actors[0]!.position
+  for (let tick = 1; tick <= 20; tick += 1) {
+    baseline = step(baseline.store, tick, FAR_PLAYERS)
+    slowed = step(slowed.store, tick, FAR_PLAYERS)
+    if (
+      baseline.store.actors[0]!.position.x !== initialPosition.x
+      || baseline.store.actors[0]!.position.y !== initialPosition.y
+    ) break
+  }
+  const baselineDistance = Math.hypot(
+    baseline.store.actors[0]!.position.x - initialPosition.x,
+    baseline.store.actors[0]!.position.y - initialPosition.y,
+  )
+  const slowedDistance = Math.hypot(
+    slowed.store.actors[0]!.position.x - initialPosition.x,
+    slowed.store.actors[0]!.position.y - initialPosition.y,
+  )
+  assert.ok(
+    Math.abs(slowedDistance / baselineDistance - 0.75) < 1e-12,
+    JSON.stringify({ baselineDistance, initialPosition, slowedDistance }),
+  )
+
+  const compounded = applyBoneyardStaffDisable(
+    slowed.store,
+    slowed.store.actors[0]!.id,
+  ).actors[0]!
+  assert.equal(compounded.staffActionFactor, 0.25)
+  assert.equal(compounded.staffMovementFactor, 0.5625)
 })
 
 test('each native claw crossing independently re-checks its staged target and reach', () => {

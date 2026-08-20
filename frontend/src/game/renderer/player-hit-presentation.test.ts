@@ -28,9 +28,9 @@ test('player renderer owns a separate native-red living-body redraw pass', () =>
   assert.doesNotMatch(worldTint, /hit/)
 })
 
-test('hit redraw mirrors current textures, offsets, and front/back staff selection', () => {
-  assert.match(source, /this\.hitStaffBack\.visible = hasWeapon && !staffFront/)
-  assert.match(source, /this\.hitStaffFront\.visible = hasWeapon && staffFront/)
+test('hit redraw mirrors current textures, offsets, and item-owned depth-mask passes', () => {
+  assert.match(source, /this\.hitStaffBack\.visible = hasWeapon/)
+  assert.match(source, /this\.hitStaffFront\.visible = hasWeapon/)
   assert.match(source, /this\.hitStaffBack\.texture = weaponTextures\.back\[heading\]!\[attachmentPose\]!/)
   assert.match(source, /this\.hitRobe\.texture = this\.robe\.texture/)
   assert.match(source, /this\.hitRobeSecondary\.texture = this\.robeSecondary\.texture/)

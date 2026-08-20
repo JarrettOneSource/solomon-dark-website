@@ -1765,6 +1765,100 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     variant: 1,
     worldKey: 'hub:courtyard',
   }
+  const staffTransients = [{
+    actionTimingFactor: 1,
+    ageTicks: 1,
+    baseProgressPerTick: Math.fround(0.12),
+    contactSequence: 0,
+    headingDegrees: 0,
+    id: 1,
+    kind: 'player-staff-melee',
+    lane: 'primary',
+    origin: { x: 800, y: 400 },
+    outcome: 'normal',
+    ownerId: 'player-1',
+    progress: 2.5,
+    swooshPitch: Math.fround(
+      (Math.fround(0.12) - 0.10000000149011612) + 1,
+    ),
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 2,
+    contactSequence: 0,
+    countdown: 320,
+    headingDegrees: 40,
+    id: 2,
+    kind: 'player-staff-spin',
+    origin: { x: 800, y: 400 },
+    outcome: 'whirl',
+    ownerId: 'player-1',
+    swooshPitch: 1,
+    turnSign: -1,
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 3,
+    id: 3,
+    kind: 'player-staff-contact',
+    origin: { x: 800, y: 380 },
+    outcome: 'critical-hit',
+    ownerId: 'player-1',
+    procSound: 'critical-hit',
+    procSoundPitches: [1.03],
+    swooshPitch: 1.07,
+    targetIds: ['enemy:1'],
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 4,
+    arcDegrees: 80,
+    id: 4,
+    kind: 'player-staff-knockback',
+    origin: { x: 800, y: 400 },
+    ownerId: 'player-1',
+    remainingDistance: 110,
+    targetIds: ['enemy:1'],
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 0,
+    alpha: 1,
+    alphaLoss: Math.fround(0.05),
+    angularVelocityDegrees: 1,
+    entry: 15,
+    id: 5,
+    kind: 'player-staff-smoke',
+    ownerId: 'player-1',
+    position: { x: 800, y: 375 },
+    rotationDegrees: 5,
+    scale: 8,
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 0,
+    alpha: Math.fround(1.5),
+    alphaLoss: Math.fround(0.05),
+    entry: 45,
+    id: 6,
+    kind: 'player-staff-move-fade',
+    ownerId: 'player-1',
+    position: { x: 800, y: 375 },
+    rotationDegrees: 10,
+    scale: 0.5,
+    tint: 0xa0c3c3,
+    velocity: { x: 1, y: -3 },
+    velocityFactor: Math.fround(0.92),
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 0,
+    alpha: Math.fround(1.25),
+    alphaLoss: Math.fround(0.1),
+    entry: 88,
+    id: 7,
+    kind: 'player-staff-perspective-fade',
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    rotationDegrees: 270,
+    scale: 3,
+    tint: 0xa0c3c3,
+    worldKey: 'hub:courtyard',
+  }] as const
 
   assert.doesNotThrow(() => decodeFrame({
     ...frame,
@@ -1832,6 +1926,76 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
       transients: [{ ...airBolt, midpoint: undefined }],
     },
   }), /midpoint/)
+  const decodedStaff = decodeFrame({
+    ...frame,
+    primarySpells: { nextId: 8, projectiles: [], transients: staffTransients },
+  })
+  assert.equal(decodedStaff.type, 'server-snapshot')
+  assert.deepEqual(decodedStaff.frame.primarySpells.transients, staffTransients)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[0], ageTicks: 0.5 }],
+    },
+  }), /ageTicks/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[0], swooshPitch: 1.1 }],
+    },
+  }), /StaffMelee program/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[1], countdown: 319 }],
+    },
+  }), /StaffSpin program/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[2], procSound: 'knockback' }],
+    },
+  }), /proc sound/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[3], targetIds: ['enemy:1', 'enemy:1'] }],
+    },
+  }), /duplicate target/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[3], targetIds: ['scenery:1'] }],
+    },
+  }), /non-enemy Staff target/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[5], alpha: 1 }],
+    },
+  }), /Staff MoveFade/)
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 8,
+      projectiles: [],
+      transients: [{ ...staffTransients[6], tint: 0xffffff }],
+    },
+  }), /Whirl fade/)
   const decodedCalledRock = decodeFrame({
     ...frame,
     primarySpells: { nextId: 3, projectiles: [], transients: [calledRock] },

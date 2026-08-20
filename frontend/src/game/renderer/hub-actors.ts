@@ -1,6 +1,7 @@
 import { Container, Sprite, type Texture } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import type { PlayerStaffAttachmentPose } from '../core-kernels/primary-spells.ts'
 import { playerHitOverlayAlpha } from '../core-kernels/player-combat.ts'
 import type { NativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
 import {
@@ -157,11 +158,16 @@ export class PlayerWorldView {
     )
   }
 
-  update(player: ProtocolPlayerState, tick: number): void {
+  update(
+    player: ProtocolPlayerState,
+    tick: number,
+    staffActionPose: PlayerStaffAttachmentPose | null = null,
+  ): void {
     const playerTextures = this.textures.players[player.config.element]
     const plan = createPlayerCharacterDrawPlan(
       player,
       1,
+      staffActionPose,
       (this.secondaryState?.staffCastTicksRemaining ?? 0) > 0
         || (this.secondaryState?.castSpinTicksRemaining ?? 0) > 0,
     )
@@ -205,25 +211,28 @@ export class PlayerWorldView {
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
     this.shadow.visible = !death.visible
-    this.staffBack.visible = !death.visible && hasWeapon && !staffFront
+    // The extracted native item banks already partition each pose into an
+    // all-transparent back or front cell from Clothes point-0 depth. Keeping
+    // both passes live preserves every melee pose without duplicating pixels.
+    this.staffBack.visible = !death.visible && hasWeapon
     this.orb.container.visible = !death.visible && hasStaff
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && livingAppearance.robe !== null
     this.fixed.visible = !death.visible
     this.fixedSecondary.visible = !death.visible && livingAppearance.robe !== null
-    this.staffFront.visible = !death.visible && hasWeapon && staffFront
+    this.staffFront.visible = !death.visible && hasWeapon
     this.head.visible = !death.visible
     this.headSecondary.visible = !death.visible && livingAppearance.hat !== null
     this.updateDeathLayers(playerTextures, death, deathAppearance)
     const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
     this.hitOverlay.alpha = hitAlpha
     this.hitOverlay.visible = !death.visible && hitAlpha > 0
-    this.hitStaffBack.visible = hasWeapon && !staffFront
+    this.hitStaffBack.visible = hasWeapon
     this.hitRobe.visible = true
     this.hitRobeSecondary.visible = livingAppearance.robe !== null
     this.hitFixed.visible = true
     this.hitFixedSecondary.visible = livingAppearance.robe !== null
-    this.hitStaffFront.visible = hasWeapon && staffFront
+    this.hitStaffFront.visible = hasWeapon
     this.hitHead.visible = true
     this.hitHeadSecondary.visible = livingAppearance.hat !== null
     if (weaponTextures !== null) {

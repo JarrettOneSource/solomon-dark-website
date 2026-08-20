@@ -19,6 +19,8 @@ import {
 } from './primary-spell-fire-view.ts'
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
+import { isNativePlayerStaffTransient } from '../core-kernels/native-player-staff-action.ts'
+import { PlayerStaffVfxView } from './player-staff-vfx-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellPainterLayer {
@@ -79,10 +81,21 @@ export class PrimarySpellWorldView {
     this.liveIds.clear()
     for (const state of [...spells.projectiles, ...spells.transients]) {
       if (state.worldKey !== worldKey) continue
+      if (isNativePlayerStaffTransient(state) && (
+        state.kind !== 'player-staff-smoke'
+        && state.kind !== 'player-staff-move-fade'
+        && state.kind !== 'player-staff-perspective-fade'
+      )) continue
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        if (state.kind === 'earth-called-rock') {
+        if (
+          state.kind === 'player-staff-smoke'
+          || state.kind === 'player-staff-move-fade'
+          || state.kind === 'player-staff-perspective-fade'
+        ) {
+          view = new PlayerStaffVfxView(state, this.textures)
+        } else if (state.kind === 'earth-called-rock') {
           view = new EarthCalledRockView(state, this.textures.primarySpells.earth)
         } else if ('position' in state) {
           view = state.kind === 'earth'

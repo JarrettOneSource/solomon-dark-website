@@ -2,6 +2,7 @@ import { Container, Rectangle, Sprite, Texture, type Renderer } from 'pixi.js'
 import { hub } from '../../lib/assets.ts'
 import type { HubPresentationFrame } from '../client/hub-presentation-timeline.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   HUB_ASTRONOMER_ROOT,
   HUB_ASTRONOMER_TELESCOPE_ORIGIN,
@@ -516,7 +517,15 @@ export class HubWorldScene {
         this.world.addChild(view.container)
       }
       view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
-      view.update(player, snapshot.tick)
+      view.update(
+        player,
+        snapshot.tick,
+        playerStaffActionPose(
+          snapshot.primarySpells.transients,
+          playerId,
+          'hub:courtyard',
+        ),
+      )
     }
     for (const [playerId, view] of this.players) {
       if (live.has(playerId)) continue

@@ -624,6 +624,102 @@ test('interpolates authoritative called-rock absolute state across sparse snapsh
   assert.notEqual(copied.position, newer.transients[0].position)
 })
 
+test('interpolates Staff action and VFX state while retaining semantic contact arrays discretely', () => {
+  const melee = {
+    actionTimingFactor: 1,
+    ageTicks: 2,
+    baseProgressPerTick: 0.1,
+    contactSequence: 0,
+    headingDegrees: 350,
+    id: 1,
+    kind: 'player-staff-melee',
+    lane: 'primary',
+    origin: { x: 100, y: 200 },
+    outcome: 'normal',
+    ownerId: 'local',
+    progress: 2,
+    swooshPitch: 1.05,
+    worldKey: 'hub:courtyard',
+  } as const
+  const contact = {
+    ageTicks: 2,
+    id: 2,
+    kind: 'player-staff-contact',
+    origin: { x: 100, y: 180 },
+    outcome: 'knockback',
+    ownerId: 'local',
+    procSound: 'knockback',
+    procSoundPitches: [1.02],
+    swooshPitch: 1.05,
+    targetIds: ['enemy:1'],
+    worldKey: 'hub:courtyard',
+  } as const
+  const smoke = {
+    ageTicks: 2,
+    alpha: 0.9,
+    alphaLoss: Math.fround(0.05),
+    angularVelocityDegrees: 1,
+    entry: 15,
+    id: 3,
+    kind: 'player-staff-smoke',
+    ownerId: 'local',
+    position: { x: 100, y: 175 },
+    rotationDegrees: 350,
+    scale: 8,
+    worldKey: 'hub:courtyard',
+  } as const
+  const older = {
+    nextId: 4,
+    projectiles: [],
+    transients: [melee, contact, smoke],
+  } satisfies PrimarySpellSimulationState
+  const newer = {
+    nextId: 4,
+    projectiles: [],
+    transients: [{
+      ...melee,
+      ageTicks: 7,
+      headingDegrees: 10,
+      origin: { x: 110, y: 210 },
+      progress: 4,
+    }, {
+      ...contact,
+      ageTicks: 7,
+      origin: { x: 110, y: 190 },
+    }, {
+      ...smoke,
+      ageTicks: 7,
+      alpha: 0.65,
+      position: { x: 110, y: 185 },
+      rotationDegrees: 10,
+    }],
+  } satisfies PrimarySpellSimulationState
+  const halfway = interpolatePrimarySpellState(
+    older,
+    newer,
+    0.5,
+    primarySpellTime(102.5),
+  )
+  const action = halfway.transients[0]
+  assert.ok(action.kind === 'player-staff-melee')
+  assert.equal(action.progress, 3)
+  assert.equal(action.headingDegrees, 360)
+  assert.deepEqual(action.origin, { x: 105, y: 205 })
+  const event = halfway.transients[1]
+  assert.ok(event.kind === 'player-staff-contact')
+  assert.deepEqual(event.origin, { x: 105, y: 185 })
+  assert.notEqual(event.targetIds, contact.targetIds)
+  assert.notEqual(event.procSoundPitches, contact.procSoundPitches)
+  const effect = halfway.transients[2]
+  assert.ok(effect.kind === 'player-staff-smoke')
+  assert.equal(effect.alpha, 0.775)
+  assert.equal(effect.rotationDegrees, 360)
+
+  const owned = copyPrimarySpellState(newer)
+  assert.deepEqual(owned, newer)
+  assert.notEqual(owned.transients[0], newer.transients[0])
+})
+
 test('interpolates remote state over one network interval while keeping local prediction immediate', () => {
   const first = snapshotAt(100, 10, 20)
   const second = snapshotAt(105, 15, 30)

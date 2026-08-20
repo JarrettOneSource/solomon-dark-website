@@ -5419,6 +5419,23 @@ function mergeEffect(
   return { ...source, targetEffects }
 }
 
+export function applyNativeSecondaryDazzle(
+  source: NativeSecondarySimulationState,
+  worldKey: string,
+  targetId: number,
+  durationTicks: number,
+): NativeSecondarySimulationState {
+  if (!Number.isSafeInteger(targetId) || targetId < 0) {
+    throw new RangeError('Dazzle target id must be a non-negative safe integer')
+  }
+  if (!Number.isSafeInteger(durationTicks) || durationTicks < 0) {
+    throw new RangeError('Dazzle duration must be a non-negative safe integer')
+  }
+  return durationTicks === 0
+    ? source
+    : mergeEffect(source, worldKey, targetId, { dazzleTicks: durationTicks })
+}
+
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {
   return {
     coldSlowFactor: 1, coldSlowMaterial: false, coldSlowTicks: 0,

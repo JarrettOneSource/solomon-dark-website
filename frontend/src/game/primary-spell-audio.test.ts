@@ -380,6 +380,57 @@ test('plays each semantic Ether impact once with its native pitch interval', () 
   assert.equal(audio.soundOptions[0].volume! > 0, true)
 })
 
+test('plays each retained Staff contact once in native swoosh then proc order', () => {
+  const initial = simulation('air')
+  const player = getPlayerCharacter(initial, PLAYER_ID)
+  const contact = {
+    ageTicks: 0,
+    id: 1,
+    kind: 'player-staff-contact',
+    origin: { x: player.position.x, y: player.position.y - 20 },
+    outcome: 'whirl',
+    ownerId: PLAYER_ID,
+    procSound: 'spin-attack',
+    procSoundPitches: [1, Math.fround(0.9), Math.fround(1.1)],
+    swooshPitch: 1.1,
+    targetIds: ['enemy:1'],
+    worldKey: 'hub:courtyard',
+  } as const
+  const initialSnapshot = createGameSnapshot(initial, PLAYER_ID)
+  const contacted = createGameSnapshot({
+    ...initial,
+    primarySpells: { nextId: 2, projectiles: [], transients: [contact] },
+  }, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initialSnapshot,
+  )
+  synchronizer.update(contacted)
+  synchronizer.update(contacted)
+  assert.deepEqual(audio.sounds, [
+    'staff-swoosh',
+    'spin-attack',
+    'spin-attack',
+    'spin-attack',
+  ])
+  assert.deepEqual(
+    audio.soundOptions.map(({ playbackRate }) => playbackRate),
+    [1.1, 1, Math.fround(0.9), Math.fround(1.1)],
+  )
+  assert.ok(audio.soundOptions.every(({ volume }) => (volume ?? 0) > 0))
+
+  const reconnectAudio = new RecordingAudio()
+  const reconnect = new PrimarySpellAudioSynchronizer(
+    reconnectAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    contacted,
+  )
+  reconnect.update(contacted)
+  assert.deepEqual(reconnectAudio.sounds, [])
+})
+
 test('consumes Water start once and balances its held loop on release', () => {
   let state = simulation('water')
   const audio = new RecordingAudio()

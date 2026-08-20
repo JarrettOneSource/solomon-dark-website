@@ -39,8 +39,10 @@ export type GameSoundCue =
   | 'bone-crack'
   | 'click'
   | 'coffin-break'
+  | 'critical-hit'
   | 'comet-whistle'
   | 'demon-die'
+  | 'disable-enemy'
   | 'drink'
   | 'distort-reality'
   | 'drop-bag-1'
@@ -59,6 +61,7 @@ export type GameSoundCue =
   | 'imp-split'
   | 'ignite'
   | 'knockback-golem'
+  | 'knockback'
   | 'level-up'
   | 'lightning-start'
   | 'magic-missile'
@@ -82,6 +85,8 @@ export type GameSoundCue =
   | 'rock-hit'
   | 'ring-of-ice'
   | 'skeleton-die'
+  | 'spin-attack'
+  | 'staff-swoosh'
   | 'start-boulder'
   | 'stone-break'
   | 'stone-step'
@@ -212,6 +217,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\coffinbreak',
     sourceSha256: '5b1e1bceae4338878309256cfa083a8621efb26250fd72325d635f719b547dca',
   },
+  'critical-hit': {
+    registryOffset: 0x330,
+    sourceName: 'sounds\\CriticalHit',
+    sourceSha256: 'ccf8ffc6bea19fd51c18a51d04cc9ef2d6d727213573fd47859a23325677b03b',
+  },
   'comet-whistle': {
     registryOffset: 0x2d8,
     sourceName: 'sounds\\cometwhistle',
@@ -221,6 +231,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x388,
     sourceName: 'sounds\\demondies',
     sourceSha256: 'b22c5da10273648ef2f56d3375aaf667e8da408f134f2c2f5cd1a6a29617efa4',
+  },
+  'disable-enemy': {
+    registryOffset: 0x3b4,
+    sourceName: 'sounds\\DisableEnemy',
+    sourceSha256: 'e7e0dfed0c7e10745a545ef18ac872094d35b16535bc249b6022e8964ed186f4',
   },
   drink: {
     registryOffset: 0x438,
@@ -311,6 +326,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x8dc,
     sourceName: 'sounds\\KnockbackGolem',
     sourceSha256: '2452f75de45f6e6c30d7bc9993ba6f86e638ef0b2a101daca38814e65946e090',
+  },
+  knockback: {
+    registryOffset: 0x8b0,
+    sourceName: 'sounds\\Knockback',
+    sourceSha256: '16fee24874ab67546e35b8a08469760088c3da387e4ae8f7243a0a31263cc4dd',
   },
   'level-up': {
     registryOffset: 0x908,
@@ -436,6 +456,16 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0xdac,
     sourceName: 'sounds\\skeleton_die',
     sourceSha256: 'ab38f903e828bd695ffd153dfacea5701f36376ad24cb96be96d3d059f52fb18',
+  },
+  'spin-attack': {
+    registryOffset: 0xe5c,
+    sourceName: 'sounds\\spinattack',
+    sourceSha256: 'dbe81e2ce3a19074efa975be444072614995216b9f880c14b287ab552bcbff4f',
+  },
+  'staff-swoosh': {
+    registryOffset: 0xee0,
+    sourceName: 'sounds\\staffswoosh',
+    sourceSha256: '04da914c919485d68cd49752a0726649cc5395bb47febcfcabee4765d71f2809',
   },
   'start-boulder': {
     registryOffset: 0xf0c,

@@ -8,6 +8,7 @@ import {
   type PrimarySpellSimulationState,
   type PrimarySpellTransientState,
 } from '../core-kernels/primary-spells.ts'
+import { isNativePlayerStaffTransient } from '../core-kernels/native-player-staff-action.ts'
 
 export interface PrimarySpellPresentationTime {
   newerTick: number
@@ -141,10 +142,14 @@ function interpolateStateDrivenTransients(
   blend: number,
 ): PrimarySpellTransientState[] {
   const newerById = new Map(newer.transients
-    .filter((effect) => effect.kind === 'earth-called-rock')
+    .filter((effect) => (
+      effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)
+    ))
     .map((effect) => [effect.id, effect]))
   const result = older.transients
-    .filter((effect) => effect.kind === 'earth-called-rock')
+    .filter((effect) => (
+      effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)
+    ))
     .map((effect) => {
       const next = newerById.get(effect.id)
       return next ? interpolateTransient(effect, next, blend) : copyTransient(effect)
@@ -169,6 +174,13 @@ function fixedTransientTiming(
       lifetimeTicks: PRIMARY_SPELL_AIR_LIFETIME_TICKS,
     }
     case 'earth-called-rock': return null
+    case 'player-staff-contact':
+    case 'player-staff-knockback':
+    case 'player-staff-melee':
+    case 'player-staff-move-fade':
+    case 'player-staff-perspective-fade':
+    case 'player-staff-smoke':
+    case 'player-staff-spin': return null
     case 'earth-impact': return {
       ageZeroTick: effect.birthTick,
       firstVisibleAge: 0,
@@ -203,6 +215,92 @@ function interpolateTransient(
   blend: number,
 ): PrimarySpellTransientState {
   const discrete = blend < 1 ? older : newer
+  if (older.kind === 'player-staff-melee' && newer.kind === 'player-staff-melee') {
+    const action = blend < 1 ? older : newer
+    return {
+      ...action,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      headingDegrees: lerpDegrees(older.headingDegrees, newer.headingDegrees, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      progress: lerp(older.progress, newer.progress, blend),
+    }
+  }
+  if (older.kind === 'player-staff-spin' && newer.kind === 'player-staff-spin') {
+    const action = blend < 1 ? older : newer
+    return {
+      ...action,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      countdown: lerp(older.countdown, newer.countdown, blend),
+      headingDegrees: lerpDegrees(older.headingDegrees, newer.headingDegrees, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+    }
+  }
+  if (older.kind === 'player-staff-contact' && newer.kind === 'player-staff-contact') {
+    const event = blend < 1 ? older : newer
+    return {
+      ...event,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      procSoundPitches: [...event.procSoundPitches],
+      targetIds: [...event.targetIds],
+    }
+  }
+  if (older.kind === 'player-staff-knockback' && newer.kind === 'player-staff-knockback') {
+    const knockback = blend < 1 ? older : newer
+    return {
+      ...knockback,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      origin: { ...knockback.origin },
+      remainingDistance: lerp(
+        older.remainingDistance,
+        newer.remainingDistance,
+        blend,
+      ),
+      targetIds: [...knockback.targetIds],
+    }
+  }
+  if (older.kind === 'player-staff-smoke' && newer.kind === 'player-staff-smoke') {
+    const smoke = blend < 1 ? older : newer
+    return {
+      ...smoke,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      rotationDegrees: lerpDegrees(
+        older.rotationDegrees,
+        newer.rotationDegrees,
+        blend,
+      ),
+    }
+  }
+  if (
+    older.kind === 'player-staff-move-fade'
+    && newer.kind === 'player-staff-move-fade'
+  ) {
+    const effect = blend < 1 ? older : newer
+    return {
+      ...effect,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      velocity: lerpVector(older.velocity, newer.velocity, blend),
+    }
+  }
+  if (
+    older.kind === 'player-staff-perspective-fade'
+    && newer.kind === 'player-staff-perspective-fade'
+  ) {
+    const effect = blend < 1 ? older : newer
+    return {
+      ...effect,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      position: { ...effect.position },
+    }
+  }
+  if (isNativePlayerStaffTransient(older) || isNativePlayerStaffTransient(newer)) {
+    return copyTransient(discrete)
+  }
   if (older.kind === 'earth-impact' && newer.kind === 'earth-impact') {
     const impact = blend < 1 ? older : newer
     return {
@@ -323,6 +421,30 @@ function copyProjectile(spell: PrimarySpellProjectileState): PrimarySpellProject
 }
 
 function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransientState {
+  if (effect.kind === 'player-staff-melee' || effect.kind === 'player-staff-spin') {
+    return { ...effect, origin: { ...effect.origin } }
+  }
+  if (effect.kind === 'player-staff-contact') {
+    return {
+      ...effect,
+      origin: { ...effect.origin },
+      procSoundPitches: [...effect.procSoundPitches],
+      targetIds: [...effect.targetIds],
+    }
+  }
+  if (effect.kind === 'player-staff-knockback') {
+    return { ...effect, origin: { ...effect.origin }, targetIds: [...effect.targetIds] }
+  }
+  if (effect.kind === 'player-staff-smoke' || effect.kind === 'player-staff-perspective-fade') {
+    return { ...effect, position: { ...effect.position } }
+  }
+  if (effect.kind === 'player-staff-move-fade') {
+    return {
+      ...effect,
+      position: { ...effect.position },
+      velocity: { ...effect.velocity },
+    }
+  }
   if (effect.kind === 'earth-impact') {
     return {
       ...effect,
@@ -371,4 +493,20 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
 
 function lerp(first: number, second: number, blend: number): number {
   return first + (second - first) * blend
+}
+
+function lerpVector(
+  first: Readonly<{ x: number; y: number }>,
+  second: Readonly<{ x: number; y: number }>,
+  blend: number,
+): { x: number; y: number } {
+  return {
+    x: lerp(first.x, second.x, blend),
+    y: lerp(first.y, second.y, blend),
+  }
+}
+
+function lerpDegrees(first: number, second: number, blend: number): number {
+  const delta = ((second - first + 540) % 360) - 180
+  return first + delta * blend
 }

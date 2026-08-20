@@ -158,6 +158,28 @@ export class PrimarySpellAudioSynchronizer {
           )),
         })
       }
+      const previousStaffContacts = new Set(this.previous.primarySpells.transients
+        .filter((effect) => effect.kind === 'player-staff-contact')
+        .map((effect) => `${effect.worldKey}\u0000${effect.id}`))
+      for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind !== 'player-staff-contact'
+          || effect.worldKey !== listenerWorldKey
+          || previousStaffContacts.has(`${effect.worldKey}\u0000${effect.id}`)
+        ) continue
+        const volume = hubAudioAttenuation(Math.hypot(
+          effect.origin.x - listener.position.x,
+          effect.origin.y - listener.position.y,
+        ))
+        this.audio.playSound('staff-swoosh', {
+          playbackRate: effect.swooshPitch,
+          volume,
+        })
+        if (effect.procSound === null) continue
+        for (const playbackRate of effect.procSoundPitches) {
+          this.audio.playSound(effect.procSound, { playbackRate, volume })
+        }
+      }
     }
     this.syncLoops(snapshot)
     this.previous = snapshot

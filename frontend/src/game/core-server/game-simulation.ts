@@ -84,6 +84,7 @@ import {
 import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import {
   applyNativeSecondaryGolemDamage,
+  applyNativeSecondaryDazzle,
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
@@ -141,11 +142,13 @@ import {
 } from './native-secondary-world.ts'
 import {
   damageBoneyardEnemy,
+  applyBoneyardStaffHeadingPerturbation,
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
   type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
+import { stepPlayerStaffCombatSystem } from './player-staff-combat-system.ts'
 import {
   addHubParticipant,
   createHubWorld,
@@ -936,14 +939,25 @@ export function stepGameSimulationTick(
   if (state.levelUpBarrier !== null) return state
   const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const players = playerCharacterRecords(state.playerEntities)
-  const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => [
-    playerId,
-    getPlayerProgression(state, playerId).pendingOffer
+  const staffActionOwnerIds = new Set(state.primarySpells.transients.flatMap((transient) => (
+    transient.kind === 'player-staff-melee' || transient.kind === 'player-staff-spin'
+      ? [transient.ownerId]
+      : []
+  )))
+  const activeInputs = Object.fromEntries(Object.keys(players).map((playerId) => {
+    const input = getPlayerProgression(state, playerId).pendingOffer
       || !playerEntityCanAcceptInput(state.playerEntities, playerId)
       || (state.run.phase !== 'hub' && state.run.phase !== 'active')
       ? createIdlePlayerCharacterInput()
-      : inputs[playerId] ?? createIdlePlayerCharacterInput(),
-  ]))
+      : inputs[playerId] ?? createIdlePlayerCharacterInput()
+    return [playerId, staffActionOwnerIds.has(playerId)
+      ? {
+          ...input,
+          cast: { primary: false, secondary: null },
+          movement: { x: 0, y: 0 },
+        }
+      : input]
+  }))
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, players, activeInputs)
@@ -1426,64 +1440,145 @@ function finishGameSimulationTick(
       ? null
       : firstHubRegionLineObstruction(region, start, end)
   }
+  let spellsBeforePrimary = previous.primarySpells
+  let staffActingPlayerIds: ReadonlySet<string> = new Set()
+  let postStaffInputs = inputs
+  if (world.kind === 'boneyard') {
+    const staff = stepPlayerStaffCombatSystem({
+      enemies: world.enemies,
+      inputs,
+      knockbackTargetVisible: (origin, target) => {
+        const blocked = firstBoneyardPathBlockProgress(
+          origin,
+          target,
+          boneyardSpellBounds!,
+          boneyardCollision!,
+          0,
+        )
+        return blocked === null || blocked >= 1
+      },
+      playerEntities,
+      players: resolvedPlayers,
+      rng: secondaryAbilities.rng,
+      spells: spellsBeforePrimary,
+      tick,
+      worldKey: `boneyard:${world.runId}`,
+    })
+    playerEntities = staff.playerEntities
+    resolvedPlayers = staff.players
+    secondaryAbilities = { ...secondaryAbilities, rng: staff.rng }
+    spellsBeforePrimary = staff.spells
+    staffActingPlayerIds = staff.actingPlayerIds
+    world = {
+      ...world,
+      enemies: staff.enemies,
+      enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, staff.events, tick),
+    }
+    if (staff.displacements.length > 0) {
+      world = applyBoneyardSecondaryEnemyKnockbacks(
+        world,
+        resolvedPlayers,
+        staff.displacements.map(({ actorId, delta }) => ({
+          delta,
+          sourceActorId: 0,
+          targetId: actorId,
+        })),
+        Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => [
+          playerId,
+          {
+            alive: playerEntities.progressions[index]!.lifeState === 'alive',
+            collisionEnabled: playerCollisionEnabledAfterCombatTick(
+              playerEntities.progressions[index]!,
+            ),
+            eligible: previous.run.eligiblePlayerIds.includes(playerId),
+            movementScale: playerEntityMovementScale(playerEntities, playerId),
+          },
+        ])),
+      )
+    }
+    for (const perturbation of staff.headingPerturbations) {
+      world = {
+        ...world,
+        enemies: applyBoneyardStaffHeadingPerturbation(
+          world.enemies,
+          perturbation.actorId,
+          perturbation.headingDegrees,
+        ),
+      }
+    }
+    for (const dazzle of staff.dazzleRequests) {
+      secondaryAbilities = applyNativeSecondaryDazzle(
+        secondaryAbilities,
+        `boneyard:${world.runId}`,
+        dazzle.targetId,
+        dazzle.durationTicks,
+      )
+    }
+    postStaffInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
+      playerId,
+      staff.actingPlayerIds.has(playerId)
+        ? { ...input, cast: { primary: false, secondary: null } }
+        : input,
+    ]))
+  }
   const secondaryResult = stepNativeSecondaryAbilities(secondaryAbilities, {
     dampenCandidates: (worldKey, origin) => (
-      result.world.kind === 'boneyard'
-      && worldKey === `boneyard:${result.world.runId}`
-        ? boneyardNativeSecondaryDampenCandidates(result.world.enemies, origin)
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryDampenCandidates(world.enemies, origin)
         : { casterTargetIds: [], projectileIds: [], shieldTargetIds: [] }
     ),
     effectPositionBlocked: (worldKey, position) => {
       if (
-        result.world.kind === 'boneyard'
-        && worldKey === `boneyard:${result.world.runId}`
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
       ) {
         return !canPlaceBoneyardBody(
           position,
-          result.world.bounds,
+          world.bounds,
           boneyardCollision!,
           0,
         )
       }
-      if (result.world.kind !== 'hub') return false
-      const region = Object.values(result.world.participants)
+      if (world.kind !== 'hub') return false
+      const region = Object.values(world.participants)
         .find((participant) => `hub:${participant.region}` === worldKey)?.region
       return region === undefined || !isHubRegionTraversable(region, position, 0)
     },
     golemFootPlacement: (playerId, worldKey, currentPosition, requestedPosition) => {
       if (
-        result.world.kind === 'boneyard'
-        && worldKey === `boneyard:${result.world.runId}`
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
       ) {
         return resolveBoneyardMovement(
           currentPosition,
           requestedPosition,
-          result.world.bounds,
+          world.bounds,
           boneyardCollision!,
           0,
         )
       }
-      if (result.world.kind !== 'hub') return currentPosition
-      const region = result.world.participants[playerId]?.region
+      if (world.kind !== 'hub') return currentPosition
+      const region = world.participants[playerId]?.region
       return region !== undefined && isHubRegionTraversable(region, requestedPosition, 0)
         ? requestedPosition
         : currentPosition
     },
     golemMovement: (playerId, worldKey, origin, requestedPosition, radius) => {
       if (
-        result.world.kind === 'boneyard'
-        && worldKey === `boneyard:${result.world.runId}`
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
       ) {
         return resolveBoneyardMovement(
           origin,
           requestedPosition,
-          result.world.bounds,
+          world.bounds,
           boneyardCollision!,
           radius,
         )
       }
-      if (result.world.kind !== 'hub') return origin
-      const region = result.world.participants[playerId]?.region
+      if (world.kind !== 'hub') return origin
+      const region = world.participants[playerId]?.region
       return region !== undefined && isHubRegionTraversable(
         region,
         requestedPosition,
@@ -1492,26 +1587,26 @@ function finishGameSimulationTick(
     },
     golemPlacement: (playerId, worldKey, requestedPosition, rng) => {
       if (
-        result.world.kind === 'boneyard'
-        && worldKey === `boneyard:${result.world.runId}`
+        world.kind === 'boneyard'
+        && worldKey === `boneyard:${world.runId}`
       ) {
-        const world = result.world
+        const boneyardWorld = world
         return resolveNativeCollisionAdjustedPosition(
           rng,
           requestedPosition,
           NATIVE_GOLEM_PLACEMENT_RADIUS,
           (position) => canPlaceBoneyardBody(
             position,
-            world.bounds,
+            boneyardWorld.bounds,
             boneyardCollision!,
             NATIVE_GOLEM_PLACEMENT_RADIUS,
           ),
         )
       }
-      if (result.world.kind !== 'hub') {
+      if (world.kind !== 'hub') {
         return { position: requestedPosition, rng }
       }
-      const region = result.world.participants[playerId]?.region
+      const region = world.participants[playerId]?.region
       if (region === undefined || worldKey !== `hub:${region}`) {
         return { position: requestedPosition, rng }
       }
@@ -1532,16 +1627,16 @@ function finishGameSimulationTick(
           x: origin.x + direction.x * distance,
           y: origin.y + direction.y * distance,
         }
-        if (result.world.kind === 'boneyard') {
+        if (world.kind === 'boneyard') {
           if (canPlaceBoneyardBody(
             candidate,
-            result.world.bounds,
+            world.bounds,
             boneyardCollision!,
             PLAYER_CHARACTER_RADIUS,
           )) return candidate
           continue
         }
-        const region = result.world.participants[playerId]?.region
+        const region = world.participants[playerId]?.region
         if (region !== undefined && isHubRegionTraversable(
           region,
           candidate,
@@ -1551,12 +1646,12 @@ function finishGameSimulationTick(
       return null
     },
     lineObstruction: (worldKey, start, end) => (
-      result.world.kind === 'boneyard'
-      && worldKey === `boneyard:${result.world.runId}`
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
       && firstBoneyardLineObstruction(
         start,
         end,
-        result.world.bounds,
+        world.bounds,
         boneyardCollision!,
       ) !== null
     ),
@@ -1613,7 +1708,7 @@ function finishGameSimulationTick(
           offensiveFactors,
         ),
         golemReflectFactor: effectiveSkillNumericValue(skillBook, statBook, 75, 'mReflect') / 100,
-        input: inputs[playerId] ?? createIdlePlayerCharacterInput(),
+        input: postStaffInputs[playerId] ?? createIdlePlayerCharacterInput(),
         maximumMana: progression.maximumMana,
         magicStormDurationBonusTicks: Math.trunc(effectiveSkillNumericValue(
           skillBook,
@@ -1653,14 +1748,14 @@ function finishGameSimulationTick(
         offensiveFactors,
         secondaryRechargeFactor: derived.secondaryRechargeFactor,
         skillBook,
-        worldKey: gameWorldKey(result.world, playerId),
+        worldKey: gameWorldKey(world, playerId),
       }]
     })),
     registerLightProvider: lightProviderOrder.register,
     sceneryTargets: (worldKey, center, radius) => (
-      result.world.kind === 'boneyard'
-      && worldKey === `boneyard:${result.world.runId}`
-        ? result.world.earthquakeSceneryTargets.filter((target) => {
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? world.earthquakeSceneryTargets.filter((target) => {
             const x = target.position.x - center.x
             const y = target.position.y - center.y
             return x * x + y * y < radius * radius
@@ -1668,15 +1763,15 @@ function finishGameSimulationTick(
         : []
     ),
     teleportDestination: (_playerId, rng) => {
-      if (result.world.kind === 'boneyard') {
-        const world = result.world
-        const worldKey = `boneyard:${world.runId}`
+      if (world.kind === 'boneyard') {
+        const boneyardWorld = world
+        const worldKey = `boneyard:${boneyardWorld.runId}`
         const bodies = [
           ...Object.values(resolvedPlayers).map(({ position }) => ({
             position,
             radius: PLAYER_CHARACTER_RADIUS,
           })),
-          ...world.enemies.actors.flatMap((actor) => (
+          ...boneyardWorld.enemies.actors.flatMap((actor) => (
             actor.lifeState === 'alive'
               ? [{
                   position: actor.position,
@@ -1684,7 +1779,7 @@ function finishGameSimulationTick(
                 }]
               : []
           )),
-          ...world.enemies.maggots.flatMap((actor) => (
+          ...boneyardWorld.enemies.maggots.flatMap((actor) => (
             actor.lifeState === 'alive'
               ? [{ position: actor.position, radius: actor.collisionRadius }]
               : []
@@ -1698,22 +1793,22 @@ function finishGameSimulationTick(
         ]
         return resolveBoneyardNativeTeleport(rng, {
           bodies,
-          bounds: world.bounds,
+          bounds: boneyardWorld.bounds,
           collision: boneyardCollision!,
         })
       }
       return { position: { x: 0, y: 0 }, rng }
     },
     target: (worldKey, targetId) => (
-      result.world.kind === 'boneyard'
-      && worldKey === `boneyard:${result.world.runId}`
-        ? boneyardNativeSecondaryTarget(result.world.enemies, targetId)
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryTarget(world.enemies, targetId)
         : null
     ),
     targets: (worldKey, center, radius) => (
-      result.world.kind === 'boneyard'
-      && worldKey === `boneyard:${result.world.runId}`
-        ? boneyardNativeSecondaryTargets(result.world.enemies, center, radius)
+      world.kind === 'boneyard'
+      && worldKey === `boneyard:${world.runId}`
+        ? boneyardNativeSecondaryTargets(world.enemies, center, radius)
         : []
     ),
     tick,
@@ -1769,7 +1864,7 @@ function finishGameSimulationTick(
     }
   }
   const primaryOverridePlayerIds = new Set(secondaryResult.primaryOverridePlayerIds)
-  const primaryInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
+  const primaryInputs = Object.fromEntries(Object.entries(postStaffInputs).map(([playerId, input]) => [
     playerId,
     primaryOverridePlayerIds.has(playerId)
       || (secondaryAbilities.players[playerId]?.staffCastTicksRemaining ?? 0) > 0
@@ -1837,7 +1932,7 @@ function finishGameSimulationTick(
     players: secondaryPlayers,
     previousPlayers: playerCharacterRecords(previous.playerEntities),
     registerLightProvider: lightProviderOrder.register,
-    spells: previous.primarySpells,
+    spells: spellsBeforePrimary,
     tick,
     viewScale: result.world.kind === 'hub' ? HUB_CAMERA_SCALE : 1.35,
     spellObstructionPoint,
@@ -1875,10 +1970,7 @@ function finishGameSimulationTick(
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   let primarySpells = cast.spells
   if (world.kind === 'boneyard') {
-    const previousEvents = previous.world.kind === 'boneyard'
-      && previous.world.runId === world.runId
-      ? previous.world.enemyEvents
-      : []
+    const previousEvents = world.enemyEvents
     const previousLootEvents = previous.world.kind === 'boneyard'
       && previous.world.runId === world.runId
       ? previous.world.lootEvents
@@ -2011,7 +2103,7 @@ function finishGameSimulationTick(
   }
   playerEntities = replacePlayerCharacterRecords(playerEntities, players)
   playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
-  const combat = stepPlayerEntityCombatTick(playerEntities)
+  const combat = stepPlayerEntityCombatTick(playerEntities, staffActingPlayerIds)
   playerEntities = combat.store
   for (const playerId of combat.deathBurstPlayerIds) {
     playerEntities = setPlayerEntitySpectating(playerEntities, playerId)

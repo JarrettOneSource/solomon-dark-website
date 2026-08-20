@@ -1012,6 +1012,76 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   )
 })
 
+test('Boneyard simulation owns automatic Staff action, contact damage, and retained audio edge', () => {
+  const loaded = combatBoneyard('staff-combat-run')
+  loaded.scene.spawn.facingDeg = 0
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'body',
+    displayName: 'Staff Caster',
+    element: 'air',
+  } }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state, 'caster')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: player.position.x, y: player.position.y - 45 },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  const enemy = seeded.store.actors[0]!
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: {
+        ...seeded.store,
+        actors: [{
+          ...enemy,
+          currentHealth: 1_000,
+          nextMovementTick: Number.MAX_SAFE_INTEGER,
+          position: {
+            x: player.position.x,
+            y: player.position.y - (25 + enemy.config.collisionRadius),
+          },
+        }],
+      },
+    },
+  }
+  const initialMana = getPlayerProgression(state, 'caster').currentMana
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const initialHealth = state.world.enemies.actors[0]!.currentHealth
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+  assert.ok(state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-melee'))
+  const actionPosition = getPlayerCharacter(state, 'caster').position
+  for (let tick = 1; tick < 100; tick += 1) {
+    state = stepGameSimulationTick(state, { caster: gameplayInput(1, 0) })
+    if (state.primarySpells.transients.some(({ kind }) => kind === 'player-staff-contact')) {
+      break
+    }
+  }
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const contact = state.primarySpells.transients.find(({ kind }) => (
+    kind === 'player-staff-contact'
+  ))
+  assert.ok(contact && contact.kind === 'player-staff-contact')
+  assert.equal(state.world.enemies.actors[0]!.currentHealth, initialHealth - 1)
+  assert.equal(getPlayerProgression(state, 'caster').currentMana, initialMana)
+  assert.deepEqual(getPlayerCharacter(state, 'caster').position, actionPosition)
+  assert.ok(state.world.enemyEvents.some((event) => (
+    event.type === 'enemy-damage-sound' && event.sound === 'bone-crack'
+  )))
+})
+
 test('Boneyard Fire uses kernel terrain lookahead then post-move point contact', () => {
   const loaded = combatBoneyard('spell-ordering-run')
   loaded.scene.fences = [{

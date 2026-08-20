@@ -18,6 +18,7 @@ import {
   playerCharacterRobePose,
   playerCharacterStaffIsFront,
   playerCharacterStaffOrbOffset,
+  playerStaffActionPose,
 } from './player-character-presentation.ts'
 
 test('player death draw plan uses the native four-frame six-facing bank', () => {
@@ -294,7 +295,7 @@ test('player draw plan holds native Staff Cast 2 pose nine during a secondary ac
     primaryCast: createIdlePlayerPrimaryCast(),
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
-  }, 1, true)
+  }, 1, null, true)
   assert.equal(plan.attachmentPose, 9)
   assert.deepEqual(plan.orbOffset, { x: 32.5, y: -55 })
   assert.equal(plan.staffFront, false)
@@ -330,4 +331,39 @@ test('player draw plan holds the sustained Staff Constant pose bank', () => {
   })
   assert.equal(constant.attachmentPose, 7)
   assert.deepEqual(constant.orbOffset, { x: 8.5, y: -56 })
+})
+
+test('player draw plan consumes authoritative melee poses and world ownership', () => {
+  const state = {
+    config: FIRE_CONFIG,
+    gaitDegrees: 0,
+    headingIndex: 0,
+    primaryCast: createIdlePlayerPrimaryCast(),
+    velocity: { x: 0, y: 0 },
+    walkCyclePrimary: 0,
+  }
+  const plan = createPlayerCharacterDrawPlan(state, 1, 4)
+  assert.equal(plan.attachmentPose, 4)
+  assert.deepEqual(plan.orbOffset, { x: 39.5, y: -24.5 })
+  assert.equal(plan.staffFront, false)
+  assert.equal(playerCharacterStaffIsFront(8, 4), true)
+
+  const action = {
+    actionTimingFactor: 1,
+    ageTicks: 2,
+    baseProgressPerTick: 0.1,
+    contactSequence: 0,
+    headingDegrees: 0,
+    id: 7,
+    kind: 'player-staff-melee',
+    lane: 'primary',
+    origin: { x: 0, y: 0 },
+    outcome: 'normal',
+    ownerId: 'caster',
+    progress: 1,
+    swooshPitch: 1.05,
+    worldKey: 'boneyard:test',
+  } as const
+  assert.equal(playerStaffActionPose([action], 'caster', 'boneyard:test'), 4)
+  assert.equal(playerStaffActionPose([action], 'caster', 'boneyard:other'), null)
 })

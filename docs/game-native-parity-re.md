@@ -20551,20 +20551,102 @@ it is not a second hand-maintained list.
 | ---: | --- | --- |
 | 56 Mana Up | base max MP plus authored `mValue`, then equipment max-MP transform; refresh preserves current/max ratio | exact-ported in dense player skill state |
 | 57 Channel Mana | base `0.1` MP/tick times `1+mValue/100`, concentrated `1+mConcentration/100`, then equipment recovery transform | exact-ported |
-| 58 Meditation | idle counter, authored delay, total recovery multiplier, concentrated quarter-strength moving/acting ramp | exact-ported kernel and authoritative tick; secondary-action activity admission remains in the staff/action follow-up |
+| 58 Meditation | idle counter, authored delay, total recovery multiplier, concentrated quarter-strength moving/acting ramp | exact-ported kernel and authoritative tick, including Staff-action activity admission |
 | 59 Battle Mage | authored-row flag gate; applies after minimum-one/base reduction and before later flat/multiplier mana lanes | exact-ported for primary and all secondary value materializers |
 | 60 Focus | global cooldown decrement factor; concentration owns one exact `Integer(100)` 75..99 instant-recharge branch at cooldown creation | exact-ported |
 | 61 Siege Mage | authored-row flag gate; applies last after all damage flats, multipliers, per-skill, class, and element lanes | exact-ported for primary, secondary, DOT, summon, and Plane-Orb materialization boundaries |
 | 62 Resist Magic | combined skill/concentration/equipment fraction before shield/Stoneskin interception | exact-ported |
 | 63 Creativity | four-card/lower-requirement picker already owned by progression; fixed concentration slot A alone rolls `Integer(5)==1`, selects an eligible card, and applies it twice | exact-ported authority/protocol; full Skill Book UI follows in the loadout slice |
 | 64 Health Up | base max HP plus authored `mValue`, then equipment max-HP transform; refresh preserves ratio | exact-ported |
-| 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x` | scalar exact; automatic StaffMelee/StaffSpin contact/VFX/audio remains open in the staff slice |
+| 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x` | exact-ported through automatic StaffMelee/StaffSpin gameplay, animation, protocol, VFX, and audio; full browser receipt remains pending |
 | 66 Telekinesis | pickup scalar `mValue*1.25`, doubled while concentrated | scalar exact; Orb/Gold/Sack/Bonus ground consumers remain open in the loot-attraction slice |
 | 67 Rush | movement factor `1+mValue/100`, then concentrated factor and equipment walk transform | exact-ported into authoritative movement |
 | 68 Deflect | exact Staff type gate, one `Integer(100)` per deflectable contact, successful-only signed pitch, facing, global stock swipe, and nearby concentrated physical x5 reflection | exact-ported gameplay/event/audio; browser contact journey still required |
 | 69 Resist Poison | skill/concentration/equipment fraction scales poison duration, not DPS | exact-ported |
 | 70 Faster Caster | fractional Staff action progress; one-shot emission uses threshold crossing so faster rates cannot skip the marker | exact-ported primary authority and finite protocol clock |
-| 71 Fortunate Flailing | Staff attack `Float(100)` plus four-way proc; concentrated non-normal damage x1.2 | pending with the inseparable automatic Staff combat actor slice |
+| 71 Fortunate Flailing | Staff attack `Float(100)` plus four-way proc; concentrated non-normal damage x1.2 | exact-ported with all four contact branches and retained world effects; full browser receipt remains pending |
+
+### Enchant Staff and Fortunate Flailing authority
+
+`PlayerActorTick 0x00548B00 -> PlayerWizard_StartStaffAction 0x00537AA0`
+scans the existing contact list in registration order and admits the first
+target with strict absolute heading delta below 50 degrees, but only while the
+equipped item is native Staff type `0x1B5C`. Every admitted action consumes
+endpoint-inclusive `Float(100)`; `chance >= draw` consumes `Integer(4)` and
+selects Knockback, Disable, Critical, or Whirl. Rank zero therefore retains
+the native one-value zero-endpoint proc defect.
+
+StaffMelee `0x0044AE50/0x0044B580` alternates the exact attachment programs
+`0,4,5,6,6,6,6,6,6` and `0,1,2,3,3,3,3,3,3`. Its constructor consumes
+`Float(.05000000074505806)` and then `Integer(8)`. The stored float32 action
+rate begins from exact double `0.10000000149011612`; selector two alone
+multiplies it by exact double `1.350000023841858`. Contact crosses progress
+three once and the action retires only above progress eight. Concentrated
+Enchant Staff multiplies the progress step by `1.75`. StaffSpin
+`0x00448750/0x004487D0` instead consumes the one-word `RandomSign(1)` helper,
+turns 20 degrees per tick at attachment pose three, and contacts exactly when
+its 360 countdown reaches zero on tick 18; Enchant concentration does not
+accelerate it. A live Staff action owns the player action slot, suppressing
+locomotion and both cast inputs until the action retires; the web now applies
+that gate before authoritative world movement rather than only hiding casts
+after the fact.
+
+The marker always plays registry offset `0xEE0`, `sounds\\staffswoosh`, at
+float32 pitch `1 + (storedActionRate - 0.10000000149011612)`. The earlier
+`.05` subtraction was falsified by raw instructions `0x0055022A..0x0055024A`
+and `.rdata` bytes at `0x007849E0..0x007849EF`; `.05` is only the jitter
+bound. Each successful proc adds its own exact cue: Knockback offset `0x8B0`
+and Critical offset `0x330` consume signed `Float(.1)` pitch, Disable offset
+`0x3B4` uses pitch one, and Whirl offset `0xE5C` starts the same sample at
+`1/.9/1.1`. All five untouched retail WAV hashes are pinned in the web
+manifest and the retained contact actor is the one replay-resistant audio
+identity.
+
+`PlayerWizard_StaffContact 0x0053B9F0` owns the target and damage branch:
+
+- Normal, Knockback, and Disable use rotated trapezoid
+  `(-40,-70),(40,-70),(30,0),(-30,0)`. With effective Enchant rank zero the
+  ordered result consumes `Integer(candidateCount)` and retains one; a learned
+  rank retains all.
+- Critical uses `(-60,-105),(60,-105),(45,0),(-45,0)` and retains every
+  flag-2 center inside it.
+- Whirl uses the strict native radius-100 query
+  `distanceSquared < 100^2 + targetRadius^2`.
+- Damage is `max(1, DamageResolver(row65,mDamage))`; Critical is times three
+  and concentrated non-normal Flailing is another times `1.2`. Non-Whirl
+  targets receive `min(total,2*total/count)` while Whirl applies full total to
+  each target.
+
+Knockback, Critical, and Whirl create native type `0x7E9`. Their respective
+queries are 80-degree/radius-100/push-150, 60-degree/radius-100/push-50, and
+full-circle/radius-100/push-50. The retained actor moves its construction-time
+targets collision-aware by `min(remaining,10)` per tick. Its terminal update
+adds 200-tick Dazzle and consumes signed `Float(45)` per surviving target for
+heading perturbation. Disable permanently multiplies target movement by
+`.75` and the flag-2 action lane by `.5`; repeated hits compound as native.
+
+The complete presentation set has no light-provider call or world-light
+write. Knockback and Critical each birth normal-blend BadGuys 15 SmokePuff at
+25 units along heading, scale eight, alpha one, loss `.05`; its constructor
+still spends an overwritten `Float(.05)` and `Float(2)` angular draw. Disable
+births exactly 50 additive BadGuys 45 MoveFades at the damaged-target mean,
+using one `Float(360)` seed followed per child by `Integer(5)`, `Float(3)`, and
+`Float(.75)`, with scale `.25..1`, alpha `1.5`, loss `.05`, and velocity
+factor `.92`. Critical additionally births additive BadGuys 40 at Y minus 15,
+speed five, scale four, alpha two, loss `.25`. Whirl births additive BadGuys
+88 at the player with `Float(360)` rotation, scale three, alpha `1.25`, and
+loss `.1`. Each tinted member uses the caster element color.
+
+The Website owns these as server-stepped transients sharing the existing
+primary actor allocator and combat RNG, target-owned persistent Disable
+factors, collision-resolved Knockback requests, strict protocol variants,
+state interpolation, exact ten-pose Clothes attachment banks, pure VFX plans,
+and semantic audio contacts. Non-rendered action/contact/Knockback actors never
+gain a placeholder sprite. Focused coverage pins RNG word counts, strict
+geometry boundaries, target ordering, damage distribution, lethal-contact
+Knockback ordering, persistent factors, actor lifetimes, all VFX records and
+recurrences, protocol rejection, renderer/light disposition, animation poses,
+audio hashes/order/no-replay, and an authoritative Boneyard contact journey.
 
 ### Equipment FX ownership
 
@@ -20579,9 +20661,9 @@ uses its serialized `nativeEffects`; named gear resolves the authoritative
 recipe table; recipe-less random gear never completes a set.
 
 Current consumers are closed for effective ranks, primary/secondary damage and
-cost, cast speed, recharge, max resources, recovery, movement, all three
-resistances, and the five shipped maximum-set branches. Still-open adjacent
-consumers are equipment Gold Bonus, Orb Pull, Staff melee, HP recovery during
+cost, cast speed, recharge, max resources, recovery, movement, Staff melee,
+all three resistances, and the five shipped maximum-set branches. Still-open
+adjacent consumers are equipment Gold Bonus, Orb Pull, HP recovery during
 Regenerate composition, Mindblast's retained world program, and Welding
 feature/scalar consumption. They stay explicit here rather than being mistaken
 for completed because the pure resolver exists.
@@ -20604,11 +20686,14 @@ drift from the cancelled contact.
 
 The pure equipment catalog/resolver, all static passive formulas, native
 offensive ordering, concentration selection, Mind Chug, Mindstar/equipment
-rank composition, Meditation, and living Staff admission have focused tests.
-The exact-tree TypeScript gate is green at this checkpoint. Full Boneyard,
-production build, browser Deflect/cast-speed/equipment journeys, Mac mini, and
-publication receipts remain deliberately pending until the Staff,
-Telekinesis, Mindblast, Skill Book, and Welding slices close.
+rank composition, Meditation, and the complete automatic Staff action/contact
+system have focused tests. On the exact integration tree, the Staff/passive/
+simulation/protocol/presentation/audio set passed `174/174`, the complete
+Boneyard command passed `996/996`, TypeScript and lint/import boundaries were
+green, and the production frontend/game-host build plus bundle-budget gate
+passed. Browser Staff/Deflect/cast-speed/equipment journeys, Mac mini, and
+publication receipts remain deliberately pending until Telekinesis, Mindblast,
+Skill Book, and Welding close.
 
 ## 2026-08-20 — Solomon Dig state-0 digging audio emitter
 

@@ -7,11 +7,14 @@ import type {
   WizardElement,
 } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
+import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
 import {
   primaryCastPose,
   primarySpellEmitterOffset,
   staffAttachmentEmitterOffset,
+  playerStaffAttachmentOffset,
   type PlayerStaffAttachmentPose,
+  type PrimarySpellTransientState,
 } from './core-kernels/primary-spells.ts'
 
 const STAFF_FRONT: readonly boolean[] = [
@@ -26,6 +29,13 @@ const CAST_STAFF_FRONT: readonly boolean[] = [
   false, true, true, true, true, true,
   true, true, true, true, true, true,
   false, false, false, false, false, false,
+]
+
+const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
+  false, false, false, false, false, false,
+  false, true, true, true, true, true,
+  true, true, true, true, true, true,
+  true, false, false, false, false, false,
 ]
 
 export interface PlayerCharacterDrawPlan {
@@ -221,11 +231,12 @@ export function createPlayerCharacterDrawPlan(
     'config' | 'gaitDegrees' | 'headingIndex' | 'primaryCast' | 'velocity' | 'walkCyclePrimary'
   >,
   scale = 1,
+  staffActionPose: PlayerStaffAttachmentPose | null = null,
   secondaryCastActive = false,
 ): PlayerCharacterDrawPlan {
   const attachmentPose = secondaryCastActive
     ? 9
-    : primaryCastPose(
+    : staffActionPose ?? primaryCastPose(
         state.primaryCast.actionTick,
         state.primaryCast.channelActive,
         state.config.element,
@@ -247,12 +258,14 @@ export function createPlayerCharacterDrawPlan(
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
     orbOffset: secondaryCastActive
       ? staffAttachmentEmitterOffset(state.headingIndex, 9)
-      : primarySpellEmitterOffset(
+      : staffActionPose === null
+        ? primarySpellEmitterOffset(
           state.headingIndex,
           state.primaryCast.actionTick,
           state.primaryCast.channelActive,
           state.config.element,
-        ),
+        )
+        : playerStaffAttachmentOffset(state.headingIndex, staffActionPose),
     orbZIndex: staffFront ? 6 : 2,
     robePose: playerCharacterRobePose(state.walkCyclePrimary),
     staffFront,
@@ -263,13 +276,33 @@ export function playerCharacterStaffOrbOffset(headingIndex: number): Vector2 {
   return primarySpellEmitterOffset(headingIndex, -1)
 }
 
+export function playerStaffActionPose(
+  transients: readonly PrimarySpellTransientState[],
+  ownerId: string,
+  worldKey: string,
+): PlayerStaffAttachmentPose | null {
+  const action = transients.find((effect) => (
+    effect.ownerId === ownerId
+    && effect.worldKey === worldKey
+    && (effect.kind === 'player-staff-melee' || effect.kind === 'player-staff-spin')
+  ))
+  return action?.kind === 'player-staff-melee' || action?.kind === 'player-staff-spin'
+    ? nativePlayerStaffActionPose(action) as PlayerStaffAttachmentPose
+    : null
+}
+
 export function playerCharacterStaffIsFront(
   headingIndex: number,
   attachmentPose: PlayerStaffAttachmentPose = 0,
 ): boolean {
   const bank = attachmentPose === 7 || attachmentPose === 8 || attachmentPose === 9
     ? CAST_STAFF_FRONT
-    : STAFF_FRONT
+    : attachmentPose === 4
+        || attachmentPose === 5
+        || attachmentPose === 6
+        || attachmentPose === 9
+      ? MELEE_ALT_STAFF_FRONT
+      : STAFF_FRONT
   return bank[normalizedIndex(headingIndex, bank.length)]
 }
 

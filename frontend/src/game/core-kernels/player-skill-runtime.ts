@@ -4,6 +4,7 @@ import {
   drawNativeInteger,
   type NativeRngState,
 } from './native-rng.ts'
+import { resolveNativeSkillDamageValue } from './native-offensive-resolution.ts'
 import {
   applyNativeEquipmentTransform,
   resolveEquippedNativeEffects,
@@ -35,14 +36,19 @@ export const CONCENTRATABLE_SKILL_IDS = Object.freeze([
   65, 66, 67, 68, 69, 70, 71,
 ])
 
-export const NATIVE_BASE_STAFF_DAMAGE_PRIMARY = 0.5
-export const NATIVE_BASE_STAFF_DAMAGE_SECONDARY = 1
 export const NATIVE_MEDITATION_ACTIVITY_BONUS_SCALE = 0.25
 export const NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR = 1.75
 export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
 
 export type PlayerConcentrationSlot = 'a' | 'b'
+export type PlayerStaffDamageLane = 'primary' | 'secondary'
+export type PlayerStaffAttackOutcome =
+  | 'normal'
+  | 'knockback'
+  | 'disabling-hit'
+  | 'critical-hit'
+  | 'whirl'
 
 export interface PlayerSkillRuntimeComponent {
   readonly concentrationSkillIdA: number | null
@@ -52,6 +58,7 @@ export interface PlayerSkillRuntimeComponent {
   readonly meditationIdleElapsedTicks: number
   readonly mindstarActive: boolean
   readonly nextConcentrationReplacementSlot: PlayerConcentrationSlot
+  readonly staffMeleeAlternate: boolean
 }
 
 export interface PlayerSkillDerivedStats {
@@ -59,6 +66,7 @@ export interface PlayerSkillDerivedStats {
   readonly damageResistance: number
   readonly deflectChancePercent: number
   readonly focusInstantRechargeChancePercent: number
+  readonly flailingChancePercent: number
   readonly healthRecoveryPerTick: number
   readonly magicResistance: number
   readonly manaRecoveryPerTick: number
@@ -102,6 +110,12 @@ export interface PlayerCreativityInsightResult {
   readonly rng: NativeRngState
 }
 
+export interface PlayerStaffAttackResult {
+  readonly actionTimingFactor: number
+  readonly outcome: PlayerStaffAttackOutcome
+  readonly rng: NativeRngState
+}
+
 export function createPlayerSkillRuntime(
   skillBook: PlayerSkillBookComponent,
   statBook: PlayerStatBookComponent,
@@ -118,6 +132,7 @@ export function createPlayerSkillRuntime(
     meditationIdleElapsedTicks: 0,
     mindstarActive: false,
     nextConcentrationReplacementSlot: 'a',
+    staffMeleeAlternate: false,
   }, skillBook, statBook, economy)
 }
 
@@ -209,6 +224,7 @@ export function playerSkillDerivedStats(
     damageResistance: clampUnit(modifiers.damageResistance),
     deflectChancePercent: staffEquipped ? value(68, 'mValue') : 0,
     focusInstantRechargeChancePercent: selected(60) ? value(60, 'mConcentration') : 0,
+    flailingChancePercent: value(71, 'mChance'),
     healthRecoveryPerTick: applyNativeEquipmentTransform(
       modifiers.healthRecovery,
       PLAYER_HEALTH_RECOVERY_PER_TICK,
@@ -252,8 +268,8 @@ export function playerSkillDerivedStats(
     staffActionTimingFactor: selected(65)
       ? NATIVE_CONCENTRATED_ENCHANT_STAFF_TIMING_FACTOR
       : 1,
-    staffDamagePrimary: NATIVE_BASE_STAFF_DAMAGE_PRIMARY + staffDamage,
-    staffDamageSecondary: NATIVE_BASE_STAFF_DAMAGE_SECONDARY + staffDamage,
+    staffDamagePrimary: staffDamage,
+    staffDamageSecondary: staffDamage,
     staffEquipped,
   })
 }
@@ -345,6 +361,57 @@ export function playerDeflectReflectionSourceInRange(
   }
   const reach = playerRadius + sourceRadius + NATIVE_DEFLECT_REFLECTION_PADDING
   return deltaX * deltaX + deltaY * deltaY < reach * reach
+}
+
+export function resolvePlayerStaffAttack(
+  derived: PlayerSkillDerivedStats,
+  sourceRng: NativeRngState,
+): PlayerStaffAttackResult {
+  if (!derived.staffEquipped) throw new Error('staff attack requires an equipped staff')
+  const chance = drawNativeFloat(sourceRng, 100)
+  let rng = chance.state
+  let outcome: PlayerStaffAttackOutcome = 'normal'
+  if (derived.flailingChancePercent >= chance.value) {
+    const selected = drawNativeInteger(rng, 4)
+    rng = selected.state
+    outcome = (['knockback', 'disabling-hit', 'critical-hit', 'whirl'] as const)[
+      selected.value
+    ]!
+  }
+  return Object.freeze({
+    actionTimingFactor: derived.staffActionTimingFactor,
+    outcome,
+    rng,
+  })
+}
+
+export function playerStaffDamage(
+  runtime: PlayerSkillRuntimeComponent,
+  derived: PlayerSkillDerivedStats,
+  progression: Pick<PlayerProgressionComponent, 'mindChugTicksRemaining'>,
+  outcome: PlayerStaffAttackOutcome,
+): number {
+  const baseDamage = resolveNativeSkillDamageValue(
+    65,
+    derived.staffDamagePrimary,
+    {
+      damage: derived.offensiveDamageFactor,
+      equipment: runtime.equipmentModifiers,
+      manaCost: derived.offensiveManaCostFactor,
+    },
+  )
+  const procDamageFactor = outcome === 'critical-hit' ? 3 : 1
+  const concentrationFactor = outcome !== 'normal'
+      && isPlayerSkillConcentrated(runtime, progression, 71)
+    ? 1.2
+    : 1
+  return Math.max(1, baseDamage) * procDamageFactor * concentrationFactor
+}
+
+export function togglePlayerStaffMeleeLane(
+  source: PlayerSkillRuntimeComponent,
+): PlayerSkillRuntimeComponent {
+  return Object.freeze({ ...source, staffMeleeAlternate: !source.staffMeleeAlternate })
 }
 
 export function playerPoisonDurationSeconds(

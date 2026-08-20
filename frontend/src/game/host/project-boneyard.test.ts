@@ -124,6 +124,8 @@ test('projects the native refreshed 20-tick hit latch for Maggots', () => {
     poisonDuration: 0,
     position: { x: 100, y: 200 },
     spawnTick: 0,
+    staffActionFactor: 1,
+    staffMovementFactor: 1,
     targetPlayerId: 'player',
     terminalEmitted: false,
   }
@@ -515,6 +517,8 @@ function projectedMaggot(
     poisonDuration: 0,
     position: { x: 100, y: 200 },
     spawnTick: 0,
+    staffActionFactor: 1,
+    staffMovementFactor: 1,
     targetPlayerId: 'player',
     terminalEmitted: false,
     ...overrides,

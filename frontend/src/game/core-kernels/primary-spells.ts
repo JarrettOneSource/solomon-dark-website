@@ -36,6 +36,10 @@ import {
 } from './primary-spell-fire-native.ts'
 import { NATIVE_ETHER_IMPACT_VISIBLE_TICKS } from './primary-spell-ether-native.ts'
 import {
+  isNativePlayerStaffTransient,
+  type NativePlayerStaffTransient,
+} from './native-player-staff-action.ts'
+import {
   AIR_PRIMARY_TARGET_Y_OFFSET,
   ETHER_PRIMARY_INITIAL_TURN,
   airPrimaryBoltGeometry,
@@ -58,6 +62,7 @@ export type PrimarySpellTransientKind =
   | 'ether-impact'
   | 'fire'
   | 'fire-impact'
+  | NativePlayerStaffTransient['kind']
   | 'water'
 export type PrimarySpellProjectilePhase = 'flight' | 'held'
 
@@ -220,6 +225,7 @@ export type PrimarySpellTransientState =
   | PrimarySpellEtherImpactState
   | PrimarySpellFireImpactState
   | PrimarySpellFireParticleState
+  | NativePlayerStaffTransient
 
 export interface PrimarySpellSimulationState {
   nextId: number
@@ -318,9 +324,12 @@ const PRIMARY_SKILL_ID_BY_ELEMENT = {
   water: 32,
 } as const satisfies Readonly<Record<WizardElement, number>>
 
-export type PlayerStaffAttachmentPose = 0 | 1 | 7 | 8 | 9
+export type PlayerStaffAttachmentPose = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 
-const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<PlayerStaffAttachmentPose, readonly Vector2[]>> = {
+const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<
+  PlayerStaffAttachmentPose,
+  readonly Vector2[]
+>> = {
   0: [
     { x: -32.5, y: -66.5 }, { x: -21.5, y: -72.5 },
     { x: -9, y: -76.5 }, { x: 4.5, y: -76.5 },
@@ -348,6 +357,76 @@ const STAFF_PRIMARY_EMITTER_OFFSETS: Readonly<Record<PlayerStaffAttachmentPose, 
     { x: 44.5, y: 1.5 }, { x: 31.5, y: 10 },
     { x: 17.5, y: 15.5 }, { x: 1.5, y: 17.5 },
     { x: -14.5, y: 16.5 }, { x: -29, y: 11.5 },
+  ],
+  2: [
+    { x: -45, y: -7.5 }, { x: -51.5, y: -18.5 },
+    { x: -54.5, y: -30.5 }, { x: -53.5, y: -42.5 },
+    { x: -49.5, y: -54 }, { x: -41.5, y: -64.5 },
+    { x: -31.5, y: -72.5 }, { x: -18.5, y: -78 },
+    { x: -4.5, y: -80.5 }, { x: 9.5, y: -79.5 },
+    { x: 23.5, y: -76 }, { x: 35.5, y: -69.5 },
+    { x: 45, y: -60.5 }, { x: 51.5, y: -49.5 },
+    { x: 54.5, y: -37.5 }, { x: 53.5, y: -25.5 },
+    { x: 49.5, y: -14.5 }, { x: 41.5, y: -4 },
+    { x: 31.5, y: 4.5 }, { x: 18.5, y: 9.5 },
+    { x: 4.5, y: 12.5 }, { x: -9.5, y: 11.5 },
+    { x: -23.5, y: 8 }, { x: -35.5, y: 1.5 },
+  ],
+  3: [
+    { x: 21.5, y: -70.5 }, { x: 36.5, y: -64 },
+    { x: 49.5, y: -54.5 }, { x: 58.5, y: -42.5 },
+    { x: 63.5, y: -28.5 }, { x: 64.5, y: -14.5 },
+    { x: 60.5, y: -0.5 }, { x: 53, y: 12.5 },
+    { x: 41.5, y: 22.5 }, { x: 27.5, y: 30.5 },
+    { x: 11.5, y: 35 }, { x: -5.5, y: 35.5 },
+    { x: -21.5, y: 32.5 }, { x: -36.5, y: 26 },
+    { x: -49.5, y: 16.5 }, { x: -58.5, y: 4.5 },
+    { x: -63.5, y: -9.5 }, { x: -64.5, y: -23.5 },
+    { x: -61, y: -37.5 }, { x: -53, y: -50.5 },
+    { x: -41.5, y: -60.5 }, { x: -27.5, y: -68.5 },
+    { x: -11.5, y: -73 }, { x: 5.5, y: -73.5 },
+  ],
+  4: [
+    { x: 39.5, y: -24.5 }, { x: 32.5, y: -16 },
+    { x: 23.5, y: -10 }, { x: 12.5, y: -6 },
+    { x: 0.5, y: -4.5 }, { x: -11.5, y: -5.5 },
+    { x: -22.5, y: -9.5 }, { x: -31.5, y: -15.5 },
+    { x: -39, y: -23.5 }, { x: -43.5, y: -32.5 },
+    { x: -45.5, y: -42.5 }, { x: -44, y: -52.5 },
+    { x: -39.5, y: -62 }, { x: -32.5, y: -70 },
+    { x: -23.5, y: -76.5 }, { x: -12.5, y: -80.5 },
+    { x: -0.5, y: -81 }, { x: 11.5, y: -80.5 },
+    { x: 22.5, y: -76.5 }, { x: 31.5, y: -70.5 },
+    { x: 39, y: -62.5 }, { x: 43.5, y: -53.5 },
+    { x: 45.5, y: -43.5 }, { x: 44, y: -33.5 },
+  ],
+  5: [
+    { x: 47.5, y: -25.5 }, { x: 40.5, y: -15.5 },
+    { x: 31.5, y: -7.5 }, { x: 20.5, y: -1.5 },
+    { x: 7.5, y: 1.5 }, { x: -5.5, y: 1.5 },
+    { x: -18.5, y: -1 }, { x: -30.5, y: -6.5 },
+    { x: -39.5, y: -14.5 }, { x: -46.5, y: -23.5 },
+    { x: -50.5, y: -34.5 }, { x: -50.5, y: -46 },
+    { x: -47.5, y: -56.5 }, { x: -40.5, y: -66.5 },
+    { x: -31.5, y: -74.5 }, { x: -20.5, y: -80.5 },
+    { x: -7.5, y: -82 }, { x: 5.5, y: -82 },
+    { x: 18.5, y: -80.5 }, { x: 30.5, y: -75.5 },
+    { x: 39.5, y: -67.5 }, { x: 46.5, y: -58 },
+    { x: 50, y: -47.5 }, { x: 50.5, y: -36 },
+  ],
+  6: [
+    { x: -19.5, y: -73.5 }, { x: -2.5, y: -75.5 },
+    { x: 14.5, y: -74.5 }, { x: 30.5, y: -69.5 },
+    { x: 44.5, y: -61 }, { x: 55.5, y: -49.5 },
+    { x: 63, y: -36.5 }, { x: 66, y: -22 },
+    { x: 64.5, y: -7.5 }, { x: 58.5, y: 6.5 },
+    { x: 48.5, y: 18.5 }, { x: 35.5, y: 27.5 },
+    { x: 19.5, y: 33.5 }, { x: 2.5, y: 36.5 },
+    { x: -14.5, y: 35 }, { x: -30.5, y: 30 },
+    { x: -44.5, y: 21.5 }, { x: -55.5, y: 10.5 },
+    { x: -63, y: -3 }, { x: -66, y: -17.5 },
+    { x: -64.5, y: -32 }, { x: -58.5, y: -45.5 },
+    { x: -48.5, y: -57.5 }, { x: -35.5, y: -67 },
   ],
   7: [
     { x: 8.5, y: -56 }, { x: 20, y: -52.5 },
@@ -401,7 +480,9 @@ function standalonePrimaryLightProviderOrderState(source: PrimarySpellSimulation
   const nextRegistrationOrdinal = { actor: 0, transient: 0 }
   for (const registration of [
     ...source.projectiles.map(({ lightRegistration }) => lightRegistration),
-    ...source.transients.map(({ lightRegistration }) => lightRegistration),
+    ...source.transients.flatMap((transient) => (
+      'lightRegistration' in transient ? [transient.lightRegistration] : []
+    )),
   ]) {
     if (registration === null) continue
     nextRegistrationOrdinal[registration.managerLane] = Math.max(
@@ -461,10 +542,17 @@ export function primarySpellEmitterOffset(
   element: WizardElement = 'fire',
 ): Vector2 {
   const pose = primaryCastPose(actionTick, channelActive, element)
-  return staffAttachmentEmitterOffset(headingIndex, pose)
+  return playerStaffAttachmentOffset(headingIndex, pose)
 }
 
 export function staffAttachmentEmitterOffset(
+  headingIndex: number,
+  pose: PlayerStaffAttachmentPose,
+): Vector2 {
+  return playerStaffAttachmentOffset(headingIndex, pose)
+}
+
+export function playerStaffAttachmentOffset(
   headingIndex: number,
   pose: PlayerStaffAttachmentPose,
 ): Vector2 {
@@ -484,7 +572,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     .map((effect) => effect.id))
   let transients: PrimarySpellTransientState[] = []
   for (const effect of context.spells.transients) {
-    if (effect.kind === 'earth-called-rock') {
+    if (effect.kind === 'earth-called-rock' || isNativePlayerStaffTransient(effect)) {
       transients.push(effect)
     } else if (effect.ageTicks + 1 < transientLifetime(effect)) {
       transients.push({ ...effect, ageTicks: effect.ageTicks + 1 })
@@ -1348,6 +1436,13 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'ether-impact': return PRIMARY_SPELL_ETHER_IMPACT_LIFETIME_TICKS
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
+    case 'player-staff-contact':
+    case 'player-staff-knockback':
+    case 'player-staff-melee':
+    case 'player-staff-move-fade':
+    case 'player-staff-perspective-fade':
+    case 'player-staff-smoke':
+    case 'player-staff-spin': throw new Error('Staff transient lifetime is system owned')
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
   }
 }

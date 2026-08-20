@@ -1,6 +1,8 @@
 import type { NativeEquipmentModifiers } from './native-equipment-effects.ts'
-import { nativeSkillClass } from './player-skill-runtime.ts'
-import type { NativePrimarySkillRankStats } from './player-progression.ts'
+import {
+  nativeSkillRoot,
+  type NativePrimarySkillRankStats,
+} from './player-progression.ts'
 
 export const NATIVE_OFFENSIVE_SKILL_IDS = Object.freeze([
   8, 9, 10, 11, 13,
@@ -59,7 +61,7 @@ export function resolveNativeSkillDamage(
   validateOffensiveFactors(factors)
   const baseDamage = finite(lanes.baseDamage, 'base damage')
   const equipment = factors.equipment
-  const classId = nativeSkillClass(skillId)
+  const classId = nativeOffensiveSkillClass(skillId)
   let damage = (
     valueOr(lanes.actorBaseDamage, 0, 'actor base damage')
     + baseDamage
@@ -90,7 +92,7 @@ export function resolveNativeSkillManaCost(
   validateOffensiveFactors(factors)
   const baseManaCost = finite(lanes.baseManaCost, 'base mana cost')
   const equipment = factors.equipment
-  const classId = nativeSkillClass(skillId)
+  const classId = nativeOffensiveSkillClass(skillId)
   let cost = Math.max(
     1,
     baseManaCost - valueOr(lanes.globalManaReduction, 0, 'global mana reduction'),
@@ -167,6 +169,12 @@ function requireSkillId(skillId: number): void {
   if (!Number.isSafeInteger(skillId) || skillId < 0) {
     throw new RangeError('skill id must be a non-negative safe integer')
   }
+}
+
+function nativeOffensiveSkillClass(skillId: number): number {
+  const root = nativeSkillRoot(skillId)
+  if (root === null) throw new RangeError(`skill ${skillId} has no native class`)
+  return root
 }
 
 function finite(value: number, label: string): number {

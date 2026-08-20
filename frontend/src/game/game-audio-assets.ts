@@ -21,7 +21,9 @@ import backpackClose from '../assets/game/audio/sfx/backpack-close.wav'
 import badAction from '../assets/game/audio/sfx/bad-action.wav'
 import click from '../assets/game/audio/sfx/click.wav'
 import coffinBreak from '../assets/game/audio/sfx/coffin-break.wav'
+import criticalHit from '../assets/game/audio/sfx/critical-hit.wav'
 import demonDie from '../assets/game/audio/sfx/demon-die.wav'
+import disableEnemy from '../assets/game/audio/sfx/disable-enemy.wav'
 import drink from '../assets/game/audio/sfx/drink.wav'
 import dropCoins from '../assets/game/audio/sfx/drop-coins.wav'
 import dropBag1 from '../assets/game/audio/sfx/drop-bag-1.wav'
@@ -43,6 +45,7 @@ import iceStart from '../assets/game/audio/sfx/ice-start.wav'
 import impSplit from '../assets/game/audio/sfx/imp-split.wav'
 import ignite from '../assets/game/audio/sfx/ignite.wav'
 import knockbackGolem from '../assets/game/audio/sfx/knockback-golem.wav'
+import knockback from '../assets/game/audio/sfx/knockback.wav'
 import leviathanRoar from '../assets/game/audio/sfx/leviathan-roar.wav'
 import levelUp from '../assets/game/audio/sfx/level-up.wav'
 import lightningStart from '../assets/game/audio/sfx/lightning-start.wav'
@@ -87,6 +90,8 @@ import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import shovel1 from '../assets/game/audio/sfx/shovel-1.wav'
 import shovel2 from '../assets/game/audio/sfx/shovel-2.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
+import spinAttack from '../assets/game/audio/sfx/spin-attack.wav'
+import staffSwoosh from '../assets/game/audio/sfx/staff-swoosh.wav'
 import startCast from '../assets/game/audio/sfx/start-cast.wav'
 import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
@@ -151,8 +156,10 @@ export const GAME_AUDIO_SOURCES = {
     'big-fire': bigFire,
     click,
     'coffin-break': coffinBreak,
+    'critical-hit': criticalHit,
     'comet-whistle': cometWhistle,
     'demon-die': demonDie,
+    'disable-enemy': disableEnemy,
     drink,
     'distort-reality': distortReality,
     'drop-bag-1': dropBag1,
@@ -171,6 +178,7 @@ export const GAME_AUDIO_SOURCES = {
     'imp-split': impSplit,
     ignite,
     'knockback-golem': knockbackGolem,
+    knockback,
     'level-up': levelUp,
     'lightning-start': lightningStart,
     'magic-missile': magicMissile,
@@ -196,6 +204,8 @@ export const GAME_AUDIO_SOURCES = {
     'shovel-2': shovel2,
     'ring-of-ice': ringOfIce,
     'skeleton-die': skeletonDie,
+    'spin-attack': spinAttack,
+    'staff-swoosh': staffSwoosh,
     'start-boulder': startBoulder,
     'stone-break': stoneBreak,
     'stone-step': stoneStep,

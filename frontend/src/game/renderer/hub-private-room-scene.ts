@@ -8,6 +8,7 @@ import {
   type PrivateHubRegionId,
 } from '../core-kernels/hub-private-room-layout.ts'
 import type { WizardElement } from '../core-kernels/player-character.ts'
+import { playerStaffActionPose } from '../player-character-presentation.ts'
 import {
   createHubCommonTraderClock,
   hubMarkerAlpha,
@@ -545,7 +546,15 @@ export class HubPrivateRoomScene {
         room.addChild(view.container)
       }
       view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
-      view.update(player, snapshot.tick)
+      view.update(
+        player,
+        snapshot.tick,
+        playerStaffActionPose(
+          snapshot.primarySpells.transients,
+          playerId,
+          `hub:${region}`,
+        ),
+      )
     }
     for (const [playerId, view] of this.players) {
       if (live.has(playerId)) continue

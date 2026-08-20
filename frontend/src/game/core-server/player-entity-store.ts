@@ -317,6 +317,18 @@ export function playerSkillRuntimeAt(
   return index < 0 ? null : source.skillRuntimes[index] ?? null
 }
 
+export function setPlayerEntitySkillRuntime(
+  source: PlayerEntityStore,
+  playerId: string,
+  runtime: PlayerSkillRuntimeComponent,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0 || runtime === source.skillRuntimes[index]) return source
+  const skillRuntimes = [...source.skillRuntimes]
+  skillRuntimes[index] = runtime
+  return { ...source, skillRuntimes }
+}
+
 export function playerSkillDerivedStatsAt(
   source: PlayerEntityStore,
   playerId: string,
@@ -609,6 +621,7 @@ export function setPlayerEntityMindstar(
 
 export function stepPlayerEntityCombatTick(
   source: PlayerEntityStore,
+  actingPlayerIds: ReadonlySet<string> = new Set(),
 ): PlayerEntityCombatTickResult {
   const beganDeathEpochPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
@@ -626,7 +639,8 @@ export function stepPlayerEntityCombatTick(
       source.skillRuntimes[index]!,
       derived,
       {
-        acting: source.primaryCasts[index]!.actionTick >= 0,
+        acting: source.primaryCasts[index]!.actionTick >= 0
+          || actingPlayerIds.has(source.identities[index]!.playerId),
         moving: Math.hypot(
           source.locomotions[index]!.velocity.x,
           source.locomotions[index]!.velocity.y,

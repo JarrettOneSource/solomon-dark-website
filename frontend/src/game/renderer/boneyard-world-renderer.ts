@@ -60,6 +60,7 @@ import {
   type NativeLightProviderRegistration,
 } from '../core-kernels/native-light-provider-order.ts'
 import type { GameSnapshot, LoadedBoneyard } from '../protocol/game-protocol.ts'
+import { playerStaffActionPose } from '../player-character-presentation.ts'
 import type {
   BoneyardEnemySnapshot,
   BoneyardEnemyEventSnapshot,
@@ -1245,7 +1246,15 @@ class BoneyardDynamicScene {
         this.root.addChild(view.container)
       }
       view.setSecondaryState(snapshot.secondaryAbilities.players[playerId], snapshot.tick)
-      view.update(player, snapshot.tick)
+      view.update(
+        player,
+        snapshot.tick,
+        playerStaffActionPose(
+          snapshot.primarySpells.transients,
+          playerId,
+          `boneyard:${this.boneyard.runId}`,
+        ),
+      )
     }
     for (const [playerId, view] of this.players) {
       if (livePlayerIds.has(playerId)) continue

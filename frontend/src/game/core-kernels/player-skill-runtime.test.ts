@@ -11,6 +11,7 @@ import {
   createPlayerSkillRuntime,
   isPlayerSkillConcentrated,
   markPlayerCreativityInsight,
+  playerStaffDamage,
   playerSkillDerivedStats,
   refreshPlayerSkillRuntime,
   setPlayerConcentration,
@@ -73,8 +74,8 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.secondaryRechargeFactor, 2)
   assert.equal(derived.offensiveDamageFactor, 1.35)
   assert.equal(derived.magicResistance, 0.25)
-  assert.equal(derived.staffDamagePrimary, 4.5)
-  assert.equal(derived.staffDamageSecondary, 5)
+  assert.equal(derived.staffDamagePrimary, 4)
+  assert.equal(derived.staffDamageSecondary, 4)
   assert.equal(derived.pickupRangeScalar, 6.25)
   assert.equal(derived.movementFactor, 1.1)
   assert.equal(derived.deflectChancePercent, 10)
@@ -269,4 +270,33 @@ test('staff admission comes only from the exact native Staff type', () => {
   )
   assert.equal(wandDerived.staffEquipped, false)
   assert.equal(wandDerived.deflectChancePercent, 0)
+})
+
+test('Staff contact resolves row 65 at marker time and composes only proc multipliers', () => {
+  const book = rankedBook({ 65: 1, 71: 1 })
+  const statBook = playerStatBook()
+  const economy = createHubEconomy(1)
+  let state = createPlayerSkillRuntime(book, statBook, economy)
+  let derived = playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+  assert.equal(playerStaffDamage(state.runtime, derived, progression(), 'normal'), 4)
+  assert.equal(playerStaffDamage(state.runtime, derived, progression(), 'critical-hit'), 12)
+
+  state = setPlayerConcentration(state.runtime, state.skillBook, statBook, economy, 71)
+  derived = playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  )
+  assert.equal(playerStaffDamage(state.runtime, derived, progression(), 'normal'), 4)
+  assert.ok(Math.abs(
+    playerStaffDamage(state.runtime, derived, progression(), 'critical-hit') - 14.4,
+  ) < 1e-12)
 })

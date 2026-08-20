@@ -359,6 +359,8 @@ export interface BoneyardEnemyActor {
   readonly shieldSoundCooldownTicks: number
   readonly sourceSpawnIntentId: number
   readonly spawnTick: number
+  readonly staffActionFactor: number
+  readonly staffMovementFactor: number
   readonly targetPlayerId: string | null
   readonly terminalEmitted: boolean
   readonly waveOrdinal: number
@@ -476,6 +478,8 @@ export interface BoneyardMaggotActor {
   readonly position: Readonly<BoneyardPoint>
   readonly movementPhase: 'crawl' | 'emerging'
   readonly spawnTick: number
+  readonly staffActionFactor: number
+  readonly staffMovementFactor: number
   readonly targetPlayerId: string | null
   readonly terminalEmitted: boolean
 }
@@ -1045,6 +1049,66 @@ export function damageBoneyardEnemy(
   return finishDamage(source, actors, work, killed)
 }
 
+export function applyBoneyardStaffDisable(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+): BoneyardEnemyStore {
+  const actorIndex = source.actors.findIndex(({ id }) => id === actorId)
+  if (actorIndex >= 0) {
+    const actor = source.actors[actorIndex]!
+    if (actor.lifeState !== 'alive') return source
+    const actors = [...source.actors]
+    actors[actorIndex] = {
+      ...actor,
+      staffActionFactor: Math.fround(actor.staffActionFactor * 0.5),
+      staffMovementFactor: Math.fround(actor.staffMovementFactor * 0.75),
+    }
+    return { ...source, actors }
+  }
+  const maggotIndex = source.maggots.findIndex(({ id }) => id === actorId)
+  if (maggotIndex < 0) return source
+  const maggot = source.maggots[maggotIndex]!
+  if (maggot.lifeState !== 'alive') return source
+  const maggots = [...source.maggots]
+  maggots[maggotIndex] = {
+    ...maggot,
+    staffActionFactor: Math.fround(maggot.staffActionFactor * 0.5),
+    staffMovementFactor: Math.fround(maggot.staffMovementFactor * 0.75),
+  }
+  return { ...source, maggots }
+}
+
+export function applyBoneyardStaffHeadingPerturbation(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+  deltaDegrees: number,
+): BoneyardEnemyStore {
+  if (!Number.isFinite(deltaDegrees)) {
+    throw new RangeError('staff heading perturbation must be finite')
+  }
+  const actorIndex = source.actors.findIndex(({ id }) => id === actorId)
+  if (actorIndex >= 0) {
+    const actor = source.actors[actorIndex]!
+    if (actor.lifeState !== 'alive') return source
+    const actors = [...source.actors]
+    actors[actorIndex] = {
+      ...actor,
+      headingDeg: positiveModulo(actor.headingDeg + deltaDegrees, 360),
+    }
+    return { ...source, actors }
+  }
+  const maggotIndex = source.maggots.findIndex(({ id }) => id === actorId)
+  if (maggotIndex < 0) return source
+  const maggot = source.maggots[maggotIndex]!
+  if (maggot.lifeState !== 'alive') return source
+  const maggots = [...source.maggots]
+  maggots[maggotIndex] = {
+    ...maggot,
+    headingDeg: positiveModulo(maggot.headingDeg + deltaDegrees, 360),
+  }
+  return { ...source, maggots }
+}
+
 function damageBoneyardMaggot(
   source: BoneyardEnemyStore,
   request: DamageBoneyardEnemyRequest,
@@ -1366,6 +1430,8 @@ function materializeSpawnIntents(
       shieldSoundCooldownTicks: 0,
       sourceSpawnIntentId: intent.id,
       spawnTick: intent.spawnTick,
+      staffActionFactor: 1,
+      staffMovementFactor: 1,
       targetPlayerId,
       terminalEmitted: false,
       waveOrdinal: intent.waveOrdinal,
@@ -1931,7 +1997,7 @@ function stepSkeletonWeaponAction(
   const program = NATIVE_SKELETON_ACTION_PROGRAMS.weapon
   const previousProgress = brain.actionProgress
   const actionProgress = previousProgress
-    + program.progressPerTick * actor.config.attackSpeed
+    + program.progressPerTick * staffAttackSpeed(actor)
   let markerEmitted = brain.markerEmitted
   for (const marker of NATIVE_SKELETON_WEAPON_MARKERS) {
     if (previousProgress >= marker || actionProgress < marker) continue
@@ -1983,7 +2049,7 @@ function stepSkeletonClawAction(
   const program = NATIVE_SKELETON_ACTION_PROGRAMS.claw
   const previousProgress = brain.actionProgress
   const rawProgress = previousProgress
-    + program.progressPerTick * actor.config.attackSpeed
+    + program.progressPerTick * staffAttackSpeed(actor)
   const completed = rawProgress > program.strictEnd
   const wrappedProgress = completed
     ? rawProgress - (program.strictEnd + 1)
@@ -2172,7 +2238,7 @@ function stepMage(
         ...steppedBrain,
         lightningTargetPlayerId: dispatchedLightning.targetPlayerId,
         lightningTargetPosition: dispatchedLightning.targetPosition,
-        lightningTicksRemaining: nativeMageLightningDurationTicks(actor.config.attackSpeed),
+        lightningTicksRemaining: nativeMageLightningDurationTicks(staffAttackSpeed(actor)),
       },
     }
   }
@@ -2203,7 +2269,7 @@ function stepImp(
     }
   }
   if (brain.phase === 'contact') {
-    const nextTick = brain.actionTick + actor.config.attackSpeed
+    const nextTick = brain.actionTick + staffAttackSpeed(actor)
     let markerEmitted = brain.markerEmitted
     if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.impContact.markerTick) {
       const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
@@ -2331,7 +2397,7 @@ function stepZombie(
     const attackRate = (
       NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.minimumRate
       + drawUnit(work) * NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM.randomRateRange
-    ) * actor.config.attackSpeed
+    ) * staffAttackSpeed(actor)
     return {
       ...actor,
       brain: {
@@ -2384,7 +2450,7 @@ function stepWraith(
     }
   }
   if (brain.phase === 'drain') {
-    const nextTick = brain.actionTick + actor.config.attackSpeed
+    const nextTick = brain.actionTick + staffAttackSpeed(actor)
     let markerEmitted = brain.markerEmitted
     if (!markerEmitted && nextTick >= BOUNDED_ENEMY_ACTION_PROGRAMS.wraithDrain.markerTick) {
       const eventId = attackMarker(work, actor, context.tick, brain.contactTargetPlayerId)
@@ -2439,7 +2505,7 @@ function stepDemon(
   if (brain.phase === 'bomb') {
     const previousProgress = brain.actionProgress
     const nextProgress = previousProgress
-      + NATIVE_DEMON_BOMB_ACTION_PROGRAM.progressPerTick * actor.config.attackSpeed
+      + NATIVE_DEMON_BOMB_ACTION_PROGRAM.progressPerTick * staffAttackSpeed(actor)
     let markerEmitted = brain.markerEmitted
     if (
       !markerEmitted
@@ -2487,7 +2553,7 @@ function advanceImpVisual(
     ? 0
     : 0.25
       * source.config.chaseSpeed
-      * source.config.baseSpeed
+      * staffMovementSpeed(source)
       * source.config.scale
   const flight = stepNativeImpFlight(source.brain, horizontalVelocity, random)
   return {
@@ -2755,6 +2821,8 @@ function spawnCoffinMaggots(
         : 0,
       position,
       spawnTick: context.tick,
+      staffActionFactor: 1,
+      staffMovementFactor: 1,
       targetPlayerId,
       terminalEmitted: false,
     }))
@@ -2885,8 +2953,10 @@ function stepMaggots(
     const unitY = direction * (target.position.y - source.position.y) / distance
     const speedScale = nativeSecondaryActorSpeedScale(effect)
     const delta = Object.freeze({
-      x: unitX * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale,
-      y: unitY * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale,
+      x: unitX * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale
+        * source.staffMovementFactor,
+      y: unitY * BOUNDED_MAGGOT_PROGRAM.movementStep * speedScale
+        * source.staffMovementFactor,
     })
     const requestedPosition = Object.freeze({
       x: source.position.x + delta.x,
@@ -3069,7 +3139,7 @@ function stepProgressAction<B extends BoneyardSkeletonBrain | BoneyardArcherBrai
   onMarker: (eventId: number) => void,
 ): BoneyardEnemyActor {
   const actionProgress = brain.actionProgress
-    + program.progressPerTick * actor.config.attackSpeed
+    + program.progressPerTick * staffAttackSpeed(actor)
   let markerEmitted = brain.markerEmitted
   if (!markerEmitted && actionProgress >= program.markerProgress) {
     const eventId = attackMarker(work, actor, tick, markerTargetPlayerId)
@@ -3118,7 +3188,7 @@ function moveTowardTarget<B extends BoneyardEnemyBrain>(
   const directionY = unitY * radialDirection + unitX * tangentDirection
   const step = 0.25
     * actor.config.chaseSpeed
-    * actor.config.baseSpeed
+    * staffMovementSpeed(actor)
     * actor.config.scale
     * NATIVE_ENEMY_MOVEMENT_CADENCE_TICKS
   const delta = Object.freeze({ x: directionX * step, y: directionY * step })
@@ -3189,6 +3259,14 @@ export function nativeSecondaryActorSpeedScale(
         1 - effect.dazzleTicks / effect.dazzleMaximumTicks,
       )
   return Math.min(effect.timeScale, dazzleScale)
+}
+
+function staffAttackSpeed(actor: BoneyardEnemyActor): number {
+  return actor.config.attackSpeed * actor.staffActionFactor
+}
+
+function staffMovementSpeed(actor: BoneyardEnemyActor): number {
+  return actor.config.baseSpeed * actor.staffMovementFactor
 }
 
 function interruptNativeSecondaryAction(
