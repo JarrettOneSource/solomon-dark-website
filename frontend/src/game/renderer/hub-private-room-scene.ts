@@ -196,6 +196,10 @@ export class HubPrivateRoomScene {
     return this.secondaryAbilities[this.activeRegion].primitiveCount
   }
 
+  get secondaryAbilitySamples() {
+    return this.secondaryAbilities[this.activeRegion].diagnosticSamples
+  }
+
   destroy(): void {
     this.levelUp.container.parent?.removeChild(this.levelUp.container)
     this.levelUp.destroy()

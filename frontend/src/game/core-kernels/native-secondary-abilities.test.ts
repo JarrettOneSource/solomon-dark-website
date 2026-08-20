@@ -11,6 +11,8 @@ import {
   createNativeSecondarySimulation,
   nativePlaneOrbDamage,
   nativeSecondaryAvailableMana,
+  nativeSecondaryTargetMaterialTint,
+  removeNativeSecondaryOwner,
   stepNativeSecondaryAbilities,
   type NativeSecondarySimulationState,
   type NativeSecondaryTickContext,
@@ -153,7 +155,11 @@ function context(
         magicStormDurationBonusTicks: 0,
         magicStormFrequencyFactor: 1,
         magicStormManaCost: 0,
+        maximumGolem: false,
         maximumLeviathan: false,
+        maximumMagicStorm: false,
+        maximumRingOfFire: false,
+        maximumRingOfIce: false,
         manaRecoveryPerTick: 0.1,
         skillBook: book(skillId, learnedSkillIds, rank),
         worldKey: 'boneyard:test',
@@ -1244,6 +1250,7 @@ test('Magic Trap owns float32 charge, 32 shimmer emissions, split query geometry
     advanceNativeRngWords(preTriggerRng, 502 + 2),
   )
   assert.equal(trigger.state.events.at(-1)?.cue, 'trap')
+  assert.equal(trigger.state.events.at(-1)?.cameraMagnitude, 1.25)
   assert.ok(trigger.state.actors.some(({ kind }) => kind === 'magic-trap-shimmer'))
 
   let afterTrigger = trigger.state
@@ -1665,11 +1672,20 @@ test('Dampen removes projectiles, disrupts casters, rolls shield dispels, and ow
   assert.deepEqual(
     result.state.targetEffects.find(({ targetId }) => targetId === 7),
     {
+      coldSlowFactor: 1,
+      coldSlowMaterial: false,
       coldSlowTicks: 0,
       dazzleMaximumTicks: 0,
       dazzleTicks: 0,
       disruptedTicks: 600,
       fleeTicks: 0,
+      frostBurnDamagePerTick: 0,
+      frostBurnOwnerId: null,
+      frostBurnSkillId: null,
+      frostBurnSourceActorId: null,
+      frostBurnTicks: 0,
+      frozenTicks: 0,
+      frozenTimeScale: 1,
       prismaticTicks: 0,
       targetId: 7,
       timeScale: 1,
@@ -1855,6 +1871,55 @@ test('Ring of Fire owns the exact seven-word construction for thirty segments an
     rng = drawNativeFloat(rng, 0.025).state
   }
   assert.deepEqual(result.state.rng, rng)
+})
+
+test('Burning Man adds the native Region pulse and a radius-165 half-damage explosion per first contact', () => {
+  const castContext = context(21, 1, 0)
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...castContext,
+    players: {
+      player: { ...castContext.players.player!, maximumRingOfFire: true },
+    },
+  }).state
+  const wave = state.actors.find(({ kind }) => kind === 'shockwave')!
+  assert.equal(wave.variant, 1)
+  assert.equal(state.events.find(({ cue }) => cue === 'big-fire')?.cameraMagnitude, 0.25)
+  const first = {
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 91, nativeFlags: 0x2, position: { x: 10, y: 0 }, radius: 10,
+    scale: 1, shieldHealth: 0,
+  }
+  const second = { ...first, id: 92, position: { x: 100, y: 0 } }
+  let result: ReturnType<typeof stepNativeSecondaryAbilities> | null = null
+  for (let tick = 2; tick <= 11; tick += 1) {
+    const tickContext = context(21, tick, null)
+    result = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      targets: (_worldKey, center, radius) => radius === 165
+        ? [first, second]
+        : center.x === 0 ? [first] : [],
+    })
+    state = result.state
+  }
+  assert.ok(result)
+  const explosion = state.actors.find(({ kind }) => kind === 'ring-fire-explosion')!
+  assert.deepEqual({
+    damage: explosion.damage,
+    position: explosion.position,
+    radius: explosion.radius,
+    scale: explosion.scale,
+  }, {
+    damage: Math.fround(wave.damage * 0.5),
+    position: first.position,
+    radius: 165,
+    scale: Math.fround(1.5),
+  })
+  assert.equal(state.actors.filter(({ kind }) => kind === 'ring-fire-fragment').length, 3)
+  assert.deepEqual(result!.damage.map(({ amount, targetId }) => ({ amount, targetId })), [
+    { amount: wave.damage, targetId: first.id },
+    { amount: Math.fround(wave.damage * 0.5), targetId: first.id },
+    { amount: Math.fround(wave.damage * 0.5), targetId: second.id },
+  ])
 })
 
 test('Shockwave applies the summed native damage lane and displacement recurrence', () => {
@@ -2389,6 +2454,55 @@ test('Raise Golem ignores aim and orders signed facing, placement, then construc
   assert.deepEqual(result.state.rng, pose.state)
 })
 
+test('Fete of Clay, not Iron Golem, owns the two-summon cap', () => {
+  const castTwice = (maximumGolem: boolean) => {
+    let state = createNativeSecondarySimulation(77)
+    for (const [tick, slot] of [[1, 0], [2, null], [3, 0]] as const) {
+      const tickContext = context(45, tick, slot)
+      state = stepNativeSecondaryAbilities(state, {
+        ...tickContext,
+        players: {
+          player: {
+            ...tickContext.players.player!,
+            golemIron: true,
+            maximumGolem,
+          },
+        },
+      }).state
+    }
+    return state
+  }
+  assert.equal(castTwice(false).actors.filter(({ kind }) => kind === 'golem').length, 1)
+  const maximumState = castTwice(true)
+  const maximum = maximumState.actors.filter(({ kind }) => kind === 'golem')
+  assert.equal(maximum.length, 2)
+  assert.ok(maximum.every(({ golem }) => golem?.iron === true))
+
+  const lowId = maximum[0]!.id
+  const highId = maximum[1]!.id
+  let evictionState: NativeSecondarySimulationState = {
+    ...maximumState,
+    actors: maximumState.actors.map((actor) => actor.id === lowId
+      ? { ...actor, golem: { ...actor.golem!, currentHealth: 1 } }
+      : actor),
+  }
+  for (const [tick, slot] of [[4, null], [5, 0]] as const) {
+    const tickContext = context(45, tick, slot)
+    evictionState = stepNativeSecondaryAbilities(evictionState, {
+      ...tickContext,
+      players: {
+        player: {
+          ...tickContext.players.player!,
+          golemIron: true,
+          maximumGolem: true,
+        },
+      },
+    }).state
+  }
+  assert.equal(evictionState.actors.some(({ id }) => id === lowId), false)
+  assert.equal(evictionState.actors.some(({ id }) => id === highId), true)
+})
+
 test('Golem terminal damage owns the exact four-cue death sequence', () => {
   let state = cast(45).state
   for (let tick = 2; tick <= 401; tick += 1) {
@@ -2899,6 +3013,10 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
     expectedScreenFlash(0.5, 1, 1, 0.1, true),
     expectedScreenFlash(0.5, 1, 1, 0.05, true),
   ])
+  assert.equal(
+    explosiveBreak.events.find(({ cue }) => cue === 'magic-shield-explode')?.cameraMagnitude,
+    1.25,
+  )
 })
 
 test('Ether Drain and Leviathan preserve their recovered phase boundaries', () => {
@@ -3359,6 +3477,41 @@ test('Magic Tornado consumes the cloud visual prefix, heading, and fixed native 
   assert.equal((stepped.rng.indexA - castResult.state.rng.indexA + 55) % 55, 4)
 })
 
+test('Tempest doubles only Storm base activity and the cloud remains at its immutable world aim', () => {
+  const initial = context(27, 1, 0)
+  const aim = { x: 321, y: 222 }
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(8), {
+    ...initial,
+    players: {
+      player: {
+        ...initial.players.player!,
+        input: input(0, aim),
+        magicStormDurationBonusTicks: 75,
+        maximumMagicStorm: true,
+      },
+    },
+  }).state
+  const born = state.actors.find(({ kind }) => kind === 'storm-cloud')!
+  assert.deepEqual(born.position, aim)
+  assert.equal(born.freezeTicks, 2_075)
+  assert.equal(born.lifetimeTicks, 2_176)
+
+  const movedOwnerContext = context(27, 2, null)
+  state = stepNativeSecondaryAbilities(state, {
+    ...movedOwnerContext,
+    players: {
+      player: {
+        ...movedOwnerContext.players.player!,
+        character: {
+          ...movedOwnerContext.players.player!.character,
+          position: { x: -900, y: -800 },
+        },
+      },
+    },
+  }).state
+  assert.deepEqual(state.actors.find(({ id }) => id === born.id)?.position, aim)
+})
+
 test('Magic Storm owns the per-tick ambient flash roll and thunder edge through fade', () => {
   const castState = cast(27).state
   const cloud = castState.actors.find(({ kind }) => kind === 'storm-cloud')!
@@ -3436,6 +3589,119 @@ test('Ring of Ice owns the float32 93-tick expansion and one-contact ledger', ()
   assert.deepEqual(enhanced.rng, consumeFreezeWaveConstruction(source.rng, 200))
 })
 
+test('FreezeWave installs target-owned Frozen material and the exact final-200 thaw ramp', () => {
+  const target = {
+    family: 'ZOMBIE', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 41, nativeFlags: 0x2, position: { x: 100, y: 0 }, radius: 10,
+    scale: 1, shieldHealth: 0,
+  }
+  let state = cast(35).state
+  for (let tick = 2; tick <= 11; tick += 1) {
+    const tickContext = context(35, tick, null)
+    state = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      target: (_worldKey, targetId) => targetId === target.id ? target : null,
+      targets: () => [target],
+    }).state
+  }
+  const effect = state.targetEffects.find(({ targetId }) => targetId === target.id)!
+  const freezeSeconds = effectiveSecondaryAbilityRankStats(
+    context(35, 1, 0).players.player!.skillBook,
+    35,
+  ).values.mDamage
+  assert.equal(effect.frozenTicks, Math.trunc(freezeSeconds * 100))
+  assert.equal(effect.coldSlowTicks, 0)
+  assert.equal(effect.timeScale, 0)
+  assert.equal(nativeSecondaryTargetMaterialTint(0xffffff, effect), 0x93bfff)
+
+  const thawSource = {
+    ...state,
+    targetEffects: [{
+      ...effect,
+      frozenTicks: 201,
+      frozenTimeScale: 0,
+      timeScale: 0,
+    }],
+  }
+  const thaw = stepNativeSecondaryAbilities(thawSource, context(35, 12, null)).state
+    .targetEffects[0]!
+  assert.equal(thaw.frozenTicks, 200)
+  assert.equal(thaw.frozenTimeScale, Math.fround(0.005))
+  assert.equal(thaw.timeScale, Math.fround(0.005))
+  assert.equal(nativeSecondaryTargetMaterialTint(0xffffff, thaw), 0x93c0ff)
+
+  const expired = stepNativeSecondaryAbilities({
+    ...state,
+    targetEffects: [{
+      ...effect,
+      frozenTicks: 1,
+      frozenTimeScale: Math.fround(0.995),
+      timeScale: Math.fround(0.995),
+    }],
+  }, context(35, 12, null)).state
+  assert.equal(expired.targetEffects.some(({ targetId }) => targetId === target.id), false)
+})
+
+test('FreezeWave selects ColdSlow for flag 0x40 and Frostburn adds exact damage and target flares', () => {
+  const coldTarget = {
+    family: 'OBJECT', lightRegistration: TARGET_LIGHT_REGISTRATION,
+    id: 51, nativeFlags: 0x40, position: { x: 100, y: 0 }, radius: 10,
+    scale: 1, shieldHealth: 0,
+  }
+  let cold = cast(35).state
+  for (let tick = 2; tick <= 11; tick += 1) {
+    const tickContext = context(35, tick, null)
+    cold = stepNativeSecondaryAbilities(cold, {
+      ...tickContext,
+      targets: () => [coldTarget],
+    }).state
+  }
+  const coldEffect = cold.targetEffects[0]!
+  assert.equal(coldEffect.coldSlowTicks > 0, true)
+  assert.equal(coldEffect.coldSlowMaterial, true)
+  assert.equal(coldEffect.frozenTicks, 0)
+  assert.equal(coldEffect.timeScale, 0.5)
+  assert.equal(nativeSecondaryTargetMaterialTint(0xffffff, coldEffect), 0xbfffff)
+
+  const target = { ...coldTarget, family: 'ZOMBIE', id: 52, nativeFlags: 0x2 }
+  const maximumContext = context(35, 1, 0)
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+    ...maximumContext,
+    players: {
+      player: { ...maximumContext.players.player!, maximumRingOfIce: true },
+    },
+  }).state
+  for (let tick = 2; tick <= 11; tick += 1) {
+    const tickContext = context(35, tick, null)
+    state = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      target: (_worldKey, targetId) => targetId === target.id ? target : null,
+      targets: () => [target],
+    }).state
+  }
+  const effect = state.targetEffects[0]!
+  assert.equal(effect.frostBurnDamagePerTick, Math.fround(0.01))
+  assert.equal(effect.frostBurnTicks, effect.frozenTicks * 100)
+  assert.equal(effect.frostBurnOwnerId, 'player')
+  assert.equal(effect.frostBurnSkillId, 35)
+
+  let frostDamageUpdates = 0
+  for (let tick = 12; tick <= 31; tick += 1) {
+    const tickContext = context(35, tick, null)
+    const result = stepNativeSecondaryAbilities(state, {
+      ...tickContext,
+      target: (_worldKey, targetId) => targetId === target.id ? target : null,
+      targets: () => [],
+    })
+    frostDamageUpdates += result.damage.filter(({ amount, targetId }) => (
+      amount === Math.fround(0.01) && targetId === target.id
+    )).length
+    state = result.state
+  }
+  assert.equal(frostDamageUpdates, 20)
+  assert.equal(state.actors.some(({ kind }) => kind === 'frost-burn-flare'), true)
+})
+
 test('Acid Rain creates exact drop/splash state and owns the two-stage residue', () => {
   let state = cast(72).state
   const field = state.actors.find(({ kind }) => kind === 'acid-rain')!
@@ -3503,6 +3769,26 @@ test('Call Comet allocates one exact variable-life trail on every fall update', 
   const advanced = state.actors.find(({ id }) => id === trail.id)!
   assert.equal(advanced.phase, Math.fround(trail.phase - Math.fround(0.025)))
   assert.equal(advanced.rotationRadians, Math.fround(rotation * trail.quantity))
+})
+
+test('Frostburn Jewels propagates through Call Comet into its shared FreezeWave', () => {
+  const castContext = context(76, 1, 0)
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(9), {
+    ...castContext,
+    players: {
+      player: { ...castContext.players.player!, maximumRingOfIce: true },
+    },
+  }).state
+  const comet = state.actors.find(({ kind }) => kind === 'comet')!
+  assert.equal(comet.quantity, 1)
+  state = {
+    ...state,
+    actors: [{ ...comet, ageTicks: 399 }],
+  }
+  state = stepNativeSecondaryAbilities(state, context(76, 2, null)).state
+  const wave = state.actors.find(({ kind }) => kind === 'freeze-wave')!
+  assert.equal(wave.variant, 1)
+  assert.equal(wave.freezeTicks, comet.freezeTicks)
 })
 
 test('Comet whistles after crossing below 175 ticks remaining and impacts exactly on tick 400', () => {
@@ -3585,6 +3871,33 @@ test('death or disconnect cleanup retires player-owned actors and state once', (
   })
   assert.deepEqual(result.state.players, {})
   assert.equal(result.state.actors.length, 0)
+
+  const frost = removeNativeSecondaryOwner({
+    ...state,
+    targetEffects: [{
+      coldSlowFactor: 1,
+      coldSlowMaterial: false,
+      coldSlowTicks: 0,
+      dazzleMaximumTicks: 0,
+      dazzleTicks: 0,
+      disruptedTicks: 0,
+      fleeTicks: 0,
+      frostBurnDamagePerTick: Math.fround(0.01),
+      frostBurnOwnerId: 'player',
+      frostBurnSkillId: 35,
+      frostBurnSourceActorId: 99,
+      frostBurnTicks: 50_000,
+      frozenTicks: 500,
+      frozenTimeScale: 0,
+      prismaticTicks: 0,
+      targetId: 7,
+      timeScale: 0,
+      weakenFactor: 1,
+      worldKey: 'boneyard:test',
+    }],
+  }, 'player')
+  assert.equal(frost.targetEffects[0]?.frostBurnTicks, 0)
+  assert.equal(frost.targetEffects[0]?.frozenTicks, 500)
 })
 
 test('Magic Storm lightning consumes Prismatic susceptibility and Acid Rain uses exact target count', () => {

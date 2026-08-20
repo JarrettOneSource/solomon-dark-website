@@ -18,7 +18,11 @@ import {
   dowse,
   equipInventoryItem,
   hagathaOffers,
+  hasBurningManOutfit,
+  hasFeteOfClayOutfit,
+  hasFrostburnJewels,
   hasPandimensionalBugMasterOutfit,
+  hasTempestOutfit,
   restockFomentius,
   transferInventoryItem,
   unequipInventorySlot,
@@ -324,6 +328,36 @@ test("the complete five-piece Bug-Master outfit owns Call Leviathan's maximum an
     ...equipment,
     rings: [null, null, null],
   }), false)
+})
+
+test('every native secondary maximum is gated by its exact complete equipment set', () => {
+  const item = (recipeIndex: number) => createEquipmentInventoryItem(
+    DOWSING_EQUIPMENT_RECIPES[recipeIndex]!,
+    200 + recipeIndex,
+  )
+  const equipment = (recipeIndexes: readonly number[]) => {
+    const items = recipeIndexes.map(item)
+    const rings = items.filter(({ equipmentType }) => equipmentType === 'ring')
+    return {
+      amulet: items.find(({ equipmentType }) => equipmentType === 'amulet') ?? null,
+      hat: items.find(({ equipmentType }) => equipmentType === 'hat') ?? null,
+      rings: [rings[0] ?? null, rings[1] ?? null, rings[2] ?? null] as const,
+      robe: items.find(({ equipmentType }) => equipmentType === 'robe') ?? null,
+      weapon: items.find(({ equipmentType }) => (
+        equipmentType === 'staff' || equipmentType === 'wand'
+      )) ?? null,
+    }
+  }
+  const cases = [
+    [hasTempestOutfit, [16, 17, 18, 19]],
+    [hasBurningManOutfit, [20, 21]],
+    [hasFrostburnJewels, [22, 23, 24]],
+    [hasFeteOfClayOutfit, [25, 26, 27, 28]],
+  ] as const
+  for (const [predicate, recipes] of cases) {
+    assert.equal(predicate(equipment(recipes)), true)
+    assert.equal(predicate(equipment(recipes.slice(0, -1))), false)
+  }
 })
 
 test('two participants never share gold, stock, offers, or inventory mutations', () => {

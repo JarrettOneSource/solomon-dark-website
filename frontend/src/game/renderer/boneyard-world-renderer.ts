@@ -45,6 +45,7 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
+import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
 import {
   mergeNativeLightProviderOwners,
   type NativeLightProviderRegistration,
@@ -142,7 +143,10 @@ import {
   nativeFireImpactLightSource,
 } from './primary-spell-fire-native.ts'
 import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
-import { NativeSecondaryWorldView } from './native-secondary-world-view.ts'
+import {
+  NativeSecondaryWorldView,
+  type NativeSecondaryDiagnosticSample,
+} from './native-secondary-world-view.ts'
 import {
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
@@ -203,6 +207,7 @@ interface BoneyardRendererFrameDiagnostics {
   cameraSubjectPlayerId: string | null
   cameraX: number
   cameraY: number
+  cameraZoom: number
   cameraRenderGroup: boolean
   culledResidentCount: number
   localPlayerDeathTick: number
@@ -277,6 +282,7 @@ interface BoneyardRendererFrameDiagnostics {
   secondaryAbilityCount: number
   secondaryAbilityKinds: readonly string[]
   secondaryAbilityPrimitiveCount: number
+  secondaryAbilitySamples: readonly NativeSecondaryDiagnosticSample[]
   secondaryScreenFlashAlpha: number
   secondaryScreenFlashColor: number
   runGameOverTicks: number
@@ -522,6 +528,7 @@ export async function createBoneyardWorldRenderer(
     cameraSubjectPlayerId: null,
     cameraX: Number.NaN,
     cameraY: Number.NaN,
+    cameraZoom: Number.NaN,
     cameraRenderGroup: world.isRenderGroup,
     culledResidentCount: 0,
     localPlayerDeathTick: 0,
@@ -585,6 +592,7 @@ export async function createBoneyardWorldRenderer(
     secondaryAbilityCount: 0,
     secondaryAbilityKinds: [],
     secondaryAbilityPrimitiveCount: 0,
+    secondaryAbilitySamples: [],
     secondaryScreenFlashAlpha: 0,
     secondaryScreenFlashColor: 0xffffff,
     runGameOverTicks: 0,
@@ -705,22 +713,6 @@ export async function createBoneyardWorldRenderer(
         scene.currentLightSources,
         camera,
       )
-      const feedback = worldFeedback.sample(snapshot.tick)
-      const worldShake = nativeSecondaryWorldShake(
-        snapshot.secondaryAbilities.actors,
-        `boneyard:${snapshot.world.runId}`,
-      )
-      const worldTransform = nativeEnemyWorldFeedbackTransform(
-        camera,
-        viewport,
-        player.position,
-        Math.max(feedback.magnitude, worldShake.magnitude),
-      )
-      world.scale.set(worldTransform.scale)
-      world.position.set(
-        worldTransform.position.x + worldShake.x,
-        worldTransform.position.y + worldShake.y,
-      )
       for (const event of snapshot.secondaryAbilities.events) {
         secondaryScreenFeedback.consume(event, {
           cameraCenter: { x: camera.x, y: camera.y },
@@ -728,6 +720,25 @@ export async function createBoneyardWorldRenderer(
           visibleWorldWidth: visibleWorld.w,
         })
       }
+      const feedback = worldFeedback.sample(snapshot.tick)
+      const worldShake = nativeSecondaryWorldShake(
+        snapshot.secondaryAbilities.actors,
+        `boneyard:${snapshot.world.runId}`,
+      )
+      const secondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
+        snapshot.tick,
+      )
+      const worldTransform = nativeEnemyWorldFeedbackTransform(
+        camera,
+        viewport,
+        player.position,
+        Math.max(feedback.magnitude, worldShake.magnitude, secondaryCameraMagnitude),
+      )
+      world.scale.set(worldTransform.scale)
+      world.position.set(
+        worldTransform.position.x + worldShake.x,
+        worldTransform.position.y + worldShake.y,
+      )
       const screenOverlay = secondaryScreenFeedback.sample(snapshot.tick)
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
@@ -739,6 +750,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.cameraSubjectPlayerId = cameraFocus.playerId
       frameDiagnostics.cameraX = camera.x
       frameDiagnostics.cameraY = camera.y
+      frameDiagnostics.cameraZoom = camera.zoom
       frameDiagnostics.frameCount = frameCount
       frameDiagnostics.activeStaticPainterLayerCount = painter.activeStaticPainterLayerCount
       frameDiagnostics.arenaTransitionPhase = snapshot.world.arenaTransition?.phase ?? 'none'
@@ -880,6 +892,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.secondaryAbilityCount = scene.secondaryAbilityCount
       frameDiagnostics.secondaryAbilityKinds = scene.secondaryAbilityKinds
       frameDiagnostics.secondaryAbilityPrimitiveCount = scene.secondaryAbilityPrimitiveCount
+      frameDiagnostics.secondaryAbilitySamples = scene.secondaryAbilitySamples
       frameDiagnostics.secondaryScreenFlashAlpha = screenOverlay?.alpha ?? 0
       frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
       canvas.dataset.enemyCount = `${scene.enemyCount}`
@@ -897,6 +910,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
       canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
       canvas.dataset.worldFeedbackMagnitude = `${feedback.magnitude}`
+      canvas.dataset.secondaryCameraMagnitude = `${secondaryCameraMagnitude}`
       canvas.dataset.worldShakeX = `${worldShake.x}`
       canvas.dataset.worldShakeY = `${worldShake.y}`
       canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
@@ -1545,9 +1559,18 @@ class BoneyardDynamicScene {
         )),
       )
     }
+    const secondaryEffectsByTarget = new Map(
+      snapshot.secondaryAbilities.targetEffects
+        .filter(({ worldKey }) => worldKey === `boneyard:${snapshot.world.runId}`)
+        .map((effect) => [effect.targetId, effect] as const),
+    )
     for (const enemy of enemySnapshots) {
-      this.enemies.setTint(enemy.id, nativeBoneyardLightTint(
+      const lightTint = nativeBoneyardLightTint(
         nativeBoneyardLightScalar(enemy.position, this.lightIndex),
+      )
+      this.enemies.setTint(enemy.id, nativeSecondaryTargetMaterialTint(
+        lightTint,
+        secondaryEffectsByTarget.get(enemy.id),
       ))
     }
     for (const effect of snapshot.world.deathEffects) {
@@ -1946,6 +1969,10 @@ class BoneyardDynamicScene {
 
   get secondaryAbilityPrimitiveCount(): number {
     return this.secondaryAbilities.primitiveCount
+  }
+
+  get secondaryAbilitySamples() {
+    return this.secondaryAbilities.diagnosticSamples
   }
 
   player(playerId: string): PlayerWorldView | undefined {

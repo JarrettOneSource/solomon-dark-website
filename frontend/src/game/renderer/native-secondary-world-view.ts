@@ -24,6 +24,7 @@ import {
 } from './native-secondary-assets.ts'
 import {
   nativeSecondaryPresentationPlan,
+  nativeSecondaryCompositeOwnerEntries,
   type NativeSecondaryGradientDraw,
   type NativeSecondaryMeshDraw,
   type NativeSecondaryPresentationPlan,
@@ -36,6 +37,14 @@ import type { PlayerWorldTextures } from './world-player-textures.ts'
 const QUAD_UVS = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1])
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
 const STORM_RENDER_TARGET_SIZE = 256
+const LEVIATHAN_RENDER_TARGET_SIZE = 256
+const DIAGNOSTIC_ACTOR_KINDS = new Set<NativeSecondaryActorState['kind']>([
+  'freeze-wave-visual',
+  'golem',
+  'leviathan',
+  'leviathan-appendage',
+  'storm-cloud',
+])
 const WHITE_ALPHA_MASK_FILTER = new ColorMatrixFilter()
 WHITE_ALPHA_MASK_FILTER.matrix = [
   0, 0, 0, 0, 1,
@@ -51,6 +60,17 @@ export interface NativeSecondaryPainterLayer {
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
   readonly sortBias: number
   readonly sourceOrder: number
+  readonly worldY: number
+}
+
+export interface NativeSecondaryDiagnosticSample {
+  readonly compositeOwnerId: number
+  readonly depth: number
+  readonly id: number
+  readonly kind: NativeSecondaryActorState['kind']
+  readonly primitiveCount: number
+  readonly sortBias: number
+  readonly worldX: number
   readonly worldY: number
 }
 
@@ -184,6 +204,22 @@ class NativeSecondaryActorView {
       regionLightPoint: this.regionLightPoint,
       sortBias: this.plan.sortBias,
       sourceOrder,
+      worldY: this.plan.worldY,
+    }
+  }
+
+  diagnosticSample(
+    id: number,
+    compositeOwnerId: number,
+  ): NativeSecondaryDiagnosticSample {
+    return {
+      compositeOwnerId,
+      depth: this.container.zIndex,
+      id,
+      kind: this.currentKind,
+      primitiveCount: this.primitiveCount,
+      sortBias: this.plan.sortBias,
+      worldX: this.plan.root.x,
       worldY: this.plan.worldY,
     }
   }
@@ -350,7 +386,7 @@ class NativeStormWeatherView {
     }
     renderer.render({
       clear: true,
-      clearColor: 'rgba(255,255,255,0)',
+      clearColor: [0, 0, 0, 0],
       container: this.source,
       target: this.renderTexture,
     })
@@ -363,6 +399,84 @@ class NativeStormWeatherView {
     this.composite.destroy()
     this.renderTexture.destroy(true)
     this.sourceSprites.length = 0
+  }
+}
+
+class NativeLeviathanCompositeView {
+  readonly container = new Container({ label: 'leviathan-render-target-owner' })
+  readonly memberIds = new Set<number>()
+  private readonly composite: Sprite
+  private readonly renderTexture: RenderTexture
+  private readonly source = new Container({ label: 'leviathan-render-target-source' })
+
+  constructor() {
+    this.container.eventMode = 'none'
+    this.source.eventMode = 'none'
+    this.source.sortableChildren = true
+    this.renderTexture = RenderTexture.create({
+      dynamic: true,
+      height: LEVIATHAN_RENDER_TARGET_SIZE,
+      resolution: 1,
+      width: LEVIATHAN_RENDER_TARGET_SIZE,
+    })
+    this.composite = new Sprite(this.renderTexture)
+    this.composite.anchor.set(0.5)
+    this.composite.eventMode = 'none'
+    this.composite.label = 'leviathan-render-target-composite'
+    this.container.addChild(this.composite)
+  }
+
+  update(
+    parent: NativeSecondaryActorView,
+    members: readonly Readonly<{ id: number; view: NativeSecondaryActorView }>[],
+    renderer: Renderer,
+    root: Container,
+  ): void {
+    for (const child of [...this.source.children]) root.addChild(child)
+    const parentSample = parent.diagnosticSample(0, 0)
+    this.container.position.set(parentSample.worldX, parentSample.worldY)
+    this.memberIds.clear()
+    for (const { id, view } of members) {
+      this.memberIds.add(id)
+      const layer = view.painterLayer(id, id)
+      view.container.zIndex = layer.worldY + layer.sortBias
+      this.source.addChild(view.container)
+    }
+    this.source.position.set(
+      LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldX,
+      LEVIATHAN_RENDER_TARGET_SIZE / 2 - parentSample.worldY,
+    )
+    renderer.render({
+      clear: true,
+      clearColor: [0, 0, 0, 0],
+      container: this.source,
+      target: this.renderTexture,
+    })
+  }
+
+  releaseMembers(root: Container): void {
+    for (const child of [...this.source.children]) root.addChild(child)
+    this.memberIds.clear()
+  }
+
+  setDepth(depth: number): void {
+    this.container.zIndex = depth
+  }
+
+  setRenderable(renderable: boolean): void {
+    this.container.renderable = renderable
+  }
+
+  setTint(tint: number): void {
+    this.container.tint = tint
+  }
+
+  destroy(): void {
+    this.source.removeChildren()
+    this.source.destroy()
+    this.container.destroy({ children: true })
+    this.renderTexture.destroy(true)
+    this.memberIds.clear()
   }
 }
 
@@ -386,7 +500,9 @@ function colorWithAlpha(color: number, alpha: number): string {
 }
 
 export class NativeSecondaryWorldView {
+  private readonly compositeOwnerByActorId = new Map<number, number>()
   private readonly liveIds = new Set<number>()
+  private readonly leviathanComposites = new Map<number, NativeLeviathanCompositeView>()
   private readonly root: Container
   private readonly renderer: Renderer
   private readonly textures: PlayerWorldTextures
@@ -415,30 +531,61 @@ export class NativeSecondaryWorldView {
         this.root.addChild(view.container)
       }
       view.update(actor, presentationFrame)
-      view.setDepth(hubWorldDepthForActor(actor.position.y))
     }
     for (const [id, view] of this.views) {
       if (this.liveIds.has(id)) continue
-      this.root.removeChild(view.container)
+      view.container.parent?.removeChild(view.container)
       view.destroy()
       this.views.delete(id)
+    }
+    this.compositeOwnerByActorId.clear()
+    for (const [actorId, parentId] of nativeSecondaryCompositeOwnerEntries(
+      state.actors,
+      worldKey,
+    )) {
+      if (this.views.has(parentId)) this.compositeOwnerByActorId.set(actorId, parentId)
+    }
+    this.syncLeviathanComposites()
+    for (const layer of this.painterLayers()) {
+      this.setDepth(
+        layer.id,
+        hubWorldDepthForActor(layer.worldY + layer.sortBias),
+      )
     }
   }
 
   painterLayers(): NativeSecondaryPainterLayer[] {
-    return [...this.views.entries()].map(([id, view], index) => view.painterLayer(id, index))
+    const layers: NativeSecondaryPainterLayer[] = []
+    for (const [id, view] of this.views) {
+      if (this.compositeOwnerByActorId.has(id)) continue
+      layers.push(view.painterLayer(id, layers.length))
+    }
+    return layers
   }
 
   setDepth(id: string, depth: number): void {
-    this.views.get(Number(id.slice('secondary:'.length)))?.setDepth(depth)
+    const requestedId = Number(id.slice('secondary:'.length))
+    const ownerId = this.compositeOwnerByActorId.get(requestedId) ?? requestedId
+    const composite = this.leviathanComposites.get(ownerId)
+    if (composite) composite.setDepth(depth)
+    else this.views.get(ownerId)?.setDepth(depth)
   }
 
   setTint(id: string, tint: number): void {
-    this.views.get(Number(id.slice('secondary:'.length)))?.setTint(tint)
+    const requestedId = Number(id.slice('secondary:'.length))
+    const ownerId = this.compositeOwnerByActorId.get(requestedId) ?? requestedId
+    const composite = this.leviathanComposites.get(ownerId)
+    if (composite) composite.setTint(tint)
+    else this.views.get(ownerId)?.setTint(tint)
   }
 
   setRenderable(renderable: boolean): void {
-    for (const view of this.views.values()) view.container.renderable = renderable
+    for (const composite of this.leviathanComposites.values()) {
+      composite.setRenderable(renderable)
+    }
+    for (const [id, view] of this.views) {
+      view.container.renderable = this.compositeForMember(id) ? true : renderable
+    }
   }
 
   get count(): number {
@@ -455,13 +602,69 @@ export class NativeSecondaryWorldView {
     return count
   }
 
+  get diagnosticSamples(): readonly NativeSecondaryDiagnosticSample[] {
+    return [...this.views.entries()].flatMap(([id, view]) => {
+      if (!DIAGNOSTIC_ACTOR_KINDS.has(view.kind)) return []
+      const ownerId = this.compositeOwnerByActorId.get(id) ?? id
+      const sample = view.diagnosticSample(id, ownerId)
+      const composite = this.leviathanComposites.get(ownerId)
+      return [composite ? { ...sample, depth: composite.container.zIndex } : sample]
+    })
+  }
+
   destroy(): void {
+    for (const composite of this.leviathanComposites.values()) {
+      composite.releaseMembers(this.root)
+      this.root.removeChild(composite.container)
+      composite.destroy()
+    }
+    this.leviathanComposites.clear()
     for (const view of this.views.values()) {
-      this.root.removeChild(view.container)
+      view.container.parent?.removeChild(view.container)
       view.destroy()
     }
     this.views.clear()
+    this.compositeOwnerByActorId.clear()
     this.liveIds.clear()
+  }
+
+  private compositeForMember(id: number): NativeLeviathanCompositeView | null {
+    for (const composite of this.leviathanComposites.values()) {
+      if (composite.memberIds.has(id)) return composite
+    }
+    return null
+  }
+
+  private syncLeviathanComposites(): void {
+    const childrenByParent = new Map<number, number[]>()
+    for (const [actorId, parentId] of this.compositeOwnerByActorId) {
+      const children = childrenByParent.get(parentId) ?? []
+      children.push(actorId)
+      childrenByParent.set(parentId, children)
+    }
+    for (const [parentId, composite] of this.leviathanComposites) {
+      if (childrenByParent.has(parentId)) continue
+      composite.releaseMembers(this.root)
+      this.root.removeChild(composite.container)
+      composite.destroy()
+      this.leviathanComposites.delete(parentId)
+    }
+    for (const [parentId, childIds] of childrenByParent) {
+      const parent = this.views.get(parentId)
+      if (!parent) continue
+      let composite = this.leviathanComposites.get(parentId)
+      if (!composite) {
+        composite = new NativeLeviathanCompositeView()
+        this.leviathanComposites.set(parentId, composite)
+        this.root.addChild(composite.container)
+      }
+      const members = [parentId, ...childIds]
+        .flatMap((id) => {
+          const view = this.views.get(id)
+          return view ? [{ id, view }] : []
+        })
+      composite.update(parent, members, this.renderer, this.root)
+    }
   }
 }
 

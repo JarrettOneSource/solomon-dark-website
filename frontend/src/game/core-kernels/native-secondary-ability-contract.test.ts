@@ -41,11 +41,11 @@ const EXPECTED_ART = new Map<number, readonly string[]>([
   [11, ['BadGuys:343..372', 'BadGuys:39', 'BadGuys:11', 'BadGuys:22', 'procedural:Ether FadeMM']],
   [12, ['BadGuys:75', 'images:etherplane.png', 'BadGuys:11,45', 'BadGuys:11']],
   [15, ['BadGuys:53']],
-  [21, ['DeadHawg:46..77', 'DeadHawg:18', 'BadGuys:333..342']],
+  [21, ['DeadHawg:46..77', 'DeadHawg:18', 'BadGuys:15,251..254,267..270', 'BadGuys:333..342']],
   [23, ['DeadHawg:46..77', 'BadGuys:333..342']],
   [27, ['BadGuys:0,11,78,84', 'procedural:width-2 blue-white gradient', 'render_target:three BadGuys-78 passes plus moving and white-mask branches']],
   [30, ['BadGuys:58', 'BadGuys:111', 'BadGuys:10,11']],
-  [35, ['DeadHawg:114,121', 'BadGuys:72']],
+  [35, ['DeadHawg:114,121', 'BadGuys:72', 'target-material:Frozen and ColdSlow', 'BadGuys:10,11 FrostBurn']],
   [41, ['DeadHawg:200..202', 'BadGuys:62', 'BadGuys:10', 'BadGuys:2008..2010']],
   [45, ['Golem:1..208', 'BadGuys:15,36,62,86,238..245,2008..2010', 'DeadHawg:78..87', 'UI:23']],
   [46, ['player:actor flag 0x1 material treatment']],
@@ -190,6 +190,9 @@ test('critical native VFX and lifecycle constants cannot collapse to generic eff
   assert.equal(nativeSecondaryAbilityContract(12).audio.at(-1)?.playbackRate, 2)
   assert.deepEqual(nativeSecondaryAbilityContract(21).timing, {
     angleStepDegrees: 12,
+    burningManExplosionDamage: '0.5*waveDamage per eligible target',
+    burningManExplosionRadius: 165,
+    cameraMagnitude: 0.25,
     segmentCount: 30,
     segmentRngWords: 7,
     shockwaveQueryPeriodTicks: 10,

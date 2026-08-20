@@ -105,13 +105,28 @@ export interface NativeSecondaryScreenFeedbackContext {
   readonly visibleWorldWidth: number
 }
 
+export function nativeSecondaryCompositeOwnerEntries(
+  actors: readonly NativeSecondaryActorState[],
+  worldKey: string,
+): readonly (readonly [actorId: number, ownerId: number])[] {
+  const liveIds = new Set(actors
+    .filter((actor) => actor.worldKey === worldKey)
+    .map(({ id }) => id))
+  return actors.flatMap((actor) => {
+    if (actor.worldKey !== worldKey || actor.kind !== 'leviathan-appendage') return []
+    const parentId = actor.hitTargetIds[0]
+    return parentId !== undefined && liveIds.has(parentId)
+      ? [[actor.id, parentId] as const]
+      : []
+  })
+}
+
 const WHITE = 0xffffff
 const GOLEM_IRON_TINT = 0x595959
 const GOLEM_DRAW_SCALE = 1.1109999418258667
 const GOLEM_HALF_DRAW_SCALE = 0.5554999709129333
 const GOLEM_STAR_TINT = 0xa6ffa6
 const ACID_SPLASH_INITIAL_LIFE = Math.fround(0.25)
-const MAGIC_SHIELD_EXPLOSION_CAMERA_MAGNITUDE = Math.fround(1.25)
 const MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY = Math.fround(0.94)
 const MAGIC_SHIELD_EXPLOSION_CAMERA_CUTOFF = Math.fround(0.001)
 const MAGIC_TRAP_FULL_DRAW_THRESHOLD = Math.fround(0.9900000095367432)
@@ -176,14 +191,6 @@ export function nativeSecondaryWorldShake(
       }
       continue
     }
-    if (actor.kind !== 'shield-explosion' && actor.kind !== 'magic-trap-burst') continue
-    const magnitude = repeatedFloatMultiply(
-      MAGIC_SHIELD_EXPLOSION_CAMERA_MAGNITUDE,
-      MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
-      actor.ageTicks,
-    )
-    if (magnitude < MAGIC_SHIELD_EXPLOSION_CAMERA_CUTOFF) continue
-    selected = { ...selected, magnitude: Math.max(selected.magnitude, magnitude) }
   }
   return selected
 }
@@ -218,6 +225,7 @@ export function nativeRegionPointGain(
 export class NativeSecondaryScreenFeedbackPresentation {
   private alpha = 0
   private blue = 1
+  private cameraMagnitude = 0
   private green = 1
   private lastEventId = 0
   private lastTick: number
@@ -239,11 +247,22 @@ export class NativeSecondaryScreenFeedbackPresentation {
   ): void {
     if (event.eventId <= this.lastEventId) return
     this.lastEventId = event.eventId
-    if (event.worldKey !== this.worldKey || event.screenFlash === null) return
+    if (event.worldKey !== this.worldKey) return
 
-    const flash = event.screenFlash
     const eventTick = Math.max(0, Math.trunc(event.tick))
     if (eventTick > this.lastTick) this.advanceTo(eventTick)
+    if (event.cameraMagnitude > 0) {
+      this.cameraMagnitude = Math.fround(event.cameraMagnitude)
+      if (eventTick < this.lastTick) {
+        this.cameraMagnitude = repeatedFloatMultiply(
+          this.cameraMagnitude,
+          MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
+          this.lastTick - eventTick,
+        )
+      }
+    }
+    const flash = event.screenFlash
+    if (flash === null) return
     const pointGain = flash.pointAttenuated
       ? nativeRegionPointGain(
           event.position,
@@ -275,14 +294,28 @@ export class NativeSecondaryScreenFeedbackPresentation {
     }
   }
 
+  sampleCameraMagnitude(tick: number): number {
+    this.advanceTo(Math.max(0, Math.trunc(tick)))
+    return this.cameraMagnitude
+  }
+
   private advanceTo(tick: number): void {
     if (tick <= this.lastTick) return
+    const elapsedTicks = tick - this.lastTick
     if (this.alpha > 0 && this.decayPerTick > 0) {
       this.alpha = repeatedFloatDecay(
         this.alpha,
         this.decayPerTick,
-        tick - this.lastTick,
+        elapsedTicks,
       )
+    }
+    this.cameraMagnitude = repeatedFloatMultiply(
+      this.cameraMagnitude,
+      MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
+      elapsedTicks,
+    )
+    if (this.cameraMagnitude < MAGIC_SHIELD_EXPLOSION_CAMERA_CUTOFF) {
+      this.cameraMagnitude = 0
     }
     this.lastTick = tick
   }
@@ -484,6 +517,15 @@ export function nativeSecondaryPresentationPlan(
       return plan([])
     case 'freeze-wave-visual':
       return plan(freezeWaveVisualDraws(actor, draw))
+    case 'frost-burn-flare':
+      return plan([draw('BadGuys', clampEntry(actor.frame, 10, 11), {
+        alpha: actor.alpha,
+        blend: 'add',
+        rotationRadians: actor.rotationRadians,
+        scaleX: actor.scale,
+        scaleY: actor.scale,
+        tint: Math.trunc(actor.quantity),
+      })])
     case 'ice-blast':
       return plan([])
     case 'earthquake':
@@ -667,6 +709,34 @@ export function nativeSecondaryPresentationPlan(
       })])
     case 'shield-explosion':
       return plan(shieldExplosionDraws(actor, draw))
+    case 'ring-fire-explosion': {
+      return plan([draw('BadGuys', 15, {
+        alpha: actor.alpha,
+        offset: { x: 0, y: -25 },
+        role: 'ring-fire-contact-explosion-core',
+        rotationRadians: actor.rotationRadians,
+        scaleX: actor.scale * 6,
+        scaleY: actor.scale * 6,
+      })])
+    }
+    case 'ring-fire-fragment': {
+      const frame = Math.floor(actor.frame) % 4
+      return plan([
+        draw('BadGuys', 251 + frame, {
+          alpha: Math.min(actor.alpha, 1),
+          offset: { x: 0, y: actor.phase },
+          role: 'ring-fire-ember-body',
+        }),
+        draw('BadGuys', 267 + frame, {
+          alpha: Math.min(actor.alpha, 1),
+          blend: 'add',
+          offset: { x: 0, y: actor.phase },
+          role: 'ring-fire-ember-core',
+          scaleX: 2,
+          scaleY: 2,
+        }),
+      ], 'ordinary-dynamic')
+    }
     case 'acid-rain': {
       const fieldScale = Math.fround(actor.scale)
       const groundScalar = Math.max(0, Math.min(1, Math.fround(actor.phase)))
@@ -1456,13 +1526,18 @@ export function nativeGolemPresentationPlan(
   const oppositeFacing = nativeGolemFacing(drawHeadingDegrees + 180)
   const elevation = actor.ageTicks < 100 ? 0 : actor.ageTicks < 200 ? -20 : -40
   const tint = actor.golem.iron ? GOLEM_IRON_TINT : WHITE
-  const center = golemPoint(
-    { x: 0, y: 0 },
-    baseHeadingDegrees,
-    -19,
-    0,
-    0,
-  )
+  const leftFoot = {
+    x: actor.golem.leftFoot.x + actor.golem.leftFootBob.x - actor.position.x,
+    y: actor.golem.leftFoot.y + actor.golem.leftFootBob.y - actor.position.y,
+  }
+  const rightFoot = {
+    x: actor.golem.rightFoot.x + actor.golem.rightFootBob.x - actor.position.x,
+    y: actor.golem.rightFoot.y + actor.golem.rightFootBob.y - actor.position.y,
+  }
+  const center = {
+    x: (leftFoot.x + rightFoot.x) * 0.5,
+    y: (leftFoot.y + rightFoot.y) * 0.5,
+  }
   const records: GolemDrawRecord[] = []
   const part = (
     entry: number,
@@ -1579,7 +1654,14 @@ export function nativeGolemPresentationPlan(
     .sort((left, right) => left.y - right.y || left.sourceOrder - right.sourceOrder)
     .flatMap(({ draws }) => draws)
   const connectors = actor.ageTicks >= 200
-    ? nativeGolemConnectorDraws(actor, presentationFrame, center, drawHeadingDegrees, facing, tint)
+    ? nativeGolemConnectorDraws(
+        actor,
+        presentationFrame,
+        leftFoot,
+        rightFoot,
+        facing,
+        tint,
+      )
     : []
   const quads: NativeSecondaryQuadDraw[] = actor.ageTicks < 200
     ? [{
@@ -1601,7 +1683,7 @@ export function nativeGolemPresentationPlan(
     root: { ...actor.position },
     sortBias: 0,
     stormComposite: null,
-    worldY: actor.position.y,
+    worldY: actor.position.y + center.y,
   }
 }
 
@@ -1677,64 +1759,44 @@ interface GolemPose {
 
 function nativeGolemPose(actor: NativeSecondaryActorState): GolemPose {
   const golem = actor.golem!
-  if (golem.phase === 'attack') {
-    const selectedLeft = golem.poseVariant === 0
-    if (golem.actionTick <= 37) {
-      return {
-        headingOffsetDegrees: golem.actionTick < 25 ? (selectedLeft ? -38 : 38) : 0,
-        leftMode: selectedLeft ? 1 : 0,
-        leftRotationDegrees: selectedLeft ? 45 : 0,
-        rightMode: selectedLeft ? 0 : 1,
-        rightRotationDegrees: selectedLeft ? 0 : -45,
-      }
-    }
-    return {
-      headingOffsetDegrees: selectedLeft ? 47 : -47,
-      leftMode: selectedLeft ? 2 : 1,
-      leftRotationDegrees: selectedLeft ? 0 : 45,
-      rightMode: selectedLeft ? 1 : 2,
-      rightRotationDegrees: selectedLeft ? -45 : 0,
-    }
-  }
-  if (golem.phase === 'provoke' && golem.actionTick > 100) {
-    return {
-      headingOffsetDegrees: 0,
-      leftMode: 3,
-      leftRotationDegrees: 0,
-      rightMode: 3,
-      rightRotationDegrees: 0,
-    }
-  }
   return {
-    headingOffsetDegrees: 0,
-    leftMode: 0,
-    leftRotationDegrees: 0,
-    rightMode: 0,
-    rightRotationDegrees: 0,
+    headingOffsetDegrees: golem.actionHeadingOffsetDegrees,
+    leftMode: golem.leftLimbMode,
+    leftRotationDegrees: golem.leftLimbMode === 1 ? 45 : 0,
+    rightMode: golem.rightLimbMode,
+    rightRotationDegrees: golem.rightLimbMode === 1 ? -45 : 0,
   }
 }
 
 function nativeGolemConnectorDraws(
   actor: NativeSecondaryActorState,
   presentationFrame: number,
-  center: Vector2,
-  headingDegrees: number,
+  leftFoot: Vector2,
+  rightFoot: Vector2,
   facing: number,
   tint: number,
 ): NativeSecondarySpriteDraw[] {
-  const radians = degreesToRadians(headingDegrees)
-  const lateral = { x: -Math.cos(radians), y: -Math.sin(radians) }
-  const leftFoot = { x: center.x + lateral.x * 10, y: center.y + lateral.y * 10 }
-  const rightFoot = { x: center.x - lateral.x * 10, y: center.y - lateral.y * 10 }
-  const leftJoint = { x: leftFoot.x, y: leftFoot.y - 15 }
-  const rightJoint = { x: rightFoot.x, y: rightFoot.y - 15 }
-  const endpoint = (offset: Vector2, side: string): NativeSecondarySpriteDraw => secondarySprite(
+  const golem = actor.golem!
+  const leftJoint = {
+    x: leftFoot.x + golem.leftConnectorOffset.x,
+    y: leftFoot.y - 15 + golem.leftConnectorOffset.y,
+  }
+  const rightJoint = {
+    x: rightFoot.x + golem.rightConnectorOffset.x,
+    y: rightFoot.y - 15 + golem.rightConnectorOffset.y,
+  }
+  const endpoint = (
+    offset: Vector2,
+    side: string,
+    rotationDegrees: number,
+  ): NativeSecondarySpriteDraw => secondarySprite(
     actor,
     'Golem',
     97 + facing,
     `golem-connector-endpoint-${side}`,
     {
       offset,
+      rotationRadians: degreesToRadians(rotationDegrees),
       scaleX: actor.scale * GOLEM_DRAW_SCALE,
       scaleY: actor.scale * GOLEM_DRAW_SCALE,
       tint,
@@ -1767,8 +1829,14 @@ function nativeGolemConnectorDraws(
   const leftFirst = leftFoot.y < rightFoot.y
   return [
     ...(leftFirst
-      ? [endpoint(leftFoot, 'left'), endpoint(rightFoot, 'right')]
-      : [endpoint(rightFoot, 'right'), endpoint(leftFoot, 'left')]),
+      ? [
+          endpoint(leftFoot, 'left', golem.leftFootRotationDegrees),
+          endpoint(rightFoot, 'right', golem.rightFootRotationDegrees),
+        ]
+      : [
+          endpoint(rightFoot, 'right', golem.rightFootRotationDegrees),
+          endpoint(leftFoot, 'left', golem.leftFootRotationDegrees),
+        ]),
     glow(leftJoint, leftFoot, 'left', 10),
     glow(rightJoint, rightFoot, 'right', 12),
     ...(leftFirst

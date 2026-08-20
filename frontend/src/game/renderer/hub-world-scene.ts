@@ -321,6 +321,10 @@ export class HubWorldScene {
     return this.secondaryAbilities.primitiveCount
   }
 
+  get secondaryAbilitySamples() {
+    return this.secondaryAbilities.diagnosticSamples
+  }
+
   destroy(): void {
     this.world.removeChild(this.levelUp.container)
     this.levelUp.destroy()

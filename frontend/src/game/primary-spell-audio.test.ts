@@ -555,6 +555,7 @@ test('secondary one-shots and streams consume new authoritative events once with
     worldKey = 'hub:courtyard',
   ): NativeSecondaryEventState => ({
     actorId: null,
+    cameraMagnitude: 0,
     cue,
     eventId,
     kind: 'pulse',

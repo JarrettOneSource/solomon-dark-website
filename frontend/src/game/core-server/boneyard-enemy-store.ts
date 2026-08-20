@@ -3064,7 +3064,7 @@ function withNativeSecondaryEffect(
   }
 }
 
-function nativeSecondaryActorSpeedScale(
+export function nativeSecondaryActorSpeedScale(
   effect: NativeSecondaryTargetEffectState | undefined,
 ): number {
   if (effect === undefined) return 1

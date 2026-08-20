@@ -537,6 +537,22 @@ export function nativeSecondaryProviderLightSource(
       radius: 0.6,
     }
   }
+  if (actor.kind === 'ring-fire-explosion') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: actor.alpha,
+      position: actor.position,
+      radius: actor.scale,
+    }
+  }
+  if (actor.kind === 'ring-fire-fragment') {
+    return {
+      castsDirectionalShadow: false,
+      intensity: Math.min(actor.alpha, 1),
+      position: actor.position,
+      radius: 0.5,
+    }
+  }
   if (actor.kind === 'shockwave' || actor.kind === 'freeze-wave') {
     return {
       castsDirectionalShadow: false,

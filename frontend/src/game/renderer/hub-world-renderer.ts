@@ -14,6 +14,7 @@ import {
   hubStudentVisibilityDiagnosticsDue,
   initialHubResolution,
 } from './hub-render-contract.ts'
+import type { NativeSecondaryDiagnosticSample } from './native-secondary-world-view.ts'
 import {
   destroyHubWorldTextureFrames,
   hubDeferredAnimationTextures,
@@ -60,6 +61,7 @@ interface HubFrameDiagnostics {
   secondaryAbilityCount: number
   secondaryAbilityKinds: readonly string[]
   secondaryAbilityPrimitiveCount: number
+  secondaryAbilitySamples: readonly NativeSecondaryDiagnosticSample[]
   secondaryScreenFlashAlpha: number
   secondaryScreenFlashColor: number
   pooledStudentViewCount: number
@@ -211,6 +213,7 @@ export async function createHubWorldRenderer(
     secondaryAbilityCount: 0,
     secondaryAbilityKinds: [],
     secondaryAbilityPrimitiveCount: 0,
+    secondaryAbilitySamples: [],
     secondaryScreenFlashAlpha: 0,
     secondaryScreenFlashColor: 0xffffff,
     pooledStudentViewCount: 0,
@@ -265,6 +268,7 @@ export async function createHubWorldRenderer(
     frameDiagnostics.secondaryAbilityCount = currentScene.secondaryAbilityCount
     frameDiagnostics.secondaryAbilityKinds = currentScene.secondaryAbilityKinds
     frameDiagnostics.secondaryAbilityPrimitiveCount = currentScene.secondaryAbilityPrimitiveCount
+    frameDiagnostics.secondaryAbilitySamples = currentScene.secondaryAbilitySamples
     frameDiagnostics.pooledStudentViewCount = courtyardScene.pooledStudentViewCount
     frameDiagnostics.southernArchitectureCount = courtyardScene.southernArchitectureCount
     frameDiagnostics.southernArtRenderable = courtyardScene.southernArtRenderable
@@ -402,6 +406,21 @@ export async function createHubWorldRenderer(
         })
       }
       const screenOverlay = screenFeedback.sample(snapshot.tick)
+      const secondaryCameraMagnitude = screenFeedback.sampleCameraMagnitude(snapshot.tick)
+      const cameraScale = HUB_CAMERA_SCALE * (1 + secondaryCameraMagnitude)
+      if (inCourtyard) {
+        courtyardScene.stage.scale.set(cameraScale)
+        courtyardScene.stage.position.set(
+          (HUB_CAMERA_SCALE - cameraScale) * (player.position.x - camera.x),
+          (HUB_CAMERA_SCALE - cameraScale) * (player.position.y - camera.y),
+        )
+      } else {
+        privateRoomScene.world.scale.set(cameraScale)
+        privateRoomScene.world.position.set(
+          HUB_CAMERA_SCALE * (player.position.x - camera.x) - cameraScale * player.position.x,
+          HUB_CAMERA_SCALE * (player.position.y - camera.y) - cameraScale * player.position.y,
+        )
+      }
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
@@ -409,6 +428,7 @@ export async function createHubWorldRenderer(
       frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
       canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
       canvas.dataset.secondaryScreenFlashColor = `${screenOverlay?.color ?? 0xffffff}`
+      canvas.dataset.secondaryCameraMagnitude = `${secondaryCameraMagnitude}`
       fadeCover.alpha = participant.transition?.alpha ?? 0
       canvas.dataset.hubRegion = participant.region
       canvas.dataset.transitionAlpha = `${fadeCover.alpha}`

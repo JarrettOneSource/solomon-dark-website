@@ -35,7 +35,11 @@ import {
   consumeInventoryItem,
   dowse,
   equipInventoryItem,
+  hasBurningManOutfit,
+  hasFeteOfClayOutfit,
+  hasFrostburnJewels,
   hasPandimensionalBugMasterOutfit,
+  hasTempestOutfit,
   restockFomentius,
   transferInventoryItem,
   unequipInventorySlot,
@@ -916,6 +920,25 @@ function finishGameSimulationTick(
         .find((participant) => `hub:${participant.region}` === worldKey)?.region
       return region === undefined || !isHubRegionTraversable(region, position, 0)
     },
+    golemFootPlacement: (playerId, worldKey, currentPosition, requestedPosition) => {
+      if (
+        result.world.kind === 'boneyard'
+        && worldKey === `boneyard:${result.world.runId}`
+      ) {
+        return resolveBoneyardMovement(
+          currentPosition,
+          requestedPosition,
+          result.world.bounds,
+          boneyardCollision!,
+          0,
+        )
+      }
+      if (result.world.kind !== 'hub') return currentPosition
+      const region = result.world.participants[playerId]?.region
+      return region !== undefined && isHubRegionTraversable(region, requestedPosition, 0)
+        ? requestedPosition
+        : currentPosition
+    },
     golemMovement: (playerId, worldKey, origin, requestedPosition, radius) => {
       if (
         result.world.kind === 'boneyard'
@@ -1060,7 +1083,11 @@ function finishGameSimulationTick(
           'mSpeed',
         ) / 100,
         magicStormManaCost: effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
+        maximumGolem: hasFeteOfClayOutfit(economy.equipment),
         maximumLeviathan: hasPandimensionalBugMasterOutfit(economy.equipment),
+        maximumMagicStorm: hasTempestOutfit(economy.equipment),
+        maximumRingOfFire: hasBurningManOutfit(economy.equipment),
+        maximumRingOfIce: hasFrostburnJewels(economy.equipment),
         manaRecoveryPerTick: PLAYER_MANA_RECOVERY_PER_TICK,
         skillBook,
         worldKey: gameWorldKey(result.world, playerId),

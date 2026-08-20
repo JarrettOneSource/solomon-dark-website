@@ -17,6 +17,7 @@ import {
   nativeFireParticleVariant,
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
+import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import {
   coldSlowPlayerEntity,
@@ -1958,6 +1959,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   const event = {
     actorId: null,
+    cameraMagnitude: 0,
     cue: 'teleport',
     eventId: 1,
     kind: 'pulse',
@@ -2019,6 +2021,64 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidDecay)),
     /screenFlash\.decayPerTick must be positive/,
+  )
+
+  const invalidCamera = JSON.parse(JSON.stringify(message))
+  invalidCamera.frame.secondaryAbilities.events[0].cameraMagnitude = -0.01
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidCamera)),
+    /cameraMagnitude must be nonnegative/,
+  )
+})
+
+test('protocol v30 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const effect = {
+    coldSlowFactor: 1,
+    coldSlowMaterial: false,
+    coldSlowTicks: 0,
+    dazzleMaximumTicks: 0,
+    dazzleTicks: 0,
+    disruptedTicks: 0,
+    fleeTicks: 0,
+    frostBurnDamagePerTick: Math.fround(0.01),
+    frostBurnOwnerId: 'player-1',
+    frostBurnSkillId: 35,
+    frostBurnSourceActorId: 44,
+    frostBurnTicks: 50_000,
+    frozenTicks: 500,
+    frozenTimeScale: 0,
+    prismaticTicks: 0,
+    targetId: 7,
+    timeScale: 0,
+    weakenFactor: 1,
+    worldKey: 'hub:courtyard',
+  }
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      secondaryAbilities: {
+        ...frame.secondaryAbilities,
+        targetEffects: [effect],
+      },
+    },
+    sequence: 2,
+  }
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.secondaryAbilities.targetEffects, [effect])
+
+  const invalid = JSON.parse(JSON.stringify(message))
+  invalid.frame.secondaryAbilities.targetEffects[0].frostBurnSkillId = 21
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalid)),
+    /frostBurnSkillId must be 35 or 76/,
   )
 })
 
@@ -2092,6 +2152,38 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   assert.equal(continuousDecoded.type, 'server-snapshot')
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.frame, 0.25)
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.slowFactor, -1)
+
+  const golemFrame = JSON.parse(JSON.stringify(message))
+  const golemActor = golemFrame.frame.secondaryAbilities.actors[0]!
+  golemActor.hitTargetIds = []
+  golemActor.kind = 'golem'
+  golemActor.lightRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 0,
+  }
+  golemActor.skillId = 45
+  golemActor.golem = {
+    ...nativeInitialGolemArticulation(golemActor.position, 0),
+    actionDurationTicks: 0,
+    actionTick: 0,
+    currentHealth: 100,
+    damageMaximum: 10,
+    iron: false,
+    maximumHealth: 100,
+    orbitDirection: 0,
+    orbitHeadingRadians: null,
+    phase: 'assembly',
+    poseVariant: 0,
+    provokeRollBound: 0,
+    reflectFactor: 0,
+    targetPollTicksRemaining: 50,
+  }
+  const golemDecoded = decodeServerGameMessage(JSON.stringify(golemFrame))
+  assert.equal(golemDecoded.type, 'server-snapshot')
+  assert.deepEqual(
+    golemDecoded.frame.secondaryAbilities.actors[0]!.golem?.leftFoot,
+    golemActor.golem.leftFoot,
+  )
 
   const miscFrame = JSON.parse(JSON.stringify(message))
   miscFrame.frame.secondaryAbilities.actors[0]!.hitTargetIds = []

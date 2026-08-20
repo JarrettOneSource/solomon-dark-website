@@ -30,11 +30,21 @@ const MOVEMENT_PER_TICK = 0.5
 export type NativeGolemPhase = 'active' | 'assembly' | 'attack' | 'provoke'
 
 export interface NativeSecondaryGolemState {
+  readonly actionHeadingOffsetDegrees: number
   readonly actionDurationTicks: number
   readonly actionTick: number
   readonly currentHealth: number
   readonly damageMaximum: number
   readonly iron: boolean
+  readonly gaitTick: number
+  readonly leftConnectorOffset: Vector2
+  readonly leftFoot: Vector2
+  readonly leftFootBob: Vector2
+  readonly leftFootNext: Vector2
+  readonly leftFootPrevious: Vector2
+  readonly leftFootProgress: number
+  readonly leftFootRotationDegrees: number
+  readonly leftLimbMode: number
   readonly maximumHealth: number
   readonly orbitDirection: number
   readonly orbitHeadingRadians: number | null
@@ -42,6 +52,14 @@ export interface NativeSecondaryGolemState {
   readonly poseVariant: 0 | 1
   readonly provokeRollBound: number
   readonly reflectFactor: number
+  readonly rightConnectorOffset: Vector2
+  readonly rightFoot: Vector2
+  readonly rightFootBob: Vector2
+  readonly rightFootNext: Vector2
+  readonly rightFootPrevious: Vector2
+  readonly rightFootProgress: number
+  readonly rightFootRotationDegrees: number
+  readonly rightLimbMode: number
   readonly targetPollTicksRemaining: number
 }
 
@@ -72,19 +90,74 @@ export interface NativeGolemKernelStepResult {
   readonly actor: NativeGolemKernelActor
   readonly assemblyImpact: boolean
   readonly contact: NativeGolemContact | null
+  readonly footstep: boolean
   readonly provokeStarted: boolean
   readonly rng: NativeRngState
+}
+
+export function nativeInitialGolemArticulation(
+  position: Vector2,
+  rotationRadians: number,
+  resolveFootTarget: (current: Vector2, requested: Vector2) => Vector2 = (_current, requested) => requested,
+): Pick<
+  NativeSecondaryGolemState,
+  | 'actionHeadingOffsetDegrees'
+  | 'gaitTick'
+  | 'leftConnectorOffset'
+  | 'leftFoot'
+  | 'leftFootBob'
+  | 'leftFootNext'
+  | 'leftFootPrevious'
+  | 'leftFootProgress'
+  | 'leftFootRotationDegrees'
+  | 'leftLimbMode'
+  | 'rightConnectorOffset'
+  | 'rightFoot'
+  | 'rightFootBob'
+  | 'rightFootNext'
+  | 'rightFootPrevious'
+  | 'rightFootProgress'
+  | 'rightFootRotationDegrees'
+  | 'rightLimbMode'
+> {
+  const leftRequested = nativeGolemFootTarget(position, rotationRadians, 0, -19)
+  const rightRequested = nativeGolemFootTarget(position, rotationRadians, 1, -19)
+  const leftFoot = resolveFootTarget(position, leftRequested)
+  const rightFoot = resolveFootTarget(position, rightRequested)
+  return {
+    actionHeadingOffsetDegrees: 0,
+    gaitTick: 0,
+    leftConnectorOffset: { x: 0, y: 0 },
+    leftFoot,
+    leftFootBob: { x: 0, y: 0 },
+    leftFootNext: { ...leftFoot },
+    leftFootPrevious: { ...leftFoot },
+    leftFootProgress: 1,
+    leftFootRotationDegrees: 0,
+    leftLimbMode: 0,
+    rightConnectorOffset: { x: 0, y: 0 },
+    rightFoot,
+    rightFootBob: { x: 0, y: 0 },
+    rightFootNext: { ...rightFoot },
+    rightFootPrevious: { ...rightFoot },
+    rightFootProgress: 1,
+    rightFootRotationDegrees: 0,
+    rightLimbMode: 0,
+  }
 }
 
 export function stepNativeSecondaryGolem(
   source: NativeGolemKernelActor,
   context: Readonly<{
     ownerPosition: Vector2 | null
+    resolveFootTarget?: (current: Vector2, requested: Vector2) => Vector2
     resolveMovement: (requestedPosition: Vector2) => Vector2
     rng: NativeRngState
     targets: readonly NativeGolemKernelTarget[]
   }>,
 ): NativeGolemKernelStepResult {
+  const resolveFootTarget = context.resolveFootTarget
+    ?? ((_current: Vector2, requested: Vector2) => requested)
   const assembling = source.ageTicks < 201
   let actor: NativeGolemKernelActor = {
     ...source,
@@ -105,10 +178,26 @@ export function stepNativeSecondaryGolem(
     || source.ageTicks === 200
   )
   if (assembling) {
+    const leftFoot = resolveFootTarget(
+      actor.golem.leftFoot,
+      nativeGolemFootTarget(actor.position, actor.rotationRadians, 0, 0),
+    )
+    const rightFoot = resolveFootTarget(
+      actor.golem.rightFoot,
+      nativeGolemFootTarget(actor.position, actor.rotationRadians, 1, 0),
+    )
+    actor = withGolem(actor, {
+      ...actor.golem,
+      leftFoot,
+      leftFootBob: { x: 0, y: 0 },
+      rightFoot,
+      rightFootBob: { x: 0, y: 0 },
+    })
     return {
       actor,
       assemblyImpact,
       contact: null,
+      footstep: false,
       provokeStarted: false,
       rng: context.rng,
     }
@@ -121,7 +210,7 @@ export function stepNativeSecondaryGolem(
       return result(actor, {
         ...actor.golem,
         actionTick,
-      }, rng)
+      }, rng, resolveFootTarget)
     }
     actor = withGolem(actor, {
       ...actor.golem,
@@ -150,13 +239,13 @@ export function stepNativeSecondaryGolem(
       }
     }
     if (actionTick < actor.golem.actionDurationTicks) {
-      return {
-        actor: withGolem(actor, { ...actor.golem, actionTick }),
-        assemblyImpact: false,
-        contact,
-        provokeStarted: false,
+      return activeResult(
+        withGolem(actor, { ...actor.golem, actionTick }),
         rng,
-      }
+        contact,
+        false,
+        resolveFootTarget,
+      )
     }
     actor = withGolem(actor, {
       ...actor.golem,
@@ -166,13 +255,13 @@ export function stepNativeSecondaryGolem(
       provokeRollBound: POST_ATTACK_PROVOKE_ROLL_BOUND,
     })
     const provoked = maybeStartProvoke(actor, rng)
-    return {
-      actor: provoked.actor,
-      assemblyImpact: false,
+    return activeResult(
+      provoked.actor,
+      provoked.rng,
       contact,
-      provokeStarted: provoked.started,
-      rng: provoked.rng,
-    }
+      provoked.started,
+      resolveFootTarget,
+    )
   }
 
   const eligibleTargets = context.targets.filter(({ position }) => (
@@ -200,22 +289,23 @@ export function stepNativeSecondaryGolem(
     )
     if (distance < target.radius + NATIVE_GOLEM_RADIUS + ATTACK_REACH_PADDING) {
       const durationDraw = drawNativeInteger(rng, ATTACK_DURATION_RANDOM_COUNT)
-      return {
-        actor: {
+      return activeResult(
+        {
           ...actor,
           golem: {
             ...actor.golem,
             actionDurationTicks: ATTACK_DURATION_MAXIMUM - durationDraw.value,
             actionTick: 0,
             phase: 'attack',
+            poseVariant: (1 - actor.golem.poseVariant) as 0 | 1,
           },
           rotationRadians: nativeHeading(actor.position, target.position),
         },
-        assemblyImpact: false,
-        contact: null,
-        provokeStarted: false,
-        rng: durationDraw.state,
-      }
+        durationDraw.state,
+        null,
+        false,
+        resolveFootTarget,
+      )
     }
   }
 
@@ -267,13 +357,13 @@ export function stepNativeSecondaryGolem(
   }
 
   const provoked = maybeStartProvoke(actor, rng)
-  return {
-    actor: provoked.actor,
-    assemblyImpact: false,
-    contact: null,
-    provokeStarted: provoked.started,
-    rng: provoked.rng,
-  }
+  return activeResult(
+    provoked.actor,
+    provoked.rng,
+    null,
+    provoked.started,
+    resolveFootTarget,
+  )
 }
 
 export function damageNativeSecondaryGolem(
@@ -385,6 +475,181 @@ function nativeGolemContactTargets(
   }).map(({ id }) => id))
 }
 
+function advanceGolemArticulation(
+  source: NativeGolemKernelActor,
+  sourceRng: NativeRngState,
+  resolveFootTarget: (current: Vector2, requested: Vector2) => Vector2,
+): Readonly<{
+  actor: NativeGolemKernelActor
+  footstep: boolean
+  rng: NativeRngState
+}> {
+  const gaitTick = source.golem.gaitTick + 1
+  let rng = sourceRng
+  let footstep = false
+  let leftRotationDegrees = source.golem.leftFootRotationDegrees
+  let rightRotationDegrees = source.golem.rightFootRotationDegrees
+
+  const advanceFoot = (
+    side: 0 | 1,
+    current: Vector2,
+    previous: Vector2,
+    next: Vector2,
+    sourceProgress: number,
+  ): Readonly<{
+    current: Vector2
+    next: Vector2
+    previous: Vector2
+    progress: number
+  }> => {
+    let footPrevious = previous
+    let footNext = next
+    let progress = sourceProgress
+    if (gaitTick % 100 === side * 50) {
+      footPrevious = { ...current }
+      footNext = resolveFootTarget(
+        current,
+        nativeGolemFootTarget(
+          source.position,
+          source.rotationRadians,
+          side,
+          -19,
+        ),
+      )
+      progress = 0
+    }
+    if (progress < 1) {
+      const advanced = Math.fround(
+        Math.fround(progress + Math.fround(0.015)) * Math.fround(1.06),
+      )
+      if (advanced > 1) {
+        footstep = true
+        const pitch = drawNativeFloat(rng, 0.1)
+        const leftRotation = drawNativeFloat(pitch.state, 8, true)
+        const rightRotation = drawNativeFloat(leftRotation.state, 8, true)
+        rng = rightRotation.state
+        leftRotationDegrees = leftRotation.value
+        rightRotationDegrees = rightRotation.value
+      }
+      progress = Math.min(1, advanced)
+    }
+    return {
+      current: {
+        x: Math.fround(footPrevious.x + progress * (footNext.x - footPrevious.x)),
+        y: Math.fround(footPrevious.y + progress * (footNext.y - footPrevious.y)),
+      },
+      next: footNext,
+      previous: footPrevious,
+      progress,
+    }
+  }
+
+  const left = advanceFoot(
+    0,
+    source.golem.leftFoot,
+    source.golem.leftFootPrevious,
+    source.golem.leftFootNext,
+    source.golem.leftFootProgress,
+  )
+  const right = advanceFoot(
+    1,
+    source.golem.rightFoot,
+    source.golem.rightFootPrevious,
+    source.golem.rightFootNext,
+    source.golem.rightFootProgress,
+  )
+  const bob = Math.fround(
+    -Math.sin(gaitTick * 3.6 * Math.PI / 180) * 3,
+  )
+  return {
+    actor: withGolem(source, nativeGolemPoseState({
+      ...source.golem,
+      gaitTick,
+      leftFoot: left.current,
+      leftFootBob: { x: 0, y: bob },
+      leftFootNext: left.next,
+      leftFootPrevious: left.previous,
+      leftFootProgress: left.progress,
+      leftFootRotationDegrees: leftRotationDegrees,
+      rightFoot: right.current,
+      rightFootBob: { x: 0, y: bob },
+      rightFootNext: right.next,
+      rightFootPrevious: right.previous,
+      rightFootProgress: right.progress,
+      rightFootRotationDegrees: rightRotationDegrees,
+    })),
+    footstep,
+    rng,
+  }
+}
+
+function nativeGolemPoseState(
+  source: NativeSecondaryGolemState,
+): NativeSecondaryGolemState {
+  if (source.phase === 'attack') {
+    const selectedLeft = source.poseVariant === 0
+    if (source.actionTick <= ATTACK_IMPACT_TICK) {
+      return {
+        ...source,
+        actionHeadingOffsetDegrees: source.actionTick < 25
+          ? selectedLeft ? -38 : 38
+          : 0,
+        leftConnectorOffset: { x: 0, y: 0 },
+        leftLimbMode: selectedLeft ? 1 : 0,
+        rightConnectorOffset: { x: 0, y: 0 },
+        rightLimbMode: selectedLeft ? 0 : 1,
+      }
+    }
+    return {
+      ...source,
+      actionHeadingOffsetDegrees: selectedLeft ? 47 : -47,
+      leftConnectorOffset: { x: 0, y: 0 },
+      leftLimbMode: selectedLeft ? 2 : 1,
+      rightConnectorOffset: { x: 0, y: 0 },
+      rightLimbMode: selectedLeft ? 1 : 2,
+    }
+  }
+  if (source.phase === 'provoke' && source.actionTick > 100) {
+    return {
+      ...source,
+      actionHeadingOffsetDegrees: 0,
+      leftConnectorOffset: { x: 0, y: -12 },
+      leftLimbMode: 3,
+      rightConnectorOffset: { x: 0, y: -12 },
+      rightLimbMode: 3,
+    }
+  }
+  return {
+    ...source,
+    actionHeadingOffsetDegrees: 0,
+    leftConnectorOffset: { x: 0, y: 0 },
+    leftLimbMode: 0,
+    rightConnectorOffset: { x: 0, y: 0 },
+    rightLimbMode: 0,
+  }
+}
+
+function nativeGolemFootTarget(
+  position: Vector2,
+  rotationRadians: number,
+  side: 0 | 1,
+  forward: number,
+): Vector2 {
+  const full = Math.PI * 2
+  const normalized = (rotationRadians % full + full) % full
+  const facing = Math.round(normalized / full * 16) % 16
+  const radians = facing * full / 16
+  const forwardX = Math.sin(radians)
+  const forwardY = -Math.cos(radians)
+  const lateralX = forwardY
+  const lateralY = -forwardX
+  const lateral = side === 0 ? -10 : 10
+  return {
+    x: Math.fround(position.x + forwardX * forward + lateralX * lateral),
+    y: Math.fround(position.y + forwardY * forward + lateralY * lateral),
+  }
+}
+
 function nearestTarget(
   origin: Vector2,
   targets: readonly NativeGolemKernelTarget[],
@@ -426,12 +691,25 @@ function result(
   actor: NativeGolemKernelActor,
   golem: NativeSecondaryGolemState,
   rng: NativeRngState,
+  resolveFootTarget: (current: Vector2, requested: Vector2) => Vector2,
 ): NativeGolemKernelStepResult {
+  return activeResult(withGolem(actor, golem), rng, null, false, resolveFootTarget)
+}
+
+function activeResult(
+  source: NativeGolemKernelActor,
+  sourceRng: NativeRngState,
+  contact: NativeGolemContact | null,
+  provokeStarted: boolean,
+  resolveFootTarget: (current: Vector2, requested: Vector2) => Vector2,
+): NativeGolemKernelStepResult {
+  const articulated = advanceGolemArticulation(source, sourceRng, resolveFootTarget)
   return {
-    actor: withGolem(actor, golem),
+    actor: articulated.actor,
     assemblyImpact: false,
-    contact: null,
-    provokeStarted: false,
-    rng,
+    contact,
+    footstep: articulated.footstep,
+    provokeStarted,
+    rng: articulated.rng,
   }
 }

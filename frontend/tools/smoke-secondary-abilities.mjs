@@ -11,6 +11,10 @@ import {
   NATIVE_SECONDARY_ABILITY_IDS,
 } from '../src/game/core-kernels/native-secondary-ability-contract.ts'
 import {
+  DOWSING_EQUIPMENT_RECIPES,
+  createEquipmentInventoryItem,
+} from '../src/game/core-kernels/hub-economy.ts'
+import {
   resetNativeSecondaryWorld,
 } from '../src/game/core-kernels/native-secondary-abilities.ts'
 import {
@@ -54,6 +58,15 @@ const PROOFS = Object.freeze({
   78: { audio: 'mindstar', flash: true, kinds: [] },
   79: { audio: 'mindstar', flash: true, kinds: [] },
 })
+const MAXIMUM_SET_RECIPES = new Map([
+  [11, [11, 12, 13, 14, 15]],
+  [21, [20, 21]],
+  [27, [16, 17, 18, 19]],
+  [35, [22, 23, 24]],
+  [76, [22, 23, 24]],
+  [45, [25, 26, 27, 28]],
+])
+const COMBAT_PROOF_SKILLS = new Set([11, 21, 27, 35, 45, 76])
 
 assert.deepEqual(
   Object.keys(PROOFS).map(Number),
@@ -105,6 +118,9 @@ try {
       if (frame) {
         samples.push({
           actorCount: frame.secondaryAbilityCount,
+          actors: frame.secondaryAbilitySamples.map((actor) => ({ ...actor })),
+          cameraMagnitude: Number(canvas.dataset.secondaryCameraMagnitude || 0),
+          cameraZoom: frame.cameraZoom,
           flashAlpha: frame.secondaryScreenFlashAlpha,
           flashColor: frame.secondaryScreenFlashColor,
           frameCount: frame.frameCount,
@@ -137,6 +153,7 @@ try {
   const playerId = host.hostPlayerId()
   assert.ok(playerId, 'the browser player must own the local authoritative host slot')
   const baseSkillBook = getPlayerSkillBook(host.state(), playerId)
+  const baseEquipment = structuredClone(playerEconomy(host, playerId).equipment)
   await waitUntil(
     () => host.state().secondaryAbilities.players[playerId] !== undefined,
     'secondary player state did not materialize',
@@ -149,6 +166,7 @@ try {
   ))
   const beltReceipt = await captureBeltReceipt(page)
   await page.screenshot({ path: `${screenshotRoot}/secondary-belt-all-slots.png` })
+  let boneyardEnemyBaseline = null
   if (requestedScene === 'boneyard') {
     await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
     await page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({
@@ -156,6 +174,10 @@ try {
     })
     canvas = page.locator('.boneyard-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 90_000 })
+    await openBoneyardCombat(page, host, playerId)
+    const state = host.state()
+    assert.equal(state.world.kind, 'boneyard')
+    boneyardEnemyBaseline = structuredClone(state.world.enemies)
   }
   await page.setViewportSize({ width: 800, height: 450 })
   await page.waitForTimeout(250)
@@ -170,10 +192,18 @@ try {
   }
   const receipts = []
   for (const contract of selectedContracts) {
+    if (boneyardEnemyBaseline) restoreBoneyardEnemies(host, boneyardEnemyBaseline)
     const proof = PROOFS[contract.skillId]
     await waitForFlashClear(page)
     await waitForStableHostCadence(host)
-    armBelt(host, playerId, baseSkillBook, [contract.skillId])
+    armMaximumSet(host, playerId, contract.skillId, baseEquipment)
+    armBelt(
+      host,
+      playerId,
+      baseSkillBook,
+      [contract.skillId],
+      contract.skillId === 11 ? 5 : 1,
+    )
     await waitForBeltSkill(page, contract.name)
     await waitForStableHostCadence(host)
     await waitForStablePresentationCadence(page)
@@ -182,14 +212,17 @@ try {
     const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
     const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
     let target
+    let combatBaseline = null
     try {
-      target = await canvas.evaluate((node) => {
-        const bounds = node.getBoundingClientRect()
-        return {
-          x: bounds.left + bounds.width * 0.5,
-          y: bounds.top + bounds.height * 0.4,
-        }
-      })
+      const castTarget = await abilityCastTarget(
+        canvas,
+        host,
+        playerId,
+        contract.skillId,
+        requestedScene,
+      )
+      target = castTarget.pointer
+      combatBaseline = castTarget.combatBaseline
     } catch (error) {
       process.stderr.write(`${JSON.stringify({
         contract: { id: contract.skillId, name: contract.name },
@@ -199,21 +232,37 @@ try {
       }, null, 2)}\n`)
       throw error
     }
-    await page.mouse.move(target.x, target.y)
-    await page.mouse.down({ button: 'right' })
-    await page.waitForTimeout(35)
-    await page.mouse.up({ button: 'right' })
+    await castSecondaryPointer(page, target)
 
-    await waitUntil(() => {
-      const player = host.state().secondaryAbilities.players[playerId]
-      return player?.castSequence > castSequence && player.lastSkillId === contract.skillId
-    }, `${contract.name} did not commit an authoritative cast`)
+    try {
+      await waitUntil(() => {
+        const player = host.state().secondaryAbilities.players[playerId]
+        return player?.castSequence > castSequence && player.lastSkillId === contract.skillId
+      }, `${contract.name} did not commit an authoritative cast`)
+    } catch (error) {
+      const state = host.state()
+      const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+      process.stderr.write(`${JSON.stringify({
+        castFailure: {
+          input: state.inputs?.[playerId] ?? null,
+          player: state.secondaryAbilities.players[playerId] ?? null,
+          progression: state.playerEntities.progressions[index],
+          run: state.run,
+          worldKind: state.world.kind,
+        },
+      }, null, 2)}\n`)
+      throw error
+    }
+    positionCombatTargetForAbility(host, contract.skillId, combatBaseline)
     await waitUntil(() => host.state().secondaryAbilities.events.some((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
     )), `${contract.name} emitted no authoritative semantic event`)
     const events = structuredClone(host.state().secondaryAbilities.events.filter((event) => (
       event.eventId >= firstEventId && event.skillId === contract.skillId
     )))
+    let maximumSet = contract.skillId === 45
+      ? null
+      : maximumSetReceipt(host.state(), playerId, contract.skillId)
     let flashObservedAtCast = false
     if (proof.flash) {
       try {
@@ -247,9 +296,7 @@ try {
         document.querySelector('.hub-hud-secondary-slot[data-slot="0"]')
           ?.getAttribute('aria-label')?.endsWith(', active')
       ))
-      await page.mouse.down({ button: 'left' })
-      await page.waitForTimeout(90)
-      await page.mouse.up({ button: 'left' })
+      await castPrimaryPointer(page, target)
     }
 
     if (proof.kinds.length > 0) {
@@ -273,6 +320,36 @@ try {
       }
     } else if (contract.skillId === 46 || contract.skillId === 54) {
       await waitForPlayerPresentation(page, contract.skillId)
+    }
+    if (contract.skillId === 45) {
+      const secondCastSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
+      await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
+      await waitUntil(() => (
+        (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
+          > secondCastSequence
+        && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+          kind === 'golem' && ownerId === playerId
+        )).length === 2
+        && host.state().secondaryAbilities.actors.filter(({ kind, ownerId }) => (
+          kind === 'golem' && ownerId === playerId
+        )).every(({ ageTicks }) => ageTicks >= 400)
+      ), 'Fete of Clay did not retain and assemble two authoritative Golems', 10_000)
+      maximumSet = maximumSetReceipt(host.state(), playerId, contract.skillId)
+    }
+    const combatProof = await collectCombatProof(
+      host,
+      playerId,
+      contract.skillId,
+      combatBaseline,
+      requestedScene,
+    )
+    if (combatProof && contract.skillId === 35) {
+      await page.waitForFunction(() => (
+        ((document.querySelector('.boneyard-world-canvas')?.__sdrBoneyardFrame)
+          ?.secondaryScreenFlashAlpha ?? 1) <= 0.1
+      ), undefined, { timeout: 2_000 })
+    } else if (combatProof) {
+      await page.waitForTimeout(120)
     }
 
     let cooldownPath = null
@@ -309,31 +386,48 @@ try {
     }
     const flashObserved = flashObservedAtCast
       || samples.some(({ flashAlpha }) => flashAlpha > 0)
+    const expectedFlash = proof.flash || (combatProof !== null && contract.skillId === 76)
     assert.equal(
       flashObserved,
-      proof.flash,
+      expectedFlash,
       `${contract.name} Region flash ownership diverged`,
     )
     assert.ok(
       events.some(({ skillId }) => skillId === contract.skillId),
       `${contract.name} emitted no replicated semantic event`,
     )
+    if (combatProof && contract.skillId === 21) {
+      assert.equal(samples.some(({ kinds }) => kinds.includes('ring-fire-explosion')), true)
+      assert.equal(samples.some(({ kinds }) => kinds.includes('ring-fire-fragment')), true)
+    }
+    if (combatProof && contract.skillId === 35) {
+      assert.equal(samples.some(({ kinds }) => kinds.includes('frost-burn-flare')), true)
+    }
     const player = host.state().secondaryAbilities.players[playerId]
     assertPlayerState(contract.skillId, player)
+    const reportedPresentation = assertReportedPresentation(
+      host.state(),
+      playerId,
+      contract.skillId,
+      samples,
+    )
     receipts.push({
       audio: proof.audio,
       cooldownPath,
+      combatProof,
       eventCues: events.flatMap(({ cue }) => cue === null ? [] : [cue]),
       flashObserved,
       id: contract.skillId,
       kinds: [...new Set(samples.flatMap(({ kinds }) => kinds))].sort(),
       maximumActorCount: Math.max(...samples.map(({ actorCount }) => actorCount)),
       maximumPrimitiveCount: Math.max(...samples.map(({ primitiveCount }) => primitiveCount)),
+      maximumSet,
       name: contract.name,
+      reportedPresentation,
       screenshotPath,
       ticksObserved: new Set(samples.map(({ tick }) => tick).filter(Number.isFinite)).size,
     })
-    resetSecondaryWorld(host)
+    await resetSecondaryWorld(host)
     try {
       await page.waitForFunction(() => {
         const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
@@ -398,7 +492,7 @@ async function enterHub(page, baseUrl) {
   await page.waitForTimeout(250)
 }
 
-function armBelt(host, playerId, baseSkillBook, skillIds) {
+function armBelt(host, playerId, baseSkillBook, skillIds, rank = 1) {
   const state = host.state()
   const index = state.playerEntities.identities.findIndex((identity) => (
     identity.playerId === playerId
@@ -407,8 +501,8 @@ function armBelt(host, playerId, baseSkillBook, skillIds) {
   const permanentRanks = [...baseSkillBook.permanentRanks]
   const effectiveRanks = [...baseSkillBook.effectiveRanks]
   for (const skillId of skillIds) {
-    permanentRanks[skillId] = 1
-    effectiveRanks[skillId] = 1
+    permanentRanks[skillId] = rank
+    effectiveRanks[skillId] = rank
   }
   const secondaryBelt = Object.freeze(Array.from(
     { length: 8 },
@@ -424,7 +518,12 @@ function armBelt(host, playerId, baseSkillBook, skillIds) {
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {
     ...progressions[index],
+    currentHealth: 1_000_000,
     currentMana: 10_000,
+    deathEpoch: 0,
+    deathTick: 0,
+    lifeState: 'alive',
+    maximumHealth: 1_000_000,
     maximumMana: 10_000,
     pendingOffer: null,
   }
@@ -438,11 +537,422 @@ function armBelt(host, playerId, baseSkillBook, skillIds) {
   })
 }
 
-function resetSecondaryWorld(host) {
+function armMaximumSet(host, playerId, skillId, baseEquipment) {
   const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const equipment = structuredClone(baseEquipment)
+  const recipes = MAXIMUM_SET_RECIPES.get(skillId) || []
+  let ringSlot = 0
+  for (const recipeIndex of recipes) {
+    const item = createEquipmentInventoryItem(
+      DOWSING_EQUIPMENT_RECIPES[recipeIndex],
+      90_000 + recipeIndex,
+    )
+    switch (item.equipmentType) {
+      case 'amulet': equipment.amulet = item; break
+      case 'hat': equipment.hat = item; break
+      case 'ring': equipment.rings[ringSlot++] = item; break
+      case 'robe': equipment.robe = item; break
+      case 'staff':
+      case 'wand': equipment.weapon = item; break
+      default: throw new Error(`maximum set recipe ${recipeIndex} is not equipment`)
+    }
+  }
+  const economies = [...state.playerEntities.economies]
+  economies[index] = { ...economies[index], equipment }
   Object.assign(state, {
-    secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+    playerEntities: {
+      ...state.playerEntities,
+      economies: Object.freeze(economies),
+    },
   })
+}
+
+function playerEconomy(host, playerId) {
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  return state.playerEntities.economies[index]
+}
+
+function maximumSetReceipt(state, playerId, skillId) {
+  const owned = state.secondaryAbilities.actors.filter(({ ownerId }) => ownerId === playerId)
+  switch (skillId) {
+    case 11: {
+      const parent = owned.find(({ kind }) => kind === 'leviathan')
+      assert.equal(parent?.quantity, 5)
+      assert.equal(owned.filter(({ kind }) => kind === 'leviathan-appendage').length, 5)
+      return { appendages: 5, damage: parent.damage }
+    }
+    case 21: {
+      const wave = owned.find(({ kind }) => kind === 'shockwave')
+      if (wave) assert.equal(wave.variant, 1)
+      assert.equal(state.secondaryAbilities.events.some(({ cameraMagnitude }) => (
+        cameraMagnitude === 0.25
+      )), true)
+      return { cameraMagnitude: 0.25, maximumContactExplosion: true }
+    }
+    case 27: {
+      const storm = owned.find(({ kind }) => kind === 'storm-cloud')
+      assert.ok(storm?.freezeTicks >= 2_000)
+      return { activeTicks: storm.freezeTicks, position: storm.position }
+    }
+    case 35: {
+      const wave = owned.find(({ kind }) => kind === 'freeze-wave')
+      if (wave) assert.equal(wave.variant, 1)
+      const frostBurn = state.secondaryAbilities.targetEffects.find(({ frostBurnOwnerId }) => (
+        frostBurnOwnerId === playerId
+      ))
+      assert.ok(wave?.variant === 1 || (frostBurn?.frostBurnTicks ?? 0) > 0)
+      return {
+        frostBurnEnabled: true,
+        frostBurnTicks: frostBurn?.frostBurnTicks ?? null,
+        freezeTicks: wave?.freezeTicks ?? frostBurn?.frozenTicks ?? null,
+      }
+    }
+    case 45:
+      assert.equal(owned.filter(({ kind }) => kind === 'golem').length, 2)
+      return { expectedSummonCap: 2, summons: 2 }
+    case 76: {
+      const wave = owned.find(({ kind }) => kind === 'freeze-wave')
+      const comet = owned.find(({ kind }) => kind === 'comet')
+      if (wave) assert.equal(wave.variant, 1)
+      else assert.equal(comet?.quantity, 1)
+      return {
+        frostBurnFreezeWave: wave?.variant === 1,
+        freezeTicks: wave?.freezeTicks ?? comet?.freezeTicks,
+        maximumStoredAtBirth: comet?.quantity === 1,
+      }
+    }
+    default:
+      return null
+  }
+}
+
+function assertReportedPresentation(state, playerId, skillId, samples) {
+  const actorSamples = samples.flatMap(({ actors }) => actors)
+  switch (skillId) {
+    case 11: {
+      const parent = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+        kind === 'leviathan' && ownerId === playerId
+      ))
+      assert.ok(parent)
+      const composite = actorSamples.filter(({ compositeOwnerId }) => (
+        compositeOwnerId === parent.id
+      ))
+      assert.ok(composite.some(({ kind }) => kind === 'leviathan'))
+      assert.equal(composite.filter(({ kind }) => kind === 'leviathan-appendage').length >= 5, true)
+      const compositeFrames = samples.map(({ actors }) => actors.filter(({ compositeOwnerId }) => (
+        compositeOwnerId === parent.id
+      ))).filter(({ length }) => length > 0)
+      assert.ok(compositeFrames.every((members) => (
+        new Set(members.map(({ depth }) => depth)).size === 1
+      )))
+      return {
+        compositeDepths: [...new Set(compositeFrames.map((members) => members[0].depth))],
+        maximumCompositeMembers: Math.max(...compositeFrames.map(({ length }) => length)),
+      }
+    }
+    case 21: {
+      const maximumMagnitude = Math.max(...samples.map(({ cameraMagnitude }) => cameraMagnitude))
+      assert.ok(maximumMagnitude > 0)
+      return { maximumCameraMagnitude: maximumMagnitude }
+    }
+    case 27: {
+      const storm = state.secondaryAbilities.actors.find(({ kind, ownerId }) => (
+        kind === 'storm-cloud' && ownerId === playerId
+      ))
+      const rendered = actorSamples.find(({ id }) => id === storm?.id)
+      assert.ok(storm && rendered)
+      assert.equal(rendered.worldX, storm.position.x)
+      assert.equal(rendered.worldY, storm.position.y)
+      const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+      const playerPosition = state.playerEntities.locomotions[index].position
+      assert.ok(Math.hypot(
+        storm.position.x - playerPosition.x,
+        storm.position.y - playerPosition.y,
+      ) > 10)
+      return { playerPosition, stormPosition: storm.position }
+    }
+    case 35:
+      assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
+        kind === 'freeze-wave-visual' && primitiveCount >= 104
+      )))
+      return { ringPrimitiveCount: Math.max(...actorSamples
+        .filter(({ kind }) => kind === 'freeze-wave-visual')
+        .map(({ primitiveCount }) => primitiveCount)) }
+    case 45: {
+      assert.ok(actorSamples.some(({ kind, primitiveCount }) => (
+        kind === 'golem' && primitiveCount >= 5
+      )))
+      const primitiveCounts = actorSamples
+        .filter(({ kind }) => kind === 'golem')
+        .map(({ primitiveCount }) => primitiveCount)
+      assert.ok(Math.min(...primitiveCounts) <= 7)
+      assert.ok(Math.max(...primitiveCounts) >= 18)
+      return {
+        assemblyPrimitiveCounts: [...new Set(primitiveCounts)].sort((a, b) => a - b),
+        maximumGolemPrimitives: Math.max(...primitiveCounts),
+      }
+    }
+    default:
+      return null
+  }
+}
+
+async function openBoneyardCombat(page, host, playerId) {
+  if (host.state().world.kind !== 'boneyard') throw new Error('expected Boneyard host world')
+  if (host.state().world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')) return
+  const state = host.state()
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  const solomon = state.world.encounter?.position
+  assert.ok(solomon, 'Boneyard combat proof requires the Solomon opening encounter')
+  setHostPlayerPosition(host, index, solomon)
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard' && world.encounter?.phase === 'speaking'
+  }, 'Solomon did not enter the authentic speaking phase', 10_000)
+  const afterApproach = host.state()
+  assert.equal(afterApproach.world.kind, 'boneyard')
+  setHostPlayerPosition(host, index, { x: solomon.x, y: solomon.y + 250 })
+  await waitUntil(() => {
+    const world = host.state().world
+    return world.kind === 'boneyard' && world.enemies.actors.some(({ lifeState }) => (
+      lifeState === 'alive'
+    ))
+  }, 'Solomon opening did not release a live combat wave', 30_000)
+  const combatState = host.state()
+  assert.equal(combatState.world.kind, 'boneyard')
+  const combatBounds = combatState.world.arenaTransition?.combatBounds
+  assert.ok(combatBounds, 'Boneyard combat proof requires sealed arena bounds')
+  setHostPlayerPosition(host, index, {
+    x: combatBounds.x + combatBounds.w * 0.5,
+    y: combatBounds.y + combatBounds.h * 0.5,
+  })
+  await page.waitForTimeout(150)
+}
+
+function setHostPlayerPosition(host, index, position) {
+  const state = host.state()
+  const locomotions = [...state.playerEntities.locomotions]
+  locomotions[index] = { ...locomotions[index], position: { ...position }, velocity: { x: 0, y: 0 } }
+  Object.assign(state, {
+    playerEntities: {
+      ...state.playerEntities,
+      locomotions: Object.freeze(locomotions),
+    },
+  })
+}
+
+function restoreBoneyardEnemies(host, baseline) {
+  const state = host.state()
+  if (state.world.kind !== 'boneyard') return
+  const current = state.world.enemies
+  const enemies = structuredClone(baseline)
+  enemies.lastStepTick = state.tick
+  for (const counter of [
+    'nextActorId',
+    'nextDeathEpoch',
+    'nextDeathEffectId',
+    'nextEventId',
+    'nextMageLightningPulseId',
+    'nextProjectileEffectId',
+    'nextProjectileId',
+    'nextSyntheticSpawnIntentId',
+  ]) {
+    enemies[counter] = Math.max(enemies[counter], current[counter])
+  }
+  enemies.actors = enemies.actors.map((actor) => ({
+    ...actor,
+    nextMovementTick: state.tick + 1_000,
+    nextTargetRefreshTick: state.tick + 1_000,
+  }))
+  Object.assign(state, { world: { ...state.world, enemies, enemyEvents: [] } })
+}
+
+async function abilityCastTarget(canvas, host, playerId, skillId, scene) {
+  const fallback = await canvas.evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    return {
+      x: bounds.left + bounds.width * 0.5,
+      y: bounds.top + bounds.height * 0.4,
+    }
+  })
+  if (scene !== 'boneyard' || !COMBAT_PROOF_SKILLS.has(skillId)) {
+    return { combatBaseline: null, pointer: fallback }
+  }
+  await waitUntil(() => {
+    const state = host.state()
+    if (state.world.kind !== 'boneyard') return false
+    return state.world.enemies.actors.some(({ lifeState }) => lifeState === 'alive')
+  }, 'the Boneyard produced no live enemy for secondary combat proof', 10_000)
+  let state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  const index = state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+  assert.notEqual(index, -1)
+  const playerPosition = state.playerEntities.locomotions[index].position
+  let enemy = [...state.world.enemies.actors]
+    .filter(({ lifeState }) => lifeState === 'alive')
+    .sort((left, right) => (
+      squaredDistance(left.position, playerPosition)
+        - squaredDistance(right.position, playerPosition)
+      || left.id - right.id
+    ))[0]
+  assert.ok(enemy)
+  const position = {
+    x: playerPosition.x,
+    y: playerPosition.y + (skillId === 27 ? 100 : -50),
+  }
+  const enemies = {
+    ...state.world.enemies,
+    actors: state.world.enemies.actors.map((actor) => actor.id === enemy.id
+      ? { ...actor, nextMovementTick: state.tick + 100_000, position }
+      : actor),
+  }
+  Object.assign(state, { world: { ...state.world, enemies } })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  state = host.state()
+  assert.equal(state.world.kind, 'boneyard')
+  enemy = state.world.enemies.actors.find(({ id }) => id === enemy.id)
+  assert.ok(enemy)
+  const projection = await canvas.evaluate((node) => {
+    const bounds = node.getBoundingClientRect()
+    const frame = node.__sdrBoneyardFrame
+    return {
+      bounds: {
+        bottom: bounds.bottom,
+        left: bounds.left,
+        right: bounds.right,
+        top: bounds.top,
+      },
+      frame: {
+        cameraX: frame.cameraX,
+        cameraY: frame.cameraY,
+        cameraZoom: frame.cameraZoom,
+        playerScreenX: frame.playerScreenX,
+        playerScreenY: frame.playerScreenY,
+      },
+    }
+  })
+  const pointer = {
+    x: projection.bounds.left + (projection.bounds.right - projection.bounds.left) * 0.5
+      + (enemy.position.x - projection.frame.cameraX) * projection.frame.cameraZoom,
+    y: projection.bounds.top + (projection.bounds.bottom - projection.bounds.top) * 0.5
+      + (enemy.position.y - projection.frame.cameraY) * projection.frame.cameraZoom,
+  }
+  const playerPointer = {
+    x: projection.bounds.left + projection.frame.playerScreenX,
+    y: projection.bounds.top + projection.frame.playerScreenY,
+  }
+  const visible = pointer.x >= projection.bounds.left
+    && pointer.x <= projection.bounds.right
+    && pointer.y >= projection.bounds.top
+    && pointer.y <= projection.bounds.bottom
+  return {
+    combatBaseline: {
+      enemyId: enemy.id,
+      health: enemy.currentHealth,
+      position: { ...enemy.position },
+      worldKey: `boneyard:${state.world.runId}`,
+    },
+    pointer: skillId === 11 ? playerPointer : visible ? pointer : fallback,
+  }
+}
+
+async function collectCombatProof(host, playerId, skillId, baseline, scene) {
+  if (scene !== 'boneyard' || !baseline || !COMBAT_PROOF_SKILLS.has(skillId)) return null
+  let receipt = null
+  try {
+    await waitUntil(() => {
+      const state = host.state()
+      if (state.world.kind !== 'boneyard') return false
+      const enemy = state.world.enemies.actors.find(({ id }) => id === baseline.enemyId)
+      const effect = state.secondaryAbilities.targetEffects.find(({ targetId, worldKey }) => (
+        targetId === baseline.enemyId && worldKey === baseline.worldKey
+      ))
+      const health = enemy?.currentHealth ?? 0
+      const damaged = enemy === undefined || health < baseline.health
+      const frozen = (effect?.frozenTicks ?? 0) > 0
+      const frostBurn = (effect?.frostBurnTicks ?? 0) > 0
+      const succeeded = skillId === 35 ? frozen && frostBurn : damaged
+      if (!succeeded) return false
+      receipt = {
+        damaged,
+        enemyId: baseline.enemyId,
+        finalHealth: health,
+        frostBurnTicks: effect?.frostBurnTicks ?? 0,
+        frozenTicks: effect?.frozenTicks ?? 0,
+        initialHealth: baseline.health,
+        ownerId: playerId,
+      }
+      return true
+    }, `secondary ${skillId} produced no authoritative enemy damage/status`, 20_000)
+  } catch (error) {
+    const state = host.state()
+    process.stderr.write(`${JSON.stringify({
+      combatFailure: {
+        baseline,
+        effects: state.secondaryAbilities.targetEffects,
+        enemy: state.world.kind === 'boneyard'
+          ? state.world.enemies.actors.find(({ id }) => id === baseline.enemyId) ?? null
+          : null,
+        playerPosition: state.playerEntities.locomotions[
+          state.playerEntities.identities.findIndex(({ playerId: id }) => id === playerId)
+        ]?.position,
+        waveActors: state.secondaryAbilities.actors.filter(({ skillId: id }) => id === skillId),
+      },
+    }, null, 2)}\n`)
+    throw error
+  }
+  return receipt
+}
+
+function positionCombatTargetForAbility(host, skillId, baseline) {
+  if (skillId !== 11 || baseline === null) return
+  const state = host.state()
+  if (state.world.kind !== 'boneyard') return
+  const appendage = state.secondaryAbilities.actors.find(({ kind }) => (
+    kind === 'leviathan-appendage'
+  ))
+  const parentId = appendage?.hitTargetIds[0]
+  const parent = state.secondaryAbilities.actors.find(({ id }) => id === parentId)
+  if (!appendage || !parent) return
+  const heading = appendage.rotationRadians
+  const queryOrigin = {
+    x: parent.position.x + appendage.endpoint.x,
+    y: parent.position.y + appendage.endpoint.y,
+  }
+  const position = {
+    x: queryOrigin.x + Math.sin(heading) * 50,
+    y: queryOrigin.y - Math.cos(heading) * 50,
+  }
+  const enemies = {
+    ...state.world.enemies,
+    actors: state.world.enemies.actors.map((actor) => actor.id === baseline.enemyId
+      ? { ...actor, nextMovementTick: state.tick + 1_000, position }
+      : actor),
+  }
+  Object.assign(state, { world: { ...state.world, enemies } })
+  baseline.position = { ...position }
+}
+
+function squaredDistance(left, right) {
+  const x = left.x - right.x
+  const y = left.y - right.y
+  return x * x + y * y
+}
+
+async function resetSecondaryWorld(host) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const state = host.state()
+    Object.assign(state, {
+      secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    if (host.state().secondaryAbilities.actors.length === 0) return
+  }
+  throw new Error('secondary world reset did not win the host tick boundary')
 }
 
 async function captureBeltReceipt(page) {
@@ -492,6 +1002,54 @@ async function waitForBeltSkill(page, name) {
     document.querySelector('.hub-hud-secondary-slot[data-slot="0"]')
       ?.getAttribute('aria-label')?.startsWith(`${expectedName}, right mouse button`)
   ), name, { timeout: 10_000 })
+}
+
+async function castSecondaryPointer(page, target) {
+  await page.evaluate(({ x, y }) => {
+    const surface = document.querySelector('.boneyard-world-renderer, .hub-world-renderer')
+    if (!surface) throw new Error('secondary cast surface is unavailable')
+    surface.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
+  await page.waitForTimeout(35)
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
+}
+
+async function castPrimaryPointer(page, target) {
+  await page.evaluate(({ x, y }) => {
+    const surface = document.querySelector('.boneyard-world-renderer, .hub-world-renderer')
+    if (!surface) throw new Error('primary cast surface is unavailable')
+    surface.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
+  await page.waitForTimeout(90)
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+    }))
+  }, target)
 }
 
 async function waitForPlayerPresentation(page, skillId) {

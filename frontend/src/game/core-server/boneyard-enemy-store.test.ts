@@ -42,6 +42,7 @@ import {
   damageBoneyardEnemy,
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
+  nativeSecondaryActorSpeedScale,
   stepBoneyardEnemyStore,
   type BoneyardEnemyActor,
   type BoneyardEnemyMovementRequest,
@@ -65,6 +66,37 @@ const FAR_PLAYERS: BoneyardEnemyTargets = {
 const DIRECT_MOVEMENT = (request: BoneyardEnemyMovementRequest) => request.requestedPosition
 const NO_WORLD_CONTACT = () => null
 const CLEAR_SPELL_SEGMENT = (request: BoneyardEnemySpellSegmentRequest) => request.end
+
+test('Frozen timeScale fully stops enemies and exposes the exact thaw scalar', () => {
+  const effect = {
+    coldSlowFactor: 1,
+    coldSlowMaterial: false,
+    coldSlowTicks: 0,
+    dazzleMaximumTicks: 0,
+    dazzleTicks: 0,
+    disruptedTicks: 0,
+    fleeTicks: 0,
+    frostBurnDamagePerTick: 0,
+    frostBurnOwnerId: null,
+    frostBurnSkillId: null,
+    frostBurnSourceActorId: null,
+    frostBurnTicks: 0,
+    frozenTicks: 500,
+    frozenTimeScale: 0,
+    prismaticTicks: 0,
+    targetId: 1,
+    timeScale: 0,
+    weakenFactor: 1,
+    worldKey: 'boneyard:test',
+  } as const
+  assert.equal(nativeSecondaryActorSpeedScale(effect), 0)
+  assert.equal(nativeSecondaryActorSpeedScale({
+    ...effect,
+    frozenTicks: 200,
+    frozenTimeScale: Math.fround(0.005),
+    timeScale: Math.fround(0.005),
+  }), Math.fround(0.005))
+})
 
 test('Wizard ouch consumes cue then inclusive cooldown draws on the active enemy RNG stream', () => {
   const source = createBoneyardEnemyStore('wizard-ouch')

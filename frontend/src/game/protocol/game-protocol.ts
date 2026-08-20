@@ -2429,6 +2429,18 @@ function nativeSecondaryState(
       throw new GameProtocolError(`${field}.targetEffects must have unique world/target keys`)
     }
     effectKeys.add(key)
+    const frostBurnActive = effect.frostBurnTicks > 0
+    if (frostBurnActive !== (
+      effect.frostBurnDamagePerTick > 0
+      && effect.frostBurnOwnerId !== null
+      && effect.frostBurnSkillId !== null
+      && effect.frostBurnSourceActorId !== null
+    )) {
+      throw new GameProtocolError(`${field}.targetEffects FrostBurn ownership is inconsistent`)
+    }
+    if (effect.frostBurnOwnerId !== null && !players[effect.frostBurnOwnerId]) {
+      throw new GameProtocolError(`${field}.targetEffects FrostBurn owner has no player snapshot`)
+    }
   }
   const nextActorId = positiveInteger(source.nextActorId, `${field}.nextActorId`)
   const nextEventId = positiveInteger(source.nextEventId, `${field}.nextEventId`)
@@ -2578,10 +2590,15 @@ function nativeSecondaryGolemState(
 ): NativeSecondaryGolemState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'actionDurationTicks', 'actionTick', 'currentHealth', 'damageMaximum',
-    'iron', 'maximumHealth', 'orbitDirection', 'orbitHeadingRadians', 'phase',
-    'poseVariant', 'provokeRollBound', 'reflectFactor',
-    'targetPollTicksRemaining',
+    'actionDurationTicks', 'actionHeadingOffsetDegrees', 'actionTick',
+    'currentHealth', 'damageMaximum', 'gaitTick', 'iron',
+    'leftConnectorOffset', 'leftFoot', 'leftFootBob', 'leftFootNext',
+    'leftFootPrevious', 'leftFootProgress', 'leftFootRotationDegrees',
+    'leftLimbMode', 'maximumHealth', 'orbitDirection', 'orbitHeadingRadians',
+    'phase', 'poseVariant', 'provokeRollBound', 'reflectFactor',
+    'rightConnectorOffset', 'rightFoot', 'rightFootBob', 'rightFootNext',
+    'rightFootPrevious', 'rightFootProgress', 'rightFootRotationDegrees',
+    'rightLimbMode', 'targetPollTicksRemaining',
   ])
   const phase = memberString(
     source.phase,
@@ -2611,11 +2628,27 @@ function nativeSecondaryGolemState(
     ? null
     : finite(source.orbitHeadingRadians, `${field}.orbitHeadingRadians`)
   return {
+    actionHeadingOffsetDegrees: finite(
+      source.actionHeadingOffsetDegrees,
+      `${field}.actionHeadingOffsetDegrees`,
+    ),
     actionDurationTicks,
     actionTick,
     currentHealth,
     damageMaximum: nonnegativeFinite(source.damageMaximum, `${field}.damageMaximum`),
+    gaitTick: nonnegativeInteger(source.gaitTick, `${field}.gaitTick`),
     iron: boolean(source.iron, `${field}.iron`),
+    leftConnectorOffset: vector(source.leftConnectorOffset, `${field}.leftConnectorOffset`),
+    leftFoot: vector(source.leftFoot, `${field}.leftFoot`),
+    leftFootBob: vector(source.leftFootBob, `${field}.leftFootBob`),
+    leftFootNext: vector(source.leftFootNext, `${field}.leftFootNext`),
+    leftFootPrevious: vector(source.leftFootPrevious, `${field}.leftFootPrevious`),
+    leftFootProgress: unitInterval(source.leftFootProgress, `${field}.leftFootProgress`),
+    leftFootRotationDegrees: finite(
+      source.leftFootRotationDegrees,
+      `${field}.leftFootRotationDegrees`,
+    ),
+    leftLimbMode: boundedInteger(source.leftLimbMode, `${field}.leftLimbMode`, 0, 3),
     maximumHealth,
     orbitDirection,
     orbitHeadingRadians,
@@ -2623,6 +2656,17 @@ function nativeSecondaryGolemState(
     poseVariant: boundedInteger(source.poseVariant, `${field}.poseVariant`, 0, 1) as 0 | 1,
     provokeRollBound: boundedInteger(source.provokeRollBound, `${field}.provokeRollBound`, 0, 1_200),
     reflectFactor: unitInterval(source.reflectFactor, `${field}.reflectFactor`),
+    rightConnectorOffset: vector(source.rightConnectorOffset, `${field}.rightConnectorOffset`),
+    rightFoot: vector(source.rightFoot, `${field}.rightFoot`),
+    rightFootBob: vector(source.rightFootBob, `${field}.rightFootBob`),
+    rightFootNext: vector(source.rightFootNext, `${field}.rightFootNext`),
+    rightFootPrevious: vector(source.rightFootPrevious, `${field}.rightFootPrevious`),
+    rightFootProgress: unitInterval(source.rightFootProgress, `${field}.rightFootProgress`),
+    rightFootRotationDegrees: finite(
+      source.rightFootRotationDegrees,
+      `${field}.rightFootRotationDegrees`,
+    ),
+    rightLimbMode: boundedInteger(source.rightLimbMode, `${field}.rightLimbMode`, 0, 3),
     targetPollTicksRemaining: boundedInteger(
       source.targetPollTicksRemaining,
       `${field}.targetPollTicksRemaining`,
@@ -2638,8 +2682,8 @@ function nativeSecondaryEvent(
 ): NativeSecondaryEventState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'actorId', 'cue', 'eventId', 'kind', 'ownerId', 'pitch', 'position',
-    'screenFlash', 'skillId', 'tick', 'worldKey',
+    'actorId', 'cameraMagnitude', 'cue', 'eventId', 'kind', 'ownerId', 'pitch',
+    'position', 'screenFlash', 'skillId', 'tick', 'worldKey',
   ])
   const cue = source.cue === null
     ? null
@@ -2657,6 +2701,7 @@ function nativeSecondaryEvent(
     actorId: source.actorId === null
       ? null
       : positiveInteger(source.actorId, `${field}.actorId`),
+    cameraMagnitude: nonnegativeFinite(source.cameraMagnitude, `${field}.cameraMagnitude`),
     cue,
     eventId: positiveInteger(source.eventId, `${field}.eventId`),
     kind,
@@ -2795,9 +2840,11 @@ function nativeSecondaryTargetEffectState(
 ): NativeSecondaryTargetEffectState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'coldSlowTicks', 'dazzleMaximumTicks', 'dazzleTicks', 'disruptedTicks',
-    'fleeTicks', 'prismaticTicks', 'targetId', 'timeScale', 'weakenFactor',
-    'worldKey',
+    'coldSlowFactor', 'coldSlowMaterial', 'coldSlowTicks', 'dazzleMaximumTicks',
+    'dazzleTicks', 'disruptedTicks', 'fleeTicks', 'frostBurnDamagePerTick',
+    'frostBurnOwnerId', 'frostBurnSkillId', 'frostBurnSourceActorId', 'frostBurnTicks',
+    'frozenTicks', 'frozenTimeScale', 'prismaticTicks', 'targetId', 'timeScale',
+    'weakenFactor', 'worldKey',
   ])
   const dazzleMaximumTicks = nonnegativeInteger(
     source.dazzleMaximumTicks,
@@ -2807,12 +2854,34 @@ function nativeSecondaryTargetEffectState(
   if (dazzleTicks > dazzleMaximumTicks) {
     throw new GameProtocolError(`${field}.dazzleTicks exceeds its maximum`)
   }
+  const frostBurnSkillId = source.frostBurnSkillId === null
+    ? null
+    : nonnegativeInteger(source.frostBurnSkillId, `${field}.frostBurnSkillId`)
+  if (frostBurnSkillId !== null && frostBurnSkillId !== 35 && frostBurnSkillId !== 76) {
+    throw new GameProtocolError(`${field}.frostBurnSkillId must be 35 or 76`)
+  }
   return {
+    coldSlowFactor: unitInterval(source.coldSlowFactor, `${field}.coldSlowFactor`),
+    coldSlowMaterial: boolean(source.coldSlowMaterial, `${field}.coldSlowMaterial`),
     coldSlowTicks: nonnegativeInteger(source.coldSlowTicks, `${field}.coldSlowTicks`),
     dazzleMaximumTicks,
     dazzleTicks,
     disruptedTicks: nonnegativeInteger(source.disruptedTicks, `${field}.disruptedTicks`),
     fleeTicks: nonnegativeInteger(source.fleeTicks, `${field}.fleeTicks`),
+    frostBurnDamagePerTick: nonnegativeFinite(
+      source.frostBurnDamagePerTick,
+      `${field}.frostBurnDamagePerTick`,
+    ),
+    frostBurnOwnerId: source.frostBurnOwnerId === null
+      ? null
+      : validatedPlayerId(source.frostBurnOwnerId, `${field}.frostBurnOwnerId`),
+    frostBurnSkillId: frostBurnSkillId as 35 | 76 | null,
+    frostBurnSourceActorId: source.frostBurnSourceActorId === null
+      ? null
+      : positiveInteger(source.frostBurnSourceActorId, `${field}.frostBurnSourceActorId`),
+    frostBurnTicks: nonnegativeInteger(source.frostBurnTicks, `${field}.frostBurnTicks`),
+    frozenTicks: nonnegativeInteger(source.frozenTicks, `${field}.frozenTicks`),
+    frozenTimeScale: unitInterval(source.frozenTimeScale, `${field}.frozenTimeScale`),
     prismaticTicks: nonnegativeInteger(source.prismaticTicks, `${field}.prismaticTicks`),
     targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
     timeScale: unitInterval(source.timeScale, `${field}.timeScale`),

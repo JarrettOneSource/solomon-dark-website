@@ -163,11 +163,39 @@ export interface HubEconomyResult {
 export function hasPandimensionalBugMasterOutfit(
   equipment: HubEquipmentState,
 ): boolean {
-  return equipment.hat?.recipeIndex === 11
-    && equipment.robe?.recipeIndex === 12
-    && equipment.weapon?.recipeIndex === 13
-    && equipment.rings.some((ring) => ring?.recipeIndex === 14)
-    && equipment.amulet?.recipeIndex === 15
+  return hasCompleteEquipmentSet(equipment, [11, 12, 13, 14, 15])
+}
+
+export function hasTempestOutfit(equipment: HubEquipmentState): boolean {
+  return hasCompleteEquipmentSet(equipment, [16, 17, 18, 19])
+}
+
+export function hasBurningManOutfit(equipment: HubEquipmentState): boolean {
+  return hasCompleteEquipmentSet(equipment, [20, 21])
+}
+
+export function hasFrostburnJewels(equipment: HubEquipmentState): boolean {
+  return hasCompleteEquipmentSet(equipment, [22, 23, 24])
+}
+
+export function hasFeteOfClayOutfit(equipment: HubEquipmentState): boolean {
+  return hasCompleteEquipmentSet(equipment, [25, 26, 27, 28])
+}
+
+function hasCompleteEquipmentSet(
+  equipment: HubEquipmentState,
+  recipeIndexes: readonly number[],
+): boolean {
+  const equippedRecipes = new Set([
+    equipment.hat,
+    equipment.robe,
+    equipment.weapon,
+    equipment.amulet,
+    ...equipment.rings,
+  ].flatMap((item) => item?.recipeIndex === null || item?.recipeIndex === undefined
+    ? []
+    : [item.recipeIndex]))
+  return recipeIndexes.every((recipeIndex) => equippedRecipes.has(recipeIndex))
 }
 
 export interface FomentiusStockDefinition {

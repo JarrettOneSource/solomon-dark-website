@@ -6,6 +6,7 @@ import {
   NATIVE_GOLEM_DEATH_PRESENTATION_RNG_DRAWS,
   consumeNativeGolemDeathPresentationRng,
   damageNativeSecondaryGolem,
+  nativeInitialGolemArticulation,
   stepNativeSecondaryGolem,
   type NativeGolemKernelActor,
 } from './native-secondary-golem.ts'
@@ -58,6 +59,63 @@ test('Golem assembly advances by two and the 400-tick damage gate owns both heal
     reflectablePhysicalSourceInRange: false,
     secondaryDamage: 10,
   }).killed, true)
+})
+
+test('Golem publishes native foot anchors, alternating gait paths, bob, and attack limb state', () => {
+  const initial = nativeInitialGolemArticulation({ x: 0, y: 0 }, 0)
+  assert.deepEqual(initial.leftFoot, { x: 10, y: 19 })
+  assert.deepEqual(initial.rightFoot, { x: -10, y: 19 })
+
+  const source = golem({
+    ageTicks: 400,
+    golem: golemState({
+      ...initial,
+      gaitTick: 49,
+      phase: 'active',
+      provokeRollBound: 1_200,
+      targetPollTicksRemaining: 1,
+    }),
+  })
+  let footResolutions = 0
+  const stepped = stepNativeSecondaryGolem(source, {
+    ownerPosition: null,
+    resolveFootTarget: (current) => {
+      footResolutions += 1
+      return current
+    },
+    resolveMovement: noMovement,
+    rng: createNativeRng(22),
+    targets: [{ id: 4, position: { x: 200, y: 0 }, radius: 10 }],
+  })
+  assert.equal(stepped.actor.golem.gaitTick, 50)
+  assert.equal(footResolutions, 1)
+  assert.deepEqual(stepped.actor.golem.rightFootPrevious, initial.rightFoot)
+  assert.deepEqual(stepped.actor.golem.rightFootNext, initial.rightFoot)
+  assert.equal(
+    stepped.actor.golem.rightFootProgress,
+    Math.fround(Math.fround(0.015) * Math.fround(1.06)),
+  )
+  assert.equal(Number.isFinite(stepped.actor.golem.rightFootBob.y), true)
+
+  const attack = stepNativeSecondaryGolem(golem({
+    ageTicks: 400,
+    golem: golemState({
+      ...initial,
+      phase: 'active',
+      poseVariant: 0,
+      provokeRollBound: 1_200,
+      targetPollTicksRemaining: 1,
+    }),
+  }), {
+    ownerPosition: null,
+    resolveMovement: noMovement,
+    rng: createNativeRng(1),
+    targets: [{ id: 5, position: { x: 0, y: -60 }, radius: 20 }],
+  })
+  assert.equal(attack.actor.golem.poseVariant, 1)
+  assert.equal(attack.actor.golem.actionHeadingOffsetDegrees, 38)
+  assert.equal(attack.actor.golem.leftLimbMode, 0)
+  assert.equal(attack.actor.golem.rightLimbMode, 1)
 })
 
 test('Golem acquires, follows, attacks at marker 37, and applies the 90-degree contact arc', () => {
@@ -199,6 +257,7 @@ function golemState(
   overrides: Partial<NativeGolemKernelActor['golem']> = {},
 ): NativeGolemKernelActor['golem'] {
   return {
+    ...nativeInitialGolemArticulation({ x: 0, y: 0 }, 0),
     actionDurationTicks: 0,
     actionTick: 0,
     currentHealth: 100,

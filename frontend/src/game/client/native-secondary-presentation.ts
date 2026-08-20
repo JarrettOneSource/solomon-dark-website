@@ -42,6 +42,7 @@ export function interpolateNativeSecondaryState(
         x: lerp(actor.endpoint.x, next.endpoint.x, blend),
         y: lerp(actor.endpoint.y, next.endpoint.y, blend),
       },
+      golem: interpolateGolem(actor.golem, next.golem, discrete.golem, blend),
       midpoint: {
         x: lerp(actor.midpoint.x, next.midpoint.x, blend),
         y: lerp(actor.midpoint.y, next.midpoint.y, blend),
@@ -82,7 +83,7 @@ function copyActor(
 ): NativeSecondarySnapshotState['actors'][number] {
   return {
     ...actor,
-    golem: actor.golem === null ? null : { ...actor.golem },
+    golem: actor.golem === null ? null : copyGolem(actor.golem),
     endpoint: { ...actor.endpoint },
     hitTargetIds: [...actor.hitTargetIds],
     lightRegistration: actor.lightRegistration === null
@@ -97,6 +98,70 @@ function copyActor(
           words: [...actor.presentationRng.words],
         },
     velocity: { ...actor.velocity },
+  }
+}
+
+function copyGolem(
+  golem: NonNullable<NativeSecondarySnapshotState['actors'][number]['golem']>,
+): NonNullable<NativeSecondarySnapshotState['actors'][number]['golem']> {
+  return {
+    ...golem,
+    leftConnectorOffset: { ...golem.leftConnectorOffset },
+    leftFoot: { ...golem.leftFoot },
+    leftFootBob: { ...golem.leftFootBob },
+    leftFootNext: { ...golem.leftFootNext },
+    leftFootPrevious: { ...golem.leftFootPrevious },
+    rightConnectorOffset: { ...golem.rightConnectorOffset },
+    rightFoot: { ...golem.rightFoot },
+    rightFootBob: { ...golem.rightFootBob },
+    rightFootNext: { ...golem.rightFootNext },
+    rightFootPrevious: { ...golem.rightFootPrevious },
+  }
+}
+
+function interpolateGolem(
+  first: NativeSecondarySnapshotState['actors'][number]['golem'],
+  second: NativeSecondarySnapshotState['actors'][number]['golem'],
+  discrete: NativeSecondarySnapshotState['actors'][number]['golem'],
+  blend: number,
+): NativeSecondarySnapshotState['actors'][number]['golem'] {
+  if (first === null || second === null) return discrete === null ? null : copyGolem(discrete)
+  const base = discrete === null ? copyGolem(first) : copyGolem(discrete)
+  return {
+    ...base,
+    leftConnectorOffset: lerpVector(first.leftConnectorOffset, second.leftConnectorOffset, blend),
+    leftFoot: lerpVector(first.leftFoot, second.leftFoot, blend),
+    leftFootBob: lerpVector(first.leftFootBob, second.leftFootBob, blend),
+    leftFootNext: lerpVector(first.leftFootNext, second.leftFootNext, blend),
+    leftFootPrevious: lerpVector(first.leftFootPrevious, second.leftFootPrevious, blend),
+    leftFootProgress: lerp(first.leftFootProgress, second.leftFootProgress, blend),
+    leftFootRotationDegrees: lerp(
+      first.leftFootRotationDegrees,
+      second.leftFootRotationDegrees,
+      blend,
+    ),
+    rightConnectorOffset: lerpVector(first.rightConnectorOffset, second.rightConnectorOffset, blend),
+    rightFoot: lerpVector(first.rightFoot, second.rightFoot, blend),
+    rightFootBob: lerpVector(first.rightFootBob, second.rightFootBob, blend),
+    rightFootNext: lerpVector(first.rightFootNext, second.rightFootNext, blend),
+    rightFootPrevious: lerpVector(first.rightFootPrevious, second.rightFootPrevious, blend),
+    rightFootProgress: lerp(first.rightFootProgress, second.rightFootProgress, blend),
+    rightFootRotationDegrees: lerp(
+      first.rightFootRotationDegrees,
+      second.rightFootRotationDegrees,
+      blend,
+    ),
+  }
+}
+
+function lerpVector(
+  first: Readonly<{ x: number; y: number }>,
+  second: Readonly<{ x: number; y: number }>,
+  blend: number,
+): { x: number; y: number } {
+  return {
+    x: lerp(first.x, second.x, blend),
+    y: lerp(first.y, second.y, blend),
   }
 }
 

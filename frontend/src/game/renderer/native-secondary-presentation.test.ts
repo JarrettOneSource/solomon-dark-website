@@ -16,6 +16,7 @@ import {
   drawNativeInteger,
   drawNativeSign,
 } from '../core-kernels/native-rng.ts'
+import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
 import {
   nativeSecondaryMiscLightSource,
   nativeSecondaryProviderLightSource,
@@ -27,6 +28,7 @@ import {
   nativePlayerMaterialTint,
   nativeEtherFadeScalar,
   nativeSecondaryPresentationPlan,
+  nativeSecondaryCompositeOwnerEntries,
   nativeRegionPointGain,
   NativeSecondaryScreenFeedbackPresentation,
   nativeSecondaryWorldShake,
@@ -37,12 +39,13 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'plane-orb-shot', 'plane-orb-particle', 'moving-fire', 'shockwave', 'fire-patch', 'fire-burn',
   'fire-burn-flame', 'storm-cloud',
   'storm-drop', 'storm-strike', 'prismatic-wave', 'freeze-wave', 'freeze-wave-visual',
-  'ice-blast', 'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake',
+  'ice-blast', 'frost-burn-flare', 'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake',
   'earthquake-dust', 'earthquake-debris',
   'golem', 'golem-death', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn', 'dampen-wave', 'shield-break',
-  'shield-explosion', 'acid-rain', 'acid-drop', 'acid-splash', 'ether-drain',
+  'shield-explosion', 'acid-rain', 'acid-drop', 'ring-fire-explosion',
+  'ring-fire-fragment', 'acid-splash', 'ether-drain',
   'ether-drain-cloud', 'ether-drain-debris', 'ether-drain-capture-flare', 'comet',
   'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
 ]
@@ -57,6 +60,7 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     frame: kind === 'moving-fire' || kind === 'fire-patch' ? 46 : 0,
     freezeTicks: 0,
     golem: kind === 'golem' ? {
+      ...nativeInitialGolemArticulation({ x: 100, y: 200 }, 0),
       actionDurationTicks: 0,
       actionTick: 0,
       currentHealth: 100,
@@ -108,6 +112,7 @@ function screenEvent(
 ): NativeSecondaryEventState {
   return {
     actorId: null,
+    cameraMagnitude: 0,
     cue: null,
     eventId,
     kind: 'pulse',
@@ -140,7 +145,7 @@ test('the complete secondary light census stays split between providers and Misc
   const actorProviders = new Set<NativeSecondaryActorKind>([
     'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'fire-patch',
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
-    'ether-drain', 'comet',
+    'ether-drain', 'comet', 'ring-fire-explosion', 'ring-fire-fragment',
   ])
   const miscWriters = new Set<NativeSecondaryActorKind>([
     'magic-circle', 'fire-burn', 'electric-burn',
@@ -302,6 +307,25 @@ test('Leviathan owns the portal redraw, authored appendage bank, EtherBolt, Fade
     position: fadeActor.position,
     radius: 2,
   })
+})
+
+test('Leviathan appendages share one parent painter owner and cannot interleave as world actors', () => {
+  const parent = { ...actor('leviathan'), id: 10 }
+  const first = {
+    ...actor('leviathan-appendage'),
+    hitTargetIds: [parent.id],
+    id: 11,
+  }
+  const second = { ...first, id: 12 }
+  const unrelated = { ...actor('moving-fire'), id: 13 }
+  assert.deepEqual(nativeSecondaryCompositeOwnerEntries(
+    [parent, first, second, unrelated],
+    'boneyard:test',
+  ), [[11, 10], [12, 10]])
+  assert.deepEqual(nativeSecondaryCompositeOwnerEntries(
+    [parent, first, second, unrelated],
+    'hub:courtyard',
+  ), [])
 })
 
 test('Plane Orb owns the exact core, repeating ether-plane mesh, and perspective particle draw', () => {
@@ -550,6 +574,49 @@ test('gameplay waves stay invisible while the independent Ring visual owns exact
   }).draws, [])
   assert.equal(nativeSecondaryPresentationPlan(actor('ice-blast')).draws.length, 0)
   assert.ok(nativeSecondaryPresentationPlan(actor('dampen-wave')).draws.length >= 360)
+})
+
+test('FrostBurn and maximum Ring fire own target and contact VFX with enrolled lights', () => {
+  const frost = nativeSecondaryPresentationPlan({
+    ...actor('frost-burn-flare'),
+    alpha: 0.75,
+    frame: 11,
+    quantity: 0x408080,
+    rotationRadians: 0.25,
+    scale: 0.8,
+  }).draws
+  assert.deepEqual(frost.map(({ alpha, blend, entry, tint }) => ({
+    alpha, blend, entry, tint,
+  })), [{ alpha: 0.75, blend: 'add', entry: 11, tint: 0x408080 }])
+
+  const explosionActor = {
+    ...actor('ring-fire-explosion'),
+    alpha: 0.8,
+    radius: 165,
+    scale: 1.5,
+  }
+  assert.deepEqual(
+    nativeSecondaryPresentationPlan(explosionActor).draws.map(({ entry, role }) => ({ entry, role })),
+    [{ entry: 15, role: 'ring-fire-contact-explosion-core' }],
+  )
+  assert.deepEqual(nativeSecondaryProviderLightSource(explosionActor), {
+    castsDirectionalShadow: false,
+    intensity: 0.8,
+    position: explosionActor.position,
+    radius: 1.5,
+  })
+
+  const fragment = { ...actor('ring-fire-fragment'), frame: 2, phase: -6 }
+  assert.deepEqual(
+    nativeSecondaryPresentationPlan(fragment).draws.map(({ blend, entry }) => ({ blend, entry })),
+    [{ blend: 'normal', entry: 253 }, { blend: 'add', entry: 269 }],
+  )
+  assert.deepEqual(nativeSecondaryProviderLightSource(fragment), {
+    castsDirectionalShadow: false,
+    intensity: 1,
+    position: fragment.position,
+    radius: 0.5,
+  })
 })
 
 test('Dampen replays 360 source-over MoveFades and 30 centered additive fades', () => {
@@ -845,7 +912,7 @@ test('Magic Trap draws the armed stock body, selector shimmer, and full terminal
     ...actor('magic-trap-burst'),
     ageTicks: 1,
   }], 'boneyard:test'), {
-    magnitude: Math.fround(Math.fround(1.25) * Math.fround(0.94)),
+    magnitude: 0,
     x: 0,
     y: 0,
   })
@@ -1139,6 +1206,8 @@ test('stationary Storm owns the exact three-pass render-target composite and whi
   }
   const phase = drawNativeFloat(source.presentationRng!, 1, true).value
   const plan = nativeSecondaryPresentationPlan(source)
+  assert.deepEqual(plan.root, source.position)
+  assert.equal(plan.worldY, source.position.y)
   assert.equal(plan.stormComposite?.scale, 5)
   assert.deepEqual(plan.stormComposite?.offset, { x: 0, y: -175 })
   assert.deepEqual(plan.stormComposite?.draws.map(({ role }) => role), [
@@ -1264,6 +1333,24 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     expectedLateAlpha = Math.max(0, Math.fround(expectedLateAlpha - Math.fround(0.05)))
   }
   assert.equal(late.sample(100)?.alpha, expectedLateAlpha)
+
+  const camera = new NativeSecondaryScreenFeedbackPresentation(0, 'boneyard:test')
+  camera.consume({
+    ...screenEvent(1, 0, {
+      alpha: 1,
+      blue: 1,
+      decayPerTick: 0.01,
+      green: 0.5,
+      pointAttenuated: true,
+      red: 1,
+    }),
+    cameraMagnitude: 0.25,
+  }, context)
+  assert.equal(camera.sampleCameraMagnitude(0), Math.fround(0.25))
+  assert.equal(
+    camera.sampleCameraMagnitude(1),
+    Math.fround(Math.fround(0.25) * Math.fround(0.94)),
+  )
 })
 
 test('Shockwave and FreezeWave share the expanding Region-light callback', () => {
@@ -1510,10 +1597,13 @@ test('Golem attack and provoke phases select the native limb banks and rotations
     ...base,
     golem: {
       ...base.golem!,
+      actionHeadingOffsetDegrees: -38,
       actionDurationTicks: 80,
       actionTick: 10,
+      leftLimbMode: 1,
       phase: 'attack',
       poseVariant: 0,
+      rightLimbMode: 0,
     },
   })
   const attackingLeft = attack.draws.find(({ role }) => role === 'golem-limb-left')!
@@ -1524,10 +1614,13 @@ test('Golem attack and provoke phases select the native limb banks and rotations
     ...base,
     golem: {
       ...base.golem!,
+      actionHeadingOffsetDegrees: 47,
       actionDurationTicks: 80,
       actionTick: 38,
+      leftLimbMode: 2,
       phase: 'attack',
       poseVariant: 0,
+      rightLimbMode: 1,
     },
   })
   assert.equal(recovery.draws.find(({ role }) => role === 'golem-limb-left')!.entry, 19)
@@ -1535,7 +1628,15 @@ test('Golem attack and provoke phases select the native limb banks and rotations
 
   const provoke = nativeGolemPresentationPlan({
     ...base,
-    golem: { ...base.golem!, actionTick: 101, phase: 'provoke' },
+    golem: {
+      ...base.golem!,
+      actionTick: 101,
+      leftConnectorOffset: { x: 0, y: -12 },
+      leftLimbMode: 3,
+      phase: 'provoke',
+      rightConnectorOffset: { x: 0, y: -12 },
+      rightLimbMode: 3,
+    },
   })
   assert.equal(provoke.draws.find(({ role }) => role === 'golem-limb-left')!.entry, 17)
   assert.equal(provoke.draws.find(({ role }) => role === 'golem-limb-right')!.entry, 49)
@@ -1588,7 +1689,7 @@ test('Earthquake uses the exact floor-copy thresholds and Region largest-vector 
     { ...actor('shield-explosion'), ageTicks: 1, id: 4 },
     { ...quake, id: 3, worldKey: 'hub:courtyard', velocity: { x: 99, y: 99 } },
   ], 'boneyard:test'), {
-    magnitude: Math.fround(Math.fround(1.25) * Math.fround(0.94)),
+    magnitude: 0,
     x: -2,
     y: 8,
   })

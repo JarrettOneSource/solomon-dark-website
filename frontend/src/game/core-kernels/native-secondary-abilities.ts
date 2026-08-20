@@ -21,6 +21,7 @@ import {
   NATIVE_GOLEM_RADIUS,
   consumeNativeGolemDeathPresentationRng,
   damageNativeSecondaryGolem as damageNativeSecondaryGolemActor,
+  nativeInitialGolemArticulation,
   stepNativeSecondaryGolem,
   type NativeSecondaryGolemState,
 } from './native-secondary-golem.ts'
@@ -58,12 +59,14 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'moving-fire', 'shockwave', 'fire-patch', 'fire-burn', 'fire-burn-flame',
   'storm-cloud', 'storm-drop', 'storm-strike',
   'prismatic-wave', 'freeze-wave', 'freeze-wave-visual', 'ice-blast',
+  'frost-burn-flare',
   'earthquake', 'earthquake-scenery-wobble', 'earthquake-quake', 'earthquake-dust',
   'earthquake-debris', 'golem',
   'golem-death',
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn',
   'dampen-wave', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
+  'ring-fire-explosion', 'ring-fire-fragment',
   'acid-splash', 'ether-drain', 'ether-drain-cloud', 'ether-drain-debris',
   'ether-drain-capture-flare', 'comet', 'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
 ] as const)
@@ -128,6 +131,7 @@ export interface NativeSecondaryActorState {
 
 export interface NativeSecondaryEventState {
   readonly actorId: number | null
+  readonly cameraMagnitude: number
   readonly cue: NativeSecondaryAudioCue | null
   readonly eventId: number
   readonly kind: NativeSecondaryEventKind
@@ -151,8 +155,9 @@ export interface NativeSecondaryScreenFlashState {
 
 type NativeSecondaryEventSeed = Omit<
   NativeSecondaryEventState,
-  'eventId' | 'screenFlash'
+  'cameraMagnitude' | 'eventId' | 'screenFlash'
 > & {
+  readonly cameraMagnitude?: number
   readonly screenFlash?: NativeSecondaryScreenFlashState | null
 }
 
@@ -178,11 +183,20 @@ export interface NativeSecondaryPlayerState {
 }
 
 export interface NativeSecondaryTargetEffectState {
+  readonly coldSlowFactor: number
+  readonly coldSlowMaterial: boolean
   readonly coldSlowTicks: number
   readonly dazzleMaximumTicks: number
   readonly dazzleTicks: number
   readonly disruptedTicks: number
   readonly fleeTicks: number
+  readonly frostBurnDamagePerTick: number
+  readonly frostBurnOwnerId: string | null
+  readonly frostBurnSkillId: 35 | 76 | null
+  readonly frostBurnSourceActorId: number | null
+  readonly frostBurnTicks: number
+  readonly frozenTicks: number
+  readonly frozenTimeScale: number
   readonly prismaticTicks: number
   readonly targetId: number
   readonly timeScale: number
@@ -236,7 +250,11 @@ export interface NativeSecondaryPlayerAuthority {
   readonly magicStormDurationBonusTicks: number
   readonly magicStormFrequencyFactor: number
   readonly magicStormManaCost: number
+  readonly maximumGolem: boolean
   readonly maximumLeviathan: boolean
+  readonly maximumMagicStorm: boolean
+  readonly maximumRingOfFire: boolean
+  readonly maximumRingOfIce: boolean
   readonly manaRecoveryPerTick: number
   readonly skillBook: PlayerSkillBookComponent
   readonly worldKey: string
@@ -269,6 +287,12 @@ export interface NativeSecondaryTickContext {
     origin: Vector2,
     requestedPosition: Vector2,
     radius: number,
+  ) => Vector2
+  readonly golemFootPlacement?: (
+    playerId: string,
+    worldKey: string,
+    currentPosition: Vector2,
+    requestedPosition: Vector2,
   ) => Vector2
   readonly golemPlacement: (
     playerId: string,
@@ -412,6 +436,16 @@ const STORM_AMBIENT_FLASH_ROLL = 3
 const STORM_AMBIENT_THUNDER_VOLUME_JITTER = 0.35
 const TORNADO_MOVEMENT_PER_TICK = Math.fround(0.349999994)
 const FREEZE_WAVE_RADIUS_PER_TICK = 6
+const FROZEN_THAW_TICKS = 200
+const FROZEN_TIME_SCALE_GAIN = Math.fround(0.005)
+const FROST_BURN_DAMAGE_PER_TICK = Math.fround(0.01)
+const FROST_BURN_FLARE_ALPHA_LOSS = Math.fround(0.05)
+const FROST_BURN_FLARE_DAMPING = Math.fround(0.96)
+const FROST_BURN_FLARE_LIFETIME_TICKS = 20
+const RING_FIRE_EXPLOSION_RADIUS = 165
+const RING_FIRE_EXPLOSION_DAMAGE_FACTOR = Math.fround(0.5)
+const RING_FIRE_EXPLOSION_LIFETIME_TICKS = 30
+const RING_FIRE_FRAGMENT_LIFETIME_TICKS = 400
 const ACID_RAIN_ACTIVE_TICKS = 1_500
 const ACID_RAIN_INITIAL_PULSE_DELAY_TICKS = 50
 const ACID_RAIN_PULSE_INTERVAL_TICKS = 25
@@ -612,6 +646,7 @@ const MAGIC_TRAP_SELECTOR_COLORS = Object.freeze([
 interface FreezeWaveProgramSeed {
   readonly enhanced: boolean
   readonly freezeTicks: number
+  readonly maximumRingOfIce: boolean
   readonly ownerId: string
   readonly position: Vector2
   readonly rank: number
@@ -652,6 +687,7 @@ function spawnFreezeWaveProgram(
     radius: 75,
     rank: seed.rank,
     skillId: seed.skillId,
+    variant: seed.maximumRingOfIce ? 1 : 0,
     worldKey: seed.worldKey,
   }))
   state = spawn(state, actorSeed({
@@ -730,18 +766,67 @@ export function nativeSecondaryTargetEffect(
   )) ?? null
 }
 
+export function nativeSecondaryTargetMaterialTint(
+  worldTint: number,
+  effect: NativeSecondaryTargetEffectState | null | undefined,
+): number {
+  if (!effect) return worldTint
+  let redFactor = 1
+  let greenFactor = 1
+  const blueFactor = 1
+  if (effect.coldSlowTicks > 0 && effect.coldSlowMaterial) {
+    redFactor = Math.fround(redFactor * Math.fround(0.75))
+  }
+  if (effect.frozenTicks > 0) {
+    const thawUpdates = Math.max(0, Math.min(
+      FROZEN_THAW_TICKS,
+      Math.round(effect.frozenTimeScale / FROZEN_TIME_SCALE_GAIN),
+    ))
+    let frozenRed = Math.fround(0.15)
+    let frozenGreen = Math.fround(0.5)
+    for (let update = 0; update < thawUpdates; update += 1) {
+      frozenRed = Math.fround(frozenRed + Math.fround(0.00425))
+      frozenGreen = Math.fround(frozenGreen + Math.fround(0.0025))
+    }
+    redFactor = Math.fround(redFactor * Math.fround((1 + frozenRed) * 0.5))
+    greenFactor = Math.fround(greenFactor * Math.fround((1 + frozenGreen) * 0.5))
+  }
+  const channel = (shift: number, factor: number): number => Math.max(
+    0,
+    Math.min(255, Math.round((worldTint >> shift & 0xff) * factor)),
+  )
+  return (channel(16, redFactor) << 16)
+    | (channel(8, greenFactor) << 8)
+    | channel(0, blueFactor)
+}
+
 export function removeNativeSecondaryOwner(
   source: NativeSecondarySimulationState,
   playerId: string,
 ): NativeSecondarySimulationState {
   if (!Object.hasOwn(source.players, playerId)
-    && !source.actors.some(({ ownerId }) => ownerId === playerId)) return source
+    && !source.actors.some(({ ownerId }) => ownerId === playerId)
+    && !source.targetEffects.some(({ frostBurnOwnerId }) => (
+      frostBurnOwnerId === playerId
+    ))) return source
   const players = { ...source.players }
   delete players[playerId]
   return {
     ...source,
     actors: source.actors.filter(({ ownerId }) => ownerId !== playerId),
     players,
+    targetEffects: source.targetEffects.flatMap((effect) => {
+      if (effect.frostBurnOwnerId !== playerId) return [effect]
+      const next = {
+        ...effect,
+        frostBurnDamagePerTick: 0,
+        frostBurnOwnerId: null,
+        frostBurnSkillId: null,
+        frostBurnSourceActorId: null,
+        frostBurnTicks: 0,
+      }
+      return hasTargetEffect(next) ? [next] : []
+    }),
   }
 }
 
@@ -872,6 +957,7 @@ export function applyNativeSecondaryPlayerDamage(
       }))
       next = emit(next, {
         actorId: null,
+        cameraMagnitude: 1.25,
         cue: 'magic-shield-explode',
         kind: 'impact',
         ownerId: playerId,
@@ -987,8 +1073,17 @@ export function stepNativeSecondaryAbilities(
     events: source.events.filter(({ tick }) => tick >= context.tick - EVENT_RETENTION_TICKS),
     targetEffects: source.targetEffects.flatMap((effect) => {
       const coldSlowTicks = Math.max(0, effect.coldSlowTicks - 1)
+      const frozenTicks = Math.max(0, effect.frozenTicks - 1)
+      const frostBurnTicks = Math.max(0, effect.frostBurnTicks - 1)
+      const frozenTimeScale = frozenTicks === 0
+        ? 1
+        : frozenTicks <= FROZEN_THAW_TICKS
+          ? Math.fround(Math.min(1, effect.frozenTimeScale + FROZEN_TIME_SCALE_GAIN))
+          : effect.frozenTimeScale
       const next = {
         ...effect,
+        coldSlowFactor: coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
+        coldSlowMaterial: coldSlowTicks > 0 && effect.coldSlowMaterial,
         coldSlowTicks,
         dazzleMaximumTicks: effect.dazzleTicks > 1
           ? effect.dazzleMaximumTicks
@@ -996,13 +1091,24 @@ export function stepNativeSecondaryAbilities(
         dazzleTicks: Math.max(0, effect.dazzleTicks - 1),
         disruptedTicks: Math.max(0, effect.disruptedTicks - 1),
         fleeTicks: Math.max(0, effect.fleeTicks - 1),
+        frostBurnDamagePerTick: frostBurnTicks > 0 ? effect.frostBurnDamagePerTick : 0,
+        frostBurnOwnerId: frostBurnTicks > 0 ? effect.frostBurnOwnerId : null,
+        frostBurnSkillId: frostBurnTicks > 0 ? effect.frostBurnSkillId : null,
+        frostBurnSourceActorId: frostBurnTicks > 0 ? effect.frostBurnSourceActorId : null,
+        frostBurnTicks,
+        frozenTicks,
+        frozenTimeScale,
         prismaticTicks: Math.max(0, effect.prismaticTicks - 1),
-        timeScale: coldSlowTicks > 0 ? effect.timeScale : 1,
+        timeScale: Math.min(
+          coldSlowTicks > 0 ? effect.coldSlowFactor : 1,
+          frozenTicks > 0 ? frozenTimeScale : 1,
+        ),
       }
       return hasTargetEffect(next) ? [next] : []
     }),
   }
   let rng = state.rng
+  const actorsAtStepStart = state.actors
   const damage: NativeSecondaryDamageContact[] = []
   const knockbacks: NativeSecondaryKnockbackContact[] = []
   const disruptedTargetIds = new Set<number>()
@@ -1019,8 +1125,8 @@ export function stepNativeSecondaryAbilities(
   const advancedActors: NativeSecondaryActorState[] = []
   const earthquakeWobblePhases = new Map<number, number>()
   const earthquakeSceneryPhases = new Map<string, number>()
-  const sourceActorsById = new Map(state.actors.map((actor) => [actor.id, actor] as const))
-  for (const actor of state.actors) {
+  const sourceActorsById = new Map(actorsAtStepStart.map((actor) => [actor.id, actor] as const))
+  for (const actor of actorsAtStepStart) {
     if (actor.kind !== 'earthquake-scenery-wobble' || actor.targetId === null) continue
     earthquakeSceneryPhases.set(
       `${actor.worldKey}:${actor.targetId}`,
@@ -1030,11 +1136,11 @@ export function stepNativeSecondaryAbilities(
   const fireBurnRequests: NativeFireBurnRequest[] = []
   const electricBurnRequests: NativeElectricBurnRequest[] = []
   const etherDrainPulseParentIds = new Set<number>()
-  const leviathanParents = new Map(state.actors
+  const leviathanParents = new Map(actorsAtStepStart
     .filter(({ kind }) => kind === 'leviathan')
     .map((actor) => [actor.id, actor] as const))
   const lastLeviathanAppendageIdByParent = new Map<number, number>()
-  for (const candidate of state.actors) {
+  for (const candidate of actorsAtStepStart) {
     if (candidate.kind !== 'leviathan-appendage') continue
     const parentId = candidate.hitTargetIds[0]
     if (parentId !== undefined) lastLeviathanAppendageIdByParent.set(parentId, candidate.id)
@@ -1060,7 +1166,59 @@ export function stepNativeSecondaryAbilities(
     stableTargets(context.targets(actor.worldKey, actor.position, radius))
   )
 
-  for (const sourceActor of state.actors) {
+  for (const effect of source.targetEffects) {
+    if (effect.frostBurnTicks <= 0
+      || effect.frostBurnOwnerId === null
+      || effect.frostBurnSkillId === null
+      || effect.frostBurnSourceActorId === null) continue
+    const target = context.target(effect.worldKey, effect.targetId)
+    if (!target) continue
+    damage.push({
+      amount: effect.frostBurnDamagePerTick,
+      kind: 'ice',
+      ownerId: effect.frostBurnOwnerId,
+      sourceActorId: effect.frostBurnSourceActorId,
+      targetId: target.id,
+    })
+    const gate = drawNativeInteger(rng, 2)
+    rng = gate.state
+    if (gate.value !== 1) continue
+    const record = drawNativeInteger(rng, 2)
+    const rotation = drawNativeFloat(record.state, 360)
+    const scale = drawNativeFloat(rotation.state, 0.5)
+    const radius = drawNativeFloat(scale.state, 10)
+    const offsetDirection = drawNativeUnitVector(radius.state)
+    const vertical = drawNativeFloat(offsetDirection.rng, 35)
+    const speed = drawNativeFloat(vertical.state, 1)
+    const velocityDirection = drawNativeUnitVector(speed.state)
+    const alpha = drawNativeFloat(velocityDirection.rng, 0.5)
+    rng = alpha.state
+    state = spawn(state, actorSeed({
+      alpha: Math.fround(1 - alpha.value),
+      frame: 10 + record.value,
+      kind: 'frost-burn-flare',
+      lifetimeTicks: FROST_BURN_FLARE_LIFETIME_TICKS,
+      ownerId: effect.frostBurnOwnerId,
+      position: {
+        x: Math.fround(target.position.x + offsetDirection.value.x * radius.value),
+        y: Math.fround(
+          target.position.y - vertical.value + offsetDirection.value.y * radius.value,
+        ),
+      },
+      quantity: 0x408080,
+      rotationRadians: rotation.value * Math.PI / 180,
+      scale: Math.fround(0.5 + scale.value),
+      skillId: effect.frostBurnSkillId,
+      targetId: target.id,
+      velocity: {
+        x: Math.fround(velocityDirection.value.x * (0.5 + speed.value)),
+        y: Math.fround(velocityDirection.value.y * (0.5 + speed.value)),
+      },
+      worldKey: effect.worldKey,
+    }))
+  }
+
+  for (const sourceActor of actorsAtStepStart) {
     const owner = context.players[sourceActor.ownerId]
     if (!owner || owner.worldKey !== sourceActor.worldKey) continue
     let actor = advanceActor(sourceActor)
@@ -1416,6 +1574,18 @@ export function stepNativeSecondaryAbilities(
               target,
             })
             state = mergeEffect(state, actor.worldKey, target.id, { dazzleTicks: 400 })
+            if (actor.skillId === 21 && actor.variant === 1) {
+              const explosion = spawnMaximumRingFireExplosion(state, rng, actor, target)
+              state = explosion.state
+              rng = explosion.rng
+              for (const splashTarget of stableTargets(context.targets(
+                actor.worldKey,
+                target.position,
+                RING_FIRE_EXPLOSION_RADIUS,
+              ))) {
+                addDamage(explosion.actor, splashTarget, explosion.actor.damage, 'fire')
+              }
+            }
           }
           actor = { ...actor, hitTargetIds: Object.freeze([...hit].sort((a, b) => a - b)) }
         }
@@ -1461,10 +1631,28 @@ export function stepNativeSecondaryAbilities(
           for (const target of candidates(actor)) {
             if (hit.has(target.id)) continue
             hit.add(target.id)
-            state = mergeEffect(state, actor.worldKey, target.id, {
-              coldSlowTicks: actor.freezeTicks,
-              timeScale: 0,
-            })
+            const coldSlow = ((target.nativeFlags ?? 0) & 0x40) !== 0
+            state = mergeEffect(state, actor.worldKey, target.id, coldSlow
+              ? {
+                  coldSlowFactor: owner.coldSlowFactor,
+                  coldSlowMaterial: true,
+                  coldSlowTicks: actor.freezeTicks,
+                  timeScale: owner.coldSlowFactor,
+                }
+              : {
+                  frozenTicks: actor.freezeTicks,
+                  frozenTimeScale: 0,
+                  timeScale: 0,
+                })
+            if (actor.variant === 1) {
+              state = mergeEffect(state, actor.worldKey, target.id, {
+                frostBurnDamagePerTick: FROST_BURN_DAMAGE_PER_TICK,
+                frostBurnOwnerId: actor.ownerId,
+                frostBurnSkillId: actor.skillId === 76 ? 76 : 35,
+                frostBurnSourceActorId: actor.id,
+                frostBurnTicks: actor.freezeTicks * 100,
+              })
+            }
           }
           actor = { ...actor, hitTargetIds: Object.freeze([...hit].sort((a, b) => a - b)) }
         }
@@ -1472,6 +1660,44 @@ export function stepNativeSecondaryAbilities(
       }
       case 'freeze-wave-visual':
         break
+      case 'frost-burn-flare': {
+        const alpha = Math.fround(sourceActor.alpha - FROST_BURN_FLARE_ALPHA_LOSS)
+        actor = {
+          ...actor,
+          alpha: Math.max(0, alpha),
+          position: {
+            x: Math.fround(sourceActor.position.x + sourceActor.velocity.x),
+            y: Math.fround(sourceActor.position.y + sourceActor.velocity.y),
+          },
+          velocity: {
+            x: Math.fround(sourceActor.velocity.x * FROST_BURN_FLARE_DAMPING),
+            y: Math.fround(sourceActor.velocity.y * FROST_BURN_FLARE_DAMPING),
+          },
+        }
+        retain = alpha > 0
+        break
+      }
+      case 'ring-fire-explosion': {
+        actor = {
+          ...actor,
+          alpha: Math.max(0, Math.fround(sourceActor.alpha - Math.fround(0.1))),
+          scale: Math.fround(sourceActor.scale * Math.fround(1.01)),
+        }
+        retain = actor.alpha > 0
+        break
+      }
+      case 'ring-fire-fragment': {
+        actor = { ...actor, ...stepRingFireFragment(sourceActor) }
+        const target = candidates(actor).find(({ id }) => !actor.hitTargetIds.includes(id))
+        if (target) {
+          addDamage(actor, target, actor.damage, 'fire')
+          fireBurnRequests.push({ actor, damage: owner.fireBurnDamage, target })
+          retain = false
+        } else {
+          retain = actor.alpha > 0
+        }
+        break
+      }
       case 'fire-burn': {
         const target = actor.targetId === null
           ? null
@@ -1981,6 +2207,14 @@ export function stepNativeSecondaryAbilities(
           targetId: sourceActor.targetId,
         }, {
           ownerPosition: owner.character.position,
+          resolveFootTarget: (currentPosition, requestedPosition) => (
+            context.golemFootPlacement?.(
+              sourceActor.ownerId,
+              sourceActor.worldKey,
+              currentPosition,
+              requestedPosition,
+            ) ?? requestedPosition
+          ),
           resolveMovement: (requestedPosition) => context.golemMovement(
             sourceActor.ownerId,
             sourceActor.worldKey,
@@ -2010,6 +2244,9 @@ export function stepNativeSecondaryAbilities(
         }
         if (stepped.provokeStarted) {
           state = emit(state, eventSeed(actor, context.tick, 'golem-provoke', 'pulse'))
+        }
+        if (stepped.footstep) {
+          state = emit(state, eventSeed(actor, context.tick, 'stone-step', 'pulse'))
         }
         if (stepped.contact !== null) {
           state = emit(state, eventSeed(actor, context.tick, 'knockback-golem', 'impact'))
@@ -2144,6 +2381,7 @@ export function stepNativeSecondaryAbilities(
               }))
               state = emit(state, {
                 ...eventSeed(actor, context.tick, 'trap', 'impact'),
+                cameraMagnitude: 1.25,
                 screenFlash: magicTrapScreenFlash(actor.variant, 0.05, true),
               })
               const amount = Math.fround(actor.damage * charge)
@@ -2165,6 +2403,7 @@ export function stepNativeSecondaryAbilities(
                 if (actor.variant === 3) {
                   state = mergeEffect(state, actor.worldKey, target.id, {
                     coldSlowTicks: Math.max(50, Math.trunc(400 * charge)),
+                    coldSlowMaterial: true,
                     timeScale: actor.slowFactor,
                   })
                 }
@@ -2649,16 +2888,11 @@ export function stepNativeSecondaryAbilities(
           )
         }
         if (remainingTicks <= 0) {
-          for (const target of candidates(actor, 400)) {
-            addDamage(actor, target, actor.damage, 'ice')
-            state = mergeEffect(state, actor.worldKey, target.id, {
-              coldSlowTicks: actor.freezeTicks,
-              timeScale: 0,
-            })
-          }
+          for (const target of candidates(actor, 400)) addDamage(actor, target, actor.damage, 'ice')
           const freezeWave = spawnFreezeWaveProgram(state, rng, {
             enhanced: actor.enhanced,
             freezeTicks: actor.freezeTicks,
+            maximumRingOfIce: actor.quantity === 1,
             ownerId: actor.ownerId,
             position: actor.position,
             rank: actor.rank,
@@ -3309,9 +3543,11 @@ function castAbility(
         radius: 75,
         skillId,
         slowFactor: SHOCKWAVE_FADE_THRESHOLD,
+        variant: authority.maximumRingOfFire ? 1 : 0,
       })
       state = emit(state, {
         ...castEvent(playerId, skillId, authority, context.tick, 'cast', 'big-fire'),
+        cameraMagnitude: 0.25,
         screenFlash: REGION_FLASH_RING_FIRE,
       })
       state = emit(state, castEvent(playerId, skillId, authority, context.tick, 'pulse', 'nuke'))
@@ -3338,7 +3574,8 @@ function castAbility(
       return none(state, nextPlayer)
     }
     case 27: {
-      const activeTicks = 1_000 + authority.magicStormDurationBonusTicks
+      const activeTicks = (authority.maximumMagicStorm ? 2_000 : 1_000)
+        + authority.magicStormDurationBonusTicks
       const moving = (authority.skillBook.effectiveRanks[28] ?? 0) > 0
       const presentationRng = state.rng
       const visualPhase = drawNativeFloat(state.rng, 1, true)
@@ -3412,7 +3649,8 @@ function castAbility(
     case 35:
       state = spawnFreezeWaveProgram(state, state.rng, {
         enhanced: authority.enhancedEffects,
-        freezeTicks: Math.trunc(v.mDamage * authority.freezeDurationMultiplier * 200),
+        freezeTicks: Math.trunc(v.mDamage * authority.freezeDurationMultiplier * 100),
+        maximumRingOfIce: authority.maximumRingOfIce,
         ownerId: playerId,
         position: origin,
         rank: ranked.rank,
@@ -3488,7 +3726,7 @@ function castAbility(
       break
     case 45: {
       const owned = state.actors.filter((actor) => actor.kind === 'golem' && actor.ownerId === playerId)
-      const cap = authority.golemIron ? 2 : 1
+      const cap = authority.maximumGolem ? 2 : 1
       if (owned.length >= cap) {
         const retired = [...owned].sort((a, b) => (
           (a.golem?.currentHealth ?? 0) - (b.golem?.currentHealth ?? 0)
@@ -3516,9 +3754,22 @@ function castAbility(
       facingHeadingIndex = actorHeadingIndex(placementHeading)
       const pose = drawNativeInteger(state.rng, 2)
       state = { ...state, rng: pose.state }
+      const golemRotationRadians = normalizeRadians(
+        (placementHeading + 180) * Math.PI / 180,
+      )
       spawnActor({
         damage: v.mDamage1,
         golem: Object.freeze({
+          ...nativeInitialGolemArticulation(
+            placement.position,
+            golemRotationRadians,
+            (currentPosition, requestedPosition) => context.golemFootPlacement?.(
+              playerId,
+              authority.worldKey,
+              currentPosition,
+              requestedPosition,
+            ) ?? requestedPosition,
+          ),
           actionDurationTicks: 0,
           actionTick: 0,
           currentHealth: v.mHP,
@@ -3538,9 +3789,7 @@ function castAbility(
         position: placement.position,
         quantity: v.mHP,
         radius: NATIVE_GOLEM_RADIUS,
-        rotationRadians: normalizeRadians(
-          (placementHeading + 180) * Math.PI / 180,
-        ),
+        rotationRadians: golemRotationRadians,
         scale: 1,
         skillId,
         variant: authority.golemIron ? 1 : 0,
@@ -3812,10 +4061,11 @@ function castAbility(
       spawnActor({
         damage: v.mDamage,
         enhanced: authority.enhancedEffects,
-        freezeTicks: Math.trunc(v.mFreeze * authority.freezeDurationMultiplier * 200),
+        freezeTicks: Math.trunc(v.mFreeze * authority.freezeDurationMultiplier * 100),
         kind: 'comet',
         lifetimeTicks: COMET_FALL_TICKS,
         position: aim,
+        quantity: authority.maximumRingOfIce ? 1 : 0,
         radius: 400,
         rotationRadians: Math.atan2(3, headingSeed.value),
         scale: 2,
@@ -4198,6 +4448,115 @@ function spawnLeviathanEnhancedMote(
   }
 }
 
+function spawnMaximumRingFireExplosion(
+  source: NativeSecondarySimulationState,
+  sourceRng: NativeRngState,
+  wave: NativeSecondaryActorState,
+  target: NativeSecondaryTarget,
+): Readonly<{
+  actor: NativeSecondaryActorState
+  rng: NativeRngState
+  state: NativeSecondarySimulationState
+}> {
+  const presentationRng = sourceRng
+  const privateSeed = drawNativeInteger(sourceRng, 1_000_000)
+  const coreRotation = drawNativeFloat(privateSeed.state, 0.8, true)
+  let state = spawn(source, actorSeed({
+    alpha: 1,
+    damage: Math.fround(wave.damage * RING_FIRE_EXPLOSION_DAMAGE_FACTOR),
+    kind: 'ring-fire-explosion',
+    lifetimeTicks: RING_FIRE_EXPLOSION_LIFETIME_TICKS,
+    ownerId: wave.ownerId,
+    position: target.position,
+    presentationRng,
+    radius: RING_FIRE_EXPLOSION_RADIUS,
+    rank: wave.rank,
+    rotationRadians: coreRotation.value,
+    scale: Math.fround(1.5),
+    skillId: 21,
+    targetId: target.id,
+    worldKey: wave.worldKey,
+  }))
+  const actor = state.actors.at(-1)!
+
+  let fragmentRng = createNativeRng(privateSeed.value)
+  const initialHeading = drawNativeFloat(fragmentRng, 360)
+  fragmentRng = initialHeading.state
+  const headingStep = 120
+  for (let index = 0; index < 3; index += 1) {
+    const jitter = drawNativeFloat(fragmentRng, headingStep / 3, true)
+    const speed = drawNativeFloat(jitter.state, 0.5)
+    const verticalVelocity = drawNativeFloat(speed.state, 3)
+    fragmentRng = verticalVelocity.state
+    const direction = nativeHeadingVector(initialHeading.value + index * headingStep + jitter.value)
+    const velocity = {
+      x: Math.fround(direction.x * Math.fround((1.5 + speed.value) * 0.75)),
+      y: Math.fround(direction.y * Math.fround((1.5 + speed.value) * 0.75)),
+    }
+    let fragment = actorSeed({
+      alpha: Math.fround(3),
+      damage: Math.fround(wave.damage / 3),
+      frame: index,
+      kind: 'ring-fire-fragment',
+      lifetimeTicks: RING_FIRE_FRAGMENT_LIFETIME_TICKS,
+      ownerId: wave.ownerId,
+      phase: Math.fround(-6),
+      position: {
+        x: Math.fround(target.position.x + velocity.x * 10),
+        y: Math.fround(target.position.y + velocity.y * 10),
+      },
+      radius: 10,
+      rank: wave.rank,
+      slowFactor: Math.fround(-(2 + verticalVelocity.value)),
+      skillId: 21,
+      velocity,
+      worldKey: wave.worldKey,
+    })
+    for (let tick = 0; tick < 10; tick += 1) fragment = stepRingFireFragment(fragment)
+    state = spawn(state, fragment)
+  }
+  return { actor, rng: coreRotation.state, state }
+}
+
+function stepRingFireFragment(
+  source: Omit<NativeSecondaryActorState, 'id'>,
+): Omit<NativeSecondaryActorState, 'id'> {
+  let phase = source.phase
+  let verticalVelocity = source.slowFactor
+  let velocity = source.velocity
+  let grounded = source.quantity === 1
+  let alpha = source.alpha
+  const position = {
+    x: Math.fround(source.position.x + velocity.x),
+    y: Math.fround(source.position.y + velocity.y),
+  }
+  if (!grounded) {
+    phase = Math.fround(phase + Math.max(-1, Math.min(1, verticalVelocity)))
+    verticalVelocity = Math.fround(verticalVelocity + Math.fround(0.15))
+    if (phase >= 0) {
+      phase = 0
+      verticalVelocity = Math.fround(verticalVelocity * Math.fround(-0.5))
+      velocity = {
+        x: Math.fround(velocity.x * Math.fround(0.5)),
+        y: Math.fround(velocity.y * Math.fround(0.5)),
+      }
+      grounded = Math.abs(verticalVelocity) <= 0.5
+    }
+  } else {
+    alpha = Math.fround(alpha - Math.fround(0.015))
+  }
+  return {
+    ...source,
+    alpha,
+    frame: Math.fround((source.frame + Math.fround(0.25)) % 4),
+    phase,
+    position,
+    quantity: grounded ? 1 : 0,
+    slowFactor: verticalVelocity,
+    velocity,
+  }
+}
+
 function actorSeed(
   seed: Partial<NativeSecondaryActorState>
     & Pick<NativeSecondaryActorState, 'kind' | 'ownerId' | 'skillId' | 'worldKey'>,
@@ -4252,6 +4611,8 @@ export function nativeSecondaryLightDisposition(
     case 'moving-fire':
     case 'shockwave':
     case 'fire-patch':
+    case 'ring-fire-explosion':
+    case 'ring-fire-fragment':
     case 'storm-cloud':
     case 'freeze-wave':
     case 'golem':
@@ -4686,6 +5047,7 @@ function emit(
     ...source,
     events: [...source.events, Object.freeze({
       ...event,
+      cameraMagnitude: event.cameraMagnitude ?? 0,
       eventId: source.nextEventId,
       screenFlash: event.screenFlash ?? null,
     })],
@@ -4829,9 +5191,22 @@ function mergeEffect(
     effect.worldKey === worldKey && effect.targetId === targetId
   ))
   const current = index < 0 ? emptyTargetEffect(worldKey, targetId) : source.targetEffects[index]!
+  const coldSlowTicks = Math.max(current.coldSlowTicks, patch.coldSlowTicks ?? 0)
+  const frozenTicks = Math.max(current.frozenTicks, patch.frozenTicks ?? 0)
+  const frostBurnTicks = Math.max(current.frostBurnTicks, patch.frostBurnTicks ?? 0)
   const next = {
     ...current,
-    coldSlowTicks: Math.max(current.coldSlowTicks, patch.coldSlowTicks ?? 0),
+    coldSlowFactor: patch.coldSlowTicks === undefined
+      ? current.coldSlowFactor
+      : Math.min(current.coldSlowFactor, patch.coldSlowFactor ?? patch.timeScale ?? 1),
+    coldSlowMaterial: patch.coldSlowTicks === undefined
+      ? current.coldSlowMaterial
+      : current.coldSlowTicks > (patch.coldSlowTicks ?? 0)
+        ? current.coldSlowMaterial
+        : current.coldSlowTicks < (patch.coldSlowTicks ?? 0)
+          ? patch.coldSlowMaterial ?? current.coldSlowMaterial
+          : current.coldSlowMaterial || (patch.coldSlowMaterial ?? false),
+    coldSlowTicks,
     dazzleMaximumTicks: Math.max(
       current.dazzleMaximumTicks,
       patch.dazzleTicks ?? 0,
@@ -4839,6 +5214,23 @@ function mergeEffect(
     dazzleTicks: Math.max(current.dazzleTicks, patch.dazzleTicks ?? 0),
     disruptedTicks: Math.max(current.disruptedTicks, patch.disruptedTicks ?? 0),
     fleeTicks: Math.max(current.fleeTicks, patch.fleeTicks ?? 0),
+    frostBurnDamagePerTick: frostBurnTicks > current.frostBurnTicks
+      ? patch.frostBurnDamagePerTick ?? current.frostBurnDamagePerTick
+      : Math.max(current.frostBurnDamagePerTick, patch.frostBurnDamagePerTick ?? 0),
+    frostBurnOwnerId: frostBurnTicks > current.frostBurnTicks
+      ? patch.frostBurnOwnerId ?? current.frostBurnOwnerId
+      : current.frostBurnOwnerId ?? patch.frostBurnOwnerId ?? null,
+    frostBurnSkillId: frostBurnTicks > current.frostBurnTicks
+      ? patch.frostBurnSkillId ?? current.frostBurnSkillId
+      : current.frostBurnSkillId ?? patch.frostBurnSkillId ?? null,
+    frostBurnSourceActorId: frostBurnTicks > current.frostBurnTicks
+      ? patch.frostBurnSourceActorId ?? current.frostBurnSourceActorId
+      : current.frostBurnSourceActorId ?? patch.frostBurnSourceActorId ?? null,
+    frostBurnTicks,
+    frozenTicks,
+    frozenTimeScale: patch.frozenTicks === undefined
+      ? current.frozenTimeScale
+      : Math.min(current.frozenTimeScale, patch.frozenTimeScale ?? 0),
     prismaticTicks: Math.max(current.prismaticTicks, patch.prismaticTicks ?? 0),
     timeScale: patch.timeScale === undefined
       ? current.timeScale
@@ -4855,15 +5247,20 @@ function mergeEffect(
 
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {
   return {
-    coldSlowTicks: 0, dazzleMaximumTicks: 0, dazzleTicks: 0,
+    coldSlowFactor: 1, coldSlowMaterial: false, coldSlowTicks: 0,
+    dazzleMaximumTicks: 0, dazzleTicks: 0,
     disruptedTicks: 0, fleeTicks: 0,
+    frostBurnDamagePerTick: 0, frostBurnOwnerId: null, frostBurnSkillId: null,
+    frostBurnSourceActorId: null, frostBurnTicks: 0,
+    frozenTicks: 0, frozenTimeScale: 1,
     prismaticTicks: 0, targetId, timeScale: 1, weakenFactor: 1, worldKey,
   }
 }
 
 function hasTargetEffect(effect: NativeSecondaryTargetEffectState): boolean {
   return effect.coldSlowTicks > 0 || effect.dazzleTicks > 0 || effect.disruptedTicks > 0
-    || effect.fleeTicks > 0 || effect.prismaticTicks > 0 || effect.weakenFactor < 1
+    || effect.fleeTicks > 0 || effect.frostBurnTicks > 0 || effect.frozenTicks > 0
+    || effect.prismaticTicks > 0 || effect.weakenFactor < 1
 }
 
 function stableTargets(targets: readonly NativeSecondaryTarget[]): readonly NativeSecondaryTarget[] {
