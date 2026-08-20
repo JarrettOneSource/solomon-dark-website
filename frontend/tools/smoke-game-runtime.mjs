@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-boneyards.ts'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const CREATE_MENU_TIMEOUT_MS = 30_000
@@ -1124,47 +1125,46 @@ async function assertSolomonSetPieceRoots(page) {
 }
 
 async function stockSolomonPlacementReceipt(page) {
-  return page.evaluate(async () => {
+  const observed = await page.evaluate(() => {
     const scene = document.querySelector('.boneyard-scene')
     const grave = document.querySelector('.boneyard-grave-dirt')
-    const geometrySha256 = scene?.getAttribute('data-geometry-sha256')
-    const { NATIVE_GENERATED_BONEYARDS } = await import(
-      '/src/game/host/native-generated-boneyards.ts'
-    )
-    const template = NATIVE_GENERATED_BONEYARDS.find((entry) => (
-      entry.geometrySha256 === geometrySha256
-    ))
-    if (!template) throw new Error(`No native template for geometry ${geometrySha256}`)
-    const selected = {
-      x: Number(grave?.getAttribute('data-world-x')),
-      y: Number(grave?.getAttribute('data-world-y')),
-    }
-    const candidates = template.scene.objects.filter((object) => (
-      object.typeId === 2029 && object.overlayVariant === 8
-    ))
-    const distance = (candidate) => (
-      (candidate.pos.x - template.scene.spawn.x) ** 2
-      + (candidate.pos.y - template.scene.spawn.y) ** 2
-    )
-    let nearestIndex = 0
-    for (let index = 1; index < candidates.length; index += 1) {
-      if (distance(candidates[index]) < distance(candidates[nearestIndex])) {
-        nearestIndex = index
-      }
-    }
-    const selectedIndex = candidates.findIndex((candidate) => (
-      candidate.pos.x === selected.x && candidate.pos.y === selected.y
-    ))
     return {
-      candidateCount: candidates.length,
-      geometrySha256,
-      nearestIndex,
-      selected,
-      selectedIndex,
-      sourceSha256: template.sourceSha256,
-      spawn: template.scene.spawn,
+      geometrySha256: scene?.getAttribute('data-geometry-sha256'),
+      selected: {
+        x: Number(grave?.getAttribute('data-world-x')),
+        y: Number(grave?.getAttribute('data-world-y')),
+      },
     }
   })
+  const template = NATIVE_GENERATED_BONEYARDS.find((entry) => (
+    entry.geometrySha256 === observed.geometrySha256
+  ))
+  if (!template) throw new Error(`No native template for geometry ${observed.geometrySha256}`)
+  const candidates = template.scene.objects.filter((object) => (
+    object.typeId === 2029 && object.overlayVariant === 8
+  ))
+  const distance = (candidate) => (
+    (candidate.pos.x - template.scene.spawn.x) ** 2
+    + (candidate.pos.y - template.scene.spawn.y) ** 2
+  )
+  let nearestIndex = 0
+  for (let index = 1; index < candidates.length; index += 1) {
+    if (distance(candidates[index]) < distance(candidates[nearestIndex])) {
+      nearestIndex = index
+    }
+  }
+  const selectedIndex = candidates.findIndex((candidate) => (
+    candidate.pos.x === observed.selected.x && candidate.pos.y === observed.selected.y
+  ))
+  return {
+    candidateCount: candidates.length,
+    geometrySha256: observed.geometrySha256,
+    nearestIndex,
+    selected: observed.selected,
+    selectedIndex,
+    sourceSha256: template.sourceSha256,
+    spawn: template.scene.spawn,
+  }
 }
 
 async function solomonDigIndicatorReceipt(page) {

@@ -16261,8 +16261,41 @@ the Golem's native cooldown plus assembly clock outlived the fixture's
 1,000-tick movement hold, allowing the proof target to resume AI movement.
 The fixture now holds the selected target for 100,000 ticks; the rerun proved
 actual Golem damage. This changes only deterministic browser acceptance, not
-enemy or Golem runtime behavior. Publication, deployment-revision proof, and
-production `/game` proof remain required before this correction is complete.
+enemy or Golem runtime behavior.
+
+### Publication and production closure
+
+The runtime-bearing Website commit `a4cf0299987336a37e58419eaf532f5c7b03e361`
+and Mod Loader evidence commit `82a55b2d6bde2bc84a67ffaf145fad75dd43bb48`
+reached their respective `main` branches by fast-forward. GitHub's Website
+Validate run `32372421945` and Mod Loader Lua/static-contract run
+`32372421178` both completed successfully.
+
+The isolated deployment worker independently validated Website `a4cf029`,
+built immutable artifact
+`cc028104860a10a46c2f829c578ca430fbeecbc3478afd54fd6e5f5cab09b864`,
+and deployed it with an atomic rollback release and an integrity-checked SQLite
+backup. NFO then reported the exact deployed SHA, both services active with
+zero restarts, protocol `solomon-dark/30`, zero sessions/lobbies, `ok` for the
+live and backup databases, and no warning-or-higher service journal entry from
+the cutover. The public `/game` document SHA-256 matched the validated build.
+
+Production was exercised independently from the Mac mini in hardware Chrome,
+not inferred from health checks. Three real clients completed Create and the
+shared Hub, entered the same generated mode-2 Boneyard, crossed the gate, and
+completed the Solomon greeting, taunt, opening ten-enemy wave, audio, lighting,
+and painter journey. The renderer was WebGL2; both clients agreed on run,
+geometry, gate membership, Region-light composition, resident census, and
+Solomon placement; all six page/console error lanes were empty. The receipt
+SHA-256 is
+`50475af7297dd775218bfd2c9b278de8de963cb5115a4dcba49f9ba515a2eaba`.
+
+The first production attempt exposed one verifier-only source boundary:
+`smoke-game-runtime.mjs` asked the deployed page to import a Vite-only
+`/src/game/host/native-generated-boneyards.ts` path. The harness now resolves
+that authored bank from its own exact checkout and compares it with observed
+production geometry. This follow-up changes the smoke harness and this receipt,
+not shipped game behavior.
 
 ## Enemy damage-presenter closure correction (2026-08-15)
 
