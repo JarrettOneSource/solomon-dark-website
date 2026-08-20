@@ -177,6 +177,7 @@ function enemy(
     id: 23,
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
     lighting: { charge: 0, glow: 0, providerCopies: 0 },
+    mageCloak: false,
     maximumHealth: 5,
     nativeTypeId: 1_001,
     position: { x: 20, y: 30 },

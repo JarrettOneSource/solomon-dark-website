@@ -85,6 +85,8 @@ export interface EvaluateBoneyardEnemyConfigOptions {
   /** Custom-authoring lane; retail wave data leaves this at zero. */
   archerExtraArrows?: number
   flags?: readonly string[]
+  /** Native MonsterRecipe selector; retail survival-wave data leaves it false. */
+  mageCloak?: boolean
   random?: Partial<BoneyardEnemyConfigRandom>
   waveOrdinal?: number
 }
@@ -136,6 +138,7 @@ export interface BoneyardArcherConfig extends BoneyardEnemyConfigBase {
 export interface BoneyardMageConfig extends BoneyardEnemyConfigBase {
   enemyToken: 'SKELETONMAGE'
   family: Readonly<{
+    cloak: boolean
     element: BoneyardMageElement
     headgear: 0 | 1 | 2 | 3
     otherShield: boolean
@@ -230,6 +233,7 @@ interface MutableConfig {
   attackSpeed: number
   burning: boolean
   chaseSpeed: number
+  cloak: boolean
   experience: number
   extraDamage: number
   headgear: 0 | 1 | 2 | 3
@@ -281,6 +285,7 @@ export function evaluateBoneyardEnemyConfig(
     bodyType: 0,
     burning: false,
     chaseSpeed: base.chaseSpeed,
+    cloak: validatedMageCloak(enemyToken, options.mageCloak),
     experience: base.experience,
     extraArrows: validatedExtraArrows(enemyToken, options.archerExtraArrows),
     extraDamage: 0,
@@ -355,6 +360,7 @@ export function evaluateBoneyardEnemyConfig(
       ...common,
       enemyToken,
       family: {
+        cloak: config.cloak,
         element: config.mageElement,
         headgear: config.headgear,
         otherShield: config.otherShield,
@@ -390,6 +396,18 @@ export function evaluateBoneyardEnemyConfig(
       },
     })
   }
+}
+
+function validatedMageCloak(
+  enemyToken: BoneyardWaveEnemyToken,
+  value: boolean | undefined,
+): boolean {
+  if (value === undefined) return false
+  if (enemyToken !== 'SKELETONMAGE') {
+    throw new Error('mageCloak is only valid for SKELETONMAGE')
+  }
+  if (typeof value !== 'boolean') throw new TypeError('mageCloak must be boolean')
+  return value
 }
 
 function validatedExtraArrows(

@@ -377,16 +377,6 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
       demonRearJointRotationRadians: 0,
       demonRearLimbRotationRadians: 0,
       effects: [{
-        alpha: 0.75,
-        atlas: 'DeadHawg',
-        blendMode: 'normal',
-        entry: 52,
-        id: 42,
-        offset: { x: 0, y: 0 },
-        role: 'burning-fire',
-        rotationRadians: 0,
-        scale: 1,
-      }, {
         alpha: 1.25,
         atlas: 'BadGuys',
         blendMode: 'add',
@@ -428,6 +418,7 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
     nativeTypeId: 1001,
     position: { x: 100, y: 100 },
     lighting: { charge: 0, glow: 0.75, providerCopies: 1 },
+    mageCloak: false,
     shieldHealth: 25,
     shieldMaximumHealth: 50,
     spawnTick: 0,
@@ -551,7 +542,7 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
   }
   assert.equal(
     fullEffectFrame.frame.world.entities.samples[0]?.length,
-    63,
+    53,
   )
   assert.deepEqual(
     decodeServerGameMessage(encodeGameMessage(fullEffectFrame)),
@@ -562,7 +553,7 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
   if (replicatedFrame.world.kind !== 'boneyard') {
     throw new Error('expected replicated Boneyard frame')
   }
-  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 63)
+  assert.equal(replicatedFrame.world.entities.samples[0]?.length, 53)
   const replicatedMessage = {
     type: 'server-snapshot' as const,
     acknowledgedInputSequence: 0,
@@ -574,7 +565,7 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
     replicatedMessage,
   )
   const oversizedReplicatedSample = JSON.parse(encodeGameMessage(replicatedMessage))
-  oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(10).fill(0))
+  oversizedReplicatedSample.frame.world.entities.samples[0].push(...Array(20).fill(0))
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(oversizedReplicatedSample)),
     /may contain at most 72 entries/,
@@ -632,7 +623,7 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
   assert.throws(() => decodeServerGameMessage(JSON.stringify(invalidShield)), /shieldHealth/)
 
   const invalidMagicShield = JSON.parse(encodeGameMessage(welcome))
-  invalidMagicShield.snapshot.world.enemies[0].animation.effects[1].entry = 382
+  invalidMagicShield.snapshot.world.enemies[0].animation.effects[0].entry = 382
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidMagicShield)),
     /fields do not match role/,
@@ -692,10 +683,10 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
   )
 
   const invalidMagicShieldAlpha = JSON.parse(encodeGameMessage(welcome))
-  invalidMagicShieldAlpha.snapshot.world.enemies[0].animation.effects[1].alpha = 1.251
+  invalidMagicShieldAlpha.snapshot.world.enemies[0].animation.effects[0].alpha = 1.251
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidMagicShieldAlpha)),
-    /animation\.effects\[1\]\.alpha/,
+    /animation\.effects\[0\]\.alpha/,
   )
 
   const extraPulseField = JSON.parse(encodeGameMessage(welcome))
@@ -2374,7 +2365,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
     /encounter\.digFrame/,
   )
 
-  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2]
+  const enemyDescriptor = [2, 1, 0, 1001, 12, 5, 1, 0, 0, 2, 0]
   const invalidType = JSON.parse(encodeGameMessage(snapshotMessage))
   invalidType.frame.world.entities.spawned = [[...enemyDescriptor.slice(0, 3), 1004, ...enemyDescriptor.slice(4)]]
   assert.throws(

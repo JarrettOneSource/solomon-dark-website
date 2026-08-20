@@ -42,6 +42,8 @@ export interface BoneyardEnemySpawnIntent {
   flags: readonly string[]
   id: number
   locationPolicy: BoneyardSpawnLocationPolicy
+  /** Custom MonsterRecipe lane; omitted by the retail wave director. */
+  mageCloak?: boolean
   nativeTypeId: number
   position: BoneyardPoint
   spawnTick: number

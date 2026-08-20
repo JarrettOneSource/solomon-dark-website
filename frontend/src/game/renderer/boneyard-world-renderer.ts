@@ -167,6 +167,7 @@ interface BoneyardRendererFrameDiagnostics {
   complexShadowQuadCount: number
   complexShadowRecordCount: number
   complexShadowZOrderMismatchCount: number
+  enemyAttackEffectCount: number
   enemyCount: number
   enemyOutsideCombatBoundsCount: number
   enemyDeathEffectCount: number
@@ -503,6 +504,7 @@ export async function createBoneyardWorldRenderer(
     complexShadowQuadCount: 0,
     complexShadowRecordCount: 0,
     complexShadowZOrderMismatchCount: 0,
+    enemyAttackEffectCount: 0,
     enemyCount: 0,
     enemyOutsideCombatBoundsCount: 0,
     enemyDeathEffectCount: 0,
@@ -638,6 +640,7 @@ export async function createBoneyardWorldRenderer(
     consumeEnemyEvent(event) {
       if (destroyed || event.runId !== options.boneyard.runId) return
       worldFeedback.consume(event)
+      scene.consumeEnemyEvent(event)
     },
     cycleSpectatorTarget(snapshot) {
       if (destroyed) return false
@@ -746,6 +749,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.complexShadowQuadCount = painter.complexShadowQuadCount
       frameDiagnostics.complexShadowRecordCount = painter.complexShadowRecordCount
       frameDiagnostics.complexShadowZOrderMismatchCount = painter.complexShadowZOrderMismatchCount
+      frameDiagnostics.enemyAttackEffectCount = scene.enemyAttackEffectCount
       frameDiagnostics.enemyCount = scene.enemyCount
       const combatBounds = snapshot.world.arenaTransition?.combatBounds
       frameDiagnostics.enemyOutsideCombatBoundsCount = combatBounds === undefined
@@ -879,6 +883,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.secondaryScreenFlashAlpha = screenOverlay?.alpha ?? 0
       frameDiagnostics.secondaryScreenFlashColor = screenOverlay?.color ?? 0xffffff
       canvas.dataset.enemyCount = `${scene.enemyCount}`
+      canvas.dataset.enemyAttackEffectCount = `${scene.enemyAttackEffectCount}`
       canvas.dataset.enemyDeathEffectCount = `${scene.enemyDeathEffectCount}`
       canvas.dataset.complexShadowCasterCount = `${painter.complexShadowCasterCount}`
       canvas.dataset.complexShadowQuadCount = `${painter.complexShadowQuadCount}`
@@ -1106,6 +1111,10 @@ class BoneyardDynamicScene {
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
+  }
+
+  consumeEnemyEvent(event: BoneyardEnemyEventSnapshot): void {
+    this.enemies.consumeEvent(event)
   }
 
   update(
@@ -1865,6 +1874,10 @@ class BoneyardDynamicScene {
 
   get enemyCount(): number {
     return this.enemies.size
+  }
+
+  get enemyAttackEffectCount(): number {
+    return this.enemies.attackBurstCount
   }
 
   get enemyDeathEffectCount(): number {

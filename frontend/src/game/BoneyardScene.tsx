@@ -13,6 +13,7 @@ import {
   boneyardDigIndicatorLayout,
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
+import { BoneyardEnemyAmbientAudioSynchronizer } from './boneyard-enemy-ambient-audio.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
@@ -278,6 +279,7 @@ export default function BoneyardScene({
     if (!host) return
     let cancelled = false
     let stopPresentationLoop: (() => void) | null = null
+    const enemyAmbientAudio = new BoneyardEnemyAmbientAudioSynchronizer(audio)
     const input = createBrowserGameplayInput({
       claimMouseCastStart: () => {
         const renderer = rendererRef.current
@@ -355,6 +357,7 @@ export default function BoneyardScene({
       onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
         const snapshot = samplePresentation(now)
+        const camera = renderer.camera(snapshot)
         if (snapshot.run.phase === 'game-over') {
           setRun((current) => (
             current.phase === 'game-over'
@@ -378,13 +381,32 @@ export default function BoneyardScene({
             lastVoiceEventRef.current.eventId = event.id
           }
         }
+        if (isBoneyardGameSnapshot(snapshot)) {
+          const localPlayer = snapshot.players[playerId]
+          const requests = enemyAmbientAudio.update(snapshot, (position) => (
+            nativeBoneyardPointGain(
+              position,
+              camera,
+              viewportRef.current.width / camera.zoom,
+              localPlayer?.progression.lifeState === 'dying'
+                || localPlayer?.progression.lifeState === 'spectating',
+            )
+          ))
+          const scene = sceneRef.current
+          if (scene) {
+            const active = requests.filter(({ gain }) => gain > 0)
+            scene.dataset.enemyAmbientLoops = active.map(({ cue }) => cue).join(',')
+            scene.dataset.enemyAmbientLoopGains = active
+              .map(({ cue, gain }) => `${cue}:${gain.toFixed(6)}`)
+              .join(',')
+          }
+        }
         onInput(input.sample().input)
         renderer.render(snapshot)
         const nextStatus = renderer.spectatorStatus(snapshot)
         setSpectatorStatus((current) => (
           boneyardSpectatorStatusesEqual(current, nextStatus) ? current : nextStatus
         ))
-        const camera = renderer.camera(snapshot)
         const darkness = darknessCanvasRef.current
         if (darkness) {
           paintDarkness(darkness, snapshot, camera, viewportRef.current, now)
@@ -417,6 +439,7 @@ export default function BoneyardScene({
     return () => {
       cancelled = true
       stopPresentationLoop?.()
+      enemyAmbientAudio.destroy()
       audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       input.destroy()
       inputRef.current = null

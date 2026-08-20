@@ -204,7 +204,7 @@ const MAX_BONEYARD_MAGE_LIGHTNING_PULSES = MAX_BONEYARD_ENEMIES
   * NATIVE_MAGE_LIGHTNING_MAX_PULSE_AGES
 const MAX_BONEYARD_MAGGOTS = 2_048
 const MAX_BONEYARD_ENEMY_FLAGS = 64
-const MAX_BONEYARD_ENEMY_EFFECTS = 2
+const MAX_BONEYARD_ENEMY_EFFECTS = 1
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
@@ -3980,6 +3980,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
     'id',
     'lightRegistration',
     'lighting',
+    'mageCloak',
     'maximumHealth',
     'nativeTypeId',
     'position',
@@ -4033,6 +4034,10 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
   if (armored && enemyToken !== 'SKELETON') {
     throw new GameProtocolError(`${field}.armored is only valid for SKELETON`)
   }
+  const mageCloak = boolean(source.mageCloak, `${field}.mageCloak`)
+  if (mageCloak && enemyToken !== 'SKELETONMAGE') {
+    throw new GameProtocolError(`${field}.mageCloak is only valid for SKELETONMAGE`)
+  }
   return {
     animation: boneyardEnemyAnimation(source.animation, `${field}.animation`),
     armored,
@@ -4047,6 +4052,7 @@ function boneyardEnemySnapshot(value: unknown, field: string): BoneyardEnemySnap
       'actor',
     ),
     lighting: boneyardEnemyLighting(source.lighting, `${field}.lighting`),
+    mageCloak,
     maximumHealth,
     nativeTypeId,
     position: boneyardPoint(source.position, `${field}.position`),
@@ -4576,16 +4582,11 @@ function boneyardEnemyEffect(
     throw new GameProtocolError(`${field}.blendMode is not supported`)
   }
   const entry = nonnegativeInteger(source.entry, `${field}.entry`)
-  if (
-    (role === 'burning-fire'
-      && (atlas !== 'DeadHawg' || blendMode !== 'normal' || entry < 46 || entry > 77))
-    || (role === 'magic-shield'
-      && (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 49))
-  ) {
+  if (atlas !== 'BadGuys' || blendMode !== 'add' || entry !== 49) {
     throw new GameProtocolError(`${field} fields do not match role`)
   }
   const alpha = finite(source.alpha, `${field}.alpha`)
-  const maximumAlpha = role === 'magic-shield' ? 1.25 : 1
+  const maximumAlpha = 1.25
   if (alpha < 0 || alpha > maximumAlpha) {
     throw new GameProtocolError(`${field}.alpha must be within [0,${maximumAlpha}]`)
   }

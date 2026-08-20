@@ -472,6 +472,7 @@ export type BoneyardEnemyDeathEffectKind =
   | 'banish'
   | 'bouncer'
   | 'fade'
+  | 'fire-array'
   | 'move-fade'
   | 'sprite-array'
   | 'unbind'
@@ -1255,6 +1256,7 @@ function materializeSpawnIntents(
     const evaluatedConfig = evaluateBoneyardEnemyConfig(intent.enemyToken, {
       arenaScalars: context.arenaScalars,
       flags: intent.flags,
+      mageCloak: intent.mageCloak,
       random: {
         baseSpeedUnit: baseSpeed.value,
         collisionRadiusUnit: radius.value,
@@ -3763,6 +3765,7 @@ function spawnDemonFireHandoff(
     y: position.y - 10,
   }, 'demon-fire', {
     atlas: 'DeadHawg',
+    blendMode: 'add',
     entry: 46 + firstPhase,
     lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks,
     phaseOriginTicks: firstPhase,
@@ -3774,6 +3777,7 @@ function spawnDemonFireHandoff(
     y: position.y + 5,
   }, 'demon-fire', {
     atlas: 'DeadHawg',
+    blendMode: 'add',
     entry: 46 + secondPhase,
     lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks,
     phaseOriginTicks: secondPhase,
@@ -4337,6 +4341,9 @@ function stepDeathEffect(
   source: BoneyardEnemyDeathEffect,
   tick: number,
 ): BoneyardEnemyDeathEffect | null {
+  if (tick <= source.spawnTick) {
+    return { ...source, ageTicks: 0, lastStepTick: tick }
+  }
   const ageTicks = Math.max(0, tick - source.spawnTick)
   if (ageTicks >= source.lifetimeTicks) return null
 
@@ -4389,17 +4396,22 @@ function stepDeathEffect(
   const opacityTimer = source.opacityTimer - source.alphaLossPerTick
   if (opacityTimer <= 0) return null
   const position = source.kind === 'move-fade'
+    || (source.kind === 'sprite-array'
+      && (source.velocity.x !== 0 || source.velocity.y !== 0))
     ? {
         x: source.position.x + source.velocity.x,
         y: source.position.y + source.velocity.y,
       }
     : source.position
+  const frame = Math.min(
+    source.frameCount - 1,
+    Math.floor(ageTicks / source.frameTicks),
+  )
   const entry = source.kind === 'sprite-array'
-    ? source.firstEntry + Math.min(
-        source.frameCount - 1,
-        Math.floor(ageTicks / source.frameTicks),
-      )
-    : source.entry
+    ? source.firstEntry + frame
+    : source.kind === 'fire-array'
+      ? 46 + positiveModulo(source.firstEntry - 46 + frame, 32)
+      : source.entry
   return Object.freeze({
     ...source,
     ageTicks,
@@ -4450,7 +4462,7 @@ function spawnEnemyDeathEffects(
         atlas: 'DeadHawg',
         blendMode: 'normal',
         entry: 30,
-        kind: 'fade',
+        kind: 'move-fade',
         lifetimeTicks: 36,
         role: 'zombie-clipped-fade',
         scale: 1,
@@ -4506,6 +4518,59 @@ function spawnEnemyDeathEffects(
         scale: 2,
       })
       spawnSpriteArray(work, actor, tick, 'demon-sprite-array', 401, 19, 2)
+      spawnSpriteArray(work, actor, tick, 'demon-death-body', 55, 7, 7, {
+        atlas: 'Demon',
+        blendMode: 'normal',
+      })
+      for (const delay of [0, 20, 40, 60, 80]) {
+        const phase = drawInteger(work, 32)
+        const displacement = randomRadialDisplacement(work, (100 - delay) / 20)
+        spawnSpriteArray(
+          work,
+          actor,
+          tick,
+          `demon-death-fire:${delay}`,
+          46 + phase,
+          32,
+          4,
+          {
+            atlas: 'DeadHawg',
+            blendMode: 'add',
+            kind: 'fire-array',
+            position: {
+              x: actor.position.x + displacement.x,
+              y: actor.position.y + displacement.y - 20,
+            },
+            spawnDelayTicks: delay,
+          },
+        )
+      }
+      const burstScale = 0.9 + drawUnit(work) * 0.2
+      spawnSimpleDeathEffect(work, actor, tick, {
+        alpha: 0.5,
+        alphaLossPerTick: 0.5 / NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+        atlas: 'BadGuys',
+        blendMode: 'normal',
+        entry: 110,
+        kind: 'fade',
+        lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+        position: { x: actor.position.x, y: actor.position.y - 1 },
+        role: 'demon-death-fire-burst-glow',
+        scale: burstScale * 5,
+        spawnDelayTicks: 95,
+        tint: 0xff8000,
+        velocity: { x: 0, y: -1 },
+      })
+      spawnSpriteArray(work, actor, tick, 'demon-death-fire-burst-frame', 251, 4, 4, {
+        alphaLossPerTick: 0,
+        blendMode: 'add',
+        lifetimeTicks: NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.fireBurstTicks,
+        position: { x: actor.position.x, y: actor.position.y - 1 },
+        scale: burstScale,
+        spawnDelayTicks: 95,
+        tint: 0xffffbf,
+        velocity: { x: 0, y: -1 },
+      })
       return
     case 'COFFIN': {
       for (const entry of SKELETON_BASE_FRAGMENT_ENTRIES) {
@@ -4909,20 +4974,40 @@ function spawnSpriteArray(
   firstEntry: number,
   frameCount: number,
   frameTicks: number,
+  options: Readonly<{
+    alphaLossPerTick?: number
+    atlas?: BoneyardEnemyDeathEffect['atlas']
+    blendMode?: BoneyardEnemyDeathEffect['blendMode']
+    kind?: 'fire-array' | 'sprite-array'
+    lifetimeTicks?: number
+    position?: Readonly<BoneyardPoint>
+    scale?: number
+    spawnDelayTicks?: number
+    tint?: number
+    velocity?: Readonly<BoneyardPoint>
+  }> = {},
 ): void {
   spawnSimpleDeathEffect(work, actor, tick, {
     alpha: 1,
-    alphaLossPerTick: 1 / (frameCount * frameTicks),
-    atlas: 'BadGuys',
-    blendMode: 'add',
+    alphaLossPerTick: options.alphaLossPerTick
+      ?? (options.kind === 'fire-array' ? 0 : 1 / (frameCount * frameTicks)),
+    atlas: options.atlas ?? 'BadGuys',
+    blendMode: options.blendMode ?? 'add',
     entry: firstEntry,
     firstEntry,
     frameCount,
     frameTicks,
-    kind: 'sprite-array',
-    lifetimeTicks: frameCount * frameTicks,
+    kind: options.kind ?? 'sprite-array',
+    lifetimeTicks: options.lifetimeTicks
+      ?? (options.kind === 'fire-array'
+        ? NATIVE_ENEMY_PROJECTILE_VFX_PROGRAMS.demonBombFireTicks
+        : frameCount * frameTicks),
+    position: options.position,
     role,
-    scale: 1,
+    scale: options.scale ?? 1,
+    spawnDelayTicks: options.spawnDelayTicks,
+    tint: options.tint,
+    velocity: options.velocity,
   })
 }
 
@@ -4946,6 +5031,7 @@ function spawnSimpleDeathEffect(
     role: string
     rotationDeg?: number
     scale: number
+    spawnDelayTicks?: number
     tint?: number
     velocity?: Readonly<BoneyardPoint>
   },
@@ -4974,7 +5060,7 @@ function spawnSimpleDeathEffect(
     rotationDeg: options.rotationDeg ?? 0,
     scale: options.scale,
     shadow: false,
-    spawnTick: tick,
+    spawnTick: tick + (options.spawnDelayTicks ?? 0),
     tint: options.tint ?? 0xffffff,
     verticalVelocity: 0,
     velocity: Object.freeze({ ...(options.velocity ?? { x: 0, y: 0 }) }),

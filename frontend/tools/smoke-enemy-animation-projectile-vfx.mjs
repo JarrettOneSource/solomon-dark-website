@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 
 import { chromium } from 'playwright-core'
 
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4182'
 const screenshotPath = process.env.SDR_ENEMY_VFX_SCREENSHOT
   || join(tmpdir(), 'solomon-dark-enemy-animation-projectile-vfx-20260815.png')
@@ -34,6 +36,7 @@ try {
       failedResponses.push({ status: response.status(), url: response.url() })
     }
   })
+  await page.addInitScript(installGameAudioSmokeProbe)
 
   await page.route(`${baseUrl}/__enemy-animation-projectile-vfx-proof`, (route) => (
     route.fulfill({
@@ -52,14 +55,22 @@ try {
     document.body.style.margin = '0'
 
     const [
+      ambientAudioModule,
       animationModule,
+      assetModule,
+      audioAssetsModule,
+      audioBrowserModule,
       economyModule,
       playerModule,
       presentationModule,
       rendererModule,
       spellModule,
     ] = await Promise.all([
+      import('/src/game/boneyard-enemy-ambient-audio.ts'),
       import('/src/game/renderer/native-enemy-animation.ts'),
+      import('/src/game/renderer/native-enemy-assets.ts'),
+      import('/src/game/game-audio-assets.ts'),
+      import('/src/game/game-audio-browser.ts'),
       import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/core-kernels/player-character.ts'),
       import('/src/game/renderer/native-enemy-presentation.ts'),
@@ -122,6 +133,7 @@ try {
         ? null
         : { managerLane: 'actor', registrationOrdinal: id > 5 ? id - 1 : id },
       lighting: enemyLighting[enemyToken],
+      mageCloak: false,
       maximumHealth: 100,
       nativeTypeId,
       position,
@@ -162,7 +174,7 @@ try {
           gaitPose: advanced ? 3 : 0,
           state: 'action',
         }),
-        ['FLAG_ARMOR', 'FLAG_HOODED', 'FLAG_SWORD'],
+        ['FLAG_ARMOR', 'FLAG_HOODED', 'FLAG_MACE', 'FLAG_BURNING'],
         true,
       ),
       makeEnemy(
@@ -175,7 +187,7 @@ try {
           actionProgress: advanced ? 7 : 1,
           state: 'action',
         }),
-        ['FLAG_HELM', 'FLAG_POISON'],
+        ['FLAG_HELM', 'FLAG_POISONARROW'],
       ),
       makeEnemy(
         'SKELETONMAGE',
@@ -188,7 +200,7 @@ try {
           effects: mageEffects,
           state: 'action',
         }),
-        ['FLAG_HORNED'],
+        ['FLAG_HORNED', 'FLAG_CASTLIGHTNING'],
       ),
       makeEnemy(
         'IMP',
@@ -227,6 +239,7 @@ try {
           zombieRearArmPose: advanced ? 0 : 1,
           zombieRearArmRotationRadians: advanced ? radians(12) : radians(-42),
         }),
+        ['FLAG_ROTTEN'],
       ),
       makeEnemy(
         'WRAITH',
@@ -239,6 +252,7 @@ try {
           alpha: 1,
           state: 'action',
         }),
+        ['FLAG_BURNING'],
       ),
       makeEnemy(
         'DEMON',
@@ -357,7 +371,7 @@ try {
         alpha: 2,
         scale: 2,
       }),
-      effect(207, 'demon-fire', 'DeadHawg', 46, 'normal', { x: 760, y: 375 }),
+      effect(207, 'demon-fire', 'DeadHawg', 46, 'add', { x: 760, y: 375 }),
       effect(208, 'poison-pool-fade-outer', 'DeadHawg', 0, 'normal', { x: 840, y: 375 }),
       effect(209, 'poison-pool-fade-inner', 'DeadHawg', 0, 'normal', { x: 920, y: 375 }),
     ]
@@ -377,6 +391,7 @@ try {
     }]
     const snapshotAt = (tick, advanced) => ({
       hostPlayerId: 'local',
+      levelUpBarrier: null,
       players: {
         local: {
           config: {
@@ -407,6 +422,7 @@ try {
             learnedSkills: [],
             level: 1,
             lifeState: 'alive',
+            lastDamageTick: null,
             maximumHealth: 50,
             maximumMana: 100,
             nextThreshold: 100,
@@ -415,12 +431,43 @@ try {
             poisonTicksRemaining: 0,
             previousThreshold: 0,
             revision: 0,
+            sorcerorsCharmAvailable: false,
+            secondaryBelt: [null, null, null, null, null, null, null, null],
           },
           velocity: { x: 0, y: 0 },
           walkCyclePrimary: 0,
         },
       },
       primarySpells: spellModule.createPrimarySpellSimulation(),
+      secondaryAbilities: {
+        actors: [],
+        events: [],
+        nextActorId: 1,
+        nextEventId: 1,
+        players: {
+          local: {
+            castSequence: 0,
+            castSpinTicksRemaining: 0,
+            cooldownMaximumTicksBySkill: Array(83).fill(0),
+            cooldownTicksBySkill: Array(83).fill(0),
+            firewalker: false,
+            fizzleSequence: 0,
+            heldSlot: null,
+            lastSkillId: null,
+            magicShieldAbsorb: 0,
+            magicShieldExplosionDamage: 0,
+            magicShieldMaximum: 0,
+            magicShieldPulseTicks: 0,
+            mindstar: false,
+            planeOrbHeld: false,
+            planewalkerTicksRemaining: 0,
+            regenerate: false,
+            reservedMana: 0,
+            stoneskinTicksRemaining: 0,
+          },
+        },
+        targetEffects: [],
+      },
       run: {
         eligiblePlayerIds: ['local'],
         gameOverEventId: 0,
@@ -471,13 +518,35 @@ try {
         waves: null,
       },
     })
-    const capture = (canvas) => {
+    const copyCanvas = (canvas) => {
       const copy = document.createElement('canvas')
       copy.width = canvas.width
       copy.height = canvas.height
       const context = copy.getContext('2d', { willReadFrequently: true })
       context.drawImage(canvas, 0, 0)
-      return context.getImageData(0, 0, copy.width, copy.height).data
+      return copy
+    }
+    const cropCanvas = (source, x, y, width, height) => {
+      const crop = document.createElement('canvas')
+      crop.width = width
+      crop.height = height
+      crop.getContext('2d').drawImage(
+        source,
+        x,
+        y,
+        width,
+        height,
+        0,
+        0,
+        width,
+        height,
+      )
+      return crop
+    }
+    const capture = (canvas) => {
+      const copy = copyCanvas(canvas)
+      return copy.getContext('2d', { willReadFrequently: true })
+        .getImageData(0, 0, copy.width, copy.height).data
     }
     const compare = (first, second) => {
       let changedPixels = 0
@@ -493,6 +562,44 @@ try {
     }
 
     const initialSnapshot = snapshotAt(120.25, false)
+    const auxiliaryPlans = Object.fromEntries(enemiesAt(true).map((enemy) => [
+      enemy.enemyToken,
+      presentationModule.nativeEnemyPresentationPlan(
+        enemy,
+        121.75,
+        (atlas, entry) => assetModule.nativeEnemySpriteRecord(atlas, entry).points,
+      ).layers.map(({ entry, role }) => ({ entry, role })),
+    ]))
+    const ambientRequests = ambientAudioModule.nativeBoneyardEnemyAmbientRequests(
+      snapshotAt(121.75, true),
+      () => 1,
+    )
+    await Promise.all(ambientAudioModule.BONEYARD_ENEMY_AMBIENT_CUES.map((cue) => (
+      audioBrowserModule.loadGameAudioAsset(audioAssetsModule.GAME_AUDIO_SOURCES.loops[cue])
+    )))
+    const audioEventStart = window.__sdrAudioEvents.length
+    const ambientDirector = audioBrowserModule.createBrowserGameAudioDirector()
+    ambientDirector.unlock()
+    const ambientAudio = new ambientAudioModule.BoneyardEnemyAmbientAudioSynchronizer(
+      ambientDirector,
+    )
+    ambientAudio.update(snapshotAt(121.75, true), () => 1)
+    ambientAudio.update({ world: { enemies: [], maggots: [] } }, () => 1)
+    ambientAudio.destroy()
+    ambientDirector.destroy()
+    const ambientAudioEvents = window.__sdrAudioEvents.slice(audioEventStart)
+      .filter(({ type }) => type === 'buffer-start' || type === 'buffer-stop')
+      .map((event) => ({
+        cue: ambientAudioModule.BONEYARD_ENEMY_AMBIENT_CUES.find((cue) => (
+          window.__sdrAudioSourceMatches(
+            event.src,
+            audioAssetsModule.GAME_AUDIO_SOURCES.loops[cue],
+          )
+        )),
+        loop: event.loop,
+        type: event.type,
+        volume: event.volume,
+      }))
     const renderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
       devicePixelRatio: 1,
@@ -500,12 +607,26 @@ try {
       playerId: 'local',
       viewport,
     })
-    renderer.canvas.id = 'enemy-animation-projectile-vfx-probe'
+    renderer.canvas.id = 'enemy-animation-projectile-vfx-canvas'
     document.body.append(renderer.canvas)
     const initialPixels = capture(renderer.canvas)
+    renderer.consumeEnemyEvent({
+      actorId: 4,
+      eventId: 900,
+      runId,
+      targetPlayerId: 'local',
+      tick: 120.5,
+      type: 'attack-marker',
+    })
     renderer.render(snapshotAt(121.75, true))
+    const enemyVfxCopy = copyCanvas(renderer.canvas)
+    const advancedPixels = enemyVfxCopy.getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, enemyVfxCopy.width, enemyVfxCopy.height).data
+    const enemyVfxImage = document.createElement('img')
+    enemyVfxImage.id = 'enemy-animation-projectile-vfx-probe'
+    enemyVfxImage.src = enemyVfxCopy.toDataURL('image/png')
+    document.body.append(enemyVfxImage)
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    const advancedPixels = capture(renderer.canvas)
 
     const skeletonAttackSnapshotAt = (actionProgress) => {
       const snapshot = snapshotAt(130, false)
@@ -517,7 +638,7 @@ try {
             'SKELETON',
             1,
             1001,
-            { x: 300, y: 190 },
+            { x: 500, y: 333 },
             makeAnimation({
               action: 'skeleton-claw-a',
               actionProgress,
@@ -535,29 +656,31 @@ try {
     }
     const skeletonEarlySnapshot = skeletonAttackSnapshotAt(0)
     const skeletonLateSnapshot = skeletonAttackSnapshotAt(7)
-    const skeletonEarlyRenderer = await rendererModule.createBoneyardWorldRenderer({
+    const skeletonRenderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
       devicePixelRatio: 1,
       initialSnapshot: skeletonEarlySnapshot,
       playerId: 'local',
       viewport,
     })
-    const skeletonEarlyPixels = capture(skeletonEarlyRenderer.canvas)
+    const skeletonEarlyCopy = copyCanvas(skeletonRenderer.canvas)
+    const skeletonEarlyCrop = cropCanvas(skeletonEarlyCopy, 600, 375, 160, 160)
+    const skeletonEarlyPixels = skeletonEarlyCrop
+      .getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, skeletonEarlyCrop.width, skeletonEarlyCrop.height).data
     const skeletonEarlyImage = document.createElement('img')
     skeletonEarlyImage.id = 'skeleton-attack-early-probe'
-    skeletonEarlyImage.src = skeletonEarlyRenderer.canvas.toDataURL('image/png')
+    skeletonEarlyImage.src = skeletonEarlyCrop.toDataURL('image/png')
     document.body.append(skeletonEarlyImage)
-    const skeletonLateRenderer = await rendererModule.createBoneyardWorldRenderer({
-      boneyard: loaded,
-      devicePixelRatio: 1,
-      initialSnapshot: skeletonLateSnapshot,
-      playerId: 'local',
-      viewport,
-    })
-    const skeletonLatePixels = capture(skeletonLateRenderer.canvas)
+    skeletonRenderer.render(skeletonLateSnapshot)
+    const skeletonLateCopy = copyCanvas(skeletonRenderer.canvas)
+    const skeletonLateCrop = cropCanvas(skeletonLateCopy, 600, 375, 160, 160)
+    const skeletonLatePixels = skeletonLateCrop
+      .getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, skeletonLateCrop.width, skeletonLateCrop.height).data
     const skeletonLateImage = document.createElement('img')
     skeletonLateImage.id = 'skeleton-attack-late-probe'
-    skeletonLateImage.src = skeletonLateRenderer.canvas.toDataURL('image/png')
+    skeletonLateImage.src = skeletonLateCrop.toDataURL('image/png')
     document.body.append(skeletonLateImage)
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 
@@ -566,7 +689,7 @@ try {
         'SKELETON',
         1,
         1001,
-        { x: 300, y: 190 },
+        { x: 500, y: 333 },
         makeAnimation({
           action: 'skeleton-claw-a',
           actionProgress,
@@ -579,10 +702,12 @@ try {
       () => [],
     ).layers.map(({ entry, role }) => ({ entry, role }))
     window.__enemyVfxRenderer = renderer
-    window.__skeletonEarlyRenderer = skeletonEarlyRenderer
-    window.__skeletonLateRenderer = skeletonLateRenderer
+    window.__skeletonRenderer = skeletonRenderer
     return {
       animationDifference: compare(initialPixels, advancedPixels),
+      ambientAudioEvents,
+      ambientRequests,
+      auxiliaryPlans,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: structuredClone(renderer.canvas.__sdrBoneyardFrame),
       renderer: renderer.canvas.dataset.gameRenderer,
@@ -612,6 +737,7 @@ try {
   assert.match(receipt.rendererName.toLowerCase(), /webgl/)
   assert.equal(receipt.context, 'webgl2')
   assert.equal(receipt.frame.enemyCount, 8)
+  assert.equal(receipt.frame.enemyAttackEffectCount, 1)
   assert.equal(receipt.frame.enemyFamilies, expectedFamilies)
   assert.equal(receipt.frame.enemyProjectileCount, 8)
   assert.equal(receipt.frame.enemyProjectileEffectCount, 9)
@@ -619,6 +745,51 @@ try {
   assert.deepEqual(receipt.frame.enemyProjectileEffectIds, [201, 202, 203, 204, 205, 206, 207, 208, 209])
   assert.equal(receipt.frame.maggotCount, 1)
   assert.equal(receipt.frame.mageLightningCount, 1)
+  assert.deepEqual(receipt.ambientRequests, [
+    { cue: 'flyblown-loop', gain: 1 },
+    { cue: 'maggots-loop', gain: 0.0025 },
+    { cue: 'soul-loop', gain: 1 },
+  ])
+  const ambientStarts = receipt.ambientAudioEvents.filter(({ type }) => (
+    type === 'buffer-start'
+  ))
+  assert.deepEqual(
+    ambientStarts.map(({ cue, loop, type }) => ({ cue, loop, type })),
+    [
+      { cue: 'flyblown-loop', loop: true, type: 'buffer-start' },
+      { cue: 'maggots-loop', loop: true, type: 'buffer-start' },
+      { cue: 'soul-loop', loop: true, type: 'buffer-start' },
+    ],
+  )
+  assert.equal(ambientStarts[0]?.volume, 1)
+  assert.ok(Math.abs(ambientStarts[1].volume - 0.0025) < 1e-9)
+  assert.equal(ambientStarts[2]?.volume, 1)
+  assert.deepEqual(
+    receipt.ambientAudioEvents.filter(({ type }) => type === 'buffer-stop')
+      .map(({ cue }) => cue),
+    ['flyblown-loop', 'maggots-loop', 'soul-loop'],
+  )
+  assert.ok(receipt.auxiliaryPlans.SKELETON.some(({ role }) => (
+    role === 'skeleton-mace-head'
+  )))
+  assert.ok(receipt.auxiliaryPlans.SKELETONARCHER.some(({ role }) => (
+    role === 'archer-held-poison-arrow'
+  )))
+  assert.equal(receipt.auxiliaryPlans.SKELETONMAGE.filter(({ role }) => (
+    role.startsWith('mage-lightning-charge:')
+  )).length, 4)
+  assert.equal(receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
+    role.startsWith('zombie-gas-cloud:')
+  )).length, 2)
+  assert.ok(receipt.auxiliaryPlans.ZOMBIE.filter(({ role }) => (
+    role.startsWith('zombie-fly:')
+  )).length >= 5)
+  assert.ok(receipt.auxiliaryPlans.WRAITH.some(({ role }) => (
+    role.startsWith('wraith-soul-wisp:')
+  )))
+  assert.equal(receipt.auxiliaryPlans.DEMON.filter(({ role }) => (
+    role.startsWith('demon-flame:')
+  )).length, 5)
   assert.ok(receipt.animationDifference.changedPixels > 1_000)
   assert.ok(receipt.animationDifference.channelDelta > 10_000)
   assert.ok(
@@ -656,8 +827,7 @@ try {
   })
   await page.evaluate(() => {
     window.__enemyVfxRenderer.destroy()
-    window.__skeletonEarlyRenderer.destroy()
-    window.__skeletonLateRenderer.destroy()
+    window.__skeletonRenderer.destroy()
     document.body.replaceChildren()
   })
 

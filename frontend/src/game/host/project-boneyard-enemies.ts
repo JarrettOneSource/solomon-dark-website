@@ -35,7 +35,9 @@ import type {
 export function projectBoneyardEnemyDeathEffects(
   store: BoneyardEnemyStore,
 ): readonly BoneyardEnemyDeathEffectSnapshot[] {
-  return store.deathEffects.map((effect) => ({
+  return store.deathEffects.filter((effect) => (
+    effect.spawnTick <= store.lastStepTick
+  )).map((effect) => ({
     ageTicks: effect.ageTicks,
     alpha: effect.alpha,
     atlas: effect.atlas,
@@ -68,6 +70,8 @@ export function projectBoneyardEnemies(
     id: actor.id,
     lightRegistration: actor.lightRegistration,
     lighting: { ...actor.lighting },
+    mageCloak: actor.config.enemyToken === 'SKELETONMAGE'
+      && actor.config.family.cloak,
     maximumHealth: actor.config.maximumHealth,
     nativeTypeId: actor.config.nativeTypeId,
     position: { ...actor.position },
@@ -278,19 +282,6 @@ function projectEnemyEffects(
 ): readonly BoneyardEnemyEffectSnapshot[] {
   if (actor.lifeState !== 'alive') return []
   const effects: BoneyardEnemyEffectSnapshot[] = []
-  if (actor.config.burning) {
-    effects.push({
-      alpha: 1,
-      atlas: 'DeadHawg',
-      blendMode: 'normal',
-      entry: 46 + positiveModulo(tick - actor.spawnTick, 32),
-      id: actor.id * 4 + 1,
-      offset: { x: 0, y: 0 },
-      role: 'burning-fire',
-      rotationRadians: 0,
-      scale: 1,
-    })
-  }
   if (actor.shieldHealth > 0) {
     const wobble = Math.min(actor.shieldPulse, 1)
     effects.push({

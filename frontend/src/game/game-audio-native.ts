@@ -108,13 +108,16 @@ export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
   | 'earthquake-loop'
+  | 'flyblown-loop'
   | 'gather-rocks-loop'
   | 'ice-loop'
   | 'lightning-loop'
   | 'low-fire-loop'
+  | 'maggots-loop'
   | 'plane-cross-loop'
   | 'rainfall-loop'
   | 'rolling-stone-loop'
+  | 'soul-loop'
   | 'steady-wind-loop'
 
 export interface GameAudioSources {
@@ -534,6 +537,11 @@ export const NATIVE_LOOP_MANIFEST = {
     sourceName: 'sounds\\earthquake__loop',
     sourceSha256: 'ac56c68d267f5d9c7431b8cadd5b6bd4e73ae6101e144ff9769d2aac1a529068',
   },
+  'flyblown-loop': {
+    registryOffset: 0x170c,
+    sourceName: 'sounds\\flyblown__loop',
+    sourceSha256: 'e4dd23bbe5a2d36762ec54587dacb7cd5465dba64268b0b4b1db198b953422d6',
+  },
   'gather-rocks-loop': {
     registryOffset: 0x176c,
     sourceName: 'sounds\\gatherrocksloop__loop',
@@ -554,6 +562,11 @@ export const NATIVE_LOOP_MANIFEST = {
     sourceName: 'sounds\\lowfire__loop',
     sourceSha256: '8d42e14b1848f1f2b45fabb52c1f83620a986557416f59ee08f78e630439ce8a',
   },
+  'maggots-loop': {
+    registryOffset: 0x194c,
+    sourceName: 'sounds\\maggots__loop',
+    sourceSha256: '725332465d0f7d85bd84043ae4a691f0827b227c3ee2aa9fd3226d72bece40db',
+  },
   'plane-cross-loop': {
     registryOffset: 0x1a0c,
     sourceName: 'sounds\\PlaneCross__Loop',
@@ -568,6 +581,11 @@ export const NATIVE_LOOP_MANIFEST = {
     registryOffset: 0x1acc,
     sourceName: 'sounds\\rollingstoneloop__loop',
     sourceSha256: '66a306a2ebe8443cb017ce8c3737477f196600a82af7472201cc123f70cee706',
+  },
+  'soul-loop': {
+    registryOffset: 0x1b8c,
+    sourceName: 'sounds\\Soul__Loop',
+    sourceSha256: '661515f9ac51cfb7be5aaa08d7d87667f5b06b6a1e7a530e1a8863b1c46450b4',
   },
   'steady-wind-loop': {
     registryOffset: 0x1bec,

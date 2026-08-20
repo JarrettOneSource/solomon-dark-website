@@ -173,6 +173,7 @@ export const BONEYARD_ENEMY_DEATH_EFFECT_KINDS = [
   'banish',
   'bouncer',
   'fade',
+  'fire-array',
   'move-fade',
   'sprite-array',
   'unbind',
@@ -477,7 +478,6 @@ export interface BoneyardEnemyAnimationSnapshot {
 }
 
 export const BONEYARD_ENEMY_EFFECT_ROLES = [
-  'burning-fire',
   'magic-shield',
 ] as const
 
@@ -511,6 +511,7 @@ export interface BoneyardEnemySnapshot {
   id: number
   lightRegistration: NativeLightProviderRegistration
   lighting: BoneyardEnemyLightingSnapshot
+  mageCloak: boolean
   maximumHealth: number
   nativeTypeId: number
   position: Vector2

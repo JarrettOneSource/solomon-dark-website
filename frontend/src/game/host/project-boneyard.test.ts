@@ -410,13 +410,12 @@ test('projects armor, shields, burning, and owned Mage lightning pulses', () => 
   assert.equal(created.shieldHealth, 25)
   assert.equal(created.shieldMaximumHealth, 50)
   assert.deepEqual(created.animation.effects.map(({ alpha, role }) => ({ alpha, role })), [
-    { alpha: 1, role: 'burning-fire' },
     { alpha: 1.25, role: 'magic-shield' },
   ])
-  assert.equal(created.animation.effects[1]?.entry, 49)
-  assert.deepEqual(created.animation.effects[1]?.offset, { x: 0, y: -30 })
+  assert.equal(created.animation.effects[0]?.entry, 49)
+  assert.deepEqual(created.animation.effects[0]?.offset, { x: 0, y: -30 })
   assert.ok(Math.abs(
-    created.animation.effects[1]!.scale
+    created.animation.effects[0]!.scale
       - (1.5 + 0.1 * Math.sin(startedTick * 20 * Math.PI / 180)),
   ) < 1e-12)
   const pulses = projectBoneyardMageLightningPulses(store)

@@ -18,10 +18,10 @@ export const BONEYARD_ENEMY_ENTITY_TYPE_ID = 2
 const POSITION_SCALE = 16
 const ANGLE_SCALE = 64
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 10
+const DESCRIPTOR_LENGTH = 11
 const EFFECT_COMPONENT_OFFSET = 43
 const EFFECT_COMPONENT_COUNT = 10
-const MAX_EFFECTS = 2
+const MAX_EFFECTS = 1
 const SAMPLE_LENGTH = EFFECT_COMPONENT_OFFSET + EFFECT_COMPONENT_COUNT * MAX_EFFECTS
 
 const FAMILIES = [
@@ -87,12 +87,14 @@ export const BONEYARD_ENEMY_ENTITY_REGISTRATION = {
       || descriptor[6] < 0
       || descriptor[6] >= 2 ** BONEYARD_ENEMY_FLAGS.length
       || (descriptor[7] !== 0 && descriptor[7] !== 1)
+      || (descriptor[10] !== 0 && descriptor[10] !== 1)
     ) return false
     const family = FAMILIES[descriptor[2]]!
     return BONEYARD_WAVE_ENEMY_TYPES[family] === descriptor[3]
       && (descriptor[7] === 0 || family === 'SKELETON')
       && descriptor[8] === 0
       && nonnegativeInteger(descriptor[9])
+      && (descriptor[10] === 0 || family === 'SKELETONMAGE')
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
     return sample.length === SAMPLE_LENGTH
@@ -138,6 +140,7 @@ export function boneyardEnemyDescriptor(
     Number(enemy.armored),
     enemy.lightRegistration.managerLane === 'actor' ? 0 : -1,
     enemy.lightRegistration.registrationOrdinal,
+    Number(enemy.mageCloak),
   ]
 }
 
@@ -262,6 +265,7 @@ export function materializeBoneyardEnemy(
       glow: dequantize(sample[40], VALUE_SCALE),
       providerCopies: sample[42] as 0 | 1 | 2,
     },
+    mageCloak: descriptor[10] === 1,
     maximumHealth: descriptor[5],
     nativeTypeId: descriptor[3],
     position: {
@@ -376,7 +380,6 @@ function effectShapeMatchesRole(
   entry: number,
 ): boolean {
   switch (BONEYARD_ENEMY_EFFECT_ROLES[role]) {
-    case 'burning-fire': return atlas === 1 && blendMode === 1 && entry >= 46 && entry <= 77
     case 'magic-shield': return atlas === 0 && blendMode === 0 && entry === 49
     default: return false
   }

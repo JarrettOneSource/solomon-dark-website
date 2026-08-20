@@ -133,6 +133,7 @@ test('Archer and Mage flags remain family-specific evaluated lanes', () => {
     ],
   })
   assert.deepEqual(mage.family, {
+    cloak: false,
     element: 'poison',
     headgear: 0,
     otherShield: true,
@@ -143,6 +144,16 @@ test('Archer and Mage flags remain family-specific evaluated lanes', () => {
     shieldInterval: 5,
   })
   assert.equal(mage.primaryDamage, 24)
+
+  const cloakedMage = evaluateBoneyardEnemyConfig('SKELETONMAGE', {
+    mageCloak: true,
+  })
+  if (cloakedMage.enemyToken !== 'SKELETONMAGE') throw new Error('expected Mage config')
+  assert.equal(cloakedMage.family.cloak, true)
+  assert.throws(
+    () => evaluateBoneyardEnemyConfig('SKELETON', { mageCloak: true }),
+    /only valid for SKELETONMAGE/,
+  )
 })
 
 test('split, rotten, and Coffin child flags build their recovered payloads', () => {

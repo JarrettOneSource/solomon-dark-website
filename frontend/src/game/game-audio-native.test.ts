@@ -136,6 +136,9 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     NATIVE_LOOP_MANIFEST['electric-loop'].sourceSha256,
     '809601e64da07ac0adfffec5f5e29dfc61ee79725fdbf85ceb501d80d6cb0db4',
   )
+  assert.equal(NATIVE_LOOP_MANIFEST['flyblown-loop'].registryOffset, 0x170c)
+  assert.equal(NATIVE_LOOP_MANIFEST['maggots-loop'].registryOffset, 0x194c)
+  assert.equal(NATIVE_LOOP_MANIFEST['soul-loop'].registryOffset, 0x1b8c)
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
@@ -169,6 +172,24 @@ test('pins Magic Trap ElectricBurn loop to the untouched stock WAV', () => {
     createHash('sha256').update(source).digest('hex'),
     NATIVE_LOOP_MANIFEST['electric-loop'].sourceSha256,
   )
+})
+
+test('pins all three enemy ambient loops to the untouched stock WAVs', () => {
+  for (const [cue, filename] of [
+    ['flyblown-loop', 'flyblown-loop.wav'],
+    ['maggots-loop', 'maggots-loop.wav'],
+    ['soul-loop', 'soul-loop.wav'],
+  ] as const) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_LOOP_MANIFEST[cue].sourceSha256,
+      cue,
+    )
+  }
 })
 
 test('pins every contracted right-click cue to its untouched stock WAV', () => {

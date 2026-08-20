@@ -5,6 +5,11 @@ import {
 } from '../core-kernels/boneyard-imp-flight.ts'
 import { nativeEighteenWayFacingBucket } from '../core-kernels/boneyard-mage-lightning.ts'
 import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+} from '../core-kernels/native-rng.ts'
+import {
   NATIVE_ENEMY_ACTION_PROGRAMS,
   NATIVE_ENEMY_DEATH_PROGRAMS,
   nativeEnemyActionFrame,
@@ -38,6 +43,8 @@ export interface NativeEnemyVisualSnapshot {
   flags: readonly string[]
   headingDeg: number
   id: number
+  lighting: Readonly<{ charge: number; glow: number; providerCopies: 0 | 1 | 2 }>
+  mageCloak: boolean
   nativeTypeId: number
   position: Readonly<{ x: number; y: number }>
   shieldHealth: number
@@ -54,7 +61,18 @@ export interface NativeEnemySpriteLayer {
   role: string
   rotationRadians: number
   scale: number
+  scaleX?: number
+  scaleY?: number
   tint: number
+}
+
+export interface NativeEnemySegmentLayer {
+  alpha: number
+  end: Readonly<{ x: number; y: number }>
+  role: string
+  start: Readonly<{ x: number; y: number }>
+  tint: number
+  width: number
 }
 
 export interface NativeEnemyPresentationPlan {
@@ -63,6 +81,7 @@ export interface NativeEnemyPresentationPlan {
   facing: number
   family: NativeEnemyFamily
   layers: readonly NativeEnemySpriteLayer[]
+  segments: readonly NativeEnemySegmentLayer[]
   spawnAgeTicks: number
 }
 
@@ -96,6 +115,20 @@ const ACTIONS_BY_FAMILY: Readonly<
   DEMON: ['demon-bomb'],
   COFFIN: [],
 }
+
+interface NativeEnemyFamilyPresentation {
+  after: readonly NativeEnemySpriteLayer[]
+  before: readonly NativeEnemySpriteLayer[]
+  body: readonly NativeEnemySpriteLayer[]
+  segments: readonly NativeEnemySegmentLayer[]
+}
+
+const EMPTY_FAMILY_PRESENTATION: NativeEnemyFamilyPresentation = Object.freeze({
+  after: Object.freeze([]),
+  before: Object.freeze([]),
+  body: Object.freeze([]),
+  segments: Object.freeze([]),
+})
 
 export function roundHalfToEven(value: number): number {
   if (!Number.isFinite(value)) throw new Error('native facing value must be finite')
@@ -154,8 +187,8 @@ export function nativeEnemyPresentationPlan(
   const deathProgram = animation?.state === 'death'
     ? NATIVE_ENEMY_DEATH_PROGRAMS[family]
     : null
-  const baseLayers = animation?.state === 'death'
-    ? []
+  const familyPresentation = animation?.state === 'death'
+    ? EMPTY_FAMILY_PRESENTATION
     : familyLayers(
         enemy,
         facing,
@@ -166,14 +199,26 @@ export function nativeEnemyPresentationPlan(
         authoredPoints,
       )
   const layers = animation
-    ? applyAuthoritativeSample(baseLayers, effectLayers(animation.effects), animation)
-    : baseLayers
+    ? applyAuthoritativeSample(
+        familyPresentation,
+        effectLayers(animation.effects),
+        animation,
+      )
+    : [
+        ...familyPresentation.before,
+        ...familyPresentation.body,
+        ...familyPresentation.after,
+      ]
+  const segments = animation
+    ? applySegmentSample(familyPresentation.segments, animation)
+    : familyPresentation.segments
   return {
     actionFrame,
     deathProgram,
     facing,
     family,
     layers,
+    segments,
     spawnAgeTicks,
   }
 }
@@ -199,22 +244,272 @@ function familyLayers(
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
   authoredPoints: NativeEnemyAuthoredPointResolver,
-): NativeEnemySpriteLayer[] {
+): NativeEnemyFamilyPresentation {
   switch (enemy.enemyToken) {
-    case 'SKELETON': return skeletonLayers(enemy, facing, animation, actionFrame)
-    case 'SKELETONARCHER': return skeletonArcherLayers(facing, flags, animation, actionFrame)
-    case 'SKELETONMAGE': return skeletonMageLayers(facing, flags, animation, actionFrame)
-    case 'IMP': return impLayers(enemy, facing, animation)
-    case 'ZOMBIE': return zombieLayers(enemy, facing, flags, animation, authoredPoints)
-    case 'WRAITH': return [layer('BadGuys', 2070 + facing, 'wraith-body', {
-      offset: { x: 0, y: 15 },
-      scale: 2,
-    })]
-    case 'DEMON': return demonLayers(facing, animation, actionFrame, authoredPoints)
-    case 'COFFIN': return animation
+    case 'SKELETON': return skeletonPresentation(
+      enemy,
+      facing,
+      flags,
+      spawnAgeTicks,
+      animation,
+      actionFrame,
+      authoredPoints,
+    )
+    case 'SKELETONARCHER': return archerPresentation(
+      enemy,
+      facing,
+      flags,
+      spawnAgeTicks,
+      animation,
+      actionFrame,
+      authoredPoints,
+    )
+    case 'SKELETONMAGE': return magePresentation(
+      enemy,
+      facing,
+      flags,
+      spawnAgeTicks,
+      animation,
+      actionFrame,
+      authoredPoints,
+    )
+    case 'IMP': return presentation(impLayers(enemy, facing, animation))
+    case 'ZOMBIE': return zombiePresentation(
+      enemy,
+      facing,
+      flags,
+      spawnAgeTicks,
+      animation,
+      authoredPoints,
+    )
+    case 'WRAITH': return wraithPresentation(
+      enemy,
+      facing,
+      flags,
+      spawnAgeTicks,
+      animation,
+    )
+    case 'DEMON': return demonPresentation(
+      enemy,
+      facing,
+      spawnAgeTicks,
+      animation,
+      actionFrame,
+      authoredPoints,
+    )
+    case 'COFFIN': return presentation(animation
       ? coffinSampleLayers(animation)
-      : coffinSpawnLayers(enemy, spawnAgeTicks)
+      : coffinSpawnLayers(enemy, spawnAgeTicks))
   }
+}
+
+function presentation(
+  body: readonly NativeEnemySpriteLayer[],
+  options: Partial<Pick<
+    NativeEnemyFamilyPresentation,
+    'after' | 'before' | 'segments'
+  >> = {},
+): NativeEnemyFamilyPresentation {
+  return {
+    after: options.after ?? [],
+    before: options.before ?? [],
+    body,
+    segments: options.segments ?? [],
+  }
+}
+
+function skeletonPresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  flags: ReadonlySet<string>,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
+): NativeEnemyFamilyPresentation {
+  const body = skeletonLayers(enemy, facing, animation, actionFrame)
+  const weapon = selectedFlagValue([...flags], WEAPON_BY_FLAG, 0)
+  const segments: NativeEnemySegmentLayer[] = []
+  if (weapon === 2 || weapon === 3) {
+    const weaponLayer = body.find(({ role }) => role === 'skeleton-weapon')
+    if (weaponLayer) {
+      const points = authoredPoints(weaponLayer.atlas, weaponLayer.entry)
+      const first = requiredPoint(points, 0, `Skeleton weapon ${weaponLayer.entry}`)
+      if (weapon === 2) {
+        body.push(layer('BadGuys', 46, 'skeleton-mace-head', { offset: first }))
+      } else {
+        const second = requiredPoint(points, 1, `Skeleton flail ${weaponLayer.entry}`)
+        segments.push(segment(first, second, 'skeleton-flail-chain'))
+        body.push(layer('BadGuys', 46, 'skeleton-flail-head', { offset: second }))
+      }
+    }
+  } else if (weapon === 5) {
+    const headingRadians = enemy.headingDeg * Math.PI / 180
+    const reach = actionFrame?.program.name === 'skeleton-pike' ? 64 : 54
+    body.push(layer(
+      'BadGuys',
+      actionFrame?.program.name === 'skeleton-pike' ? 56 : 54,
+      'skeleton-pike-shaft',
+      {
+        offset: {
+          x: Math.cos(headingRadians) * reach * 0.5,
+          y: Math.sin(headingRadians) * reach * 0.5 - 18,
+        },
+        rotationRadians: headingRadians + Math.PI / 2,
+        scaleX: 1,
+        scaleY: reach / 136,
+      },
+    ))
+  }
+  const burning = flags.has('BURNING')
+    ? burningLayers(enemy, spawnAgeTicks, [
+        { x: -9, y: -20 },
+        { x: 9, y: -27 },
+        { x: 0, y: -38 },
+      ], 'skeleton')
+    : []
+  return presentation(body, { after: burning, segments })
+}
+
+function archerPresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  flags: ReadonlySet<string>,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
+): NativeEnemyFamilyPresentation {
+  const body = skeletonArcherLayers(facing, flags, animation, actionFrame)
+  const bodyLayer = body.find(({ role }) => role === 'archer-body')!
+  const bowPoint = requiredPoint(
+    authoredPoints(bodyLayer.atlas, bodyLayer.entry),
+    0,
+    `Archer body ${bodyLayer.entry}`,
+  )
+  if (actionFrame && actionFrame.selector !== 0) {
+    if (flags.has('FIREARROW')) {
+      body.push(layer(
+        'BadGuys',
+        255 + Math.floor(spawnAgeTicks / 5) % 12,
+        'archer-held-fire-arrow',
+        { offset: bowPoint },
+      ))
+    } else if (flags.has('POISONARROW')) {
+      body.push(layer(
+        'BadGuys',
+        271 + Math.floor(spawnAgeTicks / 6) % 12,
+        'archer-held-poison-arrow',
+        { offset: bowPoint },
+      ))
+    }
+  }
+  const burning = flags.has('BURNING')
+    ? burningLayers(enemy, spawnAgeTicks, [
+        bowPoint,
+        { x: -bowPoint.x, y: bowPoint.y + 5 },
+        { x: 0, y: -18 },
+      ], 'archer')
+    : []
+  return presentation(body, { after: burning })
+}
+
+function magePresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  flags: ReadonlySet<string>,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
+): NativeEnemyFamilyPresentation {
+  const body = skeletonMageLayers(
+    enemy,
+    facing,
+    flags,
+    animation,
+    actionFrame,
+    authoredPoints,
+  )
+  const bodyLayer = body.find(({ role }) => role === 'mage-body')!
+  const authored = authoredPoints(bodyLayer.atlas, bodyLayer.entry)
+  const first = requiredPoint(authored, 0, `Mage body ${bodyLayer.entry}`)
+  const second = authored[1] ?? { x: -first.x, y: first.y }
+  const after = mageChargeLayers(
+    flags,
+    enemy.lighting.charge,
+    spawnAgeTicks,
+    [first, second],
+  )
+  after.push(...mageCastParticleLayers(
+    enemy,
+    animation,
+    spawnAgeTicks,
+    [first, second],
+  ))
+  if (flags.has('BURNING')) {
+    after.push(...burningLayers(enemy, spawnAgeTicks, [first, second], 'mage'))
+  }
+  return presentation(body, { after })
+}
+
+function zombiePresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  flags: ReadonlySet<string>,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
+): NativeEnemyFamilyPresentation {
+  const body = zombieLayers(enemy, facing, flags, animation, authoredPoints)
+  const after = flags.has('ROTTEN') ? zombieFlyblownLayers(spawnAgeTicks) : []
+  if (flags.has('ROTTEN')) {
+    after.push(...zombieFadeParticleLayers(enemy, spawnAgeTicks))
+  }
+  return presentation(body, {
+    after,
+  })
+}
+
+function wraithPresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  flags: ReadonlySet<string>,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+): NativeEnemyFamilyPresentation {
+  const body = [layer('BadGuys', 2070 + facing, 'wraith-body', {
+    offset: { x: 0, y: 15 },
+    scale: 2,
+  })]
+  return presentation(body, {
+    after: flags.has('BURNING')
+      ? wraithWispLayers(
+          enemy,
+          spawnAgeTicks,
+          animation?.state === 'action' ? animation.actionProgress : -1,
+        )
+      : [],
+  })
+}
+
+function demonPresentation(
+  enemy: NativeEnemyVisualSnapshot,
+  facing: number,
+  spawnAgeTicks: number,
+  animation: NativeEnemyAnimationSample | undefined,
+  actionFrame: NativeEnemyActionFrame | null,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
+): NativeEnemyFamilyPresentation {
+  const demon = demonLayers(facing, animation, actionFrame, authoredPoints)
+  const controller = demon.find(({ role }) => role === 'demon-controller-body')!
+  const points = authoredPoints(controller.atlas, controller.entry)
+  const flames = demonFlameLayers(enemy, spawnAgeTicks, points)
+  const splitY = requiredPoint(points, 5, `Demon controller ${controller.entry}`).y
+  return presentation(demon, {
+    after: flames.filter(({ offset }) => offset.y >= splitY),
+    before: flames.filter(({ offset }) => offset.y < splitY),
+  })
 }
 
 function skeletonLayers(
@@ -287,22 +582,46 @@ function skeletonArcherLayers(
 }
 
 function skeletonMageLayers(
+  enemy: NativeEnemyVisualSnapshot,
   facing: number,
   sourceFlags: ReadonlySet<string>,
   animation: NativeEnemyAnimationSample | undefined,
   actionFrame: NativeEnemyActionFrame | null,
+  authoredPoints: NativeEnemyAuthoredPointResolver,
 ): NativeEnemySpriteLayer[] {
   const flags = [...sourceFlags]
   const headgear = selectedFlagValue(flags, HEADGEAR_BY_FLAG, 0)
   const limbPose = animation?.gaitPose ?? 0
   const bodyPose = actionFrame?.selector ?? animation?.bodyPose ?? 0
-  return [
-    layer('BadGuys', 1585 + boundedPose(limbPose, 7) * 18 + facing, 'mage-limbs'),
-    layer('BadGuys', 1729 + boundedPose(bodyPose, 4) * 18 + facing, 'mage-body'),
-    layer('BadGuys', HEADGEAR_BASES[headgear] + facing, 'mage-headgear', {
+  const limbs = layer(
+    'BadGuys',
+    1585 + boundedPose(limbPose, 7) * 18 + facing,
+    'mage-limbs',
+  )
+  const body = layer(
+    'BadGuys',
+    enemy.mageCloak
+      ? 1459 + facing
+      : 1729 + boundedPose(bodyPose, 4) * 18 + facing,
+    'mage-body',
+  )
+  const headgearLayer = layer(
+    'BadGuys',
+    HEADGEAR_BASES[headgear] + facing,
+    'mage-headgear',
+    {
       offset: { x: 0, y: -4 },
-    }),
-  ]
+    },
+  )
+  if (!enemy.mageCloak) return [limbs, body, headgearLayer]
+  const cloakPoint = requiredPoint(
+    authoredPoints(body.atlas, body.entry),
+    0,
+    `Mage cloak ${body.entry}`,
+  )
+  return cloakPoint.x < 0
+    ? [body, limbs, headgearLayer]
+    : [limbs, body, headgearLayer]
 }
 
 function impLayers(
@@ -425,6 +744,293 @@ function demonLayers(
   ]
 }
 
+function burningLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  spawnAgeTicks: number,
+  attachmentPoints: readonly Readonly<{ x: number; y: number }>[],
+  familyRole: string,
+): NativeEnemySpriteLayer[] {
+  return attachmentPoints.map((offset, index) => layer(
+    'DeadHawg',
+    46 + positiveModulo(
+      Math.floor(spawnAgeTicks + stableUnit(enemy, 70 + index) * 32),
+      32,
+    ),
+    `${familyRole}-burning-fire:${index}`,
+    {
+      alpha: 0.75 + stableUnit(enemy, 80 + index) * 0.25,
+      blendMode: 'add',
+      offset,
+      scale: 0.5 + stableUnit(enemy, 90 + index) * 0.35,
+    },
+  ))
+}
+
+function mageChargeLayers(
+  flags: ReadonlySet<string>,
+  charge: number,
+  spawnAgeTicks: number,
+  points: readonly Readonly<{ x: number; y: number }>[],
+): NativeEnemySpriteLayer[] {
+  const strength = boundedUnit(charge) ** 2
+  if (strength === 0) return []
+  let element: 'fire' | 'frost' | 'lightning' | 'poison' = 'fire'
+  for (const flag of flags) {
+    if (flag === 'CASTFIRE') element = 'fire'
+    else if (flag === 'CASTLIGHTNING') element = 'lightning'
+    else if (flag === 'CASTFROST') element = 'frost'
+    else if (flag === 'CASTPOISON') element = 'poison'
+  }
+  if (element === 'fire') {
+    const entry = 255 + Math.floor(spawnAgeTicks / 5) % 12
+    return points.flatMap((offset, pointIndex) => [
+      layer('BadGuys', entry, `mage-fire-charge:${pointIndex}:full`, {
+        alpha: strength,
+        offset,
+        scale: strength,
+      }),
+      layer('BadGuys', entry, `mage-fire-charge:${pointIndex}:half`, {
+        alpha: strength * 0.5,
+        offset,
+        scale: strength * 1.2,
+      }),
+    ])
+  }
+  if (element === 'lightning') {
+    const entry = 1836 + Math.floor(spawnAgeTicks) % 4
+    return points.flatMap((offset, pointIndex) => [
+      layer('BadGuys', entry, `mage-lightning-charge:${pointIndex}:full`, {
+        alpha: strength,
+        blendMode: 'add',
+        offset,
+        scale: strength,
+      }),
+      layer('BadGuys', entry, `mage-lightning-charge:${pointIndex}:tint`, {
+        alpha: strength * 0.5,
+        blendMode: 'add',
+        offset,
+        scale: strength * 1.35,
+        tint: 0x80c8ff,
+      }),
+    ])
+  }
+  const entry = element === 'frost' ? 381 : 382
+  return points.map((offset, pointIndex) => layer(
+    'BadGuys',
+    entry,
+    `mage-${element}-charge:${pointIndex}`,
+    {
+      alpha: strength,
+      blendMode: 'add',
+      offset,
+      scale: strength,
+    },
+  ))
+}
+
+function mageCastParticleLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  animation: NativeEnemyAnimationSample | undefined,
+  spawnAgeTicks: number,
+  points: readonly Readonly<{ x: number; y: number }>[],
+): NativeEnemySpriteLayer[] {
+  if (animation?.state !== 'action') return []
+  const fixedAge = Math.floor(spawnAgeTicks)
+  const actionAge = Math.min(
+    19,
+    fixedAge,
+    Math.ceil(animation.actionProgress / 0.25),
+  )
+  const result: NativeEnemySpriteLayer[] = []
+  for (let age = 0; age <= actionAge; age += 1) {
+    const emissionAge = Math.max(0, fixedAge - age)
+    for (let lane = 0; lane < 2; lane += 1) {
+      if (stableInteger(enemy, emissionAge, 5, 180 + lane) !== 1) continue
+      const angle = stableUnit(enemy, 182 + lane, emissionAge) * Math.PI * 2
+      const magnitude = stableUnit(enemy, 184 + lane, emissionAge) * 5
+      const drift = age * (0.1 + stableUnit(enemy, 186 + lane, emissionAge) * 0.2)
+      const point = points[lane]!
+      result.push(layer(
+        'BadGuys',
+        10 + stableInteger(enemy, emissionAge, 2, 188 + lane),
+        `mage-cast-particle:${lane}:${emissionAge}`,
+        {
+          alpha: (1 - age / 20) * (
+            0.5 + stableUnit(enemy, 190 + lane, emissionAge) * 0.5
+          ),
+          blendMode: 'add',
+          offset: {
+            x: point.x + Math.cos(angle) * magnitude + Math.cos(angle) * drift,
+            y: point.y + Math.sin(angle) * magnitude + Math.sin(angle) * drift,
+          },
+          rotationRadians: angle,
+          scale: 0.5 + stableUnit(enemy, 192 + lane, emissionAge) * 0.5,
+        },
+      ))
+    }
+  }
+  return result
+}
+
+function zombieFlyblownLayers(spawnAgeTicks: number): NativeEnemySpriteLayer[] {
+  const rotationRadians = spawnAgeTicks * 0.25 * Math.PI / 180
+  const result = [
+    layer('BadGuys', 65, 'zombie-gas-cloud:front', {
+      alpha: 0.5,
+      offset: { x: 0, y: -15 },
+      rotationRadians,
+      scaleX: 1.5,
+      scaleY: 1.2,
+      tint: 0x0d1a0d,
+    }),
+    layer('BadGuys', 65, 'zombie-gas-cloud:mirrored', {
+      alpha: 0.5,
+      offset: { x: 0, y: -20 },
+      rotationRadians,
+      scaleX: -1.5,
+      scaleY: 1.2,
+      tint: 0x0d1a0d,
+    }),
+  ]
+  let state = createNativeRng(Math.floor(spawnAgeTicks / 10))
+  const count = drawNativeInteger(state, 16)
+  state = count.state
+  for (let index = 0; index < count.value + 5; index += 1) {
+    const alpha = drawNativeFloat(state, 0.5)
+    state = alpha.state
+    const radius = drawNativeFloat(state, 20)
+    state = radius.state
+    const doubled = drawNativeInteger(state, 5)
+    state = doubled.state
+    const angle = drawNativeFloat(state, 360)
+    state = angle.state
+    const verticalBase = drawNativeFloat(state, 10)
+    state = verticalBase.state
+    const finalRadius = (radius.value + 1) * (doubled.value === 3 ? 2 : 1)
+    const radians = angle.value * Math.PI / 180
+    result.push(layer('BadGuys', 26, `zombie-fly:${index}`, {
+      alpha: alpha.value + 0.25,
+      offset: {
+        x: Math.cos(radians) * finalRadius,
+        y: Math.sin(radians) * finalRadius * 0.8 - verticalBase.value - 15,
+      },
+    }))
+  }
+  return result
+}
+
+function zombieFadeParticleLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  spawnAgeTicks: number,
+): NativeEnemySpriteLayer[] {
+  const fixedAge = Math.floor(spawnAgeTicks)
+  const result: NativeEnemySpriteLayer[] = []
+  for (let age = 0; age < Math.min(40, fixedAge + 1); age += 1) {
+    const emissionAge = Math.max(0, fixedAge - age)
+    if (stableInteger(enemy, emissionAge, 75, 210) !== 3) continue
+    const angle = stableUnit(enemy, 211, emissionAge) * Math.PI * 2
+    const radius = stableUnit(enemy, 212, emissionAge) * 20
+    const velocityAngle = stableUnit(enemy, 213, emissionAge) * Math.PI * 2
+    const velocity = 0.25 + stableUnit(enemy, 214, emissionAge) * 0.75
+    result.push(layer(
+      'BadGuys',
+      10 + stableInteger(enemy, emissionAge, 2, 215),
+      `zombie-fade-particle:${emissionAge}`,
+      {
+        alpha: Math.sin((1 - age / 40) * Math.PI / 2),
+        blendMode: 'add',
+        offset: {
+          x: 1 + Math.cos(angle) * radius + Math.cos(velocityAngle) * velocity * age,
+          y: -15 + Math.sin(angle) * radius + Math.sin(velocityAngle) * velocity * age,
+        },
+        rotationRadians: velocityAngle,
+        scale: 0.5 + stableUnit(enemy, 216, emissionAge) * 0.5,
+      },
+    ))
+  }
+  return result
+}
+
+function wraithWispLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  spawnAgeTicks: number,
+  actionProgress: number,
+): NativeEnemySpriteLayer[] {
+  const result: NativeEnemySpriteLayer[] = []
+  const fixedAge = Math.floor(spawnAgeTicks)
+  const actionAge = Math.floor(finiteOrZero(actionProgress))
+  for (let age = 0; age < Math.min(20, fixedAge + 1); age += 1) {
+    const emissionAge = Math.max(0, fixedAge - age)
+    if (
+      !(actionProgress >= 0 && age <= actionAge)
+      && stableInteger(enemy, emissionAge, 4, 120) !== 1
+    ) continue
+    const angle = stableUnit(enemy, 121, emissionAge) * Math.PI * 2
+    const alpha = (0.25 + stableUnit(enemy, 122, emissionAge) * 0.5)
+      * (1 - age / 20)
+    const radius = 15 + age * 0.45
+    result.push(layer('BadGuys', 21, `wraith-soul-wisp:${emissionAge}`, {
+      alpha,
+      blendMode: 'add',
+      offset: {
+        x: -Math.cos(angle) * radius,
+        y: -15 - Math.sin(angle) * radius - age * 0.2,
+      },
+    }))
+  }
+  return result
+}
+
+function demonFlameLayers(
+  enemy: NativeEnemyVisualSnapshot,
+  spawnAgeTicks: number,
+  controllerPoints: readonly Readonly<{ x: number; y: number }>[],
+): NativeEnemySpriteLayer[] {
+  const point0 = requiredPoint(controllerPoints, 0, 'Demon controller')
+  const point1 = requiredPoint(controllerPoints, 1, 'Demon controller')
+  const bases = [
+    requiredPoint(controllerPoints, 2, 'Demon controller'),
+    requiredPoint(controllerPoints, 3, 'Demon controller'),
+    requiredPoint(controllerPoints, 4, 'Demon controller'),
+    midpoint(point0, point1),
+    midpoint(point1, requiredPoint(controllerPoints, 2, 'Demon controller')),
+  ]
+  const scales = [0.5, 1.1, 0.5, 0.8, 0.8] as const
+  return bases.map((base, index) => {
+    const magnitude = stableUnit(enemy, 140 + index * 3) * 4
+    const direction = stableUnit(enemy, 141 + index * 3) * Math.PI * 2
+    const initialPhase = stableUnit(enemy, 142 + index * 3) * 32
+    return layer(
+      'DeadHawg',
+      46 + Math.floor(positiveModulo(initialPhase + spawnAgeTicks * 0.25, 32)),
+      `demon-flame:${index}`,
+      {
+        blendMode: 'add',
+        offset: {
+          x: base.x + Math.cos(direction) * magnitude,
+          y: base.y + Math.sin(direction) * magnitude,
+        },
+        scale: scales[index]!,
+      },
+    )
+  })
+}
+
+function midpoint(
+  first: Readonly<{ x: number; y: number }>,
+  second: Readonly<{ x: number; y: number }>,
+): Readonly<{ x: number; y: number }> {
+  return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
+}
+
+function segment(
+  start: Readonly<{ x: number; y: number }>,
+  end: Readonly<{ x: number; y: number }>,
+  role: string,
+): NativeEnemySegmentLayer {
+  return { alpha: 1, end, role, start, tint: 0x777777, width: 1.5 }
+}
+
 function coffinSampleLayers(
   animation: NativeEnemyAnimationSample,
 ): NativeEnemySpriteLayer[] {
@@ -507,7 +1113,7 @@ function effectLayers(
 }
 
 function applyAuthoritativeSample(
-  bodyLayers: readonly NativeEnemySpriteLayer[],
+  family: NativeEnemyFamilyPresentation,
   effectSampleLayers: readonly NativeEnemySpriteLayer[],
   animation: NativeEnemyAnimationSample,
 ): NativeEnemySpriteLayer[] {
@@ -520,11 +1126,14 @@ function applyAuthoritativeSample(
       y: source.offset.y + finiteOrZero(animation.verticalOffset),
     },
   })
-  const body = bodyLayers.map(transform)
+  const before = family.before.map(transform)
+  const body = family.body.map(transform)
+  const after = family.after.map(transform)
   const effects = effectSampleLayers.map(transform)
   const hitFlash = boundedUnit(animation.hitFlash)
-  if (hitFlash === 0) return [...body, ...effects]
+  if (hitFlash === 0) return [...before, ...body, ...after, ...effects]
   return [
+    ...before,
     ...body,
     ...body.filter((source) => source.alpha > 0).map((source) => ({
       ...source,
@@ -533,7 +1142,33 @@ function applyAuthoritativeSample(
       role: `hit:${source.role}`,
       tint: 0xff0000,
     })),
+    ...after,
     ...effects,
+  ]
+}
+
+function applySegmentSample(
+  segments: readonly NativeEnemySegmentLayer[],
+  animation: NativeEnemyAnimationSample,
+): NativeEnemySegmentLayer[] {
+  const alpha = boundedUnit(animation.alpha)
+  const verticalOffset = finiteOrZero(animation.verticalOffset)
+  const transformed = segments.map((source) => ({
+    ...source,
+    alpha: source.alpha * alpha,
+    end: { x: source.end.x, y: source.end.y + verticalOffset },
+    start: { x: source.start.x, y: source.start.y + verticalOffset },
+  }))
+  const hitFlash = boundedUnit(animation.hitFlash)
+  if (hitFlash === 0) return transformed
+  return [
+    ...transformed,
+    ...transformed.map((source) => ({
+      ...source,
+      alpha: source.alpha * hitFlash,
+      role: `hit:${source.role}`,
+      tint: 0xff0000,
+    })),
   ]
 }
 
@@ -543,10 +1178,17 @@ function layer(
   role: string,
   options: Partial<Pick<
     NativeEnemySpriteLayer,
-    'alpha' | 'blendMode' | 'offset' | 'rotationRadians' | 'scale' | 'tint'
+    | 'alpha'
+    | 'blendMode'
+    | 'offset'
+    | 'rotationRadians'
+    | 'scale'
+    | 'scaleX'
+    | 'scaleY'
+    | 'tint'
   >> = {},
 ): NativeEnemySpriteLayer {
-  return {
+  const result: NativeEnemySpriteLayer = {
     alpha: options.alpha ?? 1,
     atlas,
     blendMode: options.blendMode ?? 'normal',
@@ -557,6 +1199,9 @@ function layer(
     scale: options.scale ?? 1,
     tint: options.tint ?? 0xffffff,
   }
+  if (options.scaleX !== undefined) result.scaleX = options.scaleX
+  if (options.scaleY !== undefined) result.scaleY = options.scaleY
+  return result
 }
 
 function normalizedFlags(flags: readonly string[]): Set<string> {
@@ -592,6 +1237,34 @@ function visualChoice(
   value = Math.imul(value, 0x846ca68b) >>> 0
   value = (value ^ (value >>> 16)) >>> 0
   return value % count
+}
+
+function stableUnit(
+  enemy: NativeEnemyVisualSnapshot,
+  channel: number,
+  epoch = 0,
+): number {
+  let value = (
+    (enemy.id >>> 0)
+    ^ Math.imul((Math.floor(enemy.spawnTick) + 1) >>> 0, 0x9e3779b1)
+    ^ Math.imul((channel + 1) >>> 0, 0x85ebca6b)
+    ^ Math.imul((epoch + 1) >>> 0, 0xc2b2ae35)
+  ) >>> 0
+  value ^= value >>> 16
+  value = Math.imul(value, 0x7feb352d) >>> 0
+  value ^= value >>> 15
+  value = Math.imul(value, 0x846ca68b) >>> 0
+  value = (value ^ (value >>> 16)) >>> 0
+  return value / 0x1_0000_0000
+}
+
+function stableInteger(
+  enemy: NativeEnemyVisualSnapshot,
+  epoch: number,
+  count: number,
+  channel: number,
+): number {
+  return Math.floor(stableUnit(enemy, channel, epoch) * count)
 }
 
 function boundedPose(value: number, maximum: number): number {

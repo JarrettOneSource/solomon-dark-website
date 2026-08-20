@@ -11,10 +11,15 @@ import {
   nativeEnemyIdleAnimationSample,
 } from './native-enemy-animation.ts'
 import {
+  NATIVE_IMP_CONTACT_FIRE_BURST_TICKS,
+  nativeImpContactFireBurstSample,
+} from './native-enemy-attack-effect.ts'
+import {
   nativeEnemyDeathEffectPainterLayer,
   nativeEnemyDeathEffectPlan,
 } from './native-enemy-death-effect-presentation.ts'
 import {
+  NATIVE_ENEMY_FAMILIES,
   nativeEnemyFacingBucket,
   nativeEnemyPainterLayer,
   nativeEnemyPresentationPlan as buildNativeEnemyPresentationPlan,
@@ -52,6 +57,8 @@ function enemy(
     flags,
     headingDeg: 0,
     id: 7,
+    lighting: { charge: 0, glow: 0, providerCopies: 0 },
+    mageCloak: false,
     nativeTypeId: {
       SKELETON: 1001,
       SKELETONARCHER: 1002,
@@ -286,6 +293,24 @@ test('Imp renderer consumes native pose, rotation, bounce, and upper-effect alph
   assert.equal(source.spawnTick, 100)
 })
 
+test('Imp attack markers own one finite native Anim_FireBurst child', () => {
+  const frames = Array.from(
+    { length: NATIVE_IMP_CONTACT_FIRE_BURST_TICKS },
+    (_, age) => nativeImpContactFireBurstSample(17, age)!,
+  )
+  assert.deepEqual(frames.map(({ frameEntry }) => frameEntry), [
+    251, 251, 251, 251,
+    252, 252, 252, 252,
+    253, 253, 253, 253,
+    254, 254, 254, 254,
+  ])
+  assert.equal(frames[0]?.glowAlpha, 0.5)
+  assert.equal(frames[15]?.glowAlpha, 0.5 / 16)
+  assert.equal(frames[15]?.verticalOffset, -15)
+  assert.equal(nativeImpContactFireBurstSample(17, 16), null)
+  assert.throws(() => nativeImpContactFireBurstSample(0, 0), /positive safe integer/)
+})
+
 test('Zombie keeps its native constructor selectors independent', () => {
   const plan = nativeEnemyPresentationPlan({
     ...enemy('ZOMBIE'),
@@ -331,12 +356,12 @@ test('Wraith, Demon, and Coffin preserve their native spawn compositions', () =>
   assert.deepEqual(wraith.layers[0].offset, { x: 0, y: 15 })
   assert.equal(wraith.layers[0].scale, 2)
 
+  const demon = nativeEnemyPresentationPlan(enemy('DEMON'), 100)
+  const demonBody = demon.layers.filter(({ role }) => !role.startsWith('demon-flame:'))
+  const demonFlames = demon.layers.filter(({ role }) => role.startsWith('demon-flame:'))
+  assert.deepEqual(demonBody.map((layer) => layer.entry), [62, 98, 19, 1, 80])
   assert.deepEqual(
-    nativeEnemyPresentationPlan(enemy('DEMON'), 100).layers.map((layer) => layer.entry),
-    [62, 98, 19, 1, 80],
-  )
-  assert.deepEqual(
-    nativeEnemyPresentationPlan(enemy('DEMON'), 100).layers.map((layer) => layer.offset),
+    demonBody.map((layer) => layer.offset),
     [
       { x: -14, y: -28 },
       { x: 10, y: -13 },
@@ -345,6 +370,11 @@ test('Wraith, Demon, and Coffin preserve their native spawn compositions', () =>
       { x: -8.5, y: -13 },
     ],
   )
+  assert.equal(demonFlames.length, 5)
+  assert.deepEqual(demonFlames.map(({ scale }) => scale), [0.5, 1.1, 0.5, 0.8, 0.8])
+  assert.ok(demonFlames.every(({ atlas, entry }) => (
+    atlas === 'DeadHawg' && entry >= 46 && entry <= 77
+  )))
   assert.deepEqual(nativeEnemyPresentationPlan(enemy('COFFIN'), 100).layers, [])
 })
 
@@ -577,6 +607,245 @@ test('Skeleton-family attacks keep gait limbs independent from body and equipmen
   }
 })
 
+test('Skeleton mace, flail, and pike own their native auxiliary records and geometry', () => {
+  const mace = nativeEnemyPresentationPlan(enemy('SKELETON', ['FLAG_MACE']), 100)
+  const maceHead = mace.layers.find(({ role }) => role === 'skeleton-mace-head')
+  assert.deepEqual(
+    maceHead && { entry: maceHead.entry, offset: maceHead.offset },
+    { entry: 46, offset: { x: 30, y: -13.5 } },
+  )
+
+  const flail = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_FLAIL']),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'skeleton-weapon',
+      actionProgress: 9,
+      state: 'action',
+    }),
+  }, 100)
+  assert.equal(flail.layers.find(({ role }) => role === 'skeleton-flail-head')?.entry, 46)
+  assert.deepEqual(flail.segments, [{
+    alpha: 1,
+    end: { x: -11.5, y: -90 },
+    role: 'skeleton-flail-chain',
+    start: { x: -1, y: -76.5 },
+    tint: 0x777777,
+    width: 1.5,
+  }])
+
+  const pike = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_PIKE']),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'skeleton-pike',
+      actionProgress: 1,
+      state: 'action',
+    }),
+  }, 100)
+  const shaft = pike.layers.find(({ role }) => role === 'skeleton-pike-shaft')
+  assert.equal(shaft?.entry, 56)
+  assert.equal(shaft?.rotationRadians, Math.PI / 2)
+  assert.equal(shaft?.scaleX, 1)
+  assert.equal(shaft?.scaleY, 64 / 136)
+})
+
+test('Archer action bodies attach only the configured native held elemental arrow', () => {
+  const action = nativeEnemyIdleAnimationSample({
+    action: 'archer-shot',
+    actionProgress: 3,
+    state: 'action',
+  })
+  const fire = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER', ['FLAG_FIREARROW']),
+    animation: action,
+  }, 130)
+  const poison = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER', ['FLAG_POISONARROW']),
+    animation: action,
+  }, 130)
+  const ordinary = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONARCHER'),
+    animation: action,
+  }, 130)
+
+  assert.equal(fire.layers.find(({ role }) => role === 'archer-held-fire-arrow')?.entry, 261)
+  assert.equal(poison.layers.find(({ role }) => role === 'archer-held-poison-arrow')?.entry, 276)
+  assert.ok(ordinary.layers.every(({ role }) => !role.startsWith('archer-held-')))
+})
+
+test('Mage charge and cloak presentation enumerate every native recipe selector', () => {
+  const action = nativeEnemyIdleAnimationSample({
+    action: 'mage-cast-short',
+    actionProgress: 25,
+    state: 'action',
+  })
+  const expected = [
+    ['FLAG_CASTFIRE', [261, 261, 261, 261]],
+    ['FLAG_CASTLIGHTNING', [1838, 1838, 1838, 1838]],
+    ['FLAG_CASTFROST', [381, 381]],
+    ['FLAG_CASTPOISON', [382, 382]],
+  ] as const
+  for (const [flag, entries] of expected) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy('SKELETONMAGE', [flag]),
+      animation: action,
+      lighting: { charge: 0.5, glow: 0, providerCopies: 1 },
+    }, 130)
+    const charge = plan.layers.filter(({ role }) => role.includes('-charge:'))
+    assert.deepEqual(charge.map(({ entry }) => entry), entries, flag)
+    assert.ok(charge.every(({ alpha }) => alpha <= 0.25), flag)
+  }
+
+  const cloak = nativeEnemyPresentationPlan({
+    ...enemy('SKELETONMAGE'),
+    mageCloak: true,
+  }, 100)
+  assert.equal(cloak.layers.find(({ role }) => role === 'mage-body')?.entry, 1459)
+})
+
+test('Rotten Zombie owns the exact two-cloud transform and private-seeded fly swarm', () => {
+  const source = enemy('ZOMBIE', ['FLAG_ROTTEN'])
+  const first = nativeEnemyPresentationPlan(source, 120)
+  const repeated = nativeEnemyPresentationPlan(source, 120)
+  const sameSeedBucket = nativeEnemyPresentationPlan(source, 129)
+  const nextSeedBucket = nativeEnemyPresentationPlan(source, 130)
+  const gas = first.layers.filter(({ role }) => role.startsWith('zombie-gas-cloud:'))
+  const flies = first.layers.filter(({ role }) => role.startsWith('zombie-fly:'))
+
+  assert.deepEqual(gas.map(({ alpha, entry, scaleX, scaleY, tint }) => ({
+    alpha, entry, scaleX, scaleY, tint,
+  })), [
+    { alpha: 0.5, entry: 65, scaleX: 1.5, scaleY: 1.2, tint: 0x0d1a0d },
+    { alpha: 0.5, entry: 65, scaleX: -1.5, scaleY: 1.2, tint: 0x0d1a0d },
+  ])
+  assert.ok(flies.length >= 5 && flies.length <= 20)
+  assert.ok(flies.every(({ alpha, entry }) => entry === 26 && alpha >= 0.25 && alpha <= 0.75))
+  assert.deepEqual(first.layers, repeated.layers)
+  assert.deepEqual(
+    first.layers.filter(({ role }) => role.startsWith('zombie-fly:')),
+    sameSeedBucket.layers.filter(({ role }) => role.startsWith('zombie-fly:')),
+  )
+  assert.notDeepEqual(
+    first.layers.filter(({ role }) => role.startsWith('zombie-fly:')),
+    nextSeedBucket.layers.filter(({ role }) => role.startsWith('zombie-fly:')),
+  )
+})
+
+test('Zombie and Mage retain their low-frequency native record-10/11 transient membership', () => {
+  const zombieEntries = new Set<number>()
+  const mageEntries = new Set<number>()
+  for (let id = 1; id <= 24; id += 1) {
+    const zombie = { ...enemy('ZOMBIE', ['FLAG_ROTTEN']), id }
+    const mage = {
+      ...enemy('SKELETONMAGE'),
+      animation: nativeEnemyIdleAnimationSample({
+        action: 'mage-cast-long',
+        actionProgress: 5,
+        state: 'action',
+      }),
+      id,
+    }
+    for (let tick = 100; tick <= 180; tick += 10) {
+      for (const layer of nativeEnemyPresentationPlan(zombie, tick).layers) {
+        if (layer.role.startsWith('zombie-fade-particle:')) {
+          assert.equal(layer.blendMode, 'add')
+          zombieEntries.add(layer.entry)
+        }
+      }
+      for (const layer of nativeEnemyPresentationPlan(mage, tick).layers) {
+        if (layer.role.startsWith('mage-cast-particle:')) {
+          assert.equal(layer.blendMode, 'add')
+          mageEntries.add(layer.entry)
+        }
+      }
+    }
+  }
+  assert.deepEqual([...zombieEntries].sort(), [10, 11])
+  assert.deepEqual([...mageEntries].sort(), [10, 11])
+})
+
+test('Wraith wisps and Demon flames remain independent ambient members around body redraws', () => {
+  const wraith = nativeEnemyPresentationPlan({
+    ...enemy('WRAITH', ['FLAG_BURNING']),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'wraith-drain',
+      hitFlash: 0.75,
+      state: 'action',
+    }),
+  }, 120)
+  const wisps = wraith.layers.filter(({ role }) => role.startsWith('wraith-soul-wisp:'))
+  assert.ok(wisps.length > 0)
+  assert.ok(wisps.every(({ atlas, blendMode, entry }) => (
+    atlas === 'BadGuys' && blendMode === 'add' && entry === 21
+  )))
+  assert.ok(wraith.layers.every(({ role }) => !role.startsWith('hit:wraith-soul-wisp:')))
+
+  const demonStart = nativeEnemyPresentationPlan(enemy('DEMON'), 100)
+  const demonNext = nativeEnemyPresentationPlan(enemy('DEMON'), 104)
+  const startFlames = demonStart.layers.filter(({ role }) => role.startsWith('demon-flame:'))
+  const nextFlames = demonNext.layers.filter(({ role }) => role.startsWith('demon-flame:'))
+  assert.deepEqual(nextFlames.map(({ entry }) => entry), startFlames.map(({ entry }) => (
+    46 + (entry - 46 + 1) % 32
+  )))
+  assert.ok(Array.from({ length: 18 }, (_, facing) => nativeEnemyPresentationPlan({
+    ...enemy('DEMON'),
+    headingDeg: facing * 20,
+  }, 100)).some((plan) => {
+    const bodyIndex = plan.layers.findIndex(({ role }) => role === 'demon-controller-body')
+    const flameIndices = plan.layers.flatMap(({ role }, index) => (
+      role.startsWith('demon-flame:') ? [index] : []
+    ))
+    return flameIndices.some((index) => index < bodyIndex)
+      && flameIndices.some((index) => index > bodyIndex)
+  }))
+})
+
+test('native hit redraw excludes Zombie gas, flies, and family ambient fire', () => {
+  const zombie = nativeEnemyPresentationPlan({
+    ...enemy('ZOMBIE', ['FLAG_ROTTEN']),
+    animation: nativeEnemyIdleAnimationSample({ hitFlash: 0.5 }),
+  }, 120)
+  assert.equal(zombie.layers.filter(({ role }) => role.startsWith('hit:')).length, 5)
+  assert.ok(zombie.layers.every(({ role }) => (
+    !role.startsWith('hit:zombie-gas-cloud:') && !role.startsWith('hit:zombie-fly:')
+  )))
+
+  const skeleton = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', ['FLAG_BURNING']),
+    animation: nativeEnemyIdleAnimationSample({ hitFlash: 0.5 }),
+  }, 120)
+  assert.ok(skeleton.layers.some(({ role }) => role.startsWith('skeleton-burning-fire:')))
+  assert.ok(skeleton.layers.every(({ role }) => !role.startsWith('hit:skeleton-burning-fire:')))
+})
+
+test('common native hit redraw covers every survival family body membership', () => {
+  const expectedHitLayers = {
+    COFFIN: 1,
+    DEMON: 5,
+    IMP: 2,
+    SKELETON: 3,
+    SKELETONARCHER: 3,
+    SKELETONMAGE: 3,
+    WRAITH: 1,
+    ZOMBIE: 5,
+  } as const
+  for (const family of NATIVE_ENEMY_FAMILIES) {
+    const plan = nativeEnemyPresentationPlan({
+      ...enemy(family),
+      animation: nativeEnemyIdleAnimationSample({
+        coffinState: 'closed',
+        hitFlash: 0.5,
+        impEffectAlpha: 1,
+        impEffectFrame: 0,
+      }),
+    }, 120)
+    const hit = plan.layers.filter(({ role }) => role.startsWith('hit:'))
+    assert.equal(hit.length, expectedHitLayers[family], family)
+    assert.ok(hit.every(({ alpha, blendMode, tint }) => (
+      alpha === 0.5 && blendMode === 'normal' && tint === 0xff0000
+    )), family)
+  }
+})
+
 test('armored Skeleton claw selector 9 preserves the native blank torso slot', () => {
   const plan = nativeEnemyPresentationPlan({
     ...enemy('SKELETON', ['FLAG_ARMOR']),
@@ -726,9 +995,10 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
       demonRearLimbRotationRadians: -0.2,
     }),
   }, 100)
-  assert.deepEqual(demon.layers.map((layer) => layer.rotationRadians), [-0.2, -0.1, 0, 0.2, 0.1])
-  assert.equal(demon.layers[2].entry, 37)
-  assert.deepEqual(demon.layers.map((layer) => layer.offset), [
+  const demonBody = demon.layers.filter(({ role }) => !role.startsWith('demon-flame:'))
+  assert.deepEqual(demonBody.map((layer) => layer.rotationRadians), [-0.2, -0.1, 0, 0.2, 0.1])
+  assert.equal(demonBody[2].entry, 37)
+  assert.deepEqual(demonBody.map((layer) => layer.offset), [
     { x: -14, y: -31 },
     { x: 10, y: -13 },
     { x: 0, y: 0 },
@@ -745,7 +1015,10 @@ test('Demon joints and Coffin later states consume authoritative articulation sa
     }),
   }, 100)
   assert.equal(demonBomb.actionFrame?.selector, 1)
-  assert.equal(demonBomb.layers[2].entry, 37)
+  assert.equal(
+    demonBomb.layers.find(({ role }) => role === 'demon-controller-body')?.entry,
+    37,
+  )
 
   const coffin = nativeEnemyPresentationPlan({
     ...enemy('COFFIN'),

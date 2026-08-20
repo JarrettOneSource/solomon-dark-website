@@ -28,6 +28,7 @@ import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
 import flameLashStart from '../assets/game/audio/sfx/flame-lash-start.wav'
+import flyblownLoop from '../assets/game/audio/sfx/flyblown-loop.wav'
 import fizzle from '../assets/game/audio/sfx/fizzle.wav'
 import hitShield from '../assets/game/audio/sfx/hit-shield.wav'
 import golemDie from '../assets/game/audio/sfx/golem-die.wav'
@@ -46,6 +47,7 @@ import magicCircle from '../assets/game/audio/sfx/magic-circle.wav'
 import magicShieldExplode from '../assets/game/audio/sfx/magic-shield-explode.wav'
 import magicShieldUp from '../assets/game/audio/sfx/magic-shield-up.wav'
 import magicStorm from '../assets/game/audio/sfx/magic-storm.wav'
+import maggotsLoop from '../assets/game/audio/sfx/maggots-loop.wav'
 import mindstar from '../assets/game/audio/sfx/mindstar.wav'
 import nuke from '../assets/game/audio/sfx/nuke.wav'
 import phase from '../assets/game/audio/sfx/phase.wav'
@@ -59,6 +61,7 @@ import rainfallLoop from '../assets/game/audio/sfx/rainfall-loop.wav'
 import ringOfIce from '../assets/game/audio/sfx/ring-of-ice.wav'
 import setTrap from '../assets/game/audio/sfx/set-trap.wav'
 import steadyWindLoop from '../assets/game/audio/sfx/steady-wind-loop.wav'
+import soulLoop from '../assets/game/audio/sfx/soul-loop.wav'
 import stoneBreak from '../assets/game/audio/sfx/stone-break.wav'
 import stoneStep from '../assets/game/audio/sfx/stone-step.wav'
 import stoneskin from '../assets/game/audio/sfx/stoneskin.wav'
@@ -108,13 +111,16 @@ export const GAME_AUDIO_SOURCES = {
     'comet-loop': cometLoop,
     'electric-loop': electricLoop,
     'earthquake-loop': earthquakeLoop,
+    'flyblown-loop': flyblownLoop,
     'gather-rocks-loop': gatherRocksLoop,
     'ice-loop': iceLoop,
     'lightning-loop': lightningLoop,
     'low-fire-loop': lowFireLoop,
+    'maggots-loop': maggotsLoop,
     'plane-cross-loop': planeCrossLoop,
     'rainfall-loop': rainfallLoop,
     'rolling-stone-loop': rollingStoneLoop,
+    'soul-loop': soulLoop,
     'steady-wind-loop': steadyWindLoop,
   },
   music: {

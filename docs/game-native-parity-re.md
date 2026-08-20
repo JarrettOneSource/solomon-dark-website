@@ -17047,8 +17047,11 @@ Wraith add `0.05` per active tick; burning Mage adds two clamped `0.05` steps;
 Imp adds `0.01`. Archer/Mage charged radius is
 `charge*(0.5+S(0.1))`, Imp radius is `0.25+S(0.1)`, and Demon radius is
 `1.5+S(0.25)`. Coffin emits only in opening, transition-delay, or open state.
-The static `burning-fire` role is family-owned presentation and does not imply
-the separate Mod_Burn MiscLight. Mod_ElectricBurn and Mod_Burn are active
+At that revision the static `burning-fire` role was treated as family-owned
+presentation and did not imply the separate Mod_Burn MiscLight. The
+2026-08-20 reopened closure below supersedes that projection: family-native
+fire is now presentation-owned and the generic wire role no longer exists.
+Mod_ElectricBurn and Mod_Burn are active
 target-owned secondary snapshot members; Mod_EtherBurn remains catalogued but
 dormant.
 
@@ -19007,3 +19010,203 @@ source module. The decisive journey removed only that external oracle and
 added the organic death assertions above; it did not modify the deployed
 bundle or authority. This receipt is written afterward, so its commit changes
 only this ledger.
+
+## 2026-08-20 enemy attack and auxiliary-presentation reopened closure
+
+The missing Skeleton attack pose on the published Website was not an isolated
+sprite problem. It exposed an incomplete mirror of the native enemy
+presentation owner: the server sampled the locomotion lane at actor `+0x144`
+but the renderer selects attack bodies and equipment from the independent
+action lane at `+0x150`. That selector is now fixed. This pass reopens the
+whole owner and audits every sibling renderer branch, attached effect,
+projectile, damage redraw, death program, and enemy-owned loop before the
+system can be closed again.
+
+The evidence source is retail `SolomonDark.exe`, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+with atlas manifests and untouched PCM from the same installation. Addresses
+below are image-base virtual addresses. Renderer-local random decoration is
+allowed one documented deterministic multiplayer substitute where the stock
+process-global RNG position is not replicated; gameplay state, timing, record
+identity, placement geometry, ordering, and audio ownership remain exact.
+
+### Causal trace and complete membership
+
+`BoneyardSimulation` owns enemy action state and child projectile creation.
+The replication descriptor fixes immutable recipe selectors, while the sample
+carries mutable animation, effects, projectile, hit, death, and lighting
+state. `NativeEnemyViews` consumes that authoritative sample, resolves atlas
+records plus their authored points, and preserves the native internal painter
+order. `BoneyardScene` separately consumes the same world snapshot for
+one-frame enemy ambient-loop requests. A hit flash redraws the native
+body/equipment membership in red; it does not recolor independently blended
+ambient particles. A projectile retains its own lifetime and presenter after
+the attack animation requested it.
+
+| Native class / child | Website membership | Required disposition | Baseline finding |
+| --- | --- | --- | --- |
+| Skeleton | survival family; claw, sword, mace, flail, axe, pike | exact-ported | action selector fixed; mace head, flail chain/head, and pike shaft/head still absent |
+| SkeletonArcher | survival family; normal/fire/poison shot | exact-ported | action body and projectile children present; held fire/poison arrow at the authored bow point absent |
+| SkeletonMage | survival family; fire/lightning/frost/poison recipe and cloak recipe | exact-ported | action bodies and projectile children present; element charge attachments and custom-recipe cloak branch absent |
+| Imp | survival family; contact attack and owned `Anim_FireBurst` | exact-ported | body `285..332` and upper effect `333..342` were correct; residual sweep found the marker-owned shared `251..254` burst missing |
+| Zombie | survival family; normal/rotten, beat, fly swarm, gas cloud | exact-ported | articulated attack body present; records `26` and `65` plus Flyblown loop absent |
+| Wraith | survival family; drain, burning soul wisps | exact-ported | action/contact state and opaque body present; record `21` wisps and Soul loop absent |
+| Lesser Demon | survival family; bomb, five persistent flames, death fire handoff | exact-ported | articulated attack body and bomb child were present; five split-order flames and the delayed death fire/burst choreography were absent |
+| Coffin | survival family; materialize/open/spawn Maggots | exact-ported | four-state body and Maggot children present; count-weighted Maggots loop absent |
+| Maggot | Coffin-owned child; airborne/crawl/bite/hit/death | verified-already-at-parity | authoritative state, all 50 airborne records, hit flash, death fade, and impact cue already covered |
+| Arrow / Fire Arrow / Poison Arrow | Archer-owned children | verified-already-at-parity | independent flight, impact, poison/fire visual and audio ownership already covered |
+| Firebolt / Guided Missile / mage lightning | Mage-owned children | verified-already-at-parity | element-specific projectile/effect/audio paths already covered; charge-in-hand is the separate open renderer branch |
+| Demon Bomb / Poison Pool | Demon/Zombie-owned children | verified-already-at-parity | independent trajectory, landing, pool lifetime, painter order, hit, and audio paths already covered |
+| The Discorporeal | non-survival native class | out-of-system | no stock survival-wave token or Website factory member in this port |
+| Dire Faculty | non-survival native class | out-of-system | boss class, outside the Boneyard survival factory membership |
+| Heartmonger / Crow | non-survival native class and owned child | out-of-system | boss lifecycle is not constructed by the Website survival factory |
+| Spider / Silk / Cocoon | non-survival native class and owned children | out-of-system | no Website survival token/factory member |
+| Portal | non-survival native class | out-of-system | record `251..254` and portal flames belong to Portal, not an omitted Imp layer |
+
+All eight survival families and Maggot remain members of common damage/death
+presentation. Their 20-tick red duplicate redraw, shield interception,
+family-specific death records, fragments, sound identities, and once-only
+lifecycle ownership were already exact and remain regression members. Player
+damage is a separate presenter owner and remains in scope for acceptance: the
+20-tick red duplicate player redraw, the three native Wizard ouch cues, poison
+suppression, shield/terminal suppression, and exactly-once replicated event
+must all remain visible and audible.
+
+### Native auxiliary recipes being closed
+
+- Zombie renderer `0x00493390` tints BadGuys record `65` RGBA
+  `(0.05,0.1,0.05,0.5)`, rotates it by age times `0.25` degrees, draws a
+  `(1.5,1.2)` copy at y `-15` and a mirrored copy another five pixels up,
+  then seeds its private render RNG with `floor(age/10)`. It draws `5..20`
+  record-`26` flies: alpha `.25..75`, radius `1..21` doubled on one of five
+  rolls, circular angle, y radius multiplied by `.8`, and base y `-15..-25`.
+  Rotten tick owner `0x004863A0` also renews Flyblown loop request 158 every
+  tick at native point attenuation.
+- Wraith tick owner `0x00486C30` renews Soul loop request 170 every tick. A
+  burning Wraith emits additive BadGuys record `21` when `RandomInt(4)==1` or
+  its action clock is positive, 15 pixels behind the actor and 15 pixels up,
+  with randomized alpha. The opaque body `2070..2087`, scale two and y `+15`,
+  remains independently readable.
+- Lesser Demon constructor `0x00479150` seeds five flame phases and five
+  offsets; tick advances every phase by `.25` modulo the 32 DeadHawg frames
+  `46..77`. Scale membership is exactly `[0.5,1.1,0.5,0.8,0.8]`. Attachment
+  bases are controller points 2, 3, 4, midpoint 0/1, and midpoint 1/2; flames
+  behind point 5 draw before the body and the remaining flames after it.
+  Its dead branch in tick `0x00487300` retains Demon `55..61`, emits
+  DeadHawg fire at death clocks `0/20/40/60/80`, and creates shared
+  `Anim_FireBurst` record `110` plus `251..254` at clock 95.
+- Skeleton renderer `0x0048DEE0` adds BadGuys record `46` for mace and flail,
+  a line between the flail overlay's two authored points, and BadGuys record
+  `54` or `56` as the pike shaft/head depending on target/action state.
+- Archer renderer `0x0048F450` attaches the animated fire records `255..266`
+  at age/5 or poison records `271..282` at age/6 to body authored point zero
+  while its action selector is nonzero. A normal arrow has no held overlay.
+- Mage renderer `0x00491720` attaches fire `255..266`, lightning `1836..1839`,
+  frost `381`, or poison `382` at the two authored casting points while charge
+  is positive and cooldown permits it. Charge uses the squared native charge
+  lane. The explicit custom MonsterRecipe cloak selector uses alternate body
+  `1459..1476`; retail survival waves leave that selector false.
+- Imp tick `0x00485DC0` creates one `Anim_FireBurst` from shared BadGuys
+  `251..254` on successful contact. Those records are not Imp body or Portal
+  ownership in this call path; the authoritative attack-marker edge owns the
+  independent 16-tick child.
+- Coffin tick owner `0x004A2760` requests loop 164 at native point attenuation
+  times `min(live owned Maggots / 200, 1) * 0.5`.
+
+The three ambient sounds use the native one-frame request-accumulator model:
+all live producers submit gains, one global instance per registry entry takes
+the maximum, starts on the zero-to-positive edge, updates gain in place, and
+stops on the positive-to-zero edge. They are untouched `flyblown__loop.wav`
+(11025 Hz mono 8-bit, 39976 frames), `maggots__loop.wav` (44100 Hz stereo
+16-bit, 290305 frames with a full-file `smpl` loop), and `Soul__Loop.wav`
+(44100 Hz stereo 16-bit, 420589 frames).
+
+### Closure and proof contract
+
+The implementation must select every newly named atlas record, preserve
+nonuniform and mirrored transforms, keep ambient layers out of the hit-redraw
+membership, synchronize the three global loops from authoritative snapshots,
+and expose deterministic browser diagnostics for family/action/layer/loop
+membership. Regression coverage must enumerate every survival family, every
+action program, all weapon and element recipes, projectile children, common
+hit/shield/death programs, Zombie/Wraith/Demon ambient branches, and player
+damage visual/audio behavior. Completion requires the canonical
+`./scripts/validate.sh` on the exact final tree and focused real-browser proof
+on the Mac mini, followed by a focused fast-forward publication to `main`, CI
+deployment of the same revision, and a clean production browser receipt.
+
+### Implemented closure
+
+This section supersedes earlier chronological notes that left survival-family
+action presentation, auxiliary weapon shapes, or the 63-component protocol-29
+enemy sample open. Protocol 30 carries a 53-component dynamic enemy sample and
+an 11-component immutable descriptor after removing the generic fire effect
+and adding Mage cloak. Older notes about exact melee collision reaches remain
+simulation-geometry evidence outside this presentation/audio closure; they do
+not describe an unimplemented attack sprite, attachment, projectile, hit/death
+effect, or cue.
+
+The renderer now owns explicit before-body, hit-reactive body/equipment, and
+after-body memberships. Damage redrawing duplicates only the body/equipment
+set; Zombie gas and flies, Wraith wisps, Demon flames, cast particles, burning
+fire, and the independent shield shell retain their own blend/tint. Sprite
+layers support mirrored/nonuniform scale and the Skeleton Flail owns a real
+line primitive. The generic replicated `burning-fire` shell was removed.
+DeadHawg fire is additively composited throughout the enemy and Demon-bomb
+paths; the residual browser sweep caught and removed the otherwise-visible
+black source rectangles.
+
+The concrete family closure is:
+
+- Skeleton now attaches record `46` to Mace/Flail authored points, draws the
+  Flail chain, orients Pike record `54/56`, and retains the independent action
+  selector for every claw/weapon pose.
+- Archer holds only its configured fire `255..266` or poison `271..282` arrow
+  while the attack body selector is nonzero.
+- Mage attaches all four element recipes at both authored hand points, squares
+  authoritative charge, reconstructs the two independent one-in-five
+  record-`10/11` cast-particle lanes, and carries the custom MonsterRecipe cloak
+  boolean in protocol 30's immutable enemy descriptor. Retail waves leave it
+  false.
+- Rotten Zombie draws the exact two record-`65` cloud transforms and private
+  `floor(age/10)` native-RNG record-`26` swarm. Its one-in-75 record-`10/11`
+  `Anim_FadeSin_Move` membership is also retained.
+- Burning Wraith reconstructs recent additive record-`21` wisps, including
+  every current drain-action emission; Lesser Demon carries five independently
+  phased DeadHawg flames with the exact scales, controller attachments, `.25`
+  frame rate, and behind/front split. Demon death now schedules its native
+  body strip, five delayed additive Fire children, and clock-95 FireBurst;
+  future children stay out of replication until their authored birth tick.
+- Imp attack-marker events now construct one independent 16-tick
+  `Anim_FireBurst`: fading record `110`, additive four-ticks-per-frame
+  `251..254`, upward motion, and a deterministic cosmetic constructor domain.
+  The body/upper effect remains separately verified.
+- Coffin retains its body/Maggot state machine and now contributes the exact
+  live-owned-Maggot-weighted ambient request.
+
+Stock uses the process-global RNG for the Mage, Wraith, Demon, Zombie transient
+births and Demon constructor offsets. Protocol 30 does not serialize that
+global cursor. The Website uses an immutable actor-id/spawn-tick plus fixed-tick
+cosmetic domain for those draws. This is the documented deterministic
+multiplayer substitute: native membership, frequency gates, atlas records,
+attachment geometry, phase rate, fade ownership, and painter order remain
+fixed, without claiming the same retail global-RNG word position. The same
+  policy applies to the random scale/rotation of Imp's event-owned burst.
+
+`BoneyardEnemyAmbientAudioSynchronizer` reduces live authoritative producers to
+one max-gain owner for each of Flyblown, Soul, and Maggots on every presentation
+frame. It starts at the zero edge, updates volume in place, stops at zero, and
+balances all three owners at teardown. The browser surface publishes the active
+cue/gain set as bounded diagnostics. The checked-in WAV hashes are
+`e4dd23bb...22d6`, `661515f9...50b4`, and `72533246...0db` respectively.
+
+Regression coverage now explicitly enumerates every survival family hit body,
+all Skeleton weapons, both Archer elemental holds, all Mage elements and cloak,
+Zombie clouds/flies/record-10/11 particles, Wraith wisps, Demon flames, the
+three loop reducers, every action/death program, every projectile/effect kind,
+Maggot states, shield independence, and the separate player hit/ouch presenter.
+The focused WSL WebGL preflight rendered all eight attacking families, all
+eight projectile kinds and nine child effects, reported `804840+` changed
+pixels between sampled action frames, proved a Skeleton claw body change of
+875 pixels, and returned empty page-, console-, and response-error arrays. It
+is diagnostic only; final acceptance remains the exact rebased Mac mini tree.

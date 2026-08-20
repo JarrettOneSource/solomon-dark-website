@@ -131,6 +131,7 @@ export function nativeEnemyProjectilePlan(
         'demon-bomb-ground',
         {
           alpha: groundAlpha,
+          blendMode: 'add',
           offset: { x: 0, y: -20 },
           scaleY: 0.5,
         },

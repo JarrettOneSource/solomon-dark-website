@@ -281,13 +281,13 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   if (frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
   assert.equal(frame.world.entities.keyframe, true)
   assert.equal(frame.world.entities.spawned.length, 1)
-  assert.equal(frame.world.entities.spawned[0]!.length, 10)
-  assert.equal(frame.world.entities.samples[0]!.length, 63)
+  assert.equal(frame.world.entities.spawned[0]!.length, 11)
+  assert.equal(frame.world.entities.samples[0]!.length, 53)
   assert.equal(frame.world.entities.spawned[0]![7], 1)
-  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0])
+  assert.deepEqual(frame.world.entities.spawned[0]!.slice(8), [0, 0, 0])
   assert.equal(frame.world.entities.samples[0]![33], 25 * 1024)
   assert.equal(frame.world.entities.samples[0]![34], 50 * 1024)
-  assert.equal(frame.world.entities.samples[0]![39], 2)
+  assert.equal(frame.world.entities.samples[0]![39], 1)
   assert.equal(frame.world.entities.samples[0]![40], 0.375 * 1024)
   assert.equal(frame.world.entities.samples[0]![41], 0)
   assert.equal(frame.world.entities.samples[0]![42], 1)
@@ -302,6 +302,7 @@ test('Boneyard enemies use compact descriptors and authoritative dynamic samples
   assert.equal(enemy.id, 7)
   assert.equal(enemy.enemyToken, 'SKELETON')
   assert.equal(enemy.armored, true)
+  assert.equal(enemy.mageCloak, false)
   assert.deepEqual(enemy.flags, ['FLAG_ARMOR'])
   assert.equal(enemy.shieldHealth, 25)
   assert.equal(enemy.shieldMaximumHealth, 50)
@@ -395,11 +396,11 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     0,
     ...sample.slice(8),
   ] as [number, number, ...number[]]
-  const duplicateEffectRole: ReplicatedEntitySample = [
-    ...sample.slice(0, 53),
-    sample[43]!,
-    ...sample.slice(54),
-  ] as [number, number, ...number[]]
+  const invalidEffectRole = [
+    ...sample.slice(0, 43),
+    1,
+    ...sample.slice(44),
+  ] as unknown as ReplicatedEntitySample
   const invalidGlow = [
     ...sample.slice(0, 40),
     1025,
@@ -435,11 +436,30 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
     0,
     0,
     7,
+    0,
+  ] as ReplicatedEntityDescriptor
+  const mageCloakDescriptor = [
+    descriptor[0]!,
+    descriptor[1]!,
+    2,
+    1003,
+    descriptor[4]!,
+    descriptor[5]!,
+    0,
+    0,
+    0,
+    7,
+    1,
   ] as ReplicatedEntityDescriptor
   assert.equal(registration.descriptorIsValid(invalidDescriptor), false)
   assert.equal(registration.descriptorIsValid(invalidActorLane), false)
   assert.equal(registration.descriptorIsValid(invalidActorOrdinal), false)
   assert.equal(registration.descriptorIsValid(zombieDescriptor), true)
+  assert.equal(registration.descriptorIsValid(mageCloakDescriptor), true)
+  assert.equal(registration.descriptorIsValid([
+    ...zombieDescriptor.slice(0, 10),
+    1,
+  ] as unknown as ReplicatedEntityDescriptor), false)
   assert.equal(registration.descriptorIsValid([
     ...zombieDescriptor.slice(0, 8),
     -1,
@@ -447,7 +467,7 @@ test('Boneyard enemy codec rejects family/type mismatches and malformed samples'
   ] as unknown as ReplicatedEntityDescriptor), false)
   assert.equal(registration.sampleIsValid(truncatedSample), false)
   assert.equal(registration.sampleIsValid(mismatchedAction), false)
-  assert.equal(registration.sampleIsValid(duplicateEffectRole), false)
+  assert.equal(registration.sampleIsValid(invalidEffectRole), false)
   assert.equal(registration.sampleIsValid(invalidGlow), false)
   assert.equal(registration.sampleIsValid(invalidCharge), false)
   assert.equal(registration.sampleIsValid(invalidProviderCopies), false)
@@ -764,16 +784,6 @@ function enemySnapshot(): BoneyardEnemySnapshot {
       demonRearJointRotationRadians: 0,
       demonRearLimbRotationRadians: 0,
       effects: [{
-        alpha: 0.75,
-        atlas: 'DeadHawg',
-        blendMode: 'normal',
-        entry: 52,
-        id: 29,
-        offset: { x: 0.5, y: -1 },
-        role: 'burning-fire',
-        rotationRadians: 0.25,
-        scale: 1.25,
-      }, {
         alpha: 1.25,
         atlas: 'BadGuys',
         blendMode: 'add',
@@ -815,6 +825,7 @@ function enemySnapshot(): BoneyardEnemySnapshot {
     nativeTypeId: 1001,
     position: { x: 123.45, y: 456.75 },
     lighting: { charge: 0, glow: 0.375, providerCopies: 1 },
+    mageCloak: false,
     shieldHealth: 25,
     shieldMaximumHealth: 50,
     spawnTick: 12,

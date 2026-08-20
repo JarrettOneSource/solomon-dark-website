@@ -2412,6 +2412,56 @@ test('family Unbind stars use the exact primary-only clocks', () => {
   )
 })
 
+test('Demon death retains its body flames and delayed Anim_FireBurst choreography', () => {
+  let result = killOneAndStep('demon-death-choreography', 'DEMON')
+  const effects = result.store.deathEffects
+  assert.equal(effects.filter(({ kind }) => kind === 'fire-array').length, 5)
+  assert.deepEqual(
+    effects.filter(({ kind }) => kind === 'fire-array').map(({ spawnTick }) => spawnTick),
+    [1, 21, 41, 61, 81],
+  )
+  const body = effects.find(({ role }) => role === 'demon-death-body')
+  assert.ok(body)
+  assert.deepEqual(
+    {
+      atlas: body.atlas,
+      firstEntry: body.firstEntry,
+      frameCount: body.frameCount,
+      frameTicks: body.frameTicks,
+    },
+    { atlas: 'Demon', firstEntry: 55, frameCount: 7, frameTicks: 7 },
+  )
+  assert.equal(
+    effects.find(({ role }) => role === 'demon-death-fire-burst-glow')?.spawnTick,
+    96,
+  )
+  assert.equal(
+    effects.find(({ role }) => role === 'demon-death-fire-burst-frame')?.spawnTick,
+    96,
+  )
+
+  result = step(result.store, 96, FAR_PLAYERS)
+  assert.equal(
+    result.store.deathEffects.find(
+      ({ role }) => role === 'demon-death-fire-burst-frame',
+    )?.entry,
+    251,
+  )
+  assert.equal(
+    result.store.deathEffects.find(
+      ({ role }) => role === 'demon-death-fire-burst-glow',
+    )?.alpha,
+    0.5,
+  )
+  result = step(result.store, 100, FAR_PLAYERS)
+  assert.equal(
+    result.store.deathEffects.find(
+      ({ role }) => role === 'demon-death-fire-burst-frame',
+    )?.entry,
+    252,
+  )
+})
+
 test('Bouncer draws its horizontal damping branch anew at every ground contact', () => {
   let result = killOneAndStep('bouncer-contact-rng', 'SKELETON')
   const forceGroundContact = (source: BoneyardEnemyStore, effectIndex: number) => ({

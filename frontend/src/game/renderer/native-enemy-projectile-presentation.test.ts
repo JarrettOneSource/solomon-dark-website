@@ -108,6 +108,7 @@ test('live projectile selectors and clocks follow the recovered compositor', () 
   assert.equal(bomb.layers[3]!.entry, 74)
   assert.equal(bomb.layers[3]!.alpha, 0.25)
   assert.deepEqual(bomb.layers[3]!.offset, { x: 0, y: -20 })
+  assert.equal(bomb.layers[3]!.blendMode, 'add')
   assert.equal(bomb.layers[3]!.scaleY, 0.5)
 
   const airborneBomb = nativeEnemyProjectilePlan(projectile('demon-bomb', 0x7f7, {

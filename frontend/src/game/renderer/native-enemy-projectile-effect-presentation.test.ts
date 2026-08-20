@@ -22,7 +22,7 @@ test('every projectile-owned transient resolves its exact atlas record and layer
     effect('guided-impact-main', 'BadGuys', 110, 'add'),
     effect('guided-impact-aura-one', 'BadGuys', 111, 'add'),
     effect('guided-impact-aura-two', 'BadGuys', 112, 'add'),
-    effect('demon-fire', 'DeadHawg', 46, 'normal'),
+    effect('demon-fire', 'DeadHawg', 46, 'add'),
     effect('poison-pool-fade-outer', 'DeadHawg', 0, 'normal'),
     effect('poison-pool-fade-inner', 'DeadHawg', 0, 'normal'),
   ] as const

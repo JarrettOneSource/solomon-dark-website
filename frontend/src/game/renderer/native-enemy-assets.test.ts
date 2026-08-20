@@ -64,7 +64,28 @@ test('every reachable native enemy plan uses a shipped nonempty atlas record', (
       for (const layer of plan.layers) used.add(`${layer.atlas}:${layer.entry}`)
     }
   }
-  assert.equal(used.size, 665)
+  const activePike = nativeEnemyPresentationPlan({
+    ...enemy('SKELETON', 1, 0, ['FLAG_PIKE']),
+    animation: nativeEnemyIdleAnimationSample({
+      action: 'skeleton-pike',
+      actionProgress: 1,
+      state: 'action',
+    }),
+  }, 500)
+  for (const layer of activePike.layers) used.add(`${layer.atlas}:${layer.entry}`)
+  assert.ok(used.size > 665)
+  for (const key of [
+    'BadGuys:26',
+    'BadGuys:46',
+    'BadGuys:54',
+    'BadGuys:56',
+    'BadGuys:65',
+  ]) assert.ok(used.has(key), key)
+  assert.deepEqual(
+    Array.from({ length: 32 }, (_, index) => `DeadHawg:${46 + index}`)
+      .filter((key) => !used.has(key)),
+    [],
+  )
 })
 
 test('every reachable enemy projectile record is selected for Boneyard preload', async () => {
@@ -399,6 +420,8 @@ function enemy(
     flags,
     headingDeg,
     id,
+    lighting: { charge: 1, glow: 0, providerCopies: 1 },
+    mageCloak: flags.includes('MAGE_CLOAK'),
     nativeTypeId: 1000,
     position: { x: 0, y: 0 },
     shieldHealth: 0,
@@ -419,11 +442,30 @@ function familyFlagSets(family: NativeEnemyFamily): readonly (readonly string[])
       ['FLAG_PIKE'],
       ['FLAG_ARMOR', 'FLAG_SWORD'],
       ['FLAG_ARMOR', 'FLAG_PIKE'],
+      ['FLAG_BURNING'],
     ]
   }
-  if (family === 'SKELETONARCHER') return [[], ['FLAG_HELM'], ['FLAG_HOODED']]
-  if (family === 'SKELETONMAGE') return [[], ['FLAG_HORNED'], ['FLAG_HOODED']]
+  if (family === 'SKELETONARCHER') return [
+    [],
+    ['FLAG_HELM'],
+    ['FLAG_HOODED'],
+    ['FLAG_FIREARROW'],
+    ['FLAG_POISONARROW'],
+    ['FLAG_BURNING'],
+  ]
+  if (family === 'SKELETONMAGE') return [
+    [],
+    ['FLAG_HORNED'],
+    ['FLAG_HOODED'],
+    ['FLAG_CASTFIRE'],
+    ['FLAG_CASTLIGHTNING'],
+    ['FLAG_CASTFROST'],
+    ['FLAG_CASTPOISON'],
+    ['FLAG_BURNING'],
+    ['MAGE_CLOAK'],
+  ]
   if (family === 'ZOMBIE') return [[], ['FLAG_ROTTEN']]
+  if (family === 'WRAITH') return [[], ['FLAG_BURNING']]
   return [[]]
 }
 
