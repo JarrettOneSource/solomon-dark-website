@@ -20,6 +20,7 @@ const DIG: SolomonDigState = {
 
 const ENCOUNTER: BoneyardSolomonSnapshot = {
   acceleration: 0,
+  digAudioEvents: [],
   digFrame: 17,
   escapeSpeed: 0,
   headingDeg: 0,

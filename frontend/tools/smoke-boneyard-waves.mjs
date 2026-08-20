@@ -102,6 +102,7 @@ try {
   )
   assert.ok(loadedBoneyard?.scene?.solomonDig, 'expected the loaded Solomon Dig scene')
   assert.equal(loadedBoneyard.seed, expectedBoneyardSeed)
+  const digAudio = await captureSolomonDigAudio(page)
   const combatNavigation = {
     bounds: loadedBoneyard.scene.bounds,
     collision: createBoneyardCollisionWorld(loadedBoneyard.scene),
@@ -113,34 +114,39 @@ try {
     direction: gateCrossing.direction,
     y: gateCrossing.target.y,
   }
+  const nearSolomon = await walkNearSolomon(
+    page,
+    scene,
+    loadedBoneyard.scene,
+  )
+  const nearDigAudio = await captureNearSolomonDigAudio(
+    page,
+    digAudio.eventId,
+    digAudio.events.length,
+  )
+  await installSolomonSpeakingProbe(page)
   const approach = await walkToSolomon(page, scene, loadedBoneyard.scene)
   assert.notEqual(approach.phase, 'digging')
+  const digAudioEventIdAtContact = Number(
+    await scene.getAttribute('data-solomon-dig-audio-event-id'),
+  )
 
-  await page.waitForFunction(() => (
-    Number(document.querySelector('.boneyard-scene')
-      ?.getAttribute('data-solomon-voice-event-id')) >= 1
+  const speakingHandle = await page.waitForFunction(() => (
+    window.__sdrSolomonSpeakingReceipt?.animated
+      ? window.__sdrSolomonSpeakingReceipt
+      : null
   ), undefined, { timeout: 15_000 })
-  const hello = await encounterReceipt(scene)
+  const speaking = await speakingHandle.jsonValue()
+  const hello = speaking.hello
   assert.equal(hello.phase, 'speaking')
   assert.match(hello.voiceCue, /^solomon-hello-[1-4]$/)
   assert.ok(hello.renderFrame >= 213 && hello.renderFrame <= 227)
-  const mouthPoses = [hello.mouthPose]
-  const headings = [hello.heading]
-  const changedMouthHandle = await page.waitForFunction((initialPose) => {
-    const scene = document.querySelector('.boneyard-scene')
-    const mouthPose = Number(scene?.getAttribute('data-solomon-mouth-pose'))
-    if (
-      scene?.getAttribute('data-solomon-phase') !== 'speaking'
-      || mouthPose === initialPose
-    ) return null
-    return {
-      heading: Number(scene.getAttribute('data-solomon-heading')),
-      mouthPose,
-    }
-  }, hello.mouthPose, { timeout: 5_000 })
-  const animatedSpeech = await changedMouthHandle.jsonValue()
-  mouthPoses.push(animatedSpeech.mouthPose)
-  headings.push(animatedSpeech.heading)
+  assert.equal(
+    Number(await scene.getAttribute('data-solomon-dig-audio-event-id')),
+    digAudioEventIdAtContact,
+  )
+  const mouthPoses = [hello.mouthPose, speaking.animated.mouthPose]
+  const headings = [hello.heading, speaking.animated.heading]
   assert.ok(
     new Set(mouthPoses).size > 1,
     `expected speaking mouth animation (${mouthPoses.join(', ')})`,
@@ -193,8 +199,11 @@ try {
     assert.deepEqual(errors, [])
     process.stdout.write(`${JSON.stringify({
       entranceRetirement,
+      digAudio,
       errors,
       gateCrossing,
+      nearDigAudio,
+      nearSolomon,
       opening,
       screenshotPath: combatScreenshotPath,
       status: 'ok',
@@ -314,6 +323,7 @@ try {
     death,
     deathRender,
     deathScreenshotPath,
+    digAudio,
     errors,
     entranceRetirement,
     gateCrossing,
@@ -324,6 +334,8 @@ try {
     loadoutScreenshotPath,
     locomotion,
     mouthPoses: [...new Set(mouthPoses)],
+    nearDigAudio,
+    nearSolomon,
     opening,
     playerDamageAudio,
     playerDamageEvents,
@@ -1489,6 +1501,10 @@ async function enterBoneyard(page) {
     .waitFor({ timeout: 30_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   await page.getByLabel(/College courtyard/).waitFor({ timeout: 90_000 })
+  await page.locator('.match-loading-screen').waitFor({
+    state: 'detached',
+    timeout: 90_000,
+  })
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 90_000 })
@@ -1692,6 +1708,59 @@ async function walkToSolomon(page, scene, boneyardScene) {
     await driveToSolomonWaypoint(page, scene, waypoint)
   }
   throw new Error(`could not walk to Solomon: ${JSON.stringify(samples.at(-1))}`)
+}
+
+async function walkNearSolomon(page, scene, boneyardScene) {
+  await page.bringToFront()
+  await scene.focus()
+  const startedAt = Date.now()
+  const initial = await approachReceipt(scene)
+  const solomon = { x: initial.solomonX, y: initial.solomonY }
+  assert.ok(initial.distance > 275, 'expected the entry path to begin outside near-Dig range')
+  while (Date.now() - startedAt < 240_000) {
+    const before = await approachReceipt(scene)
+    assert.equal(before.phase, 'digging')
+    if (before.distance <= 275) {
+      return { x: before.playerX, y: before.playerY, distance: before.distance }
+    }
+    const route = planSolomonPath(
+      boneyardScene,
+      { x: before.playerX, y: before.playerY },
+      solomon,
+    )
+    const waypoint = route[1]
+    assert.ok(waypoint, 'expected a collision-safe near-Dig waypoint')
+    await driveToNearSolomonWaypoint(page, scene, waypoint)
+  }
+  throw new Error(`could not reach near-Dig audio range: ${JSON.stringify(
+    await approachReceipt(scene),
+  )}`)
+}
+
+async function driveToNearSolomonWaypoint(page, scene, waypoint) {
+  const initial = await approachReceipt(scene)
+  const keys = movementKeys({
+    x: waypoint.x - initial.playerX,
+    y: waypoint.y - initial.playerY,
+  })
+  assert.ok(keys.length > 0, 'expected movement keys for the near-Dig waypoint')
+  const deadline = Date.now() + 1_500
+  for (const key of keys) await page.keyboard.down(key)
+  try {
+    while (Date.now() < deadline) {
+      const current = await approachReceipt(scene)
+      if (current.phase !== 'digging' || current.distance <= 260) break
+      if (Math.hypot(
+        waypoint.x - current.playerX,
+        waypoint.y - current.playerY,
+      ) <= 16) break
+      await page.waitForTimeout(25)
+    }
+  } finally {
+    for (const key of keys.reverse()) await page.keyboard.up(key)
+    await publishStoppedMovement(page)
+  }
+  await page.waitForTimeout(650)
 }
 
 async function driveToSolomonWaypoint(page, scene, waypoint) {
@@ -1960,6 +2029,147 @@ async function encounterReceipt(scene) {
     waveScheduleIndex: Number(node.getAttribute('data-wave-schedule-index')),
     waveSpawnDelayTicks: Number(node.getAttribute('data-wave-spawn-delay-ticks')),
   }))
+}
+
+async function captureSolomonDigAudio(page) {
+  await page.waitForFunction(() => {
+    const sources = window.__sdrAudioPlaySources ?? []
+    const matches = window.__sdrAudioSourceMatches
+    return typeof matches === 'function'
+      && sources.some((source) => (
+        matches(source, 'shovel-1.wav') || matches(source, 'shovel-2.wav')
+      ))
+      && sources.some((source) => (
+        matches(source, 'throw-dirt-1.wav') || matches(source, 'throw-dirt-2.wav')
+      ))
+  }, undefined, { timeout: 15_000 })
+  const receipt = await page.evaluate(() => {
+    const matches = window.__sdrAudioSourceMatches
+    const files = [
+      'shovel-1.wav',
+      'shovel-2.wav',
+      'throw-dirt-1.wav',
+      'throw-dirt-2.wav',
+    ]
+    const events = window.__sdrAudioEvents.filter((event) => (
+      event.type === 'buffer-start'
+        && files.some((file) => matches(event.src, file))
+    )).map((event) => ({
+      playbackRate: event.playbackRate,
+      source: files.find((file) => matches(event.src, file)),
+      volume: event.volume,
+    }))
+    return {
+      cue: document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-cue'),
+      eventId: Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-event-id')),
+      events,
+      gain: Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-gain')),
+      playbackRate: Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-playback-rate')),
+    }
+  })
+  assert.ok(receipt.events.some((event) => event.source?.startsWith('shovel-')))
+  assert.ok(receipt.events.some((event) => event.source?.startsWith('throw-dirt-')))
+  assert.ok(receipt.events.every((event) => event.playbackRate === 1))
+  assert.ok(receipt.eventId >= 2)
+  assert.match(receipt.cue, /^(?:shovel|throw-dirt)-[12]$/)
+  assert.equal(receipt.playbackRate, 1)
+  assert.ok(receipt.gain >= 0 && receipt.gain <= 1)
+  return receipt
+}
+
+async function captureNearSolomonDigAudio(page, previousEventId, previousEventCount) {
+  await page.waitForFunction(({ eventCount, eventId }) => {
+    const scene = document.querySelector('.boneyard-scene')
+    const files = [
+      'shovel-1.wav',
+      'shovel-2.wav',
+      'throw-dirt-1.wav',
+      'throw-dirt-2.wav',
+    ]
+    const matches = window.__sdrAudioSourceMatches
+    const events = window.__sdrAudioEvents.filter((event) => (
+      event.type === 'buffer-start'
+        && files.some((file) => matches(event.src, file))
+    ))
+    return Number(scene?.getAttribute('data-solomon-dig-audio-event-id')) > eventId
+      && events.length > eventCount
+      && events.slice(eventCount).some((event) => event.volume > 0)
+  }, {
+    eventCount: previousEventCount,
+    eventId: previousEventId,
+  }, { timeout: 15_000 })
+  const receipt = await page.evaluate((eventCount) => {
+    const files = [
+      'shovel-1.wav',
+      'shovel-2.wav',
+      'throw-dirt-1.wav',
+      'throw-dirt-2.wav',
+    ]
+    const matches = window.__sdrAudioSourceMatches
+    const events = window.__sdrAudioEvents.filter((event) => (
+      event.type === 'buffer-start'
+        && files.some((file) => matches(event.src, file))
+    )).slice(eventCount).map((event) => ({
+      playbackRate: event.playbackRate,
+      source: files.find((file) => matches(event.src, file)),
+      volume: event.volume,
+    }))
+    return {
+      eventId: Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-event-id')),
+      events,
+      gain: Number(document.querySelector('.boneyard-scene')
+        ?.getAttribute('data-solomon-dig-audio-gain')),
+    }
+  }, previousEventCount)
+  assert.ok(receipt.eventId > previousEventId)
+  assert.ok(receipt.events.some((event) => event.volume > 0))
+  assert.ok(receipt.events.every((event) => event.playbackRate === 1))
+  assert.ok(receipt.gain > 0 && receipt.gain <= 1)
+  return receipt
+}
+
+async function installSolomonSpeakingProbe(page) {
+  await page.evaluate(() => {
+    const scene = document.querySelector('.boneyard-scene')
+    if (!scene) throw new Error('Solomon speaking probe requires the Boneyard scene')
+    window.__sdrSolomonSpeakingReceipt = { animated: null, hello: null }
+    const sample = () => {
+      if (
+        scene.getAttribute('data-solomon-phase') !== 'speaking'
+        || Number(scene.getAttribute('data-solomon-voice-event-id')) < 1
+      ) return
+      const current = {
+        heading: Number(scene.getAttribute('data-solomon-heading')),
+        mouthPose: Number(scene.getAttribute('data-solomon-mouth-pose')),
+        phase: scene.getAttribute('data-solomon-phase'),
+        renderFrame: Number(document.querySelector('.boneyard-dig-anchor')
+          ?.getAttribute('data-frame')),
+        voiceCue: scene.getAttribute('data-solomon-voice-cue'),
+        voiceEventId: Number(scene.getAttribute('data-solomon-voice-event-id')),
+      }
+      window.__sdrSolomonSpeakingReceipt.hello ??= current
+      if (
+        current.mouthPose
+          !== window.__sdrSolomonSpeakingReceipt.hello.mouthPose
+      ) window.__sdrSolomonSpeakingReceipt.animated = current
+    }
+    const observer = new MutationObserver(sample)
+    observer.observe(scene, {
+      attributeFilter: [
+        'data-solomon-heading',
+        'data-solomon-mouth-pose',
+        'data-solomon-phase',
+        'data-solomon-voice-event-id',
+      ],
+      attributes: true,
+    })
+    sample()
+  })
 }
 
 async function currentEncounterReceipt(page) {

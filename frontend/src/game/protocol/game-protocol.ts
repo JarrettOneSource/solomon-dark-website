@@ -5,8 +5,10 @@ import {
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
+  BONEYARD_SOLOMON_DIG_AUDIO_CUES,
   BONEYARD_SOLOMON_PHASES,
   BONEYARD_SOLOMON_VOICE_CUES,
+  type BoneyardSolomonDigAudioCue,
   type BoneyardSolomonPhase,
   type BoneyardSolomonVoiceCue,
 } from '../core-kernels/boneyard-encounter.ts'
@@ -191,7 +193,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 30
+export const GAME_PROTOCOL_VERSION = 31
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -217,6 +219,7 @@ const MAX_BONEYARD_LOOT_EVENTS = 512
 const MAX_NATIVE_SACK_DEPTH = 32
 const MAX_BONEYARD_ENEMY_FLAGS = 64
 const MAX_BONEYARD_ENEMY_EFFECTS = 1
+const MAX_BONEYARD_DIG_AUDIO_EVENTS = 8
 const MAX_BONEYARD_VOICE_EVENTS = 8
 const MAX_FOUNTAIN_PARTICLES = 512
 const MAX_PLAYERS = 64
@@ -4123,6 +4126,7 @@ function boneyardSolomonSnapshot(
   const source = record(value, field)
   onlyKeys(source, field, [
     'acceleration',
+    'digAudioEvents',
     'digFrame',
     'escapeSpeed',
     'headingDeg',
@@ -4157,6 +4161,26 @@ function boneyardSolomonSnapshot(
   if (digFrame >= 18) {
     throw new GameProtocolError(`${field}.digFrame must be within [0,18)`)
   }
+  let previousDigAudioEventId = 0
+  const digAudioEvents = limitedArray(
+    source.digAudioEvents,
+    `${field}.digAudioEvents`,
+    MAX_BONEYARD_DIG_AUDIO_EVENTS,
+  ).map((event, index) => {
+    const eventField = `${field}.digAudioEvents[${index}]`
+    const item = record(event, eventField)
+    onlyKeys(item, eventField, ['cue', 'id'])
+    const cue = limitedString(item.cue, `${eventField}.cue`, 64)
+    if (!(BONEYARD_SOLOMON_DIG_AUDIO_CUES as readonly string[]).includes(cue)) {
+      throw new GameProtocolError(`${eventField}.cue is not supported`)
+    }
+    const id = positiveInteger(item.id, `${eventField}.id`)
+    if (id <= previousDigAudioEventId) {
+      throw new GameProtocolError(`${field}.digAudioEvents ids must increase`)
+    }
+    previousDigAudioEventId = id
+    return { cue: cue as BoneyardSolomonDigAudioCue, id }
+  })
   const transitionOffsetY = nonnegativeFinite(
     source.transitionOffsetY,
     `${field}.transitionOffsetY`,
@@ -4194,6 +4218,7 @@ function boneyardSolomonSnapshot(
   })
   return {
     acceleration: finite(source.acceleration, `${field}.acceleration`),
+    digAudioEvents,
     digFrame,
     escapeSpeed: nonnegativeFinite(source.escapeSpeed, `${field}.escapeSpeed`),
     headingDeg,

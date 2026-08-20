@@ -164,7 +164,7 @@ test('client protocol validates character hello, input, match, loadout, and ping
   })
 })
 
-test('protocol v30 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v31 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -345,7 +345,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v30 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v31 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -750,8 +750,8 @@ test('protocol v30 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v30 carries native automatic Game Over lifecycle and combat modifiers', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 30)
+test('protocol v31 carries Solomon Dig audio, Game Over, and combat modifiers', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 31)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -872,7 +872,7 @@ test('protocol v30 carries native automatic Game Over lifecycle and combat modif
   )
 })
 
-test('protocol v30 strictly owns the generated-arena transition', () => {
+test('protocol v31 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -926,7 +926,7 @@ test('protocol v30 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v30 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v31 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2032,7 +2032,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v30 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v31 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -2406,6 +2406,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(snapshot.world.gateLeaves.length, 2)
   assert.equal(snapshot.world.encounter?.acceleration, 0)
+  assert.deepEqual(snapshot.world.encounter?.digAudioEvents, [])
   assert.equal(snapshot.world.encounter?.digFrame, 0)
   assert.equal(snapshot.world.encounter?.transitionOffsetY, 0)
   const snapshotMessage = {
@@ -2438,6 +2439,36 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(invalidCue)),
     /voiceEvents\[0\]\.cue/,
+  )
+
+  const invalidDigAudioCue = JSON.parse(encodeGameMessage(snapshotMessage))
+  invalidDigAudioCue.frame.world.encounter.digAudioEvents = [{
+    id: 1,
+    cue: 'backhoe-1',
+  }]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidDigAudioCue)),
+    /digAudioEvents\[0\]\.cue/,
+  )
+
+  const unorderedDigAudio = JSON.parse(encodeGameMessage(snapshotMessage))
+  unorderedDigAudio.frame.world.encounter.digAudioEvents = [
+    { id: 2, cue: 'shovel-1' },
+    { id: 2, cue: 'throw-dirt-1' },
+  ]
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(unorderedDigAudio)),
+    /digAudioEvents ids must increase/,
+  )
+
+  const excessiveDigAudio = JSON.parse(encodeGameMessage(snapshotMessage))
+  excessiveDigAudio.frame.world.encounter.digAudioEvents = Array.from(
+    { length: 9 },
+    (_, index) => ({ id: index + 1, cue: 'shovel-1' }),
+  )
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(excessiveDigAudio)),
+    /digAudioEvents may contain at most 8/,
   )
 
   const exactNativeHeading = JSON.parse(encodeGameMessage(snapshotMessage))

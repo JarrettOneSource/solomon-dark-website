@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import type { SolomonDigState } from './boneyard.ts'
 import {
+  BONEYARD_SOLOMON_DIG_AUDIO_CUES,
   SOLOMON_VOICE_DURATION_TICKS,
   createSolomonEncounter,
   isSolomonPlayerLocked,
@@ -78,14 +79,14 @@ test('contact is armed only in the final ten native dig-program slots', () => {
   const player = { player: { position: { x: 1000, y: 990 } } }
   const closed = stepSolomonEncounter({
     ...createSolomonEncounter(NATIVE_DIG, 'dig-gate-closed'),
-    digPhase: 18.8,
+    digPhase: 18.7,
   }, player)
   const opened = stepSolomonEncounter({
     ...createSolomonEncounter(NATIVE_DIG, 'dig-gate-open'),
-    digPhase: 19,
+    digPhase: 18.9,
   }, player)
 
-  assert.equal(closed.digPhase, 19)
+  assert.ok(closed.digPhase < 19)
   assert.equal(closed.phase, 'digging')
   assert.equal(opened.phase, 'turning')
   assert.equal(opened.digFrame, 17)
@@ -106,6 +107,111 @@ test('contact frame seeds the three native heading and emergence-offset branches
     assert.equal(encounter.headingDeg, branch.headingDeg)
     assert.equal(encounter.transitionOffsetY, branch.transitionOffsetY)
   }
+})
+
+test('digging emits each native shovel and throw-dirt pool once per armed cycle', () => {
+  const observed = new Set<string>()
+  for (let seed = 0; seed < 24; seed += 1) {
+    let encounter = createSolomonEncounter(NATIVE_DIG, `dig-audio-${seed}`)
+    for (let tick = 0; tick < 2_000 && observed.size < 4; tick += 1) {
+      encounter = stepSolomonEncounter(encounter, {})
+      for (const event of encounter.digAudioEvents) observed.add(event.cue)
+    }
+  }
+  assert.deepEqual(
+    [...observed].sort(),
+    [...BONEYARD_SOLOMON_DIG_AUDIO_CUES].sort(),
+  )
+})
+
+test('digging preserves the native float32 cursor and RNG event sequence', () => {
+  let encounter = createSolomonEncounter(NATIVE_DIG, 'dig-audio-golden')
+  let lastEventId = 0
+  const events: Array<{ cue: string; id: number; phase: number; tick: number }> = []
+  for (let tick = 1; tick < 1_000 && events.length < 8; tick += 1) {
+    encounter = stepSolomonEncounter(encounter, {})
+    if (encounter.digAudioEventId === lastEventId) continue
+    for (const event of encounter.digAudioEvents) {
+      if (event.id <= lastEventId) continue
+      events.push({ ...event, phase: encounter.digPhase, tick })
+    }
+    lastEventId = encounter.digAudioEventId
+  }
+  assert.deepEqual(events, [
+    { cue: 'shovel-1', id: 1, phase: 3.9819726943969727, tick: 20 },
+    { cue: 'throw-dirt-1', id: 2, phase: 15.164621353149414, tick: 82 },
+    { cue: 'shovel-2', id: 3, phase: 4.180782794952393, tick: 183 },
+    { cue: 'throw-dirt-1', id: 4, phase: 14.9970121383667, tick: 243 },
+    { cue: 'shovel-2', id: 5, phase: 4.090818405151367, tick: 365 },
+    { cue: 'throw-dirt-2', id: 6, phase: 15.109530448913574, tick: 427 },
+    { cue: 'shovel-2', id: 7, phase: 3.9386777877807617, tick: 542 },
+    { cue: 'throw-dirt-2', id: 8, phase: 15.162186622619629, tick: 606 },
+  ])
+})
+
+test('digging uses strict native cursor gates and bounded ordered event history', () => {
+  let encounter = {
+    ...createSolomonEncounter(NATIVE_DIG, 'dig-audio-thresholds'),
+    digPhase: 3.8,
+  }
+  encounter = stepSolomonEncounter(encounter, {})
+  assert.equal(encounter.digAudioEvents.length, 0)
+  assert.equal(encounter.digShovelArmed, true)
+
+  encounter = stepSolomonEncounter({ ...encounter, digPhase: 4 }, {})
+  assert.match(encounter.digAudioEvents.at(-1)!.cue, /^shovel-[12]$/)
+  assert.equal(encounter.digShovelArmed, false)
+
+  encounter = stepSolomonEncounter({
+    ...encounter,
+    digPhase: 15,
+    digThrowDirtArmed: true,
+  }, {})
+  assert.match(encounter.digAudioEvents.at(-1)!.cue, /^throw-dirt-[12]$/)
+  assert.equal(encounter.digThrowDirtArmed, false)
+
+  for (let index = 0; index < 10; index += 1) {
+    encounter = stepSolomonEncounter({
+      ...encounter,
+      digPhase: 4,
+      digShovelArmed: true,
+    }, {})
+  }
+  assert.equal(encounter.digAudioEventId, 12)
+  assert.deepEqual(
+    encounter.digAudioEvents.map((event) => event.id),
+    [5, 6, 7, 8, 9, 10, 11, 12],
+  )
+})
+
+test('digging rearms both sound gates only on native program wrap', () => {
+  const encounter = stepSolomonEncounter({
+    ...createSolomonEncounter(NATIVE_DIG, 'dig-audio-wrap'),
+    digPhase: 28.95,
+    digShovelArmed: false,
+    digThrowDirtArmed: false,
+  }, {})
+
+  assert.equal(encounter.phase, 'digging')
+  assert.equal(encounter.digShovelArmed, true)
+  assert.equal(encounter.digThrowDirtArmed, true)
+  assert.ok(encounter.digPhase >= 0 && encounter.digPhase <= 4)
+  assert.equal(encounter.rngState.words.length, 55)
+})
+
+test('contact ends the digging emitter without cancelling its latched history', () => {
+  const players = { player: { position: { x: 1000, y: 990 } } }
+  let encounter = stepSolomonEncounter({
+    ...createSolomonEncounter(NATIVE_DIG, 'dig-audio-contact'),
+    digPhase: 19,
+  }, players)
+  assert.equal(encounter.phase, 'turning')
+  const eventsAtContact = encounter.digAudioEvents
+
+  for (let tick = 0; tick < 100; tick += 1) {
+    encounter = stepSolomonEncounter(encounter, players)
+  }
+  assert.deepEqual(encounter.digAudioEvents, eventsAtContact)
 })
 
 test('turning accelerates through native one-degree substeps before dialogue', () => {

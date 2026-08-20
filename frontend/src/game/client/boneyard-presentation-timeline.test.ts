@@ -209,6 +209,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       deathEffects: [],
       encounter: {
         acceleration: tick >= 105 ? -3 : -7,
+        digAudioEvents: [],
         digFrame: tick >= 105 ? 5 : 17,
         escapeSpeed: tick >= 105 ? 2 : 0,
         headingDeg: tick >= 105 ? 90 : 45,

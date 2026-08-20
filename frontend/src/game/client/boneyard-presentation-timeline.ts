@@ -745,6 +745,7 @@ function copySolomon(
 ): BoneyardSolomonSnapshot | null {
   return encounter === null ? null : {
     ...encounter,
+    digAudioEvents: encounter.digAudioEvents.map((event) => ({ ...event })),
     position: { ...encounter.position },
     voiceEvents: encounter.voiceEvents.map((event) => ({ ...event })),
   }

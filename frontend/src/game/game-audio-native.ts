@@ -3,6 +3,8 @@ import {
   HUB_TEACHER_CYCLE_SECONDS,
 } from './hub-teacher.ts'
 import type {
+  BoneyardSolomonDigAudioCue,
+  BoneyardSolomonDigAudioEvent,
   BoneyardSolomonVoiceCue,
   BoneyardSolomonVoiceEvent,
 } from './core-kernels/boneyard-encounter.ts'
@@ -28,6 +30,7 @@ export type GameMusicCue =
   | 'selection'
   | 'solomondarktheme'
 export type GameSoundCue =
+  | BoneyardSolomonDigAudioCue
   | 'backpack-close'
   | 'bad-action'
   | 'acid-sizzle'
@@ -413,6 +416,16 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\rockhit',
     sourceSha256: '865484cf3d7c2e199fb46f069973c43893122e934f0f46ba33d30eeeac4de25b',
   },
+  'shovel-1': {
+    registryOffset: 0x22dc,
+    sourceName: 'sounds\\shovel\\shovel1',
+    sourceSha256: 'be06d2e6eaacf2e0b35aaf14293e41420a0efd5ae364894cda193398838ebce6',
+  },
+  'shovel-2': {
+    registryOffset: 0x2308,
+    sourceName: 'sounds\\shovel\\shovel2',
+    sourceSha256: '4697492d7f5e07a78613b60c44122c7e3193d17d898eccf8ffe62f229d4c0fdd',
+  },
   'ring-of-ice': {
     registryOffset: 0xd28,
     sourceName: 'sounds\\ringofice',
@@ -468,6 +481,16 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\throwfire',
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
   },
+  'throw-dirt-1': {
+    registryOffset: 0x2518,
+    sourceName: 'sounds\\throwdirt\\throwdirt1',
+    sourceSha256: 'de233771aae5e806e4bdba0553729d1744605f512243fd30733e2e0dbd00a1ef',
+  },
+  'throw-dirt-2': {
+    registryOffset: 0x2544,
+    sourceName: 'sounds\\throwdirt\\throwdirt2',
+    sourceSha256: 'e527b1df105d2a2fabc65aa576d76fcf7379d3bf0d9f6a51fabb81011ffc947f',
+  },
   'unlock-skill': {
     registryOffset: 0x11a0,
     sourceName: 'sounds\\unlockskill',
@@ -522,6 +545,22 @@ export interface NativeEnemyEventSoundRequest {
   volume: number
 }
 
+export interface NativeSolomonDigSoundRequest {
+  cue: BoneyardSolomonDigAudioCue
+  playbackRate: 1
+  volume: 0.5 | 1
+}
+
+export function nativeSolomonDigSoundRequest(
+  event: BoneyardSolomonDigAudioEvent,
+): NativeSolomonDigSoundRequest {
+  return {
+    cue: event.cue,
+    playbackRate: 1,
+    volume: event.cue === 'shovel-1' || event.cue === 'shovel-2' ? 0.5 : 1,
+  }
+}
+
 export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
 ): NativeEnemyEventSoundRequest | null {
@@ -570,6 +609,24 @@ export function nativeBoneyardPointGain(
       ? 0
       : 1 - (distance - innerRadius) / (outerRadius - innerRadius)
   return spatialGain * (localPlayerInDeathPresentation ? 0.1 : 1)
+}
+
+export function nativeBoneyardHitPointGain(
+  sourcePosition: Readonly<{ x: number; y: number }>,
+  cameraCenter: Readonly<{ x: number; y: number }>,
+  visibleWorldWidth: number,
+  localPlayerInDeathPresentation: boolean,
+): number {
+  const distance = Math.hypot(
+    sourcePosition.x - cameraCenter.x,
+    sourcePosition.y - cameraCenter.y,
+  )
+  const innerRadius = visibleWorldWidth * 0.1
+  const outerRadius = visibleWorldWidth * 0.5
+  if (distance < innerRadius) return 1
+  if (distance > outerRadius) return 0
+  const gain = 1 - (distance - innerRadius) / (outerRadius - innerRadius)
+  return gain * (localPlayerInDeathPresentation ? 0.1 : 1)
 }
 
 export const NATIVE_LOOP_MANIFEST = {
@@ -872,6 +929,36 @@ export function newSolomonVoiceEvent(
 ): BoneyardSolomonVoiceEvent | null {
   const latest = current.at(-1)
   return latest && latest.id > lastSeenEventId ? latest : null
+}
+
+export interface SolomonDigAudioCursor {
+  eventId: number
+  runId: string
+}
+
+export function solomonDigAudioDelta(
+  cursor: SolomonDigAudioCursor | null,
+  runId: string,
+  current: readonly BoneyardSolomonDigAudioEvent[],
+): Readonly<{
+  cursor: SolomonDigAudioCursor
+  events: readonly BoneyardSolomonDigAudioEvent[]
+}> {
+  const latestEventId = current.at(-1)?.id ?? 0
+  if (cursor === null || cursor.runId !== runId) {
+    return {
+      cursor: { eventId: latestEventId, runId },
+      events: [],
+    }
+  }
+  const events = current.filter((event) => event.id > cursor.eventId)
+  return {
+    cursor: {
+      eventId: events.at(-1)?.id ?? cursor.eventId,
+      runId,
+    },
+    events,
+  }
 }
 
 function stableHash(value: string, salt: number): number {

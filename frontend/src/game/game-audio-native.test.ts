@@ -21,12 +21,15 @@ import {
   hubTeacherReleasesBetween,
   hubTeacherSummonPitch,
   hubTeacherSummonVolume,
+  nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
   nativeFootstepCue,
   nativeEnemyEventSoundRequest,
   nativeLootEventSoundRequest,
+  nativeSolomonDigSoundRequest,
   newSolomonVoiceEvent,
   newNativeFootstepTick,
+  solomonDigAudioDelta,
 } from './game-audio-native.ts'
 import {
   HUB_TEACHER_CAST_SECONDS,
@@ -101,6 +104,25 @@ test('pins every checked-in Solomon voice to its untouched stock WAV', () => {
         cue as keyof typeof NATIVE_SOLOMON_VOICE_MANIFEST
       ].sourceSha256,
     )
+  }
+})
+
+test('pins every Solomon Dig one-shot to its exact native registry row and PCM', () => {
+  const files = {
+    'shovel-1': ['shovel-1.wav', 0x22dc, 'be06d2e6eaacf2e0b35aaf14293e41420a0efd5ae364894cda193398838ebce6'],
+    'shovel-2': ['shovel-2.wav', 0x2308, '4697492d7f5e07a78613b60c44122c7e3193d17d898eccf8ffe62f229d4c0fdd'],
+    'throw-dirt-1': ['throw-dirt-1.wav', 0x2518, 'de233771aae5e806e4bdba0553729d1744605f512243fd30733e2e0dbd00a1ef'],
+    'throw-dirt-2': ['throw-dirt-2.wav', 0x2544, 'e527b1df105d2a2fabc65aa576d76fcf7379d3bf0d9f6a51fabb81011ffc947f'],
+  } as const
+  for (const [cue, [filename, registryOffset, sha256]] of Object.entries(files)) {
+    const entry = NATIVE_SOUND_MANIFEST[cue as keyof typeof files]
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(entry.registryOffset, registryOffset)
+    assert.equal(entry.sourceSha256, sha256)
+    assert.equal(createHash('sha256').update(source).digest('hex'), sha256)
   }
 })
 
@@ -476,6 +498,44 @@ test('matches native Boneyard point attenuation and death-presentation damping',
   )
 })
 
+test('matches native Solomon Dig hit attenuation and fixed gain-only requests', () => {
+  const width = 1_200
+  const camera = { x: 800, y: 450 }
+  const inner = width * 0.1
+  const outer = width * 0.5
+  const midpoint = (inner + outer) / 2
+
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x + inner, y: camera.y }, camera, width, false,
+  ), 1)
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x + inner, y: camera.y }, camera, width, true,
+  ), 0.1)
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x + midpoint, y: camera.y }, camera, width, false,
+  ), 0.5)
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x + midpoint, y: camera.y }, camera, width, true,
+  ), 0.05)
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x, y: camera.y }, camera, width, true,
+  ), 1)
+  assert.equal(nativeBoneyardHitPointGain(
+    { x: camera.x + outer, y: camera.y }, camera, width, true,
+  ), 0)
+
+  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'shovel-2', id: 7 }), {
+    cue: 'shovel-2',
+    playbackRate: 1,
+    volume: 0.5,
+  })
+  assert.deepEqual(nativeSolomonDigSoundRequest({ cue: 'throw-dirt-1', id: 8 }), {
+    cue: 'throw-dirt-1',
+    playbackRate: 1,
+    volume: 1,
+  })
+})
+
 test('emits Create entry stream commands on crossed native thresholds', () => {
   assert.deepEqual(createEntryAudioEvents(0, 199), [])
   assert.deepEqual(createEntryAudioEvents(199, 200), [
@@ -530,6 +590,34 @@ test('consumes only the newest unseen Solomon cue after sparse snapshots', () =>
   assert.equal(newSolomonVoiceEvent(0, []), null)
 })
 
+test('consumes ordered Solomon Dig events without replaying hydration or a new run', () => {
+  const events = [
+    { cue: 'shovel-1' as const, id: 4 },
+    { cue: 'throw-dirt-2' as const, id: 5 },
+    { cue: 'shovel-2' as const, id: 6 },
+  ]
+  const hydrated = solomonDigAudioDelta(null, 'run-1', events)
+  assert.deepEqual(hydrated.events, [])
+  assert.deepEqual(hydrated.cursor, { eventId: 6, runId: 'run-1' })
+
+  const next = { cue: 'throw-dirt-1' as const, id: 7 }
+  const advanced = solomonDigAudioDelta(
+    hydrated.cursor,
+    'run-1',
+    [...events, next],
+  )
+  assert.deepEqual(advanced.events, [next])
+  assert.deepEqual(advanced.cursor, { eventId: 7, runId: 'run-1' })
+
+  const newRun = solomonDigAudioDelta(
+    advanced.cursor,
+    'run-2',
+    [{ cue: 'shovel-2', id: 1 }],
+  )
+  assert.deepEqual(newRun.events, [])
+  assert.deepEqual(newRun.cursor, { eventId: 1, runId: 'run-2' })
+})
+
 test('gives Boneyard one authoritative same-world footstep synchronizer', () => {
   assert.match(mainMenuSceneSource, /<BoneyardScene[\s\S]*?audio=\{audio\}/)
   assert.match(boneyardSceneSource, /new PlayerFootstepAudioSynchronizer\(/)
@@ -555,6 +643,13 @@ test('consumes the host enemy event lane once through the active Boneyard scene'
   assert.match(boneyardSceneSource, /nativeEnemyEventSoundRequest\(event\)/)
   assert.match(boneyardSceneSource, /playbackRate: sound\.playbackRate/)
   assert.match(boneyardSceneSource, /nativeBoneyardPointGain\(/)
+})
+
+test('plays authoritative Solomon Dig events through native hit attenuation', () => {
+  assert.match(boneyardSceneSource, /solomonDigAudioDelta\(/)
+  assert.match(boneyardSceneSource, /nativeSolomonDigSoundRequest\(/)
+  assert.match(boneyardSceneSource, /nativeBoneyardHitPointGain\(/)
+  assert.match(boneyardSceneSource, /scene\.dataset\.solomonDigAudioEventId/)
 })
 
 test('matches native Courtyard attenuation and Teacher release timing', () => {

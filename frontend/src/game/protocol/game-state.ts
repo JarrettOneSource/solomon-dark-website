@@ -3,6 +3,7 @@ import type {
 } from '../core-kernels/boneyard.ts'
 import type { BoneyardArenaTransitionState } from '../core-kernels/boneyard-arena-transition.ts'
 import type {
+  BoneyardSolomonDigAudioEvent,
   BoneyardSolomonPhase,
   BoneyardSolomonVoiceEvent,
 } from '../core-kernels/boneyard-encounter.ts'
@@ -594,6 +595,7 @@ export interface BoneyardEnemySnapshot {
 
 export interface BoneyardSolomonSnapshot {
   acceleration: number
+  digAudioEvents: readonly BoneyardSolomonDigAudioEvent[]
   digFrame: number
   escapeSpeed: number
   headingDeg: number

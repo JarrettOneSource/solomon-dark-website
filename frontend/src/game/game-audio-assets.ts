@@ -84,12 +84,16 @@ import openPanel from '../assets/game/audio/sfx/openpanel.wav'
 import pickSkill from '../assets/game/audio/sfx/pickskill.wav'
 import popShield from '../assets/game/audio/sfx/pop-shield.wav'
 import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
+import shovel1 from '../assets/game/audio/sfx/shovel-1.wav'
+import shovel2 from '../assets/game/audio/sfx/shovel-2.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
 import startCast from '../assets/game/audio/sfx/start-cast.wav'
 import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
+import throwDirt1 from '../assets/game/audio/sfx/throw-dirt-1.wav'
+import throwDirt2 from '../assets/game/audio/sfx/throw-dirt-2.wav'
 import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
 import wizardOuch1 from '../assets/game/audio/sfx/wizard-ouch-1.wav'
 import wizardOuch2 from '../assets/game/audio/sfx/wizard-ouch-2.wav'
@@ -187,6 +191,8 @@ export const GAME_AUDIO_SOURCES = {
     'pickup-bag': pickupBag,
     'pickup-coin': pickupCoin,
     'rock-hit': rockHit,
+    'shovel-1': shovel1,
+    'shovel-2': shovel2,
     'ring-of-ice': ringOfIce,
     'skeleton-die': skeletonDie,
     'start-boulder': startBoulder,
@@ -197,6 +203,8 @@ export const GAME_AUDIO_SOURCES = {
     'step-2': step2,
     summon,
     teleport,
+    'throw-dirt-1': throwDirt1,
+    'throw-dirt-2': throwDirt2,
     'throw-fire': throwFire,
     'unlock-skill': unlockSkill,
     'wizard-ouch-1': wizardOuch1,

@@ -22,10 +22,14 @@ import {
 import type { GameAudioDirector } from './game-audio-director.ts'
 import { loadGameImage } from './game-assets.ts'
 import {
+  nativeBoneyardHitPointGain,
   nativeBoneyardPointGain,
   nativeEnemyEventSoundRequest,
   nativeLootEventSoundRequest,
+  nativeSolomonDigSoundRequest,
   newSolomonVoiceEvent,
+  solomonDigAudioDelta,
+  type SolomonDigAudioCursor,
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
@@ -146,6 +150,7 @@ export default function BoneyardScene({
     eventId: boneyardInitialSnapshot.world.encounter?.voiceEvents.at(-1)?.id ?? 0,
     runId: loaded.runId,
   })
+  const digAudioCursorRef = useRef<SolomonDigAudioCursor | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
   const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
@@ -446,6 +451,34 @@ export default function BoneyardScene({
           if (event) {
             audio.playStream(event.cue)
             lastVoiceEventRef.current.eventId = event.id
+          }
+          const digAudio = solomonDigAudioDelta(
+            digAudioCursorRef.current,
+            snapshot.world.runId,
+            snapshot.world.encounter.digAudioEvents,
+          )
+          digAudioCursorRef.current = digAudio.cursor
+          for (const digAudioEvent of digAudio.events) {
+            const request = nativeSolomonDigSoundRequest(digAudioEvent)
+            const localPlayer = snapshot.players[playerId]
+            const hitGain = nativeBoneyardHitPointGain(
+              snapshot.world.encounter.position,
+              camera,
+              viewportRef.current.width / camera.zoom,
+              localPlayer?.progression.lifeState === 'dying'
+                || localPlayer?.progression.lifeState === 'spectating',
+            )
+            audio.playSound(request.cue, {
+              playbackRate: request.playbackRate,
+              volume: request.volume * hitGain,
+            })
+            const scene = sceneRef.current
+            if (scene) {
+              scene.dataset.solomonDigAudioCue = request.cue
+              scene.dataset.solomonDigAudioEventId = `${digAudioEvent.id}`
+              scene.dataset.solomonDigAudioGain = `${request.volume * hitGain}`
+              scene.dataset.solomonDigAudioPlaybackRate = `${request.playbackRate}`
+            }
           }
         }
         if (isBoneyardGameSnapshot(snapshot)) {
