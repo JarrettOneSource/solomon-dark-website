@@ -124,7 +124,11 @@ public static class AuthEndpoints
         }
 
         var modCount = await db.Mods.CountAsync(mod => mod.AuthorId == user.Id, cancellationToken);
-        var saveCount = await db.CloudSaves.CountAsync(save => save.UserId == user.Id, cancellationToken);
+        var saveCount = await db.CloudSaves.CountAsync(
+            save => save.UserId == user.Id,
+            cancellationToken) + await db.WebGameSaves.CountAsync(
+            save => save.UserId == user.Id,
+            cancellationToken);
 
         return Results.Ok(new { user = UserPayload(user), modCount, saveCount });
     }

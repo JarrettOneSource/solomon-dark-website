@@ -10,6 +10,7 @@ const renderer = readFileSync(
   new URL('./renderer/title-menu-renderer.ts', import.meta.url),
   'utf8',
 )
+const accountStyles = readFileSync(new URL('./game-account.css', import.meta.url), 'utf8')
 
 test('contains the Solomon Darker artwork inside the native GPU title slot', () => {
   const mainMenuManifest = assetManifest.match(/export const mainMenu = \{([\s\S]*?)\n\}/)
@@ -20,8 +21,11 @@ test('contains the Solomon Darker artwork inside the native GPU title slot', () 
   assert.match(scene, /TitleMenuPresentation/)
 })
 
-test('game account presentation is absent for anonymous play', () => {
-  assert.equal(gameAccountPresentation(null), null)
+test('game account presentation names anonymous play explicitly', () => {
+  assert.deepEqual(gameAccountPresentation(null), {
+    accessibleLabel: 'Not logged in',
+    username: 'Not logged in',
+  })
 })
 
 test('game account presentation preserves the exact Website username', () => {
@@ -29,4 +33,11 @@ test('game account presentation preserves the exact Website username', () => {
     accessibleLabel: 'Signed in as Account-Smoke_7',
     username: 'Account-Smoke_7',
   })
+})
+
+test('title identity and resumable Last Game use their owned top-right and save paths', () => {
+  assert.match(scene, /fixedGameStageBounds\(fixedViewport, 'right', 'top'\)/)
+  assert.match(accountStyles, /\.game-account-name-title[\s\S]*right:\s*11px/)
+  assert.match(scene, /action="last-game" accessibleLabel="Last game"/)
+  assert.match(scene, /onClick=\{onLastGame\}/)
 })

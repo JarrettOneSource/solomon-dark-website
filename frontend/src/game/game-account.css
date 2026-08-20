@@ -12,10 +12,11 @@
 
 .game-account-name-title {
   top: 12px;
-  left: 11px;
+  right: 11px;
   max-width: 260px;
   font-size: 14px;
   line-height: 14px;
+  text-align: right;
 }
 
 .game-account-name-hud {

@@ -36,6 +36,7 @@ export interface SessionOptions {
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
   onProgress?: (stage: GameConnectionStage) => void
+  saveDocument?: string
   transportFactory?: (url: string) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
 }
@@ -75,6 +76,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     credential: options.endpoint.credential,
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),
     ...(options.onFatal ? { onFatal: options.onFatal } : {}),
+    ...(options.saveDocument ? { saveDocument: options.saveDocument } : {}),
   })
   options.onProgress?.('receiving_host_checkpoint')
   options.diagnostics?.info(

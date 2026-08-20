@@ -231,9 +231,27 @@ authoritative world snapshot.
 
 ## Saves, identity, and content
 
-- The server is the only writer of the save format. Desktop and cloud adapters
-  choose storage location. Cloud saves synchronize the same format rather than
-  defining a second one.
+- The authoritative game host is the only producer of browser-save contents.
+  It emits one explicitly versioned normalized document at semantic
+  progression/world boundaries and bounded active-run checkpoints. Browser
+  code transports that opaque document but never derives authority from a
+  rendered snapshot.
+- The first browser slot is always zero. An authenticated website account uses
+  its owner-scoped transactional database row; an anonymous browser uses an
+  IndexedDB row on that device. Both adapters store the same host-authored
+  document and revision contract. The launcher's eight native ZIP slots remain
+  a separate native-preservation surface.
+- `Last Game` gives the stored document to a fresh game host during the
+  authenticated handshake. The host bounds, validates, and revives its
+  simulation and loaded-Boneyard state before issuing the welcome checkpoint.
+  New Game replaces slot zero only after the new authoritative host produces
+  its first valid checkpoint.
+- The first authoritative transition from an active run to Game Over emits a
+  delete checkpoint. The adapter serializes that delete after prior writes, so
+  the completed run cannot be resumed or recreated by an older in-flight
+  checkpoint.
+- Website slot writes use optimistic revision checks and a content hash. The
+  document is capped at 8 MiB and has no mod-list field in schema version one.
 - Local profiles and direct-host identities require no website account. Website
   or platform identities are optional attestations; public rankings can only
   trust sessions whose authority and identity they can verify.

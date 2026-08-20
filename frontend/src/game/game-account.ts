@@ -5,9 +5,12 @@ export interface GameAccountPresentation {
 
 export function gameAccountPresentation(
   username: string | null,
-): GameAccountPresentation | null {
+): GameAccountPresentation {
   return username === null
-    ? null
+    ? {
+        accessibleLabel: 'Not logged in',
+        username: 'Not logged in',
+      }
     : {
         accessibleLabel: `Signed in as ${username}`,
         username,

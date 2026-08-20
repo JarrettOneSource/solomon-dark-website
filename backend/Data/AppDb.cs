@@ -14,6 +14,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<LobbySession> Lobbies => Set<LobbySession>();
     public DbSet<SteamLinkAttempt> SteamLinkAttempts => Set<SteamLinkAttempt>();
     public DbSet<CloudSave> CloudSaves => Set<CloudSave>();
+    public DbSet<WebGameSave> WebGameSaves => Set<WebGameSave>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
     public DbSet<CrashReport> CrashReports => Set<CrashReport>();
     public DbSet<DiagnosticLog> DiagnosticLogs => Set<DiagnosticLog>();
@@ -135,6 +136,17 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
         modelBuilder.Entity<CloudSave>(entity =>
         {
             entity.Property(save => save.Name).HasMaxLength(40);
+            entity.Property(save => save.Sha256).HasMaxLength(64);
+            entity.HasIndex(save => new { save.UserId, save.Slot }).IsUnique();
+            entity.HasOne(save => save.User)
+                .WithMany()
+                .HasForeignKey(save => save.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WebGameSave>(entity =>
+        {
+            entity.Property(save => save.Revision).IsConcurrencyToken();
             entity.Property(save => save.Sha256).HasMaxLength(64);
             entity.HasIndex(save => new { save.UserId, save.Slot }).IsUnique();
             entity.HasOne(save => save.User)

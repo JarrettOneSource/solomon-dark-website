@@ -25,6 +25,7 @@ import {
   type ServerLuaResultMessage,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
+import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
@@ -60,6 +61,7 @@ export interface GameClientSessionOptions {
   now?: () => number
   onFatal?: (failure: GameConnectionFailure) => void
   resumeToken?: string
+  saveDocument?: string
   transport: GameTransport
 }
 
@@ -74,11 +76,13 @@ export interface GameClientSession {
   getBoneyard(): LoadedBoneyard | null
   getGameplayPause(): GameplayPauseState | null
   getPingMs(): number | null
+  getSaveCheckpoint(): GameSaveCheckpoint | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
+  onSaveCheckpoint(listener: (checkpoint: GameSaveCheckpoint) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
@@ -145,6 +149,7 @@ export function connectGameClientSession(
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
+    let latestSaveCheckpoint: GameSaveCheckpoint | null = null
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
     let nextLuaRequestId = 1
@@ -162,6 +167,7 @@ export function connectGameClientSession(
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
+    const saveCheckpointListeners = new Set<(checkpoint: GameSaveCheckpoint) => void>()
     const pendingPings = new Map<number, number>()
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
     const entityReplication = new EntityReplicationReconstructor()
@@ -226,6 +232,16 @@ export function connectGameClientSession(
       if (message.type === 'server-boneyard-loaded') {
         loadedBoneyard = message.boneyard
         for (const listener of boneyardListeners) listener(message.boneyard)
+        return
+      }
+      if (message.type === 'server-save-checkpoint') {
+        if (message.sequence <= (latestSaveCheckpoint?.sequence ?? 0)) return
+        latestSaveCheckpoint = {
+          document: message.save,
+          reason: message.reason,
+          sequence: message.sequence,
+        }
+        for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
         return
       }
       if (message.type === 'server-gameplay-pause') {
@@ -390,6 +406,7 @@ export function connectGameClientSession(
         gameplayPauseListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
+        saveCheckpointListeners.clear()
       },
       executeLua(code) {
         if (!welcome || !snapshot || destroyed) {
@@ -442,6 +459,9 @@ export function connectGameClientSession(
       getPingMs() {
         return latestPingMs
       },
+      getSaveCheckpoint() {
+        return latestSaveCheckpoint
+      },
       getSnapshot() {
         if (!snapshot) throw new Error('game session has no snapshot')
         return snapshot
@@ -465,6 +485,10 @@ export function connectGameClientSession(
       onPing(listener) {
         pingListeners.add(listener)
         return () => pingListeners.delete(listener)
+      },
+      onSaveCheckpoint(listener) {
+        saveCheckpointListeners.add(listener)
+        return () => saveCheckpointListeners.delete(listener)
       },
       sampleBoneyardPresentation(requestedNow = now()) {
         if (!boneyardPresentationTimeline) {
@@ -645,6 +669,7 @@ export function connectGameClientSession(
       credential: options.credential,
       character: options.character,
       ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
+      ...(options.saveDocument ? { save: options.saveDocument } : {}),
     }))
 
     function sendPing(): void {

@@ -28,6 +28,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
       url: 'ws://127.0.0.1:1234/game',
       credential: 'secret',
     },
+    saveDocument: '{"schemaVersion":1}',
     transportFactory: async () => inertTransport,
     sessionConnector: async (options) => {
       connected = options
@@ -37,6 +38,7 @@ test('bootGame accepts a separate localhost server and routes through the shared
   assert.equal(result, session)
   assert.equal(connected?.credential, 'secret')
   assert.deepEqual(connected?.character, CHARACTER)
+  assert.equal(connected?.saveDocument, '{"schemaVersion":1}')
 })
 
 test('bootGame reports concrete transport and welcome milestones in order', async () => {
@@ -119,11 +121,13 @@ function inertSession() {
     getBoneyard: () => null,
     getGameplayPause: () => null,
     getPingMs: () => null,
+    getSaveCheckpoint: () => null,
     getSnapshot() { throw new Error() },
     onBoneyard: () => () => {},
     onGameplayPause: () => () => {},
     onEnemyEvent: () => () => {},
     onPing: () => () => {},
+    onSaveCheckpoint: () => () => {},
     onSnapshot: () => () => {},
     rerollSkill() {},
     requestGameplayPause() {},

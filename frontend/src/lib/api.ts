@@ -224,6 +224,16 @@ export interface CloudSave {
   updatedAtUtc: string
 }
 
+export interface WebGameSave {
+  slot: number
+  formatVersion: number
+  revision: number
+  document: string
+  size: number
+  sha256: string
+  updatedAtUtc: string
+}
+
 const TOKEN_KEY = 'sdr.token'
 
 export function getToken(): string | null {
@@ -390,5 +400,19 @@ export const api = {
     list: () => request<CloudSave[]>('/api/saves'),
     remove: (slot: number) => request<void>(`/api/saves/${slot}`, { method: 'DELETE' }),
     downloadUrl: (slot: number) => `/api/saves/${slot}`,
+  },
+
+  gameSaves: {
+    get: (slot: number) => request<{ save: WebGameSave | null }>(
+      `/api/game/saves/${slot}`,
+    ).then(({ save }) => save),
+    put: (
+      slot: number,
+      body: { document: string; expectedRevision: number },
+    ) => request<WebGameSave>(`/api/game/saves/${slot}`, { ...json(body), method: 'PUT' }),
+    remove: (slot: number, expectedRevision: number) => request<void>(
+      `/api/game/saves/${slot}?expectedRevision=${expectedRevision}`,
+      { method: 'DELETE' },
+    ),
   },
 }

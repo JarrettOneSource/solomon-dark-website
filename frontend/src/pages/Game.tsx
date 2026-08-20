@@ -30,11 +30,22 @@ import NativeLoader from '../game/NativeLoader'
 import GameRuntimeError from '../game/GameRuntimeError.tsx'
 import { useAuth } from '../lib/auth'
 import { getToken } from '../lib/api.ts'
+import { GameSaveCoordinator } from '../game/save/game-save-coordinator.ts'
+import {
+  createCloudGameSaveStore,
+  createLocalGameSaveStore,
+  type StoredGameSave,
+} from '../game/save/game-save-store.ts'
+import {
+  readGameSaveSummary,
+  type GameSaveCheckpoint,
+  type ResumableGameSave,
+} from '../game/save/game-save-contract.ts'
 
 type Readiness = 'loading' | 'ready'
 
 export default function Game() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestedParty = searchParams.get('party')
@@ -47,11 +58,65 @@ export default function Game() {
   const [readiness, setReadiness] = useState<Readiness>('loading')
   const [loadProgress, setLoadProgress] = useState(initialGameStartupProgress)
   const [fatal, setFatal] = useState<GameConnectionFailure | null>(null)
+  const [saveReady, setSaveReady] = useState(false)
+  const [resumeSave, setResumeSave] = useState<ResumableGameSave | null>(null)
+  const saveCoordinator = useRef<GameSaveCoordinator | null>(null)
 
   useEffect(() => {
     diagnostics.info('game.page_opened', 'The browser game page opened.')
     return diagnostics.attachBrowserListeners()
   }, [diagnostics])
+
+  useEffect(() => {
+    if (authLoading) return
+    let cancelled = false
+    setSaveReady(false)
+    setResumeSave(null)
+    const store = user ? createCloudGameSaveStore() : createLocalGameSaveStore()
+    const present = (record: StoredGameSave | null) => {
+      if (cancelled) return
+      if (!record) {
+        setResumeSave(null)
+        return
+      }
+      try {
+        setResumeSave({
+          document: record.document,
+          summary: readGameSaveSummary(record.document),
+        })
+      } catch (error) {
+        setResumeSave(null)
+        diagnostics.warning(
+          'save.invalid',
+          'The stored game could not be offered for resume.',
+          error instanceof Error ? error.message : 'Invalid game save.',
+        )
+      }
+    }
+    const coordinator = new GameSaveCoordinator(
+      store,
+      present,
+      (error) => diagnostics.warning(
+        'save.sync_failed',
+        'The latest game checkpoint could not be saved.',
+        error.message,
+      ),
+    )
+    saveCoordinator.current = coordinator
+    void coordinator.load().catch((error: unknown) => {
+      diagnostics.warning(
+        'save.load_failed',
+        'The game save slot could not be loaded.',
+        error instanceof Error ? error.message : 'Game save load failed.',
+      )
+    }).finally(() => {
+      if (!cancelled) setSaveReady(true)
+    })
+    return () => {
+      cancelled = true
+      if (saveCoordinator.current === coordinator) saveCoordinator.current = null
+    }
+  }, [authLoading, diagnostics, user])
 
   useEffect(() => {
     const robots = document.createElement('meta')
@@ -133,6 +198,7 @@ export default function Game() {
   const connectSession = useCallback(async (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
+    saveDocument?: string,
   ): Promise<GameSession> => {
     try {
       const endpoint = lobbyId
@@ -145,6 +211,7 @@ export default function Game() {
         endpoint,
         onFatal: setFatal,
         onProgress,
+        ...(saveDocument ? { saveDocument } : {}),
       })
       if (lobbyId) navigate('/game', { replace: true })
       hostedLobby.current = null
@@ -157,6 +224,10 @@ export default function Game() {
       throw failure
     }
   }, [diagnostics, lobbyId, navigate])
+
+  const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
+    saveCoordinator.current?.accept(checkpoint)
+  }, [])
 
   if (fatal || (requestedParty !== null && lobbyId === null)) {
     const failure = fatal ?? GameConnectionFailure.from(
@@ -172,7 +243,7 @@ export default function Game() {
   }
   return (
     <>
-      {readiness === 'ready'
+      {readiness === 'ready' && !authLoading && saveReady
         ? (
             <MainMenuScene
               accountUsername={accountUsername}
@@ -180,7 +251,9 @@ export default function Game() {
               displayName={displayName}
               initialScreen={lobbyId ? 'create' : 'root'}
               onCancelCreate={cancelCreate}
+              onSaveCheckpoint={persistCheckpoint}
               prepareNewGame={prepareNewGame}
+              resumeSave={resumeSave}
             />
           )
         : (
@@ -189,8 +262,8 @@ export default function Game() {
               currentItem={loadProgress.activeSource
                 ? assetDisplayName(loadProgress.activeSource)
                 : null}
-              progress={progress}
-              stage={gameStartupStageLabel(loadProgress)}
+              progress={readiness === 'ready' ? 1 : progress}
+              stage={readiness === 'ready' ? 'Loading save' : gameStartupStageLabel(loadProgress)}
               total={loadProgress.total}
             />
           )}

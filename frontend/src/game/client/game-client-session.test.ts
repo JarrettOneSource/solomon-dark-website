@@ -78,6 +78,7 @@ test('client carries character config, publishes authority, and tears down', asy
   const connecting = connectGameClientSession({
     character: CHARACTER,
     credential: 'spawn-secret',
+    saveDocument: '{"schemaVersion":1}',
     transport,
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
@@ -85,6 +86,7 @@ test('client carries character config, publishes authority, and tears down', asy
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: CHARACTER,
+    save: '{"schemaVersion":1}',
   })
   const serverState = createGameSimulation({ 'player-1': CHARACTER })
   transport.receive(encodeGameMessage({
@@ -105,6 +107,24 @@ test('client carries character config, publishes authority, and tears down', asy
   const session = await connecting
   assert.equal(session.isHost, true)
   assert.equal(session.boneyards[0].id, 'default-random')
+  assert.equal(session.getSaveCheckpoint(), null)
+  let receivedCheckpoint = null
+  const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
+    receivedCheckpoint = checkpoint
+  })
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"schemaVersion":1,"checkpoint":true}',
+    reason: 'progress',
+    sequence: 1,
+  }))
+  assert.deepEqual(receivedCheckpoint, {
+    document: '{"schemaVersion":1,"checkpoint":true}',
+    reason: 'progress',
+    sequence: 1,
+  })
+  assert.deepEqual(session.getSaveCheckpoint(), receivedCheckpoint)
+  removeCheckpoint()
   const stockItemId = session.getSnapshot().players[session.playerId].economy.fomentiusStock[0]!.id
   session.sendHubAction({ type: 'buy-fomentius', itemId: stockItemId })
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {

@@ -891,6 +891,93 @@ test('persistent host retains its loaded run across an empty interval', async (c
   assert.equal(host.loadedBoneyard()?.runId, firstRun.boneyard.runId)
 })
 
+test('host emits an owner checkpoint and revives it before a fresh welcome', async (context) => {
+  const firstHost = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => firstHost.close())
+  const firstSocket = await openSocket(firstHost.address.url)
+  context.after(() => firstSocket.close())
+  const firstWelcome = nextMessage(firstSocket, (message) => message.type === 'server-welcome')
+  const firstCheckpoint = nextMessage(
+    firstSocket,
+    (message) => message.type === 'server-save-checkpoint' && message.save !== null,
+  )
+  firstSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: FIRST_CHARACTER,
+  }))
+  const [welcomed, checkpoint] = await Promise.all([firstWelcome, firstCheckpoint])
+  assert.equal(welcomed.type, 'server-welcome')
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.equal(checkpoint.reason, 'progress')
+  assert.ok(checkpoint.save)
+
+  const secondHost = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => secondHost.close())
+  const secondSocket = await openSocket(secondHost.address.url)
+  context.after(() => secondSocket.close())
+  const resumedMessage = nextMessage(secondSocket, (message) => message.type === 'server-welcome')
+  secondSocket.send(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'test-secret',
+    character: FIRST_CHARACTER,
+    save: checkpoint.save,
+  }))
+  const resumed = await resumedMessage
+  assert.equal(resumed.type, 'server-welcome')
+  assert.equal(resumed.playerId, welcomed.playerId)
+  assert.equal(resumed.snapshot.tick, welcomed.snapshot.tick)
+  assert.deepEqual(resumed.snapshot.players[resumed.playerId].config, FIRST_CHARACTER)
+  assert.equal(resumed.snapshot.world.kind, 'hub')
+})
+
+test('host clears the resumable document on the first authoritative Game Over edge', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const client = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  context.after(() => client.socket.close())
+  const active = nextMessage(client.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.run.phase === 'active'
+  ))
+  client.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  await active
+
+  const cleared = nextMessage(client.socket, (message) => (
+    message.type === 'server-save-checkpoint'
+    && message.reason === 'game-over'
+  ))
+  Object.assign(host.state().playerEntities.progressions[0]!, {
+    lifeState: 'spectating',
+  })
+  const checkpoint = await cleared
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.deepEqual(checkpoint, {
+    type: 'server-save-checkpoint',
+    save: null,
+    reason: 'game-over',
+    sequence: checkpoint.sequence,
+  })
+  assert.equal(host.state().run.phase, 'game-over')
+
+  let laterProgress = 0
+  const countProgress = (data: WebSocket.RawData) => {
+    const message = decodeServerGameMessage(data.toString())
+    if (message.type === 'server-save-checkpoint' && message.reason === 'progress') {
+      laterProgress += 1
+    }
+  }
+  client.socket.on('message', countProgress)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  client.socket.off('message', countProgress)
+  assert.equal(laterProgress, 0)
+})
+
 test('host returns the same multiplayer session from Game Over through loadout to Hub', async (context) => {
   const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => host.close())

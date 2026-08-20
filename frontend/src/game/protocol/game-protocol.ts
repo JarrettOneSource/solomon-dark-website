@@ -185,6 +185,9 @@ import type {
   ReplicatedEntityKey,
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
+import {
+  MAX_WEB_GAME_SAVE_BYTES,
+} from '../save/game-save-contract.ts'
 
 export type { BoneyardEnemyEventSnapshot, GameSnapshot } from './game-state.ts'
 export type {
@@ -193,7 +196,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 33
+export const GAME_PROTOCOL_VERSION = 34
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -307,6 +310,7 @@ export interface ClientHelloMessage {
   credential: string
   character: PlayerCharacterConfig
   resumeToken?: string
+  save?: string
 }
 
 export interface ClientInputMessage {
@@ -411,6 +415,13 @@ export interface ServerBoneyardLoadedMessage {
   boneyard: LoadedBoneyard
 }
 
+export interface ServerSaveCheckpointMessage {
+  type: 'server-save-checkpoint'
+  save: string | null
+  reason: 'game-over' | 'progress'
+  sequence: number
+}
+
 export interface ServerPongMessage {
   type: 'server-pong'
   nonce: number
@@ -461,6 +472,7 @@ export type ServerGameMessage =
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
+  | ServerSaveCheckpointMessage
   | ServerLuaResultMessage
   | ServerPongMessage
   | ServerDisconnectMessage
@@ -478,6 +490,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       'credential',
       'character',
       'resumeToken',
+      'save',
     ])
     return {
       type: 'client-hello',
@@ -487,6 +500,15 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       ...(value.resumeToken === undefined
         ? {}
         : { resumeToken: limitedString(value.resumeToken, 'resumeToken', 512) }),
+      ...(value.save === undefined
+        ? {}
+        : {
+            save: byteLimitedString(
+              value.save,
+              'save',
+              MAX_WEB_GAME_SAVE_BYTES,
+            ),
+          }),
     }
   }
   if (value.type === 'client-input') {
@@ -639,6 +661,29 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
     return {
       type: 'server-boneyard-loaded',
       boneyard: loadedBoneyard(value.boneyard),
+    }
+  }
+  if (value.type === 'server-save-checkpoint') {
+    onlyKeys(value, 'message', ['type', 'save', 'reason', 'sequence'])
+    const reason = memberString(
+      value.reason,
+      'reason',
+      ['game-over', 'progress'] as const,
+    )
+    const save = value.save === null
+      ? null
+      : byteLimitedString(value.save, 'save', MAX_WEB_GAME_SAVE_BYTES)
+    if (reason === 'progress' && save === null) {
+      throw new GameProtocolError('progress save checkpoint requires save data')
+    }
+    if (reason === 'game-over' && save !== null) {
+      throw new GameProtocolError('game-over save checkpoint must clear save data')
+    }
+    return {
+      type: 'server-save-checkpoint',
+      save,
+      reason,
+      sequence: positiveInteger(value.sequence, 'sequence'),
     }
   }
   if (value.type === 'server-pong') {

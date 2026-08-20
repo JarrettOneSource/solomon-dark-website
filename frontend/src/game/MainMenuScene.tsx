@@ -55,6 +55,10 @@ import type {
   LoadedBoneyard,
 } from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type {
+  GameSaveCheckpoint,
+  ResumableGameSave,
+} from './save/game-save-contract.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
   GAME_VIEWPORT_MIN_WIDTH,
@@ -180,19 +184,23 @@ function RootActions({
 }
 
 function PlayActions({
+  canResume,
   onBack,
   onHighlight,
+  onLastGame,
   onNewGame,
   onPress,
   onPressState,
 }: ActionGroupProps & {
+  canResume: boolean
   onBack: () => void
+  onLastGame: () => void
   onNewGame: () => void
 }) {
   return (
     <>
-      <MenuButton action="last-game" accessibleLabel="Last game unavailable" className="main-menu-button-last-game" disabled onHighlight={onHighlight} onPressState={onPressState} />
-      <MenuButton action="new-game" accessibleLabel="New game" defaultFocus onClick={onNewGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="last-game" accessibleLabel="Last game" className="main-menu-button-last-game" defaultFocus={canResume} disabled={!canResume} onClick={onLastGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="new-game" accessibleLabel="New game" defaultFocus={!canResume} onClick={onNewGame} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="unavailable" accessibleLabel="Unavailable" className="main-menu-button-empty" disabled onHighlight={onHighlight} onPressState={onPressState} />
       <MenuButton action="back" accessibleLabel="Back" isBack onClick={onBack} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
@@ -205,10 +213,13 @@ interface MainMenuSceneProps {
   connectSession: (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
+    saveDocument?: string,
   ) => Promise<GameClientSession>
   initialScreen?: 'create' | 'root'
   onCancelCreate: () => Promise<void>
+  onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
   prepareNewGame: () => Promise<void>
+  resumeSave: ResumableGameSave | null
 }
 
 export default function MainMenuScene({
@@ -217,7 +228,9 @@ export default function MainMenuScene({
   displayName,
   initialScreen = 'root',
   onCancelCreate,
+  onSaveCheckpoint,
   prepareNewGame,
+  resumeSave,
 }: MainMenuSceneProps) {
   const audio = useMemo(createBrowserGameAudioDirector, [])
   const stageRef = useRef<HTMLElement>(null)
@@ -378,6 +391,8 @@ export default function MainMenuScene({
     if (!session) return
     const initialSnapshot = session.getSnapshot()
     const initialBoneyard = session.getBoneyard()
+    const initialSaveCheckpoint = session.getSaveCheckpoint()
+    if (initialSaveCheckpoint) onSaveCheckpoint(initialSaveCheckpoint)
     activeBoneyardRunRef.current = initialSnapshot.world.kind === 'boneyard'
       ? initialSnapshot.world.runId
       : null
@@ -435,12 +450,14 @@ export default function MainMenuScene({
       }
     })
     const removeGameplayPause = session.onGameplayPause(setGameplayPause)
+    const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
     return () => {
       removeSnapshot()
       removeBoneyard()
       removeGameplayPause()
+      removeSaveCheckpoint()
     }
-  }, [advanceLoading, beginLoading, session])
+  }, [advanceLoading, beginLoading, onSaveCheckpoint, session])
 
   useEffect(() => {
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
@@ -513,7 +530,7 @@ export default function MainMenuScene({
   )
   const accountStageStyle = fixedStageStyle(
     fixedViewport,
-    fixedGameStageBounds(fixedViewport, 'left', 'top'),
+    fixedGameStageBounds(fixedViewport, 'right', 'top'),
   )
 
   const beginNewGame = async () => {
@@ -544,6 +561,51 @@ export default function MainMenuScene({
     }
   }
 
+  const activateSession = (nextSession: GameClientSession) => {
+    const snapshot = nextSession.getSnapshot()
+    setSession(nextSession)
+    setRuntimeSnapshot(snapshot)
+    setRuntimeProgression(
+      snapshot.players[nextSession.playerId]?.progression ?? null,
+    )
+    setLoadedBoneyard(nextSession.getBoneyard())
+    setGameplayPause(nextSession.getGameplayPause())
+    if (snapshot.world.kind === 'hub') advanceLoading('materializing_participants')
+    setScreen('hub')
+  }
+
+  const resumeLastGame = async () => {
+    if (!resumeSave || preparing || connecting) return
+    const flow: MatchLoadingFlow = resumeSave.summary.worldKind === 'boneyard'
+      ? 'boneyard'
+      : 'hub'
+    setPreparing(true)
+    setConnectionError(null)
+    try {
+      await prepareNewGame()
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Web playtest creation failed.')
+      return
+    } finally {
+      setPreparing(false)
+    }
+    setConnecting(true)
+    beginLoading(flow, 'connecting_transport')
+    try {
+      const nextSession = await connectSession(
+        resumeSave.summary.character,
+        advanceLoading,
+        resumeSave.document,
+      )
+      activateSession(nextSession)
+    } catch (error) {
+      cancelLoading(flow)
+      setConnectionError(error instanceof Error ? error.message : 'Saved game connection failed.')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
   const startHub = async (
     selectedDisplayName: string,
     selectedElement: WizardElement,
@@ -566,15 +628,7 @@ export default function MainMenuScene({
         },
         advanceLoading,
       )
-      setSession(nextSession)
-      setRuntimeSnapshot(nextSession.getSnapshot())
-      setRuntimeProgression(
-        nextSession.getSnapshot().players[nextSession.playerId]?.progression ?? null,
-      )
-      setLoadedBoneyard(nextSession.getBoneyard())
-      setGameplayPause(nextSession.getGameplayPause())
-      advanceLoading('materializing_participants')
-      setScreen('hub')
+      activateSession(nextSession)
       return true
     } catch (error) {
       cancelLoading('hub')
@@ -671,8 +725,10 @@ export default function MainMenuScene({
                   />
                 ) : (
                   <PlayActions
+                    canResume={resumeSave !== null}
                     onBack={() => setScreen('root')}
                     onHighlight={setHoveredTitleAction}
+                    onLastGame={() => { void resumeLastGame() }}
                     onNewGame={() => { void beginNewGame() }}
                     onPress={() => audio.playSound('click')}
                     onPressState={setPressedTitleAction}

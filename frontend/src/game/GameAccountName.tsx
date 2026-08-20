@@ -10,8 +10,8 @@ export default function GameAccountName({
   placement,
   username,
 }: GameAccountNameProps) {
+  if (placement === 'hud' && username === null) return null
   const presentation = gameAccountPresentation(username)
-  if (!presentation) return null
 
   return (
     <span

@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  GAME_PROTOCOL_VERSION,
+  decodeClientGameMessage,
+  decodeServerGameMessage,
+} from '../protocol/game-protocol.ts'
+import { MAX_WEB_GAME_SAVE_BYTES } from './game-save-contract.ts'
+
+const CHARACTER = {
+  discipline: 'arcane',
+  displayName: 'Helvidius',
+  element: 'ether',
+} as const
+
+test('protocol carries one bounded resume document and ordered host checkpoints', () => {
+  const document = JSON.stringify({ schemaVersion: 1 })
+  assert.deepEqual(decodeClientGameMessage(JSON.stringify({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'secret',
+    character: CHARACTER,
+    save: document,
+  })), {
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'secret',
+    character: CHARACTER,
+    save: document,
+  })
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-checkpoint',
+    save: document,
+    reason: 'progress',
+    sequence: 9,
+  })), {
+    type: 'server-save-checkpoint',
+    save: document,
+    reason: 'progress',
+    sequence: 9,
+  })
+  assert.deepEqual(decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-checkpoint',
+    save: null,
+    reason: 'game-over',
+    sequence: 10,
+  })), {
+    type: 'server-save-checkpoint',
+    save: null,
+    reason: 'game-over',
+    sequence: 10,
+  })
+})
+
+test('protocol rejects oversized and inconsistent save messages', () => {
+  assert.throws(() => decodeClientGameMessage(JSON.stringify({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'secret',
+    character: CHARACTER,
+    save: 'x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1),
+  })), /save/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-checkpoint',
+    save: null,
+    reason: 'progress',
+    sequence: 1,
+  })), /progress/)
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-save-checkpoint',
+    save: '{}',
+    reason: 'game-over',
+    sequence: 1,
+  })), /game-over/)
+})

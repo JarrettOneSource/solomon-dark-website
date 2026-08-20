@@ -33,6 +33,28 @@ public static class DatabaseSchema
             """,
             cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS WebGameSaves (
+                Id INTEGER NOT NULL CONSTRAINT PK_WebGameSaves PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                Slot INTEGER NOT NULL,
+                FormatVersion INTEGER NOT NULL,
+                Revision INTEGER NOT NULL,
+                Document TEXT NOT NULL,
+                Size INTEGER NOT NULL,
+                Sha256 TEXT NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_WebGameSaves_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_WebGameSaves_UserId_Slot
+                ON WebGameSaves (UserId, Slot);
+            CREATE INDEX IF NOT EXISTS IX_WebGameSaves_UserId
+                ON WebGameSaves (UserId);
+            """,
+            cancellationToken);
+
         if (!await HasColumnAsync(db, "CloudSaves", "UncompressedSize", cancellationToken))
         {
             await db.Database.ExecuteSqlRawAsync(

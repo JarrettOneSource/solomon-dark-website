@@ -893,6 +893,97 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             database.execute("UPDATE Users SET SteamId = NULL WHERE Id = ?", (self.user_id,))
             database.commit()
 
+    def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
+        document = json.dumps(
+            {
+                "schemaVersion": 1,
+                "summary": {
+                    "character": {
+                        "discipline": "arcane",
+                        "displayName": "modsync",
+                        "element": "ether",
+                    },
+                    "phase": "hub",
+                    "playerId": "player-1",
+                    "savedAtTick": 42,
+                    "worldKind": "hub",
+                },
+                "simulation": {},
+                "loadedBoneyard": None,
+            },
+            separators=(",", ":"),
+        )
+        auth = {"Authorization": f"Bearer {self.token}"}
+
+        status, rejected = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            json_body={"document": document, "expectedRevision": 0},
+        )
+        self.assertEqual(status, 401, rejected)
+        status, rejected = self.request(
+            "PUT",
+            "/api/game/saves/1",
+            headers=auth,
+            json_body={"document": document, "expectedRevision": 0},
+        )
+        self.assertEqual(status, 400, rejected)
+
+        status, created = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={"document": document, "expectedRevision": 0},
+        )
+        self.assertEqual(status, 200, created)
+        self.assertEqual(created["slot"], 0)
+        self.assertEqual(created["formatVersion"], 1)
+        self.assertEqual(created["revision"], 1)
+        self.assertEqual(created["document"], document)
+        self.assertEqual(created["size"], len(document.encode()))
+        self.assertEqual(created["sha256"], hashlib.sha256(document.encode()).hexdigest())
+
+        status, loaded = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, loaded)
+        self.assertEqual(loaded["save"], created)
+
+        status, conflict = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={"document": document, "expectedRevision": 0},
+        )
+        self.assertEqual(status, 409, conflict)
+        self.assertEqual(conflict["currentRevision"], 1)
+
+        next_document = document.replace('"savedAtTick":42', '"savedAtTick":84')
+        status, updated = self.request(
+            "PUT",
+            "/api/game/saves/0",
+            headers=auth,
+            json_body={"document": next_document, "expectedRevision": 1},
+        )
+        self.assertEqual(status, 200, updated)
+        self.assertEqual(updated["revision"], 2)
+        self.assertEqual(updated["document"], next_document)
+
+        status, conflict = self.request(
+            "DELETE",
+            "/api/game/saves/0?expectedRevision=1",
+            headers=auth,
+        )
+        self.assertEqual(status, 409, conflict)
+        self.assertEqual(conflict["currentRevision"], 2)
+        status, empty = self.request(
+            "DELETE",
+            "/api/game/saves/0?expectedRevision=2",
+            headers=auth,
+        )
+        self.assertEqual(status, 204, empty)
+        status, missing = self.request("GET", "/api/game/saves/0", headers=auth)
+        self.assertEqual(status, 200, missing)
+        self.assertIsNone(missing["save"])
+
     def test_lobby_capacity_honors_the_steam_limit(self) -> None:
         def announce(max_players: int, lobby_suffix: str) -> tuple[int, object]:
             return self.request(

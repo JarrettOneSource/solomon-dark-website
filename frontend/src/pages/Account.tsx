@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import Reveal from '../fx/Reveal'
 import { ErrorNote, Spinner, TagBadge } from '../components/ui'
-import { api, ApiError, type CloudSave, type ModSummary, type School } from '../lib/api'
+import {
+  api,
+  ApiError,
+  type CloudSave,
+  type ModSummary,
+  type School,
+  type WebGameSave,
+} from '../lib/api'
 import { useApi } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import { art, elementWords } from '../lib/assets'
@@ -254,6 +261,55 @@ function SaveSlot({ slot, save, onChanged }: { slot: number; save?: CloudSave; o
   )
 }
 
+function BrowserGameSaveSlot({
+  save,
+  onChanged,
+}: {
+  save: WebGameSave | null
+  onChanged: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const remove = async () => {
+    if (!save || !window.confirm('Erase browser save I from the Annals?')) return
+    setBusy(true)
+    try {
+      await api.gameSaves.remove(save.slot, save.revision)
+      onChanged()
+    } catch (error) {
+      alert(error instanceof ApiError ? error.message : 'Failed to erase')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="panel panel-ornate flex min-h-36 max-w-sm flex-col p-4">
+      <div className="flex items-start justify-between">
+        <span className="font-display text-lg text-gold">I</span>
+        <span className="font-mono text-[10px] text-bone-dim/60">
+          {save ? `revision ${save.revision} · ${formatBytes(save.size)}` : 'empty'}
+        </span>
+      </div>
+      <div className="mt-1 font-display text-sm font-bold tracking-wide text-bone">
+        Browser Game
+      </div>
+      <div className="mt-0.5 text-xs text-bone-dim">
+        {save ? `saved ${timeAgo(save.updatedAtUtc)}` : 'Unwritten'}
+      </div>
+      {save ? (
+        <button
+          type="button"
+          className="mt-auto self-start pt-3 text-[11px] uppercase tracking-wider text-blood/80 hover:text-blood"
+          onClick={remove}
+          disabled={busy}
+        >
+          erase
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 export default function Account() {
   const { user, loading, logout } = useAuth()
   const navigate = useNavigate()
@@ -265,6 +321,10 @@ export default function Account() {
   const saves = useApi(
     () => user?.steamId ? api.saves.list() : Promise.resolve<CloudSave[]>([]),
     [user?.id, user?.steamId],
+  )
+  const browserSave = useApi(
+    () => user ? api.gameSaves.get(0) : Promise.resolve(null),
+    [user?.id],
   )
   // v1: no author filter on the mods API yet — pull a page and filter client-side.
   const mods = useApi(() => api.mods.list({ pageSize: 50, sort: 'newest' }), [user?.id])
@@ -308,13 +368,30 @@ export default function Account() {
           <div className="kicker mb-1.5">Runs on record</div>
           <h2 className="h-display text-xl">Cloud Saves</h2>
           <p className="text-fell mt-2 max-w-2xl text-sm text-bone-dim">
-            Eight launcher-owned local saves, backed up here after they change.
+            The browser game writes slot I automatically while you play.
           </p>
         </Reveal>
         <div className="mt-6">
+          {browserSave.loading ? (
+            <Spinner label="Opening browser save I…" />
+          ) : browserSave.error ? (
+            <ErrorNote message={browserSave.error} />
+          ) : (
+            <BrowserGameSaveSlot save={browserSave.data} onChanged={browserSave.reload} />
+          )}
+        </div>
+        <Reveal>
+          <div className="mt-8 font-display text-xs font-bold uppercase tracking-[0.18em] text-gold/80">
+            Launcher saves
+          </div>
+          <p className="text-fell mt-1 max-w-2xl text-sm text-bone-dim">
+            Eight launcher-owned native slots, backed up after they change.
+          </p>
+        </Reveal>
+        <div className="mt-4">
           {!user.steamId ? (
             <div className="slab rounded px-5 py-6 text-sm text-bone-dim">
-              Cloud saves are disabled until this account is linked to Steam above.
+              Launcher cloud saves are disabled until this account is linked to Steam above.
             </div>
           ) : saves.loading ? (
             <Spinner label="Unlocking the vault…" />

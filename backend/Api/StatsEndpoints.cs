@@ -22,7 +22,8 @@ public static class StatsEndpoints
             .Where(lobby => lobby.LastSeenUtc >= liveCutoff)
             .SumAsync(lobby => (int?)lobby.Players, cancellationToken) ?? 0;
         var tomes = await db.Mods.CountAsync(cancellationToken);
-        var savesSynced = await db.CloudSaves.CountAsync(cancellationToken);
+        var savesSynced = await db.CloudSaves.CountAsync(cancellationToken)
+            + await db.WebGameSaves.CountAsync(cancellationToken);
         var enrolled = await db.Users.CountAsync(cancellationToken);
         var downloadsTotal = await db.Mods
             .SumAsync(mod => (long?)mod.Downloads, cancellationToken) ?? 0;

@@ -11,6 +11,7 @@ import {
   PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
   PLAYER_CHARACTER_RADIUS,
   createIdlePlayerCharacterInput,
+  type PlayerCharacterConfig,
   type PlayerCharacterInput,
 } from '../core-kernels/player-character.ts'
 import {
@@ -74,8 +75,14 @@ import {
 } from './lua/web-lua-game-api.ts'
 import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
 import { WEB_LUA_MAX_PENDING_EXECUTIONS } from './lua/web-lua-contract.ts'
+import {
+  createGameSaveDocument,
+  restoreGameSaveDocument,
+} from '../save/game-save-document.ts'
+import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
+const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
 
 export type GameHostAuthentication =
   | { kind: 'shared'; credential: string }
@@ -172,6 +179,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let reservedHostClaimed = false
   let loadedBoneyard: LoadedBoneyard | null = null
   let nextSnapshotSequence = 1
+  let nextSaveSequence = 1
+  let lastSaveDocument: string | null = null
+  let lastSaveOwnerPlayerId: string | null = null
   let nextLuaRunSeed: number | null = null
   let luaRuntime: WebLuaRuntime | null = null
   let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
@@ -205,7 +215,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   })
   const websocketServer = new WebSocketServer({
     noServer: true,
-    maxPayload: 64 * 1024,
+    maxPayload: MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024,
     perMessageDeflate: GAME_WEBSOCKET_COMPRESSION,
   })
 
@@ -358,15 +368,49 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         clearTimeout(helloDeadline)
         pending.delete(socket)
-        const playerId = `player-${nextPlayerId}`
-        nextPlayerId += 1
-        state = addPlayerCharacter(state, playerId, message.character)
-        if (options.initialPlayerExperience) {
-          state = grantGameSimulationPlayerExperience(
-            state,
-            playerId,
-            options.initialPlayerExperience,
-          )
+        let playerId: PlayerId
+        if (message.save !== undefined) {
+          if (
+            role === 'guest'
+            || clients.size !== 0
+            || state.tick !== 0
+            || state.world.kind !== 'hub'
+            || state.playerEntities.identities.length !== 0
+          ) {
+            disconnect(socket, 'invalid-message', 'A save may resume only on a fresh host owner.')
+            return
+          }
+          let restored
+          try {
+            restored = restoreGameSaveDocument(message.save)
+          } catch (error) {
+            disconnect(
+              socket,
+              'invalid-message',
+              error instanceof Error ? error.message : 'The game save is invalid.',
+            )
+            return
+          }
+          const restoredCharacter = restored.state.playerEntities.configs[0]
+          if (!restoredCharacter || !sameCharacter(restoredCharacter, message.character)) {
+            disconnect(socket, 'invalid-message', 'The game save character does not match the resume request.')
+            return
+          }
+          state = restored.state
+          loadedBoneyard = restored.loadedBoneyard
+          playerId = restored.playerId
+          nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
+        } else {
+          playerId = `player-${nextPlayerId}`
+          nextPlayerId += 1
+          state = addPlayerCharacter(state, playerId, message.character)
+          if (options.initialPlayerExperience) {
+            state = grantGameSimulationPlayerExperience(
+              state,
+              playerId,
+              options.initialPlayerExperience,
+            )
+          }
         }
         if (role === 'host') {
           reservedHostClaimed = true
@@ -440,6 +484,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             boneyard: loadedBoneyard,
           }))
         }
+        publishSaveCheckpoint('connected')
         if (gameplayPause) broadcastSnapshot()
         return
       }
@@ -457,6 +502,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           }
           stopAllClientInputs()
           resetNextTickDeadline()
+          publishSaveCheckpoint('pause')
           broadcastGameplayPause()
           logGameServerEvent(
             options.log,
@@ -534,6 +580,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
         broadcastSnapshot()
+        publishSaveCheckpoint('skill-selected')
         return
       }
       if (message.type === 'client-level-up-action') {
@@ -550,6 +597,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.queuedInputs.clear()
         if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
         broadcastSnapshot()
+        publishSaveCheckpoint('level-up-action')
         return
       }
       if (message.type === 'client-hub-action') {
@@ -559,6 +607,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
+        if (applied.accepted) publishSaveCheckpoint('hub-action')
         return
       }
       if (message.type === 'client-lua-execute') {
@@ -705,6 +754,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         broadcast({ type: 'server-boneyard-loaded', boneyard: selected })
         broadcastSnapshot()
+        publishSaveCheckpoint('boneyard-entry')
         return
       }
       if (message.type === 'client-confirm-loadout') {
@@ -713,6 +763,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (!confirmed) return
         state = confirmed
         broadcastSnapshot()
+        publishSaveCheckpoint('loadout-confirmed')
         return
       }
       if (message.type === 'client-disconnect') {
@@ -765,6 +816,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           reservedHostClaimed = false
           loadedBoneyard = null
           nextSnapshotSequence = 1
+          nextSaveSequence = 1
+          lastSaveDocument = null
+          lastSaveOwnerPlayerId = null
           gameplayPause = null
           resetNextTickDeadline()
         }
@@ -797,6 +851,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       )
       if (releasedGameplayPause) releaseGameplayPause('owner-disconnected')
       else broadcastSnapshot()
+      if (clients.size > 0) publishSaveCheckpoint('participant-disconnected')
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
     socket.once('error', (error) => release(null, '', error))
@@ -859,6 +914,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && state.run.phase === 'game-over'
         const completedGameOver = previousRunPhase === 'game-over'
           && state.run.phase === 'loadout'
+        if (enteredGameOver) publishSaveClear()
         if (completedGameOver) loadedBoneyard = null
         if (enteredGameOver || completedGameOver) stopAllClientInputs()
         if (previousBarrierId === null && barrierId !== null) stopAllClientInputs()
@@ -871,6 +927,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           || completedGameOver
           || (state.tick !== previousTick && state.tick % ticksPerSnapshot === 0)
         ) broadcastSnapshot()
+        if (
+          state.tick !== previousTick
+          && state.tick % GAME_SAVE_CHECKPOINT_TICKS === 0
+        ) publishSaveCheckpoint('periodic')
       }
       if (steps === 25 && now >= nextTickAt) {
         if (now - lastTickLagWarningAt >= 10_000) {
@@ -911,6 +971,59 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ticking = false
     }
   }, 2)
+
+  function publishSaveCheckpoint(source: string): void {
+    if (
+      hostPlayerId === null
+      || state.run.phase === 'game-over'
+      || state.run.phase === 'loadout'
+    ) return
+    const owner = [...clients.values()].find((client) => client.playerId === hostPlayerId)
+    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
+    let document: string
+    try {
+      document = createGameSaveDocument({
+        loadedBoneyard,
+        playerId: hostPlayerId,
+        state,
+      })
+    } catch (error) {
+      logGameServerEvent(
+        options.log,
+        'game-host',
+        'error',
+        'save.checkpoint_failed',
+        'The authoritative game state could not produce a save checkpoint.',
+        logDetails({ source, ...gameServerErrorDetails(error) }),
+      )
+      return
+    }
+    if (lastSaveOwnerPlayerId === hostPlayerId && lastSaveDocument === document) return
+    lastSaveOwnerPlayerId = hostPlayerId
+    lastSaveDocument = document
+    owner.socket.send(encodeGameMessage({
+      type: 'server-save-checkpoint',
+      save: document,
+      reason: 'progress',
+      sequence: nextSaveSequence,
+    }))
+    nextSaveSequence += 1
+  }
+
+  function publishSaveClear(): void {
+    if (hostPlayerId === null) return
+    const owner = [...clients.values()].find((client) => client.playerId === hostPlayerId)
+    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
+    lastSaveOwnerPlayerId = hostPlayerId
+    lastSaveDocument = null
+    owner.socket.send(encodeGameMessage({
+      type: 'server-save-checkpoint',
+      save: null,
+      reason: 'game-over',
+      sequence: nextSaveSequence,
+    }))
+    nextSaveSequence += 1
+  }
 
   function broadcastSnapshot(): void {
     const snapshot = createGameSnapshot(state, hostPlayerId)
@@ -1232,6 +1345,19 @@ function newestQueuedInput(
 function sameCast(first: PlayerCharacterInput, second: PlayerCharacterInput): boolean {
   return first.cast.primary === second.cast.primary
     && first.cast.secondary === second.cast.secondary
+}
+
+function sameCharacter(first: PlayerCharacterConfig, second: PlayerCharacterConfig): boolean {
+  return first.discipline === second.discipline
+    && first.displayName === second.displayName
+    && first.element === second.element
+}
+
+function nextPlayerNumber(playerId: string): number {
+  const match = /^player-(\d+)$/.exec(playerId)
+  if (!match) return 0
+  const value = Number(match[1])
+  return Number.isSafeInteger(value) && value > 0 ? value : 0
 }
 
 function isAllowedUpgrade(
