@@ -22252,3 +22252,52 @@ immediately; no synchronous unload API can make a final cloud write reliable.
 - Remaining implementation explicitly out of scope: mod list, multiple browser
   slots, native import/export, launcher-slot unification, and shared-party
   continuation ownership.
+
+## 2026-08-20 — Arena world weather: rain, splash, and rainfall audio
+
+### Boundary and evidence
+
+The right-click Storm/Acid rain actors are a separate closed system. The stock
+Arena world-weather owner is `0x00468E50`, called from Arena tick `0x0046E570`,
+and consumes serialized `environmentMode` byte `+518` / Arena `+0x8F20`.
+The retail class census identifies `Anim_WeatherRaindrop` at vtable
+`0x00785180`, constructor `0x00454B60`, tick `0x00454C00`, and draw
+`0x00459B60`. Clean-stock executable identity is SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+
+| Member | Native contract | Disposition |
+| --- | --- | --- |
+| Clear mode 0 | no world drops, splashes, or rainfall request | exact-ported |
+| Rainy mode 1 | 3 procedural drops per Arena tick | exact-ported |
+| Stormy mode 2 | 10 drops, or 20 with Enhanced Effects | exact-ported |
+| World streak | `20 + RandomFloat(10)`, width 1, world-space gradient, floor retirement | exact-ported |
+| Spawn validity | bounds samples rejected by `FUN_005238C0` with native radius 4 | exact-ported |
+| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`) | exact-ported |
+| Ambient audio | shared `sounds\\rainfall__loop`, mode gain 0.4/1 | exact-ported |
+| Mode-1/2 compact scenery 25..28 | serialized authored rows already use the shared compact pass | verified-already-at-parity |
+| Snowy/Foggy labels, Hub/title scenes | not reachable from Boneyard's stock 0..2 authoring path | out-of-system |
+
+Weather drops/splashes are peer-local presentation state. They do not enter
+the protocol, authoritative RNG, collision actors, lighting sources, or the
+secondary-ability actor list. The Website uses a private seed, the carried
+scene mode/bounds, shared static collision, and post-main world ordering.
+
+### Implementation and validation receipt
+
+- `core-kernels/native-boneyard-weather.ts` owns the fixed-tick plan and
+  private RNG; `renderer/native-boneyard-weather-view.ts` owns pooled Pixi
+  streaks/splashes; `boneyard-world-renderer.ts` owns collision, lighting,
+  camera bounds, ordering, and teardown; `boneyard-weather-audio.ts` owns the
+  distinct `boneyard-weather:rainfall` loop channel; `boneyard-textures.ts`
+  preloads exact `DeadHawg:24`.
+- `npm run test:world-weather` passed 8 focused tests. `npm run build` passed
+  typecheck, Vite, game-host bundling, and the 68,625-byte gzip game bundle
+  budget. Lint and architecture boundaries passed with only existing Fast
+  Refresh warnings.
+- Production-preview Chromium receipt on the rebased tree: mode 2,
+  `weatherDropCount=562`, `weatherSplashCount=153`,
+  `weatherSplashAsset=DeadHawg:24`, rainfall gain `1`, source
+  `rainfall-loop-D9cscZtS.wav`, and empty page/console errors. Screenshot:
+  `/tmp/solomon-dark-world-weather-rebased.png`.
+- Presentation samples can repeat, regress, or be fractional; the local
+  owner floors and ignores non-forward samples without mutating authority.

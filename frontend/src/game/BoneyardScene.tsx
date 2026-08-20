@@ -13,6 +13,7 @@ import {
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
 import { BoneyardEnemyAmbientAudioSynchronizer } from './boneyard-enemy-ambient-audio.ts'
+import { BoneyardWeatherAudioSynchronizer } from './boneyard-weather-audio.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
@@ -353,6 +354,7 @@ export default function BoneyardScene({
     let cancelled = false
     let stopPresentationLoop: (() => void) | null = null
     const enemyAmbientAudio = new BoneyardEnemyAmbientAudioSynchronizer(audio)
+    const weatherAudio = new BoneyardWeatherAudioSynchronizer(audio)
     const input = createBrowserGameplayInput({
       claimMouseCastStart: () => {
         const renderer = rendererRef.current
@@ -503,6 +505,7 @@ export default function BoneyardScene({
           }
         }
         if (isBoneyardGameSnapshot(snapshot)) {
+          const weatherRequest = weatherAudio.update(loaded.scene.environmentMode)
           const localPlayer = snapshot.players[playerId]
           const requests = enemyAmbientAudio.update(snapshot, (position) => (
             nativeBoneyardPointGain(
@@ -515,6 +518,9 @@ export default function BoneyardScene({
           ))
           const scene = sceneRef.current
           if (scene) {
+            scene.dataset.weatherAudioCue = weatherRequest.cue
+            scene.dataset.weatherAudioGain = `${weatherRequest.gain}`
+            scene.dataset.weatherAudioOwner = 'boneyard-weather:rainfall'
             const active = requests.filter(({ gain }) => gain > 0)
             scene.dataset.enemyAmbientLoops = active.map(({ cue }) => cue).join(',')
             scene.dataset.enemyAmbientLoopGains = active
@@ -572,6 +578,7 @@ export default function BoneyardScene({
       cancelled = true
       stopPresentationLoop?.()
       enemyAmbientAudio.destroy()
+      weatherAudio.destroy()
       audio.stopStreams(BONEYARD_SOLOMON_VOICE_CUES)
       input.destroy()
       inputRef.current = null

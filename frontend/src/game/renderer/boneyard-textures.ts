@@ -32,6 +32,7 @@ export interface BoneyardWorldTextures extends PlayerWorldTextures {
   solomonDig: readonly Texture[]
   solomonShadow: Texture
   solomonWalk: readonly (readonly Texture[])[]
+  weatherSplash: Texture
 }
 
 export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures> {
@@ -49,11 +50,16 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
   if (!solomonShadowSource) {
     throw new Error('Boneyard DeadHawg record 13 is unavailable.')
   }
+  const weatherSplashSource = spriteRefFor('DeadHawg', 24)?.src
+  if (!weatherSplashSource) {
+    throw new Error('Boneyard DeadHawg record 24 is unavailable.')
+  }
   const liftedSourceSet = new Set([
     ...fenceSources,
     ...NATIVE_ENEMY_ASSET_SOURCES,
     ...NATIVE_LOOT_ASSET_SOURCES,
     solomonShadowSource,
+    weatherSplashSource,
   ])
   const sources = [...new Set([
     ...playerWorldAssetSources(),
@@ -66,6 +72,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.solomonDig,
     solomonEncounterSource,
     solomonShadowSource,
+    weatherSplashSource,
   ])]
   let images: readonly (readonly [string, HTMLImageElement])[]
   try {
@@ -119,6 +126,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     solomonDig: stripFrames(texture(boneyard.solomonDig), 18, 200, 200, 'horizontal'),
     solomonShadow: texture(solomonShadowSource),
     solomonWalk: solomonEncounter.slice(4, 10),
+    weatherSplash: texture(weatherSplashSource),
   }
 }
 

@@ -45,6 +45,16 @@ import type {
   BoneyardGateLeafSnapshot,
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
+import {
+  canPlaceBoneyardBody,
+  createBoneyardCollisionWorld,
+  withBoneyardGateCollision,
+  type BoneyardCollisionWorld,
+} from '../core-server/boneyard-collision.ts'
+import {
+  NativeBoneyardWeather,
+  nativeBoneyardWeatherSeed,
+} from '../core-kernels/native-boneyard-weather.ts'
 import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
 import {
   mergeNativeLightProviderOwners,
@@ -167,6 +177,7 @@ import {
   NativeWorldNameplateLayer,
   projectNativeWorldPoint,
 } from './native-world-nameplate.ts'
+import { NativeBoneyardWeatherView } from './native-boneyard-weather-view.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
@@ -304,6 +315,9 @@ interface BoneyardRendererFrameDiagnostics {
   visibleMainLayerCount: number
   visibleOversizedResidentCount: number
   visibleResidentCount: number
+  weatherDropCount: number
+  weatherMode: number
+  weatherSplashCount: number
   worldFeedbackMagnitude: number
   worldShakeX: number
   worldShakeY: number
@@ -499,6 +513,7 @@ export async function createBoneyardWorldRenderer(
   canvas.dataset.regionLighting = 'native-region-field+object-scalar'
   canvas.dataset.staticCulling = 'exact-world-bounds'
   canvas.dataset.staticPaintCount = `${staticWorld.staticPaintCount}`
+  canvas.dataset.weatherSplashAsset = 'DeadHawg:24'
   canvas.style.width = `${viewport.width}px`
   canvas.style.height = `${viewport.height}px`
   canvas.dataset.viewportHeight = `${viewport.height}`
@@ -619,6 +634,9 @@ export async function createBoneyardWorldRenderer(
     visibleMainLayerCount: 0,
     visibleOversizedResidentCount: 0,
     visibleResidentCount: 0,
+    weatherDropCount: 0,
+    weatherMode: options.boneyard.scene.environmentMode,
+    weatherSplashCount: 0,
     worldFeedbackMagnitude: 0,
     worldShakeX: 0,
     worldShakeY: 0,
@@ -920,6 +938,9 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.visibleMainLayerCount = visibility.visibleMainResidents.length
       frameDiagnostics.visibleOversizedResidentCount = visibility.visibleOversizedResidentCount
       frameDiagnostics.visibleResidentCount = visibility.visibleResidentCount
+      frameDiagnostics.weatherDropCount = scene.weatherDropCount
+      frameDiagnostics.weatherMode = scene.weatherMode
+      frameDiagnostics.weatherSplashCount = scene.weatherSplashCount
       frameDiagnostics.worldFeedbackMagnitude = feedback.magnitude
       frameDiagnostics.regionLightLogicalSide = regionLightField.targetLogicalSide
       frameDiagnostics.regionLightPhysicalSide = regionLightField.targetPhysicalSide
@@ -952,6 +973,9 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.worldShakeX = `${worldShake.x}`
       canvas.dataset.worldShakeY = `${worldShake.y}`
       canvas.dataset.secondaryScreenFlashAlpha = `${screenOverlay?.alpha ?? 0}`
+      canvas.dataset.weatherDropCount = `${scene.weatherDropCount}`
+      canvas.dataset.weatherMode = `${scene.weatherMode}`
+      canvas.dataset.weatherSplashCount = `${scene.weatherSplashCount}`
     },
     resize(nextViewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -1071,6 +1095,7 @@ class BoneyardDynamicScene {
   private readonly activeStaticPainterLayers: StaticPainterLayer[] = []
   private readonly boneyard: LoadedBoneyard
   private readonly complexShadows: BoneyardComplexShadowPresentation
+  private readonly collisionWorld: BoneyardCollisionWorld
   private readonly dynamicLayers: DynamicPainterLayer[] = []
   private readonly enemies: NativeEnemyViews
   private readonly enemyDeathEffects: NativeEnemyDeathEffectViews
@@ -1107,6 +1132,8 @@ class BoneyardDynamicScene {
   private readonly treeOcclusion: BoneyardTreeOcclusionPresentation
   private readonly treeResidents: ReadonlyMap<string, TreeResidents>
   private readonly visibleShadowDepthOwners: ContainerChild[] = []
+  private readonly weather: NativeBoneyardWeather
+  private readonly weatherView: NativeBoneyardWeatherView
   private visibleEnemyFamilies = ''
 
   constructor(
@@ -1123,6 +1150,7 @@ class BoneyardDynamicScene {
     initialSnapshot: GameSnapshot,
   ) {
     this.boneyard = boneyard
+    this.collisionWorld = createBoneyardCollisionWorld(boneyard.scene)
     this.lightIndex = new NativeBoneyardLightIndex({
       height: boneyard.scene.bounds.h,
       width: boneyard.scene.bounds.w,
@@ -1165,6 +1193,17 @@ class BoneyardDynamicScene {
     this.playerDeathWeapons = new PlayerDeathWeaponViews(root, textures, initialSnapshot)
     this.levelUp = new NativeLevelUpWorldView(textures.levelUpSparkle)
     root.addChild(this.levelUp.container)
+    this.weather = new NativeBoneyardWeather({
+      enhancedEffects: true,
+      initialTick: initialSnapshot.tick,
+      mode: boneyard.scene.environmentMode,
+      seed: nativeBoneyardWeatherSeed(boneyard.runId, boneyard.seed),
+    })
+    this.weatherView = new NativeBoneyardWeatherView(
+      root,
+      textures.weatherSplash,
+      this.weather,
+    )
     this.solomon = boneyard.scene.solomonDig
       ? new BoneyardSolomonView(boneyard, root, textures)
       : null
@@ -1212,6 +1251,22 @@ class BoneyardDynamicScene {
     }
     const localPlayer = snapshot.players[localPlayerId]
     if (!localPlayer) throw new Error('Boneyard renderer lost its local player.')
+    const weatherBounds = boneyardVisibleWorldBounds(camera, viewport, 0)
+    const weatherCollisionWorld = withBoneyardGateCollision(
+      this.collisionWorld,
+      snapshot.world.gateLeaves,
+    )
+    this.weather.advanceTo(
+      snapshot.tick,
+      weatherBounds,
+      viewport.height / camera.zoom,
+      (position, radius) => !canPlaceBoneyardBody(
+        position,
+        weatherBounds,
+        weatherCollisionWorld,
+        radius,
+      ),
+    )
     const levelUpFrame = levelUpPresentation === null
       ? null
       : nativeLevelUpPresentationFrame(
@@ -1507,6 +1562,11 @@ class BoneyardDynamicScene {
       lightMiscTailCandidates,
       { camera, viewport },
     )
+    this.weatherView.update((position) => nativeBoneyardLightScalar(
+      position,
+      this.lightIndex,
+    ))
+    this.weatherView.setRenderable(!modalActive)
     let maxMainLightScalar = 0
     let minMainLightScalar = 1
     for (const resident of visibleMainResidents) {
@@ -1914,6 +1974,7 @@ class BoneyardDynamicScene {
     this.solomon?.setActorDepth(positionedDynamics.get('solomon-actor')?.zIndex ?? 1)
     this.solomon?.setLanternDepth(positionedDynamics.get('lantern')?.zIndex ?? 1)
     this.foreground.zIndex = order.foregroundZIndex
+    this.weatherView.setDepth(order.foregroundZIndex + 0.5)
     const complexShadows = this.complexShadows.render(
       this.lightIndex,
       presentationFrame,
@@ -2018,6 +2079,18 @@ class BoneyardDynamicScene {
     return this.goodies.size
   }
 
+  get weatherDropCount(): number {
+    return this.weather.activeDropCount
+  }
+
+  get weatherMode(): number {
+    return this.boneyard.scene.environmentMode
+  }
+
+  get weatherSplashCount(): number {
+    return this.weather.activeSplashCount
+  }
+
   get playerDeathBurstCount(): number {
     return this.playerDeathBursts.size
   }
@@ -2087,6 +2160,7 @@ class BoneyardDynamicScene {
     this.root.removeChild(this.levelUp.container)
     this.levelUp.destroy()
     this.gates.destroy()
+    this.weatherView.destroy()
     this.solomon?.destroy()
     for (const view of this.players.values()) view.destroy()
     this.players.clear()
