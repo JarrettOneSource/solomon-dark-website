@@ -20344,6 +20344,107 @@ rounding, and draw order inside this system remain native.
 
 ### Implementation validation receipt
 
-Pending implementation. This marker must be replaced with exact changed files,
-per-member tests, Mac receipts, pushed SHAs, and production deployment evidence
-before the system may be called complete.
+Closed on 2026-08-20.
+
+#### Implemented ownership
+
+- `core-kernels/native-loot.ts` and `native-random-equipment.ts` own the pure
+  selector, materializers, collision search, two RNG domains, all stock item
+  identities, exact generated FX, action helpers, and Goodie rows.
+- `core-server/boneyard-loot-store.ts`, `boneyard-world.ts`,
+  `boneyard-enemy-store.ts`, and `game-simulation.ts` own seed writers, ground
+  clocks, Goodie activation/effects, canonical multiplayer pickup, participant
+  credit, Bonus application, and run teardown.
+- `protocol/boneyard-loot-replication.ts`,
+  `boneyard-goodie-replication.ts`, `entity-replication.ts`, and
+  `game-protocol.ts` carry fail-closed compact state plus the ordered event
+  lane at protocol 30. Recursive item trees retain generated selectors, FX,
+  colors, and hidden overflow.
+- `renderer/native-loot-assets.ts`, `native-loot-presentation.ts`,
+  `native-loot-view.ts`, the Boneyard renderer, `NativeLootBitmapText.tsx`, and
+  the audio owner consume replicated outcomes. They do not roll or credit.
+- `tools/smoke-loot-drops.mjs` is the two-client real-host acceptance journey;
+  `scripts/validate.sh` includes the 40-test focused loot family.
+
+#### Exact-tree and Mac acceptance
+
+The implementation was rebased onto Website `dd4f87e`, producing
+`2caee0e91e2e4ae7a55a04a716126a56b013e336`; the native report was rebased
+onto Mod Loader `190a1573`, producing
+`4307dfa6d8da2fa0eb28c3437de8843d4a302885`. Both were clean and exactly
+`0 1` relative to their then-current `origin/main`. Linux
+`./scripts/validate.sh` exited zero: 24 backend contracts, 40 loot tests, 972
+Boneyard tests, 5 level-up tests, 6 diagnostics tests, 14 Hub UI tests, 5
+desktop tests, both production builds, bundle budget, and media policy passed.
+The complete Mod Loader CI-safe static suite passed `489/489`.
+
+The commits were transferred to the Mac mini as verified Git bundles. Website
+bundle SHA-256 was
+`555c6aa4b73391b6fc178aa2c0c7533f2043f927230a75b872086a4a9dbb80c7`;
+Mod Loader bundle SHA-256 was
+`b1af0b6b6d8c0b47dd95795d3a858372390a33bd10be7483d09e650337fac663`.
+The clean detached trees were
+`/Users/jarrett/codex-acceptance/loot-drops-native-parity-20260820/website`
+and `.../mod-loader` on arm64 macOS 26.4.1, Node 22.17.0, npm 10.9.2,
+.NET 10.0.302, and Chrome 151.0.7922.138.
+
+Mac `./scripts/validate.sh` exited zero on that exact Website commit. Its log
+SHA-256 is
+`d7fcbdf7a7cfa293ef2ef904a9e9ab95865414778f3c25b023af5bc89b6e937b`.
+All five loot-specific Mod Loader contracts passed on the exact evidence tree.
+The generic Mac system-Python run is not counted as a full Mod Loader gate:
+thirteen unrelated contracts require Python's newer `zip(strict=...)` support
+or Pillow; the pinned Linux CI environment supplied both and passed all 489.
+
+Mac `npm --prefix frontend run smoke:game:loot-drops` exited zero with two
+isolated Chrome contexts and one real authoritative host. The WebGL2 frame
+contained one 10-Gold actor, a Health Potion Sack, a Pentaclostic Ring Sack,
+health and mana Orbs, and Damage x4. Collection credited Gold `10000 -> 10010`,
+stacked the Potion to quantity 2, inserted the named Item, restored both
+resources, armed Damage x4, allocated exact pickup-effect counts `2/1/1`, and
+played drop-bag, drop-coins, drop-potion, goto-orb, pickup-bag, and pickup-coin
+at counts `1/1/1/2/2/1`. Bitmap-font messages for `10 GOLD`, `Health Potion`,
+`Pentaclostic Ring`, and `DAMAGE x4` all used the extracted mask atlas.
+A seventh contested Gold actor retired once and credited canonical player 1;
+player 2 remained at 10000. Page, console, and failed-response arrays were
+empty. The log SHA-256 is
+`951349dbc103393d0b972e9c51827114074be68d31c10ff62d0ea8142b3facca`.
+Visual inspection confirmed all requested families in the native light field;
+visible/collected screenshot SHA-256 values are
+`6d63c71fa429e9fc498d00eebcefac4329af31579cab4250398766b2c77b2e98`
+and `940d0eff84762f257f6adc6cb8e20a149d00386d70bf664ae39d7a90252b7757`.
+No task-owned browser, Vite, host, or listener remained.
+
+#### Publication and production
+
+Website `2caee0e` and Mod Loader `4307dfa6` reached `main` by fast-forward.
+GitHub Actions Website run `32380162505` and Mod Loader run `32380161527`
+completed successfully. The configured deployment worker independently
+validated and deployed exact Website SHA `2caee0e`. Production retained
+rollback `/opt/solomon-dark-revived.rollback-pre-2caee0e91e2e-20260820T143031Z`
+and SQLite backup
+`/var/backups/solomon-dark-revived/pre-2caee0e91e2e-20260820T143031Z/sdr.db`.
+Website, game supervisor, and Caddy were active with zero restarts; live and
+backup SQLite integrity checks returned `ok`; supervisor health returned
+`solomon-dark/30`, zero sessions, and zero lobbies.
+
+Public and loopback root/`/game` returned 200 and all four index bodies were
+byte-identical at SHA-256
+`0cc1fb0c97cd3fca8bab8faf362722994c4067f29a26db81af2cd02fd04b50ed`.
+Public `Game-CDLDwlc0.js` and `BoneyardScene-BHfOqnXS.js` matched the deployed
+files at SHA-256
+`caca0e6e2fe607798e8158d62088d7c1bd2f9a70fa7256236385bbc44d9c0b42`
+and `34c0fcaadda2093c2d428faab8e39ee95892be6449ae3f56956145414cfe232d`.
+The public bundle contained the loot entity/event code, and all seven public
+loot WAVs matched their recorded stock hashes.
+
+A public provisioned `wss://solomondarker.com/game-sessions/...` authority
+completed protocol 30 and moved player X from `950.64` to
+`951.9544100084901`. A separate Mac public-browser journey used three real
+clients, entered shared Hub and Boneyard, crossed the authored gate, rendered
+WebGL2 at resolution 1, and returned `status: ok` with empty errors; pings were
+30--49 ms. Its log SHA-256 is
+`1bcc0c219eea9210c9b00e9d84c71229fad3ecdd2409287c18910868508d08f9`.
+The final supervisor sample again reported zero sessions/lobbies. Production
+behavior is coupled to the deterministic loot proof by the exact deployed SHA
+and byte-matched runtime chunks; no debug mutation was added to production.
