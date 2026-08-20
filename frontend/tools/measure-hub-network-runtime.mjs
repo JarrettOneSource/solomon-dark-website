@@ -14,11 +14,28 @@ const sampleMs = requiredInteger(
   1000,
   60_000,
 )
+const minimumCompressionReductionPercent = requiredInteger(
+  process.env.SDR_GAME_NETWORK_MIN_COMPRESSION_REDUCTION_PERCENT
+    || String(MINIMUM_NORMAL_HUB_COMPRESSION_REDUCTION_PERCENT),
+  'SDR_GAME_NETWORK_MIN_COMPRESSION_REDUCTION_PERCENT',
+  0,
+  100,
+)
 const expectedStudentCount = optionalInteger(
   process.env.SDR_HUB_BENCH_STUDENTS,
   'SDR_HUB_BENCH_STUDENTS',
   0,
   256,
+)
+const expectedPlayerCount = requiredInteger(
+  process.env.SDR_GAME_NETWORK_EXPECTED_PLAYERS || '2',
+  'SDR_GAME_NETWORK_EXPECTED_PLAYERS',
+  1,
+  4,
+)
+const expectSharedSequenceLane = requiredBooleanFlag(
+  process.env.SDR_GAME_NETWORK_EXPECT_SHARED_SEQUENCE_LANE || '1',
+  'SDR_GAME_NETWORK_EXPECT_SHARED_SEQUENCE_LANE',
 )
 const browser = cdpUrl
   ? await chromium.connectOverCDP(cdpUrl)
@@ -98,7 +115,7 @@ try {
       `client ${index + 1} missed the 20 Hz snapshot contract: ${JSON.stringify(client)}`,
     )
     assert.equal(client.sequenceGaps, 0)
-    assert.deepEqual(client.playerCounts, [2])
+    assert.deepEqual(client.playerCounts, [expectedPlayerCount])
     assert.ok(
       client.negotiatedExtensions.some((value) => value.includes('permessage-deflate')),
       `client ${index + 1} did not negotiate snapshot compression`,
@@ -106,7 +123,7 @@ try {
     assert.ok(client.acknowledgementHertz > 18 && client.acknowledgementHertz < 22)
     assert.ok(
       client.estimatedCompressionReductionPercent
-        >= MINIMUM_NORMAL_HUB_COMPRESSION_REDUCTION_PERCENT,
+        >= minimumCompressionReductionPercent,
       `client ${index + 1} missed the snapshot compression floor: ${JSON.stringify(client)}`,
     )
     if (expectedStudentCount === undefined) {
@@ -122,11 +139,13 @@ try {
     }
   }
   const sharedSequences = commonSequenceCount(lanes[0], lanes[1])
-  assert.ok(
-    sharedSequences >= Math.min(clients[0].snapshotFrames, clients[1].snapshotFrames) - 1,
-    `clients did not receive the same broadcast sequence lane: ${JSON.stringify(clients)}`,
-  )
-  assertSharedTicks(lanes[0], lanes[1])
+  if (expectSharedSequenceLane) {
+    assert.ok(
+      sharedSequences >= Math.min(clients[0].snapshotFrames, clients[1].snapshotFrames) - 1,
+      `clients did not receive the same broadcast sequence lane: ${JSON.stringify(clients)}`,
+    )
+    assertSharedTicks(lanes[0], lanes[1])
+  }
   for (const [index, runtime] of runtimes.entries()) {
     if (requireHardwareGpu) assert.doesNotMatch(runtime.gpu, /SwiftShader|llvmpipe/i)
     assert.equal(runtime.staticCulling, 'none')
@@ -161,14 +180,16 @@ try {
     clients,
     elapsedSeconds,
     errors,
+    expectedPlayerCount,
+    expectSharedSequenceLane,
     expectedStudentCount: expectedStudentCount ?? null,
+    minimumCompressionReductionPercent,
     runtimes,
     sharedSequences,
     status: 'ok',
   })}\n`)
 } finally {
   await Promise.allSettled(sessions.map((session) => session.detach()))
-  await Promise.all(pages.map((page) => page.close()))
   await browser.close()
 }
 
@@ -366,4 +387,10 @@ function requiredInteger(value, name, minimum, maximum) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`)
   }
   return parsed
+}
+
+function requiredBooleanFlag(value, name) {
+  if (value === '0') return false
+  if (value === '1') return true
+  throw new Error(`${name} must be 0 or 1`)
 }

@@ -206,7 +206,6 @@ try {
     startupLighting: presentation.startupLighting,
   })}\n`)
 } finally {
-  await page.close()
   await browser.close()
 }
 
