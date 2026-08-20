@@ -19061,12 +19061,13 @@ the attack animation requested it.
 | Dire Faculty | non-survival native class | out-of-system | boss class, outside the Boneyard survival factory membership |
 | Heartmonger / Crow | non-survival native class and owned child | out-of-system | boss lifecycle is not constructed by the Website survival factory |
 | Spider / Silk / Cocoon | non-survival native class and owned children | out-of-system | no Website survival token/factory member |
-| Portal | non-survival native class | out-of-system | record `251..254` and portal flames belong to Portal, not an omitted Imp layer |
+| Portal | non-survival native class | out-of-system | Portal's own lifecycle remains outside the survival factory; its use of shared `251..254` does not replace Imp's separately closed marker-owned burst |
 
 All eight survival families and Maggot remain members of common damage/death
 presentation. Their 20-tick red duplicate redraw, shield interception,
-family-specific death records, fragments, sound identities, and once-only
-lifecycle ownership were already exact and remain regression members. Player
+previously closed family death records/fragments/sounds, and once-only
+lifecycle ownership remain regression members; Demon's omitted delayed death
+fire handoff is the explicit reopened exception closed below. Player
 damage is a separate presenter owner and remains in scope for acceptance: the
 20-tick red duplicate player redraw, the three native Wizard ouch cues, poison
 suppression, shield/terminal suppression, and exactly-once replicated event
@@ -19210,3 +19211,59 @@ eight projectile kinds and nine child effects, reported `804840+` changed
 pixels between sampled action frames, proved a Skeleton claw body change of
 875 pixels, and returned empty page-, console-, and response-error arrays. It
 is diagnostic only; final acceptance remains the exact rebased Mac mini tree.
+
+### Mac mini acceptance, 2026-08-20
+
+The rebased implementation commit
+`34da15e198a12e0dae0a85087c26b6fba85122b4` and Mod Loader evidence commit
+`5f68accf73321edb0ca4290beb96bff9307aa04c` were transferred as verified Git
+bundles into the fresh detached Mac worktrees under
+`/Users/jarrett/codex-acceptance/enemy-presentation-native-parity-20260820-v2`.
+The Website bundle SHA-256 was
+`0f16540d085683ca928e493a3efbd7ebf94235429bfde467537516f5e6ad1534`.
+Both worktrees were clean before and after acceptance. The host was `arm64`
+macOS `26.4.1` with Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Google
+Chrome `151.0.7922.138`.
+
+`./scripts/validate.sh` exited zero on the exact Website tree. It passed the
+Release backend build with zero warnings/errors, all 24 Website contracts,
+formatting and architecture boundaries, lint with only the eight established
+Fast Refresh warnings, 126 prerequisite tests, all 950 Boneyard/frontend
+tests, 5 level-up tests, 6 diagnostics tests, 14 Hub UI tests, 5 desktop tests,
+both production builds, and the production media-policy gate. The retained
+`validate.log` SHA-256 is
+`098153cd34f9630de0acd0750dec68a91e787838443f7386214151892b8c5ad2`.
+
+The focused WebGL2 enemy proof exited zero with empty page-, console-, and
+failed-response arrays. It rendered all eight survival families in attacking
+state, eight projectile kinds, nine independent projectile effects, one
+Maggot, one Mage lightning pulse, and one marker-owned Imp FireBurst. The
+sampled frame changed 488,929 pixels / 15,284,284 RGB-channel units. Its
+membership receipt includes Skeleton Mace plus burning fire, Archer's held
+poison arrow, four Mage lightning-charge passes plus record-10/11 particles,
+both Zombie gas clouds plus six flies, Wraith action wisps, and all five Demon
+flames. The focused Skeleton crop changed 1,096 pixels / 90,877 channel units
+and independently records body selector `1189 -> 1315` while gait limbs remain
+`1693`.
+
+The same real browser fetched and decoded all three untouched ambient WAVs,
+started Flyblown/Soul at gain 1 and Maggots at the WebAudio float32 form of
+`0.0025`, confirmed all three sources were looping, then observed one balanced
+stop per cue. The JSON log SHA-256 is
+`543e28f6e3fcbbe8a427453ad5afd1d226dc1bb5a04dcd41de315f3cb0c27bf1`.
+The inspected combined VFX image contains no opaque black fire rectangles;
+its SHA-256 is
+`7e1d9820e9626cd613a2dbac72dc5be98d77c3361a99c5c7f3152a46b62189d3`.
+The early/late Skeleton crop hashes are
+`e5ae3a7b1985fa5c751c93ab63ea347eb01d8531662122ea5c61978cc34b4d04`
+and `9b4715e0c425e84db1e469db2cd267af332255502f8000fcebd0cd24e7fb3d27`.
+
+The independent player-damage browser proof also exited zero. It showed all
+five body/equipment hit layers as a native-red duplicate, held midpoint alpha
+`.5`, retired the overlay at the 20-tick boundary, suppressed it for poison and
+death, and played untouched `wizard-ouch-2.wav` at pitch 1 / gain `.625`.
+Its log and image SHA-256 values are
+`080a221275ded1737140ee8c600866aa9aee56bdb38c43f19f53f470ef703ae4`
+and `ea943b9bdb47e9fb7a27aecb6250d8a18883fdeeceb008acc51512ead5811cb5`.
+Acceptance teardown left zero process whose command referenced the task root or
+its Vite port.
