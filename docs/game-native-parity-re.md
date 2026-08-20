@@ -16429,8 +16429,38 @@ SHA-256 is
 the Boneyard receipt SHA-256 is
 `3b84688d33001c2d4da42a51cb1400514b5cbc8648f4ba93eaf1874342d36858`.
 The Boneyard target fell from 2.5 HP to below zero while the Golem retained one
-20-primitive connected body. Publication and deployed production proof remain
-separate final gates.
+20-primitive connected body.
+
+The runtime-bearing Website commit
+`96fa2121c4f40acd5ae29cd9ace00dc1c691ef1a` and the Mod Loader evidence commit
+`167a9ad1eb1d5e959a391bde228413d68bfe553e` then reached their respective
+`main` branches by fast-forward. Website Validate run `32381239264` and Mod
+Loader Lua/static-contract run `32381239108` both passed. While the guarded
+deploy worker was validating `96fa212`, Website `main` advanced to its
+documentation-only descendant
+`b874445126f05334b9bd85d612788257c6b6d193`. The worker correctly rejected the
+stale candidate, independently validated the descendant, and deployed that
+exact revision.
+
+Production reported both services active with zero restarts, protocol 30,
+zero sessions and lobbies, `ok` live and backup database integrity, and no
+warning-level cutover journal. The public `/game` response and deployed
+`wwwroot/index.html` shared SHA-256
+`5652c8608f09ca457bee74f4466df36705f626864e56efdd4a775fc312bd8d2d`.
+
+The final Apple-M2 Chrome/WebGL2 production journey used the exact behavioral
+tree from `96fa212`; the deployed descendant differs only in this RE ledger.
+Three real clients completed Create, shared Hub, generated mode-2 Boneyard,
+and gate crossing over public HTTPS/WSS with empty page and console error
+arrays. The retained receipt is
+`/Users/jarrett/.codex-test-artifacts/golem-pass2-production-b874445/receipt.json`,
+SHA-256
+`527b886977866cb0b08251089ffa3ad1df118f4c37087af13eb98ba3b192b899`.
+Its visually inspected Boneyard and open-gate frames retained the expected
+world lighting, WebGL painter order, and approximately 60 FPS. Browser teardown
+returned production to zero sessions and lobbies with no warning-level service
+journal. This closes publication, deployment, and production acceptance for
+the second Golem reopen.
 
 ## Enemy damage-presenter closure correction (2026-08-15)
 
