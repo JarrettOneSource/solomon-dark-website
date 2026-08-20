@@ -21488,5 +21488,55 @@ samples, Lua-work p50/p95/p99/max was
 were empty. Three MP3 requests were deliberately aborted by scene audio
 replacement and are retained separately from failures.
 
-The final Apple-M2 exact-tree gate and repeated browser receipts remain pending
-until the candidate is transferred; they are not inferred from this WSL run.
+The candidate was then rebased onto Website `6c11fb0`, preserving the new loot,
+Solomon Dig audio, Golem, and authoritative gameplay-pause systems. Because
+pause and Lua had independently claimed protocol 31, the combined contract is
+protocol 32. The resolved WSL tree passed the complete gate with 40 loot tests,
+140 prerequisites, and 1,002 broad game/frontend tests. Its built-browser run
+again covered the complete journey; callback p50/p95/p99/max was
+`0.371/0.666/3.316/4.261 ms` across 120 samples, with two measured 4 ms budget
+crossings under concurrent WSL browser load and no retained process or VM.
+
+### Exact Apple-M2 acceptance
+
+Implementation commit `30be55ca77c6aff97ec44b07cffe5fc135e2ee15`, tree
+`7d3c48e00ad9fd4fb186def3bba7cd3ea7bea073`, was transferred in the incremental
+Git bundle whose SHA-256 was
+`7ee47850ae55ad15e1a43e0083f9653f2eff1b05597b6a17bde55a18add20cf9`.
+It was checked out cleanly at
+`/Users/jarrett/codex-acceptance/web-lua-runtime-20260820-v1/website` on the
+arm64 Apple-M2 Mac mini running macOS `26.4.1`, Node `22.17.0`, npm `10.9.2`,
+.NET `10.0.302`, and Chrome `151.0.7922.138`.
+
+`/opt/homebrew/bin/bash ./scripts/validate.sh` exited zero on that exact tree:
+24 backend contracts, 40 loot tests, 140 prerequisites, 1,002 broad
+game/frontend tests, 5 level-up tests, 6 diagnostics tests, 14 Hub UI tests,
+5 desktop tests, strict formatting/lint/import boundaries, both production
+host bundles, the browser build, route budget (`214047` raw / `62862` gzip),
+and media policy all passed. The log SHA-256 is
+`c3cbf9e0c9f01e0bb550644994fb61280fa32414a42e1a77e6ded4b1296496da`.
+
+Three fresh-host/fresh-Chrome invocations of
+`npm --prefix frontend run smoke:game:lua-console` then passed. Lazy init was
+`18.579`, `17.842`, and `17.607 ms`; each VM reported 28,532 bytes of Lua
+allocation, the cold host reported `lua: null`, and protocol 32 used the
+4,414,891-byte bundled host plus the 271,581-byte adjacent WASM. Across 120
+active callback samples per pass, p50/p95/p99/max was respectively:
+
+- `0.207/0.749/1.429/1.589 ms`;
+- `0.208/0.806/1.760/2.123 ms`;
+- `0.197/0.527/0.860/1.184 ms`.
+
+Every pass had zero budget crossings, page errors, unexpected console errors,
+or request failures. The one console error in each receipt was the deliberately
+executed infinite loop being interrupted after `10.9`, `13.7`, and `15.8 ms`
+of end-to-end browser round-trip time. All three entered the seed-42 Boneyard,
+materialized actor 1 through the ordinary enemy owner, removed the DevTools API
+when cheats were disabled, and returned health to zero players / `lua: null`.
+The three log SHA-256 values are
+`34d73469e946f876054bd50d6f471fd1e1c12f4be8dafe9fbb3b72e7ab2ec73b`,
+`6b9ce90eee8ae42b0c7d8fab0881020fc5a7496141b3d48f697ac8f937ebbcea`,
+and `4a2edaaf6c64e5a1c3b841a8d2bb14d52e2b9354223fdfe65593a0432b13afbe`.
+The Mac worktree stayed clean and no command referencing the acceptance root
+remained. This receipt paragraph changes documentation only; the implementation
+tree tested above is unchanged.

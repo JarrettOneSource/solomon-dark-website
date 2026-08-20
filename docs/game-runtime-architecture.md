@@ -769,6 +769,9 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity on
 every console request. `Enable Cheats` controls only whether the browser
 installs its DevTools API; it is never trusted as network authorization.
+Authoritative gameplay pause freezes this fixed-tick Lua lane together with the
+world; new console requests fail immediately while paused instead of waiting on
+a tick that cannot run.
 
 The VM is cold by default. Its JavaScript bridge is bundled into both portable
 server entry points and its immutable Lua 5.4 WASM sits beside them. Lazy
