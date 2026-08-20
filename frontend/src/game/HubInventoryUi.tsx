@@ -83,8 +83,7 @@ const EQUIPMENT_SLOT_ORDER: readonly EquipmentSlot[] = [
 
 interface HubServiceSelection {
   readonly id: number
-  readonly owner: 'backpack' | 'storage' | null
-  readonly startedAtMs: number
+  readonly owner: 'storage' | null
 }
 
 export type HubUiSurface =
@@ -304,12 +303,12 @@ function NativeHubSurface({
       config,
       dragging: inventoryDrag,
       economy,
+      inventorySelection,
       kind: 'service',
       notice,
       progression,
       selectedItemId: serviceSelection?.id ?? null,
       selectedOwner: serviceSelection?.owner ?? null,
-      selectionStartedAtMs: serviceSelection?.startedAtMs ?? null,
       trader: surface.trader,
     }
   }, [chat, config, economy, inventoryDrag, inventorySelection, notice, progression, serviceSelection, surface])
@@ -363,43 +362,43 @@ function NativeHubSurface({
   }, [beginChatPhase, surface.kind])
 
   useEffect(() => {
-    if (surface.kind === 'inventory') {
-      if (!inventorySelection) return
+    if (surface.kind !== 'dialogue' && inventorySelection) {
       if (inventorySelection.owner === 'backpack') {
         const item = economy.backpack.find(({ id }) => id === inventorySelection.id)
-        if (item) return
-        const equippedSlot = EQUIPMENT_SLOT_ORDER.find(
-          (slot) => itemAtEquipmentSlot(economy, slot)?.id === inventorySelection.id,
-        )
-        if (equippedSlot) {
-          setInventorySelection({
-            equipmentSlot: equippedSlot,
-            id: inventorySelection.id,
-            owner: 'equipment',
-            startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
-          })
-        } else setInventorySelection(null)
-        return
+        if (!item) {
+          const equippedSlot = EQUIPMENT_SLOT_ORDER.find(
+            (slot) => itemAtEquipmentSlot(economy, slot)?.id === inventorySelection.id,
+          )
+          if (equippedSlot) {
+            setInventorySelection({
+              equipmentSlot: equippedSlot,
+              id: inventorySelection.id,
+              owner: 'equipment',
+              startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
+            })
+          } else setInventorySelection(null)
+        }
+      } else {
+        const equipped = inventorySelection.equipmentSlot === null
+          ? null
+          : itemAtEquipmentSlot(economy, inventorySelection.equipmentSlot)
+        if (equipped?.id !== inventorySelection.id) {
+          if (economy.backpack.some(({ id }) => id === inventorySelection.id)) {
+            setInventorySelection({
+              equipmentSlot: null,
+              id: inventorySelection.id,
+              owner: 'backpack',
+              startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
+            })
+          } else setInventorySelection(null)
+        }
       }
-      const equipped = inventorySelection.equipmentSlot === null
-        ? null
-        : itemAtEquipmentSlot(economy, inventorySelection.equipmentSlot)
-      if (equipped?.id === inventorySelection.id) return
-      if (economy.backpack.some(({ id }) => id === inventorySelection.id)) {
-        setInventorySelection({
-          equipmentSlot: null,
-          id: inventorySelection.id,
-          owner: 'backpack',
-          startedAtMs: performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs,
-        })
-      } else setInventorySelection(null)
-      return
     }
     if (surface.kind !== 'service') return
     if (!serviceSelection) return
     const present = surface.trader === 'luthacus'
-      ? (serviceSelection.owner === 'backpack' ? economy.backpack : economy.storage)
-        .some(({ id }) => id === serviceSelection.id)
+      ? serviceSelection.owner === 'storage'
+        && economy.storage.some(({ id }) => id === serviceSelection.id)
       : surface.trader === 'fomentius'
         ? economy.fomentiusStock.some(({ id }) => id === serviceSelection.id)
         : surface.trader === 'hagatha'
@@ -468,10 +467,15 @@ function NativeHubSurface({
         ) : surface.kind === 'service' ? (
           <ServiceActions
             economy={economy}
+            inventorySelection={inventorySelection}
             selection={serviceSelection}
             trader={surface.trader}
             onAction={(action) => {
               if (action.type.startsWith('buy-')) audio.playSound('click')
+              onAction(action)
+            }}
+            onInventoryAction={(action) => {
+              if (action.type !== 'consume' && action.type !== 'transfer') audio.playSound('click')
               onAction(action)
             }}
             onClose={() => {
@@ -481,9 +485,14 @@ function NativeHubSurface({
             onDragChange={setInventoryDrag}
             onDragMove={(point) => rendererRef.current?.moveDrag(point)}
             onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
+            onInventorySelect={(next) => {
+              audio.playSound('click')
+              setInventorySelection(next)
+            }}
             onInteractionSound={(cue) => {
               if (cue === 'storage-drag-start' || cue === 'shop-activation') audio.playSound('click')
             }}
+            onNotice={setNotice}
             onSelect={setServiceSelection}
           />
         ) : (
@@ -577,54 +586,85 @@ function DialogueActions({
 
 function ServiceActions({
   economy,
+  inventorySelection,
   onAction,
   onClose,
   onDragChange,
   onDragMove,
   onInsufficientGold,
+  onInventoryAction,
+  onInventorySelect,
   onInteractionSound,
+  onNotice,
   onSelect,
   selection,
   trader,
 }: {
   economy: ProtocolPlayerEconomy
+  inventorySelection: HubInventorySelectionModel | null
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onInsufficientGold: () => void
+  onInventoryAction: (action: HubInventoryAction) => void
+  onInventorySelect: (selection: HubInventorySelectionModel | null) => void
   onInteractionSound: (cue: 'shop-activation' | 'storage-drag-start') => void
+  onNotice: (notice: HubInventoryRendererNotice) => void
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
   trader: HubTraderId
 }) {
-  if (trader === 'luthacus') return (
-    <InventoryShopActions
+  const storageDropRect = [
+    HUB_SHOP_GRID.left,
+    HUB_SHOP_GRID.top,
+    (HUB_SHOP_GRID.columns - 1) * HUB_SHOP_GRID.pitchX + HUB_SHOP_GRID.cellSize,
+    (HUB_SHOP_GRID.rows - 1) * HUB_SHOP_GRID.pitchY + HUB_SHOP_GRID.cellSize,
+  ] as const
+  const companionInventory = (
+    <InventoryActions
+      companion
       economy={economy}
-      selection={selection}
-      onAction={onAction}
-      onClose={onClose}
+      selection={inventorySelection}
+      showDone={false}
+      storageDropRect={trader === 'luthacus' ? storageDropRect : null}
+      onAction={onInventoryAction}
       onDragChange={onDragChange}
       onDragMove={onDragMove}
-      onInteractionSound={onInteractionSound}
-      onSelect={onSelect}
+      onNotice={onNotice}
+      onSelect={onInventorySelect}
     />
   )
-  if (trader === 'shlorio' && economy.dowsingOffers.length === 0) return (
-    <>
-      <NativeAction
-        label={`DOWSE ${economy.dowsingFee.toLocaleString()} gold`}
-        rect={HUB_DOWSING_PREROLL.buttonRect}
-        onClick={() => economy.gold < economy.dowsingFee
-          ? onInsufficientGold()
-          : onAction({ type: 'dowse' })}
-      />
-      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
-    </>
-  )
 
-  if (trader === 'hagatha') {
-    return (
+  let serviceActions: ReactNode
+  if (trader === 'luthacus') {
+    serviceActions = (
+      <InventoryShopStorageActions
+        economy={economy}
+        selection={selection}
+        onAction={onAction}
+        onClose={onClose}
+        onDragChange={onDragChange}
+        onDragMove={onDragMove}
+        onInteractionSound={onInteractionSound}
+        onSelect={onSelect}
+      />
+    )
+  } else if (trader === 'shlorio' && economy.dowsingOffers.length === 0) {
+    serviceActions = (
+      <>
+        <NativeAction
+          label={`DOWSE ${economy.dowsingFee.toLocaleString()} gold`}
+          rect={HUB_DOWSING_PREROLL.buttonRect}
+          onClick={() => economy.gold < economy.dowsingFee
+            ? onInsufficientGold()
+            : onAction({ type: 'dowse' })}
+        />
+        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+      </>
+    )
+  } else if (trader === 'hagatha') {
+    serviceActions = (
       <>
         {economy.hagathaOffers.map((offer, index) => (
           <ShopAction
@@ -636,7 +676,7 @@ function ServiceActions({
             selected={selection?.id === offer.selector && selection.owner === null}
             onClick={() => activateSelection(
               selection,
-              { id: offer.selector, owner: null, startedAtMs: performance.now() },
+              { id: offer.selector, owner: null },
               (next) => {
                 onInteractionSound('shop-activation')
                 onSelect(next)
@@ -651,41 +691,48 @@ function ServiceActions({
         <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
       </>
     )
+  } else {
+    const items = trader === 'fomentius'
+      ? economy.fomentiusStock
+      : dowsingItems(economy)
+    serviceActions = (
+      <>
+        {items.map((item, index) => (
+          <ShopAction
+            key={item.id}
+            data={{ 'data-item-id': item.id }}
+            index={index}
+            label={`Buy ${item.name} for ${item.price} gold`}
+            price={item.price}
+            dowsing={trader === 'shlorio'}
+            selected={selection?.id === item.id && selection.owner === null}
+            onClick={() => activateSelection(
+              selection,
+              { id: item.id, owner: null },
+              (next) => {
+                onInteractionSound('shop-activation')
+                onSelect(next)
+              },
+              () => onAction(trader === 'fomentius'
+                ? { type: 'buy-fomentius', itemId: item.id }
+                : { type: 'buy-dowsing', offerId: item.id }),
+            )}
+          />
+        ))}
+        <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+      </>
+    )
   }
 
-  const items = trader === 'fomentius'
-    ? economy.fomentiusStock
-    : dowsingItems(economy)
   return (
     <>
-      {items.map((item, index) => (
-        <ShopAction
-          key={item.id}
-          data={{ 'data-item-id': item.id }}
-          index={index}
-          label={`Buy ${item.name} for ${item.price} gold`}
-          price={item.price}
-          dowsing={trader === 'shlorio'}
-          selected={selection?.id === item.id && selection.owner === null}
-          onClick={() => activateSelection(
-            selection,
-            { id: item.id, owner: null, startedAtMs: performance.now() },
-            (next) => {
-              onInteractionSound('shop-activation')
-              onSelect(next)
-            },
-            () => onAction(trader === 'fomentius'
-              ? { type: 'buy-fomentius', itemId: item.id }
-              : { type: 'buy-dowsing', offerId: item.id }),
-          )}
-        />
-      ))}
-      <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
+      {companionInventory}
+      {serviceActions}
     </>
   )
 }
 
-function InventoryShopActions({
+function InventoryShopStorageActions({
   economy,
   onAction,
   onClose,
@@ -704,33 +751,17 @@ function InventoryShopActions({
   onSelect: (selection: HubServiceSelection | null) => void
   selection: HubServiceSelection | null
 }) {
-  const pressRef = useRef<ServiceInventoryPointerPress | null>(null)
-  const lastActivationRef = useRef<ServiceInventoryActivation | null>(null)
-  const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
+  const pressRef = useRef<StoragePointerPress | null>(null)
+  const lastActivationRef = useRef<StorageActivation | null>(null)
 
-  const sourceIsSelected = (source: ServiceInventoryPointerSource) => (
-    selection?.id === source.itemId && selection.owner === source.owner
+  const sourceIsSelected = (itemId: number) => (
+    selection?.id === itemId && selection.owner === 'storage'
   )
-  const selectSource = (
-    source: ServiceInventoryPointerSource,
-    startedAtMs = performance.now(),
-  ) => onSelect({ id: source.itemId, owner: source.owner, startedAtMs })
+  const selectSource = (itemId: number) => (
+    onSelect({ id: itemId, owner: 'storage' })
+  )
 
-  const activateBackpackSource = (source: ServiceInventoryPointerSource) => {
-    const item = economy.backpack.find(({ id }) => id === source.itemId)
-    if (!item) return
-    if (item.nativeTypeId === 7001) {
-      onAction({ type: 'consume', itemId: item.id })
-      return
-    }
-    const slots = equipmentSlotsForItem(item, thirdRingUnlocked)
-    const slot = slots.find((candidate) => itemAtEquipmentSlot(economy, candidate) === null) ?? slots[0]
-    if (!slot) return
-    onInteractionSound('shop-activation')
-    onAction({ type: 'equip', itemId: item.id, slot })
-  }
-
-  const beginPointer = (source: ServiceInventoryPointerSource) => (
+  const beginPointer = (itemId: number) => (
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
     if (event.button !== 0) return
@@ -739,8 +770,8 @@ function InventoryShopActions({
     event.currentTarget.setPointerCapture(event.pointerId)
     pressRef.current = {
       activeDrag: false,
+      itemId,
       pointerId: event.pointerId,
-      source,
       start: pointerStagePosition(event),
     }
   }
@@ -754,12 +785,12 @@ function InventoryShopActions({
       const dy = point.y - press.start.y
       if (Math.hypot(dx, dy) < HUB_INVENTORY_INTERACTION.dragThresholdPixels) return
       press.activeDrag = true
-      selectSource(press.source)
-      if (press.source.owner === 'storage') onInteractionSound('storage-drag-start')
+      selectSource(press.itemId)
+      onInteractionSound('storage-drag-start')
       onDragChange({
         equipmentSlot: null,
-        itemId: press.source.itemId,
-        owner: press.source.owner,
+        itemId: press.itemId,
+        owner: 'storage',
         pointer: point,
       })
     }
@@ -778,20 +809,13 @@ function InventoryShopActions({
     pressRef.current = null
     if (press.activeDrag) {
       onDragChange(null)
-      selectSource(press.source, performance.now() - HUB_INVENTORY_INTERACTION.itemInfoDelayMs)
-      const validDrop = press.source.owner === 'backpack'
-        ? pointInRect(point, [
-            HUB_SHOP_GRID.left,
-            HUB_SHOP_GRID.top,
-            (HUB_SHOP_GRID.columns - 1) * HUB_SHOP_GRID.pitchX + HUB_SHOP_GRID.cellSize,
-            (HUB_SHOP_GRID.rows - 1) * HUB_SHOP_GRID.pitchY + HUB_SHOP_GRID.cellSize,
-          ])
-        : pointInRect(point, [0, 490, 1600, 310])
+      selectSource(press.itemId)
+      const validDrop = pointInRect(point, [0, 490, 1600, 310])
       if (validDrop) onAction({
         type: 'transfer',
-        direction: press.source.owner === 'backpack' ? 'to-storage' : 'to-backpack',
+        direction: 'to-backpack',
         gesture: 'drag',
-        itemId: press.source.itemId,
+        itemId: press.itemId,
       })
       return
     }
@@ -799,22 +823,20 @@ function InventoryShopActions({
     const nowMs = performance.now()
     const previous = lastActivationRef.current
     const doubled = previous
-      && previous.source.itemId === press.source.itemId
-      && previous.source.owner === press.source.owner
+      && previous.itemId === press.itemId
       && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs
-    if (press.source.owner === 'storage' || !doubled) onInteractionSound('shop-activation')
+    onInteractionSound('shop-activation')
     if (doubled) {
       lastActivationRef.current = null
-      if (press.source.owner === 'storage') onAction({
+      onAction({
         type: 'transfer',
         direction: 'to-backpack',
         gesture: 'double-activation',
-        itemId: press.source.itemId,
+        itemId: press.itemId,
       })
-      else activateBackpackSource(press.source)
     } else {
-      lastActivationRef.current = { atMs: nowMs, source: press.source }
-      if (!sourceIsSelected(press.source)) selectSource(press.source, nowMs)
+      lastActivationRef.current = { atMs: nowMs, itemId: press.itemId }
+      if (!sourceIsSelected(press.itemId)) selectSource(press.itemId)
     }
   }
 
@@ -824,7 +846,7 @@ function InventoryShopActions({
     onDragChange(null)
   }
 
-  const keyboardActivate = (source: ServiceInventoryPointerSource) => (
+  const keyboardActivate = (itemId: number) => (
     event: ReactKeyboardEvent<HTMLButtonElement>,
   ) => {
     if (event.key !== 'Enter' && event.key !== ' ') return
@@ -832,89 +854,71 @@ function InventoryShopActions({
     const nowMs = performance.now()
     const previous = lastActivationRef.current
     const doubled = previous
-      && previous.source.itemId === source.itemId
-      && previous.source.owner === source.owner
+      && previous.itemId === itemId
       && nowMs - previous.atMs <= HUB_INVENTORY_INTERACTION.doubleActivationMs
-    if (source.owner === 'storage' || !doubled) onInteractionSound('shop-activation')
+    onInteractionSound('shop-activation')
     if (doubled) {
       lastActivationRef.current = null
-      if (source.owner === 'storage') onAction({
+      onAction({
         type: 'transfer',
         direction: 'to-backpack',
         gesture: 'double-activation',
-        itemId: source.itemId,
+        itemId,
       })
-      else activateBackpackSource(source)
     } else {
-      lastActivationRef.current = { atMs: nowMs, source }
-      selectSource(source, nowMs)
+      lastActivationRef.current = { atMs: nowMs, itemId }
+      selectSource(itemId)
     }
   }
 
-  const inventoryCollection = (
-    owner: 'backpack' | 'storage',
-    items: readonly HubInventoryItem[],
-    label: string,
-  ) => (
-    <section aria-label={label}>
-      {items.map((item, index) => {
-        const position = owner === 'backpack'
-          ? hubInventorySlotPosition(index)
-          : hubShopSlotPosition(index)
-        const source: ServiceInventoryPointerSource = { itemId: item.id, owner }
-        return (
-          <NativeAction
-            key={item.id}
-            data={{
-              'data-inventory-item-id': item.id,
-              'data-inventory-owner': owner,
-              'data-selected': sourceIsSelected(source) ? 'true' : 'false',
-            }}
-            label={`${item.name}, quantity ${item.quantity}`}
-            rect={[
-              position.x,
-              position.y,
-              owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
-              owner === 'backpack' ? HUB_INVENTORY_GRID.cellSize : HUB_SHOP_GRID.cellSize,
-            ]}
-            onKeyDown={keyboardActivate(source)}
-            onPointerCancel={cancelPointer}
-            onPointerDown={beginPointer(source)}
-            onPointerMove={movePointer}
-            onPointerUp={finishPointer}
-          />
-        )
-      })}
-    </section>
-  )
-
   return (
     <>
-      {inventoryCollection('backpack', economy.backpack, 'Backpack')}
-      {inventoryCollection('storage', economy.storage.slice(0, 28), 'Scavenged Goods')}
+      <section aria-label="Scavenged Goods">
+        {economy.storage.slice(0, HUB_SHOP_GRID.retainedCapacity).map((item, index) => {
+          const position = hubShopSlotPosition(index)
+          return (
+            <NativeAction
+              key={item.id}
+              data={{
+                'data-inventory-item-id': item.id,
+                'data-inventory-owner': 'storage',
+                'data-selected': sourceIsSelected(item.id) ? 'true' : 'false',
+              }}
+              label={`${item.name}, quantity ${item.quantity}`}
+              rect={[
+                position.x,
+                position.y,
+                HUB_SHOP_GRID.cellSize,
+                HUB_SHOP_GRID.cellSize,
+              ]}
+              onKeyDown={keyboardActivate(item.id)}
+              onPointerCancel={cancelPointer}
+              onPointerDown={beginPointer(item.id)}
+              onPointerMove={movePointer}
+              onPointerUp={finishPointer}
+            />
+          )
+        })}
+      </section>
       <NativeAction label="Done" rect={HUB_SHOP_PANEL.doneRect} onClick={onClose} />
     </>
   )
 }
 
-interface ServiceInventoryPointerSource {
-  readonly itemId: number
-  readonly owner: 'backpack' | 'storage'
-}
-
-interface ServiceInventoryPointerPress {
+interface StoragePointerPress {
   activeDrag: boolean
+  readonly itemId: number
   readonly pointerId: number
-  readonly source: ServiceInventoryPointerSource
   readonly start: { readonly x: number; readonly y: number }
 }
 
-interface ServiceInventoryActivation {
+interface StorageActivation {
   readonly atMs: number
-  readonly source: ServiceInventoryPointerSource
+  readonly itemId: number
 }
 
 function InventoryActions({
+  companion = false,
   economy,
   onAction,
   onClose,
@@ -923,15 +927,20 @@ function InventoryActions({
   onNotice,
   onSelect,
   selection,
+  showDone = true,
+  storageDropRect = null,
 }: {
+  companion?: boolean
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
-  onClose: () => void
+  onClose?: () => void
   onDragChange: (drag: HubInventoryDragModel | null) => void
   onDragMove: (point: { readonly x: number; readonly y: number }) => void
   onNotice: (notice: HubInventoryRendererNotice) => void
   onSelect: (selection: HubInventorySelectionModel | null) => void
   selection: HubInventorySelectionModel | null
+  showDone?: boolean
+  storageDropRect?: readonly [number, number, number, number] | null
 }) {
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
   const pressRef = useRef<InventoryPointerPress | null>(null)
@@ -1030,6 +1039,8 @@ function InventoryActions({
         thirdRingUnlocked,
         onAction,
         onNotice,
+        companion,
+        storageDropRect,
       )
       return
     }
@@ -1102,7 +1113,7 @@ function InventoryActions({
           itemId: item.id,
           owner: 'equipment',
         } : null
-        return hubInventoryEquipmentSlotRects(slot).map((rect, aliasIndex) => (
+        return hubInventoryEquipmentSlotRects(slot, companion).map((rect, aliasIndex) => (
           <NativeAction
             key={`${slot}-${aliasIndex}`}
             data={{
@@ -1126,7 +1137,9 @@ function InventoryActions({
           />
         ))
       })}
-      <NativeAction label="Done" rect={[1510, 830, 85, 65]} onClick={onClose} />
+      {showDone && onClose
+        ? <NativeAction label="Done" rect={[1510, 830, 85, 65]} onClick={onClose} />
+        : null}
     </>
   )
 }
@@ -1182,12 +1195,18 @@ function dropInventorySource(
   thirdRingUnlocked: boolean,
   onAction: (action: HubInventoryAction) => void,
   onNotice: (notice: HubInventoryRendererNotice) => void,
+  companion: boolean,
+  storageDropRect: readonly [number, number, number, number] | null,
 ): void {
   if (source.owner === 'backpack') {
     const item = economy.backpack.find(({ id }) => id === source.itemId)
     if (!item) return
+    if (storageDropRect && pointInRect(point, storageDropRect)) {
+      onAction({ type: 'transfer', direction: 'to-storage', gesture: 'drag', itemId: item.id })
+      return
+    }
     const slot = equipmentSlotsForItem(item, thirdRingUnlocked).find((candidate) => (
-      hubInventoryEquipmentSlotRects(candidate).some((rect) => pointInRect(point, rect))
+      hubInventoryEquipmentSlotRects(candidate, companion).some((rect) => pointInRect(point, rect))
     ))
     if (slot) onAction({ type: 'equip', itemId: item.id, slot })
     return

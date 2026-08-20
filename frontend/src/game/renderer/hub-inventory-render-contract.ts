@@ -51,6 +51,31 @@ export const HUB_ITEM_ICON_TRANSFORMS = {
   wand: { rotationDegrees: 45, translation: [0, 0] },
 } as const
 
+export const HUB_EQUIPMENT_SINK_RENDER = {
+  interiorTint: 0x191916,
+  normalFrameRecord: 10,
+  smallFrameRecord: 9,
+  tallPrimitiveOutline: true,
+} as const
+
+export const HUB_PRIMARY_SPELL_PANE = {
+  bodyRect: [86, 230, 227, 79] as const,
+  companionShift: 53,
+  contentAdvanceScale: 0.9,
+  contentFont: 'medium',
+  contentTextBaselines: [251, 273, 286, 299] as const,
+  headingRect: [86, 207, 227, 24] as const,
+  headingFont: 'body',
+  headingTextBaselineY: 226,
+  inlineUnit: {
+    italic: true,
+    offset: [0, 1] as const,
+    scale: 0.7,
+  },
+  textLeft: 95,
+  textTint: 0xc8f3f3,
+} as const
+
 export const HUB_SHOP_GRID = {
   cellSize: 72,
   columns: 7,
@@ -167,7 +192,7 @@ export const HUB_HAGATHA_PERK_PANE = {
   columns: 3,
   emptySlotTint: 0x808080,
   innerHeight: 238,
-  innerPanelTint: 0x1a1a17,
+  innerPanelTint: 0x191916,
   innerWidth: 227,
   left: 139,
   rows: 3,
@@ -321,7 +346,7 @@ export function hubInventoryEquipmentSlotRects(
     case 'amulet': return [[1247 + shift, 169, 46, 46]]
     case 'hat': return [[1301 + shift, 143, 72, 72]]
     case 'weapon': return [[1221 + shift, 223, 72, 72], [1381 + shift, 223, 72, 72]]
-    case 'robe': return [[1301 + shift, 231, 72, 92]]
+    case 'robe': return [[1301 + shift, 223, 72, 108]]
     case 'ring-0': return [[1247 + shift, 303, 46, 46]]
     case 'ring-1': return [[1381 + shift, 303, 46, 46]]
     case 'ring-2': return [[1381 + shift, 350, 46, 46]]
@@ -364,10 +389,15 @@ const PRIMARY_SKILL_BY_ELEMENT: Readonly<Record<WizardElement, number>> = {
   water: 32,
 }
 
+export interface HubInventoryPrimarySpellLine {
+  readonly text: string
+  readonly unit: ' / SEC' | ' / SECOND' | null
+}
+
 export function hubInventoryPrimarySpellLines(
   element: WizardElement,
   learnedSkills: readonly (readonly [number, number, number])[],
-): readonly string[] {
+): readonly HubInventoryPrimarySpellLine[] {
   const skillId = PRIMARY_SKILL_BY_ELEMENT[element]
   const learned = learnedSkills.find(([candidate]) => candidate === skillId)
   if (!learned) throw new RangeError(`${element} primary skill ${skillId} is not learned`)
@@ -391,14 +421,16 @@ export function hubInventoryPrimarySpellLines(
   const channelled = element === 'air' || element === 'water'
   const damageLine = element === 'earth'
     ? `TOTAL DAMAGE: ${damage} X SIZE`
-    : `DAMAGE: ${damage}${channelled ? ' / SECOND' : ''}`
-  const manaLine = `MANA COST: ${nativeStatNumber(manaCost)}${channelled || element === 'earth' ? ' / SEC' : ''}`
+    : `DAMAGE: ${damage}`
   const manaHeal = PLAYER_MANA_RECOVERY_PER_TICK * PLAYER_COMBAT_TICKS_PER_SECOND
   return [
-    NATIVE_SKILL_CATALOG[skillId]!.name.toUpperCase(),
-    damageLine,
-    manaLine,
-    `MANA HEAL: ${nativeStatNumber(manaHeal)} / SEC`,
+    { text: NATIVE_SKILL_CATALOG[skillId]!.name.toUpperCase(), unit: null },
+    { text: damageLine, unit: channelled ? ' / SECOND' : null },
+    {
+      text: `MANA COST: ${nativeStatNumber(manaCost)}`,
+      unit: channelled || element === 'earth' ? ' / SEC' : null,
+    },
+    { text: `MANA HEAL: ${nativeStatNumber(manaHeal)}`, unit: ' / SEC' },
   ]
 }
 

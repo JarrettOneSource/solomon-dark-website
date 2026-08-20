@@ -16,10 +16,12 @@ import {
   HUB_HAT_REMOVAL_MSGBOX,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
+  HUB_EQUIPMENT_SINK_RENDER,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
   HUB_NATIVE_UI_SURFACES,
+  HUB_PRIMARY_SPELL_PANE,
   HUB_ROBE_REMOVAL_MSGBOX,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
@@ -52,6 +54,8 @@ test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells
     [1221, 223, 72, 72],
     [1381, 223, 72, 72],
   ])
+  assert.deepEqual(hubInventoryEquipmentSlotRects('robe'), [[1354, 223, 72, 108]])
+  assert.deepEqual(hubInventoryEquipmentSlotRects('robe', true), [[1301, 223, 72, 108]])
 })
 
 test('stock inventory owns native ItemInfo, drag, double activation, and protected clothing copy', () => {
@@ -105,38 +109,57 @@ test('stock equipment icons retain class-owned natural transforms and starter ap
     fire: 0x998077,
     water: 0x5e6e81,
   })
+  assert.deepEqual(HUB_EQUIPMENT_SINK_RENDER, {
+    interiorTint: 0x191916,
+    normalFrameRecord: 10,
+    smallFrameRecord: 9,
+    tallPrimitiveOutline: true,
+  })
 })
 
 test('stock inventory derives every elemental primary stat pane from native skill ranks', () => {
+  assert.deepEqual(HUB_PRIMARY_SPELL_PANE, {
+    bodyRect: [86, 230, 227, 79],
+    companionShift: 53,
+    contentAdvanceScale: 0.9,
+    contentFont: 'medium',
+    contentTextBaselines: [251, 273, 286, 299],
+    headingRect: [86, 207, 227, 24],
+    headingFont: 'body',
+    headingTextBaselineY: 226,
+    inlineUnit: { italic: true, offset: [0, 1], scale: 0.7 },
+    textLeft: 95,
+    textTint: 0xc8f3f3,
+  })
   assert.deepEqual(hubInventoryPrimarySpellLines('ether', [[8, 1, 1]]), [
-    'MAGIC MISSILE',
-    'DAMAGE: 1 - 2',
-    'MANA COST: 6',
-    'MANA HEAL: 10 / SEC',
+    { text: 'MAGIC MISSILE', unit: null },
+    { text: 'DAMAGE: 1 - 2', unit: null },
+    { text: 'MANA COST: 6', unit: null },
+    { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
   assert.deepEqual(hubInventoryPrimarySpellLines('fire', [[16, 1, 1]]), [
-    'FIREBALL',
-    'DAMAGE: 4',
-    'MANA COST: 12',
-    'MANA HEAL: 10 / SEC',
+    { text: 'FIREBALL', unit: null },
+    { text: 'DAMAGE: 4', unit: null },
+    { text: 'MANA COST: 12', unit: null },
+    { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
   assert.deepEqual(hubInventoryPrimarySpellLines('air', [[24, 1, 1]]), [
-    'LIGHTNING',
-    'DAMAGE: 2.5 / SECOND',
-    'MANA COST: 12 / SEC',
-    'MANA HEAL: 10 / SEC',
+    { text: 'LIGHTNING', unit: null },
+    { text: 'DAMAGE: 2.5', unit: ' / SECOND' },
+    { text: 'MANA COST: 12', unit: ' / SEC' },
+    { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
   assert.deepEqual(hubInventoryPrimarySpellLines('water', [[32, 1, 1]]), [
-    'FROST JET',
-    'DAMAGE: 2.5 / SECOND',
-    'MANA COST: 12.5 / SEC',
-    'MANA HEAL: 10 / SEC',
+    { text: 'FROST JET', unit: null },
+    { text: 'DAMAGE: 2.5', unit: ' / SECOND' },
+    { text: 'MANA COST: 12.5', unit: ' / SEC' },
+    { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
   assert.deepEqual(hubInventoryPrimarySpellLines('earth', [[40, 1, 1]]), [
-    'BOULDER',
-    'TOTAL DAMAGE: 10 X SIZE',
-    'MANA COST: 12 / SEC',
-    'MANA HEAL: 10 / SEC',
+    { text: 'BOULDER', unit: null },
+    { text: 'TOTAL DAMAGE: 10 X SIZE', unit: null },
+    { text: 'MANA COST: 12', unit: ' / SEC' },
+    { text: 'MANA HEAL: 10', unit: ' / SEC' },
   ])
 })
 
@@ -288,7 +311,7 @@ test('dowsing preserves the stock red flash and insufficient-gold message branch
     columns: 3,
     emptySlotTint: 0x808080,
     innerHeight: 238,
-    innerPanelTint: 0x1a1a17,
+    innerPanelTint: 0x191916,
     innerWidth: 227,
     left: 139,
     rows: 3,
@@ -377,10 +400,20 @@ test('visible hub inventory presentation is owned by the native WebGL renderer',
   assert.doesNotMatch(rendererSource, /selected\.rarity \?\? selected\.kind/)
   assert.match(rendererSource, /hubInventoryItemInfoText\(/)
   assert.match(rendererSource, /native-inventory-dragger/)
+  assert.match(rendererSource, /addClippedItemIcon\(/)
+  assert.match(rendererSource, /hubInventorySlotPosition\(index\)[\s\S]*?addClippedItemIcon\(/)
+  assert.match(rendererSource, /function addEquipment\([\s\S]*?addClippedItemIcon\(/)
+  assert.match(rendererSource, /function addStoreGrid\([\s\S]*?addClippedItemIcon\(/)
+  assert.match(rendererSource, /function addDowsingGrid\([\s\S]*?addClippedItemIcon\(/)
+  assert.match(rendererSource, /targetItem = draggedBackpack/)
+  assert.doesNotMatch(rendererSource, /draggedBackpack \?\? selectedBackpack/)
   assert.match(rendererSource, /dragging\.owner === 'storage'/)
+  assert.match(source, /inventorySelection=\{inventorySelection\}/)
+  assert.match(source, /const companionInventory = \([\s\S]*?<InventoryActions[\s\S]*?companion/)
+  assert.doesNotMatch(source, /readonly owner: 'backpack' \| 'storage' \| null/)
   assert.match(source, /gesture: 'double-activation'/)
   assert.match(source, /gesture: 'drag'/)
-  assert.match(source, /backpackSecondActivation|activateBackpackSource/)
+  assert.match(source, /function InventoryActions[\s\S]*activateSource/)
   assert.doesNotMatch(source, /direction: 'to-storage'[^}]*gesture: 'double-activation'/s)
   assert.match(source, /audio\.playSound\('backpack-close'\)/)
   assert.match(source, /audio\.playSound\('distort-reality', \{ playbackRate: feedback\.dowsingPitch \}\)/)

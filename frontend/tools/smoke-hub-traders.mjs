@@ -17,6 +17,7 @@ import { DOWSING_EQUIPMENT_RECIPES } from '../src/game/core-kernels/hub-economy.
 import { HUB_TRADER_GEOMETRY } from '../src/game/hub-inventory-presentation.ts'
 
 const baseUrl = process.env.SDR_GAME_TRADER_SMOKE_URL || 'http://127.0.0.1:4189'
+const hostElement = process.env.SDR_GAME_TRADER_HOST_ELEMENT || 'Fire'
 const screenshotRoot = process.env.SDR_GAME_TRADER_SCREENSHOT_ROOT || '/tmp/solomon-dark-hub-trader'
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -75,7 +76,7 @@ try {
   step('preloading both game clients')
   await Promise.all([loadGame(hostPage), loadGame(guestPage)])
   step('entering host Hub')
-  await enterHub(hostPage, 'Fire')
+  await enterHub(hostPage, hostElement)
   step('entering guest Hub')
   await enterHub(guestPage, 'Earth')
   await Promise.all([waitForPlayers(hostPage, 2), waitForPlayers(guestPage, 2)])
@@ -115,8 +116,28 @@ try {
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-selected.png` })
   await stockCell.click()
   await waitForDialogGold(fomentius, beforeFomentius - stock.price)
+  const secondStockCell = fomentius.getByRole('button', { name: /^Buy Mana Potion for \d+ gold$/ }).first()
+  const secondStock = parsePurchaseLabel(await secondStockCell.getAttribute('aria-label'))
+  await secondStockCell.click()
+  await secondStockCell.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await secondStockCell.click()
+  await waitForDialogGold(fomentius, beforeFomentius - stock.price - secondStock.price)
+  const purchasedMana = fomentius.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 3',
+  })
+  await purchasedMana.waitFor()
+  await purchasedMana.click()
+  await purchasedMana.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await hostPage.waitForTimeout(250)
+  await hostPage.screenshot({ path: `${screenshotRoot}-fomentius-purchased-item-info.png` })
+  await doubleActivateInventoryPointer(hostPage, purchasedMana)
+  await fomentius.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 2',
+  }).waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-fomentius.png` })
-  step('Fomentius purchase complete')
+  step('Fomentius purchases remained selectable and activatable in the companion InventoryScreen')
   await fomentius.getByRole('button', { name: 'Done' }).click()
   await assertBackpackQuantity(hostPage, stock.name, stock.name === 'Mana Potion' ? 2 : 1)
 
@@ -210,8 +231,16 @@ try {
   await waitForDialogGold(hagatha, beforeHagatha - lifeCharmPrice)
   await lifeCharm.waitFor({ state: 'detached' })
   assert.match(await hagatha.locator('.hub-charm-capacity').innerText(), /1 \/ 3/)
+  const hagathaCompanionItem = hagatha.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  })
+  await hagathaCompanionItem.click()
+  await hagathaCompanionItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await hostPage.waitForTimeout(250)
+  await hostPage.screenshot({ path: `${screenshotRoot}-hagatha-companion-item-info.png` })
   await hostPage.screenshot({ path: `${screenshotRoot}-hagatha.png` })
-  step('Hagatha purchase complete')
+  step('Hagatha purchase retained the independent companion InventoryScreen selection owner')
   await hagatha.getByRole('button', { name: 'Done' }).click()
 
   await navigateRegion(hostPage, canvas, 'courtyard', { x: 1800, y: 650 })
@@ -273,8 +302,38 @@ try {
   await dowsingCell.click()
   await waitForDialogGold(shlorio, beforeDowsing - 650 - dowsingItem.price)
   await shlorio.getByRole('button', { name: /DOWSE\s+\d+ gold/ }).waitFor()
+  const equipmentSlot = equipmentSlotForDowsingItem(dowsingItem.name)
+  const shlorioPurchasedItem = shlorio.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: `${dowsingItem.name}, quantity 1`,
+  })
+  await shlorioPurchasedItem.waitFor()
+  await shlorioPurchasedItem.click()
+  await shlorioPurchasedItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await hostPage.waitForTimeout(250)
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-purchased-item-info.png` })
+  const shlorioEquipmentTarget = shlorio.locator(`[data-equipment-slot="${equipmentSlot}"]`).first()
+  await dragInventoryPointer(hostPage, shlorio, shlorioPurchasedItem, shlorioEquipmentTarget)
+  const shlorioEquipped = shlorio.getByRole('button', {
+    exact: true,
+    name: `${equipmentSlotLabel(equipmentSlot)}, ${dowsingItem.name}`,
+  }).first()
+  await shlorioEquipped.waitFor()
+  await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-companion-equipped.png` })
+  if (equipmentSlot === 'hat' || equipmentSlot === 'robe') {
+    const starterName = equipmentSlot === 'hat' ? 'Hat' : 'Robe'
+    const displacedStarter = shlorio.getByLabel('Backpack').getByRole('button', {
+      exact: true,
+      name: `${starterName}, quantity 1`,
+    })
+    await displacedStarter.waitFor()
+    await dragInventoryPointer(hostPage, shlorio, displacedStarter, shlorioEquipmentTarget)
+  } else {
+    await dragInventoryPointer(hostPage, shlorio, shlorioEquipped, { x: 800, y: 650 })
+  }
+  await shlorioPurchasedItem.waitFor()
   await hostPage.screenshot({ path: `${screenshotRoot}-shlorio-purchased.png` })
-  step('Shlorio purchase complete')
+  step('Shlorio purchase remained selectable, inspectable, draggable, and equippable in place')
   let finalHostGold = beforeDowsing - 650 - dowsingItem.price
   let insufficientFee = 0
   for (let cycle = 0; cycle < 10; cycle += 1) {
@@ -323,7 +382,6 @@ try {
   await equipmentItem.locator('xpath=self::*[@data-selected="true"]').waitFor()
   await hostPage.waitForTimeout(250)
   await hostPage.screenshot({ path: `${screenshotRoot}-inventory-equipment-item-info.png` })
-  const equipmentSlot = equipmentSlotForDowsingItem(dowsingItem.name)
   const equipmentTarget = inventory.locator(`[data-equipment-slot="${equipmentSlot}"]`).first()
   await dragInventoryPointer(hostPage, inventory, equipmentItem, equipmentTarget)
   const equipped = inventory.getByRole('button', {
@@ -480,6 +538,7 @@ async function exerciseStarterInventory(page) {
   await inventory.waitFor()
   await waitForNativeSurfaceSettled(inventory)
   assert.equal(await inventory.getByRole('button', { name: /^Equip / }).count(), 0)
+  await page.screenshot({ path: `${screenshotRoot}-inventory.png` })
 
   const healthPotion = inventory.getByLabel('Backpack').getByRole('button', {
     exact: true,

@@ -16296,6 +16296,98 @@ materialization phase and the remaining numeric death-effect physics are not
 producers in this system and remain outside this closure.
 ## 2026-08-15 — Inventory and hub-trader native contract
 
+### 2026-08-16 parity reopening
+
+The presentation/interaction row below is reopened. The prior closure proved
+the broad class family and replaced the original DOM modal, but it did not run
+a literal stock-versus-browser pixel comparison for every InventoryScreen
+sub-owner and it did not exercise the companion InventoryScreen after a
+purchase in every service. Current-main SHA `6826e62bc981c53b7c1f9800a6de1c97c6da18db`
+completed the full existing Mac mini trader smoke at a 1600 by 900 browser
+viewport with no browser errors, but that receipt exposes three residuals:
+
+- the PRIMARY SPELL content uses four evenly spaced browser rows ending at
+  baseline y=312, so `MANA HEAL: 10 / SEC` crosses the pane's y=310 lower
+  boundary; the retail witness keeps the whole row inside its authored inset;
+- Fomentius, Hagatha, and Shlorio draw the companion backpack but do not expose
+  its semantic object hit targets, so an object bought into that backpack
+  cannot immediately enter the stock InventoryScreen select, ItemInfo,
+  double-activation, or drag lifecycle while the service remains open;
+- the right EQUIP pane still treats the robe as a generic rectangular sink and
+  its preview as a separately synthesized wizard composition. Those are not
+  yet proven against the native class-owned Hat/Robe/Staff painters, the seven
+  sink aliases, or the settled retail pixel geometry.
+
+The reference set is not in question. All 18 rows in Mod Loader
+`tests/fixtures/webgame/native-hub-trader-ui-captures.json` and the standalone
+`inventory-screen.png` witness revalidated at 1600 by 900 with their committed
+SHA-256 digests. The 4,723,200-byte retail executable independently revalidated
+on Windows and the Mac mini as
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The corrective gate is therefore stricter: recover each affected native
+renderer/input owner, revise this ledger before implementation, add immediate
+post-purchase companion-inventory coverage for every purchasing service, and
+report deterministic region-level pixel deltas rather than accepting visual
+inspection alone.
+
+The second-pass RE closes the three residual owners before browser changes:
+
+- `0x00562520` owns the stats pane. It submits spell name, damage, mana cost,
+  and mana heal at native local y=205, 226, 239, and 252. The settled companion
+  transform `(-10,+46)` makes the exact browser-stage baselines y=251, 273,
+  286, and 299; visible `MANA HEAL` glyphs end at y=300. `/ SEC` and
+  `/ SECOND` are inline ExactText continuations appended by `0x00663b30`, not
+  full-size text: scale 0.7, offset `(0,1)`, italic. The heading uses the
+  26-square font group. Content uses natural-size 32-square glyph quads with
+  horizontal cursor/kerning advance 0.9, so the nested unit run advances at
+  0.63. Standalone content submits at x=95 and first appears at x=96;
+  companion content submits at x=148 and first appears at x=149. The heading
+  and body are distinct opaque primitives at `(86,207,227,24)` and
+  `(86,230,227,79)`, shifted 53 pixels right in companion mode, preserving the
+  native divider.
+- `0x00561300`, `0x005504d0`, and `0x00575450` own all seven equipment sinks,
+  their rectangles, and the class-painter clipping boundary. Companion centres
+  are hat `(1337,179)`, robe `(1337,277)`, weapon `(1257,259)` and
+  `(1417,259)`, amulet `(1270,192)`, and rings `(1270,326)` and
+  `(1404,326)`. Hat/weapon sinks are 72-square `Inventory.10`, amulet/rings are
+  46-square `Inventory.9`, and robe is the 72 by 108 tall primitive at
+  `(1301,223)`. Each begins with native opaque `(0.1,0.1,0.09,1)` and clips
+  its natural-size class painter. The tall outline is `0x004a2ff0` through
+  `0x004153b0`; `0x0041dd70` fills the sink and `DAT_00819e5e` brackets the
+  robe class paint. Backpack, store, storage, and dowsing grids
+  apply the same item clip; the detached dragger does not. Green accepting
+  sinks appear only for a compatible held object, never for selection alone.
+- `0x00514a20` attaches a separate InventoryScreen beneath every service.
+  `0x0056f760` keeps that companion grid selectable and double-activatable while
+  Shop, PerkShop, InventoryShop, or either DowsingShop state is open. Ordinary
+  `0x0056bf70` and dowsing `0x0056d110` purchases insert the purchased live
+  object through `0x0055ff20` and rebuild the companion screen; Hagatha's
+  `0x0056c340` applies the perk and rebuilds the charm pane instead. Shop,
+  companion-inventory, and Luthacus-storage selections are separate native
+  owners and therefore require separate web state.
+
+The corrective implementation was compared literally at 1600 by 900 against
+the standalone retail witness using a matching Air/Arcane browser profile.
+`frontend/tools/compare-native-ui-captures.mjs` decodes both PNGs, searches a
+bounded translation, and writes raw JSON plus half-overlay and threshold-diff
+PNGs. With channel threshold 16 and a +/-3-pixel search, every reviewed region
+settled at offset `(0,0)`:
+
+| Region | Mean absolute channel delta | Pixels over threshold |
+| --- | ---: | ---: |
+| PRIMARY SPELL pane | 21.4277 | 41.5253% |
+| PRIMARY SPELL body | 25.0412 | 38.8780% |
+| EQUIP pane | 10.2722 | 40.5203% |
+| robe sink | 10.5521 | 25.9398% |
+| backpack/grid | 4.8741 | 8.7542% |
+
+Those are raw raster deltas, not a subjective score or a pass threshold. They
+retain Direct3D-versus-WebGL sampling/color differences and the independently
+timed player preview, while the zero best offsets prove that the compared pane,
+sink, and grid geometry no longer drifts. The associated Mac browser run also
+exercised selection, delayed ItemInfo, second activation, drag, equip, and
+restoration on newly purchased objects before closing each applicable trader.
+
 ### Reported smell and parity question
 
 - Reported web behavior: `/game` has no usable inventory, gold ledger, merchant
@@ -16340,7 +16432,7 @@ transactions.
 | Luthacus backpack/storage transfer | `0x0056cd00` | exact-ported | two-way/no-gold/no-copy tests |
 | Shlorio fee, untargeted offers, buy, clear, close | `0x0055faf0`, `0x0056d110` | exact-ported | complete 47-recipe lifecycle tests |
 | Six equipment classes and seven equip sinks | item catalog; `0x00570cd0`, `0x00575850`, `0x00570d80`, `0x0066f020` | exact-ported | per-class/per-sink tests |
-| Shop/PerkShop/InventoryShop, both Dowsing states, InventoryScreen, trader Chat, and trader MsgBox presentation | full vtable/renderer family recorded below; Inventory/Skills/UI/Fonts/Clothes art | exact-ported | render-contract tests plus the two-participant hub-trader browser receipt |
+| Shop/PerkShop/InventoryShop, both Dowsing states, InventoryScreen, trader Chat, and trader MsgBox presentation | full vtable/renderer family recorded below; Inventory/Skills/UI/Fonts/Clothes art | exact-ported; second-pass closure 2026-08-20 | owner-level render/input tests, per-service post-purchase activation, zero-offset deterministic pixel receipt, and full Mac browser acceptance |
 | Four reachable introductions and commands | survival dialogue data; `0x0050b720`, `0x004fb890` | exact-ported | exact-copy and reachability tests |
 | Fomentius actor/balloon | `0x0050b110`, `0x0051c1a0`; College 54..58, 160..164 | verified-already-at-parity | existing presentation/render tests |
 | Hagatha body, accessory, and cross-fades | `0x0051adc0`, `0x0051b1d0`; College 45, 89..92, 517..524 | exact-ported | every-bank-member animation tests |

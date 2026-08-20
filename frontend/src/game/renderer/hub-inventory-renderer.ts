@@ -34,12 +34,14 @@ import {
   HUB_DOWSING_PREROLL,
   HUB_CHAT_INLINE_EMPHASIS,
   HUB_CHAT_PANEL,
+  HUB_EQUIPMENT_SINK_RENDER,
   HUB_HAGATHA_PERK_PANE,
   HUB_INVENTORY_GRID,
   HUB_INVENTORY_INTERACTION,
   HUB_ITEM_ICON_TRANSFORMS,
   HUB_NATIVE_UI_TIMING,
   HUB_NATIVE_UI_SIZE,
+  HUB_PRIMARY_SPELL_PANE,
   HUB_SHOP_GRID,
   HUB_SHOP_PANEL,
   HUB_SHOP_TEXT,
@@ -129,9 +131,9 @@ export type HubInventoryRendererModel =
       readonly kind: 'service'
       readonly notice: HubInventoryRendererNotice | null
       readonly progression: ProtocolPlayerProgression
+      readonly inventorySelection: HubInventorySelectionModel | null
       readonly selectedItemId: number | null
-      readonly selectedOwner: 'backpack' | 'storage' | null
-      readonly selectionStartedAtMs: number | null
+      readonly selectedOwner: 'storage' | null
       readonly trader: HubTraderId
     }
 
@@ -259,8 +261,8 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
       if (inventoryItemInfo && currentModel) {
         const selectionStartedAtMs = currentModel.kind === 'inventory'
           ? currentModel.selection?.startedAtMs ?? null
-          : currentModel.kind === 'service' && currentModel.selectedOwner === 'backpack'
-            ? currentModel.selectionStartedAtMs
+          : currentModel.kind === 'service'
+            ? currentModel.inventorySelection?.startedAtMs ?? null
             : null
         inventoryItemInfo.visible = currentModel.kind !== 'dialogue'
           && currentModel.dragging === null
@@ -382,15 +384,15 @@ function buildInventory(
   model: {
     readonly config: PlayerCharacterConfig
     readonly economy: ProtocolPlayerEconomy
+    readonly companion?: boolean
     readonly dragging?: HubInventoryDragModel | null
     readonly leftPane?: 'hagatha' | 'stats'
     readonly progression: ProtocolPlayerProgression
     readonly selection?: HubInventorySelectionModel | null
-    readonly showSelectionDetails?: boolean
   },
 ): InventoryBuildState {
   const { economy, progression } = model
-  const companion = model.showSelectionDetails === false
+  const companion = model.companion ?? false
   const dragging = model.dragging ?? null
   const selection = model.selection ?? null
   const leftShift = companion ? 53 : 0
@@ -417,7 +419,15 @@ function buildInventory(
     const item = economy.backpack[index]
     if (!item) continue
     const held = dragging?.owner === 'backpack' && item.id === dragging.itemId
-    if (!held) addItemIcon(context, layer, item, position.x + 36, position.y + 36, model.config.element)
+    if (!held) addClippedItemIcon(
+      context,
+      layer,
+      item,
+      position.x + 36,
+      position.y + 36,
+      model.config.element,
+      [position.x, position.y, HUB_INVENTORY_GRID.cellSize, HUB_INVENTORY_GRID.cellSize],
+    )
     if (!held && item.quantity > 1) {
       addBitmapText(context, layer, `${item.quantity}`, 'medium', position.x + 61, position.y + 54, {
         align: 'center',
@@ -435,15 +445,35 @@ function buildInventory(
 
   if (model.leftPane !== 'hagatha') {
     const primarySpellLines = hubInventoryPrimarySpellLines(model.config.element, progression.learnedSkills)
-    addBitmapText(context, layer, 'PRIMARY SPELL', 'medium', 96 + leftShift, 226, { align: 'left', tint: 0xe4c56d })
-    primarySpellLines.forEach((line, index) => addBitmapText(
+    const textLeft = HUB_PRIMARY_SPELL_PANE.textLeft + leftShift
+    addBitmapText(
       context,
       layer,
-      line,
-      'medium',
-      96 + leftShift,
-      255 + index * 19,
-      { align: 'left', tint: 0xd9f7ff },
+      'PRIMARY SPELL',
+      HUB_PRIMARY_SPELL_PANE.headingFont,
+      textLeft,
+      HUB_PRIMARY_SPELL_PANE.headingTextBaselineY,
+      { align: 'left', tint: 0xe4c56d },
+    )
+    primarySpellLines.forEach((line, index) => addBitmapTextRuns(
+      context,
+      layer,
+      [
+        { advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale, text: line.text },
+        ...(line.unit ? [{
+          advanceScale: HUB_PRIMARY_SPELL_PANE.contentAdvanceScale
+            * HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+          italic: HUB_PRIMARY_SPELL_PANE.inlineUnit.italic,
+          offsetX: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[0],
+          offsetY: HUB_PRIMARY_SPELL_PANE.inlineUnit.offset[1],
+          scale: HUB_PRIMARY_SPELL_PANE.inlineUnit.scale,
+          text: line.unit,
+        }] : []),
+      ],
+      HUB_PRIMARY_SPELL_PANE.contentFont,
+      textLeft,
+      HUB_PRIMARY_SPELL_PANE.contentTextBaselines[index]!,
+      HUB_PRIMARY_SPELL_PANE.textTint,
     ))
   }
 
@@ -568,13 +598,29 @@ function addStats(
   addCenteredAtlasSprite(context, layer, 'Inventory', 13, 391 + decorationShift, 439, 1, -1)
   addInset(layer, 86 + contentShift, 112, 227, 29)
   addInset(layer, 86 + contentShift, 143, 227, 43)
-  addInset(layer, 86 + contentShift, 208, 227, 102)
+  addInset(
+    layer,
+    HUB_PRIMARY_SPELL_PANE.headingRect[0] + contentShift,
+    HUB_PRIMARY_SPELL_PANE.headingRect[1],
+    HUB_PRIMARY_SPELL_PANE.headingRect[2],
+    HUB_PRIMARY_SPELL_PANE.headingRect[3],
+  )
+  addInset(
+    layer,
+    HUB_PRIMARY_SPELL_PANE.bodyRect[0] + contentShift,
+    HUB_PRIMARY_SPELL_PANE.bodyRect[1],
+    HUB_PRIMARY_SPELL_PANE.bodyRect[2],
+    HUB_PRIMARY_SPELL_PANE.bodyRect[3],
+  )
   addInset(layer, 86 + contentShift, 330, 227, 54)
   addBitmapText(context, layer, model.config.displayName.toUpperCase(), 'menu', 96 + contentShift, 136, { align: 'left', tint: 0xffffff })
   addBitmapText(context, layer, `LEVEL ${model.progression.level}`, 'medium', 96 + contentShift, 159, { align: 'left', tint: 0xe4c56d })
   addBitmapText(context, layer, `${model.config.element.toUpperCase()} ${model.config.discipline.toUpperCase()}`, 'medium', 96 + contentShift, 175, { align: 'left', tint: 0xe4c56d })
   addBitmapText(context, layer, 'MELEE DAMAGE', 'medium', 96 + contentShift, 348, { align: 'left', tint: 0xe4c56d })
-  addBitmapText(context, layer, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, { align: 'left', tint: 0xd9f7ff })
+  addBitmapText(context, layer, '0.5 - 1 / WHACK', 'medium', 96 + contentShift, 371, {
+    align: 'left',
+    tint: HUB_PRIMARY_SPELL_PANE.textTint,
+  })
 }
 
 function addPlayerPreview(context: RenderContext, layer: Container, element: WizardElement): NativeElementVfxView {
@@ -647,23 +693,42 @@ function addEquipment(
     addCenteredAtlasSprite(context, layer, 'Inventory', 16, x + xShift, y)
   }
   const thirdRingUnlocked = economy.ownedPerkSelectors.includes(19)
-  const selectedBackpack = selection?.owner === 'backpack'
-    ? economy.backpack.find(({ id }) => id === selection.id) ?? null
-    : null
   const draggedBackpack = dragging?.owner === 'backpack'
     ? economy.backpack.find(({ id }) => id === dragging.itemId) ?? null
     : null
-  const targetItem = draggedBackpack ?? selectedBackpack
+  const targetItem = draggedBackpack
   const acceptingSlots = new Set(targetItem ? equipmentSlotsForItem(targetItem, thirdRingUnlocked) : [])
   for (const slot of ['amulet', 'hat', 'weapon', 'robe', 'ring-0', 'ring-1', 'ring-2'] as const) {
     if (slot === 'ring-2' && !thirdRingUnlocked) continue
     const item = itemAtEquipmentSlot(economy, slot)
     const held = dragging?.owner === 'equipment' && dragging.equipmentSlot === slot
     for (const [x, y, width, height] of hubInventoryEquipmentSlotRects(slot, companion)) {
+      layer.addChild(new Graphics()
+        .rect(x, y, width, height)
+        .fill({ color: HUB_EQUIPMENT_SINK_RENDER.interiorTint }))
       if (height === 46 || height === 72) {
-        addAtlasSprite(context, layer, 'Inventory', height === 46 ? 9 : 10, x, y)
+        addAtlasSprite(
+          context,
+          layer,
+          'Inventory',
+          height === 46
+            ? HUB_EQUIPMENT_SINK_RENDER.smallFrameRecord
+            : HUB_EQUIPMENT_SINK_RENDER.normalFrameRecord,
+          x,
+          y,
+        )
+      } else if (HUB_EQUIPMENT_SINK_RENDER.tallPrimitiveOutline) {
+        addPrimitiveFrame(layer, x + 1, y, width - 1, height - 1)
       }
-      if (item && !held) addItemIcon(context, layer, item, x + width / 2, y + height / 2, element)
+      if (item && !held) addClippedItemIcon(
+        context,
+        layer,
+        item,
+        x + width / 2,
+        y + height / 2,
+        element,
+        [x, y, width, height],
+      )
       if (
         acceptingSlots.has(slot)
         || (selection?.owner === 'equipment'
@@ -776,20 +841,13 @@ function buildService(
   model: Extract<HubInventoryRendererModel, { kind: 'service' }>,
 ): { readonly dragger: Container | null; readonly itemInfo: Container | null; readonly overlay: Container } {
   const inventory = buildInventory(context, layer, {
+    companion: true,
     config: model.config,
     economy: model.economy,
     dragging: model.dragging,
     leftPane: model.trader === 'hagatha' ? 'hagatha' : 'stats',
     progression: model.progression,
-    selection: model.selectedOwner === 'backpack' && model.selectedItemId !== null
-      ? {
-          equipmentSlot: null,
-          id: model.selectedItemId,
-          owner: 'backpack',
-          startedAtMs: model.selectionStartedAtMs ?? 0,
-        }
-      : null,
-    showSelectionDetails: false,
+    selection: model.inventorySelection,
   })
   const overlay = new Container()
   overlay.label = 'native-service-overlay'
@@ -811,25 +869,12 @@ function buildService(
       .fill({ color: 0x000000 }))
     addDowsingButton(context, overlay, model.economy.dowsingFee)
     addDoneControl(context, overlay)
-    return { dragger: null, itemInfo: inventory.itemInfo, overlay }
+    if (inventory.dragger) layer.addChild(inventory.dragger)
+    return { dragger: inventory.dragger, itemInfo: inventory.itemInfo, overlay }
   }
 
   if (model.trader === 'luthacus') {
     addStoreGrid(context, overlay, model.economy.storage, model, 'storage')
-    if (model.selectedOwner === 'backpack' && model.selectedItemId !== null) {
-      const index = model.economy.backpack.findIndex(({ id }) => id === model.selectedItemId)
-      if (index >= 0) {
-        const position = hubInventorySlotPosition(index)
-        addSelectionGlow(
-          overlay,
-          position.x,
-          position.y,
-          HUB_INVENTORY_GRID.cellSize,
-          HUB_INVENTORY_GRID.cellSize,
-          0x45ff72,
-        )
-      }
-    }
   } else if (model.trader === 'shlorio') {
     addDowsingGrid(context, overlay, serviceItems(model), model)
   } else {
@@ -930,7 +975,15 @@ function addStoreGrid(
       const selector = 'recipeIndex' in item ? item.recipeIndex ?? -1 : -1
       if (selector >= 0) addAtlasSprite(context, layer, 'Skills', 127 + selector, x + 36, y + 36, { anchor: 0.5 })
       else addAtlasSprite(context, layer, 'Inventory', 5, x + 36, y + 36, { anchor: 0.5, scale: 0.6 })
-    } else if (!held) addItemIcon(context, layer, item, x + 36, y + 36, model.config.element)
+    } else if (!held) addClippedItemIcon(
+      context,
+      layer,
+      item,
+      x + 36,
+      y + 36,
+      model.config.element,
+      [x, y, HUB_SHOP_GRID.cellSize, HUB_SHOP_GRID.cellSize],
+    )
     if (!held && 'price' in item) {
       addBitmapText(
         context,
@@ -978,7 +1031,15 @@ function addDowsingGrid(
     const selected = item.id === model.selectedItemId
     if (selected) {
       addAtlasSprite(context, layer, 'UI', item.price > model.economy.gold ? 46 : 84, x + 1, y + 11)
-    } else addItemIcon(context, layer, item, x + 36, y + 36, model.config.element)
+    } else addClippedItemIcon(
+      context,
+      layer,
+      item,
+      x + 36,
+      y + 36,
+      model.config.element,
+      [x, y, HUB_DOWSING_GRID.cellSize, HUB_DOWSING_GRID.cellSize],
+    )
     addBitmapText(
       context,
       layer,
@@ -1180,8 +1241,24 @@ function addHorizontalChain(context: RenderContext, layer: Container, x: number,
 }
 
 function addInset(layer: Container, x: number, y: number, width: number, height: number): void {
-  layer.addChild(new Graphics().rect(x, y, width, height).fill({ color: 0x080807, alpha: 0.94 }))
-  layer.addChild(new Graphics().rect(x, y, width, height).stroke({ color: 0xc4a64d, width: 2 }))
+  layer.addChild(new Graphics().rect(x, y, width, height).fill({ color: 0x191916 }))
+  addPrimitiveFrame(layer, x + 1, y, width, height)
+}
+
+function addPrimitiveFrame(layer: Container, x: number, y: number, width: number, height: number): void {
+  layer.addChild(new Graphics().rect(x, y, width, height).stroke({ color: 0x000000, width: 2 }))
+  layer.addChild(new Graphics().rect(x + 1, y + 1, width - 2, height - 2).stroke({
+    color: 0xeadab3,
+    width: 1,
+  }))
+  layer.addChild(new Graphics().rect(x + 2, y + 2, width - 4, height - 4).stroke({
+    color: 0xd8ba70,
+    width: 1,
+  }))
+  layer.addChild(new Graphics().rect(x + 3, y + 3, width - 6, height - 6).stroke({
+    color: 0x15130b,
+    width: 1,
+  }))
 }
 
 function addGold(context: RenderContext, layer: Container, gold: number): void {
@@ -1327,21 +1404,6 @@ function addInventoryDragger(
   return dragger
 }
 
-function addSelectionGlow(
-  layer: Container,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color = 0xf0d56f,
-): void {
-  const glow = new Graphics()
-    .rect(x - 2, y - 2, width + 4, height + 4)
-    .stroke({ color, width: 3 })
-  glow.label = 'native-selection-glow'
-  layer.addChild(glow)
-}
-
 function addItemIcon(
   context: RenderContext,
   layer: Container,
@@ -1381,6 +1443,24 @@ function addItemIcon(
     sprites.push(sprite)
   }
   return sprites
+}
+
+function addClippedItemIcon(
+  context: RenderContext,
+  layer: Container,
+  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'recipeIndex'>,
+  centerX: number,
+  centerY: number,
+  element: WizardElement,
+  clipRect: readonly [number, number, number, number],
+): readonly Sprite[] {
+  const clipped = new Container()
+  const content = new Container()
+  const mask = new Graphics().rect(...clipRect).fill({ color: 0xffffff })
+  content.mask = mask
+  clipped.addChild(content, mask)
+  layer.addChild(clipped)
+  return addItemIcon(context, content, item, centerX, centerY, element)
 }
 
 function addAtlasSprite(
@@ -1660,6 +1740,56 @@ function addBitmapText(
   })
 }
 
+interface BitmapTextRun {
+  readonly advanceScale?: number
+  readonly italic?: boolean
+  readonly offsetX?: number
+  readonly offsetY?: number
+  readonly scale?: number
+  readonly text: string
+}
+
+function addBitmapTextRuns(
+  context: RenderContext,
+  layer: Container,
+  runs: readonly BitmapTextRun[],
+  fontName: FontName,
+  x: number,
+  y: number,
+  tint: number,
+): void {
+  const font = FONT_ASSETS.fonts[fontName]
+  let cursor = x
+  let previous = -1
+  for (const run of runs) {
+    const scale = run.scale ?? 1
+    const advanceScale = run.advanceScale ?? scale
+    for (const character of run.text) {
+      const code = character.codePointAt(0)!
+      if (character === ' ') {
+        cursor += font.spaceAdvance * advanceScale
+        previous = code
+        continue
+      }
+      const glyph = font.glyphs[`${code}`]
+      if (!glyph?.metrics) continue
+      cursor += kerning(font, previous, code) * advanceScale
+      const sprite = new Sprite(glyphTexture(context, glyph, code))
+      sprite.anchor.set(0.5)
+      sprite.scale.set(scale)
+      if (run.italic) applyExactTextItalic(sprite, glyph)
+      sprite.tint = tint
+      sprite.position.set(
+        cursor + glyph.metrics[1] * scale + (run.offsetX ?? 0),
+        y + glyph.metrics[2] * scale + (run.offsetY ?? 0),
+      )
+      layer.addChild(sprite)
+      cursor += glyph.metrics[0] * advanceScale
+      previous = code
+    }
+  }
+}
+
 interface StyledGlyphCharacter {
   readonly character: string
   readonly italic: boolean
@@ -1715,7 +1845,7 @@ function applyExactTextItalic(sprite: Sprite, glyph: AtlasRecord): void {
     - HUB_CHAT_INLINE_EMPHASIS.glyphBottomDelta
   const italicAngle = Math.atan(totalDelta / glyphHeight)
   sprite.skew.x = -italicAngle
-  sprite.scale.y = 1 / Math.cos(italicAngle)
+  sprite.scale.y /= Math.cos(italicAngle)
 }
 
 function wrapChatBitmapText(source: string, font: BitmapFont, maxWidth: number): StyledGlyphCharacter[][] {
