@@ -20506,9 +20506,24 @@ WebGL2 at resolution 1, and returned `status: ok` with empty errors; pings were
 The final supervisor sample again reported zero sessions/lobbies. Production
 behavior is coupled to the deterministic loot proof by the exact deployed SHA
 and byte-matched runtime chunks; no debug mutation was added to production.
-Pending implementation. This marker must be replaced with exact changed files,
-per-member tests, Mac receipts, pushed SHAs, and production deployment evidence
-before the system may be called complete.
+
+The Mac-toolchain follow-up also reached publication. Mod Loader path and
+provenance corrections `452a0214` and `8128d342` reached `main`; GitHub Actions
+run `32385457541` completed successfully. Website receipt `4755003` reached
+`main`; run `32385476579` completed successfully, and the deployment worker
+validated and deployed exact SHA
+`47550034e7f3c1484ee4fe0c41c279c3b569b00a`. Production retained rollback
+`/opt/solomon-dark-revived.rollback-pre-47550034e7f3-20260820T152335Z` and
+database backup
+`/var/backups/solomon-dark-revived/pre-47550034e7f3-20260820T152335Z/sdr.db`.
+Website, game supervisor, and Caddy were active with zero restarts; both live
+and backup SQLite integrity checks returned `ok`; supervisor health returned
+`solomon-dark/31` with zero sessions and zero lobbies. Public and loopback
+root/`/game` returned 200, and all four bodies were byte-identical at SHA-256
+`480b42b4c6b92512085fbcb9f3c778a52095fcd6cea49dd9e013aa2d8b3a1d5c`.
+No loot implementation, evidence, validation, publication, or production gap
+remains open.
+
 ## 2026-08-20 — Solomon Dig state-0 digging audio emitter
 
 ### Reported smell and parity question
