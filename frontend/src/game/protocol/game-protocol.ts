@@ -284,6 +284,11 @@ export interface PlayerCharacterKernelParameters {
   playerRadius: number
 }
 
+export interface GameplayPauseState {
+  ownerDisplayName: string
+  ownerPlayerId: string
+}
+
 export interface ClientHelloMessage {
   type: 'client-hello'
   protocolVersion: number
@@ -341,8 +346,14 @@ export interface ClientConfirmLoadoutMessage {
   type: 'client-confirm-loadout'
 }
 
+export interface ClientGameplayPauseMessage {
+  type: 'client-gameplay-pause'
+  paused: boolean
+}
+
 export type ClientGameMessage =
   | ClientConfirmLoadoutMessage
+  | ClientGameplayPauseMessage
   | ClientHelloMessage
   | ClientHubActionMessage
   | ClientInputMessage
@@ -364,6 +375,7 @@ export interface ServerWelcomeMessage {
   kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
   boneyards: readonly BoneyardChoice[]
+  gameplayPause: GameplayPauseState | null
   snapshot: GameSnapshot
   snapshotSequence: number
 }
@@ -385,6 +397,11 @@ export interface ServerPongMessage {
   nonce: number
 }
 
+export interface ServerGameplayPauseMessage {
+  type: 'server-gameplay-pause'
+  pause: GameplayPauseState | null
+}
+
 export type GameDisconnectCode =
   | 'authentication-failed'
   | 'invalid-message'
@@ -398,6 +415,7 @@ export interface ServerDisconnectMessage {
 }
 
 export type ServerGameMessage =
+  | ServerGameplayPauseMessage
   | ServerWelcomeMessage
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
@@ -489,6 +507,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-confirm-loadout' }
   }
+  if (value.type === 'client-gameplay-pause') {
+    onlyKeys(value, 'message', ['type', 'paused'])
+    return {
+      type: 'client-gameplay-pause',
+      paused: boolean(value.paused, 'paused'),
+    }
+  }
   if (value.type === 'client-disconnect') {
     onlyKeys(value, 'message', ['type'])
     return { type: 'client-disconnect' }
@@ -510,9 +535,17 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'kernelParameters',
       'content',
       'boneyards',
+      'gameplayPause',
       'snapshot',
       'snapshotSequence',
     ])
+    const snapshot = gameSnapshot(value.snapshot)
+    const gameplayPause = value.gameplayPause === null
+      ? null
+      : gameplayPauseState(value.gameplayPause, 'gameplayPause')
+    if (gameplayPause && !snapshot.players[gameplayPause.ownerPlayerId]) {
+      throw new GameProtocolError('gameplayPause owner is absent from the welcome snapshot')
+    }
     return {
       type: 'server-welcome',
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
@@ -524,7 +557,8 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
       boneyards: boneyardChoices(value.boneyards),
-      snapshot: gameSnapshot(value.snapshot),
+      gameplayPause,
+      snapshot,
       snapshotSequence: nonnegativeInteger(value.snapshotSequence, 'snapshotSequence'),
     }
   }
@@ -555,6 +589,13 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
   if (value.type === 'server-pong') {
     onlyKeys(value, 'message', ['type', 'nonce'])
     return { type: 'server-pong', nonce: pingNonce(value.nonce) }
+  }
+  if (value.type === 'server-gameplay-pause') {
+    onlyKeys(value, 'message', ['type', 'pause'])
+    return {
+      type: 'server-gameplay-pause',
+      pause: value.pause === null ? null : gameplayPauseState(value.pause, 'pause'),
+    }
   }
   if (value.type === 'server-disconnect') {
     onlyKeys(value, 'message', ['type', 'code', 'reason'])
@@ -830,6 +871,15 @@ function playerCharacterConfig(value: unknown, field: string): PlayerCharacterCo
     discipline,
     displayName: limitedString(source.displayName, `${field}.displayName`, 64),
     element,
+  }
+}
+
+function gameplayPauseState(value: unknown, field: string): GameplayPauseState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['ownerDisplayName', 'ownerPlayerId'])
+  return {
+    ownerDisplayName: limitedString(source.ownerDisplayName, `${field}.ownerDisplayName`, 64),
+    ownerPlayerId: validatedPlayerId(source.ownerPlayerId, `${field}.ownerPlayerId`),
   }
 }
 

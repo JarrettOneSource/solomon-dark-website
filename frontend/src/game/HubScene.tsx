@@ -68,10 +68,12 @@ interface HubSceneProps {
   onInput: (input: PlayerCharacterInput) => void
   onHubAction: (action: HubInventoryAction) => void
   onLoadingError: () => void
+  onPauseRequest: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
   playerId: string
   progression: ProtocolPlayerProgression
+  presentationPaused: boolean
   samplePresentation: (nowMs?: number) => HubPresentationFrame
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribe: (listener: (snapshot: GameSnapshot) => void) => () => void
@@ -99,10 +101,12 @@ export default function HubScene({
   onInput,
   onHubAction,
   onLoadingError,
+  onPauseRequest,
   onReady,
   onStartMatch,
   playerId,
   progression,
+  presentationPaused,
   samplePresentation,
   subscribePing,
   subscribe,
@@ -118,12 +122,14 @@ export default function HubScene({
   const rendererRef = useRef<HubWorldRenderer | null>(null)
   const inputRef = useRef<BrowserGameplayInput | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
+  const presentationPausedRef = useRef(presentationPaused)
   const modalOpenRef = useRef(false)
   const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
+  presentationPausedRef.current = presentationPaused
   levelUpModalActiveRef.current = levelUpModalActive
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
@@ -170,6 +176,26 @@ export default function HubScene({
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(inputBlocked || modalOpen)
   }, [inputBlocked, modalOpen])
+
+  useEffect(() => {
+    const openPause = (event: KeyboardEvent) => {
+      if (
+        inputBlocked
+        || modalOpen
+        || transitionActive
+        || event.key !== 'Escape'
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
+      event.preventDefault()
+      event.stopPropagation()
+      onPauseRequest()
+    }
+    window.addEventListener('keydown', openPause)
+    return () => window.removeEventListener('keydown', openPause)
+  }, [inputBlocked, modalOpen, onPauseRequest, transitionActive])
 
   useLayoutEffect(() => {
     rendererRef.current?.setLevelUpPresentation(
@@ -276,6 +302,7 @@ export default function HubScene({
       setRendererState('ready')
       onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
+        if (presentationPausedRef.current) return
         onInput(input.sample().input)
         const snapshot = samplePresentation(now)
         const teacherSeconds = snapshot.tick / 100
@@ -362,6 +389,7 @@ export default function HubScene({
       data-discipline={localPlayer?.config.discipline ?? 'arcane'}
       data-element={element}
       data-gameplay-input-blocked={inputBlocked || modalOpen}
+      data-presentation-paused={presentationPaused}
       data-hub-region={currentRegion}
       data-hub-ui-surface={hubUiSurface?.kind ?? 'none'}
       data-modal-open={modalOpen}

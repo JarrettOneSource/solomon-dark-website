@@ -120,6 +120,13 @@ test('client protocol validates character hello, input, match, loadout, and ping
     type: 'client-confirm-loadout',
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-gameplay-pause',
+    paused: true,
+  })), {
+    type: 'client-gameplay-pause',
+    paused: true,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-select-skill',
     choiceIndex: 2,
     offerSequence: 7,
@@ -162,6 +169,30 @@ test('client protocol validates character hello, input, match, loadout, and ping
     type: 'server-pong',
     nonce: 41,
   })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-gameplay-pause',
+    pause: {
+      ownerDisplayName: 'Helvidius',
+      ownerPlayerId: 'player-1',
+    },
+  })), {
+    type: 'server-gameplay-pause',
+    pause: {
+      ownerDisplayName: 'Helvidius',
+      ownerPlayerId: 'player-1',
+    },
+  })
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-gameplay-pause',
+    pause: null,
+  })), {
+    type: 'server-gameplay-pause',
+    pause: null,
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-gameplay-pause',
+    pause: { ownerDisplayName: '', ownerPlayerId: 'player-1' },
+  })), /ownerDisplayName/)
 })
 
 test('protocol v31 accepts every authoritative inventory action and rejects malformed variants', () => {
@@ -221,6 +252,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
       mods: [],
     },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(
       createGameSimulation({ 'player-1': CHARACTER }),
       'player-1',
@@ -531,6 +563,7 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [loaded.choice],
+    gameplayPause: null,
     snapshot,
     snapshotSequence: 1,
   }
@@ -750,7 +783,7 @@ test('protocol v31 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v31 carries Solomon Dig audio, Game Over, and combat modifiers', () => {
+test('protocol v31 carries gameplay pause, Solomon Dig audio, Game Over, and combat modifiers', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 31)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
@@ -1069,6 +1102,7 @@ test('protocol v31 preserves the bounded run-scoped enemy semantic-event lane', 
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [loadedBoneyardFixture(runId).choice],
+    gameplayPause: null,
     snapshot,
     snapshotSequence: 1,
   }
@@ -2346,6 +2380,7 @@ test('protocol bounds server-controlled world collections', () => {
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: {
       ...snapshot,
       world: {
@@ -2505,7 +2540,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v30 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v31 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

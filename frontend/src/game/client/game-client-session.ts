@@ -19,6 +19,7 @@ import {
   type BoneyardChoice,
   type BoneyardEnemyEventSnapshot,
   type GameSnapshot,
+  type GameplayPauseState,
   type LoadedBoneyard,
   type ServerWelcomeMessage,
 } from '../protocol/game-protocol.ts'
@@ -68,15 +69,18 @@ export interface GameClientSession {
   confirmLoadout(): void
   destroy(): void
   getBoneyard(): LoadedBoneyard | null
+  getGameplayPause(): GameplayPauseState | null
   getPingMs(): number | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
+  onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
   samplePresentation(nowMs?: number): HubPresentationFrame
   rerollSkill(offerSequence: number): void
+  requestGameplayPause(paused: boolean): void
   saveSkill(offerSequence: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendHubAction(action: HubInventoryAction): void
@@ -120,6 +124,7 @@ export function connectGameClientSession(
     let presentationTimeline: HubPresentationTimeline | undefined
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
+    let gameplayPause: GameplayPauseState | null = null
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
@@ -136,6 +141,7 @@ export function connectGameClientSession(
     const now = options.now ?? (() => performance.now())
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
+    const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const pendingPings = new Map<number, number>()
@@ -163,6 +169,7 @@ export function connectGameClientSession(
         }
         welcome = message
         snapshot = message.snapshot
+        gameplayPause = message.gameplayPause
         enemyEventCursor = initialEnemyEventCursor(snapshot)
         lastSnapshotSequence = message.snapshotSequence
         entityReplication.reset(snapshot, lastSnapshotSequence)
@@ -200,6 +207,14 @@ export function connectGameClientSession(
       if (message.type === 'server-boneyard-loaded') {
         loadedBoneyard = message.boneyard
         for (const listener of boneyardListeners) listener(message.boneyard)
+        return
+      }
+      if (message.type === 'server-gameplay-pause') {
+        gameplayPause = message.pause
+        currentInput = copyInput(STOPPED_INPUT)
+        sentInput = copyInput(STOPPED_INPUT)
+        pendingInputs = []
+        for (const listener of gameplayPauseListeners) listener(gameplayPause)
         return
       }
       if (message.type === 'server-pong') {
@@ -339,11 +354,15 @@ export function connectGameClientSession(
         options.transport.close(1000, 'session destroyed')
         snapshotListeners.clear()
         boneyardListeners.clear()
+        gameplayPauseListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
       },
       getBoneyard() {
         return loadedBoneyard
+      },
+      getGameplayPause() {
+        return gameplayPause
       },
       getPingMs() {
         return latestPingMs
@@ -359,6 +378,10 @@ export function connectGameClientSession(
       onBoneyard(listener) {
         boneyardListeners.add(listener)
         return () => boneyardListeners.delete(listener)
+      },
+      onGameplayPause(listener) {
+        gameplayPauseListeners.add(listener)
+        return () => gameplayPauseListeners.delete(listener)
       },
       onEnemyEvent(listener) {
         enemyEventListeners.add(listener)
@@ -396,7 +419,8 @@ export function connectGameClientSession(
         if (!welcome || !snapshot || destroyed) return
         const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
         const lifeState = snapshot.players[welcome.playerId]?.progression.lifeState
-        const requestedInput = snapshot.levelUpBarrier !== null
+        const requestedInput = gameplayPause !== null
+          || snapshot.levelUpBarrier !== null
           || offered
           || lifeState !== 'alive'
           || snapshot.run.phase === 'game-over'
@@ -459,6 +483,20 @@ export function connectGameClientSession(
           input,
           sequence,
           targetTick,
+        }))
+      },
+      requestGameplayPause(paused) {
+        if (!welcome || !snapshot || destroyed) return
+        if (paused) {
+          if (
+            gameplayPause !== null
+            || snapshot.levelUpBarrier !== null
+            || (snapshot.run.phase !== 'hub' && snapshot.run.phase !== 'active')
+          ) return
+        } else if (gameplayPause?.ownerPlayerId !== welcome.playerId) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-gameplay-pause',
+          paused,
         }))
       },
       selectSkill(choiceIndex, offerSequence, skillId) {

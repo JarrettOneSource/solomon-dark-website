@@ -98,6 +98,7 @@ test('client carries character config, publishes authority, and tears down', asy
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -183,6 +184,50 @@ test('client carries character config, publishes authority, and tears down', asy
   session.destroy()
   assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
   assert.equal(transport.readyState, 'closed')
+})
+
+test('client projects authoritative gameplay pause and blocks input until release', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  assert.equal(session.getGameplayPause(), null)
+
+  session.requestGameplayPause(true)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-gameplay-pause',
+    paused: true,
+  })
+
+  const received: Array<ReturnType<typeof session.getGameplayPause>> = []
+  const removePause = session.onGameplayPause((pause) => received.push(pause))
+  const pause = {
+    ownerDisplayName: CHARACTER.displayName,
+    ownerPlayerId: session.playerId,
+  }
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
+  assert.deepEqual(session.getGameplayPause(), pause)
+  assert.deepEqual(received, [pause])
+
+  const messageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 100, y: 100 }, true, 2))
+  assert.equal(transport.sent.length, messageCount)
+
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause: null }))
+  assert.equal(session.getGameplayPause(), null)
+  assert.deepEqual(received, [pause, null])
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
+
+  removePause()
+  session.destroy()
 })
 
 test('client logs and explains an unexpected transport disconnect', async () => {
@@ -491,6 +536,7 @@ test('client schedules every cast-level transition on a distinct fixed tick', as
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -576,6 +622,7 @@ test('client disables prediction when the shared character kernel does not match
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -610,6 +657,7 @@ test('client presents bounded display-rate movement without resending unchanged 
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(serverState, 'player-1'),
     snapshotSequence: 1,
   }))
@@ -886,6 +934,7 @@ test('client rejects a welcome that omits its assigned player', async () => {
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot: createGameSnapshot(createGameSimulation({}), null),
     snapshotSequence: 1,
   }))
@@ -968,6 +1017,7 @@ function receiveWelcome(
     kernelParameters: kernelParameters(),
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
     snapshot,
     snapshotSequence: 1,
   }))

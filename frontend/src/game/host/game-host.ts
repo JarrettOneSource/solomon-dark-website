@@ -47,6 +47,7 @@ import {
   decodeClientGameMessage,
   encodeGameMessage,
   type GameContentManifest,
+  type GameplayPauseState,
   type ServerDisconnectMessage,
 } from '../protocol/game-protocol.ts'
 import { createGameSnapshot } from './game-snapshot.ts'
@@ -155,6 +156,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }
 
   let state = createInitialSimulation(options.createSimulation)
+  let gameplayPause: GameplayPauseState | null = null
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
   let reservedHostClaimed = false
@@ -411,6 +413,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             mods: [],
           },
           boneyards: boneyards.choices,
+          gameplayPause,
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
@@ -420,13 +423,48 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             boneyard: loadedBoneyard,
           }))
         }
+        if (gameplayPause) broadcastSnapshot()
+        return
+      }
+
+      if (message.type === 'client-gameplay-pause') {
+        if (message.paused) {
+          if (
+            gameplayPause
+            || state.levelUpBarrier !== null
+            || (state.run.phase !== 'hub' && state.run.phase !== 'active')
+          ) return
+          gameplayPause = {
+            ownerDisplayName: client.displayName,
+            ownerPlayerId: client.playerId,
+          }
+          stopAllClientInputs()
+          resetNextTickDeadline()
+          broadcastGameplayPause()
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'info',
+            'gameplay.paused',
+            'A player paused the authoritative gameplay world.',
+            logDetails({
+              displayName: client.displayName,
+              playerId: client.playerId,
+              serverTick: state.tick,
+            }),
+          )
+          return
+        }
+        if (gameplayPause?.ownerPlayerId !== client.playerId) return
+        releaseGameplayPause('owner-resumed')
         return
       }
 
       if (message.type === 'client-input') {
         if (message.sequence <= client.lastReceivedSequence) return
         if (
-          state.levelUpBarrier !== null
+          gameplayPause !== null
+          || state.levelUpBarrier !== null
           || getPlayerProgression(state, client.playerId).pendingOffer
         ) {
           client.lastReceivedSequence = message.sequence
@@ -498,6 +536,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-hub-action') {
+        if (gameplayPause !== null) return
         const applied = applyGameSimulationHubAction(state, client.playerId, message.action)
         state = applied.state
         client.activeInput = createIdlePlayerCharacterInput()
@@ -540,6 +579,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         if (
           client.playerId !== hostPlayerId
           || loadedBoneyard
+          || gameplayPause !== null
           || state.levelUpBarrier !== null
           || state.run.phase !== 'hub'
         ) return
@@ -605,6 +645,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       clients.delete(socket)
+      const releasedGameplayPause = gameplayPause?.ownerPlayerId === client.playerId
       state = removePlayerCharacter(state, client.playerId)
       if (clients.size === 0 && resetWhenEmpty) {
         state = createInitialSimulation(options.createSimulation)
@@ -613,7 +654,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         reservedHostClaimed = false
         loadedBoneyard = null
         nextSnapshotSequence = 1
-        nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
+        gameplayPause = null
+        resetNextTickDeadline()
       } else if (client.playerId === hostPlayerId) {
         hostPlayerId = clients.values().next().value?.playerId ?? null
       }
@@ -641,7 +683,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ...(socketError ? gameServerErrorDetails(socketError) : {}),
         }),
       )
-      broadcastSnapshot()
+      if (releasedGameplayPause) releaseGameplayPause('owner-disconnected')
+      else broadcastSnapshot()
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
     socket.once('error', (error) => release(null, '', error))
@@ -651,7 +694,11 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const timer = setInterval(() => {
     if (closed || ticking) return
     if (resetWhenEmpty && clients.size === 0) {
-      nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
+      resetNextTickDeadline()
+      return
+    }
+    if (gameplayPause !== null) {
+      resetNextTickDeadline()
       return
     }
     ticking = true
@@ -768,6 +815,37 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
     }
+  }
+
+  function resetNextTickDeadline(): void {
+    nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
+  }
+
+  function broadcastGameplayPause(): void {
+    broadcast({ type: 'server-gameplay-pause', pause: gameplayPause })
+  }
+
+  function releaseGameplayPause(source: 'owner-disconnected' | 'owner-resumed'): void {
+    if (!gameplayPause) return
+    const released = gameplayPause
+    gameplayPause = null
+    stopAllClientInputs()
+    resetNextTickDeadline()
+    broadcastGameplayPause()
+    broadcastSnapshot()
+    logGameServerEvent(
+      options.log,
+      'game-host',
+      'info',
+      'gameplay.resumed',
+      'The authoritative gameplay world resumed.',
+      logDetails({
+        displayName: released.ownerDisplayName,
+        playerId: released.ownerPlayerId,
+        serverTick: state.tick,
+        source,
+      }),
+    )
   }
 
   function broadcast(message: Parameters<typeof encodeGameMessage>[0]): void {

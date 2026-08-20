@@ -28,6 +28,7 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
+import GameplayPauseMenu from './GameplayPauseMenu.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import MatchLoadingScreen from './MatchLoadingScreen.tsx'
 import {
@@ -38,7 +39,11 @@ import {
   type MatchLoadingStage,
   type MatchLoadingState,
 } from './match-loading.ts'
-import type { GameSnapshot, LoadedBoneyard } from './protocol/game-protocol.ts'
+import type {
+  GameSnapshot,
+  GameplayPauseState,
+  LoadedBoneyard,
+} from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
 import {
   GAME_VIEWPORT_MIN_HEIGHT,
@@ -214,6 +219,7 @@ export default function MainMenuScene({
   const [runtimeRunPhase, setRuntimeRunPhase] = useState<GameRunPhase>('hub')
   const [runtimeAudioScene, setRuntimeAudioScene] = useState<GameAudioScene | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
+  const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
   const levelUpPickerPresentationRef = useRef<number | null>(null)
@@ -328,6 +334,7 @@ export default function MainMenuScene({
     setRuntimeAudioScene(gameplayAudioScene(initialSnapshot))
     setRuntimeProgression(initialSnapshot.players[session.playerId]?.progression ?? null)
     setLoadedBoneyard(initialBoneyard)
+    setGameplayPause(session.getGameplayPause())
     if (initialSnapshot.world.kind === 'boneyard') {
       if (loadingRef.current?.flow !== 'boneyard') {
         beginLoading('boneyard', initialBoneyard
@@ -374,9 +381,11 @@ export default function MainMenuScene({
         beginLoading('boneyard', 'reading_boneyard')
       }
     })
+    const removeGameplayPause = session.onGameplayPause(setGameplayPause)
     return () => {
       removeSnapshot()
       removeBoneyard()
+      removeGameplayPause()
     }
   }, [advanceLoading, beginLoading, session])
 
@@ -509,6 +518,7 @@ export default function MainMenuScene({
         nextSession.getSnapshot().players[nextSession.playerId]?.progression ?? null,
       )
       setLoadedBoneyard(nextSession.getBoneyard())
+      setGameplayPause(nextSession.getGameplayPause())
       advanceLoading('materializing_participants')
       setScreen('hub')
       return true
@@ -530,6 +540,21 @@ export default function MainMenuScene({
       cancelLoading('boneyard')
       setConnectionError(error instanceof Error ? error.message : 'The Boneyard could not be opened.')
     }
+  }
+
+  const requestGameplayPause = useCallback(() => {
+    session?.requestGameplayPause(true)
+  }, [session])
+
+  const leaveGameplay = () => {
+    session?.destroy()
+    setSession(null)
+    setRuntimeSnapshot(null)
+    setRuntimeProgression(null)
+    setRuntimeAudioScene(null)
+    setLoadedBoneyard(null)
+    setGameplayPause(null)
+    setScreen('root')
   }
 
   const levelUpBarrierId = runtimeSnapshot?.levelUpBarrier?.barrierId ?? null
@@ -634,15 +659,17 @@ export default function MainMenuScene({
               audio={audio}
               boneyard={loadedBoneyard}
               getPingMs={session.getPingMs}
-              inputBlocked={loading !== null || levelUpModalActive}
+              inputBlocked={loading !== null || levelUpModalActive || gameplayPause !== null}
               levelUpModalActive={levelUpModalActive}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onLoadingError={cancelBoneyardLoading}
+              onPauseRequest={requestGameplayPause}
               onReady={finishBoneyardLoading}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
+              presentationPaused={gameplayPause !== null}
               samplePresentation={session.sampleBoneyardPresentation}
               subscribePing={session.onPing}
               subscribeEnemyEvent={session.onEnemyEvent}
@@ -656,7 +683,7 @@ export default function MainMenuScene({
               audio={audio}
               boneyards={session.boneyards}
               getPingMs={session.getPingMs}
-              inputBlocked={loading !== null || levelUpModalActive}
+              inputBlocked={loading !== null || levelUpModalActive || gameplayPause !== null}
               levelUpModalActive={levelUpModalActive}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
@@ -665,8 +692,10 @@ export default function MainMenuScene({
               onInput={session.sendInput}
               onHubAction={session.sendHubAction}
               onLoadingError={cancelHubLoading}
+              onPauseRequest={requestGameplayPause}
               onReady={finishHubLoading}
               onStartMatch={startBoneyard}
+              presentationPaused={gameplayPause !== null}
               samplePresentation={session.samplePresentation}
               subscribePing={session.onPing}
               subscribe={session.onSnapshot}
@@ -709,6 +738,17 @@ export default function MainMenuScene({
               <p>Waiting for all players to choose a skill…</p>
             </div>
           ) : null}
+
+        {session && gameplayPause ? (
+          <GameplayPauseMenu
+            audio={audio}
+            onLeave={leaveGameplay}
+            onResume={() => session.requestGameplayPause(false)}
+            pause={gameplayPause}
+            playerId={session.playerId}
+            style={nativeStageStyle}
+          />
+        ) : null}
 
         {(preparing || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>

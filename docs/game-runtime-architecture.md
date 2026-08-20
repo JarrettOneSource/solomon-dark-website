@@ -122,6 +122,14 @@ dependencies without revisiting this release invariant.
   resolves strict pickup order, and emits semantic audio/text edges. Currency,
   resources, inventory, and Bonus state are committed at the session-owned
   player-entity boundary after that one accepted pickup.
+- Gameplay Pause Menu state is session-owned rather than client-local. The
+  first valid connected participant request owns one nullable pause barrier;
+  while it exists the host holds the authoritative simulation tick and world
+  state, clears every input lane, and keeps transport heartbeat, joins,
+  departures, and pause presentation messages live. Only that participant may
+  resume. Owner disconnect releases the barrier. Resumption resets the next
+  fixed-tick wall-clock deadline, so elapsed pause time never becomes catch-up
+  simulation.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
   publish immediately; the authoritative queue preserves each level transition

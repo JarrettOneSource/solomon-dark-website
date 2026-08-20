@@ -20348,7 +20348,7 @@ rounding, and draw order inside this system remain native.
   no client-local currency or inventory mutation is accepted.
 - Protocol: compact Loot/Goodie entity registrations, recursively validated
   item identity/effects/colors, and one ordered loot event lane are carried by
-  wire version 30.
+  wire version 31 after the authoritative gameplay-pause lane is composed.
 - Obsolete path: enemy death's XP-only terminal output is extended at its owner;
   no renderer inference or CSS pickup substitute is added.
 
@@ -20503,7 +20503,6 @@ recovering the visible frame program and voice/wave state, and did not drain
 the state-0 audio bytes, registry rows, or cursor perturbation branches. Under
 the current system-membership rule, the earlier perpetual five-tick loop was
 not a complete disposition of the native digging system.
-
 ### Evidence and provenance
 
 | Evidence class | Exact source | Observation | Confidence |
@@ -20678,3 +20677,218 @@ given variant's PCM finishes before that variant can recur.
   separate `Anim_Flydirt` visual actor remain owned by their already-declared
   scripting/presentation systems; neither substitutes for or weakens this
   complete audio emitter.
+
+## 2026-08-20 — Gameplay pause ownership, modal suspension, and multiplayer barrier
+
+### Reported smell and parity question
+
+- Reported web behavior: gameplay has no authoritative ESC pause. A browser
+  client can continue moving, casting, ticking actors, and advancing waves
+  because no pause state reaches the host.
+- Stock behavior to recover: the default Escape-bound `OPEN MENU` edge opens
+  the native Pause Menu, holds the active gameplay world at one exact state,
+  keeps the modal/application loop responsive, and resumes the retained world
+  without catch-up.
+- Reproduction inputs/scenes: a settled Hub region or active Boneyard, one
+  rising Escape edge, all three native pause actions, nested modal lifetime,
+  owner departure, a second connected browser, and a late join.
+- Falsifiable questions: whether pause is a client presentation trick or a
+  world-owner state; whether the outer scheduler stops; whether another Escape
+  toggles the same modal; whether pause has a timeout; and whether a non-owner
+  can replace or release a multiplayer pause.
+
+### Evidence and provenance
+
+| Live native capture | `Mod Loader/tests/fixtures/webgame/menu-layouts/pause-menu.json` and `menu-reference-captures/pause-menu.png`; recorded 2026-08-09 at 1600 by 900 against retail SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Settled retained-world underlay, 0.85 black dim, centered three-row menu, exact action rectangles, and four independent captured instances. Capture-only loader hooks observed UI/Sprite/font calls without changing game or menu behavior. | high |
+| Instructions | input branch `0x005CB3D4..0x005CB42A`, binding `0x00B3BCCC`, edge sampler `0x00429950` | `Gameplay::Tick` consumes the configurable `OPEN MENU` rising edge before the world tick. Both shipped presets bind Escape scan code `0x01`. | high |
+| Instructions | action `0x0058EA50`, `SimpleMenu` ctor `0x005BA4B0`, modal `0x005ABF10` | Authored rows are exactly `RESUME GAME[1]|GAME SETTINGS[0]|LEAVE GAME[2]`; results 1/0/2 resume, open gameplay settings through `0x005A81A0`, or leave through `0x005A7F60`. | high |
+| Instructions | suspension helper `0x005CBD40`, scene dispatcher `0x00427800` | Modal entry increments `Gameplay+0x80` and writes active-region `+0x68 = -1`; the scene dispatcher skips negative-delay scenes. Final release decrements without underflow and restores zero. | high |
+| Instructions | modal runner `0x004281F0`, MyApp pump `0x0040D130`, scheduler `0x0040D3C0` | The application scheduler, window messages, modal input, and presentation remain live while the region/world is held. Pause has no timeout and does not add catch-up ticks. | high |
+| Instructions/data | `SimpleMenu::Tick` `0x005A8950`, renderer `0x005C5A00`; doubles `0.035`, `0.05`, `0.85` at `0x00784888`, `0x007DE8A0`, `0x00785858` | Reveal reaches one in 29 fixed ticks, close reaches zero in 20, and the underlay dim is `reveal * 0.85`. | high |
+| Existing web baseline | protocol 30 `game-host.ts`, `game-client-session.ts`, `MainMenuScene.tsx`, Hub/Boneyard scene loops | The server already owns fixed simulation and a no-tick level-up barrier, but exposes no gameplay pause request/owner lane. Browser interruption clears input only; it does not pause a shared world. | high |
+
+All native addresses are preferred-image VAs for the exact retail executable
+above. No runtime ASLR address or stale PID is used. The reusable native report
+is `Mod Loader/docs/reverse-engineering/native-gameplay-pause.md`; it also
+records the complete `0x005CBD40` xref family.
+
+### System boundary and membership inventory
+
+Native system: the gameplay Pause Menu boundary begins at the admitted
+`OPEN MENU` rising edge, owns the `SimpleMenu` surface and nestable active-region
+suspension, and ends when Resume or teardown releases that exact region. The
+Website extension adds authoritative player ownership and peer presentation;
+it does not turn every independent inventory/picker modal into an ESC pause.
+
+| Member (class/variant/scene/branch) | Native source (function/table row/record) | Disposition | Proof |
+| --- | --- | --- | --- |
+| default Escape / configurable `OPEN MENU` rising edge | `0x00B3BCCC`, `0x00429950`, `0x005CB3D4..0x005CB42A` | `exact-ported` | focused input and browser ESC journey; one non-repeat edge submits one host request |
+| Hub gameplay, every current web Hub region | shared Game input path and active-region `+0x68` hold | `exact-ported` | two-browser Hub tick/position freeze and resume receipt |
+| active Boneyard/Arena gameplay | same Game input path and active-region hold | `exact-ported` | two-browser Boneyard tick/enemy/player freeze and resume receipt |
+| owner Pause Menu retained-world presentation | `SimpleMenu` `0x005ABF10`, renderer `0x005C5A00`, live pause fixture | `exact-ported` | 1600 by 900 geometry/style contract plus browser screenshot |
+| `RESUME GAME` result 1 | authored row in `0x0058EA50` | `exact-ported` | only the authoritative owner can release; next fixed tick resumes with no catch-up |
+| `GAME SETTINGS` result 0 destination | `0x0058EA50 -> 0x005A81A0` | `out-of-system` (the gameplay settings tree is a separately owned menu/settings system; this pass preserves the row but does not invent its currently absent web destination) | visible disabled row explicitly names the unavailable independent destination |
+| `LEAVE GAME` result 2 | `0x0058EA50 -> 0x005A7F60` | `exact-ported` | owner disconnect releases the barrier and returns that client to the title root |
+| second Escape while Pause Menu owns input | global modal exclusion `0x008203F0` gates `0x005CB360` | `exact-ported` | owner menu consumes the edge without recursive open or release; Resume remains the close action |
+| nested modal suspension depth | `0x005CBD40`, `Gameplay+0x80` | `verified-already-at-parity` | current mandatory level-up barrier already retains a no-tick state until its own owner cohort resolves; gameplay pause is kept as a separate session owner so the barriers cannot release one another |
+| SimpleMenu reveal/close and dim | `0x005A8950`, `0x005C5A00`; 29/20 ticks, max dim 0.85 | `exact-ported` | focused timing/style contract and browser computed-style receipt |
+| application/transport service during pause | `0x004281F0 -> 0x0040D130 -> 0x0040D3C0` | `exact-ported` | pings, pause messages, joins, departure, and UI remain responsive while simulation tick is constant |
+| multiplayer first-request owner | no retail member; explicit Website product extension | `exact-ported` | two clients racing/issuing requests retain the first authoritative owner |
+| non-owner wait surface naming owner | no retail member; user-required Website presentation extension | `exact-ported` | second browser sees the exact replicated display name and no resume action |
+| owner disconnect and late join | no retail member; host lifecycle extension | `exact-ported` | disconnect releases with cleared input; welcome carries an existing owner to a late joiner |
+| title, play, Create, loading, Game Over, post-run loadout | outside native Game Pause Menu admission gates | `out-of-system` (separate application/session surfaces) | protocol and UI gates reject pause requests outside Hub/active-run gameplay |
+| mandatory level-up picker | sibling `0x0066F920`/`0x0067CAC0` modal family; current `levelUpBarrier` | `out-of-system` (independent mandatory selection owner) | picker consumes Escape and host rejects pause stacking while the barrier is active |
+| Inventory, trader, quick-panel, spell/book/settings modal xrefs of `0x005CBD40` | `0x004C2AA0`, `0x004C2E30`, `0x00555810`, `0x005684C0`, `0x005D8DC0`, `0x005D8F30`, `0x006588C0`, `0x0066B200`, `0x0066F0B0` | `out-of-system` (independently triggered modal/UI systems; enumerated because they share the native nesting helper, but they do not consume the ESC pause-menu owner or authored rows) | complete xref sweep in the native report; no symptom patch is applied to those systems |
+
+There are no `blocked-by-platform` members. Browsers can represent the retained
+frame, authoritative hold, exact timing, input ownership, and player-named
+waiting surface.
+
+### Native ownership thread
+
+- Owner and construction path: `Gameplay::Tick 0x005D7EF0` owns admission;
+  action `0x0058EA50` constructs `SimpleMenu 0x005BA4B0`; modal loop
+  `0x005ABF10` owns the surface lifetime and balanced suspension depth.
+- Upstream state producers/callers: the binding preset/config writer supplies
+  `0x00B3BCCC`; `0x00429950` supplies a rising edge; gameplay modal and readiness
+  gates decide whether that edge can dispatch.
+- State representation and transitions: nesting depth is `Gameplay+0x80`;
+  active region `+0x68` is zero normally and `-1` while suspended. Website
+  state is a nullable host-owned `{ playerId, displayName }` with no client
+  authority and no timer.
+- Downstream consumers/callees: `0x00427800` suppresses region/world ticks;
+  `0x004281F0` keeps application/UI service live; results 1/0/2 route Resume,
+  Settings, or Leave.
+- Sibling systems sharing ownership or data: all sixteen `0x005CBD40` xrefs
+  are enumerated above. They prove nesting semantics but keep their independent
+  modal triggers and content owners.
+- Entry, interruption, reset, and teardown: pause clears every held/queued web
+  gameplay input. Resume resets the host's next-tick deadline instead of
+  catching up. Owner disconnect, session empty/reset, or host shutdown clears
+  the barrier; a non-owner departure does not.
+
+### Recovered behavioral contract
+
+- Timing/ticks/thresholds: authoritative world tick and state remain byte-for-
+  byte stable for an unbounded pause. Reveal is 29 ticks, close 20 ticks, dim
+  multiplier 0.85. Resume schedules the next ordinary 10 ms tick and never
+  replays elapsed wall time.
+- Geometry/transforms/coordinate spaces: the stock surface uses the retained
+  1600 by 900 gameplay stage. Resume, Settings, and Leave rects are respectively
+  `[623.5,339.5,976.5,408.5]`, `[623.5,415.5,976.5,484.5]`, and
+  `[623.5,491.5,976.5,560.5]`; the existing fixed-stage viewport transform
+  projects them to browser CSS space.
+- Render/hit/collision/traversal order: retain the last rendered world frame,
+  apply the dim, then paint the modal. While held, no actor, collision, AI,
+  wave, projectile, effect, lighting, or region traversal consumes a tick.
+- Assets/audio/randomness: the pause frame reuses current UI/menu art and text;
+  it consumes no gameplay RNG. Native pause does not globally stop BASS; web
+  event production stops with the authoritative world, while already playing
+  scene music remains owned by the existing audio director.
+- Input/network authority/replication: clients send intent only. First valid
+  request wins; only that connection releases. Every peer and late joiner sees
+  the authoritative id/name. Non-owner requests are inert. Pause and both
+  release edges clear input lanes.
+- Boundary and failure behavior: no timeout and no host override. The owner
+  leaving is the fail-safe release. Malformed protocol payloads fail closed;
+  valid but unauthorized pause/resume requests do not disconnect a peer.
+
+### Nearby-system findings
+
+- Durable finding: the loader's earlier shared-menu pause is not this contract.
+  It aggregates Pause Menu, SimpleMenu, QuickPanel, and Settings requests and
+  expires them after 60 seconds. Copying it would violate both the native no-
+  timeout modal lifetime and the requested owner-waits-until-resume behavior.
+- Evidence: `Mod Loader/SolomonDarkModLoader/src/multiplayer_local_transport/shared_gameplay_pause_sync.inl` constants and request aggregation versus the retail causal trace above.
+- Why it matters or may matter later: any future reconciliation of Inventory or
+  Settings multiplayer behavior must decide its own authority instead of
+  silently joining the ESC owner barrier.
+- Native report/catalog also updated: `native-gameplay-pause.md`,
+  `ui-binary-map.md`, and `[gameplay.pause]` in `config/binary-layout.ini`.
+
+### Confidence and open questions
+
+- Confirmed: complete native input-to-resume ownership, all pause-helper xrefs,
+  storage offsets, modal action rows/results, timing constants, no-timeout
+  lifetime, exact live geometry, and current web authority seam.
+- Inferred: none used to choose implementation behavior.
+- Unknown: retail supplies no multiplayer identity, arbitration, disconnect,
+  or late-join rule because the build is single-player.
+- Next falsifying probe if the unknown becomes material: none; the multiplayer
+  rows are explicitly user-required product behavior, not claims about retail.
+
+### Web implementation consequence
+
+- Correct owner/module: game host session state owns pause identity and tick
+  admission; the client session owns protocol projection; a focused pause
+  presentation owns only modal rendering and actions.
+- Shared model change: add one authenticated pause intent plus one authoritative
+  pause state message/welcome field, block all input while present, and stop the
+  fixed simulation loop without stopping heartbeat or UI service.
+- Stock behavior preserved: default Escape entry, retained frame, 0.85 dim,
+  exact three-row geometry, Resume-only close, no timeout, input clearing, and
+  no catch-up.
+- Browser-specific approximation, if unavoidable: none.
+- Symptom patch or obsolete path to remove: no client-only `paused` boolean or
+  per-scene timer is permitted; the existing server pause-policy statement is
+  made concrete at the host boundary.
+
+### Validation contract
+
+- Focused automated test: protocol round trips and rejects malformed pause
+  records; host proves first-owner arbitration, constant tick/state, blocked
+  input, owner-only release, late join, and disconnect release; client proves
+  input clearing and pause listener lifetime; presentation contract pins
+  geometry, timing, wording, and disabled Settings handoff.
+- Playwright or runtime journey: one real WebGL browser alternates between
+  owner and waiting views while authenticated peers drive the opposite
+  ownership, late-join, and disconnect edges in Hub and Boneyard. The owner
+  gets the Pause Menu; the browser waiting peer gets `<display name> has paused
+  the game`; neither canvas/world/tick changes during the hold; Resume and
+  owner departure release; no page/console errors.
+- Stock-versus-web comparison: match the checked-in 1600 by 900 pause fixture's
+  retained underlay, dim, row order, and action rectangles.
+- Measurable acceptance criteria: one pause message per edge; identical owner
+  on both peers; zero authoritative tick delta and zero player/enemy position
+  delta during at least 500 ms; first resumed tick occurs without a backlog;
+  non-owner release has no effect; owner disconnect releases within one
+  heartbeat/close event; focused tests and `./scripts/validate.sh` pass.
+
+### Implementation validation receipt
+
+- Files/modules changed: protocol 31 adds authenticated pause intent, welcome
+  state, and authoritative pause broadcasts; `game-host.ts` owns first-request
+  arbitration, no-tick hold, input clearing, owner-only release, late join,
+  disconnect release, and no-catch-up deadline reset; `game-client-session.ts`
+  owns projection and blocked input; `MainMenuScene.tsx`, `HubScene.tsx`, and
+  `BoneyardScene.tsx` own stable Escape admission and frozen presentation;
+  `GameplayPauseMenu.tsx`, `gameplay-pause-menu.css`, and
+  `pause-menu-contract.ts` own the exact menu/waiting presentation.
+- Tests and canonical gate: focused protocol/client/host/presentation contracts
+  passed, including Hub and Boneyard state equality, first-owner arbitration,
+  non-owner rejection, late welcome, mandatory-picker rejection, disconnect,
+  and no catch-up. Final `./scripts/validate.sh` passed 24 backend/integration
+  tests, 40 loot tests, 140 pretests, 978 broad frontend/game tests, five
+  level-up tests, six diagnostics tests, 14 Hub UI tests, five desktop tests,
+  strict formatting,
+  lint/import boundaries, production TypeScript/Vite/game-host build, bundle
+  budget (`207071` raw / `60236` gzip bytes for the Game entry), and production
+  media policy.
+- Browser/native evidence: `npm run smoke:game:pause` passed with Chrome
+  `150.0.7871.124`, one real 1600 by 900 WebGL client, and two authenticated
+  peers on the combined Golem-plus-loot-plus-pause tree. Hub held at tick
+  `6571`; browser-owned Boneyard held at `8105` and peer-owned Boneyard at
+  `8106`, with
+  byte-equal authoritative world/player
+  receipts and byte-equal renderer diagnostics through each 550 ms hold.
+  Resume messages arrived before any replay backlog; owner departure resumed
+  the remaining session to tick `8134`. Both owner directions, late join,
+  non-owner rejection, and zero page/console errors passed. Settled screenshots
+  are `/tmp/solomon-dark-pause-hub-owner.png` SHA-256
+  `0f6e8707b70ef49739a4a11f98e1148472ad496b37af11b7a7b3988a27ecaba6`,
+  `/tmp/solomon-dark-pause-hub-waiting.png` SHA-256
+  `c9e84f2abd1e208a2bef654bfc27db80b8020b87cf8365b1271e6c05c9f14c7e`,
+  and `/tmp/solomon-dark-pause-boneyard-waiting.png` SHA-256
+  `90764c34d5995daad38209c9dd70fa69c17287f5d7f9282f1111d49ba798a880`.
+- Remaining implementation explicitly out of scope: the independently owned
+  gameplay Settings tree behind the preserved disabled row.

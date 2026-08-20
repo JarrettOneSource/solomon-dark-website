@@ -87,9 +87,11 @@ interface BoneyardSceneProps {
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
+  onPauseRequest: () => void
   onReady: () => void
   playerId: string
   progression: ProtocolPlayerProgression
+  presentationPaused: boolean
   samplePresentation: (nowMs?: number) => GameSnapshot
   subscribePing: (listener: (pingMs: number) => void) => () => void
   subscribeEnemyEvent: (listener: (event: BoneyardEnemyEventSnapshot) => void) => () => void
@@ -124,9 +126,11 @@ export default function BoneyardScene({
   levelUpPresentationId,
   onInput,
   onLoadingError,
+  onPauseRequest,
   onReady,
   playerId,
   progression,
+  presentationPaused,
   samplePresentation,
   subscribeEnemyEvent,
   subscribePing,
@@ -152,11 +156,13 @@ export default function BoneyardScene({
   })
   const digAudioCursorRef = useRef<SolomonDigAudioCursor | null>(null)
   const inputBlockedRef = useRef(inputBlocked)
+  const presentationPausedRef = useRef(presentationPaused)
   const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
   inputBlockedRef.current = inputBlocked
+  presentationPausedRef.current = presentationPaused
   levelUpModalActiveRef.current = levelUpModalActive
   levelUpPresentationIdRef.current = levelUpPresentationId
   onLoadingErrorRef.current = onLoadingError
@@ -301,6 +307,25 @@ export default function BoneyardScene({
     return () => window.removeEventListener('keydown', toggleDigIndicator)
   }, [dig, inputBlocked, loaded.runId])
 
+  useEffect(() => {
+    const openPause = (event: KeyboardEvent) => {
+      if (
+        inputBlocked
+        || run.phase !== 'active'
+        || event.key !== 'Escape'
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
+      event.preventDefault()
+      event.stopPropagation()
+      onPauseRequest()
+    }
+    window.addEventListener('keydown', openPause)
+    return () => window.removeEventListener('keydown', openPause)
+  }, [inputBlocked, onPauseRequest, run.phase])
+
   useLayoutEffect(() => {
     const scene = sceneRef.current
     if (!scene) return
@@ -428,6 +453,7 @@ export default function BoneyardScene({
       setRendererState('ready')
       onReadyRef.current()
       stopPresentationLoop = startGamePresentationLoop((now) => {
+        if (presentationPausedRef.current) return
         const snapshot = samplePresentation(now)
         const camera = renderer.camera(snapshot)
         if (snapshot.run.phase === 'game-over') {
@@ -578,8 +604,10 @@ export default function BoneyardScene({
       data-geometry-sha256={loaded.geometrySha256}
       data-gate-leaf-count={gateLeaves.length}
       data-gate-state={gateState(gateLeaves)}
+      data-gameplay-input-blocked={inputBlocked}
       data-local-player-x={localPlayer?.position.x}
       data-local-player-y={localPlayer?.position.y}
+      data-presentation-paused={presentationPaused}
       data-renderer-state={rendererError ? 'error' : rendererState}
       data-run-id={loaded.runId}
       data-viewport-height={viewport.height}

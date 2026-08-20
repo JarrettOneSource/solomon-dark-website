@@ -53,7 +53,9 @@ test('owns both requested transitions through destination renderer readiness', (
     /const levelUpModalActive = Boolean\(runtimeSnapshot\?\.levelUpBarrier\) \|\| levelUpPickerClosing/,
   )
   assert.equal(
-    mainScene.match(/inputBlocked=\{loading !== null \|\| levelUpModalActive\}/g)?.length,
+    mainScene.match(
+      /inputBlocked=\{loading !== null \|\| levelUpModalActive \|\| gameplayPause !== null\}/g,
+    )?.length,
     2,
   )
   assert.match(mainScene, /onReady=\{finishHubLoading\}/)
