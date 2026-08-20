@@ -20559,7 +20559,7 @@ it is not a second hand-maintained list.
 | 63 Creativity | four-card/lower-requirement picker already owned by progression; fixed concentration slot A alone rolls `Integer(5)==1`, selects an eligible card, and applies it twice | exact-ported authority/protocol; full Skill Book UI follows in the loadout slice |
 | 64 Health Up | base max HP plus authored `mValue`, then equipment max-HP transform; refresh preserves ratio | exact-ported |
 | 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x` | exact-ported through automatic StaffMelee/StaffSpin gameplay, animation, protocol, VFX, and audio; full browser receipt remains pending |
-| 66 Telekinesis | pickup scalar `mValue*1.25`, doubled while concentrated | scalar exact; Orb/Gold/Sack/Bonus ground consumers remain open in the loot-attraction slice |
+| 66 Telekinesis | pickup scalar `mValue*1.25`, doubled while concentrated | exact-ported through Orb pull/capture and Gold/Sack/Bonus pickup; full browser receipt remains pending |
 | 67 Rush | movement factor `1+mValue/100`, then concentrated factor and equipment walk transform | exact-ported into authoritative movement |
 | 68 Deflect | exact Staff type gate, one `Integer(100)` per deflectable contact, successful-only signed pitch, facing, global stock swipe, and nearby concentrated physical x5 reflection | exact-ported gameplay/event/audio; browser contact journey still required |
 | 69 Resist Poison | skill/concentration/equipment fraction scales poison duration, not DPS | exact-ported |
@@ -20648,6 +20648,56 @@ Knockback ordering, persistent factors, actor lifetimes, all VFX records and
 recurrences, protocol rejection, renderer/light disposition, animation poses,
 audio hashes/order/no-replay, and an authoritative Boneyard contact journey.
 
+### Telekinesis and ground-reward consumers
+
+The executable-wide read census of refreshed progression `+0xCC` closes the
+consumer set to exactly Orb `0x005E62E0`, Gold `0x005E66B0`, Sack
+`0x005E6B50`, and Bonus `0x006039C0`. Row 66 stores float32
+`mValue * 1.25`; its authored values are one at rank zero and five at rank one,
+so the exact factors are `1.25` and `6.25`. Concentration doubles the stored
+field to `2.5` or `12.5`. Goodie activation/materialization, item insertion,
+and Ether Drain do not read this lane. Calling equipment FX owns the separate
+Orb-pull scalar `+0xBC`; it never expands capture or non-Orb pickup radii.
+
+The complete gameplay formulas are:
+
+- Orb scans player slots `0..3` in stored order. Pull is strict within
+  `60 * pickupFactor * orbPull`; capture is strict within
+  `20 * pickupFactor`. Every qualifying non-capture candidate moves the same
+  Orb another normalized `1.5` units during that tick, so later slots observe
+  the updated position.
+- Gold and Sack use strict `30 * pickupFactor`; Bonus uses strict
+  `20 * pickupFactor`.
+- Gold alone, when `pickupFactor > 1.25999999`, consumes `Integer(15)` and
+  captures only on result one. This is one of fifteen outcomes, not 1/16 and
+  not a cosmetic roll. A failed roll leaves the actor live for the next tick.
+
+Telekinesis has no constructor, animation, light registration, sound request,
+or standalone world actor. Its visible/audio consequences are exclusively the
+already-authoritative reward actors moving or retiring sooner and those
+actors' existing exact pickup children/cues: Orb normal BadGuys 15/no light and
+`gotorb`; Gold two additive BadGuys 83/no light and `pickupcoin`; Sack
+`pickupbag`; Bonus result text/effect. No range ring, glow, particle, or loop
+may be invented for the skill itself.
+
+Stock is process-local: Orb attraction can be caused by any of four slots but
+only slot zero receives HP/MP, while Gold/Sack/Bonus check slot zero. The web
+multiplayer port retains its previously published host-authoritative ownership
+adaptation: every eligible participant contributes its own exact factor in
+stable participant order, and the participant whose strict capture succeeds
+receives the reward. This deliberately avoids deleting a guest-attracted Orb
+while crediting an unrelated host, without changing native geometry, ordered
+motion, draw cadence, or single-retirement semantics.
+
+The dense player runtime now projects both independent scalars into
+`NativeLootModifiers` at the Boneyard world boundary. Tests pin rank-zero,
+rank-one, concentrated, and Calling values; strict `375/125/187.5/125`
+Telekinesis boundaries; Calling's `750` pull without capture expansion; all
+four reward classes; the Gold three-word successful gate-plus-pitch sequence;
+and a host GameSimulation rank-zero-versus-rank-one Orb trajectory. The exact
+loot/runtime/simulation/protocol/timeline/presentation/audio slice passed
+`157/157` with the test TypeScript build green.
+
 ### Equipment FX ownership
 
 The generated resolver preserves native sink order (Hat, Robe, three Rings,
@@ -20662,8 +20712,8 @@ recipe table; recipe-less random gear never completes a set.
 
 Current consumers are closed for effective ranks, primary/secondary damage and
 cost, cast speed, recharge, max resources, recovery, movement, Staff melee,
-all three resistances, and the five shipped maximum-set branches. Still-open
-adjacent consumers are equipment Gold Bonus, Orb Pull, HP recovery during
+Orb Pull, all three resistances, and the five shipped maximum-set branches.
+Still-open adjacent consumers are equipment Gold Bonus, HP recovery during
 Regenerate composition, Mindblast's retained world program, and Welding
 feature/scalar consumption. They stay explicit here rather than being mistaken
 for completed because the pure resolver exists.

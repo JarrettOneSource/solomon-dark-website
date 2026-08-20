@@ -46,6 +46,11 @@ export interface NativeLootModifiers {
   readonly powerupChance: number
 }
 
+export interface NativeLootAttractionModifiers {
+  readonly orbPull: number
+  readonly pickupFactor: number
+}
+
 export const NATIVE_LOOT_DEFAULT_MODIFIERS: NativeLootModifiers = Object.freeze({
   goldAmount: Math.fround(1),
   goldChance: Math.fround(1),
@@ -232,16 +237,23 @@ export function nativeLootCandidateWeights(count: number): readonly number[] {
 
 export function nativeLootModifiers(
   ownedPerkSelectors: readonly number[],
+  attraction: NativeLootAttractionModifiers = NATIVE_LOOT_DEFAULT_MODIFIERS,
 ): NativeLootModifiers {
+  if (!Number.isFinite(attraction.pickupFactor) || attraction.pickupFactor < 0) {
+    throw new RangeError('native pickup factor must be finite and non-negative')
+  }
+  if (!Number.isFinite(attraction.orbPull) || attraction.orbPull < 0) {
+    throw new RangeError('native Orb pull factor must be finite and non-negative')
+  }
   const owned = new Set(ownedPerkSelectors)
   return Object.freeze({
     goldAmount: owned.has(4) ? NATIVE_LOOT_GOLD_AMOUNT_BONUS : Math.fround(1),
     goldChance: owned.has(4) ? NATIVE_LOOT_GOLD_CHANCE_MULTIPLIER : Math.fround(1),
     itemChance: owned.has(3) ? NATIVE_LOOT_ITEM_CHANCE_MULTIPLIER : Math.fround(1),
     orbChance: owned.has(9) ? NATIVE_LOOT_ORB_CHANCE_MULTIPLIER : Math.fround(1),
-    orbPull: NATIVE_LOOT_ORB_PULL_MULTIPLIER,
+    orbPull: Math.fround(attraction.orbPull),
     orbValueBonus: owned.has(9),
-    pickupFactor: NATIVE_LOOT_PICKUP_FACTOR,
+    pickupFactor: Math.fround(attraction.pickupFactor),
     powerupChance: owned.has(23)
       ? NATIVE_LOOT_POWERUP_CHANCE_MULTIPLIER
       : Math.fround(1),

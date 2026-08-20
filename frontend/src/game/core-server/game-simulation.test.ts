@@ -1411,6 +1411,42 @@ test('all three Bonus pickups apply once through authoritative progression and f
   }
 })
 
+test('Telekinesis reaches the authoritative Orb pull consumer through dense player state', () => {
+  const config = {
+    discipline: 'body',
+    displayName: 'Telekinetic',
+    element: 'air',
+  } as const
+  const fixture = (rank: number) => {
+    let state = enterBoneyardWorld(
+      createGameSimulation({ caster: config }),
+      combatBoneyard(`telekinesis-${rank}`),
+    )
+    state = withPlayerSkillRank(state, 'caster', 66, rank)
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    const player = getPlayerCharacter(state, 'caster')
+    const spawned = spawnBoneyardLootSpecs(state.world.loot, [{
+      activationDelayTicks: 0,
+      id: 1,
+      kind: 'orb',
+      nativeTypeId: 2011,
+      orbKind: 'mana',
+      phase: 0,
+      position: { x: player.position.x + 250, y: player.position.y },
+      source: 'script',
+      value: 0.5,
+    }], state.tick)
+    return { ...state, world: { ...state.world, loot: spawned.store } }
+  }
+  const baseline = stepGameSimulationTick(fixture(0), { caster: gameplayInput(0, 0) })
+  const learned = stepGameSimulationTick(fixture(1), { caster: gameplayInput(0, 0) })
+  if (baseline.world.kind !== 'boneyard' || learned.world.kind !== 'boneyard') {
+    throw new Error('expected Boneyard worlds')
+  }
+  assert.equal(baseline.world.loot.actors[0]!.position.x, 500)
+  assert.equal(learned.world.loot.actors[0]!.position.x, 498.5)
+})
+
 test('Rotten Zombie contact applies direct damage and authoritative poison over time', () => {
   let state = enterBoneyardWorld(
     createGameSimulation(),
@@ -1856,6 +1892,34 @@ function withEffectivePrimaryRank(
       skillBooks: Object.freeze(skillBooks),
     },
   }
+}
+
+function withPlayerSkillRank(
+  state: GameSimulationState,
+  playerId: string,
+  skillId: number,
+  rank: number,
+): GameSimulationState {
+  const index = state.playerEntities.identities.findIndex((identity) => (
+    identity.playerId === playerId
+  ))
+  if (index < 0) throw new Error(`missing player ${playerId}`)
+  const sourceBook = state.playerEntities.skillBooks[index]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[skillId] = rank
+  effectiveRanks[skillId] = rank
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    permanentRanks: Object.freeze(permanentRanks),
+  }
+  const playerEntities = replacePlayerEconomy({
+    ...state.playerEntities,
+    skillBooks: Object.freeze(skillBooks),
+  }, playerId, state.playerEntities.economies[index]!)
+  return { ...state, playerEntities }
 }
 
 function withConcentratedDeflect(

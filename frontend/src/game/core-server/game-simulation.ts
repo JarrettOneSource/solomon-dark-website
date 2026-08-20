@@ -974,6 +974,8 @@ export function stepGameSimulationTick(
           const progression = getPlayerProgression(state, playerId)
           const economy = getPlayerEconomy(state, playerId)
           const skillBook = getPlayerSkillBook(state, playerId)
+          const derived = playerSkillDerivedStatsAt(state.playerEntities, playerId)
+          if (derived === null) throw new Error(`player ${playerId} has no native skill runtime`)
           return [playerId, {
             alive: progression.lifeState === 'alive',
             collisionEnabled: playerCollisionEnabledAfterCombatTick(progression),
@@ -981,7 +983,10 @@ export function stepGameSimulationTick(
             inventoryHasHealthPotion: economyContainsHealthPotion(economy),
             inventoryHasWizardKey: economyHasWizardKey(economy),
             level: progression.level,
-            lootModifiers: nativeLootModifiers(economy.ownedPerkSelectors),
+            lootModifiers: nativeLootModifiers(economy.ownedPerkSelectors, {
+              orbPull: derived.orbPullMultiplier,
+              pickupFactor: derived.pickupRangeScalar,
+            }),
             movementScale: playerEntityMovementScale(state.playerEntities, playerId),
             ownedRecipeIndexes: economyOwnedRecipeIndexes(economy),
             advancedUnlocks: skillBook.advancedUnlocks,

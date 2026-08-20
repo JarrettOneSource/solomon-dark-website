@@ -8,6 +8,11 @@ import {
   type NativeLootDropSpec,
 } from '../core-kernels/native-loot.ts'
 import {
+  advanceNativeRngWords,
+  createNativeRng,
+  drawNativeInteger,
+} from '../core-kernels/native-rng.ts'
+import {
   activateBoneyardGoodie,
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
@@ -126,6 +131,109 @@ test('each in-range Orb slot contributes one ordered 1.5-unit move per tick', ()
     y: Math.fround(afterFirst.y + delta.y / distance * 1.5),
   })
   assert.deepEqual(stepped.pickups, [])
+})
+
+test('Telekinesis and Calling independently scale every native pickup consumer', () => {
+  const telekinetic = {
+    ...FAR[0]!,
+    modifiers: nativeLootModifiers([], { orbPull: 1, pickupFactor: 6.25 }),
+    playerId: 'telekinetic',
+  }
+  let store = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-orb-boundary'),
+    [orb()],
+    0,
+  ).store
+  let stepped = stepBoneyardLootStore(store, {
+    participants: [{ ...telekinetic, position: { x: 375, y: 0 } }],
+    tick: 0,
+  })
+  assert.deepEqual(stepped.store.actors[0]?.position, { x: 0, y: 0 })
+  stepped = stepBoneyardLootStore(stepped.store, {
+    participants: [{ ...telekinetic, position: { x: 374.999, y: 0 } }],
+    tick: 1,
+  })
+  assert.equal(stepped.store.actors[0]?.position.x, 1.5)
+
+  store = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('calling-orb-boundary'),
+    [orb()],
+    0,
+  ).store
+  const calling = {
+    ...telekinetic,
+    modifiers: nativeLootModifiers([], { orbPull: 2, pickupFactor: 6.25 }),
+  }
+  stepped = stepBoneyardLootStore(store, {
+    participants: [{ ...calling, position: { x: 749.999, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(stepped.store.actors[0]?.position.x, 1.5)
+
+  store = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-capture-boundary'),
+    [orb()],
+    0,
+  ).store
+  stepped = stepBoneyardLootStore(store, {
+    participants: [{ ...calling, position: { x: 125, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(stepped.pickups.length, 0)
+  assert.equal(stepped.store.actors[0]?.position.x, 1.5)
+  store = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-capture-inside'),
+    [orb()],
+    0,
+  ).store
+  stepped = stepBoneyardLootStore(store, {
+    participants: [{ ...calling, position: { x: 124.999, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(stepped.pickups[0]?.playerId, 'telekinetic')
+
+  const bonusStore = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-bonus'),
+    [bonus(2)],
+    0,
+  ).store
+  const bonusStep = stepBoneyardLootStore(bonusStore, {
+    participants: [{ ...telekinetic, position: { x: 124.999, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(bonusStep.pickups[0]?.kind, 'bonus')
+
+  const ids = createNativeLootItemIds(1)
+  const sackStore = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-sack'),
+    [sack(ids)],
+    0,
+  ).store
+  const sackStep = stepBoneyardLootStore(sackStore, {
+    participants: [{ ...telekinetic, position: { x: 187.499, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(sackStep.pickups[0]?.kind, 'sack')
+
+  let seed = 0
+  while (drawNativeInteger(createNativeRng(seed), 15).value !== 1) seed += 1
+  const gateRng = createNativeRng(seed)
+  const goldSpawn = spawnBoneyardLootSpecs(
+    createBoneyardLootStore('telekinesis-gold'),
+    [gold(3)],
+    0,
+  ).store
+  const goldStore = {
+    ...goldSpawn,
+    actors: goldSpawn.actors.map((actor) => ({ ...actor, scatterActive: false })),
+    sharedRng: gateRng,
+  }
+  const goldStep = stepBoneyardLootStore(goldStore, {
+    participants: [{ ...telekinetic, position: { x: 187.499, y: 0 } }],
+    tick: 0,
+  })
+  assert.equal(goldStep.pickups[0]?.kind, 'gold')
+  assert.deepEqual(goldStep.store.sharedRng, advanceNativeRngWords(gateRng, 3))
 })
 
 test('Orb, Gold, Sack, and Bonus use strict stock pickup boundaries', () => {
@@ -405,5 +513,42 @@ function gold(amount: number): NativeLootDropSpec {
     position: { x: 0, y: 0 },
     source: 'script',
     tier: amount < 3 ? 0 : amount < 5 ? 1 : amount < 8 ? 2 : 3,
+  }
+}
+
+function bonus(bonusKind: 0 | 1 | 2): NativeLootDropSpec {
+  return {
+    activationDelayTicks: 0,
+    bonusKind,
+    id: 1,
+    kind: 'bonus',
+    nativeTypeId: 2038,
+    phase: 0,
+    position: { x: 0, y: 0 },
+    source: 'script',
+  }
+}
+
+function sack(ids: ReturnType<typeof createNativeLootItemIds>): NativeLootDropSpec {
+  return {
+    activationDelayTicks: 0,
+    id: 1,
+    item: {
+      equipmentType: null,
+      iconRecords: [46],
+      id: ids.next(),
+      kind: 'health-potion',
+      name: 'Health Potion',
+      nativeSubtype: 0,
+      nativeTypeId: 7001,
+      quantity: 1,
+      rarity: null,
+      recipeIndex: null,
+    },
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position: { x: 0, y: 0 },
+    source: 'script',
   }
 }

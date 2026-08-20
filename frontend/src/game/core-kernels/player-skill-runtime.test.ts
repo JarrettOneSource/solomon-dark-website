@@ -73,6 +73,7 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.offensiveManaCostFactor, 0.9)
   assert.equal(derived.secondaryRechargeFactor, 2)
   assert.equal(derived.offensiveDamageFactor, 1.35)
+  assert.equal(derived.orbPullMultiplier, 1)
   assert.equal(derived.magicResistance, 0.25)
   assert.equal(derived.staffDamagePrimary, 4)
   assert.equal(derived.staffDamageSecondary, 4)
@@ -179,7 +180,10 @@ test('equipment skill effects compose before Mindstar and refresh back to perman
     id: 100,
     kind: 'equipment' as const,
     name: 'Rank Ring',
-    nativeEffects: [{ kind: 8, magnitude: 2, operator: 0 as const, target: 0 }],
+    nativeEffects: [
+      { kind: 8, magnitude: 2, operator: 0 as const, target: 0 },
+      { kind: 15, magnitude: 2, operator: 1 as const, target: 0 },
+    ],
     nativeSubtype: null,
     nativeTypeId: 7002,
     quantity: 1,
@@ -192,12 +196,26 @@ test('equipment skill effects compose before Mindstar and refresh back to perman
   }
   let state = createPlayerSkillRuntime(book, statBook, economy)
   assert.equal(state.skillBook.effectiveRanks[8], 3)
+  assert.equal(playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    economy,
+  ).orbPullMultiplier, 2)
   state = setPlayerMindstarActive(state.runtime, true, state.skillBook, statBook, economy)
   assert.equal(state.skillBook.effectiveRanks[8], 4)
   state = setPlayerMindstarActive(state.runtime, false, state.skillBook, statBook, economy)
   assert.equal(state.skillBook.effectiveRanks[8], 3)
   state = refreshPlayerSkillRuntime(state.runtime, state.skillBook, statBook, base)
   assert.equal(state.skillBook.effectiveRanks[8], 1)
+  assert.equal(playerSkillDerivedStats(
+    state.runtime,
+    state.skillBook,
+    statBook,
+    progression(),
+    base,
+  ).orbPullMultiplier, 1)
 })
 
 test('Meditation preserves native idle threshold and concentrated activity ramp', () => {

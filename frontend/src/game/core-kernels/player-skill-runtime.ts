@@ -78,6 +78,7 @@ export interface PlayerSkillDerivedStats {
   readonly movementFactor: number
   readonly offensiveDamageFactor: number
   readonly offensiveManaCostFactor: number
+  readonly orbPullMultiplier: number
   readonly pickupRangeScalar: number
   readonly poisonResistance: number
   readonly secondaryRechargeFactor: number
@@ -256,6 +257,7 @@ export function playerSkillDerivedStats(
     ),
     offensiveDamageFactor,
     offensiveManaCostFactor,
+    orbPullMultiplier: modifiers.orbPullMultiplier,
     pickupRangeScalar: telekinesis * (selected(66) ? 2.5 : 1.25),
     poisonResistance: clampUnit(
       (resistPoison + (selected(69) ? value(69, 'mConcentration') : 0)) / 100
