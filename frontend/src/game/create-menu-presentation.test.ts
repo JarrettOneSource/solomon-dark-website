@@ -9,8 +9,11 @@ import {
 import {
   CREATE_WIZARD_NAME_FONT,
   CREATE_WIZARD_NAME_VALUE_BOUNDS,
+  STOCK_WIZARD_NAMES,
   initialCreateWizardName,
+  initialCreateWizardNameForSession,
   layoutCreateWizardName,
+  randomStockWizardName,
   validateCreateWizardName,
 } from './create-wizard-name.ts'
 
@@ -20,6 +23,7 @@ const renderer = readFileSync(
 )
 const createScene = readFileSync(new URL('./CreateMenuScene.tsx', import.meta.url), 'utf8')
 const mainScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
+const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 
 test('closed right hand keeps its recovered center and mirrored, unrotated registration', () => {
   assert.deepEqual(CREATE_HAND_CENTERS.right, { x: 1200, y: 560 })
@@ -37,6 +41,16 @@ test('wizard-name editing keeps native bitmap pixels and reaches the first playe
   assert.doesNotMatch(renderer, /texture\(createMenu\.textName\)/)
   assert.match(mainScene, /displayName: selectedDisplayName/)
   assert.match(createScene, /readOnly=\{Boolean\(retainedLoadout\)\}/)
+})
+
+test('wizard-name controls own clear and stock randomization without a live rename path', () => {
+  assert.match(createScene, /create-menu-name-clear/)
+  assert.match(createScene, /Clear wizard name/)
+  assert.match(createScene, /create-menu-name-randomize/)
+  assert.match(createScene, /Randomize wizard name/)
+  assert.match(createScene, /readOnly=\{Boolean\(retainedLoadout\)\}/)
+  assert.match(gamePage, /const displayName = accountUsername \?\? ''/)
+  assert.match(gamePage, /createGameLobby\(accountUsername \?\? 'Guest'\)/)
 })
 
 test('wizard-name layout drains the native group-4 glyph and kerning membership', () => {
@@ -69,4 +83,15 @@ test('wizard-name layout drains the native group-4 glyph and kerning membership'
   })
   assert.equal(initialCreateWizardName('Account-Smoke_7'), 'AccountSmoke7')
   assert.equal(initialCreateWizardName('___'), 'Helvidius')
+})
+
+test('stock wizard-name membership is complete and random selection is bounded', () => {
+  assert.equal(STOCK_WIZARD_NAMES.length, 273)
+  assert.equal(STOCK_WIZARD_NAMES[0], 'Abodius')
+  assert.equal(STOCK_WIZARD_NAMES.at(-1), 'Magnificus')
+  assert.equal(STOCK_WIZARD_NAMES.includes('Reaper'), false)
+  assert.equal(randomStockWizardName(() => 0), 'Abodius')
+  assert.equal(randomStockWizardName(() => 0.999999), 'Magnificus')
+  assert.equal(initialCreateWizardNameForSession('', () => 0.5), STOCK_WIZARD_NAMES[136])
+  assert.equal(initialCreateWizardNameForSession('Account-Smoke_7', () => 0), 'AccountSmoke7')
 })

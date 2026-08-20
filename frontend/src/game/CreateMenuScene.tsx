@@ -12,7 +12,10 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
-import { validateCreateWizardName } from './create-wizard-name.ts'
+import {
+  randomStockWizardName,
+  validateCreateWizardName,
+} from './create-wizard-name.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   CREATE_DISCIPLINE_FINALIZE_MS,
@@ -78,6 +81,7 @@ export default function CreateMenuScene({
 }: CreateMenuSceneProps) {
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
   const onStartRef = useRef(onStart)
   const activeDisplayNameRef = useRef(retainedLoadout?.displayName ?? displayName)
@@ -300,6 +304,22 @@ export default function CreateMenuScene({
     onDisplayNameChange(validation.value)
   }
 
+  const clearWizardName = () => {
+    if (retainedLoadout || pendingDiscipline) return
+    audio.playSound('click')
+    onDisplayNameChange('')
+    setNameValidationMessage('Enter a wizard name.')
+    nameInputRef.current?.focus({ preventScroll: true })
+  }
+
+  const randomizeWizardName = () => {
+    if (retainedLoadout || pendingDiscipline) return
+    audio.playSound('click')
+    setNameValidationMessage(null)
+    onDisplayNameChange(randomStockWizardName())
+    nameInputRef.current?.focus({ preventScroll: true })
+  }
+
   return (
     <div
       ref={sceneRef}
@@ -348,10 +368,29 @@ export default function CreateMenuScene({
           className="create-menu-name-input"
           maxLength={64}
           onChange={(event) => updateDisplayName(event.target.value)}
+          ref={nameInputRef}
           readOnly={Boolean(retainedLoadout)}
           spellCheck={false}
           type="text"
           value={activeDisplayName}
+        />
+        <button
+          type="button"
+          aria-label="Clear wizard name"
+          className="create-menu-name-clear"
+          data-game-name-clear="true"
+          disabled={Boolean(retainedLoadout) || pendingDiscipline !== null}
+          onClick={clearWizardName}
+          title="Clear wizard name"
+        />
+        <button
+          type="button"
+          aria-label="Randomize wizard name"
+          className="create-menu-name-randomize"
+          data-game-name-randomize="true"
+          disabled={Boolean(retainedLoadout) || pendingDiscipline !== null}
+          onClick={randomizeWizardName}
+          title="Randomize wizard name"
         />
         <div id="create-menu-name-validation" className="create-menu-name-validation" role="status">
           {nameValidationMessage ?? (!nameValidation.ok ? nameValidation.reason : '')}

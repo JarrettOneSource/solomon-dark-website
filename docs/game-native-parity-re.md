@@ -21953,3 +21953,100 @@ logical dimensions.
 - Remaining implementation explicitly out of scope: native Mod Loader changes,
   Golem world indicators, nonwizard summon rows, OS-font fallback, and
   unrelated HUD/camera changes.
+
+### Follow-up — Create-name clear, randomization, and anonymous initialization
+
+The first Create-name pass closed bitmap editing and first-session ownership but
+left three members of the same name system unowned: the rendered X/caret had no
+semantic action, the stock dice art had no random-name action, and an anonymous
+Website session still entered Create with the hard-coded `Helvidius` default.
+This follow-up reopens that missed input/lifecycle boundary.
+
+#### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Native authored data | `SolomonDarkAbandonware/data/magenames.txt`, stock content SHA-256 `826b66c89344fc7662958420a7f1155001ba8ade9976c4167edbea0659bf0e89` | The complete stock wizard-name table has 273 ordered entries. | high |
+| Existing Website data | `frontend/src/assets/magenames.json` at Website `c30cf8b` | The copied Website list has the same ordered stock entries plus one non-stock `Reaper` entry; it is not an exact randomizer source. | high |
+| Native Create assets | `create-dice.png`, `create-text-name-caret.png`, Create renderer `0x0059AD40` ownership recorded above | The Website paints the stock dice and X/caret pixels, but both currently lack semantic click owners. | high |
+| Website causal trace | `pages/Game.tsx`, `MainMenuScene.tsx`, `CreateMenuScene.tsx`, `create-wizard-name.ts` | Anonymous sessions pass `Helvidius` as the display-name seed; Create input changes are the only name actions. | high |
+
+#### System boundary and membership inventory
+
+Native system: Create wizard-name value, its local input actions, the complete
+stock default-name table, and the pre-login/retained-loadout initialization
+branches.
+
+| Member | Native/Web source | Disposition | Proof |
+| --- | --- | --- | --- |
+| All 273 ordered stock wizard names | `data/magenames.txt` | exact-ported | Website asset membership/count test |
+| Website-only `Reaper` entry | prior `magenames.json` copy | out-of-system (not present in stock table) | removed from the shared name asset |
+| Clear X action on fresh Create | `create-text-name-caret.png` / semantic Create control | exact-ported | clear-action test and browser click receipt |
+| Randomize action on fresh Create | `create-dice.png` / stock name table | exact-ported | injected RNG test and browser click receipt |
+| Logged-in initial name | `Game.tsx` account username -> `initialCreateWizardName` | verified-already-at-parity | existing normalized-name tests |
+| Anonymous initial name | prior `Game.tsx` fallback `Helvidius` | exact-ported | random-initialization test; selected value is a stock entry |
+| Retained loadout | authoritative snapshot name, read-only controls | verified-already-at-parity | existing retained-loadout branch; clear/random controls disabled |
+| Element and discipline transitions | Create motion/selection state | verified-already-at-parity | existing Create motion and selection tests |
+
+No member is browser-blocked. The browser owns only the local random draw and
+input interaction; the selected name remains the value submitted to the
+authoritative first-session `PlayerCharacterConfig`.
+
+#### Recovered behavioral contract
+
+- Fresh Create with a logged-in account seeds the normalized account name.
+- Fresh Create without an authenticated account selects one name uniformly
+  from the exact 273-entry stock table. The lobby reservation may use the
+  neutral host label `Guest`; it must not become the player character name.
+- Clicking X clears the draft, shows the existing validation state, and leaves
+  the value empty until the user types or randomizes.
+- Clicking the new control below X selects a stock table entry, updates the
+  native bitmap value, clears the validation error, and keeps focus on the name
+  input. The action is local and does not mutate a connected session.
+- Retained loadout name controls remain disabled because the protocol has no
+  live rename operation.
+
+#### Web implementation consequence
+
+- Correct owner: `CreateMenuScene` owns the semantic clear/random actions;
+  `create-wizard-name.ts` owns the exact stock table and random selection;
+  `pages/Game.tsx` passes an empty initial character name for anonymous users
+  while retaining a valid lobby host label.
+- Stock behavior preserved: exact ordered name data, native X/dice art, native
+  name validation, and read-only retained-loadout behavior.
+- Browser-specific behavior: `Math.random` chooses only the local pre-session
+  draft; no random value crosses the wire until the player submits Create.
+
+#### Validation contract
+
+- Focused tests must prove all 273 names are present in order, `Reaper` is not
+  selectable, RNG boundaries select the first/last entries, clear empties the
+  draft, randomization restores a valid name, and anonymous initialization never
+  returns the hard-coded `Helvidius` fallback.
+- Browser journey: fresh anonymous `/game` -> Create must show a stock name;
+  click X and verify empty validation; click the button below X and verify a
+  different valid stock name; then complete element/discipline selection with
+  no page or console errors.
+
+#### Implementation validation receipt
+
+- Implementation: `create-wizard-name.ts` now owns the exact 273-entry stock
+  table and bounded random selection; `Game.tsx` leaves anonymous character
+  initialization empty while reserving the neutral `Guest` lobby label;
+  `MainMenuScene.tsx` supplies the anonymous stock draw; and `CreateMenuScene`
+  owns semantic clear/random buttons. The random button uses the native
+  `create-dice.png` through CSS so the existing WebGL-cutover boundary remains
+  intact.
+- Focused proof: name/Create tests 5/5, WebGL-cutover tests 6/6, TypeScript
+  check, lint, and game architecture boundary check all passed.
+- Canonical gate: `./scripts/validate.sh` exited 0 on branch
+  `codex/name-randomize-native-parity-20260820`; backend build and 24
+  contracts, all 1,015 broad frontend tests, 5 desktop tests, production
+  frontend/game-host build, bundle budget, and media policy passed. Existing
+  Fast Refresh and Vite large-chunk messages remain warnings only.
+- Browser proof: anonymous Chromium Create journey showed stock initial
+  `Arrenius`, clear produced an empty input with `Enter a wizard name.`, and
+  the below-X control selected stock `Lollius`. Measured control positions
+  were clear Y=38 and randomize Y=96; the randomizer had the native dice CSS
+  background, no child image, and page/console error lists were empty.
+- Browser screenshot: `/tmp/solomon-wizard-name-randomize-20260820-final.png`.

@@ -91,7 +91,7 @@ export default function Game() {
   }, [diagnostics])
 
   const accountUsername = user?.username ?? null
-  const displayName = accountUsername ?? 'Helvidius'
+  const displayName = accountUsername ?? ''
   const progress = loadProgress.total === 0
     ? 1
     : loadProgress.completed / loadProgress.total
@@ -104,7 +104,7 @@ export default function Game() {
       return
     }
     try {
-      const created = await createGameLobby(displayName)
+      const created = await createGameLobby(accountUsername ?? 'Guest')
       hostedLobby.current = created
       preparedEndpoint.current = created.endpoint
       diagnostics.info(
@@ -117,7 +117,7 @@ export default function Game() {
       diagnostics.error('lobby.create_failed', failure.message, failure.stack)
       throw failure
     }
-  }, [diagnostics, displayName])
+  }, [accountUsername, diagnostics])
 
   const cancelCreate = useCallback(async (): Promise<void> => {
     if (lobbyId) {

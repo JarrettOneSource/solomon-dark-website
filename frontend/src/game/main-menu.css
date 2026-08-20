@@ -339,6 +339,58 @@
   outline-offset: 0.125cqw;
 }
 
+.create-menu-name-clear,
+.create-menu-name-randomize {
+  position: absolute;
+  z-index: 4;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.create-menu-name-clear {
+  top: 38px;
+  left: 958px;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+}
+
+.create-menu-name-clear:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+.create-menu-name-randomize {
+  top: 96px;
+  left: 950px;
+  display: grid;
+  width: 46px;
+  height: 32px;
+  border: 1px solid rgb(205 177 105 / 0.62);
+  border-radius: 3px;
+  background: rgb(5 6 10 / 0.66);
+  background-image: url('../assets/game/create-dice.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 42px auto;
+  box-shadow: 0 1px 3px #000, inset 0 0 5px rgb(185 151 78 / 0.18);
+  place-items: center;
+}
+
+.create-menu-name-randomize:hover,
+.create-menu-name-randomize:focus-visible {
+  border-color: #fff0b7;
+  outline: none;
+}
+
+.create-menu-name-clear:disabled,
+.create-menu-name-randomize:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .create-menu-name-validation {
   position: absolute;
   width: 1px;

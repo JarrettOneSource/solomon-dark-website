@@ -18,7 +18,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
-import { initialCreateWizardName } from './create-wizard-name.ts'
+import { initialCreateWizardNameForSession } from './create-wizard-name.ts'
 import { createBrowserGameAudioDirector } from './game-audio-browser.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import {
@@ -223,7 +223,7 @@ export default function MainMenuScene({
   const stageRef = useRef<HTMLElement>(null)
   const wizardNameTouchedRef = useRef(false)
   const [screen, setScreen] = useState<MenuScreen>(initialScreen)
-  const [wizardName, setWizardName] = useState(() => initialCreateWizardName(displayName))
+  const [wizardName, setWizardName] = useState(() => initialCreateWizardNameForSession(displayName))
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
@@ -253,7 +253,7 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (!wizardNameTouchedRef.current && !session) {
-      setWizardName(initialCreateWizardName(displayName))
+      setWizardName(initialCreateWizardNameForSession(displayName))
     }
   }, [displayName, session])
 

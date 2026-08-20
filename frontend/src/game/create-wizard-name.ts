@@ -1,4 +1,5 @@
 import nativeFontData from '../assets/game/create-name-font-group-4.json' with { type: 'json' }
+import stockWizardNames from '../assets/magenames.json' with { type: 'json' }
 
 interface NativeCreateWizardNameGlyph {
   advance: number
@@ -50,6 +51,7 @@ export type CreateWizardNameValidation =
 
 export const CREATE_WIZARD_NAME_FONT: NativeCreateWizardNameFont = nativeFontData
 export const CREATE_WIZARD_NAME_MAX_LENGTH = 64
+export const STOCK_WIZARD_NAMES: readonly string[] = Object.freeze([...stockWizardNames])
 export const CREATE_WIZARD_NAME_VALUE_BOUNDS = Object.freeze({
   height: 49,
   left: 50,
@@ -66,6 +68,23 @@ export function initialCreateWizardName(value: string): string {
     .join('')
     .slice(0, CREATE_WIZARD_NAME_MAX_LENGTH)
   return supported || CREATE_WIZARD_NAME_DEFAULT
+}
+
+export function randomStockWizardName(random: () => number = Math.random): string {
+  const index = Math.min(
+    STOCK_WIZARD_NAMES.length - 1,
+    Math.max(0, Math.floor(random() * STOCK_WIZARD_NAMES.length)),
+  )
+  return STOCK_WIZARD_NAMES[index]!
+}
+
+export function initialCreateWizardNameForSession(
+  value: string,
+  random: () => number = Math.random,
+): string {
+  return value.length === 0
+    ? randomStockWizardName(random)
+    : initialCreateWizardName(value)
 }
 
 export function validateCreateWizardName(value: string): CreateWizardNameValidation {
