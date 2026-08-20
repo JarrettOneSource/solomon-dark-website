@@ -18295,6 +18295,110 @@ The cutover retained rollback
 `/opt/solomon-dark-revived.rollback-pre-4ea09a350152-20260820T104851Z` and backup
 `/var/backups/solomon-dark-revived/pre-4ea09a350152-20260820T104851Z/sdr.db`.
 
+The first final-production enemy capture completed gameplay with `status: ok`,
+authoritative damage, five live contacts, and no browser errors, but reproduced
+the already diagnosed context-close hang in the retained acceptance-only driver;
+it was manually terminated and is not counted. After applying the same explicit
+context teardown, the next attempt exited normally but exposed a second harness
+race: the five-tick transient array still contained an older `enemy:1` contact
+after the authoritative held target moved to `enemy:2`. The scanner had selected
+that oldest contact and compared it with the current cast target. Permanent and
+acceptance-only Air scanners now choose the newest contact whose target matches
+the same wire frame's authoritative `primaryCast.targetId`; neither failed
+attempt is treated as visual acceptance.
+
+The behavior-bearing final production revision was then rebased over the
+concurrent Game Over work and published as
+`81f8e825a1ee8573d1b17c4935780a0efc050b01`. GitHub Validate run
+`32361677050` succeeded. The independent worker validated and built the same
+tree, deferred its first cutover when one unrelated browser session became
+active, retained the validated artifact, and deployed it after that session
+closed naturally. Live revision, `origin/main`, `git ls-remote`, and the worker
+receipt agreed; protocol 30 reported zero sessions/lobbies; Website, game, and
+Caddy services were active with zero restarts; live and backup database checks
+were `ok`; all public/loopback routes returned 200; and all three index bodies
+had SHA-256
+`3aa64401d71302e1013d85e206b67ed532d5e2fb3b37537797a4369b0ca53e5f`.
+The worker retained rollback
+`/opt/solomon-dark-revived.rollback-pre-81f8e825a1ee-20260820T110529Z` and backup
+`/var/backups/solomon-dark-revived/pre-81f8e825a1ee-20260820T110529Z/sdr.db`.
+
+Three consecutive exact-tree Mac Gravestone journeys on that production
+revision acquired `scenery:object-43`, `scenery:object-45`, and
+`scenery:object-45`, rendered five Air contacts, emitted no browser errors, and
+exited normally. Their target-frame SHA-256 values are
+`18c16ae0704e3bc6de4c00a83e87477cecd918af3d22f1a650aca9408d2f0078`,
+`f715157ec26063706e01a07ea7fe4adf126e544882dd4d19e57e6a91100746c2`,
+and `0abfc0927571d3fa943fee381a6f8118e1960760474199c4082bbb8993f59553`.
+
+The acceptance-only enemy route was hardened without shipping its temporary
+driver: collision-aware waypoints now begin only after a full player radius plus
+100 units of dynamic Gate clearance, key-up plus the renderer/velocity-settle
+interval replaces a synthetic browser `blur`, and teardown has an owned bound
+after Chrome exits. Earlier Gate/route-bound attempts never reached an enemy and
+are not counted. The final three consecutive Mac runs traversed 19, 10, and 10
+route nodes; acquired `enemy:10`, `enemy:5`, and `enemy:5`; reduced health from
+`2.5` to `2.159499999955301`, `2.4611992187320695`, and
+`2.215859375000002`; retained five Air contacts with hit flash
+`1`, `0.5160000002384549`, and `1`; emitted no browser errors; and exited
+normally. Their target-frame SHA-256 values are
+`46274b52fe36305d67196ddfbb098054efc8e860f6a65af3eaf0c9e46dc0d2d2`,
+`2dcdb3fddd241c25ab626c55a75da37ebfc4f0c2c57aaab625c2c87e1a603774`,
+and `0a595399bc6c1cd47bb38f48c9ffe6d08114a3533a43bda085139b5ba59da83f`.
+Visual inspection of all six frames confirms the additive corona is in front of
+the struck Gravestone or Skeleton while body/source retain world ownership.
+Teardown left zero production sessions/lobbies and no task-owned Mac browser or
+smoke process.
+
+After concurrent enemy-presentation work advanced production to
+`97cf4f4f39c317285d035ae228bbe7fc2174d837`, the rebased smoke repeated both
+sets on that newer renderer. Three Gravestone runs acquired
+`scenery:object-36`, `scenery:object-18`, and `scenery:object-45`, with exact
+current-target agreement, five contacts, zero errors, and target-frame SHA-256
+values
+`a4dae30ff2a0cb80890bdd5255467859f84e02e3238f425108fe2bd62007210c`,
+`8abe5e2b651b75aa3a47e2b8a9b0d8f2ae4d0f48a9b38c91619e0391befa262b`,
+and `e85e734565d3a3ccfbceb328abf18ff898801d9b0d46fe4e923532c4153569bb`.
+Three enemy runs traversed 26, 26, and 44 collision-safe nodes; acquired
+`enemy:6`, `enemy:8`, and `enemy:10`; reduced health from `2.5` to
+`2.342804687544708`, `2.141000000014901`, and `2.448566406223108`; retained
+five contacts with hit flash `1`, `1`, and `0.6840000003576279`; emitted zero
+errors; and exited normally. Their target-frame SHA-256 values are
+`cfb07c848fe183639977cf197654e4237a9d56b366cd0ad6d5429192c2308d0e`,
+`41ae690a01dbbaff0e5b97007cbc5bc3c6224f9d0c5447ef7f5dd8b5124e8a08`,
+and `0737e5f626120e3f8129dd5a1e815b618f94b5cd02baa59c83d19da4f11af469`.
+Visual inspection again confirms contact-over-target painter order in all six
+frames. Task-owned journeys retired to zero sessions/lobbies; unrelated Mac
+browser activity remained untouched.
+
+On the subsequent first-frame-lighting revision, a third Gravestone journey
+again completed with `status: ok`, exact current-target agreement, five
+contacts, and a saved frame, but Playwright's `browser.close()` promise remained
+pending after both Chrome and the production session had already gone away. The
+manually terminated process is not counted. The permanent CLI now bounds both
+owned close promises, flushes its receipt, and exits only after that cleanup
+boundary; behavioral exceptions still bypass the success exit and remain
+nonzero.
+
+With that boundary in place, three consecutive Gravestone runs on the
+lighting/runtime revision `83daf5d4f57432a064e241755c13135533d954da`
+acquired `scenery:object-36`, `scenery:object-16`, and `scenery:object-16`,
+each with current-target equality, five contacts, zero errors, and normal exit.
+Their target-frame SHA-256 values are
+`91c3433b7647561abbd639c2d14ea56bf15e5421ca218d6dcd61b79734b29eb0`,
+`dfe968ed175535ee8a7871d16ca443d29bb8f2549908614911c4674b17930161`,
+and `e5c4c0301409ac7c8314d3258ea4f5c39434b9285baae5218d090e974012effc`.
+Three enemy runs traversed 11, 10, and 18 nodes; acquired `enemy:2`, `enemy:2`,
+and `enemy:1`; reduced health from `2.5` to `2.4470078124525045`,
+`2.219390624985101`, and `2.311695312485108`; retained five contacts with hit
+flash `0.532000000476819`, `1`, and `1`; emitted zero errors; and exited
+normally. Their target-frame SHA-256 values are
+`d93a30861f87e5d6493e7d3aaa25f5b2e967267a906586c815c97a8437471a91`,
+`d3e82ef5a574cd84cd2a9d97f9c3b474c09017ac22b0a987e1cf6d8b712597c4`,
+and `d71b70f18b672beded03ed51c609b8bb31ae491b6bfa859d45f27653dfc1a812`.
+All six inspected frames preserve contact-over-target order, and the supervisor
+returned to zero sessions/lobbies.
+
 ## Generated Boneyard entrance retirement and wave placement — 2026-08-16
 
 ### Problem and scope

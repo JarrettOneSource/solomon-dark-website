@@ -403,9 +403,17 @@ try {
     status: 'ok',
   })}\n`)
 } finally {
-  await context?.close()
-  await browser.close()
+  await Promise.race([
+    context ? context.close() : Promise.resolve(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
+  await Promise.race([
+    browser.close(),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ])
 }
+await new Promise((resolve) => process.stdout.write('', resolve))
+process.exit(0)
 
 async function enterHub(page, element) {
   await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
@@ -679,11 +687,13 @@ async function targetedAirWire(page, afterTick) {
     for (let index = window.__primarySpellWireFrames.length - 1; index >= 0; index -= 1) {
       const wire = window.__primarySpellWireFrames[index]
       if (wire.tick <= minimumTick) break
-      const state = wire.primarySpells.transients.find((candidate) => (
-        candidate.kind === 'air'
-        && typeof candidate.targetId === 'string'
-        && candidate.targetId.startsWith('scenery:')
-      ))
+      const state = [...wire.primarySpells.transients].reverse().find((candidate) => {
+        const playerTargetId = wire.players[candidate.ownerId]?.primaryCast.targetId
+        return candidate.kind === 'air'
+          && typeof candidate.targetId === 'string'
+          && candidate.targetId.startsWith('scenery:')
+          && candidate.targetId === playerTargetId
+      })
       if (!state) continue
       return {
         playerTargetId: wire.players[state.ownerId]?.primaryCast.targetId ?? null,
@@ -818,10 +828,7 @@ async function boneyardFrame(page) {
 }
 
 async function settleMovement(page) {
-  await page.evaluate(() => {
-    window.dispatchEvent(new Event('blur'))
-    return new Promise((resolve) => requestAnimationFrame(resolve))
-  })
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
   await page.waitForTimeout(650)
 }
 
