@@ -18860,3 +18860,63 @@ no task-owned browser or listener process, but their behavioral receipt is
 invalidated by the native ownership evidence above. Corrected Mac and
 production receipts are recorded only after the automatic transition and all
 four last-player frames pass.
+
+### Corrected Mac mini acceptance, 2026-08-20
+
+The corrected implementation, tests, smoke harness, and pre-receipt ledger
+were committed as `d6f91ba3fd80eb32de29968a550ad275e15b2993`, transferred as
+a complete Git bundle, and verified in the fresh detached Mac clone
+`/Users/jarrett/codex-acceptance/player-death-game-over-pass2-final-20260820/tree`.
+The source bundle SHA-256 was
+`5fbdc15c99c6910b6eec2e1057ed14465d2b8ff48c49a4df8f59f3152929649d`.
+The clone was clean before and after acceptance. The host was `arm64` macOS
+`26.4.1` with Node `22.17.0`, npm `10.9.2`, .NET `10.0.302`, and Google Chrome
+`151.0.7922.138`.
+
+`./scripts/validate.sh` exited zero on that exact tree. It passed the Release
+backend build with zero warnings/errors, all 24 backend/route contracts, the
+formatting and architecture boundaries, lint with only the eight established
+Fast Refresh warnings, 122 prerequisite tests, all 939 Boneyard/frontend tests,
+5 level-up tests, 6 diagnostics tests, 14 Hub UI tests, 5 desktop tests, both
+production builds, and the production media-policy gate. The retained log is
+`validate.log`, SHA-256
+`70f385f7d7f595b3b5499325b3088c058185850186981b540c48495a435284f2`.
+
+Three independent invocations of
+`npm --prefix frontend run smoke:game:player-death-game-over:strict` then
+started fresh loopback authorities and fresh two-context Chrome clients. Their
+run IDs were `d4ce96a677962fbb256522d064a4cd7e`,
+`986198d1944c8de8d0309daefc691b4f`, and
+`deed99269d5908167ab9b531c626bec9`. Every first-player and last-player sample
+was exactly `[0,1,2,3]`; each frame had nine color layers, frames 0/1/2 had no
+death-shadow layers, and frame 3 had all nine. The intermediate samples landed
+only inside native tick ranges 153..155 and 156..158. In all three terminal
+cases, the last player's clock advanced from frame 0 to frame 3 while the run
+was already in Game Over.
+
+No pass exposed a Game Over button or sent an acknowledgement. Each observed
+the clear hold below tick 1000, the automatic exit, the exact recurrence
+`gameOverTicks == 999 + exitTicks`, and retained-loadout return. Exit samples
+were `(102, 0.255)`, `(103, 0.2575)`, and `(102, 0.255)` for
+`(exitTicks, alpha)`. All six client error collectors were empty; each run
+returned two authenticated players to one Hub. The three complete JSON log
+SHA-256 values are, in pass order,
+`a38f8981ddb9ec94634c083a17c95fedf007d8efb8e550e983202ec650ed0213`,
+`15082a8fc2e64d6f4797bc4a221a06214c66f66c9c66fac16c47af651710f0a5`,
+and `440218ed83c881318d2325a9ada9e660df452de3b13ce02b27853a8aaafeeb02`.
+
+The visually inspected third-pass artifacts show the dying pose, grounded
+weapon and terminal corpse; the clear resident Arena; the correctly darkening
+exit; retained Create/loadout; and the returned shared Hub. The absence of the
+normal-story GAME/OVER title and prompt is the recovered Boneyard branch, not
+a missing screen. Their SHA-256 values are:
+
+- death animation: `75be94d9ed733c5dec2e6748d32025cd039f5b276a92db0955061590a216d30d`;
+- terminal first-player corpse: `1162e16b51b2dbc8a01090069e4be0e57cf27b94118cd3f07253b7425a9384e0`;
+- clear Game Over hold: `23d047257629a349f07cbe8aad6f1529aceca19e76cfeed53e0896876d5f1238`;
+- Game Over exit: `57cf3ec76edd7caa7edf65ff3438957eba7be8db40235acc0b8b003f9a5b5705`;
+- retained loadout: `6ad0f534bd1eb43480123663f9c0b494d5123d12a5b2f76c489c3be6be24a4ec`;
+- returned Hub: `c2067d74cbb52faceb5e80f912b2c01a1cca9707ffe316f9106a0d9e46d3637f`.
+
+All task-owned Chrome, Vite, and game-host processes exited after each pass;
+the final process census found no command referencing the acceptance root.
