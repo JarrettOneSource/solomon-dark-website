@@ -1,0 +1,153 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  createEquipmentInventoryItem,
+  DOWSING_EQUIPMENT_RECIPES,
+  type HubEquipmentState,
+  type HubInventoryItem,
+} from './hub-economy.ts'
+import {
+  NATIVE_EQUIPMENT_FEATURE,
+  NATIVE_EQUIPMENT_RECIPE_COUNT,
+  NATIVE_EQUIPMENT_SET_COUNT,
+  applyNativeEquipmentTransform,
+  equippedNativeEffectSources,
+  nativeEquipmentHasFeature,
+  nativeEquipmentRecipeEffects,
+  nativeEquipmentSetEffects,
+  resolveEquippedNativeEffects,
+  resolveNativeEquipmentEffects,
+} from './native-equipment-effects.ts'
+
+test('pins the complete stock equipment and set effect catalogs', () => {
+  assert.equal(NATIVE_EQUIPMENT_RECIPE_COUNT, 47)
+  assert.equal(NATIVE_EQUIPMENT_SET_COUNT, 7)
+  assert.deepEqual(nativeEquipmentRecipeEffects(1), [
+    { kind: 7, magnitude: 1, operator: 0, target: 27 },
+    { kind: 7, magnitude: 1, operator: 0, target: 28 },
+  ])
+  assert.deepEqual(nativeEquipmentRecipeEffects(46), [
+    { kind: 19, magnitude: 95, operator: 2, target: 0 },
+    { kind: 1, magnitude: -35, operator: 2, target: 0 },
+    { kind: 9, magnitude: -50, operator: 2, target: 0 },
+    { kind: 21, magnitude: -40, operator: 2, target: 0 },
+  ])
+  assert.deepEqual(nativeEquipmentSetEffects([0, 1, 2, 3, 4]), [])
+  assert.deepEqual(nativeEquipmentSetEffects([0, 1, 2, 3, 4, 5]), [
+    { kind: 21, magnitude: 3, operator: 1, target: 0 },
+  ])
+})
+
+test('equipment skill pass preserves Grant-last ordering, learned gates, and caps', () => {
+  const permanent = new Array<number>(83).fill(0)
+  permanent[8] = 1
+  permanent[16] = 25
+  const result = resolveNativeEquipmentEffects(permanent, [
+    {
+      effects: [
+        { kind: 5, magnitude: 2, operator: 0, target: 11 },
+        { kind: 8, magnitude: 1, operator: 0, target: 0 },
+      ],
+      recipeIndex: null,
+    },
+    {
+      effects: [{ kind: 4, magnitude: 2, operator: 0, target: 11 }],
+      recipeIndex: null,
+    },
+    {
+      effects: [{ kind: 7, magnitude: 3, operator: 0, target: 13 }],
+      recipeIndex: null,
+    },
+  ])
+  assert.equal(result.effectiveRanks[8], 2)
+  assert.equal(result.effectiveRanks[16], 25)
+  assert.equal(result.effectiveRanks[11], 2)
+  assert.equal(result.effectiveRanks[13], 3)
+  assert.equal(permanent[11], 0)
+})
+
+test('equipment stat pass preserves every split lane, transform, class, and feature family', () => {
+  const result = resolveNativeEquipmentEffects(new Array(83).fill(0), [{
+    effects: [
+      { kind: 1, magnitude: 5, operator: 0, target: 0 },
+      { kind: 1, magnitude: 50, operator: 2, target: 0 },
+      { kind: 2, magnitude: 10, operator: 2, target: 3 },
+      { kind: 9, magnitude: 5, operator: 0, target: 0 },
+      { kind: 9, magnitude: 2, operator: 1, target: 0 },
+      { kind: 15, magnitude: 2, operator: 1, target: 0 },
+      { kind: 17, magnitude: 5, operator: 0, target: 0 },
+      { kind: 18, magnitude: 25, operator: 2, target: 0 },
+      { kind: 23, magnitude: 25, operator: 0, target: 0 },
+      { kind: 23, magnitude: 2, operator: 1, target: 0 },
+      { kind: 25, magnitude: 7, operator: 0, target: 8 },
+      { kind: 25, magnitude: 50, operator: 2, target: 8 },
+      { kind: 29, magnitude: 0, operator: 0, target: 0 },
+      { kind: 38, magnitude: 20, operator: 2, target: 0 },
+      { kind: 39, magnitude: 0, operator: 0, target: 0 },
+    ],
+    recipeIndex: null,
+  }])
+  const modifiers = result.modifiers
+  assert.equal(modifiers.globalDamageFlat, 5)
+  assert.equal(modifiers.globalDamageMultiplier, 1.5)
+  assert.equal(modifiers.classDamageMultiplier[3], 1.100000023841858)
+  assert.equal(applyNativeEquipmentTransform(modifiers.manaRecovery, 1), 12)
+  assert.equal(modifiers.orbPullMultiplier, 2)
+  assert.equal(applyNativeEquipmentTransform(modifiers.walkSpeed, 1), 1.5)
+  assert.equal(modifiers.damageResistance, 0.25)
+  assert.equal(applyNativeEquipmentTransform(modifiers.maximumHealth, 100), 250)
+  assert.equal(modifiers.skillDamageFlat[8], 7)
+  assert.equal(modifiers.skillDamageMultiplier[8], 1.5)
+  assert.equal(modifiers.featureBits, 0x1008)
+  assert.equal(modifiers.weldEffect, 1.2000000476837158)
+  assert.equal(nativeEquipmentHasFeature(modifiers, 'maximumGolem'), true)
+  assert.equal(nativeEquipmentHasFeature(modifiers, 'weldCalling'), true)
+  assert.equal(NATIVE_EQUIPMENT_FEATURE.maximumGolem, 0x0008)
+})
+
+test('equipped sources follow native sink order and exact set identity', () => {
+  const item = (recipeIndex: number, id: number): HubInventoryItem => {
+    const recipe = DOWSING_EQUIPMENT_RECIPES[recipeIndex]!
+    return createEquipmentInventoryItem(recipe, id)
+  }
+  const equipment: HubEquipmentState = {
+    amulet: item(15, 6),
+    hat: item(11, 1),
+    rings: [item(14, 3), null, null],
+    robe: item(12, 2),
+    weapon: item(13, 5),
+  }
+  assert.deepEqual(
+    equippedNativeEffectSources(equipment).map(({ recipeIndex }) => recipeIndex),
+    [11, 12, 14, 15, 13],
+  )
+  const resolved = resolveEquippedNativeEffects(new Array(83).fill(0), equipment)
+  assert.equal(nativeEquipmentHasFeature(resolved.modifiers, 'maximumLeviathan'), true)
+})
+
+test('generated effects override recipe lookup without acquiring set membership', () => {
+  const generated: HubInventoryItem = {
+    equipmentType: 'ring',
+    iconRecords: [52],
+    id: 1,
+    kind: 'equipment',
+    name: 'Generated Ring',
+    nativeEffects: [{ kind: 24, magnitude: 50, operator: 0, target: 0 }],
+    nativeSubtype: null,
+    nativeTypeId: 7002,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  const equipment: HubEquipmentState = {
+    amulet: null,
+    hat: null,
+    rings: [generated, null, null],
+    robe: null,
+    weapon: null,
+  }
+  const resolved = resolveEquippedNativeEffects(new Array(83).fill(0), equipment)
+  assert.equal(applyNativeEquipmentTransform(resolved.modifiers.maximumMana, 100), 150)
+  assert.equal(resolved.modifiers.featureBits, 0)
+})

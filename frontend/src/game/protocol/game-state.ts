@@ -406,6 +406,7 @@ export type BoneyardEnemyTerminalOutput = typeof BONEYARD_ENEMY_TERMINAL_OUTPUTS
 export interface BoneyardEnemyEventSnapshot {
   actorId: number
   count?: number
+  deflectPitch?: number
   eventId: number
   gainScale?: number
   output?: BoneyardEnemyTerminalOutput

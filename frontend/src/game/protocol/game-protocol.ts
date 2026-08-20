@@ -1997,7 +1997,7 @@ function playerPrimaryCastState(
     'targetId',
     'underpowered',
   ])
-  const actionTick = integer(source.actionTick, `${field}.actionTick`)
+  const actionTick = finite(source.actionTick, `${field}.actionTick`)
   const channelActive = boolean(source.channelActive, `${field}.channelActive`)
   if (channelActive && (actionTick < 0 || actionTick > 1)) {
     throw new GameProtocolError(`${field}.actionTick is outside the Staff Constant program`)
@@ -2258,7 +2258,7 @@ function playerSkillOffer(value: unknown, field: string, playerLevel: number) {
     options: options.map((option, index) => {
       const optionField = `${field}.options[${index}]`
       const row = record(option, optionField)
-      onlyKeys(row, optionField, ['skillId', 'targetRank', 'weldBuildId'])
+      onlyKeys(row, optionField, ['insight', 'skillId', 'targetRank', 'weldBuildId'])
       const skillId = nonnegativeInteger(row.skillId, `${optionField}.skillId`)
       if (skillId < 8 || skillId > 79) {
         throw new GameProtocolError(`${optionField}.skillId is out of range`)
@@ -2270,8 +2270,12 @@ function playerSkillOffer(value: unknown, field: string, playerLevel: number) {
       const weldBuildId = row.weldBuildId === undefined
         ? undefined
         : integer(row.weldBuildId, `${optionField}.weldBuildId`)
+      const insight = row.insight === undefined ? undefined : row.insight
+      if (insight !== undefined && insight !== true) {
+        throw new GameProtocolError(`${optionField}.insight must be true`)
+      }
       if (skillId === 52) {
-        if (targetRank !== 1 || weldBuildId === undefined) {
+        if (targetRank !== 1 || weldBuildId === undefined || row.insight !== undefined) {
           throw new GameProtocolError(`${optionField} is not a valid Spell Welding choice`)
         }
         if (weldBuildId < 1000 || weldBuildId > 1009) {
@@ -2281,6 +2285,7 @@ function playerSkillOffer(value: unknown, field: string, playerLevel: number) {
         throw new GameProtocolError(`${optionField}.weldBuildId requires Spell Welding`)
       }
       return {
+        ...(insight === undefined ? {} : { insight: true as const }),
         skillId,
         targetRank,
         ...(weldBuildId === undefined ? {} : { weldBuildId }),
@@ -3437,7 +3442,7 @@ function nativeSecondaryPlayer(value: unknown, field: string): NativeSecondaryPl
     source.cooldownTicksBySkill,
     `${field}.cooldownTicksBySkill`,
     83,
-  ).map((ticks, index) => nonnegativeInteger(
+  ).map((ticks, index) => nonnegativeFinite(
     ticks,
     `${field}.cooldownTicksBySkill[${index}]`,
   ))
@@ -4964,7 +4969,7 @@ function boneyardEnemyEvents(
     const type = rawType as BoneyardEnemyEventSnapshot['type']
     const payloadKeys = (() => {
       switch (type) {
-        case 'attack-marker':
+        case 'attack-marker': return ['deflectPitch', 'targetPlayerId']
         case 'enemy-spawned':
         case 'reward': return ['targetPlayerId']
         case 'coffin-maggot-release': return ['count']
@@ -4985,7 +4990,11 @@ function boneyardEnemyEvents(
           'targetPlayerId',
         ]
         case 'enemy-terminal-output': return ['count', 'output']
-        case 'projectile-impact':
+        case 'projectile-impact': return [
+          'deflectPitch',
+          'projectileId',
+          'targetPlayerId',
+        ]
         case 'projectile-retired':
         case 'projectile-spawned': return ['projectileId', 'targetPlayerId']
       }
@@ -5023,7 +5032,17 @@ function boneyardEnemyEvents(
       type,
     }
     switch (type) {
-      case 'attack-marker':
+      case 'attack-marker': {
+        const targetPlayerId = nullablePlayerId(
+          source.targetPlayerId,
+          `${eventField}.targetPlayerId`,
+        )
+        const deflect = deflectPitchPayload(source.deflectPitch, eventField)
+        if (deflect.deflectPitch !== undefined && targetPlayerId === null) {
+          throw new GameProtocolError(`${eventField}.deflectPitch requires a targetPlayerId`)
+        }
+        return { ...base, ...deflect, targetPlayerId }
+      }
       case 'enemy-spawned':
       case 'reward': return {
         ...base,
@@ -5087,7 +5106,22 @@ function boneyardEnemyEvents(
             : { count: nonnegativeInteger(source.count, `${eventField}.count`) }),
         }
       }
-      case 'projectile-impact':
+      case 'projectile-impact': {
+        const targetPlayerId = nullablePlayerId(
+          source.targetPlayerId,
+          `${eventField}.targetPlayerId`,
+        )
+        const deflect = deflectPitchPayload(source.deflectPitch, eventField)
+        if (deflect.deflectPitch !== undefined && targetPlayerId === null) {
+          throw new GameProtocolError(`${eventField}.deflectPitch requires a targetPlayerId`)
+        }
+        return {
+          ...base,
+          ...deflect,
+          projectileId: positiveInteger(source.projectileId, `${eventField}.projectileId`),
+          targetPlayerId,
+        }
+      }
       case 'projectile-retired':
       case 'projectile-spawned': return {
         ...base,
@@ -5096,6 +5130,18 @@ function boneyardEnemyEvents(
       }
     }
   })
+}
+
+function deflectPitchPayload(
+  value: unknown,
+  field: string,
+): Readonly<{ deflectPitch?: number }> {
+  if (value === undefined) return {}
+  const deflectPitch = nonnegativeFinite(value, `${field}.deflectPitch`)
+  if (deflectPitch > 2) {
+    throw new GameProtocolError(`${field}.deflectPitch must be within [0,2]`)
+  }
+  return { deflectPitch }
 }
 
 function boneyardMageLightningPulses(

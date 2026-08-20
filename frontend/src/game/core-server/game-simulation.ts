@@ -9,6 +9,7 @@ import {
   type PlayerCharacterState,
 } from '../core-kernels/player-character.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import { boneyardActiveBounds } from '../core-kernels/boneyard-arena-transition.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
@@ -51,11 +52,6 @@ import {
   economyHasWizardKey,
   dowse,
   equipInventoryItem,
-  hasBurningManOutfit,
-  hasFeteOfClayOutfit,
-  hasFrostburnJewels,
-  hasPandimensionalBugMasterOutfit,
-  hasTempestOutfit,
   restockFomentius,
   transferInventoryItem,
   unequipInventorySlot,
@@ -65,6 +61,17 @@ import {
   type HubInventoryAction,
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
+import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
+import {
+  resolveNativePrimarySkillStats,
+  resolveNativeSkillDamageValue,
+  resolveNativeSkillManaCostValue,
+} from '../core-kernels/native-offensive-resolution.ts'
+import {
+  playerDeflectReflectionSourceInRange,
+  playerPoisonDurationSeconds,
+  resolvePlayerHarmfulContact,
+} from '../core-kernels/player-skill-runtime.ts'
 import {
   boneyardEnemyExperienceAward,
   effectivePrimarySkillRankStats,
@@ -74,10 +81,7 @@ import {
   type PlayerSkillBookComponent,
   type PlayerStatBookComponent,
 } from '../core-kernels/player-progression.ts'
-import {
-  PLAYER_MANA_RECOVERY_PER_TICK,
-  playerCollisionEnabledAfterCombatTick,
-} from '../core-kernels/player-combat.ts'
+import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
 import {
   applyNativeSecondaryGolemDamage,
   applyNativeSecondaryPlayerDamage,
@@ -172,9 +176,12 @@ import {
   playerEntityCanCast,
   playerEntityIndex,
   playerEntityMovementScale,
+  markPlayerEntityCreativityInsight,
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
+  playerSkillDerivedStatsAt,
+  playerSkillRuntimeAt,
   playerStatBookAt,
   increaseRandomPlayerEntitySkill,
   importPlayerEntity,
@@ -785,17 +792,28 @@ export function selectGameSimulationPlayerSkill(
 ): GameSimulationState | null {
   const playerEntities = applyPlayerEntitySkillChoice(state.playerEntities, playerId, selection)
   if (!playerEntities) return null
+  const insights = markNewCreativityInsights(
+    state.playerEntities,
+    playerEntities,
+    [playerId],
+    state.secondaryAbilities.rng,
+  )
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.participantIds.includes(playerId)) {
-    return { ...state, playerEntities }
+    return {
+      ...state,
+      playerEntities: insights.store,
+      secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
+    }
   }
-  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, barrier.participantIds)
+  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, barrier.participantIds)
   return {
     ...state,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities,
+    playerEntities: insights.store,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
   }
 }
 
@@ -814,10 +832,17 @@ export function rerollGameSimulationPlayerSkill(
     draw.value,
   )
   if (!playerEntities) return null
+  const insights = markNewCreativityInsights(
+    state.playerEntities,
+    playerEntities,
+    [playerId],
+    state.secondaryAbilities.rng,
+  )
   return {
     ...state,
-    playerEntities,
+    playerEntities: insights.store,
     gameRng: draw.state,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
   }
 }
 
@@ -834,13 +859,20 @@ export function saveGameSimulationPlayerSkill(
     offerSequence,
   )
   if (!playerEntities) return null
-  const pendingPlayerIds = pendingOfferPlayerIds(playerEntities, barrier.participantIds)
+  const insights = markNewCreativityInsights(
+    state.playerEntities,
+    playerEntities,
+    [playerId],
+    state.secondaryAbilities.rng,
+  )
+  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, barrier.participantIds)
   return {
     ...state,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities,
+    playerEntities: insights.store,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: insights.rng },
   }
 }
 
@@ -1007,7 +1039,8 @@ function finishGameSimulationTick(
   deferredEnemyProjectileRegistrations: DeferredNativeLightProviderRegistrations | null,
 ): GameSimulationState {
   const tick = previous.tick + 1
-  let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
+  let resolvedPlayers = result.players
+  let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, resolvedPlayers)
   let world = result.world
   let gameRng = previous.gameRng
   let secondaryAbilities = previous.secondaryAbilities
@@ -1096,6 +1129,7 @@ function finishGameSimulationTick(
     amount: number
     playerId: string
   }>> = []
+  const deflectPitchesByEventId = new Map<number, number>()
   for (const damage of playerDamage) {
     const golemId = parseNativeSecondaryGolemTargetId(damage.playerId)
     if (golemId !== null && world.kind === 'boneyard') {
@@ -1129,13 +1163,69 @@ function finishGameSimulationTick(
       }
       continue
     }
-    const character = result.players[damage.playerId]
+    const character = resolvedPlayers[damage.playerId]
+    const damageSource = world.kind === 'boneyard'
+      ? world.enemies.actors.find(({ id }) => id === damage.actorId)
+        ?? world.enemies.maggots.find(({ id }) => id === damage.actorId)
+      : undefined
+    const runtime = playerSkillRuntimeAt(playerEntities, damage.playerId)
+    const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)
+    const progression = playerProgressionAt(playerEntities, damage.playerId)
+    const contact = runtime === null || derived === null || progression === null
+      ? null
+      : resolvePlayerHarmfulContact(
+          runtime,
+          derived,
+          progression,
+          damage.amount,
+          damage.damageKind,
+          damage.deflectable,
+          character !== undefined
+            && damageSource !== undefined
+            && playerDeflectReflectionSourceInRange(
+              character.position,
+              PLAYER_CHARACTER_RADIUS,
+              damageSource.position,
+              'config' in damageSource
+                ? damageSource.config.collisionRadius
+                : damageSource.collisionRadius,
+            ),
+          secondaryAbilities.rng,
+        )
+    if (contact !== null) secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
+    if (contact?.deflected) {
+      if (contact.deflectPitch === null) {
+        throw new Error('successful Deflect did not produce its native swipe pitch')
+      }
+      deflectPitchesByEventId.set(damage.eventId, contact.deflectPitch)
+      if (character !== undefined && damageSource !== undefined) {
+        resolvedPlayers = {
+          ...resolvedPlayers,
+          [damage.playerId]: {
+            ...character,
+            headingIndex: actorHeadingIndex(actorHeadingFromVector(
+              damageSource.position.x - character.position.x,
+              damageSource.position.y - character.position.y,
+            )),
+          },
+        }
+      }
+      if (contact.reflectedDamage > 0) {
+        reflectedEnemyDamage.push(Object.freeze({
+          actorId: damage.actorId,
+          amount: contact.reflectedDamage,
+          playerId: damage.playerId,
+        }))
+      }
+      continue
+    }
+    const resistedDamage = contact?.damage ?? damage.amount
     const intercepted = character === undefined
-      ? { healthDamage: damage.amount, state: secondaryAbilities }
+      ? { healthDamage: resistedDamage, state: secondaryAbilities }
       : applyNativeSecondaryPlayerDamage(
           secondaryAbilities,
           damage.playerId,
-          damage.amount,
+          resistedDamage,
           tick,
           character.position,
           gameWorldKey(world, damage.playerId),
@@ -1179,9 +1269,37 @@ function finishGameSimulationTick(
       playerEntities,
       damage.playerId,
       damage.poisonDamage,
-      damage.poisonDuration,
+      derived === null
+        ? damage.poisonDuration
+        : playerPoisonDurationSeconds(derived, damage.poisonDuration),
     )
     appliedPlayerDamage.push({ ...damage, amount: intercepted.healthDamage })
+  }
+  for (const reward of result.rewards ?? []) {
+    if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
+    const progressionState: GameSimulationState = {
+      ...previous,
+      levelUpBarrier,
+      nextLevelUpBarrierId,
+      playerEntities,
+      secondaryAbilities,
+    }
+    const participantIds = levelUpParticipantIds(progressionState)
+    if (!participantIds.includes(reward.playerId)) continue
+    const creditedExperience = boneyardEnemyExperienceAward({
+      arenaPlayerCount: participantIds.length,
+      evaluatedActorReward: reward.experience,
+      receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
+    })
+    const awarded = grantSharedGameSimulationExperience(
+      progressionState,
+      reward.playerId,
+      creditedExperience,
+    )
+    playerEntities = awarded.playerEntities
+    levelUpBarrier = awarded.levelUpBarrier
+    nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
+    secondaryAbilities = awarded.secondaryAbilities
   }
   for (const unlock of result.goodieUnlocks ?? []) {
     const consumed = consumePlayerEntityWizardKey(playerEntities, unlock.playerId)
@@ -1228,7 +1346,16 @@ function finishGameSimulationTick(
         break
       case 'bonus':
         if (pickup.bonusKind === 0) {
+          const beforeInsight = playerEntities
           playerEntities = grantPlayerEntityBonusSkillChoice(playerEntities, pickup.playerId)
+          const insight = markNewCreativityInsights(
+            beforeInsight,
+            playerEntities,
+            [pickup.playerId],
+            secondaryAbilities.rng,
+          )
+          playerEntities = insight.store
+          secondaryAbilities = { ...secondaryAbilities, rng: insight.rng }
           bonusSkillChoicePlayerIds.push(pickup.playerId)
         } else if (pickup.bonusKind === 1 && world.kind === 'boneyard') {
           const increased = increaseRandomPlayerEntitySkill(
@@ -1434,12 +1561,19 @@ function finishGameSimulationTick(
       ) !== null
     ),
     players: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
-      const character = result.players[playerId]
-      const economy = playerEntities.economies[index]!
+      const character = resolvedPlayers[playerId]
       const progression = playerEntities.progressions[index]!
       const skillBook = playerEntities.skillBooks[index]!
       const statBook = playerEntities.statBooks[index]!
+      const runtime = playerEntities.skillRuntimes[index]!
+      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
       if (!character) throw new Error(`secondary authority lost player ${playerId}`)
+      if (derived === null) throw new Error(`secondary authority lost skill state ${playerId}`)
+      const offensiveFactors = {
+        damage: derived.offensiveDamageFactor,
+        equipment: runtime.equipmentModifiers,
+        manaCost: derived.offensiveManaCostFactor,
+      }
       return [playerId, {
         character,
         coldSlowFactor: Math.fround(Math.max(0, 0.5 / (
@@ -1455,13 +1589,17 @@ function finishGameSimulationTick(
           54,
           'mAbsorb',
         ) * effectiveSkillNumericValue(skillBook, statBook, 55, 'mDamage') / 100,
-        explosiveShieldManaCost: effectiveSkillNumericValue(
-          skillBook,
-          statBook,
+        explosiveShieldManaCost: resolveNativeSkillManaCostValue(
           55,
-          'mManaCost',
+          effectiveSkillNumericValue(skillBook, statBook, 55, 'mManaCost'),
+          offensiveFactors,
         ),
-        fireBurnDamage: effectiveSkillNumericValue(skillBook, statBook, 22, 'mDamage'),
+        fireBurnDamage: resolveNativeSkillDamageValue(
+          22,
+          effectiveSkillNumericValue(skillBook, statBook, 22, 'mDamage'),
+          offensiveFactors,
+        ),
+        focusInstantRechargeChancePercent: derived.focusInstantRechargeChancePercent,
         freezeDurationMultiplier: 1 + effectiveSkillNumericValue(
           skillBook,
           statBook,
@@ -1469,7 +1607,11 @@ function finishGameSimulationTick(
           'mSlowdown',
         ) / 100,
         golemIron: (skillBook.effectiveRanks[75] ?? 0) > 0,
-        golemManaCost: effectiveSkillNumericValue(skillBook, statBook, 75, 'mManaCost'),
+        golemManaCost: resolveNativeSkillManaCostValue(
+          75,
+          effectiveSkillNumericValue(skillBook, statBook, 75, 'mManaCost'),
+          offensiveFactors,
+        ),
         golemReflectFactor: effectiveSkillNumericValue(skillBook, statBook, 75, 'mReflect') / 100,
         input: inputs[playerId] ?? createIdlePlayerCharacterInput(),
         maximumMana: progression.maximumMana,
@@ -1485,13 +1627,31 @@ function finishGameSimulationTick(
           28,
           'mSpeed',
         ) / 100,
-        magicStormManaCost: effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
-        maximumGolem: hasFeteOfClayOutfit(economy.equipment),
-        maximumLeviathan: hasPandimensionalBugMasterOutfit(economy.equipment),
-        maximumMagicStorm: hasTempestOutfit(economy.equipment),
-        maximumRingOfFire: hasBurningManOutfit(economy.equipment),
-        maximumRingOfIce: hasFrostburnJewels(economy.equipment),
-        manaRecoveryPerTick: PLAYER_MANA_RECOVERY_PER_TICK,
+        magicStormManaCost: resolveNativeSkillManaCostValue(
+          28,
+          effectiveSkillNumericValue(skillBook, statBook, 28, 'mManaCost'),
+          offensiveFactors,
+        ),
+        maximumGolem: nativeEquipmentHasFeature(runtime.equipmentModifiers, 'maximumGolem'),
+        maximumLeviathan: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumLeviathan',
+        ),
+        maximumMagicStorm: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumMagicStorm',
+        ),
+        maximumRingOfFire: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumRingOfFire',
+        ),
+        maximumRingOfIce: nativeEquipmentHasFeature(
+          runtime.equipmentModifiers,
+          'maximumRingOfIce',
+        ),
+        manaRecoveryPerTick: derived.manaRecoveryPerTick,
+        offensiveFactors,
+        secondaryRechargeFactor: derived.secondaryRechargeFactor,
         skillBook,
         worldKey: gameWorldKey(result.world, playerId),
       }]
@@ -1512,7 +1672,7 @@ function finishGameSimulationTick(
         const world = result.world
         const worldKey = `boneyard:${world.runId}`
         const bodies = [
-          ...Object.values(result.players).map(({ position }) => ({
+          ...Object.values(resolvedPlayers).map(({ position }) => ({
             position,
             radius: PLAYER_CHARACTER_RADIUS,
           })),
@@ -1560,7 +1720,7 @@ function finishGameSimulationTick(
   })
   secondaryAbilities = secondaryResult.state
   const secondaryPlayers: Record<PlayerId, PlayerCharacterState> = {
-    ...result.players,
+    ...resolvedPlayers,
   }
   for (const [playerId, position] of Object.entries(secondaryResult.relocatedPlayers)) {
     const character = secondaryPlayers[playerId]
@@ -1645,8 +1805,19 @@ function finishGameSimulationTick(
     },
     castAuthority: Object.fromEntries(playerEntities.identities.map(({ playerId }, index) => {
       const progression = playerEntities.progressions[index]!
-      const primarySkill = effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!)
-      const damageMultiplier = progression.damageX4TicksRemaining > 0 ? 4 : 1
+      const derived = playerSkillDerivedStatsAt(playerEntities, playerId)
+      const runtime = playerSkillRuntimeAt(playerEntities, playerId)
+      if (derived === null || runtime === null) {
+        throw new Error(`player ${playerId} has no native skill runtime`)
+      }
+      const primarySkill = resolveNativePrimarySkillStats(
+        effectivePrimarySkillRankStats(playerEntities.skillBooks[index]!),
+        {
+          damage: derived.offensiveDamageFactor,
+          equipment: runtime.equipmentModifiers,
+          manaCost: derived.offensiveManaCostFactor,
+        },
+      )
       return [
         playerId,
         {
@@ -1655,13 +1826,10 @@ function finishGameSimulationTick(
             secondaryAbilities.players[playerId]
               ?? createNativeSecondaryPlayerState(),
           ),
+          castProgressFactor: derived.castProgressFactor,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
-          primarySkill: damageMultiplier === 1 ? primarySkill : {
-            ...primarySkill,
-            damageMaximum: primarySkill.damageMaximum * damageMultiplier,
-            damageMinimum: primarySkill.damageMinimum * damageMultiplier,
-          },
+          primarySkill,
         },
       ]
     })),
@@ -1715,11 +1883,17 @@ function finishGameSimulationTick(
       && previous.world.runId === world.runId
       ? previous.world.lootEvents
       : []
+    const resolvedEnemyEvents = (result.enemyEvents ?? []).map((event) => {
+      const deflectPitch = deflectPitchesByEventId.get(event.eventId)
+      return deflectPitch === undefined
+        ? event
+        : Object.freeze({ ...event, deflectPitch })
+    })
     world = {
       ...world,
       enemyEvents: retainBoneyardEnemyEvents(
         previousEvents,
-        [...(result.enemyEvents ?? []), ...playerDamageSoundEvents],
+        [...resolvedEnemyEvents, ...playerDamageSoundEvents],
         tick,
       ),
       lootEvents: retainBoneyardLootEvents(
@@ -2023,7 +2197,13 @@ function grantSharedGameSimulationExperience(
   if (granted.milestone === null) {
     return { ...state, playerEntities: granted.store }
   }
-  const pendingPlayerIds = pendingOfferPlayerIds(granted.store, participantIds)
+  const insights = markNewCreativityInsights(
+    state.playerEntities,
+    granted.store,
+    participantIds,
+    state.secondaryAbilities.rng,
+  )
+  const pendingPlayerIds = pendingOfferPlayerIds(insights.store, participantIds)
   if (pendingPlayerIds.length === 0) {
     throw new Error('shared level milestone did not create a player offer')
   }
@@ -2051,8 +2231,31 @@ function grantSharedGameSimulationExperience(
     nextLevelUpBarrierId: existing === null
       ? state.nextLevelUpBarrierId + 1
       : state.nextLevelUpBarrierId,
-    playerEntities: granted.store,
+    playerEntities: insights.store,
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      rng: insights.rng,
+    },
   }
+}
+
+function markNewCreativityInsights(
+  previous: PlayerEntityStore,
+  next: PlayerEntityStore,
+  playerIds: readonly string[],
+  sourceRng: NativeRngState,
+): Readonly<{ rng: NativeRngState; store: PlayerEntityStore }> {
+  let rng = sourceRng
+  let store = next
+  for (const playerId of playerIds) {
+    const before = playerProgressionAt(previous, playerId)?.pendingOffer
+    const after = playerProgressionAt(store, playerId)?.pendingOffer
+    if (after === null || after === undefined || after.sequence === before?.sequence) continue
+    const insight = markPlayerEntityCreativityInsight(store, playerId, rng)
+    rng = insight.rng
+    store = insight.store
+  }
+  return Object.freeze({ rng, store })
 }
 
 function levelUpParticipantIds(state: GameSimulationState): readonly string[] {

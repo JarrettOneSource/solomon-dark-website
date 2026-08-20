@@ -111,6 +111,7 @@ export interface PlayerSkillBookComponent {
 }
 
 export interface PlayerSkillOfferOption {
+  readonly insight?: true
   readonly skillId: number
   readonly targetRank: number
   readonly weldBuildId?: number
@@ -282,15 +283,13 @@ export function nativeSkillCategory(skillId: number): number | null {
   return RULES[skillId]?.category ?? null
 }
 
-export function nativeSkillRoot(skillId: number): number {
-  const root = RULES[skillId]?.root
-  if (root === undefined) throw new RangeError(`native skill ${skillId} has no root`)
-  return root
+export function nativeSkillRoot(skillId: number): number | null {
+  return RULES[skillId]?.root ?? (skillId === 80 ? 0 : null)
 }
 
 export function nativeSkillDependencies(skillId: number): readonly number[] {
   const rule = RULES[skillId]
-  if (!rule) return Object.freeze([])
+  if (!rule) throw new RangeError(`native skill ${skillId} has no dependency rule`)
   return Object.freeze([...new Set([...(rule.all ?? []), ...(rule.any ?? [])])])
 }
 
@@ -804,17 +803,20 @@ export function applyPlayerSkillChoice(
     ? null
     : nativeWeldBuild(chosen.weldBuildId)
   if (chosen.skillId === SPELL_WELDING_SKILL_ID) {
-    if (!weldBuild || rank > 0 || chosen.targetRank !== 1) return null
+    if (chosen.insight === true || !weldBuild || rank > 0 || chosen.targetRank !== 1) return null
   } else if (
     chosen.weldBuildId !== undefined
     || maximum < 1
     || rank >= maximum
+    || (chosen.insight === true && rank + 2 > maximum)
     || chosen.targetRank !== rank + 1
   ) return null
 
   const permanentRanks = [...skillBook.permanentRanks]
   const effectiveRanks = [...skillBook.effectiveRanks]
-  const nextRank = chosen.skillId === SPELL_WELDING_SKILL_ID ? 1 : rank + 1
+  const nextRank = chosen.skillId === SPELL_WELDING_SKILL_ID
+    ? 1
+    : rank + (chosen.insight === true ? 2 : 1)
   permanentRanks[chosen.skillId] = nextRank
   effectiveRanks[chosen.skillId] = nextRank
   const nextBook: PlayerSkillBookComponent = {

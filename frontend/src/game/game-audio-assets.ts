@@ -91,6 +91,7 @@ import startCast from '../assets/game/audio/sfx/start-cast.wav'
 import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
+import swipe from '../assets/game/audio/sfx/swipe.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
 import throwDirt1 from '../assets/game/audio/sfx/throw-dirt-1.wav'
 import throwDirt2 from '../assets/game/audio/sfx/throw-dirt-2.wav'
@@ -202,6 +203,7 @@ export const GAME_AUDIO_SOURCES = {
     'step-1': step1,
     'step-2': step2,
     summon,
+    swipe,
     teleport,
     'throw-dirt-1': throwDirt1,
     'throw-dirt-2': throwDirt2,

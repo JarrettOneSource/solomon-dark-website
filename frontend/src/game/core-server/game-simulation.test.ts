@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { actorHeadingFromVector, actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
@@ -22,7 +23,11 @@ import {
   createNativeLightProviderOrder,
   mergeNativeLightProviderOwners,
 } from '../core-kernels/native-light-provider-order.ts'
-import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+} from '../core-kernels/native-rng.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -59,6 +64,7 @@ import {
   replacePlayerCharacter,
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
+  selectPlayerEntityConcentration,
 } from './player-entity-store.ts'
 
 function gameplayInput(x: number, y: number) {
@@ -887,6 +893,36 @@ test('simulation wires effective primary rank into debit and captured projectile
   assert.equal(rankOne.primarySpells.projectiles[0]!.damage, 4)
 })
 
+test('Battle and Siege factors reach the authoritative primary payment and birth once', () => {
+  const fire = {
+    discipline: 'mind',
+    displayName: 'Mind Fire Caster',
+    element: 'fire',
+  } as const
+  let baseline = createGameSimulation({ caster: fire })
+  let passive = withPassiveRanks(createGameSimulation({ caster: fire }), 'caster', {
+    59: 1,
+    61: 1,
+  })
+  const input = (state: GameSimulationState) => {
+    const player = getPlayerCharacter(state, 'caster')
+    return {
+      aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary: true, secondary: null },
+      movement: { x: 0, y: 0 },
+    }
+  }
+  for (let tick = 0; tick <= PRIMARY_CAST_EMISSION_TICK; tick += 1) {
+    baseline = stepGameSimulationTick(baseline, { caster: input(baseline) })
+    passive = stepGameSimulationTick(passive, { caster: input(passive) })
+  }
+  assert.ok(Math.abs(passive.primarySpells.projectiles[0]!.damage - 4.8) < 1e-12)
+  assert.equal(Number((
+    getPlayerProgression(passive, 'caster').currentMana
+      - getPlayerProgression(baseline, 'caster').currentMana
+  ).toFixed(6)), 1.2)
+})
+
 test('Boneyard simulation debits mana, applies spell contact, and begins enemy death', () => {
   const fire = {
     discipline: 'arcane',
@@ -1123,6 +1159,74 @@ test('Boneyard semantic events survive the slowest snapshot cadence and remain b
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   assert.equal(state.world.enemyEvents.length, BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
   assert.equal(state.world.enemyEvents[0]!.eventId, 2)
+})
+
+test('Deflect cancels the contact, faces and sounds once, and reflects concentrated physical damage', () => {
+  const deflectSeed = seedForIntegerDraw(100, (value) => value < 10)
+  const chance = drawNativeInteger(createNativeRng(deflectSeed), 100)
+  const swipe = drawNativeFloat(chance.state, 1, true)
+  let state = enterBoneyardWorld(
+    createGameSimulation(),
+    combatBoneyard('deflect-combat-run'),
+  )
+  state = withConcentratedDeflect(state, 'local-player')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state)
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      'local-player': {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'ZOMBIE',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: { x: player.position.x + 40, y: player.position.y },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  state = {
+    ...state,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: createNativeRng(deflectSeed) },
+    world: { ...state.world, enemies: seeded.store },
+  }
+
+  let deflectEvent: BoneyardEnemySemanticEvent | undefined
+  for (let tick = 0; tick < 300 && deflectEvent === undefined; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+    deflectEvent = state.world.enemyEvents.find((event) => event.deflectPitch !== undefined)
+  }
+
+  assert.ok(deflectEvent)
+  assert.equal(deflectEvent.type, 'attack-marker')
+  assert.equal(deflectEvent.targetPlayerId, 'local-player')
+  assert.equal(deflectEvent.deflectPitch, Math.fround(1 + swipe.value))
+  assert.equal(getPlayerProgression(state).currentHealth, 50)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const source = state.world.enemies.actors.find(({ id }) => id === 1)
+  assert.ok(source)
+  assert.equal(
+    source.currentHealth,
+    source.config.maximumHealth - source.config.primaryDamage! * 5,
+  )
+  const publishedPlayer = getPlayerCharacter(state)
+  assert.equal(publishedPlayer.headingIndex, actorHeadingIndex(actorHeadingFromVector(
+    source.position.x - publishedPlayer.position.x,
+    source.position.y - publishedPlayer.position.y,
+  )))
 })
 
 test('enemy retirement carries its death-time private seed into one authoritative ground drop', () => {
@@ -1682,4 +1786,76 @@ function withEffectivePrimaryRank(
       skillBooks: Object.freeze(skillBooks),
     },
   }
+}
+
+function withConcentratedDeflect(
+  state: GameSimulationState,
+  playerId: string,
+): GameSimulationState {
+  const index = state.playerEntities.identities.findIndex((identity) => (
+    identity.playerId === playerId
+  ))
+  if (index < 0) throw new Error(`missing player ${playerId}`)
+  const sourceBook = state.playerEntities.skillBooks[index]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  permanentRanks[68] = 1
+  effectiveRanks[68] = 1
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    permanentRanks: Object.freeze(permanentRanks),
+  }
+  let playerEntities = {
+    ...state.playerEntities,
+    skillBooks: Object.freeze(skillBooks),
+  }
+  playerEntities = replacePlayerEconomy(
+    playerEntities,
+    playerId,
+    playerEntities.economies[index]!,
+  )
+  playerEntities = selectPlayerEntityConcentration(playerEntities, playerId, 68)
+  return { ...state, playerEntities }
+}
+
+function withPassiveRanks(
+  state: GameSimulationState,
+  playerId: string,
+  ranks: Readonly<Record<number, number>>,
+): GameSimulationState {
+  const index = state.playerEntities.identities.findIndex((identity) => (
+    identity.playerId === playerId
+  ))
+  if (index < 0) throw new Error(`missing player ${playerId}`)
+  const sourceBook = state.playerEntities.skillBooks[index]!
+  const permanentRanks = [...sourceBook.permanentRanks]
+  const effectiveRanks = [...sourceBook.effectiveRanks]
+  for (const [skillId, rank] of Object.entries(ranks)) {
+    permanentRanks[Number(skillId)] = rank
+    effectiveRanks[Number(skillId)] = rank
+  }
+  const skillBooks = [...state.playerEntities.skillBooks]
+  skillBooks[index] = {
+    ...sourceBook,
+    effectiveRanks: Object.freeze(effectiveRanks),
+    permanentRanks: Object.freeze(permanentRanks),
+  }
+  const playerEntities = replacePlayerEconomy(
+    { ...state.playerEntities, skillBooks: Object.freeze(skillBooks) },
+    playerId,
+    state.playerEntities.economies[index]!,
+  )
+  return { ...state, playerEntities }
+}
+
+function seedForIntegerDraw(
+  bound: number,
+  predicate: (value: number) => boolean,
+): number {
+  for (let seed = 0; seed < 100_000; seed += 1) {
+    if (predicate(drawNativeInteger(createNativeRng(seed), bound).value)) return seed
+  }
+  throw new Error(`could not find native RNG seed for bound ${bound}`)
 }

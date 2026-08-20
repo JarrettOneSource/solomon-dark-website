@@ -98,6 +98,7 @@ const SOURCES = {
     'step-1': 'step1.wav',
     'step-2': 'step2.wav',
     summon: 'summon.wav',
+    swipe: 'swipe.wav',
     teleport: 'teleport.wav',
     'throw-dirt-1': 'throw-dirt-1.wav',
     'throw-dirt-2': 'throw-dirt-2.wav',

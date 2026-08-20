@@ -89,6 +89,7 @@ export type GameSoundCue =
   | 'step-1'
   | 'step-2'
   | 'summon'
+  | 'swipe'
   | 'teleport'
   | 'throw-fire'
   | 'unlock-skill'
@@ -471,6 +472,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\summon',
     sourceSha256: '3c910b3918c0f45558123464301ed423974bf2356dfb8934c7d9321addac38cd',
   },
+  swipe: {
+    registryOffset: 0x1040,
+    sourceName: 'sounds\\swipe',
+    sourceSha256: 'a7ceda1c35fc9896f10ef808c626267eb3b58d958323fef76f47e2bff7716198',
+  },
   teleport: {
     registryOffset: 0x106c,
     sourceName: 'sounds\\teleport',
@@ -541,7 +547,7 @@ export const NATIVE_LEVEL_UP_SOUND_REQUEST = Object.freeze({
 export interface NativeEnemyEventSoundRequest {
   cue: GameSoundCue
   playbackRate: number
-  sourcePosition: Readonly<{ x: number; y: number }>
+  sourcePosition: Readonly<{ x: number; y: number }> | null
   volume: number
 }
 
@@ -564,6 +570,14 @@ export function nativeSolomonDigSoundRequest(
 export function nativeEnemyEventSoundRequest(
   event: BoneyardEnemyEventSnapshot,
 ): NativeEnemyEventSoundRequest | null {
+  if (event.deflectPitch !== undefined) {
+    return {
+      cue: 'swipe',
+      playbackRate: event.deflectPitch,
+      sourcePosition: null,
+      volume: 1,
+    }
+  }
   if (
     event.type !== 'enemy-damage-sound'
     && event.type !== 'enemy-death-sound'

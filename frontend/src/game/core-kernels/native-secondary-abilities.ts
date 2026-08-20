@@ -18,9 +18,17 @@ import {
   effectiveSecondaryAbilityRankStats,
   nativeWeldBuild,
   playerStatBook,
+  type NativeSecondaryAbilityRankStats,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
 import type { NativeSecondaryAbilityId } from './native-secondary-ability-contract.ts'
+import {
+  resolveNativeSkillDamageValue,
+  resolveNativeSkillManaCostValue,
+  type NativeOffensiveSpellFactors,
+} from './native-offensive-resolution.ts'
+import { nativeSkillClass } from './player-skill-runtime.ts'
+import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
 import {
   NATIVE_GOLEM_DEATH_DURATION_TICKS,
   NATIVE_GOLEM_RADIUS,
@@ -250,6 +258,7 @@ export interface NativeSecondaryPlayerAuthority {
   readonly explosiveShieldManaCost: number
   readonly fireBurnDamage: number
   readonly freezeDurationMultiplier: number
+  readonly focusInstantRechargeChancePercent: number
   readonly golemIron: boolean
   readonly golemManaCost: number
   readonly golemReflectFactor: number
@@ -264,6 +273,8 @@ export interface NativeSecondaryPlayerAuthority {
   readonly maximumRingOfFire: boolean
   readonly maximumRingOfIce: boolean
   readonly manaRecoveryPerTick: number
+  readonly offensiveFactors: NativeOffensiveSpellFactors
+  readonly secondaryRechargeFactor: number
   readonly skillBook: PlayerSkillBookComponent
   readonly worldKey: string
 }
@@ -3159,7 +3170,7 @@ export function stepNativeSecondaryAbilities(
     let player = state.players[playerId] ?? createNativeSecondaryPlayerState()
     const planewalkerWasActive = player.planewalkerTicksRemaining > 0
     const stoneskinWasActive = player.stoneskinTicksRemaining > 0
-    player = stepPlayerState(player, authority.skillBook)
+    player = stepPlayerState(player, authority)
     if (planewalkerWasActive && player.planewalkerTicksRemaining === 0) {
       state = emit(state, {
         actorId: null,
@@ -3215,7 +3226,11 @@ export function stepNativeSecondaryAbilities(
         const maximumScale = drawNativeFloat(state.rng, 1.5)
         state = { ...state, rng: maximumScale.state }
         state = spawn(state, actorSeed({
-          damage: nativePlaneOrbDamage(authority.skillBook),
+          damage: resolveNativeSkillDamageValue(
+            80,
+            nativePlaneOrbDamage(authority.skillBook),
+            authority.offensiveFactors,
+          ),
           enhanced: authority.enhancedEffects,
           kind: 'plane-orb-shot',
           lifetimeTicks: 1_125,
@@ -3348,6 +3363,31 @@ interface CastResult {
   readonly state: NativeSecondarySimulationState
 }
 
+function resolvedSecondaryAbilityRankStats(
+  authority: NativeSecondaryPlayerAuthority,
+  skillId: NativeSecondaryAbilityId,
+): NativeSecondaryAbilityRankStats {
+  const ranked = effectiveSecondaryAbilityRankStats(authority.skillBook, skillId)
+  const values = Object.fromEntries(Object.entries(ranked.values).map(([property, value]) => {
+    if (property === 'mManaCost') {
+      return [property, resolveNativeSkillManaCostValue(
+        skillId,
+        value,
+        authority.offensiveFactors,
+      )]
+    }
+    if (property === 'mDamage' || property === 'mDamage1' || property === 'mDamage2') {
+      return [property, resolveNativeSkillDamageValue(
+        skillId,
+        value,
+        authority.offensiveFactors,
+      )]
+    }
+    return [property, value]
+  }))
+  return Object.freeze({ ...ranked, values: Object.freeze(values) })
+}
+
 function castAbility(
   source: NativeSecondarySimulationState,
   player: NativeSecondaryPlayerState,
@@ -3376,7 +3416,7 @@ function castAbility(
       ...player, fizzleSequence: player.fizzleSequence + 1, lastSkillId: skillId,
     })
   }
-  const ranked = effectiveSecondaryAbilityRankStats(authority.skillBook, skillId)
+  const ranked = resolvedSecondaryAbilityRankStats(authority, skillId)
   const v = ranked.values
   let cost = v.mManaCost ?? 0
   if (skillId === 27) cost += authority.magicStormManaCost
@@ -3482,7 +3522,13 @@ function castAbility(
           'planewalker-off',
         ))
         nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
-        nextPlayer = withCooldown(nextPlayer, skillId, 0)
+        ;({ player: nextPlayer, state } = withCooldown(
+          state,
+          nextPlayer,
+          skillId,
+          0,
+          authority,
+        ))
         return none(state, nextPlayer)
       }
       nextPlayer = {
@@ -3501,7 +3547,13 @@ function castAbility(
       relocated = context.phasingDestination(playerId, origin, direction)
       if (!relocated) {
         nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
-        nextPlayer = withCooldown(nextPlayer, skillId, Math.round(v.mCooldown * 100))
+        ;({ player: nextPlayer, state } = withCooldown(
+          state,
+          nextPlayer,
+          skillId,
+          Math.round(v.mCooldown * 100),
+          authority,
+        ))
         return {
           dispelledShieldTargetIds,
           disruptedTargetIds,
@@ -3599,7 +3651,13 @@ function castAbility(
       if (active) {
         state = spawnFirewalkerPatch(state, playerId, authority, true)
         nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
-        nextPlayer = withCooldown(nextPlayer, skillId, 0)
+        ;({ player: nextPlayer, state } = withCooldown(
+          state,
+          nextPlayer,
+          skillId,
+          0,
+          authority,
+        ))
       }
       state = emit(state, {
         ...castEvent(
@@ -4166,11 +4224,13 @@ function castAbility(
       return none(state, nextPlayer)
     }
   }
-  nextPlayer = withCooldown(
+  ;({ player: nextPlayer, state } = withCooldown(
+    state,
     nextPlayer,
     skillId,
     Math.round((v.mCooldown ?? 0) * 100),
-  )
+    authority,
+  ))
   if (skillId !== 51) {
     nextPlayer = startStaffCast(nextPlayer, authority.skillBook)
   }
@@ -4775,7 +4835,7 @@ function spawnFirewalkerPatch(
   const forward = drawNativeFloat(state.rng, 8); state = { ...state, rng: forward.state }
   const scaleDraw = drawNativeFloat(state.rng, 0.5); state = { ...state, rng: scaleDraw.state }
   const lifeDraw = drawNativeFloat(state.rng, 0.25); state = { ...state, rng: lifeDraw.state }
-  const skill = effectiveSecondaryAbilityRankStats(authority.skillBook, 23)
+  const skill = resolvedSecondaryAbilityRankStats(authority, 23)
   const velocity = {
     x: authority.character.velocity.x * 0.01,
     y: authority.character.velocity.y * 0.01,
@@ -5178,21 +5238,34 @@ function advanceActor(actor: NativeSecondaryActorState): NativeSecondaryActorSta
 
 function stepPlayerState(
   source: NativeSecondaryPlayerState,
-  skillBook: PlayerSkillBookComponent,
+  authority: NativeSecondaryPlayerAuthority,
 ): NativeSecondaryPlayerState {
-  const recharge = nativeSecondaryRechargePerTick(skillBook)
   return {
     ...source,
     castSpinTicksRemaining: Math.max(0, source.castSpinTicksRemaining - 1),
-    cooldownTicksBySkill: Object.freeze(source.cooldownTicksBySkill.map(
-      (ticks) => Math.max(0, ticks - recharge),
-    )),
-    globalCooldownTicks: Math.max(0, source.globalCooldownTicks - recharge),
+    cooldownTicksBySkill: Object.freeze(source.cooldownTicksBySkill.map((ticks, skillId) => (
+      ticks <= 0 ? 0 : Math.max(0, ticks - nativeSecondaryRechargeFactor(authority, skillId))
+    ))),
+    globalCooldownTicks: Math.max(0, source.globalCooldownTicks - authority.secondaryRechargeFactor),
     magicShieldPulseTicks: Math.max(0, source.magicShieldPulseTicks - 1),
     planewalkerTicksRemaining: Math.max(0, source.planewalkerTicksRemaining - 1),
     stoneskinTicksRemaining: Math.max(0, source.stoneskinTicksRemaining - 1),
     staffCastTicksRemaining: Math.max(0, source.staffCastTicksRemaining - 1),
   }
+}
+
+function nativeSecondaryRechargeFactor(
+  authority: NativeSecondaryPlayerAuthority,
+  skillId: number,
+): number {
+  const classId = nativeSkillClass(skillId)
+  const classRecharge = authority.offensiveFactors.equipment?.classRecharge[classId]
+  return classRecharge === undefined
+    ? authority.secondaryRechargeFactor
+    : Math.max(
+        authority.secondaryRechargeFactor,
+        applyNativeEquipmentTransform(classRecharge, 1),
+      )
 }
 
 function clearPlayerToggles(source: NativeSecondaryPlayerState): NativeSecondaryPlayerState {
@@ -5222,25 +5295,41 @@ function recalculateReserve(
 }
 
 function withCooldown(
+  state: NativeSecondarySimulationState,
   source: NativeSecondaryPlayerState,
   skillId: NativeSecondaryAbilityId,
   ticks: number,
-): NativeSecondaryPlayerState {
+  authority: NativeSecondaryPlayerAuthority,
+): Readonly<{
+  player: NativeSecondaryPlayerState
+  state: NativeSecondarySimulationState
+}> {
+  let cooldownTicks = ticks
+  if (ticks > 0 && authority.focusInstantRechargeChancePercent > 0) {
+    const draw = drawNativeInteger(state.rng, 100)
+    state = { ...state, rng: draw.state }
+    if (draw.value >= 100 - authority.focusInstantRechargeChancePercent) {
+      cooldownTicks = 0
+    }
+  }
   const cooldownTicksBySkill = [...source.cooldownTicksBySkill]
   const cooldownMaximumTicksBySkill = [...source.cooldownMaximumTicksBySkill]
-  cooldownTicksBySkill[skillId] = ticks
+  cooldownTicksBySkill[skillId] = cooldownTicks
   cooldownMaximumTicksBySkill[skillId] = ticks
   for (let index = 0; index < cooldownTicksBySkill.length; index += 1) {
     if (cooldownTicksBySkill[index]! < NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS) {
       cooldownTicksBySkill[index] = 0
     }
   }
-  return {
-    ...source,
-    cooldownMaximumTicksBySkill: Object.freeze(cooldownMaximumTicksBySkill),
-    cooldownTicksBySkill: Object.freeze(cooldownTicksBySkill),
-    globalCooldownTicks: NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
-  }
+  return Object.freeze({
+    player: Object.freeze({
+      ...source,
+      cooldownMaximumTicksBySkill: Object.freeze(cooldownMaximumTicksBySkill),
+      cooldownTicksBySkill: Object.freeze(cooldownTicksBySkill),
+      globalCooldownTicks: NATIVE_SECONDARY_GLOBAL_COOLDOWN_TICKS,
+    }),
+    state,
+  })
 }
 
 function startStaffCast(
@@ -5251,10 +5340,6 @@ function startStaffCast(
     ...source,
     staffCastTicksRemaining: nativeSecondaryStaffCastDurationTicks(skillBook),
   }
-}
-
-function nativeSecondaryRechargePerTick(skillBook: PlayerSkillBookComponent): number {
-  return Math.fround(1 + effectiveSkillNumericValue(skillBook, 60, 'mValue') / 100)
 }
 
 function effectiveSkillNumericValue(

@@ -41,8 +41,6 @@ import {
   resetPlayerPotionEffects,
   equipPlayerSecondaryAbility,
   stepPlayerPotionEffects,
-  refreshPlayerSkillBookMindstar,
-  selectPlayerConcentrationSkill,
   selectPlayerPrimarySkill,
   synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
@@ -56,10 +54,21 @@ import {
   createHubEconomy,
   insertLootInventoryItem,
   SORCERORS_CHARM_SELECTOR,
-  SPLIT_MIND_CHARM_SELECTOR,
   type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
+import {
+  createPlayerSkillRuntime,
+  markPlayerCreativityInsight,
+  refreshPlayerCombatFromSkillStats,
+  playerSkillDerivedStats,
+  refreshPlayerSkillRuntime,
+  setPlayerConcentration,
+  setPlayerMindstarActive,
+  stepPlayerSkillRuntime,
+  type PlayerSkillDerivedStats,
+  type PlayerSkillRuntimeComponent,
+} from '../core-kernels/player-skill-runtime.ts'
 
 export type PlayerEntityId = number
 
@@ -80,6 +89,7 @@ export interface PlayerEntityStore {
   readonly primaryCasts: readonly PlayerPrimaryCastState[]
   readonly progressions: readonly PlayerProgressionComponent[]
   readonly skillBooks: readonly PlayerSkillBookComponent[]
+  readonly skillRuntimes: readonly PlayerSkillRuntimeComponent[]
   readonly statBooks: readonly PlayerStatBookComponent[]
 }
 
@@ -110,6 +120,11 @@ export interface PlayerEntityRandomSkillIncreaseResult {
   readonly store: PlayerEntityStore
 }
 
+export interface PlayerEntityCreativityInsightResult {
+  readonly rng: NativeRngState
+  readonly store: PlayerEntityStore
+}
+
 export function createPlayerEntityStore(): PlayerEntityStore {
   return {
     configs: [],
@@ -122,6 +137,7 @@ export function createPlayerEntityStore(): PlayerEntityStore {
     primaryCasts: [],
     progressions: [],
     skillBooks: [],
+    skillRuntimes: [],
     statBooks: [],
   }
 }
@@ -138,9 +154,16 @@ export function addPlayerEntity(
   },
 ): PlayerEntityStore {
   if (playerEntityIndex(source, playerId) >= 0) return source
+  const economy = createHubEconomy(offerSeed)
+  const statBook = playerStatBook()
+  const skillState = createPlayerSkillRuntime(
+    createPlayerSkillBook(config),
+    statBook,
+    economy,
+  )
   return {
     configs: [...source.configs, Object.freeze({ ...config })],
-    economies: [...source.economies, createHubEconomy(offerSeed)],
+    economies: [...source.economies, economy],
     entityIds: [...source.entityIds, source.nextEntityId],
     identities: [...source.identities, Object.freeze({ playerId })],
     lightings: [...source.lightings, createPlayerLighting(lightRegistration)],
@@ -148,8 +171,9 @@ export function addPlayerEntity(
     nextEntityId: source.nextEntityId + 1,
     primaryCasts: [...source.primaryCasts, character.primaryCast],
     progressions: [...source.progressions, createPlayerProgression(offerSeed)],
-    skillBooks: [...source.skillBooks, createPlayerSkillBook(config)],
-    statBooks: [...source.statBooks, playerStatBook()],
+    skillBooks: [...source.skillBooks, skillState.skillBook],
+    skillRuntimes: [...source.skillRuntimes, skillState.runtime],
+    statBooks: [...source.statBooks, statBook],
   }
 }
 
@@ -170,6 +194,7 @@ export function removePlayerEntity(
     primaryCasts: withoutIndex(source.primaryCasts, index),
     progressions: withoutIndex(source.progressions, index),
     skillBooks: withoutIndex(source.skillBooks, index),
+    skillRuntimes: withoutIndex(source.skillRuntimes, index),
     statBooks: withoutIndex(source.statBooks, index),
   }
 }
@@ -244,9 +269,13 @@ export function replacePlayerEconomy(
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
-  const economies = [...source.economies]
-  economies[index] = economy
-  return { ...source, economies }
+  return replacePlayerSkillState(
+    source,
+    index,
+    source.skillBooks[index]!,
+    source.skillRuntimes[index]!,
+    economy,
+  )
 }
 
 export function playerLightingAt(
@@ -280,6 +309,54 @@ export function assignPlayerEntitySecondaryBelt(
   )
 }
 
+export function playerSkillRuntimeAt(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerSkillRuntimeComponent | null {
+  const index = playerEntityIndex(source, playerId)
+  return index < 0 ? null : source.skillRuntimes[index] ?? null
+}
+
+export function playerSkillDerivedStatsAt(
+  source: PlayerEntityStore,
+  playerId: string,
+): PlayerSkillDerivedStats | null {
+  const index = playerEntityIndex(source, playerId)
+  return index < 0 ? null : playerSkillDerivedStats(
+    source.skillRuntimes[index]!,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.progressions[index]!,
+    source.economies[index]!,
+  )
+}
+
+export function selectPlayerEntityConcentration(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) return source
+  if (source.progressions[index]!.mindChugTicksRemaining > 0) {
+    throw new Error('concentration cannot change while Mind Chug is active')
+  }
+  const selected = setPlayerConcentration(
+    source.skillRuntimes[index]!,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.economies[index]!,
+    skillId,
+  )
+  return replacePlayerSkillState(
+    source,
+    index,
+    selected.skillBook,
+    selected.runtime,
+    source.economies[index]!,
+  )
+}
+
 export function selectPlayerEntityPrimarySkill(
   source: PlayerEntityStore,
   playerId: string,
@@ -299,18 +376,35 @@ export function selectPlayerEntityConcentrationSkill(
   playerId: string,
   skillId: number,
 ): PlayerEntityStore {
+  if (playerEntityIndex(source, playerId) < 0) {
+    throw new Error(`player ${playerId} is absent`)
+  }
+  return selectPlayerEntityConcentration(source, playerId, skillId)
+}
+
+export function markPlayerEntityCreativityInsight(
+  source: PlayerEntityStore,
+  playerId: string,
+  rng: NativeRngState,
+): PlayerEntityCreativityInsightResult {
   const index = playerEntityIndex(source, playerId)
-  if (index < 0) throw new Error(`player ${playerId} is absent`)
-  return replacePlayerSkillBook(
-    source,
-    index,
-    selectPlayerConcentrationSkill(
-      source.skillBooks[index]!,
-      skillId,
-      source.economies[index]!.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
-      source.progressions[index]!.mindChugTicksRemaining,
-    ),
+  const offer = index < 0 ? null : source.progressions[index]!.pendingOffer
+  if (index < 0 || offer === null) return { rng, store: source }
+  const insight = markPlayerCreativityInsight(
+    source.skillRuntimes[index]!,
+    offer,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    rng,
   )
+  if (insight.offer === offer) return { rng: insight.rng, store: source }
+  return {
+    rng: insight.rng,
+    store: replacePlayerProgression(source, index, {
+      ...source.progressions[index]!,
+      pendingOffer: insight.offer,
+    }),
+  }
 }
 
 export function playerStatBookAt(
@@ -493,11 +587,24 @@ export function setPlayerEntityMindstar(
 ): PlayerEntityStore {
   const index = playerEntityIndex(source, playerId)
   if (index < 0) return source
-  const skillBook = refreshPlayerSkillBookMindstar(source.skillBooks[index]!, active)
-  if (skillBook === source.skillBooks[index]) return source
-  const skillBooks = [...source.skillBooks]
-  skillBooks[index] = skillBook
-  return { ...source, skillBooks }
+  const refreshed = setPlayerMindstarActive(
+    source.skillRuntimes[index]!,
+    active,
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.economies[index]!,
+  )
+  if (
+    refreshed.runtime === source.skillRuntimes[index]
+    && refreshed.skillBook === source.skillBooks[index]
+  ) return source
+  return replacePlayerSkillState(
+    source,
+    index,
+    refreshed.skillBook,
+    refreshed.runtime,
+    source.economies[index]!,
+  )
 }
 
 export function stepPlayerEntityCombatTick(
@@ -506,18 +613,42 @@ export function stepPlayerEntityCombatTick(
   const beganDeathEpochPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
   let changed = false
+  const skillRuntimes = [...source.skillRuntimes]
   const progressions = source.progressions.map((progression, index) => {
-    const result = stepPlayerCombatTick(stepPlayerPotionEffects(progression))
+    const derived = playerSkillDerivedStats(
+      source.skillRuntimes[index]!,
+      source.skillBooks[index]!,
+      source.statBooks[index]!,
+      progression,
+      source.economies[index]!,
+    )
+    const skillTick = stepPlayerSkillRuntime(
+      source.skillRuntimes[index]!,
+      derived,
+      {
+        acting: source.primaryCasts[index]!.actionTick >= 0,
+        moving: Math.hypot(
+          source.locomotions[index]!.velocity.x,
+          source.locomotions[index]!.velocity.y,
+        ) > 0.01,
+      },
+    )
+    skillRuntimes[index] = skillTick.runtime
+    const result = stepPlayerCombatTick(stepPlayerPotionEffects(progression), {
+      healthRecoveryPerTick: derived.healthRecoveryPerTick,
+      manaRecoveryPerTick: skillTick.manaRecoveryPerTick,
+    })
     const playerId = source.identities[index]!.playerId
     if (result.beganDeathEpoch) beganDeathEpochPlayerIds.push(playerId)
     if (result.emittedDeathBurst) deathBurstPlayerIds.push(playerId)
     changed ||= result.combat !== progression
+      || skillTick.runtime !== source.skillRuntimes[index]
     return result.combat
   })
   return {
     beganDeathEpochPlayerIds: Object.freeze(beganDeathEpochPlayerIds),
     deathBurstPlayerIds: Object.freeze(deathBurstPlayerIds),
-    store: changed ? { ...source, progressions } : source,
+    store: changed ? { ...source, progressions, skillRuntimes } : source,
   }
 }
 
@@ -562,7 +693,10 @@ export function playerEntityMovementScale(
   playerId: string,
 ): number {
   const progression = playerProgressionAt(source, playerId)
-  return progression ? playerMovementScale(progression) : 1
+  const derived = playerSkillDerivedStatsAt(source, playerId)
+  return progression && derived
+    ? playerMovementScale(progression) * derived.movementFactor
+    : 1
 }
 
 export function stepPlayerEntityOverlayLightingTick(
@@ -602,6 +736,23 @@ export function resetPlayerEntitiesForNewRun(
   ) {
     throw new Error('new run requires exactly one light registration for every player entity')
   }
+  const skillStates = source.identities.map((_, index) => createPlayerSkillRuntime(
+    source.skillBooks[index]!,
+    source.statBooks[index]!,
+    source.economies[index]!,
+  ))
+  const resetSkillBooks = skillStates.map(({ skillBook }) => skillBook)
+  const progressions = source.progressions.map((progression, index) => {
+    const reset = resetPlayerPotionEffects(resetPlayerCombatForNewRun(progression))
+    const derived = playerSkillDerivedStats(
+      skillStates[index]!.runtime,
+      skillStates[index]!.skillBook,
+      source.statBooks[index]!,
+      reset,
+      source.economies[index]!,
+    )
+    return refreshPlayerCombatFromSkillStats(reset, derived)
+  })
   return {
     ...source,
     lightings: source.lightings.map((lighting, index) => createPlayerLighting(
@@ -613,9 +764,11 @@ export function resetPlayerEntitiesForNewRun(
       locomotionComponent(placements[playerId]!)
     )),
     primaryCasts: source.identities.map(({ playerId }) => placements[playerId]!.primaryCast),
-    progressions: source.progressions.map((progression) => (
-      resetPlayerPotionEffects(resetPlayerCombatForNewRun(progression))
-    )),
+    progressions,
+    skillBooks: resetSkillBooks.every((skillBook, index) => (
+      skillBook === source.skillBooks[index]
+    )) ? source.skillBooks : resetSkillBooks,
+    skillRuntimes: skillStates.map(({ runtime }) => runtime),
   }
 }
 
@@ -702,12 +855,16 @@ export function increaseRandomPlayerEntitySkill(
   if (index < 0) return { rng, skillId: null, store: source }
   const increased = increaseRandomLearnedSkill(source.skillBooks[index]!, rng)
   if (increased.skillId === null) return { ...increased, store: source }
-  const skillBooks = [...source.skillBooks]
-  skillBooks[index] = increased.skillBook
   return {
     rng: increased.rng,
     skillId: increased.skillId,
-    store: { ...source, skillBooks },
+    store: replacePlayerSkillState(
+      source,
+      index,
+      increased.skillBook,
+      source.skillRuntimes[index]!,
+      source.economies[index]!,
+    ),
   }
 }
 
@@ -778,10 +935,14 @@ export function applyPlayerEntitySkillChoice(
   )
   if (!applied) return null
   const progressions = [...source.progressions]
-  const skillBooks = [...source.skillBooks]
   progressions[index] = applied.progression
-  skillBooks[index] = applied.skillBook
-  return { ...source, progressions, skillBooks }
+  return replacePlayerSkillState(
+    { ...source, progressions },
+    index,
+    applied.skillBook,
+    source.skillRuntimes[index]!,
+    source.economies[index]!,
+  )
 }
 
 export function rerollPlayerEntitySkillOffer(
@@ -844,6 +1005,40 @@ function replacePlayerProgression(
   const progressions = [...source.progressions]
   progressions[index] = progression
   return { ...source, progressions }
+}
+
+function replacePlayerSkillState(
+  source: PlayerEntityStore,
+  index: number,
+  skillBook: PlayerSkillBookComponent,
+  runtime: PlayerSkillRuntimeComponent,
+  economy: HubEconomyState,
+): PlayerEntityStore {
+  const refreshed = refreshPlayerSkillRuntime(
+    runtime,
+    skillBook,
+    source.statBooks[index]!,
+    economy,
+  )
+  const derived = playerSkillDerivedStats(
+    refreshed.runtime,
+    refreshed.skillBook,
+    source.statBooks[index]!,
+    source.progressions[index]!,
+    economy,
+  )
+  const economies = [...source.economies]
+  const progressions = [...source.progressions]
+  const skillBooks = [...source.skillBooks]
+  const skillRuntimes = [...source.skillRuntimes]
+  economies[index] = economy
+  progressions[index] = refreshPlayerCombatFromSkillStats(
+    source.progressions[index]!,
+    derived,
+  )
+  skillBooks[index] = refreshed.skillBook
+  skillRuntimes[index] = refreshed.runtime
+  return { ...source, economies, progressions, skillBooks, skillRuntimes }
 }
 
 function ownsSorcerorsCharm(source: PlayerEntityStore, index: number): boolean {

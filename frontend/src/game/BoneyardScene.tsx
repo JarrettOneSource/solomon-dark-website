@@ -233,7 +233,7 @@ export default function BoneyardScene({
       const renderer = rendererRef.current
       const localPlayer = snapshot.players[playerId]
       const camera = renderer?.camera(snapshot)
-      const spatialGain = camera
+      const spatialGain = camera && sound.sourcePosition !== null
         ? nativeBoneyardPointGain(
             sound.sourcePosition,
             camera,
@@ -275,7 +275,7 @@ export default function BoneyardScene({
       const snapshot = samplePresentation()
       const localPlayer = snapshot.players[playerId]
       const camera = renderer?.camera(snapshot)
-      const spatialGain = camera
+      const spatialGain = camera && sound.sourcePosition !== null
         ? nativeBoneyardPointGain(
             sound.sourcePosition,
             camera,

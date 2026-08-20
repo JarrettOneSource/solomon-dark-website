@@ -594,6 +594,7 @@ export type BoneyardEnemySemanticEventType =
 export interface BoneyardEnemySemanticEvent {
   readonly actorId: BoneyardEnemyActorId
   readonly count?: number
+  readonly deflectPitch?: number
   readonly eventId: BoneyardEnemyEventId
   readonly gainScale?: number
   readonly output?: BoneyardEnemyTerminalOutput

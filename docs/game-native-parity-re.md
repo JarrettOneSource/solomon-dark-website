@@ -20516,7 +20516,6 @@ WebGL2 at resolution 1, and returned `status: ok` with empty errors; pings were
 The final supervisor sample again reported zero sessions/lobbies. Production
 behavior is coupled to the deterministic loot proof by the exact deployed SHA
 and byte-matched runtime chunks; no debug mutation was added to production.
-
 The Mac-toolchain follow-up also reached publication. Mod Loader path and
 provenance corrections `452a0214` and `8128d342` reached `main`; GitHub Actions
 run `32385457541` completed successfully. Website receipt `4755003` reached
@@ -20533,6 +20532,83 @@ root/`/game` returned 200, and all four bodies were byte-identical at SHA-256
 `480b42b4c6b92512085fbcb9f3c778a52095fcd6cea49dd9e013aa2d8b3a1d5c`.
 No loot implementation, evidence, validation, publication, or production gap
 remains open.
+
+## 2026-08-20 — Player passive and equipment-effect consumers
+
+### System boundary and evidence
+
+This pass owns the complete Mind/Body passive rows 56..71 and the two-pass
+equipment-FX refresh they depend on. The durable native authority is Mod
+Loader `native-skills-and-spells.md` plus
+`native-items-equipment-and-loot.md`: progression refresh
+`0x0065F9A0/0x0065F5B0`, equipment passes `0x00656F60/0x00657310`, damage
+resolver `0x0065FFF0`, mana resolver `0x006600F0`, and contact-time Deflect
+owner `PlayerActorMagicDamage 0x00548150`. The machine-readable web table is
+mechanically derived from the checked-in 47-recipe/7-set native item catalog;
+it is not a second hand-maintained list.
+
+| Skill | Native influence | Current disposition |
+| ---: | --- | --- |
+| 56 Mana Up | base max MP plus authored `mValue`, then equipment max-MP transform; refresh preserves current/max ratio | exact-ported in dense player skill state |
+| 57 Channel Mana | base `0.1` MP/tick times `1+mValue/100`, concentrated `1+mConcentration/100`, then equipment recovery transform | exact-ported |
+| 58 Meditation | idle counter, authored delay, total recovery multiplier, concentrated quarter-strength moving/acting ramp | exact-ported kernel and authoritative tick; secondary-action activity admission remains in the staff/action follow-up |
+| 59 Battle Mage | authored-row flag gate; applies after minimum-one/base reduction and before later flat/multiplier mana lanes | exact-ported for primary and all secondary value materializers |
+| 60 Focus | global cooldown decrement factor; concentration owns one exact `Integer(100)` 75..99 instant-recharge branch at cooldown creation | exact-ported |
+| 61 Siege Mage | authored-row flag gate; applies last after all damage flats, multipliers, per-skill, class, and element lanes | exact-ported for primary, secondary, DOT, summon, and Plane-Orb materialization boundaries |
+| 62 Resist Magic | combined skill/concentration/equipment fraction before shield/Stoneskin interception | exact-ported |
+| 63 Creativity | four-card/lower-requirement picker already owned by progression; fixed concentration slot A alone rolls `Integer(5)==1`, selects an eligible card, and applies it twice | exact-ported authority/protocol; full Skill Book UI follows in the loadout slice |
+| 64 Health Up | base max HP plus authored `mValue`, then equipment max-HP transform; refresh preserves ratio | exact-ported |
+| 65 Enchant Staff | `mDamage` adds to both melee lanes; concentration action-rate factor is shipped `1.75`, not CFG text `2x` | scalar exact; automatic StaffMelee/StaffSpin contact/VFX/audio remains open in the staff slice |
+| 66 Telekinesis | pickup scalar `mValue*1.25`, doubled while concentrated | scalar exact; Orb/Gold/Sack/Bonus ground consumers remain open in the loot-attraction slice |
+| 67 Rush | movement factor `1+mValue/100`, then concentrated factor and equipment walk transform | exact-ported into authoritative movement |
+| 68 Deflect | exact Staff type gate, one `Integer(100)` per deflectable contact, successful-only signed pitch, facing, global stock swipe, and nearby concentrated physical x5 reflection | exact-ported gameplay/event/audio; browser contact journey still required |
+| 69 Resist Poison | skill/concentration/equipment fraction scales poison duration, not DPS | exact-ported |
+| 70 Faster Caster | fractional Staff action progress; one-shot emission uses threshold crossing so faster rates cannot skip the marker | exact-ported primary authority and finite protocol clock |
+| 71 Fortunate Flailing | Staff attack `Float(100)` plus four-way proc; concentrated non-normal damage x1.2 | pending with the inseparable automatic Staff combat actor slice |
+
+### Equipment FX ownership
+
+The generated resolver preserves native sink order (Hat, Robe, three Rings,
+Amulet, Weapon), appends only completed exact-recipe set FX, moves any source
+containing Grant Skill to the end of the skill pass, and then runs the passive
+stat/feature pass. It covers all parsed IDs 1..39: skill rank grants/boosts,
+global/class/per-skill damage and mana lanes, cast speed, recharge, recovery,
+resistance, max resources, pull, walk, gold, melee, the twelve feature bits,
+Weld Effect's unusual additive-percent rule, and Weld Calling. Random gear
+uses its serialized `nativeEffects`; named gear resolves the authoritative
+recipe table; recipe-less random gear never completes a set.
+
+Current consumers are closed for effective ranks, primary/secondary damage and
+cost, cast speed, recharge, max resources, recovery, movement, all three
+resistances, and the five shipped maximum-set branches. Still-open adjacent
+consumers are equipment Gold Bonus, Orb Pull, Staff melee, HP recovery during
+Regenerate composition, Mindblast's retained world program, and Welding
+feature/scalar consumption. They stay explicit here rather than being mistaken
+for completed because the pure resolver exists.
+
+### Corrected Deflect authority
+
+The old ledger stopped at a harmless refresh-side missing-property read and
+incorrectly called concentrated Deflect inert. Raw instructions prove the
+separate event path: `0x005481A6` draws `RandomInt(100)`, `0x005481AF` reads
+progression `+0xB8`, and `0x005481BC` rejects `draw >= trunc(chance)`. Success
+faces the source and requests swipe feedback at `0x005481C4`.
+`0x00548274..0x005482D7` checks concentration slots 16/20 for ID 68 or Mind
+Chug; with a positive physical hit and nearby non-null source,
+`0x0054837B` multiplies by the exact `5.0` constant and `0x005483A3` damages
+the original source. The web attaches the successful pitch to the already
+authoritative attack/projectile event ID, so audio cannot replay or spatially
+drift from the cancelled contact.
+
+### Verification status
+
+The pure equipment catalog/resolver, all static passive formulas, native
+offensive ordering, concentration selection, Mind Chug, Mindstar/equipment
+rank composition, Meditation, and living Staff admission have focused tests.
+The exact-tree TypeScript gate is green at this checkpoint. Full Boneyard,
+production build, browser Deflect/cast-speed/equipment journeys, Mac mini, and
+publication receipts remain deliberately pending until the Staff,
+Telekinesis, Mindblast, Skill Book, and Welding slices close.
 
 ## 2026-08-20 — Solomon Dig state-0 digging audio emitter
 

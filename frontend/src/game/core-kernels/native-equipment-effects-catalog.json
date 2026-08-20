@@ -1,0 +1,891 @@
+{
+  "schema": "solomon-dark-native-equipment-effects-v1",
+  "sourceSchema": "solomon-dark-native-item-catalog-v1",
+  "sets": [
+    {
+      "effects": [
+        {
+          "kind": 21,
+          "magnitude": 3,
+          "operator": 1,
+          "target": 0
+        }
+      ],
+      "memberRecipeIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "name": "The Arcanus Spectrum Paraclosm",
+      "sourceIndex": 0
+    },
+    {
+      "effects": [
+        {
+          "kind": 37,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 38,
+          "magnitude": 20,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "memberRecipeIndices": [
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "name": "Combinator's Coutrement",
+      "sourceIndex": 1
+    },
+    {
+      "effects": [
+        {
+          "kind": 26,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 25,
+          "magnitude": 2,
+          "operator": 1,
+          "target": 11
+        }
+      ],
+      "memberRecipeIndices": [
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "name": "Pandimensional Bug-Master's Outfit",
+      "sourceIndex": 2
+    },
+    {
+      "effects": [
+        {
+          "kind": 27,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 29
+        },
+        {
+          "kind": 11,
+          "magnitude": -20,
+          "operator": 2,
+          "target": 2
+        }
+      ],
+      "memberRecipeIndices": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "name": "Tempest Kit",
+      "sourceIndex": 3
+    },
+    {
+      "effects": [
+        {
+          "kind": 28,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        }
+      ],
+      "memberRecipeIndices": [
+        20,
+        21
+      ],
+      "name": "Burning Man",
+      "sourceIndex": 4
+    },
+    {
+      "effects": [
+        {
+          "kind": 30,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 13,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 3
+        }
+      ],
+      "memberRecipeIndices": [
+        22,
+        23,
+        24
+      ],
+      "name": "Frostburn Jewels",
+      "sourceIndex": 5
+    },
+    {
+      "effects": [
+        {
+          "kind": 29,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 13,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 4
+        }
+      ],
+      "memberRecipeIndices": [
+        25,
+        26,
+        27,
+        28
+      ],
+      "name": "Fete of Clay",
+      "sourceIndex": 6
+    }
+  ],
+  "items": [
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Pentaclostic Ring",
+      "sourceIndex": 0
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 27
+        },
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 28
+        }
+      ],
+      "name": "Arcanoric Robe",
+      "sourceIndex": 1
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 49
+        },
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 51
+        }
+      ],
+      "name": "Cosmofluxic Wand",
+      "sourceIndex": 2
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 21
+        }
+      ],
+      "name": "Theptoplasmar Amulet",
+      "sourceIndex": 3
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 35
+        }
+      ],
+      "name": "Synertauxic Ring",
+      "sourceIndex": 4
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 45
+        },
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 41
+        }
+      ],
+      "name": "Sublunarous Hat",
+      "sourceIndex": 5
+    },
+    {
+      "effects": [
+        {
+          "kind": 38,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Combinator's Cap",
+      "sourceIndex": 6
+    },
+    {
+      "effects": [
+        {
+          "kind": 38,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Combinator's Cape",
+      "sourceIndex": 7
+    },
+    {
+      "effects": [
+        {
+          "kind": 39,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        }
+      ],
+      "name": "Combinator's Club",
+      "sourceIndex": 8
+    },
+    {
+      "effects": [
+        {
+          "kind": 38,
+          "magnitude": 5,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 9,
+          "magnitude": 5,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Combinator's Choker",
+      "sourceIndex": 9
+    },
+    {
+      "effects": [
+        {
+          "kind": 38,
+          "magnitude": 5,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 9,
+          "magnitude": 5,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Combinator's Circle",
+      "sourceIndex": 10
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Bug-Master's Cap",
+      "sourceIndex": 11
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Bug-Master's Robe",
+      "sourceIndex": 12
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Bug-Master's Wand",
+      "sourceIndex": 13
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Bug-Master's Loop",
+      "sourceIndex": 14
+    },
+    {
+      "effects": [
+        {
+          "kind": 4,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        },
+        {
+          "kind": 25,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 11
+        }
+      ],
+      "name": "Pan-Dimensional Strangler",
+      "sourceIndex": 15
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 10,
+          "operator": 0,
+          "target": 27
+        }
+      ],
+      "name": "Cloudcover Hood",
+      "sourceIndex": 16
+    },
+    {
+      "effects": [
+        {
+          "kind": 5,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 30
+        }
+      ],
+      "name": "Ozone Cape",
+      "sourceIndex": 17
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 24
+        }
+      ],
+      "name": "Lightning Rod",
+      "sourceIndex": 18
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 27
+        }
+      ],
+      "name": "Storm Choker",
+      "sourceIndex": 19
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 5,
+          "operator": 0,
+          "target": 16
+        },
+        {
+          "kind": 2,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 1
+        }
+      ],
+      "name": "Burning Hat",
+      "sourceIndex": 20
+    },
+    {
+      "effects": [
+        {
+          "kind": 25,
+          "magnitude": 2,
+          "operator": 1,
+          "target": 23
+        },
+        {
+          "kind": 2,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 1
+        }
+      ],
+      "name": "Burning Robe",
+      "sourceIndex": 21
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 3
+        }
+      ],
+      "name": "Biting Ring",
+      "sourceIndex": 22
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 3
+        }
+      ],
+      "name": "Bitter Ring",
+      "sourceIndex": 23
+    },
+    {
+      "effects": [
+        {
+          "kind": 5,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 39
+        },
+        {
+          "kind": 5,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 32
+        }
+      ],
+      "name": "Glittering Amulet",
+      "sourceIndex": 24
+    },
+    {
+      "effects": [
+        {
+          "kind": 22,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 4
+        }
+      ],
+      "name": "Potter's Apron",
+      "sourceIndex": 25
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 45
+        }
+      ],
+      "name": "Clayshaper's Ring",
+      "sourceIndex": 26
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 45
+        }
+      ],
+      "name": "Claybaker's Ring",
+      "sourceIndex": 27
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 16
+        }
+      ],
+      "name": "Kiln",
+      "sourceIndex": 28
+    },
+    {
+      "effects": [
+        {
+          "kind": 1,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Obfuscate's Meddler",
+      "sourceIndex": 29
+    },
+    {
+      "effects": [
+        {
+          "kind": 21,
+          "magnitude": 10,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 24,
+          "magnitude": 50,
+          "operator": 0,
+          "target": 0
+        },
+        {
+          "kind": 17,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 6,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 5
+        }
+      ],
+      "name": "Karen You Scandalous Wench",
+      "sourceIndex": 30
+    },
+    {
+      "effects": [
+        {
+          "kind": 20,
+          "magnitude": 100,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Poxproof",
+      "sourceIndex": 31
+    },
+    {
+      "effects": [
+        {
+          "kind": 5,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 8
+        },
+        {
+          "kind": 5,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 10
+        },
+        {
+          "kind": 5,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 9
+        },
+        {
+          "kind": 11,
+          "magnitude": -15,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Ethereal Choker",
+      "sourceIndex": 32
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 16
+        },
+        {
+          "kind": 7,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 40
+        }
+      ],
+      "name": "Absolox's Boomstick",
+      "sourceIndex": 33
+    },
+    {
+      "effects": [
+        {
+          "kind": 6,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 6
+        }
+      ],
+      "name": "Staff of Dawn",
+      "sourceIndex": 34
+    },
+    {
+      "effects": [
+        {
+          "kind": 4,
+          "magnitude": 2,
+          "operator": 0,
+          "target": 54
+        }
+      ],
+      "name": "Ringwall",
+      "sourceIndex": 35
+    },
+    {
+      "effects": [
+        {
+          "kind": 12,
+          "magnitude": 100,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Fleetfinger",
+      "sourceIndex": 36
+    },
+    {
+      "effects": [
+        {
+          "kind": 24,
+          "magnitude": 3,
+          "operator": 1,
+          "target": 0
+        },
+        {
+          "kind": 23,
+          "magnitude": -80,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Gritchenscorn",
+      "sourceIndex": 37
+    },
+    {
+      "effects": [
+        {
+          "kind": 36,
+          "magnitude": 0,
+          "operator": 0,
+          "target": 0
+        }
+      ],
+      "name": "Mindblowing Ring",
+      "sourceIndex": 38
+    },
+    {
+      "effects": [
+        {
+          "kind": 8,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 0
+        }
+      ],
+      "name": "Smartest Ring",
+      "sourceIndex": 39
+    },
+    {
+      "effects": [
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 64
+        },
+        {
+          "kind": 7,
+          "magnitude": 1,
+          "operator": 0,
+          "target": 56
+        }
+      ],
+      "name": "Yzmar's Handicap",
+      "sourceIndex": 40
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 11,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Qubar's Ether",
+      "sourceIndex": 41
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 1
+        },
+        {
+          "kind": 11,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 1
+        }
+      ],
+      "name": "Qubar's Fire",
+      "sourceIndex": 42
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 2
+        },
+        {
+          "kind": 11,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 2
+        }
+      ],
+      "name": "Qubar's Air",
+      "sourceIndex": 43
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 3
+        },
+        {
+          "kind": 11,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 3
+        }
+      ],
+      "name": "Qubar's Water",
+      "sourceIndex": 44
+    },
+    {
+      "effects": [
+        {
+          "kind": 2,
+          "magnitude": 50,
+          "operator": 2,
+          "target": 4
+        },
+        {
+          "kind": 11,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 4
+        }
+      ],
+      "name": "Qubar's Earth",
+      "sourceIndex": 45
+    },
+    {
+      "effects": [
+        {
+          "kind": 19,
+          "magnitude": 95,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 1,
+          "magnitude": -35,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 9,
+          "magnitude": -50,
+          "operator": 2,
+          "target": 0
+        },
+        {
+          "kind": 21,
+          "magnitude": -40,
+          "operator": 2,
+          "target": 0
+        }
+      ],
+      "name": "Robe of Thaumic Unperturbability",
+      "sourceIndex": 46
+    }
+  ]
+}

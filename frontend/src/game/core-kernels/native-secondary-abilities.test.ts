@@ -149,6 +149,7 @@ function context(
         explosiveShieldManaCost: 0,
         fireBurnDamage: 2,
         freezeDurationMultiplier: 1,
+        focusInstantRechargeChancePercent: 0,
         golemIron: false,
         golemManaCost: 0,
         golemReflectFactor: 0,
@@ -163,6 +164,8 @@ function context(
         maximumRingOfFire: false,
         maximumRingOfIce: false,
         manaRecoveryPerTick: 0.1,
+        offensiveFactors: { damage: 1, manaCost: 1 },
+        secondaryRechargeFactor: 1,
         skillBook: book(skillId, learnedSkillIds, rank),
         worldKey: 'boneyard:test',
       },
@@ -1962,6 +1965,46 @@ test('secondary input is a held edge and the shared cooldown gate is silent', ()
   assert.equal(result.state.players.player?.cooldownTicksBySkill[48], 0)
 })
 
+test('Focus accelerates retained cooldowns and its concentration owns one instant roll', () => {
+  const acceleratedContext = context(15, 1, 0)
+  const acceleratedPlayer = {
+    ...acceleratedContext.players.player!,
+    secondaryRechargeFactor: 2,
+  }
+  let result = stepNativeSecondaryAbilities(createNativeSecondarySimulation(1), {
+    ...acceleratedContext,
+    players: { player: acceleratedPlayer },
+  })
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 100)
+  const recoveryContext = context(15, 2, null)
+  result = stepNativeSecondaryAbilities(result.state, {
+    ...recoveryContext,
+    players: {
+      player: { ...recoveryContext.players.player!, secondaryRechargeFactor: 2 },
+    },
+  })
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 98)
+
+  let seed = 0
+  while (drawNativeInteger(createNativeRng(seed), 100).value < 75) seed += 1
+  const chance = drawNativeInteger(createNativeRng(seed), 100)
+  const instantContext = context(15, 1, 0)
+  result = stepNativeSecondaryAbilities(
+    { ...createNativeSecondarySimulation(), rng: createNativeRng(seed) },
+    {
+      ...instantContext,
+      players: {
+        player: {
+          ...instantContext.players.player!,
+          focusInstantRechargeChancePercent: 25,
+        },
+      },
+    },
+  )
+  assert.equal(result.state.players.player?.cooldownTicksBySkill[15], 0)
+  assert.deepEqual(result.state.rng, chance.state)
+})
+
 test('Fire Wall is the recovered 300-unit eleven-patch construction', () => {
   const source = createNativeSecondarySimulation(123)
   const result = stepNativeSecondaryAbilities(source, context(73, 1, 0))
@@ -2003,6 +2046,32 @@ test('Fire Wall is the recovered 300-unit eleven-patch construction', () => {
     rng = drawUnitVectorForTest(rng).rng
   }
   assert.deepEqual(result.state.rng, rng)
+})
+
+test('secondary materialization applies Battle and Siege once at cost and actor birth', () => {
+  const baselineContext = context(73, 1, 0)
+  const baseline = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    baselineContext,
+  )
+  const scaled = stepNativeSecondaryAbilities(
+    createNativeSecondarySimulation(123),
+    {
+      ...baselineContext,
+      players: {
+        player: {
+          ...baselineContext.players.player!,
+          offensiveFactors: { damage: 2, manaCost: 0.5 },
+        },
+      },
+    },
+  )
+  const baselinePatch = baseline.state.actors.find(({ kind }) => kind === 'fire-patch')
+  const scaledPatch = scaled.state.actors.find(({ kind }) => kind === 'fire-patch')
+  assert.ok(baselinePatch)
+  assert.ok(scaledPatch)
+  assert.equal(scaledPatch.damage, baselinePatch.damage * 2)
+  assert.equal(scaled.manaSpent.player, baseline.manaSpent.player! * 0.5)
 })
 
 test('Ring of Fire owns the exact seven-word construction for thirty segments and one contact wave', () => {

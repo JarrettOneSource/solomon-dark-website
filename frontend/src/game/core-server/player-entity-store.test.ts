@@ -35,6 +35,8 @@ import {
   poisonPlayerEntity,
   playerProgressionAt,
   playerSkillBookAt,
+  playerSkillDerivedStatsAt,
+  playerSkillRuntimeAt,
   playerStatBookAt,
   removePlayerEntity,
   replacePlayerEconomy,
@@ -63,6 +65,7 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(store.locomotions.length, store.progressions.length)
   assert.equal(store.primaryCasts.length, store.progressions.length)
   assert.equal(store.progressions.length, store.skillBooks.length)
+  assert.equal(store.skillBooks.length, store.skillRuntimes.length)
   assert.equal(store.skillBooks.length, store.statBooks.length)
   assert.equal(playerEntityId(store, 'second'), 2)
   assert.equal(playerEconomyAt(store, 'first')?.gold, 10_000)
@@ -81,6 +84,43 @@ test('players occupy aligned dense ECS columns with stable entity IDs', () => {
   assert.equal(playerCharacterAt(store, 'second')?.config.displayName, 'Second')
   assert.equal(playerProgressionAt(store, 'second')?.lifeState, 'lethal-pending')
   assert.equal(store.nextEntityId, 3)
+})
+
+test('equipped native effects refresh effective ranks, maxima, and dense runtime atomically', () => {
+  let store = createPlayerEntityStore()
+  store = addPlayerEntity(store, 'first', FIRST, createPlayerCharacter(FIRST, { x: 0, y: 0 }), 10)
+  store = addPlayerEntity(store, 'second', SECOND, createPlayerCharacter(SECOND, { x: 0, y: 0 }), 20)
+  const secondBook = playerSkillBookAt(store, 'second')
+  const secondRuntime = playerSkillRuntimeAt(store, 'second')
+  const economy = playerEconomyAt(store, 'first')!
+  const ring = {
+    equipmentType: 'ring' as const,
+    iconRecords: [52],
+    id: 99,
+    kind: 'equipment' as const,
+    name: 'Native Effect Ring',
+    nativeEffects: [
+      { kind: 4, magnitude: 1, operator: 0 as const, target: 64 },
+      { kind: 23, magnitude: 50, operator: 0 as const, target: 0 },
+    ],
+    nativeSubtype: null,
+    nativeTypeId: 7002,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  store = replacePlayerEconomy(store, 'first', {
+    ...economy,
+    equipment: { ...economy.equipment, rings: [ring, null, null] },
+  })
+  assert.equal(playerSkillBookAt(store, 'first')?.permanentRanks[64], 0)
+  assert.equal(playerSkillBookAt(store, 'first')?.effectiveRanks[64], 1)
+  assert.equal(playerProgressionAt(store, 'first')?.maximumHealth, 150)
+  assert.equal(playerProgressionAt(store, 'first')?.currentHealth, 150)
+  assert.equal(playerSkillRuntimeAt(store, 'first')?.equipmentModifiers.maximumHealth.offset, 50)
+  assert.equal(playerSkillDerivedStatsAt(store, 'first')?.maximumHealth, 150)
+  assert.strictEqual(playerSkillBookAt(store, 'second'), secondBook)
+  assert.strictEqual(playerSkillRuntimeAt(store, 'second'), secondRuntime)
 })
 
 test('each dense player row owns an isolated economy component that survives run resets', () => {

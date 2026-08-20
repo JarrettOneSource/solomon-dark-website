@@ -197,6 +197,7 @@ function protocolBoneyardEnemyEvent(
     tick: event.tick,
     type: event.type,
     ...(event.count === undefined ? {} : { count: event.count }),
+    ...(event.deflectPitch === undefined ? {} : { deflectPitch: event.deflectPitch }),
     ...(event.gainScale === undefined ? {} : { gainScale: event.gainScale }),
     ...(event.output === undefined ? {} : { output: event.output }),
     ...(event.pitch === undefined ? {} : { pitch: event.pitch }),

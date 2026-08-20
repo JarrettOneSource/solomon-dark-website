@@ -404,6 +404,30 @@ test('pins all three Wizard ouch variants to the untouched stock WAVs', () => {
   }
 })
 
+test('pins Deflect swipe to its stock PCM and maps the successful global feedback edge', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/swipe.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST.swipe.sourceSha256,
+  )
+  assert.deepEqual(nativeEnemyEventSoundRequest({
+    actorId: 9,
+    deflectPitch: 1.125,
+    eventId: 3,
+    runId: 'run-1',
+    targetPlayerId: 'wizard',
+    tick: 120,
+    type: 'attack-marker',
+  }), {
+    cue: 'swipe',
+    playbackRate: 1.125,
+    sourcePosition: null,
+    volume: 1,
+  })
+})
+
 test('maps authoritative combat sounds to host-authored requests', () => {
   const death = {
     actorId: 9,

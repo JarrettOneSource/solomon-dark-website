@@ -1172,6 +1172,7 @@ test('protocol v37 preserves the bounded run-scoped enemy semantic-event lane', 
     },
     {
       actorId: 3,
+      deflectPitch: 1.125,
       eventId: 2,
       targetPlayerId: 'player-1',
       tick: 11,

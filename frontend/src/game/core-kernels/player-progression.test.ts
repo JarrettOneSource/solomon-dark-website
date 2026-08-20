@@ -584,6 +584,31 @@ test('every offered row applies only its addressed player-book entry', () => {
   }
 })
 
+test('Creativity Insight applies the selected skill twice without duplicating loadout identity', () => {
+  const skillBook = withLearnedSkills(createPlayerSkillBook(ETHER_ARCANE), [57])
+  const progression: PlayerProgressionComponent = {
+    ...createPlayerProgression(1),
+    pendingLevels: Object.freeze([12]),
+    pendingOffer: Object.freeze({
+      level: 12,
+      options: Object.freeze([
+        Object.freeze({ insight: true as const, skillId: 57, targetRank: 2 }),
+        Object.freeze({ skillId: 48, targetRank: 1 }),
+        Object.freeze({ skillId: 56, targetRank: 1 }),
+      ]),
+      sequence: 3,
+    }),
+  }
+  const applied = applyPlayerSkillChoice(progression, skillBook, {
+    choiceIndex: 0,
+    offerSequence: 3,
+    skillId: 57,
+  })
+  assert.ok(applied)
+  assert.equal(applied.skillBook.permanentRanks[57], 3)
+  assert.equal(applied.skillBook.secondaryBelt, skillBook.secondaryBelt)
+})
+
 test('offer fill preserves the native category collision guards', () => {
   const fresh = createPlayerSkillBook(ETHER_ARCANE)
   const levelTen = buildPlayerSkillOffer(offerProgression(18, 10), fresh, 1)

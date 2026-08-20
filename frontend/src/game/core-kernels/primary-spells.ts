@@ -229,6 +229,7 @@ export interface PrimarySpellSimulationState {
 
 export interface PrimarySpellCastAuthority {
   availableMana: number
+  castProgressFactor: number
   eligible: boolean
   primarySkill: NativePrimarySkillRankStats
 }
@@ -591,6 +592,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       rawHeld,
       acceptedCast,
       player.config.element,
+      authority?.castProgressFactor ?? 1,
     )
     const castOwnsFacing = playerPrimaryCastOwnsFacing(primaryCast)
     let nextPlayer: PlayerCharacterState = {
@@ -661,8 +663,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
 
     if (
-      nextPlayer.primaryCast.actionTick === primaryCastEmissionTick(player.config.element)
-      && previous.primaryCast.actionTick !== primaryCastEmissionTick(player.config.element)
+      nextPlayer.primaryCast.actionTick >= primaryCastEmissionTick(player.config.element)
+      && previous.primaryCast.actionTick < primaryCastEmissionTick(player.config.element)
       && (player.config.element === 'ether' || player.config.element === 'fire')
     ) {
       const underpowered = debitMana()
@@ -1155,13 +1157,17 @@ function advancePrimaryCast(
   held: boolean,
   acceptedCast: boolean,
   element: WizardElement,
+  progressFactor: number,
 ): PlayerPrimaryCastState {
+  if (!Number.isFinite(progressFactor) || progressFactor < 0) {
+    throw new RangeError('primary cast progress factor must be finite and non-negative')
+  }
   let actionTick = previous.actionTick
   if (actionTick >= 0) {
     if (previous.channelActive) {
-      actionTick = Math.min(actionTick + 1, 1)
+      actionTick = Math.min(actionTick + progressFactor, 1)
     } else {
-      actionTick += 1
+      actionTick += progressFactor
       if (actionTick >= primaryCastActionEndTick(element)) actionTick = -1
     }
   }
