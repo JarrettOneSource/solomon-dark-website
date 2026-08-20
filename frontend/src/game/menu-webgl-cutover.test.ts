@@ -8,6 +8,16 @@ const loaderScene = readFileSync(new URL('./NativeLoader.tsx', import.meta.url),
 const loaderStyles = readFileSync(new URL('./native-loader.css', import.meta.url), 'utf8')
 const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
 const menuStyles = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
+const assetManifest = readFileSync(new URL('../lib/assets.ts', import.meta.url), 'utf8')
+const buildRevision = readFileSync(
+  new URL('./title-build-revision.ts', import.meta.url),
+  'utf8',
+)
+const viteConfig = readFileSync(new URL('../../vite.config.ts', import.meta.url), 'utf8')
+const deployMain = readFileSync(
+  new URL('../../../ops/local-ci/deploy-main.sh', import.meta.url),
+  'utf8',
+)
 const loaderRenderer = readFileSync(
   new URL('./renderer/loader-renderer.ts', import.meta.url),
   'utf8',
@@ -63,4 +73,21 @@ test('edge chrome and the loader consume their recovered screen ownership', () =
   assert.match(loaderRenderer, /LOADER_FILL_BOUNDS/)
   assert.doesNotMatch(loaderRenderer, /\.rotation\s*=\s*Math\.PI\s*\/\s*2/)
   assert.doesNotMatch(loaderStyles, /16\s*\/\s*9/)
+})
+
+test('the title version lane reports the exact deployed build revision', () => {
+  assert.match(titleRenderer, /layoutTitleBuildRevisionLabel/)
+  assert.match(titleRenderer, /texture\(hub\.hud\.fontAtlas\)/)
+  assert.match(titleRenderer, /canvas\.dataset\.buildRevision/)
+  assert.match(titleRenderer, /canvas\.dataset\.buildLabel/)
+  assert.doesNotMatch(titleRenderer, /mainMenu\.text\.version/)
+  assert.doesNotMatch(assetManifest, /mainMenuTextVersion/)
+  assert.match(buildRevision, /BUILD \$\{short\}/)
+  assert.match(viteConfig, /\['rev-parse', '--verify', 'HEAD'\]/)
+  assert.match(viteConfig, /__SDR_BUILD_REVISION__/)
+  assert.match(viteConfig, /requestedRevision !== checkoutRevision/)
+  assert.match(
+    deployMain,
+    /SDR_BUILD_REVISION="\$target_sha" \.\/scripts\/validate\.sh/,
+  )
 })

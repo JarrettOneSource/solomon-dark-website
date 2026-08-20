@@ -176,7 +176,7 @@ if [[ -z "$artifact_checksum" ]]; then
     log "Validating origin/main $target_sha"
     (
         cd "$source_checkout"
-        ./scripts/validate.sh
+        SDR_BUILD_REVISION="$target_sha" ./scripts/validate.sh
     )
 
     newest_sha="$(fetch_main)"

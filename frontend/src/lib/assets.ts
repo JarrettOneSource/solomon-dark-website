@@ -58,7 +58,6 @@ import mainMenuTextQuit from '../assets/game/main-menu-text-quit.png'
 import mainMenuTextResume from '../assets/game/main-menu-text-resume.png'
 import mainMenuTextSettings from '../assets/game/main-menu-text-settings.png'
 import mainMenuTextBack from '../assets/game/main-menu-text-back.png'
-import mainMenuTextVersion from '../assets/game/main-menu-text-version.png'
 import createArcaneWheel from '../assets/game/create-arcane-wheel.png'
 import createBackSkull from '../assets/game/create-back-skull.png'
 import createChooseDiscipline from '../assets/game/create-choose-discipline.png'
@@ -476,7 +475,6 @@ export const mainMenu = {
     newGame: mainMenuTextNewGame,
     back: mainMenuTextBack,
     quit: mainMenuTextQuit,
-    version: mainMenuTextVersion,
   },
 }
 

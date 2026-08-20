@@ -2,13 +2,18 @@ import {
   Container,
   FillGradient,
   Graphics,
+  Rectangle,
   Sprite,
+  Texture,
   type Application,
-  type Texture,
 } from 'pixi.js'
 
-import { mainMenu, menuSolomon } from '../../lib/assets.ts'
+import { hub, mainMenu, menuSolomon } from '../../lib/assets.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
+import {
+  TITLE_BUILD_REVISION,
+  layoutTitleBuildRevisionLabel,
+} from '../title-build-revision.ts'
 import {
   fixedGamePresentationResolution,
   fixedGameStageBounds,
@@ -77,7 +82,11 @@ interface ButtonView {
   label: Container
 }
 
-const TITLE_ASSET_SOURCES = collectAssetSources({ mainMenu, menuSolomon })
+const TITLE_ASSET_SOURCES = collectAssetSources({
+  mainMenu,
+  menuSolomon,
+  revisionFont: hub.hud.fontAtlas,
+})
 const MAIN_BUTTON_X = 674.5
 const MAIN_BUTTON_Y = 421
 const MAIN_BUTTON_GAP = 7
@@ -104,6 +113,8 @@ export async function createTitleMenuRenderer(
     throw error
   }
   const { application, canvas } = gpu
+  canvas.dataset.buildLabel = TITLE_BUILD_REVISION.label
+  canvas.dataset.buildRevision = TITLE_BUILD_REVISION.full ?? 'local'
   canvas.dataset.textureSources = JSON.stringify(textures.sources)
   const texture = (source: string) => textureFrom(textures.textures, source)
   const root = new Container({ label: 'title-menu' })
@@ -172,7 +183,8 @@ export async function createTitleMenuRenderer(
   solomon.container.zIndex = 20
   solomonStage.addChild(solomon.container)
   centerStage.addChild(containedSprite(texture(mainMenu.logo), 435.5, 0, 829, 395, 21))
-  versionStage.addChild(stageSprite(texture(mainMenu.text.version), 1495, 4, 104, 15, 22))
+  const buildRevision = createTitleBuildRevisionView(texture(hub.hud.fontAtlas))
+  versionStage.addChild(buildRevision.container)
   centerStage.addChild(stageSprite(texture(mainMenu.flourish), 601, 440, 67, 262, 23))
   const rightFlourish = stageSprite(texture(mainMenu.flourish), 1102, 440, 67, 262, 23)
   rightFlourish.scale.x = -1
@@ -330,6 +342,7 @@ export async function createTitleMenuRenderer(
       application.stage.removeChild(root)
       root.destroy({ children: true })
       for (const gradient of gradients) gradient.destroy()
+      for (const glyphTexture of buildRevision.glyphTextures) glyphTexture.destroy(false)
       textures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
@@ -398,6 +411,37 @@ function titleStage(label: string, zIndex: number): Container {
   stage.sortableChildren = true
   stage.zIndex = zIndex
   return stage
+}
+
+function createTitleBuildRevisionView(atlas: Texture): {
+  container: Container
+  glyphTextures: Texture[]
+} {
+  const layout = layoutTitleBuildRevisionLabel(TITLE_BUILD_REVISION.label)
+  const container = new Container({ label: 'title-build-revision' })
+  const glyphTextures: Texture[] = []
+  container.eventMode = 'none'
+  container.position.set(TITLE_RENDER_WIDTH - 1 - layout.right, 12)
+
+  for (const glyph of layout.glyphs) {
+    const glyphTexture = new Texture({
+      frame: new Rectangle(
+        glyph.atlasX,
+        glyph.atlasY,
+        glyph.width,
+        glyph.height,
+      ),
+      source: atlas.source,
+    })
+    const sprite = new Sprite(glyphTexture)
+    sprite.eventMode = 'none'
+    sprite.position.set(glyph.left, glyph.top)
+    sprite.tint = 0xd8ba70
+    glyphTextures.push(glyphTexture)
+    container.addChild(sprite)
+  }
+
+  return { container, glyphTextures }
 }
 
 function tiledSprites(texture: Texture, count: number, zIndex: number) {
