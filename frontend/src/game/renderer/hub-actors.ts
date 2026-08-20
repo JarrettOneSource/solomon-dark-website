@@ -15,6 +15,7 @@ import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerDeathEquipmentAppearance,
+  playerLivingEquipmentAppearance,
 } from '../player-character-presentation.ts'
 import { NativeElementVfxView } from './native-element-vfx-view.ts'
 import { hubWorldDepthForActor, spriteFrameIndex } from './hub-render-contract.ts'
@@ -39,15 +40,21 @@ export class PlayerWorldView {
   private readonly staffBack: Sprite
   private readonly orb: NativeElementVfxView
   private readonly robe: Sprite
+  private readonly robeSecondary: Sprite
   private readonly fixed: Sprite
+  private readonly fixedSecondary: Sprite
   private readonly staffFront: Sprite
   private readonly head: Sprite
+  private readonly headSecondary: Sprite
   private readonly hitOverlay: Container
   private readonly hitStaffBack: Sprite
   private readonly hitRobe: Sprite
+  private readonly hitRobeSecondary: Sprite
   private readonly hitFixed: Sprite
+  private readonly hitFixedSecondary: Sprite
   private readonly hitStaffFront: Sprite
   private readonly hitHead: Sprite
+  private readonly hitHeadSecondary: Sprite
   private readonly deathLayers: readonly Sprite[]
   private readonly deathShadowLayers: readonly Sprite[]
   private readonly magicShield: Sprite
@@ -61,6 +68,10 @@ export class PlayerWorldView {
   private currentAttachmentPose = 0
   private currentDeathFrame: number | null = null
   private secondaryState: NativeSecondaryPlayerState | undefined
+  private robePrimaryTint = 0xffffff
+  private robeSecondaryTint = 0xffffff
+  private headPrimaryTint = 0xffffff
+  private headSecondaryTint = 0xffffff
 
   constructor(
     element: WizardElement,
@@ -77,9 +88,12 @@ export class PlayerWorldView {
     this.orb = new NativeElementVfxView(element, textures.elementVfx)
     this.orb.container.zIndex = 2
     this.robe = actorSprite(playerTextures.robe[0][0], 3)
+    this.robeSecondary = actorSprite(playerTextures.robe[0][0], 3)
     this.fixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.fixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.head = actorSprite(playerTextures.head[0], 7)
+    this.headSecondary = actorSprite(playerTextures.head[0], 7)
     this.deathShadowLayers = createDeathLayers(playerTextures.death[0][0], 1, 'shadow')
     this.deathLayers = createDeathLayers(playerTextures.death[0][0], 11, 'color')
     this.hitOverlay = new Container({ label: 'player-hit-overlay' })
@@ -88,22 +102,31 @@ export class PlayerWorldView {
     this.hitOverlay.zIndex = 8
     this.hitStaffBack = actorSprite(playerTextures.staffBack[0][0], 1)
     this.hitRobe = actorSprite(playerTextures.robe[0][0], 3)
+    this.hitRobeSecondary = actorSprite(playerTextures.robe[0][0], 3)
     this.hitFixed = actorSprite(playerTextures.fixed[0][0], 4)
+    this.hitFixedSecondary = actorSprite(playerTextures.fixed[0][0], 4)
     this.hitStaffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.hitHead = actorSprite(playerTextures.head[0], 7)
+    this.hitHeadSecondary = actorSprite(playerTextures.head[0], 7)
     for (const sprite of [
       this.hitStaffBack,
       this.hitRobe,
+      this.hitRobeSecondary,
       this.hitFixed,
+      this.hitFixedSecondary,
       this.hitStaffFront,
       this.hitHead,
+      this.hitHeadSecondary,
     ]) sprite.tint = 0xff0000
     this.hitOverlay.addChild(
       this.hitStaffBack,
       this.hitRobe,
+      this.hitRobeSecondary,
       this.hitFixed,
+      this.hitFixedSecondary,
       this.hitStaffFront,
       this.hitHead,
+      this.hitHeadSecondary,
     )
     const shieldRecord = nativeSecondarySpriteRecord('BadGuys', 49)
     this.magicShield = new Sprite(textures.secondary[nativeSecondarySpriteKey('BadGuys', 49)])
@@ -121,9 +144,12 @@ export class PlayerWorldView {
       this.staffBack,
       this.orb.container,
       this.robe,
+      this.robeSecondary,
       this.fixed,
+      this.fixedSecondary,
       this.staffFront,
       this.head,
+      this.headSecondary,
       ...this.deathShadowLayers,
       ...this.deathLayers,
       this.hitOverlay,
@@ -158,48 +184,108 @@ export class PlayerWorldView {
       player.config.element,
       player.economy.equipment,
     )
+    const livingAppearance = playerLivingEquipmentAppearance(
+      player.config.element,
+      player.economy.equipment,
+    )
+    const weaponTextures = livingAppearance.weapon === null
+      ? null
+      : livingAppearance.weapon.kind === 'staff'
+        ? this.textures.equipment.staffs[livingAppearance.weapon.selector]
+        : this.textures.equipment.wand
+    if (livingAppearance.weapon !== null && weaponTextures === undefined) {
+      throw new RangeError(
+        `Missing native ${livingAppearance.weapon.kind} selector ${livingAppearance.weapon.selector}`,
+      )
+    }
+    const hasWeapon = weaponTextures !== null
+    const hasStaff = livingAppearance.weapon?.kind === 'staff'
     this.currentDeathFrame = death.visible ? death.frame : null
 
     this.container.position.set(player.position.x, player.position.y)
     this.container.zIndex = hubWorldDepthForActor(player.position.y)
     this.shadow.visible = !death.visible
-    this.staffBack.visible = !death.visible && !staffFront
-    this.orb.container.visible = !death.visible
+    this.staffBack.visible = !death.visible && hasWeapon && !staffFront
+    this.orb.container.visible = !death.visible && hasStaff
     this.robe.visible = !death.visible
+    this.robeSecondary.visible = !death.visible && livingAppearance.robe !== null
     this.fixed.visible = !death.visible
-    this.staffFront.visible = !death.visible && staffFront
+    this.fixedSecondary.visible = !death.visible && livingAppearance.robe !== null
+    this.staffFront.visible = !death.visible && hasWeapon && staffFront
     this.head.visible = !death.visible
+    this.headSecondary.visible = !death.visible && livingAppearance.hat !== null
     this.updateDeathLayers(playerTextures, death, deathAppearance)
     const hitAlpha = playerHitOverlayAlpha(player.progression, tick)
     this.hitOverlay.alpha = hitAlpha
     this.hitOverlay.visible = !death.visible && hitAlpha > 0
-    this.hitStaffBack.visible = !staffFront
+    this.hitStaffBack.visible = hasWeapon && !staffFront
     this.hitRobe.visible = true
+    this.hitRobeSecondary.visible = livingAppearance.robe !== null
     this.hitFixed.visible = true
-    this.hitStaffFront.visible = staffFront
+    this.hitFixedSecondary.visible = livingAppearance.robe !== null
+    this.hitStaffFront.visible = hasWeapon && staffFront
     this.hitHead.visible = true
-    this.staffBack.texture = playerTextures.staffBack[heading][attachmentPose]
-    this.robe.texture = playerTextures.robe[heading][pose]
-    this.fixed.texture = playerTextures.fixed[heading][attachmentPose]
+    this.hitHeadSecondary.visible = livingAppearance.hat !== null
+    if (weaponTextures !== null) {
+      this.staffBack.texture = weaponTextures.back[heading]![attachmentPose]!
+      this.staffFront.texture = weaponTextures.front[heading]![attachmentPose]!
+      this.hitStaffBack.texture = weaponTextures.back[heading]![attachmentPose]!
+      this.hitStaffFront.texture = weaponTextures.front[heading]![attachmentPose]!
+    }
+    if (livingAppearance.robe === null) {
+      this.robe.texture = playerTextures.robe[heading]![pose]!
+      this.fixed.texture = playerTextures.fixed[heading]![attachmentPose]!
+      this.robePrimaryTint = 0xffffff
+      this.robeSecondaryTint = 0xffffff
+    } else {
+      const robeTextures = this.textures.equipment.robes[livingAppearance.robe.selector]
+      if (robeTextures === undefined) {
+        throw new RangeError(`Missing native robe selector ${livingAppearance.robe.selector}`)
+      }
+      this.robe.texture = robeTextures.primary[heading]![pose]!
+      this.robeSecondary.texture = robeTextures.secondary[heading]![pose]!
+      this.fixed.texture = this.textures.equipment.robeFixed.primary[heading]![attachmentPose]!
+      this.fixedSecondary.texture = this.textures.equipment.robeFixed.secondary[heading]![attachmentPose]!
+      this.robePrimaryTint = livingAppearance.robe.primaryTint
+      this.robeSecondaryTint = livingAppearance.robe.secondaryTint
+    }
     this.fixed.position.set(fixedOffset.x, fixedOffset.y)
-    this.staffFront.texture = playerTextures.staffFront[heading][attachmentPose]
+    this.fixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
     this.staffFront.position.set(attachmentOffset.x, attachmentOffset.y)
-    this.head.texture = playerTextures.head[heading]
+    if (livingAppearance.hat === null) {
+      this.head.texture = playerTextures.head[heading]!
+      this.headPrimaryTint = 0xffffff
+      this.headSecondaryTint = 0xffffff
+    } else {
+      const hatTextures = this.textures.equipment.hats[livingAppearance.hat.selector]
+      if (hatTextures === undefined) {
+        throw new RangeError(`Missing native hat selector ${livingAppearance.hat.selector}`)
+      }
+      this.head.texture = hatTextures.primary[heading]!
+      this.headSecondary.texture = hatTextures.secondary[heading]!
+      this.headPrimaryTint = livingAppearance.hat.primaryTint
+      this.headSecondaryTint = livingAppearance.hat.secondaryTint
+    }
     this.head.position.set(headOffset.x, headOffset.y)
-    this.hitStaffBack.texture = playerTextures.staffBack[heading][attachmentPose]
-    this.hitRobe.texture = playerTextures.robe[heading][pose]
-    this.hitFixed.texture = playerTextures.fixed[heading][attachmentPose]
+    this.headSecondary.position.set(headOffset.x, headOffset.y)
+    this.hitRobe.texture = this.robe.texture
+    this.hitRobeSecondary.texture = this.robeSecondary.texture
+    this.hitFixed.texture = this.fixed.texture
+    this.hitFixedSecondary.texture = this.fixedSecondary.texture
     this.hitFixed.position.set(fixedOffset.x, fixedOffset.y)
-    this.hitStaffFront.texture = playerTextures.staffFront[heading][attachmentPose]
+    this.hitFixedSecondary.position.set(fixedOffset.x, fixedOffset.y)
     this.hitStaffFront.position.set(attachmentOffset.x, attachmentOffset.y)
-    this.hitHead.texture = playerTextures.head[heading]
+    this.hitHead.texture = this.head.texture
+    this.hitHeadSecondary.texture = this.headSecondary.texture
     this.hitHead.position.set(headOffset.x, headOffset.y)
+    this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
     this.orb.container.position.set(
       orbOffset.x + (staffFront ? attachmentOffset.x : 0),
       orbOffset.y + (staffFront ? attachmentOffset.y : 0),
     )
     this.orb.container.zIndex = staffFront ? 6 : 2
     this.orb.update(tick)
+    this.applyMaterialTint()
   }
 
   get walkPose(): number {
@@ -258,10 +344,13 @@ export class PlayerWorldView {
   private applyMaterialTint(): void {
     const tint = nativePlayerMaterialTint(this.worldTint, this.secondaryState)
     this.staffBack.tint = tint
-    this.robe.tint = tint
-    this.fixed.tint = tint
+    this.robe.tint = multiplyTints(this.robePrimaryTint, tint)
+    this.robeSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
+    this.fixed.tint = multiplyTints(this.robePrimaryTint, tint)
+    this.fixedSecondary.tint = multiplyTints(this.robeSecondaryTint, tint)
     this.staffFront.tint = tint
-    this.head.tint = tint
+    this.head.tint = multiplyTints(this.headPrimaryTint, tint)
+    this.headSecondary.tint = multiplyTints(this.headSecondaryTint, tint)
     this.applyDeathTints()
   }
 

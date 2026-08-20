@@ -20284,6 +20284,18 @@ rounding, and draw order inside this system remain native.
   optional signed per-channel `Float(.1)`, optional `*1.85`, clamping, then an
   80-percent luminance blend with weights
   `.3086000085/.6093999743/.0820000023`; layer two remains native white.
+- Living equipment uses the same item-owned selectors and colors as death;
+  it is not permanently baked into the wizard's element skin. The equipped
+  path `0x0054BA80 -> 0x00538B80` invokes Hat/Robe/Staff item painters. Hat
+  selectors choose Clothes primary `316 + 24*s` and secondary `412 + 24*s`;
+  Robe selectors choose dynamic primary `868 + 120*s` and secondary
+  `1228 + 120*s`, while the shared fixed banks remain
+  `1612/2428` primary and `2020/2836` secondary. Staff selectors choose
+  Clothes `5..10` and preserve the item-owned back/front attachment pass;
+  Wand uses Clothes record 15 at the same recovered endpoints. The starter
+  Hat/Robe use selector zero with the descriptor element palette, generated
+  Hat/Robe items use their serialized two-color state, and an empty weapon
+  slot owns neither shaft nor Staff orb.
 - Ground Sack pickup calls `0x0055FF20` with forced insertion. It stacks a
   matching Potion, replaces the first Item_None cell when one exists, and
   otherwise appends past the 88 visible cells. The actor still retires; dropping
@@ -20343,6 +20355,12 @@ rounding, and draw order inside this system remain native.
   wire version 31 after the authoritative gameplay-pause lane is composed.
 - Obsolete path: enemy death's XP-only terminal output is extended at its owner;
   no renderer inference or CSS pickup substitute is added.
+- Living presentation: the player renderer resolves Hat/Robe/Staff/Wand from
+  replicated `economy.equipment`, selects the extracted native banks, applies
+  item primary/secondary tints before world/secondary material tint, and
+  mirrors that exact composed pose into the native-red hit redraw. Death keeps
+  its separate nine-layer and bouncer owners. No item identity or palette is
+  inferred from the element after a generated item is equipped.
 
 ### Validation contract
 

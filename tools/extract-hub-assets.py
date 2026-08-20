@@ -759,9 +759,12 @@ def draw_staff(
     records: list[SpriteRecord],
     heading: int,
     pose: int,
+    selector: int = 0,
 ) -> tuple[float, float]:
     start, end = staff_endpoints(records, heading, pose)
-    body_record = records[5]
+    if selector < 0 or selector > 5:
+        raise ValueError(f"staff selector outside 0..5: {selector}")
+    body_record = records[5 + selector]
     paste_segment(
         cell,
         crop(atlas, body_record),
@@ -791,6 +794,7 @@ def draw_player_staff_pass(
     heading: int,
     pose: int,
     front: bool,
+    selector: int = 0,
 ) -> None:
     """Paint the stock staff and both hands as one item-owned depth pass."""
     frame = pose * PLAYER_HEADINGS + heading
@@ -803,7 +807,7 @@ def draw_player_staff_pass(
     # records for the same heading-and-pose frame. The whole composite is
     # submitted either behind or in front of the robe from primary-hand point
     # zero; the two hands are never split into independent depth passes.
-    draw_staff(cell, atlas, records, heading, pose)
+    draw_staff(cell, atlas, records, heading, pose, selector)
     paste_player_layer(cell, atlas, records[primary_hand])
     paste_player_layer(cell, atlas, records[secondary_hand])
 
@@ -871,6 +875,7 @@ def build_player_staff_sheet(
     atlas: Image.Image,
     records: list[SpriteRecord],
     front: bool,
+    selector: int = 0,
 ) -> Image.Image:
     sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
     for heading in range(PLAYER_HEADINGS):
@@ -883,7 +888,85 @@ def build_player_staff_sheet(
                 heading,
                 pose,
                 front,
+                selector,
             )
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_hat_style_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    selector: int,
+    secondary: bool,
+) -> Image.Image:
+    base = (412 if secondary else 316) + selector * PLAYER_HEADINGS
+    sheet = empty_player_sheet()
+    for heading in range(PLAYER_HEADINGS):
+        cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+        paste_player_layer(cell, atlas, records[base + heading])
+        sheet.alpha_composite(cell, (0, heading * PLAYER_CELL_SIZE))
+    return sheet
+
+
+def build_player_robe_style_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    selector: int,
+    secondary: bool,
+) -> Image.Image:
+    base = (1228 if secondary else 868) + selector * PLAYER_WALK_POSES * PLAYER_HEADINGS
+    sheet = empty_player_sheet(PLAYER_WALK_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_WALK_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            offset = pose * PLAYER_HEADINGS + heading
+            paste_player_layer(cell, atlas, records[base + offset])
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_fixed_color_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    secondary: bool,
+) -> Image.Image:
+    bases = (2020, 2836) if secondary else (1612, 2428)
+    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_ATTACHMENT_POSES):
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            offset = pose * PLAYER_HEADINGS + heading
+            for base in bases:
+                paste_player_layer(cell, atlas, records[base + offset])
+            sheet.alpha_composite(
+                cell,
+                (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
+            )
+    return sheet
+
+
+def build_player_wand_sheet(
+    atlas: Image.Image,
+    records: list[SpriteRecord],
+    front: bool,
+) -> Image.Image:
+    sheet = empty_player_sheet(PLAYER_ATTACHMENT_POSES)
+    for heading in range(PLAYER_HEADINGS):
+        for pose in range(PLAYER_ATTACHMENT_POSES):
+            frame = pose * PLAYER_HEADINGS + heading
+            if attachment_is_front(records, 3244 + frame) != front:
+                continue
+            cell = Image.new("RGBA", (PLAYER_CELL_SIZE, PLAYER_CELL_SIZE))
+            start, end = staff_endpoints(records, heading, pose)
+            body = records[15]
+            paste_segment(cell, crop(atlas, body), start, end, body.logical_width)
             sheet.alpha_composite(
                 cell,
                 (pose * PLAYER_CELL_SIZE, heading * PLAYER_CELL_SIZE),
@@ -1463,16 +1546,39 @@ def main() -> int:
         raise ValueError(
             f"Clothes.bundle has {len(clothes_records)} records; expected 3724"
         )
-    save(
-        build_player_staff_sheet(clothes, clothes_records, front=False),
-        output_dir,
-        "player-character-staff-back",
-    )
-    save(
-        build_player_staff_sheet(clothes, clothes_records, front=True),
-        output_dir,
-        "player-character-staff-front",
-    )
+    for selector in range(6):
+        save(
+            build_player_staff_sheet(clothes, clothes_records, False, selector),
+            output_dir,
+            f"player-character-staff-{selector}-back",
+        )
+        save(
+            build_player_staff_sheet(clothes, clothes_records, True, selector),
+            output_dir,
+            f"player-character-staff-{selector}-front",
+        )
+    save(build_player_staff_sheet(clothes, clothes_records, False), output_dir, "player-character-staff-back")
+    save(build_player_staff_sheet(clothes, clothes_records, True), output_dir, "player-character-staff-front")
+    save(build_player_wand_sheet(clothes, clothes_records, False), output_dir, "player-character-wand-back")
+    save(build_player_wand_sheet(clothes, clothes_records, True), output_dir, "player-character-wand-front")
+    for selector in range(4):
+        for secondary in (False, True):
+            layer = "secondary" if secondary else "primary"
+            save(
+                build_player_hat_style_sheet(clothes, clothes_records, selector, secondary),
+                output_dir,
+                f"player-character-hat-{selector}-{layer}",
+            )
+    for selector in range(3):
+        for secondary in (False, True):
+            layer = "secondary" if secondary else "primary"
+            save(
+                build_player_robe_style_sheet(clothes, clothes_records, selector, secondary),
+                output_dir,
+                f"player-character-robe-{selector}-{layer}",
+            )
+    save(build_player_fixed_color_sheet(clothes, clothes_records, False), output_dir, "player-character-robe-fixed-primary")
+    save(build_player_fixed_color_sheet(clothes, clothes_records, True), output_dir, "player-character-robe-fixed-secondary")
     for selector, base_record in enumerate(PLAYER_DEATH_ROBE_PRIMARY_BASES):
         save(
             build_player_death_layer_sheet(clothes, clothes_records, base_record),

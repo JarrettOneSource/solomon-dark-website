@@ -11,6 +11,7 @@ import {
   createPlayerCharacterDrawPlan,
   createPlayerDeathDrawPlan,
   playerDeathEquipmentAppearance,
+  playerLivingEquipmentAppearance,
   playerCharacterFixedRobeOffset,
   playerCharacterFrontAttachmentOffset,
   playerCharacterHeadOffset,
@@ -149,6 +150,44 @@ test('generated loot equipment keeps its live selector and wearable colors after
     hat: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 3 },
     robe: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 2 },
     weapon: { kind: 'wand', selector: 5 },
+  })
+  assert.deepEqual(playerLivingEquipmentAppearance('fire', {
+    hat: generated('hat', 3),
+    robe: generated('robe', 2),
+    weapon: generated('wand', 5),
+  }), {
+    hat: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 3 },
+    robe: { primaryTint: 0x123456, secondaryTint: 0xffffff, selector: 2 },
+    weapon: { kind: 'wand', selector: 5 },
+  })
+})
+
+test('living equipment distinguishes required starter clothes from an empty weapon slot', () => {
+  assert.deepEqual(playerLivingEquipmentAppearance(
+    'water',
+    createHubEconomy(1).equipment,
+  ), {
+    hat: { primaryTint: 0x5e6e81, secondaryTint: 0xffffff, selector: 0 },
+    robe: { primaryTint: 0x5e6e81, secondaryTint: 0xffffff, selector: 0 },
+    weapon: { kind: 'staff', selector: 0 },
+  })
+  assert.deepEqual(playerLivingEquipmentAppearance('water', {
+    hat: null,
+    robe: null,
+    weapon: null,
+  }), {
+    hat: null,
+    robe: null,
+    weapon: null,
+  })
+  assert.deepEqual(playerLivingEquipmentAppearance('fire', {
+    hat: equipmentItem(16, 'hat'),
+    robe: equipmentItem(25, 'robe'),
+    weapon: equipmentItem(18, 'staff'),
+  }), {
+    hat: { primaryTint: 0x19ffff, secondaryTint: 0xffffff, selector: 3 },
+    robe: { primaryTint: 0x19ff19, secondaryTint: 0xc8ffc8, selector: 2 },
+    weapon: { kind: 'staff', selector: 3 },
   })
 })
 

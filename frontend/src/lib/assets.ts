@@ -171,6 +171,36 @@ import playerCharacterHeadEarth from '../assets/game/player-character-head-earth
 import playerCharacterHeadEther from '../assets/game/player-character-head-ether.png'
 import playerCharacterHeadFire from '../assets/game/player-character-head-fire.png'
 import playerCharacterHeadWater from '../assets/game/player-character-head-water.png'
+import playerCharacterHat0Primary from '../assets/game/player-character-hat-0-primary.png'
+import playerCharacterHat0Secondary from '../assets/game/player-character-hat-0-secondary.png'
+import playerCharacterHat1Primary from '../assets/game/player-character-hat-1-primary.png'
+import playerCharacterHat1Secondary from '../assets/game/player-character-hat-1-secondary.png'
+import playerCharacterHat2Primary from '../assets/game/player-character-hat-2-primary.png'
+import playerCharacterHat2Secondary from '../assets/game/player-character-hat-2-secondary.png'
+import playerCharacterHat3Primary from '../assets/game/player-character-hat-3-primary.png'
+import playerCharacterHat3Secondary from '../assets/game/player-character-hat-3-secondary.png'
+import playerCharacterRobe0Primary from '../assets/game/player-character-robe-0-primary.png'
+import playerCharacterRobe0Secondary from '../assets/game/player-character-robe-0-secondary.png'
+import playerCharacterRobe1Primary from '../assets/game/player-character-robe-1-primary.png'
+import playerCharacterRobe1Secondary from '../assets/game/player-character-robe-1-secondary.png'
+import playerCharacterRobe2Primary from '../assets/game/player-character-robe-2-primary.png'
+import playerCharacterRobe2Secondary from '../assets/game/player-character-robe-2-secondary.png'
+import playerCharacterRobeFixedPrimary from '../assets/game/player-character-robe-fixed-primary.png'
+import playerCharacterRobeFixedSecondary from '../assets/game/player-character-robe-fixed-secondary.png'
+import playerCharacterStaff0Back from '../assets/game/player-character-staff-0-back.png'
+import playerCharacterStaff0Front from '../assets/game/player-character-staff-0-front.png'
+import playerCharacterStaff1Back from '../assets/game/player-character-staff-1-back.png'
+import playerCharacterStaff1Front from '../assets/game/player-character-staff-1-front.png'
+import playerCharacterStaff2Back from '../assets/game/player-character-staff-2-back.png'
+import playerCharacterStaff2Front from '../assets/game/player-character-staff-2-front.png'
+import playerCharacterStaff3Back from '../assets/game/player-character-staff-3-back.png'
+import playerCharacterStaff3Front from '../assets/game/player-character-staff-3-front.png'
+import playerCharacterStaff4Back from '../assets/game/player-character-staff-4-back.png'
+import playerCharacterStaff4Front from '../assets/game/player-character-staff-4-front.png'
+import playerCharacterStaff5Back from '../assets/game/player-character-staff-5-back.png'
+import playerCharacterStaff5Front from '../assets/game/player-character-staff-5-front.png'
+import playerCharacterWandBack from '../assets/game/player-character-wand-back.png'
+import playerCharacterWandFront from '../assets/game/player-character-wand-front.png'
 import playerCharacterDeathAir from '../assets/game/player-character-death-air.png'
 import playerCharacterDeathEarth from '../assets/game/player-character-death-earth.png'
 import playerCharacterDeathEther from '../assets/game/player-character-death-ether.png'
@@ -649,6 +679,30 @@ export const playerCharacter = {
     fire: playerCharacterHeadFire,
     water: playerCharacterHeadWater,
   },
+  hatStyles: [
+    { primary: playerCharacterHat0Primary, secondary: playerCharacterHat0Secondary },
+    { primary: playerCharacterHat1Primary, secondary: playerCharacterHat1Secondary },
+    { primary: playerCharacterHat2Primary, secondary: playerCharacterHat2Secondary },
+    { primary: playerCharacterHat3Primary, secondary: playerCharacterHat3Secondary },
+  ],
+  robeStyles: [
+    { primary: playerCharacterRobe0Primary, secondary: playerCharacterRobe0Secondary },
+    { primary: playerCharacterRobe1Primary, secondary: playerCharacterRobe1Secondary },
+    { primary: playerCharacterRobe2Primary, secondary: playerCharacterRobe2Secondary },
+  ],
+  robeFixedLayers: {
+    primary: playerCharacterRobeFixedPrimary,
+    secondary: playerCharacterRobeFixedSecondary,
+  },
+  staffStyles: [
+    { back: playerCharacterStaff0Back, front: playerCharacterStaff0Front },
+    { back: playerCharacterStaff1Back, front: playerCharacterStaff1Front },
+    { back: playerCharacterStaff2Back, front: playerCharacterStaff2Front },
+    { back: playerCharacterStaff3Back, front: playerCharacterStaff3Front },
+    { back: playerCharacterStaff4Back, front: playerCharacterStaff4Front },
+    { back: playerCharacterStaff5Back, front: playerCharacterStaff5Front },
+  ],
+  wand: { back: playerCharacterWandBack, front: playerCharacterWandFront },
 }
 
 /** Source-registered College Courtyard, actors, and fixed native HUD pieces. */

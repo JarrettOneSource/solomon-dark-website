@@ -49,19 +49,28 @@ export interface PlayerDeathDrawPlan {
   visible: boolean
 }
 
-interface PlayerDeathTintedSelector {
+export interface PlayerEquipmentTintedSelector {
   readonly primaryTint: number
   readonly secondaryTint: number
   readonly selector: number
 }
 
 export interface PlayerDeathEquipmentAppearance {
-  readonly hat: PlayerDeathTintedSelector
-  readonly robe: PlayerDeathTintedSelector
+  readonly hat: PlayerEquipmentTintedSelector
+  readonly robe: PlayerEquipmentTintedSelector
   readonly weapon: {
     readonly kind: 'staff' | 'wand'
     readonly selector: number
   }
+}
+
+export interface PlayerLivingEquipmentAppearance {
+  readonly hat: PlayerEquipmentTintedSelector | null
+  readonly robe: PlayerEquipmentTintedSelector | null
+  readonly weapon: {
+    readonly kind: 'staff' | 'wand'
+    readonly selector: number
+  } | null
 }
 
 const ELEMENT_DEATH_PALETTES: Readonly<Record<WizardElement, readonly [number, number]>> = {
@@ -72,7 +81,7 @@ const ELEMENT_DEATH_PALETTES: Readonly<Record<WizardElement, readonly [number, n
   water: [0x5e6e81, 0xffffff],
 }
 
-const ROBE_DEATH_APPEARANCES: Readonly<Record<number, PlayerDeathTintedSelector>> = {
+const ROBE_DEATH_APPEARANCES: Readonly<Record<number, PlayerEquipmentTintedSelector>> = {
   1: { primaryTint: 0x191919, secondaryTint: 0x80ffff, selector: 1 },
   7: { primaryTint: 0xc0c0c0, secondaryTint: 0xffffff, selector: 2 },
   12: { primaryTint: 0xff19ff, secondaryTint: 0xffffff, selector: 0 },
@@ -82,7 +91,7 @@ const ROBE_DEATH_APPEARANCES: Readonly<Record<number, PlayerDeathTintedSelector>
   46: { primaryTint: 0xffffff, secondaryTint: 0xffffff, selector: 0 },
 }
 
-const HAT_DEATH_APPEARANCES: Readonly<Record<number, PlayerDeathTintedSelector>> = {
+const HAT_DEATH_APPEARANCES: Readonly<Record<number, PlayerEquipmentTintedSelector>> = {
   5: { primaryTint: 0x191919, secondaryTint: 0xff80ff, selector: 0 },
   6: { primaryTint: 0xc0c0c0, secondaryTint: 0xffffff, selector: 2 },
   11: { primaryTint: 0xff19ff, secondaryTint: 0xffffff, selector: 0 },
@@ -147,12 +156,40 @@ export function playerDeathEquipmentAppearance(
   }
 }
 
+export function playerLivingEquipmentAppearance(
+  element: WizardElement,
+  equipment: Pick<HubEquipmentState, 'hat' | 'robe' | 'weapon'>,
+): PlayerLivingEquipmentAppearance {
+  const [primaryTint, secondaryTint] = ELEMENT_DEATH_PALETTES[element]
+  return {
+    hat: equipment.hat === null
+      ? null
+      : deathTintedAppearance(
+          equipment.hat,
+          'hat',
+          HAT_DEATH_APPEARANCES,
+          { primaryTint, secondaryTint, selector: 0 },
+        ),
+    robe: equipment.robe === null
+      ? null
+      : deathTintedAppearance(
+          equipment.robe,
+          'robe',
+          ROBE_DEATH_APPEARANCES,
+          { primaryTint, secondaryTint, selector: 0 },
+        ),
+    weapon: equipment.weapon === null
+      ? null
+      : deathWeaponAppearance(equipment.weapon),
+  }
+}
+
 function deathTintedAppearance(
   item: HubInventoryItem | null,
   expectedType: 'hat' | 'robe',
-  appearances: Readonly<Record<number, PlayerDeathTintedSelector>>,
-  fallback: PlayerDeathTintedSelector,
-): PlayerDeathTintedSelector {
+  appearances: Readonly<Record<number, PlayerEquipmentTintedSelector>>,
+  fallback: PlayerEquipmentTintedSelector,
+): PlayerEquipmentTintedSelector {
   if (item === null) return fallback
   if (item.recipeIndex !== null) return requiredDeathAppearance(item, expectedType, appearances)
   if (item.nativeSelector === undefined) return fallback
@@ -283,8 +320,8 @@ function normalizedIndex(value: number, length: number): number {
 function requiredDeathAppearance(
   item: HubInventoryItem,
   expectedType: 'hat' | 'robe',
-  appearances: Readonly<Record<number, PlayerDeathTintedSelector>>,
-): PlayerDeathTintedSelector {
+  appearances: Readonly<Record<number, PlayerEquipmentTintedSelector>>,
+): PlayerEquipmentTintedSelector {
   const appearance = item.recipeIndex === null ? undefined : appearances[item.recipeIndex]
   if (item.equipmentType !== expectedType || appearance === undefined) {
     throw new Error(`Unsupported native ${expectedType} death appearance recipe ${item.recipeIndex}`)

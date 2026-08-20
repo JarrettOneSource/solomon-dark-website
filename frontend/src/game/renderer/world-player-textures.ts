@@ -39,6 +39,29 @@ export interface PlayerActorTextureFrames {
   staffFront: readonly (readonly Texture[])[]
 }
 
+export interface PlayerLivingEquipmentTextureFrames {
+  readonly hats: readonly Readonly<{
+    primary: readonly Texture[]
+    secondary: readonly Texture[]
+  }>[]
+  readonly robeFixed: Readonly<{
+    primary: readonly (readonly Texture[])[]
+    secondary: readonly (readonly Texture[])[]
+  }>
+  readonly robes: readonly Readonly<{
+    primary: readonly (readonly Texture[])[]
+    secondary: readonly (readonly Texture[])[]
+  }>[]
+  readonly staffs: readonly Readonly<{
+    back: readonly (readonly Texture[])[]
+    front: readonly (readonly Texture[])[]
+  }>[]
+  readonly wand: Readonly<{
+    back: readonly (readonly Texture[])[]
+    front: readonly (readonly Texture[])[]
+  }>
+}
+
 export interface PlayerWorldTextures {
   death: {
     hat: {
@@ -60,6 +83,7 @@ export interface PlayerWorldTextures {
   }
   elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
   fontAtlas: Texture
+  equipment: PlayerLivingEquipmentTextureFrames
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
@@ -158,6 +182,28 @@ export function createPlayerWorldTextures(
     playerTextures(element),
   ])) as Record<WizardElement, PlayerActorTextureFrames>
   const elementTextures = createNativeElementVfxTextures(texture)
+  const equipment: PlayerLivingEquipmentTextureFrames = {
+    hats: playerCharacter.hatStyles.map((style) => ({
+      primary: stripFrames(texture(style.primary), 24, 170, 170, 'vertical'),
+      secondary: stripFrames(texture(style.secondary), 24, 170, 170, 'vertical'),
+    })),
+    robeFixed: {
+      primary: gridFrames(texture(playerCharacter.robeFixedLayers.primary), 10, 24, 170, 170),
+      secondary: gridFrames(texture(playerCharacter.robeFixedLayers.secondary), 10, 24, 170, 170),
+    },
+    robes: playerCharacter.robeStyles.map((style) => ({
+      primary: gridFrames(texture(style.primary), 5, 24, 170, 170),
+      secondary: gridFrames(texture(style.secondary), 5, 24, 170, 170),
+    })),
+    staffs: playerCharacter.staffStyles.map((style) => ({
+      back: gridFrames(texture(style.back), 10, 24, 170, 170),
+      front: gridFrames(texture(style.front), 10, 24, 170, 170),
+    })),
+    wand: {
+      back: gridFrames(texture(playerCharacter.wand.back), 10, 24, 170, 170),
+      front: gridFrames(texture(playerCharacter.wand.front), 10, 24, 170, 170),
+    },
+  }
   const deathGrid = (source: string): Texture[][] => gridFrames(
     texture(source),
     ACTOR_DEATH_FRAMES,
@@ -212,6 +258,7 @@ export function createPlayerWorldTextures(
     },
     elementVfx: elementTextures,
     fontAtlas: texture(hub.hud.fontAtlas),
+    equipment,
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {
@@ -307,6 +354,22 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
   textures.death.robe.fixedSecondary.forEach((sheet) => sheet.forEach(add))
   textures.death.robe.primary.forEach((sheet) => sheet.forEach(add))
   textures.death.robe.secondary.forEach((sheet) => sheet.forEach(add))
+  for (const hat of textures.equipment.hats) {
+    add(hat.primary)
+    add(hat.secondary)
+  }
+  textures.equipment.robeFixed.primary.forEach(add)
+  textures.equipment.robeFixed.secondary.forEach(add)
+  for (const robe of textures.equipment.robes) {
+    robe.primary.forEach(add)
+    robe.secondary.forEach(add)
+  }
+  for (const staff of textures.equipment.staffs) {
+    staff.back.forEach(add)
+    staff.front.forEach(add)
+  }
+  textures.equipment.wand.back.forEach(add)
+  textures.equipment.wand.front.forEach(add)
   Object.values(textures.elementVfx).forEach(add)
   add(textures.primarySpells.fire.impacts)
   add(textures.primarySpells.fire.particles)
