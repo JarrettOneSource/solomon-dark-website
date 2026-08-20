@@ -18940,3 +18940,70 @@ a missing screen. Their SHA-256 values are:
 
 All task-owned Chrome, Vite, and game-host processes exited after each pass;
 the final process census found no command referencing the acceptance root.
+
+### Corrected production acceptance, 2026-08-20
+
+Website commit `e311342643d3d6d78f6b3ae10d6659293922834f` reached `main` by
+fast-forward after its rebased implementation and receipt commits reproduced
+the pre-rebase stable patch IDs. GitHub Actions run `32360821876` completed
+successfully. The independent machine-local deployment worker fetched that
+exact commit into its own mirror, reran `./scripts/validate.sh`, built immutable
+artifact SHA-256
+`ae8b6e9b1789ab5286a7a625754a7c7aa088ddcc9fde8d102ee61f6aa824e486`,
+backed up and integrity-checked the SQLite database, and performed the
+zero-active-session atomic cutover. Its rollback directory is
+`/opt/solomon-dark-revived.rollback-pre-e311342643d3-20260820T105450Z`;
+the database backup is
+`/var/backups/solomon-dark-revived/pre-e311342643d3-20260820T105450Z/sdr.db`.
+After cutover both systemd services were active with zero restarts, the live
+database reported `ok`, and the supervisor reported protocol
+`solomon-dark/30`.
+
+The first public-path probe provisioned a real
+`wss://solomondarker.com/game-sessions/...` endpoint, completed the protocol-30
+handshake, and observed authoritative movement from X `950.64` to
+`950.9299999991059`. Its log SHA-256 is
+`2a82d27de097c9a75fc7d1a3eb1931015520be7f6ad98b5a2c50716254ac4502`.
+
+The decisive production browser journey used the public
+`https://solomondarker.com/game` bundle and public provisioned authority from
+the Mac mini. Three real clients completed Create and shared Hub/Boneyard;
+the mobile client then disconnected cleanly. The two remaining clients crossed
+the authored gate, triggered Solomon's hello/laugh/get-him-boys sequence and a
+real ten-Skeleton opening, and deliberately cast no damaging spell. Stock enemy
+attacks alone reduced both players from live health through the native death
+epochs. No server state, damage helper, local host, or debug endpoint was used.
+
+The first player's rendered death samples were frames `[0,1,2,3]` at ticks
+`[4,154,156,159]`; the last player's were `[0,1,2,3]` at
+`[0,153,156,160]`. Every sample carried nine color layers, only frame 3 carried
+the nine shadow layers, and the last player's intermediate frames advanced
+while Game Over already owned the run. The fade-only hold was clear at Game
+Over tick 162 with a null exit clock. No Game Over button existed. Automatic
+exit was observed at exit tick 102, Game Over tick 1101, alpha `0.255`, exactly
+matching `102 / 400`. The host alone confirmed the retained loadout and both
+players returned to the same Hub. The renderer was WebGL2 at resolution 1,
+network pings were 44/30 ms, every host/guest/mobile page and console error
+array was empty, and supervisor health returned to zero sessions and zero
+lobbies. The complete JSON log SHA-256 is
+`fcd77beea411c2732f5d46c6b27a4f034ca240c63e3d3d8af9fe9c91434fe26d`.
+
+Visual inspection of the public production frames confirms the active stock
+wave, the layered dying wizard and grounded weapon, the clear fade-only
+Boneyard Game Over image, its darker exit sample, retained Create/loadout, and
+the shared returned Hub. The relevant SHA-256 values are:
+
+- active Solomon wave: `d099c6bb37c27f47f9b2c2f48e1df2131cf8d259bdef98a08f91f01f0d0a5122`;
+- death animation: `3610ddee3a921b392c0e4f7988a09d7a9d389040804b20a7f20beef979856466`;
+- clear Game Over hold: `d2d7b1c408060d108d6528af80ea362d973390811e20a45df482252efb6b1bbe`;
+- Game Over exit: `55bb3e2c32e9556c989af49488635bf6822fcf2b40e7d700677042255d238ac5`;
+- retained loadout: `81aa26890f0d743f5d21668aca28d599af917df8471ed250aab47fe6ce1cb7cf`;
+- returned Hub: `1b33b13e4cc47eac6fc14bdcd03398fd965f4bd332260ab575cd73c12579e994`.
+
+The first generic production smoke attempt is not counted: its external test
+harness tried to dynamically import a Vite-only `/src/...` oracle after the
+deployed Boneyard was already healthy, and production correctly returned no
+source module. The decisive journey removed only that external oracle and
+added the organic death assertions above; it did not modify the deployed
+bundle or authority. This receipt is written afterward, so its commit changes
+only this ledger.
