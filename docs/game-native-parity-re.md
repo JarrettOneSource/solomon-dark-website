@@ -21540,3 +21540,29 @@ and `4a2edaaf6c64e5a1c3b841a8d2bb14d52e2b9354223fdfe65593a0432b13afbe`.
 The Mac worktree stayed clean and no command referencing the acceptance root
 remained. This receipt paragraph changes documentation only; the implementation
 tree tested above is unchanged.
+
+### Final concurrent-main cutoff
+
+The task then incorporated the independently published deployed-revision,
+Skeleton head-facing, and late-light corrections through Website `63f9587`.
+The three independent schema additions—pause, Skeleton head-facing, and
+Lua—therefore converge as protocol 33. Cutoff commit
+`b249af3ac293b85efbc405fd47f2a33197fa60ea`, tree
+`05245cf420c521e36f72d26cd3245a457a1c19b5`, was transferred in bundle
+`c668a4ed5931a2fbc558829c76f7ebd3735b760750b092ee1d07b87cbc7481d7`
+and checked out cleanly at
+`/Users/jarrett/codex-acceptance/web-lua-runtime-20260820-v3-cutoff/website`.
+
+The exact cutoff Mac gate passed 24 backend contracts, 40 loot tests, 143
+prerequisites, 1,009 broad game/frontend tests, and every auxiliary/build gate;
+the Game entry was 216,067 raw / 63,696 gzip bytes. Its log SHA-256 is
+`bd42f0857ec24aaef9cf2fbb2616737ec3833344331c69b4c481c1d503dc403b`.
+The exact cutoff browser journey again passed with Chrome `151.0.7922.138`,
+protocol 33, `19.063 ms` lazy initialization, zero budget crossings or
+unexpected errors, and Lua callback p50/p95/p99/max
+`0.211/0.531/0.668/1.115 ms`. Its log SHA-256 is
+`da4d4cb9eaf131f8b770ebe1b88898cafa1af56b86b1dd6d3092b6ea505f09d6`.
+It retained the corrected late-light Boneyard, completed the seed/spawn/event
+path, and retired to zero players / no VM. The worktree remained clean with no
+task process. This final paragraph is receipt-only documentation; the tested
+cutoff implementation is unchanged.
