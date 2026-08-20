@@ -59,6 +59,7 @@ import {
   monitorWebSocketHeartbeat,
   resolveGameHeartbeatInterval,
 } from './websocket-heartbeat.ts'
+import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
   gameServerErrorDetails,
   logGameServerEvent,
@@ -187,6 +188,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const websocketServer = new WebSocketServer({
     noServer: true,
     maxPayload: 64 * 1024,
+    perMessageDeflate: GAME_WEBSOCKET_COMPRESSION,
   })
 
   server.on('clientError', (error, socket) => {

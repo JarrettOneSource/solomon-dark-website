@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -9,7 +11,6 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react'
-import BoneyardScene from './BoneyardScene.tsx'
 import CreateMenuScene from './CreateMenuScene.tsx'
 import type { GameClientSession } from './client/game-client-session.ts'
 import type {
@@ -27,8 +28,6 @@ import type { GameRunPhase } from './core-kernels/game-run.ts'
 import type { GameConnectionStage } from './engine.ts'
 import GameAccountName from './GameAccountName.tsx'
 import GameFullscreenButton from './GameFullscreenButton.tsx'
-import HubScene from './HubScene.tsx'
-import SkillPicker from './SkillPicker.tsx'
 import { createGamepadMenuNavigation } from './input/gamepad-menu-navigation.ts'
 import MatchLoadingScreen from './MatchLoadingScreen.tsx'
 import {
@@ -53,6 +52,11 @@ import {
 import type { TitleMenuAction } from './renderer/title-menu-renderer.ts'
 import TitleMenuPresentation from './TitleMenuPresentation.tsx'
 import './main-menu.css'
+
+const BoneyardScene = lazy(() => import('./BoneyardScene.tsx'))
+const HubScene = lazy(() => import('./HubScene.tsx'))
+const loadSkillPicker = () => import('./SkillPicker.tsx')
+const SkillPicker = lazy(loadSkillPicker)
 
 type MenuScreen = 'root' | 'play' | 'create' | 'hub'
 type FadeState = 'idle' | 'covering' | 'revealing'
@@ -377,6 +381,10 @@ export default function MainMenuScene({
   }, [advanceLoading, beginLoading, session])
 
   useEffect(() => {
+    if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
+  }, [runtimeSnapshot?.world.kind])
+
+  useEffect(() => {
     if (!session || !runtimeSnapshot) return
     if (runtimeRunPhase === 'hub' && screen === 'create') {
       setFadeState('idle')
@@ -620,64 +628,70 @@ export default function MainMenuScene({
           />
         ) : session && runtimeSnapshot?.world.kind === 'boneyard' && loadedBoneyard
           && runtimeSnapshot.world.runId === loadedBoneyard.runId ? (
-          <BoneyardScene
-            accountUsername={accountUsername}
-            audio={audio}
-            boneyard={loadedBoneyard}
-            getPingMs={session.getPingMs}
-            inputBlocked={loading !== null || levelUpModalActive}
-            levelUpModalActive={levelUpModalActive}
-            levelUpPresentationId={levelUpPresentationId}
-            playerId={session.playerId}
-            initialSnapshot={runtimeSnapshot}
-            onInput={session.sendInput}
-            onLoadingError={cancelBoneyardLoading}
-            onReady={finishBoneyardLoading}
-            progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
-            samplePresentation={session.sampleBoneyardPresentation}
-            subscribePing={session.onPing}
-            subscribeEnemyEvent={session.onEnemyEvent}
-            subscribe={session.onSnapshot}
-          />
+          <Suspense fallback={null}>
+            <BoneyardScene
+              accountUsername={accountUsername}
+              audio={audio}
+              boneyard={loadedBoneyard}
+              getPingMs={session.getPingMs}
+              inputBlocked={loading !== null || levelUpModalActive}
+              levelUpModalActive={levelUpModalActive}
+              levelUpPresentationId={levelUpPresentationId}
+              playerId={session.playerId}
+              initialSnapshot={runtimeSnapshot}
+              onInput={session.sendInput}
+              onLoadingError={cancelBoneyardLoading}
+              onReady={finishBoneyardLoading}
+              progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
+              samplePresentation={session.sampleBoneyardPresentation}
+              subscribePing={session.onPing}
+              subscribeEnemyEvent={session.onEnemyEvent}
+              subscribe={session.onSnapshot}
+            />
+          </Suspense>
         ) : session && runtimeSnapshot?.world.kind === 'hub' ? (
-          <HubScene
-            accountUsername={accountUsername}
-            audio={audio}
-            boneyards={session.boneyards}
-            getPingMs={session.getPingMs}
-            inputBlocked={loading !== null || levelUpModalActive}
-            levelUpModalActive={levelUpModalActive}
-            levelUpPresentationId={levelUpPresentationId}
-            playerId={session.playerId}
-            progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
-            initialSnapshot={runtimeSnapshot}
-            onInput={session.sendInput}
-            onHubAction={session.sendHubAction}
-            onLoadingError={cancelHubLoading}
-            onReady={finishHubLoading}
-            onStartMatch={startBoneyard}
-            samplePresentation={session.samplePresentation}
-            subscribePing={session.onPing}
-            subscribe={session.onSnapshot}
-          />
+          <Suspense fallback={null}>
+            <HubScene
+              accountUsername={accountUsername}
+              audio={audio}
+              boneyards={session.boneyards}
+              getPingMs={session.getPingMs}
+              inputBlocked={loading !== null || levelUpModalActive}
+              levelUpModalActive={levelUpModalActive}
+              levelUpPresentationId={levelUpPresentationId}
+              playerId={session.playerId}
+              progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
+              initialSnapshot={runtimeSnapshot}
+              onInput={session.sendInput}
+              onHubAction={session.sendHubAction}
+              onLoadingError={cancelHubLoading}
+              onReady={finishHubLoading}
+              onStartMatch={startBoneyard}
+              samplePresentation={session.samplePresentation}
+              subscribePing={session.onPing}
+              subscribe={session.onSnapshot}
+            />
+          </Suspense>
         ) : null}
 
         {session
           && levelUpPickerPresentationId !== null
           && (runtimeProgression?.pendingOffer || levelUpPickerClosing) ? (
-          <SkillPicker
-            audio={audio}
-            offer={runtimeProgression?.pendingOffer ?? null}
-            onClosingChange={setLevelUpPickerClosing}
-            onReroll={session.rerollSkill}
-            onSave={session.saveSkill}
-            onSelect={session.selectSkill}
-            presentationId={levelUpPickerPresentationId}
-            sorcerorsCharmAvailable={Boolean(
-              runtimeProgression?.sorcerorsCharmAvailable,
-            )}
-            style={nativeStageStyle}
-          />
+          <Suspense fallback={null}>
+            <SkillPicker
+              audio={audio}
+              offer={runtimeProgression?.pendingOffer ?? null}
+              onClosingChange={setLevelUpPickerClosing}
+              onReroll={session.rerollSkill}
+              onSave={session.saveSkill}
+              onSelect={session.selectSkill}
+              presentationId={levelUpPickerPresentationId}
+              sorcerorsCharmAvailable={Boolean(
+                runtimeProgression?.sorcerorsCharmAvailable,
+              )}
+              style={nativeStageStyle}
+            />
+          </Suspense>
         ) : null}
 
         {session

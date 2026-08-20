@@ -3,11 +3,13 @@ import test from 'node:test'
 import {
   HUB_COURTYARD_DEPTH_PROP_FRAME,
   HUB_COURTYARD_DEPTH_PROPS,
+  HUB_DIAGNOSTIC_WINDOW_FRAMES,
   HUB_WORLD_DEPTH,
   HUB_WORLD_LAYER_BOUNDS,
   HUB_STUDENT_VISIBILITY_HALF_EXTENT,
   hubWorldDepthForActor,
   hubStudentIntersectsView,
+  hubStudentVisibilityDiagnosticsDue,
   initialHubResolution,
   spriteFrameIndex,
 } from './hub-render-contract.ts'
@@ -73,4 +75,14 @@ test('Student visibility instrumentation uses conservative actor bounds without 
     position: { x: Number.NaN, y: 300 },
     scale: 1,
   }, camera, view), false)
+})
+
+test('Student visibility diagnostics retain their low-rate window but refresh on population edges', () => {
+  assert.equal(HUB_DIAGNOSTIC_WINDOW_FRAMES, 120)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(1, 14, -1), true)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(2, 14, 14), false)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(119, 14, 14), false)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(120, 14, 14), true)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(121, 15, 14), true)
+  assert.equal(hubStudentVisibilityDiagnosticsDue(122, 14, 15), true)
 })

@@ -42,6 +42,8 @@ test('game session supervisor provisions isolated authenticated game sessions', 
   const second = await join(supervisor.address.url, secondEndpoint, BROWSER_ORIGIN)
   context.after(() => first.socket.close())
   context.after(() => second.socket.close())
+  assert.equal(first.socket.extensions, 'permessage-deflate')
+  assert.equal(second.socket.extensions, 'permessage-deflate')
   assert.equal(first.welcome.playerId, 'player-1')
   assert.equal(second.welcome.playerId, 'player-1')
 

@@ -9,7 +9,11 @@ import {
 import type { HubRegionId } from '../core-kernels/hub-regions.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
 import type { GameViewportLayout } from './game-viewport.ts'
-import { initialHubResolution } from './hub-render-contract.ts'
+import {
+  HUB_DIAGNOSTIC_WINDOW_FRAMES,
+  hubStudentVisibilityDiagnosticsDue,
+  initialHubResolution,
+} from './hub-render-contract.ts'
 import {
   destroyHubWorldTextureFrames,
   hubDeferredAnimationTextures,
@@ -88,8 +92,6 @@ interface HubWorldRendererOptions {
   playerId: string
   viewport: GameViewportLayout
 }
-
-const DIAGNOSTIC_WINDOW_FRAMES = 120
 
 export async function createHubWorldRenderer(
   options: HubWorldRendererOptions,
@@ -181,6 +183,7 @@ export async function createHubWorldRenderer(
   let levelUpPresentationStartedAt: number | null = null
   let levelUpModalActive = false
   let resolution = initialResolution
+  let sampledStudentCount = -1
   const frameDiagnostics: HubFrameDiagnostics = {
     astronomerRenderable: true,
     astronomerTelescopeFrame: 0,
@@ -355,14 +358,20 @@ export async function createHubWorldRenderer(
           width: viewport.width / HUB_CAMERA_SCALE,
         })
         courtyardScene.southern.position.copyFrom(southernTranslation)
-        if (frameCount === 1 || frameCount % DIAGNOSTIC_WINDOW_FRAMES === 0) {
+        const studentCount = snapshot.world.students.length
+        if (hubStudentVisibilityDiagnosticsDue(
+          frameCount,
+          studentCount,
+          sampledStudentCount,
+        )) {
           const view = {
             height: viewport.height / HUB_CAMERA_SCALE,
             width: viewport.width / HUB_CAMERA_SCALE,
           }
           const visible = courtyardScene.countVisibleStudents(snapshot, camera, view)
           frameDiagnostics.studentVisibleCandidateCount = visible
-          frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length - visible
+          frameDiagnostics.studentOutsideViewCount = studentCount - visible
+          sampledStudentCount = studentCount
         }
       } else {
         privateRoomScene.world.position.set(
@@ -371,6 +380,7 @@ export async function createHubWorldRenderer(
         )
         frameDiagnostics.studentVisibleCandidateCount = 0
         frameDiagnostics.studentOutsideViewCount = snapshot.world.students.length
+        sampledStudentCount = snapshot.world.students.length
       }
       let screenFeedback = secondaryScreenFeedback.get(participant.region)
       if (!screenFeedback) {
@@ -407,8 +417,8 @@ export async function createHubWorldRenderer(
       canvas.dataset.levelUpParticleCount = `${frameDiagnostics.levelUpParticleCount}`
       application.render()
       updateFrameDiagnostics(snapshot)
-      if (frameCount % DIAGNOSTIC_WINDOW_FRAMES !== 0) return
-      const averageFrameMs = frameTimeTotal / DIAGNOSTIC_WINDOW_FRAMES
+      if (frameCount % HUB_DIAGNOSTIC_WINDOW_FRAMES !== 0) return
+      const averageFrameMs = frameTimeTotal / HUB_DIAGNOSTIC_WINDOW_FRAMES
       frameTimeTotal = 0
       publishDiagnostics(snapshot, averageFrameMs)
     },

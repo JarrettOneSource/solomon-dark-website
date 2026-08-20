@@ -62,6 +62,27 @@ test('Tree foreground stays per-object and shares native alpha and root tint', (
   assert.match(boneyardRenderer, /tree\.foreground\.sprite\.tint = tint/)
 })
 
+test('Boneyard readiness includes the complete initial environment-lighting frame', () => {
+  const initialDarknessPaint = boneyardScene.indexOf(
+    'paintDarkness(\n          darkness,\n          boneyardInitialSnapshot,',
+  )
+  const readyPublication = boneyardScene.indexOf("setRendererState('ready')")
+
+  assert.ok(initialDarknessPaint >= 0, 'expected an initial darkness paint')
+  assert.ok(readyPublication >= 0, 'expected renderer readiness publication')
+  assert.ok(
+    initialDarknessPaint < readyPublication,
+    'environment darkness must paint before the Boneyard becomes ready',
+  )
+  assert.match(boneyardScene, /loadGameImage/)
+  assert.doesNotMatch(boneyardScene, /spriteImage/)
+  assert.match(boneyardScene, /const rendererPromise = createBoneyardWorldRenderer/)
+  assert.match(
+    boneyardScene,
+    /\.catch\(\(error: unknown\) => \{[\s\S]*?rendererPromise\.then[\s\S]*?renderer\.destroy\(\)/,
+  )
+})
+
 test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () => {
   const bounds = { x: -200, y: 100, w: 3200, h: 2400 }
 

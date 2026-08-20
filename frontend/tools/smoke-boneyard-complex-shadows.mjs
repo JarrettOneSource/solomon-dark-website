@@ -11,6 +11,24 @@ const generatedScreenshot = process.env.SDR_SHADOW_GENERATED_SCREENSHOT
   || '/tmp/solomon-dark-complex-shadows-generated-20260814.png'
 const expectedShadowImplementation = process.env.SDR_EXPECT_SHADOW_IMPLEMENTATION
   || 'native-indexed-owner-mesh'
+const generatedWarmupFrames = boundedInteger(
+  process.env.SDR_SHADOW_WARMUP_FRAMES || '30',
+  'SDR_SHADOW_WARMUP_FRAMES',
+  0,
+  300,
+)
+const generatedMeasurementFrames = boundedInteger(
+  process.env.SDR_SHADOW_MEASUREMENT_FRAMES || '180',
+  'SDR_SHADOW_MEASUREMENT_FRAMES',
+  1,
+  1_800,
+)
+const generatedStartupIterations = boundedInteger(
+  process.env.SDR_SHADOW_STARTUP_ITERATIONS || '0',
+  'SDR_SHADOW_STARTUP_ITERATIONS',
+  0,
+  100,
+)
 
 const browser = await chromium.launch({
   executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
@@ -47,10 +65,12 @@ try {
     document.body.replaceChildren()
     document.body.style.background = '#000'
     document.body.style.margin = '0'
-    const [airModule, rendererModule, playerModule, shadowModule, spellModule] = await Promise.all([
+    const [airModule, economyModule, rendererModule, playerModule, secondaryModule, shadowModule, spellModule] = await Promise.all([
       import('/src/game/renderer/primary-spell-air-native.ts'),
+      import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
       import('/src/game/core-kernels/player-character.ts'),
+      import('/src/game/core-kernels/native-secondary-abilities.ts'),
       import('/src/game/renderer/boneyard-complex-shadows.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
     ])
@@ -136,6 +156,7 @@ try {
               displayName: 'Shadow Probe',
               element: 'air',
             },
+            economy: economyModule.createHubEconomy(0x5299a0),
             footstepTick: 0,
             gaitDegrees: headingIndex * 15,
             headingIndex,
@@ -172,6 +193,7 @@ try {
           },
         },
         primarySpells,
+        secondaryAbilities: secondaryModule.createNativeSecondarySimulation(),
         run: {
           eligiblePlayerIds: ['local'],
           gameOverEventId: 0,
@@ -326,17 +348,25 @@ try {
     document.body.replaceChildren()
   })
 
-  const generated = await page.evaluate(async () => {
+  const generated = await page.evaluate(async ({
+    measurementFrames,
+    startupIterations,
+    warmupFrames,
+  }) => {
     const [
+      economyModule,
       encounterModule,
       rendererModule,
       playerModule,
+      secondaryModule,
       spellModule,
       templatesModule,
     ] = await Promise.all([
+      import('/src/game/core-kernels/hub-economy.ts'),
       import('/src/game/core-kernels/boneyard-encounter.ts'),
       import('/src/game/renderer/boneyard-world-renderer.ts'),
       import('/src/game/core-kernels/player-character.ts'),
+      import('/src/game/core-kernels/native-secondary-abilities.ts'),
       import('/src/game/core-kernels/primary-spells.ts'),
       import('/src/game/host/native-generated-boneyards.ts'),
     ])
@@ -359,6 +389,7 @@ try {
             displayName: 'Generated Shadow Probe',
             element: 'fire',
           },
+          economy: economyModule.createHubEconomy(0x57fe40),
           footstepTick: 0,
           gaitDegrees: headingIndex * 15,
           headingIndex,
@@ -398,6 +429,7 @@ try {
         },
       },
       primarySpells: spellModule.createPrimarySpellSimulation(),
+      secondaryAbilities: secondaryModule.createNativeSecondarySimulation(),
       run: {
         eligiblePlayerIds: ['local'],
         gameOverEventId: 0,
@@ -426,27 +458,47 @@ try {
         waves: null,
       },
     })
-    const renderer = await rendererModule.createBoneyardWorldRenderer({
-      boneyard: {
-        choice: {
-          id: 'generated-shadow-proof',
-          name: template.scene.name,
-          source: 'default',
-        },
-        geometrySha256: template.geometrySha256,
-        runId,
-        seed: 'generated-shadow-proof',
-        sourceSha256: template.sourceSha256,
-        scene: template.scene,
+    const boneyard = {
+      choice: {
+        id: 'generated-shadow-proof',
+        name: template.scene.name,
+        source: 'default',
       },
+      geometrySha256: template.geometrySha256,
+      runId,
+      seed: 'generated-shadow-proof',
+      sourceSha256: template.sourceSha256,
+      scene: template.scene,
+    }
+    const createRenderer = () => rendererModule.createBoneyardWorldRenderer({
+      boneyard,
       devicePixelRatio: 1,
       initialSnapshot: snapshotAt(2_000),
       playerId: 'local',
       viewport,
     })
+    const startupReceipts = []
+    for (let iteration = 0; iteration < startupIterations; iteration += 1) {
+      const startupRenderer = await createRenderer()
+      const frame = startupRenderer.canvas.__sdrBoneyardFrame
+      startupReceipts.push({
+        frame: {
+          frameCount: frame.frameCount,
+          lightActiveBucketCount: frame.lightActiveBucketCount,
+          lightProviderCandidateCount: frame.lightProviderCandidateCount,
+          lightSourceCount: frame.lightSourceCount,
+          playerLightRadius: frame.playerLightRadius,
+          regionLightPhysicalSide: frame.regionLightPhysicalSide,
+        },
+        pixels: pixelReceipt(startupRenderer.canvas),
+      })
+      startupRenderer.destroy()
+    }
+    const renderer = await createRenderer()
     renderer.canvas.id = 'generated-complex-shadow-probe'
     document.body.append(renderer.canvas)
-    for (let frame = 1; frame <= 30; frame += 1) {
+    const firstFrame = { ...renderer.canvas.__sdrBoneyardFrame }
+    for (let frame = 1; frame <= warmupFrames; frame += 1) {
       await new Promise(requestAnimationFrame)
       renderer.render(snapshotAt(2_000 + frame))
     }
@@ -467,8 +519,8 @@ try {
     })
     observer.observe({ type: 'longtask' })
     let previousFrameTime = await new Promise(requestAnimationFrame)
-    for (let frame = 1; frame <= 180; frame += 1) {
-      const snapshot = snapshotAt(2_030 + frame)
+    for (let frame = 1; frame <= measurementFrames; frame += 1) {
+      const snapshot = snapshotAt(2_000 + warmupFrames + frame)
       const frameTime = await new Promise(requestAnimationFrame)
       frameGaps.push(frameTime - previousFrameTime)
       previousFrameTime = frameTime
@@ -482,6 +534,7 @@ try {
     return {
       averageRenderMs: renderDurations.reduce((sum, value) => sum + value, 0)
         / renderDurations.length,
+      firstFrame,
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
       initialResources,
       frameGaps: distribution(frameGaps),
@@ -498,6 +551,7 @@ try {
         maximumMs: longTasks.length > 0 ? Math.max(...longTasks) : 0,
       },
       renderDurations: distribution(renderDurations),
+      startupReceipts,
     }
 
     function distribution(values) {
@@ -513,6 +567,34 @@ try {
         p99: percentile(0.99),
       }
     }
+
+    function pixelReceipt(source) {
+      const sample = document.createElement('canvas')
+      sample.width = source.width
+      sample.height = source.height
+      const context = sample.getContext('2d', { willReadFrequently: true })
+      if (!context) throw new Error('startup lighting pixel probe has no 2D context')
+      context.drawImage(source, 0, 0)
+      const pixels = context.getImageData(0, 0, sample.width, sample.height).data
+      let hash = 0x811c9dc5
+      let nonBlackPixels = 0
+      let rgbTotal = 0
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        const red = pixels[offset]
+        const green = pixels[offset + 1]
+        const blue = pixels[offset + 2]
+        if (red !== 0 || green !== 0 || blue !== 0) nonBlackPixels += 1
+        rgbTotal += red + green + blue
+        hash = Math.imul(hash ^ red, 0x01000193)
+        hash = Math.imul(hash ^ green, 0x01000193)
+        hash = Math.imul(hash ^ blue, 0x01000193)
+      }
+      return { hash: hash >>> 0, nonBlackPixels, rgbTotal }
+    }
+  }, {
+    measurementFrames: generatedMeasurementFrames,
+    startupIterations: generatedStartupIterations,
+    warmupFrames: generatedWarmupFrames,
   })
   await page.locator('#generated-complex-shadow-probe').screenshot({
     path: generatedScreenshot,
@@ -522,6 +604,27 @@ try {
   assert.ok(generated.frame.complexShadowCasterCount > 0)
   assert.ok(generated.frame.complexShadowRecordCount > 0)
   assert.ok(generated.frame.complexShadowQuadCount > 0)
+  assert.equal(generated.firstFrame.frameCount, 1)
+  assert.ok(generated.firstFrame.lightSourceCount > 0)
+  assert.ok(generated.firstFrame.lightActiveBucketCount > 0)
+  assert.equal(generated.firstFrame.regionLightLogicalSide, 1_600)
+  assert.equal(generated.firstFrame.regionLightPhysicalSide, 400)
+  for (const [index, startup] of generated.startupReceipts.entries()) {
+    const startupFrame = startup.frame
+    assert.equal(startupFrame.frameCount, 1, `startup ${index} frame count`)
+    assert.equal(startupFrame.lightProviderCandidateCount, 2, `startup ${index} providers`)
+    assert.equal(startupFrame.lightSourceCount, 2, `startup ${index} accepted sources`)
+    assert.ok(startupFrame.lightActiveBucketCount > 0, `startup ${index} light grid`)
+    assert.ok(startupFrame.playerLightRadius > 0, `startup ${index} player light`)
+    assert.equal(startupFrame.regionLightPhysicalSide, 400, `startup ${index} target`)
+    assert.ok(startup.pixels.nonBlackPixels > 10_000, `startup ${index} visible pixels`)
+    assert.ok(startup.pixels.rgbTotal > 1_000_000, `startup ${index} lighting pixels`)
+  }
+  assert.equal(
+    new Set(generated.startupReceipts.map(({ pixels }) => pixels.hash)).size,
+    generated.startupReceipts.length > 0 ? 1 : 0,
+    'repeated startup frames must have one deterministic pixel signature',
+  )
   if (expectedShadowImplementation === 'native-indexed-owner-mesh') {
     assert.equal(
       generated.frame.complexShadowActiveMeshCount,
@@ -555,4 +658,12 @@ try {
   })}\n`)
 } finally {
   await browser.close()
+}
+
+function boundedInteger(value, name, minimum, maximum) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`)
+  }
+  return parsed
 }

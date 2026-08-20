@@ -127,21 +127,30 @@ async function measureScene(page, duration, sceneSelector) {
   const before = metricMap(await cdp.send('Performance.getMetrics'))
   const samples = await page.evaluate((measurementMs) => new Promise((resolve) => {
     const presentation = window.__sdrGamePresentation
+    const longTasks = []
     const timestamps = []
+    const observer = typeof PerformanceObserver === 'function'
+      ? new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) longTasks.push(entry.duration)
+        })
+      : null
+    observer?.observe({ entryTypes: ['longtask'] })
     const unsubscribe = presentation.subscribe((now) => timestamps.push(now))
     setTimeout(() => {
       unsubscribe()
-      resolve(timestamps)
+      observer?.disconnect()
+      resolve({ longTasks, timestamps })
     }, measurementMs)
   }), duration)
   const after = metricMap(await cdp.send('Performance.getMetrics'))
   await cdp.detach()
 
-  const intervals = samples.slice(1).map(
-    (timestamp, index) => timestamp - samples[index],
+  const intervals = samples.timestamps.slice(1).map(
+    (timestamp, index) => timestamp - samples.timestamps[index],
   )
-  const elapsedMs = samples.at(-1) - samples[0]
+  const elapsedMs = samples.timestamps.at(-1) - samples.timestamps[0]
   const slowest = [...intervals].sort((a, b) => b - a)
+  const sorted = [...intervals].sort((a, b) => a - b)
   const lowCount = Math.max(1, Math.ceil(slowest.length * 0.01))
   const slowMean = slowest.slice(0, lowCount)
     .reduce((total, value) => total + value, 0) / lowCount
@@ -175,7 +184,13 @@ async function measureScene(page, duration, sceneSelector) {
       ((after.TaskDuration ?? 0) - (before.TaskDuration ?? 0)) * 1_000,
     ),
     compositorLayers,
+    longTaskCount: samples.longTasks.length,
+    longestTaskMs: round(Math.max(0, ...samples.longTasks)),
+    longTaskTotalMs: round(samples.longTasks.reduce((total, value) => total + value, 0)),
+    maximumFrameMs: round(Math.max(...intervals)),
     onePercentLowFps: round(1_000 / slowMean),
+    p95FrameMs: round(percentile(sorted, 0.95)),
+    p99FrameMs: round(percentile(sorted, 0.99)),
     slowFramesOver10Ms: intervals.filter((interval) => interval > 10).length,
     slowFramesOver20Ms: intervals.filter((interval) => interval > 20).length,
     ...runtime,
@@ -200,4 +215,9 @@ function metricMap(result) {
 
 function round(value) {
   return Math.round(value * 100) / 100
+}
+
+function percentile(sorted, fraction) {
+  if (sorted.length === 0) return 0
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)]
 }

@@ -16,6 +16,7 @@ import {
   monitorWebSocketHeartbeat,
   resolveGameHeartbeatInterval,
 } from './websocket-heartbeat.ts'
+import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
   gameServerErrorDetails,
   logGameServerEvent,
@@ -99,6 +100,7 @@ export async function startGameSessionSupervisor(
   const websocketServer = new WebSocketServer({
     noServer: true,
     maxPayload: 64 * 1024,
+    perMessageDeflate: GAME_WEBSOCKET_COMPRESSION,
   })
   websocketServer.on('error', (error) => {
     logGameServerEvent(
@@ -373,7 +375,9 @@ export async function startGameSessionSupervisor(
     head: Buffer,
     session: SessionRecord,
   ): void {
-    const upstream = new WebSocket(session.host.address.url)
+    const upstream = new WebSocket(session.host.address.url, {
+      perMessageDeflate: false,
+    })
     let released = false
     let upgraded = false
     let stopHeartbeat: (() => void) | null = null

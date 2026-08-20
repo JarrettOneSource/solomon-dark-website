@@ -12,6 +12,7 @@ import {
   createReplicatedEntityBaseline,
 } from '../src/game/protocol/entity-replication.ts'
 import { encodeGameMessage } from '../src/game/protocol/game-protocol.ts'
+import { GAME_WEBSOCKET_COMPRESSION } from '../src/game/host/websocket-compression.ts'
 
 const clientCount = positiveInteger(process.env.SDR_HUB_NETWORK_CLIENTS ?? '1', 'SDR_HUB_NETWORK_CLIENTS')
 const counts = integerList(process.env.SDR_HUB_BENCH_COUNTS ?? '16,32,64,128,256')
@@ -99,7 +100,10 @@ function measurePopulation(studentCount) {
   const entityJsonBytes = Buffer.byteLength(JSON.stringify(delta.world.entities))
   const entityBinaryBytes = encodeEntityFrameBinary(delta.world.entities).byteLength
   const binaryEntityLaneEstimateBytes = deltaPayloadBytes - entityJsonBytes + entityBinaryBytes
-  const deflatedDeltaBytes = deflateRawSync(deltaPayload).byteLength
+  const deflatedDeltaBytes = deflateRawSync(
+    deltaPayload,
+    GAME_WEBSOCKET_COMPRESSION.zlibDeflateOptions,
+  ).byteLength
   const perClientKiBPerSecond = averagePayloadBytes * snapshotRate / 1024
 
   return {
@@ -112,7 +116,10 @@ function measurePopulation(studentCount) {
     ),
     deflatedDeltaBytes,
     deflateMicroseconds: benchmarkMicroseconds(
-      () => deflateRawSync(deltaPayload),
+      () => deflateRawSync(
+        deltaPayload,
+        GAME_WEBSOCKET_COMPRESSION.zlibDeflateOptions,
+      ),
       encodeIterations,
     ),
     deflatedDeltaReductionPercent: reductionPercent(deltaPayloadBytes, deflatedDeltaBytes),

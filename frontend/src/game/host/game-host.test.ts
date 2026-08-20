@@ -34,6 +34,7 @@ import { createBoneyardCatalog, type ModBoneyardEntry } from './boneyard-catalog
 import { startGameHost } from './game-host.ts'
 import type { GameServerLogEntry } from './game-server-logger.ts'
 import { SOLOMON_DIG_FRAME_PROGRAM } from './project-boneyard.ts'
+import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 
 const FIRST_CHARACTER = {
   discipline: 'arcane',
@@ -59,6 +60,16 @@ interface TestReplicationState {
 
 const replicationBySocket = new WeakMap<WebSocket, TestReplicationState>()
 
+test('snapshot compression is bounded and skips sub-kilobyte control messages', () => {
+  assert.deepEqual(GAME_WEBSOCKET_COMPRESSION, {
+    clientNoContextTakeover: true,
+    concurrencyLimit: 4,
+    serverNoContextTakeover: true,
+    threshold: 1_024,
+    zlibDeflateOptions: { level: 3, memLevel: 7 },
+  })
+})
+
 function gameplayInput(
   movement: { x: number; y: number },
   aim: { x: number; y: number } | null = null,
@@ -79,6 +90,9 @@ test('authoritative game host owns two configured player characters and movement
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => first.socket.close())
   context.after(() => second.socket.close())
+
+  assert.equal(first.socket.extensions, 'permessage-deflate')
+  assert.equal(second.socket.extensions, 'permessage-deflate')
 
   assert.notEqual(first.welcome.playerId, second.welcome.playerId)
   assert.equal(host.playerCount(), 2)
@@ -239,7 +253,8 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
 
   const rerolledSnapshot = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].progression.pendingOffer?.sequence !== firstOffer.sequence
+    && message.snapshot.players[playerId].progression.pendingOffer !== null
+    && message.snapshot.players[playerId].progression.pendingOffer.sequence !== firstOffer.sequence
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-level-up-action',
@@ -253,7 +268,8 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
 
   const selectedSnapshot = nextMessage(client.socket, (message) => (
     message.type === 'server-snapshot'
-    && message.snapshot.players[playerId].progression.pendingOffer?.sequence !== rerolledOffer.sequence
+    && message.snapshot.players[playerId].progression.pendingOffer !== null
+    && message.snapshot.players[playerId].progression.pendingOffer.sequence !== rerolledOffer.sequence
   ))
   client.socket.send(encodeGameMessage({
     type: 'client-select-skill',

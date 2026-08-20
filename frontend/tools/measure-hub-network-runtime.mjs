@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
+import { deflateRawSync } from 'node:zlib'
 
 import { chromium } from 'playwright-core'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const cdpUrl = process.env.SDR_GAME_CDP_URL?.trim()
 const requireHardwareGpu = process.env.SDR_GAME_REQUIRE_HARDWARE_GPU === '1'
+const NORMAL_HUB_COMPRESSED_BUDGET_KIB_PER_SECOND = 64
+const MINIMUM_NORMAL_HUB_COMPRESSION_REDUCTION_PERCENT = 60
 const sampleMs = requiredInteger(
   process.env.SDR_GAME_NETWORK_SAMPLE_MS || '5000',
   'SDR_GAME_NETWORK_SAMPLE_MS',
@@ -24,6 +27,8 @@ const browser = cdpUrl
       headless: true,
     })
 const pages = []
+const sessions = []
+const lanes = []
 const errors = []
 
 try {
@@ -38,16 +43,6 @@ try {
     page.on('console', (message) => {
       if (message.type() === 'error') errors.push(`client-${index + 1}: ${message.text()}`)
     })
-    pages.push(page)
-  }
-
-  await Promise.all([
-    enterHub(pages[0], 'Fire'),
-    enterHub(pages[1], 'Earth'),
-  ])
-  const canvases = pages.map((page) => page.locator('.hub-world-canvas'))
-  await Promise.all(canvases.map((canvas) => canvas.waitFor({ timeout: 30_000 })))
-  const lanes = await Promise.all(pages.map(async (page) => {
     const session = await page.context().newCDPSession(page)
     await session.send('Network.enable')
     const lane = createLane()
@@ -57,8 +52,23 @@ try {
     session.on('Network.webSocketFrameSent', ({ response }) => {
       recordFrame(lane, response.payloadData, true)
     })
-    return lane
-  }))
+    session.on('Network.webSocketHandshakeResponseReceived', ({ response }) => {
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (name.toLowerCase() !== 'sec-websocket-extensions') continue
+        lane.negotiatedExtensions.add(String(value))
+      }
+    })
+    pages.push(page)
+    sessions.push(session)
+    lanes.push(lane)
+  }
+
+  await Promise.all([
+    enterHub(pages[0], 'Fire'),
+    enterHub(pages[1], 'Earth'),
+  ])
+  const canvases = pages.map((page) => page.locator('.hub-world-canvas'))
+  await Promise.all(canvases.map((canvas) => canvas.waitFor({ timeout: 30_000 })))
 
   await pages[0].waitForTimeout(1_000)
   for (const lane of lanes) resetLane(lane)
@@ -89,7 +99,23 @@ try {
     )
     assert.equal(client.sequenceGaps, 0)
     assert.deepEqual(client.playerCounts, [2])
+    assert.ok(
+      client.negotiatedExtensions.some((value) => value.includes('permessage-deflate')),
+      `client ${index + 1} did not negotiate snapshot compression`,
+    )
     assert.ok(client.acknowledgementHertz > 18 && client.acknowledgementHertz < 22)
+    assert.ok(
+      client.estimatedCompressionReductionPercent
+        >= MINIMUM_NORMAL_HUB_COMPRESSION_REDUCTION_PERCENT,
+      `client ${index + 1} missed the snapshot compression floor: ${JSON.stringify(client)}`,
+    )
+    if (expectedStudentCount === undefined) {
+      assert.ok(
+        client.estimatedCompressedSnapshotKiBPerSecond
+          <= NORMAL_HUB_COMPRESSED_BUDGET_KIB_PER_SECOND,
+        `client ${index + 1} exceeded the normal Hub wire budget: ${JSON.stringify(client)}`,
+      )
+    }
     if (expectedStudentCount !== undefined) {
       assert.equal(client.studentSampleMinimum, expectedStudentCount)
       assert.equal(client.studentSampleMaximum, expectedStudentCount)
@@ -141,6 +167,7 @@ try {
     status: 'ok',
   })}\n`)
 } finally {
+  await Promise.allSettled(sessions.map((session) => session.detach()))
   await Promise.all(pages.map((page) => page.close()))
   await browser.close()
 }
@@ -166,7 +193,13 @@ function createLane() {
   return {
     acknowledgementBytes: 0,
     acknowledgementFrames: 0,
+    componentBytes: new Map(),
+    deltaSnapshotBytes: 0,
+    deltaSnapshotFrames: 0,
+    estimatedCompressedSnapshotBytes: 0,
     keyframes: 0,
+    keyframeSnapshotBytes: 0,
+    negotiatedExtensions: new Set(),
     receivedBytes: 0,
     receivedMessages: 0,
     receivedTypes: new Map(),
@@ -185,7 +218,12 @@ function createLane() {
 function resetLane(lane) {
   lane.acknowledgementBytes = 0
   lane.acknowledgementFrames = 0
+  lane.componentBytes.clear()
+  lane.deltaSnapshotBytes = 0
+  lane.deltaSnapshotFrames = 0
+  lane.estimatedCompressedSnapshotBytes = 0
   lane.keyframes = 0
+  lane.keyframeSnapshotBytes = 0
   lane.receivedBytes = 0
   lane.receivedMessages = 0
   lane.receivedTypes.clear()
@@ -226,12 +264,25 @@ function recordFrame(lane, payloadData, sent) {
   if (type !== 'server-snapshot') return
   lane.snapshotBytes += bytes
   lane.snapshotFrames += 1
+  lane.estimatedCompressedSnapshotBytes += deflateRawSync(payloadData, {
+    level: 3,
+    memLevel: 7,
+  }).byteLength
+  for (const [key, value] of Object.entries(payload.frame)) {
+    increment(lane.componentBytes, key, Buffer.byteLength(JSON.stringify(value)))
+  }
   lane.sequences.push(payload.sequence)
   lane.sequenceTicks.set(payload.sequence, payload.frame.tick)
   lane.playerCounts.add(Object.keys(payload.frame.players).length)
   if (payload.frame.world.kind === 'hub') {
     lane.studentSamples.push(payload.frame.world.entities.samples.length)
-    if (payload.frame.world.entities.keyframe) lane.keyframes += 1
+    if (payload.frame.world.entities.keyframe) {
+      lane.keyframes += 1
+      lane.keyframeSnapshotBytes += bytes
+    } else {
+      lane.deltaSnapshotBytes += bytes
+      lane.deltaSnapshotFrames += 1
+    }
   }
 }
 
@@ -241,9 +292,24 @@ function laneReport(lane, index, elapsedSeconds) {
     acknowledgementFrames: lane.acknowledgementFrames,
     acknowledgementHertz: lane.acknowledgementFrames / elapsedSeconds,
     client: index + 1,
+    componentKiBPerSecond: Object.fromEntries([...lane.componentBytes].map(
+      ([key, bytes]) => [key, bytes / 1024 / elapsedSeconds],
+    )),
+    averageDeltaSnapshotBytes: lane.deltaSnapshotFrames > 0
+      ? lane.deltaSnapshotBytes / lane.deltaSnapshotFrames
+      : 0,
+    averageKeyframeSnapshotBytes: lane.keyframes > 0
+      ? lane.keyframeSnapshotBytes / lane.keyframes
+      : 0,
     egressKiBPerSecond: lane.sentBytes / 1024 / elapsedSeconds,
+    estimatedCompressedSnapshotKiBPerSecond:
+      lane.estimatedCompressedSnapshotBytes / 1024 / elapsedSeconds,
+    estimatedCompressionReductionPercent: lane.snapshotBytes > 0
+      ? (1 - lane.estimatedCompressedSnapshotBytes / lane.snapshotBytes) * 100
+      : 0,
     ingressKiBPerSecond: lane.receivedBytes / 1024 / elapsedSeconds,
     keyframes: lane.keyframes,
+    negotiatedExtensions: [...lane.negotiatedExtensions].sort(),
     playerCounts: [...lane.playerCounts].sort((first, second) => first - second),
     receivedMessages: lane.receivedMessages,
     receivedTypes: Object.fromEntries(lane.receivedTypes),
@@ -285,8 +351,8 @@ function assertSharedTicks(first, second) {
   }
 }
 
-function increment(counts, key) {
-  counts.set(key, (counts.get(key) ?? 0) + 1)
+function increment(counts, key, amount = 1) {
+  counts.set(key, (counts.get(key) ?? 0) + amount)
 }
 
 function optionalInteger(value, name, minimum, maximum) {

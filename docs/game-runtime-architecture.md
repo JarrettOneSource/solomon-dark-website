@@ -307,8 +307,8 @@ Node host. Stack changes require a failed measured gate, not preference.
 - browser-to-residential-peer hosting, which is unsupported without a relay;
 - host migration;
 - automatic crash restart and seamless multiplayer rejoin;
-- a binary entity wire codec, compression, or per-client spatial interest sets
-  until a declared product load crosses the measured adoption gate;
+- a binary entity wire codec or per-client spatial interest sets until a
+  declared product load crosses their measured adoption gates;
 - a third-party/general-purpose ECS dependency. The focused dense player ECS is
   implemented because native progression introduces independently owned
   components with different lifetimes; other entity families keep their
@@ -549,11 +549,74 @@ full frame.
 A benchmark-only packed entity lane estimates `5,548` bytes for the same
 `256`-Student message and about `10.7 microseconds` of entity encoding. Deflate
 reaches `4,278` bytes but costs about `143.8 microseconds` per message. Neither
-is production transport. Re-evaluate the binary lane when a declared,
-representative scene exceeds `64 KiB/s` per client at P95 or snapshot encoding
-becomes a measured server phase; a synthetic `256`-Student stress case already
-shows that future high-population combat may cross that gate, while the stock
-roster does not justify mixed text/binary tooling today.
+was production transport at that measurement. Re-evaluate the binary lane when
+snapshot encoding becomes a measured server phase or compressed representative
+traffic exceeds its declared budget; the stock roster still does not justify
+mixed text/binary tooling today.
+
+### Browser WebSocket compression gate — 2026-08-20
+
+The compression deferral above is now closed. A hardware-Mac, two-browser Hub
+sample on protocol 29 measured `109.37 KiB/s` of logical snapshot text per
+client at `19.99 Hz` with only two players and `11..15` live Students. The
+average delta was `5,419` bytes and the periodic recovery keyframe was `23,638`
+bytes. Per top-level logical lane, players consumed `45.56 KiB/s`, secondary
+abilities `31.12 KiB/s`, and the Hub world/entity lane `24.52 KiB/s`. This is a
+representative product load above the earlier `64 KiB/s` adoption trigger, not
+the synthetic 256-Student stress case.
+
+The transport therefore negotiates `permessage-deflate` on both direct game
+host browser connections and the public supervisor's browser-facing socket.
+Compression is bounded deliberately:
+
+- messages below `1,024` bytes remain uncompressed;
+- both client and server disable context takeover, bounding per-connection
+  zlib state and making each snapshot independently recoverable;
+- server compression uses level `3`, memory level `7`, and global concurrency
+  limit `4`; and
+- the supervisor's loopback upstream socket explicitly disables compression,
+  avoiding decompression/recompression on both sides of the same machine.
+
+The wire change does not alter protocol 29, snapshot contents, the `100 Hz`
+simulation, the `20 Hz` snapshot clock, acknowledgements, keyframe cadence, or
+entity baseline semantics. The runtime measurement retains logical-byte lanes
+for protocol-bloat diagnosis and adds a conservative independent-deflate
+estimate for the negotiated no-context-takeover policy. Browser and Node
+integration tests require the extension on direct and proxied connections;
+sequence/tick/acknowledgement assertions remain unchanged.
+
+### Scene code residency gate — 2026-08-20
+
+The `/game` route formerly imported Hub, Boneyard, and SkillPicker presentation
+owners synchronously through `MainMenuScene`. The production `Game` entry was
+therefore `6,666,378` bytes (`4,165,490` gzip) before the title could execute,
+even though none of those three scene owners was reachable on the title or
+Create screens.
+
+Hub and Boneyard now use React lazy boundaries at the same transitions already
+owned by `MatchLoadingScreen`. Their chunk fetch does not create a new loading
+state or clock: the existing Hub/Boneyard barrier remains visible and completes
+only when the scene renderer calls its normal `onReady`. SkillPicker is also a
+lazy member, preloaded as soon as an authoritative Boneyard snapshot arrives,
+well before the first level threshold; its native reveal and barrier clocks do
+not start until the authoritative offer exists.
+
+The resulting production `Game` entry is `189,625` bytes (`55,559` gzip).
+Hub, Boneyard, and SkillPicker retain distinct generated chunks, and the build
+now fails if the entry exceeds `512 KiB` raw or `128 KiB` gzip or if any of
+those three scene boundaries collapses back into it. This is code residency,
+not asset-policy drift: the resident image/audio readiness program and every
+native renderer asset remain unchanged.
+
+### Low-rate diagnostics under transient populations
+
+Student visibility instrumentation remains outside the render-authority path
+and still performs its view census at most once per 120 presentation frames in
+steady state. It now also refreshes on a Student population-count edge. Without
+that edge, the diagnostic compared a stale visible count against a live native
+birth/retirement count and could fail the performance harness (`15 != 14`)
+while the renderer itself remained correct. The new predicate preserves the
+steady-state cost and makes every performance receipt internally coherent.
 
 `SDR_HUB_BENCH_STUDENTS` and `SDR_HUB_BENCH_SEED` inject a deterministic,
 empty-player Hub fixture only into the development host. The count is capped at

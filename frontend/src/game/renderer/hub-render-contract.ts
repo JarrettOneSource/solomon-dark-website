@@ -21,6 +21,17 @@ export const HUB_RENDER_HEIGHT = GAME_VIEWPORT_MIN_HEIGHT
 export const HUB_RENDER_MIN_RESOLUTION = 0.5
 export const HUB_RENDER_MAX_RESOLUTION = 1.5
 export const HUB_STUDENT_VISIBILITY_HALF_EXTENT = 120
+export const HUB_DIAGNOSTIC_WINDOW_FRAMES = 120
+
+export function hubStudentVisibilityDiagnosticsDue(
+  frameCount: number,
+  studentCount: number,
+  sampledStudentCount: number,
+): boolean {
+  return frameCount === 1
+    || frameCount % HUB_DIAGNOSTIC_WINDOW_FRAMES === 0
+    || studentCount !== sampledStudentCount
+}
 
 export const HUB_WORLD_DEPTH = {
   astronomer: HUB_ASTRONOMER_DEPTH,

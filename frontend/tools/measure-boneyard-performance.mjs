@@ -71,7 +71,7 @@ try {
     const frame = node.__sdrBoneyardFrame
     return {
       darknessAlpha: darkness instanceof HTMLCanvasElement
-        ? darknessAlphaReceipt(darkness, frame, measuredViewport)
+        ? darknessAlphaReceipt(darkness, node, frame, measuredViewport)
         : null,
       domNodes: document.querySelectorAll('*').length,
       environmentMode: Number(document.querySelector('.boneyard-scene')
@@ -90,22 +90,26 @@ try {
       visibleResidentCount: frame.visibleResidentCount,
     }
 
-    function darknessAlphaReceipt(darknessCanvas, diagnostics, viewportSize) {
+    function darknessAlphaReceipt(darknessCanvas, worldCanvas, diagnostics, fallbackViewport) {
       const darknessContext = darknessCanvas.getContext('2d')
       if (!darknessContext) return null
-      const scaleX = darknessCanvas.width / viewportSize.width
-      const scaleY = darknessCanvas.height / viewportSize.height
+      const logicalWidth = Number(worldCanvas.dataset.viewportWidth)
+        || fallbackViewport.width
+      const logicalHeight = Number(worldCanvas.dataset.viewportHeight)
+        || fallbackViewport.height
+      const scaleX = darknessCanvas.width / logicalWidth
+      const scaleY = darknessCanvas.height / logicalHeight
       const player = {
         x: diagnostics.playerScreenX * scaleX,
         y: diagnostics.playerScreenY * scaleY,
       }
       const corners = [
         { x: 2 * scaleX, y: 2 * scaleY },
-        { x: (viewportSize.width - 2) * scaleX, y: 2 * scaleY },
-        { x: 2 * scaleX, y: (viewportSize.height - 2) * scaleY },
+        { x: (logicalWidth - 2) * scaleX, y: 2 * scaleY },
+        { x: 2 * scaleX, y: (logicalHeight - 2) * scaleY },
         {
-          x: (viewportSize.width - 2) * scaleX,
-          y: (viewportSize.height - 2) * scaleY,
+          x: (logicalWidth - 2) * scaleX,
+          y: (logicalHeight - 2) * scaleY,
         },
       ]
       const farthest = corners.reduce((best, point) => (
@@ -127,6 +131,11 @@ try {
           1,
           1,
         ).data[3],
+        logicalHeight,
+        logicalWidth,
+        physicalHeight: darknessCanvas.height,
+        physicalWidth: darknessCanvas.width,
+        resolution: Number(worldCanvas.dataset.resolution),
       }
     }
   }, viewport)
@@ -150,6 +159,23 @@ try {
   assert.ok(moving.minimumOversizedVisibleResidentCount > 0, JSON.stringify(moving))
   assert.ok(moving.presentedPlayerPositions > 10, JSON.stringify(moving))
   if (runtime.environmentMode === 1 || runtime.environmentMode === 2) {
+    assert.ok(presentation.startupLighting, 'expected startup darkness diagnostics')
+    assert.equal(
+      presentation.startupLighting.physicalWidth,
+      Math.round(
+        presentation.startupLighting.logicalWidth
+        * presentation.startupLighting.resolution,
+      ),
+    )
+    assert.equal(
+      presentation.startupLighting.physicalHeight,
+      Math.round(
+        presentation.startupLighting.logicalHeight
+        * presentation.startupLighting.resolution,
+      ),
+    )
+    assert.ok(presentation.startupLighting.center <= 16, JSON.stringify(presentation))
+    assert.ok(presentation.startupLighting.far >= 240, JSON.stringify(presentation))
     assert.ok(runtime.darknessAlpha, 'expected the native darkness canvas')
     assert.ok(runtime.darknessAlpha.center <= 16, JSON.stringify(runtime))
     assert.ok(runtime.darknessAlpha.far >= 240, JSON.stringify(runtime))
@@ -177,6 +203,7 @@ try {
     viewport,
     presentationFrameCap: presentation.frameCap,
     presentationUncapped: presentation.uncapped,
+    startupLighting: presentation.startupLighting,
   })}\n`)
 } finally {
   await page.close()
@@ -204,8 +231,60 @@ async function enterBoneyard(page) {
   }
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
+  const startupLighting = await page.evaluate((fallbackViewport) => {
+    const darkness = document.querySelector('.boneyard-darkness')
+    const world = document.querySelector('.boneyard-world-canvas')
+    if (!(darkness instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) {
+      return null
+    }
+    const context = darkness.getContext('2d')
+    const diagnostics = world.__sdrBoneyardFrame
+    if (!context || !diagnostics) return null
+    const logicalWidth = Number(world.dataset.viewportWidth) || fallbackViewport.width
+    const logicalHeight = Number(world.dataset.viewportHeight) || fallbackViewport.height
+    const scaleX = darkness.width / logicalWidth
+    const scaleY = darkness.height / logicalHeight
+    const player = {
+      x: Math.max(0, Math.min(darkness.width - 1, diagnostics.playerScreenX * scaleX)),
+      y: Math.max(0, Math.min(darkness.height - 1, diagnostics.playerScreenY * scaleY)),
+    }
+    const corners = [
+      { x: 2 * scaleX, y: 2 * scaleY },
+      { x: (logicalWidth - 2) * scaleX, y: 2 * scaleY },
+      { x: 2 * scaleX, y: (logicalHeight - 2) * scaleY },
+      {
+        x: (logicalWidth - 2) * scaleX,
+        y: (logicalHeight - 2) * scaleY,
+      },
+    ]
+    const farthest = corners.reduce((best, point) => (
+      Math.hypot(point.x - player.x, point.y - player.y)
+        > Math.hypot(best.x - player.x, best.y - player.y)
+        ? point
+        : best
+    ))
+    return {
+      center: context.getImageData(
+        Math.round(player.x),
+        Math.round(player.y),
+        1,
+        1,
+      ).data[3],
+      far: context.getImageData(
+        Math.max(0, Math.min(darkness.width - 1, Math.round(farthest.x))),
+        Math.max(0, Math.min(darkness.height - 1, Math.round(farthest.y))),
+        1,
+        1,
+      ).data[3],
+      logicalHeight,
+      logicalWidth,
+      physicalHeight: darkness.height,
+      physicalWidth: darkness.width,
+      resolution: Number(world.dataset.resolution),
+    }
+  }, viewport)
   await page.waitForTimeout(1_000)
-  return presentation
+  return { ...presentation, startupLighting }
 }
 
 async function measure(page, duration) {

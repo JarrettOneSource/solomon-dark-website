@@ -42,6 +42,17 @@ test('startup loader exposes total readiness and the representative active item'
   assert.match(loaderStyles, /\.native-loader-status/)
 })
 
+test('Hub and Boneyard renderer code follows the existing transition loading barriers', () => {
+  assert.match(mainScene, /lazy\(\(\) => import\('\.\/HubScene\.tsx'\)\)/)
+  assert.match(mainScene, /lazy\(\(\) => import\('\.\/BoneyardScene\.tsx'\)\)/)
+  assert.match(mainScene, /const loadSkillPicker = \(\) => import\('\.\/SkillPicker\.tsx'\)/)
+  assert.match(mainScene, /if \(runtimeSnapshot\?\.world\.kind === 'boneyard'\) void loadSkillPicker\(\)/)
+  assert.match(mainScene, /<Suspense fallback=\{null\}>/)
+  assert.doesNotMatch(mainScene, /import HubScene from/)
+  assert.doesNotMatch(mainScene, /import BoneyardScene from/)
+  assert.doesNotMatch(mainScene, /import SkillPicker from/)
+})
+
 test('edge chrome and the loader consume their recovered screen ownership', () => {
   assert.match(titleRenderer, /title-menu-solomon-stage/)
   assert.match(titleRenderer, /title-menu-version-stage/)
