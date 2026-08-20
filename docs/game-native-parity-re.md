@@ -19696,3 +19696,78 @@ SHA-256 is
 All task-owned Chrome, Vite, and game-host processes were stopped afterward;
 the remaining Mac game-host process belongs to the unrelated inventory
 acceptance worktree and was not touched.
+
+### Published first-frame lighting and performance closure, 2026-08-20
+
+The implementation was rebased with the complete enemy-presentation owner and
+published to Website `main` as
+`83daf5d4f57432a064e241755c13135533d954da`. Mod Loader evidence was rebased
+and published as `ab9e933932e2630120fa0b6e47057057045d83cc`. GitHub run
+`32366963477` passed the Website Validate workflow and run `32366965339` passed
+the Loader Lua-authoring/contracts workflow. The final rebased WSL Website log
+SHA-256 was
+`abdb083887c9dc007cfdcac9c676a7b2f51305e15d42a8ea7fc3c4688bffe81b`;
+the full Loader portable suite passed 87/87 modules and 795 tests with log
+SHA-256
+`0d0d00fc19bce238bf6456aa8936cc8c684c43978b52de99d81aace4675a8d6d`.
+
+The exact rebased Website tree then passed the complete Apple-M2 Mac gate. Its
+log SHA-256 was
+`67c15421679d4015d5c95ed0c82d32503752254166aaa8e6e75f5bd22e9ef886`.
+Eight hardware-Chrome create/destroy starts retained pixel hash `3489673138`,
+465,516 nonblack pixels, RGB total 38,690,111, two provider candidates, two
+accepted sources, zero shadow-Z mismatches, render p95/p99/max
+`2.7/2.9/3.0 ms`, and zero LongTasks. That log SHA-256 was
+`649f8a2f20ff48f398bc8fdc96a33c0580b848bf80d8b996ea5ba42568eb3ba6`.
+The inspected merged frame SHA-256 was
+`4ec6d399719d8541a9348ede704819ef6e7d5339afb8a93774f46e52a7930771`;
+it retained localized player/fire light, transparent fence-bar gaps, projected
+post/bar shadows, and correct Tree/foreground occlusion.
+
+Four real prepublication Boneyard runs covered mode 0 and two mode-2 starts.
+Every mode-2 run reported startup and settled darkness alpha `0/245`; all idle
+and moving samples stayed near 60 FPS with zero LongTasks. The combined log
+SHA-256 was
+`8e53f735a9af557087d1c3a0af1b6a0068ae04964f9f5332898317f72b3bf37b`.
+The direct-host two-browser receipt delivered 101 shared snapshots at
+`20.19 Hz`, zero gaps, identical ticks, `33.41 KiB/s` estimated ingress, and
+`69.56%` reduction; its log SHA-256 was
+`dd698fe9dafbddbe2aaf73a24ee1532d72e40c10d013621ad7d712f6d56c1436`.
+The merged menu receipt remained near 60 FPS with zero LongTasks and log
+SHA-256
+`08bbfb8082d92550a194f298a941f793055818a5cc22c4f661ecc84b9816daff`.
+
+The machine-local fail-closed worker independently validated and published the
+same Website revision. Artifact SHA-256 was
+`c2b4e0b0f45cb39a65abe08dee6f72abc76de7a6189d21e19f840fda492971d9`;
+the retained rollback is
+`/opt/solomon-dark-revived.rollback-pre-83daf5d4f574-20260820T120850Z`,
+and the WAL-aware backup is
+`/var/backups/solomon-dark-revived/pre-83daf5d4f574-20260820T120850Z/sdr.db`.
+NFO reported the exact deployed SHA, both services active with zero restarts,
+protocol `solomon-dark/30`, zero sessions/lobbies, `ok` integrity for the live
+and backup databases, and no warning-or-higher service journal entries from the
+cutover.
+
+Production was then exercised from the Mac rather than inferred from service
+health. Two cleanly exiting Boneyard runs covered modes 0 and 2; both held 60
+FPS with zero LongTasks, and mode 2 retained first-ready and settled alpha
+`0/245`. Their log SHA-256 was
+`6df68df47deb1ab2706930f82990a719a83a7f960cd5503ffd5f8a382dd9e771`.
+The production menu pass held approximately 60 FPS with zero LongTasks; its log
+SHA-256 was
+`466e29cb4cbad2d0bafdd5fc4bc3dc83548a7c13bb8205ff1b5febcf71064511`.
+
+Public New Game pages are intentionally separate supervised one-player
+sessions, unlike the direct-host two-player benchmark. Tool commit
+`9234b608bcd63b7537203043a809306e004482a8` makes that topology explicit while
+preserving the strict direct-host defaults and makes launch-owned browser
+teardown authoritative. The decisive five-second production network receipt
+delivered 101 snapshots per client at `20.18 Hz`, zero per-session sequence
+gaps, no page/console errors, Apple-M2 hardware rendering, negotiated
+`permessage-deflate; server_no_context_takeover; client_no_context_takeover`,
+about `31.88 KiB/s` estimated ingress, and `55.6%` reduction. It exited without
+retaining Chrome or a supervisor session; its log SHA-256 was
+`2344a09388273127b033530eda31c2c1c55b102bb014f6f64c53fa7b8c0123db`.
+The acceptance-tool and ledger follow-up changes no gameplay, lighting,
+simulation, snapshot, or transport runtime contract.

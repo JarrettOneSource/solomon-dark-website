@@ -585,6 +585,20 @@ estimate for the negotiated no-context-takeover policy. Browser and Node
 integration tests require the extension on direct and proxied connections;
 sequence/tick/acknowledgement assertions remain unchanged.
 
+The runtime network harness keeps those assertions topology-aware without
+weakening its direct-host default. A local two-page run expects two players,
+one shared broadcast sequence lane, identical ticks, at least 60 percent
+independent-deflate reduction, and at most 64 KiB/s per client. Public New Game
+provisioning intentionally gives each anonymous page its own one-player
+supervised session, so production acceptance declares one expected player, no
+cross-session sequence identity, and a 50 percent reduction floor while keeping
+the same 20 Hz, acknowledgement, zero-gap, negotiated-extension, hardware-GPU,
+and 64-KiB/s requirements. The values are explicit environment inputs rather
+than URL heuristics. Launch-owned performance probes also close the browser as
+the resource owner instead of awaiting every live page first; this prevents a
+remote WebSocket page from retaining the probe process or supervised session
+after a completed receipt.
+
 ### Scene code residency gate — 2026-08-20
 
 The `/game` route formerly imported Hub, Boneyard, and SkillPicker presentation
