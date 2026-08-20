@@ -51,6 +51,7 @@ export type CreateWizardNameValidation =
 
 export const CREATE_WIZARD_NAME_FONT: NativeCreateWizardNameFont = nativeFontData
 export const CREATE_WIZARD_NAME_MAX_LENGTH = 64
+export const CREATE_WIZARD_NAME_MAX_WIDTH = 372
 export const STOCK_WIZARD_NAMES: readonly string[] = Object.freeze([...stockWizardNames])
 export const CREATE_WIZARD_NAME_VALUE_BOUNDS = Object.freeze({
   height: 49,
@@ -63,10 +64,26 @@ const CREATE_WIZARD_NAME_DEFAULT = 'Helvidius'
 const CREATE_WIZARD_NAME_TEXT_TOP = 19
 
 export function initialCreateWizardName(value: string): string {
-  const supported = [...value]
-    .filter((char) => Object.hasOwn(CREATE_WIZARD_NAME_FONT.glyphs, char.toUpperCase()))
-    .join('')
-    .slice(0, CREATE_WIZARD_NAME_MAX_LENGTH)
+  let supported = ''
+  let width = 0
+  let previousGlyphId: number | null = null
+
+  for (const char of value) {
+    const glyph = CREATE_WIZARD_NAME_FONT.glyphs[char.toUpperCase()]
+    if (!glyph) continue
+    const nextWidth = width
+      + (previousGlyphId === null
+        ? 0
+        : CREATE_WIZARD_NAME_FONT.kerning[`${previousGlyphId}:${glyph.glyphId}`] ?? 0)
+      + glyph.advance
+    if (
+      supported.length >= CREATE_WIZARD_NAME_MAX_LENGTH
+      || nextWidth > CREATE_WIZARD_NAME_MAX_WIDTH
+    ) break
+    supported += char
+    width = nextWidth
+    previousGlyphId = glyph.glyphId
+  }
   return supported || CREATE_WIZARD_NAME_DEFAULT
 }
 
@@ -103,10 +120,34 @@ export function validateCreateWizardName(value: string): CreateWizardNameValidat
   ))) {
     return {
       ok: false,
-      reason: 'Use only the characters available in the native wizard-name face.',
+      reason: 'Use letters, numbers, or ! , . / : ? only.',
+    }
+  }
+  if (measureCreateWizardName(value) > CREATE_WIZARD_NAME_MAX_WIDTH) {
+    return {
+      ok: false,
+      reason: 'Wizard name is too wide.',
     }
   }
   return { ok: true, value }
+}
+
+export function measureCreateWizardName(value: string): number {
+  let width = 0
+  let previousGlyphId: number | null = null
+
+  for (const char of value.toUpperCase()) {
+    const glyph = CREATE_WIZARD_NAME_FONT.glyphs[char]
+    if (!glyph) throw new Error('Cannot measure an unsupported wizard-name character.')
+    if (previousGlyphId !== null) {
+      width += CREATE_WIZARD_NAME_FONT.kerning[
+        `${previousGlyphId}:${glyph.glyphId}`
+      ] ?? 0
+    }
+    width += glyph.advance
+    previousGlyphId = glyph.glyphId
+  }
+  return width
 }
 
 export function layoutCreateWizardName(value: string): CreateWizardNameLayout {

@@ -21586,9 +21586,9 @@ cutoff implementation is unchanged.
 
 | Evidence class | Exact source | Observation | Confidence |
 | --- | --- | --- | --- |
-| Clean stock | `SolomonDark.exe` SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Mod Loader `tests/fixtures/webgame/menu-layouts/create-element.json`; paired clean reference `create-element.png` | The Create field is visible at the top centre with `WIZARD NAME`, the saved name `SOLONSOLUS`, ornamental ends, a 384-pixel inner lane, and a fixed caret lane at its right. | high |
-| Instructions | image base `0x00400000`; `CreateWizardMenu::Render` `0x0059AD40`, especially `0x0059BF90..0x0059C180`; Create update `0x0058A820`; finalizer `0x005CFA80` | The renderer assigns `"wizard name"` through Fonts `+0x04D530`; the extracted Create name value is rendered through Fonts group 4, then followed by the group-1 `x` caret. Create owns presentation while selection finalization enters player startup separately. | high |
-| Asset/data | `Fonts.bundle` SHA-256 `048aa22cc715ee633f5e31f0400b4a3a9c0a8c8b49d681419e19d5ff676c214a`; group 4 records `308..349`; header `[40,10,28]`; 132 kerning pairs; `Create.bundle` plus `UI.80` end caps | Fonts group 4 has the complete 42-glyph uppercase name source. Group 1 supplies the `WIZARD NAME` caption and caret; the field chrome is not a source of letters. | high |
+| Clean stock | `SolomonDark.exe` SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; Mod Loader `tests/fixtures/webgame/menu-layouts/create-element.json`; paired clean reference `create-element.png` | The Create field is visible at the top centre with `WIZARD NAME`, the saved name `SOLONSOLUS`, ornamental ends, a 384-pixel inner lane, and a fixed clear-X lane at its right. | high |
+| Instructions | image base `0x00400000`; `CreateWizardMenu::Render` `0x0059AD40`, especially `0x0059BF90..0x0059C180`; Create update `0x0058A820`; finalizer `0x005CFA80` | The renderer assigns `"wizard name"` through Fonts `+0x04D530`; the extracted Create name value is rendered through Fonts group 4, then followed by the group-1 `x` clear control. Create owns presentation while selection finalization enters player startup separately. | high |
+| Asset/data | `Fonts.bundle` SHA-256 `048aa22cc715ee633f5e31f0400b4a3a9c0a8c8b49d681419e19d5ff676c214a`; group 4 records `308..349`; header `[40,10,28]`; 132 kerning pairs; `Create.bundle` plus `UI.80` end caps | Fonts group 4 has the complete 42-glyph uppercase name source. Group 1 supplies the `WIZARD NAME` caption and clear X; the field chrome is not a source of letters. | high |
 | Web causal trace | `CreateMenuScene.tsx`, `renderer/create-menu-renderer.ts`, `MainMenuScene.tsx`, and `protocol/game-protocol.ts` at `e94ec7c` | `create-text-name.png` bakes `HELVIDIUS`; a clipped non-control supplies semantics; `startHub` ignores name state and uses the page default although `displayName` already has a nonempty 64-character protocol contract. | high |
 
 ### System boundary and membership inventory
@@ -21600,8 +21600,8 @@ configuration, and retained-loadout display ownership.
 | Member (class/variant/scene/branch) | Native source (function/table row/record) | Disposition | Proof |
 | --- | --- | --- | --- |
 | Name-field chrome | `UI.80` ends, rail, dark inner lane; Create top-centre stage | verified-already-at-parity | Existing renderer geometry and clean reference capture |
-| Caption, value, and caret glyphs | Fonts group 1 at `+0x04D530`, records `93..184`; Fonts group 4 records `308..349` | exact-ported | New extracted group-1/group-4 manifests and renderer layout contract |
-| Caret | `0x0059C0D4..0x0059C180`, Create caret art | exact-ported | Renderer updates its position from the dynamic glyph advance |
+| Caption, value, and clear-X glyphs | Fonts group 1 at `+0x04D530`, records `93..184`; Fonts group 4 records `308..349` | exact-ported | Extracted group-1/group-4 assets and renderer layout contract |
+| Clear X | `TextBox` subcontrol and group-1 `x` art | exact-ported | Fixed right-lane art plus semantic clear-action test |
 | Fresh Create element branch | Create vtable `0x00797B7C`, render `0x0059AD40` | exact-ported | DOM input drives draft and first `client-hello.character.displayName` |
 | Fresh Create discipline branch | Same owner after a selected element | exact-ported | Draft remains stable through the element-to-discipline transition and finalizer |
 | Retained post-run loadout | Web run phase `loadout`; existing player configuration snapshot | exact-ported | Shows the authoritative existing name and disables editing because no rename message exists |
@@ -21640,11 +21640,11 @@ configuration, and retained-loadout display ownership.
 - Geometry/transforms/coordinate spaces: the field remains in the existing
   `558 x 17` top-centre Create-local container; the value uses the native
   group-4 `40`-pixel face centred in the 384-pixel inner lane, while the
-  group-1 caret remains in its fixed right lane.
+  group-1 clear X remains in its fixed right lane.
 - Render/hit/collision/traversal order: native chrome and the bitmap glyph
   view remain Pixi artwork; the transparent semantic input alone receives text
   and pointer focus, above the artwork and below no other Create controls.
-- Assets/audio/randomness: every caption/caret group-1 glyph and every
+- Assets/audio/randomness: every caption/clear group-1 glyph and every
   group-4 name glyph/kerning pair is extracted; the baked
   `create-text-name.png` is removed from the live painter. Name editing has no
   native Create audio cue.
@@ -21662,7 +21662,7 @@ configuration, and retained-loadout display ownership.
 
 - Durable finding: `Fonts` group 4, not `Create.bundle`, contains the dynamic
   uppercase name field's complete 42-glyph source and 132-pair kerning table;
-  group 1 supplies only its caption and caret.
+  group 1 supplies only its caption and clear X.
 - Evidence: `Bundle_Fonts` builder `0x004EA3D0`, runtime destinations
   `0x008199A0 + 0x04D530` and `+0x1351CC`, the extraction rule in
   `tools/extract-main-menu-assets.py`, `0x0059BF90..0x0059C180`, and the clean
@@ -21686,12 +21686,12 @@ configuration, and retained-loadout display ownership.
 
 - Correct owner/module: `MainMenuScene` owns the draft until connection;
   `CreateMenuScene` owns semantic input; `create-menu-renderer` owns the
-  native bitmap view and caret.
+  native bitmap view and clear X.
 - Shared model change: expose a pure group-4 name layout helper used by the
   renderer and regression test; pass `displayName` and `onDisplayNameChange`
   through the Create boundary.
 - Stock behavior preserved: chrome, top-centre stage, group-4 glyph metrics,
-  centred value lane, caret art, choice timing, and the connected-player identity
+  centred value lane, clear art, choice timing, and the connected-player identity
   contract.
 - Browser-specific approximation: HTML provides keyboard, touch, IME, and
   accessibility input while Pixi keeps the pixels native; no visual fallback
@@ -21957,10 +21957,12 @@ logical dimensions.
 ### Follow-up — Create-name clear, randomization, and anonymous initialization
 
 The first Create-name pass closed bitmap editing and first-session ownership but
-left three members of the same name system unowned: the rendered X/caret had no
-semantic action, the stock dice art had no random-name action, and an anonymous
-Website session still entered Create with the hard-coded `Helvidius` default.
-This follow-up reopens that missed input/lifecycle boundary.
+left three browser members unowned: the rendered clear X had no semantic action,
+the requested name-only reroll did not exist, and an anonymous Website session
+still entered Create with the hard-coded `Helvidius` default. This follow-up
+reopens that missed input/lifecycle boundary. The second follow-up below corrects
+this pass's then-untraced assumption that the stock top-right dice was a name
+action.
 
 #### Evidence and provenance
 
@@ -21968,7 +21970,7 @@ This follow-up reopens that missed input/lifecycle boundary.
 | --- | --- | --- | --- |
 | Native authored data | `SolomonDarkAbandonware/data/magenames.txt`, stock content SHA-256 `826b66c89344fc7662958420a7f1155001ba8ade9976c4167edbea0659bf0e89` | The complete stock wizard-name table has 273 ordered entries. | high |
 | Existing Website data | `frontend/src/assets/magenames.json` at Website `c30cf8b` | The copied Website list has the same ordered stock entries plus one non-stock `Reaper` entry; it is not an exact randomizer source. | high |
-| Native Create assets | `create-dice.png`, `create-text-name-caret.png`, Create renderer `0x0059AD40` ownership recorded above | The Website paints the stock dice and X/caret pixels, but both currently lack semantic click owners. | high |
+| Native and Website Create assets | `create-dice.png`, legacy-named `create-text-name-caret.png`, Create renderer `0x0059AD40` ownership recorded above | The Website paints the group-1 X without its TextBox clear action. The stock edge dice is separate whole-Create art; a name-only reroll is a Website convenience. | high |
 | Website causal trace | `pages/Game.tsx`, `MainMenuScene.tsx`, `CreateMenuScene.tsx`, `create-wizard-name.ts` | Anonymous sessions pass `Helvidius` as the display-name seed; Create input changes are the only name actions. | high |
 
 #### System boundary and membership inventory
@@ -21981,8 +21983,9 @@ branches.
 | --- | --- | --- | --- |
 | All 273 ordered stock wizard names | `data/magenames.txt` | exact-ported | Website asset membership/count test |
 | Website-only `Reaper` entry | prior `magenames.json` copy | out-of-system (not present in stock table) | removed from the shared name asset |
-| Clear X action on fresh Create | `create-text-name-caret.png` / semantic Create control | exact-ported | clear-action test and browser click receipt |
-| Randomize action on fresh Create | `create-dice.png` / stock name table | exact-ported | injected RNG test and browser click receipt |
+| Clear X action on fresh Create | legacy-named `create-text-name-caret.png` / semantic Create control | exact-ported | clear-action test and browser click receipt |
+| Browser name-only reroll | requested Website convenience / stock name table | out-of-system (stock has no name-only reroll) | injected RNG test and browser click receipt |
+| Stock top-right dice | Create record 6 / whole-Create control | out-of-system (not a name action) | corrected instruction trace in the second follow-up |
 | Logged-in initial name | `Game.tsx` account username -> `initialCreateWizardName` | verified-already-at-parity | existing normalized-name tests |
 | Anonymous initial name | prior `Game.tsx` fallback `Helvidius` | exact-ported | random-initialization test; selected value is a stock entry |
 | Retained loadout | authoritative snapshot name, read-only controls | verified-already-at-parity | existing retained-loadout branch; clear/random controls disabled |
@@ -22012,8 +22015,10 @@ authoritative first-session `PlayerCharacterConfig`.
   `create-wizard-name.ts` owns the exact stock table and random selection;
   `pages/Game.tsx` passes an empty initial character name for anonymous users
   while retaining a valid lobby host label.
-- Stock behavior preserved: exact ordered name data, native X/dice art, native
-  name validation, and read-only retained-loadout behavior.
+- Stock behavior preserved: exact ordered name data, native clear X, native
+  name validation, and read-only retained-loadout behavior. The name-only
+  reroll remains an explicit browser convenience separate from the stock edge
+  dice.
 - Browser-specific behavior: `Math.random` chooses only the local pre-session
   draft; no random value crosses the wire until the player submits Create.
 
@@ -22050,6 +22055,176 @@ authoritative first-session `PlayerCharacterConfig`.
   were clear Y=38 and randomize Y=96; the randomizer had the native dice CSS
   background, no child image, and page/console error lists were empty.
 - Browser screenshot: `/tmp/solomon-wizard-name-randomize-20260820-final.png`.
+
+### Second follow-up — Create-name control ownership and review correction
+
+The earlier follow-up inferred name-reroll semantics from the stock dice art
+without tracing the native widget constructor or its registered-control
+callback. It also validated the new control in isolation, so the full-screen
+name stage's pointer ownership, fresh-entry lifecycle, and native text-width
+limit were missed. The result is a boxed duplicate dice below the field, a
+name layer that intercepts the Back skull, an anonymous draft drawn more than
+once during React mount, and a touched draft that survives leaving and
+re-entering Create. This reopens the complete name-input boundary.
+
+#### Reported smell and parity question
+
+- Reported web behavior: the recently added name editor needs review, and its
+  name-randomize control is visually detached from the app and the X control.
+- Stock behavior to recover: a Create-owned `TextBox` with one construction
+  draw from the stock name table, a native-font measured-width boundary, its
+  built-in clear X, child-owned hit targets, and a fresh draft on each fresh
+  Create construction.
+- Reproduction inputs/scenes: anonymous Title -> New Game -> Create, text edit,
+  invalid/over-width input, X clear, browser name reroll, Back, re-entry,
+  failed first connection, and connected retained loadout.
+- Falsifiable questions: the prior model is wrong if the stock top-right dice
+  does not assign a new name, if stock constrains measured width rather than
+  protocol length, if the stage wrapper blocks sibling controls, or if a fresh
+  Create reuses the discarded browser draft.
+
+#### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Clean/native capture | `tests/fixtures/webgame/menu-layouts/create-element.json`, retail executable SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Create record 6 is the single stock edge dice at `(1518,3)..(1598,57)`; the field and UI.80 ends retain their stock top-centre geometry. | high |
+| Native instructions | `CreateWizardMenu` vtable `0x00797B7C`; constructor `0x0058A500`; builder `0x00593C30`; control callback `0x0058EA50`; `TextBox` constructor `0x00431F00`, input `0x004337E0`, clear callback `0x004322B0`; constant `0x00799030` | Create owns a `TextBox` at `+0x027C`, dice Button at `+0x049C`, and pause/back Button at `+0x0550`. The TextBox selects one mage name on construction, accepts only group-4 glyphs whose measured result is at most `372.0` pixels, and owns the clearing X. The stock dice clears Create phase state to enter whole-wizard finalization; it never assigns another name. | high |
+| Native authored data | `SolomonDarkAbandonware/data/magenames.txt`, 273 ordered entries, SHA-256 `826b66c89344fc7662958420a7f1155001ba8ade9976c4167edbea0659bf0e89` | The native constructor draws once from the complete table for its initial TextBox value. | high |
+| Current browser implementation | Website `28c1927`: `MainMenuScene.tsx`, `CreateMenuScene.tsx`, `create-wizard-name.ts`, `main-menu.css`, `create-menu-renderer.ts` | Mount state and its effect can both draw an anonymous name; the touched flag is never reset on a later New Game; validation uses 64 characters rather than the native measured width; the full name stage has `pointer-events:auto`; and the duplicate name dice is painted by CSS in a bespoke box. | high |
+| Browser reproduction | current-main local `npm run dev:game`, Chrome `150.0.7871.124`, `1600 x 900`, `/tmp/solomon-wizard-name-review-before.png` | Create showed stock name `Mercatius`; input/clear/reroll bounds were `(608,29,384,49)`, `(958,38,30,30)`, and `(950,96,46,32)`. A real click on Back timed out because `.create-menu-native-name-stage` intercepted the pointer. | high |
+
+#### System boundary and membership inventory
+
+Native system: the Create wizard-name draft from scene construction through
+font validation, semantic editing, local convenience actions, first-session
+commit, interruption, and retained-loadout display.
+
+| Member | Native/Web source | Disposition | Proof |
+| --- | --- | --- | --- |
+| Group-4 value layout and kerning | Fonts group 4 records `308..349` | verified-already-at-parity | complete 42-glyph / 132-kerning manifest and layout tests |
+| Supported-character input | `TextBox::input 0x004337E0` | exact-ported | validation/member tests |
+| `372.0`-pixel measured-width limit | `0x00593C30`, `0x00799030`, `TextBox +0x158` | exact-ported | width-boundary tests for accepted/rejected names |
+| Built-in clear X | `TextBox` subcontrol, callback `0x004322B0` | exact-ported | clear behavior and aligned hit-target browser receipt |
+| One native initial random name per fresh Create | `0x00593C30`, `data\\magenames.txt` | exact-ported | injected-draw-count and fresh re-entry browser receipt |
+| Logged-in account-name seed | Website account identity adaptation | out-of-system (stock constructs from `magenames.txt`; the browser intentionally begins with the signed-in identity) | normalized/width-bounded seed tests |
+| Browser name-only reroll | user-requested Website convenience | out-of-system (stock has no name-only reroll control) | stock-table selection test and browser receipt, explicitly labeled as web behavior |
+| Stock top-right dice Button | Create `+0x049C`, record 6, callback `0x0058EA50` | out-of-system (whole-Create finalization shortcut, not a name action) | instruction trace; existing native art remains untouched |
+| Fresh element and discipline phases | same Create draft before first connection | verified-already-at-parity | draft persists across the phase transition |
+| Back/leave then a later fresh Create | Create destruction/reconstruction | exact-ported | browser re-entry must not retain the touched draft |
+| Failed first connection retry | browser pre-session draft owner | exact-ported | draft remains available for retry |
+| Connected retained loadout | authoritative player config, no rename message | verified-already-at-parity | readonly input and disabled local controls |
+| Pointer ownership for input, X, reroll, Back, and choices | native child controls over one screen owner | exact-ported | stage wrapper declines hits; each semantic child owns only its bounds |
+
+No member is browser-blocked. HTML supplies the semantic text bridge, but the
+native bitmap renderer, width contract, and logical hit geometry remain exact.
+
+#### Native ownership thread and recovered contract
+
+- Owner/construction: `CreateWizardMenu` constructs one `TextBox` and two
+  independent edge Buttons. The TextBox owns its value, cursor/measurement,
+  supported-glyph test, and clear subcontrol.
+- Randomness: `0x00593C30` reads `data\\magenames.txt` and assigns one random
+  entry during construction. It does not reroll on render/update. The Website
+  may expose a clearly distinct local reroll convenience, but it uses the same
+  complete table and cannot mutate a connected player.
+- Width/input: native acceptance uses measured group-4 advance plus kerning and
+  rejects a candidate beyond `372.0` pixels. The 64-character network maximum
+  is a later transport boundary, not the Create field's input contract.
+- Hit order: the full fixed stage is layout only. The input, X, browser reroll,
+  Back, elements, and disciplines alone accept pointers. A semantic wrapper may
+  not cover or intercept sibling native controls.
+- Lifecycle: a fresh New Game creates a new draft exactly once; element and
+  discipline transitions preserve it; a failed connection preserves it for
+  retry; leaving Create discards it; retained loadout reads the authoritative
+  connected config and remains readonly.
+- Render/resource lifetime: changing a draft replaces the current name sprites
+  without leaking removed Pixi children or recreating duplicate glyph textures;
+  scene teardown destroys the finite glyph-texture cache once.
+
+#### Nearby-system findings
+
+- Durable finding: the previous `PauseMenu_Render` name for `0x0058EA50` is a
+  cross-class symbol collision. On `CreateWizardMenu` vtable slot `+0x10`, the
+  function is the registered-control callback for the dice and pause/back
+  Buttons.
+- Native report also updated:
+  `Mod Loader/docs/reverse-engineering/native-presentation-ui-fonts-and-loader.md`
+  now records the TextBox, its width/filter/clear behavior, and the distinct
+  dice action.
+
+#### Confidence and open questions
+
+- Confirmed: native TextBox/Button membership, construction-only name draw,
+  clear ownership, 372-pixel width, supported-glyph gate, dice non-name action,
+  browser pointer interception, and browser draft lifecycle defects.
+- Inferred: none used by the implementation.
+- Unknown: the whole-wizard selection result after the stock dice clears both
+  phase bytes belongs to the broader Create selection/finalization system; it
+  does not affect or authorize the browser name-only reroll.
+
+#### Web implementation consequence and validation contract
+
+- Keep the existing `MainMenuScene` draft owner, but remove its mount-time
+  second anonymous draw and explicitly create a fresh draft only on a successful
+  fresh New Game entry or a real account-identity change before touch.
+- Validate native font support and measured width before changing the draft;
+  bound account-derived seeds to the same 372-pixel lane.
+- Let the full name stage keep `pointer-events:none`; opt the input, X, and
+  browser reroll children into pointer ownership individually.
+- Keep the name-only reroll beside and visually subordinate to the X: no panel,
+  border, radius, or box shadow, only the native art's subtle sprite shadow.
+  Do not reassign the stock top-right dice artwork or semantics.
+- Focused tests must cover glyph membership, measured widths at/beyond 372,
+  a single anonymous initialization, fresh-entry reset, failed-retry retention,
+  child-only pointer ownership, clear, and stock-table reroll bounds.
+- Browser acceptance must click Back without force, re-enter with a new draft,
+  exercise edit/X/reroll, complete element/discipline startup with the submitted
+  name, inspect control bounds/style, and record zero page/console errors at
+  `1600 x 900` plus a non-native viewport.
+
+#### Implementation validation receipt
+
+- Implementation: `MainMenuScene.tsx` now creates the draft only when Create
+  is entered, resets it after each successful fresh New Game preparation, and
+  retains it only across element/discipline selection or a failed connection.
+  `create-wizard-name.ts` ports the native `372.0`-pixel advance/kerning limit
+  and bounds account-derived seeds to it. `CreateMenuScene.tsx` exposes actual
+  validity without marking a retained valid value invalid after a rejected
+  keystroke. `main-menu.css` restores child-only pointer ownership and replaces
+  the boxed reroll with a transparent, borderless 42-by-30 native-art control
+  centred under the X. `create-menu-renderer.ts` destroys replaced sprites and
+  reuses a finite per-glyph texture cache rather than allocating textures on
+  every edit. `smoke-game-runtime.mjs` now covers Back/re-entry, clear, and
+  stock-table reroll before its existing first-session handoff.
+- Focused proof: the Create/menu suites passed 13/13, including complete font
+  and name-table membership, the exact `243`-pixel `HELVIDIUS` advance, accepted
+  `363`-pixel and rejected `396`-pixel boundaries, fresh-draft source ownership,
+  and child-only hit ownership. TypeScript, lint, and the game architecture
+  boundary check passed; the only lint output was the repository's existing
+  Fast Refresh warnings.
+- Canonical gate: `./scripts/validate.sh` exited 0 on the final combined tree
+  based directly on Website `origin/main` `f950d90`. It passed 25 backend
+  contracts, 40 loot tests, every prerequisite and broad game/frontend suite
+  (including the concurrently landed weather coverage), the 5 level-up, 6
+  diagnostics, 14 Hub UI, and 5 desktop tests, both production builds, the
+  game bundle budget (`234342` raw / `68752` gzip bytes), and production media
+  policy. The final receipt paragraph is documentation-only and was appended
+  after that exact code gate.
+- Browser proof: Chrome `150.0.7871.124` at `1600 x 900` produced initial stock
+  `Picens`, rerolled to stock `Frontinus`, accepted the X clear, rejected an
+  unsupported character and an over-width twelfth `A`, clicked Back without
+  force, and re-entered with fresh stock `Anicius`. Clear and reroll centres
+  both measured `x=973`; the reroll computed transparent background, zero
+  border/radius, and no box shadow. At `844 x 390` the two centres remained
+  aligned and the reroll remained clickable. Fire/Arcane startup emitted
+  `client-hello.character.displayName = "SolonSolus"`; page and console error
+  lists were empty. Captures:
+  `/tmp/solomon-wizard-name-review-after-1600.png` and
+  `/tmp/solomon-wizard-name-review-after-mobile.png`.
+- Remaining scope: the stock top-right dice's whole-wizard finalization result
+  remains owned by the broader Create selection system and was not reassigned
+  to name reroll. There are no browser-platform-blocked name-system members and
+  no live connected-player rename path.
 
 ## 2026-08-20 — Native save/load lifecycle and first browser cloud slot
 

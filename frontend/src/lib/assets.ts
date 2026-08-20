@@ -77,7 +77,7 @@ import createHandRaised from '../assets/game/create-hand-raised.png'
 import createNameEnd from '../assets/game/create-name-end.png'
 import createNameRail from '../assets/game/create-name-rail.png'
 import createTextNameCaption from '../assets/game/create-text-name-caption.png'
-import createTextNameCaret from '../assets/game/create-text-name-caret.png'
+import createTextNameClear from '../assets/game/create-text-name-caret.png'
 import createStarLarge from '../assets/game/create-star-large.png'
 import createStarSmall from '../assets/game/create-star-small.png'
 import hubCourtyard from '../assets/game/hub-courtyard.png'
@@ -502,7 +502,7 @@ export const createMenu = {
   nameEnd: createNameEnd,
   nameRail: createNameRail,
   textNameCaption: createTextNameCaption,
-  textNameCaret: createTextNameCaret,
+  textNameClear: createTextNameClear,
   stars: {
     large: createStarLarge,
     small: createStarSmall,

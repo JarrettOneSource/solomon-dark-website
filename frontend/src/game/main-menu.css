@@ -314,10 +314,6 @@
   outline-offset: 0.125cqw;
 }
 
-.create-menu-native-name-stage {
-  pointer-events: auto;
-}
-
 .create-menu-name-input {
   position: absolute;
   top: 29px;
@@ -332,6 +328,7 @@
   background: transparent;
   caret-color: transparent;
   font: inherit;
+  pointer-events: auto;
 }
 
 .create-menu-name-input:focus-visible {
@@ -363,26 +360,27 @@
 }
 
 .create-menu-name-randomize {
-  top: 96px;
-  left: 950px;
-  display: grid;
-  width: 46px;
-  height: 32px;
-  border: 1px solid rgb(205 177 105 / 0.62);
-  border-radius: 3px;
-  background: rgb(5 6 10 / 0.66);
+  top: 92px;
+  left: 952px;
+  width: 42px;
+  height: 30px;
+  background-color: transparent;
   background-image: url('../assets/game/create-dice.png');
   background-position: center;
   background-repeat: no-repeat;
   background-size: 42px auto;
-  box-shadow: 0 1px 3px #000, inset 0 0 5px rgb(185 151 78 / 0.18);
-  place-items: center;
+  filter: drop-shadow(0 1px 1px #000);
+  opacity: 0.78;
 }
 
-.create-menu-name-randomize:hover,
+.create-menu-name-randomize:hover {
+  filter: brightness(1.25) drop-shadow(0 0 3px rgb(255 240 183 / 0.55));
+  opacity: 1;
+}
+
 .create-menu-name-randomize:focus-visible {
-  border-color: #fff0b7;
-  outline: none;
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
 }
 
 .create-menu-name-clear:disabled,

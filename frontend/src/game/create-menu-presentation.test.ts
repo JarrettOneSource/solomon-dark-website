@@ -8,11 +8,13 @@ import {
 } from './renderer/create-menu-render-contract.ts'
 import {
   CREATE_WIZARD_NAME_FONT,
+  CREATE_WIZARD_NAME_MAX_WIDTH,
   CREATE_WIZARD_NAME_VALUE_BOUNDS,
   STOCK_WIZARD_NAMES,
   initialCreateWizardName,
   initialCreateWizardNameForSession,
   layoutCreateWizardName,
+  measureCreateWizardName,
   randomStockWizardName,
   validateCreateWizardName,
 } from './create-wizard-name.ts'
@@ -24,6 +26,7 @@ const renderer = readFileSync(
 const createScene = readFileSync(new URL('./CreateMenuScene.tsx', import.meta.url), 'utf8')
 const mainScene = readFileSync(new URL('./MainMenuScene.tsx', import.meta.url), 'utf8')
 const gamePage = readFileSync(new URL('../pages/Game.tsx', import.meta.url), 'utf8')
+const mainMenuCss = readFileSync(new URL('./main-menu.css', import.meta.url), 'utf8')
 
 test('closed right hand keeps its recovered center and mirrored, unrotated registration', () => {
   assert.deepEqual(CREATE_HAND_CENTERS.right, { x: 1200, y: 560 })
@@ -53,6 +56,18 @@ test('wizard-name controls own clear and stock randomization without a live rena
   assert.match(gamePage, /createGameLobby\(accountUsername \?\? 'Guest'\)/)
 })
 
+test('wizard-name controls own only their logical bounds and a fresh Create owns its draft', () => {
+  assert.doesNotMatch(mainMenuCss, /\.create-menu-native-name-stage\s*\{[^}]*pointer-events:\s*auto/s)
+  assert.match(mainMenuCss, /\.create-menu-name-input\s*\{[^}]*pointer-events:\s*auto/s)
+  assert.match(mainMenuCss, /\.create-menu-name-randomize\s*\{[^}]*background-color:\s*transparent/s)
+  assert.doesNotMatch(mainMenuCss, /\.create-menu-name-randomize\s*\{[^}]*(?:border-radius|box-shadow):/s)
+  assert.doesNotMatch(mainScene, /wizardNameTouchedRef/)
+  assert.match(
+    mainScene,
+    /await prepareNewGame\(\)[\s\S]*setWizardName\(initialCreateWizardNameForSession\(displayName\)\)[\s\S]*transitionTo\('create'\)/,
+  )
+})
+
 test('wizard-name layout drains the native group-4 glyph and kerning membership', () => {
   assert.equal(CREATE_WIZARD_NAME_FONT.group, 4)
   assert.equal(CREATE_WIZARD_NAME_FONT.glyphCount, 42)
@@ -79,10 +94,27 @@ test('wizard-name layout drains the native group-4 glyph and kerning membership'
   })
   assert.deepEqual(validateCreateWizardName('Solon-Solus'), {
     ok: false,
-    reason: 'Use only the characters available in the native wizard-name face.',
+    reason: 'Use letters, numbers, or ! , . / : ? only.',
   })
-  assert.equal(initialCreateWizardName('Account-Smoke_7'), 'AccountSmoke7')
+  assert.equal(initialCreateWizardName('Account-Smoke_7'), 'AccountSmok')
   assert.equal(initialCreateWizardName('___'), 'Helvidius')
+})
+
+test('wizard-name input uses the native measured-width boundary', () => {
+  assert.equal(CREATE_WIZARD_NAME_MAX_WIDTH, 372)
+  assert.equal(measureCreateWizardName('HELVIDIUS'), 243)
+  assert.equal(measureCreateWizardName('A'.repeat(11)), 363)
+  assert.equal(measureCreateWizardName('A'.repeat(12)), 396)
+  assert.deepEqual(validateCreateWizardName('A'.repeat(11)), {
+    ok: true,
+    value: 'A'.repeat(11),
+  })
+  assert.deepEqual(validateCreateWizardName('A'.repeat(12)), {
+    ok: false,
+    reason: 'Wizard name is too wide.',
+  })
+  assert.equal(initialCreateWizardName('A'.repeat(64)), 'A'.repeat(11))
+  assert.ok(STOCK_WIZARD_NAMES.every((name) => validateCreateWizardName(name).ok))
 })
 
 test('stock wizard-name membership is complete and random selection is bounded', () => {
@@ -93,5 +125,5 @@ test('stock wizard-name membership is complete and random selection is bounded',
   assert.equal(randomStockWizardName(() => 0), 'Abodius')
   assert.equal(randomStockWizardName(() => 0.999999), 'Magnificus')
   assert.equal(initialCreateWizardNameForSession('', () => 0.5), STOCK_WIZARD_NAMES[136])
-  assert.equal(initialCreateWizardNameForSession('Account-Smoke_7', () => 0), 'AccountSmoke7')
+  assert.equal(initialCreateWizardNameForSession('Account-Smoke_7', () => 0), 'AccountSmok')
 })

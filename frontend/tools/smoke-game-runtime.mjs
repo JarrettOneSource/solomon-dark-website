@@ -4,6 +4,7 @@ import { chromium } from 'playwright-core'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { NATIVE_GENERATED_BONEYARDS } from '../src/game/host/native-generated-boneyards.ts'
+import { STOCK_WIZARD_NAMES } from '../src/game/create-wizard-name.ts'
 
 const baseUrl = process.env.SDR_GAME_SMOKE_URL || 'http://127.0.0.1:4181'
 const CREATE_MENU_TIMEOUT_MS = 30_000
@@ -114,6 +115,18 @@ try {
     throw error
   }
   const wizardName = page.getByRole('textbox', { name: 'Wizard name' })
+  await wizardName.fill('ReviewName')
+  await page.getByRole('button', { name: 'Back' }).click()
+  await page.getByRole('button', { name: 'New Game' }).waitFor()
+  await page.getByRole('button', { name: 'New Game' }).click()
+  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+    timeout: CREATE_MENU_TIMEOUT_MS,
+  })
+  assert.notEqual(await wizardName.inputValue(), 'ReviewName')
+  await page.getByRole('button', { name: 'Clear wizard name' }).click()
+  assert.equal(await wizardName.inputValue(), '')
+  await page.getByRole('button', { name: 'Randomize wizard name' }).click()
+  assert.ok(STOCK_WIZARD_NAMES.includes(await wizardName.inputValue()))
   await wizardName.fill('SolonSolus')
   await page.locator('.create-menu-canvas[data-wizard-name="SolonSolus"]').waitFor({
     timeout: 15_000,

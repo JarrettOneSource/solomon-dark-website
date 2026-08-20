@@ -13,6 +13,7 @@ import type {
   WizardElement,
 } from './core-kernels/player-character.ts'
 import {
+  CREATE_WIZARD_NAME_MAX_LENGTH,
   randomStockWizardName,
   validateCreateWizardName,
 } from './create-wizard-name.ts'
@@ -361,12 +362,12 @@ export default function CreateMenuScene({
       <div className="create-menu-native-stage create-menu-native-name-stage" style={nativeNameStageStyle}>
         <input
           aria-describedby="create-menu-name-validation"
-          aria-invalid={(!nameValidation.ok || nameValidationMessage !== null) || undefined}
+          aria-invalid={!nameValidation.ok || undefined}
           aria-label="Wizard name"
           autoCapitalize="characters"
           autoComplete="off"
           className="create-menu-name-input"
-          maxLength={64}
+          maxLength={CREATE_WIZARD_NAME_MAX_LENGTH}
           onChange={(event) => updateDisplayName(event.target.value)}
           ref={nameInputRef}
           readOnly={Boolean(retainedLoadout)}

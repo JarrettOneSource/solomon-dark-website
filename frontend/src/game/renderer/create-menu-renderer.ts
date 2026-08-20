@@ -95,7 +95,7 @@ interface DisciplineView {
 interface CreateNameView {
   atlas: Texture
   container: Container
-  glyphTextures: Texture[]
+  glyphTextures: Map<string, Texture>
   value: Container
   valueName: string | null
 }
@@ -373,7 +373,7 @@ export async function createCreateMenuRenderer(
       application.stage.removeChild(root)
       root.destroy({ children: true })
       for (const gradient of gradients) gradient.destroy()
-      for (const glyphTexture of name.glyphTextures) glyphTexture.destroy(false)
+      for (const glyphTexture of name.glyphTextures.values()) glyphTexture.destroy(false)
       for (const frames of Object.values(vfxTextures)) {
         for (const frame of frames ?? []) frame.destroy(false)
       }
@@ -587,13 +587,13 @@ function createNameView(
   value.eventMode = 'none'
   value.mask = field
   value.zIndex = 3
-  const caret = stageSprite(texture(createMenu.textNameCaret), 412, 30, 12, 11, 3)
-  caret.alpha = 0.65
-  container.addChild(field, rail, leftEnd, rightEnd, caption, value, caret)
+  const clear = stageSprite(texture(createMenu.textNameClear), 412, 30, 12, 11, 3)
+  clear.alpha = 0.65
+  container.addChild(field, rail, leftEnd, rightEnd, caption, value, clear)
   return {
     atlas: fontAtlas,
     container,
-    glyphTextures: [],
+    glyphTextures: new Map(),
     value,
     valueName: null,
   }
@@ -603,9 +603,7 @@ function updateCreateNameView(view: CreateNameView, displayName: string): void {
   const validation = validateCreateWizardName(displayName)
   const nextName = validation.ok ? validation.value.toUpperCase() : ''
   if (view.valueName === nextName) return
-  view.value.removeChildren()
-  for (const glyphTexture of view.glyphTextures) glyphTexture.destroy(false)
-  view.glyphTextures.length = 0
+  for (const child of view.value.removeChildren()) child.destroy()
   if (!validation.ok) {
     view.valueName = nextName
     return
@@ -613,15 +611,18 @@ function updateCreateNameView(view: CreateNameView, displayName: string): void {
   const layout = layoutCreateWizardName(validation.value)
 
   for (const glyph of layout.glyphs) {
-    const glyphTexture = new Texture({
-      frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.atlasWidth, glyph.atlasHeight),
-      source: view.atlas.source,
-    })
+    let glyphTexture = view.glyphTextures.get(glyph.char)
+    if (!glyphTexture) {
+      glyphTexture = new Texture({
+        frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.atlasWidth, glyph.atlasHeight),
+        source: view.atlas.source,
+      })
+      view.glyphTextures.set(glyph.char, glyphTexture)
+    }
     const sprite = new Sprite(glyphTexture)
     sprite.eventMode = 'none'
     sprite.position.set(glyph.left, glyph.top)
     sprite.tint = 0xd8ba70
-    view.glyphTextures.push(glyphTexture)
     view.value.addChild(sprite)
   }
   view.valueName = layout.value
