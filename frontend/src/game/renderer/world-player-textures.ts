@@ -59,6 +59,7 @@ export interface PlayerWorldTextures {
     }
   }
   elementVfx: Readonly<Record<NativeElementVfxSprite, readonly Texture[]>>
+  fontAtlas: Texture
   playerShadow: Texture
   players: Readonly<Record<WizardElement, PlayerActorTextureFrames>>
   primarySpells: {
@@ -97,6 +98,7 @@ export interface PlayerWorldTextures {
 export function playerWorldAssetSources(): string[] {
   return collectAssetSources({
     elementVfx,
+    fontAtlas: hub.hud.fontAtlas,
     playerCharacter,
     playerShadow: hub.npcs.teacher.shadow,
     primarySpells,
@@ -209,6 +211,7 @@ export function createPlayerWorldTextures(
       },
     },
     elementVfx: elementTextures,
+    fontAtlas: texture(hub.hud.fontAtlas),
     playerShadow: texture(hub.npcs.teacher.shadow),
     players,
     primarySpells: {

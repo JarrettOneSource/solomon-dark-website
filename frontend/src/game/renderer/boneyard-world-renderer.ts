@@ -163,6 +163,10 @@ import {
   nativeLevelUpPresentationFrame,
 } from './level-up-presentation.ts'
 import { NativeLevelUpWorldView } from './level-up-world-view.ts'
+import {
+  NativeWorldNameplateLayer,
+  projectNativeWorldPoint,
+} from './native-world-nameplate.ts'
 
 interface BoneyardRendererFrameDiagnostics {
   activeStaticPainterLayerCount: number
@@ -433,12 +437,15 @@ export async function createBoneyardWorldRenderer(
   const world = new Container({ isRenderGroup: true, label: 'boneyard-world' })
   world.sortableChildren = true
   application.stage.addChild(world)
+  const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
+  application.stage.addChild(worldNameplates.container)
 
   let staticWorld: StaticWorldBuild | null = null
   try {
     staticWorld = await buildStaticWorld(document, world)
   } catch (error) {
-    application.stage.removeChild(world)
+    application.stage.removeChild(world, worldNameplates.container)
+    worldNameplates.destroy()
     world.destroy({ children: true })
     application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
@@ -749,6 +756,22 @@ export async function createBoneyardWorldRenderer(
         worldTransform.position.x + worldShake.x,
         worldTransform.position.y + worldShake.y,
       )
+      worldNameplates.update(
+        snapshot.players,
+        options.playerId,
+        (point) => projectNativeWorldPoint(
+          point,
+          {
+            position: {
+              x: worldTransform.position.x + worldShake.x,
+              y: worldTransform.position.y + worldShake.y,
+            },
+            scale: worldTransform.scale,
+          },
+          viewport,
+        ),
+        { renderable: !levelUpModalActive },
+      )
       const screenOverlay = secondaryScreenFeedback.sample(snapshot.tick)
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
@@ -972,7 +995,8 @@ export async function createBoneyardWorldRenderer(
       if (destroyed) return
       destroyed = true
       spectatorCamera = INITIAL_BONEYARD_SPECTATOR_CAMERA_STATE
-      application.stage.removeChild(world)
+      application.stage.removeChild(world, worldNameplates.container)
+      worldNameplates.destroy()
       application.stage.removeChild(secondaryScreenFlash)
       scene.destroy()
       regionLightField.destroy()

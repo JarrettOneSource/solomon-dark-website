@@ -63,7 +63,11 @@ export function derivePlayerAllyHudRows(
   localPlayerId: string,
 ): AllyHudRow[] {
   return Object.entries(players)
-    .filter(([playerId]) => playerId !== localPlayerId)
+    .filter(([playerId, player]) => (
+      playerId !== localPlayerId
+      && player.progression.lifeState === 'alive'
+      && player.progression.currentHealth > 0
+    ))
     .sort(([leftId], [rightId]) => leftId < rightId ? -1 : leftId > rightId ? 1 : 0)
     .map(([playerId, player]) => ({
       healthRatio: clampAllyHudHealthRatio(
@@ -147,7 +151,10 @@ export function allyHudRowsEqual(
   })
 }
 
-export function layoutNativeAllyName(text: string): NativeAllyNameLayout {
+export function layoutNativeAllyName(
+  text: string,
+  scale = NATIVE_ALLY_FONT.scale,
+): NativeAllyNameLayout {
   const glyphs: NativeAllyNameGlyph[] = []
   let cursor = 0
   let previousGlyphId: number | null = null
@@ -162,19 +169,19 @@ export function layoutNativeAllyName(text: string): NativeAllyNameLayout {
         atlasX: glyph.atlasX,
         atlasY: glyph.atlasY,
         char,
-        height: glyph.atlasHeight * NATIVE_ALLY_FONT.scale,
+        height: glyph.atlasHeight * scale,
         left: (
           cursor
           + glyph.offsetX
           - glyph.atlasWidth / 2
           + glyph.centerX
-        ) * NATIVE_ALLY_FONT.scale,
+        ) * scale,
         top: (
           glyph.offsetY
           - glyph.atlasHeight / 2
           + glyph.centerY
-        ) * NATIVE_ALLY_FONT.scale,
-        width: glyph.atlasWidth * NATIVE_ALLY_FONT.scale,
+        ) * scale,
+        width: glyph.atlasWidth * scale,
       })
       cursor += glyph.advance
     } else if (char === ' ') {
@@ -184,7 +191,7 @@ export function layoutNativeAllyName(text: string): NativeAllyNameLayout {
   }
 
   return {
-    advance: cursor * NATIVE_ALLY_FONT.scale,
+    advance: cursor * scale,
     glyphs,
   }
 }

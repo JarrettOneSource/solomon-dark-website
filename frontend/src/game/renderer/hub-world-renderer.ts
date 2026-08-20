@@ -24,6 +24,10 @@ import { HubPrivateRoomScene } from './hub-private-room-scene.ts'
 import { HubWorldScene } from './hub-world-scene.ts'
 import { NATIVE_LEVEL_UP_PRESENTATION_DURATION_MS } from './level-up-presentation.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from './native-secondary-presentation.ts'
+import {
+  NativeWorldNameplateLayer,
+  projectNativeWorldPoint,
+} from './native-world-nameplate.ts'
 
 export interface HubRendererDiagnostics {
   averageFrameMs: number
@@ -146,7 +150,12 @@ export async function createHubWorldRenderer(
   )
   courtyardScene.stage.scale.set(HUB_CAMERA_SCALE)
   privateRoomScene.world.scale.set(HUB_CAMERA_SCALE)
-  application.stage.addChild(courtyardScene.stage, privateRoomScene.world)
+  const worldNameplates = new NativeWorldNameplateLayer(textures.fontAtlas)
+  application.stage.addChild(
+    courtyardScene.stage,
+    privateRoomScene.world,
+    worldNameplates.container,
+  )
   const secondaryScreenFlash = new Graphics({ label: 'native-secondary-screen-flash' })
   secondaryScreenFlash.eventMode = 'none'
   secondaryScreenFlash.visible = false
@@ -421,6 +430,30 @@ export async function createHubWorldRenderer(
           HUB_CAMERA_SCALE * (player.position.y - camera.y) - cameraScale * player.position.y,
         )
       }
+      const worldNameplateTransform = {
+        position: {
+          x: (player.position.x - camera.x) * HUB_CAMERA_SCALE
+            - cameraScale * player.position.x,
+          y: (player.position.y - camera.y) * HUB_CAMERA_SCALE
+            - cameraScale * player.position.y,
+        },
+        scale: cameraScale,
+      }
+      worldNameplates.update(
+        snapshot.players,
+        options.playerId,
+        (point) => projectNativeWorldPoint(
+          point,
+          worldNameplateTransform,
+          viewport,
+        ),
+        {
+          includePlayer: (playerId) => (
+            snapshot.world.participants[playerId]?.region === participant.region
+          ),
+          renderable: !levelUpModalActive,
+        },
+      )
       secondaryScreenFlash.alpha = screenOverlay?.alpha ?? 0
       secondaryScreenFlash.tint = screenOverlay?.color ?? 0xffffff
       secondaryScreenFlash.visible = screenOverlay !== null
@@ -486,11 +519,13 @@ export async function createHubWorldRenderer(
       application.stage.removeChild(
         courtyardScene.stage,
         privateRoomScene.world,
+        worldNameplates.container,
         secondaryScreenFlash,
         fadeCover,
       )
       courtyardScene.destroy()
       privateRoomScene.destroy()
+      worldNameplates.destroy()
       secondaryScreenFeedback.clear()
       secondaryScreenFlash.destroy()
       fadeCover.destroy()

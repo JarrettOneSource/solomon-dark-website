@@ -57,6 +57,17 @@ test('ally HUD derives remote health from authoritative player progression', () 
   assert.equal(rows[0]?.healthRatio, 0.25)
 })
 
+test('ally HUD removes nonlocal participants once native alive-only eligibility ends', () => {
+  const remote = player('Remote')
+  remote.progression = {
+    ...remote.progression,
+    currentHealth: 0,
+    lifeState: 'dying',
+  }
+
+  assert.deepEqual(derivePlayerAllyHudRows({ local: player('Local'), remote }, 'local'), [])
+})
+
 test('ally HUD derives exact nonlocal lobby identities in stable player order', () => {
   const rows = derivePlayerAllyHudRows({
     'player-3': player('Vibia'),
@@ -148,5 +159,19 @@ test('ally HUD lays out native quarter-scale bitmap glyphs with bundle kerning',
   })), [
     { char: 'A', height: 6.5, left: -0.25, top: -4.75, width: 6 },
     { char: 'B', height: 6.75, left: 5, top: -5, width: 4 },
+  ])
+})
+
+test('ally HUD font layout can reuse native group-6 metrics at world half scale', () => {
+  const layout = layoutNativeAllyName('AB', 0.5)
+  assert.equal(layout.advance, 18)
+  assert.deepEqual(layout.glyphs.map((glyph) => ({
+    height: glyph.height,
+    left: glyph.left,
+    top: glyph.top,
+    width: glyph.width,
+  })), [
+    { height: 13, left: -0.5, top: -9.5, width: 12 },
+    { height: 13.5, left: 10, top: -10, width: 8 },
   ])
 })

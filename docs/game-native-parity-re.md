@@ -21739,3 +21739,217 @@ configuration, and retained-loadout display ownership.
 - Remaining implementation explicitly out of scope: editing an already
   connected retained loadout remains locked because no authoritative rename
   message exists. There are no browser-platform-blocked members.
+
+## 2026-08-20 — Multiplayer world nameplates and health bars
+
+### Reported smell and parity question
+
+- Reported web behavior: multiplayer Website actors render and the fixed ally
+  roster already shows names and compact health rows, but actors in the world
+  have no floating nameplate or health bar.
+- Stock behavior to recover: every connected remote `PlayerWizard` contributes
+  a camera-following half-scale name and a native 7-pixel health bar after the
+  completed world render; the fixed top-center ally rows remain a separate
+  consumer.
+- Reproduction scenes: shared Hub courtyard, every private Hub room, and the
+  active Boneyard/Arena with at least two participants. Move the remote actor,
+  change its authoritative HP, cross a camera edge, enter/leave a room, and
+  let the remote actor reach zero HP.
+- Falsifiable questions: whether the web should derive identity from the
+  interpolated frame or authoritative roster; whether the world bar scales with
+  the camera; whether local players or Golems use the world lane; whether the
+  zero-health death presentation removes the nameplate; and whether a missing
+  bitmap glyph may fall back to an OS font.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Native instructions | Clean retail `SolomonDark.exe` SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; preferred image base `0x00400000`; `Arena::Render` `0x0046EC80`, `PlayerWizard` render `0x0054BA80`, ExactText `0x0043BCD0`, renderer color setter `0x0041FE50`, untextured quad `0x0041DD70` | The world lane is post-scene, uses projected actor coordinates, and draws the name before the bar without entering the D3D9 EndScene overlay. | high |
+| Native durable report | Mod Loader `docs/ally-healthbar-investigation.md` and `docs/design/world-render-seam.md` | Remote participant identity and HP ratio come from the multiplayer runtime snapshot; actor progression memory is not authoritative for the bar. | high |
+| Injected-loader runtime | `/mnt/d/codex-evidence/zorder-20260802/gates-a6ad8bc/real-flow-run-final/screenshots/first-wave-20260802T225008Z-267028072-client-b.png` and matching `native_world_indicator` log; loader-enabled three-peer run | The rendered world name is white, the bar is centered beneath it, the bar remains at width 64 for short names, and a zero-health record still draws the empty bar. This is supporting loader evidence, not clean-stock proof. | high |
+| Native fixed-row sibling | Mod Loader `docs/reverse-engineering/native-ally-roster-hud-2026-08-14.md`; append `0x005CF480`, consumer `0x005D2520`, player producer `0x0052D2A4`, Golem producer `0x00617804`, row glyph return `0x005D3521` | Fixed ally rows use the 50 x 5 bar, 2-pixel identity gap, group-6 quarter-scale name, 10-pixel pitch, and alive-only eligibility. | high |
+| Existing Website | `AllyHud.tsx`, `ally-hud.ts`, `GameHud.tsx`, `HubWorldScene`, `HubPrivateRoomScene`, `BoneyardDynamicScene`, and `hub-hud-font-group-6.json` at Website `e94ec7c` | The roster, authoritative player health, exact font atlas/kerning, and all three world actor owners already exist. Only the world indicator lane is absent. | high |
+
+### System boundary and membership inventory
+
+Native system: the remote-participant world indicator lane plus its separate
+fixed ally-row sibling, from participant eligibility through scene projection,
+bitmap rendering, HP fill, and teardown.
+
+| Member (class/variant/scene/branch) | Native source (function/table row/record) | Disposition | Proof |
+| --- | --- | --- | --- |
+| Remote `PlayerWizard` world indicator in Hub courtyard | `Arena::Render 0x0046EC80` post-scene lane; `PlayerWizard` render `0x0054BA80` supplies the actor | exact-ported | shared screen-space Website layer and Hub browser journey |
+| Remote `PlayerWizard` world indicator in private Hub rooms | same native Arena/PlayerWizard ownership across the active Region | exact-ported | `HubPrivateRoomScene` uses the same player presentation and projection contract |
+| Remote `PlayerWizard` world indicator in Boneyard/Arena | `Arena::Render 0x0046EC80`; `TryGetGameplayHudParticipantDisplayNameForActor` | exact-ported | Boneyard renderer contract and world-position/HP regression |
+| World name text | ExactText `0x0043BCD0`, half-scale command `_s(0.5)`, Fonts group 6 atlas rows `376..442` | exact-ported | extracted atlas, registration, kerning, and bitmap-sprite renderer |
+| World health bar geometry and colors | `DrawNativeWorldIndicatorHealthBar`; `0x0041FE50`, `0x0041DD70`; height 7, offset 17, minimum width 64 | exact-ported | pure geometry tests and rendered pixels |
+| World health ratio | `TryGetRemoteParticipantDisplayState` runtime snapshot; native clamps current/max | exact-ported | snapshot-derived ratio test; no presentation smoothing |
+| World zero-health/death-presentation branch | native world path accepts finite max HP and clamps current HP to zero | exact-ported | empty-bar branch test; fixed rows remain separately alive-only |
+| Local player world indicator | native lookup requires a remote participant display state | out-of-system (local player has no remote nameplate) | local-player exclusion test |
+| Golem/Leviathan/Good Imp world indicator | native world predicate accepts only wizard participant bindings; no summon xref | out-of-system (not a world participant indicator member) | native predicate and adjacent xref census |
+| Fixed remote ally rows in Hub and Boneyard | `0x005CF480` -> `0x005D2520`, player producer `0x0052D2A4` | verified-already-at-parity | existing `AllyHud` exact font/ratio/order tests |
+| Fixed Golem ally row | Golem producer `0x00615CD0` -> `0x00617804`, `UI.23` | verified-already-at-parity | existing `deriveGolemAllyHudRows` and shared roster renderer |
+| Fixed Leviathan/Good Imp rows | no direct `0x005CF480` producer in the stock executable | out-of-system (no native shared-list membership) | native two-xref census |
+| Group-6 authored glyph records and 1,043 kerning pairs | `Fonts` group 6 records `376..442`, header `[24,5,28]` | exact-ported | committed JSON asset and layout tests |
+| `ALLY`/`GOLEM` fixed identity art | `UI.bundle` records 0 and 23 | verified-already-at-parity | existing asset and Golem-row tests |
+| Missing name/max-HP failure path | native draw returns false; no text or ASCII fallback | exact-ported | layer hides invalid items and has no fallback renderer |
+| Solo/multiplayer gate | no nonlocal snapshot player means no world items | exact-ported | self-only derivation test |
+| Participant disconnect/scene epoch teardown | binding/actor disappears from the active snapshot and native frame-local list | exact-ported | per-frame keyed layer removal and transition journey |
+
+No member is browser-blocked. WebGL can represent the native bitmap sprites and
+screen-space quads; the renderer deliberately keeps them out of the fixed DOM
+HUD so camera zoom and browser viewport adaptation cannot change their native
+logical dimensions.
+
+### Native ownership thread
+
+- Owner and construction path: multiplayer participant materialization owns the
+  actor binding; `PlayerWizard` remains an ordinary world actor. The native
+  Arena render detour calls the world indicator lane after stock scene drawing.
+- Upstream state producers/callers: the participant runtime owns display name
+  and authoritative runtime HP/max HP; the actor binding resolves which world
+  actor is associated with that participant.
+- State representation and transitions: name is durable participant state;
+  position is the presented actor transform; HP ratio is recomputed from the
+  authoritative current/max pair each render. The native path does not use a
+  stale materialized progression object.
+- Downstream consumers/callees: ExactText draws the half-scale name; the
+  untextured native quad path draws border, empty track, red fill, and highlight.
+  WebGL equivalents live in one screen-space world-indicator layer.
+- Sibling systems sharing ownership or data: the fixed ally roster consumes
+  the same remote name/HP concepts through `0x005D2520`; Golem uses that fixed
+  list but not the world lane. Local HUD vitals and actor body sprites remain
+  separate consumers.
+- Entry, interruption, reset, and teardown: item creation follows the active
+  world player map; a scene switch reprojects the current remote actor set; a
+  missing participant, invalid vitals, or out-of-view projected anchor hides
+  the item; layer destruction removes all derived glyph textures.
+
+### Recovered behavioral contract
+
+- Timing/ticks/thresholds: positions may use the existing display-time player
+  interpolation; name and HP are discrete authoritative snapshot values. No
+  browser timer or HP smoothing is introduced.
+- Geometry/transforms/coordinate spaces: project `(actor_x, actor_y - 45)`;
+  center the name and bar at the projected point; draw the bar at `name_y + 17`,
+  height 7, width `max(64, 8 * nonspace_count + 4 * space_count)`; fill is
+  `clamp(current / max, 0, 1)`. The layer is screen-space, so camera zoom does
+  not scale the bar or glyphs.
+- Render/hit/collision/traversal order: world indicators render after the
+  completed world and before the semantic fixed HUD; they are noninteractive,
+  do not enter actor painter sorting, and do not affect collision or lighting.
+- Assets/audio/randomness: world names use the existing `Fonts` group-6 atlas;
+  identity tint is white, and the four bar colors are native constants
+  `(12,6,6,235)`, `(54,13,13,220)`, `(190,31,24,240)`, and `(255,105,78,210)`.
+  No audio or randomness participates.
+- Input/network authority/replication: the host/session snapshot is the HP and
+  identity authority; the client only presents its current remote snapshot.
+- Boundary and failure behavior: local actors, nonwizard summons, missing
+  names, invalid max HP, and offscreen anchors produce no world item. Zero HP
+  with a valid actor/name/max HP produces a name and empty bar, matching the
+  native death-presentation branch.
+
+### Nearby-system findings
+
+- The earlier fixed ally-row pass already closed the native shared-list census;
+  this entry reopens it only to connect the separate world lane and to pin the
+  alive-only versus zero-health lifecycle difference.
+- `HubWorldScene`, `HubPrivateRoomScene`, and `BoneyardDynamicScene` already
+  share `PlayerWorldView`/`HubPlayerView` for body presentation. The new label
+  must not add a Hub-only actor subclass or duplicate participant state.
+- The Hub and Boneyard presentation timelines interpolate actor transforms but
+  keep progression as a discrete snapshot value. That is the correct browser
+  equivalent of native camera-following actor movement plus render-time
+  authoritative vitals.
+- Native post-scene indicators are not DOM HUD rows and must not be scaled by
+  the mobile fixed-HUD readability rule.
+- Native report updated: `Mod Loader/docs/ally-healthbar-investigation.md`
+  records this Website handoff and the world/fixed-lane ownership boundary.
+
+### Confidence and open questions
+
+- Confirmed: native executable identity, addresses, post-scene owner, exact bar
+  dimensions/colors/offset, remote-only eligibility, authoritative HP source,
+  group-6 bitmap asset, fixed-row sibling, and scene membership.
+- Inferred: the WebGL screen-space layer is the clean equivalent of native
+  post-scene quads; the browser has no platform constraint requiring a visual
+  approximation.
+- Unknown: the exact native glyph width for every possible Unicode name is not
+  represented by the Website's bounded group-6 atlas. This is not a browser
+  limitation: unsupported glyphs are intentionally omitted, with no system-font
+  fallback, matching native ExactText's no-fallback behavior.
+- Next falsifying probe if material: compare a long mixed-case name's native
+  captured glyph bounds with the fixed 8/4-pixel bar-width estimate; the current
+  MP implementation and acceptance verifier define the estimate used here.
+
+### Web implementation consequence
+
+- Correct owner: a shared renderer-owned `NativeWorldNameplateLayer`, attached
+  to the WebGL stage after the world and before the fixed semantic HUD.
+- Shared model change: derive nonlocal remote player items from the presented
+  player map, use presented positions, and use discrete authoritative
+  progression health/name values. Keep fixed ally-row derivation unchanged
+  except for its native alive-only eligibility.
+- Stock behavior preserved: white half-scale bitmap names, camera-following
+  actor anchor, minimum 64-pixel bar, native four-color bar construction,
+  zero-health world branch, and no local/Golem/fallback labels.
+- Browser-specific approximation: none. Device-pixel resolution follows the
+  existing WebGL renderer; logical dimensions remain screen-space constants.
+- Symptom patch or obsolete path to remove: none; no prior world-label shim
+  exists. Do not route these items through `AllyHud` or CSS mobile scaling.
+
+### Validation contract
+
+- Focused automated test: all native geometry constants, ratio clamping,
+  minimum/variable width, screen projection, self/invalid/offscreen filtering,
+  zero-health visibility, deterministic item order, and fixed-row death removal.
+- Playwright/runtime journey: a real two-client Website session must show the
+  reciprocal world nameplate and bar in Hub and Boneyard, follow a moving
+  remote actor through camera motion, change the bar from full to half HP, and
+  report no page/console errors; fixed ally rows must remain present separately.
+- Stock-versus-web comparison: compare the existing native injected-loader
+  capture geometry at 1600 x 900 (`7` px bar, `17` px name-to-bar offset, `64`
+  px minimum) with matching Website screenshots. Loader evidence remains
+  labeled supporting evidence, not clean-stock provenance.
+- Measurable acceptance criteria: world name/bar center follows the actor;
+  width is at least 64; height is 7; bar top is name origin + 17; full/half/zero
+  ratios produce corresponding fill widths; no world label appears for self;
+  fixed row bar remains 50 x 5 at 10-pixel pitch; no page or console errors.
+- Canonical Website gate: `./scripts/validate.sh` from the final isolated tree.
+
+### Implementation validation receipt
+
+- Files/modules changed: `frontend/src/game/renderer/native-world-nameplate.ts`
+  owns the shared screen-space layer, `hub-world-renderer.ts` and
+  `boneyard-world-renderer.ts` attach it to every world scene, and
+  `world-player-textures.ts` loads the existing exact Fonts atlas for both
+  renderers. `ally-hud.ts` now applies the native alive-only fixed-row gate and
+  exposes the same group-6 metrics at half scale.
+- Focused tests: `npm run test:world-nameplates` passed TypeScript plus 12
+  focused tests covering remote/self/invalid/off-scene filtering, zero-health
+  retention, ratio clamping, minimum/variable bar width, projection, native
+  kerning at half scale, and fixed-row death removal.
+- Canonical gate: `./scripts/validate.sh` exited 0 on Website branch
+  `codex/nameplates-healthbars-native-parity-20260820`; backend build, 24
+  Website contracts, lint/import boundaries, 143 prerequisite tests, 1,011
+  broad frontend tests, 5 desktop tests, production frontend/game-host build,
+  route budget, and media policy passed. Existing Fast Refresh and Vite large
+  chunk warnings remain only as warnings.
+- Browser/native evidence: the isolated two-client Chromium journey against
+  `npm run dev:game -- --host 127.0.0.1 --port 4181` reached ready Hub and ready
+  Boneyard scenes on both peers with empty page-error and console-error lists.
+  The headless run used a startup-only `HTMLAudioElement.loadeddata` shim for
+  two music channels that do not fire that event in this environment; gameplay,
+  WebSocket, renderer, and screenshot paths were real. Hub capture:
+  `/tmp/solomon-dark-nameplates-hub.png`; Boneyard capture:
+  `/tmp/solomon-dark-nameplates-boneyard-debug-host.png`. Both visibly show the
+  remote white bitmap name and centered red bordered bar; the Hub frame also
+  retains the fixed ally row under the skull.
+- Native comparison: the browser frames preserve the recovered 7-pixel bar,
+  17-pixel name-to-bar offset, 64-pixel short-name minimum, white world text,
+  and separate fixed 50 x 5 ally row. Loader-supported native comparison
+  remains `/mnt/d/codex-evidence/zorder-20260802/gates-a6ad8bc/real-flow-run-final/screenshots/first-wave-20260802T225008Z-267028072-client-b.png`.
+- Remaining implementation explicitly out of scope: native Mod Loader changes,
+  Golem world indicators, nonwizard summon rows, OS-font fallback, and
+  unrelated HUD/camera changes.
