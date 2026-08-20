@@ -1463,6 +1463,81 @@ test('Deflect cancels the contact, faces and sounds once, and reflects concentra
   )))
 })
 
+test('Flash responds before damage with area Dazzle, twelve children, feedback, and stock audio', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation(),
+    combatBoneyard('flash-response-run'),
+  )
+  state = withPlayerSkillRank(state, 'local-player', 53, 1)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state)
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {
+      'local-player': {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: player.position,
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'ZOMBIE',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.ZOMBIE,
+      position: { x: player.position.x + 40, y: player.position.y },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  })
+  state = {
+    ...state,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: createNativeRng(15) },
+    world: { ...state.world, enemies: seeded.store },
+  }
+
+  let flashEvent = state.secondaryAbilities.events.find(({ skillId }) => skillId === 53)
+  for (let tick = 0; tick < 300 && flashEvent === undefined; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    flashEvent = state.secondaryAbilities.events.find(({ skillId }) => skillId === 53)
+  }
+  assert.ok(flashEvent)
+  assert.equal(flashEvent.cue, 'flash-spell')
+  assert.equal(flashEvent.kind, 'impact')
+  assert.ok(flashEvent.pitch >= 1 && flashEvent.pitch <= 1.2)
+  assert.ok(flashEvent.cameraDisplacement)
+  assert.ok(Math.abs(Math.hypot(
+    flashEvent.cameraDisplacement.x,
+    flashEvent.cameraDisplacement.y,
+  ) - 3) < 1e-5)
+  assert.deepEqual(flashEvent.screenFlash, {
+    alpha: 1,
+    blue: 1,
+    decayPerTick: Math.fround(0.05),
+    green: 1,
+    pointAttenuated: true,
+    red: 1,
+  })
+  assert.equal(
+    state.secondaryAbilities.actors.filter(({ kind }) => kind === 'flash-response-grow').length,
+    8,
+  )
+  assert.equal(
+    state.secondaryAbilities.actors.filter(({ kind }) => kind === 'flash-response-fade').length,
+    4,
+  )
+  const effect = state.secondaryAbilities.targetEffects.find(({ targetId }) => targetId === 1)
+  assert.ok(effect)
+  assert.ok(effect.dazzleTicks >= 399 && effect.dazzleTicks <= 400)
+  assert.ok(getPlayerProgression(state).currentHealth < 50, 'Flash does not block the strike')
+})
+
 test('enemy retirement carries its death-time private seed into one authoritative ground drop', () => {
   for (const [actorSeed, expectedKind] of [
     [9_974_658, 'gold'],

@@ -391,6 +391,18 @@ test('pins every Hail bounce selector to its exact stock registry WAV', () => {
   }
 })
 
+test('pins defensive Flash response to its exact stock registry WAV', () => {
+  const source = readFileSync(
+    new URL('../assets/game/audio/sfx/flash-spell.wav', import.meta.url),
+  )
+  assert.equal(
+    createHash('sha256').update(source).digest('hex'),
+    NATIVE_SOUND_MANIFEST['flash-spell'].sourceSha256,
+  )
+  assert.equal(NATIVE_SOUND_MANIFEST['flash-spell'].registryOffset, 0x61c)
+  assert.equal(NATIVE_SOUND_MANIFEST['flash-spell'].sourceName, 'sounds\\flashspell')
+})
+
 test('plays the untouched stock level-up cue once at scalar one per barrier', () => {
   const source = readFileSync(
     new URL('../assets/game/audio/sfx/level-up.wav', import.meta.url),

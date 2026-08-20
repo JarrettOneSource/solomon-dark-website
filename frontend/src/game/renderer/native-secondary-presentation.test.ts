@@ -43,7 +43,8 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'earthquake-dust', 'earthquake-debris',
   'golem', 'golem-death', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
-  'magic-trap-burst', 'electric-burn', 'dampen-wave', 'shield-break',
+  'magic-trap-burst', 'electric-burn', 'flash-response-fade', 'flash-response-grow',
+  'dampen-wave', 'shield-break',
   'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
   'mindblast-shockwave', 'ring-fire-explosion',
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
@@ -99,6 +100,8 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     scale: 1,
     skillId: kind.startsWith('mindblast-')
       ? null
+      : kind.startsWith('flash-response-')
+        ? 53
       : kind.startsWith('acid-')
         ? 72
         : kind.startsWith('comet')
@@ -122,6 +125,7 @@ function screenEvent(
 ): NativeSecondaryEventState {
   return {
     actorId: null,
+    cameraDisplacement: null,
     cameraMagnitude: 0,
     cue: null,
     eventId,
@@ -1470,6 +1474,70 @@ test('Region screen feedback is one overwrite lane with exact float32 decay', ()
     camera.sampleCameraMagnitude(1),
     Math.fround(Math.fround(0.25) * Math.fround(0.94)),
   )
+
+  camera.consume({
+    ...screenEvent(2, 1, {
+      alpha: 1,
+      blue: 1,
+      decayPerTick: 0.05,
+      green: 1,
+      pointAttenuated: true,
+      red: 1,
+    }),
+    cameraDisplacement: { x: 1.8, y: -2.4 },
+  }, context)
+  assert.deepEqual(camera.sampleCameraDisplacement(1), {
+    x: Math.fround(1.8),
+    y: Math.fround(-2.4),
+  })
+  assert.deepEqual(camera.sampleCameraDisplacement(2), {
+    x: Math.fround(Math.fround(1.8) * Math.fround(0.75)),
+    y: Math.fround(Math.fround(-2.4) * Math.fround(0.75)),
+  })
+  assert.deepEqual(camera.sampleCameraDisplacement(8), { x: 0, y: 0 })
+})
+
+test('Flash response actors retain the exact record-16 growth and record-15 fade passes', () => {
+  const grow = nativeSecondaryPresentationPlan({
+    ...actor('flash-response-grow'),
+    alpha: 0.75,
+    scale: 1.5,
+  }).draws[0]!
+  assert.deepEqual({
+    alpha: grow.alpha,
+    blend: grow.blend,
+    entry: grow.entry,
+    role: grow.role,
+    scaleX: grow.scaleX,
+    scaleY: grow.scaleY,
+  }, {
+    alpha: 0.75,
+    blend: 'add',
+    entry: 16,
+    role: 'flash-response-grow-perspective',
+    scaleX: 1.5,
+    scaleY: Math.fround(1.5 * Math.fround(0.8)),
+  })
+  const fade = nativeSecondaryPresentationPlan({
+    ...actor('flash-response-fade'),
+    alpha: 0.5,
+    scale: 6,
+  }).draws[0]!
+  assert.deepEqual({
+    alpha: fade.alpha,
+    blend: fade.blend,
+    entry: fade.entry,
+    role: fade.role,
+    scaleX: fade.scaleX,
+    scaleY: fade.scaleY,
+  }, {
+    alpha: 0.5,
+    blend: 'add',
+    entry: 15,
+    role: 'flash-response-fade',
+    scaleX: 6,
+    scaleY: 6,
+  })
 })
 
 test('Shockwave and FreezeWave share the expanding Region-light callback', () => {

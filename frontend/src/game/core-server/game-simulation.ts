@@ -67,6 +67,7 @@ import {
   resolveNativeSkillManaCostValue,
 } from '../core-kernels/native-offensive-resolution.ts'
 import {
+  NATIVE_FLASH_RESPONSE_RADIUS,
   playerDeflectReflectionSourceInRange,
   playerPoisonDurationSeconds,
   resolvePlayerHarmfulContact,
@@ -90,6 +91,7 @@ import {
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
   emitNativePlayerScreenFlash,
+  materializeNativePlayerFlashResponse,
   nativeSecondaryAvailableMana,
   nativeSecondaryTargetEffect,
   removeNativeSecondaryOwner,
@@ -1240,6 +1242,27 @@ function finishGameSimulationTick(
           secondaryAbilities.rng,
         )
     if (contact !== null) secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
+    if (contact !== null && contact.flash !== null && character !== undefined) {
+      const worldKey = gameWorldKey(world, damage.playerId)
+      const targetIds = world.kind === 'boneyard'
+        ? boneyardNativeSecondaryTargets(
+            world.enemies,
+            character.position,
+            NATIVE_FLASH_RESPONSE_RADIUS,
+          ).map(({ id }) => id)
+        : []
+      secondaryAbilities = materializeNativePlayerFlashResponse(
+        secondaryAbilities,
+        {
+          ownerId: damage.playerId,
+          position: character.position,
+          response: contact.flash,
+          targetIds,
+          tick,
+          worldKey,
+        },
+      )
+    }
     if (contact?.deflected) {
       if (contact.deflectPitch === null) {
         throw new Error('successful Deflect did not produce its native swipe pitch')

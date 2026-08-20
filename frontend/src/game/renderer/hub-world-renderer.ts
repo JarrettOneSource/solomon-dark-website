@@ -429,18 +429,23 @@ export async function createHubWorldRenderer(
       }
       const screenOverlay = screenFeedback.sample(snapshot.tick)
       const secondaryCameraMagnitude = screenFeedback.sampleCameraMagnitude(snapshot.tick)
+      const secondaryCameraDisplacement = screenFeedback.sampleCameraDisplacement(snapshot.tick)
       const cameraScale = HUB_CAMERA_SCALE * (1 + secondaryCameraMagnitude)
       if (inCourtyard) {
         courtyardScene.stage.scale.set(cameraScale)
         courtyardScene.stage.position.set(
-          (HUB_CAMERA_SCALE - cameraScale) * (player.position.x - camera.x),
-          (HUB_CAMERA_SCALE - cameraScale) * (player.position.y - camera.y),
+          (HUB_CAMERA_SCALE - cameraScale) * (player.position.x - camera.x)
+            + secondaryCameraDisplacement.x,
+          (HUB_CAMERA_SCALE - cameraScale) * (player.position.y - camera.y)
+            + secondaryCameraDisplacement.y,
         )
       } else {
         privateRoomScene.world.scale.set(cameraScale)
         privateRoomScene.world.position.set(
-          HUB_CAMERA_SCALE * (player.position.x - camera.x) - cameraScale * player.position.x,
-          HUB_CAMERA_SCALE * (player.position.y - camera.y) - cameraScale * player.position.y,
+          HUB_CAMERA_SCALE * (player.position.x - camera.x) - cameraScale * player.position.x
+            + secondaryCameraDisplacement.x,
+          HUB_CAMERA_SCALE * (player.position.y - camera.y) - cameraScale * player.position.y
+            + secondaryCameraDisplacement.y,
         )
       }
       const worldNameplateTransform = {

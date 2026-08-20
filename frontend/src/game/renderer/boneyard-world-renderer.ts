@@ -769,6 +769,9 @@ export async function createBoneyardWorldRenderer(
       const secondaryCameraMagnitude = secondaryScreenFeedback.sampleCameraMagnitude(
         snapshot.tick,
       )
+      const secondaryCameraDisplacement = secondaryScreenFeedback.sampleCameraDisplacement(
+        snapshot.tick,
+      )
       const worldTransform = nativeEnemyWorldFeedbackTransform(
         camera,
         viewport,
@@ -777,8 +780,8 @@ export async function createBoneyardWorldRenderer(
       )
       world.scale.set(worldTransform.scale)
       world.position.set(
-        worldTransform.position.x + worldShake.x,
-        worldTransform.position.y + worldShake.y,
+        worldTransform.position.x + worldShake.x + secondaryCameraDisplacement.x,
+        worldTransform.position.y + worldShake.y + secondaryCameraDisplacement.y,
       )
       worldNameplates.update(
         snapshot.players,

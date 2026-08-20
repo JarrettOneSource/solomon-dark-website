@@ -737,6 +737,7 @@ test('secondary one-shots and streams consume new authoritative events once with
     worldKey = 'hub:courtyard',
   ): NativeSecondaryEventState => ({
     actorId: null,
+    cameraDisplacement: null,
     cameraMagnitude: 0,
     cue,
     eventId,
@@ -759,16 +760,32 @@ test('secondary one-shots and streams consume new authoritative events once with
         event(21, 'planewalker-on', 1.25),
         event(22, 'rainfall-loop', 1),
         event(23, 'magic-circle', 1, 'hub:library'),
+        {
+          ...event(24, 'flash-spell', 1.125),
+          kind: 'impact',
+          screenFlash: {
+            alpha: 1,
+            blue: 1,
+            decayPerTick: 0.05,
+            green: 1,
+            pointAttenuated: true,
+            red: 1,
+          },
+          skillId: 53,
+        } satisfies NativeSecondaryEventState,
       ],
-      nextEventId: 24,
+      nextEventId: 25,
     },
     tick: previous.tick + 1,
   }
 
   synchronizer.update(snapshot)
   synchronizer.update(snapshot)
-  assert.deepEqual(audio.sounds, ['teleport'])
-  assert.deepEqual(audio.soundOptions, [{ playbackRate: 0.75, volume: 1 }])
+  assert.deepEqual(audio.sounds, ['teleport', 'flash-spell'])
+  assert.deepEqual(audio.soundOptions, [
+    { playbackRate: 0.75, volume: 1 },
+    { playbackRate: 1.125, volume: 1 },
+  ])
   assert.deepEqual(audio.streams, ['planewalker-on'])
   assert.deepEqual(audio.streamOptions, [{ playbackRate: 1.25, volume: 1 }])
   synchronizer.destroy()

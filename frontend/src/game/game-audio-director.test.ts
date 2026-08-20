@@ -64,6 +64,7 @@ const SOURCES = {
     'firey-death': 'firey.wav',
     'flame-lash-start': 'flame-lash-start.wav',
     flash: 'flash.wav',
+    'flash-spell': 'flash-spell.wav',
     fizzle: 'fizzle.wav',
     'hit-shield': 'hit-shield.wav',
     'goto-orb': 'goto-orb.wav',

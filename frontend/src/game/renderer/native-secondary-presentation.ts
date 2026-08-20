@@ -225,6 +225,8 @@ export function nativeRegionPointGain(
 export class NativeSecondaryScreenFeedbackPresentation {
   private alpha = 0
   private blue = 1
+  private cameraDisplacementX = 0
+  private cameraDisplacementY = 0
   private cameraMagnitude = 0
   private green = 1
   private lastEventId = 0
@@ -259,6 +261,21 @@ export class NativeSecondaryScreenFeedbackPresentation {
           MAGIC_SHIELD_EXPLOSION_CAMERA_DECAY,
           this.lastTick - eventTick,
         )
+      }
+    }
+    if (event.cameraDisplacement !== null) {
+      let x = Math.fround(event.cameraDisplacement.x)
+      let y = Math.fround(event.cameraDisplacement.y)
+      if (eventTick < this.lastTick) {
+        x = repeatedFloatMultiply(x, Math.fround(0.75), this.lastTick - eventTick)
+        y = repeatedFloatMultiply(y, Math.fround(0.75), this.lastTick - eventTick)
+      }
+      const currentSquared = this.cameraDisplacementX * this.cameraDisplacementX
+        + this.cameraDisplacementY * this.cameraDisplacementY
+      const incomingSquared = x * x + y * y
+      if (incomingSquared >= currentSquared) {
+        this.cameraDisplacementX = x
+        this.cameraDisplacementY = y
       }
     }
     const flash = event.screenFlash
@@ -299,6 +316,14 @@ export class NativeSecondaryScreenFeedbackPresentation {
     return this.cameraMagnitude
   }
 
+  sampleCameraDisplacement(tick: number): Vector2 {
+    this.advanceTo(Math.max(0, Math.trunc(tick)))
+    return {
+      x: this.cameraDisplacementX,
+      y: this.cameraDisplacementY,
+    }
+  }
+
   private advanceTo(tick: number): void {
     if (tick <= this.lastTick) return
     const elapsedTicks = tick - this.lastTick
@@ -316,6 +341,24 @@ export class NativeSecondaryScreenFeedbackPresentation {
     )
     if (this.cameraMagnitude < MAGIC_SHIELD_EXPLOSION_CAMERA_CUTOFF) {
       this.cameraMagnitude = 0
+    }
+    this.cameraDisplacementX = repeatedFloatMultiply(
+      this.cameraDisplacementX,
+      Math.fround(0.75),
+      elapsedTicks,
+    )
+    this.cameraDisplacementY = repeatedFloatMultiply(
+      this.cameraDisplacementY,
+      Math.fround(0.75),
+      elapsedTicks,
+    )
+    if (
+      this.cameraDisplacementX * this.cameraDisplacementX
+        + this.cameraDisplacementY * this.cameraDisplacementY
+      <= Math.fround(0.25)
+    ) {
+      this.cameraDisplacementX = 0
+      this.cameraDisplacementY = 0
     }
     this.lastTick = tick
   }
@@ -528,6 +571,22 @@ export function nativeSecondaryPresentationPlan(
         scaleX: actor.scale,
         scaleY: actor.scale,
         tint: Math.trunc(actor.quantity),
+      })])
+    case 'flash-response-grow':
+      return plan([draw('BadGuys', 16, {
+        alpha: Math.min(actor.alpha, 1),
+        blend: 'add',
+        role: 'flash-response-grow-perspective',
+        scaleX: actor.scale,
+        scaleY: Math.fround(actor.scale * Math.fround(0.8)),
+      })])
+    case 'flash-response-fade':
+      return plan([draw('BadGuys', 15, {
+        alpha: Math.min(actor.alpha, 1),
+        blend: 'add',
+        role: 'flash-response-fade',
+        scaleX: actor.scale,
+        scaleY: actor.scale,
       })])
     case 'ice-blast':
       return plan([])

@@ -2587,6 +2587,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
   const event = {
     actorId: null,
+    cameraDisplacement: null,
     cameraMagnitude: 0,
     cue: 'teleport',
     eventId: 1,
@@ -2622,6 +2623,26 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   const decoded = decodeServerGameMessage(JSON.stringify(message))
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.secondaryAbilities.events, [event])
+
+  const flashFeedback = JSON.parse(JSON.stringify(message))
+  Object.assign(flashFeedback.frame.secondaryAbilities.events[0], {
+    cameraDisplacement: { x: 1.8, y: -2.4 },
+    cue: 'flash-spell',
+    kind: 'impact',
+    skillId: 53,
+  })
+  const flashDecoded = decodeServerGameMessage(JSON.stringify(flashFeedback))
+  assert.equal(flashDecoded.type, 'server-snapshot')
+  assert.deepEqual(
+    flashDecoded.frame.secondaryAbilities.events[0]!.cameraDisplacement,
+    { x: 1.8, y: -2.4 },
+  )
+  const wrongFlashCue = JSON.parse(JSON.stringify(flashFeedback))
+  wrongFlashCue.frame.secondaryAbilities.events[0].cue = 'teleport'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongFlashCue)),
+    /skill 53 is reserved for Flash response feedback/,
+  )
 
   const externalFeedback = JSON.parse(JSON.stringify(message))
   Object.assign(externalFeedback.frame.secondaryAbilities.events[0], {
@@ -2800,6 +2821,25 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   assert.equal(continuousDecoded.type, 'server-snapshot')
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.frame, 0.25)
   assert.equal(continuousDecoded.frame.secondaryAbilities.actors[0]!.slowFactor, -1)
+
+  const flashFrame = JSON.parse(JSON.stringify(message))
+  const flashActor = flashFrame.frame.secondaryAbilities.actors[0]!
+  flashActor.ageTicks = 1
+  flashActor.hitTargetIds = []
+  flashActor.kind = 'flash-response-grow'
+  flashActor.lifetimeTicks = 20
+  flashActor.scale = 1.5
+  flashActor.skillId = 53
+  const flashDecoded = decodeServerGameMessage(JSON.stringify(flashFrame))
+  assert.equal(flashDecoded.type, 'server-snapshot')
+  assert.equal(flashDecoded.frame.secondaryAbilities.actors[0]!.skillId, 53)
+
+  const wrongFlashActor = JSON.parse(JSON.stringify(flashFrame))
+  wrongFlashActor.frame.secondaryAbilities.actors[0]!.kind = 'earthquake'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongFlashActor)),
+    /not a native secondary ability/,
+  )
 
   const golemFrame = JSON.parse(JSON.stringify(message))
   const golemActor = golemFrame.frame.secondaryAbilities.actors[0]!

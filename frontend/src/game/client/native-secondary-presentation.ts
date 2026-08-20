@@ -7,6 +7,9 @@ export function copyNativeSecondaryState(
     actors: source.actors.map(copyActor),
     events: source.events.map((event) => ({
       ...event,
+      cameraDisplacement: event.cameraDisplacement === null
+        ? null
+        : { ...event.cameraDisplacement },
       position: { ...event.position },
       screenFlash: event.screenFlash === null ? null : { ...event.screenFlash },
     })),

@@ -57,6 +57,7 @@ export type GameSoundCue =
   | 'firey-death'
   | 'flame-lash-start'
   | 'flash'
+  | 'flash-spell'
   | 'fizzle'
   | 'hit-shield'
   | 'goto-orb'
@@ -323,6 +324,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x5f0,
     sourceName: 'sounds\\flash',
     sourceSha256: 'dfbee90531011a439650ee0bbf30a3c5ea9469ccd97a9979c05ba73f3db9c05c',
+  },
+  'flash-spell': {
+    registryOffset: 0x61c,
+    sourceName: 'sounds\\flashspell',
+    sourceSha256: 'fda25c45eab0290011b1f3ba859757578586b30c3e7f1c905077f801af0ee5be',
   },
   fizzle: {
     registryOffset: 0x598,

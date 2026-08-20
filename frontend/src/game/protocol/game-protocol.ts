@@ -3215,6 +3215,10 @@ function nativeSecondaryActor(
     ? null
     : source.skillId === 22 && kind === 'fire-burn'
       ? 22
+      : source.skillId === 53 && (
+          kind === 'flash-response-fade' || kind === 'flash-response-grow'
+        )
+        ? 53
       : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
   const mindblast = kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
   if (mindblast !== (skillId === null)) {
@@ -3409,8 +3413,8 @@ function nativeSecondaryEvent(
 ): NativeSecondaryEventState {
   const source = record(value, field)
   onlyKeys(source, field, [
-    'actorId', 'cameraMagnitude', 'cue', 'eventId', 'kind', 'ownerId', 'pitch',
-    'position', 'screenFlash', 'skillId', 'tick', 'worldKey',
+    'actorId', 'cameraDisplacement', 'cameraMagnitude', 'cue', 'eventId', 'kind',
+    'ownerId', 'pitch', 'position', 'screenFlash', 'skillId', 'tick', 'worldKey',
   ])
   const cue = source.cue === null
     ? null
@@ -3431,7 +3435,14 @@ function nativeSecondaryEvent(
     ? null
     : source.skillId === 22
       ? 22
+      : source.skillId === 53
+        ? 53
       : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
+  if (skillId === 53 && (
+    cue !== 'flash-spell' || kind !== 'impact' || screenFlash === null
+  )) {
+    throw new GameProtocolError(`${field} skill 53 is reserved for Flash response feedback`)
+  }
   if (skillId === null && (cue !== null || kind !== 'impact' || screenFlash === null)) {
     throw new GameProtocolError(`${field} null skillId is reserved for player-effect feedback`)
   }
@@ -3439,6 +3450,9 @@ function nativeSecondaryEvent(
     actorId: source.actorId === null
       ? null
       : positiveInteger(source.actorId, `${field}.actorId`),
+    cameraDisplacement: source.cameraDisplacement === null
+      ? null
+      : vector(source.cameraDisplacement, `${field}.cameraDisplacement`),
     cameraMagnitude: nonnegativeFinite(source.cameraMagnitude, `${field}.cameraMagnitude`),
     cue,
     eventId: positiveInteger(source.eventId, `${field}.eventId`),

@@ -28,7 +28,10 @@ import {
   resolveNativeSkillManaCostValue,
   type NativeOffensiveSpellFactors,
 } from './native-offensive-resolution.ts'
-import { nativeSkillClass } from './player-skill-runtime.ts'
+import {
+  nativeSkillClass,
+  type PlayerFlashResponse,
+} from './player-skill-runtime.ts'
 import { applyNativeEquipmentTransform } from './native-equipment-effects.ts'
 import {
   NATIVE_GOLEM_DEATH_DURATION_TICKS,
@@ -79,6 +82,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'golem-death',
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn',
+  'flash-response-fade', 'flash-response-grow',
   'dampen-wave', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
   'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
@@ -93,7 +97,7 @@ export const NATIVE_SECONDARY_AUDIO_CUES = Object.freeze([
   'big-fire', 'nuke', 'ignite', 'magic-storm', 'lightning-start', 'thunder',
   'prismatic-shock', 'ring-of-ice', 'quake-cracks', 'quake-crack-small',
   'golem-provoke', 'knockback-golem', 'stone-step', 'golem-die', 'stone-break',
-  'flame-lash-start', 'rock-hit',
+  'flame-lash-start', 'flash-spell', 'rock-hit',
   'stoneskin-on', 'stoneskin', 'teleport', 'magic-circle', 'set-trap', 'trap',
   'magic-missile', 'throw-fire', 'ice-start', 'start-boulder',
   'flash', 'dampen', 'magic-shield-up', 'hit-shield', 'pop-shield',
@@ -137,7 +141,7 @@ export interface NativeSecondaryActorState {
   readonly rank: number
   readonly rotationRadians: number
   readonly scale: number
-  readonly skillId: NativeSecondaryAbilityId | 22 | null
+  readonly skillId: NativeSecondaryAbilityId | 22 | 53 | null
   readonly slowFactor: number
   readonly targetId: number | null
   readonly variant: number
@@ -147,6 +151,7 @@ export interface NativeSecondaryActorState {
 
 export interface NativeSecondaryEventState {
   readonly actorId: number | null
+  readonly cameraDisplacement: Vector2 | null
   readonly cameraMagnitude: number
   readonly cue: NativeSecondaryAudioCue | null
   readonly eventId: number
@@ -155,7 +160,7 @@ export interface NativeSecondaryEventState {
   readonly pitch: number
   readonly position: Vector2
   readonly screenFlash: NativeSecondaryScreenFlashState | null
-  readonly skillId: NativeSecondaryAbilityId | 22 | null
+  readonly skillId: NativeSecondaryAbilityId | 22 | 53 | null
   readonly tick: number
   readonly worldKey: string
 }
@@ -171,8 +176,9 @@ export interface NativeSecondaryScreenFlashState {
 
 type NativeSecondaryEventSeed = Omit<
   NativeSecondaryEventState,
-  'cameraMagnitude' | 'eventId' | 'screenFlash'
+  'cameraDisplacement' | 'cameraMagnitude' | 'eventId' | 'screenFlash'
 > & {
+  readonly cameraDisplacement?: Vector2 | null
   readonly cameraMagnitude?: number
   readonly screenFlash?: NativeSecondaryScreenFlashState | null
 }
@@ -672,6 +678,7 @@ const REGION_FLASH_TELEPORT_DESTINATION = screenFlash(1, 1, 1, 0.025, true)
 const REGION_FLASH_TELEPORT_SOURCE = screenFlash(1, 1, 1, 0.025, false)
 const REGION_FLASH_EARTHQUAKE = screenFlash(0.8, 1, 0.8, 0.025, false)
 const REGION_FLASH_COMET = screenFlash(1, 1, 1, 0.005, false)
+const REGION_FLASH_RESPONSE = screenFlash(1, 1, 1, 0.05, true)
 const PRISMATIC_REGION_FLASH_COLORS = Object.freeze([
   Object.freeze([1, 0, 0] as const),
   Object.freeze([1, 0.5, 0] as const),
@@ -3145,6 +3152,21 @@ export function stepNativeSecondaryAbilities(
       case 'dampen-wave':
       case 'mindblast-burst':
         break
+      case 'flash-response-grow':
+        actor = {
+          ...actor,
+          alpha: Math.max(0, Math.fround(sourceActor.alpha - Math.fround(0.05))),
+          scale: Math.fround(sourceActor.scale * Math.fround(1.05)),
+        }
+        retain = actor.alpha > 0
+        break
+      case 'flash-response-fade':
+        actor = {
+          ...actor,
+          alpha: Math.max(0, Math.fround(sourceActor.alpha - Math.fround(0.05))),
+        }
+        retain = actor.alpha > 0
+        break
       case 'shield-break':
         actor = {
           ...actor,
@@ -4302,6 +4324,9 @@ function applyFireBurnRequest(
   source: NativeSecondarySimulationState,
   request: NativeFireBurnRequest,
 ): NativeSecondarySimulationState {
+  if (request.actor.skillId === 53) {
+    throw new Error('Flash response actors cannot author Fire Burn')
+  }
   return applyNativeSecondaryFireBurn(source, {
     damage: request.damage,
     ownerId: request.actor.ownerId,
@@ -5223,6 +5248,11 @@ function emit(
     ...source,
     events: [...source.events, Object.freeze({
       ...event,
+      cameraDisplacement: event.cameraDisplacement === undefined
+        ? null
+        : event.cameraDisplacement === null
+          ? null
+          : Object.freeze({ ...event.cameraDisplacement }),
       cameraMagnitude: event.cameraMagnitude ?? 0,
       eventId: source.nextEventId,
       screenFlash: event.screenFlash ?? null,
@@ -5527,6 +5557,75 @@ export function applyNativeSecondaryDazzle(
   return durationTicks === 0
     ? source
     : mergeEffect(source, worldKey, targetId, { dazzleTicks: durationTicks })
+}
+
+/** Materializes the complete successful row-53 response after its RNG was consumed. */
+export function materializeNativePlayerFlashResponse(
+  source: NativeSecondarySimulationState,
+  input: Readonly<{
+    ownerId: string
+    position: Readonly<Vector2>
+    response: PlayerFlashResponse
+    targetIds: readonly number[]
+    tick: number
+    worldKey: string
+  }>,
+): NativeSecondarySimulationState {
+  if (new Set(input.targetIds).size !== input.targetIds.length) {
+    throw new RangeError('Flash response target ids must be unique')
+  }
+  let state = source
+  for (const targetId of input.targetIds) {
+    state = applyNativeSecondaryDazzle(
+      state,
+      input.worldKey,
+      targetId,
+      input.response.durationTicks,
+    )
+  }
+  for (const scale of input.response.growScales) {
+    if (!Number.isFinite(scale) || scale < 1 || scale > 2) {
+      throw new RangeError('Flash response grow scale must be inside [1,2]')
+    }
+    state = spawn(state, actorSeed({
+      alpha: 1,
+      kind: 'flash-response-grow',
+      lifetimeTicks: 20,
+      ownerId: input.ownerId,
+      position: input.position,
+      scale,
+      skillId: 53,
+      worldKey: input.worldKey,
+    }))
+  }
+  for (let index = 0; index < 4; index += 1) {
+    state = spawn(state, actorSeed({
+      alpha: 1,
+      kind: 'flash-response-fade',
+      lifetimeTicks: 20,
+      ownerId: input.ownerId,
+      position: {
+        x: input.position.x,
+        y: Math.fround(input.position.y - 25),
+      },
+      scale: 6,
+      skillId: 53,
+      worldKey: input.worldKey,
+    }))
+  }
+  return emit(state, {
+    actorId: null,
+    cameraDisplacement: { ...input.response.cameraDisplacement },
+    cue: 'flash-spell',
+    kind: 'impact',
+    ownerId: input.ownerId,
+    pitch: input.response.pitch,
+    position: { ...input.position },
+    screenFlash: REGION_FLASH_RESPONSE,
+    skillId: 53,
+    tick: input.tick,
+    worldKey: input.worldKey,
+  })
 }
 
 export function emitNativePlayerScreenFlash(

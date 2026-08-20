@@ -10,6 +10,7 @@ import {
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
+  materializeNativePlayerFlashResponse,
   NATIVE_MINDBLAST_DIRECT_RADIUS,
   NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
   nativePlaneOrbDamage,
@@ -278,6 +279,73 @@ test('Mindblast Shockwave contacts every target once, Dazzles, pushes, and publi
   const wave = state.actors.find(({ kind }) => kind === 'mindblast-shockwave')!
   assert.deepEqual(wave.hitTargetIds, [1])
   assert.ok(state.targetEffects.find(({ targetId }) => targetId === 1)!.dazzleTicks > 0)
+})
+
+test('Flash materializes twelve independent children, area Dazzle, feedback, and audio', () => {
+  const response = Object.freeze({
+    cameraDisplacement: Object.freeze({ x: 1.8, y: -2.4 }),
+    durationTicks: 400,
+    growScales: Object.freeze([1, 1.125, 1.25, 1.375, 1.5, 1.625, 1.75, 2]),
+    pitch: 1.125,
+  })
+  let state = materializeNativePlayerFlashResponse(
+    createNativeSecondarySimulation(9),
+    {
+      ownerId: 'player',
+      position: { x: 30, y: 50 },
+      response,
+      targetIds: [4, 2],
+      tick: 1,
+      worldKey: 'boneyard:test',
+    },
+  )
+  assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-grow').length, 8)
+  assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-fade').length, 4)
+  assert.deepEqual(state.actors.slice(0, 8).map(({ scale }) => scale), response.growScales)
+  assert.ok(state.actors.slice(0, 8).every(({ position }) => (
+    position.x === 30 && position.y === 50
+  )))
+  assert.ok(state.actors.slice(8).every(({ position, scale }) => (
+    position.x === 30 && position.y === 25 && scale === 6
+  )))
+  assert.deepEqual(state.targetEffects.map(({ dazzleTicks, targetId }) => ({
+    dazzleTicks,
+    targetId,
+  })), [
+    { dazzleTicks: 400, targetId: 4 },
+    { dazzleTicks: 400, targetId: 2 },
+  ])
+  assert.deepEqual(state.events, [{
+    actorId: null,
+    cameraDisplacement: { x: 1.8, y: -2.4 },
+    cameraMagnitude: 0,
+    cue: 'flash-spell',
+    eventId: 1,
+    kind: 'impact',
+    ownerId: 'player',
+    pitch: 1.125,
+    position: { x: 30, y: 50 },
+    screenFlash: {
+      alpha: 1,
+      blue: 1,
+      decayPerTick: Math.fround(0.05),
+      green: 1,
+      pointAttenuated: true,
+      red: 1,
+    },
+    skillId: 53,
+    tick: 1,
+    worldKey: 'boneyard:test',
+  }])
+
+  state = stepNativeSecondaryAbilities(state, context(41, 2, null)).state
+  const grow = state.actors.find(({ kind }) => kind === 'flash-response-grow')!
+  const fade = state.actors.find(({ kind }) => kind === 'flash-response-fade')!
+  assert.equal(grow.alpha, Math.fround(0.95))
+  assert.equal(grow.scale, Math.fround(Math.fround(1) * Math.fround(1.05)))
+  assert.equal(fade.alpha, Math.fround(0.95))
+  assert.equal(fade.scale, 6)
+  assert.deepEqual(state.targetEffects.map(({ dazzleTicks }) => dazzleTicks), [399, 399])
 })
 
 function expectedScreenFlash(

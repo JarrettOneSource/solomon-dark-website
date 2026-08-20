@@ -42,6 +42,7 @@ export const NATIVE_CONCENTRATED_DEFLECT_DAMAGE_FACTOR = 5
 export const NATIVE_DEFLECT_REFLECTION_PADDING = 25
 export const NATIVE_HURRICANE_CHARGE_PER_TICK = Math.fround(0.0015)
 export const NATIVE_HURRICANE_RELEASE_PER_TICK = Math.fround(0.03)
+export const NATIVE_FLASH_RESPONSE_RADIUS = 100
 
 export type PlayerConcentrationSlot = 'a' | 'b'
 export type PlayerStaffDamageLane = 'primary' | 'secondary'
@@ -72,6 +73,8 @@ export interface PlayerSkillDerivedStats {
   readonly castProgressFactor: number
   readonly damageResistance: number
   readonly deflectChancePercent: number
+  readonly flashChancePercent: number
+  readonly flashDurationTicks: number
   readonly focusInstantRechargeChancePercent: number
   readonly flailingChancePercent: number
   readonly healthRecoveryPerTick: number
@@ -109,8 +112,16 @@ export interface PlayerHarmfulContactResult {
   readonly damage: number
   readonly deflectPitch: number | null
   readonly deflected: boolean
+  readonly flash: PlayerFlashResponse | null
   readonly reflectedDamage: number
   readonly rng: NativeRngState
+}
+
+export interface PlayerFlashResponse {
+  readonly cameraDisplacement: Readonly<{ x: number; y: number }>
+  readonly durationTicks: number
+  readonly growScales: readonly number[]
+  readonly pitch: number
 }
 
 export interface PlayerCreativityInsightResult {
@@ -259,6 +270,8 @@ export function playerSkillDerivedStats(
     castProgressFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
     deflectChancePercent: staffEquipped ? value(68, 'mValue') : 0,
+    flashChancePercent: value(53, 'mChance'),
+    flashDurationTicks: Math.round(value(53, 'mDuration') * 100),
     focusInstantRechargeChancePercent: selected(60) ? value(60, 'mConcentration') : 0,
     flailingChancePercent: value(71, 'mChance'),
     healthRecoveryPerTick: applyNativeEquipmentTransform(
@@ -350,6 +363,38 @@ export function resolvePlayerHarmfulContact(
     throw new RangeError('incoming player damage must be finite and non-negative')
   }
   let rng = sourceRng
+  let flash: PlayerFlashResponse | null = null
+  if (damage > 0 && derived.flashChancePercent > 0) {
+    const chance = drawNativeInteger(rng, 100)
+    rng = chance.state
+    if (
+      chance.value > 0
+      && chance.value <= Math.round(derived.flashChancePercent)
+    ) {
+      const pitch = drawNativeFloat(rng, Math.fround(0.2))
+      const heading = drawNativeInteger(pitch.state, 100_001)
+      rng = heading.state
+      const headingDegrees = Math.fround(
+        Math.fround(heading.value / 100_000) * 360,
+      )
+      const headingRadians = headingDegrees * Math.PI / 180
+      const growScales: number[] = []
+      for (let index = 0; index < 8; index += 1) {
+        const scale = drawNativeFloat(rng, 1)
+        rng = scale.state
+        growScales.push(Math.fround(2 - scale.value))
+      }
+      flash = Object.freeze({
+        cameraDisplacement: Object.freeze({
+          x: Math.fround(Math.sin(headingRadians) * 3),
+          y: Math.fround(-Math.cos(headingRadians) * 3),
+        }),
+        durationTicks: derived.flashDurationTicks,
+        growScales: Object.freeze(growScales),
+        pitch: Math.fround(1 + pitch.value),
+      })
+    }
+  }
   if (deflectable) {
     const draw = drawNativeInteger(rng, 100)
     rng = draw.state
@@ -359,6 +404,7 @@ export function resolvePlayerHarmfulContact(
         damage: 0,
         deflectPitch: Math.fround(1 + pitch.value),
         deflected: true,
+        flash,
         reflectedDamage: kind === 'physical'
           && reflectionSourceInRange
           && isPlayerSkillConcentrated(runtime, progression, 68)
@@ -375,6 +421,7 @@ export function resolvePlayerHarmfulContact(
     damage: Math.max(0, resistedDamage - runtime.hardenArmor),
     deflectPitch: null,
     deflected: false,
+    flash,
     reflectedDamage: 0,
     rng,
   })

@@ -40,6 +40,7 @@ import hailBounce3 from '../assets/game/audio/sfx/hail-bounce-3.wav'
 import pickupBag from '../assets/game/audio/sfx/pickup-bag.wav'
 import pickupCoin from '../assets/game/audio/sfx/pickup-coin.wav'
 import enemyFlash from '../assets/game/audio/sfx/enemy-flash.wav'
+import flashSpell from '../assets/game/audio/sfx/flash-spell.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
 import flameLashStart from '../assets/game/audio/sfx/flame-lash-start.wav'
@@ -192,6 +193,7 @@ export const GAME_AUDIO_SOURCES = {
     'flame-lash-start': flameLashStart,
     fizzle,
     flash: enemyFlash,
+    'flash-spell': flashSpell,
     'hit-shield': hitShield,
     'goto-orb': gotoOrb,
     'hail-bounce-0': hailBounce0,
