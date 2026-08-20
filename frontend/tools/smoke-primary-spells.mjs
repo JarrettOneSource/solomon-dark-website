@@ -521,6 +521,8 @@ async function castAirInBoneyard(page) {
   const bounds = await canvas.boundingBox()
   assert.ok(bounds, 'expected the Boneyard canvas to have bounds')
   const frame = await boneyardFrame(page)
+  const environmentMode = Number(await page.locator('.boneyard-scene')
+    .getAttribute('data-environment-mode'))
   assert.equal(frame.localPlayerLifeState, 'alive')
   assert.equal(frame.runPhase, 'active')
   const gravestones = await visibleGravestones(page, frame)
@@ -573,12 +575,33 @@ async function castAirInBoneyard(page) {
     assert.equal(targeted.playerTargetId, targeted.state.targetId)
     if (lowManaAcceptance) assert.equal(targeted.state.underpowered, true)
     const held = await waitForBoneyardSpell(page, 'air')
+    assert.ok(
+      held.lightProviderCandidateCount > frame.lightProviderCandidateCount,
+      `expected Air to join the current light-provider frame: ${JSON.stringify({
+        before: frame.lightProviderCandidateCount,
+        held: held.lightProviderCandidateCount,
+      })}`,
+    )
     if (lowManaAcceptance) assert.ok(held.localPlayerMana <= 0.1)
     const screenshotPath = `${screenshotRoot}/solomon-primary-air-boneyard-target.png`
     await page.screenshot({ path: screenshotPath })
     receipt = {
       gate,
       held,
+      environmentMode,
+      lighting: {
+        before: {
+          accepted: frame.lightSourceCount,
+          misc: frame.lightMiscTailCandidateCount,
+          providers: frame.lightProviderCandidateCount,
+        },
+        held: {
+          accepted: held.lightSourceCount,
+          lanternIntensity: held.lanternLightIntensity,
+          misc: held.lightMiscTailCandidateCount,
+          providers: held.lightProviderCandidateCount,
+        },
+      },
       screenshotPath,
       targeted,
     }

@@ -3609,14 +3609,15 @@ Confidence: high for control ownership, the direct-versus-picker branch, and
 transition lifecycle. The browser fade itself remains owned by its existing
 scene transport rather than duplicating the stock renderer's fade object.
 
-#### Environment modes 1 and 2 own a two-pass darkness aperture
+#### Environment modes 1 and 2 own a bounded player-light pass
 
 Arena field `+0x8F20` is the environment mode. The retained exact stock-generator
 outputs contain modes `0`, `1`, and `2`; the isolated stock run used for the
 visual comparison was mode `2`. Arena's main painter tiles the ground for
-modes `1` and `2`, while auxiliary painter `0x00470EE0` owns their persistent
-darkness/light target. Each visible player contributes two additive light
-passes in those modes.
+modes `1` and `2`, while auxiliary painter `0x00470EE0` owns their player-light
+pass. Each visible player always contributes one direct additive light and may
+contribute a second local target light when either target-mask grid is
+populated.
 
 The direct pass draws DeadHawg record `18` (`DeadHawg owner +0xE00`) at the
 player root with color/alpha `random[0.95, 1.0] * 0.25`, or `0.2375..0.25`.
@@ -3638,19 +3639,14 @@ static shapes can occlude this target pass, while the direct record-18 pass
 remains unoccluded. The first browser attempts first omitted this target, then
 incorrectly reused record 18's quarter-alpha for it.
 
-The stock backbuffer is not mathematically black outside those two masks. The
-native mode-2 receipts retain low-value terrain and silhouette pixels beyond
-the 518.4-world-unit target, while the HUD remains full intensity. This is a
-world-composition floor rather than a larger third player mask: no third
-player-centered draw exists in `0x00470EE0`, and the nonzero pixels continue
-past the recovered target bounds. A direct live write proved that Arena
+The stock pass does not touch the backbuffer outside those bounded player
+draws. Native low-value terrain and silhouettes beyond the target come from
+the already completed Region composition; they are not a calibrated global
+floor or a larger third player mask. A direct live write proved that Arena
 `+0x8F20` is the active mode byte and was restored to `2`, but D3D9
 `PrintWindow` and desktop captures on this machine returned the same cached
 backbuffer hash across the write. They are therefore retained only as a field
-ownership check, not used as differential pixel evidence. Calibrating the
-browser against the independently captured native frame leaves a four-percent
-ambient world floor (a `0.96` maximum darkness alpha). This value is a visual
-projection constant, not a claimed literal recovered from the stock binary.
+ownership check, not used to invent a fullscreen alpha value.
 
 Arena also owns a `1.35` world-camera zoom. In the live `1600 x 900` run,
 fields `+0x8BCC/+0x8BD0/+0x8BD4/+0x8BD8` held viewport
@@ -3663,17 +3659,14 @@ positions, and masks share it. On the backbuffer the target therefore spans
 pixels before crop transparency.
 
 Implementation consequence: environment mode must survive scene projection.
-Modes `1` and `2` combine the actual record-18 alpha aperture and scaled
-record-9 radial in a darkness canvas after world and actor painting but before
-HUD painting, once per synchronized visible player. Canvas `lighter` builds
-the summed light alpha and a final `source-out` black fill inverts it into the
-darkness layer, preserving the stock additive overlap instead of multiplying
-the two contributions. The direct pass samples `0.2375..0.25`; the target pass
-samples `0.95..1.0`. The inverted light alpha tops out at `0.96` darkness so
-the native low-value ambient silhouettes survive outside the aperture instead
-of collapsing to browser black. Boneyard world projection uses zoom `1.35` consistently
-for canvas geometry, players, the Solomon set piece, and both masks. Mode `0`
-does not apply the pass.
+Modes `1` and `2` draw record 18 additively after world/actor painting and
+before HUD painting, once per synchronized visible player. The direct pass
+samples `0.2375..0.25`. The optional record-9 target exists only when its
+class-owned mask grids have members; the current Website actor model does not
+carry that lane and therefore omits the target rather than synthesizing a
+radial. The transparent browser surface uses `plus-lighter` and never fills or
+inverts the viewport. Boneyard projection uses zoom `1.35` consistently. Mode
+`0` does not apply the pass.
 
 Evidence: read-only decompilation and instruction traces for auxiliary painter
 `0x00470EE0`, blend dispatcher `0x004208A0`, and target binder `0x004214C0`;
@@ -5381,7 +5374,7 @@ selects the Boneyard audio scene. Entry must crossfade Academy to the existing
 exact `prelude.mp3` render over 100 ticks. Combat and combat-prelude remain
 owned by the future wave lifecycle; entry must not invent them early.
 
-### Region lighting precedes the existing mode-1/mode-2 darkness compositor
+### Region lighting precedes the mode-1/mode-2 player environment light
 
 Arena rendering contains two different dark systems. `0x0057D4E0` first
 resets the Region light manager at `Arena + 0x8C44` to ambient RGB zero and an
@@ -5394,9 +5387,10 @@ dispatch boundary. Building upper art does too, but Tree secondary painter
 `0x00608830` explicitly reapplies the Tree-root scalar from `+0xCC`; treating
 all late proxy art alike is incorrect. A fullscreen multiply over the already
 flattened world would also be incorrect.
-After this lit world is assembled, mode owner `0x00470EE0` still applies the
-previously recovered DeadHawg-18 direct aperture and DeadHawg-9 target pass
-before the HUD. Mode 0 still has no such post pass.
+After this lit world is assembled, mode owner `0x00470EE0` adds the
+DeadHawg-18 direct light and any grid-backed DeadHawg-9 local target before the
+HUD. Mode 0 still has no such post pass. Neither player draw covers the full
+backbuffer.
 
 Source query `0x0057F980` takes the maximum contribution. With source radius
 `r`, intensity `i`, and delta `(dx,dy)`, let
@@ -5414,17 +5408,15 @@ ticks and 57 provider calls in one window with the Lantern as `ECX`. A live
 player record independently contained the 15-unit anchor, radius `2.6`,
 intensity `1`, and flag `1`.
 
-Implementation contract: calculate native light sources separately from the
-post-scene fog. Apply the recovered maximum scalar to individually resident
+Implementation contract: calculate native Region light sources separately from
+the player environment pass. Apply the recovered maximum scalar to individually resident
 main-object/fence sprites and dynamic main actors, leaving base/underlay and
 non-Tree proxy passes alone. Tree secondary art receives the same root scalar
 through its own late painter. Lantern flicker is presentation-owned and must stay in the
 recovered inclusive `[0.55,0.75]` lattice; it must not mutate synchronized gameplay RNG.
-Keep environment modes 1 and 2 on the existing two-pass player darkness
-compositor and keep the HUD above it. The far alpha `245` is still a
-capture-calibrated four-percent projection rather than a falsely claimed
-literal; the new Region scalar restores true black main-object silhouettes
-where stock ambient is zero without erasing the verified low-value base field.
+Keep environment modes 1 and 2 on the bounded additive record-18 pass and keep
+the HUD above it. Do not add a fullscreen black floor: the Region scalar and
+raster already own world darkness, including every non-player source.
 
 Evidence: read-only Ghidra decompilation/instructions for `0x005E8100`,
 `0x005E1EF0`, `0x0064AC90`, `0x00428800`, `0x00470A90`, `0x0047D570`,
@@ -5436,9 +5428,8 @@ native near-Dig capture; and focused Chromium baseline
 `/tmp/solomon-dark-boneyard-baseline-20260813.png` with no page or console
 errors. Confidence is high for ownership, constants, selector lifecycle,
 entry music, source parameters, scalar falloff, render order, and mode gates.
-The four-percent post-darkness ambient floor and deterministic browser
-projection of native presentation RNG remain explicitly medium-confidence
-visual policies.
+The deterministic browser projection of native presentation RNG remains an
+explicit visual policy; the prior four-percent fullscreen floor is withdrawn.
 
 ### Browser receipt
 
@@ -5447,19 +5438,20 @@ Boneyard flow against a development host whose catalog exposed the captured
 stock mode-2 Boneyard. Instrumentation on the browser's actual audio elements
 observed Academy at `0.9129` and Prelude at `0.0871` during the overlap, 48
 intermediate volume writes, and a completed transition after `1129.1 ms` with
-Academy paused at volume zero and Prelude playing at volume one. The settled
-darkness surface retained alpha `0` at the player aperture and `245` at the
-far sample. The Region-light receipt reported two enrolled sources, main-object
+Academy paused at volume zero and Prelude playing at volume one. The historical
+browser surface reported alpha `0` at the player and `245` at the far sample;
+the corrected instruction trace proves those values measured the removed
+fullscreen inversion bug, not a native acceptance oracle. The Region-light receipt reported two enrolled sources, main-object
 scalars spanning `0..1`, and Lantern samples from `0.570956` through `0.747951`,
 inside the recovered native interval. Its renderer marker was
 `native-object-scalar`; the session emitted no page or console errors.
 
 A separate mode-0 browser pass verified the then-implemented ownership
-boundary: it omitted the post-scene darkness canvas while distant main props
+boundary: it omitted the player environment-light canvas while distant main props
 and fence bodies became black Region-light silhouettes, and ground,
 grave-dirt underlays, and the flattened late canopy/proxy canvas retained
 their caller-owned color. The main-object result proves the Region-light
-correction without incorrectly extending mode-1/mode-2 fog to mode 0; the
+correction without incorrectly extending the mode-1/mode-2 player pass to mode 0; the
 white Tree canopy was subsequently identified as a browser divergence, not a
 native exemption.
 
@@ -5579,9 +5571,10 @@ Synthesizing any of those dormant effects here would be non-native.
 - Treat Solomon Dig's record-13 dirt and body as one tinted Puppet-root
   composition. The current browser tints the body alone; that split violates
   the already-recovered actor painter.
-- Keep the mode-1/mode-2 DeadHawg-18 plus DeadHawg-9 darkness compositor as a
-  later, player-owned pass. A Lantern must not be inserted into that separate
-  player aperture list merely to make its Region source visible.
+- Keep the mode-1/mode-2 DeadHawg-18 direct light as a later, bounded additive
+  player pass. The optional DeadHawg-9 target stays absent until its native
+  target-grid actor lane is modeled. A Lantern must not be inserted into that
+  separate player list merely to make its Region source visible.
 - Keep Lantern flicker local to the render frame and within inclusive `[0.55,0.75]`.
   The authoritative host, snapshot protocol, collision, camera, and match RNG
   remain unchanged.
@@ -5595,8 +5588,8 @@ Synthesizing any of those dormant effects here would be non-native.
   Lantern intensity inside the native interval, and pixels around the Lantern
   that differ from the pre-change no-field baseline while distant pre-main
   pixels remain black.
-- The same run must retain the later mode-1/mode-2 player darkness canvas and
-  HUD ordering, emit no page/console errors, and exercise the actual title ->
+- The same run must retain the later mode-1/mode-2 additive player-light canvas
+  and HUD ordering, emit no page/console errors, and exercise the actual title ->
   Create -> Hub -> Boneyard route.
 - The exact tree must pass focused tests and `./scripts/validate.sh` before this
   ledger receives an implementation receipt.
@@ -5609,7 +5602,7 @@ stamps the extracted DeadHawg record 18 for the current player and Lantern
 sources with the recovered registration/radius/intensity, and presents the
 result as a multiply sprite at `z = 0.5`. The opaque base remains at `0`, every
 shared actor/scenery painter row starts at `1`, and the existing foreground and
-environment-darkness lanes remain later. The analytic maximum-scalar consumer
+environment-player-light lanes remain later. The analytic maximum-scalar consumer
 is retained independently. The shared source collector preserves native order,
 strict containment, intensity precedence, and the source bypass flag before
 either consumer runs. Solomon Dig now applies that scalar to the shared
@@ -5618,8 +5611,8 @@ collision, camera, or gameplay RNG changed.
 
 Chrome `150.0.7871.124` exercised the real Title -> Create -> Hub -> Boneyard
 route from a fresh host on origin-main `934f4ac`. The selected Boneyard was
-environment mode `0`, so the Region result was directly visible without the
-later darkness target. The live WebGL canvas reported
+environment mode `0`, so the Region result was visible without the later
+player environment pass. The live WebGL canvas reported
 `native-region-field+object-scalar`, `multiply-pre-main`, DeadHawg entry `18`,
 two sources, and composite depth `0.5`, with no page or console errors. The
 player was held `465.40` world units from the Lantern, beyond the player's
@@ -5632,8 +5625,8 @@ region changed on zero pixels. The receipt image is
 `/tmp/solomon-light-field-near-dig-raw-0-20260814.png`.
 
 Before the source-policy follow-up, an exact-tree two-client smoke selected
-environment mode `2` and retained the later player-owned darkness target,
-clear player aperture, ambient floor, and HUD. Both WebGL clients reported the
+environment mode `2` and retained the then-current player overlay and HUD. The
+overlay's full-screen inversion is superseded by the correction below. Both WebGL clients reported the
 Region multiply marker at `0.5`, three sources (two players plus Lantern), and
 Lantern intensities inside the native interval. The shared geometry hash,
 painter bands, culling totals, Solomon animation, responsive Dig indicator,
@@ -19861,7 +19854,7 @@ prove the first visible member of the same render system.
 | Asset ownership trace | `loadGameStartupAssets`, `loadGameImage`, `spriteImage`, and `paintDarkness` | Resident startup awaits the two darkness sources through `loadGameImage`, but `paintDarkness` asks the editor's separate `spriteImage` cache for new `Image` objects. Fast browser resource reuse usually hides the duplicate owner; decode/scheduler delay is not covered by the ready barrier. | high |
 | Repeated WSL WebGL probe | updated `smoke-boneyard-complex-shadows.mjs`, current-main generated scene | Six destroy/recreate starts retained two providers, two accepted sources, 34 active buckets, a 400-pixel native-quality target, and stable first-frame diagnostics. Three pixel-sampled starts were byte-signature identical (`465449` nonblack pixels, RGB total `38680129`). | high |
 | Repeated Mac WebGL probe | Apple M2 Metal/ANGLE, Chrome 151, current-main isolated worktree | Eight destroy/recreate starts retained one identical first-frame pixel hash, `465516` nonblack pixels, RGB total `38690111`, two providers, and two accepted sources. GPU texture/RenderTexture poisoning is falsified for this path. | high |
-| Real Mac local and production runs | seven loopback runs and three deployed `https://solomondarker.com` runs, generated environment modes 0/1/2 | Every settled mode-1/2 receipt had center alpha `0`, far alpha `245`; mode 0 correctly owned no environment-darkness canvas. Hardware FPS stayed near 60 with no LongTasks. The intermittent ready-window remains an ordering defect even though ordinary scheduling hid it in these samples. | high |
+| Real Mac local and production runs | seven loopback runs and three deployed `https://solomondarker.com` runs, generated environment modes 0/1/2 | The readiness race was real, but the old alpha `0/245` mode-1/2 oracle measured the later-disproven fullscreen inversion. Mode 0 correctly owned no environment-player-light canvas. | high for lifecycle only |
 
 ### System boundary and membership inventory
 
@@ -19874,14 +19867,14 @@ publication, resize, repeated run creation, and teardown.
 | --- | --- | --- |
 | Region raster, analytic tint, and source grid on first frame | `verified-already-at-parity` | repeated WSL/Mac first-frame diagnostics and pixel signatures |
 | directional shadows and same-depth caster ownership | `verified-already-at-parity` | repeated first-frame caster/record/quad/Z diagnostics |
-| environment mode 0 | `verified-already-at-parity` | no late darkness owner by native design; Mac local/production mode-0 receipts |
-| environment modes 1 and 2 | `exact-ported` after this pass | both darkness passes must paint before ready and every later presentation frame |
-| local and remote visible players in mode 1/2 | `exact-ported` after this pass | initial darkness composition consumes the complete initial player snapshot, then sampled presentation players |
-| resident darkness aperture and radial assets | `exact-ported` after this pass | use the already awaited game-resident image owner and precompute the grayscale mask once |
+| environment mode 0 | `verified-already-at-parity` | no late player environment-light owner by native design |
+| environment modes 1 and 2 | `exact-ported` after the late-source correction below | bounded direct record-18 passes paint before ready and every later presentation frame |
+| local and remote visible players in mode 1/2 | `exact-ported` after the late-source correction below | initial environment-light composition consumes the complete initial player snapshot, then sampled presentation players |
+| resident record-18 aperture | `exact-ported` after the late-source correction below | use the already awaited game-resident image owner; optional record-9 target remains out-of-system with its target-grid actors |
 | renderer creation and immediate resize | `exact-ported` after this pass | the first complete paint uses the final logical viewport before ready publication |
 | Boneyard teardown and later run recreation | `exact-ported` after this pass | no old renderer/target/mask state survives; repeated create/destroy browser proof |
 | Game Over return, reconnect, and new run | `exact-ported` after this pass | each Boneyard mount executes the same first-complete-frame barrier |
-| Hub lighting | `out-of-system` | Hub has no Boneyard environment-darkness overlay; its renderer lifecycle remains independently validated |
+| Hub lighting | `out-of-system` | Hub has no Boneyard environment-player-light pass; its renderer lifecycle remains independently validated |
 | WebGL unavailable | `blocked-by-platform` | the shipped web renderer intentionally fails closed instead of presenting a divergent CPU fallback |
 
 Every persistent provider, MiscLight owner, setting branch, source formula, and
@@ -19892,14 +19885,14 @@ source-family formula is reopened by this lifecycle defect.
 
 - Owner/construction: Arena owns its light target before rendering; the
   browser Boneyard scene owns both its WebGL renderer and later screen-space
-  environment overlay.
+  environment light.
 - Producers: the authoritative initial snapshot supplies current players,
   provider registrations, sources, and run identity; resident startup supplies
-  the already decoded darkness assets.
-- Transition: one first paint must finish Region and, for modes 1/2, darkness
+  the already decoded record-18 asset.
+- Transition: one first paint must finish Region and, for modes 1/2, player light
   before scene-ready. Later display frames resample presentation state without
   changing the readiness epoch.
-- Consumers: the completed world/darkness stack is placed below HUD and input
+- Consumers: the completed world/environment-light stack is placed below HUD and input
   surfaces. Loading transitions may not reveal a partial stack.
 - Reset/teardown: unmount stops the presentation loop, destroys the renderer,
   and retires task-local mask resources. A replacement run repeats asset
@@ -19909,12 +19902,10 @@ source-family formula is reopened by this lifecycle defect.
 
 ### Web implementation consequence
 
-- Replace `paintDarkness`'s editor-owned `spriteImage` lookup with one awaited
-  Boneyard darkness presentation resource built from `loadGameImage`.
-- Build the grayscale record-9 mask once per mounted scene rather than checking
-  and reconstructing it from the render loop.
+- Replace the editor-owned `spriteImage` lookup with one awaited Boneyard
+  environment-light resource built from `loadGameImage`.
 - After mounting/resizing the WebGL canvas, synchronously paint the initial
-  mode-1/2 darkness frame from the authoritative initial snapshot and camera.
+  mode-1/2 record-18 light frame from the authoritative initial snapshot and camera.
 - Publish `rendererState='ready'` and call the loading-barrier callback only
   after that complete paint.
 - Keep mode 0 unchanged and do not force one authored environment mode merely
@@ -19922,9 +19913,9 @@ source-family formula is reopened by this lifecycle defect.
 
 ### Validation contract
 
-- Browser RED/GREEN: capture the darkness canvas immediately when the scene
-  first reports ready. Modes 1/2 require final viewport dimensions, player
-  alpha at most 16, and far alpha at least 240; mode 0 requires no canvas.
+- Browser RED/GREEN: capture the environment-light canvas immediately when the
+  scene first reports ready. Modes 1/2 require final viewport dimensions,
+  direct alpha `.2375..25`, and zero far alpha/RGB; mode 0 requires no canvas.
 - Lifecycle stress: repeatedly create/destroy generated renderers in one page;
   every first frame must retain identical provider/source/grid/target records
   and deterministic pixel signatures.
@@ -19936,11 +19927,11 @@ source-family formula is reopened by this lifecycle defect.
 
 ### Implementation and pre-publication performance receipt
 
-The Boneyard scene now awaits one scene-local darkness presentation built from
-the already resident `loadGameImage` sources, creates record 9's grayscale mask
-once, mounts and resizes WebGL, paints the complete initial mode-1/2 darkness
-frame, and only then publishes `ready`. The display loop reuses that immutable
-resource. Mode 0 remains mask-free. The per-frame loops no longer allocate two
+The Boneyard scene now awaits one scene-local environment-light presentation
+built from the already resident `loadGameImage` source, mounts and resizes
+WebGL, paints the initial mode-1/2 frame, and only then publishes `ready`. The
+late-source correction below replaces that historical inverted mask with the
+bounded direct record-18 draw. Mode 0 remains pass-free. The per-frame loops no longer allocate two
 `Object.values(players)` arrays.
 
 The complex-shadow browser proof was repaired against the current equipment and
@@ -19951,7 +19942,8 @@ RGB total 38,680,129. On Apple M2 Metal/ANGLE, eight starts had one hash,
 accepted sources, and no empty grid/target frame. Real Mac local runs covered
 environment modes 0, 1, and 2. The corrected responsive receipt for `844x390`
 mode 1 proved logical `1947.6923x900`, physical `2435x1125`, resolution `1.25`,
-startup and settled alpha `0` at the player and `245` at the far point.
+startup and settled alpha `0/245`; those historical values are retained only
+as evidence of the now-removed inversion bug.
 
 The performance adjacency sweep fixed two additional evidence-backed defects:
 
@@ -21163,3 +21155,151 @@ rows in this system.
 - Publication state at receipt time: this reopened correction was isolated and
   uncommitted. Subsequent publication state is established by Git and CI/CD,
   not inferred from this pre-publication validation snapshot.
+
+## 2026-08-20 — Late light-source visibility and environment-player pass correction
+
+### Reported smell and parity question
+
+- Reported web behavior: some new Boneyards retain the player's light while
+  spell, Solomon Dig Lantern, enemy, and other sources that appear later seem
+  not to illuminate the world.
+- Stock behavior to recover: Region sources born or admitted after the first
+  frame must remain visible in every environment mode; the separate player
+  environment pass must not erase them.
+- Reproduction: a real Air cast in a generated dark Boneyard produced
+  `/tmp/sdr-late-light-air-run1/solomon-primary-air-boneyard-target.png`.
+  The Air body/contact art was present, but its world illumination outside the
+  player aperture was reduced to the nearly-black post-pass floor.
+- Falsifiers: if a player-only renderer cannot admit a later Air source, the
+  source manager is at fault; if candidate/accepted/grid counts grow but the
+  dark-mode result alone hides the light, the later environment compositor is
+  at fault.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| WebGL differential | current `origin/main` `dd4f87e`; modified complex-shadow browser probe | After 120 player-only frames, a new Air birth changed provider candidates `1 -> 2`, accepted sources `1 -> 6`, indexed references `25 -> 67`, and 551,960 output pixels. Dynamic source admission, registration, the retained grid, and Pixi child growth are not the failure. | high |
+| Real web journey | Title -> Create -> Hub -> generated Boneyard -> gate -> held Air | The failure-shaped frame occurs in the dark environment presentation while the spell itself remains visible. | high |
+| Retail instructions | pinned `SolomonDark.exe` SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`; `0x0046EC80`, `0x00470EE0`, `0x004208A0`, `0x004715C1..0x00472828` | The Region field is complete first. Mode-1/2 player record 18 and the local record-9 target are later additive draws. No fullscreen black/inversion draw exists. | high |
+| Exact constants/assets | `0x00785D18/1C/20/28/30/34`, `0x00784E20`; DeadHawg 9/18 | Target scale `2.025000095`, record-9 scale `2.009999990`, center `128`, target/query sizes `256/512`, target alpha `0.95+U(0.05)`, direct alpha `0.25*(0.95+U(0.05))`. | high |
+| Existing web source trace | `BoneyardScene.tsx::paintDarkness` | The browser combined player masks, then `source-out` filled the entire viewport black at alpha `.96`. That invented fullscreen operation double-darkened the Region result outside player holes. | high |
+
+### System boundary and membership inventory
+
+Native system: the complete environment-mode player-light pass and its
+composition with the already closed Region source field.
+
+| Member | Native source | Disposition after this correction | Proof / consequence |
+| --- | --- | --- | --- |
+| Region persistent providers: players, Lantern, enemies, actor/transient projectiles, ZAnimLit, secondary actors | `0x0046ECFA..0x0046ED32` plus provider census | `verified-already-at-parity` | later-admission differential plus existing per-family source tests |
+| Region MiscLights: Air/Mage path lights and modeled secondary/effect tails | `0x0046ED34` replay plus complete Misc census | `verified-already-at-parity` | age-zero/timeline/source-order tests remain authoritative |
+| environment mode 0 | `Arena +0x8F20 == 0` | `verified-already-at-parity` | no player environment pass |
+| environment modes 1 and 2 direct player record 18 | `0x0047128F..0x00471417` | `exact-ported` | bounded additive white aperture; no black fill |
+| environment modes 1 and 2 local record-9 target | `0x004715C1..0x00472828` | `out-of-system` for the current web actor model | native constructs the target only when either target-mask grid contains a member; no unconditional radial exists |
+| multiple visible players | slot loop in `0x00470EE0` | `exact-ported` | independent additive contributions in slot order |
+| target-mask grids `Arena +0x8F24/+0x8F84` | 512-square `0x00588040` queries | `out-of-system` for the current web actor model | the Website has no replicated native environment/compact target-mask actor lane; absence cannot be replaced by a fullscreen mask. The native class registrations remain catalogued in the Loader report. |
+| Lantern, spell, enemy, and secondary positions outside every player target | Region field only | `exact-ported` | they remain untouched by the bounded player pass |
+| HUD and screen feedback | post-world Arena lanes | `verified-already-at-parity` | remain above both light owners |
+
+### Native ownership thread and recovered contract
+
+`Arena::Render` builds the Region raster/analytic products and composites the
+Region texture before the shared main queue. `0x00470EE0` later loops occupied
+player slots. The direct record-18 draw selects blend mode 1
+(`SRCALPHA,ONE`). The optional 256 target is cleared transparent white, receives
+class-owned masks, and has record 9 multiplied into it with blend mode 2
+(`ZERO,SRCCOLOR`). After restoring the main backbuffer, the completed target is
+drawn at that player with blend mode 1 and scale `2.025000095`. Pixels outside
+the target quad are never touched. Multiple player contributions add; neither
+player pass enumerates or suppresses Region sources.
+
+The web symptom is mode-deterministic rather than an intermittent registration
+race. Generated Boneyards vary environment mode, so mode 0 exposed the correct
+Region result while modes 1/2 reliably placed the invented fullscreen black
+sheet over every non-player light. The earlier first-frame barrier fixed a real
+readiness race but also made this incorrect pass reliably present. All prior
+`far alpha 245` receipts are historical evidence of the bug, not acceptance
+oracles for parity.
+
+### Web implementation consequence and validation contract
+
+- Replace `paintDarkness` and `.boneyard-darkness` with a transparent,
+  plus-lighter environment-light surface. Draw the always-valid record-18
+  direct pass for each visible player; remove the fullscreen `source-out`
+  black fill, unconditional record-9 radial, and `.96` calibration constant.
+- Keep Lanterns, spells, enemies, and secondary effects exclusively in the
+  Region collector. Do not add them to the player pass as a symptom patch.
+- Preserve environment mode 0 as no extra surface and retain the first-paint
+  readiness barrier for modes 1/2.
+- Regression: one player-only frame followed after 120 frames by a new Air
+  source must grow the provider/Misc/accepted/grid products and change pixels.
+- Regression: modes 1/2 direct alpha must remain inside `.2375..25`, the
+  environment surface must have zero alpha outside the bounded record-18
+  draws, mode 0 must have no surface, and multiple players must add rather
+  than create a fullscreen inverse mask.
+- Browser: repeat real mode-0 and mode-2 starts, cast Air beyond the player
+  aperture, approach the Lantern, and assert both late Region sources visibly
+  change ground pixels with no page/console errors.
+
+### Implementation validation receipt
+
+`boneyard-environment-light.ts` now owns one transparent presentation surface.
+Modes 1/2 draw only the exact record-18 direct contribution for every visible
+player and composite it with CSS `plus-lighter`; mode 0 mounts no surface.
+`BoneyardScene` still awaits the one resident asset and paints the first frame
+before publishing `ready`. The unconditional record-9 draw, grayscale-alpha
+rewrite, fullscreen `source-out` fill, and `.96` constant are removed. No
+authority, protocol, Region-source, camera, collision, or gameplay RNG changed.
+
+Focused render-contract, TypeScript, lint, syntax, and diff checks passed. The
+late-admission WebGL regression held a renderer at player-only sources for 120
+frames, then introduced Air at age zero: provider candidates changed `1 -> 2`,
+accepted sources `1 -> 6`, indexed references `25 -> 64`, and 531,875 pixels /
+25,168,826 RGB-channel units changed. Complex-shadow Z mismatches remained
+zero.
+
+A real mode-1 generated run reported first-ready environment-light alpha
+`64`, settled alpha `61`, RGB total `765`, `plus-lighter`, and exact far alpha
+and RGB zero. A separate real environment-mode-2 held-Air journey crossed the
+entry gate and acquired Gravestone `scenery:object-40`. Provider candidates
+changed `2 -> 7`; the current Lantern sample was `0.581906`, accepted sources
+remained the native-contained pair, five Air actors rendered, and the endpoint
+illumination remained visibly present away from the player. The journey's
+page/console error array was empty and its screenshot is
+`/tmp/sdr-late-light-air-fixed2/solomon-primary-air-boneyard-target.png`.
+
+After rebasing onto the combined loot, Solomon Dig audio, Golem, and gameplay
+pause tree, `./scripts/validate.sh` passed the complete Website gate; its log
+SHA-256 is
+`09cf77c174dfbab7bcd4a50447dfc541060b56ca5dde5d60ad30676c403275a1`.
+The paired Loader portable suite passed 87/87 modules and 795 tests; its log
+SHA-256 is
+`d43697c5bdc8e90f54be5be4dbcc58279b3ea59bf2118f0d864045d2e993daf3`.
+
+The identical rebased tree passed the full Apple-M2 Mac gate with all reported
+test fail counts zero, both production builds, bundle budget, and media policy;
+its log SHA-256 is
+`aaecfb2c9cf5022809b00fb4d09f845eb8331562ac2b2d4ac3abaf3127ba8192`.
+A real hardware mode-2 Boneyard held 60 FPS idle/moving with zero LongTasks.
+Its first-ready and settled environment surface both reported direct alpha
+`61`, RGB `765`, `plus-lighter`, and far alpha/RGB zero; log SHA-256
+`1b3c695c75532054c2fa8c87c89941acf0c24e2ae54ff8603efd8d9006bf2be5`.
+
+The decisive Mac mode-2 Air run crossed the gate, acquired Gravestone
+`scenery:object-30`, changed providers `2 -> 7`, retained Lantern intensity
+`0.586402`, rendered five Air actors, and returned `errors: []`. Its log and
+inspected screenshot SHA-256 values are
+`3aa98e137b20198b0bea168157258c27e5c74d1d1d02dad76fec2e6411d04bb9`
+and
+`59c65b12286174d424f5b260938a8d7f9e5e656d7f447ddbabf32a337acd5f98`.
+The hardware late-admission/shadow probe also passed with two identical startup
+pixel receipts, zero Z-order mismatches, provider/accepted growth after 120
+player-only frames, and no LongTasks; log SHA-256
+`181d563456ec5847750ef397043d4c76ba5a52798bd522afb9baf532f6491697`.
+
+The unrelated broad `smoke:game` stopped twice on its pre-Boneyard Astronomer
+telescope animation-sampling assertion. It never reached a lighting assertion;
+no changed file in this pass owns the Hub telescope. Lighting acceptance is
+therefore based on the focused real journeys above plus the complete canonical
+gate, not misreported as a broad-smoke success.

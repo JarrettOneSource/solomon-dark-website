@@ -62,6 +62,10 @@ import {
   type BoneyardWorldRenderer,
 } from './renderer/boneyard-world-renderer.ts'
 import {
+  paintBoneyardEnvironmentLight,
+  type BoneyardEnvironmentLightImages,
+} from './renderer/boneyard-environment-light.ts'
+import {
   boneyardSpectatorStatusesEqual,
   type BoneyardSpectatorStatusPresentation,
 } from './renderer/boneyard-render-contract.ts'
@@ -69,12 +73,8 @@ import {
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
-import { initialHubResolution } from './renderer/hub-render-contract.ts'
 import './hub.css'
 import './boneyard.css'
-
-const NATIVE_DARKNESS_TARGET_EXTENT = 256 * 2.025
-const NATIVE_DARKNESS_MAX_ALPHA = 0.96
 
 interface BoneyardSceneProps {
   accountUsername: string | null
@@ -108,11 +108,6 @@ interface BoneyardFrameDiagnostics {
   staticPaintCount: number
 }
 
-interface BoneyardDarknessPresentation {
-  aperture: HTMLImageElement
-  radialMask: HTMLCanvasElement
-}
-
 type RendererState = 'loading' | 'ready'
 
 export default function BoneyardScene({
@@ -144,7 +139,7 @@ export default function BoneyardScene({
   })
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
-  const darknessCanvasRef = useRef<HTMLCanvasElement>(null)
+  const environmentLightCanvasRef = useRef<HTMLCanvasElement>(null)
   const digIndicatorRef = useRef<HTMLDivElement>(null)
   const digReceiptRef = useRef<HTMLSpanElement>(null)
   const rendererRef = useRef<BoneyardWorldRenderer | null>(null)
@@ -409,9 +404,9 @@ export default function BoneyardScene({
     setRendererError(null)
     setSpectatorStatus(null)
 
-    const darknessPresentation = loaded.scene.environmentMode === 1
+    const environmentLightPresentation = loaded.scene.environmentMode === 1
       || loaded.scene.environmentMode === 2
-      ? loadBoneyardDarknessPresentation()
+      ? loadBoneyardEnvironmentLightPresentation()
       : Promise.resolve(null)
     const rendererPromise = createBoneyardWorldRenderer({
       boneyard: loaded,
@@ -421,8 +416,8 @@ export default function BoneyardScene({
     })
     void Promise.all([
       rendererPromise,
-      darknessPresentation,
-    ]).then(([renderer, initialDarkness]) => {
+      environmentLightPresentation,
+    ]).then(([renderer, initialEnvironmentLight]) => {
       if (cancelled) {
         renderer.destroy()
         return
@@ -439,15 +434,15 @@ export default function BoneyardScene({
       }
       host.replaceChildren(renderer.canvas)
       renderer.resize(viewportRef.current)
-      const darkness = darknessCanvasRef.current
-      if (darkness && initialDarkness) {
-        paintDarkness(
-          darkness,
-          boneyardInitialSnapshot,
+      const environmentLight = environmentLightCanvasRef.current
+      if (environmentLight && initialEnvironmentLight) {
+        paintBoneyardEnvironmentLight(
+          environmentLight,
+          boneyardInitialSnapshot.players,
           renderer.camera(boneyardInitialSnapshot),
           viewportRef.current,
           performance.now(),
-          initialDarkness,
+          initialEnvironmentLight,
         )
       }
       setRendererState('ready')
@@ -533,15 +528,15 @@ export default function BoneyardScene({
         setSpectatorStatus((current) => (
           boneyardSpectatorStatusesEqual(current, nextStatus) ? current : nextStatus
         ))
-        const darkness = darknessCanvasRef.current
-        if (darkness && initialDarkness) {
-          paintDarkness(
-            darkness,
-            snapshot,
+        const environmentLight = environmentLightCanvasRef.current
+        if (environmentLight && initialEnvironmentLight) {
+          paintBoneyardEnvironmentLight(
+            environmentLight,
+            snapshot.players,
             camera,
             viewportRef.current,
             now,
-            initialDarkness,
+            initialEnvironmentLight,
           )
         }
         positionDigIndicator(
@@ -627,10 +622,10 @@ export default function BoneyardScene({
         <div ref={hostRef} className="boneyard-world-renderer" />
         {(loaded.scene.environmentMode === 1 || loaded.scene.environmentMode === 2) ? (
           <canvas
-            ref={darknessCanvasRef}
-            className="boneyard-darkness"
-            data-max-alpha={NATIVE_DARKNESS_MAX_ALPHA}
-            data-native-mask="DeadHawg:18+9"
+            ref={environmentLightCanvasRef}
+            className="boneyard-environment-light"
+            data-composite="plus-lighter"
+            data-native-light="DeadHawg:18"
             aria-hidden
           />
         ) : null}
@@ -784,78 +779,6 @@ function positionDigIndicator(
   indicator.dataset.ready = 'true'
 }
 
-function paintDarkness(
-  canvas: HTMLCanvasElement,
-  snapshot: GameSnapshot,
-  camera: Camera,
-  viewport: GameViewportLayout,
-  now: number,
-  presentation: BoneyardDarknessPresentation,
-): void {
-  const dpr = window.devicePixelRatio || 1
-  const resolution = initialHubResolution({
-    devicePixelRatio: dpr,
-    displayScale: viewport.displayScale,
-  })
-  const width = Math.round(viewport.width * resolution)
-  const height = Math.round(viewport.height * resolution)
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width
-    canvas.height = height
-  }
-  const context = canvas.getContext('2d')
-  if (!context) return
-  const { aperture, radialMask } = presentation
-  context.setTransform(resolution, 0, 0, resolution, 0, 0)
-  context.globalAlpha = 1
-  context.globalCompositeOperation = 'source-over'
-  context.clearRect(0, 0, viewport.width, viewport.height)
-  context.globalCompositeOperation = 'lighter'
-  let playerIndex = 0
-  for (const playerId in snapshot.players) {
-    const player = snapshot.players[playerId]!
-    const position = worldToScreen(
-      player.position,
-      camera,
-      viewport.width,
-      viewport.height,
-    )
-    context.globalAlpha = nativeDirectApertureAlpha(now, playerIndex)
-    context.drawImage(
-      aperture,
-      position.x - 168 * camera.zoom,
-      position.y - 153 * camera.zoom,
-      aperture.naturalWidth * camera.zoom,
-      aperture.naturalHeight * camera.zoom,
-    )
-    playerIndex += 1
-  }
-  playerIndex = 0
-  for (const playerId in snapshot.players) {
-    const player = snapshot.players[playerId]!
-    const position = worldToScreen(
-      player.position,
-      camera,
-      viewport.width,
-      viewport.height,
-    )
-    const extent = NATIVE_DARKNESS_TARGET_EXTENT * camera.zoom
-    context.globalAlpha = nativeTargetApertureAlpha(now, playerIndex)
-    context.drawImage(
-      radialMask,
-      position.x - extent / 2,
-      position.y - extent / 2,
-      extent,
-      extent,
-    )
-    playerIndex += 1
-  }
-  context.globalAlpha = NATIVE_DARKNESS_MAX_ALPHA
-  context.globalCompositeOperation = 'source-out'
-  context.fillStyle = '#000'
-  context.fillRect(0, 0, viewport.width, viewport.height)
-}
-
 function sameViewport(left: GameViewportLayout, right: GameViewportLayout): boolean {
   return left.displayScale === right.displayScale
     && left.height === right.height
@@ -919,37 +842,6 @@ function gateState(leaves: readonly {
   )).join('|')
 }
 
-function nativeDirectApertureAlpha(now: number, playerIndex: number): number {
-  const flicker = (Math.sin(now * 0.017 + playerIndex * 2.399) + 1) / 2
-  return 0.2375 + flicker * 0.0125
-}
-
-function nativeTargetApertureAlpha(now: number, playerIndex: number): number {
-  const flicker = (Math.sin(now * 0.013 + playerIndex * 3.117 + 1.703) + 1) / 2
-  return 0.95 + flicker * 0.05
-}
-
-async function loadBoneyardDarknessPresentation(): Promise<BoneyardDarknessPresentation> {
-  const [aperture, radial] = await Promise.all([
-    loadGameImage(boneyard.darknessAperture),
-    loadGameImage(boneyard.darknessRadial),
-  ])
-  return { aperture, radialMask: grayscaleAlphaMask(radial) }
-}
-
-function grayscaleAlphaMask(image: HTMLImageElement): HTMLCanvasElement {
-  const mask = document.createElement('canvas')
-  mask.width = image.naturalWidth
-  mask.height = image.naturalHeight
-  const context = mask.getContext('2d')
-  if (!context) throw new Error('Boneyard darkness mask requires a 2D canvas context.')
-  context.drawImage(image, 0, 0)
-  const pixels = context.getImageData(0, 0, mask.width, mask.height)
-  for (let offset = 0; offset < pixels.data.length; offset += 4) {
-    pixels.data[offset + 3] = Math.round(
-      (pixels.data[offset] * pixels.data[offset + 3]) / 255,
-    )
-  }
-  context.putImageData(pixels, 0, 0)
-  return mask
+async function loadBoneyardEnvironmentLightPresentation(): Promise<BoneyardEnvironmentLightImages> {
+  return { aperture: await loadGameImage(boneyard.darknessAperture) }
 }

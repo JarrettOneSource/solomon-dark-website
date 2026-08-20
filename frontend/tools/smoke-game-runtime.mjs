@@ -437,17 +437,24 @@ try {
     const environmentMode = await scene.getAttribute('data-environment-mode')
     assert.equal(await scene.getAttribute('data-camera-zoom'), '1.35')
     assert.equal(
-      await runPage.locator('.boneyard-darkness[data-native-mask="DeadHawg:18+9"]').count(),
+      await runPage.locator(
+        '.boneyard-environment-light[data-native-light="DeadHawg:18"]',
+      ).count(),
       environmentMode === '1' || environmentMode === '2' ? 1 : 0,
     )
     if (environmentMode === '1' || environmentMode === '2') {
-      const darkness = runPage.locator('.boneyard-darkness')
-      assert.equal(await darkness.getAttribute('data-max-alpha'), '0.96')
-      const pixels = await sampleDarknessPixels(runPage)
-      assert.ok(pixels.centerAlpha < 16, `expected a clear player aperture, got alpha ${pixels.centerAlpha}`)
+      const environmentLight = runPage.locator('.boneyard-environment-light')
+      assert.equal(await environmentLight.getAttribute('data-composite'), 'plus-lighter')
+      const pixels = await sampleEnvironmentLightPixels(runPage)
       assert.ok(
-        pixels.farAlpha >= 244 && pixels.farAlpha <= 246,
-        `expected the native ambient floor at alpha 245, got ${pixels.farAlpha}`,
+        pixels.centerAlpha >= 55
+          && pixels.centerAlpha <= 70
+          && pixels.centerRgbTotal >= 720,
+        `expected an additive player environment light, got ${JSON.stringify(pixels)}`,
+      )
+      assert.deepEqual(
+        { alpha: pixels.farAlpha, rgb: pixels.farRgbTotal },
+        { alpha: 0, rgb: 0 },
       )
     }
   }
@@ -1192,10 +1199,10 @@ async function solomonDigIndicatorReceipt(page) {
   })
 }
 
-async function sampleDarknessPixels(page) {
+async function sampleEnvironmentLightPixels(page) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const sample = await page.evaluate(() => {
-      const canvas = document.querySelector('.boneyard-darkness')
+      const canvas = document.querySelector('.boneyard-environment-light')
       const world = document.querySelector('.boneyard-world-canvas')
       if (!(canvas instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) return null
       const context = canvas.getContext('2d')
@@ -1219,17 +1226,28 @@ async function sampleDarknessPixels(page) {
           ? point
           : best
       ))
-      return {
-        centerAlpha: context.getImageData(
+      const center = context.getImageData(
           Math.round(playerX), Math.round(playerY), 1, 1,
-        ).data[3],
-        farAlpha: context.getImageData(
+        ).data
+      const far = context.getImageData(
           Math.round(farthest.x), Math.round(farthest.y), 1, 1,
-        ).data[3],
+        ).data
+      return {
+        centerAlpha: center[3],
+        centerRgbTotal: center[0] + center[1] + center[2],
+        farAlpha: far[3],
+        farRgbTotal: far[0] + far[1] + far[2],
       }
     })
-    if (sample && sample.centerAlpha < sample.farAlpha) return sample
+    if (
+      sample
+      && sample.centerAlpha >= 55
+      && sample.centerAlpha <= 70
+      && sample.centerRgbTotal >= 720
+      && sample.farAlpha === 0
+      && sample.farRgbTotal === 0
+    ) return sample
     await page.waitForTimeout(50)
   }
-  throw new Error('darkness canvas did not paint the native player aperture')
+  throw new Error('environment-light canvas did not paint the bounded player light')
 }

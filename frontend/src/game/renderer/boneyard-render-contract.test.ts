@@ -26,9 +26,17 @@ import {
   NativeEnemyWorldFeedbackPresentation,
   nativeEnemyWorldFeedbackTransform,
 } from './native-enemy-world-feedback.ts'
+import {
+  nativeDirectEnvironmentLightAlpha,
+} from './boneyard-environment-light-plan.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
 const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
+const boneyardStyles = readFileSync(new URL('../boneyard.css', import.meta.url), 'utf8')
+const environmentLight = readFileSync(
+  new URL('./boneyard-environment-light.ts', import.meta.url),
+  'utf8',
+)
 const editorRenderer = readFileSync(new URL('../../editor/render.ts', import.meta.url), 'utf8')
 const hubActors = readFileSync(new URL('./hub-actors.ts', import.meta.url), 'utf8')
 const deathWeaponView = readFileSync(
@@ -63,16 +71,16 @@ test('Tree foreground stays per-object and shares native alpha and root tint', (
 })
 
 test('Boneyard readiness includes the complete initial environment-lighting frame', () => {
-  const initialDarknessPaint = boneyardScene.indexOf(
-    'paintDarkness(\n          darkness,\n          boneyardInitialSnapshot,',
+  const initialEnvironmentLightPaint = boneyardScene.indexOf(
+    'paintBoneyardEnvironmentLight(\n          environmentLight,\n          boneyardInitialSnapshot.players,',
   )
   const readyPublication = boneyardScene.indexOf("setRendererState('ready')")
 
-  assert.ok(initialDarknessPaint >= 0, 'expected an initial darkness paint')
+  assert.ok(initialEnvironmentLightPaint >= 0, 'expected an initial environment-light paint')
   assert.ok(readyPublication >= 0, 'expected renderer readiness publication')
   assert.ok(
-    initialDarknessPaint < readyPublication,
-    'environment darkness must paint before the Boneyard becomes ready',
+    initialEnvironmentLightPaint < readyPublication,
+    'environment light must paint before the Boneyard becomes ready',
   )
   assert.match(boneyardScene, /loadGameImage/)
   assert.doesNotMatch(boneyardScene, /spriteImage/)
@@ -81,6 +89,26 @@ test('Boneyard readiness includes the complete initial environment-lighting fram
     boneyardScene,
     /\.catch\(\(error: unknown\) => \{[\s\S]*?rendererPromise\.then[\s\S]*?renderer\.destroy\(\)/,
   )
+})
+
+test('mode one and two add bounded player light without masking later Region sources', () => {
+  assert.match(boneyardScene, /className="boneyard-environment-light"/)
+  assert.match(boneyardScene, /data-composite="plus-lighter"/)
+  assert.match(environmentLight, /globalCompositeOperation = 'lighter'/)
+  assert.doesNotMatch(environmentLight, /globalCompositeOperation = 'source-out'/)
+  assert.doesNotMatch(environmentLight, /fillRect\(0, 0, viewport\.width, viewport\.height\)/)
+  assert.doesNotMatch(environmentLight, /images\.radial/)
+  assert.match(
+    boneyardStyles,
+    /\.boneyard-environment-light \{[\s\S]*?mix-blend-mode: plus-lighter;/,
+  )
+})
+
+test('environment player-light plan keeps the recovered direct alpha lane', () => {
+  for (let frame = 0; frame < 360; frame += 1) {
+    const direct = nativeDirectEnvironmentLightAlpha(frame, frame % 4)
+    assert.ok(direct >= 0.2375 && direct <= 0.25)
+  }
 })
 
 test('Boneyard camera keeps the native zoom and clamps to the arena bounds', () => {

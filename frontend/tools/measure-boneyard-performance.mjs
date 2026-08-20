@@ -67,11 +67,11 @@ try {
   const runtime = await canvas.evaluate((node, measuredViewport) => {
     const context = node.getContext('webgl2') || node.getContext('webgl')
     const extension = context?.getExtension('WEBGL_debug_renderer_info')
-    const darkness = document.querySelector('.boneyard-darkness')
+    const environmentLight = document.querySelector('.boneyard-environment-light')
     const frame = node.__sdrBoneyardFrame
     return {
-      darknessAlpha: darkness instanceof HTMLCanvasElement
-        ? darknessAlphaReceipt(darkness, node, frame, measuredViewport)
+      environmentLight: environmentLight instanceof HTMLCanvasElement
+        ? environmentLightReceipt(environmentLight, node, frame, measuredViewport)
         : null,
       domNodes: document.querySelectorAll('*').length,
       environmentMode: Number(document.querySelector('.boneyard-scene')
@@ -90,15 +90,15 @@ try {
       visibleResidentCount: frame.visibleResidentCount,
     }
 
-    function darknessAlphaReceipt(darknessCanvas, worldCanvas, diagnostics, fallbackViewport) {
-      const darknessContext = darknessCanvas.getContext('2d')
-      if (!darknessContext) return null
+    function environmentLightReceipt(lightCanvas, worldCanvas, diagnostics, fallbackViewport) {
+      const lightContext = lightCanvas.getContext('2d')
+      if (!lightContext) return null
       const logicalWidth = Number(worldCanvas.dataset.viewportWidth)
         || fallbackViewport.width
       const logicalHeight = Number(worldCanvas.dataset.viewportHeight)
         || fallbackViewport.height
-      const scaleX = darknessCanvas.width / logicalWidth
-      const scaleY = darknessCanvas.height / logicalHeight
+      const scaleX = lightCanvas.width / logicalWidth
+      const scaleY = lightCanvas.height / logicalHeight
       const player = {
         x: diagnostics.playerScreenX * scaleX,
         y: diagnostics.playerScreenY * scaleY,
@@ -118,23 +118,28 @@ try {
           ? point
           : best
       ))
-      return {
-        center: darknessContext.getImageData(
+      const center = lightContext.getImageData(
           Math.round(player.x),
           Math.round(player.y),
           1,
           1,
-        ).data[3],
-        far: darknessContext.getImageData(
+        ).data
+      const far = lightContext.getImageData(
           Math.round(farthest.x),
           Math.round(farthest.y),
           1,
           1,
-        ).data[3],
+        ).data
+      return {
+        centerAlpha: center[3],
+        centerRgbTotal: center[0] + center[1] + center[2],
+        composite: getComputedStyle(lightCanvas).mixBlendMode,
+        farAlpha: far[3],
+        farRgbTotal: far[0] + far[1] + far[2],
         logicalHeight,
         logicalWidth,
-        physicalHeight: darknessCanvas.height,
-        physicalWidth: darknessCanvas.width,
+        physicalHeight: lightCanvas.height,
+        physicalWidth: lightCanvas.width,
         resolution: Number(worldCanvas.dataset.resolution),
       }
     }
@@ -159,28 +164,42 @@ try {
   assert.ok(moving.minimumOversizedVisibleResidentCount > 0, JSON.stringify(moving))
   assert.ok(moving.presentedPlayerPositions > 10, JSON.stringify(moving))
   if (runtime.environmentMode === 1 || runtime.environmentMode === 2) {
-    assert.ok(presentation.startupLighting, 'expected startup darkness diagnostics')
+    assert.ok(presentation.startupEnvironmentLight, 'expected startup environment-light diagnostics')
     assert.equal(
-      presentation.startupLighting.physicalWidth,
+      presentation.startupEnvironmentLight.physicalWidth,
       Math.round(
-        presentation.startupLighting.logicalWidth
-        * presentation.startupLighting.resolution,
+        presentation.startupEnvironmentLight.logicalWidth
+        * presentation.startupEnvironmentLight.resolution,
       ),
     )
     assert.equal(
-      presentation.startupLighting.physicalHeight,
+      presentation.startupEnvironmentLight.physicalHeight,
       Math.round(
-        presentation.startupLighting.logicalHeight
-        * presentation.startupLighting.resolution,
+        presentation.startupEnvironmentLight.logicalHeight
+        * presentation.startupEnvironmentLight.resolution,
       ),
     )
-    assert.ok(presentation.startupLighting.center <= 16, JSON.stringify(presentation))
-    assert.ok(presentation.startupLighting.far >= 240, JSON.stringify(presentation))
-    assert.ok(runtime.darknessAlpha, 'expected the native darkness canvas')
-    assert.ok(runtime.darknessAlpha.center <= 16, JSON.stringify(runtime))
-    assert.ok(runtime.darknessAlpha.far >= 240, JSON.stringify(runtime))
+    assert.equal(presentation.startupEnvironmentLight.composite, 'plus-lighter')
+    assert.ok(
+      presentation.startupEnvironmentLight.centerAlpha >= 55
+      && presentation.startupEnvironmentLight.centerAlpha <= 70,
+      JSON.stringify(presentation),
+    )
+    assert.ok(presentation.startupEnvironmentLight.centerRgbTotal >= 720, JSON.stringify(presentation))
+    assert.equal(presentation.startupEnvironmentLight.farAlpha, 0, JSON.stringify(presentation))
+    assert.equal(presentation.startupEnvironmentLight.farRgbTotal, 0, JSON.stringify(presentation))
+    assert.ok(runtime.environmentLight, 'expected the native environment-light canvas')
+    assert.equal(runtime.environmentLight.composite, 'plus-lighter')
+    assert.ok(
+      runtime.environmentLight.centerAlpha >= 55
+      && runtime.environmentLight.centerAlpha <= 70,
+      JSON.stringify(runtime),
+    )
+    assert.ok(runtime.environmentLight.centerRgbTotal >= 720, JSON.stringify(runtime))
+    assert.equal(runtime.environmentLight.farAlpha, 0, JSON.stringify(runtime))
+    assert.equal(runtime.environmentLight.farRgbTotal, 0, JSON.stringify(runtime))
   } else {
-    assert.equal(runtime.darknessAlpha, null)
+    assert.equal(runtime.environmentLight, null)
   }
   if (minimumFps > 0) {
     assert.ok(idle.averageFps >= minimumFps, JSON.stringify(idle))
@@ -203,7 +222,7 @@ try {
     viewport,
     presentationFrameCap: presentation.frameCap,
     presentationUncapped: presentation.uncapped,
-    startupLighting: presentation.startupLighting,
+    startupEnvironmentLight: presentation.startupEnvironmentLight,
   })}\n`)
 } finally {
   await browser.close()
@@ -230,22 +249,22 @@ async function enterBoneyard(page) {
   }
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
     .waitFor({ timeout: 30_000 })
-  const startupLighting = await page.evaluate((fallbackViewport) => {
-    const darkness = document.querySelector('.boneyard-darkness')
+  const startupEnvironmentLight = await page.evaluate((fallbackViewport) => {
+    const environmentLight = document.querySelector('.boneyard-environment-light')
     const world = document.querySelector('.boneyard-world-canvas')
-    if (!(darkness instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) {
+    if (!(environmentLight instanceof HTMLCanvasElement) || !(world instanceof HTMLCanvasElement)) {
       return null
     }
-    const context = darkness.getContext('2d')
+    const context = environmentLight.getContext('2d')
     const diagnostics = world.__sdrBoneyardFrame
     if (!context || !diagnostics) return null
     const logicalWidth = Number(world.dataset.viewportWidth) || fallbackViewport.width
     const logicalHeight = Number(world.dataset.viewportHeight) || fallbackViewport.height
-    const scaleX = darkness.width / logicalWidth
-    const scaleY = darkness.height / logicalHeight
+    const scaleX = environmentLight.width / logicalWidth
+    const scaleY = environmentLight.height / logicalHeight
     const player = {
-      x: Math.max(0, Math.min(darkness.width - 1, diagnostics.playerScreenX * scaleX)),
-      y: Math.max(0, Math.min(darkness.height - 1, diagnostics.playerScreenY * scaleY)),
+      x: Math.max(0, Math.min(environmentLight.width - 1, diagnostics.playerScreenX * scaleX)),
+      y: Math.max(0, Math.min(environmentLight.height - 1, diagnostics.playerScreenY * scaleY)),
     }
     const corners = [
       { x: 2 * scaleX, y: 2 * scaleY },
@@ -262,28 +281,33 @@ async function enterBoneyard(page) {
         ? point
         : best
     ))
-    return {
-      center: context.getImageData(
+    const center = context.getImageData(
         Math.round(player.x),
         Math.round(player.y),
         1,
         1,
-      ).data[3],
-      far: context.getImageData(
-        Math.max(0, Math.min(darkness.width - 1, Math.round(farthest.x))),
-        Math.max(0, Math.min(darkness.height - 1, Math.round(farthest.y))),
+      ).data
+    const far = context.getImageData(
+        Math.max(0, Math.min(environmentLight.width - 1, Math.round(farthest.x))),
+        Math.max(0, Math.min(environmentLight.height - 1, Math.round(farthest.y))),
         1,
         1,
-      ).data[3],
+      ).data
+    return {
+      centerAlpha: center[3],
+      centerRgbTotal: center[0] + center[1] + center[2],
+      composite: getComputedStyle(environmentLight).mixBlendMode,
+      farAlpha: far[3],
+      farRgbTotal: far[0] + far[1] + far[2],
       logicalHeight,
       logicalWidth,
-      physicalHeight: darkness.height,
-      physicalWidth: darkness.width,
+      physicalHeight: environmentLight.height,
+      physicalWidth: environmentLight.width,
       resolution: Number(world.dataset.resolution),
     }
   }, viewport)
   await page.waitForTimeout(1_000)
-  return { ...presentation, startupLighting }
+  return { ...presentation, startupEnvironmentLight }
 }
 
 async function measure(page, duration) {

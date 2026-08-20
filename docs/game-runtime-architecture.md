@@ -273,8 +273,10 @@ There is one composed client, not one DOM client and one canvas client.
   driven only by the ordered semantic event stream.
   `npm --prefix frontend run smoke:game:loot-drops` is the deterministic
   two-client browser acceptance for this boundary.
-  The recovered mode-1/2 darkness compositor remains a small screen-space
-  post-process between the world canvas and HUD.
+  The Region field owns engine-wide world darkness and every dynamic source.
+  Modes 1/2 add a transparent, bounded record-18 player-light surface between
+  the world canvas and HUD; it never fills or masks the viewport. The optional
+  native record-9 target remains absent with its unmodeled target-grid actors.
 - Gameplay camera motion is isolated at Pixi render-group boundaries. Boneyard
   owns one camera group; the Hub owns separate primary-Courtyard and recovered
   southern-parallax groups, plus one active private-room group. Group boundaries

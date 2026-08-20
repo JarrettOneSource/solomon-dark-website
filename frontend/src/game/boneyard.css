@@ -54,6 +54,7 @@
 }
 
 .boneyard-native-frame {
+  isolation: isolate;
   position: absolute;
   top: 0;
   left: 0;
@@ -62,7 +63,7 @@
 }
 
 .boneyard-world-renderer,
-.boneyard-darkness {
+.boneyard-environment-light {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -79,9 +80,10 @@
   height: 100%;
 }
 
-.boneyard-darkness {
+.boneyard-environment-light {
   z-index: 2;
   display: block;
+  mix-blend-mode: plus-lighter;
   pointer-events: none;
 }
 

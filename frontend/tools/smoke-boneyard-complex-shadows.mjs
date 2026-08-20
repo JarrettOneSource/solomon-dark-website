@@ -130,7 +130,7 @@ try {
     }
     const longAir = {
       ageTicks: 0,
-      birthTick: 1_000,
+      birthTick: 1_121,
       direction: { x: 1, y: 0 },
       endpoint: { x: 725, y: 330 },
       id: 4_501,
@@ -212,8 +212,11 @@ try {
           enemyProjectileEffects: [],
           enemyProjectiles: [],
           gateLeaves: [],
+          goodies: [],
           kind: 'boneyard',
           lanternLightRegistration: null,
+          loot: [],
+          lootEvents: [],
           mageLightningPulses: [],
           maggots: [],
           runId,
@@ -224,12 +227,15 @@ try {
     const renderer = await rendererModule.createBoneyardWorldRenderer({
       boneyard: loaded,
       devicePixelRatio: 1,
-      initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6, true),
+      initialSnapshot: snapshotAt(1_000, { x: 275, y: 330 }, 6),
       playerId: 'local',
       viewport,
     })
     renderer.canvas.id = 'complex-shadow-probe'
     document.body.append(renderer.canvas)
+    for (let frame = 1; frame <= 120; frame += 1) {
+      renderer.render(snapshotAt(1_000 + frame, { x: 275, y: 330 }, 6))
+    }
     const capture = () => {
       const copy = document.createElement('canvas')
       copy.width = renderer.canvas.width
@@ -238,20 +244,41 @@ try {
       context.drawImage(renderer.canvas, 0, 0)
       return context.getImageData(0, 0, copy.width, copy.height).data
     }
+    const initialFrame = { ...renderer.canvas.__sdrBoneyardFrame }
+    const initialPixels = capture()
+    renderer.render(snapshotAt(1_121, { x: 275, y: 330 }, 6, true))
+    const latePixels = capture()
+    let lateChangedPixels = 0
+    let lateChannelDelta = 0
+    for (let offset = 0; offset < latePixels.length; offset += 4) {
+      const delta = (
+        Math.abs(latePixels[offset] - initialPixels[offset])
+        + Math.abs(latePixels[offset + 1] - initialPixels[offset + 1])
+        + Math.abs(latePixels[offset + 2] - initialPixels[offset + 2])
+      )
+      if (delta > 3) lateChangedPixels += 1
+      lateChannelDelta += delta
+    }
     window.__complexShadowProbe = {
       capture,
-      leftPixels: capture(),
+      initialFrame,
+      lateChangedPixels,
+      lateChannelDelta,
+      leftPixels: latePixels,
       longAirPathLightCount: typeof airModule.buildNativeAirPathLightSources === 'function'
         ? airModule.buildNativeAirPathLightSources(longAir).length
         : 0,
       renderer,
-      rightSnapshot: snapshotAt(1_010, { x: 800, y: 330 }, 18),
+      rightSnapshot: snapshotAt(1_130, { x: 800, y: 330 }, 18),
     }
     const treeOutline = shadowModule.nativeBoneyardTreeComplexShadowOutline(0)
     return {
       complexShadows: renderer.canvas.dataset.complexShadows,
       context: renderer.canvas.getContext('webgl2') ? 'webgl2' : 'webgl',
       frame: { ...renderer.canvas.__sdrBoneyardFrame },
+      initialFrame,
+      lateChangedPixels,
+      lateChannelDelta,
       longAirPathLightCount: window.__complexShadowProbe.longAirPathLightCount,
       renderer: renderer.canvas.dataset.gameRenderer,
       rendererName: renderer.canvas.dataset.rendererName,
@@ -273,6 +300,11 @@ try {
   assert.equal(left.context, 'webgl2')
   assert.equal(left.complexShadows, expectedShadowImplementation)
   assert.equal(left.treeComplexShadowOutline, 'native-main-variant-table')
+  assert.equal(left.initialFrame.lightProviderCandidateCount, 1)
+  assert.equal(left.initialFrame.lightMiscTailCandidateCount, 0)
+  assert.equal(left.initialFrame.lightSourceCount, 1)
+  assert.ok(left.lateChangedPixels > 20_000)
+  assert.ok(left.lateChannelDelta > 100_000)
   assert.deepEqual(left.treeOutline, {
     maxX: 18,
     maxY: 12,
@@ -448,12 +480,15 @@ try {
         enemyProjectileEffects: [],
         enemyProjectiles: [],
         gateLeaves: [],
+        goodies: [],
         kind: 'boneyard',
         lanternLightRegistration: encounter
           ? { managerLane: 'actor', registrationOrdinal: 1 }
           : null,
         mageLightningPulses: [],
         maggots: [],
+        loot: [],
+        lootEvents: [],
         runId,
         waves: null,
       },
