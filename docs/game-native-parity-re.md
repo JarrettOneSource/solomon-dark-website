@@ -20422,9 +20422,37 @@ Mac `./scripts/validate.sh` exited zero on that exact Website commit. Its log
 SHA-256 is
 `d7fcbdf7a7cfa293ef2ef904a9e9ab95865414778f3c25b023af5bc89b6e937b`.
 All five loot-specific Mod Loader contracts passed on the exact evidence tree.
-The generic Mac system-Python run is not counted as a full Mod Loader gate:
-thirteen unrelated contracts require Python's newer `zip(strict=...)` support
-or Pillow; the pinned Linux CI environment supplied both and passed all 489.
+
+The follow-up Mac toolchain pass replaced that earlier generic-gate caveat.
+Python.org's signed and notarized universal2 Python 3.12.10 package was
+installed at `/usr/local/bin/python3.12`; its verified package SHA-256 is
+`8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4`.
+Pillow 12.2.0, matching CI, was installed in that interpreter's user site.
+Fresh-process probes confirmed both `zip(strict=...)` and
+`Image.get_flattened_data()`. Apple's `/usr/bin/python3` remains 3.9.6 and is
+not the validation interpreter.
+
+The first newly enabled broad run exposed one macOS-only test expectation:
+the harness intentionally canonicalized temporary paths while the assertion
+compared `/private/var/...` with macOS's `/var/...` alias. Mod Loader
+`452a021448a11204a958e3f631fc474fec58fe8c` made that assertion compare the
+canonical path. The same pass found that the concurrently landed gameplay-
+pause layout additions had not refreshed the class-loadout fixture's required
+whole-layout provenance hash; `8128d34298b4e0035d5b6f55cd95a1b1a0f85d56`
+restored the established provenance contract without changing captured class
+data.
+
+The final verified bundle SHA-256 is
+`f48ce3c5636d5ba34377df5f271035e3d9e3d8884ab4f86c132087dce94c6684`.
+Its clean detached Mac tree is
+`/Users/jarrett/codex-acceptance/loot-drops-native-parity-20260820/mod-loader-python312-final-8128d342`.
+On that exact tree, `tests/re/run_static_re_tests.py --ci` passed `489/489`;
+the log SHA-256 is
+`b299086e06d4e442bf3efee5ca26a816322c066419452a596dba5408346023c8`.
+The broader `tests/run_python_suite.py` passed all `87/87` runnable modules
+and `795` tests, with the declared eight machine-dependent modules excluded;
+its log SHA-256 is
+`f65840fd8a8a85431dee685df3aa8cb53aa452d8a88cd45bdabedc55c19a37b0`.
 
 Mac `npm --prefix frontend run smoke:game:loot-drops` exited zero with two
 isolated Chrome contexts and one real authoritative host. The WebGL2 frame
