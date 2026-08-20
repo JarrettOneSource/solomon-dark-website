@@ -88,8 +88,9 @@ unanswered five-second interval terminates that transport and feeds the same
 release event, detecting a newly half-open connection within ten seconds. The
 protocol-visible client ping remains an RTT diagnostic rather than a liveness
 lease. This policy is specific to remotely provisioned browser hosts: standalone
-shell-owned hosts may reset an empty run, while externally managed dedicated
-servers retain their owner's process policy.
+shell-owned hosts may reset an empty run and park its fresh Hub at tick zero
+until the next client authenticates, while externally managed dedicated servers
+retain their owner's process policy and clock.
 
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to

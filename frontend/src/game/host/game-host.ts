@@ -648,6 +648,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const ticksPerSnapshot = Math.max(1, Math.round(GAME_TICK_RATE / snapshotRate))
   const timer = setInterval(() => {
     if (closed || ticking) return
+    if (resetWhenEmpty && clients.size === 0) {
+      nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
+      return
+    }
     ticking = true
     try {
       const now = performance.now()

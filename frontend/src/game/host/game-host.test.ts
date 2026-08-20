@@ -688,6 +688,8 @@ test('standalone host resets its run after the final client leaves', async (cont
   await waitFor(() => host.loadedBoneyard() === null)
   assert.equal(host.hostPlayerId(), null)
   assert.equal(host.state().world.kind, 'hub')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(host.state().tick, 0)
 
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => second.socket.close())
@@ -722,6 +724,9 @@ test('persistent host retains its loaded run across an empty interval', async (c
   assert.equal(firstRun.type, 'server-boneyard-loaded')
   await closeSocket(first.socket)
   await waitFor(() => host.playerCount() === 0)
+  const emptyTick = host.state().tick
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.ok(host.state().tick > emptyTick)
 
   const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
   context.after(() => second.socket.close())

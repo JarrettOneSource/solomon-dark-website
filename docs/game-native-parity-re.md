@@ -10189,11 +10189,13 @@ last standalone client disconnects
 
 The standalone host must reset its run when its authenticated client count
 reaches zero. Reset means a fresh empty Hub simulation, no loaded Boneyard, no
-host claim, and fresh per-run player/snapshot sequencing. The persistent
-browser session supervisor must keep its existing behavior: temporary peer
-absence does not reroll a multiplayer Arena, and the supervisor remains the
-owner of session expiry. Within any active run, one Boneyard materialization
-continues to be immutable and identical for every peer.
+host claim, and fresh per-run player/snapshot sequencing. Its fixed clock must
+remain parked at tick zero while that reset host is empty; otherwise the next
+welcome depends on transport timing instead of the reset boundary. The
+persistent browser session supervisor must keep its existing behavior:
+temporary peer absence does not reroll a multiplayer Arena, and the supervisor
+remains the owner of session expiry. Within any active run, one Boneyard
+materialization continues to be immutable and identical for every peer.
 
 The Gate correction belongs in shared native fence geometry. That seam must
 return the two recovered rule segments so the Pixi runtime and Canvas editor
@@ -10221,9 +10223,10 @@ width remain unchanged.
 ### Validation contract
 
 - A focused host regression must reproduce final-client disconnect followed by
-  a new client and prove that opt-in standalone reset returns to Hub with no
-  loaded Boneyard, while the default persistent-session behavior still retains
-  one exact run for reconnecting peers.
+  an intentionally delayed new client and prove that opt-in standalone reset
+  remains at Hub tick zero with no loaded Boneyard, while the default
+  persistent-session behavior continues its clock and retains one exact run for
+  reconnecting peers.
 - Deterministic catalog coverage must continue to prove all 12 stock templates
   are reachable and distinct; fresh run ids/seeds must remain separate from
   immutable per-run peer state.
@@ -10243,7 +10246,9 @@ width remain unchanged.
   it; supervisor-provisioned session hosts retain the default persistent-run
   policy. Final-client release now reconstructs the empty Hub and resets loaded
   Boneyard, host claim, player ids, snapshot sequence, and tick deadline before
-  the next standalone client authenticates.
+  the next standalone client authenticates. The fixed loop parks that reset Hub
+  at tick zero while it remains empty and slides its next deadline forward; the
+  default persistent policy continues advancing its retained run.
 - `nativeGateRules` is the single geometry owner for both visible line
   primitives. Pixi and Canvas now consume `(p1.x,p1.y+32) -> p3` and the two
   edge midpoints from that shared contract.
@@ -18078,13 +18083,14 @@ below is from that rebased tree.
 The first live audit found production healthy at Website revision
 `6826e62bc981c53b7c1f9800a6de1c97c6da18db`, with `e68372a9617aef51f241f85f0c519d701c8c8e4d`
 in its ancestry. The installed deployment worker matched current `origin/main`,
-its last-success receipt named the same deployed revision, Caddy and the game
-supervisor were active with zero restarts, SQLite integrity was `ok`, the public
-and loopback `/game` routes returned 200, and the public index hash matched the
-deployed artifact. There is intentionally no `solomon-dark-website.service` on
-this host: Caddy serves the deployed static release directly. The supervisor
-reported protocol `solomon-dark/29` with zero sessions and zero lobbies before
-acceptance.
+its last-success receipt named the same deployed revision, and the Website/game
+services plus Caddy were active with zero restarts. SQLite integrity was `ok`,
+the public and loopback `/game` routes returned 200, and the public index hash
+matched the deployed artifact. The Website unit is named
+`solomon-dark-revived.service`; it serves the release and API on loopback port
+5220 behind Caddy. There is no unit named `solomon-dark-website.service`. The
+supervisor reported protocol `solomon-dark/29` with zero sessions and zero
+lobbies before acceptance.
 
 The first Mac mini production Air run exposed an acceptance-harness defect,
 not a game or deployment defect. `smoke-primary-spells.mjs` reached the live Hub
@@ -18179,6 +18185,20 @@ Visual inspection confirms that the contact corona paints in front of each
 struck Gravestone while the source/body remain world-sorted. No task-owned
 Chrome or smoke process remained, and the supervisor returned to zero sessions
 and zero lobbies.
+
+Publication follow-up on 2026-08-20 pushed
+`4ea09a35015235f5cac54ca5be687fc6b6e826ad` to `main`. GitHub Validate run
+`32360415035` completed successfully, and the independent deployment worker
+validated the same commit before cutting over production. The live revision and
+worker last-success receipt both named that SHA; `solomon-dark-revived.service`,
+`solomon-dark-game.service`, and Caddy were active with zero restarts; protocol
+29 reported zero sessions/lobbies; live and backup SQLite integrity checks were
+`ok`; and public plus loopback root/`/game` returned 200. The deployed, loopback,
+and public index bodies all had SHA-256
+`d437b78dfed59e6375f87af52e265b7588ced54342d6146a7a37ed6394fefeeb`.
+The cutover retained rollback
+`/opt/solomon-dark-revived.rollback-pre-4ea09a350152-20260820T104851Z` and backup
+`/var/backups/solomon-dark-revived/pre-4ea09a350152-20260820T104851Z/sdr.db`.
 
 ## Generated Boneyard entrance retirement and wave placement — 2026-08-16
 
