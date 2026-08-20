@@ -10,12 +10,15 @@ import {
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
+  NATIVE_MINDBLAST_DIRECT_RADIUS,
+  NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS,
   nativePlaneOrbDamage,
   nativeSecondaryAvailableMana,
   nativeSecondaryStaffCastDurationTicks,
   nativeSecondaryTargetMaterialTint,
   removeNativeSecondaryOwner,
   stepNativeSecondaryAbilities,
+  triggerNativePlayerMindblast,
   type NativeSecondarySimulationState,
   type NativeSecondaryTickContext,
 } from './native-secondary-abilities.ts'
@@ -186,6 +189,96 @@ function cast(skillId: NativeSecondaryAbilityId): ReturnType<typeof stepNativeSe
     context(skillId, 1, 0),
   )
 }
+
+test('Mindblowing Ring births its exact burst and actor-light Shockwave from 502 RNG words', () => {
+  const source = createNativeSecondarySimulation(0x52a220)
+  const lightRegistration = { managerLane: 'actor' as const, registrationOrdinal: 7 }
+  const triggered = triggerNativePlayerMindblast(source, {
+    element: 'ether',
+    level: 12,
+    lightRegistration,
+    ownerId: 'player',
+    position: { x: 4, y: 5 },
+    worldKey: 'boneyard:test',
+  })
+  assert.equal(triggered.directDamage, 6)
+  assert.equal(triggered.directRadius, NATIVE_MINDBLAST_DIRECT_RADIUS)
+  assert.deepEqual(
+    triggered.state.rng,
+    advanceNativeRngWords(source.rng, NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS),
+  )
+  assert.deepEqual(triggered.state.actors.map(({ kind }) => kind), [
+    'mindblast-burst',
+    'mindblast-shockwave',
+  ])
+  const burst = triggered.state.actors[0]!
+  assert.equal(burst.ageTicks, 0)
+  assert.equal(burst.lifetimeTicks, 230)
+  assert.equal(burst.presentationRng, source.rng)
+  assert.equal(burst.rank, 12)
+  assert.equal(burst.scale, 9)
+  assert.equal(burst.skillId, null)
+  assert.equal(burst.variant, 0)
+  const wave = triggered.state.actors[1]!
+  assert.deepEqual(wave.lightRegistration, lightRegistration)
+  assert.equal(wave.phase, Math.fround(0.35))
+  assert.equal(wave.quantity, 8)
+  assert.equal(wave.radius, 75)
+  assert.equal(wave.skillId, null)
+
+  const fire = triggerNativePlayerMindblast(createNativeSecondarySimulation(1), {
+    element: 'fire',
+    level: 12,
+    lightRegistration,
+    ownerId: 'player',
+    position: { x: 4, y: 5 },
+    worldKey: 'boneyard:test',
+  })
+  assert.equal(fire.directDamage, 0)
+  assert.equal(fire.state.actors[0]!.variant, 1)
+})
+
+test('Mindblast Shockwave contacts every target once, Dazzles, pushes, and publishes its radial light', () => {
+  const target = {
+    family: 'ZOMBIE',
+    id: 1,
+    lightRegistration: TARGET_LIGHT_REGISTRATION,
+    nativeFlags: 2,
+    position: { x: 150, y: 0 },
+    radius: 10,
+    scale: 1,
+    shieldHealth: 0,
+  }
+  let state = triggerNativePlayerMindblast(createNativeSecondarySimulation(3), {
+    element: 'water',
+    level: 4,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 0 },
+    ownerId: 'player',
+    position: { x: 0, y: 0 },
+    worldKey: 'boneyard:test',
+  }).state
+  let contactCount = 0
+  for (let tick = 1; tick <= 20; tick += 1) {
+    const result = stepNativeSecondaryAbilities(state, {
+      ...context(35, tick, null),
+      targets: (_worldKey, _center, radius) => radius >= 150 ? [target] : [],
+    })
+    state = result.state
+    contactCount += Number(result.knockbacks.length > 0)
+    assert.deepEqual(result.damage, [])
+    if (tick === 10) {
+      assert.equal(result.knockbacks.length, 1)
+      assert.ok(Math.abs(Math.hypot(
+        result.knockbacks[0]!.delta.x,
+        result.knockbacks[0]!.delta.y,
+      ) - state.actors.find(({ kind }) => kind === 'mindblast-shockwave')!.alpha * 8) < 1e-5)
+    }
+  }
+  assert.equal(contactCount, 6)
+  const wave = state.actors.find(({ kind }) => kind === 'mindblast-shockwave')!
+  assert.deepEqual(wave.hitTargetIds, [1])
+  assert.ok(state.targetEffects.find(({ targetId }) => targetId === 1)!.dazzleTicks > 0)
+})
 
 function expectedScreenFlash(
   red: number,
@@ -2173,7 +2266,7 @@ test('Burning Man adds the native Region pulse and a radius-165 half-damage expl
   ])
 })
 
-test('Shockwave applies the summed native damage lane and displacement recurrence', () => {
+test('Shockwave applies the summed native damage lane and normalized displacement recurrence', () => {
   let state = cast(21).state
   const wave = state.actors.find(({ kind }) => kind === 'shockwave')!
   const target = {
@@ -2206,7 +2299,7 @@ test('Shockwave applies the summed native damage lane and displacement recurrenc
   )
   assert.deepEqual(
     result.knockbacks.filter(({ sourceActorId }) => sourceActorId === wave.id),
-    [{ delta: { x: 60, y: 0 }, sourceActorId: wave.id, targetId: target.id }],
+    [{ delta: { x: 6, y: 0 }, sourceActorId: wave.id, targetId: target.id }],
   )
 })
 

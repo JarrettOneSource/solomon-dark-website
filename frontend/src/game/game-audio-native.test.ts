@@ -152,6 +152,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_SOUND_MANIFEST['disable-enemy'].registryOffset, 0x3b4)
   assert.equal(NATIVE_SOUND_MANIFEST.knockback.registryOffset, 0x8b0)
   assert.equal(NATIVE_SOUND_MANIFEST['spin-attack'].registryOffset, 0xe5c)
+  assert.equal(NATIVE_SOUND_MANIFEST['staff-hit-wood'].registryOffset, 0xeb4)
   assert.equal(NATIVE_SOUND_MANIFEST['staff-swoosh'].registryOffset, 0xee0)
   assert.equal(NATIVE_SOUND_MANIFEST['hit-shield'].registryOffset, 0x750)
   assert.equal(NATIVE_SOUND_MANIFEST['pop-shield'].registryOffset, 0xcd0)
@@ -173,6 +174,7 @@ test('keeps native registry offsets on the browser cue manifest', () => {
   assert.equal(NATIVE_LOOP_MANIFEST['rolling-stone-loop'].registryOffset, 0x1acc)
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
+  assert.equal(NATIVE_STREAM_MANIFEST['pike-break'].registryOffset, 0x13e4)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
 })
 
@@ -182,6 +184,7 @@ test('pins every Staff contact cue to its untouched stock WAV', () => {
     ['disable-enemy', 'disable-enemy.wav'],
     ['knockback', 'knockback.wav'],
     ['spin-attack', 'spin-attack.wav'],
+    ['staff-hit-wood', 'staff-hit-wood.wav'],
     ['staff-swoosh', 'staff-swoosh.wav'],
   ] as const) {
     const source = readFileSync(new URL(
@@ -193,6 +196,14 @@ test('pins every Staff contact cue to its untouched stock WAV', () => {
       NATIVE_SOUND_MANIFEST[cue].sourceSha256,
     )
   }
+  const pikeBreak = readFileSync(new URL(
+    '../assets/game/audio/sfx/pike-break.wav',
+    import.meta.url,
+  ))
+  assert.equal(
+    createHash('sha256').update(pikeBreak).digest('hex'),
+    NATIVE_STREAM_MANIFEST['pike-break'].sourceSha256,
+  )
 })
 
 test('pins the complete skill-picker lifecycle cues to the untouched stock WAVs', () => {

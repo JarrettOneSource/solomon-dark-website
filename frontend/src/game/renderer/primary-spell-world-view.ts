@@ -20,7 +20,10 @@ import {
 import { hubWorldDepthForActor } from './hub-render-contract.ts'
 import { WaterPrimarySpellView } from './primary-spell-water-view.ts'
 import { isNativePlayerStaffTransient } from '../core-kernels/native-player-staff-action.ts'
-import { PlayerStaffVfxView } from './player-staff-vfx-view.ts'
+import {
+  PlayerStaffPikeBreakView,
+  PlayerStaffVfxView,
+} from './player-staff-vfx-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 export interface PrimarySpellPainterLayer {
@@ -85,11 +88,14 @@ export class PrimarySpellWorldView {
         state.kind !== 'player-staff-smoke'
         && state.kind !== 'player-staff-move-fade'
         && state.kind !== 'player-staff-perspective-fade'
+        && state.kind !== 'player-staff-pike-break'
       )) continue
       this.liveIds.add(state.id)
       let view = this.views.get(state.id)
       if (!view) {
-        if (
+        if (state.kind === 'player-staff-pike-break') {
+          view = new PlayerStaffPikeBreakView(state, this.textures)
+        } else if (
           state.kind === 'player-staff-smoke'
           || state.kind === 'player-staff-move-fade'
           || state.kind === 'player-staff-perspective-fade'

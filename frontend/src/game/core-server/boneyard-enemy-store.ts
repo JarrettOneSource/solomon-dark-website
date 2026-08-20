@@ -1109,6 +1109,61 @@ export function applyBoneyardStaffHeadingPerturbation(
   return { ...source, maggots }
 }
 
+export function applyBoneyardStaffImpactVerticalVelocity(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+  verticalVelocity: number,
+): BoneyardEnemyStore {
+  if (!Number.isFinite(verticalVelocity)) {
+    throw new RangeError('staff impact vertical velocity must be finite')
+  }
+  const actorIndex = source.actors.findIndex(({ id }) => id === actorId)
+  if (actorIndex < 0) return source
+  const actor = source.actors[actorIndex]!
+  if (actor.lifeState !== 'alive' || actor.brain.family !== 'imp') return source
+  const actors = [...source.actors]
+  actors[actorIndex] = {
+    ...actor,
+    brain: { ...actor.brain, verticalVelocity: Math.fround(verticalVelocity) },
+  }
+  return { ...source, actors }
+}
+
+export function breakBoneyardSkeletonPike(
+  source: BoneyardEnemyStore,
+  actorId: BoneyardEnemyActorId,
+): Readonly<{ broke: boolean; store: BoneyardEnemyStore }> {
+  const actorIndex = source.actors.findIndex(({ id }) => id === actorId)
+  if (actorIndex < 0) return { broke: false, store: source }
+  const actor = source.actors[actorIndex]!
+  if (
+    actor.lifeState !== 'alive'
+    || actor.brain.family !== 'skeleton'
+    || !actor.config.flags.some((flag) => flag === 'FLAG_PIKE')
+  ) return { broke: false, store: source }
+  const weaponFlags = new Set([
+    'FLAG_SWORD', 'FLAG_MACE', 'FLAG_FLAIL', 'FLAG_AXE', 'FLAG_PIKE',
+  ])
+  const actors = [...source.actors]
+  actors[actorIndex] = {
+    ...actor,
+    bodyPose: 0,
+    brain: {
+      ...actor.brain,
+      action: 'claw',
+      actionProgress: 0,
+      contactTargetPlayerId: null,
+      markerEmitted: false,
+      phase: 'approach',
+    },
+    config: {
+      ...actor.config,
+      flags: Object.freeze(actor.config.flags.filter((flag) => !weaponFlags.has(flag))),
+    },
+  }
+  return { broke: true, store: { ...source, actors } }
+}
+
 function damageBoneyardMaggot(
   source: BoneyardEnemyStore,
   request: DamageBoneyardEnemyRequest,

@@ -6,7 +6,10 @@ import {
   createIdlePlayerCharacterInput,
   createPlayerCharacter,
 } from '../core-kernels/player-character.ts'
-import { createNativePlayerStaffAction } from '../core-kernels/native-player-staff-action.ts'
+import {
+  createNativePlayerStaffAction,
+  resolveNativeStaffPhysicalContacts,
+} from '../core-kernels/native-player-staff-action.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createPrimarySpellSimulation } from '../core-kernels/primary-spells.ts'
 import { refreshPlayerSkillRuntime } from '../core-kernels/player-skill-runtime.ts'
@@ -31,6 +34,7 @@ import {
 } from './player-staff-combat-system.ts'
 
 const CONFIG = { discipline: 'body', displayName: 'Staff', element: 'air' } as const
+const ETHER_CONFIG = { ...CONFIG, element: 'ether' } as const
 const PLAYER_ID = 'caster'
 
 test('automatic staff admission requires the exact equipped Staff and emits one retained contact', () => {
@@ -136,21 +140,73 @@ test('a lethal proc still owns its same-contact Knockback actor', () => {
   assert.deepEqual(knockback.targetIds, [`enemy:${result.enemies.actors[0]!.id}`])
 })
 
+test('an Ether Staff contact disarms Pike Skeletons before damage and retains every feedback edge', () => {
+  let context = staffFixture(undefined, ETHER_CONFIG, ['FLAG_PIKE'])
+  context = {
+    ...context,
+    playerEntities: rankPlayerSkill(context.playerEntities, 65, 15),
+  }
+  context = {
+    ...context,
+    rng: createNativeRng(seedForEtherPikeBreak(context.playerEntities)),
+  }
+  let result = stepPlayerStaffCombatSystem(context)
+  for (let tick = 2; tick < 100; tick += 1) {
+    result = stepPlayerStaffCombatSystem({
+      ...context,
+      enemies: result.enemies,
+      playerEntities: result.playerEntities,
+      players: result.players,
+      rng: result.rng,
+      spells: result.spells,
+      tick,
+    })
+    if (result.spells.transients.some(({ kind }) => kind === 'player-staff-contact')) break
+  }
+
+  const skeleton = result.enemies.actors[0]!
+  assert.equal(skeleton.brain.family, 'skeleton')
+  assert.equal(skeleton.config.flags.includes('FLAG_PIKE'), false)
+  if (skeleton.brain.family === 'skeleton') {
+    assert.equal(skeleton.brain.action, 'claw')
+    assert.equal(skeleton.brain.phase, 'approach')
+  }
+  const contact = result.spells.transients.find(({ kind }) => kind === 'player-staff-contact')
+  assert.ok(contact && contact.kind === 'player-staff-contact')
+  assert.equal(contact.impactSoundPitches.length, 1)
+  assert.deepEqual(contact.pikeBreakSoundIndexes, [0])
+  assert.equal(
+    result.spells.transients.some(({ kind }) => kind === 'player-staff-contact-knockback'),
+    true,
+  )
+  assert.equal(
+    result.spells.transients.some(({ kind }) => kind === 'player-staff-pike-break'),
+    true,
+  )
+  assert.deepEqual(result.pikeBreakFeedback, [{
+    ownerId: PLAYER_ID,
+    position: skeleton.position,
+    worldKey: 'boneyard:test',
+  }])
+})
+
 function staffFixture(
   playerEntitiesOverride?: PlayerEntityStore,
+  config = CONFIG,
+  flags: readonly 'FLAG_PIKE'[] = [],
 ): PlayerStaffCombatSystemContext {
   const player = {
-    ...createPlayerCharacter(CONFIG, { x: 0, y: 0 }),
+    ...createPlayerCharacter(config, { x: 0, y: 0 }),
     headingIndex: 0,
   }
   const playerEntities = playerEntitiesOverride ?? addPlayerEntity(
     createPlayerEntityStore(),
     PLAYER_ID,
-    CONFIG,
+    config,
     player,
     1,
   )
-  const spawned = spawnSkeleton()
+  const spawned = spawnSkeleton(flags)
   const actor = spawned.actors[0]!
   const distance = 25 + actor.config.collisionRadius
   const enemies: BoneyardEnemyStore = {
@@ -225,7 +281,37 @@ function seedForOutcome(
   throw new Error(`No deterministic seed produced ${outcome}`)
 }
 
-function spawnSkeleton(): BoneyardEnemyStore {
+function seedForEtherPikeBreak(playerEntities: PlayerEntityStore): number {
+  const derived = playerSkillDerivedStatsAt(playerEntities, PLAYER_ID)!
+  for (let seed = 0; seed < 100_000; seed += 1) {
+    const spawned = createNativePlayerStaffAction({
+      derived,
+      headingDegrees: 0,
+      id: 1,
+      lane: 'primary',
+      origin: { x: 0, y: 0 },
+      ownerId: PLAYER_ID,
+      worldKey: 'boneyard:test',
+    }, createNativeRng(seed))
+    if (spawned.action.outcome !== 'normal') continue
+    const contact = resolveNativeStaffPhysicalContacts(
+      spawned.action,
+      [{
+        collisionRadius: 10,
+        id: 'enemy:1',
+        pike: true,
+        position: { x: 0, y: -35 },
+      }],
+      'ether',
+      derived.staffDamageSecondary,
+      spawned.rng,
+    )
+    if (contact.impacts[0]?.pikeBreakPresentationRng !== null) return seed
+  }
+  throw new Error('No deterministic seed produced the Ether Pike-break branch')
+}
+
+function spawnSkeleton(flags: readonly 'FLAG_PIKE'[] = []): BoneyardEnemyStore {
   return stepBoneyardEnemyStore(createBoneyardEnemyStore('staff-system'), {
     firstProjectileWorldContact: () => null,
     players: {
@@ -241,7 +327,7 @@ function spawnSkeleton(): BoneyardEnemyStore {
     resolveMovement: ({ requestedPosition }) => requestedPosition,
     resolveSpawnIntents: () => [{
       enemyToken: 'SKELETON',
-      flags: [],
+      flags,
       id: 1,
       locationPolicy: 'anywhere',
       nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,

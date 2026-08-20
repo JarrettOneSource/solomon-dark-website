@@ -1,10 +1,12 @@
 import { actorHeadingFromVector } from './actor-heading.ts'
 import {
+  advanceNativeRngWords,
   drawNativeFloat,
   drawNativeInteger,
   drawNativeSign,
   type NativeRngState,
 } from './native-rng.ts'
+import type { WizardElement } from './player-character.ts'
 import {
   resolvePlayerStaffAttack,
   type PlayerSkillDerivedStats,
@@ -24,6 +26,10 @@ export const NATIVE_STAFF_WHIRL_RADIUS = 100
 export const NATIVE_STAFF_KNOCKBACK_STEP = 10
 export const NATIVE_STAFF_KNOCKBACK_DAZZLE_TICKS = 200
 export const NATIVE_STAFF_CONTACT_EVENT_TICKS = 40
+export const NATIVE_STAFF_CONTACT_KNOCKBACK_TICKS = 5
+export const NATIVE_STAFF_CONTACT_KNOCKBACK_STEP = 6
+export const NATIVE_STAFF_PIKE_BREAK_RNG_WORDS = 50
+export const NATIVE_STAFF_PIKE_BREAK_LIFETIME_TICKS = 100
 
 const STAFF_MELEE_POSE_PROGRAMS = Object.freeze({
   primary: Object.freeze([0, 4, 5, 6, 6, 6, 6, 6, 6]),
@@ -83,13 +89,38 @@ export interface NativePlayerStaffContactEvent {
   readonly ageTicks: number
   readonly id: number
   readonly kind: 'player-staff-contact'
+  readonly impactSoundPitches: readonly number[]
   readonly origin: Readonly<Vector2>
   readonly outcome: PlayerStaffAttackOutcome
   readonly ownerId: string
   readonly procSound: NativeStaffProcSound | null
   readonly procSoundPitches: readonly number[]
+  readonly pikeBreakSoundIndexes: readonly number[]
   readonly swooshPitch: number
   readonly targetIds: readonly string[]
+  readonly worldKey: string
+}
+
+export interface NativePlayerStaffContactKnockback {
+  readonly ageTicks: number
+  readonly delta: Readonly<Vector2>
+  readonly id: number
+  readonly kind: 'player-staff-contact-knockback'
+  readonly ownerId: string
+  readonly remainingTicks: number
+  readonly targetId: string
+  readonly worldKey: string
+}
+
+export interface NativePlayerStaffPikeBreakVfx {
+  readonly ageTicks: number
+  readonly headingDegrees: number
+  readonly id: number
+  readonly kind: 'player-staff-pike-break'
+  readonly ownerId: string
+  readonly position: Readonly<Vector2>
+  readonly presentationRng: NativeRngState
+  readonly targetId: string
   readonly worldKey: string
 }
 
@@ -160,6 +191,8 @@ export interface NativeStaffKnockbackActor {
 export type NativePlayerStaffTransient =
   | NativePlayerStaffAction
   | NativePlayerStaffContactEvent
+  | NativePlayerStaffContactKnockback
+  | NativePlayerStaffPikeBreakVfx
   | NativePlayerStaffVfx
   | NativeStaffKnockbackActor
 
@@ -169,6 +202,8 @@ export function isNativePlayerStaffTransient(
   return value.kind === 'player-staff-melee'
     || value.kind === 'player-staff-spin'
     || value.kind === 'player-staff-contact'
+    || value.kind === 'player-staff-contact-knockback'
+    || value.kind === 'player-staff-pike-break'
     || value.kind === 'player-staff-smoke'
     || value.kind === 'player-staff-move-fade'
     || value.kind === 'player-staff-perspective-fade'
@@ -190,6 +225,23 @@ export interface NativeStaffTarget {
   readonly collisionRadius: number
   readonly id: string
   readonly position: Readonly<Vector2>
+}
+
+export interface NativeStaffPhysicalTarget extends NativeStaffTarget {
+  readonly pike: boolean
+}
+
+export interface NativeStaffPhysicalImpact {
+  readonly contactKnockbackDelta: Readonly<Vector2> | null
+  readonly pikeBreakPresentationRng: NativeRngState | null
+  readonly soundPitch: number
+  readonly targetId: string
+  readonly verticalVelocity: number
+}
+
+export interface NativeStaffPhysicalContactResult {
+  readonly impacts: readonly NativeStaffPhysicalImpact[]
+  readonly rng: NativeRngState
 }
 
 export interface NativeStaffContactPresentation {
@@ -348,6 +400,67 @@ export function nativeStaffAdmissionTarget(
   return null
 }
 
+export function nativeStaffPhysicalContactTargets<T extends NativeStaffTarget>(
+  player: Readonly<{
+    collisionRadius: number
+    headingDegrees: number
+    position: Readonly<Vector2>
+  }>,
+  targets: readonly T[],
+): readonly T[] {
+  return Object.freeze(targets.filter((target) => {
+    const deltaX = target.position.x - player.position.x
+    const deltaY = target.position.y - player.position.y
+    const reach = player.collisionRadius + target.collisionRadius
+    if (deltaX * deltaX + deltaY * deltaY > reach * reach) return false
+    return absoluteHeadingDelta(
+      player.headingDegrees,
+      actorHeadingFromVector(deltaX, deltaY),
+    ) < NATIVE_STAFF_ADMISSION_HEADING_DEGREES
+  }))
+}
+
+export function resolveNativeStaffPhysicalContacts(
+  action: NativePlayerStaffAction,
+  targets: readonly NativeStaffPhysicalTarget[],
+  element: WizardElement,
+  etherKnockbackChance: number,
+  sourceRng: NativeRngState,
+): NativeStaffPhysicalContactResult {
+  let rng = sourceRng
+  const impacts: NativeStaffPhysicalImpact[] = []
+  for (const target of targets) {
+    const vertical = drawNativeFloat(rng, 1)
+    const pitch = drawNativeFloat(vertical.state, 0.1, true)
+    rng = pitch.state
+    let contactKnockbackDelta: Readonly<Vector2> | null = null
+    let pikeBreakPresentationRng: NativeRngState | null = null
+    if (element === 'ether') {
+      const chance = drawNativeFloat(rng, 200)
+      rng = chance.state
+      if (chance.value > 0 && chance.value <= etherKnockbackChance) {
+        contactKnockbackDelta = Object.freeze(directionWithMagnitude(
+          action.origin,
+          target.position,
+          NATIVE_STAFF_CONTACT_KNOCKBACK_STEP,
+        ))
+        if (target.pike) {
+          pikeBreakPresentationRng = rng
+          rng = advanceNativeRngWords(rng, NATIVE_STAFF_PIKE_BREAK_RNG_WORDS)
+        }
+      }
+    }
+    impacts.push(Object.freeze({
+      contactKnockbackDelta,
+      pikeBreakPresentationRng,
+      soundPitch: Math.fround(1 + pitch.value),
+      targetId: target.id,
+      verticalVelocity: Math.fround(-(1 + vertical.value)),
+    }))
+  }
+  return Object.freeze({ impacts: Object.freeze(impacts), rng })
+}
+
 export function nativeStaffDamageTargets<T extends NativeStaffTarget>(
   action: NativePlayerStaffAction,
   targets: readonly T[],
@@ -443,6 +556,8 @@ export function createNativeStaffContactPresentation(
   targetMean: Readonly<Vector2>,
   elementTint: number,
   sourceRng: NativeRngState,
+  impactSoundPitches: readonly number[] = [],
+  pikeBreakSoundIndexes: readonly number[] = [],
 ): NativeStaffContactPresentation {
   let rng = sourceRng
   let nextId = firstId
@@ -502,12 +617,14 @@ export function createNativeStaffContactPresentation(
     event: Object.freeze({
       ageTicks: 0,
       id: nextId,
+      impactSoundPitches: Object.freeze([...impactSoundPitches]),
       kind: 'player-staff-contact',
       origin: Object.freeze({ ...action.origin }),
       outcome: action.outcome,
       ownerId: action.ownerId,
       procSound,
       procSoundPitches,
+      pikeBreakSoundIndexes: Object.freeze([...pikeBreakSoundIndexes]),
       swooshPitch: action.swooshPitch,
       targetIds: Object.freeze([...targetIds]),
       worldKey: action.worldKey,
@@ -516,6 +633,74 @@ export function createNativeStaffContactPresentation(
     rng,
     vfx: Object.freeze(vfx),
   })
+}
+
+export function createNativeStaffContactKnockback(
+  id: number,
+  action: NativePlayerStaffAction,
+  targetId: string,
+  delta: Readonly<Vector2>,
+): NativePlayerStaffContactKnockback {
+  return Object.freeze({
+    ageTicks: 0,
+    delta: Object.freeze({ ...delta }),
+    id,
+    kind: 'player-staff-contact-knockback',
+    ownerId: action.ownerId,
+    remainingTicks: NATIVE_STAFF_CONTACT_KNOCKBACK_TICKS,
+    targetId,
+    worldKey: action.worldKey,
+  })
+}
+
+export function createNativeStaffPikeBreakVfx(
+  id: number,
+  action: NativePlayerStaffAction,
+  target: NativeStaffTarget,
+  presentationRng: NativeRngState,
+  headingDegrees: number,
+): NativePlayerStaffPikeBreakVfx {
+  return Object.freeze({
+    ageTicks: 0,
+    headingDegrees: normalizedDegrees(headingDegrees),
+    id,
+    kind: 'player-staff-pike-break',
+    ownerId: action.ownerId,
+    position: Object.freeze({ ...target.position }),
+    presentationRng,
+    targetId: target.id,
+    worldKey: action.worldKey,
+  })
+}
+
+export function stepNativeStaffContactKnockback(
+  source: NativePlayerStaffContactKnockback,
+  targetExists: boolean,
+): Readonly<{
+  actor: NativePlayerStaffContactKnockback | null
+  displacement: Readonly<Vector2> | null
+}> {
+  if (!targetExists) return Object.freeze({ actor: null, displacement: null })
+  const remainingTicks = source.remainingTicks - 1
+  return Object.freeze({
+    actor: remainingTicks <= 0
+      ? null
+      : Object.freeze({
+          ...source,
+          ageTicks: source.ageTicks + 1,
+          remainingTicks,
+        }),
+    displacement: Object.freeze({ ...source.delta }),
+  })
+}
+
+export function stepNativeStaffPikeBreakVfx(
+  source: NativePlayerStaffPikeBreakVfx,
+): NativePlayerStaffPikeBreakVfx | null {
+  const ageTicks = source.ageTicks + 1
+  return ageTicks >= NATIVE_STAFF_PIKE_BREAK_LIFETIME_TICKS
+    ? null
+    : Object.freeze({ ...source, ageTicks })
 }
 
 export function stepNativePlayerStaffVfx(
@@ -757,6 +942,22 @@ function circleContains(
   const dx = target.position.x - origin.x
   const dy = target.position.y - origin.y
   return dx * dx + dy * dy < radius * radius + target.collisionRadius ** 2
+}
+
+function directionWithMagnitude(
+  origin: Readonly<Vector2>,
+  target: Readonly<Vector2>,
+  magnitude: number,
+): Vector2 {
+  const dx = target.x - origin.x
+  const dy = target.y - origin.y
+  const length = Math.hypot(dx, dy)
+  return length === 0
+    ? { x: 0, y: 0 }
+    : {
+        x: Math.fround(dx / length * magnitude),
+        y: Math.fround(dy / length * magnitude),
+      }
 }
 
 function absoluteHeadingDelta(first: number, second: number): number {

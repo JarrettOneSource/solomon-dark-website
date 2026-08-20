@@ -11,6 +11,7 @@ import {
   playerPrimaryCastOwnsFacing,
   type PlayerCharacterInput,
   type PlayerCharacterState,
+  type WizardElement,
 } from './player-character.ts'
 import { actorHeadingIndex } from './actor-heading.ts'
 import {
@@ -79,6 +80,7 @@ export const NATIVE_SECONDARY_ACTOR_KINDS = Object.freeze([
   'teleport-burst', 'magic-circle', 'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn',
   'dampen-wave', 'shield-break', 'shield-explosion', 'acid-rain', 'acid-drop',
+  'mindblast-burst', 'mindblast-shockwave',
   'ring-fire-explosion', 'ring-fire-fragment',
   'acid-splash', 'ether-drain', 'ether-drain-cloud', 'ether-drain-debris',
   'ether-drain-capture-flare', 'comet', 'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
@@ -135,7 +137,7 @@ export interface NativeSecondaryActorState {
   readonly rank: number
   readonly rotationRadians: number
   readonly scale: number
-  readonly skillId: NativeSecondaryAbilityId
+  readonly skillId: NativeSecondaryAbilityId | null
   readonly slowFactor: number
   readonly targetId: number | null
   readonly variant: number
@@ -153,7 +155,7 @@ export interface NativeSecondaryEventState {
   readonly pitch: number
   readonly position: Vector2
   readonly screenFlash: NativeSecondaryScreenFlashState | null
-  readonly skillId: NativeSecondaryAbilityId
+  readonly skillId: NativeSecondaryAbilityId | null
   readonly tick: number
   readonly worldKey: string
 }
@@ -405,6 +407,12 @@ export interface NativeSecondaryPlayerDamageResult {
   readonly state: NativeSecondarySimulationState
 }
 
+export interface NativePlayerMindblastTriggerResult {
+  readonly directDamage: number
+  readonly directRadius: number
+  readonly state: NativeSecondarySimulationState
+}
+
 export interface NativeSecondaryGolemDamageResult {
   readonly ignored: boolean
   readonly killed: boolean
@@ -557,6 +565,11 @@ const MAGIC_SHIELD_EXPLOSION_CONTACT_RADIUS = 110
 const MAGIC_SHIELD_EXPLOSION_PRESENTATION_RNG_WORDS = 502
 const MAGIC_SHIELD_EXPLOSION_PRESENTATION_LIFETIME_TICKS = 116
 const MAGIC_SHIELD_EXPLOSION_SHOCKWAVE_LIFETIME_TICKS = 36
+export const NATIVE_MINDBLAST_DIRECT_RADIUS = 495
+export const NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS = 502
+export const NATIVE_MINDBLAST_BURST_LIFETIME_TICKS = 230
+export const NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS = 36
+export const NATIVE_MINDBLAST_SHOCKWAVE_GROWTH = Math.fround(8)
 const MAGIC_TRAP_CHARGE_PER_TICK = Math.fround(1 / (8 * 100))
 const MAGIC_TRAP_ARMING_HALF_EXTENT = 65
 const MAGIC_TRAP_PAYLOAD_HALF_EXTENT = 150
@@ -985,6 +998,7 @@ export function applyNativeSecondaryPlayerDamage(
         ownerId: playerId,
         phase: SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE,
         position,
+        quantity: SHOCKWAVE_RADIUS_GROWTH_PER_TICK,
         radius: 75,
         skillId: 54,
         slowFactor: SHOCKWAVE_EXPLOSIVE_SHIELD_FADE_THRESHOLD,
@@ -1582,7 +1596,12 @@ export function stepNativeSecondaryAbilities(
         }
         break
       }
-      case 'shockwave': {
+      case 'shockwave':
+      case 'mindblast-shockwave': {
+        const radiusGrowth = sourceActor.quantity
+        if (!(radiusGrowth > 0)) {
+          throw new Error(`${actor.kind} ${actor.id} lost its native radius growth`)
+        }
         const remainingLife = Math.fround(sourceActor.phase - WAVE_LIFE_PER_TICK)
         if (remainingLife <= 0) {
           retain = false
@@ -1595,7 +1614,7 @@ export function stepNativeSecondaryAbilities(
           ...actor,
           alpha,
           phase: remainingLife,
-          radius: Math.fround(sourceActor.radius + SHOCKWAVE_RADIUS_GROWTH_PER_TICK),
+          radius: Math.fround(sourceActor.radius + radiusGrowth),
           scale: Math.fround(1 + actor.ageTicks * 0.08),
         }
         if (actor.ageTicks % 10 === 0) {
@@ -1603,14 +1622,16 @@ export function stepNativeSecondaryAbilities(
           for (const target of candidates(actor)) {
             if (hit.has(target.id)) continue
             hit.add(target.id)
-            addDamage(actor, target, actor.damage, 'fire')
-            fireBurnRequests.push({
-              actor,
-              damage: owner.fireBurnDamage,
-              target,
-            })
+            if (actor.kind === 'shockwave') {
+              addDamage(actor, target, actor.damage, 'fire')
+              fireBurnRequests.push({
+                actor,
+                damage: owner.fireBurnDamage,
+                target,
+              })
+            }
             state = mergeEffect(state, actor.worldKey, target.id, { dazzleTicks: 400 })
-            if (actor.skillId === 21 && actor.variant === 1) {
+            if (actor.kind === 'shockwave' && actor.skillId === 21 && actor.variant === 1) {
               const explosion = spawnMaximumRingFireExplosion(state, rng, actor, target)
               state = explosion.state
               rng = explosion.rng
@@ -1628,19 +1649,16 @@ export function stepNativeSecondaryAbilities(
         if (actor.ageTicks % 2 === 0) {
           const tracked = new Set(actor.hitTargetIds)
           for (const target of candidates(actor).filter(({ id }) => tracked.has(id))) {
+            const deltaX = Math.fround(target.position.x - actor.position.x)
+            const deltaY = Math.fround(target.position.y - actor.position.y)
+            const distance = Math.hypot(deltaX, deltaY)
             knockbacks.push({
-              delta: {
-                x: Math.fround(
-                  Math.fround(target.position.x - actor.position.x)
-                  * actor.alpha
-                  * SHOCKWAVE_RADIUS_GROWTH_PER_TICK,
-                ),
-                y: Math.fround(
-                  Math.fround(target.position.y - actor.position.y)
-                  * actor.alpha
-                  * SHOCKWAVE_RADIUS_GROWTH_PER_TICK,
-                ),
-              },
+              delta: distance === 0
+                ? ZERO
+                : {
+                    x: Math.fround(deltaX / distance * actor.alpha * radiusGrowth),
+                    y: Math.fround(deltaY / distance * actor.alpha * radiusGrowth),
+                  },
               sourceActorId: actor.id,
               targetId: target.id,
             })
@@ -3105,6 +3123,7 @@ export function stepNativeSecondaryAbilities(
         break
       case 'magic-trap-burst':
       case 'dampen-wave':
+      case 'mindblast-burst':
         break
       case 'shield-break':
         actor = {
@@ -3631,6 +3650,7 @@ function castAbility(
         lifetimeTicks: 116,
         phase: SHOCKWAVE_INITIAL_LIFE,
         position: origin,
+        quantity: SHOCKWAVE_RADIUS_GROWTH_PER_TICK,
         radius: 75,
         skillId,
         slowFactor: SHOCKWAVE_FADE_THRESHOLD,
@@ -4704,6 +4724,16 @@ function actorSeed(
   }
 }
 
+function wizardElementIndex(element: WizardElement): number {
+  switch (element) {
+    case 'ether': return 0
+    case 'fire': return 1
+    case 'air': return 2
+    case 'water': return 3
+    case 'earth': return 4
+  }
+}
+
 export type NativeSecondaryLightDisposition =
   | 'actor-provider'
   | 'misc'
@@ -4718,6 +4748,7 @@ export function nativeSecondaryLightDisposition(
     case 'ether-bolt':
     case 'moving-fire':
     case 'shockwave':
+    case 'mindblast-shockwave':
     case 'fire-patch':
     case 'ring-fire-explosion':
     case 'ring-fire-fragment':
@@ -5434,6 +5465,83 @@ export function applyNativeSecondaryDazzle(
   return durationTicks === 0
     ? source
     : mergeEffect(source, worldKey, targetId, { dazzleTicks: durationTicks })
+}
+
+export function emitNativePlayerScreenFlash(
+  source: NativeSecondarySimulationState,
+  event: Readonly<{
+    ownerId: string
+    position: Readonly<Vector2>
+    screenFlash: NativeSecondaryScreenFlashState
+    tick: number
+    worldKey: string
+  }>,
+): NativeSecondarySimulationState {
+  return emit(source, {
+    actorId: null,
+    cue: null,
+    kind: 'impact',
+    ownerId: event.ownerId,
+    pitch: 1,
+    position: { ...event.position },
+    screenFlash: event.screenFlash,
+    skillId: null,
+    tick: event.tick,
+    worldKey: event.worldKey,
+  })
+}
+
+export function triggerNativePlayerMindblast(
+  source: NativeSecondarySimulationState,
+  input: Readonly<{
+    element: WizardElement
+    level: number
+    lightRegistration: NativeLightProviderRegistration
+    ownerId: string
+    position: Readonly<Vector2>
+    worldKey: string
+  }>,
+): NativePlayerMindblastTriggerResult {
+  if (!Number.isSafeInteger(input.level) || input.level < 1) {
+    throw new RangeError('Mindblast level must be a positive safe integer')
+  }
+  const presentationRng = source.rng
+  let state: NativeSecondarySimulationState = {
+    ...source,
+    rng: advanceNativeRngWords(source.rng, NATIVE_MINDBLAST_PRESENTATION_RNG_WORDS),
+  }
+  const variant = wizardElementIndex(input.element)
+  state = spawn(state, actorSeed({
+    kind: 'mindblast-burst',
+    lifetimeTicks: NATIVE_MINDBLAST_BURST_LIFETIME_TICKS,
+    ownerId: input.ownerId,
+    position: { ...input.position },
+    presentationRng,
+    rank: input.level,
+    scale: 9,
+    skillId: null,
+    variant,
+    worldKey: input.worldKey,
+  }))
+  state = spawn(state, actorSeed({
+    kind: 'mindblast-shockwave',
+    lifetimeTicks: NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS,
+    lightRegistration: input.lightRegistration,
+    ownerId: input.ownerId,
+    phase: SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE,
+    position: { ...input.position },
+    quantity: NATIVE_MINDBLAST_SHOCKWAVE_GROWTH,
+    radius: 75,
+    skillId: null,
+    slowFactor: SHOCKWAVE_EXPLOSIVE_SHIELD_FADE_THRESHOLD,
+    variant,
+    worldKey: input.worldKey,
+  }))
+  return Object.freeze({
+    directDamage: input.element === 'ether' ? input.level * 0.5 : 0,
+    directRadius: NATIVE_MINDBLAST_DIRECT_RADIUS,
+    state,
+  })
 }
 
 function emptyTargetEffect(worldKey: string, targetId: number): NativeSecondaryTargetEffectState {

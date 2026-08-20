@@ -5,6 +5,7 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createHubParticipantState } from '../core-kernels/hub-regions.ts'
 import { createIdlePlayerPrimaryCast } from '../core-kernels/player-character.ts'
 import { nativeFireParticleVariant } from '../core-kernels/primary-spell-fire-native.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import {
   EARTH_BOULDER_IDENTITY_ORIENTATION,
   earthBoulderHeldOrientationStep,
@@ -644,12 +645,14 @@ test('interpolates Staff action and VFX state while retaining semantic contact a
   const contact = {
     ageTicks: 2,
     id: 2,
+    impactSoundPitches: [0.95],
     kind: 'player-staff-contact',
     origin: { x: 100, y: 180 },
     outcome: 'knockback',
     ownerId: 'local',
     procSound: 'knockback',
     procSoundPitches: [1.02],
+    pikeBreakSoundIndexes: [0],
     swooshPitch: 1.05,
     targetIds: ['enemy:1'],
     worldKey: 'hub:courtyard',
@@ -668,13 +671,24 @@ test('interpolates Staff action and VFX state while retaining semantic contact a
     scale: 8,
     worldKey: 'hub:courtyard',
   } as const
+  const pikeBreak = {
+    ageTicks: 2,
+    headingDegrees: 180,
+    id: 4,
+    kind: 'player-staff-pike-break',
+    ownerId: 'local',
+    position: { x: 120, y: 175 },
+    presentationRng: createNativeRng(44),
+    targetId: 'enemy:1',
+    worldKey: 'hub:courtyard',
+  } as const
   const older = {
-    nextId: 4,
+    nextId: 5,
     projectiles: [],
-    transients: [melee, contact, smoke],
+    transients: [melee, contact, smoke, pikeBreak],
   } satisfies PrimarySpellSimulationState
   const newer = {
-    nextId: 4,
+    nextId: 5,
     projectiles: [],
     transients: [{
       ...melee,
@@ -692,6 +706,9 @@ test('interpolates Staff action and VFX state while retaining semantic contact a
       alpha: 0.65,
       position: { x: 110, y: 185 },
       rotationDegrees: 10,
+    }, {
+      ...pikeBreak,
+      ageTicks: 7,
     }],
   } satisfies PrimarySpellSimulationState
   const halfway = interpolatePrimarySpellState(
@@ -710,10 +727,17 @@ test('interpolates Staff action and VFX state while retaining semantic contact a
   assert.deepEqual(event.origin, { x: 105, y: 185 })
   assert.notEqual(event.targetIds, contact.targetIds)
   assert.notEqual(event.procSoundPitches, contact.procSoundPitches)
+  assert.notEqual(event.impactSoundPitches, contact.impactSoundPitches)
+  assert.notEqual(event.pikeBreakSoundIndexes, contact.pikeBreakSoundIndexes)
   const effect = halfway.transients[2]
   assert.ok(effect.kind === 'player-staff-smoke')
   assert.equal(effect.alpha, 0.775)
   assert.equal(effect.rotationDegrees, 360)
+  const pike = halfway.transients[3]
+  assert.ok(pike.kind === 'player-staff-pike-break')
+  assert.equal(pike.ageTicks, 4.5)
+  assert.notEqual(pike.presentationRng, pikeBreak.presentationRng)
+  assert.notEqual(pike.presentationRng.words, pikeBreak.presentationRng.words)
 
   const owned = copyPrimarySpellState(newer)
   assert.deepEqual(owned, newer)

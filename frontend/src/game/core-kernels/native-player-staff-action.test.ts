@@ -4,15 +4,21 @@ import test from 'node:test'
 import { createHubEconomy } from './hub-economy.ts'
 import {
   createNativePlayerStaffAction,
+  createNativeStaffContactKnockback,
   createNativeStaffContactPresentation,
   createNativeStaffKnockback,
+  createNativeStaffPikeBreakVfx,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
   nativePlayerStaffActionPose,
   nativeStaffAdmissionTarget,
   nativeStaffContactDamagePerTarget,
   nativeStaffDamageTargets,
   nativeStaffKnockbackTargets,
+  nativeStaffPhysicalContactTargets,
+  resolveNativeStaffPhysicalContacts,
   stepNativePlayerStaffAction,
+  stepNativeStaffContactKnockback,
+  stepNativeStaffPikeBreakVfx,
   stepNativePlayerStaffVfx,
   stepNativeStaffKnockback,
   type NativePlayerStaffAction,
@@ -151,6 +157,85 @@ test('automatic admission preserves list order and excludes the exact fifty-degr
     headingDegrees: 0,
     position: { x: 0, y: 0 },
   }, [atBoundary]), null)
+})
+
+test('Staff physical contacts preserve list order, per-target RNG, and Ether Pike-break ownership', () => {
+  const action = actionForOutcome('normal').action
+  const targets = [
+    {
+      collisionRadius: 5,
+      id: 'enemy:1',
+      pike: true,
+      position: { x: 0, y: -25 },
+    },
+    {
+      collisionRadius: 5,
+      id: 'enemy:2',
+      pike: false,
+      position: { x: 10, y: -20 },
+    },
+  ]
+  assert.deepEqual(nativeStaffPhysicalContactTargets({
+    collisionRadius: 25,
+    headingDegrees: 0,
+    position: { x: 0, y: 0 },
+  }, targets).map(({ id }) => id), ['enemy:1', 'enemy:2'])
+
+  const rng = createNativeRng(17)
+  const ether = resolveNativeStaffPhysicalContacts(action, targets, 'ether', 200, rng)
+  assert.deepEqual(ether.rng, advanceNativeRngWords(rng, 58))
+  assert.deepEqual(ether.impacts.map(({ targetId }) => targetId), ['enemy:1', 'enemy:2'])
+  assert.ok(ether.impacts.every(({ soundPitch }) => (
+    soundPitch >= Math.fround(0.9) && soundPitch <= Math.fround(1.1)
+  )))
+  assert.ok(ether.impacts.every(({ verticalVelocity }) => (
+    verticalVelocity >= -2 && verticalVelocity <= -1
+  )))
+  assert.ok(ether.impacts.every(({ contactKnockbackDelta }) => (
+    contactKnockbackDelta !== null
+    && Math.abs(Math.hypot(contactKnockbackDelta.x, contactKnockbackDelta.y) - 6) < 1e-5
+  )))
+  assert.deepEqual(
+    ether.impacts.map(({ pikeBreakPresentationRng }) => pikeBreakPresentationRng !== null),
+    [true, false],
+  )
+
+  const air = resolveNativeStaffPhysicalContacts(action, targets, 'air', 200, rng)
+  assert.deepEqual(air.rng, advanceNativeRngWords(rng, 6))
+  assert.ok(air.impacts.every(({ contactKnockbackDelta }) => contactKnockbackDelta === null))
+  assert.ok(air.impacts.every(({ pikeBreakPresentationRng }) => pikeBreakPresentationRng === null))
+})
+
+test('Ether contact Knockback moves for five ticks and Pike-break presentation owns one hundred frames', () => {
+  const action = actionForOutcome('normal').action
+  let knockback = createNativeStaffContactKnockback(
+    2,
+    action,
+    'enemy:1',
+    { x: 0, y: -6 },
+  )
+  const displacements = []
+  for (let tick = 0; tick < 5; tick += 1) {
+    const stepped = stepNativeStaffContactKnockback(knockback, true)
+    displacements.push(stepped.displacement)
+    knockback = stepped.actor!
+    if (tick < 4) assert.ok(knockback)
+    else assert.equal(stepped.actor, null)
+  }
+  assert.deepEqual(displacements, Array(5).fill({ x: 0, y: -6 }))
+
+  let pike = createNativeStaffPikeBreakVfx(
+    3,
+    action,
+    { collisionRadius: 10, id: 'enemy:1', position: { x: 4, y: 5 } },
+    createNativeRng(9),
+    30,
+  )
+  for (let tick = 1; tick < 100; tick += 1) {
+    pike = stepNativeStaffPikeBreakVfx(pike)!
+    assert.ok(pike, `Pike-break retired before native frame ${tick}`)
+  }
+  assert.equal(stepNativeStaffPikeBreakVfx(pike), null)
 })
 
 test('normal, critical, and Whirl contacts use their exact shapes and strict boundaries', () => {

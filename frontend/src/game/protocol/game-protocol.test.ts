@@ -18,7 +18,12 @@ import {
 } from '../core-kernels/primary-spell-fire-native.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { nativeInitialGolemArticulation } from '../core-kernels/native-secondary-golem.ts'
-import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import {
+  createNativeSecondaryPlayerState,
+  createNativeSecondarySimulation,
+  triggerNativePlayerMindblast,
+} from '../core-kernels/native-secondary-abilities.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
 import type { BoneyardEnemySemanticEvent } from '../core-server/boneyard-enemy-store.ts'
 import { spawnBoneyardLootSpecs } from '../core-server/boneyard-loot-store.ts'
 import {
@@ -1798,10 +1803,12 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   }, {
     ageTicks: 3,
     id: 3,
+    impactSoundPitches: [1],
     kind: 'player-staff-contact',
     origin: { x: 800, y: 380 },
     outcome: 'critical-hit',
     ownerId: 'player-1',
+    pikeBreakSoundIndexes: [0],
     procSound: 'critical-hit',
     procSoundPitches: [1.03],
     swooshPitch: 1.07,
@@ -1857,6 +1864,25 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     rotationDegrees: 270,
     scale: 3,
     tint: 0xa0c3c3,
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 2,
+    delta: { x: 6, y: 0 },
+    id: 8,
+    kind: 'player-staff-contact-knockback',
+    ownerId: 'player-1',
+    remainingTicks: 3,
+    targetId: 'enemy:1',
+    worldKey: 'hub:courtyard',
+  }, {
+    ageTicks: 5,
+    headingDegrees: 180,
+    id: 9,
+    kind: 'player-staff-pike-break',
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    presentationRng: createNativeRng(5),
+    targetId: 'enemy:1',
     worldKey: 'hub:courtyard',
   }] as const
 
@@ -1928,7 +1954,7 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
   }), /midpoint/)
   const decodedStaff = decodeFrame({
     ...frame,
-    primarySpells: { nextId: 8, projectiles: [], transients: staffTransients },
+    primarySpells: { nextId: 10, projectiles: [], transients: staffTransients },
   })
   assert.equal(decodedStaff.type, 'server-snapshot')
   assert.deepEqual(decodedStaff.frame.primarySpells.transients, staffTransients)
@@ -2391,6 +2417,24 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   assert.equal(decoded.type, 'server-snapshot')
   assert.deepEqual(decoded.frame.secondaryAbilities.events, [event])
 
+  const externalFeedback = JSON.parse(JSON.stringify(message))
+  Object.assign(externalFeedback.frame.secondaryAbilities.events[0], {
+    cue: null,
+    kind: 'impact',
+    skillId: null,
+  })
+  externalFeedback.frame.secondaryAbilities.events[0].screenFlash.pointAttenuated = false
+  const externalDecoded = decodeServerGameMessage(JSON.stringify(externalFeedback))
+  assert.equal(externalDecoded.type, 'server-snapshot')
+  assert.equal(externalDecoded.frame.secondaryAbilities.events[0]!.skillId, null)
+
+  const invalidExternal = JSON.parse(JSON.stringify(externalFeedback))
+  invalidExternal.frame.secondaryAbilities.events[0].cue = 'teleport'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidExternal)),
+    /null skillId is reserved for player-effect feedback/,
+  )
+
   const missing = JSON.parse(JSON.stringify(message))
   delete missing.frame.secondaryAbilities.events[0].screenFlash
   assert.throws(
@@ -2640,6 +2684,66 @@ test('protocol preserves Earthquake pointer-list order while retaining unique-ta
   assert.throws(
     () => decodeServerGameMessage(JSON.stringify(sortedOwner)),
     /only Earthquake preserves pointer-list order/,
+  )
+})
+
+test('protocol strictly reserves nullable skill ownership for the two Mindblast actors', () => {
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  const frame = createGameSnapshotFrame(snapshot, 0, undefined, true)
+  const mindblast = triggerNativePlayerMindblast(createNativeSecondarySimulation(9), {
+    element: 'ether',
+    level: 3,
+    lightRegistration: ACTOR_LIGHT_REGISTRATION,
+    ownerId: 'player-1',
+    position: { x: 800, y: 400 },
+    worldKey: 'hub:courtyard',
+  }).state
+  const message = {
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: {
+      ...frame,
+      secondaryAbilities: {
+        ...frame.secondaryAbilities,
+        actors: mindblast.actors,
+        nextActorId: mindblast.nextActorId,
+      },
+    },
+    sequence: 2,
+  }
+  const decoded = decodeServerGameMessage(JSON.stringify(message))
+  assert.equal(decoded.type, 'server-snapshot')
+  assert.deepEqual(decoded.frame.secondaryAbilities.actors, mindblast.actors)
+
+  const ownedMindblast = JSON.parse(JSON.stringify(message))
+  ownedMindblast.frame.secondaryAbilities.actors[0]!.skillId = 11
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(ownedMindblast)),
+    /skillId must be null exactly for Mindblast actors/,
+  )
+
+  const nullOrdinary = JSON.parse(JSON.stringify(message))
+  nullOrdinary.frame.secondaryAbilities.actors[0]!.kind = 'phase-burst'
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(nullOrdinary)),
+    /skillId must be null exactly for Mindblast actors/,
+  )
+
+  const missingRng = JSON.parse(JSON.stringify(message))
+  missingRng.frame.secondaryAbilities.actors[0]!.presentationRng = null
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingRng)),
+    /native Mindblast burst contract/,
+  )
+
+  const wrongGrowth = JSON.parse(JSON.stringify(message))
+  wrongGrowth.frame.secondaryAbilities.actors[1]!.quantity = 6
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(wrongGrowth)),
+    /native Mindblast Shockwave contract/,
   )
 })
 

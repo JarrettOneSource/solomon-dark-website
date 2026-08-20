@@ -141,6 +141,23 @@ export class PrimarySpellAudioSynchronizer {
           })
         }
       }
+      const previousMindblastBursts = new Set(this.previous.secondaryAbilities.actors
+        .filter(({ kind }) => kind === 'mindblast-burst')
+        .map(({ id, worldKey }) => `${worldKey}\u0000${id}`))
+      for (const actor of snapshot.secondaryAbilities.actors) {
+        if (
+          actor.kind !== 'mindblast-burst'
+          || actor.worldKey !== listenerWorldKey
+          || previousMindblastBursts.has(`${actor.worldKey}\u0000${actor.id}`)
+        ) continue
+        const volume = hubAudioAttenuation(Math.hypot(
+          actor.position.x - listener.position.x,
+          actor.position.y - listener.position.y,
+        ))
+        this.audio.playSound('magic-shield-explode', { playbackRate: 1, volume })
+        this.audio.playSound('big-fire', { playbackRate: 1, volume })
+        this.audio.playSound('big-fire', { playbackRate: 0.8, volume })
+      }
       const previousEtherImpacts = new Set(this.previous.primarySpells.transients
         .filter((effect) => effect.kind === 'ether-impact')
         .map((effect) => effect.id))
@@ -175,6 +192,16 @@ export class PrimarySpellAudioSynchronizer {
           playbackRate: effect.swooshPitch,
           volume,
         })
+        const pikeBreakIndexes = new Set(effect.pikeBreakSoundIndexes)
+        for (let index = 0; index < effect.impactSoundPitches.length; index += 1) {
+          this.audio.playSound('staff-hit-wood', {
+            playbackRate: effect.impactSoundPitches[index],
+            volume,
+          })
+          if (pikeBreakIndexes.has(index)) {
+            this.audio.playStream('pike-break', { playbackRate: 1, volume })
+          }
+        }
         if (effect.procSound === null) continue
         for (const playbackRate of effect.procSoundPitches) {
           this.audio.playSound(effect.procSound, { playbackRate, volume })

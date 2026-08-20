@@ -17096,8 +17096,9 @@ that transition.
 2. `0x005C88B0 -> 0x00528A20` writes float `180.0` to PlayerActor `+0x168`
    and requests sound-registry member `+0x908`, entry 52
    `sounds\levelup`, once at scalar `1.0` (`0x00528A3E`). Its only optional
-   sibling, `0x0052A220`, is gated by progression flags `+0x878 & 0x400` and
-   remains an actor-associated bonus-light branch.
+   sibling, `0x0052A220`, is gated by equipment feature bits
+   `+0x878 & 0x400` and owns the complete Mindblowing Ring burst documented in
+   the equipment section below.
 3. Player tick `0x00533520` enters while `+0x168 > 0`, subtracts one, and, when
    the actor is visible, creates one `Anim_Sparkle` (`0x00453980`) from exact
    BadGuys record 73. Starting from 180, this produces 180 births over 180
@@ -17154,7 +17155,7 @@ level-transition attribution.
 | Non-local/bot progression | levels without local screen/effect | no browser-local presentation for an entity that does not own the client's offer |
 | Shared multiplayer milestone | each cohort member owns a private offer; world barrier remains host-authored | each eligible local participant presents its barrier once; waiting and late-join observers do not replay it |
 | Story authored LEVEL UP trigger type 13 | only Story 0 UIDs 57029/57098; action 1090 changes XP accumulation to 25/30 | separate authored-timeline backlog; never substitute those rows for presentation |
-| Progression flag `+0x878 & 0x400` | optional `0x0052A220` associated-object light branch | fail closed until the corresponding skill/flag producer is implemented |
+| Equipment feature `+0x878 & 0x400` | optional `0x0052A220` Mindblowing Ring burst | exact-ported as source-player level damage, retained VFX/audio, Shockwave Dazzle/push, and actor-manager light |
 
 The six shipped `.boneyard` scripts were decoded completely for the trigger
 sweep. Tutorial, Survival, Story 1, Sandbox, Play, and New Boneyard 1 contain
@@ -20617,6 +20618,35 @@ identity.
   targets receive `min(total,2*total/count)` while Whirl applies full total to
   each target.
 
+The same callback then performs a distinct physical-contact pass over the
+player's stored contact list. It preserves list order and requires the same
+strict below-50-degree heading gate. After the rank-zero damage-candidate
+`Integer(candidateCount)` draw, when present, each physical contact consumes
+`Float(1)` and writes target `+0x22C = -(1+draw)`; the recovered live consumer
+is Imp vertical velocity. It then consumes signed `Float(.1)` and plays
+registry offset `0xEB4`, `sounds\\staffhitwood`, at pitch `1+draw` and point
+gain. Ether alone consumes another `Float(200)`, succeeding only when the draw
+is nonzero and no greater than progression `+0xC8` (the secondary Staff damage
+accumulator). Success attaches `Mod_Knockback 0x1B6D` with normalized
+away-from-player displacement six for five collision-aware ticks.
+
+If that successful Ether contact is a Skeleton whose live weapon selector is
+five, `0x00484EA0` clears the selector and `0x00484B30` rebuilds its action
+program as unarmed while retaining already-derived damage stats. It plays
+`sounds\\pikebreak__stream` at registry offset `0x13E4`, emits one additive
+perspective BadGuys 15 flash 75 units along the Skeleton heading at scale
+three/alpha one/loss `.025`, and writes a white full-screen Region flash at
+alpha one/loss `.1`. The Region flash is not a world light. Seven world-owned
+BadGuys 55 `Anim_Bouncer` children consume one initial `Float(360)` plus seven
+words apiece: constructor `Float(3),Float(20),Float(360),Float(10)`, radial
+`Float(10)`, then signed `Float(10)` for the next angle. This is exactly 50
+presentation RNG words. Each child is linked and ticked once immediately,
+uses alpha timer `2*.75 = 1.5` with `.015` loss, normalized radial velocity
+`(1.5x,1y)`, X-only two-velocity spawn lead, native gravity/bounce progress,
+`.65` bounce and optional horizontal damping, and the generic conditional
+bounce-audio draws. It draws BadGuys 55 once with no invented shadow, scale,
+tint, or light and retires after its hundredth visible reconstructed state.
+
 Knockback, Critical, and Whirl create native type `0x7E9`. Their respective
 queries are 80-degree/radius-100/push-150, 60-degree/radius-100/push-50, and
 full-circle/radius-100/push-50. The retained actor moves its construction-time
@@ -20641,7 +20671,10 @@ The Website owns these as server-stepped transients sharing the existing
 primary actor allocator and combat RNG, target-owned persistent Disable
 factors, collision-resolved Knockback requests, strict protocol variants,
 state interpolation, exact ten-pose Clothes attachment banks, pure VFX plans,
-and semantic audio contacts. Non-rendered action/contact/Knockback actors never
+and semantic audio contacts. The physical-contact pass additionally owns Imp
+vertical impulse, Ether's five-tick contact Knockback, Skeleton disarm/action
+rebuild, replay-safe wood/Pike audio, the Region flash, and the exact retained
+Pike debris presentation. Non-rendered action/contact/Knockback actors never
 gain a placeholder sprite. Focused coverage pins RNG word counts, strict
 geometry boundaries, target ordering, damage distribution, lethal-contact
 Knockback ordering, persistent factors, actor lifetimes, all VFX records and
@@ -20713,10 +20746,78 @@ recipe table; recipe-less random gear never completes a set.
 Current consumers are closed for effective ranks, primary/secondary damage and
 cost, cast speed, recharge, max resources, recovery, movement, Staff melee,
 Orb Pull, all three resistances, and the five shipped maximum-set branches.
-Still-open adjacent consumers are equipment Gold Bonus, HP recovery during
-Regenerate composition, Mindblast's retained world program, and Welding
-feature/scalar consumption. They stay explicit here rather than being mistaken
-for completed because the pure resolver exists.
+Mindblast's retained world program is now also closed. Still-open adjacent
+consumers are equipment Gold Bonus, HP recovery during Regenerate composition,
+and Welding feature/scalar consumption. They stay explicit here rather than
+being mistaken for completed because the pure resolver exists.
+
+### Mindblowing Ring level-up event
+
+`0x005C88B0` runs the ordinary 180-tick PlayerActor level-up effect first, then
+tests equipment feature `FX_MINDBLAST = 0x400` and calls
+`0x0052A220 -> 0x00645B50`. The call passes the player element in both element
+slots, current position, exact float32 scale nine, current level, and the cyan
+color vector. The factory requests `magicshieldexplode` at pitch one, then
+`bigfire` at pitches one and `.8`, all at native point gain and in that order.
+
+The complete retained presentation is:
+
+- one normal BadGuys 15 fade at `(x,y-25)`, scale `9*6=54`, alpha one,
+  loss `.025`;
+- three cyan Clothes record 2 `Anim_FadeScale` rings at `(x,y-35)`, initial
+  scale `4.5`, alpha `1.5`, loss `.025`, and independent scale multipliers
+  `1.1`, `1.05`, and `1.025`;
+- two additive BadGuys 158..167 sprite arrays at the origin, scale ten, with
+  `Float(360)` rotations and frame steps `.075/.1125`;
+- exactly 100 cyan FuzzySpears. Each consumes `Float(360)` heading,
+  `Float(2)+3` speed, `Integer(5)` with result two doubling speed,
+  `Float(1)+1` alpha, and `Float(1.5)+2` scale. It begins 75 units along the
+  heading, multiplies velocity by `.95`, and loses `.00875` alpha per tick.
+
+Construction therefore consumes exactly `2 + 100*5 = 502` active RNG words.
+The native FuzzySpear draw also consumes globally interleaved per-frame signed
+presentation jitter. The web preserves that visible signed lane through a
+stable event/age hash rather than stealing words from combat RNG; constructor
+identity, distributions, motion, alpha, and all 502 authoritative words remain
+exact. Clothes record 2 is extracted as the exact 81x81 retail crop and pinned
+at SHA-256
+`9312387b1ba6a8eba523eaf955504c564f39aec89e1d67fbfd10e358991a627e`.
+None of the burst children submits a world light.
+
+The direct-damage branch is narrower than the earlier ledger claimed:
+`0x00646345` requires the first element parameter to equal zero, and the stock
+element catalog maps zero to Ether. Only an Ether bearer queries flag-2
+targets at strict native radius `9*55 = 495` and applies `level*.5`; Fire, Air,
+Water, and Earth still receive the complete audio/VFX/Shockwave without direct
+damage. The web uses stable target order and the common strict circle rule
+`distanceSquared < 495^2 + targetRadius^2`, routes damage through the ordinary
+enemy shield/death/event authority, and retains its damage cues.
+
+Every element also spawns Shockwave `0x7E7`: radius 75, growth eight per tick,
+life `.35` with `.01` loss, fade below `.0375` by multiplying alpha `.9`, and
+no damage. On each tenth post-birth age it admits each flag-2 target once and
+installs 400-tick Dazzle. On every even age thereafter it collision-resolves a
+normalized outward push of `alpha*8` for the retained target set. Provider
+`0x005E7AA0` publishes one actor-manager Region light at wave position,
+intensity alpha, radius `waveRadius/140`, and no directional shadow.
+
+The multiplayer adaptation follows the already-authoritative level-up owner:
+shared progression/offer state may advance the cohort, but only the credited
+source player whose PlayerActor presentation was armed emits Mindblast. The
+reward path consumes the 502 RNG words at the level event, registers the light
+in native actor order, applies immediate Ether damage, and withholds the two
+new actors from that tick's actor step so the first replicated state is age
+zero. Public host-authored XP uses the same path. Strict protocol reserves
+nullable skill ownership exactly for the burst and wave actors; audio is keyed
+to burst identity and baselines live snapshots without replay.
+
+Focused coverage pins the source-only multiplayer edge, reward-order RNG,
+age-zero births, Ether-only strict boundary damage, target damage events,
+Shockwave one-contact Dazzle and normalized eight-unit push recurrence,
+provider light, 502-word construction, every visible layer and lifetime,
+Clothes asset hash, strict actor protocol, interpolation/copy, and three-cue
+audio ordering/no-replay. Browser/Mac receipt remains part of the final
+all-skills gate.
 
 ### Corrected Deflect authority
 
@@ -20742,8 +20843,8 @@ simulation/protocol/presentation/audio set passed `174/174`, the complete
 Boneyard command passed `996/996`, TypeScript and lint/import boundaries were
 green, and the production frontend/game-host build plus bundle-budget gate
 passed. Browser Staff/Deflect/cast-speed/equipment journeys, Mac mini, and
-publication receipts remain deliberately pending until Telekinesis, Mindblast,
-Skill Book, and Welding close.
+publication receipts remain deliberately pending until Skill Book, Welding,
+the residual per-skill audit, and the final Mac/browser gate close.
 
 ## 2026-08-20 — Solomon Dig state-0 digging audio emitter
 
@@ -20904,7 +21005,7 @@ given variant's PCM finishes before that variant can recur.
 - `core-kernels/boneyard-encounter.ts` now owns the exact float32 cursor
   perturbation/slowdown, native 55-word RNG draw order, strict shovel/dirt
   gates, wrap rearming, bounded monotonic cue history, and contact cutoff. The
-  former uniform five-tick approximation is gone. Protocol 31 carries the
+  former uniform five-tick approximation is gone. Protocol 32 carries the
   bounded cue rows through snapshots and interpolation without replaying
   hydration or a new run.
 - `game-audio-native.ts`, `game-audio-assets.ts`, and `BoneyardScene.tsx` own

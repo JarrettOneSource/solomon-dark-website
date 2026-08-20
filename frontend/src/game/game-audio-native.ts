@@ -87,6 +87,7 @@ export type GameSoundCue =
   | 'skeleton-die'
   | 'spin-attack'
   | 'staff-swoosh'
+  | 'staff-hit-wood'
   | 'start-boulder'
   | 'stone-break'
   | 'stone-step'
@@ -114,6 +115,7 @@ export type SecondaryStreamCue =
   | 'mindstar'
   | 'planewalker-off'
   | 'planewalker-on'
+  | 'pike-break'
   | 'prismatic-shock'
   | 'quake-crack-small'
   | 'quake-cracks'
@@ -467,6 +469,11 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\staffswoosh',
     sourceSha256: '04da914c919485d68cd49752a0726649cc5395bb47febcfcabee4765d71f2809',
   },
+  'staff-hit-wood': {
+    registryOffset: 0xeb4,
+    sourceName: 'sounds\\staffhitwood',
+    sourceSha256: '0e682ef1ba77ba08cd3b52c5a98eefe0fcb31797275a07fdce6a03abfa484b50',
+  },
   'start-boulder': {
     registryOffset: 0xf0c,
     sourceName: 'sounds\\startboulder',
@@ -771,6 +778,11 @@ export const NATIVE_STREAM_MANIFEST = {
     registryOffset: 0x13d4,
     sourceName: 'sounds\\mindstar__stream',
     sourceSha256: '8a4310894e1401f9d47e58ae4f9202aec1e1eb0f6dd34db6987e6e3e753b5de8',
+  },
+  'pike-break': {
+    registryOffset: 0x13e4,
+    sourceName: 'sounds\\pikebreak__stream',
+    sourceSha256: '7095f48810f60a759aef5f584d5eb52b7a0c82030b27abb1af782a9281441e82',
   },
   'planewalker-off': {
     registryOffset: 0x13ec,

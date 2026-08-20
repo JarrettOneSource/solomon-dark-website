@@ -553,7 +553,11 @@ export function nativeSecondaryProviderLightSource(
       radius: 0.5,
     }
   }
-  if (actor.kind === 'shockwave' || actor.kind === 'freeze-wave') {
+  if (
+    actor.kind === 'shockwave'
+    || actor.kind === 'mindblast-shockwave'
+    || actor.kind === 'freeze-wave'
+  ) {
     return {
       castsDirectionalShadow: false,
       intensity: actor.alpha,

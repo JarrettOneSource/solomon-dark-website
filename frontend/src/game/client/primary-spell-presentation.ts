@@ -1,4 +1,5 @@
 import { nativeFireParticleLifetimeTicks } from '../core-kernels/primary-spell-fire-native.ts'
+import type { NativeRngState } from '../core-kernels/native-rng.ts'
 import { waterFrostJetLifetimeTicks } from '../core-kernels/primary-spell-water.ts'
 import {
   PRIMARY_SPELL_AIR_LIFETIME_TICKS,
@@ -175,12 +176,14 @@ function fixedTransientTiming(
     }
     case 'earth-called-rock': return null
     case 'player-staff-contact':
+    case 'player-staff-contact-knockback':
     case 'player-staff-knockback':
     case 'player-staff-melee':
     case 'player-staff-move-fade':
     case 'player-staff-perspective-fade':
     case 'player-staff-smoke':
-    case 'player-staff-spin': return null
+    case 'player-staff-spin':
+    case 'player-staff-pike-break': return null
     case 'earth-impact': return {
       ageZeroTick: effect.birthTick,
       firstVisibleAge: 0,
@@ -240,9 +243,23 @@ function interpolateTransient(
     return {
       ...event,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      impactSoundPitches: [...event.impactSoundPitches],
       origin: lerpVector(older.origin, newer.origin, blend),
+      pikeBreakSoundIndexes: [...event.pikeBreakSoundIndexes],
       procSoundPitches: [...event.procSoundPitches],
       targetIds: [...event.targetIds],
+    }
+  }
+  if (
+    older.kind === 'player-staff-pike-break'
+    && newer.kind === 'player-staff-pike-break'
+  ) {
+    const effect = blend < 1 ? older : newer
+    return {
+      ...effect,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      position: { ...effect.position },
+      presentationRng: copyNativeRng(effect.presentationRng),
     }
   }
   if (older.kind === 'player-staff-knockback' && newer.kind === 'player-staff-knockback') {
@@ -427,9 +444,21 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   if (effect.kind === 'player-staff-contact') {
     return {
       ...effect,
+      impactSoundPitches: [...effect.impactSoundPitches],
       origin: { ...effect.origin },
+      pikeBreakSoundIndexes: [...effect.pikeBreakSoundIndexes],
       procSoundPitches: [...effect.procSoundPitches],
       targetIds: [...effect.targetIds],
+    }
+  }
+  if (effect.kind === 'player-staff-contact-knockback') {
+    return { ...effect, delta: { ...effect.delta } }
+  }
+  if (effect.kind === 'player-staff-pike-break') {
+    return {
+      ...effect,
+      position: { ...effect.position },
+      presentationRng: copyNativeRng(effect.presentationRng),
     }
   }
   if (effect.kind === 'player-staff-knockback') {
@@ -489,6 +518,10 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     lightRegistration: null,
     origin: { ...effect.origin },
   }
+}
+
+function copyNativeRng(source: NativeRngState) {
+  return { ...source, words: [...source.words] }
 }
 
 function lerp(first: number, second: number, blend: number): number {

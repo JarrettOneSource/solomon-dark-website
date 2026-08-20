@@ -1437,12 +1437,14 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'fire': return nativeFireParticleLifetimeTicks(effect.id)
     case 'fire-impact': return PRIMARY_SPELL_FIRE_IMPACT_LIFETIME_TICKS
     case 'player-staff-contact':
+    case 'player-staff-contact-knockback':
     case 'player-staff-knockback':
     case 'player-staff-melee':
     case 'player-staff-move-fade':
     case 'player-staff-perspective-fade':
     case 'player-staff-smoke':
-    case 'player-staff-spin': throw new Error('Staff transient lifetime is system owned')
+    case 'player-staff-spin':
+    case 'player-staff-pike-break': throw new Error('Staff transient lifetime is system owned')
     case 'water': return waterFrostJetLifetimeTicks(effect.id)
   }
 }

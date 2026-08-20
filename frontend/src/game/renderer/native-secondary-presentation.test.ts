@@ -44,7 +44,8 @@ const KINDS: readonly NativeSecondaryActorKind[] = [
   'golem', 'golem-death', 'teleport-burst', 'magic-circle',
   'magic-circle-player-flash', 'magic-trap', 'magic-trap-shimmer',
   'magic-trap-burst', 'electric-burn', 'dampen-wave', 'shield-break',
-  'shield-explosion', 'acid-rain', 'acid-drop', 'ring-fire-explosion',
+  'shield-explosion', 'acid-rain', 'acid-drop', 'mindblast-burst',
+  'mindblast-shockwave', 'ring-fire-explosion',
   'ring-fire-fragment', 'acid-splash', 'ether-drain',
   'ether-drain-cloud', 'ether-drain-debris', 'ether-drain-capture-flare', 'comet',
   'comet-trail', 'comet-impact', 'comet-debris', 'turn-undead',
@@ -88,14 +89,23 @@ function actor(kind: NativeSecondaryActorKind): NativeSecondaryActorState {
     presentationRng: kind === 'dampen-wave' || kind === 'golem-death' || kind === 'freeze-wave-visual'
       || kind === 'storm-cloud' || kind === 'prismatic-wave' || kind === 'magic-circle'
       || kind === 'shield-explosion' || kind === 'magic-trap-burst'
+      || kind === 'mindblast-burst'
       ? createNativeRng(711)
       : null,
-    quantity: 1,
+    quantity: kind === 'mindblast-shockwave' ? 8 : 1,
     radius: 400,
     rank: 1,
     rotationRadians: 0,
     scale: 1,
-    skillId: kind.startsWith('acid-') ? 72 : kind.startsWith('comet') ? 76 : kind.startsWith('golem') ? 45 : 11,
+    skillId: kind.startsWith('mindblast-')
+      ? null
+      : kind.startsWith('acid-')
+        ? 72
+        : kind.startsWith('comet')
+          ? 76
+          : kind.startsWith('golem')
+            ? 45
+            : 11,
     slowFactor: 0.5,
     targetId: null,
     variant: 0,
@@ -133,7 +143,7 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
     assert.equal(plan.root.x, 100, kind)
     assert.ok(['ordinary-dynamic', 'zanim'].includes(plan.queueFamily), kind)
     if (![
-      'shockwave', 'fire-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
+      'shockwave', 'mindblast-shockwave', 'fire-burn', 'electric-burn', 'storm-cloud', 'storm-strike', 'freeze-wave', 'ice-blast',
       'earthquake-scenery-wobble',
     ].includes(kind)) {
       assert.ok(plan.draws.length > 0, `${kind} unexpectedly became invisible`)
@@ -143,7 +153,7 @@ test('every authoritative secondary actor kind has an explicit stock presentatio
 
 test('the complete secondary light census stays split between providers and MiscLight writers', () => {
   const actorProviders = new Set<NativeSecondaryActorKind>([
-    'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'fire-patch',
+    'leviathan', 'ether-bolt', 'moving-fire', 'shockwave', 'mindblast-shockwave', 'fire-patch',
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
     'ether-drain', 'comet', 'ring-fire-explosion', 'ring-fire-fragment',
   ])
@@ -795,6 +805,115 @@ test('Explosive Shield replays the exact four-layer burst and one hundred FuzzyS
     ageTicks: 67,
     presentationRng: initial,
   }).draws, [])
+})
+
+test('Mindblowing Ring replays its exact core, three Clothes rings, arrays, and cyan FuzzySpears', () => {
+  const initial = createNativeRng(0x52a220)
+  const bornActor = {
+    ...actor('mindblast-burst'),
+    ageTicks: 0,
+    presentationRng: initial,
+    rank: 12,
+    scale: 9,
+    skillId: null,
+    variant: 0,
+  }
+  const born = nativeSecondaryPresentationPlan(bornActor).draws
+  assert.equal(born.length, 206)
+  assert.deepEqual(born.slice(0, 6).map((operation) => ({
+    alpha: operation.alpha,
+    atlas: operation.atlas,
+    blend: operation.blend,
+    entry: operation.entry,
+    offset: operation.offset,
+    role: operation.role,
+    scaleX: operation.scaleX,
+    scaleY: operation.scaleY,
+    tint: operation.tint,
+  })), [{
+    alpha: 1,
+    atlas: 'BadGuys',
+    blend: 'normal',
+    entry: 15,
+    offset: { x: 0, y: -25 },
+    role: 'mindblast-center-flash',
+    scaleX: 54,
+    scaleY: 54,
+    tint: 0xffffff,
+  }, ...[1.1, 1.05, 1.025].map((_, index) => ({
+    alpha: 1,
+    atlas: 'Clothes' as const,
+    blend: 'normal' as const,
+    entry: 2,
+    offset: { x: 0, y: -35 },
+    role: `mindblast-expanding-ring-${index}`,
+    scaleX: 4.5,
+    scaleY: 4.5,
+    tint: 0x00ffff,
+  })), {
+    alpha: 1,
+    atlas: 'BadGuys',
+    blend: 'add',
+    entry: 158,
+    offset: { x: 0, y: 0 },
+    role: 'mindblast-sprite-array-0',
+    scaleX: 10,
+    scaleY: 10,
+    tint: 0xffffff,
+  }, {
+    alpha: 1,
+    atlas: 'BadGuys',
+    blend: 'add',
+    entry: 158,
+    offset: { x: 0, y: 0 },
+    role: 'mindblast-sprite-array-1',
+    scaleX: 10,
+    scaleY: 10,
+    tint: 0xffffff,
+  }])
+
+  const firstRotation = drawNativeFloat(initial, 360)
+  const secondRotation = drawNativeFloat(firstRotation.state, 360)
+  assert.equal(born[4]!.rotationRadians, firstRotation.value * Math.PI / 180)
+  assert.equal(born[5]!.rotationRadians, secondRotation.value * Math.PI / 180)
+  assert.deepEqual(born.slice(6, 8).map(({ atlas, blend, entry, role, tint }) => ({
+    atlas, blend, entry, role, tint,
+  })), [{
+    atlas: 'BadGuys', blend: 'add', entry: 17,
+    role: 'mindblast-fuzzy-spear-base-0', tint: 0x00ffff,
+  }, {
+    atlas: 'BadGuys', blend: 'add', entry: 74,
+    role: 'mindblast-fuzzy-spear-glow-0', tint: 0x00ffff,
+  }])
+
+  const stepped = nativeSecondaryPresentationPlan({ ...bornActor, ageTicks: 1 }).draws
+  assert.equal(
+    stepped.find(({ role }) => role === 'mindblast-expanding-ring-0')!.scaleX,
+    Math.fround(Math.fround(4.5) * Math.fround(1.1)),
+  )
+  assert.equal(
+    stepped.find(({ role }) => role === 'mindblast-expanding-ring-1')!.scaleX,
+    Math.fround(Math.fround(4.5) * Math.fround(1.05)),
+  )
+  assert.equal(
+    stepped.find(({ role }) => role === 'mindblast-expanding-ring-2')!.scaleX,
+    Math.fround(Math.fround(4.5) * Math.fround(1.025)),
+  )
+  assert.deepEqual(nativeSecondaryPresentationPlan({ ...bornActor, ageTicks: 230 }).draws, [])
+
+  const wave = {
+    ...actor('mindblast-shockwave'),
+    alpha: Math.fround(0.9),
+    lightRegistration: { managerLane: 'actor' as const, registrationOrdinal: 9 },
+    radius: 155,
+    skillId: null,
+  }
+  assert.deepEqual(nativeSecondaryProviderLightSource(wave), {
+    castsDirectionalShadow: false,
+    intensity: Math.fround(0.9),
+    position: wave.position,
+    radius: 155 / 140,
+  })
 })
 
 test('Magic Trap draws the armed stock body, selector shimmer, and full terminal FuzzySpear program', () => {

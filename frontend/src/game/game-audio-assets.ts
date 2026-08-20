@@ -60,6 +60,7 @@ import maggotsLoop from '../assets/game/audio/sfx/maggots-loop.wav'
 import mindstar from '../assets/game/audio/sfx/mindstar.wav'
 import nuke from '../assets/game/audio/sfx/nuke.wav'
 import phase from '../assets/game/audio/sfx/phase.wav'
+import pikeBreak from '../assets/game/audio/sfx/pike-break.wav'
 import planeCrossLoop from '../assets/game/audio/sfx/plane-cross-loop.wav'
 import planewalkerOff from '../assets/game/audio/sfx/planewalker-off.wav'
 import planewalkerOn from '../assets/game/audio/sfx/planewalker-on.wav'
@@ -92,6 +93,7 @@ import shovel2 from '../assets/game/audio/sfx/shovel-2.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
 import spinAttack from '../assets/game/audio/sfx/spin-attack.wav'
 import staffSwoosh from '../assets/game/audio/sfx/staff-swoosh.wav'
+import staffHitWood from '../assets/game/audio/sfx/staff-hit-wood.wav'
 import startCast from '../assets/game/audio/sfx/start-cast.wav'
 import step1 from '../assets/game/audio/sfx/step/step1.wav'
 import step2 from '../assets/game/audio/sfx/step/step2.wav'
@@ -206,6 +208,7 @@ export const GAME_AUDIO_SOURCES = {
     'skeleton-die': skeletonDie,
     'spin-attack': spinAttack,
     'staff-swoosh': staffSwoosh,
+    'staff-hit-wood': staffHitWood,
     'start-boulder': startBoulder,
     'stone-break': stoneBreak,
     'stone-step': stoneStep,
@@ -238,6 +241,7 @@ export const GAME_AUDIO_SOURCES = {
     mindstar,
     'planewalker-off': planewalkerOff,
     'planewalker-on': planewalkerOn,
+    'pike-break': pikeBreak,
     'prismatic-shock': prismaticShock,
     'quake-crack-small': quakeCrackSmall,
     'quake-cracks': quakeCracks,

@@ -15,6 +15,10 @@ import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-directo
 import { playerCollisionEnabled, playerDeathFrame } from '../core-kernels/player-combat.ts'
 import { PRIMARY_CAST_EMISSION_TICK } from '../core-kernels/primary-spells.ts'
 import {
+  createEquipmentInventoryItem,
+  DOWSING_EQUIPMENT_RECIPES,
+} from '../core-kernels/hub-economy.ts'
+import {
   NATIVE_PLAYER_LIGHT_OVERLAY_DECAY,
   NATIVE_PLAYER_STAFF_CONSTANT_OVERLAY,
 } from '../core-kernels/player-lighting.ts'
@@ -24,6 +28,7 @@ import {
   mergeNativeLightProviderOwners,
 } from '../core-kernels/native-light-provider-order.ts'
 import {
+  advanceNativeRngWords,
   createNativeRng,
   drawNativeFloat,
   drawNativeInteger,
@@ -72,6 +77,28 @@ function gameplayInput(x: number, y: number) {
     aim: null,
     cast: { primary: false, secondary: null },
     movement: { x, y },
+  }
+}
+
+function equipMindblowingRing(
+  state: GameSimulationState,
+  playerId: string,
+): GameSimulationState {
+  const recipe = DOWSING_EQUIPMENT_RECIPES.find(({ sourceIndex }) => sourceIndex === 38)
+  if (!recipe) throw new Error('Mindblowing Ring recipe is missing')
+  const economy = getPlayerEconomy(state, playerId)
+  const ring = createEquipmentInventoryItem(recipe, economy.nextItemId)
+  return {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
+      ...economy,
+      equipment: {
+        ...economy.equipment,
+        rings: [ring, economy.equipment.rings[1], economy.equipment.rings[2]],
+      },
+      nextItemId: economy.nextItemId + 1,
+      revision: economy.revision + 1,
+    }),
   }
 }
 
@@ -579,6 +606,136 @@ test('a shared level milestone freezes every gameplay clock until the fixed coho
   assert.equal(state.levelUpBarrier, null)
   state = stepGameSimulationTick(state, {})
   assert.equal(state.tick, frozenTick + 1)
+})
+
+test('Mindblowing Ring triggers only for the credited source and retains its unstepped birth actors', () => {
+  let state = createGameSimulation({
+    first: { discipline: 'arcane', displayName: 'First', element: 'ether' },
+    second: { discipline: 'mind', displayName: 'Second', element: 'fire' },
+  })
+  state = equipMindblowingRing(equipMindblowingRing(state, 'first'), 'second')
+  const rng = state.secondaryAbilities.rng
+  const actorLightOrdinal = state.lightProviderOrder.nextRegistrationOrdinal.actor
+  state = grantGameSimulationPlayerExperience(state, 'first', 91)
+  assert.equal(getPlayerProgression(state, 'first').level, 2)
+  assert.equal(getPlayerProgression(state, 'second').level, 2)
+  assert.deepEqual(state.secondaryAbilities.actors.map(({ ageTicks, kind, ownerId }) => ({
+    ageTicks, kind, ownerId,
+  })), [{
+    ageTicks: 0,
+    kind: 'mindblast-burst',
+    ownerId: 'first',
+  }, {
+    ageTicks: 0,
+    kind: 'mindblast-shockwave',
+    ownerId: 'first',
+  }])
+  assert.equal(state.secondaryAbilities.actors[0]!.presentationRng, rng)
+  assert.deepEqual(state.secondaryAbilities.rng, advanceNativeRngWords(rng, 502))
+  assert.equal(
+    state.lightProviderOrder.nextRegistrationOrdinal.actor,
+    actorLightOrdinal + 1,
+  )
+})
+
+test('Ether Mindblast applies strict radius-495 level damage before retaining Boneyard feedback', () => {
+  const loaded = combatBoneyard('mindblast-run')
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Mindblast Caster',
+    element: 'ether',
+  } }), loaded)
+  state = equipMindblowingRing(state, 'caster')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state, 'caster')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [1, 2].map((id) => ({
+      enemyToken: 'SKELETON' as const,
+      flags: [],
+      id,
+      locationPolicy: 'anywhere' as const,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: player.position,
+      spawnTick: 0,
+      waveOrdinal: id,
+    })),
+    tick: 0,
+  }).store
+  const radius = seeded.actors[0]!.config.collisionRadius
+  const strictBoundary = Math.sqrt(495 * 495 + radius * radius)
+  const enemies = {
+    ...seeded,
+    actors: seeded.actors.map((actor, index) => ({
+      ...actor,
+      currentHealth: 100,
+      nextMovementTick: Number.MAX_SAFE_INTEGER,
+      position: {
+        x: player.position.x + strictBoundary - (index === 0 ? 0.001 : 0),
+        y: player.position.y,
+      },
+    })),
+  }
+  state = { ...state, world: { ...state.world, enemies } }
+  state = grantGameSimulationPlayerExperience(state, 'caster', 91)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.equal(state.world.enemies.actors[0]!.currentHealth, 99)
+  assert.equal(state.world.enemies.actors[1]!.currentHealth, 100)
+  assert.ok(state.world.enemyEvents.some(({ type }) => type === 'enemy-damage-sound'))
+  assert.deepEqual(state.secondaryAbilities.actors.map(({ ageTicks, kind }) => ({
+    ageTicks, kind,
+  })), [{ ageTicks: 0, kind: 'mindblast-burst' }, {
+    ageTicks: 0,
+    kind: 'mindblast-shockwave',
+  }])
+})
+
+test('a death reward consumes Mindblast RNG in reward order without advancing its newborn actors', () => {
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'arcane',
+    displayName: 'Reward Caster',
+    element: 'ether',
+  } }), combatBoneyard('mindblast-reward-run'))
+  state = equipMindblowingRing(state, 'caster')
+  state = grantGameSimulationPlayerExperience(state, 'caster', 90)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const player = getPlayerCharacter(state, 'caster')
+  const seeded = stepBoneyardEnemyStore(state.world.enemies, {
+    firstProjectileWorldContact: () => null,
+    players: {},
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON,
+      position: { x: player.position.x + 200, y: player.position.y },
+      spawnTick: 0,
+      waveOrdinal: 1,
+    }],
+    tick: 0,
+  }).store
+  const killed = damageBoneyardEnemy(seeded, {
+    actorId: seeded.actors[0]!.id,
+    amount: 1_000,
+    sourcePlayerId: 'caster',
+    tick: state.tick,
+  })
+  state = {
+    ...state,
+    world: { ...state.world, enemies: killed.store, enemyEvents: killed.events },
+  }
+  state = stepGameSimulationTick(state, { caster: gameplayInput(0, 0) })
+  assert.equal(getPlayerProgression(state, 'caster').level, 2)
+  assert.deepEqual(state.secondaryAbilities.actors.map(({ ageTicks, kind }) => ({
+    ageTicks, kind,
+  })), [{ ageTicks: 0, kind: 'mindblast-burst' }, {
+    ageTicks: 0,
+    kind: 'mindblast-shockwave',
+  }])
 })
 
 test('shared picker cohort excludes late joiners and releases disconnected waiters', () => {

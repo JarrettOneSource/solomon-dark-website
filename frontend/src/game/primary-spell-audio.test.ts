@@ -103,7 +103,13 @@ function secondaryActor(
     rank: 1,
     rotationRadians: 0,
     scale: 1,
-    skillId: kind === 'acid-rain' ? 72 : kind === 'comet' ? 76 : 11,
+    skillId: kind.startsWith('mindblast-')
+      ? null
+      : kind === 'acid-rain'
+        ? 72
+        : kind === 'comet'
+          ? 76
+          : 11,
     slowFactor: 0,
     targetId: null,
     variant: 0,
@@ -380,18 +386,20 @@ test('plays each semantic Ether impact once with its native pitch interval', () 
   assert.equal(audio.soundOptions[0].volume! > 0, true)
 })
 
-test('plays each retained Staff contact once in native swoosh then proc order', () => {
+test('plays each retained Staff contact once in native swoosh, world-impact, then proc order', () => {
   const initial = simulation('air')
   const player = getPlayerCharacter(initial, PLAYER_ID)
   const contact = {
     ageTicks: 0,
     id: 1,
+    impactSoundPitches: [0.95],
     kind: 'player-staff-contact',
     origin: { x: player.position.x, y: player.position.y - 20 },
     outcome: 'whirl',
     ownerId: PLAYER_ID,
     procSound: 'spin-attack',
     procSoundPitches: [1, Math.fround(0.9), Math.fround(1.1)],
+    pikeBreakSoundIndexes: [0],
     swooshPitch: 1.1,
     targetIds: ['enemy:1'],
     worldKey: 'hub:courtyard',
@@ -411,15 +419,18 @@ test('plays each retained Staff contact once in native swoosh then proc order', 
   synchronizer.update(contacted)
   assert.deepEqual(audio.sounds, [
     'staff-swoosh',
+    'staff-hit-wood',
     'spin-attack',
     'spin-attack',
     'spin-attack',
   ])
   assert.deepEqual(
     audio.soundOptions.map(({ playbackRate }) => playbackRate),
-    [1.1, 1, Math.fround(0.9), Math.fround(1.1)],
+    [1.1, 0.95, 1, Math.fround(0.9), Math.fround(1.1)],
   )
   assert.ok(audio.soundOptions.every(({ volume }) => (volume ?? 0) > 0))
+  assert.deepEqual(audio.streams, ['pike-break'])
+  assert.deepEqual(audio.streamOptions, [{ playbackRate: 1, volume: 1 }])
 
   const reconnectAudio = new RecordingAudio()
   const reconnect = new PrimarySpellAudioSynchronizer(
@@ -429,6 +440,53 @@ test('plays each retained Staff contact once in native swoosh then proc order', 
   )
   reconnect.update(contacted)
   assert.deepEqual(reconnectAudio.sounds, [])
+  assert.deepEqual(reconnectAudio.streams, [])
+})
+
+test('plays Mindblast birth once in magic-shield then two-pitch big-fire order', () => {
+  const state = simulation('ether')
+  const initial = createGameSnapshot(state, PLAYER_ID)
+  const burst = {
+    ...secondaryActor('mindblast-burst', 17, PLAYER_ID, initial),
+    ageTicks: 0,
+    lifetimeTicks: 230,
+    presentationRng: state.secondaryAbilities.rng,
+    rank: 4,
+    scale: 9,
+    skillId: null,
+  }
+  const snapshot = createGameSnapshot({
+    ...state,
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      actors: [burst],
+      nextActorId: 18,
+    },
+  }, PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  synchronizer.update(snapshot)
+  synchronizer.update(snapshot)
+  assert.deepEqual(audio.sounds, [
+    'magic-shield-explode',
+    'big-fire',
+    'big-fire',
+  ])
+  assert.deepEqual(audio.soundOptions.map(({ playbackRate }) => playbackRate), [1, 1, 0.8])
+  assert.ok(audio.soundOptions.every(({ volume }) => volume === 1))
+
+  const hydratedAudio = new RecordingAudio()
+  const hydrated = new PrimarySpellAudioSynchronizer(
+    hydratedAudio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    snapshot,
+  )
+  hydrated.update(snapshot)
+  assert.deepEqual(hydratedAudio.sounds, [])
 })
 
 test('consumes Water start once and balances its held loop on release', () => {

@@ -7,13 +7,19 @@ import {
 import {
   NATIVE_STAFF_KNOCKBACK_DAZZLE_TICKS,
   createNativePlayerStaffAction,
+  createNativeStaffContactKnockback,
   createNativeStaffContactPresentation,
   createNativeStaffKnockback,
+  createNativeStaffPikeBreakVfx,
   isNativePlayerStaffTransient,
   nativeStaffAdmissionTarget,
   nativeStaffContactDamagePerTarget,
   nativeStaffDamageTargets,
   nativeStaffKnockbackTargets,
+  nativeStaffPhysicalContactTargets,
+  resolveNativeStaffPhysicalContacts,
+  stepNativeStaffContactKnockback,
+  stepNativeStaffPikeBreakVfx,
   stepNativePlayerStaffAction,
   stepNativePlayerStaffVfx,
   stepNativeStaffContactEvent,
@@ -33,6 +39,8 @@ import type {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   applyBoneyardStaffDisable,
+  applyBoneyardStaffImpactVerticalVelocity,
+  breakBoneyardSkeletonPike,
   damageBoneyardEnemy,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
@@ -78,6 +86,11 @@ export interface PlayerStaffCombatSystemResult {
     headingDegrees: number
   }>[]
   readonly playerEntities: PlayerEntityStore
+  readonly pikeBreakFeedback: readonly Readonly<{
+    ownerId: string
+    position: Readonly<Vector2>
+    worldKey: string
+  }>[]
   readonly players: Readonly<Record<string, PlayerCharacterState>>
   readonly rng: NativeRngState
   readonly spells: PrimarySpellSimulationState
@@ -85,6 +98,8 @@ export interface PlayerStaffCombatSystemResult {
 
 interface StaffCombatTarget extends NativeStaffTarget {
   readonly actorId: number
+  readonly headingDegrees: number
+  readonly pike: boolean
 }
 
 export function stepPlayerStaffCombatSystem(
@@ -101,6 +116,11 @@ export function stepPlayerStaffCombatSystem(
   const dazzleRequests: Array<{ durationTicks: number; targetId: number }> = []
   const headingPerturbations: Array<{ actorId: number; headingDegrees: number }> = []
   const events: BoneyardEnemySemanticEvent[] = []
+  const pikeBreakFeedback: Array<{
+    ownerId: string
+    position: Readonly<Vector2>
+    worldKey: string
+  }> = []
   const actingPlayerIds = new Set<string>()
   const existingActionOwners = new Set<string>()
 
@@ -111,6 +131,23 @@ export function stepPlayerStaffCombatSystem(
     }
     if (transient.kind === 'player-staff-contact') {
       const stepped = stepNativeStaffContactEvent(transient)
+      if (stepped !== null) retained.push(stepped)
+      continue
+    }
+    if (transient.kind === 'player-staff-contact-knockback') {
+      const targetId = parseEnemyTargetId(transient.targetId)
+      const targetExists = targetId !== null && staffCombatTargets(enemies).some((target) => (
+        target.actorId === targetId
+      ))
+      const stepped = stepNativeStaffContactKnockback(transient, targetExists)
+      if (targetId !== null && stepped.displacement !== null) {
+        displacements.push({ actorId: targetId, delta: stepped.displacement })
+      }
+      if (stepped.actor !== null) retained.push(stepped.actor)
+      continue
+    }
+    if (transient.kind === 'player-staff-pike-break') {
+      const stepped = stepNativeStaffPikeBreakVfx(transient)
       if (stepped !== null) retained.push(stepped)
       continue
     }
@@ -172,16 +209,77 @@ export function stepPlayerStaffCombatSystem(
       // lethal hit does not retroactively remove that actor from the same
       // callback's Knockback constructor/query.
       const preContactTargets = staffCombatTargets(enemies)
+      const selected = selectStaffContactTargets(
+        enemies,
+        playerEntities,
+        stepped.sample,
+        rng,
+      )
+      rng = selected.rng
+      const physicalTargets = nativeStaffPhysicalContactTargets({
+        collisionRadius: PLAYER_CHARACTER_RADIUS,
+        headingDegrees: stepped.sample.headingDegrees,
+        position: stepped.sample.origin,
+      }, preContactTargets)
+      const physical = resolveNativeStaffPhysicalContacts(
+        stepped.sample,
+        physicalTargets,
+        owner.config.element,
+        playerSkillDerivedStatsAt(playerEntities, transient.ownerId)?.staffDamageSecondary ?? 0,
+        rng,
+      )
+      rng = physical.rng
+      const impactSoundPitches: number[] = []
+      const pikeBreakSoundIndexes: number[] = []
+      for (const impact of physical.impacts) {
+        impactSoundPitches.push(impact.soundPitch)
+        const actorId = parseEnemyTargetId(impact.targetId)
+        if (actorId === null) continue
+        enemies = applyBoneyardStaffImpactVerticalVelocity(
+          enemies,
+          actorId,
+          impact.verticalVelocity,
+        )
+        if (impact.pikeBreakPresentationRng !== null) {
+          const target = preContactTargets.find((candidate) => candidate.actorId === actorId)
+          const broken = breakBoneyardSkeletonPike(enemies, actorId)
+          enemies = broken.store
+          if (broken.broke && target !== undefined) {
+            pikeBreakSoundIndexes.push(impactSoundPitches.length - 1)
+            pikeBreakFeedback.push(Object.freeze({
+              ownerId: stepped.sample.ownerId,
+              position: Object.freeze({ ...target.position }),
+              worldKey: stepped.sample.worldKey,
+            }))
+            spawned.push(createNativeStaffPikeBreakVfx(
+              nextId,
+              stepped.sample,
+              target,
+              impact.pikeBreakPresentationRng,
+              target.headingDegrees,
+            ))
+            nextId += 1
+          }
+        }
+        if (impact.contactKnockbackDelta !== null) {
+          spawned.push(createNativeStaffContactKnockback(
+            nextId,
+            stepped.sample,
+            impact.targetId,
+            impact.contactKnockbackDelta,
+          ))
+          nextId += 1
+        }
+      }
       const contact = applyStaffContact(
         enemies,
         playerEntities,
         stepped.sample,
+        selected.targets,
         context.tick,
-        rng,
       )
       enemies = contact.enemies
       events.push(...contact.events)
-      rng = contact.rng
 
       if (contact.targets.length > 0) {
         const knockbackTargets = nativeStaffKnockbackTargets(
@@ -208,6 +306,8 @@ export function stepPlayerStaffCombatSystem(
         meanTargetPosition(contact.targets, stepped.sample.origin),
         playerElementTint(owner.config.element),
         rng,
+        impactSoundPitches,
+        pikeBreakSoundIndexes,
       )
       rng = presentation.rng
       nextId = presentation.nextId
@@ -270,6 +370,7 @@ export function stepPlayerStaffCombatSystem(
     events: Object.freeze(events),
     headingPerturbations: Object.freeze(headingPerturbations),
     playerEntities,
+    pikeBreakFeedback: Object.freeze(pikeBreakFeedback),
     players,
     rng,
     spells: {
@@ -284,35 +385,21 @@ function applyStaffContact(
   source: BoneyardEnemyStore,
   playerEntities: PlayerEntityStore,
   action: NativePlayerStaffAction,
+  targets: readonly StaffCombatTarget[],
   tick: number,
-  sourceRng: NativeRngState,
 ): Readonly<{
   enemies: BoneyardEnemyStore
   events: readonly BoneyardEnemySemanticEvent[]
-  rng: NativeRngState
   targets: readonly StaffCombatTarget[]
 }> {
   const runtime = playerSkillRuntimeAt(playerEntities, action.ownerId)
   const derived = playerSkillDerivedStatsAt(playerEntities, action.ownerId)
   const progression = playerProgressionAt(playerEntities, action.ownerId)
-  const skillBook = playerSkillBookAt(playerEntities, action.ownerId)
-  if (runtime === null || derived === null || progression === null || skillBook === null) {
-    return { enemies: source, events: [], rng: sourceRng, targets: [] }
-  }
-  let rng = sourceRng
-  let targets = [...nativeStaffDamageTargets(action, staffCombatTargets(source))]
-  if (
-    action.outcome !== 'critical-hit'
-    && action.outcome !== 'whirl'
-    && (skillBook.effectiveRanks[65] ?? 0) === 0
-    && targets.length > 0
-  ) {
-    const selected = drawNativeInteger(rng, targets.length)
-    rng = selected.state
-    targets = [targets[selected.value]!]
+  if (runtime === null || derived === null || progression === null) {
+    return { enemies: source, events: [], targets: [] }
   }
   if (targets.length === 0) {
-    return { enemies: source, events: [], rng, targets: [] }
+    return { enemies: source, events: [], targets: [] }
   }
   const totalDamage = playerStaffDamage(runtime, derived, progression, action.outcome)
   const damage = nativeStaffContactDamagePerTarget(
@@ -341,9 +428,31 @@ function applyStaffContact(
   return Object.freeze({
     enemies,
     events: Object.freeze(events),
-    rng,
     targets: Object.freeze(acceptedTargets),
   })
+}
+
+function selectStaffContactTargets(
+  source: BoneyardEnemyStore,
+  playerEntities: PlayerEntityStore,
+  action: NativePlayerStaffAction,
+  sourceRng: NativeRngState,
+): Readonly<{ rng: NativeRngState; targets: readonly StaffCombatTarget[] }> {
+  const skillBook = playerSkillBookAt(playerEntities, action.ownerId)
+  if (skillBook === null) return { rng: sourceRng, targets: [] }
+  let rng = sourceRng
+  let targets = [...nativeStaffDamageTargets(action, staffCombatTargets(source))]
+  if (
+    action.outcome !== 'critical-hit'
+    && action.outcome !== 'whirl'
+    && (skillBook.effectiveRanks[65] ?? 0) === 0
+    && targets.length > 0
+  ) {
+    const selected = drawNativeInteger(rng, targets.length)
+    rng = selected.state
+    targets = [targets[selected.value]!]
+  }
+  return Object.freeze({ rng, targets: Object.freeze(targets) })
 }
 
 function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
@@ -353,7 +462,10 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
         ? [{
             actorId: actor.id,
             collisionRadius: actor.config.collisionRadius,
+            headingDegrees: actor.headingDeg,
             id: `enemy:${actor.id}`,
+            pike: actor.brain.family === 'skeleton'
+              && actor.config.flags.includes('FLAG_PIKE'),
             position: actor.position,
           }]
         : []
@@ -363,7 +475,9 @@ function staffCombatTargets(enemies: BoneyardEnemyStore): StaffCombatTarget[] {
         ? [{
             actorId: maggot.id,
             collisionRadius: maggot.collisionRadius,
+            headingDegrees: maggot.headingDeg,
             id: `enemy:${maggot.id}`,
+            pike: false,
             position: maggot.position,
           }]
         : []

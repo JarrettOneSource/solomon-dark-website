@@ -1546,6 +1546,7 @@ def main() -> int:
         raise ValueError(
             f"Clothes.bundle has {len(clothes_records)} records; expected 3724"
         )
+    save(crop(clothes, clothes_records[2]), output_dir, "player-mindblast-ring")
     for selector in range(6):
         save(
             build_player_staff_sheet(clothes, clothes_records, False, selector),

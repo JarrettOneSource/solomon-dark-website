@@ -17,21 +17,22 @@ test('the stock right-click atlas membership is complete and every row is regist
     const module = await server.ssrLoadModule('/src/game/renderer/native-secondary-assets.ts') as {
       NATIVE_SECONDARY_ASSET_SOURCES: readonly string[]
       NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES: Readonly<{ etherPlane: string }>
-      NATIVE_SECONDARY_SPRITE_MEMBERSHIP: Readonly<Record<'BadGuys' | 'DeadHawg' | 'Golem', readonly number[]>>
+      NATIVE_SECONDARY_SPRITE_MEMBERSHIP: Readonly<Record<'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', readonly number[]>>
       NATIVE_SECONDARY_SPRITE_RECORDS: readonly unknown[]
-      nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'DeadHawg' | 'Golem', entry: number): { source: string }
+      nativeSecondarySpriteRecord(atlas: 'BadGuys' | 'Clothes' | 'DeadHawg' | 'Golem', entry: number): { source: string }
     }
     const hubTextures = await server.ssrLoadModule('/src/game/renderer/hub-textures.ts') as {
       hubWorldAssetSources(): readonly string[]
     }
     const membership = module.NATIVE_SECONDARY_SPRITE_MEMBERSHIP
-    assert.deepEqual(membership.BadGuys.slice(0, 27), [
-      0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86,
+    assert.deepEqual(membership.BadGuys.slice(0, 28), [
+      0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86,
     ])
     assert.equal(membership.BadGuys.includes(343), true)
     assert.equal(membership.BadGuys.includes(400), true)
     assert.equal(membership.BadGuys.includes(2008), true)
-    for (const entry of [15, 40, 45, 88]) {
+    assert.deepEqual(membership.Clothes, [2])
+    for (const entry of [15, 40, 45, 55, 88]) {
       assert.equal(membership.BadGuys.includes(entry), true, `missing Staff VFX record ${entry}`)
       const record = module.nativeSecondarySpriteRecord('BadGuys', entry) as unknown as {
         anchorX: number
@@ -73,6 +74,15 @@ test('the stock right-click atlas membership is complete and every row is regist
     )
     assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 343).source.includes('0343.png'))
     assert.ok(module.nativeSecondarySpriteRecord('BadGuys', 22).source.includes('0022.png'))
+    assert.ok(module.nativeSecondarySpriteRecord('Clothes', 2).source.includes('player-mindblast-ring.png'))
+    const mindblastRing = await readFile(new URL(
+      '../../assets/game/player-mindblast-ring.png',
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(mindblastRing).digest('hex'),
+      '9312387b1ba6a8eba523eaf955504c564f39aec89e1d67fbfd10e358991a627e',
+    )
     assert.throws(() => module.nativeSecondarySpriteRecord('BadGuys', 1), /outside the closed membership/)
   } finally {
     await server.close()

@@ -2,8 +2,15 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-import type { NativePlayerStaffVfx } from '../core-kernels/native-player-staff-action.ts'
-import { nativePlayerStaffVfxRenderPlan } from './player-staff-vfx-presentation.ts'
+import type {
+  NativePlayerStaffPikeBreakVfx,
+  NativePlayerStaffVfx,
+} from '../core-kernels/native-player-staff-action.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import {
+  nativePlayerStaffPikeBreakDraws,
+  nativePlayerStaffVfxRenderPlan,
+} from './player-staff-vfx-presentation.ts'
 
 const common = {
   ageTicks: 0,
@@ -89,6 +96,47 @@ test('Staff proc VFX map every proven layer without inventing a light', () => {
   }])
 })
 
+test('Pike-break reconstructs one additive flash and seven native Bouncer sprites', () => {
+  const state: NativePlayerStaffPikeBreakVfx = {
+    ageTicks: 0,
+    headingDegrees: 0,
+    id: 7,
+    kind: 'player-staff-pike-break',
+    ownerId: 'caster',
+    position: { x: 10, y: 20 },
+    presentationRng: createNativeRng(19),
+    targetId: 'enemy:4',
+    worldKey: 'boneyard:test',
+  }
+  const birth = nativePlayerStaffPikeBreakDraws(state)
+  assert.equal(birth.length, 8)
+  assert.deepEqual(birth.map(({ entry }) => entry), [15, 55, 55, 55, 55, 55, 55, 55])
+  assert.deepEqual(birth[0], {
+    alpha: 1,
+    blendMode: 'add',
+    entry: 15,
+    offset: { x: 0, y: -75 },
+    role: 'pike-break-flash',
+    rotationRadians: 0,
+    scaleX: 3,
+    scaleY: 3,
+    tint: null,
+  })
+  for (const draw of birth.slice(1)) {
+    assert.equal(draw.alpha, 1)
+    assert.equal(draw.blendMode, 'normal')
+    assert.equal(draw.scaleX, 1)
+    assert.equal(draw.scaleY, 1)
+    assert.equal(draw.tint, null)
+  }
+
+  const afterFlash = nativePlayerStaffPikeBreakDraws({ ...state, ageTicks: 41 })
+  assert.equal(afterFlash.some(({ role }) => role === 'pike-break-flash'), false)
+  assert.equal(afterFlash.length, 7)
+  assert.ok(nativePlayerStaffPikeBreakDraws({ ...state, ageTicks: 99 })[0]!.alpha > 0)
+  assert.deepEqual(nativePlayerStaffPikeBreakDraws({ ...state, ageTicks: 100 }), [])
+})
+
 test('the shared spell view renders only Staff visual actors', () => {
   const source = readFileSync(
     new URL('./primary-spell-world-view.ts', import.meta.url),
@@ -97,7 +145,9 @@ test('the shared spell view renders only Staff visual actors', () => {
   assert.match(source, /state\.kind === 'player-staff-smoke'/)
   assert.match(source, /state\.kind === 'player-staff-move-fade'/)
   assert.match(source, /state\.kind === 'player-staff-perspective-fade'/)
+  assert.match(source, /state\.kind === 'player-staff-pike-break'/)
   assert.match(source, /new PlayerStaffVfxView\(state, this\.textures\)/)
+  assert.match(source, /new PlayerStaffPikeBreakView\(state, this\.textures\)/)
   for (const kind of [
     'player-staff-contact',
     'player-staff-knockback',

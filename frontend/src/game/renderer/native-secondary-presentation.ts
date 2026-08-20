@@ -486,7 +486,10 @@ export function nativeSecondaryPresentationPlan(
         scaleY: actor.scale,
       })])
     case 'shockwave':
+    case 'mindblast-shockwave':
       return plan([])
+    case 'mindblast-burst':
+      return plan(mindblastBurstDraws(actor, draw))
     case 'storm-cloud':
       return plan(
         [
@@ -2295,6 +2298,123 @@ function magicTrapBurstDraws(
     actor.presentationRng,
     'magic-trap',
   ))
+  return draws
+}
+
+function mindblastBurstDraws(
+  actor: NativeSecondaryActorState,
+  draw: (
+    atlas: NativeSecondaryAtlas,
+    entry: number,
+    options?: Partial<Omit<NativeSecondarySpriteDraw, 'atlas' | 'entry'>>,
+  ) => NativeSecondarySpriteDraw,
+): NativeSecondarySpriteDraw[] {
+  if (actor.presentationRng === null) {
+    throw new TypeError('Mindblast presentation requires its construction RNG state')
+  }
+  const age = Math.max(0, Math.trunc(actor.ageTicks))
+  const draws: NativeSecondarySpriteDraw[] = []
+  const coreAlpha = repeatedFloatDecay(1, Math.fround(0.025), age)
+  if (coreAlpha > 0) {
+    draws.push(draw('BadGuys', 15, {
+      alpha: Math.min(coreAlpha, 1),
+      offset: { x: 0, y: -25 },
+      role: 'mindblast-center-flash',
+      scaleX: 54,
+      scaleY: 54,
+    }))
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    const alpha = repeatedFloatDecay(1.5, Math.fround(0.025), age)
+    if (alpha <= 0) continue
+    const growth = [1.1, 1.05, 1.025][index]!
+    draws.push(draw('Clothes', 2, {
+      alpha: Math.min(alpha, 1),
+      offset: { x: 0, y: -35 },
+      role: `mindblast-expanding-ring-${index}`,
+      scaleX: repeatedFloatMultiply(4.5, growth, age),
+      scaleY: repeatedFloatMultiply(4.5, growth, age),
+      tint: 0x00ffff,
+    }))
+  }
+
+  let rng = actor.presentationRng
+  for (let index = 0; index < 2; index += 1) {
+    const rotation = drawNativeFloat(rng, 360)
+    rng = rotation.state
+    const frameRate = Math.fround(index === 0 ? 0.075 : 0.1125)
+    let frame = Math.fround(0)
+    for (let tick = 0; tick < age; tick += 1) frame = Math.fround(frame + frameRate)
+    if (frame >= 10) continue
+    draws.push(draw('BadGuys', 158 + Math.floor(frame), {
+      alpha: 1,
+      blend: 'add',
+      role: `mindblast-sprite-array-${index}`,
+      rotationRadians: rotation.value * Math.PI / 180,
+      scaleX: 10,
+      scaleY: 10,
+    }))
+  }
+
+  for (let index = 0; index < 100; index += 1) {
+    const heading = drawNativeFloat(rng, 360)
+    const speed = drawNativeFloat(heading.state, 2)
+    const doubleSpeed = drawNativeInteger(speed.state, 5)
+    const alpha = drawNativeFloat(doubleSpeed.state, 1)
+    const scale = drawNativeFloat(alpha.state, 1.5)
+    rng = scale.state
+    const life = repeatedFloatDecay(
+      Math.fround(1 + alpha.value),
+      Math.fround(0.00875),
+      age,
+    )
+    if (life <= 0) continue
+    const headingRadians = heading.value * Math.PI / 180
+    const direction = {
+      x: Math.fround(Math.sin(headingRadians)),
+      y: Math.fround(-Math.cos(headingRadians)),
+    }
+    const speedFactor = doubleSpeed.value === 2 ? 2 : 1
+    let velocity = {
+      x: Math.fround(direction.x * Math.fround(3 + speed.value) * speedFactor),
+      y: Math.fround(direction.y * Math.fround(3 + speed.value) * speedFactor),
+    }
+    const offset = {
+      x: Math.fround(direction.x * 75),
+      y: Math.fround(direction.y * 75),
+    }
+    for (let tick = 0; tick < age; tick += 1) {
+      offset.x = Math.fround(offset.x + velocity.x)
+      offset.y = Math.fround(offset.y + velocity.y)
+      velocity = {
+        x: Math.fround(velocity.x * Math.fround(0.95)),
+        y: Math.fround(velocity.y * Math.fround(0.95)),
+      }
+    }
+    const horizontalSign = hashUnit(actor.id + index, age * 101 + index) < 0.5 ? -1 : 1
+    const shared = {
+      alpha: Math.min(life, 1),
+      blend: 'add' as const,
+      offset,
+      rotationRadians: headingRadians,
+      tint: 0x00ffff,
+    }
+    draws.push(
+      draw('BadGuys', 17, {
+        ...shared,
+        role: `mindblast-fuzzy-spear-base-${index}`,
+        scaleX: horizontalSign,
+        scaleY: 1,
+      }),
+      draw('BadGuys', 74, {
+        ...shared,
+        role: `mindblast-fuzzy-spear-glow-${index}`,
+        scaleX: Math.fround(2 + scale.value),
+        scaleY: Math.fround(2 + scale.value),
+      }),
+    )
+  }
   return draws
 }
 

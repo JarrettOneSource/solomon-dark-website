@@ -88,11 +88,13 @@ import {
   applyNativeSecondaryPlayerDamage,
   createNativeSecondaryPlayerState,
   createNativeSecondarySimulation,
+  emitNativePlayerScreenFlash,
   nativeSecondaryAvailableMana,
   nativeSecondaryTargetEffect,
   removeNativeSecondaryOwner,
   resetNativeSecondaryWorld,
   stepNativeSecondaryAbilities,
+  triggerNativePlayerMindblast,
   type NativeSecondarySimulationState,
   type NativeSecondaryTargetEffectState,
 } from '../core-kernels/native-secondary-abilities.ts'
@@ -785,7 +787,27 @@ export function grantGameSimulationPlayerExperience(
   playerId: PlayerId,
   amount: number,
 ): GameSimulationState {
-  return grantSharedGameSimulationExperience(state, playerId, amount)
+  const previousLevel = getPlayerProgression(state, playerId).level
+  let next = grantSharedGameSimulationExperience(state, playerId, amount)
+  const level = getPlayerProgression(next, playerId).level
+  if (level <= previousLevel) return next
+  const lightProviderOrder = createNativeLightProviderOrder(next.lightProviderOrder)
+  const triggered = triggerMindblowingRing(
+    next.playerEntities,
+    next.secondaryAbilities,
+    next.world,
+    playerId,
+    level,
+    next.tick,
+    lightProviderOrder,
+  )
+  next = {
+    ...next,
+    lightProviderOrder: lightProviderOrder.state(),
+    secondaryAbilities: triggered.secondaryAbilities,
+    world: triggered.world,
+  }
+  return next
 }
 
 export function selectGameSimulationPlayerSkill(
@@ -1140,6 +1162,7 @@ function finishGameSimulationTick(
       }
     },
   }
+  const unsteppedSecondaryActorIds = new Set<number>()
   const playerDamage = result.playerDamage ?? []
   const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
   const appliedPlayerDamage: (typeof playerDamage)[number][] = []
@@ -1296,6 +1319,7 @@ function finishGameSimulationTick(
   }
   for (const reward of result.rewards ?? []) {
     if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
+    const previousLevel = playerProgressionAt(playerEntities, reward.playerId)?.level
     const progressionState: GameSimulationState = {
       ...previous,
       levelUpBarrier,
@@ -1319,6 +1343,21 @@ function finishGameSimulationTick(
     levelUpBarrier = awarded.levelUpBarrier
     nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
     secondaryAbilities = awarded.secondaryAbilities
+    const level = playerProgressionAt(playerEntities, reward.playerId)?.level
+    if (previousLevel !== undefined && level !== undefined && level > previousLevel) {
+      const triggered = triggerMindblowingRing(
+        playerEntities,
+        secondaryAbilities,
+        world,
+        reward.playerId,
+        level,
+        tick,
+        lightProviderOrder,
+      )
+      secondaryAbilities = triggered.secondaryAbilities
+      world = triggered.world
+      for (const actorId of triggered.actorIds) unsteppedSecondaryActorIds.add(actorId)
+    }
   }
   for (const unlock of result.goodieUnlocks ?? []) {
     const consumed = consumePlayerEntityWizardKey(playerEntities, unlock.playerId)
@@ -1519,6 +1558,20 @@ function finishGameSimulationTick(
         dazzle.durationTicks,
       )
     }
+    for (const feedback of staff.pikeBreakFeedback) {
+      secondaryAbilities = emitNativePlayerScreenFlash(secondaryAbilities, {
+        ...feedback,
+        screenFlash: {
+          alpha: 1,
+          blue: 1,
+          decayPerTick: Math.fround(0.1),
+          green: 1,
+          pointAttenuated: false,
+          red: 1,
+        },
+        tick,
+      })
+    }
     postStaffInputs = Object.fromEntries(Object.entries(inputs).map(([playerId, input]) => [
       playerId,
       staff.actingPlayerIds.has(playerId)
@@ -1526,7 +1579,13 @@ function finishGameSimulationTick(
         : input,
     ]))
   }
-  const secondaryResult = stepNativeSecondaryAbilities(secondaryAbilities, {
+  const unsteppedSecondaryActors = secondaryAbilities.actors.filter(({ id }) => (
+    unsteppedSecondaryActorIds.has(id)
+  ))
+  const secondaryResult = stepNativeSecondaryAbilities({
+    ...secondaryAbilities,
+    actors: secondaryAbilities.actors.filter(({ id }) => !unsteppedSecondaryActorIds.has(id)),
+  }, {
     dampenCandidates: (worldKey, origin) => (
       world.kind === 'boneyard'
       && worldKey === `boneyard:${world.runId}`
@@ -1818,7 +1877,15 @@ function finishGameSimulationTick(
     ),
     tick,
   })
-  secondaryAbilities = secondaryResult.state
+  secondaryAbilities = unsteppedSecondaryActors.length === 0
+    ? secondaryResult.state
+    : {
+        ...secondaryResult.state,
+        actors: Object.freeze([
+          ...secondaryResult.state.actors,
+          ...unsteppedSecondaryActors,
+        ].sort((left, right) => left.id - right.id)),
+      }
   const secondaryPlayers: Record<PlayerId, PlayerCharacterState> = {
     ...resolvedPlayers,
   }
@@ -2276,6 +2343,74 @@ function economyContainsHealthPotion(economy: HubEconomyState): boolean {
     && item.nativeSubtype === 0
     || ((item as NativeLootItem).contents ?? []).some(contains)
   return economy.backpack.some(contains)
+}
+
+function triggerMindblowingRing(
+  playerEntities: PlayerEntityStore,
+  secondaryAbilities: NativeSecondarySimulationState,
+  sourceWorld: GameWorldState,
+  playerId: PlayerId,
+  level: number,
+  tick: number,
+  lightProviderOrder: NativeLightProviderOrder,
+): Readonly<{
+  actorIds: readonly number[]
+  secondaryAbilities: NativeSecondarySimulationState
+  world: GameWorldState
+}> {
+  const runtime = playerSkillRuntimeAt(playerEntities, playerId)
+  const character = playerCharacterAt(playerEntities, playerId)
+  if (
+    runtime === null
+    || character === null
+    || !nativeEquipmentHasFeature(runtime.equipmentModifiers, 'mindblast')
+  ) {
+    return { actorIds: [], secondaryAbilities, world: sourceWorld }
+  }
+  const firstActorId = secondaryAbilities.nextActorId
+  const triggered = triggerNativePlayerMindblast(secondaryAbilities, {
+    element: character.config.element,
+    level,
+    lightRegistration: lightProviderOrder.register('actor'),
+    ownerId: playerId,
+    position: character.position,
+    worldKey: gameWorldKey(sourceWorld, playerId),
+  })
+  let world = sourceWorld
+  if (world.kind === 'boneyard' && triggered.directDamage > 0) {
+    const targets = boneyardNativeSecondaryTargets(
+      world.enemies,
+      character.position,
+      triggered.directRadius,
+    ).filter((target) => {
+      const x = target.position.x - character.position.x
+      const y = target.position.y - character.position.y
+      return x * x + y * y
+        < triggered.directRadius * triggered.directRadius + target.radius * target.radius
+    })
+    for (const target of targets) {
+      const damaged = damageBoneyardEnemy(world.enemies, {
+        actorId: target.id,
+        amount: triggered.directDamage,
+        sourcePlayerId: playerId,
+        tick,
+      })
+      if (!damaged.accepted) continue
+      world = {
+        ...world,
+        enemies: damaged.store,
+        enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents, damaged.events, tick),
+      }
+    }
+  }
+  return Object.freeze({
+    actorIds: Object.freeze(Array.from(
+      { length: triggered.state.nextActorId - firstActorId },
+      (_, index) => firstActorId + index,
+    )),
+    secondaryAbilities: triggered.state,
+    world,
+  })
 }
 
 function grantSharedGameSimulationExperience(

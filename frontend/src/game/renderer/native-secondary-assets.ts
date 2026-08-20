@@ -4,7 +4,7 @@ import golem from '../../editor/manifest/golem.json'
 import type { AtlasManifest } from '../../editor/manifest/index.ts'
 import { nativeSpriteAnchor } from '../../editor/sprite-registration.ts'
 
-export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'DeadHawg', 'Golem'] as const
+export const NATIVE_SECONDARY_ATLASES = ['BadGuys', 'Clothes', 'DeadHawg', 'Golem'] as const
 export type NativeSecondaryAtlas = typeof NATIVE_SECONDARY_ATLASES[number]
 
 const files = import.meta.glob([
@@ -25,6 +25,7 @@ const files = import.meta.glob([
   '../../assets/game/boneyard/badguys/0049.png',
   '../../assets/game/boneyard/badguys/0051.png',
   '../../assets/game/boneyard/badguys/0053.png',
+  '../../assets/game/boneyard/badguys/0055.png',
   '../../assets/game/boneyard/badguys/0058.png',
   '../../assets/game/boneyard/badguys/0062.png',
   '../../assets/game/boneyard/badguys/0068.png',
@@ -66,6 +67,7 @@ const files = import.meta.glob([
   '../../assets/game/boneyard/deadhawg/17[7-9].png',
   '../../assets/game/boneyard/deadhawg/20[0-7].png',
   '../../assets/game/boneyard/golem/*.png',
+  '../../assets/game/player-mindblast-ring.png',
 ], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
 const specialFiles = import.meta.glob([
@@ -82,7 +84,7 @@ export const NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES = Object.freeze({
 })
 
 const BADGUYS_ENTRIES = Object.freeze([
-  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
+  0, 7, 10, 11, 15, 16, 17, 22, 36, 38, 39, 40, 45, 48, 49, 51, 53, 55, 58, 62, 68, 72, 74, 75, 78, 84, 85, 86, 88, 90,
   ...range(110, 112), ...range(158, 167), ...range(238, 250),
   ...range(251, 254), ...range(267, 270),
   ...range(333, 400), ...range(2008, 2010),
@@ -90,6 +92,7 @@ const BADGUYS_ENTRIES = Object.freeze([
 const DEADHAWG_ENTRIES = Object.freeze([
   2, 5, 6, 16, 17, 18, ...range(46, 87), 114, 121, ...range(177, 179), ...range(200, 207),
 ])
+const CLOTHES_ENTRIES = Object.freeze([2])
 const GOLEM_ENTRIES = Object.freeze(range(1, 208).filter((entry) => {
   const record = (golem as AtlasManifest).entries[entry]
   return record !== undefined && !record.empty && record.file !== null
@@ -97,11 +100,12 @@ const GOLEM_ENTRIES = Object.freeze(range(1, 208).filter((entry) => {
 
 export const NATIVE_SECONDARY_SPRITE_MEMBERSHIP = Object.freeze({
   BadGuys: BADGUYS_ENTRIES,
+  Clothes: CLOTHES_ENTRIES,
   DeadHawg: DEADHAWG_ENTRIES,
   Golem: GOLEM_ENTRIES,
 }) satisfies Readonly<Record<NativeSecondaryAtlas, readonly number[]>>
 
-const manifests: Readonly<Record<NativeSecondaryAtlas, AtlasManifest>> = {
+const manifests: Readonly<Record<Exclude<NativeSecondaryAtlas, 'Clothes'>, AtlasManifest>> = {
   BadGuys: badguys as AtlasManifest,
   DeadHawg: deadhawg as AtlasManifest,
   Golem: golem as AtlasManifest,
@@ -143,6 +147,23 @@ export function nativeSecondarySpriteKey(atlas: NativeSecondaryAtlas, entry: num
 }
 
 function record(atlas: NativeSecondaryAtlas, entry: number): NativeSecondarySpriteRecord {
+  if (atlas === 'Clothes') {
+    if (entry !== 2) {
+      throw new Error(`Native secondary Clothes record is missing: ${entry}`)
+    }
+    const source = files['../../assets/game/player-mindblast-ring.png']
+    if (!source) throw new Error('Native Mindblast Clothes record was not bundled')
+    const anchor = nativeSpriteAnchor(81, 81, { x: 0, y: 0 })
+    return Object.freeze({
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      atlas,
+      entry,
+      height: 81,
+      source,
+      width: 81,
+    })
+  }
   const sourceRecord = manifests[atlas].entries[entry]
   if (!sourceRecord || sourceRecord.empty || !sourceRecord.file) {
     throw new Error(`Native secondary atlas record is missing: ${atlas}:${entry}`)

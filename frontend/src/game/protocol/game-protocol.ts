@@ -66,6 +66,7 @@ import {
   NATIVE_STAFF_MELEE_ACCELERATION,
   NATIVE_STAFF_MELEE_BASE_PROGRESS,
   NATIVE_STAFF_CONTACT_EVENT_TICKS,
+  NATIVE_STAFF_PIKE_BREAK_LIFETIME_TICKS,
   isNativePlayerStaffTransient,
   type NativePlayerStaffTransient,
   type NativeStaffProcSound,
@@ -100,6 +101,9 @@ import {
 } from '../core-kernels/player-lighting.ts'
 import { BONEYARD_ENEMY_FLAGS } from '../core-kernels/boneyard-enemy-config.ts'
 import {
+  NATIVE_MINDBLAST_BURST_LIFETIME_TICKS,
+  NATIVE_MINDBLAST_SHOCKWAVE_GROWTH,
+  NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS,
   NATIVE_SECONDARY_ACTOR_KINDS,
   NATIVE_SECONDARY_AUDIO_CUES,
   NATIVE_SECONDARY_EVENT_KINDS,
@@ -3197,6 +3201,37 @@ function nativeSecondaryActor(
     throw new GameProtocolError(`${field}.golem must exist exactly for Golem actors`)
   }
   const variant = nonnegativeInteger(source.variant, `${field}.variant`)
+  const presentationRng = source.presentationRng === null
+    ? null
+    : nativeRngState(source.presentationRng, `${field}.presentationRng`)
+  const skillId = source.skillId === null
+    ? null
+    : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
+  const mindblast = kind === 'mindblast-burst' || kind === 'mindblast-shockwave'
+  if (mindblast !== (skillId === null)) {
+    throw new GameProtocolError(`${field}.skillId must be null exactly for Mindblast actors`)
+  }
+  if (mindblast && variant > 4) {
+    throw new GameProtocolError(`${field}.variant is not a native Wizard element`)
+  }
+  if (kind === 'mindblast-burst') {
+    if (
+      lifetimeTicks !== NATIVE_MINDBLAST_BURST_LIFETIME_TICKS
+      || presentationRng === null
+      || source.scale !== 9
+    ) {
+      throw new GameProtocolError(`${field} violates the native Mindblast burst contract`)
+    }
+  }
+  if (kind === 'mindblast-shockwave') {
+    if (
+      lifetimeTicks !== NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS
+      || presentationRng !== null
+      || source.quantity !== NATIVE_MINDBLAST_SHOCKWAVE_GROWTH
+    ) {
+      throw new GameProtocolError(`${field} violates the native Mindblast Shockwave contract`)
+    }
+  }
   const lightDisposition = nativeSecondaryLightDisposition({ kind, variant })
   const lightRegistration = lightDisposition === 'none'
     ? absentNativeLightProviderRegistration(
@@ -3236,15 +3271,13 @@ function nativeSecondaryActor(
     ownerId,
     phase: finite(source.phase, `${field}.phase`),
     position: vector(source.position, `${field}.position`),
-    presentationRng: source.presentationRng === null
-      ? null
-      : nativeRngState(source.presentationRng, `${field}.presentationRng`),
+    presentationRng,
     quantity: finite(source.quantity, `${field}.quantity`),
     radius: nonnegativeFinite(source.radius, `${field}.radius`),
     rank: positiveInteger(source.rank, `${field}.rank`),
     rotationRadians: finite(source.rotationRadians, `${field}.rotationRadians`),
     scale: nonnegativeFinite(source.scale, `${field}.scale`),
-    skillId: nativeSecondarySkillId(source.skillId, `${field}.skillId`),
+    skillId,
     slowFactor: finite(source.slowFactor, `${field}.slowFactor`),
     targetId,
     variant,
@@ -3382,6 +3415,15 @@ function nativeSecondaryEvent(
     `${field}.kind`,
     NATIVE_SECONDARY_EVENT_KINDS,
   ) as NativeSecondaryEventKind
+  const screenFlash = source.screenFlash === null
+    ? null
+    : nativeSecondaryScreenFlash(source.screenFlash, `${field}.screenFlash`)
+  const skillId = source.skillId === null
+    ? null
+    : nativeSecondarySkillId(source.skillId, `${field}.skillId`)
+  if (skillId === null && (cue !== null || kind !== 'impact' || screenFlash === null)) {
+    throw new GameProtocolError(`${field} null skillId is reserved for player-effect feedback`)
+  }
   return {
     actorId: source.actorId === null
       ? null
@@ -3393,10 +3435,8 @@ function nativeSecondaryEvent(
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
     pitch: positiveFinite(source.pitch, `${field}.pitch`),
     position: vector(source.position, `${field}.position`),
-    screenFlash: source.screenFlash === null
-      ? null
-      : nativeSecondaryScreenFlash(source.screenFlash, `${field}.screenFlash`),
-    skillId: nativeSecondarySkillId(source.skillId, `${field}.skillId`),
+    screenFlash,
+    skillId,
     tick: nonnegativeInteger(source.tick, `${field}.tick`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
@@ -4110,8 +4150,9 @@ function nativePlayerStaffTransient(
   }
   if (kind === 'player-staff-contact') {
     onlyKeys(source, field, [
-      'ageTicks', 'id', 'kind', 'origin', 'outcome', 'ownerId', 'procSound',
-      'procSoundPitches', 'swooshPitch', 'targetIds', 'worldKey',
+      'ageTicks', 'id', 'impactSoundPitches', 'kind', 'origin', 'outcome',
+      'ownerId', 'pikeBreakSoundIndexes', 'procSound', 'procSoundPitches',
+      'swooshPitch', 'targetIds', 'worldKey',
     ])
     const ageTicks = nonnegativeInteger(source.ageTicks, `${field}.ageTicks`)
     if (ageTicks >= NATIVE_STAFF_CONTACT_EVENT_TICKS) {
@@ -4133,6 +4174,31 @@ function nativePlayerStaffTransient(
       pitch,
       `${field}.procSoundPitches[${index}]`,
     ))
+    const impactSoundPitches = limitedArray(
+      source.impactSoundPitches,
+      `${field}.impactSoundPitches`,
+      MAX_PRIMARY_SPELL_HIT_TARGETS,
+    ).map((pitch, index) => {
+      const decoded = staffPitch(pitch, `${field}.impactSoundPitches[${index}]`)
+      if (decoded < Math.fround(0.9) || decoded > Math.fround(1.1)) {
+        throw new GameProtocolError(`${field}.impactSoundPitches[${index}] is outside StaffHitWood`)
+      }
+      return decoded
+    })
+    const pikeBreakSoundIndexes = limitedArray(
+      source.pikeBreakSoundIndexes,
+      `${field}.pikeBreakSoundIndexes`,
+      MAX_PRIMARY_SPELL_HIT_TARGETS,
+    ).map((value, index) => {
+      const decoded = nonnegativeInteger(value, `${field}.pikeBreakSoundIndexes[${index}]`)
+      if (decoded >= impactSoundPitches.length) {
+        throw new GameProtocolError(`${field}.pikeBreakSoundIndexes[${index}] has no impact`)
+      }
+      return decoded
+    })
+    if (new Set(pikeBreakSoundIndexes).size !== pikeBreakSoundIndexes.length) {
+      throw new GameProtocolError(`${field}.pikeBreakSoundIndexes contains a duplicate`)
+    }
     const expectedSound: Readonly<Record<typeof outcome, NativeStaffProcSound | null>> = {
       'critical-hit': 'critical-hit',
       'disabling-hit': 'disable-enemy',
@@ -4171,13 +4237,54 @@ function nativePlayerStaffTransient(
     return {
       ...common,
       ageTicks,
+      impactSoundPitches,
       kind,
       origin: vector(source.origin, `${field}.origin`),
       outcome,
       procSound,
       procSoundPitches,
+      pikeBreakSoundIndexes,
       swooshPitch,
       targetIds: staffTargetIds(source.targetIds, `${field}.targetIds`),
+    }
+  }
+  if (kind === 'player-staff-contact-knockback') {
+    onlyKeys(source, field, [
+      'ageTicks', 'delta', 'id', 'kind', 'ownerId', 'remainingTicks',
+      'targetId', 'worldKey',
+    ])
+    const delta = vector(source.delta, `${field}.delta`)
+    const magnitude = Math.hypot(delta.x, delta.y)
+    if (magnitude !== 0 && Math.abs(magnitude - 6) > 1e-5) {
+      throw new GameProtocolError(`${field}.delta is not the native contact Knockback step`)
+    }
+    const remainingTicks = positiveInteger(source.remainingTicks, `${field}.remainingTicks`)
+    if (remainingTicks > 5 || common.ageTicks + remainingTicks !== 5) {
+      throw new GameProtocolError(`${field} is outside the five-tick contact Knockback`)
+    }
+    return {
+      ...common,
+      delta,
+      kind,
+      remainingTicks,
+      targetId: staffTargetId(source.targetId, `${field}.targetId`),
+    }
+  }
+  if (kind === 'player-staff-pike-break') {
+    onlyKeys(source, field, [
+      'ageTicks', 'headingDegrees', 'id', 'kind', 'ownerId', 'position',
+      'presentationRng', 'targetId', 'worldKey',
+    ])
+    if (common.ageTicks >= NATIVE_STAFF_PIKE_BREAK_LIFETIME_TICKS) {
+      throw new GameProtocolError(`${field}.ageTicks outlived native Pike-break debris`)
+    }
+    return {
+      ...common,
+      headingDegrees: staffHeading(source.headingDegrees, `${field}.headingDegrees`),
+      kind,
+      position: vector(source.position, `${field}.position`),
+      presentationRng: nativeRngState(source.presentationRng, `${field}.presentationRng`),
+      targetId: staffTargetId(source.targetId, `${field}.targetId`),
     }
   }
   if (kind === 'player-staff-knockback') {
@@ -4341,6 +4448,14 @@ function staffTargetIds(value: unknown, field: string): readonly string[] {
     throw new GameProtocolError(`${field} contains a duplicate target`)
   }
   return targetIds
+}
+
+function staffTargetId(value: unknown, field: string): string {
+  const targetId = limitedString(value, field, 256)
+  if (!/^enemy:[1-9]\d*$/.test(targetId)) {
+    throw new GameProtocolError(`${field} is not an enemy Staff target`)
+  }
+  return targetId
 }
 
 function staffFadeAlpha(initial: number, loss: number, ageTicks: number): number {
