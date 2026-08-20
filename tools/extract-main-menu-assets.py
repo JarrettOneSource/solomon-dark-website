@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import struct
 from dataclasses import dataclass
@@ -195,6 +196,40 @@ def render_text(
     return result
 
 
+def write_create_name_font_data(font: FontGroup, output_dir: Path) -> None:
+    data = {
+        "atlasHeight": 256,
+        "atlasWidth": 512,
+        "glyphCount": len(font.glyphs),
+        "group": 4,
+        "kerning": {
+            f"{left}:{right}": adjustment
+            for (left, right), adjustment in font.kerning.items()
+        },
+        "kerningCount": len(font.kerning),
+        "spaceAdvance": font.space_advance,
+        "glyphs": {
+            chr(glyph_id): {
+                "advance": glyph.advance,
+                "atlasHeight": glyph.sprite.height,
+                "atlasWidth": glyph.sprite.width,
+                "atlasX": glyph.sprite.x,
+                "atlasY": glyph.sprite.y,
+                "centerX": glyph.center_x,
+                "centerY": glyph.center_y,
+                "glyphId": glyph_id,
+                "spriteCenterX": glyph.sprite.center_x,
+                "spriteCenterY": glyph.sprite.center_y,
+            }
+            for glyph_id, glyph in font.glyphs.items()
+        },
+    }
+    (output_dir / "create-name-font-group-4.json").write_text(
+        json.dumps(data, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def save(image: Image.Image, output_dir: Path, name: str) -> None:
     image.save(output_dir / f"{name}.png")
 
@@ -335,6 +370,12 @@ def main() -> int:
 
     fonts_atlas = Image.open(images_dir / "Fonts.png").convert("RGBA")
     fonts = parse_fonts(images_dir / "Fonts.bundle")
+    name_font = fonts[4]
+    if len(name_font.glyphs) != 42 or len(name_font.kerning) != 132:
+        raise ValueError(
+            "Fonts group 4 does not match the native 42-glyph/132-kerning contract"
+        )
+    write_create_name_font_data(name_font, output_dir)
     labels = {
         "main-menu-text-play": (4, "PLAY", (216, 186, 112, 255)),
         "main-menu-text-explore": (3, "explore the", (221, 197, 139, 255)),
@@ -347,7 +388,6 @@ def main() -> int:
         "main-menu-text-back": (3, "BACK", (221, 197, 139, 255)),
         "main-menu-text-quit": (3, "quit", (221, 197, 139, 255)),
         "main-menu-text-version": (1, "V.0.72BETA", (216, 186, 112, 255)),
-        "create-text-name": (4, "HELVIDIUS", (216, 186, 112, 255)),
         "create-text-name-caption": (1, "WIZARD NAME", (216, 186, 112, 255)),
         "create-text-name-caret": (1, "x", (216, 186, 112, 255)),
     }

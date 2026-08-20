@@ -78,7 +78,6 @@ import createNameEnd from '../assets/game/create-name-end.png'
 import createNameRail from '../assets/game/create-name-rail.png'
 import createTextNameCaption from '../assets/game/create-text-name-caption.png'
 import createTextNameCaret from '../assets/game/create-text-name-caret.png'
-import createTextName from '../assets/game/create-text-name.png'
 import createStarLarge from '../assets/game/create-star-large.png'
 import createStarSmall from '../assets/game/create-star-small.png'
 import hubCourtyard from '../assets/game/hub-courtyard.png'
@@ -504,7 +503,6 @@ export const createMenu = {
   nameRail: createNameRail,
   textNameCaption: createTextNameCaption,
   textNameCaret: createTextNameCaret,
-  textName: createTextName,
   stars: {
     large: createStarLarge,
     small: createStarSmall,

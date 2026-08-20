@@ -12,6 +12,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
+import { validateCreateWizardName } from './create-wizard-name.ts'
 import type { GameAudioDirector } from './game-audio-director.ts'
 import {
   CREATE_DISCIPLINE_FINALIZE_MS,
@@ -38,12 +39,19 @@ import {
 
 interface CreateMenuSceneProps {
   audio: GameAudioDirector
+  displayName: string
   onBack: () => void
+  onDisplayNameChange: (displayName: string) => void
   onDisciplineCommit: () => void
-  onStart: (element: WizardElement, discipline: WizardDiscipline) => Promise<boolean>
+  onStart: (
+    displayName: string,
+    element: WizardElement,
+    discipline: WizardDiscipline,
+  ) => Promise<boolean>
   retainedLoadoutCanConfirm?: boolean
   retainedLoadout?: Readonly<{
     discipline: WizardDiscipline
+    displayName: string
     element: WizardElement
   }>
   viewport: FixedGameViewportLayout
@@ -59,7 +67,9 @@ function playCreateAudioEvents(audio: GameAudioDirector, events: readonly Create
 
 export default function CreateMenuScene({
   audio,
+  displayName,
   onBack,
+  onDisplayNameChange,
   onDisciplineCommit,
   onStart,
   retainedLoadoutCanConfirm = false,
@@ -70,6 +80,7 @@ export default function CreateMenuScene({
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<CreateMenuRenderer | null>(null)
   const onStartRef = useRef(onStart)
+  const activeDisplayNameRef = useRef(retainedLoadout?.displayName ?? displayName)
   const selectedElementRef = useRef<WizardElement | null>(retainedLoadout?.element ?? null)
   const hoveredActionRef = useRef<CreateMenuAction | null>(null)
   const phaseStartedAtRef = useRef(0)
@@ -85,8 +96,10 @@ export default function CreateMenuScene({
     retainedLoadout?.element ?? null,
   )
   const [pendingDiscipline, setPendingDiscipline] = useState<WizardDiscipline | null>(null)
+  const [nameValidationMessage, setNameValidationMessage] = useState<string | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
   onStartRef.current = onStart
+  activeDisplayNameRef.current = retainedLoadout?.displayName ?? displayName
   viewportRef.current = viewport
 
   useEffect(() => rendererRef.current?.resize(viewport), [viewport])
@@ -162,6 +175,7 @@ export default function CreateMenuScene({
           previousSemanticTick = semanticTick
         }
         renderer.render({
+          displayName: activeDisplayNameRef.current,
           hoveredAction: hoveredActionRef.current,
           phase,
           phaseElapsedMs,
@@ -203,7 +217,11 @@ export default function CreateMenuScene({
         return
       }
       audio.playStream('catch-it')
-      void onStartRef.current(selectedElement, pendingDiscipline).then((started) => {
+      void onStartRef.current(
+        activeDisplayNameRef.current,
+        selectedElement,
+        pendingDiscipline,
+      ).then((started) => {
         if (active && !started) setPendingDiscipline(null)
       })
     }
@@ -229,6 +247,7 @@ export default function CreateMenuScene({
   }
 
   const selectDiscipline = (discipline: WizardDiscipline) => {
+    if (!validateCreateWizardName(activeDisplayNameRef.current).ok) return
     if (
       !selectedElementRef.current
       || pendingDiscipline
@@ -262,6 +281,24 @@ export default function CreateMenuScene({
     viewport,
     fixedGameStageBounds(viewport, 'center', 'bottom'),
   )
+  const activeDisplayName = retainedLoadout?.displayName ?? displayName
+  const nameValidation = validateCreateWizardName(activeDisplayName)
+
+  const updateDisplayName = (nextName: string) => {
+    if (retainedLoadout) return
+    if (nextName.length === 0) {
+      onDisplayNameChange('')
+      setNameValidationMessage('Enter a wizard name.')
+      return
+    }
+    const validation = validateCreateWizardName(nextName)
+    if (!validation.ok) {
+      setNameValidationMessage(validation.reason)
+      return
+    }
+    setNameValidationMessage(null)
+    onDisplayNameChange(validation.value)
+  }
 
   return (
     <div
@@ -302,7 +339,23 @@ export default function CreateMenuScene({
       </div>
 
       <div className="create-menu-native-stage create-menu-native-name-stage" style={nativeNameStageStyle}>
-        <div className="create-menu-name-semantic" aria-label="Wizard name: Helvidius" />
+        <input
+          aria-describedby="create-menu-name-validation"
+          aria-invalid={(!nameValidation.ok || nameValidationMessage !== null) || undefined}
+          aria-label="Wizard name"
+          autoCapitalize="characters"
+          autoComplete="off"
+          className="create-menu-name-input"
+          maxLength={64}
+          onChange={(event) => updateDisplayName(event.target.value)}
+          readOnly={Boolean(retainedLoadout)}
+          spellCheck={false}
+          type="text"
+          value={activeDisplayName}
+        />
+        <div id="create-menu-name-validation" className="create-menu-name-validation" role="status">
+          {nameValidationMessage ?? (!nameValidation.ok ? nameValidation.reason : '')}
+        </div>
       </div>
 
       <div className="create-menu-native-stage create-menu-native-action-stage" style={nativeActionStageStyle}>
@@ -353,6 +406,7 @@ export default function CreateMenuScene({
               disabled={
                 !disciplinesVisible
                 || pendingDiscipline !== null
+                || !nameValidation.ok
                 || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
                 || Boolean(retainedLoadout && discipline !== retainedLoadout.discipline)
               }

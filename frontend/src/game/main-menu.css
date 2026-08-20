@@ -314,7 +314,32 @@
   outline-offset: 0.125cqw;
 }
 
-.create-menu-name-semantic {
+.create-menu-native-name-stage {
+  pointer-events: auto;
+}
+
+.create-menu-name-input {
+  position: absolute;
+  top: 29px;
+  left: 608px;
+  width: 384px;
+  height: 49px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+  font: inherit;
+}
+
+.create-menu-name-input:focus-visible {
+  outline: 0.125cqw solid rgb(255 255 255 / 0.8);
+  outline-offset: 0.125cqw;
+}
+
+.create-menu-name-validation {
   position: absolute;
   width: 1px;
   height: 1px;

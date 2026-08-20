@@ -2,12 +2,13 @@ import {
   Container,
   FillGradient,
   Graphics,
+  Rectangle,
   Sprite,
+  Texture,
   type Application,
-  type Texture,
 } from 'pixi.js'
 
-import { createMenu, elementVfx } from '../../lib/assets.ts'
+import { createMenu, elementVfx, hub } from '../../lib/assets.ts'
 import {
   CREATE_ENTRY_ANIMATION_MS,
   CREATE_SELECTION_ANIMATION_MS,
@@ -23,6 +24,10 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from '../core-kernels/player-character.ts'
+import {
+  layoutCreateWizardName,
+  validateCreateWizardName,
+} from '../create-wizard-name.ts'
 import { NATIVE_ELEMENT_VFX_SCALE } from '../element-vfx-native.ts'
 import { collectAssetSources } from '../game-asset-readiness.ts'
 import {
@@ -54,6 +59,7 @@ export type CreateMenuAction = 'back' | WizardElement | WizardDiscipline
 export type CreateMenuPhase = 'discipline' | 'element'
 
 export interface CreateMenuRenderFrame {
+  displayName: string
   hoveredAction: CreateMenuAction | null
   phase: CreateMenuPhase
   phaseElapsedMs: number
@@ -86,7 +92,19 @@ interface DisciplineView {
   highlight: Sprite
 }
 
-const CREATE_ASSET_SOURCES = collectAssetSources({ createMenu, elementVfx })
+interface CreateNameView {
+  atlas: Texture
+  container: Container
+  glyphTextures: Texture[]
+  value: Container
+  valueName: string | null
+}
+
+const CREATE_ASSET_SOURCES = collectAssetSources({
+  createMenu,
+  elementVfx,
+  nameFont: hub.hud.fontAtlas,
+})
 const HAND_SOURCE: Readonly<Record<CreateHandPose, string>> = {
   cupped: createMenu.handCupped,
   fist: createMenu.handFist,
@@ -216,9 +234,9 @@ export async function createCreateMenuRenderer(
   const elementPrompt = stageSprite(texture(createMenu.chooseElement), 620, 793, 361, 92, 7)
   const disciplinePrompt = stageSprite(texture(createMenu.chooseDiscipline), 620, 793, 361, 87, 7)
   nativeActionStage.addChild(elementPrompt, disciplinePrompt)
-  const name = createNameView(texture, gradients)
-  name.zIndex = 8
-  nativeNameStage.addChild(name)
+  const name = createNameView(texture, gradients, texture(hub.hud.fontAtlas))
+  name.container.zIndex = 8
+  nativeNameStage.addChild(name.container)
   const back = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 8)
   back.alpha = 0.76
   const backHighlight = stageSprite(texture(createMenu.backSkull), 10, 9, 31, 33, 9)
@@ -299,6 +317,7 @@ export async function createCreateMenuRenderer(
       )
       updateDisciplineViews(disciplineViews, frame, motion.disciplinesVisible,
         motionElapsedMs)
+      updateCreateNameView(name, frame.displayName)
 
       elementPrompt.visible = frame.phase === 'element' && motion.elementsVisible
       disciplinePrompt.visible = frame.phase === 'discipline' && motion.disciplinesVisible
@@ -317,6 +336,7 @@ export async function createCreateMenuRenderer(
       diagnostics.spriteCount = countSprites(root)
       canvas.dataset.phase = frame.phase
       canvas.dataset.selectedElement = frame.selectedElement ?? ''
+      canvas.dataset.wizardName = frame.displayName
     },
     resize(viewport, nextDevicePixelRatio = window.devicePixelRatio) {
       if (destroyed) return
@@ -353,6 +373,7 @@ export async function createCreateMenuRenderer(
       application.stage.removeChild(root)
       root.destroy({ children: true })
       for (const gradient of gradients) gradient.destroy()
+      for (const glyphTexture of name.glyphTextures) glyphTexture.destroy(false)
       for (const frames of Object.values(vfxTextures)) {
         for (const frame of frames ?? []) frame.destroy(false)
       }
@@ -374,6 +395,7 @@ export async function createCreateMenuRenderer(
     resolution,
   )
   renderer.render({
+    displayName: 'HELVIDIUS',
     hoveredAction: null,
     phase: 'element',
     phaseElapsedMs: 0,
@@ -540,7 +562,8 @@ function setHandScale(sprite: Sprite, flipped: boolean): void {
 function createNameView(
   texture: (source: string) => Texture,
   gradients: FillGradient[],
-): Container {
+  fontAtlas: Texture,
+): CreateNameView {
   const container = new Container({ label: 'create-name' })
   container.position.set(558, 17)
   container.eventMode = 'none'
@@ -560,11 +583,48 @@ function createNameView(
   const rightEnd = stageSprite(texture(createMenu.nameEnd), 484, 0, 72, 76, 2)
   rightEnd.scale.x = -1
   const caption = stageSprite(texture(createMenu.textNameCaption), 174, -10, 136, 15, 3)
-  const value = stageSprite(texture(createMenu.textName), 122, 19, 240, 31, 3)
+  const value = new Container({ label: 'create-name-value' })
+  value.eventMode = 'none'
+  value.mask = field
+  value.zIndex = 3
   const caret = stageSprite(texture(createMenu.textNameCaret), 412, 30, 12, 11, 3)
   caret.alpha = 0.65
   container.addChild(field, rail, leftEnd, rightEnd, caption, value, caret)
-  return container
+  return {
+    atlas: fontAtlas,
+    container,
+    glyphTextures: [],
+    value,
+    valueName: null,
+  }
+}
+
+function updateCreateNameView(view: CreateNameView, displayName: string): void {
+  const validation = validateCreateWizardName(displayName)
+  const nextName = validation.ok ? validation.value.toUpperCase() : ''
+  if (view.valueName === nextName) return
+  view.value.removeChildren()
+  for (const glyphTexture of view.glyphTextures) glyphTexture.destroy(false)
+  view.glyphTextures.length = 0
+  if (!validation.ok) {
+    view.valueName = nextName
+    return
+  }
+  const layout = layoutCreateWizardName(validation.value)
+
+  for (const glyph of layout.glyphs) {
+    const glyphTexture = new Texture({
+      frame: new Rectangle(glyph.atlasX, glyph.atlasY, glyph.atlasWidth, glyph.atlasHeight),
+      source: view.atlas.source,
+    })
+    const sprite = new Sprite(glyphTexture)
+    sprite.eventMode = 'none'
+    sprite.position.set(glyph.left, glyph.top)
+    sprite.tint = 0xd8ba70
+    view.glyphTextures.push(glyphTexture)
+    view.value.addChild(sprite)
+  }
+  view.valueName = layout.value
 }
 
 function stageSprite(

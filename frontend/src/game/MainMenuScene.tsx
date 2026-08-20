@@ -18,6 +18,7 @@ import type {
   WizardDiscipline,
   WizardElement,
 } from './core-kernels/player-character.ts'
+import { initialCreateWizardName } from './create-wizard-name.ts'
 import { createBrowserGameAudioDirector } from './game-audio-browser.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
 import {
@@ -220,7 +221,9 @@ export default function MainMenuScene({
 }: MainMenuSceneProps) {
   const audio = useMemo(createBrowserGameAudioDirector, [])
   const stageRef = useRef<HTMLElement>(null)
+  const wizardNameTouchedRef = useRef(false)
   const [screen, setScreen] = useState<MenuScreen>(initialScreen)
+  const [wizardName, setWizardName] = useState(() => initialCreateWizardName(displayName))
   const [fadeState, setFadeState] = useState<FadeState>('idle')
   const [fadeTarget, setFadeTarget] = useState<MenuScreen | null>(null)
   const [session, setSession] = useState<GameClientSession | null>(null)
@@ -247,6 +250,12 @@ export default function MainMenuScene({
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
   ))
+
+  useEffect(() => {
+    if (!wizardNameTouchedRef.current && !session) {
+      setWizardName(initialCreateWizardName(displayName))
+    }
+  }, [displayName, session])
 
   const beginLoading = useCallback((
     flow: MatchLoadingFlow,
@@ -536,6 +545,7 @@ export default function MainMenuScene({
   }
 
   const startHub = async (
+    selectedDisplayName: string,
     selectedElement: WizardElement,
     selectedDiscipline: WizardDiscipline,
   ): Promise<boolean> => {
@@ -551,7 +561,7 @@ export default function MainMenuScene({
       const nextSession = await connectSession(
         {
           discipline: selectedDiscipline,
-          displayName,
+          displayName: selectedDisplayName,
           element: selectedElement,
         },
         advanceLoading,
@@ -687,7 +697,12 @@ export default function MainMenuScene({
         ) : screen === 'create' ? (
           <CreateMenuScene
             audio={audio}
+            displayName={wizardName}
             onBack={() => { void leaveCreate() }}
+            onDisplayNameChange={(nextName) => {
+              wizardNameTouchedRef.current = true
+              setWizardName(nextName)
+            }}
             onDisciplineCommit={beginHubLoading}
             onStart={startHub}
             retainedLoadoutCanConfirm={Boolean(session?.isHost)}

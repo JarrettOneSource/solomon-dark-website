@@ -113,6 +113,12 @@ try {
     })}\n`)
     throw error
   }
+  const wizardName = page.getByRole('textbox', { name: 'Wizard name' })
+  await wizardName.fill('SolonSolus')
+  await page.locator('.create-menu-canvas[data-wizard-name="SolonSolus"]').waitFor({
+    timeout: 15_000,
+  })
+  assert.equal(await wizardName.inputValue(), 'SolonSolus')
   await page.getByRole('button', { name: /fire/i }).click()
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
@@ -252,7 +258,7 @@ try {
   const hostSingleAllyReceipt = await allyRosterReceipt(page)
   const clientSingleAllyReceipt = await allyRosterReceipt(clientPage)
   assert.deepEqual(hostSingleAllyReceipt.names, ['Helvidius'])
-  assert.deepEqual(clientSingleAllyReceipt.names, ['Helvidius'])
+  assert.deepEqual(clientSingleAllyReceipt.names, ['SolonSolus'])
 
   await enterHub(thirdPage, 'Water')
   await Promise.all([
@@ -298,7 +304,7 @@ try {
     expectedMobileViewportScale,
     'mobile viewport scale',
   )
-  assert.deepEqual(thirdMobileHubAllyReceipt.names, ['Helvidius', 'Helvidius'])
+  assert.deepEqual(thirdMobileHubAllyReceipt.names, ['SolonSolus', 'Helvidius'])
   assertClose(
     thirdMobileHubAllyReceipt.roster.x,
     11 * expectedMobileViewportScale,
