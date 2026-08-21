@@ -25310,3 +25310,36 @@ its four-word glow pair, Steam terminal/contact clocks, weak and Over branches,
 protocol ownership, and renderer plans. The remaining welded draw work is the
 Meteor ground primitive and independent debris painter/lifecycle audit before
 browser comparison.
+
+### 2026-08-21 v43 Ball/BoulderBit ownership correction
+
+The next direct actor pass closes two presentation omissions without attaching
+either one to a parent painter:
+
+- Ball Lightning draw `0x005E0670` first applies the weak parent alpha, then
+  calls the shared `0x00536380` Lightning-corona compositor. That compositor
+  owns four BadGuys-110 circles and two independently selected BadGuys
+  1836..1839 forks. The same actor then draws a direct BadGuys-70 sibling at
+  local `(0,-10)`, with alpha `Float(1)` and uniform scale
+  `1.25+Float(.1)`. The Website plan now carries the six exact shared corona
+  members plus that direct record-70 body; weak alpha covers both branches.
+  The later conditional `0x00535A30` turn overlay remains an explicit painter
+  audit item rather than being silently approximated.
+- `Anim_BoulderBit` is one registered world actor per fragment. Its inherited
+  Bouncer tick skips planar motion, height integration, gravity, rotation, and
+  the base `.015` fade while airborne on global ticks divisible by three; the
+  subclass `.025` fade still executes. Other airborne ticks integrate planar
+  and vertical motion, add `.4` gravity, and on ground crossing consume
+  `Float(10)` then `Integer(2)`, multiply the stored bounce velocity by `.3`,
+  optionally damp planar velocity by `.65`, and settle when the next bounce is
+  greater than `-.75`. Non-skipped and settled ticks subtract `.015` followed
+  by `.025` in float32 order. Weak/contact EBoulder fragments and Meteor's five
+  impact fragments now use this same independent state/RNG/retirement path;
+  each owns one Region-light sample and painter root at sort bias `-15`.
+
+Protocol 42 now validates one dynamic BoulderBit state per debris actor instead
+of a nested fragment array. Focused type, runtime, combat, protocol, and
+renderer coverage passes 140 tests; lint and architecture boundaries are
+clean. The remaining pixel-level adjacency is the native Bouncer shadow
+primitive, Meteor's ground primitive, Frost's helper/turn primitives, and
+Ball's conditional turn overlay before the ten-skill browser comparison.

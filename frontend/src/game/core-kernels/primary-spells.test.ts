@@ -2015,6 +2015,10 @@ test('Meteor impact transition registers its additive flash as an independent ac
   assert.equal(flash.id, 20)
   assert.equal(flash.alpha, 2)
   assert.equal(flash.scale, 6)
+  const debris = result.spells.transients.filter(({ kind }) => kind === 'weld-boulder-debris')
+  assert.equal(debris.length, 5)
+  assert.ok(debris.every((child) => child.kind === 'weld-boulder-debris'
+    && child.buildId === 1007))
 })
 
 test('retained rock welds publish their constructor-randomized start pitch', () => {

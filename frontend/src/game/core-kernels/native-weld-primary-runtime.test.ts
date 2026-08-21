@@ -138,9 +138,11 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
   })
   let rng = createNativeRng(99)
   let fallTicks = 0
+  let impactDebris = 0
   while (actor.phase === 'fall') {
     const stepped = stepNativeWeldWorldActor(actor, rng)
     rng = stepped.rng
+    impactDebris += stepped.debris?.length ?? 0
     assert.ok(stepped.actor?.kind === 'weld-meteor')
     actor = stepped.actor
     fallTicks += 1
@@ -149,7 +151,8 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
   assert.equal(fallTicks, 3)
   assert.equal(actor.phase, 'impact')
   assert.equal(actor.impactDue, true)
-  assert.equal(actor.debris.length, 5)
+  assert.equal(actor.debris.length, 0)
+  assert.equal(impactDebris, 5)
   assert.ok(actor.cameraDisplacement)
 
   for (let tick = 0; tick < 9; tick += 1) {

@@ -34,7 +34,10 @@ import {
 } from './native-weld-meteor.ts'
 import {
   NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  createNativeWeldBoulderDebrisParticle,
   createNativeWeldEtherealBoulderWeakDebrisProgram,
+  stepNativeWeldBoulderDebrisParticle,
+  type NativeWeldBoulderDebrisParticleState,
 } from './native-weld-boulder-debris.ts'
 import type { NativeWeldGroundSparkFadeSeed } from './native-weld-ground-spark.ts'
 import {
@@ -283,8 +286,8 @@ export interface NativeWeldImpactActorState extends NativeWeldOwnedActorBase {
 }
 
 export interface NativeWeldBoulderDebrisActorState extends NativeWeldOwnedActorBase {
-  readonly buildId: 1006 | 1008
-  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly buildId: 1006 | 1007
+  readonly debris: NativeWeldBoulderDebrisParticleState
   readonly kind: 'weld-boulder-debris'
   readonly lightRegistration: null
   readonly position: Vector2
@@ -955,8 +958,8 @@ export function updateNativeWeldPersistentActor(
 }
 
 export function createNativeWeldBoulderDebrisActor(input: {
-  readonly buildId: 1006 | 1008
-  readonly debris: readonly NativeWeldMeteorDebrisSeed[]
+  readonly buildId: 1006 | 1007
+  readonly debris: NativeWeldMeteorDebrisSeed
   readonly direction: Vector2
   readonly id: number
   readonly origin: Vector2
@@ -969,11 +972,7 @@ export function createNativeWeldBoulderDebrisActor(input: {
     ageTicks: 0,
     birthTick: input.tick,
     buildId: input.buildId,
-    debris: Object.freeze(input.debris.map((debris) => Object.freeze({
-      ...debris,
-      position: Object.freeze({ ...debris.position }),
-      velocity: Object.freeze({ ...debris.velocity }),
-    }))),
+    debris: createNativeWeldBoulderDebrisParticle(input.debris),
     direction: Object.freeze({ ...input.direction }),
     id: input.id,
     kind: 'weld-boulder-debris',
@@ -1259,7 +1258,11 @@ export function stepNativeWeldWorldActor(
     from: Readonly<Vector2>,
     to: Readonly<Vector2>,
   ) => boolean = () => true,
-): { readonly actor: NativeWeldWorldActor | null; readonly rng: NativeRngState } {
+): {
+  readonly actor: NativeWeldWorldActor | null
+  readonly debris?: readonly NativeWeldMeteorDebrisSeed[]
+  readonly rng: NativeRngState
+} {
   if (actor.kind === 'weld-blizzard-glow') return { actor: null, rng: sourceRng }
   if (actor.kind === 'weld-flame-lash-fade') {
     return { actor: stepNativeWeldFlameLashFade(actor), rng: sourceRng }
@@ -1274,11 +1277,21 @@ export function stepNativeWeldWorldActor(
     return stepNativeWeldHailChild(actor, sourceRng)
   }
   if (actor.kind === 'weld-boulder-debris') {
+    const stepped = stepNativeWeldBoulderDebrisParticle(
+      actor.debris,
+      actor.birthTick + actor.ageTicks + 1,
+      sourceRng,
+    )
     return {
-      actor: actor.ageTicks + 1 < NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS
-        ? Object.freeze({ ...actor, ageTicks: actor.ageTicks + 1 })
+      actor: stepped.particle !== null
+        && actor.ageTicks + 1 < NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS
+        ? Object.freeze({
+            ...actor,
+            ageTicks: actor.ageTicks + 1,
+            debris: stepped.particle,
+          })
         : null,
-      rng: sourceRng,
+      rng: stepped.rng,
     }
   }
   if (actor.kind === 'weld-hail-rock-fade') {
@@ -1363,7 +1376,7 @@ export function stepNativeWeldWorldActor(
           ...actor,
           ageTicks: actor.ageTicks + 1,
           cameraDisplacement: impact.cameraDisplacement,
-          debris: impact.debris,
+          debris: Object.freeze([]),
           fallHeight,
           impactDue: true,
           impactRadiusScalar: impact.impactRadiusScalar,
@@ -1372,6 +1385,7 @@ export function stepNativeWeldWorldActor(
           impactThrowFirePitch: impact.impactThrowFirePitch,
           phase: 'impact',
         }),
+        debris: impact.debris,
         rng: impact.rng,
       }
     }

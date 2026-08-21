@@ -886,6 +886,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             tick: context.tick,
           }))
           nextId += 1
+          for (const debris of stepped.debris ?? []) {
+            transients.push(createNativeWeldBoulderDebrisActor({
+              buildId: 1007,
+              debris,
+              direction: stepped.actor.direction,
+              id: nextId,
+              origin: stepped.actor.position,
+              ownerId: stepped.actor.ownerId,
+              tick: context.tick,
+              vector: stepped.actor.vector,
+              worldKey: stepped.actor.worldKey,
+            }))
+            nextId += 1
+          }
         }
       }
     } else if (
@@ -1655,18 +1669,20 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               nextId += 1
             }
             if (boulderDebris.length > 0) {
-              transients.push(createNativeWeldBoulderDebrisActor({
-                buildId: 1006,
-                debris: boulderDebris,
-                direction: actor.direction,
-                id: nextId,
-                origin: actor.origin,
-                ownerId: actor.ownerId,
-                tick: context.tick,
-                vector: actor.vector,
-                worldKey: actor.worldKey,
-              }))
-              nextId += 1
+              for (const debris of boulderDebris) {
+                transients.push(createNativeWeldBoulderDebrisActor({
+                  buildId: 1006,
+                  debris,
+                  direction: actor.direction,
+                  id: nextId,
+                  origin: actor.origin,
+                  ownerId: actor.ownerId,
+                  tick: context.tick,
+                  vector: actor.vector,
+                  worldKey: actor.worldKey,
+                }))
+                nextId += 1
+              }
             }
             for (const fade of hailRockFades) {
               transients.push(createNativeWeldHailRockFadeActor({

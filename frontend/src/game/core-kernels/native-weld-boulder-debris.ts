@@ -17,6 +17,99 @@ export interface NativeWeldBoulderDebrisProgram {
   readonly rng: NativeRngState
 }
 
+export interface NativeWeldBoulderDebrisParticleState extends Omit<
+  NativeWeldMeteorDebrisSeed,
+  'alpha'
+> {
+  readonly alpha: number
+  readonly bounceVelocity: number
+  readonly enhancedShadow: boolean
+}
+
+export function createNativeWeldBoulderDebrisParticle(
+  seed: NativeWeldMeteorDebrisSeed,
+  enhancedShadow = true,
+): NativeWeldBoulderDebrisParticleState {
+  return Object.freeze({
+    ...seed,
+    bounceVelocity: seed.verticalVelocity,
+    enhancedShadow,
+    position: Object.freeze({ ...seed.position }),
+    velocity: Object.freeze({ ...seed.velocity }),
+  })
+}
+
+export function stepNativeWeldBoulderDebrisParticle(
+  particle: NativeWeldBoulderDebrisParticleState,
+  globalTick: number,
+  sourceRng: NativeRngState,
+): Readonly<{
+  particle: NativeWeldBoulderDebrisParticleState | null
+  rng: NativeRngState
+}> {
+  if (particle.height !== 0 && globalTick % 3 === 0) {
+    const alpha = Math.fround(particle.alpha - NATIVE_WELD_BOULDER_DEBRIS_ALPHA_STEP)
+    return Object.freeze({
+      particle: alpha > 0 ? Object.freeze({ ...particle, alpha }) : null,
+      rng: sourceRng,
+    })
+  }
+
+  let rng = sourceRng
+  let position = particle.position
+  let velocity = particle.velocity
+  let height = particle.height
+  let verticalVelocity = particle.verticalVelocity
+  let bounceVelocity = particle.bounceVelocity
+  let rotationDegrees = particle.rotationDegrees
+  let rotationStepDegrees = particle.rotationStepDegrees
+  if (height !== 0) {
+    position = Object.freeze({
+      x: Math.fround(position.x + velocity.x),
+      y: Math.fround(position.y + velocity.y),
+    })
+    height = Math.fround(height + verticalVelocity)
+    verticalVelocity = Math.fround(verticalVelocity + Math.fround(0.4))
+    rotationDegrees = Math.fround(rotationDegrees + rotationStepDegrees)
+    if (height > 0) {
+      const spin = drawNativeFloat(rng, 10); rng = spin.state
+      const damping = drawNativeInteger(rng, 2); rng = damping.state
+      rotationStepDegrees = Math.fround(spin.value + 1)
+      bounceVelocity = Math.fround(bounceVelocity * Math.fround(0.3))
+      verticalVelocity = bounceVelocity
+      if (damping.value === 1) {
+        velocity = Object.freeze({
+          x: Math.fround(velocity.x * Math.fround(0.65)),
+          y: Math.fround(velocity.y * Math.fround(0.65)),
+        })
+      }
+      if (verticalVelocity > Math.fround(-0.75)) {
+        velocity = Object.freeze({ x: 0, y: 0 })
+        verticalVelocity = 0
+        bounceVelocity = 0
+        rotationStepDegrees = 0
+      }
+      height = verticalVelocity
+    }
+  }
+  let alpha = Math.fround(particle.alpha - Math.fround(0.015))
+  alpha = Math.fround(alpha - NATIVE_WELD_BOULDER_DEBRIS_ALPHA_STEP)
+  return Object.freeze({
+    particle: alpha > 0 ? Object.freeze({
+      ...particle,
+      alpha,
+      bounceVelocity,
+      height,
+      position,
+      rotationDegrees,
+      rotationStepDegrees,
+      velocity,
+      verticalVelocity,
+    }) : null,
+    rng,
+  })
+}
+
 /** Shared Boulder/Hail contact child at 0x0060BC10. */
 export function createNativeWeldBoulderContactDebrisProgram(input: {
   readonly rng: NativeRngState

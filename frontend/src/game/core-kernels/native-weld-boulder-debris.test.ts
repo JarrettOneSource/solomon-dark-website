@@ -9,8 +9,10 @@ import {
 } from './native-rng.ts'
 import {
   NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  createNativeWeldBoulderDebrisParticle,
   createNativeWeldBoulderContactDebrisProgram,
   createNativeWeldEtherealBoulderWeakDebrisProgram,
+  stepNativeWeldBoulderDebrisParticle,
 } from './native-weld-boulder-debris.ts'
 
 test('weak EBoulder debris preserves native count, macro redraw, and field order', () => {
@@ -76,4 +78,57 @@ test('weak EBoulder debris uses the eight-piece floor and forward spawn socket',
   })
   assert.equal(program.debris.length, 8)
   assert.ok(program.debris.every(({ position }) => position.y < 0))
+})
+
+test('BoulderBit recurrence preserves modulo-three skips and sequential native fade', () => {
+  const seed = createNativeWeldBoulderContactDebrisProgram({
+    rng: createNativeRng(303),
+    scale: 0.75,
+  }).debris[0]!
+  const particle = createNativeWeldBoulderDebrisParticle(seed)
+  const skipped = stepNativeWeldBoulderDebrisParticle(particle, 3, createNativeRng(4))
+  assert.ok(skipped.particle)
+  assert.deepEqual(skipped.particle.position, particle.position)
+  assert.equal(skipped.particle.alpha, Math.fround(2 - Math.fround(0.025)))
+
+  const advanced = stepNativeWeldBoulderDebrisParticle(
+    skipped.particle,
+    4,
+    skipped.rng,
+  )
+  assert.ok(advanced.particle)
+  assert.deepEqual(advanced.particle.position, {
+    x: Math.fround(particle.position.x + particle.velocity.x),
+    y: Math.fround(particle.position.y + particle.velocity.y),
+  })
+  assert.equal(advanced.particle.alpha, Math.fround(
+    Math.fround(skipped.particle.alpha - Math.fround(0.015))
+      - Math.fround(0.025),
+  ))
+})
+
+test('BoulderBit bounce rerolls spin and damping in two-word order', () => {
+  const sourceRng = createNativeRng(404)
+  const particle = createNativeWeldBoulderDebrisParticle({
+    alpha: 2,
+    colorGreen: 0.25,
+    height: Math.fround(-0.1),
+    index: 0,
+    position: { x: 0, y: 0 },
+    record: 2008,
+    rotationDegrees: 0,
+    rotationStepDegrees: 1,
+    scale: 0.5,
+    velocity: { x: 1, y: 0 },
+    verticalVelocity: 1,
+  })
+  const stepped = stepNativeWeldBoulderDebrisParticle(
+    { ...particle, bounceVelocity: -3 },
+    4,
+    sourceRng,
+  )
+  assert.ok(stepped.particle)
+  assert.equal(stepped.particle.bounceVelocity, Math.fround(-3 * Math.fround(0.3)))
+  assert.equal(stepped.particle.height, stepped.particle.verticalVelocity)
+  assert.deepEqual(stepped.rng, advanceNativeRngWords(sourceRng, 2))
 })

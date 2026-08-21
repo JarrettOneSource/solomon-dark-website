@@ -679,7 +679,7 @@ function interpolateTransient(
     return {
       ...actor,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
-      debris: actor.debris.map(copyWeldMeteorDebris),
+      debris: copyWeldMeteorDebris(actor.debris),
       direction: lerpVector(older.direction, newer.direction, blend),
       lightRegistration: null,
       origin: lerpVector(older.origin, newer.origin, blend),
@@ -1126,7 +1126,7 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   if (effect.kind === 'weld-boulder-debris') {
     return {
       ...effect,
-      debris: effect.debris.map(copyWeldMeteorDebris),
+      debris: copyWeldMeteorDebris(effect.debris),
       direction: { ...effect.direction },
       lightRegistration: null,
       origin: { ...effect.origin },

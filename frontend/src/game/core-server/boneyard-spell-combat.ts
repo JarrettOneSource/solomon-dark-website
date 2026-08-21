@@ -325,7 +325,7 @@ export function resolveBoneyardSpellCombat(
   }
 
   const publishBoulderContactDebris = (effect: Readonly<{
-    buildId: 1006 | 1008
+    buildId: 1006
     direction: Vector2
     origin: Vector2
     ownerId: string
@@ -340,7 +340,7 @@ export function resolveBoneyardSpellCombat(
     rng = program.rng
     impactTransients.push(createNativeWeldBoulderDebrisActor({
       buildId: effect.buildId,
-      debris: program.debris,
+      debris: program.debris[0]!,
       direction: effect.direction,
       id: nextSpellId,
       origin: effect.origin,

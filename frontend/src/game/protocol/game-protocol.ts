@@ -92,7 +92,10 @@ import {
   type NativeWeldProjectileState,
   type NativeWeldWorldActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
-import { NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS } from '../core-kernels/native-weld-boulder-debris.ts'
+import {
+  NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  type NativeWeldBoulderDebrisParticleState,
+} from '../core-kernels/native-weld-boulder-debris.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
 import {
   NATIVE_WELD_HAIL_FLASH_ALPHA_STEP,
@@ -4459,23 +4462,13 @@ function primarySpellWeldActor(
 
   if (source.kind === 'weld-boulder-debris') {
     onlyKeys(source, field, [...commonKeys, 'debris', 'position'])
-    if (buildId !== 1006 && buildId !== 1008) {
+    if (buildId !== 1006 && buildId !== 1007) {
       throw new GameProtocolError(`${field}.buildId is not a Boulder carrier`)
     }
     if (common.ageTicks >= NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the BoulderBit lifetime`)
     }
-    const debris = limitedArray(source.debris, `${field}.debris`, 4096).map(
-      (value, index) => nativeWeldBoulderDebris(
-        value,
-        `${field}.debris[${index}]`,
-        index,
-      ),
-    )
-    if ((buildId === 1006 && debris.length !== 1 && debris.length < 8)
-      || (buildId === 1008 && debris.length !== 1)) {
-      throw new GameProtocolError(`${field}.debris does not match its native contact/release path`)
-    }
+    const debris = nativeWeldBoulderDebris(source.debris, `${field}.debris`)
     return {
       ...common,
       buildId,
@@ -5009,7 +5002,7 @@ function primarySpellWeldActor(
       || cameraDisplacement !== null || impactAgeTicks !== 0
       || impactRadiusScalar !== 1 || impactRotationDegrees !== 0
       || impactSoundPitch !== null || impactThrowFirePitch !== null))
-      || (source.phase === 'impact' && (debris.length !== 5
+      || (source.phase === 'impact' && (debris.length !== 0
         || cameraDisplacement === null))
       || ((impactSoundPitch !== null) !== (source.phase === 'impact'))
       || ((impactThrowFirePitch !== null) !== (
@@ -5228,15 +5221,39 @@ function nativeWeldMeteorDebris(
 function nativeWeldBoulderDebris(
   value: unknown,
   field: string,
-  expectedIndex: number,
-): NativeWeldMeteorDebrisSeed {
-  return nativeWeldMeteorDebris(
-    value,
-    field,
-    expectedIndex,
-    Number.MIN_VALUE,
-    Math.fround(0.75 * 0.75),
-  )
+): NativeWeldBoulderDebrisParticleState {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'alpha', 'bounceVelocity', 'colorGreen', 'enhancedShadow', 'height', 'index',
+    'position', 'record', 'rotationDegrees', 'rotationStepDegrees', 'scale',
+    'velocity', 'verticalVelocity',
+  ])
+  const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+  if (alpha > 2) throw new GameProtocolError(`${field}.alpha exceeds native debris life`)
+  const nativeRecord = positiveInteger(source.record, `${field}.record`)
+  if (nativeRecord !== 2008 && nativeRecord !== 2009 && nativeRecord !== 2010) {
+    throw new GameProtocolError(`${field}.record is not native BoulderBit art`)
+  }
+  const scale = positiveFinite(source.scale, `${field}.scale`)
+  if (scale > 0.75) throw new GameProtocolError(`${field}.scale exceeds native debris size`)
+  return {
+    alpha,
+    bounceVelocity: finite(source.bounceVelocity, `${field}.bounceVelocity`),
+    colorGreen: unitInterval(source.colorGreen, `${field}.colorGreen`),
+    enhancedShadow: boolean(source.enhancedShadow, `${field}.enhancedShadow`),
+    height: finite(source.height, `${field}.height`),
+    index: nonnegativeInteger(source.index, `${field}.index`),
+    position: vector(source.position, `${field}.position`),
+    record: nativeRecord,
+    rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+    rotationStepDegrees: nonnegativeFinite(
+      source.rotationStepDegrees,
+      `${field}.rotationStepDegrees`,
+    ),
+    scale,
+    velocity: vector(source.velocity, `${field}.velocity`),
+    verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+  }
 }
 
 function primarySpellWeldHailstones(

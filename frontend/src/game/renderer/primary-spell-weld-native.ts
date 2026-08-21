@@ -31,6 +31,7 @@ import { earthBoulderPresentationPlan } from './earth-boulder-presentation.ts'
 import { nativeFireballPlan } from './primary-spell-fire-native.ts'
 import {
   AIR_LIGHTNING_BRANCH_RECORDS,
+  buildNativeAirCoronaPlan,
   buildNativeAirRibbonLayer,
 } from './primary-spell-air-native.ts'
 import {
@@ -249,13 +250,19 @@ function projectilePlan(
     ], { regionLightPoint: state.position })
   }
   if (state.buildId === 1002) {
-    return positioned(state.position, lightningCore(
+    const alpha = state.underpowered ? 0.5 : 1
+    return positioned(state.position, [...lightningCore(
       state.id,
       frame,
       0.75 + visualUnit(state.id, frame, 0) * 0.5,
-      1,
+      alpha,
       'ball-lightning',
-    ), { regionLightPoint: state.position })
+    ), sprite(70, 'ball-lightning-body', {
+      alpha: alpha * visualUnit(state.id, frame, 0x70),
+      offset: { x: 0, y: -10 },
+      scaleX: 1.25 + visualUnit(state.id, frame, 0x71) * 0.1,
+      scaleY: 1.25 + visualUnit(state.id, frame, 0x71) * 0.1,
+    })], { regionLightPoint: state.position })
   }
   // GroundSpark owns no immediate draw. Its tick-created fades are separate actors.
   return positioned(state.position, [], { regionLightPoint: state.position })
@@ -420,7 +427,7 @@ function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWel
     rotationRadians: state.impactRotationDegrees * DEG,
     scaleX: state.impactRadiusScalar,
     scaleY: state.impactRadiusScalar * 0.8,
-  }), ...debrisSprites(state.debris, state.impactAgeTicks, 'meteor-debris')])
+  })])
 }
 
 function meteorFlashPlan(state: NativeWeldMeteorFlashActorState): NativeWeldVisualPlan {
@@ -434,11 +441,31 @@ function meteorFlashPlan(state: NativeWeldMeteorFlashActorState): NativeWeldVisu
 }
 
 function debrisPlan(state: NativeWeldBoulderDebrisActorState): NativeWeldVisualPlan {
-  return positioned(state.position, debrisSprites(
-    state.debris,
-    state.ageTicks,
-    state.buildId === 1006 ? 'ethereal-boulder-debris' : 'hailstones-contact-debris',
-  ))
+  const debris = state.debris
+  const role = state.buildId === 1006 ? 'ethereal-boulder-debris' : 'meteor-debris'
+  const position = {
+    x: Math.fround(state.position.x + debris.position.x),
+    y: Math.fround(state.position.y + debris.position.y),
+  }
+  const sprites: NativeWeldSpriteDraw[] = []
+  if (debris.enhancedShadow && debris.height !== 0) {
+    sprites.push(sprite(debris.record, `${role}-shadow-${debris.index}`, {
+      alpha: Math.min(1, debris.alpha) * 0.5,
+      offset: { x: 0, y: 2 },
+      scaleX: debris.scale * 0.5,
+      scaleY: debris.scale * 0.5,
+      tint: 0x000000,
+    }))
+  }
+  sprites.push(sprite(debris.record, `${role}-${debris.index}`, {
+    alpha: Math.min(1, debris.alpha),
+    offset: { x: 0, y: debris.height },
+    rotationRadians: debris.rotationDegrees * DEG,
+    scaleX: debris.scale,
+    scaleY: debris.scale,
+    tint: 0xff0000 | Math.trunc(debris.colorGreen * 255) << 8,
+  }))
+  return positioned(position, sprites, { regionLightPoint: position, sortBias: -15 })
 }
 
 function etherealBoulderPlan(
@@ -659,31 +686,6 @@ function steamPlan(state: NativeWeldSteamActorState): NativeWeldVisualPlan {
     : [draw])
 }
 
-function debrisSprites(
-  debris: NativeWeldMeteorActorState['debris'],
-  age: number,
-  role: string,
-): NativeWeldSpriteDraw[] {
-  return debris.flatMap((seed) => {
-    const alpha = Math.max(0, seed.alpha - age * 0.025)
-    if (alpha <= 0) return []
-    const vertical = seed.height
-      + seed.verticalVelocity * age
-      + Math.fround(0.075 * age * Math.max(0, age - 1))
-    return [sprite(seed.record, `${role}-${seed.index}`, {
-      alpha,
-      offset: {
-        x: seed.position.x + seed.velocity.x * age,
-        y: seed.position.y + seed.velocity.y * age + vertical,
-      },
-      rotationRadians: (seed.rotationDegrees + seed.rotationStepDegrees * age) * DEG,
-      scaleX: seed.scale,
-      scaleY: seed.scale,
-      tint: 0xff0000 | Math.round(seed.colorGreen * 255) << 8,
-    })]
-  })
-}
-
 function frostCore(
   id: number,
   frame: number,
@@ -720,29 +722,30 @@ function lightningCore(
   alpha: number,
   role: string,
 ): NativeWeldSpriteDraw[] {
-  const pulse = (3.5 + Math.abs(Math.sin(frame * DEG)) * 0.15) * scale
-  const fork = Math.floor(visualUnit(id, frame, 10) * 4)
+  const corona = buildNativeAirCoronaPlan({
+    alpha,
+    angle: frame * DEG,
+    center: { x: 0, y: 0 },
+    randomSalt: 0x536380 ^ frame,
+    scale,
+    seed: id,
+  })
   return [
-    sprite(110, `${role}-outer`, {
-      alpha: alpha * (0.2 + visualUnit(id, frame, 1) * 0.25),
-      blend: 'add', scaleX: pulse, scaleY: pulse, tint: 0x80bfbf,
-    }),
-    sprite(110, `${role}-mid`, {
-      alpha: alpha * 0.5, blend: 'add', scaleX: pulse * 0.75,
-      scaleY: pulse * 0.75, tint: 0x80bfbf,
-    }),
-    sprite(110, `${role}-inner`, {
-      alpha: alpha * 0.5, blend: 'add', scaleX: pulse * 0.5,
-      scaleY: pulse * 0.5, tint: 0x80bfbf,
-    }),
-    sprite((1836 + fork) as NativeWeldBadGuysRecord, `${role}-fork-a`, {
-      alpha, blend: 'add', rotationRadians: frame * DEG,
-      scaleX: scale, scaleY: scale,
-    }),
-    sprite((1839 - fork) as NativeWeldBadGuysRecord, `${role}-fork-b`, {
-      alpha: alpha * 0.5, blend: 'add', rotationRadians: frame * DEG + Math.PI / 2,
-      scaleX: scale, scaleY: scale,
-    }),
+    ...corona.circles.map((circle, index) => sprite(circle.record, `${role}-circle-${index}`, {
+      alpha: corona.alpha * circle.alpha,
+      blend: 'add',
+      scaleX: circle.scale,
+      scaleY: circle.scale,
+      tint: circle.tint,
+    })),
+    ...corona.forks.map((fork, index) => sprite(fork.record, `${role}-fork-${index}`, {
+      alpha: corona.alpha * fork.alpha,
+      blend: 'add',
+      rotationRadians: fork.rotation,
+      scaleX: fork.scale,
+      scaleY: fork.scale,
+      tint: fork.tint,
+    })),
   ]
 }
 

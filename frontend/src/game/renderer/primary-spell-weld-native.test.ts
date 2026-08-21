@@ -69,8 +69,12 @@ test('one-shot Weld plans preserve native body, compositor, and child ownership'
   assert.equal(frostPlan.sprites.filter(({ role }) => role.includes('lane')).length, 2)
 
   const ball = nativeWeldVisualPlan(projectile(1002))
-  assert.ok(ball.sprites.some(({ record }) => record === 110))
-  assert.ok(ball.sprites.some(({ record }) => record >= 1836 && record <= 1839))
+  assert.equal(ball.sprites.filter(({ role }) => role.includes('-circle-')).length, 4)
+  assert.equal(ball.sprites.filter(({ role }) => role.includes('-fork-')).length, 2)
+  assert.deepEqual(ball.sprites.filter(({ role }) => role === 'ball-lightning-body').map((draw) => ({
+    offset: draw.offset,
+    record: draw.record,
+  })), [{ offset: { x: 0, y: -10 }, record: 70 }])
 
   const spark = projectile(1009)
   assert.deepEqual(nativeWeldVisualPlan(spark).sprites, [])
@@ -219,11 +223,11 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
   })
   const debris = createNativeWeldBoulderDebrisActor({
     buildId: 1006,
-    debris: debrisProgram.debris, direction: { x: 1, y: 0 }, id: 21,
+    debris: debrisProgram.debris[0]!, direction: { x: 1, y: 0 }, id: 21,
     origin: { x: 0, y: 0 }, ownerId: 'wizard', tick: 1,
     vector: [8, 2, 1, 1, 1, 1], worldKey: WORLD_KEY,
   })
-  assert.equal(nativeWeldVisualPlan(debris).sprites.length, debrisProgram.debris.length)
+  assert.ok(nativeWeldVisualPlan(debris).sprites.some(({ record }) => record === debris.debris.record))
 })
 
 test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visible', () => {
@@ -248,7 +252,7 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
     impactRotationDegrees: impactProgram.impactRotationDegrees,
     phase: 'impact' as const,
   }
-  assert.ok(nativeWeldVisualPlan(impacted).sprites.length >= 6)
+  assert.deepEqual(nativeWeldVisualPlan(impacted).sprites.map(({ record }) => record), [50])
   const flash = createNativeWeldMeteorFlash({ actor: impacted, id: 41, tick: 2 })
   assert.deepEqual(nativeWeldVisualPlan(flash).sprites.map(({ record, scaleX }) => ({
     record,
