@@ -1,7 +1,8 @@
 import {
+  BufferImageSource,
   Container,
-  FillGradient,
-  Graphics,
+  Particle,
+  ParticleContainer,
   Sprite,
   Texture,
 } from 'pixi.js'
@@ -13,15 +14,13 @@ import {
   type NativeBoneyardWeatherDropPlan,
 } from '../core-kernels/native-boneyard-weather.ts'
 
-interface DropView {
-  readonly fill: FillGradient
-  readonly graphic: Graphics
-}
+const WEATHER_STREAK_RAMP_HEIGHT = 256
 
 export class NativeBoneyardWeatherView {
   readonly container = new Container({ label: 'native-boneyard-weather' })
-  private readonly dropContainer = new Container({ label: 'native-boneyard-weather-streaks' })
-  private readonly dropViews: DropView[] = []
+  private readonly dropContainer: ParticleContainer<Particle>
+  private readonly dropTexture: Texture
+  private readonly dropViews: Particle[] = []
   private readonly root: Container
   private readonly splashContainer = new Container({ label: 'native-boneyard-weather-splashes' })
   private readonly splashAnchor: BoneyardPoint
@@ -43,6 +42,16 @@ export class NativeBoneyardWeatherView {
     }
     this.splashTexture = splashTexture
     this.weather = weather
+    this.dropTexture = weatherStreakRampTexture()
+    this.dropContainer = new ParticleContainer({
+      dynamicProperties: {
+        color: true,
+        position: true,
+        vertex: true,
+      },
+      texture: this.dropTexture,
+    })
+    this.dropContainer.label = 'native-boneyard-weather-streaks'
     this.container.sortableChildren = true
     this.splashContainer.zIndex = 0
     this.dropContainer.zIndex = 1
@@ -57,7 +66,7 @@ export class NativeBoneyardWeatherView {
     for (let index = 0; index < this.dropViews.length; index += 1) {
       const view = this.dropViews[index]!
       const drop = plan.drops[index]
-      view.graphic.renderable = drop !== undefined
+      view.alpha = drop === undefined ? 0 : 1
       if (drop) applyDrop(view, drop)
     }
     for (let index = 0; index < this.splashViews.length; index += 1) {
@@ -87,25 +96,20 @@ export class NativeBoneyardWeatherView {
   destroy(): void {
     this.root.removeChild(this.container)
     this.container.destroy({ children: true })
-    for (const view of this.dropViews) view.fill.destroy()
+    this.dropTexture.destroy(true)
     this.dropViews.length = 0
     this.splashViews.length = 0
   }
 
   private addDropView(): void {
-    const fill = new FillGradient({
-      colorStops: [
-        { color: 'rgba(255,255,255,0)', offset: 0 },
-        { color: 'rgba(255,255,255,0.5)', offset: 1 },
-      ],
-      end: { x: 0, y: 1 },
-      start: { x: 0, y: 0 },
-      textureSpace: 'local',
+    const particle = new Particle({
+      anchorX: 0.5,
+      anchorY: 0.5,
+      texture: this.dropTexture,
     })
-    const graphic = new Graphics({ label: 'native-boneyard-weather-drop' })
-    graphic.eventMode = 'none'
-    this.dropViews.push({ fill, graphic })
-    this.dropContainer.addChild(graphic)
+    particle.alpha = 0
+    this.dropViews.push(particle)
+    this.dropContainer.addParticle(particle)
   }
 
   private addSplashView(): void {
@@ -117,12 +121,38 @@ export class NativeBoneyardWeatherView {
   }
 }
 
-function applyDrop(view: DropView, drop: NativeBoneyardWeatherDropPlan): void {
-  view.graphic.label = `native-boneyard-weather-drop:${drop.id}`
-  view.graphic.clear()
-    .moveTo(drop.start.x, drop.start.y)
-    .lineTo(drop.end.x, drop.end.y)
-    .stroke({ cap: 'butt', fill: view.fill, width: drop.width })
-  view.graphic.tint = drop.startColor
-  view.graphic.alpha = 1
+function applyDrop(particle: Particle, drop: NativeBoneyardWeatherDropPlan): void {
+  particle.x = (drop.start.x + drop.end.x) / 2
+  particle.y = (drop.start.y + drop.end.y) / 2
+  particle.scaleX = drop.width
+  particle.scaleY = drop.length / WEATHER_STREAK_RAMP_HEIGHT
+  particle.tint = drop.startColor
+}
+
+export function nativeBoneyardWeatherStreakRampPixels(): Uint8Array {
+  const pixels = new Uint8Array(WEATHER_STREAK_RAMP_HEIGHT * 4)
+  for (let row = 0; row < WEATHER_STREAK_RAMP_HEIGHT; row += 1) {
+    const offset = row * 4
+    pixels[offset] = 0xff
+    pixels[offset + 1] = 0xff
+    pixels[offset + 2] = 0xff
+    pixels[offset + 3] = Math.round(
+      row / (WEATHER_STREAK_RAMP_HEIGHT - 1) * 0.5 * 0xff,
+    )
+  }
+  return pixels
+}
+
+function weatherStreakRampTexture(): Texture {
+  return new Texture({
+    label: 'native-boneyard-weather-streak-ramp',
+    source: new BufferImageSource({
+      alphaMode: 'premultiply-alpha-on-upload',
+      height: WEATHER_STREAK_RAMP_HEIGHT,
+      label: 'native-boneyard-weather-streak-ramp-source',
+      resource: nativeBoneyardWeatherStreakRampPixels(),
+      scaleMode: 'linear',
+      width: 1,
+    }),
+  })
 }

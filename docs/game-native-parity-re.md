@@ -22492,6 +22492,28 @@ This correction intentionally keeps the right-click rain actor family outside
 the world-weather owner: its native constructors, collision, damage, and local
 effects remain a separate system.
 
+### Renderer ownership and performance follow-up — 2026-08-20
+
+The corrected fixed-tick model predicts a steady enhanced-storm population of
+roughly 500–600 live streaks at the stock viewport. The first web painter gave
+each streak a separate Pixi `Graphics` owner and `FillGradient`, then cleared
+and rebuilt every path on every display frame. Those hundreds of heavyweight
+display objects are not native ownership: stock submits the streak family as
+one procedural primitive lane through manager `Arena+0x1E0`.
+
+The web renderer therefore owns one shared vertical alpha-ramp texture and one
+Pixi particle container for the complete streak lane. Each lightweight
+particle preserves the recovered one-pixel width, `20..30` length, cached
+grayscale light tint, `0 -> 0.5` endpoint alpha, world position, and manager
+order. DeadHawg:24 splashes remain ordinary pooled sprites in the earlier
+`Arena+0x2C4` lane. This changes no weather state, RNG consumption, timing,
+collision, or asset membership; it removes per-streak gradient allocation and
+collapses the streak lane to one batched render owner.
+
+Performance acceptance must report the live drop/splash population together
+with frame-gap p95, p99, and maximum, long tasks, and browser errors. Average
+FPS alone is not a completion receipt.
+
 ### Implementation and validation receipt
 
 - `core-kernels/native-boneyard-weather.ts` owns the fixed-tick plan and

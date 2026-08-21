@@ -88,6 +88,9 @@ try {
       visibleMainLayerCount: frame.visibleMainLayerCount,
       visibleOversizedResidentCount: frame.visibleOversizedResidentCount,
       visibleResidentCount: frame.visibleResidentCount,
+      weatherDropCount: frame.weatherDropCount,
+      weatherSplashCount: frame.weatherSplashCount,
+      weatherStreakRenderer: node.dataset.weatherStreakRenderer,
     }
 
     function environmentLightReceipt(lightCanvas, worldCanvas, diagnostics, fallbackViewport) {

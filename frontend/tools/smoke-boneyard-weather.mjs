@@ -83,11 +83,13 @@ try {
       dropCount: Number(canvas?.dataset.weatherDropCount),
       splashAsset: canvas?.dataset.weatherSplashAsset,
       splashCount: Number(canvas?.dataset.weatherSplashCount),
+      streakRenderer: canvas?.dataset.weatherStreakRenderer,
       rainfallSources: window.__sdrAudioPlaySources.filter((source) => source.includes('rainfall-loop')),
     }
   })
   assert.equal(receipt.canvasMode, mode)
   assert.equal(receipt.splashAsset, 'DeadHawg:24')
+  assert.equal(receipt.streakRenderer, 'pixi-particle-batch')
   assert.equal(receipt.audioCue, 'rainfall-loop')
   assert.equal(receipt.audioOwner, 'boneyard-weather:rainfall')
   assert.ok(receipt.audioGain > 0)

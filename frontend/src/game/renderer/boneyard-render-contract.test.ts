@@ -43,6 +43,10 @@ const deathWeaponView = readFileSync(
   new URL('./player-death-weapon-view.ts', import.meta.url),
   'utf8',
 )
+const weatherView = readFileSync(
+  new URL('./native-boneyard-weather-view.ts', import.meta.url),
+  'utf8',
+)
 const hubExtractor = readFileSync(
   new URL('../../../../tools/extract-hub-assets.py', import.meta.url),
   'utf8',
@@ -58,6 +62,14 @@ test('Gate record 7 uses the recovered four-corner consumer in game and editor',
   assert.doesNotMatch(boneyardRenderer, /this\.gateLeaf\.position\.set\(leaf\.p0/)
   assert.match(editorRenderer, /drawGateLeafArt\(ctx, FENCE_ART\.gateLeaf, leaf, cam, w, h\)/)
   assert.doesNotMatch(editorRenderer, /plantArt\(ctx, FENCE_ART\.gateLeaf, leaf\.p0/)
+})
+
+test('world-weather streaks share one particle batch and alpha-ramp texture', () => {
+  assert.match(weatherView, /new ParticleContainer/)
+  assert.match(weatherView, /new BufferImageSource/)
+  assert.match(weatherView, /nativeBoneyardWeatherStreakRampPixels/)
+  assert.doesNotMatch(weatherView, /new Graphics/)
+  assert.doesNotMatch(weatherView, /new FillGradient/)
 })
 
 test('Tree foreground stays per-object and shares native alpha and root tint', () => {
