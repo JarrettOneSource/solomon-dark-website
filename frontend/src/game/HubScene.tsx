@@ -4,7 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import type {
   HubGameSnapshot,
@@ -41,6 +41,7 @@ import {
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
 import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
+import type { LocalPartyState } from './protocol/party-state.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -54,6 +55,7 @@ import {
   gameViewportLayout,
   type GameViewportLayout,
 } from './renderer/game-viewport.ts'
+import { selectHubPlayerAtPoint } from './hub-player-selection.ts'
 import './hub.css'
 
 interface HubSceneProps {
@@ -66,11 +68,14 @@ interface HubSceneProps {
   levelUpModalActive: boolean
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
+  onAcceptPartyInvitation: (invitationId: string) => void
   onHubAction: (action: HubInventoryAction) => void
+  onInvitePlayer: (playerId: string) => void
   onLoadingError: () => void
   onPauseRequest: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
+  partyState: LocalPartyState | null
   playerId: string
   progression: ProtocolPlayerProgression
   presentationPaused: boolean
@@ -99,11 +104,14 @@ export default function HubScene({
   levelUpModalActive,
   levelUpPresentationId,
   onInput,
+  onAcceptPartyInvitation,
   onHubAction,
+  onInvitePlayer,
   onLoadingError,
   onPauseRequest,
   onReady,
   onStartMatch,
+  partyState,
   playerId,
   progression,
   presentationPaused,
@@ -146,6 +154,7 @@ export default function HubScene({
   )
   const [pickerOpen, setPickerOpen] = useState(false)
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
   ))
@@ -155,7 +164,7 @@ export default function HubScene({
   const [transitionActive, setTransitionActive] = useState(() => (
     hubInitialSnapshot.world.participants[playerId]?.transition !== null
   ))
-  const modalOpen = pickerOpen || hubUiSurface !== null
+  const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
   modalOpenRef.current = modalOpen
 
   useLayoutEffect(() => {
@@ -237,6 +246,13 @@ export default function HubScene({
       setHostPlayerId((current) => current === snapshot.hostPlayerId
         ? current
         : snapshot.hostPlayerId)
+      setSelectedPlayerId((selected) => {
+        if (!selected) return null
+        const selectedParticipant = snapshot.world.participants[selected]
+        return snapshot.players[selected] && selectedParticipant?.region === participant?.region
+          ? selected
+          : null
+      })
     })
   }, [audio, hubInitialSnapshot, playerId, subscribe])
 
@@ -351,8 +367,10 @@ export default function HubScene({
   }
   const localPlayer = hubInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
-  const activatePointerTrader = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || inputBlocked || modalOpen || transitionActive) return
+  const activatePointerTarget = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || event.button !== 0 || inputBlocked || modalOpen || transitionActive) {
+      return
+    }
     const host = hostRef.current
     if (!host) return
     const snapshot = samplePresentation()
@@ -371,6 +389,13 @@ export default function HubScene({
       HUB_CAMERA_SCALE,
     )
     if (!point) return
+    const selectedPlayer = selectHubPlayerAtPoint(snapshot, playerId, point)
+    if (selectedPlayer) {
+      event.preventDefault()
+      event.stopPropagation()
+      setSelectedPlayerId(selectedPlayer)
+      return
+    }
     const trader = hubTraderAtPoint(participant.region, point)
     if (!trader || !hubTraderWithinServiceRange(
       trader,
@@ -412,7 +437,7 @@ export default function HubScene({
         <div
           ref={hostRef}
           className="hub-world-renderer"
-          onMouseDownCapture={activatePointerTrader}
+          onPointerDownCapture={activatePointerTarget}
         />
 
         <GameHud
@@ -427,6 +452,7 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
+          partyMemberIds={partyState?.party.memberPlayerIds}
           playerId={playerId}
           progression={progression}
           subscribePing={subscribePing}
@@ -446,6 +472,80 @@ export default function HubScene({
           surface={hubUiSurface}
           transitionActive={transitionActive}
         />
+
+        {partyState && (
+          <section className="hub-party-panel" aria-label="Party" data-party-id={partyState.party.id}>
+            <h2>Party</h2>
+            <div className="hub-party-members" role="list">
+              {partyState.party.memberPlayerIds.map((memberPlayerId) => {
+                const profile = partyState.hubPlayers.find(({ playerId: id }) => (
+                  id === memberPlayerId
+                ))
+                return (
+                  <div key={memberPlayerId} role="listitem" data-party-member={memberPlayerId}>
+                    {profile?.displayName ?? memberPlayerId}
+                    {memberPlayerId === partyState.party.leaderPlayerId ? ' · Host' : ''}
+                  </div>
+                )
+              })}
+            </div>
+            {partyState.invitations.map((invitation) => (
+              <div
+                className="hub-party-invitation"
+                data-party-invitation={invitation.id}
+                key={invitation.id}
+              >
+                <span>{invitation.inviter.displayName} invited you</span>
+                <button
+                  type="button"
+                  onClick={() => onAcceptPartyInvitation(invitation.id)}
+                >
+                  Accept
+                </button>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {selectedPlayerId && (() => {
+          const profile = partyState?.hubPlayers.find(({ playerId: id }) => (
+            id === selectedPlayerId
+          ))
+          const displayName = profile?.displayName
+            ?? samplePresentation().players[selectedPlayerId]?.config.displayName
+            ?? selectedPlayerId
+          const alreadyTogether = partyState?.party.memberPlayerIds.includes(selectedPlayerId)
+            ?? false
+          return (
+            <div className="hub-player-profile-backdrop" role="presentation">
+              <section
+                className="hub-player-profile"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="hub-player-profile-name"
+                data-profile-player={selectedPlayerId}
+              >
+                <h2 id="hub-player-profile-name">{displayName}</h2>
+                {partyState && !alreadyTogether && (
+                  <button
+                    type="button"
+                    className="hub-player-profile-invite"
+                    onClick={() => onInvitePlayer(selectedPlayerId)}
+                  >
+                    Invite to Party
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="hub-player-profile-close"
+                  onClick={() => setSelectedPlayerId(null)}
+                >
+                  Close
+                </button>
+              </section>
+            </div>
+          )
+        })()}
 
         {pickerOpen && isHost && (
           <div className="hub-boneyard-picker-backdrop" role="presentation">

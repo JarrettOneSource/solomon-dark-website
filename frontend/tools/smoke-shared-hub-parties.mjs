@@ -1,0 +1,350 @@
+import assert from 'node:assert/strict'
+
+import { chromium } from 'playwright-core'
+import { WebSocket } from 'ws'
+
+const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'
+const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
+const publicWebSocketOrigin = process.env.SDR_SHARED_HUB_PUBLIC_ORIGIN?.trim()
+const pointerMode = process.env.SDR_SHARED_HUB_POINTER_MODE?.trim() || 'mobile'
+if (Boolean(gatewayUrl) !== Boolean(publicWebSocketOrigin)) {
+  throw new Error('SDR_SHARED_HUB_GATEWAY_URL and SDR_SHARED_HUB_PUBLIC_ORIGIN must be set together')
+}
+if (pointerMode !== 'desktop' && pointerMode !== 'mobile') {
+  throw new Error('SDR_SHARED_HUB_POINTER_MODE must be desktop or mobile')
+}
+
+const browser = await chromium.launch({
+  executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
+  headless: true,
+})
+const contexts = []
+const rawClients = []
+const pageErrors = []
+const consoleErrors = []
+
+try {
+  const host = await enterRawHub('Basil', 'earth')
+  const hostBefore = await host.next((message) => (
+    message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
+  ), 'host Hub snapshot')
+  const hostX = hostBefore.frame.players[host.playerId].position.x
+  host.sendInput(hostBefore.frame.tick + 1, 1, { x: 1, y: 0 })
+  const hostMoved = await host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.players[host.playerId]?.position.x > hostX + 80
+  ), 'host displacement')
+  host.sendInput(hostMoved.frame.tick + 1, 2, { x: 0, y: 0 })
+
+  const first = await enterHub('Aurelia', 'Fire', pointerMode === 'mobile'
+    ? { width: 844, height: 390, hasTouch: true, useTouch: true }
+    : { width: 1600, height: 900, useTouch: false })
+  await waitForPlayers(first.page, 2)
+  host.invitePlayer(first.playerId)
+  const invitation = first.page.locator('[data-party-invitation]')
+  await invitation.waitFor()
+  assert.match(await invitation.innerText(), /Basil invited you/)
+  await invitation.getByRole('button', { name: 'Accept' }).click()
+  await waitForPartySize(first.page, 2)
+
+  const member = await enterRawHub('Cassia', 'water')
+  await waitForPlayers(first.page, 3)
+  await activatePlayer(first, member.playerId)
+  await first.page.getByRole('heading', { name: 'Cassia' }).waitFor()
+  await first.page.getByRole('button', { name: 'Invite to Party' }).click()
+  const memberInvitation = await member.next((message) => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ), 'member invitation')
+  assert.equal(memberInvitation.state.invitations[0].inviter.displayName, 'Aurelia')
+  member.acceptInvitation(memberInvitation.state.invitations[0].id)
+  await waitForPartySize(first.page, 3)
+
+  const outsider = await enterRawHub('Daria', 'air')
+  await waitForPlayers(first.page, 4)
+  const outsiderParty = await outsider.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 1
+  ), 'outsider singleton party')
+  assert.equal(outsiderParty.state.party.leaderPlayerId, outsider.playerId)
+
+  const outsiderHub = outsider.next((message) => (
+    message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
+  ), 'outsider Hub snapshot')
+  const firstBoneyard = first.page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  const hostLoaded = host.next(
+    (message) => message.type === 'server-boneyard-loaded',
+    'host Boneyard materialization',
+  )
+  const memberLoaded = member.next(
+    (message) => message.type === 'server-boneyard-loaded',
+    'member Boneyard materialization',
+  )
+  host.startMatch('default-random')
+  await firstBoneyard.waitFor({ timeout: 240_000 })
+  const [hostRun, memberRun] = await Promise.all([hostLoaded, memberLoaded])
+  const firstRunId = await firstBoneyard.getAttribute('data-run-id')
+  assert.ok(firstRunId)
+  assert.equal(hostRun.boneyard.runId, firstRunId)
+  assert.equal(memberRun.boneyard.runId, firstRunId)
+
+  const outsiderBefore = await outsiderHub
+  const outsiderX = outsiderBefore.frame.players[outsider.playerId].position.x
+  outsider.sendInput(outsiderBefore.frame.tick + 1, 1, { x: 1, y: 0 })
+  const outsiderAfter = await outsider.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'hub'
+    && message.frame.players[outsider.playerId]?.position.x > outsiderX + 15
+  ), 'outsider Hub movement')
+  outsider.sendInput(outsiderAfter.frame.tick + 1, 2, { x: 0, y: 0 })
+
+  const healthDuringRun = await supervisorHealth()
+  if (healthDuringRun) {
+    assert.equal(healthDuringRun.hubPlayers, 1)
+    assert.equal(healthDuringRun.parties, 2)
+    assert.equal(healthDuringRun.runs, 1)
+  }
+  assert.deepEqual(consoleErrors, [])
+  assert.deepEqual(pageErrors, [])
+
+  await host.close()
+  await member.close()
+  await outsider.close()
+  for (const context of contexts.splice(0)) await context.close()
+  const finalHealth = await waitForEmptyHealth()
+  process.stdout.write(`${JSON.stringify({
+    status: 'ok',
+    pointerMode,
+    partyLeaderPlayerId: host.playerId,
+    browserPartyMemberPlayerId: first.playerId,
+    secondPartyMemberPlayerId: member.playerId,
+    remainingHubPlayerId: outsider.playerId,
+    runId: firstRunId,
+    remainingHubBeforeX: outsiderX,
+    remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
+    healthDuringRun,
+    finalHealth,
+    consoleErrors,
+    pageErrors,
+  })}\n`)
+} finally {
+  for (const client of rawClients.splice(0)) await client.close()
+  for (const context of contexts.splice(0)) await context.close()
+  await browser.close()
+}
+
+async function enterHub(displayName, element, viewport, existingContext) {
+  const { width, height, useTouch = false, ...device } = viewport
+  const context = existingContext
+    ?? await browser.newContext({ viewport: { width, height }, ...device })
+  if (!existingContext) contexts.push(context)
+  const page = await context.newPage()
+  if (existingContext) await page.setViewportSize({ width, height })
+  page.on('pageerror', (error) => pageErrors.push(`${displayName}: ${error.message}`))
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(`${displayName}: ${message.text()}`)
+  })
+  if (gatewayUrl && publicWebSocketOrigin) {
+    await page.addInitScript(({ gateway, publicOrigin }) => {
+      const NativeWebSocket = window.WebSocket
+      window.WebSocket = class GatewayWebSocket extends NativeWebSocket {
+        constructor(url, protocols) {
+          const requested = new URL(String(url))
+          const mapped = requested.origin === publicOrigin
+            ? new URL(`${requested.pathname}${requested.search}`, gateway).toString()
+            : requested.toString()
+          if (protocols === undefined) super(mapped)
+          else super(mapped, protocols)
+        }
+      }
+    }, { gateway: gatewayUrl, publicOrigin: publicWebSocketOrigin })
+  }
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
+  await page.getByRole('button', { name: 'Play' }).click()
+  const admission = page.waitForResponse((response) => (
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/game/hub'
+  ))
+  await page.getByRole('button', { name: 'New Game' }).click()
+  assert.equal((await admission).status(), 201)
+  await page.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({
+    timeout: 30_000,
+  })
+  await page.getByRole('textbox', { name: 'Wizard name' }).fill(displayName)
+  await page.getByRole('button', { name: new RegExp(element, 'i') }).click()
+  await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
+  await page.locator('.create-menu-discipline-arcane').click()
+  try {
+    await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 240_000 })
+  } catch (error) {
+    const rendererError = await page.locator('.hub-renderer-error').textContent().catch(() => null)
+    throw new Error(
+      `${displayName} Hub renderer did not become ready${rendererError ? `: ${rendererError}` : ''}`,
+      { cause: error },
+    )
+  }
+  await page.evaluate(() => {
+    window.requestAnimationFrame = (callback) => window.setTimeout(
+      () => callback(performance.now()),
+      50,
+    )
+    window.cancelAnimationFrame = (handle) => window.clearTimeout(handle)
+  })
+  const current = await frame(page)
+  return { context, page, playerId: current.localPlayerId, touch: useTouch }
+}
+
+async function activatePlayer(client, targetPlayerId) {
+  const canvas = client.page.locator('.hub-world-canvas')
+  const target = await canvas.evaluate((node, playerId) => ({
+    logicalHeight: Number(node.dataset.viewportHeight),
+    logicalWidth: Number(node.dataset.viewportWidth),
+    position: structuredClone(node.__sdrHubFrame.playerScreenPositions[playerId]),
+  }), targetPlayerId)
+  assert.ok(target.position, `missing screen position for ${targetPlayerId}`)
+  const bounds = await canvas.boundingBox()
+  assert.ok(bounds)
+  const x = bounds.x + (target.position.x - 48) * bounds.width / target.logicalWidth
+  const y = bounds.y + target.position.y * bounds.height / target.logicalHeight
+  if (client.touch) await client.page.touchscreen.tap(x, y)
+  else await client.page.mouse.click(x, y)
+}
+
+async function enterRawHub(displayName, element) {
+  const response = await fetch(`${baseUrl}/api/game/hub`, {
+    method: 'POST',
+    headers: { 'x-solomon-dark-session': 'enter-hub' },
+  })
+  const admission = await response.json()
+  assert.equal(response.status, 201, JSON.stringify(admission))
+  const requested = new URL(admission.url)
+  const socketUrl = gatewayUrl
+    ? new URL(`${requested.pathname}${requested.search}`, gatewayUrl).toString()
+    : requested.toString()
+  const socket = await new Promise((resolve, reject) => {
+    const connecting = new WebSocket(socketUrl, { origin: new URL(baseUrl).origin })
+    connecting.once('open', () => resolve(connecting))
+    connecting.once('error', reject)
+  })
+  const next = rawMessageQueue(socket)
+  socket.send(JSON.stringify({
+    type: 'client-hello',
+    protocolVersion: 35,
+    credential: admission.credential,
+    character: { discipline: 'arcane', displayName, element },
+  }))
+  const welcome = await next((message) => message.type === 'server-welcome')
+  const client = {
+    acceptInvitation(invitationId) {
+      socket.send(JSON.stringify({
+        type: 'client-party-accept',
+        invitationId,
+      }))
+    },
+    close: () => closeRawSocket(socket),
+    invitePlayer(targetPlayerId) {
+      socket.send(JSON.stringify({
+        type: 'client-party-invite',
+        targetPlayerId,
+      }))
+    },
+    next,
+    playerId: welcome.playerId,
+    sendInput(targetTick, sequence, movement) {
+      socket.send(JSON.stringify({
+        type: 'client-input',
+        input: { aim: null, cast: { primary: false, secondary: null }, movement },
+        sequence,
+        targetTick,
+      }))
+    },
+    startMatch(boneyardId) {
+      socket.send(JSON.stringify({
+        type: 'client-start-match',
+        boneyardId,
+      }))
+    },
+    socket,
+  }
+  rawClients.push(client)
+  return client
+}
+
+function rawMessageQueue(socket) {
+  const buffered = []
+  const waiters = []
+  socket.on('message', (data) => {
+    const message = JSON.parse(data.toString())
+    if (message.type === 'server-snapshot') {
+      socket.send(JSON.stringify({
+        type: 'client-snapshot-ack',
+        requireKeyframe: false,
+        sequence: message.sequence,
+      }))
+    }
+    const waiterIndex = waiters.findIndex(({ predicate }) => predicate(message))
+    if (waiterIndex < 0) {
+      buffered.push(message)
+      return
+    }
+    const [waiter] = waiters.splice(waiterIndex, 1)
+    clearTimeout(waiter.timeout)
+    waiter.resolve(message)
+  })
+  return (predicate, label = 'raw game message') => {
+    const bufferedIndex = buffered.findIndex(predicate)
+    if (bufferedIndex >= 0) return Promise.resolve(buffered.splice(bufferedIndex, 1)[0])
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), 240_000)
+      waiters.push({ predicate, reject, resolve, timeout })
+    })
+  }
+}
+
+function closeRawSocket(socket) {
+  if (socket.readyState === WebSocket.CLOSED) return Promise.resolve()
+  return new Promise((resolve) => {
+    socket.once('close', resolve)
+    socket.close(1000, 'smoke complete')
+  })
+}
+
+async function frame(page) {
+  return page.locator('.hub-world-canvas').evaluate((node) => (
+    structuredClone(node.__sdrHubFrame)
+  ))
+}
+
+async function waitForPlayers(page, count) {
+  await page.waitForFunction((expected) => (
+    document.querySelector('.hub-world-canvas')?.__sdrHubFrame.playerCount === expected
+  ), count, { timeout: 15_000 })
+}
+
+async function waitForPartySize(page, size) {
+  await page.waitForFunction((expected) => (
+    document.querySelectorAll('[data-party-member]').length === expected
+  ), size, { timeout: 15_000 })
+}
+
+async function supervisorHealth() {
+  if (!gatewayUrl) return null
+  const url = new URL('/health', gatewayUrl)
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:'
+  const response = await fetch(url)
+  const payload = await response.json()
+  assert.equal(response.status, 200, JSON.stringify(payload))
+  return payload
+}
+
+async function waitForEmptyHealth() {
+  if (!gatewayUrl) return null
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const health = await supervisorHealth()
+    if (health.sessions === 0 && health.hubPlayers === 0 && health.runs === 0) return health
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error('shared Hub did not release all browser players')
+}

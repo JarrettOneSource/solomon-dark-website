@@ -404,6 +404,90 @@
   cursor: pointer;
 }
 
+.hub-party-panel {
+  position: absolute;
+  z-index: 15000;
+  top: 96px;
+  left: 11px;
+  min-width: 190px;
+  padding: 10px 12px;
+  border: 1px solid rgb(135 115 77 / 0.8);
+  background: rgb(13 12 10 / 0.82);
+  color: #dfd0a0;
+  font: 13px 'IM FELL English', Georgia, serif;
+  pointer-events: auto;
+  text-shadow: 0 1px 2px #000;
+}
+
+.hub-party-panel h2 {
+  margin: 0 0 5px;
+  color: #f0dda0;
+  font-size: 17px;
+  font-weight: normal;
+}
+
+.hub-party-members { display: grid; gap: 2px; }
+
+.hub-party-invitation {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(135 115 77 / 0.55);
+}
+
+.hub-party-invitation button,
+.hub-player-profile button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid #87734d;
+  background: #1c1a15;
+  color: #dfd0a0;
+  cursor: pointer;
+  font: 14px 'IM FELL English', Georgia, serif;
+}
+
+.hub-party-invitation button:hover,
+.hub-party-invitation button:focus-visible,
+.hub-player-profile button:hover,
+.hub-player-profile button:focus-visible {
+  border-color: #cfb978;
+  color: #fff1bd;
+  outline: none;
+}
+
+.hub-player-profile-backdrop {
+  position: absolute;
+  z-index: 31000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.72);
+  pointer-events: auto;
+}
+
+.hub-player-profile {
+  display: grid;
+  width: 360px;
+  padding: 28px;
+  border: 2px solid #8c774e;
+  border-radius: 5px;
+  background: radial-gradient(circle at 50% 0, #353126, #11100d 70%);
+  box-shadow: 0 14px 50px #000;
+  gap: 12px;
+}
+
+.hub-player-profile h2 {
+  margin: 0 0 10px;
+  color: #e0cf98;
+  font: 32px 'IM FELL English', Georgia, serif;
+  font-weight: normal;
+  text-align: center;
+  text-shadow: 0 3px 3px #000;
+}
+
 .hub-boneyard-option:hover,
 .hub-boneyard-option:focus-visible,
 .hub-boneyard-cancel:hover,
@@ -508,6 +592,20 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  .hub-party-panel,
+  .hub-player-profile {
+    transform: scale(2);
+    transform-origin: top left;
+  }
+
+  .hub-player-profile { transform-origin: center; }
+
+  .hub-party-invitation button,
+  .hub-player-profile button {
+    min-height: 48px;
+    font-size: 18px;
+  }
+
   .hub-hud-allies {
     transform: scale(2);
     transform-origin: top left;

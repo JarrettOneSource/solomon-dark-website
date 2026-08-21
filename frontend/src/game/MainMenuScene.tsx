@@ -55,6 +55,7 @@ import type {
   LoadedBoneyard,
 } from './protocol/game-protocol.ts'
 import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type { LocalPartyState } from './protocol/party-state.ts'
 import type {
   GameSaveCheckpoint,
   ResumableGameSave,
@@ -247,6 +248,7 @@ export default function MainMenuScene({
   const [runtimeAudioScene, setRuntimeAudioScene] = useState<GameAudioScene | null>(null)
   const [loadedBoneyard, setLoadedBoneyard] = useState<LoadedBoneyard | null>(null)
   const [gameplayPause, setGameplayPause] = useState<GameplayPauseState | null>(null)
+  const [partyState, setPartyState] = useState<LocalPartyState | null>(null)
   const activeBoneyardRunRef = useRef<string | null>(null)
   const loadedBoneyardRunRef = useRef<string | null>(null)
   const levelUpPickerPresentationRef = useRef<number | null>(null)
@@ -398,6 +400,7 @@ export default function MainMenuScene({
     setRuntimeProgression(initialSnapshot.players[session.playerId]?.progression ?? null)
     setLoadedBoneyard(initialBoneyard)
     setGameplayPause(session.getGameplayPause())
+    setPartyState(session.getPartyState())
     if (initialSnapshot.world.kind === 'boneyard') {
       if (loadingRef.current?.flow !== 'boneyard') {
         beginLoading('boneyard', initialBoneyard
@@ -445,11 +448,13 @@ export default function MainMenuScene({
       }
     })
     const removeGameplayPause = session.onGameplayPause(setGameplayPause)
+    const removePartyState = session.onPartyState(setPartyState)
     const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
     return () => {
       removeSnapshot()
       removeBoneyard()
       removeGameplayPause()
+      removePartyState()
       removeSaveCheckpoint()
     }
   }, [advanceLoading, beginLoading, onSaveCheckpoint, session])
@@ -537,7 +542,7 @@ export default function MainMenuScene({
       setWizardName(initialCreateWizardNameForSession(displayName))
       transitionTo('create')
     } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Web playtest creation failed.')
+      setConnectionError(error instanceof Error ? error.message : 'Shared Hub admission failed.')
     } finally {
       setPreparing(false)
     }
@@ -551,7 +556,7 @@ export default function MainMenuScene({
       await onCancelCreate()
       if (initialScreen !== 'create') transitionTo('play')
     } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'The web playtest could not be closed.')
+      setConnectionError(error instanceof Error ? error.message : 'The shared Hub admission could not be closed.')
     } finally {
       setPreparing(false)
     }
@@ -580,7 +585,7 @@ export default function MainMenuScene({
     try {
       await prepareNewGame()
     } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Web playtest creation failed.')
+      setConnectionError(error instanceof Error ? error.message : 'Shared Hub admission failed.')
       return
     } finally {
       setPreparing(false)
@@ -658,6 +663,7 @@ export default function MainMenuScene({
     setRuntimeAudioScene(null)
     setLoadedBoneyard(null)
     setGameplayPause(null)
+    setPartyState(null)
     setScreen('root')
   }
 
@@ -799,11 +805,14 @@ export default function MainMenuScene({
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
+              onAcceptPartyInvitation={session.acceptPartyInvitation}
               onHubAction={session.sendHubAction}
+              onInvitePlayer={session.inviteToParty}
               onLoadingError={cancelHubLoading}
               onPauseRequest={requestGameplayPause}
               onReady={finishHubLoading}
               onStartMatch={startBoneyard}
+              partyState={partyState}
               presentationPaused={gameplayPause !== null}
               samplePresentation={session.samplePresentation}
               subscribePing={session.onPing}
@@ -861,7 +870,7 @@ export default function MainMenuScene({
 
         {(preparing || connectionError) && (
           <div className="main-menu-runtime-status" role={connectionError ? 'alert' : 'status'}>
-            {connectionError ?? 'Opening the web playtest…'}
+            {connectionError ?? 'Entering the shared Hub…'}
           </div>
         )}
 

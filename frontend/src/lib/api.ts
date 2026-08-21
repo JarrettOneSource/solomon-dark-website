@@ -167,21 +167,6 @@ export interface LobbyAuthorization {
   launchUri: string
 }
 
-export type WebGameLobbyPhase = 'picking-loadout' | 'hub' | 'session'
-
-export interface WebGameLobby {
-  id: string
-  hostPlayer: string
-  players: number
-  maxPlayers: number
-  phase: WebGameLobbyPhase
-  protocol: string
-}
-
-export interface WebGameLobbyList {
-  items: WebGameLobby[]
-}
-
 export interface SteamLinkStart {
   authorizationUrl: string
   expiresAtUtc: string
@@ -368,9 +353,6 @@ export const api = {
       request<LobbyAuthorization>(`/api/lobbies/${id}/authorize`, json({ passwordHash })),
   },
 
-  gameLobbies: {
-    list: () => request<WebGameLobbyList>('/api/game/lobbies'),
-  },
 
   steam: {
     link: (returnPath: string) =>

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   gameStartupStageLabel,
   initialGameStartupProgress,
@@ -18,12 +17,8 @@ import {
 import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
 import {
-  cancelGameLobby,
+  admitSharedHubPlayer,
   configuredGameEndpoint,
-  createGameLobby,
-  joinGameLobby,
-  parseGameLobbyId,
-  type CreatedGameLobby,
 } from '../game/game-bootstrap.ts'
 import MainMenuScene from '../game/MainMenuScene'
 import NativeLoader from '../game/NativeLoader'
@@ -46,11 +41,6 @@ type Readiness = 'loading' | 'ready'
 
 export default function Game() {
   const { user, loading: authLoading } = useAuth()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const requestedParty = searchParams.get('party')
-  const lobbyId = parseGameLobbyId(requestedParty)
-  const hostedLobby = useRef<CreatedGameLobby | null>(null)
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
   const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
   diagnosticsRef.current ??= createGameClientDiagnostics()
@@ -169,31 +159,21 @@ export default function Game() {
       return
     }
     try {
-      const created = await createGameLobby(accountUsername ?? 'Guest')
-      hostedLobby.current = created
-      preparedEndpoint.current = created.endpoint
+      preparedEndpoint.current = await admitSharedHubPlayer()
       diagnostics.info(
-        'lobby.created',
-        'A browser game lobby was created.',
-        `lobbyId=${created.lobbyId}`,
+        'hub.admitted',
+        'A shared Hub admission was issued.',
       )
     } catch (error) {
       const failure = GameConnectionFailure.from(error)
-      diagnostics.error('lobby.create_failed', failure.message, failure.stack)
+      diagnostics.error('hub.admission_failed', failure.message, failure.stack)
       throw failure
     }
-  }, [accountUsername, diagnostics])
+  }, [diagnostics])
 
   const cancelCreate = useCallback(async (): Promise<void> => {
-    if (lobbyId) {
-      navigate('/parties')
-      return
-    }
-    const created = hostedLobby.current
-    if (created) await cancelGameLobby(created)
-    hostedLobby.current = null
     preparedEndpoint.current = null
-  }, [lobbyId, navigate])
+  }, [])
 
   const connectSession = useCallback(async (
     character: PlayerCharacterConfig,
@@ -201,10 +181,8 @@ export default function Game() {
     saveDocument?: string,
   ): Promise<GameSession> => {
     try {
-      const endpoint = lobbyId
-        ? await joinGameLobby(lobbyId)
-        : preparedEndpoint.current
-      if (!endpoint) throw new Error('The web playtest was not prepared.')
+      const endpoint = preparedEndpoint.current
+      if (!endpoint) throw new Error('The shared Hub admission was not prepared.')
       const session = await bootGame({
         character,
         diagnostics,
@@ -213,8 +191,6 @@ export default function Game() {
         onProgress,
         ...(saveDocument ? { saveDocument } : {}),
       })
-      if (lobbyId) navigate('/game', { replace: true })
-      hostedLobby.current = null
       preparedEndpoint.current = null
       return session
     } catch (error) {
@@ -223,20 +199,17 @@ export default function Game() {
       setFatal(failure)
       throw failure
     }
-  }, [diagnostics, lobbyId, navigate])
+  }, [diagnostics])
 
   const persistCheckpoint = useCallback((checkpoint: GameSaveCheckpoint) => {
     saveCoordinator.current?.accept(checkpoint)
   }, [])
 
-  if (fatal || (requestedParty !== null && lobbyId === null)) {
-    const failure = fatal ?? GameConnectionFailure.from(
-      new Error('This game lobby link is invalid, so the server could not be contacted.'),
-    )
+  if (fatal) {
     return (
       <GameRuntimeError
         diagnostics={diagnostics}
-        failure={failure}
+        failure={fatal}
         token={getToken()}
       />
     )
@@ -249,7 +222,7 @@ export default function Game() {
               accountUsername={accountUsername}
               connectSession={connectSession}
               displayName={displayName}
-              initialScreen={lobbyId ? 'create' : 'root'}
+              initialScreen="root"
               onCancelCreate={cancelCreate}
               onSaveCheckpoint={persistCheckpoint}
               prepareNewGame={prepareNewGame}

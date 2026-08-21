@@ -10,7 +10,7 @@ import {
   shouldPresentMatchLoading,
 } from './match-loading.ts'
 
-test('retains the loader-owned twenty-stage lifecycle and exact labels', () => {
+test('retains every applicable loader stage after the browser lobby cutover', () => {
   assert.deepEqual(
     MATCH_LOADING_STAGE_DEFINITIONS.map(({ label, progress, stage }) => [
       stage,
@@ -19,8 +19,6 @@ test('retains the loader-owned twenty-stage lifecycle and exact labels', () => {
     ]),
     [
       ['connecting_transport', 'Waking the multiplayer transport...', 0.44],
-      ['creating_lobby', 'Opening the coven...', 0.48],
-      ['joining_lobby', 'Entering the Steam lobby...', 0.48],
       ['authenticating_session', 'Proving your sigil to the host...', 0.52],
       ['establishing_route', 'Opening the route...', 0.56],
       ['synchronizing_host_settings', "Receiving the host's settings...", 0.60],
@@ -43,8 +41,7 @@ test('retains the loader-owned twenty-stage lifecycle and exact labels', () => {
 })
 
 test('advances only to a strictly greater lifecycle value', () => {
-  const creating = beginMatchLoading('hub', 'creating_lobby', 1_000)
-  assert.equal(advanceMatchLoading(creating, 'joining_lobby'), creating)
+  const creating = beginMatchLoading('hub', 'connecting_transport', 1_000)
   assert.equal(advanceMatchLoading(creating, 'connecting_transport'), creating)
 
   const authenticating = advanceMatchLoading(creating, 'authenticating_session')

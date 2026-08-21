@@ -26,9 +26,8 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
   package validation, downloads, comments, screenshots, and public profiles.
 - `/api/lobbies*` provides the optional Steam Search Parties directory and join
   tickets.
-- `/api/game/sessions` provisions non-discoverable browser sessions, while
-  `/api/game/lobbies*` creates, lists, joins, and cancels discoverable Web
-  Rebuild Playtests backed directly by the live game supervisor.
+- `/api/game/hub` issues one single-use admission to the resident shared browser
+  Hub. `/api/game/sessions` remains the non-discoverable private operations seam.
 - `/api/saves*` provides user-scoped cloud save slots.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
@@ -37,14 +36,12 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 `privateParties` contains player and capacity counts for friends-only parties
 that the current viewer cannot inspect; it does not expose their lobby details.
 
-The two lobby namespaces are deliberately unrelated. `/api/lobbies` stores
-Steam/launcher announcements and returns `solomondarkrevived://` joins.
-`/api/game/lobbies` stores nothing in SQLite: it projects the supervisor's live
-browser sessions and returns credentials only from create/join responses.
-Browser lobby ids are opaque 32-character base64url values. The creator's host
-credential reserves authority even when a guest finishes loadout first; a
-guest credential never appears in the public list. Create, join, cancel, and
-all list responses use `Cache-Control: no-store`.
+`/api/lobbies` is exclusively the Steam/launcher directory and returns
+`solomondarkrevived://` joins. The rebuilt browser game has no lobby namespace,
+directory, or join URL. `POST /api/game/hub` returns a `Cache-Control: no-store`
+credentialed WSS endpoint; the supervisor consumes that admission once, and
+the authoritative host creates party membership only after the completed
+character authenticates.
 
 ## Launcher cloud saves
 

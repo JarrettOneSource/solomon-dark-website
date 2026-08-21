@@ -23,6 +23,7 @@ interface GameHudProps {
   mode?: 'hub' | 'run'
   onInventoryClick?: () => void
   onMapClick?: () => void
+  partyMemberIds?: readonly string[]
   playerId: string
   progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
@@ -110,6 +111,7 @@ export default function GameHud({
   mode = 'hub',
   onInventoryClick,
   onMapClick,
+  partyMemberIds,
   playerId,
   progression,
   subscribePing,
@@ -161,6 +163,7 @@ export default function GameHud({
       <AllyHud
         additionalRows={additionalAllyRows}
         initialSnapshot={initialSnapshot}
+        partyMemberIds={partyMemberIds}
         playerId={playerId}
         subscribeSnapshot={subscribeSnapshot}
       />

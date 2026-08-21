@@ -224,7 +224,7 @@ try {
       gateCrossing,
       levelUpScreenshotPath,
       levelUpWaitingScreenshotPath,
-      lobby: {
+      participants: {
         guestPlayerId: guestHub.localPlayerId,
         hostPlayerId: hostHub.localPlayerId,
         runId: hostInitial.runId,
@@ -342,7 +342,7 @@ try {
     levelUpScreenshotPath,
     levelUpWaitingScreenshotPath,
     loadoutScreenshotPath,
-    lobby: {
+    participants: {
       guestPlayerId: guestHub.localPlayerId,
       hostPlayerId: hostHub.localPlayerId,
       runId: hostInitial.runId,

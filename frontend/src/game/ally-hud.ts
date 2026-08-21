@@ -61,10 +61,13 @@ export const NATIVE_ALLY_FONT: NativeAllyFontData = nativeFontData
 export function derivePlayerAllyHudRows(
   players: Readonly<Record<string, ProtocolPlayerState>>,
   localPlayerId: string,
+  partyMemberIds: readonly string[] = Object.keys(players),
 ): AllyHudRow[] {
+  const partyMembers = new Set(partyMemberIds)
   return Object.entries(players)
     .filter(([playerId, player]) => (
       playerId !== localPlayerId
+      && partyMembers.has(playerId)
       && player.progression.lifeState === 'alive'
       && player.progression.currentHealth > 0
     ))

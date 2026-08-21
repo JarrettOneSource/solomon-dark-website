@@ -4,7 +4,6 @@ import test from 'node:test'
 import { WebSocket } from 'ws'
 
 import {
-  GAME_HOST_ENDED_SESSION_CLOSE_CODE,
   GAME_PROTOCOL_VERSION,
   decodeServerGameMessage,
   encodeGameMessage,
@@ -53,7 +52,7 @@ test('game session supervisor provisions isolated authenticated game sessions', 
   )
 })
 
-test('game session supervisor enforces capacity and expires unclaimed sessions and lobbies', async (context) => {
+test('game session supervisor enforces private capacity and expires unclaimed sessions', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -70,13 +69,11 @@ test('game session supervisor enforces capacity and expires unclaimed sessions a
   assert.equal(full.status, 503)
 
   await waitFor(() => supervisor.sessionCount() === 0)
-  const replacement = await createLobby(supervisor.address.url, 'Patient Wizard')
+  const replacement = await provision(supervisor.address.url)
   assert.match(replacement.path, /^\/game-sessions\/[A-Za-z0-9_-]{32}$/)
-  assert.equal((await listLobbies(supervisor.address.url))[0]?.id, replacement.lobbyId)
-  await waitFor(async () => (await listLobbies(supervisor.address.url)).length === 0)
 })
 
-test('game session supervisor owns discoverable lobby lifecycle and reserved host access', async (context) => {
+test('game session supervisor admits independent players to one shared Hub and removes lobby routes', async (context) => {
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -84,56 +81,123 @@ test('game session supervisor owns discoverable lobby lifecycle and reserved hos
   })
   context.after(() => supervisor.close())
 
-  const created = await createLobby(supervisor.address.url, 'Host Wizard')
-  assert.deepEqual(await listLobbies(supervisor.address.url), [{
-    hostPlayer: 'Host Wizard',
-    id: created.lobbyId,
-    maxPlayers: 16,
-    phase: 'picking-loadout',
-    players: 0,
-    protocol: `solomon-dark/${GAME_PROTOCOL_VERSION}`,
-  }])
+  const endpoints = await Promise.all([
+    admitHub(supervisor.address.url),
+    admitHub(supervisor.address.url),
+    admitHub(supervisor.address.url),
+  ])
+  assert.deepEqual(new Set(endpoints.map(({ path }) => path)), new Set(['/game-hub']))
+  assert.equal(new Set(endpoints.map(({ credential }) => credential)).size, 3)
 
-  const guestEndpoint = await joinLobby(supervisor.address.url, created.lobbyId)
-  const guest = await join(supervisor.address.url, guestEndpoint, BROWSER_ORIGIN)
-  context.after(() => guest.socket.close())
-  assert.equal(guest.welcome.snapshot.hostPlayerId, null)
-  assert.equal((await listLobbies(supervisor.address.url))[0].phase, 'picking-loadout')
+  const [first, second, third] = await Promise.all(endpoints.map((endpoint) => (
+    join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  )))
+  context.after(() => closeSocket(first.socket))
+  context.after(() => closeSocket(second.socket))
+  context.after(() => closeSocket(third.socket))
+  assert.equal(new Set([
+    first.welcome.playerId,
+    second.welcome.playerId,
+    third.welcome.playerId,
+  ]).size, 3)
 
-  const creator = await join(supervisor.address.url, created, BROWSER_ORIGIN)
-  context.after(() => creator.socket.close())
-  const guestClosed = socketClosed(guest.socket)
-  const creatorClosed = socketClosed(creator.socket)
-  assert.equal(creator.welcome.snapshot.hostPlayerId, creator.welcome.playerId)
-  await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.phase === 'hub')
-  assert.equal((await listLobbies(supervisor.address.url))[0].players, 2)
+  const firstParty = await first.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 1
+  ))
+  assert.equal(firstParty.type, 'server-party-state')
+  const inviteForSecond = second.next((message) => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const invited = await inviteForSecond
+  assert.equal(invited.type, 'server-party-state')
+  const acceptedForFirst = first.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  const acceptedForSecond = second.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.party.memberPlayerIds.length === 2
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: invited.state.invitations[0]!.id,
+  }))
+  await Promise.all([acceptedForFirst, acceptedForSecond])
 
-  const denied = await fetch(`${supervisor.address.url}/admin/lobbies/${created.lobbyId}`, {
-    method: 'DELETE',
-    headers: {
-      authorization: `Bearer ${ADMIN_SECRET}`,
-      'x-solomon-dark-host-credential': 'wrong-secret',
-    },
-  })
-  assert.equal(denied.status, 403)
+  const firstLoaded = first.next((message) => message.type === 'server-boneyard-loaded')
+  const secondLoaded = second.next((message) => message.type === 'server-boneyard-loaded')
+  const thirdHub = third.next((message) => (
+    message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  }))
+  const [firstRun, secondRun, thirdFrame] = await Promise.all([
+    firstLoaded,
+    secondLoaded,
+    thirdHub,
+  ])
+  assert.equal(firstRun.type, 'server-boneyard-loaded')
+  assert.equal(secondRun.type, 'server-boneyard-loaded')
+  assert.equal(firstRun.boneyard.runId, secondRun.boneyard.runId)
+  assert.equal(thirdFrame.type === 'server-snapshot' && thirdFrame.frame.world.kind, 'hub')
 
-  const cancelled = await fetch(`${supervisor.address.url}/admin/lobbies/${created.lobbyId}`, {
-    method: 'DELETE',
-    headers: {
-      authorization: `Bearer ${ADMIN_SECRET}`,
-      'x-solomon-dark-host-credential': created.credential,
-    },
+  const health = await readHealth(supervisor.address.url)
+  assert.equal(health.hubPlayers, 1)
+  assert.equal(health.parties, 2)
+  assert.equal(health.runs, 1)
+  assert.equal((await fetch(`${supervisor.address.url}/admin/lobbies`, {
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
+  })).status, 404)
+})
+
+test('shared Hub admissions are single-use and expire before authentication', async (context) => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET,
+    allowedOrigins: [BROWSER_ORIGIN],
+    snapshotRate: 100,
+    unclaimedTimeoutMs: 50,
   })
-  assert.equal(cancelled.status, 204)
-  assert.deepEqual(await guestClosed, {
-    code: GAME_HOST_ENDED_SESSION_CLOSE_CODE,
-    reason: 'host ended session',
-  })
-  assert.deepEqual(await creatorClosed, {
-    code: GAME_HOST_ENDED_SESSION_CLOSE_CODE,
-    reason: 'host ended session',
-  })
-  assert.deepEqual(await listLobbies(supervisor.address.url), [])
+  context.after(() => supervisor.close())
+
+  const admission = await admitHub(supervisor.address.url)
+  const accepted = await join(supervisor.address.url, admission, BROWSER_ORIGIN)
+  await closeSocket(accepted.socket)
+
+  const replay = await openSocket(
+    websocketUrl(supervisor.address.url, admission.path),
+    BROWSER_ORIGIN,
+  )
+  const replayMessages = messageQueue(replay)
+  replay.send(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: admission.credential,
+    character: CHARACTER,
+  }))
+  const replayDenied = await replayMessages((message) => message.type === 'server-disconnect')
+  assert.equal(replayDenied.type, 'server-disconnect')
+  assert.equal(replayDenied.code, 'authentication-failed')
+
+  const expired = await admitHub(supervisor.address.url)
+  await new Promise((resolve) => setTimeout(resolve, 75))
+  const late = await openSocket(websocketUrl(supervisor.address.url, expired.path), BROWSER_ORIGIN)
+  const lateMessages = messageQueue(late)
+  late.send(encodeGameMessage({
+    type: 'client-hello',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: expired.credential,
+    character: CHARACTER,
+  }))
+  const expiredDenied = await lateMessages((message) => message.type === 'server-disconnect')
+  assert.equal(expiredDenied.type, 'server-disconnect')
+  assert.equal(expiredDenied.code, 'authentication-failed')
 })
 
 test('game session supervisor gives connected players a reason when it shuts down', async (context) => {
@@ -189,7 +253,7 @@ test('game session supervisor closes a used session after the final player and p
   )
 })
 
-test('game session supervisor drops a player that misses its transport heartbeat', async (context) => {
+test('shared Hub drops only the player that misses its transport heartbeat', async (context) => {
   const logs: GameServerLogEntry[] = []
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
@@ -200,13 +264,15 @@ test('game session supervisor drops a player that misses its transport heartbeat
   })
   context.after(() => supervisor.close())
 
-  const created = await createLobby(supervisor.address.url, 'Responsive Wizard')
-  const healthy = await join(supervisor.address.url, created, BROWSER_ORIGIN)
+  const healthy = await join(
+    supervisor.address.url,
+    await admitHub(supervisor.address.url),
+    BROWSER_ORIGIN,
+  )
   context.after(() => closeSocket(healthy.socket))
-  const guestEndpoint = await joinLobby(supervisor.address.url, created.lobbyId)
   const unresponsive = await join(
     supervisor.address.url,
-    guestEndpoint,
+    await admitHub(supervisor.address.url),
     BROWSER_ORIGIN,
     false,
   )
@@ -218,12 +284,11 @@ test('game session supervisor drops a player that misses its transport heartbeat
     }))
   })
 
-  assert.equal((await listLobbies(supervisor.address.url))[0]?.players, 2)
-  await waitFor(async () => (await listLobbies(supervisor.address.url))[0]?.players === 1)
+  await waitFor(async () => (await readHealth(supervisor.address.url)).hubPlayers === 1)
   assert.deepEqual(await closed, { code: 4000, reason: 'connection timed out' })
   const timeout = logs.find((entry) => entry.event === 'proxy.heartbeat_timeout')
   assert.equal(timeout?.level, 'warning')
-  assert.equal(timeout?.details?.sessionId, created.lobbyId)
+  assert.equal(timeout?.details?.sessionId, 'shared-hub')
   assert.equal(supervisor.sessionCount(), 1)
   assert.equal(healthy.socket.readyState, WebSocket.OPEN)
 
@@ -236,17 +301,14 @@ interface ProvisionedEndpoint {
   path: string
 }
 
-interface CreatedLobbyEndpoint extends ProvisionedEndpoint {
-  lobbyId: string
-}
-
-interface LobbySummary {
-  hostPlayer: string
-  id: string
-  maxPlayers: number
-  phase: 'picking-loadout' | 'hub' | 'session'
-  players: number
+interface SupervisorHealth {
+  hubPlayers: number
+  parties: number
+  privateSessions: number
   protocol: string
+  runs: number
+  sessions: number
+  status: string
 }
 
 async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
@@ -265,40 +327,23 @@ async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
   }
 }
 
-async function createLobby(supervisorUrl: string, hostPlayer: string): Promise<CreatedLobbyEndpoint> {
-  const response = await fetch(`${supervisorUrl}/admin/lobbies`, {
+async function admitHub(supervisorUrl: string): Promise<ProvisionedEndpoint> {
+  const response = await fetch(`${supervisorUrl}/admin/hub/tickets`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${ADMIN_SECRET}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ hostPlayer }),
+    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
   })
   assert.equal(response.status, 201)
   const value = await response.json() as Record<string, unknown>
   return {
     credential: value.credential as string,
-    lobbyId: value.lobbyId as string,
     path: value.path as string,
   }
 }
 
-async function joinLobby(supervisorUrl: string, lobbyId: string): Promise<ProvisionedEndpoint> {
-  const response = await fetch(`${supervisorUrl}/admin/lobbies/${lobbyId}/join`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
-  })
+async function readHealth(supervisorUrl: string): Promise<SupervisorHealth> {
+  const response = await fetch(`${supervisorUrl}/health`)
   assert.equal(response.status, 200)
-  return await response.json() as ProvisionedEndpoint
-}
-
-async function listLobbies(supervisorUrl: string): Promise<LobbySummary[]> {
-  const response = await fetch(`${supervisorUrl}/admin/lobbies`, {
-    headers: { authorization: `Bearer ${ADMIN_SECRET}` },
-  })
-  assert.equal(response.status, 200)
-  const value = await response.json() as { items: LobbySummary[] }
-  return value.items
+  return await response.json() as SupervisorHealth
 }
 
 async function join(
@@ -308,15 +353,16 @@ async function join(
   autoPong = true,
 ) {
   const socket = await openSocket(websocketUrl(supervisorUrl, endpoint.path), origin, autoPong)
+  const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
     character: CHARACTER,
   }))
-  const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
+  const welcome = await next((message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
-  return { socket, welcome }
+  return { next, socket, welcome }
 }
 
 function websocketUrl(supervisorUrl: string, path: string): string {
@@ -353,33 +399,43 @@ function socketClosed(socket: WebSocket): Promise<{ code: number; reason: string
   })
 }
 
-function nextMessage(
-  socket: WebSocket,
-  predicate: (message: ServerGameMessage) => boolean,
-): Promise<ServerGameMessage> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup()
-      reject(new Error('timed out waiting for game message'))
-    }, 3000)
-    const receive = (data: WebSocket.RawData) => {
-      const message = decodeServerGameMessage(data.toString())
-      if (!predicate(message)) return
-      cleanup()
-      resolve(message)
+function messageQueue(socket: WebSocket) {
+  const buffered: ServerGameMessage[] = []
+  const waiters: Array<{
+    predicate: (message: ServerGameMessage) => boolean
+    reject: (error: Error) => void
+    resolve: (message: ServerGameMessage) => void
+    timeout: ReturnType<typeof setTimeout>
+  }> = []
+  socket.on('message', (data) => {
+    const message = decodeServerGameMessage(data.toString())
+    const waiterIndex = waiters.findIndex(({ predicate }) => predicate(message))
+    if (waiterIndex < 0) {
+      buffered.push(message)
+      return
     }
-    const fail = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
-    const cleanup = () => {
-      clearTimeout(timeout)
-      socket.off('message', receive)
-      socket.off('error', fail)
-    }
-    socket.on('message', receive)
-    socket.on('error', fail)
+    const [waiter] = waiters.splice(waiterIndex, 1)
+    clearTimeout(waiter!.timeout)
+    waiter!.resolve(message)
   })
+  socket.on('error', (error) => {
+    for (const waiter of waiters.splice(0)) {
+      clearTimeout(waiter.timeout)
+      waiter.reject(error)
+    }
+  })
+  return (predicate: (message: ServerGameMessage) => boolean): Promise<ServerGameMessage> => {
+    const bufferedIndex = buffered.findIndex(predicate)
+    if (bufferedIndex >= 0) return Promise.resolve(buffered.splice(bufferedIndex, 1)[0]!)
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        const index = waiters.findIndex((waiter) => waiter.resolve === resolve)
+        if (index >= 0) waiters.splice(index, 1)
+        reject(new Error('timed out waiting for game message'))
+      }, 3000)
+      waiters.push({ predicate, reject, resolve, timeout })
+    })
+  }
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {

@@ -53,7 +53,7 @@ test('wizard-name controls own clear and stock randomization without a live rena
   assert.match(createScene, /Randomize wizard name/)
   assert.match(createScene, /readOnly=\{Boolean\(retainedLoadout\)\}/)
   assert.match(gamePage, /const displayName = accountUsername \?\? ''/)
-  assert.match(gamePage, /createGameLobby\(accountUsername \?\? 'Guest'\)/)
+  assert.match(gamePage, /admitSharedHubPlayer\(\)/)
 })
 
 test('wizard-name controls own only their logical bounds and a fresh Create owns its draft', () => {

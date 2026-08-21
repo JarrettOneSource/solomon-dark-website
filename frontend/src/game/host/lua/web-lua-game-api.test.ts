@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { resolve as resolvePath } from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 import { createGameSimulation, enterBoneyardWorld } from '../../core-server/game-simulation.ts'
 import { DEFAULT_PLAYER_CHARACTER_CONFIG } from '../../core-server/game-simulation.ts'
@@ -12,13 +14,22 @@ import {
 import { resolveWebLuaWasmPath } from './web-lua-wasm-path.ts'
 
 test('web Lua resolves source and deployed WASM ownership without directory-name assumptions', () => {
-  assert.equal(
-    resolveWebLuaWasmPath('file:///repo/frontend/src/game/host/run-game-host.ts'),
-    '/repo/frontend/node_modules/wasmoon/dist/glue.wasm',
+  const fixtureRoot = resolvePath('web-lua-path-fixture')
+  const sourceEntry = resolvePath(
+    fixtureRoot,
+    'repo/frontend/src/game/host/run-game-host.ts',
+  )
+  const deployedEntry = resolvePath(
+    fixtureRoot,
+    'opt/solomon-dark-revived/GameHost/game-host.mjs',
   )
   assert.equal(
-    resolveWebLuaWasmPath('file:///opt/solomon-dark-revived/GameHost/game-host.mjs'),
-    '/opt/solomon-dark-revived/GameHost/lua54.wasm',
+    resolveWebLuaWasmPath(pathToFileURL(sourceEntry).href),
+    resolvePath(fixtureRoot, 'repo/frontend/node_modules/wasmoon/dist/glue.wasm'),
+  )
+  assert.equal(
+    resolveWebLuaWasmPath(pathToFileURL(deployedEntry).href),
+    resolvePath(fixtureRoot, 'opt/solomon-dark-revived/GameHost/lua54.wasm'),
   )
 })
 

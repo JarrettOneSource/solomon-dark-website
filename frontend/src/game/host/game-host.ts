@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server as HttpServer } from 'node:http'
 import type { Duplex } from 'node:stream'
 
@@ -80,15 +80,32 @@ import {
   restoreGameSaveDocument,
 } from '../save/game-save-document.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
+import { partyForPlayer, projectPartyState } from './party-system.ts'
+import {
+  acceptSharedPartyInvitation,
+  addSharedHubPlayer,
+  confirmSharedPartyLoadout,
+  createSharedGameWorlds,
+  inviteSharedPartyPlayer,
+  removeSharedGamePlayer,
+  replaceSharedGameStateForPlayer,
+  restoreSharedGamePlayer,
+  sharedGameStateForPlayer,
+  sharedLoadedBoneyardForPlayer,
+  sharedPartySaveStateForPlayer,
+  startSharedPartyRun,
+  stepSharedGameWorlds,
+  type SharedGameWorldsState,
+} from './shared-game-worlds.ts'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
 
 export type GameHostAuthentication =
   | { kind: 'shared'; credential: string }
-  | { kind: 'reserved-host'; guestCredential: string; hostCredential: string }
+  | { kind: 'tickets'; claim: (credential: string) => boolean }
 
-type GameHostRole = 'guest' | 'host' | 'shared'
+type GameHostRole = 'shared'
 
 export interface GameHostOptions {
   allowedOrigins?: readonly string[]
@@ -107,6 +124,7 @@ export interface GameHostOptions {
   onPlayerCountChanged?: (playerCount: number) => void
   port?: number
   resetWhenEmpty?: boolean
+  sharedHub?: boolean
   snapshotRate?: number
   trustedProxy?: boolean
 }
@@ -120,10 +138,13 @@ export interface GameHostAddress {
 export interface GameHost {
   address: GameHostAddress
   close(reason?: GameHostCloseReason): Promise<void>
+  hubPlayerCount(): number
   hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
+  partyCount(): number
   state(): GameSimulationState
+  runCount(): number
 }
 
 export type GameHostCloseReason = 'host-ended-session' | 'server-shutdown'
@@ -159,6 +180,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const snapshotRate = options.snapshotRate ?? 20
   const heartbeatIntervalMs = resolveGameHeartbeatInterval(options.heartbeatIntervalMs)
   const boneyards = options.boneyards ?? createBoneyardCatalog()
+  const sharedHub = options.sharedHub ?? false
   if (!LOOPBACK_HOSTS.has(host) && !options.trustedProxy) {
     throw new Error('Non-loopback game hosts may only run behind an explicitly trusted secure proxy')
   }
@@ -172,16 +194,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     throw new Error(`snapshotRate must be within 1..${GAME_TICK_RATE}`)
   }
 
-  let state = createInitialSimulation(options.createSimulation)
+  let sharedWorlds: SharedGameWorldsState | null = sharedHub ? createSharedGameWorlds() : null
+  let state = sharedWorlds?.hub ?? createInitialSimulation(options.createSimulation)
   let gameplayPause: GameplayPauseState | null = null
+  const sharedGameplayPauses = new Map<string, GameplayPauseState>()
   let nextPlayerId = 1
   let hostPlayerId: PlayerId | null = null
-  let reservedHostClaimed = false
   let loadedBoneyard: LoadedBoneyard | null = null
   let nextSnapshotSequence = 1
   let nextSaveSequence = 1
   let lastSaveDocument: string | null = null
   let lastSaveOwnerPlayerId: string | null = null
+  const sharedSaveDocuments = new Map<string, string>()
+  const sharedSaveSequences = new Map<string, number>()
   let nextLuaRunSeed: number | null = null
   let luaRuntime: WebLuaRuntime | null = null
   let luaRuntimeInitialization: Promise<WebLuaRuntime> | null = null
@@ -354,16 +379,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
           return
         }
-        if (role === 'host' && reservedHostClaimed) {
-          disconnect(socket, 'authentication-failed', 'The host credential has already been claimed.')
-          return
-        }
         if (clients.size >= maxPlayers) {
           disconnect(socket, 'server-full', 'The session is full.')
-          return
-        }
-        if (role === 'guest' && !reservedHostClaimed && clients.size >= maxPlayers - 1) {
-          disconnect(socket, 'server-full', 'The session is reserving its final seat for the host.')
           return
         }
         clearTimeout(helloDeadline)
@@ -371,11 +388,12 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         let playerId: PlayerId
         if (message.save !== undefined) {
           if (
-            role === 'guest'
-            || clients.size !== 0
-            || state.tick !== 0
-            || state.world.kind !== 'hub'
-            || state.playerEntities.identities.length !== 0
+            !sharedHub && (
+              clients.size !== 0
+              || state.tick !== 0
+              || state.world.kind !== 'hub'
+              || state.playerEntities.identities.length !== 0
+            )
           ) {
             disconnect(socket, 'invalid-message', 'A save may resume only on a fresh host owner.')
             return
@@ -396,31 +414,55 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             disconnect(socket, 'invalid-message', 'The game save character does not match the resume request.')
             return
           }
-          state = restored.state
-          loadedBoneyard = restored.loadedBoneyard
           playerId = restored.playerId
-          nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
+          if (sharedWorlds) {
+            try {
+              sharedWorlds = restoreSharedGamePlayer(
+                sharedWorlds,
+                restored.state,
+                restored.loadedBoneyard,
+                playerId,
+              )
+              state = sharedWorlds.hub
+            } catch (error) {
+              disconnect(
+                socket,
+                'invalid-message',
+                error instanceof Error ? error.message : 'The game save cannot enter the shared Hub.',
+              )
+              return
+            }
+          } else {
+            state = restored.state
+            loadedBoneyard = restored.loadedBoneyard
+            nextPlayerId = Math.max(nextPlayerId, nextPlayerNumber(playerId) + 1)
+          }
         } else {
-          playerId = `player-${nextPlayerId}`
-          nextPlayerId += 1
-          state = addPlayerCharacter(state, playerId, message.character)
+          playerId = sharedWorlds
+            ? `player-${randomBytes(12).toString('base64url')}`
+            : `player-${nextPlayerId}`
+          if (sharedWorlds) {
+            sharedWorlds = addSharedHubPlayer(sharedWorlds, playerId, message.character)
+            state = sharedWorlds.hub
+          } else {
+            nextPlayerId += 1
+            state = addPlayerCharacter(state, playerId, message.character)
+          }
           if (options.initialPlayerExperience) {
-            state = grantGameSimulationPlayerExperience(
-              state,
+            const activeState = stateForPlayer(playerId)
+            const experienced = grantGameSimulationPlayerExperience(
+              activeState,
               playerId,
               options.initialPlayerExperience,
             )
+            replaceStateForPlayer(playerId, experienced)
           }
         }
-        if (role === 'host') {
-          reservedHostClaimed = true
-          hostPlayerId = playerId
-        } else if (role === 'shared') {
-          hostPlayerId ??= playerId
-        } else if (reservedHostClaimed) {
+        if (!sharedHub) {
           hostPlayerId ??= playerId
         }
-        const welcomeSnapshot = createGameSnapshot(state, hostPlayerId)
+        const playerState = stateForPlayer(playerId)
+        const welcomeSnapshot = createGameSnapshot(playerState, authorityForPlayer(playerId))
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
@@ -474,36 +516,41 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             mods: [],
           },
           boneyards: boneyards.choices,
-          gameplayPause,
+          gameplayPause: gameplayPauseForPlayer(playerId),
           snapshot: welcomeSnapshot,
           snapshotSequence,
         }))
-        if (loadedBoneyard) {
+        const playerBoneyard = loadedBoneyardForPlayer(playerId)
+        if (playerBoneyard) {
           socket.send(encodeGameMessage({
             type: 'server-boneyard-loaded',
-            boneyard: loadedBoneyard,
+            boneyard: playerBoneyard,
           }))
         }
+        if (sharedWorlds) broadcastPartyState()
         publishSaveCheckpoint('connected')
-        if (gameplayPause) broadcastSnapshot()
+        if (gameplayPauseForPlayer(playerId)) broadcastSnapshot()
         return
       }
 
       if (message.type === 'client-gameplay-pause') {
+        const activeState = stateForPlayer(client.playerId)
+        if (sharedWorlds && activeState.world.kind === 'hub') return
+        const activePause = gameplayPauseForPlayer(client.playerId)
         if (message.paused) {
           if (
-            gameplayPause
-            || state.levelUpBarrier !== null
-            || (state.run.phase !== 'hub' && state.run.phase !== 'active')
+            activePause
+            || activeState.levelUpBarrier !== null
+            || (activeState.run.phase !== 'hub' && activeState.run.phase !== 'active')
           ) return
-          gameplayPause = {
+          setGameplayPauseForPlayer(client.playerId, {
             ownerDisplayName: client.displayName,
             ownerPlayerId: client.playerId,
-          }
-          stopAllClientInputs()
-          resetNextTickDeadline()
+          })
+          stopWorldClientInputs(client.playerId)
+          if (!sharedWorlds) resetNextTickDeadline()
           publishSaveCheckpoint('pause')
-          broadcastGameplayPause()
+          broadcastGameplayPause(client.playerId)
           logGameServerEvent(
             options.log,
             'game-host',
@@ -513,22 +560,23 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             logDetails({
               displayName: client.displayName,
               playerId: client.playerId,
-              serverTick: state.tick,
+              serverTick: activeState.tick,
             }),
           )
           return
         }
-        if (gameplayPause?.ownerPlayerId !== client.playerId) return
-        releaseGameplayPause('owner-resumed')
+        if (activePause?.ownerPlayerId !== client.playerId) return
+        releaseGameplayPause('owner-resumed', client.playerId)
         return
       }
 
       if (message.type === 'client-input') {
         if (message.sequence <= client.lastReceivedSequence) return
+        const activeState = stateForPlayer(client.playerId)
         if (
-          gameplayPause !== null
-          || state.levelUpBarrier !== null
-          || getPlayerProgression(state, client.playerId).pendingOffer
+          gameplayPauseForPlayer(client.playerId) !== null
+          || activeState.levelUpBarrier !== null
+          || getPlayerProgression(activeState, client.playerId).pendingOffer
         ) {
           client.lastReceivedSequence = message.sequence
           client.acknowledgedSequence = message.sequence
@@ -537,7 +585,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           broadcastSnapshot()
           return
         }
-        if (message.targetTick > state.tick + GAME_TICK_RATE * 2) {
+        if (message.targetTick > activeState.tick + GAME_TICK_RATE * 2) {
           disconnect(socket, 'invalid-message', 'Input targets too far ahead of the server tick.')
           return
         }
@@ -547,13 +595,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           message.input,
         )
         const targetTick = Math.max(
-          state.tick + 1,
+          activeState.tick + 1,
           message.targetTick,
           pendingTail
             ? pendingTail.targetTick + Number(castTransition)
-            : state.tick + 1,
+            : activeState.tick + 1,
         )
-        if (targetTick > state.tick + GAME_TICK_RATE * 2) {
+        if (targetTick > activeState.tick + GAME_TICK_RATE * 2) {
           disconnect(socket, 'invalid-message', 'Input queue extends too far ahead of the server tick.')
           return
         }
@@ -569,45 +617,86 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-select-skill') {
-        const barrierBefore = state.levelUpBarrier
-        const selected = selectGameSimulationPlayerSkill(state, client.playerId, message)
+        const activeState = stateForPlayer(client.playerId)
+        const barrierBefore = activeState.levelUpBarrier
+        const selected = selectGameSimulationPlayerSkill(activeState, client.playerId, message)
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
           return
         }
-        state = selected
+        replaceStateForPlayer(client.playerId, selected)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
-        if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
+        if (barrierBefore !== null && selected.levelUpBarrier === null) {
+          stopWorldClientInputs(client.playerId)
+        }
         broadcastSnapshot()
         publishSaveCheckpoint('skill-selected')
         return
       }
       if (message.type === 'client-level-up-action') {
-        const barrierBefore = state.levelUpBarrier
+        const activeState = stateForPlayer(client.playerId)
+        const barrierBefore = activeState.levelUpBarrier
         const applied = message.action === 'reroll'
-          ? rerollGameSimulationPlayerSkill(state, client.playerId, message.offerSequence)
-          : saveGameSimulationPlayerSkill(state, client.playerId, message.offerSequence)
+          ? rerollGameSimulationPlayerSkill(activeState, client.playerId, message.offerSequence)
+          : saveGameSimulationPlayerSkill(activeState, client.playerId, message.offerSequence)
         if (!applied) {
           disconnect(socket, 'invalid-message', 'The level-up action is stale or unavailable.')
           return
         }
-        state = applied
+        replaceStateForPlayer(client.playerId, applied)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
-        if (barrierBefore !== null && state.levelUpBarrier === null) stopAllClientInputs()
+        if (barrierBefore !== null && applied.levelUpBarrier === null) {
+          stopWorldClientInputs(client.playerId)
+        }
         broadcastSnapshot()
         publishSaveCheckpoint('level-up-action')
         return
       }
       if (message.type === 'client-hub-action') {
-        if (gameplayPause !== null) return
-        const applied = applyGameSimulationHubAction(state, client.playerId, message.action)
-        state = applied.state
+        if (gameplayPauseForPlayer(client.playerId) !== null) return
+        const applied = applyGameSimulationHubAction(
+          stateForPlayer(client.playerId),
+          client.playerId,
+          message.action,
+        )
+        replaceStateForPlayer(client.playerId, applied.state)
         client.activeInput = createIdlePlayerCharacterInput()
         client.queuedInputs.clear()
         broadcastSnapshot()
         if (applied.accepted) publishSaveCheckpoint('hub-action')
+        return
+      }
+      if (message.type === 'client-party-invite') {
+        if (!sharedWorlds) return
+        const result = inviteSharedPartyPlayer(
+          sharedWorlds,
+          client.playerId,
+          message.targetPlayerId,
+          maxPlayers,
+        )
+        if (result.accepted) {
+          sharedWorlds = result.state
+          state = sharedWorlds.hub
+          broadcastPartyState()
+        }
+        return
+      }
+      if (message.type === 'client-party-accept') {
+        if (!sharedWorlds) return
+        const result = acceptSharedPartyInvitation(
+          sharedWorlds,
+          client.playerId,
+          message.invitationId,
+          maxPlayers,
+        )
+        if (result.accepted) {
+          sharedWorlds = result.state
+          state = sharedWorlds.hub
+          broadcastPartyState()
+          broadcastSnapshot()
+        }
         return
       }
       if (message.type === 'client-lua-execute') {
@@ -626,7 +715,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             ...result,
           }))
         }
-        if (client.playerId !== hostPlayerId) {
+        if (sharedHub) {
+          sendLuaResult({
+            error: 'Authoritative Lua is unavailable on the shared Hub host.',
+            ok: false,
+            output: [],
+            values: [],
+          })
+          return
+        }
+        if (client.playerId !== authorityForPlayer(client.playerId)) {
           sendLuaResult({
             error: 'Only the current session host may execute authoritative Lua.',
             ok: false,
@@ -726,12 +824,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-start-match') {
+        const activeState = stateForPlayer(client.playerId)
         if (
-          client.playerId !== hostPlayerId
-          || loadedBoneyard
-          || gameplayPause !== null
-          || state.levelUpBarrier !== null
-          || state.run.phase !== 'hub'
+          client.playerId !== authorityForPlayer(client.playerId)
+          || loadedBoneyardForPlayer(client.playerId)
+          || gameplayPauseForPlayer(client.playerId) !== null
+          || activeState.levelUpBarrier !== null
+          || activeState.run.phase !== 'hub'
         ) return
         const selected = materializeBoneyard(
           boneyards,
@@ -740,6 +839,21 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The selected Boneyard is unavailable.')
+          return
+        }
+        if (sharedWorlds) {
+          const started = startSharedPartyRun(sharedWorlds, client.playerId, selected)
+          if (!started.accepted) return
+          sharedWorlds = started.state
+          state = sharedWorlds.hub
+          stopWorldClientInputs(client.playerId)
+          broadcastToPlayerWorld(client.playerId, {
+            type: 'server-boneyard-loaded',
+            boneyard: selected,
+          })
+          broadcastPartyState()
+          broadcastSnapshot()
+          publishSaveCheckpoint('boneyard-entry')
           return
         }
         loadedBoneyard = selected
@@ -758,7 +872,19 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       if (message.type === 'client-confirm-loadout') {
-        if (client.playerId !== hostPlayerId) return
+        if (client.playerId !== authorityForPlayer(client.playerId)) return
+        if (sharedWorlds) {
+          const confirmed = confirmSharedPartyLoadout(sharedWorlds, client.playerId)
+          if (!confirmed.accepted) return
+          sharedGameplayPauses.delete(partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? '')
+          sharedWorlds = confirmed.state
+          state = sharedWorlds.hub
+          stopWorldClientInputs(client.playerId)
+          broadcastPartyState()
+          broadcastSnapshot()
+          publishSaveCheckpoint('loadout-confirmed')
+          return
+        }
         const confirmed = confirmGameSimulationLoadout(state)
         if (!confirmed) return
         state = confirmed
@@ -805,15 +931,26 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
       clients.delete(socket)
-      const releasedGameplayPause = gameplayPause?.ownerPlayerId === client.playerId
-      state = removePlayerCharacter(state, client.playerId)
+      const disconnectedState = stateForPlayer(client.playerId)
+      const disconnectedPartyId = sharedWorlds
+        ? partyForPlayer(sharedWorlds.parties, client.playerId)?.id ?? null
+        : null
+      const releasedGameplayPause = gameplayPauseForPlayer(client.playerId)?.ownerPlayerId
+        === client.playerId
+      if (sharedWorlds) {
+        sharedWorlds = removeSharedGamePlayer(sharedWorlds, client.playerId)
+        state = sharedWorlds.hub
+        sharedSaveDocuments.delete(client.playerId)
+        sharedSaveSequences.delete(client.playerId)
+      } else {
+        state = removePlayerCharacter(state, client.playerId)
+      }
       if (clients.size === 0) {
         hostPlayerId = null
         resetLuaRuntime()
-        if (resetWhenEmpty) {
+        if (resetWhenEmpty && !sharedHub) {
           state = createInitialSimulation(options.createSimulation)
           nextPlayerId = 1
-          reservedHostClaimed = false
           loadedBoneyard = null
           nextSnapshotSequence = 1
           nextSaveSequence = 1
@@ -845,12 +982,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           lastInputSequence: client.lastReceivedSequence,
           playerCount: clients.size,
           playerId: client.playerId,
-          serverTick: state.tick,
+          serverTick: disconnectedState.tick,
           ...(socketError ? gameServerErrorDetails(socketError) : {}),
         }),
       )
-      if (releasedGameplayPause) releaseGameplayPause('owner-disconnected')
-      else broadcastSnapshot()
+      if (releasedGameplayPause) {
+        releaseGameplayPause('owner-disconnected', client.playerId, disconnectedPartyId)
+      } else broadcastSnapshot()
+      if (sharedWorlds) broadcastPartyState()
       if (clients.size > 0) publishSaveCheckpoint('participant-disconnected')
     }
     socket.once('close', (code, reason) => release(code, reason.toString()))
@@ -864,7 +1003,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       resetNextTickDeadline()
       return
     }
-    if (gameplayPause !== null) {
+    if (!sharedWorlds && gameplayPause !== null) {
       resetNextTickDeadline()
       return
     }
@@ -873,6 +1012,44 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
+        if (sharedWorlds) {
+          const inputs: Record<PlayerId, PlayerCharacterInput> = {}
+          for (const client of clients.values()) {
+            const activeState = stateForPlayer(client.playerId)
+            applyQueuedInput(client, activeState.tick + 1)
+            inputs[client.playerId] = client.activeInput
+          }
+          const previous = sharedWorlds
+          sharedWorlds = stepSharedGameWorlds(
+            sharedWorlds,
+            inputs,
+            new Set(sharedGameplayPauses.keys()),
+          )
+          state = sharedWorlds.hub
+          let lifecycleBoundary = false
+          for (const run of sharedWorlds.runs) {
+            const before = previous.runs.find(({ partyId }) => partyId === run.partyId)
+            if (!before) continue
+            const enteredGameOver = before.state.run.phase === 'active'
+              && run.state.run.phase === 'game-over'
+            const completedGameOver = before.state.run.phase === 'game-over'
+              && run.state.run.phase === 'loadout'
+            const previousBarrierId = before.state.levelUpBarrier?.barrierId ?? null
+            const barrierId = run.state.levelUpBarrier?.barrierId ?? null
+            if (enteredGameOver) publishSharedSaveClear(run.partyId)
+            if (enteredGameOver || completedGameOver || previousBarrierId !== barrierId) {
+              stopPartyInputs(run.partyId)
+              lifecycleBoundary = true
+            }
+          }
+          nextTickAt += GAME_FIXED_TICK_SECONDS * 1000
+          steps += 1
+          if (lifecycleBoundary || state.tick % ticksPerSnapshot === 0) broadcastSnapshot()
+          if (state.tick % GAME_SAVE_CHECKPOINT_TICKS === 0) {
+            publishSaveCheckpoint('periodic')
+          }
+          continue
+        }
         const inputs: Record<PlayerId, PlayerCharacterInput> = {}
         const nextTick = state.tick + 1
         for (const client of clients.values()) {
@@ -973,6 +1150,53 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   }, 2)
 
   function publishSaveCheckpoint(source: string): void {
+    if (sharedWorlds) {
+      for (const party of sharedWorlds.parties.parties) {
+        const owner = [...clients.values()].find(({ playerId }) => (
+          playerId === party.leaderPlayerId
+        ))
+        const saveState = sharedPartySaveStateForPlayer(sharedWorlds, party.leaderPlayerId)
+        if (
+          !owner
+          || owner.socket.readyState !== WebSocket.OPEN
+          || !saveState
+          || saveState.run.phase === 'game-over'
+          || saveState.run.phase === 'loadout'
+        ) continue
+        let document: string
+        try {
+          document = createGameSaveDocument({
+            loadedBoneyard: sharedLoadedBoneyardForPlayer(
+              sharedWorlds,
+              party.leaderPlayerId,
+            ),
+            playerId: party.leaderPlayerId,
+            state: saveState,
+          })
+        } catch (error) {
+          logGameServerEvent(
+            options.log,
+            'game-host',
+            'error',
+            'save.checkpoint_failed',
+            'A party game state could not produce a save checkpoint.',
+            logDetails({ partyId: party.id, source, ...gameServerErrorDetails(error) }),
+          )
+          continue
+        }
+        if (sharedSaveDocuments.get(party.leaderPlayerId) === document) continue
+        const sequence = (sharedSaveSequences.get(party.leaderPlayerId) ?? 0) + 1
+        sharedSaveSequences.set(party.leaderPlayerId, sequence)
+        sharedSaveDocuments.set(party.leaderPlayerId, document)
+        owner.socket.send(encodeGameMessage({
+          type: 'server-save-checkpoint',
+          save: document,
+          reason: 'progress',
+          sequence,
+        }))
+      }
+      return
+    }
     if (
       hostPlayerId === null
       || state.run.phase === 'game-over'
@@ -1025,14 +1249,37 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     nextSaveSequence += 1
   }
 
+  function publishSharedSaveClear(partyId: string): void {
+    if (!sharedWorlds) return
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
+    if (!party) return
+    const owner = [...clients.values()].find(({ playerId }) => (
+      playerId === party.leaderPlayerId
+    ))
+    if (!owner || owner.socket.readyState !== WebSocket.OPEN) return
+    const sequence = (sharedSaveSequences.get(party.leaderPlayerId) ?? 0) + 1
+    sharedSaveSequences.set(party.leaderPlayerId, sequence)
+    sharedSaveDocuments.delete(party.leaderPlayerId)
+    owner.socket.send(encodeGameMessage({
+      type: 'server-save-checkpoint',
+      save: null,
+      reason: 'game-over',
+      sequence,
+    }))
+  }
+
   function broadcastSnapshot(): void {
-    const snapshot = createGameSnapshot(state, hostPlayerId)
+    const defaultSnapshot = sharedWorlds ? null : createGameSnapshot(state, hostPlayerId)
     const snapshotSequence = nextSnapshotSequence
     nextSnapshotSequence += 1
-    const currentBaseline = createReplicatedEntityBaseline(snapshot)
     const periodicKeyframe = snapshotSequence % Math.max(1, snapshotRate * 5) === 0
     for (const client of clients.values()) {
       if (client.socket.readyState !== WebSocket.OPEN) continue
+      const snapshot = defaultSnapshot ?? createGameSnapshot(
+        stateForPlayer(client.playerId),
+        authorityForPlayer(client.playerId),
+      )
+      const currentBaseline = createReplicatedEntityBaseline(snapshot)
       const acknowledgedBaseline = client.sentReplicationBaselines.get(
         client.acknowledgedSnapshotSequence,
       )
@@ -1057,8 +1304,95 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function stateForPlayer(playerId: string): GameSimulationState {
+    if (!sharedWorlds) return state
+    const playerState = sharedGameStateForPlayer(sharedWorlds, playerId)
+    if (!playerState) throw new Error(`connected player ${playerId} has no shared world`)
+    return playerState
+  }
+
+  function replaceStateForPlayer(playerId: string, nextState: GameSimulationState): void {
+    if (!sharedWorlds) {
+      state = nextState
+      return
+    }
+    sharedWorlds = replaceSharedGameStateForPlayer(sharedWorlds, playerId, nextState)
+    state = sharedWorlds.hub
+  }
+
+  function authorityForPlayer(playerId: string): string | null {
+    return sharedWorlds
+      ? partyForPlayer(sharedWorlds.parties, playerId)?.leaderPlayerId ?? null
+      : hostPlayerId
+  }
+
+  function loadedBoneyardForPlayer(playerId: string): LoadedBoneyard | null {
+    return sharedWorlds
+      ? sharedLoadedBoneyardForPlayer(sharedWorlds, playerId)
+      : loadedBoneyard
+  }
+
+  function broadcastPartyState(): void {
+    if (!sharedWorlds) return
+    const displayNames = new Map(
+      [...clients.values()].map(({ displayName, playerId }) => [playerId, displayName]),
+    )
+    const hubPlayerIds = new Set(
+      sharedWorlds.hub.playerEntities.identities.map(({ playerId }) => playerId),
+    )
+    for (const client of clients.values()) {
+      if (client.socket.readyState !== WebSocket.OPEN) continue
+      client.socket.send(encodeGameMessage({
+        type: 'server-party-state',
+        state: projectPartyState(
+          sharedWorlds.parties,
+          client.playerId,
+          displayNames,
+          hubPlayerIds,
+        ),
+      }))
+    }
+  }
+
+  function broadcastToPlayerWorld(
+    playerId: string,
+    message: Parameters<typeof encodeGameMessage>[0],
+  ): void {
+    const playerState = stateForPlayer(playerId)
+    for (const client of clients.values()) {
+      if (
+        client.socket.readyState === WebSocket.OPEN
+        && stateForPlayer(client.playerId) === playerState
+      ) client.socket.send(encodeGameMessage(message))
+    }
+  }
+
   function stopAllClientInputs(): void {
     for (const client of clients.values()) {
+      client.activeInput = createIdlePlayerCharacterInput()
+      client.queuedInputs.clear()
+    }
+  }
+
+  function stopWorldClientInputs(playerId: string): void {
+    if (!sharedWorlds) {
+      stopAllClientInputs()
+      return
+    }
+    const playerState = stateForPlayer(playerId)
+    for (const client of clients.values()) {
+      if (stateForPlayer(client.playerId) !== playerState) continue
+      client.activeInput = createIdlePlayerCharacterInput()
+      client.queuedInputs.clear()
+    }
+  }
+
+  function stopPartyInputs(partyId: string): void {
+    if (!sharedWorlds) return
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
+    if (!party) return
+    for (const client of clients.values()) {
+      if (!party.memberPlayerIds.includes(client.playerId)) continue
       client.activeInput = createIdlePlayerCharacterInput()
       client.queuedInputs.clear()
     }
@@ -1068,17 +1402,64 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   }
 
-  function broadcastGameplayPause(): void {
-    broadcast({ type: 'server-gameplay-pause', pause: gameplayPause })
+  function gameplayPauseForPlayer(playerId: string): GameplayPauseState | null {
+    if (!sharedWorlds) return gameplayPause
+    const partyId = partyForPlayer(sharedWorlds.parties, playerId)?.id
+    return partyId ? sharedGameplayPauses.get(partyId) ?? null : null
   }
 
-  function releaseGameplayPause(source: 'owner-disconnected' | 'owner-resumed'): void {
-    if (!gameplayPause) return
-    const released = gameplayPause
-    gameplayPause = null
-    stopAllClientInputs()
-    resetNextTickDeadline()
-    broadcastGameplayPause()
+  function setGameplayPauseForPlayer(
+    playerId: string,
+    pause: GameplayPauseState,
+  ): void {
+    if (!sharedWorlds) {
+      gameplayPause = pause
+      return
+    }
+    const partyId = partyForPlayer(sharedWorlds.parties, playerId)?.id
+    if (partyId) sharedGameplayPauses.set(partyId, pause)
+  }
+
+  function broadcastGameplayPause(playerId?: string, knownPartyId?: string | null): void {
+    if (!sharedWorlds) {
+      broadcast({ type: 'server-gameplay-pause', pause: gameplayPause })
+      return
+    }
+    const partyId = knownPartyId
+      ?? (playerId ? partyForPlayer(sharedWorlds.parties, playerId)?.id : undefined)
+    if (!partyId) return
+    const pause = sharedGameplayPauses.get(partyId) ?? null
+    const party = sharedWorlds.parties.parties.find(({ id }) => id === partyId)
+    if (!party) return
+    for (const client of clients.values()) {
+      if (
+        client.socket.readyState === WebSocket.OPEN
+        && party.memberPlayerIds.includes(client.playerId)
+      ) client.socket.send(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
+    }
+  }
+
+  function releaseGameplayPause(
+    source: 'owner-disconnected' | 'owner-resumed',
+    playerId?: string,
+    knownPartyId?: string | null,
+  ): void {
+    const partyId = sharedWorlds
+      ? knownPartyId ?? (playerId ? partyForPlayer(sharedWorlds.parties, playerId)?.id : null)
+      : null
+    const released = sharedWorlds
+      ? partyId ? sharedGameplayPauses.get(partyId) ?? null : null
+      : gameplayPause
+    if (!released) return
+    if (sharedWorlds && partyId) {
+      sharedGameplayPauses.delete(partyId)
+      stopPartyInputs(partyId)
+    } else {
+      gameplayPause = null
+      stopAllClientInputs()
+      resetNextTickDeadline()
+    }
+    broadcastGameplayPause(playerId, partyId)
     broadcastSnapshot()
     logGameServerEvent(
       options.log,
@@ -1173,9 +1554,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       )
     },
     hostPlayerId: () => hostPlayerId,
+    hubPlayerCount: () => sharedWorlds?.hub.playerEntities.identities.length
+      ?? Number(state.world.kind === 'hub') * clients.size,
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
+    partyCount: () => sharedWorlds?.parties.parties.length ?? 0,
     state: () => state,
+    runCount: () => sharedWorlds?.runs.length ?? Number(state.world.kind === 'boneyard'),
   }
 
   async function ensureLuaRuntime(): Promise<WebLuaRuntime> {
@@ -1294,8 +1679,8 @@ function authenticate(
   if (authentication.kind === 'shared') {
     return credentialsEqual(credential, authentication.credential) ? 'shared' : null
   }
-  if (credentialsEqual(credential, authentication.hostCredential)) return 'host'
-  return credentialsEqual(credential, authentication.guestCredential) ? 'guest' : null
+  if (authentication.kind === 'tickets') return authentication.claim(credential) ? 'shared' : null
+  return null
 }
 
 function validateAuthentication(authentication: GameHostAuthentication): void {
@@ -1303,11 +1688,11 @@ function validateAuthentication(authentication: GameHostAuthentication): void {
     if (!authentication.credential) throw new Error('Game host requires a shared credential')
     return
   }
-  if (!authentication.hostCredential || !authentication.guestCredential) {
-    throw new Error('Game host requires host and guest credentials')
-  }
-  if (credentialsEqual(authentication.hostCredential, authentication.guestCredential)) {
-    throw new Error('Game host host and guest credentials must differ')
+  if (authentication.kind === 'tickets') {
+    if (typeof authentication.claim !== 'function') {
+      throw new Error('Game host requires a ticket claim function')
+    }
+    return
   }
 }
 

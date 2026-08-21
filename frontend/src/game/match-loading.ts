@@ -6,8 +6,6 @@ export const MATCH_LOADING_STAGE_DEFINITIONS = [
     label: 'Waking the multiplayer transport...',
     progress: 0.44,
   },
-  { stage: 'creating_lobby', label: 'Opening the coven...', progress: 0.48 },
-  { stage: 'joining_lobby', label: 'Entering the Steam lobby...', progress: 0.48 },
   {
     stage: 'authenticating_session',
     label: 'Proving your sigil to the host...',

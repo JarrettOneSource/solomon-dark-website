@@ -108,6 +108,41 @@ test('client carries character config, publishes authority, and tears down', asy
   assert.equal(session.isHost, true)
   assert.equal(session.boneyards[0].id, 'default-random')
   assert.equal(session.getSaveCheckpoint(), null)
+  assert.equal(session.getPartyState(), null)
+  let receivedPartyRevision = 0
+  session.onPartyState((party) => { receivedPartyRevision = party.revision })
+  transport.receive(encodeGameMessage({
+    type: 'server-party-state',
+    state: {
+      hubPlayers: [
+        { displayName: 'Helvidius', playerId: 'player-1' },
+        { displayName: 'Aurelia', playerId: 'player-2' },
+      ],
+      invitations: [{
+        id: 'invite-1',
+        inviter: { displayName: 'Aurelia', playerId: 'player-2' },
+        partyId: 'party-2',
+      }],
+      party: {
+        id: 'party-1',
+        leaderPlayerId: 'player-1',
+        memberPlayerIds: ['player-1'],
+      },
+      revision: 3,
+    },
+  }))
+  assert.equal(receivedPartyRevision, 3)
+  assert.equal(session.getPartyState()?.party.id, 'party-1')
+  session.inviteToParty('player-2')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-invite',
+    targetPlayerId: 'player-2',
+  })
+  session.acceptPartyInvitation('invite-1')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-accept',
+    invitationId: 'invite-1',
+  })
   let receivedCheckpoint = null
   const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
     receivedCheckpoint = checkpoint

@@ -417,32 +417,24 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             {"error": "A private game session is not available right now."},
         )
 
-        status, response = self.request("GET", "/api/game/lobbies")
-        self.assertEqual(status, 503)
-        self.assertEqual(
-            response,
-            {"error": "Web rebuild playtests are not available right now."},
-        )
-
         status, response = self.request(
             "POST",
-            "/api/game/lobbies",
-            json_body={"hostPlayer": "Contract Wizard"},
-            headers={"X-Solomon-Dark-Session": "create-lobby"},
+            "/api/game/hub",
+            headers={"X-Solomon-Dark-Session": "enter-hub"},
         )
         self.assertEqual(status, 503)
         self.assertEqual(
             response,
-            {"error": "Web rebuild playtests are not available right now."},
+            {"error": "The shared Hub is not available right now."},
         )
 
-        status, response = self.request(
-            "POST",
-            "/api/game/lobbies/not-a-lobby/join",
-            headers={"X-Solomon-Dark-Session": "join-lobby"},
-        )
-        self.assertEqual(status, 400)
-        self.assertEqual(response, {"error": "The web playtest lobby id is invalid."})
+        for method, path in (
+            ("GET", "/api/game/lobbies"),
+            ("POST", "/api/game/lobbies"),
+            ("POST", "/api/game/lobbies/retired/join"),
+        ):
+            status, _response = self.request(method, path)
+            self.assertEqual(status, 404)
 
     def test_crash_reports_are_private_persisted_and_attributed(self) -> None:
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

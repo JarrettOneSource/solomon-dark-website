@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import LobbyPasswordDialog from '../components/LobbyPasswordDialog'
 import LobbyTable from '../components/LobbyTable'
-import WebGameLobbyTable from '../components/WebGameLobbyTable'
 import Reveal from '../fx/Reveal'
 import { EmptyState, ErrorNote, Spinner } from '../components/ui'
-import { api, type Lobby } from '../lib/api'
+import type { Lobby } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { useApi } from '../lib/useApi'
 import { useLobbies } from '../lib/useLobbies'
 
 export default function SearchParties() {
@@ -16,7 +14,6 @@ export default function SearchParties() {
   const [knock, setKnock] = useState<Lobby | null>(null)
   const { user } = useAuth()
   const { data, error, loading } = useLobbies()
-  const web = useApi(() => api.gameLobbies.list(), [], 2_000)
   const [searchParams, setSearchParams] = useSearchParams()
   const consumedDeepLink = useRef(false)
 
@@ -50,16 +47,6 @@ export default function SearchParties() {
   // they only show on the unfiltered view.
   const veiledAll = data?.privateParties ?? []
   const veiled = search.trim() || openSeats ? [] : veiledAll
-  const filteredWeb = useMemo(() => {
-    let items = web.data?.items ?? []
-    if (search.trim()) {
-      const query = search.trim().toLowerCase()
-      items = items.filter((lobby) => lobby.hostPlayer.toLowerCase().includes(query))
-    }
-    if (openSeats) items = items.filter((lobby) => lobby.players < lobby.maxPlayers)
-    return items
-  }, [web.data, search, openSeats])
-
   return (
     <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6">
       <Reveal>
@@ -101,37 +88,7 @@ export default function SearchParties() {
           </label>
         </div>
 
-        <section aria-labelledby="web-playtest-title">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <div className="kicker mb-1.5">WEB TEST</div>
-              <h2 id="web-playtest-title" className="h-display text-xl">
-                Web Rebuild Playtest
-              </h2>
-              <p className="text-fell mt-1 text-sm text-bone-dim">
-                Browser-only sessions for the rebuilt game. These do not open or alter the Mod Launcher.
-              </p>
-            </div>
-            <Link to="/game" className="btn btn-gold">Start New Game</Link>
-          </div>
-
-          {web.loading ? (
-            <Spinner label="Looking for web playtests…" />
-          ) : web.error ? (
-            <ErrorNote message={web.error} />
-          ) : filteredWeb.length === 0 ? (
-            <EmptyState
-              title={search || openSeats ? 'No matching web playtests' : 'No web playtests waiting'}
-              line={search || openSeats
-                ? 'Nothing in the rebuilt game list matches these filters.'
-                : 'Open the rebuilt game and press New Game to host the first one.'}
-            />
-          ) : (
-            <WebGameLobbyTable lobbies={filteredWeb} />
-          )}
-        </section>
-
-        <section className="mt-12" aria-labelledby="launcher-parties-title">
+        <section aria-labelledby="launcher-parties-title">
           <div className="mb-4">
             <div className="kicker mb-1.5">LIVE LAUNCHER</div>
             <h2 id="launcher-parties-title" className="h-display text-xl">

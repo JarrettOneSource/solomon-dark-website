@@ -181,10 +181,11 @@ builder.Services.AddRateLimiter(options =>
                 "/api/game/sessions",
                 StringComparison.OrdinalIgnoreCase)
                 ? "Too many private game sessions were requested; try again in a minute."
-            : requestPath?.StartsWith(
-                "/api/game/lobbies",
-                StringComparison.OrdinalIgnoreCase) == true
-                ? "Too many web playtest requests were made; try again in a minute."
+            : string.Equals(
+                requestPath,
+                "/api/game/hub",
+                StringComparison.OrdinalIgnoreCase)
+                ? "Too many shared Hub admissions were requested; try again in a minute."
                 : "Too many match announcements; try again in a minute.";
         await context.HttpContext.Response.WriteAsJsonAsync(
             new { error = message },

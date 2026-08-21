@@ -170,6 +170,33 @@ export function removePlayerEntity(
   }
 }
 
+export function importPlayerEntity(
+  target: PlayerEntityStore,
+  source: PlayerEntityStore,
+  sourcePlayerId: string,
+  targetPlayerId: string,
+  lightRegistration: NativeLightProviderRegistration,
+  character?: PlayerCharacterState,
+): PlayerEntityStore {
+  if (playerEntityIndex(target, targetPlayerId) >= 0) return target
+  const index = playerEntityIndex(source, sourcePlayerId)
+  if (index < 0) throw new Error(`source player entity ${sourcePlayerId} is missing`)
+  const importedCharacter = character ?? playerCharacterProjection(source, index)
+  return {
+    configs: [...target.configs, source.configs[index]!],
+    economies: [...target.economies, source.economies[index]!],
+    entityIds: [...target.entityIds, target.nextEntityId],
+    identities: [...target.identities, Object.freeze({ playerId: targetPlayerId })],
+    lightings: [...target.lightings, createPlayerLighting(lightRegistration)],
+    locomotions: [...target.locomotions, locomotionComponent(importedCharacter)],
+    nextEntityId: target.nextEntityId + 1,
+    primaryCasts: [...target.primaryCasts, importedCharacter.primaryCast],
+    progressions: [...target.progressions, source.progressions[index]!],
+    skillBooks: [...target.skillBooks, source.skillBooks[index]!],
+    statBooks: [...target.statBooks, source.statBooks[index]!],
+  }
+}
+
 export function playerEntityIndex(source: PlayerEntityStore, playerId: string): number {
   return source.identities.findIndex((identity) => identity.playerId === playerId)
 }

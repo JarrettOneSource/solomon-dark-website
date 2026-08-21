@@ -20,6 +20,7 @@ const NATIVE_NAME_BASELINE = 7
 interface AllyHudProps {
   additionalRows?: readonly AllyHudRow[]
   initialSnapshot: GameSnapshot
+  partyMemberIds?: readonly string[]
   playerId: string
   subscribeSnapshot: (listener: (snapshot: GameSnapshot) => void) => () => void
 }
@@ -37,9 +38,10 @@ function snapshotWorldKey(snapshot: GameSnapshot, playerId: string): string {
 function deriveSnapshotAllyHudRows(
   snapshot: GameSnapshot,
   playerId: string,
+  partyMemberIds?: readonly string[],
 ): AllyHudRow[] {
   return combineAllyHudRows(
-    derivePlayerAllyHudRows(snapshot.players, playerId),
+    derivePlayerAllyHudRows(snapshot.players, playerId, partyMemberIds),
     deriveGolemAllyHudRows(
       snapshot.secondaryAbilities.actors,
       snapshotWorldKey(snapshot, playerId),
@@ -137,23 +139,24 @@ export function AllyHudRoster({ rows }: AllyHudRosterProps) {
 export default function AllyHud({
   additionalRows = EMPTY_ADDITIONAL_ROWS,
   initialSnapshot,
+  partyMemberIds,
   playerId,
   subscribeSnapshot,
 }: AllyHudProps) {
   const [snapshotRows, setSnapshotRows] = useState<readonly AllyHudRow[]>(() => (
-    deriveSnapshotAllyHudRows(initialSnapshot, playerId)
+    deriveSnapshotAllyHudRows(initialSnapshot, playerId, partyMemberIds)
   ))
 
   useEffect(() => {
     const publish = (snapshot: GameSnapshot) => {
-      const nextRows = deriveSnapshotAllyHudRows(snapshot, playerId)
+      const nextRows = deriveSnapshotAllyHudRows(snapshot, playerId, partyMemberIds)
       setSnapshotRows((currentRows) => allyHudRowsEqual(currentRows, nextRows)
         ? currentRows
         : nextRows)
     }
     publish(initialSnapshot)
     return subscribeSnapshot(publish)
-  }, [initialSnapshot, playerId, subscribeSnapshot])
+  }, [initialSnapshot, partyMemberIds, playerId, subscribeSnapshot])
 
   return <AllyHudRoster rows={combineAllyHudRows(snapshotRows, additionalRows)} />
 }

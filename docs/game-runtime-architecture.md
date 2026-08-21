@@ -1,6 +1,7 @@
 # Solomon Dark rebuilt runtime architecture
 
-Status: accepted; authoritative, GPU-client, desktop-solo, headless-crowd, and compact-replication slices implemented, 2026-08-16
+Status: accepted; authoritative, GPU-client, shared-Hub party, desktop-solo,
+headless-crowd, and compact-replication slices implemented, 2026-08-20
 
 This document records the load-bearing runtime decisions for the rebuilt game.
 It does not replace `game-native-parity-re.md`: the native game remains the
@@ -18,23 +19,29 @@ distributed or lockstep simulation.
 | Desktop solo | Packaged shared client | Server bundle spawned as a separate localhost process |
 | Desktop host | Host's shared client plus remote desktop clients | The same server bundle on the host's machine |
 | Desktop join | Packaged shared client | Peer-hosted or dedicated server |
-| Web solo | Shared browser client | Private remotely provisioned server instance |
-| Web multiplayer | Shared browser client, with compatible desktop clients allowed | The same remote server instance |
+| Web singleton party | Shared browser client | The process-wide shared Hub host; a party-scoped run instance after launch |
+| Web multiplayer party | Shared browser clients | The same shared Hub host, then one party-scoped Boneyard run instance |
 | Dedicated | Any compatible client | The same server bundle run headlessly |
 
-The website is an optional control plane for browser provisioning, account
-identity, cloud saves, public discovery, and published content. The packaged
+The website is an optional control plane for browser admission, account
+identity, cloud saves, and published content. The packaged
 desktop client must still provide local profiles, local saves, solo play, LAN
 or direct joining, hosting, and locally installed content while the website is
 unreachable.
 
-Browser discovery and native-launcher discovery are separate products even
-when they share the `/parties` presentation page. Steam/launcher hosts continue
-to announce through `/api/lobbies` and join through the registered
-`solomondarkrevived://` transport. Discoverable rebuilt-web sessions live only
-under `/api/game/lobbies`, join through an ordinary `/game?party=<id>` URL, and
-are projected directly from the live game-session supervisor. They do not
-create Steam-shaped SQLite lobby records or enter launcher counts.
+Browser play has no lobby directory or join-by-lobby URL. New Game requests one
+single-use shared-Hub admission ticket, and the authoritative host registers a
+singleton party when the completed character authenticates. Players discover
+one another in the Courtyard itself, inspect a name-only profile, and exchange
+party invitations over the gameplay protocol. The current party leader alone
+can launch; that transition freezes the current party roster and moves exactly
+those player entities into a party-scoped Boneyard instance while unrelated
+Hub residents keep ticking in the shared Hub instance.
+
+Steam/launcher discovery is a separate product and transport. It continues to
+use Steam's platform-level lobby primitive, `/api/lobbies`, and the registered
+`solomondarkrevived://` hand-off. Those names do not describe or participate in
+the rebuilt browser game's party model.
 
 ## Shared identities and boundaries
 
@@ -68,29 +75,25 @@ from the in-world character and from native gameplay-slot ordinals. This keeps
 reconnect, future spectating, and world transitions from leaking connection
 identity into position or actor behavior.
 
-A discoverable browser session also separates control-plane lobby identity
-from participant identity. Creating the lobby reserves host authority but does
-not create a player character. The creator's host credential and the joiners'
-guest credential assign authority when their complete character configurations
-arrive, so a guest that finishes Create first cannot become host by timing.
-After the reserved host has connected, the existing authoritative host handoff
-may select the earliest remaining participant if that host disconnects.
+Party identity is also distinct from participant and world identity. Every
+connected browser participant belongs to exactly one party. A new participant
+creates a singleton party and is its leader. Accepting an invitation atomically
+moves a singleton participant into the inviter's party; it never derives
+authority from connection order. Leader disconnect promotes the earliest
+remaining member. Invitations are invalidated when either endpoint disappears,
+the target ceases to be a singleton, or the party starts a run.
 
-A supervisor-provisioned browser session is a reservation until its first
-authenticated participant arrives. Never-claimed reservations retain a bounded
-claim timeout. After use, the supervisor destroys the per-session host as soon
-as both the authenticated-player count and proxy count reach zero; there is no
-empty-session reconnect lease. The exact release event, rather than a gameplay
-tick or periodic idle poll, owns that transition. A remaining participant or an
-in-flight proxy keeps the session live. WebSocket control heartbeats monitor
-both the game host's direct peer and the supervisor's browser-facing peer; one
-unanswered five-second interval terminates that transport and feeds the same
-release event, detecting a newly half-open connection within ten seconds. The
-protocol-visible client ping remains an RTT diagnostic rather than a liveness
-lease. This policy is specific to remotely provisioned browser hosts: standalone
-shell-owned hosts may reset an empty run and park its fresh Hub at tick zero
-until the next client authenticates, while externally managed dedicated servers
-retain their owner's process policy and clock.
+The browser supervisor owns one shared-Hub host for its process lifetime and a
+bounded set of single-use admission tickets. It does not create one host per
+player or party. The host owns a shared Hub simulation plus zero or more
+party-scoped Boneyard simulations. Each socket receives snapshots only for its
+current world instance, while party-control messages remain session-wide.
+Leaving or a failed heartbeat removes the participant from its world and party;
+an empty run retires independently, and an empty shared Hub remains ready for
+the next ticket. Health reports active players, parties, and runs so deployment
+safety does not mistake an empty resident Hub process for an occupied session.
+Private per-session provisioning remains an explicit operations/test seam and
+is not a browser New Game path.
 
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to
@@ -122,13 +125,12 @@ dependencies without revisiting this release invariant.
   resolves strict pickup order, and emits semantic audio/text edges. Currency,
   resources, inventory, and Bonus state are committed at the session-owned
   player-entity boundary after that one accepted pickup.
-- Gameplay Pause Menu state is session-owned rather than client-local. The
-  first valid connected participant request owns one nullable pause barrier;
-  while it exists the host holds the authoritative simulation tick and world
-  state, clears every input lane, and keeps transport heartbeat, joins,
-  departures, and pause presentation messages live. Only that participant may
-  resume. Owner disconnect releases the barrier. Resumption resets the next
-  fixed-tick wall-clock deadline, so elapsed pause time never becomes catch-up
+- Gameplay Pause Menu state is world-instance-owned rather than client-local.
+  A party run may hold its own authoritative simulation without pausing the
+  shared Hub or another run. The shared multiplayer Hub itself cannot be
+  globally paused by one participant; its menu is presentation-local. A pause
+  owner disconnect releases only that instance barrier. Resumption resets that
+  instance's fixed-tick deadline, so elapsed pause time never becomes catch-up
   simulation.
 - The shared player input record carries normalized movement, a nullable world
   aim point, and independent primary/secondary held levels. Browser mouse edges
@@ -139,13 +141,15 @@ dependencies without revisiting this release invariant.
 - The client predicts only explicitly shared kernels needed for the local
   player. Remote actors and server-only systems are presented from buffered
   authoritative snapshots.
-- The session-owned run lifecycle is `hub -> active -> game-over -> loadout`.
+- A party-owned run lifecycle is `hub -> active -> game-over -> loadout -> hub`.
   An all-eligible-dead edge freezes the terminal Boneyard world while the
   session tick and two replicated Game Over clocks continue. The entry/hold
   clock opens input at 1000; host acknowledgement starts a nullable 400-tick
   exit clock. World retirement and the retained-loadout reset occur atomically
   on the following fixed tick, so neither client rendering nor acknowledgement
-  can destroy the image beneath an active fade.
+  can destroy the image beneath an active fade. After retained-loadout
+  confirmation, the same party and player entities merge back into the shared
+  Hub; no private post-run Hub may remain resident.
 - Player-character movement uses a two-phase shared kernel: first plan native
   intent/velocity, then let the active world resolve collision, then commit the
   resolved position plus native heading/gait state. Hub and Boneyard geometry

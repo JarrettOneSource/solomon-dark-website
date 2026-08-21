@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  cancelGameLobby,
-  decodeCreatedGameLobby,
+  admitSharedHubPlayer,
   decodeProvisionedGameEndpoint,
-  parseGameLobbyId,
 } from './game-bootstrap.ts'
 
 test('browser provisioning accepts only a credentialed public WSS endpoint', () => {
@@ -36,53 +34,27 @@ test('browser provisioning accepts only a credentialed public WSS endpoint', () 
   }), /invalid endpoint/)
 })
 
-test('browser lobby creation retains only an opaque id and credentialed endpoint', () => {
-  assert.deepEqual(decodeCreatedGameLobby({
-    lobbyId: '01234567890123456789012345678901',
-    kind: 'remote',
-    url: 'wss://solomondarker.com/game-sessions/01234567890123456789012345678901',
-    credential: 'reserved-host-credential',
-  }), {
-    lobbyId: '01234567890123456789012345678901',
-    endpoint: {
-      kind: 'remote',
-      url: 'wss://solomondarker.com/game-sessions/01234567890123456789012345678901',
-      credential: 'reserved-host-credential',
-    },
-  })
-
-  assert.equal(parseGameLobbyId('01234567890123456789012345678901'),
-    '01234567890123456789012345678901')
-  assert.equal(parseGameLobbyId('../launcher-lobby'), null)
-  assert.equal(parseGameLobbyId('short'), null)
-  assert.throws(() => decodeCreatedGameLobby({
-    lobbyId: '../launcher-lobby',
-    kind: 'remote',
-    url: 'wss://solomondarker.com/game-sessions/01234567890123456789012345678901',
-    credential: 'reserved-host-credential',
-  }), /invalid lobby/)
-})
-
-test('cancelling an already-expired browser lobby is complete', async () => {
-  const lobbyId = '01234567890123456789012345678901'
-  await cancelGameLobby({
-    lobbyId,
-    endpoint: {
-      kind: 'remote',
-      url: `wss://solomondarker.com/game-sessions/${lobbyId}`,
-      credential: 'reserved-host-credential',
-    },
-  }, async (input, init) => {
-    assert.equal(input, `/api/game/lobbies/${lobbyId}`)
+test('browser New Game requests a shared-Hub admission without lobby identity', async () => {
+  const endpoint = await admitSharedHubPlayer(async (input, init) => {
+    assert.equal(input, '/api/game/hub')
     assert.ok(init)
-    assert.equal(init.method, 'DELETE')
+    assert.equal(init.method, 'POST')
     assert.equal(
-      (init.headers as Record<string, string>)['x-solomon-dark-host-credential'],
-      'reserved-host-credential',
+      (init.headers as Record<string, string>)['x-solomon-dark-session'],
+      'enter-hub',
     )
-    return new Response('{"error":"gone"}', {
+    return new Response(JSON.stringify({
+      kind: 'remote',
+      url: 'wss://solomondarker.com/game-hub',
+      credential: 'single-use-hub-ticket',
+    }), {
       headers: { 'content-type': 'application/json' },
-      status: 404,
+      status: 201,
     })
+  })
+  assert.deepEqual(endpoint, {
+    kind: 'remote',
+    url: 'wss://solomondarker.com/game-hub',
+    credential: 'single-use-hub-ticket',
   })
 })

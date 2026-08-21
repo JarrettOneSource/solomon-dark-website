@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -40,101 +39,26 @@ public sealed partial class GameSessionProvisioner
         return BuildEndpoint(provisioned.Path, provisioned.Credential);
     }
 
-    public async Task<CreatedGameLobby> CreateLobbyAsync(
-        string hostPlayer,
+    public async Task<ProvisionedGameEndpoint> AdmitSharedHubAsync(
         CancellationToken cancellationToken)
     {
-        EnsureLobbiesConfigured();
-        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/lobbies");
-        request.Content = JsonContent.Create(new { hostPlayer });
+        EnsurePrivateSessionsConfigured();
+        using var request = CreateAdminRequest(HttpMethod.Post, "/admin/hub/tickets");
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw LobbyFailure(response.StatusCode);
-        }
-
-        var provisioned = await ReadLobbyProvisionResponseAsync(response, cancellationToken);
-        if (!IsValidLobbyId(provisioned.LobbyId))
-        {
-            throw InvalidLobbyResponse();
-        }
-        return new CreatedGameLobby(
-            provisioned.LobbyId!,
-            BuildLobbyEndpoint(provisioned.Path, provisioned.Credential));
-    }
-
-    public async Task<IReadOnlyList<WebGameLobby>> ListLobbiesAsync(
-        CancellationToken cancellationToken)
-    {
-        EnsureLobbiesConfigured();
-        using var request = CreateAdminRequest(HttpMethod.Get, "/admin/lobbies");
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw LobbyFailure(response.StatusCode);
-        }
-
-        SupervisorLobbyList? directory;
-        try
-        {
-            directory = await response.Content.ReadFromJsonAsync<SupervisorLobbyList>(
-                JsonOptions,
-                cancellationToken);
-        }
-        catch (JsonException exception)
-        {
-            throw InvalidLobbyResponse(exception);
-        }
-        if (directory?.Items is null || directory.Items.Any(item => !ValidLobby(item)))
-        {
-            throw InvalidLobbyResponse();
-        }
-        return directory.Items
-            .Select(item => new WebGameLobby(
-                item.Id!,
-                item.HostPlayer!,
-                item.Players,
-                item.MaxPlayers,
-                item.Phase!,
-                item.Protocol!))
-            .ToArray();
-    }
-
-    public async Task<ProvisionedGameEndpoint> JoinLobbyAsync(
-        string lobbyId,
-        CancellationToken cancellationToken)
-    {
-        EnsureLobbiesConfigured();
-        using var request = CreateAdminRequest(
-            HttpMethod.Post,
-            $"/admin/lobbies/{lobbyId}/join");
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw LobbyFailure(response.StatusCode);
+            throw new GameSessionUnavailableException(
+                $"The game session supervisor returned {(int)response.StatusCode}.");
         }
 
         var provisioned = await ReadPrivateProvisionResponseAsync(response, cancellationToken);
-        return BuildLobbyEndpoint(provisioned.Path, provisioned.Credential);
-    }
-
-    public async Task CancelLobbyAsync(
-        string lobbyId,
-        string hostCredential,
-        CancellationToken cancellationToken)
-    {
-        EnsureLobbiesConfigured();
-        using var request = CreateAdminRequest(HttpMethod.Delete, $"/admin/lobbies/{lobbyId}");
-        request.Headers.Add("X-Solomon-Dark-Host-Credential", hostCredential);
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        if (response.StatusCode != HttpStatusCode.NoContent)
+        if (!string.Equals(provisioned.Path, "/game-hub", StringComparison.Ordinal))
         {
-            throw LobbyFailure(response.StatusCode);
+            throw new GameSessionUnavailableException(
+                "The game session supervisor returned an invalid shared Hub endpoint.");
         }
+        return BuildEndpoint(provisioned.Path, provisioned.Credential, GameHubPath());
     }
-
-    public static bool IsValidLobbyId(string? value) =>
-        value is not null && GameLobbyId().IsMatch(value);
 
     private HttpRequestMessage CreateAdminRequest(HttpMethod method, string path)
     {
@@ -143,23 +67,14 @@ public sealed partial class GameSessionProvisioner
         return request;
     }
 
-    private ProvisionedGameEndpoint BuildLobbyEndpoint(string? path, string? credential)
-    {
-        try
-        {
-            return BuildEndpoint(path, credential);
-        }
-        catch (GameSessionUnavailableException exception)
-        {
-            throw InvalidLobbyResponse(exception);
-        }
-    }
-
-    private ProvisionedGameEndpoint BuildEndpoint(string? path, string? credential)
+    private ProvisionedGameEndpoint BuildEndpoint(
+        string? path,
+        string? credential,
+        Regex? requiredPath = null)
     {
         if (string.IsNullOrEmpty(credential) ||
             credential.Length > 512 ||
-            !GameSessionPath().IsMatch(path ?? string.Empty))
+            !(requiredPath ?? GameSessionPath()).IsMatch(path ?? string.Empty))
         {
             throw new GameSessionUnavailableException(
                 "The game session supervisor returned an invalid endpoint.");
@@ -175,17 +90,6 @@ public sealed partial class GameSessionProvisioner
         if (!Configured())
         {
             throw new GameSessionUnavailableException(
-                "Game session provisioning is not configured.");
-        }
-    }
-
-    private void EnsureLobbiesConfigured()
-    {
-        if (!Configured())
-        {
-            throw new GameLobbyUnavailableException(
-                StatusCodes.Status503ServiceUnavailable,
-                "Web rebuild playtests are not available right now.",
                 "Game session provisioning is not configured.");
         }
     }
@@ -212,60 +116,6 @@ public sealed partial class GameSessionProvisioner
         }
     }
 
-    private static async Task<SupervisorLobbyProvisionResponse> ReadLobbyProvisionResponseAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await response.Content.ReadFromJsonAsync<SupervisorLobbyProvisionResponse>(
-                    JsonOptions,
-                    cancellationToken)
-                ?? throw new JsonException("The response was empty.");
-        }
-        catch (JsonException exception)
-        {
-            throw InvalidLobbyResponse(exception);
-        }
-    }
-
-    private static bool ValidLobby(SupervisorLobby lobby) =>
-        IsValidLobbyId(lobby.Id) &&
-        !string.IsNullOrWhiteSpace(lobby.HostPlayer) &&
-        lobby.HostPlayer.Length <= 64 &&
-        !lobby.HostPlayer.Any(char.IsControl) &&
-        lobby.Players >= 0 &&
-        lobby.MaxPlayers >= 1 &&
-        lobby.Players <= lobby.MaxPlayers &&
-        lobby.Phase is "picking-loadout" or "hub" or "session" &&
-        !string.IsNullOrEmpty(lobby.Protocol) &&
-        lobby.Protocol.Length <= 128;
-
-    private static GameLobbyUnavailableException LobbyFailure(HttpStatusCode statusCode) =>
-        statusCode switch
-        {
-            HttpStatusCode.NotFound => new GameLobbyUnavailableException(
-                StatusCodes.Status404NotFound,
-                "That web playtest is no longer available."),
-            HttpStatusCode.Conflict => new GameLobbyUnavailableException(
-                StatusCodes.Status409Conflict,
-                "That web playtest is full."),
-            HttpStatusCode.Forbidden => new GameLobbyUnavailableException(
-                StatusCodes.Status403Forbidden,
-                "The web playtest host credential is invalid."),
-            _ => new GameLobbyUnavailableException(
-                StatusCodes.Status503ServiceUnavailable,
-                "Web rebuild playtests are not available right now.",
-                $"The game session supervisor returned {(int)statusCode}.")
-        };
-
-    private static GameLobbyUnavailableException InvalidLobbyResponse(Exception? inner = null) =>
-        new(
-            StatusCodes.Status503ServiceUnavailable,
-            "Web rebuild playtests are not available right now.",
-            "The game session supervisor returned an invalid lobby response.",
-            inner);
-
     private static Uri? ParseAbsoluteUri(string? value, string requiredScheme)
     {
         if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) ||
@@ -279,41 +129,17 @@ public sealed partial class GameSessionProvisioner
         return uri;
     }
 
-    [GeneratedRegex("^[A-Za-z0-9_-]{32}$", RegexOptions.CultureInvariant)]
-    private static partial Regex GameLobbyId();
-
     [GeneratedRegex("^/game-sessions/[A-Za-z0-9_-]{32}$", RegexOptions.CultureInvariant)]
     private static partial Regex GameSessionPath();
 
+    [GeneratedRegex("^/game-hub$", RegexOptions.CultureInvariant)]
+    private static partial Regex GameHubPath();
+
     private sealed record SupervisorProvisionResponse(string? Credential, string? Path);
 
-    private sealed record SupervisorLobbyProvisionResponse(
-        string? Credential,
-        string? LobbyId,
-        string? Path);
-
-    private sealed record SupervisorLobbyList(SupervisorLobby[]? Items);
-
-    private sealed record SupervisorLobby(
-        string? Id,
-        string? HostPlayer,
-        int Players,
-        int MaxPlayers,
-        string? Phase,
-        string? Protocol);
 }
 
 public sealed record ProvisionedGameEndpoint(string Url, string Credential);
-
-public sealed record CreatedGameLobby(string LobbyId, ProvisionedGameEndpoint Endpoint);
-
-public sealed record WebGameLobby(
-    string Id,
-    string HostPlayer,
-    int Players,
-    int MaxPlayers,
-    string Phase,
-    string Protocol);
 
 public sealed class GameSessionUnavailableException : Exception
 {
@@ -326,27 +152,4 @@ public sealed class GameSessionUnavailableException : Exception
         : base(message, innerException)
     {
     }
-}
-
-public sealed class GameLobbyUnavailableException : Exception
-{
-    public GameLobbyUnavailableException(int statusCode, string publicMessage)
-        : this(statusCode, publicMessage, publicMessage)
-    {
-    }
-
-    public GameLobbyUnavailableException(
-        int statusCode,
-        string publicMessage,
-        string message,
-        Exception? innerException = null)
-        : base(message, innerException)
-    {
-        StatusCode = statusCode;
-        PublicMessage = publicMessage;
-    }
-
-    public int StatusCode { get; }
-
-    public string PublicMessage { get; }
 }

@@ -68,7 +68,7 @@ test('ally HUD removes nonlocal participants once native alive-only eligibility 
   assert.deepEqual(derivePlayerAllyHudRows({ local: player('Local'), remote }, 'local'), [])
 })
 
-test('ally HUD derives exact nonlocal lobby identities in stable player order', () => {
+test('ally HUD derives exact nonlocal party identities in stable player order', () => {
   const rows = derivePlayerAllyHudRows({
     'player-3': player('Vibia'),
     'player-1': player('Helvidius'),
@@ -87,6 +87,16 @@ test('ally HUD derives exact nonlocal lobby identities in stable player order', 
       identity: { kind: 'player', displayName: 'Vibia' },
     },
   ])
+})
+
+test('ally HUD excludes visible shared-Hub residents outside the local party', () => {
+  const rows = derivePlayerAllyHudRows({
+    local: player('Local'),
+    party: player('Party Member'),
+    stranger: player('Hub Stranger'),
+  }, 'local', ['local', 'party'])
+
+  assert.deepEqual(rows.map(({ id }) => id), ['party'])
 })
 
 test('ally HUD appends the explicit stock Golem presentation through the shared row seam', () => {

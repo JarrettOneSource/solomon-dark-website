@@ -186,6 +186,7 @@ import type {
   ReplicatedEntityKey,
   ReplicatedEntitySample,
 } from './replicated-entity-types.ts'
+import type { LocalPartyState, PartyPlayerProfile } from './party-state.ts'
 import {
   MAX_WEB_GAME_SAVE_BYTES,
 } from '../save/game-save-contract.ts'
@@ -339,6 +340,16 @@ export interface ClientHubActionMessage {
   action: HubInventoryAction
 }
 
+export interface ClientPartyInviteMessage {
+  type: 'client-party-invite'
+  targetPlayerId: string
+}
+
+export interface ClientPartyAcceptMessage {
+  type: 'client-party-accept'
+  invitationId: string
+}
+
 export interface ClientPingMessage {
   type: 'client-ping'
   nonce: number
@@ -382,6 +393,8 @@ export type ClientGameMessage =
   | ClientInputMessage
   | ClientLevelUpActionMessage
   | ClientLuaExecuteMessage
+  | ClientPartyAcceptMessage
+  | ClientPartyInviteMessage
   | ClientSelectSkillMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
@@ -433,6 +446,11 @@ export interface ServerGameplayPauseMessage {
   pause: GameplayPauseState | null
 }
 
+export interface ServerPartyStateMessage {
+  type: 'server-party-state'
+  state: LocalPartyState
+}
+
 export interface LuaConsoleArray extends ReadonlyArray<LuaConsoleValue> {}
 
 export interface LuaConsoleObject {
@@ -475,6 +493,7 @@ export type ServerGameMessage =
   | ServerBoneyardLoadedMessage
   | ServerSaveCheckpointMessage
   | ServerLuaResultMessage
+  | ServerPartyStateMessage
   | ServerPongMessage
   | ServerDisconnectMessage
 
@@ -524,6 +543,20 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
   if (value.type === 'client-hub-action') {
     onlyKeys(value, 'message', ['type', 'action'])
     return { type: 'client-hub-action', action: hubInventoryAction(value.action) }
+  }
+  if (value.type === 'client-party-invite') {
+    onlyKeys(value, 'message', ['type', 'targetPlayerId'])
+    return {
+      type: 'client-party-invite',
+      targetPlayerId: validatedPlayerId(value.targetPlayerId, 'targetPlayerId'),
+    }
+  }
+  if (value.type === 'client-party-accept') {
+    onlyKeys(value, 'message', ['type', 'invitationId'])
+    return {
+      type: 'client-party-accept',
+      invitationId: partyIdentifier(value.invitationId, 'invitationId'),
+    }
   }
   if (value.type === 'client-select-skill') {
     onlyKeys(value, 'message', ['type', 'choiceIndex', 'offerSequence', 'skillId'])
@@ -697,6 +730,10 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       type: 'server-gameplay-pause',
       pause: value.pause === null ? null : gameplayPauseState(value.pause, 'pause'),
     }
+  }
+  if (value.type === 'server-party-state') {
+    onlyKeys(value, 'message', ['type', 'state'])
+    return { type: 'server-party-state', state: localPartyState(value.state) }
   }
   if (value.type === 'server-lua-result') {
     onlyKeys(value, 'message', [
@@ -988,6 +1025,85 @@ function validatedPlayerId(value: unknown, field: string): string {
     throw new GameProtocolError(`${field} is reserved`)
   }
   return result
+}
+
+function partyIdentifier(value: unknown, field: string): string {
+  const result = limitedString(value, field, 64)
+  if (!/^[A-Za-z0-9_-]+$/.test(result)) {
+    throw new GameProtocolError(`${field} must contain only identifier characters`)
+  }
+  return result
+}
+
+function partyPlayerProfile(value: unknown, field: string): PartyPlayerProfile {
+  const source = record(value, field)
+  onlyKeys(source, field, ['displayName', 'playerId'])
+  return {
+    displayName: limitedString(source.displayName, `${field}.displayName`, 64),
+    playerId: validatedPlayerId(source.playerId, `${field}.playerId`),
+  }
+}
+
+function localPartyState(value: unknown): LocalPartyState {
+  const source = record(value, 'state')
+  onlyKeys(source, 'state', ['hubPlayers', 'invitations', 'party', 'revision'])
+  const hubPlayers = limitedArray(source.hubPlayers, 'state.hubPlayers', 64)
+    .map((entry, index) => partyPlayerProfile(entry, `state.hubPlayers[${index}]`))
+  const hubPlayerIds = new Set(hubPlayers.map(({ playerId }) => playerId))
+  if (hubPlayerIds.size !== hubPlayers.length) {
+    throw new GameProtocolError('state.hubPlayers contains a duplicate player id')
+  }
+  const party = record(source.party, 'state.party')
+  onlyKeys(party, 'state.party', ['id', 'leaderPlayerId', 'memberPlayerIds'])
+  const memberPlayerIds = limitedArray(
+    party.memberPlayerIds,
+    'state.party.memberPlayerIds',
+    64,
+  ).map((entry, index) => validatedPlayerId(
+    entry,
+    `state.party.memberPlayerIds[${index}]`,
+  ))
+  if (memberPlayerIds.length === 0) {
+    throw new GameProtocolError('state.party.memberPlayerIds must not be empty')
+  }
+  if (new Set(memberPlayerIds).size !== memberPlayerIds.length) {
+    throw new GameProtocolError('state.party.memberPlayerIds contains a duplicate player id')
+  }
+  const leaderPlayerId = validatedPlayerId(
+    party.leaderPlayerId,
+    'state.party.leaderPlayerId',
+  )
+  if (!memberPlayerIds.includes(leaderPlayerId)) {
+    throw new GameProtocolError('state.party leader is not a party member')
+  }
+  const invitations = limitedArray(source.invitations, 'state.invitations', 64)
+    .map((entry, index) => {
+      const field = `state.invitations[${index}]`
+      const invitation = record(entry, field)
+      onlyKeys(invitation, field, ['id', 'inviter', 'partyId'])
+      const inviter = partyPlayerProfile(invitation.inviter, `${field}.inviter`)
+      if (!hubPlayerIds.has(inviter.playerId)) {
+        throw new GameProtocolError(`${field}.inviter is not a Hub player`)
+      }
+      return {
+        id: partyIdentifier(invitation.id, `${field}.id`),
+        inviter,
+        partyId: partyIdentifier(invitation.partyId, `${field}.partyId`),
+      }
+    })
+  if (new Set(invitations.map(({ id }) => id)).size !== invitations.length) {
+    throw new GameProtocolError('state.invitations contains a duplicate invitation id')
+  }
+  return {
+    hubPlayers,
+    invitations,
+    party: {
+      id: partyIdentifier(party.id, 'state.party.id'),
+      leaderPlayerId,
+      memberPlayerIds,
+    },
+    revision: nonnegativeInteger(source.revision, 'state.revision'),
+  }
 }
 
 function sha256(value: unknown, field: string): string {

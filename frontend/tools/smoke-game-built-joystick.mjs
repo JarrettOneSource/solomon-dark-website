@@ -323,24 +323,6 @@ try {
   assert.ok(Math.abs(boneyardPrimaryReleased.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardPrimaryReleased.y - boneyardPrimaryCenter.y) < 1)
 
-  const failure = await browser.newPage({
-    hasTouch: true,
-    isMobile: true,
-    viewport: { width: 844, height: 390 },
-  })
-  const failureConsoleErrors = []
-  const failurePageErrors = []
-  failure.on('console', (message) => {
-    if (message.type() === 'error') failureConsoleErrors.push(message.text())
-  })
-  failure.on('pageerror', (error) => failurePageErrors.push(error.message))
-  await failure.goto(`${baseUrl}/game?party=invalid`, { waitUntil: 'domcontentloaded' })
-  await failure.locator('.game-runtime-error').waitFor({ timeout: 30_000 })
-  browserSurfaceReceipts.runtimeError = await assertGameSurface(failure, '.game-runtime-error')
-  assert.deepEqual(failureConsoleErrors, [])
-  assert.deepEqual(failurePageErrors, [])
-  await failure.close()
-
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
   process.stdout.write(

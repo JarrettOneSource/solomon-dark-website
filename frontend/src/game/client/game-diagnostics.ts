@@ -149,7 +149,9 @@ export function createGameClientDiagnostics(
     setEndpoint(endpointUrl) {
       try {
         const endpoint = new URL(endpointUrl)
-        sessionId = GAME_SESSION_ID.exec(endpoint.pathname)?.[1] ?? null
+        sessionId = endpoint.pathname === '/game-hub'
+          ? 'shared-hub'
+          : GAME_SESSION_ID.exec(endpoint.pathname)?.[1] ?? null
         diagnostics.info(
           'connection.endpoint',
           'The game server endpoint was selected.',

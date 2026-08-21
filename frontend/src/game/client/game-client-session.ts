@@ -29,6 +29,7 @@ import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
+import type { LocalPartyState } from '../protocol/party-state.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   GameConnectionFailure,
@@ -73,15 +74,18 @@ export interface GameClientSession {
   confirmLoadout(): void
   destroy(): void
   executeLua(code: string): Promise<GameLuaExecutionResult>
+  acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
   getGameplayPause(): GameplayPauseState | null
   getPingMs(): number | null
+  getPartyState(): LocalPartyState | null
   getSaveCheckpoint(): GameSaveCheckpoint | null
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
+  onPartyState(listener: (state: LocalPartyState) => void): () => void
   onSaveCheckpoint(listener: (checkpoint: GameSaveCheckpoint) => void): () => void
   onSnapshot(listener: (snapshot: GameSnapshot) => void): () => void
   sampleBoneyardPresentation(nowMs?: number): BoneyardPresentationFrame
@@ -92,6 +96,7 @@ export interface GameClientSession {
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
+  inviteToParty(playerId: string): void
   startMatch(boneyardId: string): void
 }
 
@@ -149,6 +154,7 @@ export function connectGameClientSession(
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
+    let partyState: LocalPartyState | null = null
     let latestSaveCheckpoint: GameSaveCheckpoint | null = null
     let lastHighPingLoggedAtMs = Number.NEGATIVE_INFINITY
     let nextPingNonce = 1
@@ -167,6 +173,7 @@ export function connectGameClientSession(
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
+    const partyStateListeners = new Set<(state: LocalPartyState) => void>()
     const saveCheckpointListeners = new Set<(checkpoint: GameSaveCheckpoint) => void>()
     const pendingPings = new Map<number, number>()
     const pendingLuaExecutions = new Map<number, PendingLuaExecution>()
@@ -250,6 +257,11 @@ export function connectGameClientSession(
         sentInput = copyInput(STOPPED_INPUT)
         pendingInputs = []
         for (const listener of gameplayPauseListeners) listener(gameplayPause)
+        return
+      }
+      if (message.type === 'server-party-state') {
+        partyState = message.state
+        for (const listener of partyStateListeners) listener(partyState)
         return
       }
       if (message.type === 'server-pong') {
@@ -365,6 +377,13 @@ export function connectGameClientSession(
     })
 
     const session: GameClientSession = {
+      acceptPartyInvitation(invitationId) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-accept',
+          invitationId,
+        }))
+      },
       confirmLoadout() {
         if (!welcome || !snapshot || destroyed || !session.isHost) return
         if (snapshot.run.phase !== 'loadout') return
@@ -406,6 +425,7 @@ export function connectGameClientSession(
         gameplayPauseListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
+        partyStateListeners.clear()
         saveCheckpointListeners.clear()
       },
       executeLua(code) {
@@ -459,6 +479,9 @@ export function connectGameClientSession(
       getPingMs() {
         return latestPingMs
       },
+      getPartyState() {
+        return partyState
+      },
       getSaveCheckpoint() {
         return latestSaveCheckpoint
       },
@@ -485,6 +508,10 @@ export function connectGameClientSession(
       onPing(listener) {
         pingListeners.add(listener)
         return () => pingListeners.delete(listener)
+      },
+      onPartyState(listener) {
+        partyStateListeners.add(listener)
+        return () => partyStateListeners.delete(listener)
       },
       onSaveCheckpoint(listener) {
         saveCheckpointListeners.add(listener)
@@ -649,6 +676,13 @@ export function connectGameClientSession(
         options.transport.send(encodeGameMessage({
           type: 'client-hub-action',
           action,
+        }))
+      },
+      inviteToParty(playerId) {
+        if (!welcome || destroyed || playerId === welcome.playerId) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-invite',
+          targetPlayerId: playerId,
         }))
       },
       startMatch(boneyardId) {

@@ -57,6 +57,7 @@ interface HubFrameDiagnostics {
   playerMaterialTint: number
   playerMoving: boolean
   playerPositions: Record<string, { x: number; y: number }>
+  playerScreenPositions: Record<string, { x: number; y: number }>
   playerWalkPose: number
   playerX: number
   playerY: number
@@ -214,6 +215,7 @@ export async function createHubWorldRenderer(
     playerMaterialTint: 0xffffff,
     playerMoving: false,
     playerPositions: {},
+    playerScreenPositions: {},
     playerWalkPose: 0,
     playerX: Number.NaN,
     playerY: Number.NaN,
@@ -321,6 +323,17 @@ export async function createHubWorldRenderer(
       const participant = snapshot.world.participants[options.playerId]
       if (!player || !participant) return
       const camera = hubRegionCameraOrigin(participant.region, player.position, viewport)
+      for (const playerId of Object.keys(frameDiagnostics.playerScreenPositions)) {
+        if (snapshot.world.participants[playerId]?.region !== participant.region) {
+          delete frameDiagnostics.playerScreenPositions[playerId]
+        }
+      }
+      for (const [playerId, remote] of Object.entries(snapshot.players)) {
+        if (snapshot.world.participants[playerId]?.region !== participant.region) continue
+        const position = frameDiagnostics.playerScreenPositions[playerId] ??= { x: 0, y: 0 }
+        position.x = (remote.position.x - camera.x) * HUB_CAMERA_SCALE
+        position.y = (remote.position.y - camera.y) * HUB_CAMERA_SCALE
+      }
       const frameAt = now()
       frameTimeTotal += Math.max(0, frameAt - previousFrameAt)
       previousFrameAt = frameAt

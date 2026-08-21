@@ -162,6 +162,7 @@ import {
   playerSkillBookAt,
   playerStatBookAt,
   increaseRandomPlayerEntitySkill,
+  importPlayerEntity,
   insertPlayerEntityLootItem,
   removePlayerEntity,
   rerollPlayerEntitySkillOffer,
@@ -359,6 +360,60 @@ export function removePlayerCharacter(
     world: state.world.kind === 'hub'
       ? removeHubParticipant(state.world, playerId)
       : state.world,
+  }
+}
+
+export function partitionGameSimulationPlayers(
+  state: GameSimulationState,
+  selectedPlayerIds: readonly PlayerId[],
+): Readonly<{ remaining: GameSimulationState; selected: GameSimulationState }> {
+  const selectedSet = new Set(selectedPlayerIds)
+  if (
+    selectedSet.size !== selectedPlayerIds.length
+    || selectedPlayerIds.some((playerId) => playerEntityIndex(state.playerEntities, playerId) < 0)
+  ) throw new Error('game simulation partition requires unique existing players')
+  let selected = state
+  let remaining = state
+  for (const { playerId } of state.playerEntities.identities) {
+    if (selectedSet.has(playerId)) remaining = removePlayerCharacter(remaining, playerId)
+    else selected = removePlayerCharacter(selected, playerId)
+  }
+  return { remaining, selected }
+}
+
+export function mergeGameSimulationPlayersIntoHub(
+  target: GameSimulationState,
+  source: GameSimulationState,
+): GameSimulationState {
+  if (target.world.kind !== 'hub' || source.world.kind !== 'hub') {
+    throw new Error('game simulation merge requires two Hub worlds')
+  }
+  const lightProviderOrder = createNativeLightProviderOrder(target.lightProviderOrder)
+  let playerEntities = target.playerEntities
+  let world = target.world
+  for (const { playerId } of source.playerEntities.identities) {
+    if (playerEntityIndex(playerEntities, playerId) >= 0) {
+      throw new Error(`Hub already contains player ${playerId}`)
+    }
+    const config = source.playerEntities.configs[
+      playerEntityIndex(source.playerEntities, playerId)
+    ]!
+    const character = createPlayerCharacter(config, hubSpawnPoint())
+    playerEntities = importPlayerEntity(
+      playerEntities,
+      source.playerEntities,
+      playerId,
+      playerId,
+      lightProviderOrder.register('actor'),
+      character,
+    )
+    world = addHubParticipant(world, playerId)
+  }
+  return {
+    ...target,
+    lightProviderOrder: lightProviderOrder.state(),
+    playerEntities,
+    world,
   }
 }
 

@@ -24,6 +24,7 @@ import {
 } from './game-server-logger.ts'
 
 export const GAME_SESSION_PATH_PREFIX = '/game-sessions/'
+export const GAME_HUB_PATH = '/game-hub'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const DEFAULT_MAX_CONNECTIONS_PER_SESSION = 16
@@ -63,12 +64,10 @@ interface SessionRecord {
   closePromise: Promise<void> | null
   closing: boolean
   createdAt: number
-  guestCredential: string | null
   host: GameHost
   hostCredential: string
-  hostPlayer: string | null
   id: string
-  kind: 'lobby' | 'private'
+  kind: 'hub' | 'private'
 }
 
 export async function startGameSessionSupervisor(
@@ -93,10 +92,39 @@ export async function startGameSessionSupervisor(
   )
   const maxSessions = positiveInteger(options.maxSessions ?? DEFAULT_MAX_SESSIONS, 'maxSessions')
   const sessions = new Map<string, SessionRecord>()
+  const hubTickets = new Map<string, number>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let provisioning = 0
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
+  const claimHubTicket = (credential: string): boolean => {
+    const expiresAt = hubTickets.get(credential)
+    if (expiresAt === undefined) return false
+    hubTickets.delete(credential)
+    return expiresAt > Date.now()
+  }
+  const hubHost = await startGameHost({
+    authentication: { kind: 'tickets', claim: claimHubTicket },
+    heartbeatIntervalMs,
+    log: options.log,
+    logContext: { sessionId: 'shared-hub', sessionKind: 'hub' },
+    luaWasmPath: options.luaWasmPath,
+    maxPlayers: maxConnectionsPerSession,
+    sharedHub: true,
+    ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
+    ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
+  })
+  const hubSession: SessionRecord = {
+    activeProxies: 0,
+    claimed: true,
+    closePromise: null,
+    closing: false,
+    createdAt: Date.now(),
+    host: hubHost,
+    hostCredential: '',
+    id: 'shared-hub',
+    kind: 'hub',
+  }
 
   const websocketServer = new WebSocketServer({
     noServer: true,
@@ -119,8 +147,11 @@ export async function startGameSessionSupervisor(
       sendJson(response, 200, {
         status: 'ok',
         protocol: GAME_PROTOCOL_NAME,
-        sessions: sessions.size,
-        lobbies: [...sessions.values()].filter((session) => session.kind === 'lobby').length,
+        sessions: sessions.size + Number(hubHost.playerCount() > 0),
+        privateSessions: sessions.size,
+        hubPlayers: hubHost.hubPlayerCount(),
+        parties: hubHost.partyCount(),
+        runs: hubHost.runCount(),
       })
       return
     }
@@ -142,68 +173,21 @@ export async function startGameSessionSupervisor(
       return
     }
     if (request.method === 'POST' && path === '/admin/sessions') {
-      provisionIntoResponse(response, 'private', null)
+      provisionIntoResponse(response)
       return
     }
-    if (request.method === 'GET' && path === '/admin/lobbies') {
-      const items = [...sessions.values()]
-        .filter((session) => session.kind === 'lobby' && !session.closing)
-        .sort((first, second) => first.createdAt - second.createdAt)
-        .map(lobbySummary)
-      sendJson(response, 200, { items })
-      return
-    }
-    if (request.method === 'POST' && path === '/admin/lobbies') {
-      void readJsonObject(request).then((body) => {
-        const hostPlayer = normalizeHostPlayer(body.hostPlayer)
-        if (!hostPlayer) {
-          sendJson(response, 400, { error: 'A valid host player name is required.' })
-          return
-        }
-        provisionIntoResponse(response, 'lobby', hostPlayer)
-      }).catch(() => {
-        sendJson(response, 400, { error: 'A valid JSON request body is required.' })
-      })
-      return
-    }
-    const joinLobbyId = lobbyRouteId(path, '/join')
-    if (request.method === 'POST' && joinLobbyId) {
-      const session = sessions.get(joinLobbyId)
-      if (!session || session.kind !== 'lobby' || session.closing || !session.guestCredential) {
-        sendJson(response, 404, { error: 'That web playtest is no longer available.' })
+    if (request.method === 'POST' && path === '/admin/hub/tickets') {
+      pruneHubTickets()
+      if (hubHost.playerCount() + hubTickets.size >= maxConnectionsPerSession) {
+        sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
         return
       }
-      const guestLimit = session.host.hostPlayerId() === null
-        ? maxConnectionsPerSession - 1
-        : maxConnectionsPerSession
-      if (session.host.playerCount() >= guestLimit) {
-        sendJson(response, 409, { error: 'That web playtest is full.' })
-        return
-      }
-      sendJson(response, 200, {
-        credential: session.guestCredential,
-        path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
-      })
-      return
-    }
-    const cancelLobbyId = lobbyRouteId(path)
-    if (request.method === 'DELETE' && cancelLobbyId) {
-      const session = sessions.get(cancelLobbyId)
-      if (!session || session.kind !== 'lobby' || session.closing) {
-        sendJson(response, 404, { error: 'That web playtest is no longer available.' })
-        return
-      }
-      const suppliedCredential = request.headers['x-solomon-dark-host-credential']
-      if (typeof suppliedCredential !== 'string'
-        || !secretsEqual(suppliedCredential, session.hostCredential)) {
-        sendJson(response, 403, { error: 'The web playtest host credential is invalid.' })
-        return
-      }
-      void closeSession(session, 'host-cancelled').then(() => {
-        response.writeHead(204, { 'cache-control': 'no-store' })
-        response.end()
-      }).catch(() => {
-        sendJson(response, 503, { error: 'The web playtest could not be cancelled.' })
+      const credential = randomBytes(32).toString('base64url')
+      hubTickets.set(credential, Date.now() + unclaimedTimeoutMs)
+      sendJson(response, 201, {
+        credential,
+        path: GAME_HUB_PATH,
+        protocol: GAME_PROTOCOL_NAME,
       })
       return
     }
@@ -222,22 +206,18 @@ export async function startGameSessionSupervisor(
     if (!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n')
   })
 
-  function provisionIntoResponse(
-    response: ServerResponse,
-    kind: SessionRecord['kind'],
-    hostPlayer: string | null,
-  ): void {
+  function provisionIntoResponse(response: ServerResponse): void {
     if (sessions.size + provisioning >= maxSessions) {
       sendJson(response, 503, { error: 'Game session capacity is exhausted.' }, { 'retry-after': '5' })
       return
     }
     provisioning += 1
-    void provisionSession(kind, hostPlayer).then((session) => {
+    void provisionSession().then((session) => {
       sendJson(response, 201, {
         credential: session.hostCredential,
         path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
         protocol: GAME_PROTOCOL_NAME,
-        ...(kind === 'private' ? { sessionId: session.id } : { lobbyId: session.id }),
+        sessionId: session.id,
       })
     }).catch((error) => {
       logGameServerEvent(
@@ -246,26 +226,12 @@ export async function startGameSessionSupervisor(
         'error',
         'session.provision_failed',
         'A game session could not be provisioned.',
-        logDetails({ kind, ...gameServerErrorDetails(error) }),
+        logDetails({ kind: 'private', ...gameServerErrorDetails(error) }),
       )
       sendJson(response, 503, { error: 'A game session could not be started.' }, { 'retry-after': '5' })
     }).finally(() => {
       provisioning -= 1
     })
-  }
-
-  function lobbySummary(session: SessionRecord) {
-    const world = session.host.state().world
-    return {
-      id: session.id,
-      hostPlayer: session.hostPlayer,
-      players: session.host.playerCount(),
-      maxPlayers: maxConnectionsPerSession,
-      phase: world.kind === 'boneyard'
-        ? 'session'
-        : session.host.hostPlayerId() === null ? 'picking-loadout' : 'hub',
-      protocol: GAME_PROTOCOL_NAME,
-    }
   }
 
   server.on('upgrade', (request, socket, head) => {
@@ -281,8 +247,11 @@ export async function startGameSessionSupervisor(
       rejectUpgrade(socket, 403, 'Forbidden')
       return
     }
-    const sessionId = sessionIdFromPath(request.url)
-    const session = sessionId ? sessions.get(sessionId) : undefined
+    const path = request.url?.split('?', 1)[0]
+    const sessionId = sessionIdFromPath(path)
+    const session = path === GAME_HUB_PATH
+      ? hubSession
+      : sessionId ? sessions.get(sessionId) : undefined
     if (!session || session.closing) {
       logGameServerEvent(
         options.log,
@@ -311,23 +280,15 @@ export async function startGameSessionSupervisor(
     proxyUpgrade(request, socket, head, session)
   })
 
-  async function provisionSession(
-    kind: SessionRecord['kind'],
-    hostPlayer: string | null,
-  ): Promise<SessionRecord> {
+  async function provisionSession(): Promise<SessionRecord> {
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
     const hostCredential = randomBytes(32).toString('base64url')
-    const guestCredential = kind === 'lobby'
-      ? randomBytes(32).toString('base64url')
-      : null
     const sessionHost = await startGameHost({
-      authentication: guestCredential
-        ? { kind: 'reserved-host', hostCredential, guestCredential }
-        : { kind: 'shared', credential: hostCredential },
+      authentication: { kind: 'shared', credential: hostCredential },
       heartbeatIntervalMs,
       log: options.log,
-      logContext: { sessionId: id, sessionKind: kind },
+      logContext: { sessionId: id, sessionKind: 'private' },
       luaWasmPath: options.luaWasmPath,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
@@ -348,12 +309,10 @@ export async function startGameSessionSupervisor(
       closePromise: null,
       closing: false,
       createdAt: Date.now(),
-      guestCredential,
       host: sessionHost,
       hostCredential,
-      hostPlayer,
       id,
-      kind,
+      kind: 'private',
     }
     if (closed) {
       await sessionHost.close()
@@ -366,7 +325,7 @@ export async function startGameSessionSupervisor(
       'info',
       'session.provisioned',
       'An isolated browser game session was provisioned.',
-      logDetails({ kind, sessionId: id, sessionCount: sessions.size }),
+      logDetails({ kind: 'private', sessionId: id, sessionCount: sessions.size }),
     )
     return session
   }
@@ -388,7 +347,7 @@ export async function startGameSessionSupervisor(
       released = true
       stopHeartbeat?.()
       session.activeProxies = Math.max(0, session.activeProxies - 1)
-      closeClaimedSessionIfEmpty(session)
+      if (session.kind === 'private') closeClaimedSessionIfEmpty(session)
     }
     const timeout = setTimeout(() => {
       if (!upgraded) {
@@ -506,6 +465,7 @@ export async function startGameSessionSupervisor(
 
   const expiryTimer = setInterval(() => {
     const now = Date.now()
+    pruneHubTickets(now)
     for (const session of sessions.values()) {
       if (
         !session.closing
@@ -525,6 +485,12 @@ export async function startGameSessionSupervisor(
       || session.host.playerCount() > 0
     ) return
     closeSessionInBackground(session, 'empty-after-use')
+  }
+
+  function pruneHubTickets(now = Date.now()): void {
+    for (const [credential, expiresAt] of hubTickets) {
+      if (expiresAt <= now) hubTickets.delete(credential)
+    }
   }
 
   function closeSessionInBackground(session: SessionRecord, reason: string): void {
@@ -596,9 +562,11 @@ export async function startGameSessionSupervisor(
       if (closed) return
       closed = true
       clearInterval(expiryTimer)
+      hubTickets.clear()
       await Promise.all([...sessions.values()].map((session) => (
         closeSession(session, 'supervisor-shutdown')
       )))
+      await hubHost.close('server-shutdown')
       for (const socket of downstreamSockets) {
         closePeer(socket, 1012, 'server shutdown')
         const forceClose = setTimeout(() => {
@@ -617,46 +585,8 @@ export async function startGameSessionSupervisor(
         logDetails(),
       )
     },
-    sessionCount: () => sessions.size,
+    sessionCount: () => sessions.size + Number(hubHost.playerCount() > 0),
   }
-}
-
-function lobbyRouteId(path: string, suffix = ''): string | null {
-  const prefix = '/admin/lobbies/'
-  if (!path.startsWith(prefix) || (suffix && !path.endsWith(suffix))) return null
-  const end = suffix ? path.length - suffix.length : path.length
-  const id = path.slice(prefix.length, end)
-  return /^[A-Za-z0-9_-]{32}$/.test(id) ? id : null
-}
-
-function normalizeHostPlayer(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const normalized = value.trim()
-  if (!normalized || normalized.length > 64 || [...normalized].some(isControlCharacter)) {
-    return null
-  }
-  return normalized
-}
-
-function isControlCharacter(value: string): boolean {
-  const code = value.charCodeAt(0)
-  return code < 32 || (code >= 127 && code <= 159)
-}
-
-async function readJsonObject(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of request) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    size += bytes.length
-    if (size > 4096) throw new Error('request body is too large')
-    chunks.push(bytes)
-  }
-  const value = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('request body must be an object')
-  }
-  return value as Record<string, unknown>
 }
 
 function sendJson(

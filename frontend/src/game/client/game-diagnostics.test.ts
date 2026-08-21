@@ -87,6 +87,13 @@ test('browser diagnostic submission is explicit and authenticated when possible'
   assert.equal(receipt.logId, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')
 })
 
+test('shared Hub diagnostics retain a stable noncredential session label', () => {
+  const diagnostics = createGameClientDiagnostics({ writeToConsole: false })
+  diagnostics.setEndpoint('wss://solomondarker.com/game-hub')
+  const report = diagnostics.createReport(null)
+  assert.equal(report.sessionId, 'shared-hub')
+})
+
 test('browser diagnostic submission surfaces the server explanation', async () => {
   const report = createGameClientDiagnostics({ writeToConsole: false }).createReport(null, {
     online: false,

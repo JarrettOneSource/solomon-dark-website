@@ -7,7 +7,8 @@ processes from the same release directory:
   endpoint through the loopback supervisor;
 - `solomon-dark-game.service` runs the bundled TypeScript authoritative host on
   pinned Node `22.17.0`; and
-- Caddy terminates TLS and forwards only `/game-sessions/*` to the supervisor.
+- Caddy terminates TLS and forwards `/game-hub` and `/game-sessions/*` to the
+  supervisor.
 
 `/etc/solomon-dark-game.env` must be mode `0600`, owned by root, and contain:
 
@@ -33,15 +34,15 @@ GameSessions__PublicWebSocketOrigin=wss://solomondarker.com
 
 Never place the supervisor secret or a provisioned session credential in a
 build-time Vite variable. `POST /api/game/sessions` retains the private
-provisioning contract. New Game uses `POST /api/game/lobbies`, and `/parties`
-reads `GET /api/game/lobbies`; both are projections of the same live supervisor
-and do not write the Steam launcher lobby database. Joiners receive the guest
-credential only from `POST /api/game/lobbies/{id}/join`. Unclaimed sessions
-expire after two minutes. A used session shuts down when its final
-authenticated player and in-flight proxy have both left. The game host and
-browser-facing proxy send WebSocket control pings every five seconds. After six
-missed responses, they close the connection with an explicit timeout code and
-reason before force-closing an unresponsive socket.
+provisioning contract. New Game uses `POST /api/game/hub` to receive one
+single-use admission to the process-wide Hub. Party discovery and invitations
+happen inside that Hub; there is no browser lobby directory or join URL.
+Unused admissions and unclaimed private sessions expire after two minutes. A
+used private session shuts down when its final authenticated player and
+in-flight proxy have both left; the empty shared Hub host remains resident and
+reports zero occupancy. The game host and browser-facing proxy send WebSocket
+control pings every five seconds and close an unresponsive connection with an
+explicit timeout code and reason.
 
 The supervisor writes structured JSON events to stderr, which systemd captures
 in the `solomon-dark-game.service` journal. `info` records session and player
@@ -59,9 +60,10 @@ protocol changes. A release is healthy only when all of these pass:
 
 1. the website and game units are active with zero unexpected restarts;
 2. `http://127.0.0.1:5222/health` reports the release protocol;
-3. private provisioning and Web Rebuild Playtest create/list/join responses are
-   `no-store` and return same-origin `wss` URLs where applicable;
-4. a guest may complete Create first without becoming host, then both clients
-   complete the protocol handshake and authoritative movement; and
-5. a real two-browser `/parties` -> `/game?party=<id>` journey reaches one Hub
-   without console or page errors.
+3. private provisioning and shared-Hub admission responses are `no-store` and
+   return same-origin `wss` URLs where applicable;
+4. independently admitted clients enter one Hub with distinct singleton
+   parties and authoritative movement; and
+5. a real three-browser journey proves invite, accept, party-only Boneyard
+   launch, and an unrelated player continuing in the Hub without console or
+   page errors.

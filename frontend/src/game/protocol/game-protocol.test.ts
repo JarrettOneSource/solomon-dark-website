@@ -2727,3 +2727,55 @@ test('protocol v35 strictly round-trips loot, Goodies, and their semantic event 
     /invalid registered descriptor shape/,
   )
 })
+
+test('party protocol strictly round-trips invite, acceptance, and local projection', () => {
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: 'player-2',
+  })), {
+    type: 'client-party-invite',
+    targetPlayerId: 'player-2',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-party-accept',
+    invitationId: 'invite-7',
+  })), {
+    type: 'client-party-accept',
+    invitationId: 'invite-7',
+  })
+
+  const message = {
+    type: 'server-party-state' as const,
+    state: {
+      hubPlayers: [
+        { displayName: 'Aurelia', playerId: 'player-1' },
+        { displayName: 'Basil', playerId: 'player-2' },
+      ],
+      invitations: [{
+        id: 'invite-7',
+        inviter: { displayName: 'Aurelia', playerId: 'player-1' },
+        partyId: 'party-1',
+      }],
+      party: {
+        id: 'party-2',
+        leaderPlayerId: 'player-2',
+        memberPlayerIds: ['player-2'],
+      },
+      revision: 4,
+    },
+  }
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+
+  const duplicateMember = structuredClone(message)
+  duplicateMember.state.party.memberPlayerIds.push('player-2')
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(duplicateMember)),
+    /memberPlayerIds.*duplicate/,
+  )
+  const missingInviter = structuredClone(message)
+  missingInviter.state.hubPlayers.shift()
+  assert.throws(
+    () => decodeServerGameMessage(encodeGameMessage(missingInviter)),
+    /inviter.*Hub player/,
+  )
+})

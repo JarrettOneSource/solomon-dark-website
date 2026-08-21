@@ -1294,61 +1294,6 @@ test('host authority transfers to the earliest remaining client', async (context
   assert.equal(result.boneyard.choice.id, 'default-random')
 })
 
-test('reserved host authority does not depend on loadout completion order', async (context) => {
-  const host = await startGameHost({
-    authentication: {
-      kind: 'reserved-host',
-      guestCredential: 'guest-secret',
-      hostCredential: 'host-secret',
-    },
-    snapshotRate: 100,
-  })
-  context.after(() => host.close())
-
-  const guest = await join(host.address.url, 'guest-secret', SECOND_CHARACTER)
-  context.after(() => guest.socket.close())
-  assert.equal(guest.welcome.snapshot.hostPlayerId, null)
-  assert.equal(host.hostPlayerId(), null)
-
-  guest.socket.send(encodeGameMessage({
-    type: 'client-start-match',
-    boneyardId: 'default-random',
-  }))
-  await new Promise((resolve) => setTimeout(resolve, 25))
-  assert.equal(host.loadedBoneyard(), null)
-
-  const hostAssignment = nextMessage(guest.socket, (message) => (
-    message.type === 'server-snapshot' && message.snapshot.hostPlayerId !== null
-  ))
-  const creator = await join(host.address.url, 'host-secret', FIRST_CHARACTER)
-  context.after(() => creator.socket.close())
-  assert.equal(creator.welcome.snapshot.hostPlayerId, creator.welcome.playerId)
-  assert.equal(host.hostPlayerId(), creator.welcome.playerId)
-  const assigned = await hostAssignment
-  assert.equal(assigned.type, 'server-snapshot')
-  assert.equal(assigned.snapshot.hostPlayerId, creator.welcome.playerId)
-})
-
-test('a later guest inherits authority after the reserved host has left', async (context) => {
-  const host = await startGameHost({
-    authentication: {
-      kind: 'reserved-host',
-      guestCredential: 'guest-secret',
-      hostCredential: 'host-secret',
-    },
-    snapshotRate: 100,
-  })
-  context.after(() => host.close())
-
-  const creator = await join(host.address.url, 'host-secret', FIRST_CHARACTER)
-  await closeSocket(creator.socket)
-  await waitFor(() => host.hostPlayerId() === null)
-
-  const successor = await join(host.address.url, 'guest-secret', SECOND_CHARACTER)
-  context.after(() => successor.socket.close())
-  assert.equal(successor.welcome.snapshot.hostPlayerId, successor.welcome.playerId)
-})
-
 async function join(
   url: string,
   credential: string,
