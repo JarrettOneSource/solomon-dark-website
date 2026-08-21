@@ -25736,3 +25736,56 @@ release. Windows sampled `125 FPS / 5 ms` in the visual receipt and wrote
 `C:\Users\User\codex-acceptance\solomon-hurricane-win-final.png`; macOS
 26.4.1 arm64 sampled `60 FPS / 0 ms` and wrote
 `/Users/jarrett/codex-acceptance/solomon-hurricane-mac-final.png`.
+
+### 2026-08-21 v51 current-main all-skill integration acceptance
+
+Code cutoff `981fec5a6888af5b714456e9a5ce7762c6f2735c` rebases the complete
+82-row skill closure onto Website main `afbfb3b20a8a96f24def9359f08048093ca1f31c`.
+The merge retains party-invitation denial, the revised remote-player
+presentation, shared-Hub/save ownership, Hall scoring, the mixed eight-slot
+quickbar, and protocol 45 beside every skill runtime. No party or skill message
+was dropped, and the superseded `client-assign-belt-skill` path is absent.
+
+Linux, native Windows, and the arm64 Mac mini independently ran the canonical
+`./scripts/validate.sh` gate on that exact code tree and exited zero. Each passed
+13 backend contracts, Library `2/2`, loot `41/41`, focused/pretest `216/216`,
+broad Boneyard/runtime `1230/1230`, parties `16/16`, level-up `5/5`, diagnostics
+`7/7`, Hall `15/15`, Hub UI `14/14`, desktop `5/5`, lint/import boundaries,
+production builds, bundle budget, and media policy. The eight existing Fast
+Refresh warnings remain non-failing. The game entry is
+`Game-DJCePvoy.js`, 344,882 raw / 97,474 gzip bytes. Receipts are:
+
+- Linux: `/tmp/solomon-final-linux-981fec5.log`;
+- Windows: `C:\Users\User\codex-acceptance\solomon-final-windows-981fec5.log`;
+- Mac: `/Users/jarrett/codex-acceptance/solomon-final-mac-981fec5.log`.
+
+The exact-code Mac Chrome matrix then passed every browser-owned skill surface:
+
+- all 23 right-click abilities produced their mapped semantic world/player/
+  target effects, VFX kinds, lights or explicit no-light branches, audio,
+  maximum-equipment variants, cooldowns, and teardown in WebGL2, with empty
+  page and console errors;
+- all five ordinary primaries and all five forced-zero-MP primaries completed
+  Hub and Boneyard presentation/audio/lifecycle journeys. The low-MP run forced
+  75,073 authority samples and returned five zero-error receipts;
+- the low-MP pass corrected two stale acceptance assumptions: Ether's recovered
+  `Sound::Play(pitch,gain)` launch is `.75/1`, and its rank-one half-damage draw
+  is the discrete `.5..1` range rather than a fixed one;
+- a long-held weak Boulder proved that float32 repeated halving may reach
+  `damage=0` and `remainingDamage=0`. Protocol now accepts that native held
+  state, still rejects negative values, and release promotes the same actor to
+  the native `.25` positive floor. Focused kernel and protocol regressions pass;
+- the mixed Skill Screen/quickbar returned `duplicateSecondary=true`,
+  `mixedQuickbar=true`, and selected Fireball; pause/settings completed both
+  Hub and Boneyard owner/peer clocks; built-bundle Ether tracking recorded three
+  nonzero authoritative turns with empty errors;
+- Hurricane returned protocol 45, eight lanes, damage range `10..20`, contact
+  charge `0.5010014772415161`, active charge `0.5025014877319336`, and empty
+  page/console/network errors. Its screenshot is
+  `/Users/jarrett/codex-acceptance/solomon-hurricane-mac-981fec5.png`.
+
+Browser logs are under `/Users/jarrett/codex-acceptance/` with the
+`*-981fec5.log` suffix. This v51 text is a documentation-only follow-up to the
+tested code cutoff. The final membership rescan found no unresolved skill row,
+effect owner, VFX/light/audio branch, cast gate, protocol member, or
+platform-blocked implementation.
