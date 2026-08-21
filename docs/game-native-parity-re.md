@@ -24093,12 +24093,34 @@ actual fresh-host boundary; an empty ambient tick is not an owner.
   the tick proxy; zero clients, Hub world, and zero player entities remain
   mandatory.
 - The follow-up Windows-native canonical gate passed the same complete matrix
-  on `aaac1fc`, including the deliberately delayed resume under the broad
-  suite; its game entry was `276116` raw / `82791` gzip bytes. A concurrent
+  on code-identical pre-receipt commit `aaac1fc`, including the deliberately
+  delayed resume under the broad suite; its game entry was `276116` raw /
+  `82791` gzip bytes. A concurrent
   high-load WSL rerun also passed the resume regression but recorded one
   unrelated Lua p99 sample at `20.918 ms` against the `20 ms` limit; the
   isolated Lua timing suite immediately passed unchanged, so no performance
   threshold or Lua code was altered.
-- Publication, durable deployment of the backend change, and final production
-  diagnostic submission remain pending below; this entry is not complete until
-  both original repros pass on the final production revision.
+- Publication/deployment: `7572139` delivered the edge/diagnostic ownership
+  fix; `a086325` delivered the deterministic resume-race closure. Local,
+  tracking, remote `main`, worker last-success, and production matched
+  `a086325579a5d2a1ed87808cd017663bb2d959b8` for the final code receipt.
+  GitHub Validate run `32486805963` passed. The receipt text itself is a
+  documentation-only follow-up with no runtime behavior change.
+- The final guarded cutover retained rollback
+  `/opt/solomon-dark-revived.rollback-pre-a086325579a5-20260821T133007Z`
+  and database backup
+  `/var/backups/solomon-dark-revived/pre-a086325579a5-20260821T133007Z/sdr.db`.
+  Website, supervisor, and Caddy were active with zero restarts; live and
+  backup database integrity returned `ok`; supervisor protocol 37 reported
+  zero players/sessions/parties/runs; live/artifact Caddy SHA-256 was
+  `d27a74bafa41ec7c7ea85d1bb352bcbfa0fa475a3283335d01b8d0f3859b89e9`.
+- Final Windows production Chrome entered the Hub with one player, no page or
+  console errors, and no unexpected request failures. The two observed
+  `ERR_ABORTED` requests were expected cancelled optional MP3 preloads during
+  the scene transition. Public, loopback, and deployed index SHA-256 matched at
+  `b7ea3e059fe5be7044dd9454f59ba8b8f4dddc1ea4ca71863c9d81b4ffd235aa`.
+- Final production diagnostic submission with exact `sessionId: "shared-hub"`
+  returned `201`, reference
+  `d42f1347-eb8a-4024-8f89-c254a4183458`, and one matching private database
+  row. Both original repros are closed; no required member or platform-blocked
+  branch remains.
