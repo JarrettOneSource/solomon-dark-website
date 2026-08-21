@@ -48,25 +48,28 @@ export interface NativeWeldAudioPlan {
   readonly cue: NativeWeldCastCue
   readonly loop: boolean
   readonly nativeLoopIds: readonly number[]
-  readonly startCueId: number | null
+  readonly nativeSoundIds: readonly number[]
+  readonly nativeSoundVariantIds: readonly number[]
 }
 
 const WELD_AUDIO_PLANS: Readonly<Record<NativeWeldBuildId, NativeWeldAudioPlan>> = {
-  1000: plan(1000, 'burning-bolt'),
-  1001: plan(1001, 'frost-missile'),
-  1002: plan(1002, 'ball-lightning'),
-  1003: plan(1003, 'flame-lash-loop', [157], 33),
-  1004: plan(1004, 'blizzard-beam-loop', [160], 44),
-  1005: plan(1005, 'steam-jet-loop', [172, 157]),
-  1006: plan(1006, 'ethereal-boulder-loop', [159]),
-  1007: plan(1007, 'meteor-swarm-loop', [165]),
-  1008: plan(1008, 'hailstones-loop', [160, 159]),
-  1009: plan(1009, 'crawling-shock'),
+  1000: plan(1000, 'burning-bolt', { sounds: [57, 97] }),
+  1001: plan(1001, 'frost-missile', { sounds: [38] }),
+  1002: plan(1002, 'ball-lightning', { soundVariants: [224, 225] }),
+  1003: plan(1003, 'flame-lash-loop', { loops: [157], sounds: [33] }),
+  1004: plan(1004, 'blizzard-beam-loop', { loops: [160], sounds: [44] }),
+  1005: plan(1005, 'steam-jet-loop', { loops: [172, 157] }),
+  1006: plan(1006, 'ethereal-boulder-loop', { loops: [159], sounds: [87] }),
+  1007: plan(1007, 'meteor-swarm-loop', { loops: [165] }),
+  1008: plan(1008, 'hailstones-loop', { loops: [160, 159], sounds: [87] }),
+  1009: plan(1009, 'crawling-shock', { soundVariants: [203, 204, 205] }),
 }
 
 export interface NativeWeldProjectileState {
   readonly ageTicks: number
+  readonly basePresentationPhaseDegrees: number | null
   readonly buildId: NativeWeldOneShotBuildId
+  readonly castSoundVariant: number | null
   readonly charge: 1
   readonly contactsRemaining: number
   readonly damage: number
@@ -82,6 +85,7 @@ export interface NativeWeldProjectileState {
   readonly position: Vector2
   readonly presentationSeed: number | null
   readonly projectileIndex: number
+  readonly secondaryPresentationPhaseDegrees: number | null
   readonly speed: number
   readonly targetId: string | null
   readonly turnAccumulator: number
@@ -106,7 +110,9 @@ interface NativeWeldOwnedActorBase {
 
 export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
   readonly buildId: NativeWeldChannelBuildId
+  readonly endpoint: Vector2 | null
   readonly kind: 'weld-channel'
+  readonly midpoint: Vector2 | null
   readonly targetId: string | null
   readonly variant: number
 }
@@ -249,6 +255,12 @@ export function spawnNativeWeldOneShot(
     rng = draw.state
     groundSparkMotionScale = Math.fround(1 + draw.value)
   }
+  let castSoundVariant: number | null = null
+  if (profile.buildId === 1002 || profile.buildId === 1009) {
+    const draw = drawNativeInteger(rng, profile.buildId === 1002 ? 2 : 3)
+    rng = draw.state
+    castSoundVariant = draw.value
+  }
   const projectiles: NativeWeldProjectileState[] = []
   for (let index = 0; index < quantity; index += 1) {
     const headingDegrees = profile.buildId === 1009
@@ -266,15 +278,32 @@ export function spawnNativeWeldOneShot(
           origin: input.origin,
           targets: input.targets,
         })
+    let basePresentationPhaseDegrees: number | null = null
+    if (profile.buildId !== 1009) {
+      const phase = drawNativeFloat(rng, 360)
+      rng = phase.state
+      basePresentationPhaseDegrees = phase.value
+    }
+    let secondaryPresentationPhaseDegrees: number | null = null
+    if (profile.buildId === 1001) {
+      const phase = drawNativeFloat(rng, 360)
+      rng = phase.state
+      secondaryPresentationPhaseDegrees = phase.value
+    }
     let presentationSeed: number | null = null
-    if (profile.buildId === 1000) {
-      const seed = drawNativeInteger(rng, 100_000)
-      rng = seed.state
-      presentationSeed = seed.value
+    if (profile.buildId === 1000 || profile.buildId === 1009) {
+      const nativeSeed = drawNativeInteger(
+        rng,
+        profile.buildId === 1000 ? 100_000 : 1_000_000,
+      )
+      rng = nativeSeed.state
+      presentationSeed = nativeSeed.value
     }
     projectiles.push(Object.freeze({
       ageTicks: 0,
+      basePresentationPhaseDegrees,
       buildId: profile.buildId,
+      castSoundVariant,
       charge: 1,
       contactsRemaining: profile.buildId === 1009
         ? Math.round(profile.vector.values[4]!) + 1
@@ -297,6 +326,7 @@ export function spawnNativeWeldOneShot(
         : { ...input.origin }),
       presentationSeed,
       projectileIndex: index,
+      secondaryPresentationPhaseDegrees,
       speed,
       targetId: target?.id ?? null,
       turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
@@ -367,7 +397,9 @@ export function stepNativeWeldProjectile(
 export function createNativeWeldChannelActor(input: {
   readonly buildId: NativeWeldChannelBuildId
   readonly direction: Vector2
+  readonly endpoint?: Vector2 | null
   readonly id: number
+  readonly midpoint?: Vector2 | null
   readonly origin: Vector2
   readonly ownerId: string
   readonly targetId: string | null
@@ -380,9 +412,11 @@ export function createNativeWeldChannelActor(input: {
     birthTick: input.tick,
     buildId: input.buildId,
     direction: Object.freeze({ ...input.direction }),
+    endpoint: input.endpoint ? Object.freeze({ ...input.endpoint }) : null,
     id: input.id,
     kind: 'weld-channel',
     lightRegistration: null,
+    midpoint: input.midpoint ? Object.freeze({ ...input.midpoint }) : null,
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
     targetId: input.targetId,
@@ -635,7 +669,7 @@ export function createNativeWeldMeteor(input: {
     buildId: 1007,
     damage: input.damage,
     direction: Object.freeze({ ...input.direction }),
-    fallScalar: Math.fround(1 + input.presentationPhase),
+    fallScalar: Math.fround(1 - input.presentationPhase),
     id: input.id,
     impactDue: false,
     impactTicksRemaining: NATIVE_WELD_METEOR_IMPACT_TICKS,
@@ -802,15 +836,20 @@ export function isPersistentBuild(
 function plan(
   buildId: NativeWeldBuildId,
   cue: NativeWeldCastCue,
-  nativeLoopIds: readonly number[] = [],
-  startCueId: number | null = null,
+  audio: {
+    readonly loops?: readonly number[]
+    readonly sounds?: readonly number[]
+    readonly soundVariants?: readonly number[]
+  } = {},
 ): NativeWeldAudioPlan {
+  const nativeLoopIds = Object.freeze([...(audio.loops ?? [])])
   return Object.freeze({
     buildId,
     cue,
     loop: nativeLoopIds.length > 0,
-    nativeLoopIds: Object.freeze([...nativeLoopIds]),
-    startCueId,
+    nativeLoopIds,
+    nativeSoundIds: Object.freeze([...(audio.sounds ?? [])]),
+    nativeSoundVariantIds: Object.freeze([...(audio.soundVariants ?? [])]),
   })
 }
 

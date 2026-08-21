@@ -96,6 +96,9 @@ const NATIVE_WELD_MISSILE_COLLISION_RADIUS = PRIMARY_SPELL_ETHER_COLLISION_RADIU
 const NATIVE_WELD_GROUND_SPARK_COLLISION_RADIUS = 15
 const NATIVE_WELD_FROST_SLOW_TICKS = 150
 const NATIVE_WELD_FROST_SLOW_FACTOR = 0.5
+const NATIVE_WELD_FROST_RADIUS_BASE = 120
+const NATIVE_WELD_FROST_RADIUS_GROWTH = 1.024999976158142
+const NATIVE_WELD_FROST_RADIUS_GROWTH_STEPS = 15
 const NATIVE_WELD_BALL_LIGHTNING_BURN_TICKS = 100
 const NATIVE_WELD_GROUND_SPARK_BURN_TICKS = 50
 const NATIVE_WELD_CHANNEL_MODIFIER_TICKS = 25
@@ -363,6 +366,36 @@ export function resolveBoneyardSpellCombat(
       enemies = damaged.store
       events.push(...damaged.events)
       hits.push(spellHit(projectile, actor.id, amount, damaged.killed, tick))
+
+      if (projectile.buildId === 1001 && projectile.vector[5]! > 0) {
+        const radialDamage = projectile.damage / 20
+        const radialRows = nativePrimaryRootTargetRows(
+          enemies,
+          projectile.position,
+          nativeWeldFrostRadialRadius(projectile.vector[5]!),
+          0x2,
+        )
+        for (const row of radialRows) {
+          if (row.actor.id !== actor.id) {
+            queueTargetEffect(row.actor.id, {
+              coldSlowFactor: NATIVE_WELD_FROST_SLOW_FACTOR,
+              coldSlowMaterial: true,
+              coldSlowTicks: NATIVE_WELD_FROST_SLOW_TICKS,
+              timeScale: NATIVE_WELD_FROST_SLOW_FACTOR,
+            })
+          }
+          const radial = damageBoneyardEnemy(enemies, {
+            actorId: row.actor.id,
+            amount: radialDamage,
+            sourcePlayerId: projectile.ownerId,
+            tick,
+          })
+          if (!radial.accepted) continue
+          enemies = radial.store
+          events.push(...radial.events)
+          hits.push(spellHit(projectile, row.actor.id, radialDamage, radial.killed, tick))
+        }
+      }
 
       if (projectile.buildId === 1009 && projectile.contactsRemaining > 1) {
         updatedProjectiles.set(projectile.id, {
@@ -923,13 +956,21 @@ export function resolveBoneyardSpellCombat(
             }
             const currentPoint = primarySpellTargetPoint(row.target)
             if (hop > 0) {
+              const direction = normalizedDifference(previousPoint, currentPoint)
+              const geometry = airPrimaryBoltGeometry(
+                previousPoint,
+                direction,
+                currentPoint,
+              )
               ownedTransients.push({
                 ageTicks: 0,
                 birthTick: tick,
                 buildId: 1003,
-                direction: normalizedDifference(previousPoint, currentPoint),
+                direction,
+                endpoint: geometry.endpoint,
                 id: nextSpellId,
                 kind: 'weld-channel',
+                midpoint: geometry.midpoint,
                 origin: { ...previousPoint },
                 ownerId: emission.ownerId,
                 targetId: row.target.id,
@@ -1013,13 +1054,21 @@ export function resolveBoneyardSpellCombat(
               }
               const currentPoint = primarySpellTargetPoint(row.target)
               if (hop > 0) {
+                const direction = normalizedDifference(previousPoint, currentPoint)
+                const geometry = airPrimaryBoltGeometry(
+                  previousPoint,
+                  direction,
+                  currentPoint,
+                )
                 ownedTransients.push({
                   ageTicks: 0,
                   birthTick: tick,
                   buildId: 1004,
-                  direction: normalizedDifference(previousPoint, currentPoint),
+                  direction,
+                  endpoint: geometry.endpoint,
                   id: nextSpellId,
                   kind: 'weld-channel',
+                  midpoint: geometry.midpoint,
                   origin: { ...previousPoint },
                   ownerId: emission.ownerId,
                   targetId: row.target.id,
@@ -1296,6 +1345,17 @@ export function resolveBoneyardSpellCombat(
     spells,
     targetEffects: Object.freeze(targetEffects),
   }
+}
+
+export function nativeWeldFrostRadialRadius(pushScalar: number): number {
+  if (!Number.isFinite(pushScalar) || pushScalar < 0) {
+    throw new RangeError('Frost Missile push scalar must be finite and non-negative')
+  }
+  let radius = Math.fround(pushScalar * NATIVE_WELD_FROST_RADIUS_BASE)
+  for (let step = 0; step < NATIVE_WELD_FROST_RADIUS_GROWTH_STEPS; step += 1) {
+    radius = Math.fround(radius * NATIVE_WELD_FROST_RADIUS_GROWTH)
+  }
+  return radius
 }
 
 function waterEmissionTransients(

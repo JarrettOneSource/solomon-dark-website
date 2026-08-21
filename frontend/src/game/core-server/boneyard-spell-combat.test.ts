@@ -33,6 +33,7 @@ import {
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
 import {
+  nativeWeldFrostRadialRadius,
   resolveBoneyardSpellCombat,
   WATER_PRIMARY_ACTOR_MASK,
   WATER_PRIMARY_UNDERPOWERED_ACTOR_MASK,
@@ -380,6 +381,43 @@ test('welded missile contacts preserve each native elemental payload and impact 
     targetId: 1,
     worldKey: WORLD_KEY,
   }])
+})
+
+test('Frost Missile owns its fifteen-step radial damage and ColdSlow contact', () => {
+  const radius = nativeWeldFrostRadialRadius(0.2)
+  let expectedRadius = Math.fround(0.2 * 120)
+  for (let step = 0; step < 15; step += 1) {
+    expectedRadius = Math.fround(expectedRadius * 1.024999976158142)
+  }
+  assert.equal(radius, expectedRadius)
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    { position: { x: radius - 1, y: 0 }, token: 'SKELETON' },
+    { position: { x: radius + 100, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 100,
+      maximumHealth: 100,
+    })),
+  }
+  const result = resolveCombatWithAuthority(enemies, spellState({
+    projectiles: [projectile({
+      buildId: 1001,
+      damage: 5,
+      id: 804,
+      kind: 'weld',
+      vector: [5, 5, 10, 1, 1, 0.2, 0],
+    })],
+  }), [], 34)
+  assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 5 },
+    { actorId: 1, amount: 0.25 },
+    { actorId: 2, amount: 0.25 },
+  ])
+  assert.deepEqual(result.targetEffects.map(({ targetId }) => targetId), [1, 2])
 })
 
 test('Crawling Shock uses its 15-unit query and survives exactly its captured contacts', () => {
@@ -815,8 +853,10 @@ test('Flame Lash retains the semantic Lightning target, chains, stuns, and owns 
       birthTick: 1,
       buildId: 1003,
       direction: { x: 1, y: 0 },
+      endpoint: { x: 20, y: 0 },
       id: 10,
       kind: 'weld-channel',
+      midpoint: { x: 10, y: 0 },
       origin: { x: 0, y: 0 },
       ownerId: 'wizard',
       targetId: 'enemy:1',
@@ -1402,14 +1442,19 @@ function projectile(options: {
     case 'weld':
       return {
         ...common,
+        basePresentationPhaseDegrees: options.buildId === 1009 ? null : 0,
         buildId: options.buildId ?? 1000,
+        castSoundVariant: options.buildId === 1002 || options.buildId === 1009 ? 0 : null,
         charge: 1,
         contactsRemaining: options.contactsRemaining ?? 1,
         headingDegrees: 0,
         hitTargetIds: [],
         kind: 'weld',
-        presentationSeed: 0,
+        presentationSeed: (options.buildId ?? 1000) === 1000 || options.buildId === 1009
+          ? 0
+          : null,
         projectileIndex: 0,
+        secondaryPresentationPhaseDegrees: options.buildId === 1001 ? 0 : null,
         speed: 3,
         targetId: null,
         turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,

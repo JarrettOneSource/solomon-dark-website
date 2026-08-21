@@ -243,7 +243,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /ownerDisplayName/)
 })
 
-test('protocol v37 bounds Lua requests and structured results by wire bytes and shape', () => {
+test('protocol v38 bounds Lua requests and structured results by wire bytes and shape', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-lua-execute',
     code: '😀'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 4 + 1),
@@ -304,7 +304,7 @@ test('protocol v37 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v37 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v38 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -491,7 +491,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v37 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v38 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1066,7 +1066,7 @@ test('protocol v38 carries party denial, Hall archives, secondary gates, and exi
   )
 })
 
-test('protocol v37 strictly owns the generated-arena transition', () => {
+test('protocol v38 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -1160,7 +1160,7 @@ test('protocol v37 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v37 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v38 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2698,7 +2698,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v37 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v38 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -3255,7 +3255,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v37 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v38 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -3395,7 +3395,9 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   }))
   const projectile = {
     ageTicks: 1,
+    basePresentationPhaseDegrees: 35,
     buildId: 1000,
+    castSoundVariant: null,
     charge: 1,
     contactsRemaining: 1,
     damage: 8,
@@ -3411,6 +3413,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     position: { x: 800, y: 400 },
     presentationSeed: 42,
     projectileIndex: 0,
+    secondaryPresentationPhaseDegrees: null,
     speed: 3,
     targetId: null,
     turnAccumulator: ETHER_PRIMARY_INITIAL_TURN,
@@ -3432,7 +3435,9 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   const actors = [{
     ...common,
     buildId: 1003,
+    endpoint: { x: 800, y: 200 },
     kind: 'weld-channel',
+    midpoint: { x: 800, y: 300 },
     targetId: null,
     variant: 1,
     vector: [8, 2, 1, 0.8, 0, 0, 0, 0],

@@ -14,19 +14,28 @@ import {
 import { nativeFireImpactPitch } from './core-kernels/primary-spell-fire-native.ts'
 import { nativeEtherImpactPitch } from './core-kernels/primary-spell-ether-native.ts'
 import { newNativeAirWaterActorSoundRequests } from './air-water-skill-audio.ts'
+import type { NativeWeldBuildId } from './core-kernels/native-weld-primary-profile.ts'
+import {
+  nativeWeldCastSoundCues,
+  nativeWeldLoopCues,
+} from './weld-primary-audio-contract.ts'
 
 const LOOP_CUES: readonly GameLoopCue[] = [
   'comet-loop',
   'electric-loop',
   'earthquake-loop',
+  'fire-loop',
   'gather-rocks-loop',
+  'ice-beam-loop',
   'ice-loop',
   'lightning-loop',
   'low-fire-loop',
+  'meteor-loop',
   'plane-cross-loop',
   'rainfall-loop',
   'rolling-stone-loop',
   'steady-wind-loop',
+  'steam-loop',
 ]
 
 const SECONDARY_STREAM_CUES = new Set<NativeSecondaryAudioCue>([
@@ -80,14 +89,27 @@ export class PrimarySpellAudioSynchronizer {
           playerId,
         )
         if (volume === null) continue
+        const weldBuildId = activeWeldBuildId(player.progression.activeWeldBuildId)
         if (player.primaryCast.castSequence > previous.primaryCast.castSequence) {
-          switch (player.config.element) {
-            case 'air': this.audio.playSound('lightning-start', { volume }); break
-            case 'earth': this.audio.playSound('start-boulder', { volume }); break
-            case 'water': this.audio.playSound('ice-start', { volume }); break
-            case 'ether':
-            case 'fire':
-              break
+          if (weldBuildId !== null) {
+            if (!isWeldOneShot(weldBuildId)) {
+              for (let sequence = previous.primaryCast.castSequence;
+                sequence < player.primaryCast.castSequence;
+                sequence += 1) {
+                for (const cue of nativeWeldCastSoundCues(weldBuildId, null)) {
+                  this.audio.playSound(cue, { volume })
+                }
+              }
+            }
+          } else {
+            switch (player.config.element) {
+              case 'air': this.audio.playSound('lightning-start', { volume }); break
+              case 'earth': this.audio.playSound('start-boulder', { volume }); break
+              case 'water': this.audio.playSound('ice-start', { volume }); break
+              case 'ether':
+              case 'fire':
+                break
+            }
           }
         }
         if (player.primaryCast.fizzleSequence > previous.primaryCast.fizzleSequence) {
@@ -101,13 +123,24 @@ export class PrimarySpellAudioSynchronizer {
         }
         if (player.primaryCast.emissionSequence > previous.primaryCast.emissionSequence) {
           const launchVolume = volume * (player.primaryCast.underpowered ? 0.75 : 1)
-          switch (player.config.element) {
-            case 'ether': this.audio.playSound('magic-missile', { volume: launchVolume }); break
-            case 'fire': this.audio.playSound('throw-fire', { volume: launchVolume }); break
-            case 'air':
-            case 'earth':
-            case 'water':
-              break
+          if (weldBuildId !== null && isWeldOneShot(weldBuildId)) {
+            const count = player.primaryCast.emissionSequence
+              - previous.primaryCast.emissionSequence
+            for (let emission = 0; emission < count; emission += 1) {
+              for (const cue of nativeWeldCastSoundCues(
+                weldBuildId,
+                player.primaryCast.lastWeldSoundVariant,
+              )) this.audio.playSound(cue, { volume: launchVolume })
+            }
+          } else if (weldBuildId === null) {
+            switch (player.config.element) {
+              case 'ether': this.audio.playSound('magic-missile', { volume: launchVolume }); break
+              case 'fire': this.audio.playSound('throw-fire', { volume: launchVolume }); break
+              case 'air':
+              case 'earth':
+              case 'water':
+                break
+            }
           }
         }
       }
@@ -294,6 +327,13 @@ export class PrimarySpellAudioSynchronizer {
           playerId,
         )
         if (attenuation === null) continue
+        const weldBuildId = activeWeldBuildId(player.progression.activeWeldBuildId)
+        if (weldBuildId !== null) {
+          for (const cue of nativeWeldLoopCues(weldBuildId)) {
+            desired.get(cue)!.set(owner, attenuation)
+          }
+          continue
+        }
         switch (player.config.element) {
           case 'air':
             desired.get('lightning-loop')!.set(
@@ -433,4 +473,14 @@ export class PrimarySpellAudioSynchronizer {
       boulder.position.y - listener.position.y,
     )) * 0.5
   }
+}
+
+function activeWeldBuildId(value: number | null): NativeWeldBuildId | null {
+  return Number.isInteger(value) && value !== null && value >= 1000 && value <= 1009
+    ? value as NativeWeldBuildId
+    : null
+}
+
+function isWeldOneShot(buildId: NativeWeldBuildId): boolean {
+  return buildId === 1000 || buildId === 1001 || buildId === 1002 || buildId === 1009
 }

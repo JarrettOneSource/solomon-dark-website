@@ -30,6 +30,7 @@ export interface PlayerPrimaryCastState {
   emissionSequence: number
   fizzleSequence: number
   held: boolean
+  lastWeldSoundVariant: number | null
   targetId: string | null
   underpowered: boolean
 }
@@ -102,6 +103,7 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     emissionSequence: 0,
     fizzleSequence: 0,
     held: false,
+    lastWeldSoundVariant: null,
     targetId: null,
     underpowered: false,
   }

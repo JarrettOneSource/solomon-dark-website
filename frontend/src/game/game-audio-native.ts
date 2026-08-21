@@ -59,6 +59,7 @@ export type GameSoundCue =
   | 'flash'
   | 'flash-spell'
   | 'fizzle'
+  | 'frost-missile'
   | 'hit-shield'
   | 'goto-orb'
   | 'hail-bounce-0'
@@ -101,6 +102,9 @@ export type GameSoundCue =
   | 'rock-hit'
   | 'ring-of-ice'
   | 'skeleton-die'
+  | 'shock-1'
+  | 'shock-2'
+  | 'shock-3'
   | 'spin-attack'
   | 'staff-swoosh'
   | 'staff-hit-wood'
@@ -114,6 +118,8 @@ export type GameSoundCue =
   | 'swipe'
   | 'teleport'
   | 'throw-fire'
+  | 'throw-lightning-1'
+  | 'throw-lightning-2'
   | 'unlock-skill'
   | 'wizard-ouch-1'
   | 'wizard-ouch-2'
@@ -144,17 +150,21 @@ export type GameLoopCue =
   | 'comet-loop'
   | 'electric-loop'
   | 'earthquake-loop'
+  | 'fire-loop'
   | 'flyblown-loop'
   | 'gather-rocks-loop'
+  | 'ice-beam-loop'
   | 'ice-loop'
   | 'lightning-loop'
   | 'low-fire-loop'
   | 'maggots-loop'
+  | 'meteor-loop'
   | 'plane-cross-loop'
   | 'rainfall-loop'
   | 'rolling-stone-loop'
   | 'soul-loop'
   | 'steady-wind-loop'
+  | 'steam-loop'
 
 export interface GameAudioSources {
   loops: Readonly<Record<GameLoopCue, string>>
@@ -329,6 +339,11 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x61c,
     sourceName: 'sounds\\flashspell',
     sourceSha256: 'fda25c45eab0290011b1f3ba859757578586b30c3e7f1c905077f801af0ee5be',
+  },
+  'frost-missile': {
+    registryOffset: 0x6a0,
+    sourceName: 'sounds\\frostmissile',
+    sourceSha256: 'c1d3a682766c53071dc95717d267955128c7be472dc1329da0f5d12700c13d9b',
   },
   fizzle: {
     registryOffset: 0x598,
@@ -555,6 +570,21 @@ export const NATIVE_SOUND_MANIFEST = {
     sourceName: 'sounds\\skeleton_die',
     sourceSha256: 'ab38f903e828bd695ffd153dfacea5701f36376ad24cb96be96d3d059f52fb18',
   },
+  'shock-1': {
+    registryOffset: 0x21d4,
+    sourceName: 'sounds\\Shock\\s1',
+    sourceSha256: '25994dac57db5b28d0e17c9880f6769fb941ebabfd3c91211baf5a616604859c',
+  },
+  'shock-2': {
+    registryOffset: 0x2200,
+    sourceName: 'sounds\\Shock\\s2',
+    sourceSha256: '69ce707d2d3baabf1543a0a2ec4a606840dc9568779f06e91c3b6c75b3b9cf05',
+  },
+  'shock-3': {
+    registryOffset: 0x222c,
+    sourceName: 'sounds\\Shock\\s3',
+    sourceSha256: '5ca5ce12ad76cd77f0ab856928a4048c8b466b3637783f16b6947e42b46b46d4',
+  },
   'spin-attack': {
     registryOffset: 0xe5c,
     sourceName: 'sounds\\spinattack',
@@ -619,6 +649,16 @@ export const NATIVE_SOUND_MANIFEST = {
     registryOffset: 0x10c4,
     sourceName: 'sounds\\throwfire',
     sourceSha256: 'b6e14b90d00e27a9b2ceba404ea1c113a7d7bf5f14aa69987ec9629669b53de0',
+  },
+  'throw-lightning-1': {
+    registryOffset: 0x2570,
+    sourceName: 'sounds\\throwlightning\\1',
+    sourceSha256: '282f45f33c27522c442248b7f12641492499dedca709341d2e5503863ba15625',
+  },
+  'throw-lightning-2': {
+    registryOffset: 0x259c,
+    sourceName: 'sounds\\throwlightning\\2',
+    sourceSha256: 'a412108b979fb5b6a744ae5a3618c5ef699ad916cd2927f5b95bbf5788e80f17',
   },
   'throw-dirt-1': {
     registryOffset: 0x2518,
@@ -792,6 +832,11 @@ export const NATIVE_LOOP_MANIFEST = {
     sourceName: 'sounds\\earthquake__loop',
     sourceSha256: 'ac56c68d267f5d9c7431b8cadd5b6bd4e73ae6101e144ff9769d2aac1a529068',
   },
+  'fire-loop': {
+    registryOffset: 0x16ac,
+    sourceName: 'sounds\\fire__loop',
+    sourceSha256: 'afb0963aa7b68590aa2faea31e86e2e080c524513d32f3c23ebe9e7dc001e00b',
+  },
   'flyblown-loop': {
     registryOffset: 0x170c,
     sourceName: 'sounds\\flyblown__loop',
@@ -801,6 +846,11 @@ export const NATIVE_LOOP_MANIFEST = {
     registryOffset: 0x176c,
     sourceName: 'sounds\\gatherrocksloop__loop',
     sourceSha256: '143cfa6a54d77570d3d929c3c536fe0306a9a1f1f5292cf4c1521481d5895990',
+  },
+  'ice-beam-loop': {
+    registryOffset: 0x17cc,
+    sourceName: 'sounds\\icebeam__loop',
+    sourceSha256: '7bb84b1df2a8cc54f0c6cc3bef5ab6f5dec6b2ce2151cd853cd4e42afd595bc6',
   },
   'ice-loop': {
     registryOffset: 0x182c,
@@ -821,6 +871,11 @@ export const NATIVE_LOOP_MANIFEST = {
     registryOffset: 0x194c,
     sourceName: 'sounds\\maggots__loop',
     sourceSha256: '725332465d0f7d85bd84043ae4a691f0827b227c3ee2aa9fd3226d72bece40db',
+  },
+  'meteor-loop': {
+    registryOffset: 0x19ac,
+    sourceName: 'sounds\\meteor__loop',
+    sourceSha256: '0161a346a636790b0e5e2ca105c2f6d6ac9d22359742ae1f8469634393e39bcd',
   },
   'plane-cross-loop': {
     registryOffset: 0x1a0c,
@@ -846,6 +901,11 @@ export const NATIVE_LOOP_MANIFEST = {
     registryOffset: 0x1bec,
     sourceName: 'sounds\\steadywind__loop',
     sourceSha256: '2c87905f66fa7b02ab18c6b9e5d875ed2c9258ce37c961ba858c17d031141487',
+  },
+  'steam-loop': {
+    registryOffset: 0x1c4c,
+    sourceName: 'sounds\\steam__loop',
+    sourceSha256: 'd817fd149e8b87fa6b7a87bf3b05255749c2d3955469cbe00a0af32d61b5a649',
   },
 } as const satisfies Readonly<Record<GameLoopCue, NativeSoundEntry>>
 

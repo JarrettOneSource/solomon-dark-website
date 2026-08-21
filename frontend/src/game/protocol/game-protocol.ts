@@ -1408,12 +1408,13 @@ function playerSnapshotFrame(value: unknown, field: string): ProtocolPlayerSnaps
   const economy = source.economy === undefined
     ? undefined
     : playerEconomy(source.economy, `${field}.economy`)
+  const progression = playerProgression(source.progression, `${field}.progression`)
   const primaryCast = playerPrimaryCastState(
     source.primaryCast,
     `${field}.primaryCast`,
     config.element,
+    progression.activeWeldBuildId,
   )
-  const progression = playerProgression(source.progression, `${field}.progression`)
   const lighting = playerLighting(source.lighting, `${field}.lighting`)
   if (lighting.driveActive !== playerLightDriveActive(primaryCast, progression.lifeState)) {
     throw new GameProtocolError(`${field}.lighting.driveActive is inconsistent with player state`)
@@ -2020,6 +2021,7 @@ function playerPrimaryCastState(
   value: unknown,
   field: string,
   element: PlayerCharacterConfig['element'],
+  activeWeldBuildId: number | null,
 ): ProtocolPlayerState['primaryCast'] {
   const source = record(value, field)
   onlyKeys(source, field, [
@@ -2030,6 +2032,7 @@ function playerPrimaryCastState(
     'emissionSequence',
     'fizzleSequence',
     'held',
+    'lastWeldSoundVariant',
     'targetId',
     'underpowered',
   ])
@@ -2044,8 +2047,23 @@ function playerPrimaryCastState(
   const targetId = source.targetId === null
     ? null
     : limitedString(source.targetId, `${field}.targetId`, 256)
-  if (element !== 'air' && targetId !== null) {
+  if (element !== 'air' && activeWeldBuildId !== 1003 && targetId !== null) {
     throw new GameProtocolError(`${field}.targetId is only valid for Air`)
+  }
+  const lastWeldSoundVariant = source.lastWeldSoundVariant === null
+    ? null
+    : nonnegativeInteger(
+        source.lastWeldSoundVariant,
+        `${field}.lastWeldSoundVariant`,
+      )
+  const weldSoundVariantCount = activeWeldBuildId === 1002
+    ? 2
+    : activeWeldBuildId === 1009
+      ? 3
+      : 0
+  if ((weldSoundVariantCount === 0 && lastWeldSoundVariant !== null)
+    || (lastWeldSoundVariant !== null && lastWeldSoundVariant >= weldSoundVariantCount)) {
+    throw new GameProtocolError(`${field}.lastWeldSoundVariant does not match the active build`)
   }
   return {
     actionTick,
@@ -2061,6 +2079,7 @@ function playerPrimaryCastState(
       `${field}.fizzleSequence`,
     ),
     held: boolean(source.held, `${field}.held`),
+    lastWeldSoundVariant,
     targetId,
     underpowered: boolean(source.underpowered, `${field}.underpowered`),
   }
@@ -3968,11 +3987,12 @@ function primarySpellWeldProjectile(
   field: string,
 ): NativeWeldProjectileState {
   onlyKeys(source, field, [
-    'ageTicks', 'buildId', 'charge', 'contactsRemaining', 'damage', 'direction',
+    'ageTicks', 'basePresentationPhaseDegrees', 'buildId', 'castSoundVariant',
+    'charge', 'contactsRemaining', 'damage', 'direction',
     'flightTicks', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'presentationSeed',
-    'projectileIndex', 'speed', 'targetId', 'turnAccumulator', 'turnInput',
-    'vector', 'velocity', 'worldKey',
+    'projectileIndex', 'secondaryPresentationPhaseDegrees', 'speed', 'targetId',
+    'turnAccumulator', 'turnInput', 'vector', 'velocity', 'worldKey',
   ])
   const buildId = weldBuildId(source.buildId, `${field}.buildId`)
   if (buildId !== 1000 && buildId !== 1001 && buildId !== 1002 && buildId !== 1009) {
@@ -3993,8 +4013,48 @@ function primarySpellWeldProjectile(
   const presentationSeed = source.presentationSeed === null
     ? null
     : nonnegativeInteger(source.presentationSeed, `${field}.presentationSeed`)
-  if (presentationSeed !== null && (buildId !== 1000 || presentationSeed >= 100_000)) {
-    throw new GameProtocolError(`${field}.presentationSeed is outside the Burning Bolt lane`)
+  const presentationSeedLimit = buildId === 1000
+    ? 100_000
+    : buildId === 1009
+      ? 1_000_000
+      : 0
+  if ((presentationSeedLimit === 0 && presentationSeed !== null)
+    || (presentationSeedLimit > 0
+      && (presentationSeed === null || presentationSeed >= presentationSeedLimit))) {
+    throw new GameProtocolError(`${field}.presentationSeed does not match its welded build`)
+  }
+  const basePresentationPhaseDegrees = source.basePresentationPhaseDegrees === null
+    ? null
+    : finite(source.basePresentationPhaseDegrees, `${field}.basePresentationPhaseDegrees`)
+  if ((buildId === 1009 && basePresentationPhaseDegrees !== null)
+    || (buildId !== 1009 && (basePresentationPhaseDegrees === null
+      || basePresentationPhaseDegrees < 0 || basePresentationPhaseDegrees >= 360))) {
+    throw new GameProtocolError(
+      `${field}.basePresentationPhaseDegrees does not match its welded build`,
+    )
+  }
+  const secondaryPresentationPhaseDegrees = source.secondaryPresentationPhaseDegrees === null
+    ? null
+    : finite(
+        source.secondaryPresentationPhaseDegrees,
+        `${field}.secondaryPresentationPhaseDegrees`,
+      )
+  if ((buildId !== 1001 && secondaryPresentationPhaseDegrees !== null)
+    || (buildId === 1001 && (secondaryPresentationPhaseDegrees === null
+      || secondaryPresentationPhaseDegrees < 0
+      || secondaryPresentationPhaseDegrees >= 360))) {
+    throw new GameProtocolError(
+      `${field}.secondaryPresentationPhaseDegrees does not match its welded build`,
+    )
+  }
+  const castSoundVariant = source.castSoundVariant === null
+    ? null
+    : nonnegativeInteger(source.castSoundVariant, `${field}.castSoundVariant`)
+  const soundVariantCount = buildId === 1002 ? 2 : buildId === 1009 ? 3 : 0
+  if ((soundVariantCount === 0 && castSoundVariant !== null)
+    || (soundVariantCount > 0
+      && (castSoundVariant === null || castSoundVariant >= soundVariantCount))) {
+    throw new GameProtocolError(`${field}.castSoundVariant does not match its welded build`)
   }
   const targetId = source.targetId === null
     ? null
@@ -4012,7 +4072,9 @@ function primarySpellWeldProjectile(
   }
   return {
     ageTicks,
+    basePresentationPhaseDegrees,
     buildId,
+    castSoundVariant,
     charge: 1,
     contactsRemaining: positiveInteger(
       source.contactsRemaining,
@@ -4035,6 +4097,7 @@ function primarySpellWeldProjectile(
     position: vector(source.position, `${field}.position`),
     presentationSeed,
     projectileIndex: nonnegativeInteger(source.projectileIndex, `${field}.projectileIndex`),
+    secondaryPresentationPhaseDegrees,
     speed: positiveFinite(source.speed, `${field}.speed`),
     targetId,
     turnAccumulator,
@@ -4102,7 +4165,9 @@ function primarySpellWeldActor(
   }
 
   if (source.kind === 'weld-channel') {
-    onlyKeys(source, field, [...commonKeys, 'targetId', 'variant'])
+    onlyKeys(source, field, [
+      ...commonKeys, 'endpoint', 'midpoint', 'targetId', 'variant',
+    ])
     if (buildId !== 1003 && buildId !== 1004 && buildId !== 1005) {
       throw new GameProtocolError(`${field}.buildId is not a welded channel build`)
     }
@@ -4111,10 +4176,24 @@ function primarySpellWeldActor(
     }
     const variant = nonnegativeInteger(source.variant, `${field}.variant`)
     if (variant > 3) throw new GameProtocolError(`${field}.variant exceeds the native family`)
+    const endpoint = source.endpoint === null
+      ? null
+      : vector(source.endpoint, `${field}.endpoint`)
+    const midpoint = source.midpoint === null
+      ? null
+      : vector(source.midpoint, `${field}.midpoint`)
+    if ((endpoint === null) !== (midpoint === null)) {
+      throw new GameProtocolError(`${field}.endpoint and midpoint must be present together`)
+    }
+    if (buildId === 1005 && endpoint !== null) {
+      throw new GameProtocolError(`${field} Steam Jet cannot own lightning geometry`)
+    }
     return {
       ...common,
       buildId,
+      endpoint,
       kind: 'weld-channel',
+      midpoint,
       targetId: source.targetId === null
         ? null
         : limitedString(source.targetId, `${field}.targetId`, 256),

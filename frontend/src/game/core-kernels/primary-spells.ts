@@ -967,7 +967,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   const players: Record<string, PlayerCharacterState> = { ...context.players }
 
   for (const spell of projectiles) {
-    if (spell.kind !== 'fire') continue
+    if (spell.kind !== 'fire' && !(spell.kind === 'weld' && spell.buildId === 1000)) continue
     transients = [...transients, createFireParticle(nextId, spell)]
     nextId += 1
   }
@@ -1064,6 +1064,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
 
     if (acceptedCast) {
+      nextPlayer = {
+        ...nextPlayer,
+        primaryCast: { ...nextPlayer.primaryCast, lastWeldSoundVariant: null },
+      }
       if (authority.primarySkill.kind === 'weld') {
         if (authority.primarySkill.castKind !== 'one-shot') {
           primaryCast = { ...nextPlayer.primaryCast, channelActive: true }
@@ -1259,10 +1263,15 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             },
           )
           if (firstLookaheadClear) {
-            projectiles = [...projectiles, advanceProjectile(
+            const spell = advanceProjectile(
               born,
               context.spellTargets(playerId),
-            )]
+            )
+            projectiles = [...projectiles, spell]
+            if (spell.kind === 'weld' && spell.buildId === 1000) {
+              transients = [...transients, createFireParticle(nextId, spell)]
+              nextId += 1
+            }
           } else if (born.buildId === 1000) {
             const detonation = createPrimarySpellWeldFireDetonation(
               nextId,
@@ -1289,6 +1298,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           fizzleSequence: underpowered
             ? nextPlayer.primaryCast.fizzleSequence + 1
             : nextPlayer.primaryCast.fizzleSequence,
+          lastWeldSoundVariant: authority.primarySkill.kind === 'weld'
+            ? birth.projectiles[0]?.kind === 'weld'
+              ? birth.projectiles[0].castSoundVariant
+              : null
+            : null,
           underpowered,
         },
       }
@@ -1335,7 +1349,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             transients = [...transients, createNativeWeldChannelActor({
               buildId,
               direction: aimDirection,
+              endpoint: lightning?.endpoint ?? null,
               id: nextId,
+              midpoint: lightning?.midpoint ?? null,
               origin: emitter,
               ownerId: playerId,
               targetId: lightning?.targetId ?? null,
@@ -1393,7 +1409,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             }
             if (
               buildId === 1007
-              && context.tick % NATIVE_WELD_METEOR_CADENCE_TICKS === 0
+              && actor.pulseSequence % NATIVE_WELD_METEOR_CADENCE_TICKS === 0
             ) {
               const damage = drawNativeWeldDamage(
                 rng,
@@ -1402,7 +1418,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               )
               rng = damage.rng
               // Meteor construction initializes its fall scalar to
-              // `1 + RandomFloat(0.25)` before subtracting 0.02 per tick.
+              // `1 - RandomFloat(0.25)` before subtracting 0.02 per tick.
               const phase = drawNativeFloat(rng, Math.fround(0.25))
               rng = phase.state
               const privateSeed = drawNativeInteger(rng, 10_000_000)

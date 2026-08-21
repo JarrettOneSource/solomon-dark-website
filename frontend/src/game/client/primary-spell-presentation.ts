@@ -590,7 +590,9 @@ function interpolateTransient(
       ...actor,
       ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
       direction: lerpVector(older.direction, newer.direction, blend),
+      endpoint: lerpNullableVector(older.endpoint, newer.endpoint, blend),
       lightRegistration: null,
+      midpoint: lerpNullableVector(older.midpoint, newer.midpoint, blend),
       origin: lerpVector(older.origin, newer.origin, blend),
       vector: [...actor.vector],
     }
@@ -841,7 +843,9 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
     return {
       ...effect,
       direction: { ...effect.direction },
+      endpoint: effect.endpoint === null ? null : { ...effect.endpoint },
       lightRegistration: null,
+      midpoint: effect.midpoint === null ? null : { ...effect.midpoint },
       origin: { ...effect.origin },
       vector: [...effect.vector],
     }
@@ -914,6 +918,16 @@ function lerpVector(
     x: lerp(first.x, second.x, blend),
     y: lerp(first.y, second.y, blend),
   }
+}
+
+function lerpNullableVector(
+  first: Readonly<{ x: number; y: number }> | null,
+  second: Readonly<{ x: number; y: number }> | null,
+  blend: number,
+): { x: number; y: number } | null {
+  if (first !== null && second !== null) return lerpVector(first, second, blend)
+  const discrete = blend < 1 ? first : second
+  return discrete === null ? null : { ...discrete }
 }
 
 function lerpDegrees(first: number, second: number, blend: number): number {

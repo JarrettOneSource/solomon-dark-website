@@ -31,6 +31,7 @@ import type {
 } from './game-audio-native.ts'
 import { createGameSnapshot } from './host/game-snapshot.ts'
 import { PrimarySpellAudioSynchronizer } from './primary-spell-audio.ts'
+import type { NativeWeldBuildId } from './core-kernels/native-weld-primary-profile.ts'
 
 const PLAYER_ID = 'caster'
 
@@ -153,6 +154,53 @@ test('consumes Air start once and balances its held loop on release', () => {
   state = step(state, false)
   synchronizer.update(createGameSnapshot(state, PLAYER_ID))
   assert.deepEqual(audio.stops, [['lightning-loop', 'primary-player:caster']])
+  synchronizer.destroy()
+})
+
+test('plays the authoritative welded one-shot sound variant without relying on actor survival', () => {
+  const initial = weldedSnapshot(
+    createGameSnapshot(simulation('air'), PLAYER_ID),
+    1002,
+  )
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const emitted = weldedSnapshot(initial, 1002, {
+    emissionSequence: 1,
+    lastWeldSoundVariant: 0,
+  })
+  synchronizer.update(emitted)
+  synchronizer.update(emitted)
+  assert.deepEqual(audio.sounds, ['throw-lightning-1'])
+  synchronizer.destroy()
+})
+
+test('balances every welded channel loop and plays only its start cue', () => {
+  const initial = weldedSnapshot(
+    createGameSnapshot(simulation('fire'), PLAYER_ID),
+    1003,
+  )
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector,
+    PLAYER_ID,
+    initial,
+  )
+  const active = weldedSnapshot(initial, 1003, {
+    castSequence: 1,
+    channelActive: true,
+  })
+  synchronizer.update(active)
+  synchronizer.update(active)
+  assert.deepEqual(audio.sounds, ['flame-lash-start'])
+  assert.deepEqual(audio.starts, [['fire-loop', 'primary-player:caster']])
+
+  const released = weldedSnapshot(active, 1003, { channelActive: false })
+  synchronizer.update(released)
+  assert.deepEqual(audio.stops, [['fire-loop', 'primary-player:caster']])
   synchronizer.destroy()
 })
 
@@ -870,3 +918,32 @@ test('every persistent secondary audio owner starts and retires its exact native
   )
   synchronizer.destroy()
 })
+
+type Snapshot = ReturnType<typeof createGameSnapshot>
+
+function weldedSnapshot(
+  source: Snapshot,
+  buildId: NativeWeldBuildId,
+  primaryCast: Partial<{
+    castSequence: number
+    channelActive: boolean
+    emissionSequence: number
+    lastWeldSoundVariant: number | null
+  }> = {},
+): Snapshot {
+  const player = source.players[PLAYER_ID]!
+  return {
+    ...source,
+    players: {
+      ...source.players,
+      [PLAYER_ID]: {
+        ...player,
+        primaryCast: { ...player.primaryCast, ...primaryCast },
+        progression: {
+          ...player.progression,
+          activeWeldBuildId: buildId,
+        },
+      },
+    },
+  }
+}

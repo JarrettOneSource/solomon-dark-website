@@ -13,7 +13,9 @@ import {
 
 const projectile = {
   ageTicks: 10,
+  basePresentationPhaseDegrees: 35,
   buildId: 1000,
+  castSoundVariant: null,
   charge: 1,
   contactsRemaining: 1,
   damage: 8,
@@ -29,6 +31,7 @@ const projectile = {
   position: { x: 40, y: 50 },
   presentationSeed: 17,
   projectileIndex: 0,
+  secondaryPresentationPhaseDegrees: null,
   speed: 3,
   targetId: 'enemy:2',
   turnAccumulator: 1,

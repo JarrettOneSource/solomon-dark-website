@@ -1302,13 +1302,15 @@ export function stepNativeSecondaryAbilities(
       const sourceTarget = context.target(effect.worldKey, effect.targetId)
       if (sourceTarget) {
         const arcTargets = [...context.targets(effect.worldKey, sourceTarget.position, 200)]
-          .filter((target) => target.id !== sourceTarget.id)
+          .map((target, registrationOrder) => ({ registrationOrder, target }))
+          .filter(({ target }) => target.id !== sourceTarget.id)
           .sort((left, right) => (
-            squaredDistance(left.position, sourceTarget.position)
-              - squaredDistance(right.position, sourceTarget.position)
-            || left.id - right.id
+            squaredDistance(left.target.position, sourceTarget.position)
+              - squaredDistance(right.target.position, sourceTarget.position)
+            || left.registrationOrder - right.registrationOrder
           ))
           .slice(0, effect.electricBurn.arcCount)
+          .map(({ target }) => target)
         for (const target of [sourceTarget, ...arcTargets]) {
           const targetEffect = nativeSecondaryTargetEffect(state, effect.worldKey, target.id)
           damage.push({
@@ -5844,11 +5846,11 @@ function mergeElectricBurnEffect(
   if (current === null) return Object.freeze({ ...incoming })
   const strongest = incoming.damagePerTick >= current.damagePerTick ? incoming : current
   return Object.freeze({
-    arcCount: Math.max(current.arcCount, incoming.arcCount),
+    arcCount: strongest.arcCount,
     damagePerTick: Math.max(current.damagePerTick, incoming.damagePerTick),
     ownerId: strongest.ownerId,
     sourceActorId: strongest.sourceActorId,
-    stunFactor: Math.min(current.stunFactor, incoming.stunFactor),
+    stunFactor: strongest.stunFactor,
     ticks: Math.max(current.ticks, incoming.ticks),
   })
 }

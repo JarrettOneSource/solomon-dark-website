@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import {
+  createNativeWeldChannelActor,
   createNativeWeldPersistentActor,
   createNativeWeldMeteor,
   drawNativeWeldDamage,
@@ -15,11 +16,13 @@ import {
   updateNativeWeldPersistentActor,
 } from './native-weld-primary-runtime.ts'
 
-test('welded missiles share one native float damage draw and consume Fire seeds in fan order', () => {
+test('welded missiles share one damage draw and consume constructor RNG in fan order', () => {
   const rng = createNativeRng(17)
   const expectedDamage = drawNativeFloat(rng, 6)
-  const seed0 = drawNativeInteger(expectedDamage.state, 100_000)
-  const seed1 = drawNativeInteger(seed0.state, 100_000)
+  const phase0 = drawNativeFloat(expectedDamage.state, 360)
+  const seed0 = drawNativeInteger(phase0.state, 100_000)
+  const phase1 = drawNativeFloat(seed0.state, 360)
+  const seed1 = drawNativeInteger(phase1.state, 100_000)
   const spawned = spawnNativeWeldOneShot({
     aimDirection: { x: 1, y: 0 },
     firstId: 40,
@@ -36,6 +39,10 @@ test('welded missiles share one native float damage draw and consume Fire seeds 
     Math.fround(4 + expectedDamage.value),
   ])
   assert.deepEqual(spawned.projectiles.map(({ headingDegrees }) => headingDegrees), [105, 75])
+  assert.deepEqual(
+    spawned.projectiles.map(({ basePresentationPhaseDegrees }) => basePresentationPhaseDegrees),
+    [phase0.value, phase1.value],
+  )
   assert.deepEqual(spawned.projectiles.map(({ presentationSeed }) => presentationSeed), [
     seed0.value,
     seed1.value,
@@ -46,6 +53,10 @@ test('welded missiles share one native float damage draw and consume Fire seeds 
 test('Crawling Shock consumes its one motion draw then creates center and side actors', () => {
   const rng = createNativeRng(31)
   const expected = drawNativeFloat(rng, Math.fround(0.05))
+  const sound = drawNativeInteger(expected.state, 3)
+  const seed0 = drawNativeInteger(sound.state, 1_000_000)
+  const seed1 = drawNativeInteger(seed0.state, 1_000_000)
+  const seed2 = drawNativeInteger(seed1.state, 1_000_000)
   const spawned = spawnNativeWeldOneShot({
     aimDirection: { x: 0, y: -1 },
     firstId: 1,
@@ -63,7 +74,16 @@ test('Crawling Shock consumes its one motion draw then creates center and side a
     { x: 0, y: 15 },
     { x: 0, y: 15 },
   ])
-  assert.deepEqual(spawned.rng, expected.state)
+  assert.deepEqual(spawned.projectiles.map(({ castSoundVariant }) => castSoundVariant), [
+    sound.value,
+    sound.value,
+    sound.value,
+  ])
+  assert.deepEqual(
+    spawned.projectiles.map(({ presentationSeed }) => presentationSeed),
+    [seed0.value, seed1.value, seed2.value],
+  )
+  assert.deepEqual(spawned.rng, seed2.state)
   assert.equal(spawned.projectiles[0]!.speed, Math.fround(3 * Math.fround(1.5 * Math.fround(1 + expected.value))))
 })
 
@@ -116,6 +136,22 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
   assert.equal(stepped.impactTicksRemaining, 190)
 })
 
+test('Meteor constructor subtracts its float32 quarter-range fall draw', () => {
+  const actor = createNativeWeldMeteor({
+    damage: 12,
+    direction: { x: 1, y: 0 },
+    id: 6,
+    origin: { x: 40, y: 80 },
+    ownerId: 'p1',
+    presentationPhase: Math.fround(0.25),
+    privateSeed: 42,
+    tick: 100,
+    vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(actor.fallScalar, Math.fround(0.75))
+})
+
 test('weld homing actors retain the nearest native target and advance through shared motion', () => {
   const projectile = spawnNativeWeldOneShot({
     aimDirection: { x: 1, y: 0 },
@@ -134,17 +170,70 @@ test('weld homing actors retain the nearest native target and advance through sh
   assert.notDeepEqual(stepped.position, projectile.position)
 })
 
-test('semantic audio plans retain every native loop/start cue ownership', () => {
-  assert.deepEqual(nativeWeldAudioPlan(1003), {
-    buildId: 1003,
-    cue: 'flame-lash-loop',
-    loop: true,
-    nativeLoopIds: [157],
-    startCueId: 33,
+test('semantic audio plans retain every native sound and loop registry owner', () => {
+  const buildIds = [
+    1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009,
+  ] as const
+  assert.deepEqual(buildIds.map(nativeWeldAudioPlan), [
+    audio(1000, 'burning-bolt', [57, 97]),
+    audio(1001, 'frost-missile', [38]),
+    audio(1002, 'ball-lightning', [], [224, 225]),
+    audio(1003, 'flame-lash-loop', [33], [], [157]),
+    audio(1004, 'blizzard-beam-loop', [44], [], [160]),
+    audio(1005, 'steam-jet-loop', [], [], [172, 157]),
+    audio(1006, 'ethereal-boulder-loop', [87], [], [159]),
+    audio(1007, 'meteor-swarm-loop', [], [], [165]),
+    audio(1008, 'hailstones-loop', [87], [], [160, 159]),
+    audio(1009, 'crawling-shock', [], [203, 204, 205]),
+  ])
+})
+
+test('Ball Lightning consumes one cast-sound selector before its fan phases', () => {
+  const rng = createNativeRng(71)
+  const damage = drawNativeFloat(rng, 6)
+  const sound = drawNativeInteger(damage.state, 2)
+  const phase0 = drawNativeFloat(sound.state, 360)
+  const phase1 = drawNativeFloat(phase0.state, 360)
+  const phase2 = drawNativeFloat(phase1.state, 360)
+  const spawned = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 20, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1002, [4, 10, 6, 3, 1.1, 2, 0.5]),
+    rng, targets: [], worldKey: 'boneyard:1',
   })
-  assert.deepEqual(nativeWeldAudioPlan(1005).nativeLoopIds, [172, 157])
-  assert.deepEqual(nativeWeldAudioPlan(1008).nativeLoopIds, [160, 159])
-  assert.equal(nativeWeldAudioPlan(1000).loop, false)
+  assert.deepEqual(spawned.projectiles.map(({ castSoundVariant }) => castSoundVariant), [
+    sound.value, sound.value, sound.value,
+  ])
+  assert.deepEqual(
+    spawned.projectiles.map(({ basePresentationPhaseDegrees }) => basePresentationPhaseDegrees),
+    [phase0.value, phase1.value, phase2.value],
+  )
+  assert.deepEqual(spawned.rng, phase2.state)
+})
+
+test('Frost Missile consumes inherited and derived presentation phases per actor', () => {
+  const rng = createNativeRng(83)
+  const damage = drawNativeFloat(rng, 6)
+  const base = drawNativeFloat(damage.state, 360)
+  const secondary = drawNativeFloat(base.state, 360)
+  const spawned = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 20, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1001, [4, 10, 6, 1, 1.1, 2, 0.5]),
+    rng, targets: [], worldKey: 'boneyard:1',
+  })
+  assert.equal(spawned.projectiles[0]!.basePresentationPhaseDegrees, base.value)
+  assert.equal(spawned.projectiles[0]!.secondaryPresentationPhaseDegrees, secondary.value)
+  assert.deepEqual(spawned.rng, secondary.state)
+})
+
+test('welded channel actors retain authoritative Lightning geometry', () => {
+  const actor = createNativeWeldChannelActor({
+    buildId: 1003, direction: { x: 0, y: -1 }, endpoint: { x: 20, y: 30 },
+    id: 9, midpoint: { x: 10, y: 15 }, origin: { x: 0, y: 0 }, ownerId: 'p1',
+    targetId: 'enemy:1', tick: 50, vector: [8, 2, 1, 0.8, 0, 0, 0, 0],
+    worldKey: 'boneyard:1',
+  })
+  assert.deepEqual(actor.endpoint, { x: 20, y: 30 })
+  assert.deepEqual(actor.midpoint, { x: 10, y: 15 })
 })
 
 test('fixed damage does not consume the authoritative stream', () => {
@@ -274,11 +363,29 @@ function profile(
     damageFactor: 1,
     damageMaximum: buildId === 1009 ? values[0]! : values[1]!,
     damageMinimum: values[0]!,
+    damageRollCount: 1,
     kind: 'weld',
     manaCost: values[buildId === 1009 ? 1 : 2]!,
     rank: 1,
     skillId: buildId,
     vector: { buildId, castKind: 'one-shot', values },
+  }
+}
+
+function audio(
+  buildId: Parameters<typeof nativeWeldAudioPlan>[0],
+  cue: ReturnType<typeof nativeWeldAudioPlan>['cue'],
+  nativeSoundIds: readonly number[] = [],
+  nativeSoundVariantIds: readonly number[] = [],
+  nativeLoopIds: readonly number[] = [],
+): ReturnType<typeof nativeWeldAudioPlan> {
+  return {
+    buildId,
+    cue,
+    loop: nativeLoopIds.length > 0,
+    nativeLoopIds,
+    nativeSoundIds,
+    nativeSoundVariantIds,
   }
 }
 

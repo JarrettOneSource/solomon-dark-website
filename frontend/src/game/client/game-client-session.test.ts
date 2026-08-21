@@ -982,6 +982,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           emissionSequence: 1,
           fizzleSequence: 0,
           held: false,
+          lastWeldSoundVariant: null,
           targetId: null,
           underpowered: false,
         },

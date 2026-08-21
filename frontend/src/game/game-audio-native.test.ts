@@ -136,6 +136,9 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     '9bfad709cfb932b7e836c58f781a42ee78907a0211bac5d14a2583d721192738',
   )
   assert.equal(NATIVE_SOUND_MANIFEST['flame-lash-start'].registryOffset, 0x5c4)
+  assert.equal(NATIVE_SOUND_MANIFEST['frost-missile'].registryOffset, 0x6a0)
+  assert.equal(NATIVE_SOUND_MANIFEST['shock-1'].registryOffset, 0x21d4)
+  assert.equal(NATIVE_SOUND_MANIFEST['throw-lightning-1'].registryOffset, 0x2570)
   assert.equal(
     NATIVE_SOUND_MANIFEST['flame-lash-start'].sourceSha256,
     'd563633ce5ed2701050884b11806898da500581858238d45fb881e820db0a1dc',
@@ -166,16 +169,58 @@ test('keeps native registry offsets on the browser cue manifest', () => {
     '809601e64da07ac0adfffec5f5e29dfc61ee79725fdbf85ceb501d80d6cb0db4',
   )
   assert.equal(NATIVE_LOOP_MANIFEST['flyblown-loop'].registryOffset, 0x170c)
+  assert.equal(NATIVE_LOOP_MANIFEST['fire-loop'].registryOffset, 0x16ac)
   assert.equal(NATIVE_LOOP_MANIFEST['maggots-loop'].registryOffset, 0x194c)
   assert.equal(NATIVE_LOOP_MANIFEST['soul-loop'].registryOffset, 0x1b8c)
   assert.equal(NATIVE_LOOP_MANIFEST['gather-rocks-loop'].registryOffset, 0x176c)
+  assert.equal(NATIVE_LOOP_MANIFEST['ice-beam-loop'].registryOffset, 0x17cc)
   assert.equal(NATIVE_LOOP_MANIFEST['ice-loop'].registryOffset, 0x182c)
   assert.equal(NATIVE_LOOP_MANIFEST['lightning-loop'].registryOffset, 0x188c)
   assert.equal(NATIVE_LOOP_MANIFEST['rolling-stone-loop'].registryOffset, 0x1acc)
+  assert.equal(NATIVE_LOOP_MANIFEST['meteor-loop'].registryOffset, 0x19ac)
+  assert.equal(NATIVE_LOOP_MANIFEST['steam-loop'].registryOffset, 0x1c4c)
   assert.equal(NATIVE_STREAM_MANIFEST['catch-it'].registryOffset, 0x1344)
   assert.equal(NATIVE_STREAM_MANIFEST['choose-element'].registryOffset, 0x134c)
   assert.equal(NATIVE_STREAM_MANIFEST['pike-break'].registryOffset, 0x13e4)
   assert.equal(NATIVE_STREAM_MANIFEST['start-cast'].registryOffset, 0x141c)
+})
+
+test('pins every welded-primary cue to its untouched stock WAV', () => {
+  const sounds = {
+    'flame-lash-start': 'flame-lash-start.wav',
+    'frost-missile': 'frost-missile.wav',
+    'shock-1': 'shock-1.wav',
+    'shock-2': 'shock-2.wav',
+    'shock-3': 'shock-3.wav',
+    'throw-lightning-1': 'throw-lightning-1.wav',
+    'throw-lightning-2': 'throw-lightning-2.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(sounds)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_SOUND_MANIFEST[cue as keyof typeof sounds].sourceSha256,
+    )
+  }
+  const loops = {
+    'fire-loop': 'fire-loop.wav',
+    'ice-beam-loop': 'ice-beam-loop.wav',
+    'meteor-loop': 'meteor-loop.wav',
+    'steam-loop': 'steam-loop.wav',
+  } as const
+  for (const [cue, filename] of Object.entries(loops)) {
+    const source = readFileSync(new URL(
+      `../assets/game/audio/sfx/${filename}`,
+      import.meta.url,
+    ))
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      NATIVE_LOOP_MANIFEST[cue as keyof typeof loops].sourceSha256,
+    )
+  }
 })
 
 test('pins every GoodImp landing and contact cue to its untouched stock WAV', () => {

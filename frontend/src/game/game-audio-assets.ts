@@ -44,6 +44,7 @@ import flashSpell from '../assets/game/audio/sfx/flash-spell.wav'
 import fireballHit from '../assets/game/audio/sfx/fireball-hit.wav'
 import fireyDeath from '../assets/game/audio/sfx/firey-death.wav'
 import flameLashStart from '../assets/game/audio/sfx/flame-lash-start.wav'
+import frostMissile from '../assets/game/audio/sfx/frost-missile.wav'
 import flyblownLoop from '../assets/game/audio/sfx/flyblown-loop.wav'
 import fizzle from '../assets/game/audio/sfx/fizzle.wav'
 import hitShield from '../assets/game/audio/sfx/hit-shield.wav'
@@ -107,6 +108,9 @@ import rockHit from '../assets/game/audio/sfx/rock-hit.wav'
 import shovel1 from '../assets/game/audio/sfx/shovel-1.wav'
 import shovel2 from '../assets/game/audio/sfx/shovel-2.wav'
 import skeletonDie from '../assets/game/audio/sfx/skeleton-die.wav'
+import shock1 from '../assets/game/audio/sfx/shock-1.wav'
+import shock2 from '../assets/game/audio/sfx/shock-2.wav'
+import shock3 from '../assets/game/audio/sfx/shock-3.wav'
 import spinAttack from '../assets/game/audio/sfx/spin-attack.wav'
 import staffSwoosh from '../assets/game/audio/sfx/staff-swoosh.wav'
 import staffHitWood from '../assets/game/audio/sfx/staff-hit-wood.wav'
@@ -116,6 +120,8 @@ import step2 from '../assets/game/audio/sfx/step/step2.wav'
 import summon from '../assets/game/audio/sfx/summon.wav'
 import swipe from '../assets/game/audio/sfx/swipe.wav'
 import throwFire from '../assets/game/audio/sfx/throw-fire.wav'
+import throwLightning1 from '../assets/game/audio/sfx/throw-lightning-1.wav'
+import throwLightning2 from '../assets/game/audio/sfx/throw-lightning-2.wav'
 import throwDirt1 from '../assets/game/audio/sfx/throw-dirt-1.wav'
 import throwDirt2 from '../assets/game/audio/sfx/throw-dirt-2.wav'
 import unlockSkill from '../assets/game/audio/sfx/unlockskill.wav'
@@ -127,10 +133,14 @@ import zombieDieGroan from '../assets/game/audio/sfx/zombie-die-groan.wav'
 import zombieOuch from '../assets/game/audio/sfx/zombie-ouch.wav'
 import zombiePoisonSplat from '../assets/game/audio/sfx/zombie-poison-splat.wav'
 import gatherRocksLoop from '../assets/game/audio/sfx/gather-rocks-loop.wav'
+import fireLoop from '../assets/game/audio/sfx/fire-loop.wav'
+import iceBeamLoop from '../assets/game/audio/sfx/ice-beam-loop.wav'
 import iceLoop from '../assets/game/audio/sfx/ice-loop.wav'
 import lightningLoop from '../assets/game/audio/sfx/lightning-loop.wav'
+import meteorLoop from '../assets/game/audio/sfx/meteor-loop.wav'
 import rollingStoneLoop from '../assets/game/audio/sfx/rolling-stone-loop.wav'
 import startBoulder from '../assets/game/audio/sfx/start-boulder.wav'
+import steamLoop from '../assets/game/audio/sfx/steam-loop.wav'
 import deathGuitar from '../assets/game/audio/sfx/death-guitar.wav'
 import solomonGetHimBoys from '../assets/game/audio/voice/solomon-get-him-boys.wav'
 import solomonHello1 from '../assets/game/audio/voice/solomon-hello-1.wav'
@@ -145,17 +155,21 @@ export const GAME_AUDIO_SOURCES = {
     'comet-loop': cometLoop,
     'electric-loop': electricLoop,
     'earthquake-loop': earthquakeLoop,
+    'fire-loop': fireLoop,
     'flyblown-loop': flyblownLoop,
     'gather-rocks-loop': gatherRocksLoop,
+    'ice-beam-loop': iceBeamLoop,
     'ice-loop': iceLoop,
     'lightning-loop': lightningLoop,
     'low-fire-loop': lowFireLoop,
     'maggots-loop': maggotsLoop,
+    'meteor-loop': meteorLoop,
     'plane-cross-loop': planeCrossLoop,
     'rainfall-loop': rainfallLoop,
     'rolling-stone-loop': rollingStoneLoop,
     'soul-loop': soulLoop,
     'steady-wind-loop': steadyWindLoop,
+    'steam-loop': steamLoop,
   },
   music: {
     academy,
@@ -191,6 +205,7 @@ export const GAME_AUDIO_SOURCES = {
     'fireball-hit': fireballHit,
     'firey-death': fireyDeath,
     'flame-lash-start': flameLashStart,
+    'frost-missile': frostMissile,
     fizzle,
     flash: enemyFlash,
     'flash-spell': flashSpell,
@@ -238,6 +253,9 @@ export const GAME_AUDIO_SOURCES = {
     'shovel-2': shovel2,
     'ring-of-ice': ringOfIce,
     'skeleton-die': skeletonDie,
+    'shock-1': shock1,
+    'shock-2': shock2,
+    'shock-3': shock3,
     'spin-attack': spinAttack,
     'staff-swoosh': staffSwoosh,
     'staff-hit-wood': staffHitWood,
@@ -253,6 +271,8 @@ export const GAME_AUDIO_SOURCES = {
     'throw-dirt-1': throwDirt1,
     'throw-dirt-2': throwDirt2,
     'throw-fire': throwFire,
+    'throw-lightning-1': throwLightning1,
+    'throw-lightning-2': throwLightning2,
     'unlock-skill': unlockSkill,
     'wizard-ouch-1': wizardOuch1,
     'wizard-ouch-2': wizardOuch2,
