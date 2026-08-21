@@ -24066,6 +24066,16 @@ provenance to that boundary.
 
 ## 2026-08-20 — Hall of Fame, Website-global leaderboards, and reopened Memoratorium
 
+> **2026-08-21 authority reopening.** The first Website-global pass closed
+> score calculation at the authoritative host, but then let the browser rebuild
+> the completed row and submit every statistic directly. JWT identity, bounds,
+> and account/run idempotency did not prove that the admitted account completed
+> that run on our server. The earlier membership sweep stopped downstream of
+> the snapshot and skipped admission identity, score provenance, cheat-mode
+> transitions, resumed-save provenance, and API verification. This reopening replaces that incomplete
+> trust boundary across the whole global-submission path; local Hall history is
+> intentionally unaffected.
+
 ### Reported smell and parity question
 
 - Reported web behavior: the stock-styled `HALL of FAME` main-menu control has
@@ -24097,6 +24107,7 @@ provenance to that boundary.
 | Instructions | `Mortuary::Present 0x0050EAC0`, instructions `0x0050F45C..0x0050F5E5` | Memoratorium record 5 at singleton `+0x40C` is submitted three times at `(512,507)` after actors/effects | high |
 | Asset/data | `Memoratorium.bundle` records `0..75`; registered record 5 | record 5 is an exact `71 x 54` white memorial-glow sprite; the web extractor and manifest omitted it | high |
 | Existing runtime | prior normal Mortuary captures and private-room tests | record 0, ten filled paintings/six urns, record-27 marker, 16 headings, 50 flames, collision, camera, and transition are already at parity | high |
+| Current web causal trace | Website `17d69dd`; `HallOfFameRunRecorder`, `MainMenuScene`, `Game.tsx`, `api.ts`, and `GameLeaderboardEndpoints.cs` | the host snapshot is authoritative, but the browser chooses every submitted field and the API accepts it after JWT/range checks; no host or supervisor proof reaches the API | high |
 
 The Ghidra work followed the `ghidra-binary-analysis` read-only workflow. The
 populated Hall observation used the retail executable directly; injected menu
@@ -24141,7 +24152,10 @@ composition and its reachable branch dispositions.
 | Main Menu close gate and one-second linear close | `0x00589DB0`, `0x00589CD0` | exact-ported | lifecycle timer/browser journey |
 | native `halloffame.dat` and raw portrait import | `0x005A13A0`, `0x005BC400`, `0x005BED10` | out-of-system — native import/export remains the separately declared save-compatibility product boundary | web records are normalized, not native-file claims |
 | guest local history | native process-local profile analogue | exact-ported | local store test/browser journey |
-| authenticated global submission | Website extension | exact-ported | JWT integration test |
+| authenticated global submission | Website extension | exact-ported | admitted account id is sealed into a host-signed receipt and checked against the submitting JWT |
+| server-authoritative global provenance | Website host/supervisor extension | exact-ported | only the authoritative host can sign the immutable completed row; arbitrary and tampered browser bodies fail closed |
+| cheats-off eligibility for the complete run | Website host/protocol extension | exact-ported | initial and live cheat-mode state taints the active party run permanently; accepted direct Lua execution also taints it; tainted runs receive no receipt |
+| client-held save resume without server attestation | Website save boundary | out-of-system — the current save document proves shape, not server provenance, so resumed lineages remain local-only instead of receiving a global receipt | forged-save regression and host withholding test |
 | global Awesomeness board | Website extension over native field | exact-ported | API/client ordering test |
 | global Wave board | Website extension over native field | exact-ported | API/client ordering test |
 | global Kills board | Website extension over native field | exact-ported | API/client ordering test |
@@ -24177,13 +24191,20 @@ No member is blocked by the browser platform.
   fixed layout and normal memorial compositor independently.
 - Upstream state producers/callers: game-over archival produces Hall metrics;
   wizard/progression/inventory state supplies level, skills, perks, kills, and
-  Awesomeness. Website session snapshots supply the equivalent survival data,
-  while JWT identity owns global rows.
+  Awesomeness. The backend binds an authenticated account id to the one-use
+  supervisor admission; the authoritative host, not the browser, serializes
+  the completed global row and signs that account/run payload.
 - State representation and transitions: Hall is empty or a ranked list with
   later-loaded equal scores first;
   each row is collapsed/expanded; outer close is idle -> rate 1 -> progress
-  greater than 1 -> Main Menu. A Website entry is local immediately and
-  submitted globally at most once per account/run id.
+  greater than 1 -> Main Menu. A Website entry is local immediately. Global
+  eligibility begins only for a fresh account-bound authoritative connection
+  and is irreversibly revoked for that connection when cheats are enabled or
+  an authoritative console execution is accepted. A client-held save has no
+  server attestation in save schema 3, so resume starts ineligible and cannot
+  convert a forged lineage into a signed score. Any ineligible participant
+  taints the active party run. Only an eligible completed run yields one signed
+  receipt, submitted at most once per account/run id.
 - Downstream consumers/callees: Hall row presentation, four Website sort views,
   local browser history, public API readers, and the ordinary Mortuary renderer.
 - Sibling systems sharing ownership or data: player progression, Boneyard run
@@ -24213,9 +24234,13 @@ No member is blocked by the browser platform.
   no draw occurs for a non-maximum kill. Archive consumes signed `Float(65)`
   then unsigned `Float(0.15)` and persists the resulting heading/scale. Hall
   has no new audio owner beyond the existing click cue.
-- Input/network authority/replication: local history accepts guests. Global
-  submission requires JWT account identity and is idempotent by account/run.
-  Public reads never expose email or bearer data.
+- Input/network authority/replication: local history accepts guests and
+  cheat-tainted runs. Global submission requires a score receipt HMAC-signed
+  inside the authoritative server process, bound to the backend account id
+  carried by its consumed admission, and matched to the caller's JWT. The
+  protocol carries initial and live cheat-mode state; eligibility cannot be
+  restored by disabling cheats or by resuming a client-held save. Public reads
+  never expose email, bearer, admission, or signing data.
 - Boundary and failure behavior: global fetch failure leaves local history
   usable and exposes a bounded retry state. Invalid entry enums/limits fail
   closed. Empty is distinct from loading/error.
@@ -24246,12 +24271,15 @@ No member is blocked by the browser platform.
 ### Web implementation consequence
 
 - Correct owner/module: one native score kernel, host-owned run counters, one
-  snapshot-to-entry recorder, one local store, one Hall scene, and one backend
-  leaderboard endpoint/table. Memoratorium record 5 remains in the private-room
-  renderer.
+  snapshot-to-local-entry recorder, one local store, one Hall scene, and one
+  backend leaderboard endpoint/table. The supervisor owns account-bound
+  admission material; the host owns cheat taint and signed global receipts;
+  the backend verifies receipts and persists their sealed values. Memoratorium
+  record 5 remains in the private-room renderer.
 - Shared model change: the host snapshots the completed run counters; the page
   supplies global load/submit callbacks; the session-independent Hall model
-  remains free of backend imports. Protocol 37 carries the run receipt and
+  remains free of backend imports. Protocol 46 carries cheat-mode state and
+  the opaque signed global receipt in addition to the run snapshot and
   authoritative feedback seed; save schema 3 retains its Game clock/RNG/state
   alongside the current mod identity/state fields. The world-pulse kernel is
   shared by score authority and presentation.
@@ -24267,7 +24295,9 @@ No member is blocked by the browser platform.
 
 - Focused automated test: newest-first tie ordering, 100 cap, time formatting,
   every score/pulse/name branch, authoritative snapshot entry completion,
-  potion streak reset, local persistence, strict API
+  potion streak reset, local persistence, account-bound host receipt issuance,
+  no receipt for anonymous, resumed, or cheat-tainted runs,
+  signature/body/account tamper rejection, strict API
   validation/auth/idempotency/four sorts, Hall source contract, and record-5
   asset/count/position/blend/depth.
 - Playwright/runtime journey: root -> Hall, local/global/sort/expand/scroll ->

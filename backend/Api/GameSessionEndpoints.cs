@@ -28,11 +28,12 @@ public static class GameSessionEndpoints
         }
         try
         {
+            var userId = TokenService.GetUserId(context.User);
             var content = await contentService.ResolveAsync(
-                TokenService.GetUserId(context.User),
+                userId,
                 recordDownloads: true,
                 cancellationToken: cancellationToken);
-            var endpoint = await provisioner.ProvisionAsync(content, cancellationToken);
+            var endpoint = await provisioner.ProvisionAsync(content, userId, cancellationToken);
             return Results.Ok(new
             {
                 kind = "remote",
@@ -75,11 +76,15 @@ public static class GameSessionEndpoints
         }
         try
         {
+            var userId = TokenService.GetUserId(context.User);
             var content = await contentService.ResolveAsync(
-                TokenService.GetUserId(context.User),
+                userId,
                 recordDownloads: true,
                 cancellationToken: cancellationToken);
-            var endpoint = await provisioner.AdmitSharedHubAsync(content, cancellationToken);
+            var endpoint = await provisioner.AdmitSharedHubAsync(
+                content,
+                userId,
+                cancellationToken);
             return Results.Created("/api/game/hub", new
             {
                 kind = "remote",

@@ -33,6 +33,7 @@ builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
 builder.Services.AddScoped<ModPublishingService>();
 builder.Services.AddScoped<WebModContentService>();
+builder.Services.AddSingleton<GameLeaderboardReceiptVerifier>();
 builder.Services.AddHttpClient<GameSessionProvisioner>(client =>
     client.Timeout = TimeSpan.FromSeconds(30));
 

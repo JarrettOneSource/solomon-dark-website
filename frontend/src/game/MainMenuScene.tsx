@@ -46,6 +46,7 @@ import {
 import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
+  gameCheatsEnabled,
   readGameSettings,
   setGameSettings,
   subscribeGameSettings,
@@ -238,6 +239,7 @@ interface MainMenuSceneProps {
   connectSession: (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
+    cheatsEnabled: boolean,
     saveDocument?: string,
     allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
@@ -247,7 +249,7 @@ interface MainMenuSceneProps {
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
   prepareNewGame: () => Promise<void>
   resumeSave: ResumableGameSave | null
-  submitGlobalHallOfFame: (entry: HallOfFameEntry) => Promise<void>
+  submitGlobalHallOfFame: (receipt: string) => Promise<void>
 }
 
 export default function MainMenuScene({
@@ -367,6 +369,10 @@ export default function MainMenuScene({
     if (!session || !gameSettings.enableCheats || !session.isHost) return
     return installGameLuaConsole(window, session)
   }, [gameSettings.enableCheats, runtimeSnapshot?.hostPlayerId, session])
+
+  useEffect(() => {
+    session?.setCheatsEnabled(gameSettings.enableCheats)
+  }, [gameSettings.enableCheats, session])
 
   useEffect(() => {
     if (!settingsOpen && !gameplaySettingsOpen) return
@@ -494,12 +500,17 @@ export default function MainMenuScene({
       }
     })
     const removeGameplayPause = session.onGameplayPause(setGameplayPause)
+    const removeLeaderboardReceipt = session.onLeaderboardReceipt((receipt) => {
+      if (gameCheatsEnabled()) return
+      void submitGlobalHallOfFame(receipt)
+    })
     const removePartyState = session.onPartyState(setPartyState)
     const removeSaveCheckpoint = session.onSaveCheckpoint(onSaveCheckpoint)
     return () => {
       removeSnapshot()
       removeBoneyard()
       removeGameplayPause()
+      removeLeaderboardReceipt()
       removePartyState()
       removeSaveCheckpoint()
     }
@@ -508,7 +519,6 @@ export default function MainMenuScene({
       const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
       if (!entry) return
       setLocalHallOfFame(recordLocalHallOfFame(entry))
-      void submitGlobalHallOfFame(entry)
     }
   }, [accountUsername, advanceLoading, beginLoading, onSaveCheckpoint, session, submitGlobalHallOfFame])
 
@@ -654,6 +664,7 @@ export default function MainMenuScene({
       const nextSession = await connectSession(
         resumeSave.summary.character,
         advanceLoading,
+        gameSettings.enableCheats,
         resumeSave.document,
         allowModMismatch,
       )
@@ -697,6 +708,7 @@ export default function MainMenuScene({
           element: selectedElement,
         },
         advanceLoading,
+        gameSettings.enableCheats,
       )
       activateSession(nextSession)
       return true

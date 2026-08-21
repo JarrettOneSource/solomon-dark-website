@@ -83,6 +83,7 @@ test('client carries character config, publishes authority, and tears down', asy
   })
   assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: CHARACTER,
@@ -106,6 +107,18 @@ test('client carries character config, publishes authority, and tears down', asy
   }))
   const session = await connecting
   assert.equal(session.isHost, true)
+  session.setCheatsEnabled(true)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-cheat-mode',
+    enabled: true,
+  })
+  let leaderboardReceipt: string | null = null
+  session.onLeaderboardReceipt((receipt) => { leaderboardReceipt = receipt })
+  transport.receive(encodeGameMessage({
+    type: 'server-leaderboard-receipt',
+    receipt: 'payload.signature',
+  }))
+  assert.equal(leaderboardReceipt, 'payload.signature')
   assert.equal(session.boneyards[0].id, 'default-random')
   assert.equal(session.getSaveCheckpoint(), null)
   assert.equal(session.getPartyState(), null)

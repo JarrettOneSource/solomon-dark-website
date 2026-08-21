@@ -44,6 +44,15 @@ test('game session supervisor provisions isolated authenticated game sessions', 
 
   const unauthorized = await fetch(`${supervisor.address.url}/admin/sessions`, { method: 'POST' })
   assert.equal(unauthorized.status, 401)
+  const invalidAccount = await fetch(`${supervisor.address.url}/admin/sessions`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${ADMIN_SECRET}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ content: EMPTY_CONTENT, leaderboardUserId: 0 }),
+  })
+  assert.equal(invalidAccount.status, 400)
 
   const firstEndpoint = await provision(supervisor.address.url)
   const secondEndpoint = await provision(supervisor.address.url)
@@ -101,8 +110,8 @@ test('game session supervisor admits independent players to one shared Hub and r
   context.after(() => supervisor.close())
 
   const endpoints = await Promise.all([
-    admitHub(supervisor.address.url, MOD_CONTENT),
-    admitHub(supervisor.address.url, MOD_CONTENT),
+    admitHub(supervisor.address.url, MOD_CONTENT, 42),
+    admitHub(supervisor.address.url, MOD_CONTENT, 43),
     admitHub(supervisor.address.url, MOD_CONTENT),
   ])
   assert.deepEqual(new Set(endpoints.map(({ path }) => path)), new Set(['/game-hub']))
@@ -281,6 +290,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const replayMessages = messageQueue(replay)
   replay.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: admission.credential,
     character: CHARACTER,
@@ -295,6 +305,7 @@ test('shared Hub admissions are single-use and expire before authentication', as
   const lateMessages = messageQueue(late)
   late.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: expired.credential,
     character: CHARACTER,
@@ -423,7 +434,7 @@ async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
       authorization: `Bearer ${ADMIN_SECRET}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ content: EMPTY_CONTENT }),
+    body: JSON.stringify({ content: EMPTY_CONTENT, leaderboardUserId: 42 }),
   })
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('cache-control'), 'no-store')
@@ -439,6 +450,7 @@ async function provision(supervisorUrl: string): Promise<ProvisionedEndpoint> {
 async function admitHub(
   supervisorUrl: string,
   content: typeof EMPTY_CONTENT | typeof MOD_CONTENT = EMPTY_CONTENT,
+  leaderboardUserId: number | null = null,
 ): Promise<ProvisionedEndpoint> {
   const response = await fetch(`${supervisorUrl}/admin/hub/tickets`, {
     method: 'POST',
@@ -446,7 +458,7 @@ async function admitHub(
       authorization: `Bearer ${ADMIN_SECRET}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, leaderboardUserId }),
   })
   assert.equal(response.status, 201)
   const value = await response.json() as Record<string, unknown>
@@ -472,6 +484,7 @@ async function join(
   const next = messageQueue(socket)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
     character: CHARACTER,

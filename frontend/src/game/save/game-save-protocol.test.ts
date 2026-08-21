@@ -18,12 +18,14 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
   const document = JSON.stringify({ schemaVersion: 1 })
   assert.deepEqual(decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'secret',
     character: CHARACTER,
     save: document,
   })), {
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'secret',
     character: CHARACTER,
@@ -56,6 +58,7 @@ test('protocol carries one bounded resume document and ordered host checkpoints'
 test('protocol rejects oversized and inconsistent save messages', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'secret',
     character: CHARACTER,

@@ -217,6 +217,7 @@ export default function Game() {
   const connectSession = useCallback(async (
     character: PlayerCharacterConfig,
     onProgress: (stage: GameConnectionStage) => void,
+    cheatsEnabled: boolean,
     saveDocument?: string,
     allowModMismatch?: boolean,
   ): Promise<GameSession> => {
@@ -226,6 +227,7 @@ export default function Game() {
       const session = await bootGame({
         ...(allowModMismatch ? { allowModMismatch: true } : {}),
         character,
+        cheatsEnabled,
         diagnostics,
         endpoint,
         onFatal: setFatal,
@@ -253,10 +255,10 @@ export default function Game() {
     return result.items
   }, [])
 
-  const submitGlobalHallOfFame = useCallback(async (entry: HallOfFameEntry) => {
+  const submitGlobalHallOfFame = useCallback(async (receipt: string) => {
     if (!user) return
     try {
-      await api.gameLeaderboards.submit(entry)
+      await api.gameLeaderboards.submit(receipt)
     } catch (error) {
       diagnostics.warning(
         'hall.global_submit_failed',

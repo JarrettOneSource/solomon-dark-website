@@ -269,8 +269,9 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 45
+export const GAME_PROTOCOL_VERSION = 46
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
+export const MAX_GAME_LEADERBOARD_RECEIPT_BYTES = 4_096
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
 export const PLAYER_CHARACTER_KERNEL_VERSION = 'player-character-kernel-4'
@@ -379,6 +380,7 @@ export interface GameplayPauseState {
 
 export interface ClientHelloMessage {
   allowModMismatch?: boolean
+  cheatsEnabled: boolean
   type: 'client-hello'
   protocolVersion: number
   credential: string
@@ -472,6 +474,11 @@ export interface ClientGameplayPauseMessage {
   paused: boolean
 }
 
+export interface ClientCheatModeMessage {
+  type: 'client-cheat-mode'
+  enabled: boolean
+}
+
 export interface ClientLuaExecuteMessage {
   type: 'client-lua-execute'
   code: string
@@ -479,6 +486,7 @@ export interface ClientLuaExecuteMessage {
 }
 
 export type ClientGameMessage =
+  | ClientCheatModeMessage
   | ClientConfirmLoadoutMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
@@ -531,6 +539,11 @@ export interface ServerSaveCheckpointMessage {
   save: string | null
   reason: 'game-over' | 'progress'
   sequence: number
+}
+
+export interface ServerLeaderboardReceiptMessage {
+  type: 'server-leaderboard-receipt'
+  receipt: string
 }
 
 export interface ServerPongMessage {
@@ -589,6 +602,7 @@ export type ServerGameMessage =
   | ServerSnapshotMessage
   | ServerBoneyardLoadedMessage
   | ServerSaveCheckpointMessage
+  | ServerLeaderboardReceiptMessage
   | ServerLuaResultMessage
   | ServerPartyStateMessage
   | ServerPongMessage
@@ -604,6 +618,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', [
       'type',
       'allowModMismatch',
+      'cheatsEnabled',
       'protocolVersion',
       'credential',
       'character',
@@ -612,6 +627,7 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     ])
     return {
       type: 'client-hello',
+      cheatsEnabled: boolean(value.cheatsEnabled, 'cheatsEnabled'),
       protocolVersion: integer(value.protocolVersion, 'protocolVersion'),
       credential: limitedString(value.credential, 'credential', 512),
       character: playerCharacterConfig(value.character, 'character'),
@@ -748,6 +764,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
       paused: boolean(value.paused, 'paused'),
     }
   }
+  if (value.type === 'client-cheat-mode') {
+    onlyKeys(value, 'message', ['type', 'enabled'])
+    return {
+      type: 'client-cheat-mode',
+      enabled: boolean(value.enabled, 'enabled'),
+    }
+  }
   if (value.type === 'client-lua-execute') {
     onlyKeys(value, 'message', ['type', 'code', 'requestId'])
     const code = limitedString(value.code, 'code', MAX_LUA_CONSOLE_CODE_LENGTH)
@@ -853,6 +876,17 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       save,
       reason,
       sequence: positiveInteger(value.sequence, 'sequence'),
+    }
+  }
+  if (value.type === 'server-leaderboard-receipt') {
+    onlyKeys(value, 'message', ['type', 'receipt'])
+    return {
+      type: 'server-leaderboard-receipt',
+      receipt: byteLimitedString(
+        value.receipt,
+        'receipt',
+        MAX_GAME_LEADERBOARD_RECEIPT_BYTES,
+      ),
     }
   }
   if (value.type === 'server-pong') {

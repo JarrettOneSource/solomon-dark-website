@@ -23,7 +23,7 @@
     "test:world-weather": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/game/boneyard-weather-audio.test.ts src/game/core-kernels/native-boneyard-weather.test.ts",
     "test:level-up": "node --experimental-strip-types --test src/game/renderer/level-up-presentation.test.ts",
     "test:diagnostics": "node --experimental-strip-types --test src/game/client/game-connection-failure.test.ts src/game/client/game-diagnostics.test.ts",
-    "test:hall": "node --experimental-strip-types --test src/game/client/hall-of-fame-run-recorder.test.ts src/game/core-kernels/hall-of-fame-score.test.ts src/game/core-kernels/hall-of-fame.test.ts src/game/core-kernels/native-enemy-world-feedback.test.ts src/game/hall-of-fame-store.test.ts",
+    "test:hall": "node --experimental-strip-types --test src/game/client/hall-of-fame-run-recorder.test.ts src/game/core-kernels/hall-of-fame-score.test.ts src/game/core-kernels/hall-of-fame.test.ts src/game/core-kernels/native-enemy-world-feedback.test.ts src/game/hall-of-fame-store.test.ts src/game/host/game-leaderboard-receipt.test.ts",
     "test:hub-ui": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/game/hub-inventory-presentation.test.ts src/game/renderer/hub-inventory-render-contract.test.ts",
     "test:library": "node --experimental-strip-types --test src/pages/mods-subscriptions.test.ts",
     "test:parties": "node --experimental-strip-types --test src/game/browser-party-cutover.test.ts src/game/host/party-system.test.ts src/game/host/shared-game-worlds.test.ts src/game/hub-player-selection.test.ts",

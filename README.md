@@ -113,6 +113,9 @@ Production browser sessions use the bundled `GameHost/game-session-supervisor.mj
 The website's `POST /api/game/sessions` adapter authenticates to that
 loopback-only supervisor and returns a one-session `wss` endpoint; the static
 client contains neither the supervisor secret nor a shared gameplay credential.
+The same server-only boundary signs completed global Hall rows; the leaderboard
+API rejects browser-authored score fields and receipts belonging to another
+account.
 The checked-in NFO unit, Caddy route, required environment, expiry policy, and
 release health gates are documented in `ops/nfo/README.md`.
 

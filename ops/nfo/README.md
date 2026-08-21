@@ -32,6 +32,11 @@ GameSessions__SupervisorUrl=http://127.0.0.1:5222
 GameSessions__PublicWebSocketOrigin=wss://solomondarker.com
 ```
 
+The supervisor also uses this secret as the key for domain-separated global
+leaderboard receipts. The website verifies those receipts with the matching
+protected value. Rotating it therefore requires restarting both services;
+never expose it to the browser or a build-time variable.
+
 Never place the supervisor secret or a provisioned session credential in a
 build-time Vite variable. `POST /api/game/sessions` retains the private
 provisioning contract. New Game uses `POST /api/game/hub` to receive one

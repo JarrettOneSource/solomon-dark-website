@@ -129,6 +129,7 @@ function inertSession() {
     getSnapshot() { throw new Error() },
     onBoneyard: () => () => {},
     onGameplayPause: () => () => {},
+    onLeaderboardReceipt: () => () => {},
     onEnemyEvent: () => () => {},
     onPing: () => () => {},
     onPartyState: () => () => {},
@@ -144,6 +145,7 @@ function inertSession() {
     selectSkill() {},
     sendHubAction() {},
     sendInput() {},
+    setCheatsEnabled() {},
     inviteToParty() {},
     startMatch() {},
   }

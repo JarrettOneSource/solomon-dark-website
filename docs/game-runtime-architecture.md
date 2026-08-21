@@ -305,6 +305,31 @@ authoritative world snapshot.
   destinations that the browser authority does not own. Accepted packages are
   sandboxed Lua, typed Boneyards, or both.
 
+### Global leaderboard authority
+
+The Website backend seals an authenticated account id into each single-use Hub
+or private-session admission. The supervisor retains it as server-only ticket
+material, and the game host associates it with the authenticated socket. It is
+never accepted from a gameplay packet or exposed in a snapshot.
+
+When the authoritative simulation archives a completed Hall row, the host
+serializes the immutable row with that account id and signs the opaque payload
+with a domain-separated HMAC. Protocol 46 carries only the signed receipt to
+the matching client. The leaderboard API accepts only that receipt, verifies
+its signature and account id against the caller's JWT, revalidates every Hall
+bound, and persists the sealed values. The browser cannot choose score fields,
+and the client bundle receives neither the supervisor/signing secret nor an
+account-id override.
+
+Global eligibility starts only on a fresh account-bound admission. Initial or
+live `Enable Cheats` state permanently revokes it for that connection; an
+accepted authoritative Lua console request revokes it independently. Any
+ineligible member taints the current party run for every participant. Local
+Hall history remains available. Current save schema 3 validates and restores
+state but carries no server authenticity proof, so a client-held resumed
+lineage is deliberately local-only rather than being promoted into a signed
+global score.
+
 ## Rendering boundary
 
 There is one composed client, not one DOM client and one canvas client.
@@ -828,6 +853,9 @@ This preserves one mutation boundary and prevents Lua callbacks from entering
 the simulation recursively. The host checks dynamic session host identity on
 every console request. `Enable Cheats` controls only whether the browser
 installs its DevTools API; it is never trusted as network authorization.
+Initial and live setting state is nevertheless replicated as a separate
+global-score eligibility input, and accepting a console request revokes that
+eligibility even if a crafted client misreported the setting.
 Authoritative gameplay pause freezes this fixed-tick Lua lane together with the
 world; new console requests fail immediately while paused instead of waiting on
 a tick that cannot run.

@@ -58,4 +58,7 @@ test('Hall of Fame is actionable and owns local plus four global boards', () => 
   assert.match(hallStyles, /left:\s*617\.5px/)
   assert.match(hallStyles, /width:\s*365px/)
   assert.match(hallStyles, /height:\s*85px/)
+  assert.match(scene, /session\.onLeaderboardReceipt/)
+  assert.match(scene, /if \(gameCheatsEnabled\(\)\) return/)
+  assert.doesNotMatch(scene, /submitGlobalHallOfFame\(entry\)/)
 })

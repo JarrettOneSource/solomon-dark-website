@@ -83,6 +83,13 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
 
 test('client protocol validates character, input, lifecycle, Lua, and ping messages', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-cheat-mode',
+    enabled: true,
+  })), {
+    type: 'client-cheat-mode',
+    enabled: true,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-skill-quickbar-bind',
     skillId: 8,
     slot: 7,
@@ -106,12 +113,14 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: CHARACTER,
     resumeToken: 'reserved-token',
   })), {
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: CHARACTER,
@@ -237,6 +246,20 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     type: 'server-gameplay-pause',
     pause: { ownerDisplayName: '', ownerPlayerId: 'player-1' },
   })), /ownerDisplayName/)
+})
+
+test('server protocol carries only one bounded opaque leaderboard receipt', () => {
+  assert.deepEqual(decodeServerGameMessage(encodeGameMessage({
+    type: 'server-leaderboard-receipt',
+    receipt: 'payload.signature',
+  })), {
+    type: 'server-leaderboard-receipt',
+    receipt: 'payload.signature',
+  })
+  assert.throws(() => decodeServerGameMessage(JSON.stringify({
+    type: 'server-leaderboard-receipt',
+    receipt: 'x'.repeat(4_097),
+  })), /receipt/)
 })
 
 test('protocol v42 bounds Lua requests and structured results by wire bytes and shape', () => {
@@ -917,8 +940,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v45 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 45)
+test('protocol v46 carries party denial, Hall archives, the mixed-skill quickbar, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 46)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1502,6 +1525,7 @@ test('protocol rejects legacy, malformed, and unsupported discriminated payloads
   })), /displayName|character/)
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'spawn-secret',
     character: { ...CHARACTER, element: 'void' },

@@ -65,6 +65,7 @@ public static partial class GameLeaderboardEndpoints
         SubmitLeaderboardEntryRequest request,
         HttpContext context,
         AppDb db,
+        GameLeaderboardReceiptVerifier receiptVerifier,
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -73,7 +74,18 @@ public static partial class GameLeaderboardEndpoints
         {
             return ApiErrors.Unauthorized("A valid bearer token is required.");
         }
-        var error = Validate(request);
+        if (!receiptVerifier.Configured)
+        {
+            return ApiErrors.Error(
+                StatusCodes.Status503ServiceUnavailable,
+                "Global leaderboard submission is unavailable.");
+        }
+        var receipt = receiptVerifier.Verify(request.Receipt, userId.Value);
+        if (receipt is null)
+        {
+            return ApiErrors.BadRequest("The authoritative leaderboard receipt is invalid.");
+        }
+        var error = Validate(receipt);
         if (error is not null)
         {
             return ApiErrors.BadRequest(error);
@@ -86,7 +98,7 @@ public static partial class GameLeaderboardEndpoints
             return ApiErrors.Unauthorized("This enrollment no longer exists.");
         }
 
-        var runId = request.RunId!.Trim();
+        var runId = receipt.RunId!.Trim();
         var existing = await db.GameLeaderboardEntries
             .Include(entry => entry.User)
             .SingleOrDefaultAsync(
@@ -102,20 +114,20 @@ public static partial class GameLeaderboardEndpoints
             UserId = user.Id,
             User = user,
             RunId = runId,
-            WizardName = request.WizardName!.Trim(),
-            Element = request.Element!,
-            Discipline = request.Discipline!,
-            HeadingIndex = request.HeadingIndex,
-            PortraitScale = request.PortraitScale,
-            Level = request.Level,
-            Awesomeness = request.Awesomeness,
-            ElapsedTicks = request.ElapsedTicks,
-            Wave = request.Wave,
-            MonstersKilled = request.MonstersKilled,
-            AwesomestKill = NormalizeOptionalText(request.AwesomestKill),
-            HighestSkillsJson = JsonSerializer.Serialize(request.HighestSkills),
-            PerksUsedJson = JsonSerializer.Serialize(request.PerksUsed),
-            CompletedAtUtc = DateTime.UtcNow
+            WizardName = receipt.WizardName!.Trim(),
+            Element = receipt.Element!,
+            Discipline = receipt.Discipline!,
+            HeadingIndex = receipt.HeadingIndex,
+            PortraitScale = receipt.PortraitScale,
+            Level = receipt.Level,
+            Awesomeness = receipt.Awesomeness,
+            ElapsedTicks = receipt.ElapsedTicks,
+            Wave = receipt.Wave,
+            MonstersKilled = receipt.MonstersKilled,
+            AwesomestKill = NormalizeOptionalText(receipt.AwesomestKill),
+            HighestSkillsJson = JsonSerializer.Serialize(receipt.HighestSkills),
+            PerksUsedJson = JsonSerializer.Serialize(receipt.PerksUsed),
+            CompletedAtUtc = receipt.CompletedAtUtc
         };
         db.GameLeaderboardEntries.Add(entry);
         try
@@ -155,13 +167,13 @@ public static partial class GameLeaderboardEndpoints
         entry.Wave,
         entry.MonstersKilled,
         entry.AwesomestKill,
-        highestSkills = JsonSerializer.Deserialize<LeaderboardSkill[]>(
+        highestSkills = JsonSerializer.Deserialize<GameLeaderboardReceiptSkill[]>(
             entry.HighestSkillsJson) ?? [],
         perksUsed = JsonSerializer.Deserialize<int[]>(entry.PerksUsedJson) ?? [],
         entry.CompletedAtUtc
     };
 
-    private static string? Validate(SubmitLeaderboardEntryRequest request)
+    private static string? Validate(GameLeaderboardReceipt request)
     {
         if (request.RunId is null || !RunId().IsMatch(request.RunId.Trim()))
         {
@@ -207,6 +219,12 @@ public static partial class GameLeaderboardEndpoints
         {
             return "The perk list is invalid.";
         }
+        if (request.CompletedAtUtc.Kind != DateTimeKind.Utc ||
+            request.CompletedAtUtc < new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc) ||
+            request.CompletedAtUtc > DateTime.UtcNow.AddMinutes(5))
+        {
+            return "The completion time is invalid.";
+        }
         return null;
     }
 
@@ -237,22 +255,6 @@ public static partial class GameLeaderboardEndpoints
     [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant)]
     private static partial Regex RunId();
 
-    public sealed record LeaderboardSkill(int SkillId, int Rank);
-
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed record SubmitLeaderboardEntryRequest(
-        string? RunId,
-        string? WizardName,
-        string? Element,
-        string? Discipline,
-        int HeadingIndex,
-        double PortraitScale,
-        int Level,
-        int Awesomeness,
-        int ElapsedTicks,
-        int Wave,
-        int MonstersKilled,
-        string? AwesomestKill,
-        LeaderboardSkill[]? HighestSkills,
-        int[]? PerksUsed);
+    public sealed record SubmitLeaderboardEntryRequest(string? Receipt);
 }

@@ -86,6 +86,8 @@ import {
   createGameSaveDocument,
   restoreGameSaveDocument,
 } from '../save/game-save-document.ts'
+import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
+import { createGameLeaderboardReceipt } from './game-leaderboard-receipt.ts'
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 import { partyForPlayer, projectPartyState } from './party-system.ts'
 import {
@@ -112,16 +114,22 @@ const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost'])
 const GAME_SAVE_CHECKPOINT_TICKS = GAME_TICK_RATE * 5
 
 export type GameHostAuthentication =
-  | { kind: 'shared'; credential: string }
+  | { kind: 'shared'; credential: string; leaderboardUserId?: number | null }
   | {
       kind: 'tickets'
-      claim: (credential: string) => MaterializedWebSessionContent | null
+      claim: (credential: string) => GameHostAdmission | null
     }
+
+export interface GameHostAdmission {
+  readonly content: MaterializedWebSessionContent
+  readonly leaderboardUserId: number | null
+}
 
 type GameHostRole = 'shared'
 
 interface AuthenticatedGameHostRole {
   readonly content: MaterializedWebSessionContent | null
+  readonly leaderboardUserId: number | null
   readonly role: GameHostRole
 }
 
@@ -141,6 +149,7 @@ export interface GameHostOptions {
   host?: string
   heartbeatIntervalMs?: number
   initialPlayerExperience?: number
+  leaderboardReceiptSecret?: string
   log?: GameServerLogSink
   logContext?: Readonly<Record<string, unknown>>
   luaWasmPath?: string
@@ -181,8 +190,10 @@ interface HostClient {
   connectedAtMs: number
   displayName: string
   forceReplicationKeyframe: boolean
+  globalScoreEligible: boolean
   lastReceivedSequence: number
   lastSentSnapshotSequence: number
+  leaderboardUserId: number | null
   playerId: PlayerId
   queuedInputs: Map<number, QueuedClientInput>
   pendingLuaRequestIds: Set<number>
@@ -198,6 +209,10 @@ interface QueuedClientInput {
 
 export async function startGameHost(options: GameHostOptions): Promise<GameHost> {
   validateAuthentication(options.authentication)
+  if (options.leaderboardReceiptSecret !== undefined
+    && Buffer.byteLength(options.leaderboardReceiptSecret, 'utf8') < 32) {
+    throw new Error('Game host leaderboard receipt secret must contain at least 32 bytes')
+  }
   const host = options.host ?? '127.0.0.1'
   const port = options.port ?? 0
   const maxPlayers = options.maxPlayers ?? 16
@@ -255,6 +270,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
   const pendingLuaEvents: WebLuaDerivedEvent[] = []
+  const cheatTaintedRunIds = new Set<string>()
+  const issuedLeaderboardReceipts = new Set<string>()
   const pending = new Set<WebSocket>()
   const disconnectCauses = new WeakMap<WebSocket, { reason: string; source: string }>()
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => ({
@@ -569,21 +586,25 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const snapshotSequence = nextSnapshotSequence
         nextSnapshotSequence += 1
         const welcomeBaseline = createReplicatedEntityBaseline(welcomeSnapshot)
-        clients.set(socket, {
+        const joinedClient: HostClient = {
           acknowledgedSequence: 0,
           acknowledgedSnapshotSequence: snapshotSequence,
           activeInput: createIdlePlayerCharacterInput(),
           connectedAtMs: Date.now(),
           displayName: message.character.displayName,
           forceReplicationKeyframe: false,
+          globalScoreEligible: message.save === undefined && !message.cheatsEnabled,
           lastReceivedSequence: 0,
           lastSentSnapshotSequence: snapshotSequence,
+          leaderboardUserId: authenticated.leaderboardUserId,
           playerId,
           pendingLuaRequestIds: new Set(),
           queuedInputs: new Map(),
           sentReplicationBaselines: new Map([[snapshotSequence, welcomeBaseline]]),
           socket,
-        })
+        }
+        clients.set(socket, joinedClient)
+        if (!joinedClient.globalScoreEligible) taintActiveRun(joinedClient)
         logGameServerEvent(
           options.log,
           'game-host',
@@ -872,6 +893,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         return
       }
+      if (message.type === 'client-cheat-mode') {
+        if (message.enabled) {
+          client.globalScoreEligible = false
+          taintActiveRun(client)
+        }
+        return
+      }
       if (message.type === 'client-lua-execute') {
         const sendLuaResult = (
           result: Readonly<{
@@ -929,6 +957,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           return
         }
         client.pendingLuaRequestIds.add(message.requestId)
+        client.globalScoreEligible = false
+        taintActiveRun(client)
         const completeRequest = (result: Parameters<typeof sendLuaResult>[0]) => {
           client.pendingLuaRequestIds.delete(message.requestId)
           sendLuaResult(result)
@@ -1021,6 +1051,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         loadedBoneyard = selected
         const previousState = state
         state = enterBoneyardWorld(state, selected)
+        taintIneligibleClientRuns()
         if (activePrivateLuaRuntimes().length > 0) {
           pendingLuaEvents.push(...deriveWebLuaEvents(
             previousState,
@@ -1180,6 +1211,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const now = performance.now()
       let steps = 0
       while (now >= nextTickAt && steps < 25) {
+        taintIneligibleClientRuns()
         if (sharedWorlds) {
           const inputs: Record<PlayerId, PlayerCharacterInput> = {}
           for (const client of clients.values()) {
@@ -1247,6 +1279,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
                 for (const runtime of scope.runtimes) runtime.dispatch(event.name, event.payload)
               }
             }
+            publishLeaderboardReceipts(before.state, run.state)
             if (enteredGameOver) publishSharedSaveClear(run.partyId)
             if (enteredGameOver || completedGameOver || previousBarrierId !== barrierId) {
               stopPartyInputs(run.partyId)
@@ -1282,6 +1315,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (applied.nextRunSeed !== null) nextLuaRunSeed = applied.nextRunSeed
         }
         state = stepGameSimulationTick(state, inputs, { enemySpawnIntents })
+        publishLeaderboardReceipts(stateBeforeLua, state)
         if (runtimes.length > 0) {
           const events = [
             ...pendingLuaEvents.splice(0),
@@ -1321,6 +1355,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           && state.tick % GAME_SAVE_CHECKPOINT_TICKS === 0
         ) publishSaveCheckpoint('periodic')
       }
+      pruneLeaderboardRunState()
       if (steps === 25 && now >= nextTickAt) {
         if (now - lastTickLagWarningAt >= 10_000) {
           lastTickLagWarningAt = now
@@ -1705,6 +1740,80 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function taintActiveRun(client: HostClient): void {
+    const activeState = stateForPlayer(client.playerId)
+    if (activeState.world.kind === 'boneyard') {
+      cheatTaintedRunIds.add(activeState.world.runId)
+    }
+  }
+
+  function taintIneligibleClientRuns(): void {
+    for (const client of clients.values()) {
+      if (!client.globalScoreEligible) taintActiveRun(client)
+    }
+  }
+
+  function publishLeaderboardReceipts(
+    previous: GameSimulationState,
+    completed: GameSimulationState,
+  ): void {
+    if (
+      !options.leaderboardReceiptSecret
+      || previous.world.kind !== 'boneyard'
+      || completed.world.kind !== 'boneyard'
+      || previous.world.runId !== completed.world.runId
+      || cheatTaintedRunIds.has(completed.world.runId)
+    ) return
+    for (const client of clients.values()) {
+      const userId = client.leaderboardUserId
+      const previousRun = previous.world.hallOfFameRuns[client.playerId]
+      const completedRun = completed.world.hallOfFameRuns[client.playerId]
+      if (
+        userId === null
+        || !previousRun
+        || !completedRun
+        || previousRun.elapsedTicks !== null
+        || completedRun.elapsedTicks === null
+        || client.socket.readyState !== WebSocket.OPEN
+      ) continue
+      const receiptKey = `${completed.world.runId}\0${client.playerId}`
+      if (issuedLeaderboardReceipts.has(receiptKey)) continue
+      const entry = completedHallOfFameEntry(
+        createGameSnapshot(completed, authorityForPlayer(client.playerId)),
+        client.playerId,
+        null,
+        new Date().toISOString(),
+      )
+      if (!entry) continue
+      const receipt = createGameLeaderboardReceipt(
+        options.leaderboardReceiptSecret,
+        userId,
+        entry,
+      )
+      issuedLeaderboardReceipts.add(receiptKey)
+      client.socket.send(encodeGameMessage({
+        type: 'server-leaderboard-receipt',
+        receipt,
+      }))
+    }
+  }
+
+  function pruneLeaderboardRunState(): void {
+    const activeRunIds = new Set(sharedWorlds
+      ? sharedWorlds.runs.map(run => run.state.world.kind === 'boneyard'
+        ? run.state.world.runId
+        : null).filter((runId): runId is string => runId !== null)
+      : state.world.kind === 'boneyard' ? [state.world.runId] : [])
+    for (const runId of cheatTaintedRunIds) {
+      if (!activeRunIds.has(runId)) cheatTaintedRunIds.delete(runId)
+    }
+    for (const key of issuedLeaderboardReceipts) {
+      if (!activeRunIds.has(key.slice(0, key.indexOf('\0')))) {
+        issuedLeaderboardReceipts.delete(key)
+      }
+    }
+  }
+
   function disconnect(
     socket: WebSocket,
     code: ServerDisconnectMessage['code'],
@@ -1784,6 +1893,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         run.state,
         name => scope.runtimes.some(runtime => runtime.wantsEvent(name)),
       ))
+      taintIneligibleClientRuns()
       stopWorldClientInputs(leaderPlayerId)
       broadcastToPlayerWorld(leaderPlayerId, {
         type: 'server-boneyard-loaded',
@@ -2130,12 +2240,20 @@ function authenticate(
 ): AuthenticatedGameHostRole | null {
   if (authentication.kind === 'shared') {
     return credentialsEqual(credential, authentication.credential)
-      ? { content: null, role: 'shared' }
+      ? {
+          content: null,
+          leaderboardUserId: authentication.leaderboardUserId ?? null,
+          role: 'shared',
+        }
       : null
   }
   if (authentication.kind === 'tickets') {
     const claimed = authentication.claim(credential)
-    return claimed ? { content: claimed, role: 'shared' } : null
+    return claimed && validLeaderboardUserId(claimed.leaderboardUserId) ? {
+      content: claimed.content,
+      leaderboardUserId: claimed.leaderboardUserId,
+      role: 'shared',
+    } : null
   }
   return null
 }
@@ -2143,6 +2261,9 @@ function authenticate(
 function validateAuthentication(authentication: GameHostAuthentication): void {
   if (authentication.kind === 'shared') {
     if (!authentication.credential) throw new Error('Game host requires a shared credential')
+    if (!validLeaderboardUserId(authentication.leaderboardUserId ?? null)) {
+      throw new Error('Game host leaderboard user id is invalid')
+    }
     return
   }
   if (authentication.kind === 'tickets') {
@@ -2151,6 +2272,14 @@ function validateAuthentication(authentication: GameHostAuthentication): void {
     }
     return
   }
+}
+
+function validLeaderboardUserId(value: number | null): boolean {
+  return value === null || (
+    Number.isSafeInteger(value)
+    && value >= 1
+    && value <= 0x7fff_ffff
+  )
 }
 
 function applyQueuedInput(client: HostClient, nextTick: number): void {

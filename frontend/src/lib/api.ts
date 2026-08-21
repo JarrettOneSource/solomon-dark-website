@@ -168,11 +168,6 @@ export interface GameLeaderboardEntry {
   completedAtUtc: string
 }
 
-export type GameLeaderboardSubmission = Omit<
-  GameLeaderboardEntry,
-  'accountUsername' | 'completedAtUtc' | 'rank'
->
-
 const TOKEN_KEY = 'sdr.token'
 
 export function getToken(): string | null {
@@ -353,24 +348,9 @@ export const api = {
       board: GameLeaderboardBoard
       items: GameLeaderboardEntry[]
     }>(`/api/game/leaderboards?board=${board}`),
-    submit: (entry: GameLeaderboardSubmission) => request<GameLeaderboardEntry>(
+    submit: (receipt: string) => request<GameLeaderboardEntry>(
       '/api/game/leaderboards',
-      json({
-        awesomeness: entry.awesomeness,
-        awesomestKill: entry.awesomestKill,
-        discipline: entry.discipline,
-        elapsedTicks: entry.elapsedTicks,
-        element: entry.element,
-        headingIndex: entry.headingIndex,
-        highestSkills: entry.highestSkills,
-        level: entry.level,
-        monstersKilled: entry.monstersKilled,
-        perksUsed: entry.perksUsed,
-        portraitScale: entry.portraitScale,
-        runId: entry.runId,
-        wave: entry.wave,
-        wizardName: entry.wizardName,
-      }),
+      json({ receipt }),
     ),
   },
 }

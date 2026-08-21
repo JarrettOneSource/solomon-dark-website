@@ -33,6 +33,7 @@ export type GameEndpoint =
 export interface SessionOptions {
   allowModMismatch?: boolean
   character: PlayerCharacterConfig
+  cheatsEnabled?: boolean
   diagnostics?: GameClientDiagnostics
   endpoint: GameEndpoint
   onFatal?: (failure: GameConnectionFailure) => void
@@ -74,6 +75,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
   const session = await connectSession({
     ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
     character: options.character,
+    cheatsEnabled: options.cheatsEnabled === true,
     transport,
     credential: options.endpoint.credential,
     ...(options.diagnostics ? { diagnostics: options.diagnostics } : {}),

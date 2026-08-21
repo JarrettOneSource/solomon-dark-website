@@ -11,10 +11,13 @@ import { WebSocket, WebSocketServer } from 'ws'
 
 import { GAME_PROTOCOL_NAME } from '../protocol/game-protocol.ts'
 import { createBoneyardCatalog, type BoneyardCatalog } from './boneyard-catalog.ts'
-import { startGameHost, type GameHost } from './game-host.ts'
+import {
+  startGameHost,
+  type GameHost,
+  type GameHostAdmission,
+} from './game-host.ts'
 import {
   materializeWebSessionContent,
-  type MaterializedWebSessionContent,
 } from './web-mod-content.ts'
 import {
   monitorWebSocketHeartbeat,
@@ -98,18 +101,18 @@ export async function startGameSessionSupervisor(
   const maxSessions = positiveInteger(options.maxSessions ?? DEFAULT_MAX_SESSIONS, 'maxSessions')
   const sessions = new Map<string, SessionRecord>()
   const hubTickets = new Map<string, {
-    content: MaterializedWebSessionContent
+    admission: GameHostAdmission
     expiresAt: number
   }>()
   const downstreamSockets = new Set<WebSocket>()
   let closed = false
   let provisioning = 0
   const logDetails = (details: Readonly<Record<string, unknown>> = {}) => details
-  const claimHubTicket = (credential: string): MaterializedWebSessionContent | null => {
+  const claimHubTicket = (credential: string): GameHostAdmission | null => {
     const ticket = hubTickets.get(credential)
     if (ticket === undefined) return null
     hubTickets.delete(credential)
-    return ticket.expiresAt > performance.now() ? ticket.content : null
+    return ticket.expiresAt > performance.now() ? ticket.admission : null
   }
   const hubHost = await startGameHost({
     authentication: { kind: 'tickets', claim: claimHubTicket },
@@ -117,6 +120,7 @@ export async function startGameSessionSupervisor(
     log: options.log,
     logContext: { sessionId: 'shared-hub', sessionKind: 'hub' },
     luaWasmPath: options.luaWasmPath,
+    leaderboardReceiptSecret: options.adminSecret,
     maxPlayers: maxConnectionsPerSession,
     sharedHub: true,
     ...(options.boneyards === undefined ? {} : { boneyards: options.boneyards }),
@@ -183,15 +187,15 @@ export async function startGameSessionSupervisor(
     }
     if (request.method === 'POST' && path === '/admin/sessions') {
       void readJsonObject(request).then((body) => {
-        provisionIntoResponse(response, materializeWebSessionContent(body.content))
+        provisionIntoResponse(response, materializeGameAdmission(body))
       }).catch(() => {
-        sendJson(response, 400, { error: 'A valid web content manifest is required.' })
+        sendJson(response, 400, { error: 'A valid game admission is required.' })
       })
       return
     }
     if (request.method === 'POST' && path === '/admin/hub/tickets') {
       void readJsonObject(request).then((body) => {
-        const content = materializeWebSessionContent(body.content)
+        const admission = materializeGameAdmission(body)
         pruneHubTickets()
         if (hubHost.playerCount() + hubTickets.size >= maxConnectionsPerSession) {
           sendJson(response, 503, { error: 'The shared Hub is full.' }, { 'retry-after': '5' })
@@ -199,7 +203,7 @@ export async function startGameSessionSupervisor(
         }
         const credential = randomBytes(32).toString('base64url')
         hubTickets.set(credential, {
-          content,
+          admission,
           expiresAt: performance.now() + unclaimedTimeoutMs,
         })
         sendJson(response, 201, {
@@ -208,7 +212,7 @@ export async function startGameSessionSupervisor(
           protocol: GAME_PROTOCOL_NAME,
         })
       }).catch(() => {
-        sendJson(response, 400, { error: 'A valid web content manifest is required.' })
+        sendJson(response, 400, { error: 'A valid game admission is required.' })
       })
       return
     }
@@ -229,14 +233,14 @@ export async function startGameSessionSupervisor(
 
   function provisionIntoResponse(
     response: ServerResponse,
-    content: MaterializedWebSessionContent,
+    admission: GameHostAdmission,
   ): void {
     if (sessions.size + provisioning >= maxSessions) {
       sendJson(response, 503, { error: 'Game session capacity is exhausted.' }, { 'retry-after': '5' })
       return
     }
     provisioning += 1
-    void provisionSession(content).then((session) => {
+    void provisionSession(admission).then((session) => {
       sendJson(response, 201, {
         credential: session.hostCredential,
         path: `${GAME_SESSION_PATH_PREFIX}${session.id}`,
@@ -305,19 +309,24 @@ export async function startGameSessionSupervisor(
   })
 
   async function provisionSession(
-    content: MaterializedWebSessionContent,
+    admission: GameHostAdmission,
   ): Promise<SessionRecord> {
     if (closed) throw new Error('The game session supervisor is closed')
     const id = randomBytes(24).toString('base64url')
     const hostCredential = randomBytes(32).toString('base64url')
     const sessionHost = await startGameHost({
-      authentication: { kind: 'shared', credential: hostCredential },
+      authentication: {
+        kind: 'shared',
+        credential: hostCredential,
+        leaderboardUserId: admission.leaderboardUserId,
+      },
       heartbeatIntervalMs,
       log: options.log,
       logContext: { sessionId: id, sessionKind: 'private' },
       luaWasmPath: options.luaWasmPath,
-      content: content.manifest,
-      mods: content.modSources,
+      leaderboardReceiptSecret: options.adminSecret,
+      content: admission.content.manifest,
+      mods: admission.content.modSources,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {
         const session = sessions.get(id)
@@ -330,7 +339,7 @@ export async function startGameSessionSupervisor(
       },
       boneyards: createBoneyardCatalog([
         ...(options.boneyards?.modEntries.values() ?? []),
-        ...content.boneyards,
+        ...admission.content.boneyards,
       ]),
       ...(options.snapshotRate === undefined ? {} : { snapshotRate: options.snapshotRate }),
     })
@@ -634,6 +643,19 @@ async function readJsonObject(request: IncomingMessage): Promise<Record<string, 
     throw new Error('request body must be an object')
   }
   return value as Record<string, unknown>
+}
+
+function materializeGameAdmission(body: Record<string, unknown>): GameHostAdmission {
+  const value = body.leaderboardUserId
+  if (
+    value !== undefined
+    && value !== null
+    && (!Number.isSafeInteger(value) || Number(value) < 1 || Number(value) > 0x7fff_ffff)
+  ) throw new Error('leaderboard user id is invalid')
+  return {
+    content: materializeWebSessionContent(body.content),
+    leaderboardUserId: value === undefined || value === null ? null : Number(value),
+  }
 }
 
 function sendJson(

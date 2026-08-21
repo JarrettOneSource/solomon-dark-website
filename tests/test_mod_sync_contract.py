@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import io
@@ -60,6 +62,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             raise unittest.SkipTest("dotnet is unavailable")
 
         cls.jwt_secret = "website-mod-sync-contract-secret-at-least-thirty-two-bytes"
+        cls.leaderboard_secret = "leaderboard-contract-secret-at-least-thirty-two-bytes"
         cls.environment = os.environ.copy()
         cls.environment.update(
             {
@@ -67,6 +70,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "ASPNETCORE_URLS": cls.origin,
                 "Storage__Root": cls.temp.name,
                 "Jwt__Secret": cls.jwt_secret,
+                "GameSessions__AdminSecret": cls.leaderboard_secret,
             }
         )
         cls.build_server()
@@ -246,6 +250,26 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
             },
         )
+
+    @classmethod
+    def leaderboard_receipt(cls, user_id: int, entry: dict[str, object]) -> str:
+        payload = {
+            "version": 1,
+            "userId": user_id,
+            **entry,
+            "completedAtUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        payload_part = base64.urlsafe_b64encode(
+            json.dumps(payload, separators=(",", ":")).encode()
+        ).rstrip(b"=").decode()
+        signature = base64.urlsafe_b64encode(
+            hmac.new(
+                cls.leaderboard_secret.encode(),
+                f"solomon-dark-leaderboard-v1.{payload_part}".encode(),
+                hashlib.sha256,
+            ).digest()
+        ).rstrip(b"=").decode()
+        return f"{payload_part}.{signature}"
 
 
     @classmethod
@@ -511,7 +535,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, missing)
         self.assertIsNone(missing["save"])
 
-    def test_game_leaderboards_are_authenticated_idempotent_and_independently_ranked(self) -> None:
+    def test_game_leaderboards_require_authoritative_receipts_and_rank_independently(self) -> None:
         status, empty = self.request("GET", "/api/game/leaderboards")
         self.assertEqual(status, 200, empty)
         self.assertEqual(empty, {"board": "awesomeness", "items": []})
@@ -538,37 +562,53 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, rejected = self.request(
             "POST",
             "/api/game/leaderboards",
-            json_body=first,
+            json_body={"receipt": self.leaderboard_receipt(self.user_id, first)},
         )
         self.assertEqual(status, 401, rejected)
         status, rejected = self.request(
             "POST",
             "/api/game/leaderboards",
             headers={"Authorization": f"Bearer {self.token}"},
-            json_body={**first, "headingIndex": 24},
+            json_body={"receipt": self.leaderboard_receipt(
+                self.user_id,
+                {**first, "headingIndex": 24},
+            )},
         )
         self.assertEqual(status, 400, rejected)
         status, rejected = self.request(
             "POST",
             "/api/game/leaderboards",
             headers={"Authorization": f"Bearer {self.token}"},
-            json_body={**first, "portraitScale": 0.8},
+            json_body={"receipt": self.leaderboard_receipt(
+                self.user_id,
+                {**first, "portraitScale": 0.8},
+            )},
         )
         self.assertEqual(status, 400, rejected)
         status, rejected = self.request(
             "POST",
             "/api/game/leaderboards",
             headers={"Authorization": f"Bearer {self.token}"},
-            json_body={**first, "unexpected": "not part of a Hall record"},
+            json_body={
+                "receipt": self.leaderboard_receipt(self.user_id, first),
+                "unexpected": "not part of a Hall submission",
+            },
         )
         self.assertEqual(status, 400, rejected)
 
         auth = {"Authorization": f"Bearer {self.token}"}
-        status, created = self.request(
+        status, forged = self.request(
             "POST",
             "/api/game/leaderboards",
             headers=auth,
             json_body=first,
+        )
+        self.assertEqual(status, 400, forged)
+        status, created = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers=auth,
+            json_body={"receipt": self.leaderboard_receipt(self.user_id, first)},
         )
         self.assertEqual(status, 201, created)
         self.assertEqual(created["accountUsername"], "modsync")
@@ -579,7 +619,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "POST",
             "/api/game/leaderboards",
             headers=auth,
-            json_body={**first, "awesomeness": 999999},
+            json_body={"receipt": self.leaderboard_receipt(
+                self.user_id,
+                {**first, "awesomeness": 999999},
+            )},
         )
         self.assertEqual(status, 200, duplicate)
         self.assertEqual(duplicate["awesomeness"], 91)
@@ -599,7 +642,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "POST",
                 "/api/game/leaderboards",
                 headers=auth,
-                json_body=concurrent_entry,
+                json_body={"receipt": self.leaderboard_receipt(
+                    self.user_id,
+                    concurrent_entry,
+                )},
             )
 
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -621,6 +667,30 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 201, registered)
         peer_auth = {"Authorization": f"Bearer {registered['token']}"}
+        peer_user_id = registered["user"]["id"]
+
+        status, mismatched = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers=peer_auth,
+            json_body={"receipt": self.leaderboard_receipt(self.user_id, first)},
+        )
+        self.assertEqual(status, 400, mismatched)
+
+        valid_receipt = self.leaderboard_receipt(self.user_id, {
+            **first,
+            "runId": "leaderboard-run-tamper",
+        })
+        tampered_receipt = valid_receipt[:-1] + (
+            "A" if valid_receipt[-1] != "A" else "B"
+        )
+        status, tampered = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers=auth,
+            json_body={"receipt": tampered_receipt},
+        )
+        self.assertEqual(status, 400, tampered)
         peer_entries = [
             {
                 **first,
@@ -655,7 +725,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 "POST",
                 "/api/game/leaderboards",
                 headers=peer_auth,
-                json_body=entry,
+                json_body={"receipt": self.leaderboard_receipt(peer_user_id, entry)},
             )
             self.assertEqual(status, 201, payload)
 

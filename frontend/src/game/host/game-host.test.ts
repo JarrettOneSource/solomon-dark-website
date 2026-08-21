@@ -9,6 +9,7 @@ import {
   BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
+import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import {
   createGameSimulation,
   gameSimulationPlayerRecords,
@@ -50,6 +51,7 @@ const SECOND_CHARACTER = {
   element: 'water',
 } as const
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
+const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long-enough'
 const require = createRequire(import.meta.url)
 const luaWasmPath = require.resolve('wasmoon/dist/glue.wasm')
 
@@ -689,6 +691,7 @@ test('game host rejects arbitrary origins and invalid bootstrap credentials', as
   context.after(() => socket.close())
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'wrong-secret',
     character: FIRST_CHARACTER,
@@ -969,6 +972,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   )
   firstSocket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
     character: FIRST_CHARACTER,
@@ -981,6 +985,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
 
   const secondHost = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
   context.after(() => secondHost.close())
+  await waitFor(() => secondHost.state().tick > 0)
   const secondSocket = await openSocket(secondHost.address.url)
   context.after(() => secondSocket.close())
   const resumedMessage = nextMessage(secondSocket, (message) => (
@@ -988,6 +993,7 @@ test('host emits an owner checkpoint and revives it before a fresh welcome', asy
   ))
   secondSocket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
     character: FIRST_CHARACTER,
@@ -1036,6 +1042,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   )
   rejectedSocket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
     character: FIRST_CHARACTER,
@@ -1056,6 +1063,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
   continuedSocket.send(encodeGameMessage({
     type: 'client-hello',
     allowModMismatch: true,
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
     character: FIRST_CHARACTER,
@@ -1249,6 +1257,59 @@ test('host returns the same multiplayer session from Game Over through loadout t
   assert.equal(host.playerCount(), 2)
 })
 
+test('host signs an account-bound global score only for a fresh cheats-off run', async () => {
+  const result = await completeLeaderboardScenario()
+  assert.equal(result.receipts.length, 1)
+  const [payloadPart] = result.receipts[0]!.split('.')
+  assert.ok(payloadPart)
+  const payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'))
+  assert.equal(payload.userId, 42)
+  assert.equal(payload.runId, result.runId)
+  assert.equal(payload.wizardName, FIRST_CHARACTER.displayName)
+})
+
+test('host withholds global scores across every ineligible authority branch', async () => {
+  const save = createGameSaveDocument({
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'saved-owner',
+    state: createGameSimulation({ 'saved-owner': FIRST_CHARACTER }),
+  })
+  const scenarios: readonly [string, LeaderboardScenario][] = [
+    ['anonymous admission', { leaderboardUserId: null }],
+    ['initial cheat mode', { cheatsEnabled: true }],
+    ['unattested save resume', { save }],
+    ['live cheat mode', {
+      beforeArchive: async (socket) => {
+        socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: true }))
+        socket.send(encodeGameMessage({ type: 'client-cheat-mode', enabled: false }))
+        await new Promise(resolve => setTimeout(resolve, 20))
+      },
+    }],
+    ['accepted Lua', {
+      lua: true,
+      beforeArchive: async (socket) => {
+        const result = nextMessage(socket, message => (
+          message.type === 'server-lua-result' && message.requestId === 1
+        ))
+        socket.send(encodeGameMessage({
+          type: 'client-lua-execute',
+          code: 'return 1',
+          requestId: 1,
+        }))
+        const executed = await result
+        assert.equal(executed.type, 'server-lua-result')
+        assert.equal(executed.ok, true)
+      },
+    }],
+  ]
+  for (const [label, scenario] of scenarios) {
+    const result = await completeLeaderboardScenario(scenario)
+    assert.deepEqual(result.receipts, [], label)
+  }
+})
+
 test('host exposes and authoritatively loads a selected mod Boneyard', async (context) => {
   const mod = modBoneyardEntry()
   const host = await startGameHost({
@@ -1289,6 +1350,7 @@ test('host exposes and authoritatively loads a selected mod Boneyard', async (co
   const lateLoaded = nextMessage(lateSocket, (message) => message.type === 'server-boneyard-loaded')
   lateSocket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: 'test-secret',
     character: FIRST_CHARACTER,
@@ -1451,6 +1513,7 @@ async function join(
   const socket = await openSocket(url, undefined, autoPong)
   socket.send(encodeGameMessage({
     type: 'client-hello',
+    cheatsEnabled: false,
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential,
     character,
@@ -1458,6 +1521,82 @@ async function join(
   const welcome = await nextMessage(socket, (message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')
   return { socket, welcome }
+}
+
+interface LeaderboardScenario {
+  beforeArchive?: (socket: WebSocket) => Promise<void>
+  cheatsEnabled?: boolean
+  leaderboardUserId?: number | null
+  lua?: boolean
+  save?: string
+}
+
+async function completeLeaderboardScenario(
+  scenario: LeaderboardScenario = {},
+): Promise<{ receipts: string[]; runId: string }> {
+  const host = await startGameHost({
+    authentication: {
+      kind: 'shared',
+      credential: 'test-secret',
+      leaderboardUserId: scenario.leaderboardUserId === undefined
+        ? 42
+        : scenario.leaderboardUserId,
+    },
+    leaderboardReceiptSecret: LEADERBOARD_RECEIPT_SECRET,
+    ...(scenario.lua ? { luaWasmPath } : {}),
+    snapshotRate: 100,
+  })
+  const socket = await openSocket(host.address.url)
+  try {
+    const receipts: string[] = []
+    socket.on('message', (data) => {
+      const message = JSON.parse(data.toString()) as Record<string, unknown>
+      if (message.type === 'server-leaderboard-receipt'
+        && typeof message.receipt === 'string') receipts.push(message.receipt)
+    })
+    const welcomeMessage = nextMessage(socket, message => message.type === 'server-welcome')
+    socket.send(encodeGameMessage({
+      type: 'client-hello',
+      cheatsEnabled: scenario.cheatsEnabled === true,
+      protocolVersion: GAME_PROTOCOL_VERSION,
+      credential: 'test-secret',
+      character: FIRST_CHARACTER,
+      ...(scenario.save === undefined ? {} : { save: scenario.save }),
+    }))
+    const welcome = await welcomeMessage
+    assert.equal(welcome.type, 'server-welcome')
+    const loaded = nextMessage(socket, message => message.type === 'server-boneyard-loaded')
+    socket.send(encodeGameMessage({
+      type: 'client-start-match',
+      boneyardId: 'default-random',
+    }))
+    await loaded
+    await scenario.beforeArchive?.(socket)
+    const archived = nextMessage(socket, message => (
+      message.type === 'server-snapshot'
+      && message.snapshot.world.kind === 'boneyard'
+      && message.snapshot.world.hallOfFameRuns[welcome.playerId]?.elapsedTicks !== null
+    ))
+    forceHallArchive(host)
+    await archived
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const runId = host.state().run.runId
+    if (runId === null) throw new Error('expected completed run id')
+    return { receipts, runId }
+  } finally {
+    await closeSocket(socket)
+    await host.close()
+  }
+}
+
+function forceHallArchive(host: Awaited<ReturnType<typeof startGameHost>>): void {
+  if (host.state().world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  Object.assign(host.state().run, {
+    gameOverEventId: 1,
+    gameOverTicks: NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick - 1,
+    nextGameOverEventId: 2,
+    phase: 'game-over',
+  })
 }
 
 function closeSocket(socket: WebSocket): Promise<void> {

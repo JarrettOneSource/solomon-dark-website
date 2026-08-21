@@ -59,6 +59,7 @@ import {
 export interface GameClientSessionOptions {
   allowModMismatch?: boolean
   character: PlayerCharacterConfig
+  cheatsEnabled?: boolean
   credential: string
   diagnostics?: GameClientDiagnostics
   now?: () => number
@@ -87,6 +88,7 @@ export interface GameClientSession {
   getSnapshot(): GameSnapshot
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
+  onLeaderboardReceipt(listener: (receipt: string) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onPartyState(listener: (state: LocalPartyState) => void): () => void
@@ -102,6 +104,7 @@ export interface GameClientSession {
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
+  setCheatsEnabled(enabled: boolean): void
   inviteToParty(playerId: string): void
   startMatch(boneyardId: string): void
 }
@@ -177,6 +180,7 @@ export function connectGameClientSession(
     const snapshotListeners = new Set<(snapshot: GameSnapshot) => void>()
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
+    const leaderboardReceiptListeners = new Set<(receipt: string) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const partyStateListeners = new Set<(state: LocalPartyState) => void>()
@@ -255,6 +259,10 @@ export function connectGameClientSession(
           sequence: message.sequence,
         }
         for (const listener of saveCheckpointListeners) listener(latestSaveCheckpoint)
+        return
+      }
+      if (message.type === 'server-leaderboard-receipt') {
+        for (const listener of leaderboardReceiptListeners) listener(message.receipt)
         return
       }
       if (message.type === 'server-gameplay-pause') {
@@ -447,6 +455,7 @@ export function connectGameClientSession(
         snapshotListeners.clear()
         boneyardListeners.clear()
         gameplayPauseListeners.clear()
+        leaderboardReceiptListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
         partyStateListeners.clear()
@@ -531,6 +540,10 @@ export function connectGameClientSession(
       onGameplayPause(listener) {
         gameplayPauseListeners.add(listener)
         return () => gameplayPauseListeners.delete(listener)
+      },
+      onLeaderboardReceipt(listener) {
+        leaderboardReceiptListeners.add(listener)
+        return () => leaderboardReceiptListeners.delete(listener)
       },
       onEnemyEvent(listener) {
         enemyEventListeners.add(listener)
@@ -640,6 +653,13 @@ export function connectGameClientSession(
           input,
           sequence,
           targetTick,
+        }))
+      },
+      setCheatsEnabled(enabled) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-cheat-mode',
+          enabled,
         }))
       },
       requestGameplayPause(paused) {
@@ -760,6 +780,7 @@ export function connectGameClientSession(
     options.transport.send(encodeGameMessage({
       type: 'client-hello',
       ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
+      cheatsEnabled: options.cheatsEnabled === true,
       protocolVersion: GAME_PROTOCOL_VERSION,
       credential: options.credential,
       character: options.character,

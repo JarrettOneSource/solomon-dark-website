@@ -30,14 +30,18 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/game/saves*` provides the authoritative browser cloud slot.
 - `/api/game/diagnostics` accepts an explicit, bounded browser connection
   report without a session credential.
+- `/api/game/leaderboards` publicly reads Hall boards and accepts only
+  account-bound receipts signed by the authoritative game host.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
 The rebuilt browser game has no lobby namespace, directory, or join URL.
 `POST /api/game/hub` resolves the authenticated account's active mod content
 and returns a `Cache-Control: no-store` credentialed WSS endpoint. The
-supervisor consumes that admission once, and the authoritative host creates
-party membership only after the completed character authenticates.
+supervisor consumes that admission once, retains its server-only account id,
+and the authoritative host creates party membership only after the completed
+character authenticates. The browser never supplies the account id or global
+score fields to the leaderboard write boundary.
 
 Browser diagnostics correlate the report with exactly one of three endpoint
 classes: `null` when no provisioned session is known, `shared-hub` for the

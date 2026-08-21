@@ -25,11 +25,12 @@ public sealed partial class GameSessionProvisioner
 
     public async Task<ProvisionedGameEndpoint> ProvisionAsync(
         WebSessionContent content,
+        int? leaderboardUserId,
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
         using var request = CreateAdminRequest(HttpMethod.Post, "/admin/sessions");
-        request.Content = JsonContent.Create(new { content });
+        request.Content = JsonContent.Create(new { content, leaderboardUserId });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
@@ -43,11 +44,12 @@ public sealed partial class GameSessionProvisioner
 
     public async Task<ProvisionedGameEndpoint> AdmitSharedHubAsync(
         WebSessionContent content,
+        int? leaderboardUserId,
         CancellationToken cancellationToken)
     {
         EnsurePrivateSessionsConfigured();
         using var request = CreateAdminRequest(HttpMethod.Post, "/admin/hub/tickets");
-        request.Content = JsonContent.Create(new { content });
+        request.Content = JsonContent.Create(new { content, leaderboardUserId });
         using var response = await httpClient.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

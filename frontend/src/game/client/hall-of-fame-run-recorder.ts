@@ -1,9 +1,6 @@
 import type { HallOfFameEntry } from '../core-kernels/hall-of-fame.ts'
-import type {
-  GameSnapshot,
-  NativeHallOfFameRunSnapshot,
-  ProtocolPlayerState,
-} from '../protocol/game-state.ts'
+import { completedHallOfFameEntry } from '../hall-of-fame-entry.ts'
+import type { GameSnapshot } from '../protocol/game-state.ts'
 
 export class HallOfFameRunRecorder {
   private readonly completedRunIds = new Set<string>()
@@ -22,52 +19,14 @@ export class HallOfFameRunRecorder {
       return null
     }
     if (this.completedRunIds.has(snapshot.world.runId)) return null
-    const player = snapshot.players[playerId]
-    const run = snapshot.world.hallOfFameRuns[playerId]
-    if (!player || !run || run.elapsedTicks === null
-      || run.portraitHeadingIndex === null || run.portraitScale === null) return null
-
-    this.completedRunIds.add(snapshot.world.runId)
-    return completedEntry(
-      snapshot.world.runId,
-      run,
-      player,
-      snapshot.world.waves?.waveOrdinal ?? 0,
+    const entry = completedHallOfFameEntry(
+      snapshot,
+      playerId,
       accountUsername,
       this.now().toISOString(),
     )
-  }
-}
-
-function completedEntry(
-  runId: string,
-  run: NativeHallOfFameRunSnapshot,
-  player: ProtocolPlayerState,
-  wave: number,
-  accountUsername: string | null,
-  completedAtUtc: string,
-): HallOfFameEntry {
-  const highestSkills = player.progression.learnedSkills
-    .filter(([, permanentRank]) => permanentRank > 0)
-    .map(([skillId, permanentRank]) => ({ rank: permanentRank, skillId }))
-    .sort((left, right) => right.rank - left.rank || left.skillId - right.skillId)
-    .slice(0, 3)
-  return {
-    accountUsername,
-    awesomeness: run.awesomeness,
-    awesomestKill: run.awesomestKill,
-    completedAtUtc,
-    discipline: player.config.discipline,
-    elapsedTicks: run.elapsedTicks!,
-    element: player.config.element,
-    headingIndex: run.portraitHeadingIndex!,
-    highestSkills,
-    level: player.progression.level,
-    monstersKilled: run.monstersKilled,
-    perksUsed: player.economy.ownedPerkSelectors.slice(0, 9),
-    portraitScale: run.portraitScale!,
-    runId,
-    wave,
-    wizardName: player.config.displayName,
+    if (!entry) return null
+    this.completedRunIds.add(snapshot.world.runId)
+    return entry
   }
 }
