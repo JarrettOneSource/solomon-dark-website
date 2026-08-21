@@ -938,6 +938,14 @@ carries package assets, catalog entries, content-identified inventory/ground
 items, and active effects together with the independently merged Unforge
 state.
 
+The browser must carry the current account token into the optional-auth
+`/api/game/hub` admission request. Loading `/api/mods/active` is only a UI
+preview; the admission response is what seals immutable per-player content into
+the single-use game ticket. Guests deliberately pass no token and retain an
+empty content manifest. Party launch compares those sealed content identities,
+so a signed-in request that silently becomes anonymous must fail the admission
+regression before it can strand a mixed-content party in the Hub.
+
 `sd.state` remains the only durable mod-owned value domain. Schema-three
 checkpoints snapshot it as bounded JSON and restore it only for an exact mod
 identity match; live Lua callbacks, timers, and active consumable effects are

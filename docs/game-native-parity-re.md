@@ -26983,9 +26983,19 @@ validated immutable ZIP + required capabilities
   concurrent Unforge documentation merge were closed by adding its three
   document-only initialized fields and two promoted captures to their complete
   censuses.
+- The first live account proof reopened the admission edge: both temporary
+  accounts returned the identical active manifest, while the ordinary browser
+  welcome carried zero mods and an explicitly authenticated raw admission
+  carried `0.3.0`. `admitSharedHubPlayer` was using bare `fetch`, so optional
+  authentication treated signed-in New Game as a guest and the party correctly
+  rejected the mismatch. The browser now passes `getToken()` explicitly into
+  admission; focused tests prove both the bearer header and the unchanged
+  anonymous guest branch. Functional fix
+  `6e2bd27b9173f7ffc8fb8b4791f86652da1150a6` passes the full Mac gate and
+  native-Windows typecheck, lint, and all ten changed bootstrap/Create tests.
 
-Production data migration, publication, guarded deployment, and live
-affected-account acceptance remain pending at this receipt.
+Admission-fix publication, guarded redeployment, and final live account
+acceptance remain pending at this receipt.
 ## 2026-08-21 — Website multiplayer chat, native absence, and input priority
 
 ### Reported smell and parity question
