@@ -193,7 +193,6 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly speedFactor: number
   readonly toughness: number
   readonly velocity: Vector2
-  readonly visualScaleFactor: number
 }
 
 export interface NativeWeldHailstoneRockState {
@@ -799,7 +798,6 @@ export function createNativeWeldPersistentActor(input: {
       speedFactor: input.vector[3]!,
       toughness: input.vector[4]!,
       velocity: Object.freeze({ x: 0, y: 0 }),
-      visualScaleFactor: 1,
     })
   }
   if (input.buildId === 1008) {
@@ -1133,7 +1131,6 @@ export function releaseNativeWeldPersistentActor(input: {
         x: Math.fround(piece.direction.x * 3 * piece.speedFactor),
         y: Math.fround(piece.direction.y * 3 * piece.speedFactor),
       }),
-      visualScaleFactor: piece.visualScaleFactor,
     }))),
     nextId: input.firstChildId + split.length - 1,
     rng: input.rng,
@@ -1799,7 +1796,6 @@ function nativeWeldEtherealBoulderSplit(
   direction: Vector2
   origin: Vector2
   speedFactor: number
-  visualScaleFactor: number
 }>[] {
   const direction = actor.direction
   const perpendicular = Object.freeze({ x: direction.y, y: -direction.x })
@@ -1809,7 +1805,6 @@ function nativeWeldEtherealBoulderSplit(
     across: number,
     headingOffset: number,
     speedFactor: number,
-    visualScaleFactor: number,
   ) => Object.freeze({
     direction: Object.freeze(directionFromHeading(heading + headingOffset)),
     origin: Object.freeze({
@@ -1817,28 +1812,27 @@ function nativeWeldEtherealBoulderSplit(
       y: Math.fround(actor.origin.y + direction.y * along + perpendicular.y * across),
     }),
     speedFactor: Math.fround(speedFactor),
-    visualScaleFactor: Math.fround(visualScaleFactor),
   })
   switch (actor.quantity) {
     case 1:
-      return Object.freeze([piece(0, 0, 0, actor.speedFactor, 0.75)])
+      return Object.freeze([piece(0, 0, 0, actor.speedFactor)])
     case 2:
       return Object.freeze([
-        piece(0, 30, 0, actor.speedFactor, 0.75),
-        piece(0, -30, 10, 1, 0.75),
+        piece(0, 30, 0, actor.speedFactor),
+        piece(0, -30, 10, 1),
       ])
     case 3:
       return Object.freeze([
-        piece(30, 0, 0, actor.speedFactor, 0.75),
-        piece(0, 30, -10, 0.95, 0.7125),
-        piece(0, -30, 10, 0.95, 0.7125),
+        piece(30, 0, 0, actor.speedFactor),
+        piece(0, 30, -10, 0.95),
+        piece(0, -30, 10, 0.95),
       ])
     case 4:
       return Object.freeze([
-        piece(30, 0, 0, actor.speedFactor, 0.75),
-        piece(0, 30, -10, 0.95, 0.7125),
-        piece(0, -30, 10, 0.95, 0.7125),
-        piece(-15, 0, 0, 0.9, 0.675),
+        piece(30, 0, 0, actor.speedFactor),
+        piece(0, 30, -10, 0.95),
+        piece(0, -30, 10, 0.95),
+        piece(-15, 0, 0, 0.9),
       ])
   }
   throw new RangeError(`native Ethereal Boulder quantity ${actor.quantity} is outside 1..4`)

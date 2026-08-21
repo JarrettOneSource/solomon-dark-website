@@ -3696,7 +3696,6 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     toughness: 1,
     vector: [12, 2, 1, 1, 1, 1],
     velocity: { x: 0, y: 0 },
-    visualScaleFactor: 1,
   }, {
     ...common,
     buildId: 1007,

@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   NATIVE_ELEMENT_VFX_SCALE,
   nativeElementVfxPlan,
+  nativeElementVfxPlanAtPhase,
 } from './element-vfx-native.ts'
 
 test('uses the native Create and equipped-staff scale inputs', () => {
@@ -55,6 +56,17 @@ test('Ether reuses native phases across both painter passes', () => {
   assert.equal(fixedSparks[0].rotation, fixedSparks[1].rotation)
   assert.equal(rays[0].alpha, rays[1].alpha)
   assert.equal(rays[0].rotation, rays[1].rotation)
+})
+
+test('explicit element phase preserves Ball Lightning inherited sub-tick motion', () => {
+  assert.equal(
+    nativeElementVfxPlan('ether', 12.75, 1)[0].scale,
+    nativeElementVfxPlan('ether', 12, 1)[0].scale,
+  )
+  assert.notEqual(
+    nativeElementVfxPlanAtPhase('ether', 12.75, 1)[0].scale,
+    nativeElementVfxPlanAtPhase('ether', 12, 1)[0].scale,
+  )
 })
 
 test('each stock element keeps its distinct recovered painter stack', () => {

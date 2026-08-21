@@ -5102,7 +5102,7 @@ function primarySpellWeldEtherealBoulder(
     ...commonKeys, 'assemblyScale', 'damage', 'flightTicks', 'hitTargetIds',
     'lifetimeTicksRemaining', 'maximumScale', 'orientation', 'phase',
     'pulseSequence', 'quantity', 'remainingDamage', 'scale', 'speedFactor',
-    'toughness', 'velocity', 'visualScaleFactor',
+    'toughness', 'velocity',
   ])
   if (source.phase !== 'held' && source.phase !== 'flight') {
     throw new GameProtocolError(`${field}.phase is not an Ethereal Boulder phase`)
@@ -5168,7 +5168,6 @@ function primarySpellWeldEtherealBoulder(
     speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
     toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
     velocity: vector(source.velocity, `${field}.velocity`),
-    visualScaleFactor: positiveFinite(source.visualScaleFactor, `${field}.visualScaleFactor`),
   }
 }
 

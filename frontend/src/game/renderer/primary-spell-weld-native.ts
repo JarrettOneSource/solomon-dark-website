@@ -27,6 +27,10 @@ import {
 } from '../core-kernels/native-weld-blizzard.ts'
 import type { NativeWeldMeteorMarkerState } from '../core-kernels/native-weld-meteor.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
+import {
+  nativeElementVfxPlanAtPhase,
+  type NativeElement,
+} from '../element-vfx-native.ts'
 import { earthBoulderPresentationPlan } from './earth-boulder-presentation.ts'
 import { nativeFireballPlan } from './primary-spell-fire-native.ts'
 import {
@@ -42,7 +46,8 @@ import {
 const DEG = Math.PI / 180
 
 export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
-  6, 15, 18, 31, 32, 35, 43, 44, 45, 50, 51, 70, 71, 76, 86, 110, 111, 112,
+  5, 6, 15, 16, 18, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
+  110, 111, 112,
   168, 169, 170, 171,
   ...integerRange(251, 266),
   ...integerRange(271, 282),
@@ -53,12 +58,24 @@ export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
 
 export type NativeWeldBadGuysRecord = typeof NATIVE_WELD_BADGUYS_RECORDS[number]
 
+export const NATIVE_WELD_DEADHAWG_RECORDS = Object.freeze([19] as const)
+export type NativeWeldDeadHawgRecord = typeof NATIVE_WELD_DEADHAWG_RECORDS[number]
+export type NativeWeldAtlas = 'BadGuys' | 'DeadHawg'
+export type NativeWeldRecord = NativeWeldBadGuysRecord | NativeWeldDeadHawgRecord
+
 export const NATIVE_WELD_SPRITES = Object.freeze(Object.fromEntries(
   NATIVE_WELD_BADGUYS_RECORDS.map((record) => [
     record,
     nativeEnemySpriteRegistration('BadGuys', record),
   ]),
 )) as Readonly<Record<NativeWeldBadGuysRecord, NativeEnemySpriteRegistration>>
+
+export const NATIVE_WELD_DEADHAWG_SPRITES = Object.freeze(Object.fromEntries(
+  NATIVE_WELD_DEADHAWG_RECORDS.map((record) => [
+    record,
+    nativeEnemySpriteRegistration('DeadHawg', record),
+  ]),
+)) as Readonly<Record<NativeWeldDeadHawgRecord, NativeEnemySpriteRegistration>>
 
 export type NativeWeldPresentationState =
   | NativeWeldProjectileState
@@ -86,14 +103,25 @@ export type NativeWeldPresentationState =
 
 export interface NativeWeldSpriteDraw {
   readonly alpha: number
+  readonly atlas: NativeWeldAtlas
   readonly blend: 'add' | 'normal'
+  readonly matrix: NativeWeldAffineMatrix | null
   readonly offset: Readonly<{ x: number; y: number }>
-  readonly record: NativeWeldBadGuysRecord
+  readonly record: NativeWeldRecord
   readonly role: string
   readonly rotationRadians: number
   readonly scaleX: number
   readonly scaleY: number
   readonly tint: number
+}
+
+export interface NativeWeldAffineMatrix {
+  readonly a: number
+  readonly b: number
+  readonly c: number
+  readonly d: number
+  readonly tx: number
+  readonly ty: number
 }
 
 export interface NativeWeldMeshDraw {
@@ -221,32 +249,53 @@ function projectilePlan(
   }
   if (state.buildId === 1001) {
     const alphaFactor = state.underpowered ? 0.5 : 1
+    const age = state.ageTicks
     const body = sprite(
-      (271 + Math.floor(state.ageTicks / 4) % 12) as NativeWeldBadGuysRecord,
+      (271 + Math.floor(age / 4) % 12) as NativeWeldBadGuysRecord,
       'frost-missile-body',
       {
         alpha: alphaFactor * (0.75 + visualUnit(state.id, frame, 0) * 0.25),
-        rotationRadians: state.ageTicks * DEG,
+        rotationRadians: age * DEG,
         scaleX: 1.7,
         scaleY: 1.7,
       },
     )
     const lanes = state.frostPresentationLanes!.map((lane, index) => sprite(
-      110,
+      16,
       `frost-missile-lane-${index}`,
       {
-        alpha: alphaFactor * 0.5,
+        alpha: alphaFactor,
         blend: 'add',
         rotationRadians: lane.rotationDegrees * DEG,
         scaleX: lane.scale,
         scaleY: lane.scale * lane.aspect,
-        tint: 0x80bfff,
+        tint: 0x80ffff,
       },
     ))
+    const helperAlpha = alphaFactor * (0.2 + visualUnit(state.id, frame, 1) * 0.25)
+    const helpers = [
+      sprite(5, 'frost-missile-random-helper', {
+        alpha: helperAlpha,
+        blend: 'add',
+        rotationRadians: visualUnit(state.id, frame, 2) * Math.PI * 2,
+        tint: 0x80bfff,
+      }),
+      sprite(110, 'frost-missile-pulse-helper', {
+        alpha: alphaFactor * (0.2 + visualUnit(state.id, frame, 3) * 0.25),
+        blend: 'add',
+        scaleX: Math.abs(Math.sin(age * 15 * DEG)) * 2,
+        scaleY: Math.abs(Math.sin(age * 15 * DEG)) * 2,
+        tint: 0xff80ff,
+      }),
+    ]
+    const overlays = state.vector[5]! > 0
+      ? frostMissileLearnedOverlays(age, state.frostTurnDegrees ?? 0, alphaFactor)
+      : []
     return positioned(state.position, [
       body,
-      ...frostCore(state.id, frame, 1, alphaFactor, 'frost-missile'),
+      ...helpers,
       ...lanes,
+      ...overlays,
     ], { regionLightPoint: state.position })
   }
   if (state.buildId === 1002) {
@@ -262,7 +311,13 @@ function projectilePlan(
       offset: { x: 0, y: -10 },
       scaleX: 1.25 + visualUnit(state.id, frame, 0x71) * 0.1,
       scaleY: 1.25 + visualUnit(state.id, frame, 0x71) * 0.1,
-    })], { regionLightPoint: state.position })
+    }), ...elementVfxSprites(
+      'ether',
+      state.basePresentationPhaseDegrees ?? 0,
+      1 + visualUnit(state.id, frame, 0x535a30) * 0.5,
+      0.1,
+      'ball-lightning-ether',
+    )], { regionLightPoint: state.position })
   }
   // GroundSpark owns no immediate draw. Its tick-created fades are separate actors.
   return positioned(state.position, [], { regionLightPoint: state.position })
@@ -361,8 +416,8 @@ function flameLashMeshes(
 
 function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWeldVisualPlan {
   if (state.buildId === 1001) {
-    return positioned(state.position, frostCore(
-      state.id,
+    return positioned(state.position, elementVfxSprites(
+      'water',
       frame,
       state.presentationScale,
       state.alpha,
@@ -376,11 +431,8 @@ function impactPlan(state: NativeWeldImpactActorState, frame: number): NativeWel
       state.presentationScale,
       state.alpha,
       state.buildId === 1002 ? 'ball-lightning-impact' : 'ground-spark-impact',
-    ).map((draw) => ({
-      ...draw,
-      rotationRadians: draw.rotationRadians
-        + (state.presentationRotationDegrees ?? 0) * DEG,
-    }))
+      ((state.presentationRotationDegrees ?? 0) + state.ageTicks) * DEG,
+    )
     return positioned(state.position, draws)
   }
   return empty(state.position)
@@ -403,6 +455,10 @@ function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWel
       x: 0,
       y: Math.fround(-768 * state.fallHeight),
     }
+    const bodyScaleX = visualUnit(state.id, frame, 0x5e16c0) < 0.5
+      ? -state.bodyScale
+      : state.bodyScale
+    const groundAlpha = Math.max(0, 1 - state.fallHeight) * 0.5
     return positioned(state.position, [
       sprite(15, 'meteor-fall-corona', {
         alpha: 1,
@@ -415,13 +471,19 @@ function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWel
       sprite(50, 'meteor-fall-body', {
         offset: fallOffset,
         rotationRadians: (state.fallHeadingDegrees * 0.5 + 180) * DEG,
-        scaleX: Math.sqrt(Math.max(0, state.bodyScale)),
+        scaleX: bodyScaleX,
         scaleY: Math.max(0, state.bodyScale * 2),
       }),
-    ], { sortBias: fallOffset.y })
+      ...(groundAlpha > 0 ? [sprite(19, 'meteor-final-descent-ground', {
+        alpha: groundAlpha,
+        atlas: 'DeadHawg',
+        scaleX: 2,
+        scaleY: 1.6,
+      })] : []),
+    ])
   }
   const impactAlpha = Math.min(1, state.impactTicksRemaining / 100)
-  return positioned(state.position, [sprite(50, 'meteor-impact-body', {
+  return positioned(state.position, [sprite(67, 'meteor-impact-body', {
     alpha: impactAlpha,
     blend: 'add',
     rotationRadians: state.impactRotationDegrees * DEG,
@@ -450,10 +512,11 @@ function debrisPlan(state: NativeWeldBoulderDebrisActorState): NativeWeldVisualP
   const sprites: NativeWeldSpriteDraw[] = []
   if (debris.enhancedShadow && debris.height !== 0) {
     sprites.push(sprite(debris.record, `${role}-shadow-${debris.index}`, {
-      alpha: Math.min(1, debris.alpha) * 0.5,
+      alpha: Math.min(1, debris.alpha),
       offset: { x: 0, y: 2 },
-      scaleX: debris.scale * 0.5,
-      scaleY: debris.scale * 0.5,
+      rotationRadians: debris.rotationDegrees * DEG,
+      scaleX: debris.scale,
+      scaleY: debris.scale * 0.75,
       tint: 0x000000,
     }))
   }
@@ -481,29 +544,98 @@ function etherealBoulderPlan(
     orientation: state.orientation,
     phase: state.phase,
   }, frame)
+  const centers = state.phase === 'held'
+    ? etherealBoulderHeldCenters(state)
+    : [{ x: 0, y: 0 }]
+  const bodyTint = packRgb(plan.bodyAlpha, plan.bodyAlpha * 0.75, 1)
+  const body = centers.flatMap((center, centerIndex) => plan.rocks.flatMap((rock) => {
+    const offset = {
+      x: plan.visualOffset.x + center.x + rock.position.x,
+      y: plan.visualOffset.y + center.y + rock.position.y,
+    }
+    if (rock.shellIndex === null) {
+      return elementVfxSprites(
+        'ether',
+        frame,
+        (1 + visualUnit(state.id, frame, 0x60c540 + centerIndex) * 0.1) * 2 * state.scale,
+        1,
+        `ethereal-boulder-center-${centerIndex}`,
+      ).map((draw) => Object.freeze({
+        ...draw,
+        offset: Object.freeze({
+          x: draw.offset.x + offset.x,
+          y: draw.offset.y + offset.y,
+        }),
+      }))
+    }
+    const scale = Math.max(0.25, rock.storedScale * 0.75)
+    return [sprite(rock.record, `ethereal-boulder-rock-${centerIndex}`, {
+      offset,
+      rotationRadians: rock.rotation,
+      scaleX: scale,
+      scaleY: scale,
+      tint: bodyTint,
+    })]
+  }))
+  const auxiliary = boulderAuxiliarySprite(
+    state.id,
+    frame,
+    state.scale,
+    state.phase,
+    'ethereal-boulder',
+  )
   return positioned(state.origin, [
+    sprite(15, 'ethereal-boulder-aura', {
+      alpha: plan.aura.alpha,
+      offset: plan.visualOffset,
+      scaleX: plan.aura.scale,
+      scaleY: plan.aura.scale,
+      tint: packRgb(1, 0.9, 1),
+    }),
     sprite(86, 'ethereal-boulder-opening', {
       alpha: plan.openingFlash.alpha,
       blend: 'add',
       offset: plan.visualOffset,
       rotationRadians: plan.openingFlash.rotation,
-      scaleX: plan.openingFlash.scale * state.visualScaleFactor,
-      scaleY: plan.openingFlash.scale * state.visualScaleFactor,
+      scaleX: plan.openingFlash.scale,
+      scaleY: plan.openingFlash.scale,
     }),
-    ...plan.rocks.map((rock) => sprite(rock.record, 'ethereal-boulder-rock', {
-      alpha: plan.bodyAlpha,
-      offset: {
-        x: (plan.visualOffset.x + rock.position.x) * state.visualScaleFactor,
-        y: (plan.visualOffset.y + rock.position.y) * state.visualScaleFactor,
-      },
-      rotationRadians: rock.rotation,
-      scaleX: rock.scale * state.visualScaleFactor,
-      scaleY: rock.scale * state.visualScaleFactor,
-    })),
+    ...body,
+    auxiliary,
   ], {
     regionLightPoint: state.origin,
-    sortBias: plan.sortBias * state.visualScaleFactor,
+    sortBias: plan.sortBias,
   })
+}
+
+function etherealBoulderHeldCenters(
+  state: NativeWeldEtherealBoulderState,
+): readonly Readonly<{ x: number; y: number }>[] {
+  const direction = state.direction
+  const perpendicular = { x: direction.y, y: -direction.x }
+  const centers = state.quantity === 1
+    ? [{ x: 0, y: 0 }]
+    : state.quantity === 2
+      ? [
+          { x: perpendicular.x * 30, y: perpendicular.y * 30 },
+          { x: perpendicular.x * -30, y: perpendicular.y * -30 },
+        ]
+      : state.quantity === 3
+        ? [
+            { x: direction.x * 30, y: direction.y * 30 },
+            { x: perpendicular.x * 30, y: perpendicular.y * 30 },
+            { x: perpendicular.x * -30, y: perpendicular.y * -30 },
+          ]
+        : [
+            { x: direction.x * 30, y: direction.y * 30 },
+            { x: perpendicular.x * 30, y: perpendicular.y * 30 },
+            { x: perpendicular.x * -30, y: perpendicular.y * -30 },
+            { x: direction.x * -15, y: direction.y * -15 },
+          ]
+  return Object.freeze(centers
+    .map((center, sourceOrder) => ({ ...center, sourceOrder }))
+    .sort((left, right) => left.y - right.y || left.sourceOrder - right.sourceOrder)
+    .map(({ x, y }) => Object.freeze({ x: Math.fround(x), y: Math.fround(y) })))
 }
 
 function hailstonesPlan(
@@ -511,13 +643,19 @@ function hailstonesPlan(
   frame: number,
 ): NativeWeldVisualPlan {
   const sprites: NativeWeldSpriteDraw[] = []
+  const openingMix = Math.max(0, 1 - state.ageTicks * 0.03500000014901161)
   if (state.phase === 'held') {
-    sprites.push(...frostCore(
-      state.id,
+    sprites.push(sprite(15, 'hailstones-held-core', {
+      alpha: 0.35 + visualUnit(state.id, frame, 0x611160) * 0.25,
+      scaleX: state.scale * 4.099999904632568,
+      scaleY: state.scale * 4.099999904632568,
+      tint: packRgb(1, 1, 0.9),
+    }), ...elementVfxSprites(
+      'water',
       frame,
-      state.scale * 4.099999904632568,
+      1.75,
       1,
-      'hailstones-held-core',
+      'hailstones-held-water',
     ))
   }
   for (const [index, rock] of state.rocks.entries()) {
@@ -536,18 +674,51 @@ function hailstonesPlan(
     const scale = Math.max(0.45, rock.visualScale)
       * (state.phase === 'held' ? 0.85 : 0.75)
     sprites.push(sprite(rock.spriteRecord, `hailstones-rock-${index}`, {
-      alpha: rock.phase * (state.phase === 'held' ? 0.8 : 1),
       offset,
       scaleX: scale,
       scaleY: scale,
+      tint: state.phase === 'held'
+        ? packRgb(1 - openingMix, 1 - openingMix, 1 - openingMix)
+        : 0xffffff,
+    }), sprite(32, `hailstones-rock-overlay-${index}`, {
+      alpha: rock.phase * (state.phase === 'held' ? 0.8 : 1),
+      offset,
+      rotationRadians: Math.atan2(state.direction.y, state.direction.x),
     }))
   }
+  sprites.push(boulderAuxiliarySprite(
+    state.id,
+    frame,
+    state.scale,
+    state.phase,
+    'hailstones',
+  ))
   return positioned(state.origin, sprites, {
     regionLightPoint: state.origin,
     sortBias: state.rocks.reduce((highest, rock) => (
       Math.max(highest, rock.localPosition.z)
     ), 0),
   })
+}
+
+function boulderAuxiliarySprite(
+  id: number,
+  frame: number,
+  scale: number,
+  phase: 'flight' | 'held',
+  role: string,
+): NativeWeldSpriteDraw {
+  return phase === 'held'
+    ? sprite(15, `${role}-held-auxiliary`, {
+        alpha: 0.25 + visualUnit(id, frame, 0x5e5530) * 0.5,
+        scaleX: scale * 2.5,
+        scaleY: scale * 2.5,
+        tint: packRgb(0.85, 1, 0.85),
+      })
+    : sprite(67, `${role}-flight-auxiliary`, {
+        scaleX: scale * 2.5,
+        scaleY: scale * 2.5,
+      })
 }
 
 function hailTerrainParticlePlan(
@@ -569,10 +740,11 @@ function hailTerrainBouncerPlan(
   const sprites: NativeWeldSpriteDraw[] = []
   if (state.enhancedShadow && state.height !== 0) {
     sprites.push(sprite(32, 'hailstones-terrain-bouncer-shadow', {
-      alpha: Math.min(1, state.alpha) * 0.5,
+      alpha: Math.min(1, state.alpha),
       offset: { x: 0, y: 2 },
-      scaleX: state.scale * 0.5,
-      scaleY: state.scale * 0.5,
+      rotationRadians: state.rotationDegrees * DEG,
+      scaleX: state.scale,
+      scaleY: state.scale * 0.75,
       tint: 0x000000,
     }))
   }
@@ -633,8 +805,8 @@ function frostFadePlan(
   state: NativeWeldFrostFadeActorState,
   frame: number,
 ): NativeWeldVisualPlan {
-  return positioned(state.position, frostCore(
-    state.id,
+  return positioned(state.position, elementVfxSprites(
+    'water',
     frame,
     state.scale,
     Math.max(0, 1 - state.ageTicks * 0.05),
@@ -686,33 +858,104 @@ function steamPlan(state: NativeWeldSteamActorState): NativeWeldVisualPlan {
     : [draw])
 }
 
-function frostCore(
-  id: number,
-  frame: number,
+function elementVfxSprites(
+  element: Extract<NativeElement, 'ether' | 'water'>,
+  phase: number,
   scale: number,
   alpha: number,
   role: string,
 ): NativeWeldSpriteDraw[] {
-  const phase = frame * DEG
-  const pulse = (3.5 + Math.abs(Math.sin(phase)) * 0.15) * scale
+  return nativeElementVfxPlanAtPhase(element, phase, scale).map((draw, index) => {
+    let record: NativeWeldBadGuysRecord
+    switch (draw.sprite) {
+      case 'core': record = 110; break
+      case 'ray': record = 112; break
+      case 'spark': record = 111; break
+      case 'water': record = (271 + draw.frame) as NativeWeldBadGuysRecord; break
+      default: throw new Error(`Unexpected ${element} Weld compositor sprite ${draw.sprite}`)
+    }
+    return sprite(record, `${role}-${draw.sprite}-${index}`, {
+      alpha: alpha * draw.alpha,
+      blend: draw.blend === 'lighter' ? 'add' : 'normal',
+      offset: { x: draw.x, y: draw.y },
+      rotationRadians: draw.rotation * DEG,
+      scaleX: draw.scale,
+      scaleY: draw.scale,
+      tint: packRgb(draw.color[0], draw.color[1], draw.color[2]),
+    })
+  })
+}
+
+function frostMissileLearnedOverlays(
+  ageTicks: number,
+  turnDegrees: number,
+  alphaFactor: number,
+): NativeWeldSpriteDraw[] {
+  const tint = 0xbfffff
+  const first = composeAffine(
+    translationAffine(Math.abs(Math.sin(ageTicks * DEG)) * 3, 0),
+    rotationAffine(turnDegrees),
+    scaleAffine(1.4, 1.12),
+    rotationAffine(ageTicks * 8),
+  )
+  const second = composeAffine(
+    rotationAffine(turnDegrees),
+    scaleAffine(1.75, 1.4),
+    rotationAffine(ageTicks * -12),
+  )
   return [
-    sprite(110, `${role}-core`, {
-      alpha: alpha * (0.2 + visualUnit(id, frame, 1) * 0.25),
-      blend: 'add', scaleX: pulse, scaleY: pulse, tint: 0x80bfff,
+    sprite(87, 'frost-missile-learned-overlay-a', {
+      alpha: alphaFactor * 0.15,
+      blend: 'add',
+      matrix: first,
+      tint,
     }),
-    sprite(112, `${role}-ray-a`, {
-      alpha: alpha * Math.abs(Math.sin(phase * 11)) * 0.55,
-      blend: 'add', rotationRadians: phase * 50,
-      scaleX: scale * (1 + visualUnit(id, frame, 2) * 0.3),
-      scaleY: scale * (1 + visualUnit(id, frame, 2) * 0.3),
-    }),
-    sprite(112, `${role}-ray-b`, {
-      alpha: alpha * Math.abs(Math.cos(phase * 11)) * 0.55,
-      blend: 'add', rotationRadians: -phase * 50,
-      scaleX: scale * (1 + visualUnit(id, frame, 3) * 0.3),
-      scaleY: scale * (1 + visualUnit(id, frame, 3) * 0.3),
+    sprite(87, 'frost-missile-learned-overlay-b', {
+      alpha: alphaFactor * 0.15,
+      blend: 'add',
+      matrix: second,
+      tint,
     }),
   ]
+}
+
+function composeAffine(
+  ...matrices: readonly NativeWeldAffineMatrix[]
+): NativeWeldAffineMatrix {
+  return Object.freeze(matrices.reduce(multiplyAffine, identityAffine()))
+}
+
+function multiplyAffine(
+  left: NativeWeldAffineMatrix,
+  right: NativeWeldAffineMatrix,
+): NativeWeldAffineMatrix {
+  return {
+    a: left.a * right.a + left.c * right.b,
+    b: left.b * right.a + left.d * right.b,
+    c: left.a * right.c + left.c * right.d,
+    d: left.b * right.c + left.d * right.d,
+    tx: left.a * right.tx + left.c * right.ty + left.tx,
+    ty: left.b * right.tx + left.d * right.ty + left.ty,
+  }
+}
+
+function identityAffine(): NativeWeldAffineMatrix {
+  return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }
+}
+
+function rotationAffine(degrees: number): NativeWeldAffineMatrix {
+  const radians = degrees * DEG
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  return { a: cosine, b: sine, c: -sine, d: cosine, tx: 0, ty: 0 }
+}
+
+function scaleAffine(x: number, y: number): NativeWeldAffineMatrix {
+  return { a: x, b: 0, c: 0, d: y, tx: 0, ty: 0 }
+}
+
+function translationAffine(x: number, y: number): NativeWeldAffineMatrix {
+  return { a: 1, b: 0, c: 0, d: 1, tx: x, ty: y }
 }
 
 function lightningCore(
@@ -721,10 +964,11 @@ function lightningCore(
   scale: number,
   alpha: number,
   role: string,
+  angleRadians = frame * DEG,
 ): NativeWeldSpriteDraw[] {
   const corona = buildNativeAirCoronaPlan({
     alpha,
-    angle: frame * DEG,
+    angle: angleRadians,
     center: { x: 0, y: 0 },
     randomSalt: 0x536380 ^ frame,
     scale,
@@ -750,13 +994,15 @@ function lightningCore(
 }
 
 function sprite(
-  record: NativeWeldBadGuysRecord,
+  record: NativeWeldRecord,
   role: string,
   values: Partial<Omit<NativeWeldSpriteDraw, 'record' | 'role'>> = {},
 ): NativeWeldSpriteDraw {
   return Object.freeze({
     alpha: values.alpha ?? 1,
+    atlas: values.atlas ?? 'BadGuys',
     blend: values.blend ?? 'normal',
+    matrix: values.matrix ?? null,
     offset: Object.freeze(values.offset ?? { x: 0, y: 0 }),
     record,
     role,

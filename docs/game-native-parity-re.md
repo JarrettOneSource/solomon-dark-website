@@ -25343,3 +25343,70 @@ renderer coverage passes 140 tests; lint and architecture boundaries are
 clean. The remaining pixel-level adjacency is the native Bouncer shadow
 primitive, Meteor's ground primitive, Frost's helper/turn primitives, and
 Ball's conditional turn overlay before the ten-skill browser comparison.
+
+### 2026-08-21 v44 direct-painter correction
+
+The v43 residual names above are historical shorthand. Raw call-site operands,
+atlas singleton offsets, and shared animation vtables resolve each path to
+authored atlas draws rather than unknown primitives:
+
+- Ball `0x005E0670` always owns three stacks in the welded case. Its Air corona
+  uses global render phase and `.75+Float(.5)` scale; direct BadGuys 70 uses
+  local Y `-10`, `1.25+Float(.1)` scale, and `Float(1)` alpha. Constructor byte
+  `+0x168` stays zero because handler `0x0053EDB0` never writes it, so the final
+  `0x00535A30` call always adds the complete two-pass Ether compositor. That
+  stack uses inherited mutable phase `+0x154`, `1+Float(.5)` scale, and a `.1`
+  graphics-alpha multiplier; it includes BadGuys 110, 111, and 112 cores,
+  sparks, `2..11` particles per pass, and rays. It is not a turn-only overlay.
+- Frost `0x006093B0` owns body records 271..282, additive BadGuys 5 and 110
+  helpers, two dynamic BadGuys-16 lanes, and—when handler field `+0x16C` is
+  positive—two BadGuys-87 affine draws. The lanes use tint `(.5,1,1)` and
+  alpha one; the helper colors and exact affine matrices are recorded in the
+  Mod Loader ledger. Weak graphics modulation covers the whole stack and the
+  weak handler clears `+0x16C`. `Anim_FadeFrost 0x00457230` delegates to the
+  full Water compositor, while `Anim_FadeLightning 0x004572C0` delegates to the
+  full Air compositor with its retained/incrementing phase.
+- Meteor main draw `0x005E16C0` uses BadGuys 15 plus BadGuys 50 with
+  per-render signed X scale `+/-bodyScale`, not `sqrt(bodyScale)`. Auxiliary
+  vslot `+0x28`, `0x005E6DE0`, draws normal DeadHawg 19 at the ground root
+  during final descent (`scale 2/1.6`, alpha
+  `max(0,1-fallHeight)*.5`), then additive BadGuys 67 during impact
+  (`scale radius/.8*radius`, alpha `min(remaining,100)/100`). BadGuys 50 is not
+  the impact disc.
+- `Anim_BoulderBit 0x00457E40` passes its own atlas descriptor to shadow helper
+  `0x00415020`. The enhanced airborne shadow is therefore the same fragment
+  sprite, black, full `min(1,alpha)`, at local Y `+2`, with the same rotation
+  and scale `(scale,scale*.75)`. Its colored copy remains at dynamic height
+  with uniform scale. The ordinary BadGuys-32 Hail bouncer inherits the same
+  geometry and retains normal blend.
+- Held Hail draw `0x00611160` uses neither the Frost-Missile helper nor a
+  generic glow. Its held-only preamble is ordinary BadGuys 15 at tint
+  `(1,1,.9)`, alpha `.35+Float(.25)`, and scale
+  `heldScale*4.099999904632568`, followed by the complete Water compositor at
+  fixed scale `1.75` and global render phase. Released Hail skips both owners
+  before painting its independently sorted rocks. Its inherited auxiliary
+  vslot `0x005E5530` still paints held BadGuys 15 at actor XY, tint
+  `(.85,1,.85)`, signed alpha `.5+Float(.25)`, scale `heldScale*2.5`, or
+  flight BadGuys 67 at `flightScale*2.5`.
+  Every retained rock is also a two-draw owner: opaque record 168..170 at
+  `max(.45,storedScale)*.85` held or `*.75` flight, followed by a distinct
+  white BadGuys-32 copy at the same projected XY, heading rotation, unit scale,
+  and alpha `rockPhase*.8` held or `rockPhase` flight. Phase never substitutes
+  for the rock body's alpha.
+- EBoulder draw `0x0060C540` is not the ordinary Earth body with a different
+  payload. Its main aura is BadGuys 15 at tint `(1,.9,1)` and scale
+  `charge*4.099999904632568`; its body color after the opening mix is
+  `(1-mix,.75*(1-mix),1,1)`. Every transformed zero-XY center becomes a full
+  Ether compositor at `(1+Float(.1))*2*charge` scale, while shell records
+  168..170 use `max(.25,storedScale*.75)`. Held quantity repeats that complete
+  center/shell body over the native one-to-four offset template; flight uses
+  one body. Auxiliary vslot `0x005E5530` separately draws held BadGuys 15 at
+  actor XY, tint `(.85,1,.85)`, signed alpha `.5+Float(.25)`, scale
+  `charge*2.5`, or flight BadGuys 67 at the same scale. Release does not apply
+  the previously inferred visual shrink; its `.75/.95/.9` writes affect
+  angular/gameplay fields.
+
+These corrections expand the Weld preload census to BadGuys 5, 16, 67, and 87
+plus DeadHawg 19. They also require affine sprite transforms for the two Frost
+87 draws and exact reuse of the already recovered element-compositor plans.
+Implementation and browser receipts follow this ledger update.

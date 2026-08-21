@@ -36,6 +36,8 @@ import { createPrimarySpellWeldImpact } from '../core-kernels/primary-spells.ts'
 import { buildNativeAirRibbonLayer } from './primary-spell-air-native.ts'
 import {
   NATIVE_WELD_BADGUYS_RECORDS,
+  NATIVE_WELD_DEADHAWG_RECORDS,
+  NATIVE_WELD_DEADHAWG_SPRITES,
   NATIVE_WELD_SPRITES,
   isNativeWeldPresentationState,
   nativeWeldVisualPlan,
@@ -47,12 +49,14 @@ const WORLD_KEY = 'boneyard:weld-render'
 
 test('Weld atlas membership covers every recovered direct owner', () => {
   for (const record of [
-    6, 15, 18, 31, 32, 35, 43, 44, 45, 50, 51, 70, 71, 76, 86,
+    5, 6, 15, 16, 18, 31, 32, 35, 43, 44, 45, 50, 51, 67, 70, 71, 76, 86, 87,
     110, 111, 112, 168, 169, 170, 171, 251, 266, 271, 282,
     1836, 1839, 2008, 2010,
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
   assert.equal(NATIVE_WELD_SPRITES[44].atlas, 'BadGuys')
   assert.equal(NATIVE_WELD_SPRITES[76].entry, 76)
+  assert.deepEqual(NATIVE_WELD_DEADHAWG_RECORDS, [19])
+  assert.equal(NATIVE_WELD_DEADHAWG_SPRITES[19].atlas, 'DeadHawg')
 })
 
 test('one-shot Weld plans preserve native body, compositor, and child ownership', () => {
@@ -75,6 +79,10 @@ test('one-shot Weld plans preserve native body, compositor, and child ownership'
     offset: draw.offset,
     record: draw.record,
   })), [{ offset: { x: 0, y: -10 }, record: 70 }])
+  const ether = ball.sprites.filter(({ role }) => role.startsWith('ball-lightning-ether-'))
+  assert.ok(ether.length >= 12)
+  assert.ok(ether.some(({ record }) => record === 111))
+  assert.ok(ether.some(({ record }) => record === 112))
 
   const spark = projectile(1009)
   assert.deepEqual(nativeWeldVisualPlan(spark).sprites, [])
@@ -92,6 +100,36 @@ test('one-shot Weld plans preserve native body, compositor, and child ownership'
     worldKey: spark.worldKey,
   })
   assert.equal(nativeWeldVisualPlan(fade).sprites[0]!.record, 71)
+})
+
+test('Frost Missile uses its concrete helper, lane, and affine learned-overlay records', () => {
+  const frost = {
+    ...projectile(1001),
+    frostTurnDegrees: 0,
+    vector: [8, 8, 2, 1, 1, 1, 1],
+  }
+  const plan = nativeWeldVisualPlan(frost)
+  assert.deepEqual(plan.sprites.map(({ record }) => record), [271, 5, 110, 16, 16, 87, 87])
+  assert.ok(plan.sprites.slice(1).every(({ blend }) => blend === 'add'))
+  assert.deepEqual(plan.sprites.filter(({ record }) => record === 16).map(({ alpha, tint }) => ({
+    alpha,
+    tint,
+  })), [
+    { alpha: 1, tint: 0x80ffff },
+    { alpha: 1, tint: 0x80ffff },
+  ])
+  assert.deepEqual(plan.sprites.filter(({ record }) => record === 87).map(({ matrix }) => matrix), [
+    { a: 1.4, b: 0, c: 0, d: 1.12, tx: 0, ty: 0 },
+    { a: 1.75, b: 0, c: 0, d: 1.4, tx: 0, ty: 0 },
+  ])
+
+  const weak = nativeWeldVisualPlan({
+    ...frost,
+    underpowered: true,
+    vector: [4, 4, 2, 1, 0.8, 0, 0],
+  })
+  assert.equal(weak.sprites.some(({ record }) => record === 87), false)
+  assert.ok(weak.sprites.filter(({ record }) => record === 16).every(({ alpha }) => alpha === 0.5))
 })
 
 test('channel and Steam plans use their concrete native classes', () => {
@@ -197,7 +235,26 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
     kind === 'weld-hail-terrain-bouncer'
   ))!
   assert.equal(nativeWeldVisualPlan(terrainParticle).sprites[0]!.record, 45)
-  assert.ok(nativeWeldVisualPlan(terrainBouncer).sprites.some(({ record }) => record === 32))
+  const bouncerSprites = nativeWeldVisualPlan(terrainBouncer).sprites
+  assert.deepEqual(bouncerSprites.slice(0, 2).map(({ alpha, record, scaleX, scaleY }) => ({
+    alpha,
+    record,
+    scaleX,
+    scaleY,
+  })), [
+    {
+      alpha: Math.min(1, terrainBouncer.alpha),
+      record: 32,
+      scaleX: terrainBouncer.scale,
+      scaleY: terrainBouncer.scale * 0.75,
+    },
+    {
+      alpha: Math.min(1, terrainBouncer.alpha),
+      record: 32,
+      scaleX: terrainBouncer.scale,
+      scaleY: terrainBouncer.scale,
+    },
+  ])
   const contact = createNativeWeldHailContactPresentation({
     actor: released.actors.find((actor) => (
       actor.kind === 'weld-persistent' && actor.buildId === 1008
@@ -227,7 +284,82 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
     origin: { x: 0, y: 0 }, ownerId: 'wizard', tick: 1,
     vector: [8, 2, 1, 1, 1, 1], worldKey: WORLD_KEY,
   })
-  assert.ok(nativeWeldVisualPlan(debris).sprites.some(({ record }) => record === debris.debris.record))
+  const debrisSprites = nativeWeldVisualPlan(debris).sprites
+  assert.deepEqual(debrisSprites.map(({ alpha, record, scaleX, scaleY }) => ({
+    alpha,
+    record,
+    scaleX,
+    scaleY,
+  })), [
+    {
+      alpha: 1,
+      record: debris.debris.record,
+      scaleX: debris.debris.scale,
+      scaleY: debris.debris.scale * 0.75,
+    },
+    {
+      alpha: 1,
+      record: debris.debris.record,
+      scaleX: debris.debris.scale,
+      scaleY: debris.debris.scale,
+    },
+  ])
+})
+
+test('retained EBoulder and Hail preserve their native center, overlay, and auxiliary owners', () => {
+  const ethereal = createNativeWeldPersistentActor({
+    buildId: 1006, direction: { x: 1, y: 0 }, id: 70, origin: { x: 0, y: 0 },
+    ownerId: 'wizard', tick: 1, vector: [8, 2, 4, 1, 1, 1], worldKey: WORLD_KEY,
+  })
+  assert.equal(ethereal.buildId, 1006)
+  const held = nativeWeldVisualPlan(ethereal)
+  assert.equal(held.sprites.filter(({ role }) => role === 'ethereal-boulder-aura').length, 1)
+  assert.equal(held.sprites.filter(({ role }) => role === 'ethereal-boulder-held-auxiliary').length, 1)
+  assert.equal(held.sprites.some(({ record }) => record === 171), false)
+  for (let center = 0; center < 4; center += 1) {
+    assert.ok(held.sprites.some(({ role }) => role.startsWith(
+      `ethereal-boulder-center-${center}-`,
+    )))
+  }
+  assert.ok(held.sprites.filter(({ role }) => role.startsWith('ethereal-boulder-rock-'))
+    .every(({ scaleX, scaleY }) => scaleX === scaleY && scaleX >= 0.25))
+
+  const released = releaseNativeWeldPersistentActor({
+    actor: ethereal, firstChildId: 80, rng: createNativeRng(3), tick: 2,
+  })
+  const flight = nativeWeldVisualPlan(released.actors[0]!)
+  assert.equal(flight.sprites.filter(({ role }) => role.startsWith(
+    'ethereal-boulder-center-0-',
+  )).length > 0, true)
+  assert.equal(flight.sprites.some(({ role }) => role.includes('center-1-')), false)
+  assert.deepEqual(flight.sprites.filter(({ role }) => (
+    role === 'ethereal-boulder-flight-auxiliary'
+  )).map(({ record, scaleX }) => ({ record, scaleX })), [{
+    record: 67,
+    scaleX: ethereal.scale * 2.5,
+  }])
+
+  const hailSource = createNativeWeldPersistentActor({
+    buildId: 1008, direction: { x: 1, y: 0 }, id: 90, origin: { x: 0, y: 0 },
+    ownerId: 'wizard', tick: 1, vector: [8, 2, 40, 1.5, 0.1, 0.5],
+    worldKey: WORLD_KEY,
+  })
+  assert.equal(hailSource.buildId, 1008)
+  const hail = updateNativeWeldPersistentActor(
+    hailSource, hailSource.origin, hailSource.direction, createNativeRng(4),
+  ).actor
+  assert.equal(hail.buildId, 1008)
+  const hailPlan = nativeWeldVisualPlan(hail)
+  assert.ok(hailPlan.sprites.some(({ role, record }) => (
+    role.startsWith('hailstones-held-water-water-') && record >= 271 && record <= 282
+  )))
+  assert.equal(hailPlan.sprites.filter(({ role }) => role.startsWith(
+    'hailstones-rock-overlay-',
+  )).length, hail.rocks.length)
+  assert.ok(hailPlan.sprites.filter(({ role }) => role.startsWith(
+    'hailstones-rock-overlay-',
+  )).every(({ record, scaleX, scaleY }) => record === 32 && scaleX === 1 && scaleY === 1))
+  assert.equal(hailPlan.sprites.some(({ role }) => role === 'hailstones-held-auxiliary'), true)
 })
 
 test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visible', () => {
@@ -241,8 +373,16 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
   const fallPlan = nativeWeldVisualPlan(meteor)
   assert.ok(fallPlan.sprites.length >= 2)
   assert.equal(fallPlan.sprites[0]!.offset.y, -3840)
-  assert.equal(fallPlan.sprites[1]!.scaleX, 1)
+  assert.equal(Math.abs(fallPlan.sprites[1]!.scaleX), 1)
   assert.equal(fallPlan.sprites[1]!.scaleY, 2)
+  const finalDescent = nativeWeldVisualPlan({ ...meteor, fallHeight: 0.5 })
+  assert.deepEqual(finalDescent.sprites.filter(({ atlas }) => atlas === 'DeadHawg').map((draw) => ({
+    alpha: draw.alpha,
+    record: draw.record,
+    scaleX: draw.scaleX,
+    scaleY: draw.scaleY,
+  })), [{ alpha: 0.25, record: 19, scaleX: 2, scaleY: 1.6 }])
+  assert.equal(finalDescent.sortBias, 0)
   const impactProgram = createNativeWeldMeteorImpactProgram({
     bodyScale: 1, rng: createNativeRng(5), underpowered: false,
   })
@@ -252,7 +392,7 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
     impactRotationDegrees: impactProgram.impactRotationDegrees,
     phase: 'impact' as const,
   }
-  assert.deepEqual(nativeWeldVisualPlan(impacted).sprites.map(({ record }) => record), [50])
+  assert.deepEqual(nativeWeldVisualPlan(impacted).sprites.map(({ record }) => record), [67])
   const flash = createNativeWeldMeteorFlash({ actor: impacted, id: 41, tick: 2 })
   assert.deepEqual(nativeWeldVisualPlan(flash).sprites.map(({ record, scaleX }) => ({
     record,
@@ -310,9 +450,15 @@ function profile(buildId: 1000 | 1001 | 1002 | 1009): NativeWeldPrimarySkillProf
 }
 
 function textures(): PlayerWorldTextures {
-  const weldActors = Object.fromEntries(NATIVE_WELD_BADGUYS_RECORDS.map((entry) => [
-    entry,
-    { ...NATIVE_WELD_SPRITES[entry], texture: Texture.EMPTY },
-  ]))
+  const weldActors = {
+    BadGuys: Object.fromEntries(NATIVE_WELD_BADGUYS_RECORDS.map((entry) => [
+      entry,
+      { ...NATIVE_WELD_SPRITES[entry], texture: Texture.EMPTY },
+    ])),
+    DeadHawg: Object.fromEntries(NATIVE_WELD_DEADHAWG_RECORDS.map((entry) => [
+      entry,
+      { ...NATIVE_WELD_DEADHAWG_SPRITES[entry], texture: Texture.EMPTY },
+    ])),
+  }
   return { primarySpells: { weldActors } } as unknown as PlayerWorldTextures
 }

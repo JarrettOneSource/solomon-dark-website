@@ -1,4 +1,4 @@
-import { Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
+import { Container, Graphics, Matrix, MeshSimple, Sprite } from 'pixi.js'
 
 import type {
   PrimarySpellProjectileState,
@@ -77,8 +77,10 @@ export class WeldPrimarySpellView {
     syncSprites(this.container, this.sprites, this.plan.sprites.length)
     for (let index = 0; index < this.plan.sprites.length; index += 1) {
       const draw = this.plan.sprites[index]!
-      const registered = this.textures[draw.record]
-      if (!registered) throw new Error(`Missing native Weld texture BadGuys:${draw.record}`)
+      const registered = this.textures[draw.atlas][draw.record]
+      if (!registered) {
+        throw new Error(`Missing native Weld texture ${draw.atlas}:${draw.record}`)
+      }
       applySprite(this.sprites[index]!, registered, draw)
     }
     this.lineGraphics.clear()
@@ -126,7 +128,7 @@ export class WeldPrimarySpellView {
     }
     this.meshes.length = 0
     for (const draw of this.plan.meshes) {
-      const registered = this.textures[draw.record]
+      const registered = this.textures.BadGuys[draw.record]
       if (!registered) throw new Error(`Missing native Weld mesh texture BadGuys:${draw.record}`)
       const mesh = new MeshSimple({
         indices: new Uint32Array(draw.indices),
@@ -166,7 +168,7 @@ function applySprite(
   registered: NativeWeldTexture,
   draw: NativeWeldSpriteDraw,
 ): void {
-  target.label = `${draw.role}:BadGuys:${draw.record}`
+  target.label = `${draw.role}:${draw.atlas}:${draw.record}`
   target.texture = registered.texture
   target.anchor.set(
     registered.anchorX / registered.width,
@@ -174,8 +176,21 @@ function applySprite(
   )
   target.alpha = draw.alpha
   target.blendMode = draw.blend
-  target.position.set(draw.offset.x, draw.offset.y)
-  target.rotation = draw.rotationRadians
-  target.scale.set(draw.scaleX, draw.scaleY)
+  if (draw.matrix) {
+    target.setFromMatrix(new Matrix(
+      draw.matrix.a,
+      draw.matrix.b,
+      draw.matrix.c,
+      draw.matrix.d,
+      draw.matrix.tx,
+      draw.matrix.ty,
+    ))
+  } else {
+    target.position.set(draw.offset.x, draw.offset.y)
+    target.pivot.set(0)
+    target.rotation = draw.rotationRadians
+    target.scale.set(draw.scaleX, draw.scaleY)
+    target.skew.set(0)
+  }
   target.tint = draw.tint
 }

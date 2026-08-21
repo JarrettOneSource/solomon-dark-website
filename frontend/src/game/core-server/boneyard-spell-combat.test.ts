@@ -1096,7 +1096,6 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     toughness: 2,
     vector: [10, 2, 1, 1, 2, 1],
     velocity: { x: 3, y: 0 },
-    visualScaleFactor: 0.75,
     worldKey: WORLD_KEY,
   }
   const resolved = resolveCombatWithAuthority(

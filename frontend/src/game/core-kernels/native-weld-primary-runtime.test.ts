@@ -439,9 +439,6 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
   assert.deepEqual(released.actors.map((actor) => (
     actor.buildId === 1006 ? actor.speedFactor : null
   )), [Math.fround(1.1), Math.fround(0.95), Math.fround(0.95), Math.fround(0.9)])
-  assert.deepEqual(released.actors.map((actor) => (
-    actor.buildId === 1006 ? actor.visualScaleFactor : null
-  )), [Math.fround(0.75), Math.fround(0.7125), Math.fround(0.7125), Math.fround(0.675)])
   const first = released.actors[0]
   assert.ok(first?.buildId === 1006)
   const stepped = stepNativeWeldWorldActor(first, createNativeRng(2))

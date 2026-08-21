@@ -237,12 +237,19 @@ export function nativeElementVfxPlan(
   tick: number,
   scale: number,
 ): NativeElementVfxDraw[] {
-  const integerTick = Math.floor(tick)
+  return nativeElementVfxPlanAtPhase(element, Math.floor(tick), scale)
+}
+
+export function nativeElementVfxPlanAtPhase(
+  element: NativeElement,
+  phase: number,
+  scale: number,
+): NativeElementVfxDraw[] {
   switch (element) {
-    case 'ether': return etherPlan(integerTick, scale)
-    case 'fire': return firePlan(integerTick, scale)
-    case 'air': return airPlan(integerTick, scale)
-    case 'water': return waterPlan(integerTick, scale)
-    case 'earth': return earthPlan(integerTick, scale)
+    case 'ether': return etherPlan(phase, scale)
+    case 'fire': return firePlan(phase, scale)
+    case 'air': return airPlan(phase, scale)
+    case 'water': return waterPlan(phase, scale)
+    case 'earth': return earthPlan(phase, scale)
   }
 }
