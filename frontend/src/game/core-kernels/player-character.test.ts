@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
+import {
+  actorHeadingFromVector,
+  actorHeadingIndex,
+  actorHeadingVector,
+} from './actor-heading.ts'
 import {
   PLAYER_CHARACTER_GAIT_DEGREES_PER_UNIT,
   PLAYER_CHARACTER_INPUT_ACCELERATION,
@@ -37,6 +41,12 @@ test('player character headings use the native twenty-four-direction bank', () =
   assert.equal(actorHeadingFromVector(0, 1), 180)
   assert.equal(actorHeadingFromVector(-1, 0), 270)
   assert.deepEqual([0, 90, 180, 270].map(actorHeadingIndex), [0, 6, 12, 18])
+  assert.deepEqual([0, 6, 12, 18].map(actorHeadingVector), [
+    { x: 0, y: -1 },
+    { x: 1, y: -Math.cos(Math.PI / 2) },
+    { x: Math.sin(Math.PI), y: 1 },
+    { x: -1, y: -Math.cos(3 * Math.PI / 2) },
+  ])
 })
 
 test('player character planning replays the native fixed-tick movement lane', () => {

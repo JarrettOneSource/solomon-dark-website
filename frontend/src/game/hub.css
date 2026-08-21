@@ -198,6 +198,10 @@
   left: calc(50% + var(--quickbar-slot-offset));
   width: 53px;
   height: 53px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .hub-hud-quickbar-skill-icon {
@@ -281,14 +285,30 @@
   inset: 0;
 }
 
-.hub-hud-potion {
+.hub-hud-potion-button {
   position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hub-hud-potion-button:disabled { cursor: default; }
+
+.hub-hud-potion {
+  display: block;
   max-width: none;
 }
 
-.hub-hud-potion-red {
+.hub-hud-potion-button-red {
   bottom: 17px;
   left: calc(50% - 149px);
+  width: 53px;
+  height: 50px;
+}
+
+.hub-hud-potion-red {
   width: 53px;
   height: 50px;
 }
@@ -337,9 +357,14 @@
   max-width: none;
 }
 
-.hub-hud-potion-blue {
+.hub-hud-potion-button-blue {
   bottom: 18px;
   left: calc(50% + 103px);
+  width: 50px;
+  height: 49px;
+}
+
+.hub-hud-potion-blue {
   width: 50px;
   height: 49px;
 }
@@ -621,6 +646,91 @@
 }
 
 @media (hover: none) and (pointer: coarse) {
+  .hub-hud-quickbar-slot {
+    bottom: 132px;
+    left: calc(50% + var(--mobile-quickbar-slot-offset));
+    width: 100px;
+    height: 100px;
+    border: 2px solid rgb(226 216 181 / 0.42);
+    border-radius: 14px;
+    background: rgb(9 13 18 / 0.62);
+    box-shadow: inset 0 0 12px rgb(0 0 0 / 0.72), 0 3px 10px rgb(0 0 0 / 0.4);
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .hub-hud-quickbar-slot:disabled {
+    border-color: rgb(226 216 181 / 0.18);
+    background: rgb(9 13 18 / 0.32);
+  }
+
+  .hub-hud-quickbar-cooldown {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .hub-hud-quickbar-input-mouse,
+  .hub-hud-quickbar-key-backing,
+  .hub-hud-quickbar-key-glyph {
+    display: none;
+  }
+
+  .hub-hud-potion-button,
+  .hub-hud-backpack-button,
+  .hub-hud-tome-button {
+    width: 100px;
+    height: 100px;
+  }
+
+  .hub-hud-potion-button-red {
+    bottom: 8px;
+    left: calc(50% - 215px);
+  }
+
+  .hub-hud-potion-button-blue {
+    bottom: 8px;
+    left: calc(50% + 115px);
+  }
+
+  .hub-hud-potion-red {
+    position: absolute;
+    bottom: 9px;
+    left: 23.5px;
+  }
+
+  .hub-hud-potion-blue {
+    position: absolute;
+    bottom: 10px;
+    left: 25px;
+  }
+
+  .hub-hud-backpack-button {
+    bottom: 0;
+    left: calc(50% - 105px);
+  }
+
+  .hub-hud-backpack {
+    position: absolute;
+    bottom: 14px;
+    left: 21px;
+  }
+
+  .hub-hud-tome-button {
+    bottom: 0;
+    left: calc(50% + 5px);
+  }
+
+  .hub-hud-tome {
+    position: absolute;
+    bottom: 14px;
+    left: 21px;
+  }
+
+  .hub-hud-count-red { left: calc(50% - 170.5px); }
+  .hub-hud-count-blue { left: calc(50% + 160px); }
+
   .hub-party-panel,
   .hub-player-profile {
     transform: scale(2);

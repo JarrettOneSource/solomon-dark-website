@@ -29,7 +29,8 @@
   visibility: hidden;
 }
 
-.main-menu-page:has(.hub-scene:not([data-hub-ui-surface="none"])) .game-fullscreen-control {
+.main-menu-page:has(.hub-scene:not([data-hub-ui-surface="none"])) .game-fullscreen-control,
+.main-menu-page:has(.skill-book-stage) .game-fullscreen-control {
   visibility: hidden;
   pointer-events: none;
 }

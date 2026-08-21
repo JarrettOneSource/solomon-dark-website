@@ -32,9 +32,13 @@ interface NativeAssetManifest {
 const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
 const ATLAS_WIDTH = 1024
 const ATLAS_HEIGHT = 512
+const MOBILE_QUICKBAR_SLOT_OFFSETS = Object.freeze([
+  -414, -310, -206, -102, 2, 106, 210, 314,
+])
 
 interface SkillQuickbarProps {
   mode: 'hub' | 'run'
+  onInput?: (slot: number, pressed: boolean) => void
   playerState: NativeSecondaryPlayerState | undefined
   quickbar: readonly (number | null)[]
   selectedPrimarySkillId: number
@@ -42,6 +46,7 @@ interface SkillQuickbarProps {
 
 export default function SkillQuickbar({
   mode,
+  onInput,
   playerState,
   quickbar,
   selectedPrimarySkillId,
@@ -74,13 +79,28 @@ export default function SkillQuickbar({
             ? `, ${formatCooldown(remaining)} seconds cooldown remaining`
             : ''}${active ? ', active' : ''}`
         return (
-          <div
+          <button
+            type="button"
             className="hub-hud-quickbar-slot"
             data-slot={slot}
             data-active={active}
+            disabled={skill === undefined || !onInput}
             key={slot}
-            style={{ '--quickbar-slot-offset': `${offset}px` } as CSSProperties}
+            style={{
+              '--mobile-quickbar-slot-offset': `${MOBILE_QUICKBAR_SLOT_OFFSETS[slot]}px`,
+              '--quickbar-slot-offset': `${offset}px`,
+            } as CSSProperties}
             aria-label={label}
+            onPointerDown={(event) => {
+              const unsupportedMouseButton = event.pointerType === 'mouse' && event.button !== 0
+              if (unsupportedMouseButton || skill === undefined || !onInput) return
+              event.preventDefault()
+              event.currentTarget.setPointerCapture(event.pointerId)
+              onInput(slot, true)
+            }}
+            onPointerUp={() => onInput?.(slot, false)}
+            onPointerCancel={() => onInput?.(slot, false)}
+            onLostPointerCapture={() => onInput?.(slot, false)}
           >
             {remaining > 0 && capacity > 0 ? (
               <CooldownSector remaining={remaining} capacity={capacity} />
@@ -101,7 +121,7 @@ export default function SkillQuickbar({
             {slot > 0 && skill !== undefined ? (
               <NativeKeyboardBinding text={`${slot}`} />
             ) : null}
-          </div>
+          </button>
         )
       })}
     </div>

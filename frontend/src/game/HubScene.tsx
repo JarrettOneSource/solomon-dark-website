@@ -12,6 +12,7 @@ import type {
 } from './client/hub-presentation-timeline.ts'
 import { isHubGameSnapshot } from './client/hub-presentation-timeline.ts'
 import type { HubRegionId } from './core-kernels/hub-regions.ts'
+import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import {
   HUB_CAMERA_SCALE,
   hubRegionCameraOrigin,
@@ -488,6 +489,25 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
+          onPotionClick={(itemId) => {
+            if (!inputBlocked && !pickerOpen && !transitionActive) {
+              onHubAction({ type: 'consume', itemId })
+            }
+          }}
+          onQuickbarInput={(slot, pressed) => {
+            const input = inputRef.current
+            if (!input) return
+            if (!pressed) {
+              input.setTouchQuickbar(slot, false)
+              return
+            }
+            const player = samplePresentation().players[playerId]
+            input.setTouchQuickbar(
+              slot,
+              true,
+              player ? actorHeadingVector(player.headingIndex) : undefined,
+            )
+          }}
           partyMemberIds={partyState?.party.memberPlayerIds}
           onSkillsClick={() => {
             if (!inputBlocked && !pickerOpen && !transitionActive) {

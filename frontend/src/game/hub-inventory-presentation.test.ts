@@ -6,10 +6,22 @@ import {
   HUB_TRADER_GRID_CAPACITY,
   HUB_TRADER_NATIVE_UI_RECORDS,
   equipmentSlotsForItem,
+  hubPotionShortcut,
   hubTraderAtPoint,
   hubTraderWithinServiceRange,
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
+
+test('HUD potion shortcuts total the addressed kind and consume the first owned stack', () => {
+  const backpack = [
+    { id: 8, kind: 'health-potion', quantity: 2 },
+    { id: 9, kind: 'mana-potion', quantity: 4 },
+    { id: 10, kind: 'health-potion', quantity: 3 },
+  ] as const
+  assert.deepEqual(hubPotionShortcut(backpack, 'health-potion'), { count: 5, itemId: 8 })
+  assert.deepEqual(hubPotionShortcut(backpack, 'mana-potion'), { count: 4, itemId: 9 })
+  assert.deepEqual(hubPotionShortcut([], 'health-potion'), { count: 0, itemId: null })
+})
 
 test('merchant dialogue exposes only the four reachable retail service commands', () => {
   assert.deepEqual(

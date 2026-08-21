@@ -15,6 +15,22 @@ export interface HubTraderDialogueDefinition {
   readonly title: string
 }
 
+export interface HubPotionShortcut {
+  readonly count: number
+  readonly itemId: number | null
+}
+
+export function hubPotionShortcut(
+  backpack: readonly Pick<HubInventoryItem, 'id' | 'kind' | 'quantity'>[],
+  kind: 'health-potion' | 'mana-potion',
+): HubPotionShortcut {
+  const stacks = backpack.filter((item) => item.kind === kind)
+  return {
+    count: stacks.reduce((total, item) => total + item.quantity, 0),
+    itemId: stacks[0]?.id ?? null,
+  }
+}
+
 export const HUB_TRADER_DIALOGUES: Readonly<Record<HubTraderId, HubTraderDialogueDefinition>> = {
   hagatha: {
     actionLabel: 'Buy Charms and Curses',

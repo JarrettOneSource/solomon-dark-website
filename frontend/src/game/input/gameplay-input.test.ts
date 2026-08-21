@@ -220,8 +220,10 @@ test('blocking owns input immediately and drops barrier-time state', () => {
   input.setTouch({ x: 1, y: 0 })
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 0, 20, 30))
   input.setTouchPrimary({ x: 1, y: 0 })
+  input.setTouchQuickbar(7, true)
   assert.equal(input.sample().device, 'touch')
   assert.equal(input.sample().input.cast.primary, true)
+  assert.equal(input.sample().input.cast.quickbar, 7)
 
   input.setBlocked(true)
   assert.deepEqual(published.at(-1), expectedInput(null, false, null))
@@ -233,6 +235,7 @@ test('blocking owns input immediately and drops barrier-time state', () => {
   const publishedAtBarrier = published.length
   input.setTouch({ x: 0, y: -1 })
   input.setTouchPrimary({ x: 0, y: -1 })
+  input.setTouchQuickbar(6, true)
   mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 40, 50))
   assert.equal(published.length, publishedAtBarrier)
   assert.deepEqual(input.sample(), {
@@ -357,5 +360,44 @@ test('right mouse and digits one through seven address all native skill quickbar
   const afterRelease = published.length
   target.dispatchEvent(new FakeKeyboardEvent('keydown', 'Digit0'))
   assert.equal(published.length, afterRelease)
+  input.destroy()
+})
+
+test('touch addresses all eight quickbar slots without stealing mouse or older touch holds', () => {
+  const mouseTarget = new EventTarget()
+  const target = new EventTarget()
+  const published: PlayerCharacterInput[] = []
+  const input = createBrowserGameplayInput({
+    getGamepads: () => [],
+    mouseTarget,
+    onInput: (state) => published.push(state),
+    projectDirection: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
+    projectPointer: ({ x, y }) => ({ x, y }),
+    target,
+    visibilityTarget: new FakeVisibilityTarget(),
+  })
+
+  input.setTouchQuickbar(0, true, { x: 1, y: 0 })
+  assert.deepEqual(published.at(-1), expectedInput({ x: 100, y: 0 }, false, 0))
+  mouseTarget.dispatchEvent(new FakeMouseEvent('mousedown', 2, 20, 30))
+  input.setTouchQuickbar(0, false)
+  assert.equal(published.at(-1)?.cast.quickbar, 0)
+  target.dispatchEvent(new FakeMouseEvent('mouseup', 2, 20, 30))
+  assert.equal(published.at(-1)?.cast.quickbar, null)
+
+  for (let slot = 0; slot < 8; slot += 1) {
+    input.setTouchQuickbar(slot, true)
+    assert.equal(published.at(-1)?.cast.quickbar, slot)
+    input.setTouchQuickbar(slot, false)
+    assert.equal(published.at(-1)?.cast.quickbar, null)
+  }
+
+  input.setTouchQuickbar(2, true)
+  input.setTouchQuickbar(7, true)
+  assert.equal(published.at(-1)?.cast.quickbar, 7)
+  input.setTouchQuickbar(7, false)
+  assert.equal(published.at(-1)?.cast.quickbar, 2)
+  input.setTouchQuickbar(2, false)
+  assert.equal(published.at(-1)?.cast.quickbar, null)
   input.destroy()
 })

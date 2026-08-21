@@ -124,6 +124,9 @@ try {
   await hubLoading
   browserSurfaceReceipts.hubLoading = await assertGameSurface(mobile, '.match-loading-screen')
   await mobile.locator('.hub-world-canvas').waitFor({ timeout: 30_000 })
+  await mobile.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({
+    timeout: 10_000,
+  })
   browserSurfaceReceipts.hub = await assertGameSurface(mobile, '.hub-scene')
 
   const movementJoystick = mobile.locator('[data-joystick="movement"]')
@@ -148,6 +151,13 @@ try {
   const primaryIdleCenter = rectCenter(await settledBounds(primaryKnob, mobile))
   const primaryBase = await primaryJoystick.boundingBox()
   const primaryCenter = rectCenter(primaryBase)
+  const joystickGeometry = await movementJoystick.evaluate((node) => ({
+    base: Number.parseFloat(getComputedStyle(node).width),
+    knob: Number.parseFloat(getComputedStyle(node.querySelector('.game-touch-joystick-knob')).width),
+  }))
+  assert.deepEqual(joystickGeometry, { base: 190, knob: 80 })
+  assert.ok(Math.abs(movementBase.width - 190 * 390 / 900) < 0.1)
+  assert.ok(Math.abs(primaryBase.width - 190 * 390 / 900) < 0.1)
   assert.ok(Math.abs(primaryIdleCenter.x - primaryCenter.x) < 1)
   assert.ok(Math.abs(primaryIdleCenter.y - primaryCenter.y) < 1)
   assert.equal(
@@ -158,6 +168,119 @@ try {
   await mobile.screenshot({ path: idleScreenshotPath })
 
   const cdp = await mobile.context().newCDPSession(mobile)
+  const abilityButtons = mobile.locator('.hub-hud-quickbar-slot')
+  assert.equal(await abilityButtons.count(), 8)
+  const abilityBounds = await abilityButtons.evaluateAll((nodes) => nodes.map((node) => {
+    const rect = node.getBoundingClientRect()
+    return {
+      height: rect.height,
+      topmost: document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      )?.closest('.hub-hud-quickbar-slot') === node,
+      width: rect.width,
+      x: rect.x,
+      y: rect.y,
+    }
+  }))
+  abilityBounds.forEach((bounds, index) => {
+    assert.ok(Math.abs(bounds.width - 100 * 390 / 900) < 0.1, `ability ${index} width`)
+    assert.ok(Math.abs(bounds.height - 100 * 390 / 900) < 0.1, `ability ${index} height`)
+    assert.equal(bounds.topmost, true, `ability ${index} must be topmost at its center`)
+    assert.equal(rectsOverlap(bounds, movementBase), false)
+    assert.equal(rectsOverlap(bounds, primaryBase), false)
+    for (let previous = 0; previous < index; previous += 1) {
+      assert.equal(rectsOverlap(bounds, abilityBounds[previous]), false)
+    }
+  })
+
+  const hudButtons = [
+    mobile.getByRole('button', { name: /Use health potion/ }),
+    mobile.getByRole('button', { name: /Open inventory/ }),
+    mobile.getByRole('button', { name: 'Open skills' }),
+    mobile.getByRole('button', { name: /Use mana potion/ }),
+  ]
+  const hudButtonBounds = []
+  for (const button of hudButtons) {
+    const bounds = await button.boundingBox()
+    assert.ok(Math.abs(bounds.width - 100 * 390 / 900) < 0.1)
+    assert.ok(Math.abs(bounds.height - 100 * 390 / 900) < 0.1)
+    hudButtonBounds.push(bounds)
+  }
+  for (let index = 0; index < hudButtonBounds.length; index += 1) {
+    for (let previous = 0; previous < index; previous += 1) {
+      assert.equal(rectsOverlap(hudButtonBounds[index], hudButtonBounds[previous]), false)
+    }
+  }
+
+  const firstAbilityCenter = rectCenter(abilityBounds[0])
+  await mobile.evaluate(() => {
+    window.__sdrAbilityPointerEvents = []
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'lostpointercapture']) {
+      document.addEventListener(type, (event) => {
+        if (event.target instanceof Element && event.target.closest('.hub-hud-quickbar-slot')) {
+          window.__sdrAbilityPointerEvents.push({
+            button: event.button,
+            defaultPrevented: event.defaultPrevented,
+            pointerType: event.pointerType,
+            slot: event.target.closest('.hub-hud-quickbar-slot')?.getAttribute('data-slot'),
+            type,
+          })
+        }
+      })
+    }
+  })
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: firstAbilityCenter.x, y: firstAbilityCenter.y }],
+  })
+  try {
+    const quickbarCast = await mobile.waitForFunction(() => {
+      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      const cooldown = document.querySelector(
+        '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown',
+      ) !== null
+      return cooldown || frame?.secondaryAbilityCount > 0
+        ? {
+            cooldown,
+            count: frame?.secondaryAbilityCount ?? 0,
+            kinds: [...(frame?.secondaryAbilityKinds ?? [])],
+          }
+        : null
+    }, null, { timeout: 10_000 })
+    await quickbarCast.dispose()
+  } catch {
+    const abilityFailure = await mobile.evaluate(() => {
+      const slot = document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
+      const frame = document.querySelector('.hub-world-canvas')?.__sdrHubFrame
+      return {
+        disabled: slot?.disabled,
+        frameSecondary: frame && Object.fromEntries(
+          Object.entries(frame).filter(([key]) => key.toLowerCase().includes('secondary')),
+        ),
+        label: slot?.getAttribute('aria-label'),
+        pointerEvents: window.__sdrAbilityPointerEvents,
+        sceneInputBlocked: document.querySelector('.hub-scene')
+          ?.getAttribute('data-gameplay-input-blocked'),
+      }
+    })
+    assert.fail(`touch quickbar slot did not cast: ${JSON.stringify(abilityFailure)}`)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+  await mobile.getByRole('button', { name: 'Use health potion, 1 available' }).click()
+  await mobile.getByRole('button', { name: 'Use health potion, 0 available' }).waitFor()
+  await mobile.getByRole('button', { name: 'Use mana potion, 1 available' }).click()
+  await mobile.getByRole('button', { name: 'Use mana potion, 0 available' }).waitFor()
+  await mobile.getByRole('button', { name: /Open inventory/ }).click()
+  const hubInventory = mobile.getByRole('dialog', { name: 'Inventory' })
+  await hubInventory.waitFor()
+  await hubInventory.getByRole('button', { name: 'Done' }).click()
+  await mobile.getByRole('button', { name: 'Open skills' }).click()
+  const hubSkills = mobile.getByRole('dialog', { name: 'Skills' })
+  await hubSkills.waitFor()
+  await hubSkills.getByRole('button', { name: 'Close skills' }).click()
+
   await mobile.evaluate(() => {
     window.__sdrJoystickPointerDefaults = []
     document.addEventListener('pointerdown', (event) => {
@@ -323,11 +446,22 @@ try {
   assert.ok(Math.abs(boneyardPrimaryReleased.x - boneyardPrimaryCenter.x) < 1)
   assert.ok(Math.abs(boneyardPrimaryReleased.y - boneyardPrimaryCenter.y) < 1)
 
+  assert.equal(await mobile.locator('.boneyard-scene .hub-hud-quickbar-slot').count(), 8)
+  await mobile.getByRole('button', { name: /Open inventory/ }).click()
+  const boneyardInventory = mobile.getByRole('dialog', { name: 'Inventory' })
+  await boneyardInventory.waitFor()
+  await boneyardInventory.getByRole('button', { name: 'Done' }).click()
+  await mobile.getByRole('button', { name: 'Open skills' }).click()
+  const boneyardSkills = mobile.getByRole('dialog', { name: 'Skills' })
+  await boneyardSkills.waitFor()
+  await boneyardSkills.getByRole('button', { name: 'Close skills' }).click()
+
   assert.deepEqual(consoleErrors, [])
   assert.deepEqual(pageErrors, [])
   process.stdout.write(
-    `built-bundle joystick smoke passed: movement (${movementIdleCenter.x.toFixed(2)}, ${movementIdleCenter.y.toFixed(2)}), `
+    `built-bundle mobile controls smoke passed: 190px movement (${movementIdleCenter.x.toFixed(2)}, ${movementIdleCenter.y.toFixed(2)}), `
     + `primary attack (${primaryIdleCenter.x.toFixed(2)}, ${primaryIdleCenter.y.toFixed(2)}), `
+    + 'eight quickbar buttons, red/blue potion taps, inventory/skills in both scenes, '
     + 'rightward Water heading 6, simultaneous movement, Boneyard cast, '
     + `${interactionReceipt.pointerDefaults.length} canceled rapid/held pointer defaults, `
     + `and game-surface policy across ${Object.keys(browserSurfaceReceipts).join(', ')}\n`,

@@ -18,6 +18,7 @@ import {
   nativeBoneyardWeatherArenaFade,
 } from './boneyard-weather-audio.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
+import { actorHeadingVector } from './core-kernels/actor-heading.ts'
 import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
@@ -727,6 +728,25 @@ export default function BoneyardScene({
             if (!inputBlocked && run.phase === 'active') {
               setInventorySurface({ kind: 'inventory' })
             }
+          }}
+          onPotionClick={(itemId) => {
+            if (!inputBlocked && run.phase === 'active') {
+              onHubAction({ type: 'consume', itemId })
+            }
+          }}
+          onQuickbarInput={(slot, pressed) => {
+            const input = inputRef.current
+            if (!input) return
+            if (!pressed) {
+              input.setTouchQuickbar(slot, false)
+              return
+            }
+            const player = samplePresentation().players[playerId]
+            input.setTouchQuickbar(
+              slot,
+              true,
+              player ? actorHeadingVector(player.headingIndex) : undefined,
+            )
           }}
           onSkillsClick={() => {
             if (!inputBlocked && run.phase === 'active') {

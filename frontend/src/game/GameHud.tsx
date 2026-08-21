@@ -13,6 +13,7 @@ import {
 } from './core-kernels/player-progression.ts'
 import { subscribeGamePresentationFrames } from './game-presentation-frame-loop.ts'
 import GameAccountName from './GameAccountName.tsx'
+import { hubPotionShortcut } from './hub-inventory-presentation.ts'
 import SkillQuickbar from './SkillQuickbar.tsx'
 import type { GameSnapshot } from './protocol/game-protocol.ts'
 
@@ -26,6 +27,8 @@ interface GameHudProps {
   mode?: 'hub' | 'run'
   onInventoryClick?: () => void
   onMapClick?: () => void
+  onPotionClick?: (itemId: number) => void
+  onQuickbarInput?: (slot: number, pressed: boolean) => void
   partyMemberIds?: readonly string[]
   onSkillsClick?: () => void
   playerId: string
@@ -115,6 +118,8 @@ export default function GameHud({
   mode = 'hub',
   onInventoryClick,
   onMapClick,
+  onPotionClick,
+  onQuickbarInput,
   partyMemberIds,
   onSkillsClick,
   playerId,
@@ -161,8 +166,8 @@ export default function GameHud({
       ? [{ className: 'hub-hud-meter-fill hub-hud-meter-shield', progress: shieldProgress, shield: true }]
       : []),
   ].sort((left, right) => left.progress - right.progress)
-  const healthPotions = inventoryQuantity(economy, 'health-potion')
-  const manaPotions = inventoryQuantity(economy, 'mana-potion')
+  const healthPotions = hubPotionShortcut(economy.backpack, 'health-potion')
+  const manaPotions = hubPotionShortcut(economy.backpack, 'mana-potion')
   return (
     <div className="hub-hud" aria-label="Player status">
       <img className="hub-hud-skull" src={hub.hud.skull} alt="Menu" />
@@ -230,6 +235,7 @@ export default function GameHud({
 
       <SkillQuickbar
         mode={mode}
+        onInput={onQuickbarInput}
         playerState={quickbarHud.playerState}
         quickbar={quickbarHud.quickbar}
         selectedPrimarySkillId={quickbarHud.selectedPrimarySkillId}
@@ -246,8 +252,18 @@ export default function GameHud({
       ) : null}
 
       <div className="hub-hud-inventory" aria-label="Inventory shortcuts">
-        <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt={`${healthPotions} health potions`} />
-        <InventoryCount count={healthPotions} variant="red" />
+        <button
+          type="button"
+          className="hub-hud-potion-button hub-hud-potion-button-red"
+          aria-label={`Use health potion, ${healthPotions.count} available`}
+          disabled={healthPotions.itemId === null || !onPotionClick}
+          onClick={() => {
+            if (healthPotions.itemId !== null) onPotionClick?.(healthPotions.itemId)
+          }}
+        >
+          <img className="hub-hud-potion hub-hud-potion-red" src={hub.hud.potionRed} alt="" />
+        </button>
+        <InventoryCount count={healthPotions.count} variant="red" />
         <button
           type="button"
           className="hub-hud-backpack-button"
@@ -282,8 +298,18 @@ export default function GameHud({
         >
           <img className="hub-hud-tome" src={hub.hud.tome} alt="" />
         </button>
-        <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt={`${manaPotions} mana potions`} />
-        <InventoryCount count={manaPotions} variant="blue" />
+        <button
+          type="button"
+          className="hub-hud-potion-button hub-hud-potion-button-blue"
+          aria-label={`Use mana potion, ${manaPotions.count} available`}
+          disabled={manaPotions.itemId === null || !onPotionClick}
+          onClick={() => {
+            if (manaPotions.itemId !== null) onPotionClick?.(manaPotions.itemId)
+          }}
+        >
+          <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt="" />
+        </button>
+        <InventoryCount count={manaPotions.count} variant="blue" />
       </div>
 
       {mode === 'hub' ? (
@@ -303,15 +329,6 @@ export default function GameHud({
       ) : null}
     </div>
   )
-}
-
-function inventoryQuantity(
-  economy: ProtocolPlayerEconomy,
-  kind: 'health-potion' | 'mana-potion',
-): number {
-  return economy.backpack.reduce((total, item) => (
-    item.kind === kind ? total + item.quantity : total
-  ), 0)
 }
 
 function clampUnit(value: number): number {
