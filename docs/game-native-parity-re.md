@@ -23417,3 +23417,50 @@ client authority to pause other actors.
   Chromium `/game` journey through Hub and Boneyard with keyboard and pointer
   actions, state mutation, input suppression, WebGL identity, and empty
   page/console errors.
+
+### Implementation and verification receipt
+
+- `HubInventoryUi` now mounts the same standalone Inventory owner in Hub and
+  Boneyard; Boneyard disables only trader discovery. `I`, the backpack, item
+  selection, potion use, equipment actions, close, input suppression, and
+  host-authoritative economy mutations therefore share one implementation.
+- `SkillBook`, `skill-book-model`, and `skill-book-renderer` own the 40-tick
+  screen lifecycle, exact full-screen atlas/font composition, all dependency
+  pages, selected-primary/concentration card states, and the eight-slot drag
+  surface. The HUD tome and `T` open it in both scenes. `I`/`T` replace the
+  other book without leaking player input.
+- Protocol 36 adds strict belt assignment, primary selection, and concentration
+  selection. The player book retains learned-vector order, primary,
+  concentration A/B and replacement cursor, and duplicate-capable eight-slot
+  belt state. The host validates the authenticated actor, phase, learned row,
+  category, Split Mind capacity, duplicate concentration, and Mind Chug lock,
+  then publishes a new progression revision and save checkpoint.
+- Automated coverage drains every public row `8..79`, all SkillScreen atlas
+  members, every slot including the clean-stock duplicate case, primary and
+  concentration replacement rules, two-player isolation, both scene mounts,
+  Inventory-to-Skills replacement, transition timing, protocol rejection, and
+  existing per-potion/per-equipment Inventory branches.
+- Windows-native `./scripts/validate.sh` exited zero on tracked tree
+  `dc13a0e8009aa05bcdd753c14802b24654fd2e58` using Node 22.17.0, npm 10.9.2,
+  Python 3.13.5, and task-local .NET SDK 10.0.302. It passed 25 backend
+  contracts, 40 loot tests, 156 prerequisite/save/secondary tests, 1,040 broad
+  game/frontend tests, 13 party tests, 5 level-up tests, 7 diagnostics tests,
+  14 Hub UI tests, 5 desktop tests, backend build/format, lint/import
+  boundaries, production frontend and host builds, bundle budget (`247256`
+  raw / `72601` gzip bytes), and media policy. Output contained only the eight
+  existing Fast Refresh warnings and Vite's non-fatal chunk advisory.
+- Windows Chrome `151.0.7922.170` completed the real 1600-by-900 Hub ->
+  Boneyard journey. It opened both books by HUD and keyboard, consumed the Hub
+  Health Potion, retained Call Leviathan in slots 0 and 1, opened Boneyard
+  Inventory with the Mana Potion present, replaced it with Skills, observed
+  local input blocked throughout, and rendered the 1600-by-900 SkillScreen in
+  WebGL2. The receipt returned `hubInventory=true`, `hubSkills=true`,
+  `matchInventory=true`, `matchSkills=true`, `duplicateBelt=true`, and empty
+  console/page-error arrays.
+- Captures are
+  `C:/sdw/receipts/inventory-skillbook-hub-inventory.png`,
+  `inventory-skillbook-hub-skills.png`,
+  `inventory-skillbook-hub-duplicate-belt.png`,
+  `inventory-skillbook-match-inventory.png`, and
+  `inventory-skillbook-match-skills.png`. No member is browser-blocked and no
+  native constant remains guessed in this system.
