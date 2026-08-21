@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
 import { readFile, mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
-import { createServer as createViteServer } from 'vite'
 
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import {
@@ -30,7 +30,7 @@ import {
 import { materializeWebSessionContent } from '../src/game/host/web-mod-content.ts'
 
 const require = createRequire(import.meta.url)
-const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const webRoot = fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url))
 const modRoot = process.env.SDR_INVINCIBILITY_MOD_ROOT
 if (!modRoot) throw new Error('SDR_INVINCIBILITY_MOD_ROOT is required')
 const screenshotRoot = process.env.SDR_INVINCIBILITY_SCREENSHOT_ROOT
@@ -54,19 +54,13 @@ await mkdir(screenshotRoot, { recursive: true })
 const content = await loadInvincibilityContent(resolve(modRoot))
 const credential = 'invincibility-mod-browser-parity'
 const hostLogs = []
-const vite = await createViteServer({
-  configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
-  logLevel: 'error',
-  root: frontendRoot,
-  server: { host: '127.0.0.1', port: 0 },
-})
-await vite.listen()
-const viteAddress = vite.httpServer?.address()
-if (!viteAddress || typeof viteAddress === 'string') {
-  await vite.close()
-  throw new Error('Vite did not expose its Invincibility Potion smoke port')
+const staticServer = await startStaticServer(webRoot)
+const staticAddress = staticServer.address()
+if (!staticAddress || typeof staticAddress === 'string') {
+  await new Promise(resolveClose => staticServer.close(resolveClose))
+  throw new Error('built-game static server did not expose its Invincibility Potion smoke port')
 }
-const baseUrl = `http://127.0.0.1:${viteAddress.port}`
+const baseUrl = `http://127.0.0.1:${staticAddress.port}`
 const host = await startGameHost({
   allowedOrigins: [baseUrl],
   authentication: { kind: 'shared', credential },
@@ -330,7 +324,7 @@ try {
   ])
   await browser.close()
   await host.close()
-  await vite.close()
+  await new Promise(resolveClose => staticServer.close(resolveClose))
 }
 
 async function loadInvincibilityContent(root) {
@@ -477,4 +471,57 @@ async function waitUntil(predicate, message, timeoutMs = 10_000) {
     await new Promise(resolve => setTimeout(resolve, 10))
   }
   throw new Error(message)
+}
+
+async function startStaticServer(root) {
+  const rootPrefix = root.endsWith(sep) ? root : `${root}${sep}`
+  const index = resolve(root, 'index.html')
+  const server = createServer(async (request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname)
+      const relative = pathname === '/' || extname(pathname) === ''
+        ? 'index.html'
+        : pathname.slice(1)
+      const target = resolve(root, relative)
+      if (target !== index && !target.startsWith(rootPrefix)) {
+        response.writeHead(403)
+        response.end()
+        return
+      }
+      const body = await readFile(target)
+      response.writeHead(200, {
+        'cache-control': 'no-store',
+        'content-type': contentType(target),
+      })
+      response.end(body)
+    } catch {
+      response.writeHead(404)
+      response.end()
+    }
+  })
+  await new Promise((resolveListen, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolveListen()
+    })
+  })
+  return server
+}
+
+function contentType(path) {
+  return ({
+    '.css': 'text/css; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.mp3': 'audio/mpeg',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml',
+    '.wav': 'audio/wav',
+    '.webmanifest': 'application/manifest+json',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+  })[extname(path)] || 'application/octet-stream'
 }
