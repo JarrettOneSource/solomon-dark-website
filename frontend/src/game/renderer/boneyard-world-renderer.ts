@@ -104,6 +104,8 @@ import {
   nativeSecondaryMiscLightSource,
   nativeSecondaryProviderLightSource,
   nativeSolomonSetPieceLighting,
+  nativeWeldProjectileLightSource,
+  nativeWeldRockLightSource,
   type NativeBoneyardLightSource,
   type NativeSolomonSetPieceLighting,
 } from './boneyard-lighting.ts'
@@ -1391,6 +1393,9 @@ class BoneyardDynamicScene {
           case 'fire':
             source = nativeFireballLightSource(spell, presentationFrame)
             break
+          case 'weld':
+            source = nativeWeldProjectileLightSource(spell, presentationFrame)
+            break
         }
         lightProviderOwners.push({
           registration: spell.lightRegistration,
@@ -1413,6 +1418,17 @@ class BoneyardDynamicScene {
         lightProviderOwners.push({ registration, sources: [candidate.source] })
       }
       for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind === 'weld-persistent'
+          && (effect.buildId === 1006 || effect.buildId === 1008)
+          && effect.worldKey === `boneyard:${snapshot.world.runId}`
+        ) {
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: [nativeWeldRockLightSource(effect)],
+          })
+          continue
+        }
         if (
           effect.kind === 'fire-good-imp'
           && effect.worldKey === `boneyard:${snapshot.world.runId}`

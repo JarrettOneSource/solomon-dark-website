@@ -8,6 +8,7 @@ import {
   createNativeWeldMeteor,
   drawNativeWeldDamage,
   nativeWeldAudioPlan,
+  nativeGroundSparkPrivateWord,
   nativeWeldMissileFanHeading,
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
@@ -31,6 +32,7 @@ test('welded missiles share one damage draw and consume constructor RNG in fan o
     primarySkill: profile(1000, [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
     rng,
     targets: [],
+    underpowered: false,
     worldKey: 'boneyard:1',
   })
 
@@ -50,13 +52,16 @@ test('welded missiles share one damage draw and consume constructor RNG in fan o
   assert.deepEqual(spawned.rng, seed1.state)
 })
 
-test('Crawling Shock consumes its one motion draw then creates center and side actors', () => {
+test('Crawling Shock consumes signed pitch then private seed and age per actor', () => {
   const rng = createNativeRng(31)
-  const expected = drawNativeFloat(rng, Math.fround(0.05))
-  const sound = drawNativeInteger(expected.state, 3)
+  const pitch = drawNativeFloat(rng, Math.fround(0.05), true)
+  const sound = drawNativeInteger(pitch.state, 3)
   const seed0 = drawNativeInteger(sound.state, 1_000_000)
-  const seed1 = drawNativeInteger(seed0.state, 1_000_000)
-  const seed2 = drawNativeInteger(seed1.state, 1_000_000)
+  const age0 = drawNativeInteger(seed0.state, 360)
+  const seed1 = drawNativeInteger(age0.state, 1_000_000)
+  const age1 = drawNativeInteger(seed1.state, 360)
+  const seed2 = drawNativeInteger(age1.state, 1_000_000)
+  const age2 = drawNativeInteger(seed2.state, 360)
   const spawned = spawnNativeWeldOneShot({
     aimDirection: { x: 0, y: -1 },
     firstId: 1,
@@ -65,6 +70,7 @@ test('Crawling Shock consumes its one motion draw then creates center and side a
     primarySkill: profile(1009, [7, 9, 2, 0.5, 2, 1.5]),
     rng,
     targets: [],
+    underpowered: false,
     worldKey: 'boneyard:1',
   })
   assert.deepEqual(spawned.projectiles.map(({ headingDegrees }) => headingDegrees), [0, 330, 30])
@@ -83,8 +89,13 @@ test('Crawling Shock consumes its one motion draw then creates center and side a
     spawned.projectiles.map(({ presentationSeed }) => presentationSeed),
     [seed0.value, seed1.value, seed2.value],
   )
-  assert.deepEqual(spawned.rng, seed2.state)
-  assert.equal(spawned.projectiles[0]!.speed, Math.fround(3 * Math.fround(1.5 * Math.fround(1 + expected.value))))
+  assert.deepEqual(
+    spawned.projectiles.map(({ groundSparkNativeAgeTicks }) => groundSparkNativeAgeTicks),
+    [age0.value, age1.value, age2.value],
+  )
+  assert.deepEqual(spawned.projectiles.map(({ speed }) => speed), [4, 3, 3])
+  assert.deepEqual(spawned.rng, age2.state)
+  assert.equal(spawned.projectiles[0]!.castPlaybackRate, Math.fround(1 + pitch.value))
 })
 
 test('weld missile fan matches the retail alternating geometry', () => {
@@ -161,6 +172,7 @@ test('weld homing actors retain the nearest native target and advance through sh
     primarySkill: profile(1001, [4, 4, 10, 1, 1, 0.2, 0.3]),
     rng: createNativeRng(1),
     targets: [target('enemy:4', 90, 0)],
+    underpowered: false,
     worldKey: 'boneyard:1',
   }).projectiles[0]!
   assert.equal(projectile.targetId, 'enemy:4')
@@ -191,14 +203,15 @@ test('semantic audio plans retain every native sound and loop registry owner', (
 test('Ball Lightning consumes one cast-sound selector before its fan phases', () => {
   const rng = createNativeRng(71)
   const damage = drawNativeFloat(rng, 6)
-  const sound = drawNativeInteger(damage.state, 2)
+  const pitch = drawNativeFloat(damage.state, Math.fround(0.25))
+  const sound = drawNativeInteger(pitch.state, 2)
   const phase0 = drawNativeFloat(sound.state, 360)
   const phase1 = drawNativeFloat(phase0.state, 360)
   const phase2 = drawNativeFloat(phase1.state, 360)
   const spawned = spawnNativeWeldOneShot({
     aimDirection: { x: 1, y: 0 }, firstId: 20, origin: { x: 0, y: 0 },
     ownerId: 'p1', primarySkill: profile(1002, [4, 10, 6, 3, 1.1, 2, 0.5]),
-    rng, targets: [], worldKey: 'boneyard:1',
+    rng, targets: [], underpowered: false, worldKey: 'boneyard:1',
   })
   assert.deepEqual(spawned.projectiles.map(({ castSoundVariant }) => castSoundVariant), [
     sound.value, sound.value, sound.value,
@@ -207,22 +220,112 @@ test('Ball Lightning consumes one cast-sound selector before its fan phases', ()
     spawned.projectiles.map(({ basePresentationPhaseDegrees }) => basePresentationPhaseDegrees),
     [phase0.value, phase1.value, phase2.value],
   )
+  assert.ok(spawned.projectiles.every(({ castPlaybackRate }) => (
+    castPlaybackRate === Math.fround(1 + pitch.value)
+  )))
   assert.deepEqual(spawned.rng, phase2.state)
 })
 
 test('Frost Missile consumes inherited and derived presentation phases per actor', () => {
   const rng = createNativeRng(83)
   const damage = drawNativeFloat(rng, 6)
-  const base = drawNativeFloat(damage.state, 360)
+  const playback = drawNativeFloat(damage.state, Math.fround(0.1))
+  const base = drawNativeFloat(playback.state, 360)
   const secondary = drawNativeFloat(base.state, 360)
+  const aspect = drawNativeFloat(secondary.state, Math.fround(0.25))
   const spawned = spawnNativeWeldOneShot({
     aimDirection: { x: 1, y: 0 }, firstId: 20, origin: { x: 0, y: 0 },
     ownerId: 'p1', primarySkill: profile(1001, [4, 10, 6, 1, 1.1, 2, 0.5]),
-    rng, targets: [], worldKey: 'boneyard:1',
+    rng, targets: [], underpowered: false, worldKey: 'boneyard:1',
   })
   assert.equal(spawned.projectiles[0]!.basePresentationPhaseDegrees, base.value)
   assert.equal(spawned.projectiles[0]!.secondaryPresentationPhaseDegrees, secondary.value)
-  assert.deepEqual(spawned.rng, secondary.state)
+  assert.equal(spawned.projectiles[0]!.frostPulseAspect, Math.fround(0.5 + aspect.value))
+  assert.equal(spawned.projectiles[0]!.castPlaybackRate, Math.fround(1 + playback.value))
+  assert.deepEqual(spawned.rng, aspect.state)
+})
+
+test('underpowered welded one-shots retain native actors but suppress every learned payload', () => {
+  const fire = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 1, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1000, [8, 8, 5, 3, 1.5, 4, 9, 2, 3]),
+    rng: createNativeRng(1), targets: [], underpowered: true, worldKey: 'boneyard:1',
+  }).projectiles
+  assert.equal(fire.length, 1)
+  assert.equal(fire[0]!.damage, 4)
+  assert.equal(fire[0]!.speed, Math.fround(3 * 0.8))
+  assert.equal(fire[0]!.castPlaybackRate, 0.75)
+  assert.deepEqual(fire[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 0, 0, 0])
+
+  const frost = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 2, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1001, [8, 8, 5, 3, 1.5, 0.4, 0.8]),
+    rng: createNativeRng(2), targets: [], underpowered: true, worldKey: 'boneyard:1',
+  }).projectiles
+  assert.equal(frost.length, 1)
+  assert.equal(frost[0]!.castPlaybackRate, 0.75)
+  assert.deepEqual(frost[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 0])
+
+  const ball = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 3, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1002, [8, 8, 5, 3, 1.5, 4, 0.4]),
+    rng: createNativeRng(3), targets: [], underpowered: true, worldKey: 'boneyard:1',
+  }).projectiles
+  assert.equal(ball.length, 1)
+  assert.equal(ball[0]!.castPlaybackRate, 0.75)
+  assert.equal(ball[0]!.turnInput, Math.fround(2 * 0.8 * 0.75))
+  assert.deepEqual(ball[0]!.vector.slice(3), [1, Math.fround(0.8), 0, 1])
+
+  const spark = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 4, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1009, [8, 5, 4, 0.4, 3, 1.5]),
+    rng: createNativeRng(4), targets: [], underpowered: true, worldKey: 'boneyard:1',
+  }).projectiles
+  assert.equal(spark.length, 1)
+  assert.equal(spark[0]!.speed, 4)
+  assert.equal(spark[0]!.contactsRemaining, 1)
+  assert.deepEqual(spark[0]!.vector.slice(2, 5), [0, 1, 0])
+  assert.ok(spark[0]!.castPlaybackRate >= Math.fround(0.95 * 0.8))
+  assert.ok(spark[0]!.castPlaybackRate <= Math.fround(1.05 * 0.8))
+})
+
+test('Crawling Shock advances its private three-word turn program after the first move', () => {
+  const born = spawnNativeWeldOneShot({
+    aimDirection: { x: 0, y: -1 }, firstId: 1, origin: { x: 10, y: 20 },
+    ownerId: 'p1', primarySkill: profile(1009, [8, 5, 2, 0.5, 1, 1]),
+    rng: createNativeRng(91), targets: [], underpowered: false, worldKey: 'boneyard:1',
+  }).projectiles[0]!
+  const turnWord = nativeGroundSparkPrivateWord(born.presentationSeed!)
+  const signWord = nativeGroundSparkPrivateWord(turnWord)
+  const speedWord = nativeGroundSparkPrivateWord(signWord)
+  const stepped = stepNativeWeldProjectile(born, [])
+  assert.deepEqual(stepped.position, { x: 10, y: 31 })
+  assert.equal(stepped.presentationSeed, speedWord)
+  assert.equal(stepped.speed, speedWord % 4 + 1)
+  assert.equal(stepped.groundSparkTurnTicksRemaining, 20)
+  assert.equal(stepped.groundSparkNativeAgeTicks, born.groundSparkNativeAgeTicks! + 1)
+  assert.notDeepEqual(stepped.direction, born.direction)
+})
+
+test('Ball Lightning applies and decays its native temporary acceleration', () => {
+  const born = spawnNativeWeldOneShot({
+    aimDirection: { x: 1, y: 0 }, firstId: 1, origin: { x: 0, y: 0 },
+    ownerId: 'p1', primarySkill: profile(1002, [8, 8, 5, 1, 0.5, 0, 1]),
+    rng: createNativeRng(12), targets: [], underpowered: false, worldKey: 'boneyard:1',
+  }).projectiles[0]!
+  assert.equal(Math.hypot(born.velocity.x, born.velocity.y), Math.fround(
+    Math.fround(3 * Math.fround(0.5 * 0.8500000238418579)) * 3,
+  ))
+  const stepped = stepNativeWeldProjectile(born, [])
+  assert.equal(stepped.ballLightningAcceleration, Math.fround(2 * 0.8999999761581421))
+  assert.equal(Math.hypot(
+    stepped.position.x - born.position.x,
+    stepped.position.y - born.position.y,
+  ), Math.hypot(
+    born.velocity.x,
+    born.velocity.y,
+  ))
+  assert.ok(stepped.basePresentationPhaseDegrees! > born.basePresentationPhaseDegrees!)
 })
 
 test('welded channel actors retain authoritative Lightning geometry', () => {

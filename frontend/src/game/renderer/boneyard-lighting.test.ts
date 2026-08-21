@@ -16,6 +16,10 @@ import {
   nativeSignedRandomFloatFromSemanticWords,
 } from '../core-kernels/native-random-domain.ts'
 import {
+  createNativeWeldPersistentActor,
+  type NativeWeldProjectileState,
+} from '../core-kernels/native-weld-primary-runtime.ts'
+import {
   NATIVE_DEFAULT_LIGHT_QUALITY,
   NATIVE_DEFAULT_MULTIPLE_SHADOWS,
   NATIVE_LANTERN_LIGHT_MIN_INTENSITY,
@@ -42,6 +46,8 @@ import {
   nativeRegionLightTargetPlan,
   nativeRegionLightStamp,
   nativeSolomonSetPieceLighting,
+  nativeWeldProjectileLightSource,
+  nativeWeldRockLightSource,
 } from './boneyard-lighting.ts'
 import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
 import {
@@ -131,6 +137,47 @@ function enemyProjectile(
     position: { x: 31, y: 47 },
     spawnTick: 80,
     ...overrides,
+  }
+}
+
+function weldProjectile(buildId: 1000 | 1009): NativeWeldProjectileState {
+  return {
+    ageTicks: 1,
+    ballLightningAcceleration: null,
+    basePresentationPhaseDegrees: buildId === 1009 ? null : 20,
+    buildId,
+    castPlaybackRate: 1,
+    castSoundVariant: buildId === 1009 ? 0 : null,
+    charge: 1,
+    contactsRemaining: 1,
+    damage: 8,
+    direction: { x: 1, y: 0 },
+    flightTicks: 1,
+    frostPulseAspect: null,
+    frostTurnDegrees: null,
+    groundSparkNativeAgeTicks: buildId === 1009 ? 20 : null,
+    groundSparkTurnTicksRemaining: buildId === 1009 ? 10 : null,
+    headingDegrees: 90,
+    hitTargetIds: [],
+    id: 9,
+    kind: 'weld',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 9 },
+    ownerId: 'wizard',
+    phase: 'flight',
+    position: { x: 10, y: 20 },
+    presentationSeed: buildId === 1009 ? 17 : 42,
+    projectileIndex: 0,
+    secondaryPresentationPhaseDegrees: null,
+    speed: buildId === 1009 ? 4 : 3,
+    targetId: null,
+    turnAccumulator: 0.01,
+    turnInput: buildId === 1009 ? 0 : 2,
+    underpowered: false,
+    vector: buildId === 1009
+      ? [8, 2, 0, 1, 0, 1]
+      : [8, 8, 2, 1, 1, 0, 0, 0, 0],
+    velocity: { x: buildId === 1009 ? 4 : 3, y: 0 },
+    worldKey: 'boneyard:1',
   }
 }
 
@@ -533,6 +580,38 @@ test('publishes currently modeled Ether and Earth providers through native defau
     charge: 0.8,
     position: { x: 30, y: 40 },
   }).radius, 1.6)
+})
+
+test('projects every welded projectile and retained-rock light provider exactly', () => {
+  const missile = nativeWeldProjectileLightSource(weldProjectile(1000), 41)
+  assert.equal(missile.intensity, 0.75)
+  assert.equal(missile.castsDirectionalShadow, true)
+  assert.ok(missile.radius >= 0.75 && missile.radius <= 0.85)
+
+  const spark = nativeWeldProjectileLightSource(weldProjectile(1009), 41)
+  assert.equal(spark.castsDirectionalShadow, false)
+  assert.ok(spark.intensity >= 0.5 && spark.intensity <= 1)
+  assert.equal(spark.radius, Math.fround(0.4))
+
+  const retained = createNativeWeldPersistentActor({
+    buildId: 1006,
+    direction: { x: 1, y: 0 },
+    id: 8,
+    origin: { x: 30, y: 40 },
+    ownerId: 'wizard',
+    tick: 1,
+    vector: [8, 2, 1, 1, 1, 1],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(retained.buildId, 1006)
+  if (retained.buildId !== 1006) throw new Error('expected Ethereal Boulder')
+  assert.deepEqual(nativeWeldRockLightSource(retained), {
+    castsDirectionalShadow: true,
+    intensity: 0.5,
+    position: { x: 30, y: 40 },
+    radius: 0.5,
+  })
+  assert.equal(nativeWeldRockLightSource({ ...retained, scale: 1 }).radius, 0.75)
 })
 
 test('table-drives every source-family disposition exposed by the pure lighting adapters', () => {

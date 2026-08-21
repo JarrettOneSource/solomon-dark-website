@@ -170,11 +170,13 @@ test('plays the authoritative welded one-shot sound variant without relying on a
   )
   const emitted = weldedSnapshot(initial, 1002, {
     emissionSequence: 1,
+    lastWeldPlaybackRate: 1.125,
     lastWeldSoundVariant: 0,
   })
   synchronizer.update(emitted)
   synchronizer.update(emitted)
   assert.deepEqual(audio.sounds, ['throw-lightning-1'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 1.125, volume: 1 }])
   synchronizer.destroy()
 })
 
@@ -305,7 +307,7 @@ test('consumes GoodImp landing and Bite banks only from replicated actor counter
   assert.deepEqual(audio.sounds, ['imp-vocal-4', 'bite-3', 'imp-vocal-1'])
 })
 
-test('orders low-mana fizzle before both attenuated one-shot launches', () => {
+test('orders low-mana fizzle before both pitch-reduced one-shot launches', () => {
   for (const [element, cue] of [
     ['ether', 'magic-missile'],
     ['fire', 'throw-fire'],
@@ -338,7 +340,7 @@ test('orders low-mana fizzle before both attenuated one-shot launches', () => {
     assert.deepEqual(audio.sounds, ['fizzle', cue])
     assert.deepEqual(audio.soundOptions, [
       { playbackRate: 1, volume: 1 },
-      { volume: 0.75 },
+      { playbackRate: 0.75, volume: 1 },
     ])
   }
 })
@@ -928,6 +930,7 @@ function weldedSnapshot(
     castSequence: number
     channelActive: boolean
     emissionSequence: number
+    lastWeldPlaybackRate: number | null
     lastWeldSoundVariant: number | null
   }> = {},
 ): Snapshot {

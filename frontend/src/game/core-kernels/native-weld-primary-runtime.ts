@@ -67,8 +67,10 @@ const WELD_AUDIO_PLANS: Readonly<Record<NativeWeldBuildId, NativeWeldAudioPlan>>
 
 export interface NativeWeldProjectileState {
   readonly ageTicks: number
+  readonly ballLightningAcceleration: number | null
   readonly basePresentationPhaseDegrees: number | null
   readonly buildId: NativeWeldOneShotBuildId
+  readonly castPlaybackRate: number
   readonly castSoundVariant: number | null
   readonly charge: 1
   readonly contactsRemaining: number
@@ -78,6 +80,10 @@ export interface NativeWeldProjectileState {
   readonly headingDegrees: number
   readonly hitTargetIds: readonly string[]
   readonly id: number
+  readonly frostPulseAspect: number | null
+  readonly frostTurnDegrees: number | null
+  readonly groundSparkNativeAgeTicks: number | null
+  readonly groundSparkTurnTicksRemaining: number | null
   readonly kind: 'weld'
   readonly lightRegistration: NativeLightProviderRegistration
   readonly ownerId: string
@@ -90,6 +96,7 @@ export interface NativeWeldProjectileState {
   readonly targetId: string | null
   readonly turnAccumulator: number
   readonly turnInput: number
+  readonly underpowered: boolean
   readonly vector: readonly number[]
   readonly velocity: Vector2
   readonly worldKey: string
@@ -101,7 +108,6 @@ interface NativeWeldOwnedActorBase {
   readonly buildId: NativeWeldBuildId
   readonly direction: Vector2
   readonly id: number
-  readonly lightRegistration?: null
   readonly origin: Vector2
   readonly ownerId: string
   readonly vector: readonly number[]
@@ -112,6 +118,7 @@ export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
   readonly buildId: NativeWeldChannelBuildId
   readonly endpoint: Vector2 | null
   readonly kind: 'weld-channel'
+  readonly lightRegistration: null
   readonly midpoint: Vector2 | null
   readonly targetId: string | null
   readonly variant: number
@@ -119,6 +126,7 @@ export interface NativeWeldChannelActorState extends NativeWeldOwnedActorBase {
 
 interface NativeWeldPersistentActorBase extends NativeWeldOwnedActorBase {
   readonly kind: 'weld-persistent'
+  readonly lightRegistration: NativeLightProviderRegistration | null
   readonly pulseSequence: number
 }
 
@@ -129,6 +137,7 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly flightTicks: number
   readonly hitTargetIds: readonly string[]
   readonly lifetimeTicksRemaining: number
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly maximumScale: number
   readonly orientation: EarthBoulderOrientation
   readonly phase: 'flight' | 'held'
@@ -154,6 +163,7 @@ export interface NativeWeldHailstoneRockState {
 export interface NativeWeldHailstonesState extends NativeWeldPersistentActorBase {
   readonly buildId: 1008
   readonly damage: number
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly maximumScale: 1
   readonly phase: 'flight' | 'held'
   readonly presentationScale: number
@@ -166,6 +176,7 @@ export interface NativeWeldHailstonesState extends NativeWeldPersistentActorBase
 
 export interface NativeWeldMeteorFieldState extends NativeWeldPersistentActorBase {
   readonly buildId: 1007
+  readonly lightRegistration: null
   readonly phase: 'held'
 }
 
@@ -181,6 +192,7 @@ export interface NativeWeldMeteorActorState extends NativeWeldOwnedActorBase {
   readonly impactDue: boolean
   readonly impactTicksRemaining: number
   readonly kind: 'weld-meteor'
+  readonly lightRegistration: NativeLightProviderRegistration
   readonly phase: 'fall' | 'impact'
   readonly position: Vector2
   readonly presentationPhase: number
@@ -193,6 +205,7 @@ export interface NativeWeldMeteorActorState extends NativeWeldOwnedActorBase {
 export interface NativeWeldImpactActorState extends NativeWeldOwnedActorBase {
   readonly buildId: NativeWeldOneShotBuildId | NativeWeldPersistentBuildId
   readonly kind: 'weld-impact'
+  readonly lightRegistration: null
   readonly position: Vector2
 }
 
@@ -211,6 +224,7 @@ export interface SpawnNativeWeldOneShotInput {
   readonly registerLightProvider?: RegisterNativeLightProvider
   readonly rng: NativeRngState
   readonly targets: readonly PrimarySpellTarget[]
+  readonly underpowered: boolean
   readonly worldKey: string
 }
 
@@ -230,6 +244,19 @@ export const NATIVE_WELD_HAILSTONES_SPEED = 10
 export const NATIVE_WELD_HAILSTONES_LOOKAHEAD = 30
 export const NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR = 3
 
+const NATIVE_WELD_BALL_LIGHTNING_SPEED_FACTOR = 0.8500000238418579
+const NATIVE_WELD_BALL_LIGHTNING_INITIAL_ACCELERATION = 2
+const NATIVE_WELD_BALL_LIGHTNING_ACCELERATION_DECAY = 0.8999999761581421
+const NATIVE_WELD_BALL_LIGHTNING_SPEED_CAP = 6
+const NATIVE_WELD_FROST_TURN_DECAY = 0.949999988079071
+const NATIVE_WELD_FROST_TURN_LIMIT = 35
+const NATIVE_WELD_GROUND_SPARK_AUDIO_RANGE = Math.fround(0.05)
+const NATIVE_WELD_GROUND_SPARK_WEAK_AUDIO_FACTOR = 0.800000011920929
+const NATIVE_WELD_GROUND_SPARK_PRIVATE_MULTIPLIER = 0x0a67cfcf
+const NATIVE_WELD_GROUND_SPARK_TURN_TICKS = 20
+const NATIVE_WELD_GROUND_SPARK_TURN_MINIMUM = 17
+const NATIVE_WELD_GROUND_SPARK_TURN_RANGE = 20
+
 export function nativeWeldAudioPlan(buildId: NativeWeldBuildId): NativeWeldAudioPlan {
   return WELD_AUDIO_PLANS[buildId]
 }
@@ -248,12 +275,33 @@ export function spawnNativeWeldOneShot(
   )
   let rng = damage.rng
   const aimHeading = actorHeadingFromVector(input.aimDirection.x, input.aimDirection.y)
-  const quantity = profile.buildId === 1009 ? 3 : Math.round(profile.vector.values[3]!)
-  let groundSparkMotionScale = 1
-  if (profile.buildId === 1009) {
-    const draw = drawNativeFloat(rng, Math.fround(0.05))
+  const quantity = input.underpowered
+    ? 1
+    : profile.buildId === 1009
+      ? 3
+      : Math.round(profile.vector.values[3]!)
+  let castPlaybackRate = input.underpowered ? Math.fround(0.75) : 1
+  let ballLightningTurnScale = 1
+  if (profile.buildId === 1001) {
+    const draw = drawNativeFloat(rng, Math.fround(0.1))
     rng = draw.state
-    groundSparkMotionScale = Math.fround(1 + draw.value)
+    if (!input.underpowered) castPlaybackRate = Math.fround(1 + draw.value)
+  } else if (profile.buildId === 1002) {
+    const draw = drawNativeFloat(rng, Math.fround(0.25))
+    rng = draw.state
+    ballLightningTurnScale = input.underpowered
+      ? Math.fround(0.75)
+      : Math.fround(1 + draw.value)
+    castPlaybackRate = ballLightningTurnScale
+  } else if (profile.buildId === 1009) {
+    const draw = drawNativeFloat(rng, NATIVE_WELD_GROUND_SPARK_AUDIO_RANGE, true)
+    rng = draw.state
+    castPlaybackRate = Math.fround(1 + draw.value)
+    if (input.underpowered) {
+      castPlaybackRate = Math.fround(
+        castPlaybackRate * NATIVE_WELD_GROUND_SPARK_WEAK_AUDIO_FACTOR,
+      )
+    }
   }
   let castSoundVariant: number | null = null
   if (profile.buildId === 1002 || profile.buildId === 1009) {
@@ -267,15 +315,27 @@ export function spawnNativeWeldOneShot(
       ? normalizeDegrees(aimHeading + (index === 0 ? 0 : index === 1 ? -30 : 30))
       : nativeWeldMissileFanHeading(aimHeading, quantity, index)
     const direction = directionFromHeading(headingDegrees)
+    const position = Object.freeze({
+      x: input.origin.x,
+      y: Math.fround(input.origin.y + (profile.buildId === 1009 ? 15 : 10)),
+    })
     const speedFactor = profile.buildId === 1009
-      ? Math.fround(profile.vector.values[5]! * groundSparkMotionScale)
-      : profile.vector.values[4]!
-    const speed = Math.fround(3 * speedFactor)
+      ? index === 0 ? 4 : 3
+      : input.underpowered
+        ? Math.fround(0.8)
+        : profile.buildId === 1002
+          ? Math.fround(
+              profile.vector.values[4]! * NATIVE_WELD_BALL_LIGHTNING_SPEED_FACTOR,
+            )
+          : profile.vector.values[4]!
+    const speed = profile.buildId === 1009
+      ? speedFactor
+      : Math.fround(3 * speedFactor)
     const target = profile.buildId === 1009
       ? null
       : selectEtherPrimaryTarget({
           aimDirection: direction,
-          origin: input.origin,
+          origin: position,
           targets: input.targets,
         })
     let basePresentationPhaseDegrees: number | null = null
@@ -285,12 +345,17 @@ export function spawnNativeWeldOneShot(
       basePresentationPhaseDegrees = phase.value
     }
     let secondaryPresentationPhaseDegrees: number | null = null
+    let frostPulseAspect: number | null = null
     if (profile.buildId === 1001) {
       const phase = drawNativeFloat(rng, 360)
       rng = phase.state
       secondaryPresentationPhaseDegrees = phase.value
+      const aspect = drawNativeFloat(rng, Math.fround(0.25))
+      rng = aspect.state
+      frostPulseAspect = Math.fround(0.5 + aspect.value)
     }
     let presentationSeed: number | null = null
+    let groundSparkNativeAgeTicks: number | null = null
     if (profile.buildId === 1000 || profile.buildId === 1009) {
       const nativeSeed = drawNativeInteger(
         rng,
@@ -298,19 +363,41 @@ export function spawnNativeWeldOneShot(
       )
       rng = nativeSeed.state
       presentationSeed = nativeSeed.value
+      if (profile.buildId === 1009) {
+        const age = drawNativeInteger(rng, 360)
+        rng = age.state
+        groundSparkNativeAgeTicks = age.value
+      }
     }
+    const vector = underpoweredWeldVector(
+      profile.buildId,
+      profile.vector.values,
+      input.underpowered,
+    )
+    const ballLightningAcceleration = profile.buildId === 1002
+      ? NATIVE_WELD_BALL_LIGHTNING_INITIAL_ACCELERATION
+      : null
+    const movementSpeed = profile.buildId === 1002
+      ? nativeBallLightningMovementSpeed(speed, ballLightningAcceleration!)
+      : speed
     projectiles.push(Object.freeze({
       ageTicks: 0,
+      ballLightningAcceleration,
       basePresentationPhaseDegrees,
       buildId: profile.buildId,
+      castPlaybackRate,
       castSoundVariant,
       charge: 1,
       contactsRemaining: profile.buildId === 1009
-        ? Math.round(profile.vector.values[4]!) + 1
+        ? Math.round(vector[4]!) + 1
         : 1,
-      damage: damage.value,
+      damage: Math.fround(damage.value * (input.underpowered ? 0.5 : 1)),
       direction,
       flightTicks: 0,
+      frostPulseAspect,
+      frostTurnDegrees: profile.buildId === 1001 ? 0 : null,
+      groundSparkNativeAgeTicks,
+      groundSparkTurnTicksRemaining: profile.buildId === 1009 ? 0 : null,
       headingDegrees,
       hitTargetIds: Object.freeze([]),
       id: input.firstId + index,
@@ -321,9 +408,7 @@ export function spawnNativeWeldOneShot(
       }),
       ownerId: input.ownerId,
       phase: 'flight',
-      position: Object.freeze(profile.buildId === 1009
-        ? { x: input.origin.x, y: Math.fround(input.origin.y + 15) }
-        : { ...input.origin }),
+      position,
       presentationSeed,
       projectileIndex: index,
       secondaryPresentationPhaseDegrees,
@@ -333,10 +418,17 @@ export function spawnNativeWeldOneShot(
       turnInput: profile.buildId === 1009
         ? 0
         : Math.fround(
-            2 * profile.vector.values[4]! * 0.75 ** Math.ceil(index / 2),
+            2
+              * speedFactor
+              * (profile.buildId === 1002 ? ballLightningTurnScale : 1)
+              * 0.75 ** Math.ceil(index / 2),
           ),
-      vector: Object.freeze([...profile.vector.values]),
-      velocity: Object.freeze({ x: direction.x * speed, y: direction.y * speed }),
+      underpowered: input.underpowered,
+      vector,
+      velocity: Object.freeze({
+        x: Math.fround(direction.x * movementSpeed),
+        y: Math.fround(direction.y * movementSpeed),
+      }),
       worldKey: input.worldKey,
     }))
   }
@@ -352,11 +444,39 @@ export function stepNativeWeldProjectile(
       x: Math.fround(projectile.position.x + projectile.velocity.x),
       y: Math.fround(projectile.position.y + projectile.velocity.y),
     })
+    let direction = projectile.direction
+    let presentationSeed = projectile.presentationSeed!
+    let speed = projectile.speed
+    let turnTicksRemaining = projectile.groundSparkTurnTicksRemaining! - 1
+    if (turnTicksRemaining < 1) {
+      const turnMagnitudeWord = nativeGroundSparkPrivateWord(presentationSeed)
+      const turnSignWord = nativeGroundSparkPrivateWord(turnMagnitudeWord)
+      const speedWord = nativeGroundSparkPrivateWord(turnSignWord)
+      const magnitude = Math.fround(
+        Math.fround((turnMagnitudeWord % 100_000) / 100_000)
+          * NATIVE_WELD_GROUND_SPARK_TURN_RANGE
+          + NATIVE_WELD_GROUND_SPARK_TURN_MINIMUM,
+      )
+      const signedMagnitude = turnSignWord % 2 === 0 ? -magnitude : magnitude
+      direction = directionFromHeading(projectile.headingDegrees + signedMagnitude)
+      presentationSeed = speedWord
+      speed = speedWord % 4 + 1
+      turnTicksRemaining = NATIVE_WELD_GROUND_SPARK_TURN_TICKS
+    }
     return Object.freeze({
       ...projectile,
       ageTicks: projectile.ageTicks + 1,
+      direction,
       flightTicks: projectile.flightTicks + 1,
+      groundSparkNativeAgeTicks: projectile.groundSparkNativeAgeTicks! + 1,
+      groundSparkTurnTicksRemaining: turnTicksRemaining,
       position,
+      presentationSeed,
+      speed,
+      velocity: Object.freeze({
+        x: Math.fround(direction.x * speed),
+        y: Math.fround(direction.y * speed),
+      }),
     })
   }
   const candidate = projectile.targetId === null
@@ -369,27 +489,65 @@ export function stepNativeWeldProjectile(
         origin: projectile.position,
         targets,
       })
+  const movementSpeed = projectile.buildId === 1002
+    ? nativeBallLightningMovementSpeed(
+        projectile.speed,
+        projectile.ballLightningAcceleration!,
+      )
+    : projectile.speed
   const advanced = advanceEtherPrimaryHoming({
     headingDegrees: projectile.headingDegrees,
     movementScalar: 1,
     position: projectile.position,
-    speed: projectile.speed,
+    speed: movementSpeed,
     targetPosition: target?.position ?? null,
     turnAccumulator: projectile.turnAccumulator,
     turnInput: projectile.turnInput,
   })
+  const ballLightningAcceleration = projectile.buildId === 1002
+    ? Math.fround(
+        projectile.ballLightningAcceleration!
+          * NATIVE_WELD_BALL_LIGHTNING_ACCELERATION_DECAY,
+      )
+    : null
+  const nextMovementSpeed = projectile.buildId === 1002
+    ? nativeBallLightningMovementSpeed(projectile.speed, ballLightningAcceleration!)
+    : projectile.speed
+  let frostTurnDegrees = projectile.frostTurnDegrees
+  if (projectile.buildId === 1001) {
+    frostTurnDegrees = Math.fround(
+      projectile.frostTurnDegrees! * NATIVE_WELD_FROST_TURN_DECAY,
+    )
+    if (advanced.headingDegrees !== projectile.headingDegrees) {
+      frostTurnDegrees = Math.fround(
+        signedHeadingDelta(projectile.headingDegrees, advanced.headingDegrees)
+          + frostTurnDegrees,
+      )
+      frostTurnDegrees = Math.max(
+        -NATIVE_WELD_FROST_TURN_LIMIT,
+        Math.min(NATIVE_WELD_FROST_TURN_LIMIT, frostTurnDegrees),
+      )
+    }
+  }
   return Object.freeze({
     ...projectile,
     ageTicks: projectile.ageTicks + 1,
+    ballLightningAcceleration,
+    basePresentationPhaseDegrees: projectile.basePresentationPhaseDegrees === null
+      ? null
+      : Math.fround(
+          projectile.basePresentationPhaseDegrees + movementSpeed * 3,
+        ),
     direction: advanced.direction,
     flightTicks: projectile.flightTicks + 1,
+    frostTurnDegrees,
     headingDegrees: advanced.headingDegrees,
     position: advanced.position,
     targetId: target?.id ?? null,
     turnAccumulator: advanced.turnAccumulator,
     velocity: Object.freeze({
-      x: advanced.direction.x * projectile.speed,
-      y: advanced.direction.y * projectile.speed,
+      x: Math.fround(advanced.direction.x * nextMovementSpeed),
+      y: Math.fround(advanced.direction.y * nextMovementSpeed),
     }),
   })
 }
@@ -432,6 +590,7 @@ export function createNativeWeldPersistentActor(input: {
   readonly id: number
   readonly origin: Vector2
   readonly ownerId: string
+  readonly registerLightProvider?: RegisterNativeLightProvider
   readonly tick: number
   readonly vector: readonly number[]
   readonly worldKey: string
@@ -443,7 +602,6 @@ export function createNativeWeldPersistentActor(input: {
     direction: Object.freeze({ ...input.direction }),
     id: input.id,
     kind: 'weld-persistent',
-    lightRegistration: null,
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
     pulseSequence: 0,
@@ -459,6 +617,7 @@ export function createNativeWeldPersistentActor(input: {
       flightTicks: 0,
       hitTargetIds: Object.freeze([]),
       lifetimeTicksRemaining: Math.floor(input.vector[3]! * 1_000 + 250),
+      lightRegistration: weldActorLightRegistration(input),
       maximumScale: Math.fround(0.75),
       orientation: Object.freeze([
         ...EARTH_BOULDER_IDENTITY_ORIENTATION,
@@ -478,6 +637,7 @@ export function createNativeWeldPersistentActor(input: {
       ...base,
       buildId: 1008,
       damage: input.vector[0]!,
+      lightRegistration: weldActorLightRegistration(input),
       maximumScale: 1,
       phase: 'held',
       presentationScale: 1,
@@ -488,7 +648,12 @@ export function createNativeWeldPersistentActor(input: {
       widen: input.vector[5]!,
     })
   }
-  return Object.freeze({ ...base, buildId: 1007, phase: 'held' })
+  return Object.freeze({
+    ...base,
+    buildId: 1007,
+    lightRegistration: null,
+    phase: 'held',
+  })
 }
 
 export function updateNativeWeldPersistentActor(
@@ -561,6 +726,7 @@ export function updateNativeWeldPersistentActor(
 export function releaseNativeWeldPersistentActor(input: {
   readonly actor: NativeWeldPersistentActorState
   readonly firstChildId: number
+  readonly registerLightProvider?: RegisterNativeLightProvider
   readonly rng: NativeRngState
 }): {
   readonly actors: readonly NativeWeldPersistentActorState[]
@@ -606,6 +772,12 @@ export function releaseNativeWeldPersistentActor(input: {
       direction: piece.direction,
       hitTargetIds: Object.freeze([]),
       id: index === 0 ? actor.id : input.firstChildId + index - 1,
+      lightRegistration: index === 0
+        ? actor.lightRegistration
+        : input.registerLightProvider?.('actor') ?? Object.freeze({
+            managerLane: 'actor',
+            registrationOrdinal: input.firstChildId + index - 1,
+          }),
       lifetimeTicksRemaining: Math.floor(piece.speedFactor * 1_000 + 250),
       origin: piece.origin,
       phase: 'flight',
@@ -659,6 +831,7 @@ export function createNativeWeldMeteor(input: {
   readonly ownerId: string
   readonly presentationPhase: number
   readonly privateSeed: number
+  readonly registerLightProvider?: RegisterNativeLightProvider
   readonly tick: number
   readonly vector: readonly number[]
   readonly worldKey: string
@@ -674,7 +847,10 @@ export function createNativeWeldMeteor(input: {
     impactDue: false,
     impactTicksRemaining: NATIVE_WELD_METEOR_IMPACT_TICKS,
     kind: 'weld-meteor',
-    lightRegistration: null,
+    lightRegistration: input.registerLightProvider?.('actor') ?? Object.freeze({
+      managerLane: 'actor',
+      registrationOrdinal: input.id,
+    }),
     origin: Object.freeze({ ...input.origin }),
     ownerId: input.ownerId,
     position: Object.freeze({ ...input.origin }),
@@ -851,6 +1027,75 @@ function plan(
     nativeSoundIds: Object.freeze([...(audio.sounds ?? [])]),
     nativeSoundVariantIds: Object.freeze([...(audio.soundVariants ?? [])]),
   })
+}
+
+function underpoweredWeldVector(
+  buildId: NativeWeldOneShotBuildId,
+  source: readonly number[],
+  underpowered: boolean,
+): readonly number[] {
+  if (!underpowered) return Object.freeze([...source])
+  const values = [...source]
+  switch (buildId) {
+    case 1000:
+      values[3] = 1
+      values[4] = Math.fround(0.8)
+      values[5] = 0
+      values[6] = 0
+      values[7] = 0
+      values[8] = 0
+      break
+    case 1001:
+      values[3] = 1
+      values[4] = Math.fround(0.8)
+      values[5] = 0
+      values[6] = 0
+      break
+    case 1002:
+      values[3] = 1
+      values[4] = Math.fround(0.8)
+      values[5] = 0
+      values[6] = 1
+      break
+    case 1009:
+      values[2] = 0
+      values[3] = 1
+      values[4] = 0
+      break
+  }
+  return Object.freeze(values)
+}
+
+function weldActorLightRegistration(input: {
+  readonly id: number
+  readonly registerLightProvider?: RegisterNativeLightProvider
+}): NativeLightProviderRegistration {
+  return input.registerLightProvider?.('actor') ?? Object.freeze({
+    managerLane: 'actor',
+    registrationOrdinal: input.id,
+  })
+}
+
+function nativeBallLightningMovementSpeed(
+  baseSpeed: number,
+  acceleration: number,
+): number {
+  return Math.min(
+    NATIVE_WELD_BALL_LIGHTNING_SPEED_CAP,
+    Math.fround(Math.fround(acceleration + 1) * baseSpeed),
+  )
+}
+
+/** Private GroundSpark xorshift/multiply word, including native signed abs. */
+export function nativeGroundSparkPrivateWord(source: number): number {
+  let value = (source ^ (source << 21)) >>> 0
+  value = (value ^ (value >>> 11)) >>> 0
+  value = Math.imul((value ^ (value << 4)) >>> 0, NATIVE_WELD_GROUND_SPARK_PRIVATE_MULTIPLIER) >>> 0
+  return Math.abs(value | 0) >>> 0
+}
+
+function signedHeadingDelta(current: number, next: number): number {
+  return ((next - current + 540) % 360) - 180
 }
 
 function rebuildNativeWeldHailstonesRocks(

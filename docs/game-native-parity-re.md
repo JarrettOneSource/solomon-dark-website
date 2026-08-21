@@ -25073,3 +25073,114 @@ a combined Flash-plus-Deflect case, radius membership, Dazzle merge, 8+4 actor
 construction and recurrence, records 15/16, Region decay, strict protocol,
 stock PCM, event audio, and a live Boneyard damaging contact. No Flash branch
 or presentation child remains inferred.
+
+## 2026-08-20 — Welded-primary runtime and presentation closure
+
+### Reopened parity boundary
+
+The first welded-primary integration correctly recovered the ten stat-vector
+recipes and much of their combat membership, but treated several constructor
+draws as cosmetic and reused ordinary element views for mixed spell actors.
+Fresh instruction-level review falsified those assumptions. This pass owns the
+complete build-1000..1009 system: rebuilt vector, low-mana branch, actor RNG,
+motion/contact, target modifiers, every child VFX owner, audio pitch/variant,
+Region-light registration/submission, painter lane, release, and teardown.
+
+### Evidence and provenance
+
+| Evidence class | Exact source | Observation | Confidence |
+| --- | --- | --- | --- |
+| Retail image | `SolomonDark.exe`, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3` | Source of every address/constant below. | high |
+| One-shot handlers | `0x0053E6A0`, `0x0053F3C0`, `0x0053EDB0`, `0x00545FC0`; raw instructions around every RNG/audio/factory call | Pins low-mana mutation, pitch-before-variant ordering, spawn offsets, fan geometry, constructor draws, Ball temporary acceleration, and GroundSpark private motion. | high |
+| Concrete actors | Fire/Frost/Ball/Ground constructors and ticks `0x005E4990`, `0x005E4C50`, `0x005E4F30`, `0x005E4FB0`, `0x005E76F0`, `0x005FD550`, `0x005FD720`, `0x005FD7A0`, `0x00611EB0` | Actor fields—not the browser renderer—own phase, weak state, acceleration, Frost turn/pulses, private seed, random native age, and movement recurrence. | high |
+| Draw/light vslots | `0x00608F80`, `0x006093B0`, `0x005E0670`, `0x005E1B00`, `0x005E4AF0`, `0x005E7800`, `0x005E5670`, `0x005E7040` | Closes direct atlas/procedural draw families and provider formulas/lane disposition. | high |
+| Sustained/persistent handlers | `0x005408F0`, `0x00541870`, `0x00542D20`, `0x00545360`, `0x0052BB60`, `0x00545C20`; concrete animation/projectile vtables | Proves that Flame Lash, Blizzard Beam, Steam Jet, EBoulder, Meteor, and Hailstones are distinct actor families rather than recolored ordinary primaries. | high |
+| Audio core | `Sound::Play(pitch,gain) 0x00407CD0 -> 0x00407DC0`; compiled registry | The first explicit float is pitch. Low-mana `.75` is pitch, not gain; random Frost/Ball/Ground pitch must be authoritative. | high |
+
+### System membership and web disposition
+
+| Member | Native ownership | Required web disposition |
+| --- | --- | --- |
+| 1000 Burning Bolt | FireMissile fan, per-tick fire fade, Fire impact helper | shared projectile authority, actor light, Fire child actors and two one-shots |
+| 1001 Frost Missile | FrostMissile fan, two pulse lanes, turn overlay, ColdSlow and radial helper | replicated actor presentation fields, radial/contact authority, actor light |
+| 1002 Ball Lightning | accelerated MagicMissile-derived actor, ElectricBurn, FadeLightning | replicated acceleration/phase, variant+pitch audio edge, actor light |
+| 1003 Flame Lash | two-tick textured mesh plus Lightning chain/fades and Fire payload | dedicated Flame Lash view; replicated target/chain geometry; no invented light |
+| 1004 Blizzard Beam | two-tick beam, widened Frost selection, Lightning chains | dedicated beam view; Cold-before-Stun target effects; no ordinary Frost-Jet substitution |
+| 1005 Steam Jet | normal/over stream actors and target-owned Steamed | two native stream views plus ten-tick fire payload lifecycle |
+| 1006 Ethereal Boulder | retained EBoulder and recursive separately registered children | actor-owned rock set/orientation/pools, provider registration, release/split cleanup |
+| 1007 Meteor Swarm | retained channel owner, periodic Meteor actors, impact debris/fire | exact cadence/RNG, per-Meteor lifecycle/provider registration, provider submits no light for normal size |
+| 1008 Hailstones | retained rock carrier and independently retiring released rocks | exact bucket rebuild/release/contact state, actor light, held/flight renderer |
+| 1009 Crawling Shock | center and two side GroundSparks, private movement and ElectricBurn | replicated private seed/native age/timer, exact 15-unit contacts, actor light |
+
+### Corrected one-shot contract
+
+- Fire/Frost/Ball spawn at Staff emitter `(0,+10)`; GroundSpark uses `(0,+15)`.
+- One damage draw is shared by the whole fan. Fixed endpoints consume no word.
+- Fire consumes inherited `Float(360)` then `Integer(100000)` per actor.
+  Frost consumes cast `Float(.1)`, then inherited `Float(360)`, its second
+  `Float(360)`, and `.5+Float(.25)` per actor. Ball consumes `Float(.25)`,
+  `Integer(2)`, then inherited `Float(360)` per actor. Ground consumes signed
+  `Float(.05)`, `Integer(3)`, then `Integer(1000000)` and `Integer(360)` per
+  actor.
+- Ball base speed is float32 `3 * vectorSpeed * .8500000238418579`.
+  Acceleration starts at two, temporarily multiplies motion with a cap of six,
+  and decays by `.8999999761581421`; the same cast draw initializes pitch and
+  the fan turn multiplier.
+- Ground begins at speed four for center and three for sides. After the first
+  movement and each 20-tick expiry, three private xorshift/multiply words choose
+  heading magnitude `17..37`, sign, and speed `1..4`. The original cast heading
+  stays the reference.
+- Underpowered Fire/Frost/Ball produce one actor at half damage and speed factor
+  `.8`; all learned payloads are suppressed. Ball also uses turn/pitch `.75`.
+  Ground produces only center, halves damage, removes arcs/extra contacts, sets
+  movement factor one, and multiplies its sampled pitch by
+  `.800000011920929`. The separate fizzle precedes the cast cue at gain one.
+
+Protocol 39 carries cast playback rate, sound variant, weak state, mutable
+base phase, Ball acceleration, Frost aspect/turn, Ground private word/native
+age/turn timer, effective per-actor vector, and provider registration. The
+player cast edge retains pitch/variant so a same-tick obstruction/contact
+cannot erase audio before the snapshot. Clients interpolate motion and the
+continuous presentation fields but never reroll authority.
+
+### Effects, VFX, and lighting contract
+
+- Frost direct contact attaches 150-tick `.5` ColdSlow, applies direct damage,
+  then helper `0x00643920` revisits every still-live root in its float32 radius:
+  `push*120`, followed by fifteen multiplies by `1.024999976158142`. Each area
+  hit receives damage `/20` and ColdSlow. Direct target participation is not
+  deduplicated from damage.
+- Ball/Ground ElectricBurn is a target-owned modifier. Each tick includes the
+  source plus the configured nearest distinct roots inside 200, preserves
+  registration order on distance ties, damages, and installs 25-tick Stun.
+  Merge ownership follows the strongest damage payload; ticks and damage keep
+  maxima.
+- FireMissile directly uses the Fire body/impact records; Frost, Ball, and
+  Ground own their concrete compositor/child programs. Flame Lash record-44
+  mesh, Blizzard's `0x005308D0` beam, Steam record-76 normal/over actors,
+  EBoulder 86/168..171/2008..2010, Meteor fall/impact/debris, and Hail shell 18
+  plus rocks 168..171 each require separate plans and lifetimes.
+- Fire/Frost/Ball light is intensity `.75`, radius `.75+Float(.1)`, actor lane,
+  with Multiple Shadows. Ground is actor lane, intensity `.5+Float(.5)`, radius
+  `.4`, no directional shadow. EBoulder/Hail are actor lane, intensity `.5`,
+  radius `max(.5,scale*.75)`, with Multiple Shadows. Weld-created Meteor size
+  is `5..6.25`, so its registered `0x005E7040` provider takes the `size>1`
+  return and submits no light.
+- Render-global random samples are projected from stable actor/frame identity;
+  this is the one explicit platform adaptation. Domains, recurrences, actor
+  state, painter order, provider lane/order, and teardown remain native.
+
+### Current implementation/verification checkpoint
+
+The corrected runtime slice has native low-mana payload suppression, exact
+one-shot constructor order, robust randomized pitch/variant audio, Ball
+acceleration, Frost constructor aspect/turn state, Ground private recurrence,
+Frost radial contact, strict protocol 39, retained-rock/Meteor provider
+registration, and pure welded light adapters. The focused runtime/combat/audio/
+protocol tests and test TypeScript build are green on the working tree.
+
+This is not the final Welding receipt. Remaining before this section can be
+marked complete: close Meteor impact-time RNG/debris/radius state, finish the
+dedicated ten-build renderer and asset preload, add full provider/painter tests,
+run the canonical Website gate, and cast all ten builds in the real Mac mini
+browser journey with visual/audio/light diagnostics and zero errors.

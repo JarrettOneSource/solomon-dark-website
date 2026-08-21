@@ -9,6 +9,11 @@ import type {
   BoneyardEnemySnapshot,
 } from '../protocol/game-state.ts'
 import type { NativeSecondaryActorState } from '../core-kernels/native-secondary-abilities.ts'
+import type {
+  NativeWeldHailstonesState,
+  NativeWeldEtherealBoulderState,
+  NativeWeldProjectileState,
+} from '../core-kernels/native-weld-primary-runtime.ts'
 
 export interface NativeBoneyardLightSample {
   intensity: number
@@ -326,6 +331,40 @@ export function nativeBoulderLightSource(
     intensity: 0.5,
     position: { ...owner.position },
     radius: Math.max(1, 2 * owner.charge),
+  }
+}
+
+export function nativeWeldProjectileLightSource(
+  projectile: NativeWeldProjectileState,
+  presentationFrame: number,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+): NativeBoneyardLightSource {
+  if (projectile.buildId !== 1009) {
+    return nativeMissileLightSource(projectile, presentationFrame, multipleShadows)
+  }
+  return {
+    castsDirectionalShadow: false,
+    intensity: Math.fround(
+      0.5 + presentationRandom(
+        presentationFrame,
+        projectile.id ^ 0x5e7800,
+        0.5,
+      ),
+    ),
+    position: { ...projectile.position },
+    radius: Math.fround(0.4),
+  }
+}
+
+export function nativeWeldRockLightSource(
+  actor: NativeWeldEtherealBoulderState | NativeWeldHailstonesState,
+  multipleShadows = NATIVE_DEFAULT_MULTIPLE_SHADOWS,
+): NativeBoneyardLightSource {
+  return {
+    castsDirectionalShadow: multipleShadows,
+    intensity: 0.5,
+    position: { ...actor.origin },
+    radius: Math.max(0.5, Math.fround(actor.scale * 0.75)),
   }
 }
 

@@ -122,20 +122,24 @@ export class PrimarySpellAudioSynchronizer {
           })
         }
         if (player.primaryCast.emissionSequence > previous.primaryCast.emissionSequence) {
-          const launchVolume = volume * (player.primaryCast.underpowered ? 0.75 : 1)
           if (weldBuildId !== null && isWeldOneShot(weldBuildId)) {
+            const playbackRate = player.primaryCast.lastWeldPlaybackRate
+            if (playbackRate === null) {
+              throw new Error(`weld build ${weldBuildId} emitted without native playback rate`)
+            }
             const count = player.primaryCast.emissionSequence
               - previous.primaryCast.emissionSequence
             for (let emission = 0; emission < count; emission += 1) {
               for (const cue of nativeWeldCastSoundCues(
                 weldBuildId,
                 player.primaryCast.lastWeldSoundVariant,
-              )) this.audio.playSound(cue, { volume: launchVolume })
+              )) this.audio.playSound(cue, { playbackRate, volume })
             }
           } else if (weldBuildId === null) {
+            const playbackRate = player.primaryCast.underpowered ? 0.75 : 1
             switch (player.config.element) {
-              case 'ether': this.audio.playSound('magic-missile', { volume: launchVolume }); break
-              case 'fire': this.audio.playSound('throw-fire', { volume: launchVolume }); break
+              case 'ether': this.audio.playSound('magic-missile', { playbackRate, volume }); break
+              case 'fire': this.audio.playSound('throw-fire', { playbackRate, volume }); break
               case 'air':
               case 'earth':
               case 'water':

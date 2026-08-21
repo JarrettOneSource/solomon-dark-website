@@ -237,7 +237,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 38
+export const GAME_PROTOCOL_VERSION = 39
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -2032,6 +2032,7 @@ function playerPrimaryCastState(
     'emissionSequence',
     'fizzleSequence',
     'held',
+    'lastWeldPlaybackRate',
     'lastWeldSoundVariant',
     'targetId',
     'underpowered',
@@ -2065,6 +2066,18 @@ function playerPrimaryCastState(
     || (lastWeldSoundVariant !== null && lastWeldSoundVariant >= weldSoundVariantCount)) {
     throw new GameProtocolError(`${field}.lastWeldSoundVariant does not match the active build`)
   }
+  const lastWeldPlaybackRate = source.lastWeldPlaybackRate === null
+    ? null
+    : positiveFinite(source.lastWeldPlaybackRate, `${field}.lastWeldPlaybackRate`)
+  const weldOneShot = activeWeldBuildId === 1000
+    || activeWeldBuildId === 1001
+    || activeWeldBuildId === 1002
+    || activeWeldBuildId === 1009
+  if ((!weldOneShot && lastWeldPlaybackRate !== null)
+    || (lastWeldPlaybackRate !== null
+      && (lastWeldPlaybackRate < 0.5 || lastWeldPlaybackRate > 1.5))) {
+    throw new GameProtocolError(`${field}.lastWeldPlaybackRate does not match the active build`)
+  }
   return {
     actionTick,
     aimDirection: unitVector(source.aimDirection, `${field}.aimDirection`),
@@ -2079,6 +2092,7 @@ function playerPrimaryCastState(
       `${field}.fizzleSequence`,
     ),
     held: boolean(source.held, `${field}.held`),
+    lastWeldPlaybackRate,
     lastWeldSoundVariant,
     targetId,
     underpowered: boolean(source.underpowered, `${field}.underpowered`),
@@ -3987,12 +4001,14 @@ function primarySpellWeldProjectile(
   field: string,
 ): NativeWeldProjectileState {
   onlyKeys(source, field, [
-    'ageTicks', 'basePresentationPhaseDegrees', 'buildId', 'castSoundVariant',
-    'charge', 'contactsRemaining', 'damage', 'direction',
-    'flightTicks', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
+    'ageTicks', 'ballLightningAcceleration', 'basePresentationPhaseDegrees',
+    'buildId', 'castPlaybackRate', 'castSoundVariant', 'charge',
+    'contactsRemaining', 'damage', 'direction', 'flightTicks', 'frostPulseAspect',
+    'frostTurnDegrees', 'groundSparkNativeAgeTicks',
+    'groundSparkTurnTicksRemaining', 'headingDegrees', 'hitTargetIds', 'id', 'kind',
     'lightRegistration', 'ownerId', 'phase', 'position', 'presentationSeed',
     'projectileIndex', 'secondaryPresentationPhaseDegrees', 'speed', 'targetId',
-    'turnAccumulator', 'turnInput', 'vector', 'velocity', 'worldKey',
+    'turnAccumulator', 'turnInput', 'underpowered', 'vector', 'velocity', 'worldKey',
   ])
   const buildId = weldBuildId(source.buildId, `${field}.buildId`)
   if (buildId !== 1000 && buildId !== 1001 && buildId !== 1002 && buildId !== 1009) {
@@ -4013,14 +4029,10 @@ function primarySpellWeldProjectile(
   const presentationSeed = source.presentationSeed === null
     ? null
     : nonnegativeInteger(source.presentationSeed, `${field}.presentationSeed`)
-  const presentationSeedLimit = buildId === 1000
-    ? 100_000
-    : buildId === 1009
-      ? 1_000_000
-      : 0
-  if ((presentationSeedLimit === 0 && presentationSeed !== null)
-    || (presentationSeedLimit > 0
-      && (presentationSeed === null || presentationSeed >= presentationSeedLimit))) {
+  if ((buildId !== 1000 && buildId !== 1009 && presentationSeed !== null)
+    || ((buildId === 1000 || buildId === 1009) && presentationSeed === null)
+    || (buildId === 1000 && presentationSeed !== null && presentationSeed >= 100_000)
+    || (buildId === 1009 && presentationSeed !== null && presentationSeed > 0xffff_ffff)) {
     throw new GameProtocolError(`${field}.presentationSeed does not match its welded build`)
   }
   const basePresentationPhaseDegrees = source.basePresentationPhaseDegrees === null
@@ -4028,7 +4040,7 @@ function primarySpellWeldProjectile(
     : finite(source.basePresentationPhaseDegrees, `${field}.basePresentationPhaseDegrees`)
   if ((buildId === 1009 && basePresentationPhaseDegrees !== null)
     || (buildId !== 1009 && (basePresentationPhaseDegrees === null
-      || basePresentationPhaseDegrees < 0 || basePresentationPhaseDegrees >= 360))) {
+      || basePresentationPhaseDegrees < 0))) {
     throw new GameProtocolError(
       `${field}.basePresentationPhaseDegrees does not match its welded build`,
     )
@@ -4056,6 +4068,58 @@ function primarySpellWeldProjectile(
       && (castSoundVariant === null || castSoundVariant >= soundVariantCount))) {
     throw new GameProtocolError(`${field}.castSoundVariant does not match its welded build`)
   }
+  const castPlaybackRate = positiveFinite(
+    source.castPlaybackRate,
+    `${field}.castPlaybackRate`,
+  )
+  if (castPlaybackRate < 0.5 || castPlaybackRate > 1.5) {
+    throw new GameProtocolError(`${field}.castPlaybackRate is outside the native lane`)
+  }
+  const ballLightningAcceleration = source.ballLightningAcceleration === null
+    ? null
+    : nonnegativeFinite(
+        source.ballLightningAcceleration,
+        `${field}.ballLightningAcceleration`,
+      )
+  if ((buildId !== 1002 && ballLightningAcceleration !== null)
+    || (buildId === 1002 && (ballLightningAcceleration === null
+      || ballLightningAcceleration > 2))) {
+    throw new GameProtocolError(`${field}.ballLightningAcceleration does not match its build`)
+  }
+  const frostPulseAspect = source.frostPulseAspect === null
+    ? null
+    : finite(source.frostPulseAspect, `${field}.frostPulseAspect`)
+  if ((buildId !== 1001 && frostPulseAspect !== null)
+    || (buildId === 1001 && (frostPulseAspect === null
+      || frostPulseAspect < 0.5 || frostPulseAspect > 0.75))) {
+    throw new GameProtocolError(`${field}.frostPulseAspect does not match its build`)
+  }
+  const frostTurnDegrees = source.frostTurnDegrees === null
+    ? null
+    : finite(source.frostTurnDegrees, `${field}.frostTurnDegrees`)
+  if ((buildId !== 1001 && frostTurnDegrees !== null)
+    || (buildId === 1001 && (frostTurnDegrees === null
+      || frostTurnDegrees < -35 || frostTurnDegrees > 35))) {
+    throw new GameProtocolError(`${field}.frostTurnDegrees does not match its build`)
+  }
+  const groundSparkNativeAgeTicks = source.groundSparkNativeAgeTicks === null
+    ? null
+    : nonnegativeInteger(
+        source.groundSparkNativeAgeTicks,
+        `${field}.groundSparkNativeAgeTicks`,
+      )
+  const groundSparkTurnTicksRemaining = source.groundSparkTurnTicksRemaining === null
+    ? null
+    : nonnegativeInteger(
+        source.groundSparkTurnTicksRemaining,
+        `${field}.groundSparkTurnTicksRemaining`,
+      )
+  if ((buildId !== 1009
+    && (groundSparkNativeAgeTicks !== null || groundSparkTurnTicksRemaining !== null))
+    || (buildId === 1009 && (groundSparkNativeAgeTicks === null
+      || groundSparkTurnTicksRemaining === null || groundSparkTurnTicksRemaining > 20))) {
+    throw new GameProtocolError(`${field} GroundSpark private motion state is malformed`)
+  }
   const targetId = source.targetId === null
     ? null
     : limitedString(source.targetId, `${field}.targetId`, 256)
@@ -4072,8 +4136,10 @@ function primarySpellWeldProjectile(
   }
   return {
     ageTicks,
+    ballLightningAcceleration,
     basePresentationPhaseDegrees,
     buildId,
+    castPlaybackRate,
     castSoundVariant,
     charge: 1,
     contactsRemaining: positiveInteger(
@@ -4083,6 +4149,10 @@ function primarySpellWeldProjectile(
     damage: positiveFinite(source.damage, `${field}.damage`),
     direction: unitVector(source.direction, `${field}.direction`),
     flightTicks,
+    frostPulseAspect,
+    frostTurnDegrees,
+    groundSparkNativeAgeTicks,
+    groundSparkTurnTicksRemaining,
     headingDegrees,
     hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
     id: positiveInteger(source.id, `${field}.id`),
@@ -4102,6 +4172,7 @@ function primarySpellWeldProjectile(
     targetId,
     turnAccumulator,
     turnInput,
+    underpowered: boolean(source.underpowered, `${field}.underpowered`),
     vector: weldVector(source.vector, buildId, `${field}.vector`),
     velocity: vector(source.velocity, `${field}.velocity`),
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
@@ -4154,10 +4225,6 @@ function primarySpellWeldActor(
     buildId,
     direction: unitVector(source.direction, `${field}.direction`),
     id: positiveInteger(source.id, `${field}.id`),
-    lightRegistration: absentNativeLightProviderRegistration(
-      source.lightRegistration,
-      `${field}.lightRegistration`,
-    ),
     origin: vector(source.origin, `${field}.origin`),
     ownerId: validatedPlayerId(source.ownerId, `${field}.ownerId`),
     vector: weldVector(source.vector, buildId, `${field}.vector`),
@@ -4193,6 +4260,10 @@ function primarySpellWeldActor(
       buildId,
       endpoint,
       kind: 'weld-channel',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       midpoint,
       targetId: source.targetId === null
         ? null
@@ -4213,6 +4284,10 @@ function primarySpellWeldActor(
       ...common,
       buildId,
       kind: 'weld-impact',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       position: vector(source.position, `${field}.position`),
     } satisfies NativeWeldImpactActorState
   }
@@ -4264,6 +4339,11 @@ function primarySpellWeldActor(
       impactDue: boolean(source.impactDue, `${field}.impactDue`),
       impactTicksRemaining,
       kind: 'weld-meteor',
+      lightRegistration: nativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+        'actor',
+      ),
       phase: source.phase,
       position: vector(source.position, `${field}.position`),
       presentationPhase,
@@ -4290,6 +4370,10 @@ function primarySpellWeldActor(
       ...common,
       buildId: 1007,
       kind: 'weld-persistent',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
       phase: 'held',
       pulseSequence,
     } satisfies NativeWeldMeteorFieldState
@@ -4310,7 +4394,6 @@ function primarySpellWeldEtherealBoulder(
     buildId: NativeWeldBuildId
     direction: Vector2
     id: number
-    lightRegistration: null
     origin: Vector2
     ownerId: string
     vector: readonly number[]
@@ -4369,6 +4452,11 @@ function primarySpellWeldEtherealBoulder(
     flightTicks,
     hitTargetIds: uniqueWeldTargetIds(source.hitTargetIds, `${field}.hitTargetIds`),
     kind: 'weld-persistent',
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
     lifetimeTicksRemaining: positiveInteger(
       source.lifetimeTicksRemaining,
       `${field}.lifetimeTicksRemaining`,
@@ -4397,7 +4485,6 @@ function primarySpellWeldHailstones(
     buildId: NativeWeldBuildId
     direction: Vector2
     id: number
-    lightRegistration: null
     origin: Vector2
     ownerId: string
     vector: readonly number[]
@@ -4436,6 +4523,11 @@ function primarySpellWeldHailstones(
     buildId: 1008,
     damage: positiveFinite(source.damage, `${field}.damage`),
     kind: 'weld-persistent',
+    lightRegistration: nativeLightProviderRegistration(
+      source.lightRegistration,
+      `${field}.lightRegistration`,
+      'actor',
+    ),
     maximumScale: 1,
     phase,
     presentationScale,

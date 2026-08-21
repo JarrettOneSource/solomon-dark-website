@@ -1066,7 +1066,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     if (acceptedCast) {
       nextPlayer = {
         ...nextPlayer,
-        primaryCast: { ...nextPlayer.primaryCast, lastWeldSoundVariant: null },
+        primaryCast: {
+          ...nextPlayer.primaryCast,
+          lastWeldPlaybackRate: null,
+          lastWeldSoundVariant: null,
+        },
       }
       if (authority.primarySkill.kind === 'weld') {
         if (authority.primarySkill.castKind !== 'one-shot') {
@@ -1180,6 +1184,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             registerLightProvider,
             rng,
             targets: context.spellTargets(playerId),
+            underpowered,
             worldKey,
           })
         : createOneShotProjectiles(
@@ -1303,6 +1308,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
               ? birth.projectiles[0].castSoundVariant
               : null
             : null,
+          lastWeldPlaybackRate: authority.primarySkill.kind === 'weld'
+            ? birth.projectiles[0]?.kind === 'weld'
+              ? birth.projectiles[0].castPlaybackRate
+              : null
+            : null,
           underpowered,
         },
       }
@@ -1396,6 +1406,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   id: nextId,
                   origin: emitter,
                   ownerId: playerId,
+                  registerLightProvider,
                   tick: context.tick,
                   vector: authority.primarySkill.vector.values,
                   worldKey,
@@ -1436,6 +1447,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 ownerId: playerId,
                 presentationPhase: phase.value,
                 privateSeed: privateSeed.value,
+                registerLightProvider,
                 tick: context.tick,
                 vector: authority.primarySkill.vector.values,
                 worldKey,
@@ -1704,6 +1716,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           transients,
           playerId,
           nextId,
+          registerLightProvider,
           rng,
         )
         transients = releasedWeld.transients
@@ -1743,6 +1756,7 @@ function releaseOwnedNativeWeldPersistentActors(
   source: readonly PrimarySpellTransientState[],
   ownerId: string,
   sourceNextId: number,
+  registerLightProvider: RegisterNativeLightProvider,
   sourceRng: NativeRngState,
 ): {
   readonly nextId: number
@@ -1764,6 +1778,7 @@ function releaseOwnedNativeWeldPersistentActors(
     const released = releaseNativeWeldPersistentActor({
       actor: effect,
       firstChildId: nextId,
+      registerLightProvider,
       rng,
     })
     nextId = released.nextId
