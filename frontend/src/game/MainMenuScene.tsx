@@ -474,8 +474,12 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
-    if (runtimeSnapshot) void loadSkillBook()
   }, [runtimeSnapshot?.world.kind])
+
+  const runtimeConnected = runtimeSnapshot !== null
+  useEffect(() => {
+    if (runtimeConnected) void loadSkillBook()
+  }, [runtimeConnected])
 
   useEffect(() => {
     if (!session || !runtimeSnapshot) return

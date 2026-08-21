@@ -85,8 +85,8 @@ test('drains all public authored rows and every SkillScreen atlas member', () =>
   const progression = {
     ...baseline,
     learnedSkills: [
-      [0, 1, 1],
-      [7, 1, 1],
+      [0, 1, 1] as const,
+      [7, 1, 1] as const,
       ...publicSkillIds.map((skillId) => [skillId, 1, 1] as const),
     ],
     learnedSkillOrder: publicSkillIds,
