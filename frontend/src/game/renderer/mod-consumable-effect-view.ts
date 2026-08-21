@@ -71,6 +71,10 @@ export class ModConsumableEffectViews {
     this.#views.get(id)?.setTint(tint)
   }
 
+  get size(): number {
+    return this.#views.size
+  }
+
   destroy(): void {
     for (const view of this.#views.values()) view.destroy()
     this.#views.clear()

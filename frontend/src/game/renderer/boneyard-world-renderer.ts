@@ -265,6 +265,7 @@ interface BoneyardRendererFrameDiagnostics {
   maxMainZIndex: number
   maggotCount: number
   lootCount: number
+  modEffectCount: number
   mageLightningCount: number
   minMainLightScalar: number
   minTreeAlpha: number
@@ -605,6 +606,7 @@ export async function createBoneyardWorldRenderer(
     maxMainZIndex: 0,
     maggotCount: 0,
     lootCount: 0,
+    modEffectCount: 0,
     mageLightningCount: 0,
     minMainLightScalar: 0,
     minTreeAlpha: 1,
@@ -932,6 +934,7 @@ export async function createBoneyardWorldRenderer(
       frameDiagnostics.maxMainZIndex = painter.maxMainZIndex
       frameDiagnostics.maggotCount = scene.maggotCount
       frameDiagnostics.lootCount = scene.lootCount
+      frameDiagnostics.modEffectCount = scene.modEffectCount
       frameDiagnostics.mageLightningCount = scene.mageLightningCount
       frameDiagnostics.minMainLightScalar = painter.minMainLightScalar
       frameDiagnostics.minTreeAlpha = painter.minTreeAlpha
@@ -1022,6 +1025,7 @@ export async function createBoneyardWorldRenderer(
       canvas.dataset.enemyProjectileCount = `${scene.enemyProjectileCount}`
       canvas.dataset.maggotCount = `${scene.maggotCount}`
       canvas.dataset.lootCount = `${scene.lootCount}`
+      canvas.dataset.modEffectCount = `${scene.modEffectCount}`
       canvas.dataset.goodieCount = `${scene.goodieCount}`
       canvas.dataset.mageLightningCount = `${scene.mageLightningCount}`
       canvas.dataset.playerDeathBurstCount = `${scene.playerDeathBurstCount}`
@@ -2169,6 +2173,10 @@ class BoneyardDynamicScene {
 
   get lootCount(): number {
     return this.loot.size
+  }
+
+  get modEffectCount(): number {
+    return this.modEffects.size
   }
 
   get goodieCount(): number {

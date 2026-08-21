@@ -14,6 +14,7 @@ const spriteFiles = import.meta.glob([
   '../../assets/game/boneyard/badguys/0067.png',
   '../../assets/game/boneyard/badguys/0073.png',
   '../../assets/game/boneyard/badguys/0083.png',
+  '../../assets/game/boneyard/badguys/0110.png',
   '../../assets/game/boneyard/badguys/01[2-5][0-9].png',
   '../../assets/game/boneyard/badguys/018[8-9].png',
   '../../assets/game/boneyard/badguys/019[0-9].png',
@@ -26,7 +27,7 @@ const spriteFiles = import.meta.glob([
 ], { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
 const REQUIRED_BADGUYS = new Set([
-  7, 15, 33, 52, 61, 67, 73, 83,
+  7, 15, 33, 52, 61, 67, 73, 83, 110,
   ...range(122, 157),
   ...range(188, 201),
   ...range(377, 380),

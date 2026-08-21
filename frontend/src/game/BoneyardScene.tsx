@@ -117,6 +117,7 @@ interface BoneyardSceneProps {
 
 interface BoneyardFrameDiagnostics {
   frameCount: number
+  modEffectCount: number
   painterBandCount: number
   playerScreenX: number
   playerScreenY: number

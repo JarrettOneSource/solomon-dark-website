@@ -38,7 +38,10 @@ import {
 } from '../core-server/game-simulation.ts'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { BONEYARD_GAME_OVER_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
-import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
+import type {
+  HubInventoryAction,
+  ModConsumableCatalogEntry,
+} from '../core-kernels/hub-economy.ts'
 import {
   createBoneyardCatalog,
   materializeBoneyard,
@@ -189,6 +192,7 @@ export interface GameHost {
   hostPlayerId(): string | null
   playerCount(): number
   loadedBoneyard(): LoadedBoneyard | null
+  modCatalog(): readonly ModConsumableCatalogEntry[]
   partyCount(): number
   publicParties(): readonly PublicPartyDirectoryEntry[]
   state(): GameSimulationState
@@ -2295,6 +2299,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       ?? Number(state.world.kind === 'hub') * clients.size,
     playerCount: () => clients.size,
     loadedBoneyard: () => loadedBoneyard,
+    modCatalog: () => privateModContentRegistry.catalog(),
     partyCount: () => sharedWorlds?.parties.parties.length ?? 0,
     publicParties: () => sharedWorlds
       ? projectPublicPartyDirectory({

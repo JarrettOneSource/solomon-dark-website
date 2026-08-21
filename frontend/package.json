@@ -59,6 +59,7 @@
     "smoke:game:hub-rooms": "node --experimental-strip-types tools/smoke-hub-rooms.mjs",
     "smoke:game:hub-traders": "node --experimental-strip-types tools/smoke-hub-traders.mjs",
     "smoke:game:loot-drops": "node --experimental-strip-types tools/smoke-loot-drops.mjs",
+    "smoke:game:invincibility-mod": "node --experimental-strip-types tools/smoke-invincibility-mod.mjs",
     "smoke:game:parties": "node --experimental-strip-types tools/smoke-shared-hub-parties.mjs",
     "smoke:game:dark-cloud": "node tools/smoke-dark-cloud.mjs",
     "smoke:library:subscriptions": "node tools/smoke-library-subscriptions.mjs",

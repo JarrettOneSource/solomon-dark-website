@@ -22,7 +22,7 @@ test('the complete native loot and Goodie record census is selected for preload'
     ): { readonly source: string }
   }
   const records: readonly (readonly [NativeLootAtlas, number])[] = [
-    ...[7, 15, 33, 52, 61, 67, 73, 83]
+    ...[7, 15, 33, 52, 61, 67, 73, 83, 110]
       .map((entry) => ['BadGuys', entry] as const),
     ...pairs('BadGuys', 122, 157),
     ...pairs('BadGuys', 188, 201),
@@ -36,9 +36,9 @@ test('the complete native loot and Goodie record census is selected for preload'
     assert.ok(record.source.length > 0)
     sources.add(record.source)
   }
-  assert.equal(records.length, 77)
-  assert.equal(sources.size, 77)
-  assert.equal(module.NATIVE_LOOT_ASSET_SOURCES.length, 77)
+  assert.equal(records.length, 78)
+  assert.equal(sources.size, 78)
+  assert.equal(module.NATIVE_LOOT_ASSET_SOURCES.length, 78)
 })
 
 function pairs(

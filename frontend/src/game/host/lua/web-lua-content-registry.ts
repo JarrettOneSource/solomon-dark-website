@@ -111,7 +111,7 @@ export class WebLuaContentRegistry {
       if (modLootUnitRoll(actorSeed, entry.contentId, index) >= chance) return []
       const registered = this.#consumables.get(entry.contentId)
       if (!registered) throw new Error(`mod loot item is not registered: ${entry.contentId}`)
-      return [inventoryItem(registered.catalog)]
+      return [modConsumableInventoryItem(registered.catalog)]
     }))
   }
 
@@ -500,7 +500,9 @@ export function stableWebLuaContentId(modId: string, key: string): string {
   return ((hash & ((1n << 62n) - 1n)) | (1n << 62n)).toString()
 }
 
-function inventoryItem(catalog: ModConsumableCatalogEntry): HubInventoryItem {
+export function modConsumableInventoryItem(
+  catalog: ModConsumableCatalogEntry,
+): HubInventoryItem {
   return Object.freeze({
     equipmentType: null,
     iconRecords: Object.freeze([]),
