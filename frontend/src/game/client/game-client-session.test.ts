@@ -1043,7 +1043,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           lastWeldPlaybackRate: null,
           lastWeldSoundVariant: null,
           selectedPrimaryAgeTicks: 1,
-          selectedPrimaryId: 8,
+          selectedPrimaryId: 16,
           targetId: null,
           underpowered: false,
           weaponPulse: 0,
