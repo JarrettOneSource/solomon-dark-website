@@ -24314,6 +24314,40 @@ No member is blocked by the browser platform.
 - Files/modules changed: Hall model, recorder, local store, scene/style,
   main-menu route, API client; backend entity/schema/endpoint; Memoratorium
   extraction/manifest/renderer; tests and the five native reports above.
+- Authority reopening implementation: the backend now carries authenticated
+  account identity only inside supervisor admissions; the host permanently
+  revokes global eligibility for initial/live cheat mode, accepted Lua, or an
+  unattested save resume; protocol 46 returns only an opaque HMAC receipt; and
+  the API verifies signature plus JWT account before persisting sealed fields.
+  Local Hall history remains available for every excluded branch.
+- Rebased focused receipt: TypeScript test compilation passed after replaying
+  the authority work over current protocol 45 and preserving party denial plus
+  the mixed-skill quickbar as protocol 46. Protocol `24/24`, host
+  authority/resume `4/4`, supervisor `8/8`, and Hall `17/17` passed. Loader
+  static CI passed `491/491` on its rebased documentation commit.
+- Mac mini exact-tree receipt: macOS `26.4.1` arm64 ran the canonical Website
+  gate on commit `2ffe438a`, then the final line-ending commit `4b8b6658` ran
+  its two focused contracts and canonical lint. The full matrix passed backend
+  `13/13`, Library `2/2`, loot `41/41`, prerequisite `216/216`, broad game
+  `1233/1233`, parties `16/16`, level-up `5/5`, diagnostics `7/7`, Hall
+  `17/17`, Hub UI `14/14`, desktop `5/5`, build, budget, and media policy. Its
+  game entry was `Game-YB6kcXmn.js`, `345646` raw / `97655` gzip bytes. The Mac
+  Loader matrix independently passed `491/491`.
+- Windows-native exact-tree receipt: a detached native clone at `4b8b6658`
+  passed the same complete matrix with pinned Node `22.17.0`, npm `10.9.2`,
+  .NET `10.0.302`, and Python `3.13`; lint retained eight existing warnings and
+  zero errors. Its game entry was `Game-CFL5sUEd.js`, `345646` raw / `97657`
+  gzip bytes. A clean Windows checkout first exposed two upstream CRLF-sensitive
+  contracts; the byte-locked hat-anchor JSON now has an LF attribute and the
+  source reader normalizes CRLF. Both focused regressions then passed on Windows
+  and Mac before the full Windows matrix passed.
+- Windows Chrome authority receipt: an isolated backend and Vite client
+  rejected browser-authored score JSON with `400`, rejected a signature-tampered
+  receipt with `400`, accepted the server-format account-bound receipt with
+  `201`, and rendered that one row through Awesomeness, Wave, Kills, and Time.
+  Row expansion and Main Menu return passed with empty page/console error lists.
+  Capture:
+  `.codex-windows-validation/hall-fame-memoratorium-20260820-root/sdr-authoritative-hall-global-4b8b665.png`.
 - Windows automated receipt: pinned .NET SDK `10.0.302` restored and built the
   backend in Release with zero warnings/errors, `dotnet format
   --verify-no-changes` and Website/backend integration `12/12` passed. The
