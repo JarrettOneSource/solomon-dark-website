@@ -99,9 +99,12 @@ export interface NativeSecondaryAbilityRankStats {
 export interface PlayerSkillBookComponent {
   readonly activeWeldBuildId: number | null
   readonly advancedUnlocks: readonly boolean[]
+  readonly concentrationSkillIds: readonly [number | null, number | null]
   readonly disciplineRoot: number
   readonly effectiveRanks: readonly number[]
   readonly elementRoot: number
+  readonly learnedSkillOrder: readonly number[]
+  readonly nextConcentrationSlot: 0 | 1
   readonly permanentRanks: readonly number[]
   readonly primarySkillId: number
   readonly secondaryBelt: PlayerSecondaryAbilityBelt
@@ -275,6 +278,18 @@ export function nativeSkillCategory(skillId: number): number | null {
   return RULES[skillId]?.category ?? null
 }
 
+export function nativeSkillRoot(skillId: number): number {
+  const root = RULES[skillId]?.root
+  if (root === undefined) throw new RangeError(`native skill ${skillId} has no root`)
+  return root
+}
+
+export function nativeSkillDependencies(skillId: number): readonly number[] {
+  const rule = RULES[skillId]
+  if (!rule) return Object.freeze([])
+  return Object.freeze([...new Set([...(rule.all ?? []), ...(rule.any ?? [])])])
+}
+
 export function effectivePrimarySkillRankStats(
   skillBook: PlayerSkillBookComponent,
 ): NativePrimarySkillRankStats {
@@ -332,13 +347,60 @@ export function equipPlayerSecondaryAbility(
   if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
     throw new Error(`secondary skill ${skillId} is not learned`)
   }
-  const belt = skillBook.secondaryBelt.map((entry) => (
-    entry === skillId ? null : entry
-  )) as (NativeSecondaryAbilityId | null)[]
+  const belt = [...skillBook.secondaryBelt] as (NativeSecondaryAbilityId | null)[]
   belt[slot] = skillId as NativeSecondaryAbilityId
   return {
     ...skillBook,
     secondaryBelt: freezeSecondaryBelt(belt),
+  }
+}
+
+export function selectPlayerPrimarySkill(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+): PlayerSkillBookComponent {
+  if (!(ELEMENTAL_PRIMARY_SKILL_IDS as readonly number[]).includes(skillId)) {
+    throw new RangeError(`skill ${skillId} is not an elemental primary`)
+  }
+  if ((skillBook.permanentRanks[skillId] ?? 0) < 1) {
+    throw new Error(`primary skill ${skillId} is not learned`)
+  }
+  return skillBook.primarySkillId === skillId
+    ? skillBook
+    : { ...skillBook, primarySkillId: skillId }
+}
+
+export function selectPlayerConcentrationSkill(
+  skillBook: PlayerSkillBookComponent,
+  skillId: number,
+  splitMind: boolean,
+  mindChugTicksRemaining: number,
+): PlayerSkillBookComponent {
+  if (mindChugTicksRemaining > 0) {
+    throw new Error('concentration cannot change while Mind Chug is active')
+  }
+  if (nativeSkillCategory(skillId) !== 3 || (skillBook.permanentRanks[skillId] ?? 0) < 1) {
+    throw new Error(`concentration skill ${skillId} is not learned`)
+  }
+  const [first, second] = skillBook.concentrationSkillIds
+  if (first === skillId || second === skillId) {
+    throw new Error(`concentration skill ${skillId} is already selected`)
+  }
+  let concentrationSkillIds: [number | null, number | null]
+  let nextConcentrationSlot = skillBook.nextConcentrationSlot
+  if (first === null) concentrationSkillIds = [skillId, splitMind ? second : null]
+  else if (splitMind && second === null) concentrationSkillIds = [first, skillId]
+  else {
+    const slot = splitMind ? nextConcentrationSlot : 0
+    concentrationSkillIds = splitMind
+      ? slot === 0 ? [skillId, second] : [first, skillId]
+      : [skillId, null]
+    nextConcentrationSlot = splitMind ? slot === 0 ? 1 : 0 : 0
+  }
+  return {
+    ...skillBook,
+    concentrationSkillIds: Object.freeze(concentrationSkillIds),
+    nextConcentrationSlot,
   }
 }
 
@@ -418,9 +480,12 @@ export function createPlayerSkillBook(config: PlayerCharacterConfig): PlayerSkil
   return {
     activeWeldBuildId: null,
     advancedUnlocks: Object.freeze(new Array<boolean>(8).fill(false)),
+    concentrationSkillIds: Object.freeze([null, null]),
     disciplineRoot,
     effectiveRanks: Object.freeze([...permanentRanks]),
     elementRoot,
+    learnedSkillOrder: Object.freeze([primarySkillId, secondarySkillId]),
+    nextConcentrationSlot: 0,
     permanentRanks: Object.freeze(permanentRanks),
     primarySkillId,
     secondaryBelt: freezeSecondaryBelt([
@@ -753,6 +818,9 @@ export function applyPlayerSkillChoice(
     activeWeldBuildId: weldBuild?.id ?? skillBook.activeWeldBuildId,
     permanentRanks: Object.freeze(permanentRanks),
     effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: rank === 0 && chosen.skillId >= 8 && chosen.skillId <= 79
+      ? Object.freeze([...skillBook.learnedSkillOrder, chosen.skillId])
+      : skillBook.learnedSkillOrder,
     secondaryBelt: rank === 0 && nativeSkillCategory(chosen.skillId) === 2
       ? autofillSecondaryBelt(skillBook.secondaryBelt, chosen.skillId)
       : skillBook.secondaryBelt,

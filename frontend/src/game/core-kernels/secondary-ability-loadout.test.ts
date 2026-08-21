@@ -8,6 +8,8 @@ import {
   createPlayerSkillBook,
   effectiveSecondaryAbilityRankStats,
   equipPlayerSecondaryAbility,
+  selectPlayerConcentrationSkill,
+  selectPlayerPrimarySkill,
   type PlayerProgressionComponent,
   type PlayerSkillBookComponent,
 } from './player-progression.ts'
@@ -46,16 +48,35 @@ test('learning a secondary fills one empty slot while rank-ups never duplicate i
   assert.equal(ranked.secondaryBelt.filter((skillId) => skillId === 48).length, 1)
 })
 
-test('equipping a learned secondary moves its single native belt identity', () => {
+test('equipping a learned secondary replaces only the addressed stock belt slot', () => {
   const learned = choose(choose(createPlayerSkillBook(ETHER_ARCANE), 48, 1), 49, 1)
   const moved = equipPlayerSecondaryAbility(learned, 48, 7)
-  assert.deepEqual(moved.secondaryBelt, [11, null, 49, null, null, null, null, 48])
+  assert.deepEqual(moved.secondaryBelt, [11, 48, 49, null, null, null, null, 48])
   const displaced = equipPlayerSecondaryAbility(moved, 49, 0)
-  assert.deepEqual(displaced.secondaryBelt, [49, null, null, null, null, null, null, 48])
+  assert.deepEqual(displaced.secondaryBelt, [49, 48, 49, null, null, null, null, 48])
 
   assert.throws(() => equipPlayerSecondaryAbility(learned, 50, 4), /not learned/)
   assert.throws(() => equipPlayerSecondaryAbility(learned, 48, 8), /slot/)
   assert.throws(() => equipPlayerSecondaryAbility(learned, 8, 1), /secondary/)
+})
+
+test('primary and concentration interactions validate learned rows and native replacement order', () => {
+  let book = choose(createPlayerSkillBook(ETHER_ARCANE), 16, 1)
+  book = selectPlayerPrimarySkill(book, 16)
+  assert.equal(book.primarySkillId, 16)
+
+  book = choose(book, 57, 1)
+  book = choose(book, 65, 1)
+  book = choose(book, 58, 1)
+  book = selectPlayerConcentrationSkill(book, 57, true, 0)
+  assert.deepEqual(book.concentrationSkillIds, [57, null])
+  book = selectPlayerConcentrationSkill(book, 65, true, 0)
+  assert.deepEqual(book.concentrationSkillIds, [57, 65])
+  book = selectPlayerConcentrationSkill(book, 58, true, 0)
+  assert.deepEqual(book.concentrationSkillIds, [58, 65])
+  assert.equal(book.nextConcentrationSlot, 1)
+  assert.throws(() => selectPlayerConcentrationSkill(book, 57, true, 1), /Mind Chug/)
+  assert.throws(() => selectPlayerConcentrationSkill(book, 65, true, 0), /already selected/)
 })
 
 test('all 23 secondaries resolve their authored rank-one payload without substitution', () => {

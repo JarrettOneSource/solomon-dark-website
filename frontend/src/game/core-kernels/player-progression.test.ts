@@ -4,6 +4,7 @@ import test from 'node:test'
 import './native-secondary-ability-contract.test.ts'
 import './native-secondary-abilities.test.ts'
 import './secondary-ability-loadout.test.ts'
+import '../skill-book.test.ts'
 
 import {
   MAX_PLAYER_EXPERIENCE,
@@ -380,6 +381,7 @@ test('effective primary rank indexes the native mana and damage catalog', () => 
 
 test('native XP thresholds queue a mandatory deterministic offer and selection only books rank', () => {
   const skillBook = createPlayerSkillBook(ETHER_ARCANE)
+  assert.deepEqual(skillBook.learnedSkillOrder, [8, 11])
   const initial = createPlayerProgression(79225)
   assert.equal(grantPlayerExperience(initial, skillBook, 90).level, 1)
   const leveled = grantPlayerExperience(initial, skillBook, 100)
@@ -702,6 +704,7 @@ test('a second primary arms Spell Welding and choosing a synthetic build only bo
   })
   assert.ok(primaryApplied)
   assert.equal(primaryApplied.progression.weldOfferMarker, 1)
+  assert.deepEqual(primaryApplied.skillBook.learnedSkillOrder, [8, 11, 16])
 
   const weldingOffer = buildPlayerSkillOffer({
     ...primaryApplied.progression,
@@ -730,6 +733,7 @@ test('a second primary arms Spell Welding and choosing a synthetic build only bo
   assert.equal(welded.skillBook.permanentRanks[SPELL_WELDING_SKILL_ID], 1)
   assert.equal(welded.skillBook.effectiveRanks[SPELL_WELDING_SKILL_ID], 1)
   assert.equal(welded.skillBook.activeWeldBuildId, 1000)
+  assert.deepEqual(welded.skillBook.learnedSkillOrder, [8, 11, 16, SPELL_WELDING_SKILL_ID])
   assert.deepEqual(
     welded.skillBook.permanentRanks.flatMap((rank, id) => rank !== beforeRanks[id] ? [id] : []),
     [SPELL_WELDING_SKILL_ID],

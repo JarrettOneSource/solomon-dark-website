@@ -54,7 +54,7 @@ test('owns both requested transitions through destination renderer readiness', (
   )
   assert.equal(
     mainScene.match(
-      /inputBlocked=\{loading !== null \|\| levelUpModalActive \|\| gameplayPause !== null\}/g,
+      /inputBlocked=\{loading !== null \|\| levelUpModalActive \|\| gameplayPause !== null \|\| skillBookOpen\}/g,
     )?.length,
     2,
   )
@@ -72,7 +72,7 @@ test('seals scene input until the same renderer reports its initial frame', () =
     assert.match(scene, /onReadyRef\.current\(\)/)
   }
   assert.match(boneyardScene, /input\.setBlocked\(inputBlockedRef\.current\)/)
-  assert.match(boneyardScene, /inputRef\.current\?\.setBlocked\(inputBlocked\)/)
+  assert.match(boneyardScene, /inputRef\.current\?\.setBlocked\(sceneInputBlocked\)/)
   assert.match(
     hubScene,
     /input\.setBlocked\(inputBlockedRef\.current \|\| modalOpenRef\.current\)/,

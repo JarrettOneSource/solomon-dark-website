@@ -437,6 +437,46 @@ test('game host validates and broadcasts the complete Sorceror action sequence',
   assert.equal(saved.snapshot.players[playerId].progression.sorcerorsCharmAvailable, true)
 })
 
+test('game host authoritatively projects each player skill belt and rejects unlearned selections', async (context) => {
+  const host = await startGameHost({ authentication: SHARED_AUTHENTICATION, snapshotRate: 100 })
+  context.after(() => host.close())
+  const first = await join(host.address.url, 'test-secret', FIRST_CHARACTER)
+  const second = await join(host.address.url, 'test-secret', SECOND_CHARACTER)
+  context.after(() => first.socket.close())
+  context.after(() => second.socket.close())
+
+  const assigned = nextMessage(first.socket, (message) => (
+    message.type === 'server-snapshot'
+    && message.snapshot.players[first.welcome.playerId].progression.secondaryBelt[7] === 11
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-assign-belt-skill',
+    skillId: 11,
+    slot: 7,
+  }))
+  const assignedSnapshot = await assigned
+  assert.equal(assignedSnapshot.type, 'server-snapshot')
+  assert.deepEqual(
+    assignedSnapshot.snapshot.players[first.welcome.playerId].progression.secondaryBelt,
+    [11, null, null, null, null, null, null, 11],
+  )
+  assert.deepEqual(
+    assignedSnapshot.snapshot.players[second.welcome.playerId].progression.secondaryBelt,
+    [35, null, null, null, null, null, null, null],
+  )
+
+  const rejected = nextMessage(second.socket, (message) => message.type === 'server-disconnect')
+  second.socket.send(encodeGameMessage({
+    type: 'client-select-concentration',
+    skillId: 57,
+  }))
+  assert.deepEqual(await rejected, {
+    type: 'server-disconnect',
+    code: 'invalid-message',
+    reason: 'The concentration skill is unavailable.',
+  })
+})
+
 test('game host accepts an empty deterministic Hub fixture factory', async (context) => {
   let factoryCalls = 0
   const host = await startGameHost({

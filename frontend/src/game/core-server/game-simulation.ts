@@ -139,6 +139,7 @@ import {
 import type { HubStudentPopulationState } from './hub-students.ts'
 import {
   addPlayerEntity,
+  assignPlayerEntitySecondaryBelt,
   applyPlayerEntityPotionEffect,
   applyPlayerEntitySkillChoice,
   coldSlowPlayerEntity,
@@ -172,6 +173,8 @@ import {
   restorePlayerEntityMana,
   setPlayerEntityMana,
   setPlayerEntityMindstar,
+  selectPlayerEntityConcentrationSkill,
+  selectPlayerEntityPrimarySkill,
   setPlayerEntitySpectating,
   stepPlayerEntityCombatTick,
   stepPlayerEntityOverlayLightingTick,
@@ -608,6 +611,73 @@ export function getPlayerSkillBook(
   const skillBook = playerSkillBookAt(state.playerEntities, playerId)
   if (!skillBook) throw new Error(`game simulation has no player skill book ${playerId}`)
   return skillBook
+}
+
+export function assignGameSimulationPlayerBeltSkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  slot: number,
+  skillId: number,
+): GameSimulationState | null {
+  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  try {
+    return {
+      ...state,
+      playerEntities: assignPlayerEntitySecondaryBelt(
+        state.playerEntities,
+        playerId,
+        slot,
+        skillId,
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function selectGameSimulationPlayerPrimarySkill(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  skillId: number,
+): GameSimulationState | null {
+  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  try {
+    return {
+      ...state,
+      playerEntities: selectPlayerEntityPrimarySkill(state.playerEntities, playerId, skillId),
+    }
+  } catch {
+    return null
+  }
+}
+
+export function selectGameSimulationPlayerConcentration(
+  state: GameSimulationState,
+  playerId: PlayerId,
+  skillId: number,
+): GameSimulationState | null {
+  if (!gameSimulationPlayerCanEditBooks(state, playerId)) return null
+  try {
+    return {
+      ...state,
+      playerEntities: selectPlayerEntityConcentrationSkill(
+        state.playerEntities,
+        playerId,
+        skillId,
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+function gameSimulationPlayerCanEditBooks(
+  state: GameSimulationState,
+  playerId: PlayerId,
+): boolean {
+  return (state.run.phase === 'hub' || state.run.phase === 'active')
+    && state.levelUpBarrier === null
+    && playerEntityCanAcceptInput(state.playerEntities, playerId)
 }
 
 export function getPlayerStatBook(

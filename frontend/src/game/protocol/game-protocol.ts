@@ -198,7 +198,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 35
+export const GAME_PROTOCOL_VERSION = 36
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -350,6 +350,22 @@ export interface ClientPartyAcceptMessage {
   invitationId: string
 }
 
+export interface ClientAssignBeltSkillMessage {
+  type: 'client-assign-belt-skill'
+  skillId: number
+  slot: number
+}
+
+export interface ClientSelectPrimarySkillMessage {
+  type: 'client-select-primary-skill'
+  skillId: number
+}
+
+export interface ClientSelectConcentrationMessage {
+  type: 'client-select-concentration'
+  skillId: number
+}
+
 export interface ClientPingMessage {
   type: 'client-ping'
   nonce: number
@@ -386,6 +402,7 @@ export interface ClientLuaExecuteMessage {
 }
 
 export type ClientGameMessage =
+  | ClientAssignBeltSkillMessage
   | ClientConfirmLoadoutMessage
   | ClientGameplayPauseMessage
   | ClientHelloMessage
@@ -395,6 +412,8 @@ export type ClientGameMessage =
   | ClientLuaExecuteMessage
   | ClientPartyAcceptMessage
   | ClientPartyInviteMessage
+  | ClientSelectConcentrationMessage
+  | ClientSelectPrimarySkillMessage
   | ClientSelectSkillMessage
   | ClientPingMessage
   | ClientSnapshotAckMessage
@@ -556,6 +575,28 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     return {
       type: 'client-party-accept',
       invitationId: partyIdentifier(value.invitationId, 'invitationId'),
+    }
+  }
+  if (value.type === 'client-assign-belt-skill') {
+    onlyKeys(value, 'message', ['type', 'skillId', 'slot'])
+    return {
+      type: 'client-assign-belt-skill',
+      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
+      slot: boundedInteger(value.slot, 'slot', 0, 7),
+    }
+  }
+  if (value.type === 'client-select-primary-skill') {
+    onlyKeys(value, 'message', ['type', 'skillId'])
+    return {
+      type: 'client-select-primary-skill',
+      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
+    }
+  }
+  if (value.type === 'client-select-concentration') {
+    onlyKeys(value, 'message', ['type', 'skillId'])
+    return {
+      type: 'client-select-concentration',
+      skillId: authoredPublicSkillId(value.skillId, 'skillId'),
     }
   }
   if (value.type === 'client-select-skill') {
@@ -957,6 +998,10 @@ function pingNonce(value: unknown): number {
   const result = positiveInteger(value, 'nonce')
   if (result > 0x7fffffff) throw new GameProtocolError('nonce is out of range')
   return result
+}
+
+function authoredPublicSkillId(value: unknown, field: string): number {
+  return boundedInteger(value, field, 8, 79)
 }
 
 function luaRequestId(value: unknown): number {
@@ -1971,12 +2016,14 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'coldSlowTicksRemaining',
     'currentHealth',
     'currentMana',
+    'concentrationSkillIds',
     'deferredSkillChoices',
     'dazzleTicksRemaining',
     'deathEpoch',
     'deathTick',
     'experience',
     'learnedSkills',
+    'learnedSkillOrder',
     'level',
     'lifeState',
     'lastDamageTick',
@@ -1984,12 +2031,15 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     'maximumMana',
     'nextThreshold',
     'pendingOffer',
+    'primarySkillId',
     'poisonDamagePerTick',
     'poisonTicksRemaining',
     'previousThreshold',
     'revision',
+    'mindChugTicksRemaining',
     'sorcerorsCharmAvailable',
     'secondaryBelt',
+    'splitMind',
   ])
   const maximumHealth = positiveFinite(source.maximumHealth, `${field}.maximumHealth`)
   const maximumMana = positiveFinite(source.maximumMana, `${field}.maximumMana`)
@@ -2048,6 +2098,27 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if (learnedSkills.some((entry, index) => index > 0 && entry[0] <= learnedSkills[index - 1]![0])) {
     throw new GameProtocolError(`${field}.learnedSkills must be unique and sorted`)
   }
+  const learnedPermanentIds = learnedSkills
+    .filter(([skillId, permanentRank]) => skillId >= 8 && skillId <= 79 && permanentRank > 0)
+    .map(([skillId]) => skillId)
+  const learnedSkillOrder = limitedArray(
+    source.learnedSkillOrder,
+    `${field}.learnedSkillOrder`,
+    72,
+  ).map((entry, index) => authoredPublicSkillId(
+    entry,
+    `${field}.learnedSkillOrder[${index}]`,
+  ))
+  if (
+    new Set(learnedSkillOrder).size !== learnedSkillOrder.length
+    || learnedSkillOrder.length !== learnedPermanentIds.length
+    || learnedPermanentIds.some((skillId) => !learnedSkillOrder.includes(skillId))
+  ) throw new GameProtocolError(`${field}.learnedSkillOrder must contain every learned public skill`)
+  const primarySkillId = authoredPublicSkillId(source.primarySkillId, `${field}.primarySkillId`)
+  if (
+    ![8, 16, 24, 32, 40].includes(primarySkillId)
+    || (learnedSkills.find(([id]) => id === primarySkillId)?.[1] ?? 0) < 1
+  ) throw new GameProtocolError(`${field}.primarySkillId is not a learned primary`)
   const secondaryBelt = limitedArray(source.secondaryBelt, `${field}.secondaryBelt`, 8)
     .map((entry, index) => {
       if (entry === null) return null
@@ -2063,9 +2134,29 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
   if (secondaryBelt.length !== 8) {
     throw new GameProtocolError(`${field}.secondaryBelt must contain exactly eight slots`)
   }
-  const equipped = secondaryBelt.filter((skillId): skillId is number => skillId !== null)
-  if (new Set(equipped).size !== equipped.length) {
-    throw new GameProtocolError(`${field}.secondaryBelt must not contain duplicates`)
+  const splitMind = boolean(source.splitMind, `${field}.splitMind`)
+  const concentrationSkillIds = limitedArray(
+    source.concentrationSkillIds,
+    `${field}.concentrationSkillIds`,
+    2,
+  ).map((entry, index) => {
+    if (entry === null) return null
+    const skillId = authoredPublicSkillId(entry, `${field}.concentrationSkillIds[${index}]`)
+    if (
+      ![57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71].includes(skillId)
+      || (learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+    ) throw new GameProtocolError(`${field}.concentrationSkillIds[${index}] is not eligible`)
+    return skillId
+  }) as [number | null, number | null]
+  if (concentrationSkillIds.length !== 2) {
+    throw new GameProtocolError(`${field}.concentrationSkillIds must contain two slots`)
+  }
+  if (
+    concentrationSkillIds[0] !== null
+    && concentrationSkillIds[0] === concentrationSkillIds[1]
+  ) throw new GameProtocolError(`${field}.concentrationSkillIds must be unique`)
+  if (!splitMind && concentrationSkillIds[1] !== null) {
+    throw new GameProtocolError(`${field}.concentrationSkillIds B requires Split Mind`)
   }
   const activeWeldBuildId = source.activeWeldBuildId === null
     ? null
@@ -2086,6 +2177,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     coldSlowTicksRemaining,
     currentHealth,
     currentMana,
+    concentrationSkillIds,
     deferredSkillChoices: nonnegativeInteger(
       source.deferredSkillChoices,
       `${field}.deferredSkillChoices`,
@@ -2095,6 +2187,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     deathTick: nonnegativeInteger(source.deathTick, `${field}.deathTick`),
     experience,
     learnedSkills,
+    learnedSkillOrder,
     level,
     lifeState: lifeState as PlayerLifeState,
     lastDamageTick: source.lastDamageTick === null
@@ -2106,6 +2199,7 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
     pendingOffer: source.pendingOffer === null
       ? null
       : playerSkillOffer(source.pendingOffer, `${field}.pendingOffer`, level),
+    primarySkillId,
     poisonDamagePerTick,
     poisonTicksRemaining: nonnegativeInteger(
       source.poisonTicksRemaining,
@@ -2116,11 +2210,16 @@ function playerProgression(value: unknown, field: string): ProtocolPlayerProgres
       `${field}.previousThreshold`,
     ),
     revision: nonnegativeInteger(source.revision, `${field}.revision`),
+    mindChugTicksRemaining: nonnegativeInteger(
+      source.mindChugTicksRemaining,
+      `${field}.mindChugTicksRemaining`,
+    ),
     sorcerorsCharmAvailable: boolean(
       source.sorcerorsCharmAvailable,
       `${field}.sorcerorsCharmAvailable`,
     ),
     secondaryBelt,
+    splitMind,
   }
 }
 

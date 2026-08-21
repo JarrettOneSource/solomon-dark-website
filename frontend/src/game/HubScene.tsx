@@ -65,6 +65,7 @@ interface HubSceneProps {
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
+  inventoryRequestSequence: number
   levelUpModalActive: boolean
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
@@ -72,6 +73,7 @@ interface HubSceneProps {
   onHubAction: (action: HubInventoryAction) => void
   onInvitePlayer: (playerId: string) => void
   onLoadingError: () => void
+  onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
   onStartMatch: (boneyardId: string) => void
@@ -101,6 +103,7 @@ export default function HubScene({
   getPingMs,
   initialSnapshot,
   inputBlocked,
+  inventoryRequestSequence,
   levelUpModalActive,
   levelUpPresentationId,
   onInput,
@@ -108,6 +111,7 @@ export default function HubScene({
   onHubAction,
   onInvitePlayer,
   onLoadingError,
+  onOpenSkills,
   onPauseRequest,
   onReady,
   onStartMatch,
@@ -155,6 +159,7 @@ export default function HubScene({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [hubUiSurface, setHubUiSurface] = useState<HubUiSurface>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
+  const inventoryRequestRef = useRef(inventoryRequestSequence)
   const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(() => (
     hubInitialSnapshot.players[playerId]!.economy
   ))
@@ -166,6 +171,14 @@ export default function HubScene({
   ))
   const modalOpen = pickerOpen || hubUiSurface !== null || selectedPlayerId !== null
   modalOpenRef.current = modalOpen
+
+  useEffect(() => {
+    if (inventoryRequestRef.current === inventoryRequestSequence) return
+    inventoryRequestRef.current = inventoryRequestSequence
+    if (!inputBlocked && !pickerOpen && !transitionActive) {
+      setHubUiSurface({ kind: 'inventory' })
+    }
+  }, [inputBlocked, inventoryRequestSequence, pickerOpen, transitionActive])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -185,6 +198,27 @@ export default function HubScene({
   useLayoutEffect(() => {
     inputRef.current?.setBlocked(inputBlocked || modalOpen)
   }, [inputBlocked, modalOpen])
+
+  useEffect(() => {
+    const openSkills = (event: KeyboardEvent) => {
+      if (
+        inputBlocked
+        || pickerOpen
+        || transitionActive
+        || event.code !== 'KeyT'
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
+      event.preventDefault()
+      event.stopPropagation()
+      setHubUiSurface(null)
+      onOpenSkills()
+    }
+    window.addEventListener('keydown', openSkills, { capture: true })
+    return () => window.removeEventListener('keydown', openSkills, { capture: true })
+  }, [inputBlocked, onOpenSkills, pickerOpen, transitionActive])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
@@ -452,7 +486,13 @@ export default function HubScene({
             }
           }}
           onMapClick={beginMatch}
-          partyMemberIds={partyState?.party.memberPlayerIds}
+  partyMemberIds={partyState?.party.memberPlayerIds}
+  onSkillsClick={() => {
+            if (!inputBlocked && !pickerOpen && !transitionActive) {
+              setHubUiSurface(null)
+              onOpenSkills()
+            }
+  }}
           playerId={playerId}
           progression={progression}
           subscribePing={subscribePing}

@@ -67,6 +67,13 @@ location rules. It may query player locomotion, resolve requested movement,
 and commit locomotion components, but it neither owns nor clones player
 progression. Hub-to-Boneyard placement resets the location-facing locomotion
 slice while retaining the same player entity and progression books.
+The skill-book column also owns first-learned public-row order, the selected
+primary, two concentration slots and their replacement cursor, plus the eight
+secondary intent slots. Inventory and SkillScreen presentation is shared by
+Hub and Boneyard; scenes request the participant-owned screen but never clone
+its state. Protocol 36 carries strict belt, primary, and concentration intents,
+and the host applies them only to the authenticated participant before
+publishing a new progression revision.
 The session also owns the fixed-step accumulator and tick; neither clock is
 nested inside a Hub ambient actor or another world-specific subsystem.
 
@@ -191,7 +198,7 @@ Protocol compatibility is exact-match until a proven compatibility policy is
 needed. The first handshake carries the protocol version, server tick rate,
 session content manifest, complete player-character configuration,
 prediction-kernel identity and parameters, and a reserved resume token.
-Protocol `30` welcomes a client with one complete snapshot plus its sequence.
+Protocol `36` welcomes a client with one complete snapshot plus its sequence.
 Subsequent messages keep session-owned players at the frame root and use a
 discriminated world payload. Both Hub and Boneyard carry a compact
 replicated-entity lane. Boneyard keeps encounter, gate, and wave-scheduling

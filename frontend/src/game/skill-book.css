@@ -1,0 +1,113 @@
+.native-skill-icon {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  overflow: hidden;
+}
+
+.native-skill-icon-crop {
+  display: block;
+  image-rendering: auto;
+}
+
+.main-menu-native-stage.skill-book-stage {
+  z-index: 75;
+  overflow: hidden;
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.skill-book-renderer,
+.skill-book-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 1600px !important;
+  height: 900px !important;
+  pointer-events: none;
+}
+
+.skill-book-pages,
+.skill-book-belt-actions {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.skill-book-close-action {
+  position: absolute;
+  top: 25px;
+  right: 0;
+  width: 48px;
+  height: 58px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.skill-book-page-actions {
+  position: absolute;
+}
+
+.skill-book-entry-action {
+  position: absolute;
+  top: 36.5px;
+  width: 87px;
+  height: 88px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.skill-book-entry-action:focus,
+.skill-book-belt-action:focus { outline: none; }
+
+.skill-book-belt-action {
+  position: absolute;
+  bottom: 14.5px;
+  width: 53px;
+  height: 53px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.skill-book-belt-action:nth-child(1) { left: calc(50% - 332px); }
+.skill-book-belt-action:nth-child(2) { left: calc(50% - 272px); }
+.skill-book-belt-action:nth-child(3) { left: calc(50% - 212px); }
+.skill-book-belt-action:nth-child(4) { left: calc(50% - 152px); }
+.skill-book-belt-action:nth-child(5) { left: calc(50% + 98px); }
+.skill-book-belt-action:nth-child(6) { left: calc(50% + 158px); }
+.skill-book-belt-action:nth-child(7) { left: calc(50% + 218px); }
+.skill-book-belt-action:nth-child(8) { left: calc(50% + 278px); }
+
+.skill-book-semantic-title,
+.skill-book-semantic-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skill-book-error {
+  position: absolute;
+  top: 760px;
+  left: 50%;
+  margin: 0;
+  color: #d8d4c8;
+  font: 18px serif;
+  transform: translateX(-50%);
+}

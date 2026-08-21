@@ -111,6 +111,7 @@ test('bootGame rejects non-loopback addresses presented as desktop-local servers
 
 function inertSession() {
   return {
+    assignBeltSkill() {},
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' as const }],
     isHost: true,
     playerId: 'p',
@@ -137,6 +138,8 @@ function inertSession() {
     sampleBoneyardPresentation() { throw new Error() },
     samplePresentation() { throw new Error() },
     saveSkill() {},
+    selectConcentration() {},
+    selectPrimarySkill() {},
     selectSkill() {},
     sendHubAction() {},
     sendInput() {},

@@ -5,7 +5,11 @@ import {
   getPlayerSkillBook,
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
-import { hagathaOffers, type HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import {
+  hagathaOffers,
+  SPLIT_MIND_CHARM_SELECTOR,
+  type HubInventoryItem,
+} from '../core-kernels/hub-economy.ts'
 import { hubStudentSnapshotStates } from '../core-server/hub-students.ts'
 import { boneyardGateSnapshot } from '../core-kernels/boneyard-gate.ts'
 import { playerLightDriveActive } from '../core-kernels/player-lighting.ts'
@@ -253,6 +257,10 @@ function protocolPlayerState(
     progression: {
       activeWeldBuildId: skillBook.activeWeldBuildId,
       coldSlowTicksRemaining: progression.coldSlowTicksRemaining,
+      concentrationSkillIds: [...skillBook.concentrationSkillIds] as [
+        number | null,
+        number | null,
+      ],
       currentHealth: playerEntityDisplayHealth(state.playerEntities, playerId) ?? 0,
       currentMana: progression.currentMana,
       deferredSkillChoices: progression.deferredSkillChoices,
@@ -261,19 +269,23 @@ function protocolPlayerState(
       deathTick: progression.deathTick,
       experience: progression.experience,
       learnedSkills,
+      learnedSkillOrder: [...skillBook.learnedSkillOrder],
       level: progression.level,
       maximumHealth: progression.maximumHealth,
       maximumMana: progression.maximumMana,
+      mindChugTicksRemaining: progression.mindChugTicksRemaining,
       lifeState: progression.lifeState,
       lastDamageTick: progression.lastDamageTick,
       nextThreshold: progression.nextThreshold,
       pendingOffer: progression.pendingOffer,
+      primarySkillId: skillBook.primarySkillId,
       poisonDamagePerTick: progression.poisonDamagePerTick,
       poisonTicksRemaining: progression.poisonTicksRemaining,
       previousThreshold: progression.previousThreshold,
       revision: progression.revision,
       sorcerorsCharmAvailable: progression.sorcerorsCharmAvailable,
       secondaryBelt: [...skillBook.secondaryBelt],
+      splitMind: economy.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
     },
   }
 }

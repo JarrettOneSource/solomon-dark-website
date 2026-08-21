@@ -315,10 +315,23 @@
   max-width: none;
 }
 
-.hub-hud-tome {
+.hub-hud-tome-button {
   position: absolute;
   bottom: 14px;
   left: calc(50% + 14px);
+  width: 58px;
+  height: 62px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hub-hud-tome-button:disabled { cursor: default; }
+
+.hub-hud-tome {
+  display: block;
   width: 58px;
   height: 62px;
   max-width: none;

@@ -18,6 +18,7 @@ import {
   nativeBoneyardWeatherArenaFade,
 } from './boneyard-weather-audio.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
+import type { HubInventoryAction } from './core-kernels/hub-economy.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
   isBoneyardGameSnapshot,
@@ -37,6 +38,7 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import GameHud from './GameHud.tsx'
+import HubInventoryUi, { type HubUiSurface } from './HubInventoryUi.tsx'
 import GameOverOverlay from './GameOverOverlay.tsx'
 import TouchJoystick from './input/TouchJoystick.tsx'
 import NativeLootBitmapText from './NativeLootBitmapText.tsx'
@@ -53,7 +55,10 @@ import type {
   GameSnapshot,
   LoadedBoneyard,
 } from './protocol/game-protocol.ts'
-import type { ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type {
+  ProtocolPlayerEconomy,
+  ProtocolPlayerProgression,
+} from './protocol/game-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
@@ -87,10 +92,13 @@ interface BoneyardSceneProps {
   getPingMs: () => number | null
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
+  inventoryRequestSequence: number
   levelUpModalActive: boolean
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
+  onHubAction: (action: HubInventoryAction) => void
+  onOpenSkills: () => void
   onPauseRequest: () => void
   onReady: () => void
   playerId: string
@@ -121,10 +129,13 @@ export default function BoneyardScene({
   getPingMs,
   initialSnapshot,
   inputBlocked,
+  inventoryRequestSequence,
   levelUpModalActive,
   levelUpPresentationId,
   onInput,
   onLoadingError,
+  onHubAction,
+  onOpenSkills,
   onPauseRequest,
   onReady,
   playerId,
@@ -141,6 +152,16 @@ export default function BoneyardScene({
     }
     return initialSnapshot
   })
+  const [inventorySurface, setInventorySurface] = useState<HubUiSurface>(null)
+  const inventoryRequestRef = useRef(inventoryRequestSequence)
+  const [economy, setEconomy] = useState<ProtocolPlayerEconomy>(
+    boneyardInitialSnapshot.players[playerId]!.economy,
+  )
+  const [playerPosition, setPlayerPosition] = useState(
+    boneyardInitialSnapshot.players[playerId]!.position,
+  )
+  const sceneInputBlocked = inputBlocked || inventorySurface !== null
+
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const environmentLightCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -154,13 +175,13 @@ export default function BoneyardScene({
     runId: loaded.runId,
   })
   const digAudioCursorRef = useRef<SolomonDigAudioCursor | null>(null)
-  const inputBlockedRef = useRef(inputBlocked)
+  const inputBlockedRef = useRef(sceneInputBlocked)
   const presentationPausedRef = useRef(presentationPaused)
   const levelUpModalActiveRef = useRef(levelUpModalActive)
   const levelUpPresentationIdRef = useRef(levelUpPresentationId)
   const onLoadingErrorRef = useRef(onLoadingError)
   const onReadyRef = useRef(onReady)
-  inputBlockedRef.current = inputBlocked
+  inputBlockedRef.current = sceneInputBlocked
   presentationPausedRef.current = presentationPaused
   levelUpModalActiveRef.current = levelUpModalActive
   levelUpPresentationIdRef.current = levelUpPresentationId
@@ -178,6 +199,13 @@ export default function BoneyardScene({
   const [spectatorStatus, setSpectatorStatus] =
     useState<BoneyardSpectatorStatusPresentation | null>(null)
   const [run, setRun] = useState<GameRunLifecycleState>(boneyardInitialSnapshot.run)
+  useEffect(() => {
+    if (inventoryRequestRef.current === inventoryRequestSequence) return
+    inventoryRequestRef.current = inventoryRequestSequence
+    if (!inputBlocked && run.phase === 'active') {
+      setInventorySurface({ kind: 'inventory' })
+    }
+  }, [inputBlocked, inventoryRequestSequence, run.phase])
   const deathEpochRef = useRef(
     boneyardInitialSnapshot.players[playerId]?.progression.deathEpoch ?? 0,
   )
@@ -283,13 +311,44 @@ export default function BoneyardScene({
         || snapshot.world.runId !== loaded.runId
       ) return
       synchronizer.update(snapshot)
+      const player = snapshot.players[playerId]
+      if (player) {
+        setEconomy((current) => current.revision === player.economy.revision
+          ? current
+          : player.economy)
+        setPlayerPosition((current) => (
+          current.x === player.position.x && current.y === player.position.y
+            ? current
+            : player.position
+        ))
+      }
     })
   }, [audio, boneyardInitialSnapshot, loaded.runId, playerId, subscribe])
 
   useEffect(() => {
-    const toggleDigIndicator = (event: KeyboardEvent) => {
+    const openSkills = (event: KeyboardEvent) => {
       if (
         inputBlocked
+        || run.phase !== 'active'
+        || event.code !== 'KeyT'
+        || event.repeat
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+      ) return
+      event.preventDefault()
+      event.stopPropagation()
+      setInventorySurface(null)
+      onOpenSkills()
+    }
+    window.addEventListener('keydown', openSkills, { capture: true })
+    return () => window.removeEventListener('keydown', openSkills, { capture: true })
+  }, [inputBlocked, onOpenSkills, run.phase])
+
+  useEffect(() => {
+    const toggleDigIndicator = (event: KeyboardEvent) => {
+      if (
+        sceneInputBlocked
         || event.code !== SOLOMON_DIG_HOTKEY_CODE
         || event.repeat
         || event.altKey
@@ -304,12 +363,12 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', toggleDigIndicator)
     return () => window.removeEventListener('keydown', toggleDigIndicator)
-  }, [dig, inputBlocked, loaded.runId])
+  }, [dig, loaded.runId, sceneInputBlocked])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
       if (
-        inputBlocked
+        sceneInputBlocked
         || run.phase !== 'active'
         || event.key !== 'Escape'
         || event.repeat
@@ -323,7 +382,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openPause)
     return () => window.removeEventListener('keydown', openPause)
-  }, [inputBlocked, onPauseRequest, run.phase])
+  }, [onPauseRequest, run.phase, sceneInputBlocked])
 
   useLayoutEffect(() => {
     const scene = sceneRef.current
@@ -341,8 +400,8 @@ export default function BoneyardScene({
   }, [])
 
   useLayoutEffect(() => {
-    inputRef.current?.setBlocked(inputBlocked)
-  }, [inputBlocked])
+    inputRef.current?.setBlocked(sceneInputBlocked)
+  }, [sceneInputBlocked])
 
   useLayoutEffect(() => {
     rendererRef.current?.setLevelUpPresentation(
@@ -612,7 +671,7 @@ export default function BoneyardScene({
       data-geometry-sha256={loaded.geometrySha256}
       data-gate-leaf-count={gateLeaves.length}
       data-gate-state={gateState(gateLeaves)}
-      data-gameplay-input-blocked={inputBlocked}
+      data-gameplay-input-blocked={sceneInputBlocked}
       data-local-player-x={localPlayer?.position.x}
       data-local-player-y={localPlayer?.position.y}
       data-presentation-paused={presentationPaused}
@@ -664,10 +723,35 @@ export default function BoneyardScene({
           getPingMs={getPingMs}
           initialSnapshot={boneyardInitialSnapshot}
           mode="run"
+          onInventoryClick={() => {
+            if (!inputBlocked && run.phase === 'active') {
+              setInventorySurface({ kind: 'inventory' })
+            }
+          }}
+          onSkillsClick={() => {
+            if (!inputBlocked && run.phase === 'active') {
+              setInventorySurface(null)
+              onOpenSkills()
+            }
+          }}
           playerId={playerId}
           progression={progression}
           subscribePing={subscribePing}
           subscribeSnapshot={subscribe}
+        />
+        <HubInventoryUi
+          audio={audio}
+          config={boneyardInitialSnapshot.players[playerId]!.config}
+          disabled={inputBlocked || run.phase !== 'active'}
+          economy={economy}
+          onAction={onHubAction}
+          onSurfaceChange={setInventorySurface}
+          playerPosition={playerPosition}
+          progression={progression}
+          region="courtyard"
+          surface={inventorySurface}
+          tradersEnabled={false}
+          transitionActive={false}
         />
         {spectatorStatus ? (
           <div

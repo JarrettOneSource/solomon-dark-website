@@ -24,6 +24,7 @@ interface GameHudProps {
   onInventoryClick?: () => void
   onMapClick?: () => void
   partyMemberIds?: readonly string[]
+  onSkillsClick?: () => void
   playerId: string
   progression: ProtocolPlayerProgression
   subscribePing: (listener: (pingMs: number) => void) => () => void
@@ -112,6 +113,7 @@ export default function GameHud({
   onInventoryClick,
   onMapClick,
   partyMemberIds,
+  onSkillsClick,
   playerId,
   progression,
   subscribePing,
@@ -261,7 +263,15 @@ export default function GameHud({
           />
           <img className="hub-hud-xp-frame" src={hub.hud.xpFrame} alt="" />
         </div>
-        <img className="hub-hud-tome" src={hub.hud.tome} alt="Spellbook" />
+        <button
+          type="button"
+          className="hub-hud-tome-button"
+          aria-label="Open skills"
+          disabled={!onSkillsClick}
+          onClick={onSkillsClick}
+        >
+          <img className="hub-hud-tome" src={hub.hud.tome} alt="" />
+        </button>
         <img className="hub-hud-potion hub-hud-potion-blue" src={hub.hud.potionBlue} alt={`${manaPotions} mana potions`} />
         <InventoryCount count={manaPotions} variant="blue" />
       </div>

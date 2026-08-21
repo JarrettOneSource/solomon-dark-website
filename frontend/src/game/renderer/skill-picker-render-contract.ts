@@ -3,6 +3,16 @@ export const SKILL_PICKER_NATIVE_UI_RECORDS = [
   3, 10, 37, 49, 56, 57, 59, 62, 79, 107, 108, 109, 110,
 ] as const
 export const SKILL_PICKER_CARD_RECORDS = [0, 13, 164, 5] as const
+export const SKILL_PICKER_ROOT_TINTS = [
+  0xffe5ff,
+  0xffcbcb,
+  0xe5ffff,
+  0xcbcbff,
+  0xcbffcb,
+  0xffe5cb,
+  0xcbd8ff,
+  0xe5e5e5,
+] as const
 export const SKILL_PICKER_CARD_CENTERS = {
   3: [600, 800, 1000],
   4: [500, 700, 900, 1100],
@@ -34,6 +44,12 @@ export interface SkillPickerSpecialActionBounds {
 export function skillPickerCardCenters(optionCount: number): readonly number[] {
   if (optionCount === 3 || optionCount === 4) return SKILL_PICKER_CARD_CENTERS[optionCount]
   throw new RangeError('native skill picker requires three or four options')
+}
+
+export function skillPickerRootTint(root: number): number {
+  const tint = SKILL_PICKER_ROOT_TINTS[root]
+  if (tint === undefined) throw new RangeError(`unknown native skill root ${root}`)
+  return tint
 }
 
 export function skillPickerPanelBounds(optionCount: number): SkillPickerPanelBounds {

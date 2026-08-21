@@ -158,6 +158,23 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
     offerSequence: 8,
   })
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-assign-belt-skill',
+    skillId: 11,
+    slot: 7,
+  })), {
+    type: 'client-assign-belt-skill',
+    skillId: 11,
+    slot: 7,
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  })), { type: 'client-select-primary-skill', skillId: 8 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-select-concentration',
+    skillId: 57,
+  })), { type: 'client-select-concentration', skillId: 57 })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-snapshot-ack',
     requireKeyframe: false,
     sequence: 12,
@@ -383,6 +400,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   })
   assert.deepEqual(welcome.snapshot.players['player-1'].progression, {
     activeWeldBuildId: null,
+    concentrationSkillIds: [null, null],
     currentHealth: 50,
     currentMana: 100,
     coldSlowTicksRemaining: 0,
@@ -392,19 +410,23 @@ test('server welcome round-trips content, kernel, character, and world ownership
     deathTick: 0,
     experience: 0,
     learnedSkills: [[0, 1, 1], [7, 1, 1], [8, 1, 1], [11, 1, 1]],
+    learnedSkillOrder: [8, 11],
     level: 1,
     lifeState: 'alive',
     lastDamageTick: null,
     maximumHealth: 50,
     maximumMana: 100,
+    mindChugTicksRemaining: 0,
     nextThreshold: 90,
     pendingOffer: null,
+    primarySkillId: 8,
     poisonDamagePerTick: 0,
     poisonTicksRemaining: 0,
     previousThreshold: 0,
     revision: 0,
     sorcerorsCharmAvailable: false,
     secondaryBelt: [11, null, null, null, null, null, null, null],
+    splitMind: false,
   })
   assert.deepEqual(welcome.snapshot.run, {
     eligiblePlayerIds: [],
@@ -894,8 +916,8 @@ test('protocol v35 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v35 carries secondary action/cooldown gates and the existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 35)
+test('protocol v36 carries secondary action/cooldown gates and the existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 36)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

@@ -39,8 +39,11 @@ import {
   playerStatBook,
   rerollPlayerSkillOffer,
   resetPlayerPotionEffects,
+  equipPlayerSecondaryAbility,
   stepPlayerPotionEffects,
   refreshPlayerSkillBookMindstar,
+  selectPlayerConcentrationSkill,
+  selectPlayerPrimarySkill,
   synchronizePlayerLevelMilestone,
   type PlayerProgressionComponent,
   type SharedPlayerLevelMilestone,
@@ -53,6 +56,7 @@ import {
   createHubEconomy,
   insertLootInventoryItem,
   SORCERORS_CHARM_SELECTOR,
+  SPLIT_MIND_CHARM_SELECTOR,
   type HubInventoryItem,
   type HubEconomyState,
 } from '../core-kernels/hub-economy.ts'
@@ -259,6 +263,54 @@ export function playerSkillBookAt(
 ): PlayerSkillBookComponent | null {
   const index = playerEntityIndex(source, playerId)
   return index < 0 ? null : source.skillBooks[index] ?? null
+}
+
+export function assignPlayerEntitySecondaryBelt(
+  source: PlayerEntityStore,
+  playerId: string,
+  slot: number,
+  skillId: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player ${playerId} is absent`)
+  return replacePlayerSkillBook(
+    source,
+    index,
+    equipPlayerSecondaryAbility(source.skillBooks[index]!, skillId, slot),
+  )
+}
+
+export function selectPlayerEntityPrimarySkill(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player ${playerId} is absent`)
+  return replacePlayerSkillBook(
+    source,
+    index,
+    selectPlayerPrimarySkill(source.skillBooks[index]!, skillId),
+  )
+}
+
+export function selectPlayerEntityConcentrationSkill(
+  source: PlayerEntityStore,
+  playerId: string,
+  skillId: number,
+): PlayerEntityStore {
+  const index = playerEntityIndex(source, playerId)
+  if (index < 0) throw new Error(`player ${playerId} is absent`)
+  return replacePlayerSkillBook(
+    source,
+    index,
+    selectPlayerConcentrationSkill(
+      source.skillBooks[index]!,
+      skillId,
+      source.economies[index]!.ownedPerkSelectors.includes(SPLIT_MIND_CHARM_SELECTOR),
+      source.progressions[index]!.mindChugTicksRemaining,
+    ),
+  )
 }
 
 export function playerStatBookAt(
@@ -767,6 +819,21 @@ export function deferPlayerEntitySkillChoice(
 
 function withoutIndex<T>(source: readonly T[], index: number): T[] {
   return [...source.slice(0, index), ...source.slice(index + 1)]
+}
+
+function replacePlayerSkillBook(
+  source: PlayerEntityStore,
+  index: number,
+  skillBook: PlayerSkillBookComponent,
+): PlayerEntityStore {
+  const skillBooks = [...source.skillBooks]
+  const progressions = [...source.progressions]
+  skillBooks[index] = skillBook
+  progressions[index] = {
+    ...progressions[index]!,
+    revision: progressions[index]!.revision + 1,
+  }
+  return { ...source, progressions, skillBooks }
 }
 
 function replacePlayerProgression(

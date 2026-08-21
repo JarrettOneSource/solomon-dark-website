@@ -166,6 +166,19 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-hub-action',
     action: { type: 'buy-fomentius', itemId: stockItemId },
   })
+  session.assignBeltSkill(7, 11)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-assign-belt-skill',
+    skillId: 11,
+    slot: 7,
+  })
+  session.selectPrimarySkill(8)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  })
+  assert.throws(() => session.assignBeltSkill(1, 8), /cannot be assigned/)
+  assert.throws(() => session.selectConcentration(57), /cannot be selected/)
   session.startMatch('default-random')
   assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
     type: 'client-start-match',

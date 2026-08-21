@@ -26,8 +26,11 @@ GAME_EXECUTABLE_SHA256 = (
 )
 COMMON_HEADER_SIZE = 45
 POINT_SIZE = 8
-UI_RECORDS = (3, 10, 37, 42, 47, 48, 49, 51, 56, 57, 59, 62, 79, 82, 100, 107, 108, 109, 110)
-SKILLS_RECORDS = (0, 5, 13, *range(27, 109), 164)
+UI_RECORDS = (
+    3, 10, 30, 31, 32, 37, 42, 47, 48, 49, 51, 56, 57, 59, 62, 79,
+    82, 100, 107, 108, 109, 110,
+)
+SKILLS_RECORDS = (0, 5, 6, 12, 13, 14, *range(27, 123), 164, 165)
 FONT_GROUPS = {
     "body": 0,
     "medium": 1,

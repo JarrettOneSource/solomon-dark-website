@@ -99,6 +99,7 @@ export interface ProtocolPlayerSkillOffer {
 export interface ProtocolPlayerProgression {
   activeWeldBuildId: number | null
   coldSlowTicksRemaining: number
+  concentrationSkillIds: readonly [number | null, number | null]
   currentHealth: number
   currentMana: number
   deferredSkillChoices: number
@@ -107,19 +108,23 @@ export interface ProtocolPlayerProgression {
   dazzleTicksRemaining: number
   experience: number
   learnedSkills: readonly (readonly [number, number, number])[]
+  learnedSkillOrder: readonly number[]
   level: number
   maximumHealth: number
   maximumMana: number
+  mindChugTicksRemaining: number
   lifeState: PlayerLifeState
   lastDamageTick: number | null
   nextThreshold: number
   pendingOffer: ProtocolPlayerSkillOffer | null
+  primarySkillId: number
   poisonDamagePerTick: number
   poisonTicksRemaining: number
   previousThreshold: number
   revision: number
   sorcerorsCharmAvailable: boolean
   secondaryBelt: readonly (number | null)[]
+  splitMind: boolean
 }
 
 export type NativeSecondarySnapshotState = Omit<

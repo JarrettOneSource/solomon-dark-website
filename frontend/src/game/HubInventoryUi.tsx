@@ -104,6 +104,7 @@ interface HubInventoryUiProps {
   region: HubRegionId
   surface: HubUiSurface
   transitionActive: boolean
+  tradersEnabled?: boolean
 }
 
 export default function HubInventoryUi({
@@ -118,10 +119,13 @@ export default function HubInventoryUi({
   region,
   surface,
   transitionActive,
+  tradersEnabled = true,
 }: HubInventoryUiProps) {
   const nearestTrader = useMemo(
-    () => disabled || transitionActive ? null : nearestHubTrader(region, playerPosition),
-    [disabled, playerPosition, region, transitionActive],
+    () => disabled || transitionActive || !tradersEnabled
+      ? null
+      : nearestHubTrader(region, playerPosition),
+    [disabled, playerPosition, region, tradersEnabled, transitionActive],
   )
 
   const closeSurface = useCallback(() => {

@@ -17,6 +17,7 @@ export type EquipmentSlot = 'amulet' | 'hat' | 'ring-0' | 'ring-1' | 'ring-2' | 
 export const EQUIPMENT_TYPES = ['amulet', 'hat', 'ring', 'robe', 'staff', 'wand'] as const
 export const EQUIPMENT_SLOTS = ['amulet', 'hat', 'ring-0', 'ring-1', 'ring-2', 'robe', 'weapon'] as const
 export type HubTraderId = 'fomentius' | 'hagatha' | 'luthacus' | 'shlorio'
+export const SPLIT_MIND_CHARM_SELECTOR = 21
 export type HubInventoryAction =
   | { readonly type: 'buy-dowsing'; readonly offerId: number }
   | { readonly type: 'buy-fomentius'; readonly itemId: number }

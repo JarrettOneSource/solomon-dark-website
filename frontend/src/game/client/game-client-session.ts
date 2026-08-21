@@ -30,6 +30,7 @@ import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import type { HubInventoryAction } from '../core-kernels/hub-economy.ts'
 import type { LocalPartyState } from '../protocol/party-state.ts'
+import { NATIVE_SECONDARY_ABILITY_IDS } from '../core-kernels/native-secondary-ability-contract.ts'
 import type { GameTransport } from './game-transport.ts'
 import {
   GameConnectionFailure,
@@ -71,6 +72,7 @@ export interface GameClientSession {
   readonly isHost: boolean
   readonly playerId: string
   readonly resumeToken: string
+  assignBeltSkill(slot: number, skillId: number): void
   confirmLoadout(): void
   destroy(): void
   executeLua(code: string): Promise<GameLuaExecutionResult>
@@ -93,6 +95,8 @@ export interface GameClientSession {
   rerollSkill(offerSequence: number): void
   requestGameplayPause(paused: boolean): void
   saveSkill(offerSequence: number): void
+  selectConcentration(skillId: number): void
+  selectPrimarySkill(skillId: number): void
   selectSkill(choiceIndex: number, offerSequence: number, skillId: number): void
   sendHubAction(action: HubInventoryAction): void
   sendInput(input: PlayerCharacterInput): void
@@ -668,6 +672,51 @@ export function connectGameClientSession(
           type: 'client-level-up-action',
           action: 'save',
           offerSequence,
+        }))
+      },
+      assignBeltSkill(slot, skillId) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          !Number.isInteger(slot)
+          || slot < 0
+          || slot > 7
+          || !(NATIVE_SECONDARY_ABILITY_IDS as readonly number[]).includes(skillId)
+          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The secondary skill cannot be assigned to that belt slot.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-assign-belt-skill',
+          skillId,
+          slot,
+        }))
+      },
+      selectPrimarySkill(skillId) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          ![8, 16, 24, 32, 40].includes(skillId)
+          || (progression?.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The primary skill cannot be selected.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-select-primary-skill',
+          skillId,
+        }))
+      },
+      selectConcentration(skillId) {
+        if (!welcome || !snapshot || destroyed) return
+        const progression = snapshot.players[welcome.playerId]?.progression
+        if (
+          ![57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71].includes(skillId)
+          || progression?.mindChugTicksRemaining !== 0
+          || progression.concentrationSkillIds.includes(skillId)
+          || (progression.learnedSkills.find(([id]) => id === skillId)?.[1] ?? 0) < 1
+        ) throw new Error('The concentration skill cannot be selected.')
+        session.sendInput(STOPPED_INPUT)
+        options.transport.send(encodeGameMessage({
+          type: 'client-select-concentration',
+          skillId,
         }))
       },
       sendHubAction(action) {

@@ -413,7 +413,7 @@ function skillTextTint(family: string): number {
   }
 }
 
-function spriteFor(
+export function spriteFor(
   textures: GameTextureMap,
   atlas: 'Fonts' | 'Skills' | 'UI',
   record: number,
@@ -421,7 +421,7 @@ function spriteFor(
   return new Sprite(textureFor(textures, atlas, record))
 }
 
-function textureFor(
+export function textureFor(
   textures: GameTextureMap,
   atlas: 'Fonts' | 'Skills' | 'UI',
   record: number,
@@ -444,7 +444,7 @@ function textureFor(
   })
 }
 
-function addBitmapText(
+export function addBitmapText(
   layer: Container,
   textures: GameTextureMap,
   text: string,
