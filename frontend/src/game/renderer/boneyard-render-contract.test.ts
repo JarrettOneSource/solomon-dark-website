@@ -32,7 +32,10 @@ import {
 } from './boneyard-environment-light-plan.ts'
 
 const boneyardRenderer = readFileSync(new URL('./boneyard-world-renderer.ts', import.meta.url), 'utf8')
-const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
+const boneyardScene = readFileSync(
+  new URL('../BoneyardScene.tsx', import.meta.url),
+  'utf8',
+).replaceAll('\r\n', '\n')
 const boneyardStyles = readFileSync(new URL('../boneyard.css', import.meta.url), 'utf8')
 const environmentLight = readFileSync(
   new URL('./boneyard-environment-light.ts', import.meta.url),
