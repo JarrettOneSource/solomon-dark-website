@@ -427,7 +427,6 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           if (
             !sharedHub && (
               clients.size !== 0
-              || state.tick !== 0
               || state.world.kind !== 'hub'
               || state.playerEntities.identities.length !== 0
             )

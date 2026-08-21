@@ -23961,6 +23961,7 @@ configuration or fail closed.
 | Caddy rollback | remote release rollback | out-of-system — production recovery ownership | prior site restored and reloaded on any later failure |
 | active-session guard | supervisor health and worker | verified-already-at-parity | no game-service restart or release cutover with active sessions |
 | raw-client acceptance protocol | party/Lua smoke tooling | out-of-system — Website verification transport | imports protocol identity; no numeric copy |
+| empty-host save resume after ambient ticks | private host/session lifecycle | out-of-system — Website save ownership | zero clients and player entities define freshness; fixed-clock advance does not |
 
 No member is blocked by the browser platform.
 
@@ -24000,6 +24001,13 @@ host correctly rejected it before authentication. All raw browser-game
 acceptance tools are therefore sibling protocol consumers and must import the
 authoritative identity rather than copy a version literal.
 
+GitHub's first validation of the published fix exposed the adjacent private
+resume race deterministically under slower scheduling: a new host's fixed clock
+advanced before its first hello, so the old `state.tick === 0` proxy for
+freshness rejected a valid save before reaching mod-mismatch validation.
+Authenticated clients, Hub world, and player-entity population already own the
+actual fresh-host boundary; an empty ambient tick is not an owner.
+
 ### Web implementation consequence
 
 - Accept only the exact shared sentinel beside the existing null/private
@@ -24014,6 +24022,9 @@ authoritative identity rather than copy a version literal.
   artifact, validation, checksum, install, reload, and rollback seams.
 - Make party and Lua acceptance tools consume `GAME_PROTOCOL_VERSION` /
   `GAME_PROTOCOL_NAME`; lock out numeric protocol copies in their source.
+- Remove fixed-tick value from private-host freshness. Retain zero clients, Hub
+  world, and zero player entities, and prove a delayed first hello still reaches
+  the exact mod-mismatch confirmation branch.
 
 ### Validation contract
 
@@ -24024,6 +24035,9 @@ authoritative identity rather than copy a version literal.
 - Acceptance-tool contract: party and Lua smoke source must use the
   authoritative protocol exports; the complete party journey must authenticate
   and launch rather than wait on a stale-client timeout.
+- Resume race contract: advance an empty private host beyond tick zero before
+  hello; unconfirmed mismatch rejects for confirmation and explicit continuation
+  resumes the saved owner.
 - Canonical gate: Windows-native `./scripts/validate.sh` on the exact final
   revision.
 - Browser/live: real production New Game reaches Hub without a connection
@@ -24073,6 +24087,18 @@ authoritative identity rather than copy a version literal.
   three-member party, advanced the outsider in Hub, reported
   `hubPlayers=1/parties=2/runs=1/players=4`, then returned every count to zero
   with empty page/console errors.
+- GitHub run `32485846215` then reproduced the empty-host resume race:
+  `tick > 0` selected “fresh host owner” before mod mismatch. A deterministic
+  delayed-hello regression failed before the fix and passes after removing only
+  the tick proxy; zero clients, Hub world, and zero player entities remain
+  mandatory.
+- The follow-up Windows-native canonical gate passed the same complete matrix
+  on `aaac1fc`, including the deliberately delayed resume under the broad
+  suite; its game entry was `276116` raw / `82791` gzip bytes. A concurrent
+  high-load WSL rerun also passed the resume regression but recorded one
+  unrelated Lua p99 sample at `20.918 ms` against the `20 ms` limit; the
+  isolated Lua timing suite immediately passed unchanged, so no performance
+  threshold or Lua code was altered.
 - Publication, durable deployment of the backend change, and final production
   diagnostic submission remain pending below; this entry is not complete until
   both original repros pass on the final production revision.

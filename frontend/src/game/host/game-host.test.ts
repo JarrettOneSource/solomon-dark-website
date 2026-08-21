@@ -1002,6 +1002,7 @@ test('host rejects an unconfirmed save mod mismatch and accepts an explicit cont
 
   const rejectingHost = await startGameHost(options)
   context.after(() => rejectingHost.close())
+  await waitFor(() => rejectingHost.state().tick > 0)
   const rejectedSocket = await openSocket(rejectingHost.address.url)
   context.after(() => rejectedSocket.close())
   const rejectedMessage = nextMessage(
