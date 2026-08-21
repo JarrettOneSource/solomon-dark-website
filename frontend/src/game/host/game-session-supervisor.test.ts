@@ -191,12 +191,19 @@ test('game session supervisor admits independent players to one shared Hub and r
     type: 'client-party-accept',
     invitationId: reinvited.state.invitations[0]!.id,
   }))
-  await Promise.all([acceptedForFirst, acceptedForSecond])
+  const [acceptedFirstState, acceptedSecondState] = await Promise.all([
+    acceptedForFirst,
+    acceptedForSecond,
+  ])
+  assert.equal(acceptedFirstState.type, 'server-party-state')
+  assert.equal(acceptedSecondState.type, 'server-party-state')
+  const mergedPartyId = acceptedFirstState.state.party.id
+  assert.equal(acceptedSecondState.state.party.id, mergedPartyId)
 
   const hubDirectory = await readPublicParties(supervisor.address.url)
   assert.deepEqual(hubDirectory, [{
     boneyardName: null,
-    id: 'party-1',
+    id: mergedPartyId,
     leader: CHARACTER.displayName,
     maxMembers: 16,
     memberCount: 2,
