@@ -37,6 +37,9 @@ assert.ok(context, 'expected a browser context')
 const page = await context.newPage()
 await page.setViewportSize(viewport)
 await page.bringToFront()
+await page.addInitScript(() => {
+  localStorage.setItem('solomon-dark-game-settings-v1', '{"enableCheats":true}')
+})
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {
@@ -264,6 +267,7 @@ async function enterBoneyard(page) {
     page.locator('.boneyard-scene').waitFor({ timeout: 30_000 }),
   ])
   if (await page.getByLabel(/College courtyard/).count()) {
+    await selectStormyBoneyard(page)
     await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   }
   await page.locator('.boneyard-scene[data-renderer-state="ready"]')
@@ -327,6 +331,17 @@ async function enterBoneyard(page) {
   }, viewport)
   await page.waitForTimeout(1_000)
   return { ...presentation, startupEnvironmentLight }
+}
+
+async function selectStormyBoneyard(page) {
+  await page.waitForFunction(() => Boolean(window.solomonDark?.lua), undefined, {
+    timeout: 10_000,
+  })
+  const result = await page.evaluate(() => (
+    window.solomonDark.lua.execute('return sd.rng.set_seed(2)')
+  ))
+  assert.equal(result.ok, true, result.error)
+  assert.deepEqual(result.values, [2])
 }
 
 async function measure(page, duration) {

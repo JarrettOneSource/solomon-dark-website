@@ -26,6 +26,9 @@ try {
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
   await page.addInitScript(installGameAudioSmokeProbe)
+  await page.addInitScript(() => {
+    localStorage.setItem('solomon-dark-game-settings-v1', '{"enableCheats":true}')
+  })
   await page.addInitScript((runtime) => {
     window.solomonDarkRuntime = runtime
   }, {
@@ -59,6 +62,7 @@ try {
   await page.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
   await page.locator('.create-menu-discipline-arcane').click()
   await page.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+  await selectStormyBoneyard(page)
   await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
   const boneyard = page.locator('.boneyard-scene')
   await boneyard.waitFor({ timeout: 30_000 })
@@ -102,4 +106,15 @@ try {
   process.stdout.write(`${JSON.stringify({ mode, pageErrors, consoleErrors, receipt })}\n`)
 } finally {
   await browser.close()
+}
+
+async function selectStormyBoneyard(page) {
+  await page.waitForFunction(() => Boolean(window.solomonDark?.lua), undefined, {
+    timeout: 10_000,
+  })
+  const result = await page.evaluate(() => (
+    window.solomonDark.lua.execute('return sd.rng.set_seed(2)')
+  ))
+  assert.equal(result.ok, true, result.error)
+  assert.deepEqual(result.values, [2])
 }
