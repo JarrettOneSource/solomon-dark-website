@@ -25597,3 +25597,105 @@ force, cooldown decrement/reset, low-charge sound suppression, both painter
 branches, exact atlas records, interpolation, protocol validation, and shared
 ambient-loop start/stop. A rendered browser/Mac Hurricane journey remains a
 final acceptance receipt rather than being inferred from the canonical gate.
+
+### 2026-08-21 v49 complete 82-row effect and presentation ledger
+
+This is the final row-by-row residual ledger against the 82 compiled native
+IDs, not a family-level inference. “No independent” means the row modifies its
+named parent/consumer and stock allocates no separate actor, light, or sound for
+that upgrade. The detailed secondary art/audio/timing rows remain executable
+contracts in `native-secondary-ability-contract.ts`; primary painter details
+remain in the element-specific sections above.
+
+| ID / skill | World, player, enemy, and additional effects | VFX, lighting, audio, and lifecycle disposition | Web owner / status |
+| --- | --- | --- | --- |
+| 0 Element of Ether | Creation root, default rows 8/11, offer/dependency family, wizard appearance identity. | Creation/Skills UI and Ether appearance only; no independent world light/audio. | config, progression, creation/Skill Screen — closed |
+| 1 Element of Fire | Creation root, default rows 16/21, offer/dependency family, appearance identity. | Creation/Skills UI and Fire appearance only; no independent world light/audio. | config/progression/render — closed |
+| 2 Element of Air | Creation root, default rows 24/27, offer/dependency family, appearance identity. | Creation/Skills UI and Air appearance only; no independent world light/audio. | config/progression/render — closed |
+| 3 Element of Water | Creation root, default rows 32/35, offer/dependency family, appearance identity. | Creation/Skills UI and Water appearance only; no independent world light/audio. | config/progression/render — closed |
+| 4 Element of Earth | Creation root, default rows 40/41, offer/dependency family, appearance identity. | Creation/Skills UI and Earth appearance only; no independent world light/audio. | config/progression/render — closed |
+| 5 Body Discipline | Body offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
+| 6 Mind Discipline | Mind offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
+| 7 Arcane Discipline | Arcane offer bias/root and dependency page membership. | Skills/creation UI only; no world/player VFX, light, or audio. | progression/Skill Screen — closed |
+| 8 Magic Missile | One-shot homing hostile projectile, damage/mana, terrain/actor contact. | Two-pass 110/111/112 Ether body; FadeMM/contact light and hit audio; cast `magicmissile`. | primary ECS/combat/view/audio — closed |
+| 9 Smart Missiles | Reacquisition and turn/speed scaling of row 8. | No independent actor/light/audio; path changes the retained Missile owner. | native primary profile/targeting — closed |
+| 10 More Missiles | Alternating fan quantity and added mana cost. | No independent VFX/light/audio family; each spawned row-8 actor owns the full body/contact stack. | primary emission — closed |
+| 11 Call Leviathan | Persistent summon, appendage targeting, EtherBolt damage, quantity/max-equipment branch. | BadGuys 343..372/39/11/22 plus Ether compositor; Leviathan/PlaneCross audio and owned lights. | secondary actor contract — closed |
+| 12 Planewalker | Toggle/hoard, timed modifier, saved primary, Plane Orb override and restore. | BadGuys 75, ether-plane mesh, birth/fade children; plane loop, toggle sounds, registered orb lights. | secondary player/actor + row 80 — closed |
+| 13 Piercing | Row-8 pierce count and retained-damage factor; reacquires after exiting the contacted body. | Independent ten-tick additive BadGuys-53 streaks; no extra light/loop. | primary contact/pierce state — closed |
+| 14 Ether Blast | Refreshed Magic Missile charge, rounded radial current-HP pulse, target EtherBurn. | 108 perspective particles, weapon pulse, Region flash/camera; EtherBurn 246..250 plus target MiscLight; three release sounds. | native Ether kernel/secondary target ECS — closed |
+| 15 Phasing | Paid/cooldown heading probe and collision-authoritative relocation. | BadGuys-53 traversal; `phase` sound; no persistent light. | secondary action — closed |
+| 16 Fireball | One-shot projectile, ranked damage/mana, terrain/actor contact. | 255..266 body, 267..270 trail, 251..254 impact; outbound point light; throw/hit audio. | primary ECS/combat/view/audio/light — closed |
+| 17 Embers | Contact fragments with independent damage/count and spent-Ember follow-up. | Ember actors and their native Fire passes/lights; parent Fire contact audio. | Fire payload/transient ECS — closed |
+| 18 Explode | Fire contact radial damage and radius payload. | Explosion/impact children, camera/light feedback, Fire hit audio; retires independently. | Fire detonation combat/view — closed |
+| 19 Embers to Imps | Spent Ember becomes timed friendly GoodImp and Fire patch; takes precedence over Immolate. | GoodImp body/flame/contact banks, actor light and Imp/bite sounds. | Fire GoodImp runtime — closed |
+| 20 Immolate | Spent Ember becomes damage explosion when row 19 is absent. | Fire explosion/burn presentation and ordinary Fire light/audio ownership. | Fire retirement/detonation — closed |
+| 21 Ring of Fire | Paid 30-segment ring, Shockwave damage/push, Burning Man maximum branch. | DeadHawg fire ring, shockwave children, Region camera/light; `bigfire`/`nuke` audio. | secondary actor/wave — closed |
+| 22 Burn | Target-owned timed Fire damage modifier and merge. | Target flames and MiscLight each tick; fire loop/contact sound ownership is shared with producer. | secondary target effect — closed |
+| 23 Firewalker | Toggle/hoard, immediate and periodic trail patches, damage/duration/contact. | DeadHawg patch bank, registered patch light, `ignite` and shared `lowfire` loop. | secondary player + Fire patch ECS — closed |
+| 24 Lightning | Sustained target/terrain beam, ranked per-tick damage/mana. | Dual record-44 ribbons, source/contact coronas, path/MiscLights; start and lightning loop. | primary channel/combat/view/audio/light — closed |
+| 25 Chaining | Ordered distinct-target hops and float32 damage decay. | Independent Lightning legs/contact fades and their existing light stack; no new cue. | Air combat/transients — closed |
+| 26 Stun | Target-owned 25-tick minimum movement-factor merge. | No stock independent sprite, light, or audio; target motion is the presentation consequence. | secondary target effect — closed |
+| 27 Magic Storm | Paid aimed StormCloud, strike damage range, target shuffle/query, active/fade lifecycle. | Native rain/cloud/bolt composite and lights; magic-storm/thunder plus shared rain/wind loops. | secondary Storm actor — closed |
+| 28 Magic Tornado | Moves row 27, speeds strikes, adds duration/drops and maximum variant. | Moving spline/cloud branches reuse Storm light/audio with expanded children; no separate actor family. | Storm configuration/runtime — closed |
+| 29 Hurricane | Refreshed Lightning aura, strict tangential Badguy/Maggot force, target cooldown, charge-cubed damage. | DeadHawg-15 core + BadGuys-84 high/low lane programs; shared steady-wind loop; explicitly no light/shadow. | Hurricane kernel/combat/view/audio — closed |
+| 30 Prismatic Shock | Paid radius application and target-owned Prismatic merge; doubles later Air susceptibility. | Record-58 wave plus 110..112 children, cast sounds; no retained parent light beyond mapped children. | secondary actor/target effect — closed |
+| 31 Disintegrate | Event-local Lightning percentile and strict post-hit 20-percent execute. | No independent actor/light/audio; ordinary hit/death presentation owns the result. | Air contact flag — closed |
+| 32 Frost Jet | Sustained cone query, ranked per-tick damage/mana and cold contact. | BadGuys-30/28 Normal/Over particles; ice-start and ice loop; no invented emitter light. | primary channel/combat/view/audio — closed |
+| 33 Chill Wind | Distance-tapered target push and hostile Arrow tumble/removal. | Independent record-2 SpinAway for arrows; otherwise row-32 presentation/audio, no new light. | Water combat + arrow effect — closed |
+| 34 Cone of Ice | Reach/aperture widening and particle width/density inputs. | Modifies row-32 geometry only; no independent actor/light/audio. | Water profile/emitter — closed |
+| 35 Ring of Ice | Paid expanding one-contact FreezeWave, damage/freeze/cold branches and bursts. | DeadHawg 114/121, WhirlSnow/iceblast children and wave light; `ringofice` audio. | secondary wave/target effects — closed |
+| 36 Harden | Selected pure-Water held armor accrual, cap, persistent flat incoming-damage consumer. | No stock independent sprite/light/audio; armor state is player-owned and survives release. | player skill runtime/contact — closed |
+| 37 Cold Aura | Held radius slow query and target merge. | Parent-following additive BadGuys-14 actor; no light/audio owner of its own. | Water channel/actor/target effect — closed |
+| 38 Hail | Native hit gate, event-time damage range, bouncing actor and target contact. | BadGuys-32 Hail with bounce clocks/audio samples; no outbound light. | Water RNG/combat/actor audio — closed |
+| 39 Permafrost | Scales Water cold strength/duration and Frozen/ColdSlow material/lifecycle. | No independent actor/light/audio; target material/status actors own visible consequences. | Water profile/secondary modifiers — closed |
+| 40 Boulder | Persistent held/released rock carrier, gathered rocks, charge, collision, damage pool. | 168..171/2008..2010/86 body, CalledRock and fragments with Region-light sampling; start/gather/rolling audio. | Earth primary ECS/view/audio — closed |
+| 41 Earthquake | Paid duration, shuffled enemy disruption, scenery wobble, world shake. | Floor copies, cracks/dust/lit debris; earthquake/rock/crack audio; mapped Region light/feedback. | secondary Earthquake actor — closed |
+| 42 Hasten Rocks | Accelerates row-40 charge/gather recurrence and adds mana cost. | Inherited Boulder/CalledRock art and loops only; no independent light/audio. | Earth profile/charge kernel — closed |
+| 43 Bind Rocks | Row-40 toughness/damage-pool retention and mana cost. | No independent actor/light/audio; retained rock/contact lifetime changes. | Earth contact pool — closed |
+| 44 Rock Surge | Paid percentile branch creates an immediate full-charge moving Boulder. | Reuses complete Boulder body/light and start/rolling audio; no surrogate surge sprite. | Earth cast branch — closed |
+| 45 Raise Golem | Paid collision-adjusted summon, HP/two damage lanes, AI, one/two-owner cap. | Complete Golem assembly/body/death banks, lights and crack/provoke/step/contact/death sounds. | secondary Golem runtime — closed |
+| 46 Stoneskin | Paid timed invulnerability modifier and common damage interception. | Player stone-material treatment; on/apply/removal sounds; no world light. | secondary player modifier — closed |
+| 47 Gargantuan | Raises row-40 maximum charge/size and resulting rock/body/contact scale. | Inherited Boulder/fragment painter/light/audio only. | Earth profile/Boulder runtime — closed |
+| 48 Teleport | Paid/cooldown native destination policy and collision-authoritative relocation. | Two BadGuys-90 source/destination bursts; teleport sound; no light. | secondary action/transients — closed |
+| 49 Magic Circle | Paid aimed field, ten-tick slow and player HP/MP pulses. | BadGuys-48/7 rings, flickering shadow-casting Region light; magic-circle sound. | secondary actor/target/player effects — closed |
+| 50 Magic Trap | Paid weld/primary selector, charge, trigger queries, damage and elemental target modifier. | Native trap/shimmer/terminal banks, camera/light; selector cast sounds, trap/electric loops. | secondary trap/target ECS — closed |
+| 51 Dampen | Paid caster rectangle, projectile removal, shield dispel, disruption, CastSpin. | 360 MoveFades + 30 additive fades; flash/dampen sounds; no invented light. | secondary action/world mutation — closed |
+| 52 Spell Welding | Learned recipe/vector, selected-primary row, ten build dispatches and offer rules. | Special Skills selectors 108..117; each build owns its fully mapped native VFX/light/audio; no standalone cast actor. | weld vector/runtime/Skill Screen — closed |
+| 53 Flash | Defensive chance response, radius-100 Dazzle and duration. | 8 record-16 + 4 record-15 children, Region flash/camera, flash sound; no persistent light. | harmful-contact/secondary response — closed |
+| 54 Magic Shield | Paid absorb state, hit pulse, break and optional row-55 payload. | Record-49 shell, break particles/FuzzySpears/shockwave, shield sounds and mapped light/camera. | secondary player/combat/view — closed |
+| 55 Explosive Shield | Adds paid damage payload to row-54 break and radius-110 hostile contact. | Break explosion/502-word visual and `magicshieldexplode` audio; uses row-54 lifecycle/light owner. | Magic Shield payload — closed |
+| 56 Mana Up | Adds configured maximum mana. | HUD/stat/available-mana consequence only; no independent VFX/light/audio. | player derived stats — closed |
+| 57 Channel Mana | Multiplies mana recovery; concentration adds its second factor. | Meter recovery only; no independent VFX/light/audio. | player derived/tick — closed |
+| 58 Meditation | Idle delay/recovery multiplier and concentrated acting/moving ramp. | Meter recovery only; no independent VFX/light/audio. | player runtime clock — closed |
+| 59 Battle Mage | Reduces offensive mana costs; concentration composes. | No independent VFX/light/audio; selected casts retain their own presentation. | offensive resolver — closed |
+| 60 Focus | Secondary recharge factor and concentrated instant-recharge percentile. | No independent VFX/light/audio; affected skill's ordinary next cast owns feedback. | secondary cooldown runtime — closed |
+| 61 Siege Mage | Raises offensive damage; concentration composes. | No independent VFX/light/audio; damage producer retains its own effects. | offensive resolver — closed |
+| 62 Resist Magic | Reduces incoming magic damage; concentration composes. | No independent VFX/light/audio. | player harmful-contact resolver — closed |
+| 63 Creativity | Fourth offer, relaxed picker eligibility, concentrated Insight double-apply. | Stock Skill picker extra card/Insight marker and shared pick audio; no world light. | offer RNG/picker authority — closed |
+| 64 Health Up | Adds configured maximum health. | HUD/stat consequence only; no independent VFX/light/audio. | player derived stats — closed |
+| 65 Enchant Staff | Adds staff damage, rank changes target selection, concentration speeds melee by 1.75. | Staff action/contact art and swoosh/hit sounds; no rank-owned light. | staff action/combat — closed |
+| 66 Telekinesis | Scales Orb/Gold/Sack/Bonus pull and pickup ranges; concentration doubles. | Existing loot motion/pickup art/audio only; no independent light. | loot consumers/player stats — closed |
+| 67 Rush | Player movement multiplier; concentration composes. | Locomotion/gait consequence only; no independent VFX/light/audio. | player movement — closed |
+| 68 Deflect | Staff-gated chance cancels eligible contact; concentration reflects physical damage x5 in range. | Faces source and plays pitched `swipe` audio; no actor/light. | harmful-contact/event audio — closed |
+| 69 Resist Poison | Reduces poison duration; concentration composes. | Status-duration consequence only; no independent VFX/light/audio. | player poison resolver — closed |
+| 70 Faster Caster | Cast/action progress factor; concentration composes. | Existing Staff/cast animation and sound accelerate; no independent actor/light. | player cast kernel — closed |
+| 71 Fortunate Flailing | Staff proc selection; concentrated non-normal damage multiplier. | Knockback/Disable/Critical/Whirl exact children and sounds; complete light census is empty. | staff action/contact VFX — closed |
+| 72 Acid Rain | Paid aimed persistent direct-damage field and shuffled subset pulses. | Native rain/field/splash passes and light; magic-storm/acid-sizzle/rain loop. | secondary Acid actor — closed |
+| 73 Fire Wall | Paid aim-perpendicular eleven-patch field and contact damage. | DeadHawg patch bank/light; ignite, fire-hit and shared low-fire loop. | secondary Fire patches — closed |
+| 74 Ether Drain | Paid aimed field, refreshed candidates, distance-tier damage and pull. | Ether-plane/BadGuys/DeadHawg children and Region light; distort/lightning plus plane/wind loops. | secondary Drain actor — closed |
+| 75 Iron Golem | Adds row-45 mana cost, Iron presentation/state and physical reflection factor. | Iron Golem overlays/assembly/contact/death art and existing Golem sounds/lights; no separate summon. | Golem configuration/combat — closed |
+| 76 Call Comet | Paid fall actor, radius-400 impact damage/freeze and shared FreezeWave. | DeadHawg-5 body, trails/debris/overlay/light; comet loop/whistle and impact sounds. | secondary Comet/wave — closed |
+| 77 Turn Undead | Paid family-filtered flee/weaken for Skeleton/Archer/Mage/Zombie. | 35 gray record-48 fades; level-up audio sample pitches 2 then 3; no Region light. | secondary area/target effects — closed |
+| 78 Mindstar | Toggle/hoard, temporary +1 effective rank across learned rows, overload cleanup. | Region toggle feedback and mindstar audio stream; no world actor/light. | secondary player/progression — closed |
+| 79 Regenerate | Toggle/hoard and fixed `1.5/tickRate` HP recovery, overload cleanup. | Orange Region point feedback and shared mindstar audio stream; no world actor/light. | secondary player/tick — closed |
+| 80 Plane Orb | Runtime primary forced by row 12; aimed orb, homing/acceleration, damage and fade. | BadGuys-75, repeating ether-plane mesh, 11/45 children, actor light; distort/lightning/plane audio. | Planewalker primary override — closed |
+| 81 Reserved | No CFG, rank, cast, player/enemy/world effect; selector storage boundary only. | Skills record 108 overlaps the first weld special selector; no independent audio/light/lifecycle. | catalog/Skill Screen negative disposition — closed |
+
+The mechanical property audit covers every numeric CFG key. The apparent
+unconsumed Water profile members (`armorMaximum`, `armorPerSecond`,
+`auraSlowFactor`, `hailChance`, `minimumColdDurationTicks`, `slowdownScale`) are
+not orphaned effects: Harden has its player-runtime cache, while the remaining
+values are retained intermediates for consumed movement, threshold, duration,
+and damage fields. CFG `mBonus` values are display-format strings, not missing
+numeric gameplay inputs. No other property-only gap remains after Hurricane.
