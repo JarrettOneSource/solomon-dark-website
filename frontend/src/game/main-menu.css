@@ -116,6 +116,10 @@
   animation: main-menu-screen-reveal 400ms linear forwards;
 }
 
+.main-menu-screen-fade-hall-close.main-menu-screen-fade-covering {
+  animation-duration: 1s;
+}
+
 .create-menu-scene {
   position: absolute;
   inset: 0;
@@ -149,6 +153,12 @@
   top: auto;
   right: calc(7px + min(7.4375cqw, 13.222222cqh));
   bottom: min(0.875cqw, 1.555556cqh);
+}
+
+.main-menu-page[data-game-scene='hall'] .game-fullscreen-control {
+  top: auto;
+  right: 8px;
+  bottom: 8px;
 }
 
 .main-menu-page[data-game-scene='create'] .game-fullscreen-control {

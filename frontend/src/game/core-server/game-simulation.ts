@@ -27,7 +27,20 @@ import {
   synchronizeGameRunParticipants,
   type GameRunLifecycleState,
 } from '../core-kernels/game-run.ts'
-import { createNativeRng, drawNativeInteger, type NativeRngState } from '../core-kernels/native-rng.ts'
+import {
+  archiveNativeHallOfFameRun,
+  createNativeHallOfFameRun,
+  NATIVE_HALL_OF_FAME_SCORE,
+  recordNativeHallOfFameAwesomestKill,
+  recordNativeHallOfFameOrdinaryKill,
+  resetNativeHallOfFameKillStreak,
+} from '../core-kernels/hall-of-fame-score.ts'
+import {
+  createNativeRng,
+  drawNativeFloat,
+  drawNativeInteger,
+  type NativeRngState,
+} from '../core-kernels/native-rng.ts'
 import { nativeLootModifiers, type NativeLootItem } from '../core-kernels/native-loot.ts'
 import {
   buyDowsingOffer,
@@ -126,6 +139,7 @@ import {
   damageBoneyardEnemy,
   emitBoneyardPlayerDamageSound,
   nativeWizardOuchCooldownReady,
+  type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
 } from './boneyard-enemy-store.ts'
 import {
@@ -197,11 +211,12 @@ export type GameWorldState = HubWorldState | BoneyardWorldState
 
 export interface GameSimulationState {
   accumulatorSeconds: number
+  hallOfFameClockStartedAtTick: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
   lightProviderOrder: NativeLightProviderOrderState
   nextLevelUpBarrierId: number
   playerEntities: PlayerEntityStore
-  playerOfferRng: NativeRngState
+  gameRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
   secondaryAbilities: NativeSecondarySimulationState
   run: GameRunLifecycleState
@@ -213,7 +228,7 @@ export interface GameSimulationOptions {
   hubStudentPopulation?: HubStudentPopulationState
   hubTraderAnimationSeed?: number
   initialPlayerExperience?: number
-  playerOfferRngSeed?: number
+  gameRngSeed?: number
 }
 
 export interface GameSimulationInventoryActionResult {
@@ -251,10 +266,10 @@ export function createGameSimulation(
     traderAnimationSeed: options.hubTraderAnimationSeed,
   })
   let playerEntities = createPlayerEntityStore()
-  let playerOfferRng = createNativeRng(options.playerOfferRngSeed ?? 0)
+  let gameRng = createNativeRng(options.gameRngSeed ?? 0)
   for (const [playerId, config] of Object.entries(characters)) {
-    const draw = drawNativeInteger(playerOfferRng, 1_000_000)
-    playerOfferRng = draw.state
+    const draw = drawNativeInteger(gameRng, 1_000_000)
+    gameRng = draw.state
     playerEntities = addPlayerEntity(
       playerEntities,
       playerId,
@@ -295,11 +310,12 @@ export function createGameSimulation(
       )
   return {
     accumulatorSeconds: 0,
+    hallOfFameClockStartedAtTick: 0,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),
     nextLevelUpBarrierId: levelUpBarrier === null ? 1 : 2,
     playerEntities,
-    playerOfferRng,
+    gameRng,
     primarySpells: createPrimarySpellSimulation(),
     secondaryAbilities: createNativeSecondarySimulation(),
     run: createGameRunLifecycle(),
@@ -316,8 +332,14 @@ export function addPlayerCharacter(
   if (playerEntityIndex(state.playerEntities, playerId) >= 0) return state
   const world = state.world.kind === 'hub'
     ? addHubParticipant(state.world, playerId)
-    : state.world
-  const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
+    : {
+        ...state.world,
+        hallOfFameRuns: {
+          ...state.world.hallOfFameRuns,
+          [playerId]: createNativeHallOfFameRun(state.hallOfFameClockStartedAtTick),
+        },
+      }
+  const draw = drawNativeInteger(state.gameRng, 1_000_000)
   const lightProviderOrder = createNativeLightProviderOrder(state.lightProviderOrder)
   const playerEntities = addPlayerEntity(
     state.playerEntities,
@@ -331,7 +353,7 @@ export function addPlayerCharacter(
     ...state,
     lightProviderOrder: lightProviderOrder.state(),
     playerEntities,
-    playerOfferRng: draw.state,
+    gameRng: draw.state,
     run: synchronizeGameRunParticipants(
       state.run,
       playerEntities.identities.map(({ playerId: id }) => id),
@@ -362,7 +384,12 @@ export function removePlayerCharacter(
     ),
     world: state.world.kind === 'hub'
       ? removeHubParticipant(state.world, playerId)
-      : state.world,
+      : {
+          ...state.world,
+          hallOfFameRuns: Object.fromEntries(Object.entries(
+            state.world.hallOfFameRuns,
+          ).filter(([id]) => id !== playerId)),
+        },
   }
 }
 
@@ -437,6 +464,10 @@ export function enterBoneyardWorld(
   const baseWorld = createBoneyardWorld(loaded)
   const world: BoneyardWorldState = {
     ...baseWorld,
+    hallOfFameRuns: Object.fromEntries(state.playerEntities.identities.map(({ playerId }) => [
+      playerId,
+      createNativeHallOfFameRun(state.hallOfFameClockStartedAtTick),
+    ])),
     lanternLightRegistration: loaded.scene.solomonDig === null
       ? null
       : lightProviderOrder.register('actor'),
@@ -523,6 +554,7 @@ function enterPostRunLoadout(
   }
   return {
     ...state,
+    hallOfFameClockStartedAtTick: state.tick,
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
     playerEntities,
@@ -616,12 +648,25 @@ export function applyGameSimulationHubAction(
     revision: Math.max(result.state.revision, economy.revision + 1),
   }
   let playerEntities = replacePlayerEconomy(state.playerEntities, playerId, nextEconomy)
+  let world = state.world
   if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null) {
     playerEntities = applyPlayerEntityPotionEffect(
       playerEntities,
       playerId,
       consumedPotion.nativeSubtype,
     )
+    const hallRun = world.kind === 'boneyard'
+      ? world.hallOfFameRuns[playerId]
+      : undefined
+    if (world.kind === 'boneyard' && hallRun !== undefined) {
+      world = {
+        ...world,
+        hallOfFameRuns: {
+          ...world.hallOfFameRuns,
+          [playerId]: resetNativeHallOfFameKillStreak(hallRun),
+        },
+      }
+    }
   }
   return {
     accepted: result.accepted,
@@ -629,6 +674,7 @@ export function applyGameSimulationHubAction(
     state: {
       ...state,
       playerEntities,
+      world,
     },
   }
 }
@@ -760,7 +806,7 @@ export function rerollGameSimulationPlayerSkill(
 ): GameSimulationState | null {
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.pendingPlayerIds.includes(playerId)) return null
-  const draw = drawNativeInteger(state.playerOfferRng, 1_000_000)
+  const draw = drawNativeInteger(state.gameRng, 1_000_000)
   const playerEntities = rerollPlayerEntitySkillOffer(
     state.playerEntities,
     playerId,
@@ -771,7 +817,7 @@ export function rerollGameSimulationPlayerSkill(
   return {
     ...state,
     playerEntities,
-    playerOfferRng: draw.state,
+    gameRng: draw.state,
   }
 }
 
@@ -817,12 +863,41 @@ export function stepGameSimulationTick(
       secondaryAbilities = removeNativeSecondaryOwner(secondaryAbilities, playerId)
     }
     const run = stepGameRunLifecycle(state.run, new Set())
+    const tick = state.tick + 1
+    let gameRng = state.gameRng
+    let world = state.world
+    if (run.gameOverTicks === NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick) {
+      const hallOfFameRuns: Record<string, ReturnType<typeof archiveNativeHallOfFameRun>> = {}
+      for (const [playerId, hallRun] of Object.entries(state.world.hallOfFameRuns).sort()) {
+        const heading = drawNativeFloat(
+          gameRng,
+          NATIVE_HALL_OF_FAME_SCORE.portraitHeadingJitterDegrees,
+          true,
+        )
+        const scale = drawNativeFloat(
+          heading.state,
+          NATIVE_HALL_OF_FAME_SCORE.portraitScaleJitter,
+        )
+        gameRng = scale.state
+        hallOfFameRuns[playerId] = archiveNativeHallOfFameRun(
+          hallRun,
+          tick,
+          Math.fround(
+            NATIVE_HALL_OF_FAME_SCORE.portraitHeadingCenterDegrees + heading.value,
+          ),
+          Math.fround(NATIVE_HALL_OF_FAME_SCORE.portraitScaleBase + scale.value),
+        )
+      }
+      world = { ...state.world, hallOfFameRuns }
+    }
     const frozen = {
       ...state,
+      gameRng,
       playerEntities,
       run,
       secondaryAbilities,
-      tick: state.tick + 1,
+      tick,
+      world,
     }
     return run.phase === 'loadout' ? enterPostRunLoadout(frozen, run) : frozen
   }
@@ -934,9 +1009,85 @@ function finishGameSimulationTick(
   const tick = previous.tick + 1
   let playerEntities = replacePlayerCharacterRecords(previous.playerEntities, result.players)
   let world = result.world
+  let gameRng = previous.gameRng
   let secondaryAbilities = previous.secondaryAbilities
   let levelUpBarrier = previous.levelUpBarrier
   let nextLevelUpBarrierId = previous.nextLevelUpBarrierId
+  const lethalObserver: BoneyardEnemyLethalObserver = {
+    onReward: ({ enemy, playerId }) => {
+      if (world.kind !== 'boneyard' || playerId === null) return
+      const run = world.hallOfFameRuns[playerId]
+      const before = playerProgressionAt(playerEntities, playerId)
+      if (run === undefined || before === null) return
+      world = {
+        ...world,
+        hallOfFameRuns: {
+          ...world.hallOfFameRuns,
+          [playerId]: recordNativeHallOfFameAwesomestKill(run, {
+            enemy,
+            player: {
+              currentHealth: before.currentHealth,
+              level: before.level,
+              maximumHealth: before.maximumHealth,
+              scoreHealthMultiplierEnabled: before.lifeState === 'alive',
+            },
+            regionPulseAccumulator: world.enemyWorldFeedback.accumulator,
+          }, (count) => {
+            const draw = drawNativeInteger(gameRng, count)
+            gameRng = draw.state
+            return draw.value
+          }),
+        },
+      }
+
+      const progressionState: GameSimulationState = {
+        ...previous,
+        levelUpBarrier,
+        nextLevelUpBarrierId,
+        playerEntities,
+        world,
+      }
+      const participantIds = levelUpParticipantIds(progressionState)
+      if (participantIds.includes(playerId)) {
+        const creditedExperience = boneyardEnemyExperienceAward({
+          arenaPlayerCount: participantIds.length,
+          evaluatedActorReward: enemy.experience,
+          receiverLevel: before.level,
+        })
+        const awarded = grantSharedGameSimulationExperience(
+          progressionState,
+          playerId,
+          creditedExperience,
+        )
+        playerEntities = awarded.playerEntities
+        levelUpBarrier = awarded.levelUpBarrier
+        nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
+      }
+
+      const after = playerProgressionAt(playerEntities, playerId)
+      const currentRun = world.kind === 'boneyard'
+        ? world.hallOfFameRuns[playerId]
+        : undefined
+      if (world.kind === 'boneyard' && after !== null && currentRun !== undefined) {
+        world = {
+          ...world,
+          hallOfFameRuns: {
+            ...world.hallOfFameRuns,
+            [playerId]: recordNativeHallOfFameOrdinaryKill(
+              currentRun,
+              {
+                currentHealth: after.currentHealth,
+                level: after.level,
+                maximumHealth: after.maximumHealth,
+                scoreHealthMultiplierEnabled: after.lifeState === 'alive',
+              },
+              world.enemyWorldFeedback.accumulator,
+            ),
+          },
+        }
+      }
+    },
+  }
   const playerDamage = result.playerDamage ?? []
   const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
   const appliedPlayerDamage: (typeof playerDamage)[number][] = []
@@ -1031,30 +1182,6 @@ function finishGameSimulationTick(
       damage.poisonDuration,
     )
     appliedPlayerDamage.push({ ...damage, amount: intercepted.healthDamage })
-  }
-  for (const reward of result.rewards ?? []) {
-    if (reward.playerId === null || playerEntityIndex(playerEntities, reward.playerId) < 0) continue
-    const progressionState: GameSimulationState = {
-      ...previous,
-      levelUpBarrier,
-      nextLevelUpBarrierId,
-      playerEntities,
-    }
-    const participantIds = levelUpParticipantIds(progressionState)
-    if (!participantIds.includes(reward.playerId)) continue
-    const creditedExperience = boneyardEnemyExperienceAward({
-      arenaPlayerCount: participantIds.length,
-      evaluatedActorReward: reward.experience,
-      receiverLevel: getPlayerProgression(progressionState, reward.playerId).level,
-    })
-    const awarded = grantSharedGameSimulationExperience(
-      progressionState,
-      reward.playerId,
-      creditedExperience,
-    )
-    playerEntities = awarded.playerEntities
-    levelUpBarrier = awarded.levelUpBarrier
-    nextLevelUpBarrierId = awarded.nextLevelUpBarrierId
   }
   for (const unlock of result.goodieUnlocks ?? []) {
     const consumed = consumePlayerEntityWizardKey(playerEntities, unlock.playerId)
@@ -1610,6 +1737,7 @@ function finishGameSimulationTick(
       const reflected = damageBoneyardEnemy(world.enemies, {
         actorId: reflection.actorId,
         amount: reflection.amount,
+        lethalObserver,
         sourcePlayerId: reflection.playerId,
         tick,
       })
@@ -1629,6 +1757,7 @@ function finishGameSimulationTick(
       world.enemies,
       secondaryResult,
       tick,
+      lethalObserver,
     )
     world = {
       ...world,
@@ -1683,6 +1812,7 @@ function finishGameSimulationTick(
         ? 2
         : 1,
       boneyardWorld.fireballSceneryTargets,
+      lethalObserver,
     )
     primarySpells = spellCombat.spells
     world = {
@@ -1734,11 +1864,12 @@ function finishGameSimulationTick(
   )))
   return {
     accumulatorSeconds: previous.accumulatorSeconds,
+    hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),
     nextLevelUpBarrierId,
     playerEntities,
-    playerOfferRng: previous.playerOfferRng,
+    gameRng,
     primarySpells,
     secondaryAbilities,
     run: stepGameRunLifecycle(previous.run, alivePlayerIds),

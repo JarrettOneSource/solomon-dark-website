@@ -22,6 +22,7 @@ import type { RegisterNativeLightProvider } from '../core-kernels/native-light-p
 import {
   damageBoneyardEnemy,
   type BoneyardEnemyActor,
+  type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
   type BoneyardMaggotActor,
@@ -75,6 +76,7 @@ export function resolveBoneyardSpellCombat(
   registerLightProvider?: RegisterNativeLightProvider,
   damageMultiplier: BoneyardSpellDamageMultiplier = () => 1,
   fireballSceneryTargets: readonly PrimarySpellTarget[] = [],
+  lethalObserver?: BoneyardEnemyLethalObserver,
 ): BoneyardSpellCombatResult {
   validateTick(tick)
   let enemies = sourceEnemies
@@ -135,6 +137,7 @@ export function resolveBoneyardSpellCombat(
         const damaged = damageBoneyardEnemy(enemies, {
           actorId: actor.id,
           amount,
+          lethalObserver,
           sourcePlayerId: projectile.ownerId,
           tick,
         })
@@ -168,6 +171,7 @@ export function resolveBoneyardSpellCombat(
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: actor.id,
       amount,
+      lethalObserver,
       sourcePlayerId: projectile.ownerId,
       tick,
     })
@@ -207,6 +211,7 @@ export function resolveBoneyardSpellCombat(
       const damaged = damageBoneyardEnemy(enemies, {
         actorId: actor.id,
         amount,
+        lethalObserver,
         sourcePlayerId: emission.ownerId,
         tick,
       })

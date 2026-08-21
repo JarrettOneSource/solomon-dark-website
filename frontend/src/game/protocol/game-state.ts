@@ -30,6 +30,7 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PrimarySpellSimulationState } from '../core-kernels/primary-spells.ts'
 import type { NativeLightProviderRegistration } from '../core-kernels/native-light-provider-order.ts'
 import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
 import type { GameRunLifecycleState } from '../core-kernels/game-run.ts'
 import type { PlayerLevelUpBarrierState } from '../core-kernels/player-progression.ts'
 import type { NativeSkeletonHeadFacingOffset } from '../core-kernels/boneyard-skeleton-family-animation.ts'
@@ -165,18 +166,29 @@ export interface BoneyardWorldSnapshot {
   encounter: BoneyardSolomonSnapshot | null
   enemies: readonly BoneyardEnemySnapshot[]
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
+  enemyWorldFeedback: NativeEnemyWorldFeedbackKernelState
   enemyProjectileEffects: readonly BoneyardEnemyProjectileEffectSnapshot[]
   enemyProjectiles: readonly BoneyardEnemyProjectileSnapshot[]
   mageLightningPulses: readonly BoneyardMageLightningPulseSnapshot[]
   maggots: readonly BoneyardMaggotSnapshot[]
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
   goodies: readonly BoneyardGoodieSnapshot[]
+  hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
   loot: readonly BoneyardLootSnapshot[]
   lootEvents: readonly BoneyardLootEventSnapshot[]
   runId: string
   waves: BoneyardWaveSnapshot | null
+}
+
+export interface NativeHallOfFameRunSnapshot {
+  awesomeness: number
+  awesomestKill: string | null
+  elapsedTicks: number | null
+  monstersKilled: number
+  portraitHeadingIndex: number | null
+  portraitScale: number | null
 }
 
 export const BONEYARD_LOOT_KINDS = ['bonus', 'gold', 'orb', 'sack'] as const
@@ -648,7 +660,9 @@ export interface BoneyardWorldSnapshotFrame {
   encounter: BoneyardSolomonSnapshot | null
   entities: ReplicatedEntityFrame
   enemyEvents: readonly BoneyardEnemyEventSnapshot[]
+  enemyWorldFeedback: NativeEnemyWorldFeedbackKernelState
   gateLeaves: readonly BoneyardGateLeafSnapshot[]
+  hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunSnapshot>>
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
   lootEvents: readonly BoneyardLootEventSnapshot[]

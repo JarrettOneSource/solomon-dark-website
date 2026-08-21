@@ -7,6 +7,7 @@ import {
 import { NATIVE_ZOMBIE_BEAT_ACTION_PROGRAM } from '../core-kernels/boneyard-zombie-beat.ts'
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
 import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import type { NativeEnemyWorldFeedbackOutput } from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   createNativeRng,
   drawNativeInteger,
@@ -540,15 +541,7 @@ export interface BoneyardMageLightningPulse {
   readonly tick: number
 }
 
-export type BoneyardEnemyTerminalOutput =
-  | 'archer-shatter'
-  | 'coffin-break'
-  | 'demon-split'
-  | 'imp-split'
-  | 'mage-shatter'
-  | 'skeleton-shatter'
-  | 'wraith-fragments'
-  | 'zombie-collapse'
+export type BoneyardEnemyTerminalOutput = NativeEnemyWorldFeedbackOutput
 
 export type BoneyardEnemyDeathSound =
   | 'banshee-die'
@@ -731,6 +724,22 @@ export type ClipBoneyardEnemySpellSegment = (
   request: BoneyardEnemySpellSegmentRequest,
 ) => Readonly<BoneyardPoint>
 
+export interface BoneyardEnemyLethalObserver {
+  readonly onReward: (
+    request: Readonly<{
+      enemy: EvaluatedBoneyardEnemyConfig
+      playerId: string | null
+    }>,
+  ) => void
+}
+
+export interface BoneyardEnemyRetirementObserver {
+  readonly onTerminalOutput: (
+    output: BoneyardEnemyTerminalOutput,
+    outputCount: number | undefined,
+  ) => void
+}
+
 export interface BoneyardEnemyStoreStepContext {
   readonly abilityEffects?: Readonly<Record<number, NativeSecondaryTargetEffectState>>
   readonly arenaScalars?: Partial<BoneyardEnemyArenaScalars>
@@ -739,6 +748,7 @@ export interface BoneyardEnemyStoreStepContext {
   readonly players: BoneyardEnemyTargets
   readonly registerLightProvider?: RegisterNativeLightProvider
   readonly registerProjectileLightProvider?: RegisterNativeLightProvider
+  readonly retirementObserver?: BoneyardEnemyRetirementObserver
   readonly rollLootSeed?: () => number
   readonly resolveMovement: ResolveBoneyardEnemyMovement
   readonly resolveSpawnIntents: (
@@ -760,6 +770,7 @@ export interface BoneyardEnemyStoreStepResult {
 export interface DamageBoneyardEnemyRequest {
   readonly actorId: BoneyardEnemyActorId
   readonly amount: number
+  readonly lethalObserver?: BoneyardEnemyLethalObserver
   readonly sourcePlayerId: string | null
   readonly tick: number
 }
@@ -1024,6 +1035,12 @@ export function damageBoneyardEnemy(
       }
   const actors = [...source.actors]
   actors[index] = nextActor
+  if (killed) {
+    request.lethalObserver?.onReward({
+      enemy: actor.config,
+      playerId: request.sourcePlayerId,
+    })
+  }
   return finishDamage(source, actors, work, killed)
 }
 
@@ -4383,6 +4400,7 @@ function stepDyingActor(
     count: outputCount,
     output,
   })
+  context.retirementObserver?.onTerminalOutput(output, outputCount)
   emitEnemyDeathSounds(work, source, tick, outputCount)
   spawnEnemyDeathEffects(work, source, tick)
   spawnTerminalChildren(work, source, context)

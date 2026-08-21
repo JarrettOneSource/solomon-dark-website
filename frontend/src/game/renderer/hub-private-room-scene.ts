@@ -19,6 +19,7 @@ import {
   HUB_PRIVATE_ROOM_EFFECT_DEPTH,
   HUB_PRIVATE_ROOM_FLAME_ANCHORS,
   HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH,
+  HUB_MORTUARY_MEMORIAL_GLOW,
   hubMemoratorHeadingIndex,
   hubRoomFlameTransform,
 } from './hub-private-room-presentation.ts'
@@ -60,6 +61,7 @@ export class HubPrivateRoomScene {
   private readonly livePlayerIds = new Set<string>()
   private readonly derivedTextures: Texture[] = []
   private readonly roomFlames = new Map<PrivateHubRegionId, readonly Sprite[]>()
+  private readonly mortuaryMemorialGlows: readonly Sprite[]
   private readonly textures: HubWorldTextures
   private memoratorBody!: Sprite
   private memoratorMarker!: Sprite
@@ -84,6 +86,7 @@ export class HubPrivateRoomScene {
       storeroom: this.createStoreroom(),
       office: this.createOffice(),
     }
+    this.mortuaryMemorialGlows = this.addMortuaryMemorialGlows(this.rooms.mortuary)
     this.primarySpells = Object.fromEntries(PRIVATE_HUB_REGIONS.map((region) => [
       region,
       new PrimarySpellWorldView(this.rooms[region], textures, {
@@ -147,6 +150,7 @@ export class HubPrivateRoomScene {
         flame.renderable = !modalActive
       }
     }
+    for (const glow of this.mortuaryMemorialGlows) glow.renderable = !modalActive
     const room = this.rooms[localParticipant.region]
     if (this.levelUp.container.parent !== room) {
       this.levelUp.container.parent?.removeChild(this.levelUp.container)
@@ -382,6 +386,19 @@ export class HubPrivateRoomScene {
       return flame
     })
     this.roomFlames.set(region, flames)
+  }
+
+  private addMortuaryMemorialGlows(room: Container): readonly Sprite[] {
+    return Array.from({ length: HUB_MORTUARY_MEMORIAL_GLOW.count }, () => {
+      const glow = new Sprite(this.textures.base[hub.rooms.mortuary.memorialGlow])
+      glow.anchor.set(0.5)
+      glow.position.copyFrom(HUB_MORTUARY_MEMORIAL_GLOW.position)
+      glow.zIndex = HUB_MORTUARY_MEMORIAL_GLOW.depth
+      glow.blendMode = 'add'
+      glow.eventMode = 'none'
+      room.addChild(glow)
+      return glow
+    })
   }
 
   private horizontalFrames(

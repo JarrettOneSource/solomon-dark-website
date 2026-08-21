@@ -33,6 +33,16 @@ import GameFullscreenButton from './GameFullscreenButton.tsx'
 import GameSaveModMismatchDialog from './GameSaveModMismatchDialog.tsx'
 import GameplayPauseMenu from './GameplayPauseMenu.tsx'
 import GameSettingsDialog from './GameSettingsDialog.tsx'
+import HallOfFameScene from './HallOfFameScene.tsx'
+import { HallOfFameRunRecorder } from './client/hall-of-fame-run-recorder.ts'
+import type {
+  HallOfFameBoard,
+  HallOfFameEntry,
+} from './core-kernels/hall-of-fame.ts'
+import {
+  readLocalHallOfFame,
+  recordLocalHallOfFame,
+} from './hall-of-fame-store.ts'
 import { installGameLuaConsole } from './game-lua-console.ts'
 import {
   GAME_SETTINGS_STORAGE_KEY,
@@ -84,7 +94,7 @@ const SkillPicker = lazy(loadSkillPicker)
 const loadSkillBook = () => import('./SkillBook.tsx')
 const SkillBook = lazy(loadSkillBook)
 
-type MenuScreen = 'root' | 'play' | 'dark-cloud' | 'create' | 'hub'
+type MenuScreen = 'root' | 'play' | 'dark-cloud' | 'hall' | 'create' | 'hub'
 type FadeState = 'idle' | 'covering' | 'revealing'
 
 interface MenuButtonProps {
@@ -174,19 +184,25 @@ interface ActionGroupProps {
 }
 
 function RootActions({
+  onHall,
   onHighlight,
   onExplore,
   onPlay,
   onPress,
   onPressState,
   onSettings,
-}: ActionGroupProps & { onExplore: () => void; onPlay: () => void; onSettings: () => void }) {
+}: ActionGroupProps & {
+  onExplore: () => void
+  onHall: () => void
+  onPlay: () => void
+  onSettings: () => void
+}) {
   return (
     <>
       <MenuButton action="play" accessibleLabel="Play" defaultFocus onClick={onPlay} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="explore" accessibleLabel="Explore the Dark Cloud" onClick={onExplore} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
       <MenuButton action="settings" accessibleLabel="Settings" onClick={onSettings} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
-      <MenuButton action="hall" accessibleLabel="Hall of Fame" onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
+      <MenuButton action="hall" accessibleLabel="Hall of Fame" onClick={onHall} onHighlight={onHighlight} onPress={onPress} onPressState={onPressState} />
     </>
   )
 }
@@ -226,10 +242,12 @@ interface MainMenuSceneProps {
     allowModMismatch?: boolean,
   ) => Promise<GameClientSession>
   initialScreen?: 'create' | 'root'
+  loadGlobalHallOfFame: (board: HallOfFameBoard) => Promise<readonly HallOfFameEntry[]>
   onCancelCreate: () => Promise<void>
   onSaveCheckpoint: (checkpoint: GameSaveCheckpoint) => void
   prepareNewGame: () => Promise<void>
   resumeSave: ResumableGameSave | null
+  submitGlobalHallOfFame: (entry: HallOfFameEntry) => Promise<void>
 }
 
 export default function MainMenuScene({
@@ -238,10 +256,12 @@ export default function MainMenuScene({
   connectSession,
   displayName,
   initialScreen = 'root',
+  loadGlobalHallOfFame,
   onCancelCreate,
   onSaveCheckpoint,
   prepareNewGame,
   resumeSave,
+  submitGlobalHallOfFame,
 }: MainMenuSceneProps) {
   const audio = useMemo(createBrowserGameAudioDirector, [])
   const stageRef = useRef<HTMLElement>(null)
@@ -277,6 +297,7 @@ export default function MainMenuScene({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [modMismatch, setModMismatch] = useState<GameSaveModMismatch | null>(null)
   const [gameSettings, setLocalGameSettings] = useState(readGameSettings)
+  const [localHallOfFame, setLocalHallOfFame] = useState(readLocalHallOfFame)
   const [fixedViewport, setFixedViewport] = useState(() => (
     fixedGameViewportLayout(GAME_VIEWPORT_MIN_WIDTH, GAME_VIEWPORT_MIN_HEIGHT)
   ))
@@ -408,6 +429,7 @@ export default function MainMenuScene({
 
   useEffect(() => {
     if (!session) return
+    const hallRecorder = new HallOfFameRunRecorder()
     const initialSnapshot = session.getSnapshot()
     const initialBoneyard = session.getBoneyard()
     const initialSaveCheckpoint = session.getSaveCheckpoint()
@@ -423,6 +445,7 @@ export default function MainMenuScene({
     setLoadedBoneyard(initialBoneyard)
     setGameplayPause(session.getGameplayPause())
     setPartyState(session.getPartyState())
+    recordHallSnapshot(initialSnapshot)
     if (initialSnapshot.world.kind === 'boneyard') {
       if (loadingRef.current?.flow !== 'boneyard') {
         beginLoading('boneyard', initialBoneyard
@@ -435,6 +458,7 @@ export default function MainMenuScene({
       advanceLoading('materializing_participants')
     }
     const removeSnapshot = session.onSnapshot((snapshot) => {
+      recordHallSnapshot(snapshot)
       setRuntimeRunPhase(snapshot.run.phase)
       setRuntimeAudioScene(gameplayAudioScene(snapshot))
       if (snapshot.world.kind === 'boneyard') {
@@ -479,7 +503,14 @@ export default function MainMenuScene({
       removePartyState()
       removeSaveCheckpoint()
     }
-  }, [advanceLoading, beginLoading, onSaveCheckpoint, session])
+
+    function recordHallSnapshot(snapshot: GameSnapshot) {
+      const entry = hallRecorder.observe(snapshot, session!.playerId, accountUsername)
+      if (!entry) return
+      setLocalHallOfFame(recordLocalHallOfFame(entry))
+      void submitGlobalHallOfFame(entry)
+    }
+  }, [accountUsername, advanceLoading, beginLoading, onSaveCheckpoint, session, submitGlobalHallOfFame])
 
   useEffect(() => {
     if (runtimeSnapshot?.world.kind === 'boneyard') void loadSkillPicker()
@@ -754,7 +785,14 @@ export default function MainMenuScene({
         className="main-menu-stage"
         aria-label="Solomon Darker game menu"
       >
-        {titleScreen ? (
+        {screen === 'hall' ? (
+          <HallOfFameScene
+            loadGlobal={loadGlobalHallOfFame}
+            localEntries={localHallOfFame}
+            onBack={() => transitionTo('root')}
+            stageStyle={nativeStageStyle}
+          />
+        ) : titleScreen ? (
           <>
             <TitleMenuPresentation
               hoveredAction={hoveredTitleAction}
@@ -774,6 +812,7 @@ export default function MainMenuScene({
               <nav key={screen} className="main-menu-actions" aria-label={screen === 'root' ? 'Main menu actions' : 'Play menu actions'}>
                 {screen === 'root' ? (
                   <RootActions
+                    onHall={() => transitionTo('hall')}
                     onHighlight={setHoveredTitleAction}
                     onExplore={() => transitionTo('dark-cloud')}
                     onPlay={() => setScreen('play')}
@@ -994,7 +1033,7 @@ export default function MainMenuScene({
         ) : null}
 
         <div
-          className={`main-menu-screen-fade main-menu-screen-fade-${fadeState}`}
+          className={`main-menu-screen-fade main-menu-screen-fade-${fadeState}${screen === 'hall' ? ' main-menu-screen-fade-hall-close' : ''}`}
           onAnimationEnd={handleFadeEnd}
           aria-hidden
         />

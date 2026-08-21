@@ -181,6 +181,19 @@ builder.Services.AddRateLimiter(options =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
             }));
+    options.AddPolicy("leaderboard-submissions", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            TokenService.GetUserId(context.User)?.ToString() ??
+            context.Connection.RemoteIpAddress?.ToString() ??
+            "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            }));
 });
 
 var app = builder.Build();
@@ -301,6 +314,7 @@ AuthEndpoints.Map(app);
 ModEndpoints.Map(app);
 BoneyardEndpoints.Map(app);
 WebGameSaveEndpoints.Map(app);
+GameLeaderboardEndpoints.Map(app);
 StatsEndpoints.Map(app);
 DiagnosticLogEndpoints.Map(app);
 GameSessionEndpoints.Map(app);

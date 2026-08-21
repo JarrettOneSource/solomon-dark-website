@@ -37,6 +37,8 @@ import {
   type NativeLightProviderRegistration,
 } from '../core-kernels/native-light-provider-order.ts'
 import type { NativeRngState } from '../core-kernels/native-rng.ts'
+import type { NativeEnemyWorldFeedbackKernelState } from '../core-kernels/native-enemy-world-feedback.ts'
+import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { ETHER_PRIMARY_INITIAL_TURN } from '../core-kernels/primary-spell-targeting.ts'
 import { earthImpactLifetimeTicks } from '../core-kernels/primary-spell-earth.ts'
 import {
@@ -156,6 +158,7 @@ import type {
   ProtocolPlayerState,
   ProtocolPlayerSnapshotFrame,
   ProtocolStudentState,
+  NativeHallOfFameRunSnapshot,
   NativeSecondarySnapshotState as ProtocolNativeSecondarySnapshotState,
 } from './game-state.ts'
 import {
@@ -198,7 +201,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 36
+export const GAME_PROTOCOL_VERSION = 37
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -2857,6 +2860,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'snapshot.levelUpBarrier', players, run)
   validateGameRunWorld(run, world, 'snapshot')
+  validateHallOfFameArchivePhase(run, world, 'snapshot')
   const primarySpells = primarySpellState(source.primarySpells, 'snapshot.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'snapshot.primarySpells')
   const secondaryAbilities = nativeSecondaryState(
@@ -2875,6 +2879,8 @@ function gameSnapshot(value: unknown): GameSnapshot {
         'snapshot.world.participants must match snapshot.players exactly',
       )
     }
+  } else {
+    validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'snapshot')
   }
   return {
     hostPlayerId,
@@ -2916,6 +2922,7 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     ? null
     : playerLevelUpBarrier(source.levelUpBarrier, 'frame.levelUpBarrier', players, run)
   validateGameRunWorld(run, world, 'frame')
+  validateHallOfFameArchivePhase(run, world, 'frame')
   const primarySpells = primarySpellState(source.primarySpells, 'frame.primarySpells')
   validatePrimarySpellOwners(primarySpells, players, 'frame.primarySpells')
   const secondaryAbilities = nativeSecondaryState(
@@ -2923,7 +2930,11 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     'frame.secondaryAbilities',
     players,
   )
-  if (world.kind === 'hub') validateParticipantOwnership(world.participants, players, 'frame')
+  if (world.kind === 'hub') {
+    validateParticipantOwnership(world.participants, players, 'frame')
+  } else {
+    validateHallOfFameRunOwners(world.hallOfFameRuns, players, 'frame')
+  }
   return {
     hostPlayerId,
     levelUpBarrier,
@@ -4050,6 +4061,129 @@ function hubRegionId(value: unknown, field: string): HubRegionId {
   return result
 }
 
+function nativeHallOfFameRunSnapshots(
+  value: unknown,
+  field: string,
+  snapshotTick: number,
+): Readonly<Record<string, NativeHallOfFameRunSnapshot>> {
+  const source = record(value, field)
+  if (Object.keys(source).length > MAX_PLAYERS) {
+    throw new GameProtocolError(`${field} may contain at most ${MAX_PLAYERS} entries`)
+  }
+  const runs: Record<string, NativeHallOfFameRunSnapshot> = {}
+  for (const [rawPlayerId, value] of Object.entries(source)) {
+    const playerId = validatedPlayerId(rawPlayerId, `${field} player id`)
+    const runField = `${field}.${playerId}`
+    const run = record(value, runField)
+    onlyKeys(run, runField, [
+      'awesomeness',
+      'awesomestKill',
+      'elapsedTicks',
+      'monstersKilled',
+      'portraitHeadingIndex',
+      'portraitScale',
+    ])
+    const elapsedTicks = run.elapsedTicks === null
+      ? null
+      : boundedInteger(run.elapsedTicks, `${runField}.elapsedTicks`, 0, 60_480_000)
+    if (elapsedTicks !== null && elapsedTicks > snapshotTick) {
+      throw new GameProtocolError(`${runField}.elapsedTicks exceeds its snapshot tick`)
+    }
+    const awesomestKill = run.awesomestKill === null
+      ? null
+      : limitedString(run.awesomestKill, `${runField}.awesomestKill`, 64)
+    if (awesomestKill === '') {
+      throw new GameProtocolError(`${runField}.awesomestKill must not be empty`)
+    }
+    const portraitHeadingIndex = run.portraitHeadingIndex === null
+      ? null
+      : boundedInteger(
+          run.portraitHeadingIndex,
+          `${runField}.portraitHeadingIndex`,
+          0,
+          23,
+        )
+    const portraitScale = run.portraitScale === null
+      ? null
+      : positiveFinite(run.portraitScale, `${runField}.portraitScale`)
+    if (portraitScale !== null && (
+      portraitScale < NATIVE_HALL_OF_FAME_SCORE.portraitScaleBase
+      || portraitScale > 1
+    )) throw new GameProtocolError(`${runField}.portraitScale is outside its native range`)
+    runs[playerId] = {
+      awesomeness: boundedInteger(
+        run.awesomeness,
+        `${runField}.awesomeness`,
+        0,
+        2_000_000_000,
+      ),
+      awesomestKill,
+      elapsedTicks,
+      monstersKilled: boundedInteger(
+        run.monstersKilled,
+        `${runField}.monstersKilled`,
+        0,
+        2_000_000_000,
+      ),
+      portraitHeadingIndex,
+      portraitScale,
+    }
+  }
+  return runs
+}
+
+function nativeEnemyWorldFeedbackState(
+  value: unknown,
+  field: string,
+): NativeEnemyWorldFeedbackKernelState {
+  const source = record(value, field)
+  onlyKeys(source, field, ['accumulator', 'magnitude'])
+  const accumulator = nonnegativeFinite(source.accumulator, `${field}.accumulator`)
+  const magnitude = nonnegativeFinite(source.magnitude, `${field}.magnitude`)
+  if (accumulator > 3.5 || magnitude > 0.2) {
+    throw new GameProtocolError(`${field} exceeds the native enemy-feedback bounds`)
+  }
+  return { accumulator, magnitude }
+}
+
+function validateHallOfFameRunOwners(
+  runs: Readonly<Record<string, NativeHallOfFameRunSnapshot>>,
+  players: Readonly<Record<string, unknown>>,
+  field: string,
+): void {
+  const runPlayerIds = Object.keys(runs).sort()
+  const playerIds = Object.keys(players).sort()
+  if (
+    runPlayerIds.length !== playerIds.length
+    || runPlayerIds.some((playerId, index) => playerId !== playerIds[index])
+  ) {
+    throw new GameProtocolError(
+      `${field}.world.hallOfFameRuns must match ${field}.players exactly`,
+    )
+  }
+}
+
+function validateHallOfFameArchivePhase(
+  run: GameRunLifecycleState,
+  world: GameSnapshot['world'] | GameSnapshotFrame['world'],
+  field: string,
+): void {
+  if (world.kind !== 'boneyard') return
+  const archived = run.phase === 'game-over'
+    && run.gameOverTicks >= NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick
+  if (Object.values(world.hallOfFameRuns).some(
+    ({ elapsedTicks, portraitHeadingIndex, portraitScale }) => (
+      (elapsedTicks !== null) !== archived
+      || (portraitHeadingIndex !== null) !== archived
+      || (portraitScale !== null) !== archived
+    ),
+  )) {
+    throw new GameProtocolError(
+      `${field}.world Hall archive timing does not match ${field}.run`,
+    )
+  }
+}
+
 function gameWorldSnapshot(
   value: unknown,
   field: string,
@@ -4064,10 +4198,12 @@ function gameWorldSnapshot(
       'encounter',
       'enemies',
       'enemyEvents',
+      'enemyWorldFeedback',
       'enemyProjectileEffects',
       'enemyProjectiles',
       'gateLeaves',
       'goodies',
+      'hallOfFameRuns',
       'kind',
       'lanternLightRegistration',
       'loot',
@@ -4092,6 +4228,15 @@ function gameWorldSnapshot(
       )
     }
     const runId = limitedString(source.runId, `${field}.runId`, 128)
+    const hallOfFameRuns = nativeHallOfFameRunSnapshots(
+      source.hallOfFameRuns,
+      `${field}.hallOfFameRuns`,
+      snapshotTick,
+    )
+    const enemyWorldFeedback = nativeEnemyWorldFeedbackState(
+      source.enemyWorldFeedback,
+      `${field}.enemyWorldFeedback`,
+    )
     const enemyEvents = boneyardEnemyEvents(
       source.enemyEvents,
       `${field}.enemyEvents`,
@@ -4214,6 +4359,7 @@ function gameWorldSnapshot(
       encounter,
       enemies,
       enemyEvents,
+      enemyWorldFeedback,
       enemyProjectileEffects,
       enemyProjectiles,
       gateLeaves: limitedArray(
@@ -4225,6 +4371,7 @@ function gameWorldSnapshot(
         `${field}.gateLeaves[${index}]`,
       )),
       goodies,
+      hallOfFameRuns,
       kind: 'boneyard',
       lanternLightRegistration: nullableNativeLightProviderRegistration(
         source.lanternLightRegistration,
@@ -5722,7 +5869,9 @@ function gameWorldSnapshotFrame(
       'encounter',
       'entities',
       'enemyEvents',
+      'enemyWorldFeedback',
       'gateLeaves',
+      'hallOfFameRuns',
       'kind',
       'lanternLightRegistration',
       'lootEvents',
@@ -5755,6 +5904,10 @@ function gameWorldSnapshotFrame(
         runId,
         snapshotTick,
       ),
+      enemyWorldFeedback: nativeEnemyWorldFeedbackState(
+        source.enemyWorldFeedback,
+        `${field}.enemyWorldFeedback`,
+      ),
       gateLeaves: limitedArray(
         source.gateLeaves,
         `${field}.gateLeaves`,
@@ -5763,6 +5916,11 @@ function gameWorldSnapshotFrame(
         leaf,
         `${field}.gateLeaves[${index}]`,
       )),
+      hallOfFameRuns: nativeHallOfFameRunSnapshots(
+        source.hallOfFameRuns,
+        `${field}.hallOfFameRuns`,
+        snapshotTick,
+      ),
       kind: 'boneyard',
       lanternLightRegistration: nullableNativeLightProviderRegistration(
         source.lanternLightRegistration,

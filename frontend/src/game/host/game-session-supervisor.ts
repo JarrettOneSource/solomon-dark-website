@@ -109,7 +109,7 @@ export async function startGameSessionSupervisor(
     const ticket = hubTickets.get(credential)
     if (ticket === undefined) return null
     hubTickets.delete(credential)
-    return ticket.expiresAt > Date.now() ? ticket.content : null
+    return ticket.expiresAt > performance.now() ? ticket.content : null
   }
   const hubHost = await startGameHost({
     authentication: { kind: 'tickets', claim: claimHubTicket },
@@ -127,7 +127,7 @@ export async function startGameSessionSupervisor(
     claimed: true,
     closePromise: null,
     closing: false,
-    createdAt: Date.now(),
+    createdAt: performance.now(),
     host: hubHost,
     hostCredential: '',
     id: 'shared-hub',
@@ -200,7 +200,7 @@ export async function startGameSessionSupervisor(
         const credential = randomBytes(32).toString('base64url')
         hubTickets.set(credential, {
           content,
-          expiresAt: Date.now() + unclaimedTimeoutMs,
+          expiresAt: performance.now() + unclaimedTimeoutMs,
         })
         sendJson(response, 201, {
           credential,
@@ -339,7 +339,7 @@ export async function startGameSessionSupervisor(
       claimed: false,
       closePromise: null,
       closing: false,
-      createdAt: Date.now(),
+      createdAt: performance.now(),
       host: sessionHost,
       hostCredential,
       id,
@@ -495,7 +495,7 @@ export async function startGameSessionSupervisor(
   }
 
   const expiryTimer = setInterval(() => {
-    const now = Date.now()
+    const now = performance.now()
     pruneHubTickets(now)
     for (const session of sessions.values()) {
       if (
@@ -518,7 +518,7 @@ export async function startGameSessionSupervisor(
     closeSessionInBackground(session, 'empty-after-use')
   }
 
-  function pruneHubTickets(now = Date.now()): void {
+  function pruneHubTickets(now = performance.now()): void {
     for (const [credential, ticket] of hubTickets) {
       if (ticket.expiresAt <= now) hubTickets.delete(credential)
     }

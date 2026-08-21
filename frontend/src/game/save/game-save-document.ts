@@ -39,11 +39,12 @@ export interface RestoredGameSaveDocument {
 
 const SIMULATION_KEYS = [
   'accumulatorSeconds',
+  'gameRng',
+  'hallOfFameClockStartedAtTick',
   'levelUpBarrier',
   'lightProviderOrder',
   'nextLevelUpBarrierId',
   'playerEntities',
-  'playerOfferRng',
   'primarySpells',
   'run',
   'secondaryAbilities',
@@ -144,6 +145,11 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
   if (!Number.isSafeInteger(rawState.tick) || Number(rawState.tick) < 0) {
     throw new Error('game save simulation tick is invalid')
   }
+  if (
+    !Number.isSafeInteger(rawState.hallOfFameClockStartedAtTick)
+    || Number(rawState.hallOfFameClockStartedAtTick) < 0
+    || Number(rawState.hallOfFameClockStartedAtTick) > Number(rawState.tick)
+  ) throw new Error('game save Hall clock is invalid')
   if (rawState.tick !== parsed.summary.savedAtTick) throw new Error('game save tick summary drifted')
   const rawWorld = record(rawState.world, 'game save world')
   if (rawWorld.kind !== parsed.summary.worldKind) throw new Error('game save world summary drifted')

@@ -106,6 +106,7 @@ run_all() {
     npm --prefix frontend run test:parties
     npm --prefix frontend run test:level-up
     npm --prefix frontend run test:diagnostics
+    npm --prefix frontend run test:hall
     npm --prefix frontend run test:hub-ui
 
     printf 'Running desktop shell tests\n'

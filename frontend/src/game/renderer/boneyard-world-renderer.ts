@@ -494,6 +494,8 @@ export async function createBoneyardWorldRenderer(
   const visibility = new BoneyardResidentVisibility(staticWorld.residents)
   const worldFeedback = new NativeEnemyWorldFeedbackPresentation(
     options.initialSnapshot.tick,
+    options.initialSnapshot.world.enemyWorldFeedback,
+    Math.max(0, ...options.initialSnapshot.world.enemyEvents.map(({ eventId }) => eventId)),
   )
   const now = options.now ?? (() => performance.now())
   const secondaryScreenFeedback = new NativeSecondaryScreenFeedbackPresentation(

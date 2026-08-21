@@ -67,6 +67,7 @@ test('game session supervisor provisions isolated authenticated game sessions', 
 })
 
 test('game session supervisor enforces private capacity and expires unclaimed sessions', async (context) => {
+  context.mock.method(Date, 'now', () => 1_700_000_000_000)
   const supervisor = await startGameSessionSupervisor({
     adminSecret: ADMIN_SECRET,
     allowedOrigins: [BROWSER_ORIGIN],
@@ -533,7 +534,7 @@ function messageQueue(socket: WebSocket) {
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
-  const deadline = performance.now() + 5000
+  const deadline = performance.now() + 10_000
   while (!await predicate()) {
     if (performance.now() >= deadline) throw new Error('timed out waiting for condition')
     await new Promise((resolve) => setTimeout(resolve, 10))

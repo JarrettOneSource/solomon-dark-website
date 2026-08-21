@@ -41,7 +41,7 @@ const MOD_STATE = {
 test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
   let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
     hubTraderAnimationSeed: 73,
-    playerOfferRngSeed: 91,
+    gameRngSeed: 91,
   })
   for (let tick = 0; tick < 17; tick += 1) {
     state = stepGameSimulationTick(state, {
@@ -116,6 +116,12 @@ test('host save documents retain the active Boneyard and its authoritative run i
   assert.equal(restored.state.world.kind, 'boneyard')
   if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
   assert.equal(restored.state.world.runId, loadedBoneyard.runId)
+  assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
+    ? state.world.hallOfFameRuns
+    : {})
+  assert.deepEqual(restored.state.world.enemyWorldFeedback, state.world.kind === 'boneyard'
+    ? state.world.enemyWorldFeedback
+    : {})
   assert.equal(restored.state.run.runId, loadedBoneyard.runId)
   assert.equal(restored.state.run.phase, 'active')
 })
@@ -131,7 +137,7 @@ test('host save documents fail closed for unknown schema, extra fields, owner dr
   const parsed = JSON.parse(document)
 
   assert.throws(
-    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 1 })),
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 2 })),
     /schema version/,
   )
   assert.throws(

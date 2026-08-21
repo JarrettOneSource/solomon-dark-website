@@ -33,6 +33,48 @@ public static class DatabaseSchema
             """,
             cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS GameLeaderboardEntries (
+                Id INTEGER NOT NULL CONSTRAINT PK_GameLeaderboardEntries PRIMARY KEY AUTOINCREMENT,
+                UserId INTEGER NOT NULL,
+                RunId TEXT NOT NULL,
+                WizardName TEXT NOT NULL,
+                Element TEXT NOT NULL,
+                Discipline TEXT NOT NULL,
+                HeadingIndex INTEGER NOT NULL,
+                PortraitScale REAL NOT NULL,
+                Level INTEGER NOT NULL,
+                Awesomeness INTEGER NOT NULL,
+                ElapsedTicks INTEGER NOT NULL,
+                Wave INTEGER NOT NULL,
+                MonstersKilled INTEGER NOT NULL,
+                AwesomestKill TEXT NULL,
+                HighestSkillsJson TEXT NOT NULL,
+                PerksUsedJson TEXT NOT NULL,
+                CompletedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_GameLeaderboardEntries_Users_UserId
+                    FOREIGN KEY (UserId) REFERENCES Users (Id) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_GameLeaderboardEntries_UserId_RunId
+                ON GameLeaderboardEntries (UserId, RunId);
+            CREATE INDEX IF NOT EXISTS IX_GameLeaderboardEntries_Awesomeness_Id
+                ON GameLeaderboardEntries (Awesomeness, Id);
+            CREATE INDEX IF NOT EXISTS IX_GameLeaderboardEntries_Wave_Id
+                ON GameLeaderboardEntries (Wave, Id);
+            CREATE INDEX IF NOT EXISTS IX_GameLeaderboardEntries_MonstersKilled_Id
+                ON GameLeaderboardEntries (MonstersKilled, Id);
+            CREATE INDEX IF NOT EXISTS IX_GameLeaderboardEntries_ElapsedTicks_Id
+                ON GameLeaderboardEntries (ElapsedTicks, Id);
+            """,
+            cancellationToken);
+
+        if (!await HasColumnAsync(db, "GameLeaderboardEntries", "PortraitScale", cancellationToken))
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE GameLeaderboardEntries ADD COLUMN PortraitScale REAL NOT NULL DEFAULT 1;",
+                cancellationToken);
+        }
 
         if (!await HasColumnAsync(db, "DiagnosticLogs", "ClientVersion", cancellationToken) &&
             await HasColumnAsync(db, "DiagnosticLogs", "LauncherVersion", cancellationToken))

@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
+import { actorHeadingIndex } from '../core-kernels/actor-heading.ts'
 import {
   BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK,
   BONEYARD_GAME_OVER_EXIT_FADE_TICKS,
 } from '../core-kernels/game-run.ts'
+import { NATIVE_HALL_OF_FAME_SCORE } from '../core-kernels/hall-of-fame-score.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
 import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
@@ -20,7 +22,7 @@ import {
   createNativeLightProviderOrder,
   mergeNativeLightProviderOwners,
 } from '../core-kernels/native-light-provider-order.ts'
-import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createNativeRng, drawNativeFloat } from '../core-kernels/native-rng.ts'
 import {
   addPlayerCharacter,
   applyGameSimulationHubAction,
@@ -445,7 +447,8 @@ test('hub trader actions require the authenticated participant to be in native s
 })
 
 test('inventory double activation consumes one potion and applies its participant-owned effect', () => {
-  let state = createGameSimulation()
+  let state = enterBoneyardWorld(createGameSimulation(), emptyBoneyard())
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   const index = state.playerEntities.identities.findIndex(({ playerId }) => playerId === 'local-player')
   const progressions = [...state.playerEntities.progressions]
   progressions[index] = {
@@ -455,6 +458,15 @@ test('inventory double activation consumes one potion and applies its participan
   state = {
     ...state,
     playerEntities: { ...state.playerEntities, progressions },
+    world: {
+      ...state.world,
+      hallOfFameRuns: {
+        'local-player': {
+          ...state.world.hallOfFameRuns['local-player']!,
+          killStreak: 203,
+        },
+      },
+    },
   }
   const health = getPlayerEconomy(state).backpack.find(({ kind }) => kind === 'health-potion')!
   const consumed = applyGameSimulationHubAction(state, 'local-player', {
@@ -468,6 +480,12 @@ test('inventory double activation consumes one potion and applies its participan
   assert.equal(
     getPlayerProgression(consumed.state).currentHealth,
     getPlayerProgression(consumed.state).maximumHealth,
+  )
+  assert.equal(
+    consumed.state.world.kind === 'boneyard'
+      ? consumed.state.world.hallOfFameRuns['local-player']?.killStreak
+      : null,
+    0,
   )
 })
 
@@ -595,7 +613,7 @@ test('Sorceror actions are authoritative, consume the active offer, and preserve
     discipline: 'arcane',
     displayName: 'First',
     element: 'ether',
-  } }, { playerOfferRngSeed: 73 })
+  } }, { gameRngSeed: 73 })
   state = {
     ...state,
     playerEntities: replacePlayerEconomy(state.playerEntities, 'first', {
@@ -612,7 +630,7 @@ test('Sorceror actions are authoritative, consume the active offer, and preserve
   const rerolled = getPlayerProgression(state, 'first')
   assert.notEqual(rerolled.pendingOffer?.sequence, firstOffer.sequence)
   assert.equal(rerolled.sorcerorsCharmAvailable, false)
-  assert.notDeepEqual(state.playerOfferRng, initial.playerOfferRng)
+  assert.notDeepEqual(state.gameRng, initial.gameRng)
   assert.equal(
     rerollGameSimulationPlayerSkill(state, 'first', rerolled.pendingOffer!.sequence),
     null,
@@ -906,7 +924,14 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
     }],
     tick: 0,
   })
-  state = { ...state, world: { ...state.world, enemies: seeded.store } }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      enemies: seeded.store,
+      enemyWorldFeedback: { accumulator: 0.6, magnitude: 0 },
+    },
+  }
 
   const cast = (primary: boolean) => ({
     aim: { x: 250, y: 0 },
@@ -914,6 +939,7 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
     movement: { x: 0, y: 0 },
   })
   const initialMana = getPlayerProgression(state, 'caster').currentMana
+  const initialExperience = getPlayerProgression(state, 'caster').experience
   state = stepGameSimulationTick(state, { caster: cast(true) })
   assert.equal(getPlayerProgression(state, 'caster').currentMana, initialMana)
   for (let tick = 0; tick < 30; tick += 1) {
@@ -932,16 +958,21 @@ test('Boneyard simulation debits mana, applies spell contact, and begins enemy d
   assert.ok(enemy.currentHealth <= 0)
   assert.equal(enemy.lastDamagedByPlayerId, 'caster')
   assert.ok(enemy.lastDamageTick !== null)
+  const hallRun = state.world.hallOfFameRuns.caster!
+  assert.equal(hallRun.monstersKilled, 1)
+  assert.equal(hallRun.awesomestKill, 'Skeleton')
+  assert.ok(hallRun.awesomeness >= 72 && hallRun.awesomeness <= 76)
+  assert.equal(getPlayerProgression(state, 'caster').experience - initialExperience, 4.25)
   assert.ok(state.world.enemyEvents.some((event) => (
     event.type === 'enemy-damage-sound' && event.sound === 'bone-crack'
   )))
   assert.deepEqual(state.primarySpells.projectiles, [])
 
-  const experienceBeforeReward = getPlayerProgression(state, 'caster').experience
+  const experienceAfterLethalContact = getPlayerProgression(state, 'caster').experience
   state = stepGameSimulationTick(state, { caster: cast(false) })
   assert.equal(
-    getPlayerProgression(state, 'caster').experience - experienceBeforeReward,
-    4.25,
+    getPlayerProgression(state, 'caster').experience,
+    experienceAfterLethalContact,
   )
 })
 
@@ -1419,13 +1450,54 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(state.run.gameOverEventId, 1)
   assert.equal(state.run.gameOverTicks, 0)
 
-  const frozenWorld = state.world
+  let frozenWorld = state.world
+  let archiveObserved = false
+  let expectedArchiveRng = state.gameRng
+  const expectedArchivePoses = new Map<string, { headingIndex: number; scale: number }>()
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  for (const playerId of Object.keys(state.world.hallOfFameRuns).sort()) {
+    const heading = drawNativeFloat(
+      expectedArchiveRng,
+      NATIVE_HALL_OF_FAME_SCORE.portraitHeadingJitterDegrees,
+      true,
+    )
+    const scale = drawNativeFloat(
+      heading.state,
+      NATIVE_HALL_OF_FAME_SCORE.portraitScaleJitter,
+    )
+    expectedArchiveRng = scale.state
+    expectedArchivePoses.set(playerId, {
+      headingIndex: actorHeadingIndex(Math.fround(
+        NATIVE_HALL_OF_FAME_SCORE.portraitHeadingCenterDegrees + heading.value,
+      )),
+      scale: Math.fround(NATIVE_HALL_OF_FAME_SCORE.portraitScaleBase + scale.value),
+    })
+  }
+  const assertFrozenGameOverWorld = () => {
+    if (state.run.gameOverTicks === NATIVE_HALL_OF_FAME_SCORE.archiveDeathTick) {
+      assert.notEqual(state.world, frozenWorld)
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+      for (const [playerId, hallRun] of Object.entries(state.world.hallOfFameRuns)) {
+        assert.equal(hallRun.elapsedTicks, state.tick - hallRun.startedAtTick)
+        assert.equal(
+          hallRun.portraitHeadingIndex,
+          expectedArchivePoses.get(playerId)?.headingIndex,
+        )
+        assert.equal(hallRun.portraitScale, expectedArchivePoses.get(playerId)?.scale)
+      }
+      assert.deepEqual(state.gameRng, expectedArchiveRng)
+      frozenWorld = state.world
+      archiveObserved = true
+      return
+    }
+    assert.equal(state.world, frozenWorld)
+  }
   for (let deathTick = 1; deathTick <= 152; deathTick += 1) {
     state = stepGameSimulationTick(state, {
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
     })
-    assert.equal(state.world, frozenWorld)
+    assertFrozenGameOverWorld()
     assert.equal(getPlayerProgression(state, 'second').deathTick, deathTick)
   }
   assert.equal(playerDeathFrame(getPlayerProgression(state, 'second')), 0)
@@ -1449,15 +1521,16 @@ test('one dead player spectates until all-dead Game Over returns the session thr
       first: gameplayInput(1, 0),
       second: gameplayInput(1, 0),
     })
-    assert.equal(state.world, frozenWorld)
+    assertFrozenGameOverWorld()
   }
+  assert.equal(archiveObserved, true)
   assert.equal(state.run.gameOverExitTicks, null)
   state = stepGameSimulationTick(state, {})
   assert.equal(state.run.gameOverTicks, BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK)
   assert.equal(state.run.gameOverExitTicks, 1)
   for (let exitTick = 2; exitTick <= BONEYARD_GAME_OVER_EXIT_FADE_TICKS; exitTick += 1) {
     state = stepGameSimulationTick(state, {})
-    assert.equal(state.world, frozenWorld)
+    assertFrozenGameOverWorld()
     assert.equal(state.run.gameOverExitTicks, exitTick)
   }
   assert.equal(state.run.phase, 'game-over')
@@ -1465,6 +1538,7 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   const loadout = stepGameSimulationTick(state, {})
   assert.equal(loadout.run.phase, 'loadout')
   assert.equal(loadout.world.kind, 'hub')
+  assert.equal(loadout.hallOfFameClockStartedAtTick, loadout.tick)
   assert.deepEqual(
     Object.keys(playerCharacterRecords(loadout.playerEntities)).sort(),
     ['first', 'second'],
@@ -1482,6 +1556,9 @@ test('one dead player spectates until all-dead Game Over returns the session thr
   assert.equal(secondRun.run.phase, 'active')
   assert.equal(secondRun.run.nextGameOverEventId, 2)
   if (secondRun.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  assert.ok(Object.values(secondRun.world.hallOfFameRuns).every(
+    ({ startedAtTick }) => startedAtTick === loadout.tick,
+  ))
   assert.equal(secondRun.world.playerOuchDeadlineTick, 0)
   assert.deepEqual(secondRun.world.enemyEvents, [])
   assert.deepEqual(secondRun.world.loot.actors, [])

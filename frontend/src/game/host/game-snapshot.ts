@@ -111,6 +111,7 @@ export function createGameSnapshot(
           enemyEvents: state.world.enemyEvents.map((event) => (
             protocolBoneyardEnemyEvent(event, runId)
           )),
+          enemyWorldFeedback: { ...state.world.enemyWorldFeedback },
           enemyProjectiles: projectBoneyardEnemyProjectiles(state.world.enemies),
           enemyProjectileEffects: projectBoneyardEnemyProjectileEffects(
             state.world.enemies,
@@ -127,6 +128,16 @@ export function createGameSnapshot(
             subtype: goodie.subtype,
             timer: goodie.timer,
           })),
+          hallOfFameRuns: Object.fromEntries(Object.entries(
+            state.world.hallOfFameRuns,
+          ).map(([playerId, run]) => [playerId, {
+            awesomeness: run.awesomeness,
+            awesomestKill: run.awesomestKill,
+            elapsedTicks: run.elapsedTicks,
+            monstersKilled: run.monstersKilled,
+            portraitHeadingIndex: run.portraitHeadingIndex,
+            portraitScale: run.portraitScale,
+          }])),
           kind: 'boneyard',
           lanternLightRegistration: state.world.lanternLightRegistration,
           loot: state.world.loot.actors.map((actor) => ({

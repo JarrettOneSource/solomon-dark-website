@@ -182,6 +182,9 @@ function interpolateSnapshot(
       enemies: interpolateEnemies(older.world.enemies, newer.world.enemies, blend),
       enemyEvents: (blend < 1 ? older.world.enemyEvents : newer.world.enemyEvents)
         .map(copyEnemyEvent),
+      enemyWorldFeedback: {
+        ...(blend < 1 ? older : newer).world.enemyWorldFeedback,
+      },
       enemyProjectileEffects: interpolateEnemyProjectileEffects(
         older.world.enemyProjectileEffects,
         newer.world.enemyProjectileEffects,
@@ -199,6 +202,9 @@ function interpolateSnapshot(
       ),
       goodies: (blend < 1 ? older.world.goodies : newer.world.goodies)
         .map(copyGoodie),
+      hallOfFameRuns: copyHallOfFameRuns(
+        (blend < 1 ? older : newer).world.hallOfFameRuns,
+      ),
       kind: 'boneyard',
       lanternLightRegistration: copyLightRegistration(
         (blend < 1 ? older : newer).world.lanternLightRegistration,
@@ -352,11 +358,13 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       encounter: copySolomon(snapshot.world.encounter),
       enemies: snapshot.world.enemies.map(copyEnemy),
       enemyEvents: snapshot.world.enemyEvents.map(copyEnemyEvent),
+      enemyWorldFeedback: { ...snapshot.world.enemyWorldFeedback },
       enemyProjectileEffects: snapshot.world.enemyProjectileEffects
         .map(copyEnemyProjectileEffect),
       enemyProjectiles: snapshot.world.enemyProjectiles.map(copyEnemyProjectile),
       gateLeaves: snapshot.world.gateLeaves.map(copyGateLeaf),
       goodies: snapshot.world.goodies.map(copyGoodie),
+      hallOfFameRuns: copyHallOfFameRuns(snapshot.world.hallOfFameRuns),
       kind: 'boneyard',
       lanternLightRegistration: copyLightRegistration(
         snapshot.world.lanternLightRegistration,
@@ -373,6 +381,15 @@ function presentationCopy(snapshot: BoneyardGameSnapshot): BoneyardPresentationF
       waves: copyWaves(snapshot.world.waves),
     },
   }
+}
+
+function copyHallOfFameRuns(
+  source: BoneyardGameSnapshot['world']['hallOfFameRuns'],
+): BoneyardGameSnapshot['world']['hallOfFameRuns'] {
+  return Object.fromEntries(Object.entries(source).map(([playerId, run]) => [
+    playerId,
+    { ...run },
+  ]))
 }
 
 function interpolateLoot(

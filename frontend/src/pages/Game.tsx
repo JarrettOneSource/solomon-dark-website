@@ -16,6 +16,10 @@ import {
 } from '../game/client/game-connection-failure.ts'
 import { createGameClientDiagnostics } from '../game/client/game-diagnostics.ts'
 import type { PlayerCharacterConfig } from '../game/core-kernels/player-character.ts'
+import type {
+  HallOfFameBoard,
+  HallOfFameEntry,
+} from '../game/core-kernels/hall-of-fame.ts'
 import {
   admitSharedHubPlayer,
   configuredGameEndpoint,
@@ -242,6 +246,26 @@ export default function Game() {
     saveCoordinator.current?.accept(checkpoint)
   }, [])
 
+  const loadGlobalHallOfFame = useCallback(async (
+    board: HallOfFameBoard,
+  ): Promise<readonly HallOfFameEntry[]> => {
+    const result = await api.gameLeaderboards.list(board)
+    return result.items
+  }, [])
+
+  const submitGlobalHallOfFame = useCallback(async (entry: HallOfFameEntry) => {
+    if (!user) return
+    try {
+      await api.gameLeaderboards.submit(entry)
+    } catch (error) {
+      diagnostics.warning(
+        'hall.global_submit_failed',
+        'The completed run remains in the local Hall of Fame.',
+        error instanceof Error ? error.message : 'Global leaderboard submission failed.',
+      )
+    }
+  }, [diagnostics, user])
+
   if (fatal) {
     return (
       <GameRuntimeError
@@ -261,10 +285,12 @@ export default function Game() {
               connectSession={connectSession}
               displayName={displayName}
               initialScreen="root"
+              loadGlobalHallOfFame={loadGlobalHallOfFame}
               onCancelCreate={cancelCreate}
               onSaveCheckpoint={persistCheckpoint}
               prepareNewGame={prepareNewGame}
               resumeSave={resumeSave}
+              submitGlobalHallOfFame={submitGlobalHallOfFame}
             />
           )
         : (

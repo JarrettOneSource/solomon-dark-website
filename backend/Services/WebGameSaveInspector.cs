@@ -8,7 +8,7 @@ public sealed record WebGameSaveInspection(long Size, string Sha256);
 
 public static class WebGameSaveInspector
 {
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 3;
     public const int MaxDocumentBytes = 8 * 1024 * 1024;
     private const int MaxNodes = 250_000;
 
@@ -49,6 +49,8 @@ public static class WebGameSaveInspector
                 root,
                 "browser game save",
                 "loadedBoneyard",
+                "mods",
+                "modState",
                 "schemaVersion",
                 "simulation",
                 "summary");

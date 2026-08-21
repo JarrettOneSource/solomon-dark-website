@@ -62,6 +62,14 @@ import {
   type BoneyardEnemySpawnIntent,
   type BoneyardWaveDirectorState,
 } from '../core-kernels/boneyard-wave-director.ts'
+import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
+import {
+  applyNativeEnemyWorldFeedback,
+  createNativeEnemyWorldFeedbackState,
+  nativeEnemyWorldFeedbackImpulses,
+  stepNativeEnemyWorldFeedback,
+  type NativeEnemyWorldFeedbackKernelState,
+} from '../core-kernels/native-enemy-world-feedback.ts'
 import {
   canPlaceBoneyardBody,
   clipBoneyardSegment,
@@ -120,10 +128,12 @@ export interface BoneyardWorldState {
   fireballSceneryTargets: readonly PrimarySpellTarget[]
   encounter: BoneyardSolomonEncounterState | null
   enemies: BoneyardEnemyStore
+  enemyWorldFeedback: NativeEnemyWorldFeedbackKernelState
   enemyEvents: readonly BoneyardEnemySemanticEvent[]
   gateLeaves: readonly BoneyardGateLeafState[]
   kind: 'boneyard'
   lanternLightRegistration: NativeLightProviderRegistration | null
+  hallOfFameRuns: Readonly<Record<string, NativeHallOfFameRunState>>
   loot: BoneyardLootStore
   lootEvents: readonly BoneyardLootEvent[]
   playerOuchDeadlineTick: number
@@ -180,10 +190,12 @@ export function createBoneyardWorld(
       ? createSolomonEncounter(loaded.scene.solomonDig!, loaded.seed)
       : null,
     enemies: createBoneyardEnemyStore(loaded.seed),
+    enemyWorldFeedback: createNativeEnemyWorldFeedbackState(),
     enemyEvents: [],
     gateLeaves: createBoneyardGateLeaves(loaded.scene.fences, loaded.seed),
     kind: 'boneyard',
     lanternLightRegistration,
+    hallOfFameRuns: {},
     loot: createBoneyardLootStore(
       loaded.seed,
       loaded.scene.objects
@@ -436,6 +448,7 @@ export function stepBoneyardWorldTick(
   let waves = world.waves
   let wavesStarted = false
   let pendingExternalSpawnIntents = externalSpawnIntents
+  let enemyWorldFeedback = stepNativeEnemyWorldFeedback(world.enemyWorldFeedback)
   if (waves !== null && encounter !== null) {
     if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
       waves = startBoneyardWaveDirector(waves)
@@ -555,6 +568,13 @@ export function stepBoneyardWorldTick(
     },
     registerLightProvider,
     registerProjectileLightProvider,
+    retirementObserver: {
+      onTerminalOutput: (output, outputCount) => {
+        for (const intensity of nativeEnemyWorldFeedbackImpulses(output, outputCount)) {
+          enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
+        }
+      },
+    },
     rollLootSeed: () => {
       const rolled = rollBoneyardLootSeed(loot)
       loot = rolled.store
@@ -628,6 +648,7 @@ export function stepBoneyardWorldTick(
       arenaTransition,
       encounter,
       enemies: knockback.enemies,
+      enemyWorldFeedback,
       gateLeaves,
       loot,
       waves,

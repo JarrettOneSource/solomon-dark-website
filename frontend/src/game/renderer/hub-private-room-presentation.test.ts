@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 import { HUB_PRIVATE_ROOM_LAYOUTS } from '../core-kernels/hub-private-room-layout.ts'
 import {
   HUB_LIBRARY_EXIT_MASKS,
+  HUB_MORTUARY_MEMORIAL_GLOW,
   HUB_PRIVATE_ROOM_FLAME_ANCHORS,
   hubMemoratorHeadingIndex,
   hubRoomFlameTransform,
@@ -40,6 +42,21 @@ test('selects the recovered 16-heading Memorator bank toward the local player', 
   assert.equal(hubMemoratorHeadingIndex({ x: 628, y: 840 }), 8)
   assert.equal(hubMemoratorHeadingIndex({ x: 558, y: 770 }), 12)
   assert.equal(hubMemoratorHeadingIndex({ x: 512, y: 793.974548 }), 11)
+})
+
+test('locks the reopened late triple memorial-glow pass', () => {
+  assert.deepEqual(HUB_MORTUARY_MEMORIAL_GLOW, {
+    count: 3,
+    depth: 1_000_001,
+    height: 54,
+    position: { x: 512, y: 507 },
+    width: 71,
+  })
+  const source = readFileSync(new URL('./hub-private-room-scene.ts', import.meta.url), 'utf8')
+  assert.match(source, /length: HUB_MORTUARY_MEMORIAL_GLOW\.count/)
+  assert.match(source, /hub\.rooms\.mortuary\.memorialGlow/)
+  assert.match(source, /glow\.blendMode = 'add'/)
+  assert.match(source, /glow\.zIndex = HUB_MORTUARY_MEMORIAL_GLOW\.depth/)
 })
 
 test('locks every captured private-room candle anchor', () => {

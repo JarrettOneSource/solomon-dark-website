@@ -1201,6 +1201,11 @@ def main() -> int:
         output_dir,
         "hub-room-mortuary-flame",
     )
+    save(
+        registered_sprite(mortuary, mortuary_records[5]),
+        output_dir,
+        "hub-room-mortuary-memorial-glow",
+    )
 
     storage = Image.open(images_dir / "Storage.png").convert("RGBA")
     storage_records = parse_bundle(images_dir / "Storage.bundle")

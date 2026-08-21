@@ -238,7 +238,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /ownerDisplayName/)
 })
 
-test('protocol v36 bounds Lua requests and structured results by wire bytes and shape', () => {
+test('protocol v37 bounds Lua requests and structured results by wire bytes and shape', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-lua-execute',
     code: '😀'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 4 + 1),
@@ -299,7 +299,7 @@ test('protocol v36 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v36 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v37 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -486,7 +486,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v36 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v37 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -916,8 +916,8 @@ test('protocol v36 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v36 carries secondary action/cooldown gates and the existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 36)
+test('protocol v37 carries Hall archives, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 37)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -932,6 +932,19 @@ test('protocol v36 carries secondary action/cooldown gates and the existing game
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
     },
+    world: active.world.kind === 'boneyard'
+      ? {
+          ...active.world,
+          hallOfFameRuns: Object.fromEntries(Object.entries(
+            active.world.hallOfFameRuns,
+          ).map(([playerId, hallRun]) => [playerId, {
+            ...hallRun,
+            elapsedTicks: 0,
+            portraitHeadingIndex: 12,
+            portraitScale: 0.925,
+          }])),
+        }
+      : active.world,
   }
   const gameOverSnapshot = createGameSnapshot(gameOverState, 'player-1')
   const dyingPlayer = gameOverSnapshot.players['player-1']!
@@ -1048,7 +1061,7 @@ test('protocol v36 carries secondary action/cooldown gates and the existing game
   )
 })
 
-test('protocol v36 strictly owns the generated-arena transition', () => {
+test('protocol v37 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -1086,6 +1099,46 @@ test('protocol v36 strictly owns the generated-arena transition', () => {
     phase: 'open',
     sealTicksRemaining: 0,
   })
+  assert.deepEqual(decoded.frame.world.hallOfFameRuns, {
+    'player-1': {
+      awesomeness: 0,
+      awesomestKill: null,
+      elapsedTicks: null,
+      monstersKilled: 0,
+      portraitHeadingIndex: null,
+      portraitScale: null,
+    },
+  })
+
+  const missingHallOwner = JSON.parse(encodeGameMessage(message))
+  missingHallOwner.frame.world.hallOfFameRuns = {}
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(missingHallOwner)),
+    /hallOfFameRuns must match/,
+  )
+
+  const invalidHallScore = JSON.parse(encodeGameMessage(message))
+  invalidHallScore.frame.world.hallOfFameRuns['player-1'].awesomeness = -1
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidHallScore)),
+    /awesomeness/,
+  )
+
+  const invalidEnemyFeedback = JSON.parse(encodeGameMessage(message))
+  invalidEnemyFeedback.frame.world.enemyWorldFeedback.accumulator = 4
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(invalidEnemyFeedback)),
+    /enemy-feedback bounds/,
+  )
+
+  const prematureHallArchive = JSON.parse(encodeGameMessage(message))
+  prematureHallArchive.frame.world.hallOfFameRuns['player-1'].elapsedTicks = 0
+  prematureHallArchive.frame.world.hallOfFameRuns['player-1'].portraitHeadingIndex = 12
+  prematureHallArchive.frame.world.hallOfFameRuns['player-1'].portraitScale = 0.925
+  assert.throws(
+    () => decodeServerGameMessage(JSON.stringify(prematureHallArchive)),
+    /Hall archive timing/,
+  )
 
   const invalidGeometry = JSON.parse(encodeGameMessage(message))
   invalidGeometry.frame.world.arenaTransition.combatBounds.y = 0
@@ -1102,7 +1155,7 @@ test('protocol v36 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v36 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v37 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2209,7 +2262,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v36 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v37 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -2683,7 +2736,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v36 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v37 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),

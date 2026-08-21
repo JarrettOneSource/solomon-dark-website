@@ -13,6 +13,7 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
     public DbSet<ModScreenshot> ModScreenshots => Set<ModScreenshot>();
     public DbSet<ModComment> ModComments => Set<ModComment>();
     public DbSet<WebGameSave> WebGameSaves => Set<WebGameSave>();
+    public DbSet<GameLeaderboardEntry> GameLeaderboardEntries => Set<GameLeaderboardEntry>();
     public DbSet<BoneyardDraft> BoneyardDrafts => Set<BoneyardDraft>();
     public DbSet<DiagnosticLog> DiagnosticLogs => Set<DiagnosticLog>();
 
@@ -119,6 +120,24 @@ public sealed class AppDb(DbContextOptions<AppDb> options) : DbContext(options)
             entity.HasOne(save => save.User)
                 .WithMany()
                 .HasForeignKey(save => save.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GameLeaderboardEntry>(entity =>
+        {
+            entity.Property(entry => entry.RunId).HasMaxLength(64);
+            entity.Property(entry => entry.WizardName).HasMaxLength(32);
+            entity.Property(entry => entry.Element).HasMaxLength(8);
+            entity.Property(entry => entry.Discipline).HasMaxLength(8);
+            entity.Property(entry => entry.AwesomestKill).HasMaxLength(64);
+            entity.HasIndex(entry => new { entry.UserId, entry.RunId }).IsUnique();
+            entity.HasIndex(entry => new { entry.Awesomeness, entry.Id });
+            entity.HasIndex(entry => new { entry.Wave, entry.Id });
+            entity.HasIndex(entry => new { entry.MonstersKilled, entry.Id });
+            entity.HasIndex(entry => new { entry.ElapsedTicks, entry.Id });
+            entity.HasOne(entry => entry.User)
+                .WithMany()
+                .HasForeignKey(entry => entry.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

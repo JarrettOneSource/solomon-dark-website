@@ -58,6 +58,7 @@ import mainMenuTextQuit from '../assets/game/main-menu-text-quit.png'
 import mainMenuTextResume from '../assets/game/main-menu-text-resume.png'
 import mainMenuTextSettings from '../assets/game/main-menu-text-settings.png'
 import mainMenuTextBack from '../assets/game/main-menu-text-back.png'
+import hallOfFameBackground from '../assets/game/hall-of-fame-background.png'
 import createArcaneWheel from '../assets/game/create-arcane-wheel.png'
 import createBackSkull from '../assets/game/create-back-skull.png'
 import createChooseDiscipline from '../assets/game/create-choose-discipline.png'
@@ -221,6 +222,7 @@ import hubRoomMortuaryFlame from '../assets/game/hub-room-mortuary-flame.png'
 import hubRoomMortuaryPaintings from '../assets/game/hub-room-mortuary-paintings.png'
 import hubRoomMemorator from '../assets/game/hub-room-memorator.png'
 import hubRoomMemoratorMarker from '../assets/game/hub-room-memorator-marker.png'
+import hubRoomMortuaryMemorialGlow from '../assets/game/hub-room-mortuary-memorial-glow.png'
 import hubRoomStoreroomBackground from '../assets/game/hub-room-storeroom-background.png'
 import hubRoomStoreroomFlame from '../assets/game/hub-room-storeroom-flame.png'
 import hubRoomStoreroomForeground from '../assets/game/hub-room-storeroom-foreground.png'
@@ -459,6 +461,7 @@ export const mainMenu = {
     mainMenuGrave8,
   ],
   horizon: mainMenuHorizon,
+  hallOfFameBackground,
   logo: logoSolomonDark,
   moon: mainMenuMoon,
   quitCorner: mainMenuQuitCorner,
@@ -655,6 +658,7 @@ export const hub = {
     mortuary: {
       background: hubRoomMortuaryBackground,
       flame: hubRoomMortuaryFlame,
+      memorialGlow: hubRoomMortuaryMemorialGlow,
       paintings: hubRoomMortuaryPaintings,
       memorator: hubRoomMemorator,
       memoratorMarker: hubRoomMemoratorMarker,

@@ -146,6 +146,33 @@ export interface WebGameSave {
   updatedAtUtc: string
 }
 
+export type GameLeaderboardBoard = 'awesomeness' | 'wave' | 'kills' | 'time'
+
+export interface GameLeaderboardEntry {
+  rank: number | null
+  accountUsername: string
+  runId: string
+  wizardName: string
+  element: 'air' | 'earth' | 'ether' | 'fire' | 'water'
+  discipline: 'arcane' | 'body' | 'mind'
+  headingIndex: number
+  portraitScale: number
+  level: number
+  awesomeness: number
+  elapsedTicks: number
+  wave: number
+  monstersKilled: number
+  awesomestKill: string | null
+  highestSkills: readonly { skillId: number; rank: number }[]
+  perksUsed: readonly number[]
+  completedAtUtc: string
+}
+
+export type GameLeaderboardSubmission = Omit<
+  GameLeaderboardEntry,
+  'accountUsername' | 'completedAtUtc' | 'rank'
+>
+
 const TOKEN_KEY = 'sdr.token'
 
 export function getToken(): string | null {
@@ -318,6 +345,32 @@ export const api = {
     remove: (slot: number, expectedRevision: number) => request<void>(
       `/api/game/saves/${slot}?expectedRevision=${expectedRevision}`,
       { method: 'DELETE' },
+    ),
+  },
+
+  gameLeaderboards: {
+    list: (board: GameLeaderboardBoard) => request<{
+      board: GameLeaderboardBoard
+      items: GameLeaderboardEntry[]
+    }>(`/api/game/leaderboards?board=${board}`),
+    submit: (entry: GameLeaderboardSubmission) => request<GameLeaderboardEntry>(
+      '/api/game/leaderboards',
+      json({
+        awesomeness: entry.awesomeness,
+        awesomestKill: entry.awesomestKill,
+        discipline: entry.discipline,
+        elapsedTicks: entry.elapsedTicks,
+        element: entry.element,
+        headingIndex: entry.headingIndex,
+        highestSkills: entry.highestSkills,
+        level: entry.level,
+        monstersKilled: entry.monstersKilled,
+        perksUsed: entry.perksUsed,
+        portraitScale: entry.portraitScale,
+        runId: entry.runId,
+        wave: entry.wave,
+        wizardName: entry.wizardName,
+      }),
     ),
   },
 }

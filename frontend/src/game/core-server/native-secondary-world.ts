@@ -15,6 +15,7 @@ import {
 import type { Vector2 } from '../core-kernels/vector.ts'
 import {
   damageBoneyardEnemy,
+  type BoneyardEnemyLethalObserver,
   type BoneyardEnemySemanticEvent,
   type BoneyardEnemyStore,
 } from './boneyard-enemy-store.ts'
@@ -255,6 +256,7 @@ export function resolveBoneyardNativeSecondaryCombat(
     'damage' | 'dispelledShieldTargetIds' | 'headingPerturbations' | 'removedProjectileIds'
   >,
   tick: number,
+  lethalObserver?: BoneyardEnemyLethalObserver,
 ): BoneyardSecondaryCombatResult {
   const removedProjectileIds = new Set(result.removedProjectileIds)
   let enemies = removedProjectileIds.size === 0
@@ -271,6 +273,7 @@ export function resolveBoneyardNativeSecondaryCombat(
     const damaged = damageBoneyardEnemy(enemies, {
       actorId: actor.id,
       amount: actor.shieldHealth,
+      lethalObserver,
       sourcePlayerId: null,
       tick,
     })
@@ -279,7 +282,7 @@ export function resolveBoneyardNativeSecondaryCombat(
   }
 
   for (const contact of result.damage) {
-    const damaged = applyContact(enemies, contact, tick)
+    const damaged = applyContact(enemies, contact, tick, lethalObserver)
     enemies = damaged.enemies
     events.push(...damaged.events)
   }
@@ -337,10 +340,12 @@ function applyContact(
   source: BoneyardEnemyStore,
   contact: NativeSecondaryDamageContact,
   tick: number,
+  lethalObserver?: BoneyardEnemyLethalObserver,
 ): BoneyardSecondaryCombatResult {
   const damaged = damageBoneyardEnemy(source, {
     actorId: contact.targetId,
     amount: contact.amount,
+    lethalObserver,
     sourcePlayerId: contact.ownerId,
     tick,
   })

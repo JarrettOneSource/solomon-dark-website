@@ -433,6 +433,19 @@ test('host client keeps one session through Game Over, loadout, and Hub confirma
       nextGameOverEventId: 2,
       phase: 'game-over' as const,
     },
+    world: activeState.world.kind === 'boneyard'
+      ? {
+          ...activeState.world,
+          hallOfFameRuns: Object.fromEntries(Object.entries(
+            activeState.world.hallOfFameRuns,
+          ).map(([id, hallRun]) => [id, {
+            ...hallRun,
+            elapsedTicks: 0,
+            portraitHeadingIndex: 12,
+            portraitScale: 0.925,
+          }])),
+        }
+      : activeState.world,
   }
   receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
   assert.equal(session.getSnapshot().run.phase, 'game-over')

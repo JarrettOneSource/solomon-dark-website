@@ -1,15 +1,14 @@
 import type { BoneyardEnemyEventSnapshot } from '../protocol/game-state.ts'
+import {
+  applyNativeEnemyWorldFeedback,
+  createNativeEnemyWorldFeedbackState,
+  nativeEnemyWorldFeedbackImpulses,
+  NATIVE_ENEMY_WORLD_FEEDBACK,
+  stepNativeEnemyWorldFeedback,
+  type NativeEnemyWorldFeedbackKernelState,
+} from '../core-kernels/native-enemy-world-feedback.ts'
 
-export const NATIVE_ENEMY_WORLD_FEEDBACK = Object.freeze({
-  accumulatorCap: 3.5,
-  accumulatorFloor: 0.1,
-  accumulatorImpulse: 0.20000000298023224,
-  accumulatorLossPerTick: 0.0025,
-  coffinIntensity: 0.2,
-  magnitudeCutoff: 0.001,
-  magnitudeRetentionPerTick: 0.94,
-  skeletonIntensity: 0.1,
-})
+export { NATIVE_ENEMY_WORLD_FEEDBACK }
 
 export interface NativeEnemyWorldFeedbackState {
   readonly accumulator: number
@@ -23,70 +22,46 @@ export interface NativeEnemyWorldFeedbackTransform {
 }
 
 export class NativeEnemyWorldFeedbackPresentation {
-  private accumulator = 0
+  private feedback: NativeEnemyWorldFeedbackKernelState = createNativeEnemyWorldFeedbackState()
   private lastEventId = 0
   private lastTick: number
-  private magnitude = 0
 
-  constructor(initialTick: number) {
+  constructor(
+    initialTick: number,
+    initialFeedback: NativeEnemyWorldFeedbackKernelState = createNativeEnemyWorldFeedbackState(),
+    initialEventId = 0,
+  ) {
+    this.feedback = Object.freeze({ ...initialFeedback })
+    this.lastEventId = initialEventId
     this.lastTick = initialTick
   }
 
   consume(event: BoneyardEnemyEventSnapshot): boolean {
     if (event.eventId <= this.lastEventId) return false
     this.lastEventId = event.eventId
-    const intensity = nativeEnemyWorldFeedbackIntensity(event)
-    if (intensity === null) return false
+    if (event.type !== 'enemy-terminal-output' || event.output === undefined) return false
+    const impulses = nativeEnemyWorldFeedbackImpulses(event.output, event.count)
     this.advanceTo(event.tick)
-    this.magnitude = Math.fround(Math.min(this.accumulator, 1) * intensity)
-    this.accumulator = Math.fround(Math.min(
-      NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorCap,
-      this.accumulator + NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorImpulse,
-    ))
+    for (const intensity of impulses) {
+      this.feedback = applyNativeEnemyWorldFeedback(this.feedback, intensity)
+    }
     return true
   }
 
   sample(tick: number): NativeEnemyWorldFeedbackState {
     this.advanceTo(Math.floor(tick))
     return Object.freeze({
-      accumulator: this.accumulator,
+      accumulator: this.feedback.accumulator,
       lastTick: this.lastTick,
-      magnitude: this.magnitude,
+      magnitude: this.feedback.magnitude,
     })
   }
 
   private advanceTo(tick: number): void {
     const elapsedTicks = Math.max(0, tick - this.lastTick)
     if (elapsedTicks === 0) return
-    this.accumulator = Math.fround(Math.max(
-      NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorFloor,
-      this.accumulator
-        - NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorLossPerTick * elapsedTicks,
-    ))
-    const retainedMagnitude = Math.fround(
-      this.magnitude
-        * NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeRetentionPerTick ** elapsedTicks,
-    )
-    this.magnitude = retainedMagnitude < NATIVE_ENEMY_WORLD_FEEDBACK.magnitudeCutoff
-      ? 0
-      : retainedMagnitude
+    this.feedback = stepNativeEnemyWorldFeedback(this.feedback, elapsedTicks)
     this.lastTick = tick
-  }
-}
-
-export function nativeEnemyWorldFeedbackIntensity(
-  event: BoneyardEnemyEventSnapshot,
-): number | null {
-  if (event.type !== 'enemy-terminal-output') return null
-  switch (event.output) {
-    case 'archer-shatter':
-    case 'mage-shatter':
-    case 'skeleton-shatter':
-      return NATIVE_ENEMY_WORLD_FEEDBACK.skeletonIntensity
-    case 'coffin-break':
-      return NATIVE_ENEMY_WORLD_FEEDBACK.coffinIntensity
-    default:
-      return null
   }
 }
 

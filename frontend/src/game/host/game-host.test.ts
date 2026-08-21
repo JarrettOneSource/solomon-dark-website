@@ -1123,6 +1123,19 @@ test('host returns the same multiplayer session from Game Over through loadout t
     && message.snapshot.run.phase === 'game-over'
     && message.snapshot.run.gameOverExitTicks === 1
   ))
+  const gameOverState = host.state()
+  if (gameOverState.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  gameOverState.world = {
+    ...gameOverState.world,
+    hallOfFameRuns: Object.fromEntries(Object.entries(
+      gameOverState.world.hallOfFameRuns,
+    ).map(([playerId, hallRun]) => [playerId, {
+      ...hallRun,
+      elapsedTicks: 0,
+      portraitHeadingIndex: 12,
+      portraitScale: 0.925,
+    }])),
+  }
   Object.assign(host.state().run, {
     gameOverEventId: 1,
     gameOverTicks: BONEYARD_GAME_OVER_AUTOMATIC_ACCEPT_TICK - 1,

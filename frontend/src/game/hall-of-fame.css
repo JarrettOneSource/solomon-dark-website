@@ -1,0 +1,227 @@
+.hall-of-fame-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 20;
+  overflow: hidden;
+  color: #dcc47e;
+  font-family: var(--font-heading);
+  transform-origin: 0 0;
+}
+
+.hall-of-fame-background {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 1600px;
+  height: 900px;
+  pointer-events: none;
+}
+
+.hall-of-fame-controls {
+  position: absolute;
+  z-index: 2;
+  top: 94px;
+  left: 252px;
+  display: flex;
+  width: 1096px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.hall-of-fame-scope,
+.hall-of-fame-boards {
+  display: flex;
+  gap: 8px;
+}
+
+.hall-of-fame-control,
+.hall-of-fame-status button {
+  padding: 5px 14px;
+  border: 1px solid rgb(209 177 99 / 0.58);
+  color: #bda868;
+  background: rgb(5 5 5 / 0.72);
+  font: 600 15px var(--font-heading);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.hall-of-fame-control[aria-pressed='true'],
+.hall-of-fame-control:hover,
+.hall-of-fame-control:focus-visible,
+.hall-of-fame-status button:hover,
+.hall-of-fame-status button:focus-visible {
+  border-color: #ead38c;
+  color: #f2d992;
+  outline: none;
+  box-shadow: inset 0 0 12px rgb(217 181 92 / 0.2);
+}
+
+.hall-of-fame-list {
+  position: absolute;
+  z-index: 1;
+  top: 134px;
+  left: 252px;
+  box-sizing: border-box;
+  width: 1096px;
+  height: 640px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 7px 20px;
+  scrollbar-color: #9b8246 rgb(0 0 0 / 0.5);
+  scrollbar-width: thin;
+}
+
+.hall-of-fame-status {
+  display: grid;
+  min-height: 210px;
+  margin: 0;
+  color: #bda868;
+  font-size: 18px;
+  text-align: center;
+  place-content: center;
+}
+
+.hall-of-fame-status p { margin: 0 0 12px; }
+
+.hall-of-fame-entry {
+  margin-bottom: 12px;
+  border: 1px solid rgb(172 142 71 / 0.45);
+  background: rgb(4 4 4 / 0.46);
+  box-shadow: inset 0 0 22px rgb(180 145 70 / 0.08);
+}
+
+.hall-of-fame-entry-summary {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 220px;
+  grid-template-columns: 100px minmax(0, 1fr) 190px 28px;
+  align-items: center;
+  padding: 4px 16px 4px 4px;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hall-of-fame-entry-summary:hover,
+.hall-of-fame-entry-summary:focus-visible {
+  color: #f0d68b;
+  outline: 1px solid rgb(224 190 103 / 0.78);
+  outline-offset: -1px;
+}
+
+.hall-of-fame-rank {
+  font-size: 32px;
+  text-align: center;
+}
+
+.hall-of-fame-entry-center {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.hall-of-fame-wizard {
+  position: relative;
+  display: block;
+  width: 200px;
+  height: 128px;
+  overflow: hidden;
+}
+
+.hall-of-fame-wizard-layer {
+  position: absolute;
+  top: -21px;
+  left: 15px;
+  display: block;
+  width: 170px;
+  height: 170px;
+  background-repeat: no-repeat;
+  transform-origin: center;
+}
+
+.hall-of-fame-identity,
+.hall-of-fame-score,
+.hall-of-fame-details > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.hall-of-fame-identity > strong {
+  overflow: hidden;
+  font-size: 25px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hall-of-fame-identity { align-items: center; }
+
+.hall-of-fame-identity > span {
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.hall-of-fame-score {
+  align-items: flex-end;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.hall-of-fame-score strong { font-size: 26px; }
+.hall-of-fame-score span { font-size: 13px; }
+.hall-of-fame-disclosure { text-align: right; }
+
+.hall-of-fame-details {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr 1.25fr 1.2fr;
+  gap: 18px;
+  padding: 16px 24px 22px;
+  border-top: 1px solid rgb(172 142 71 / 0.35);
+  font-family: var(--font-display);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.hall-of-fame-details strong { margin-bottom: 7px; }
+
+.hall-of-fame-skill-grid,
+.hall-of-fame-perk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.hall-of-fame-detail-cell {
+  display: grid;
+  min-height: 32px;
+  border: 1px solid rgb(209 177 99 / 0.62);
+  place-items: center;
+}
+
+.hall-of-fame-main-menu {
+  position: absolute;
+  z-index: 3;
+  top: 809.5px;
+  left: 617.5px;
+  width: 365px;
+  height: 85px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hall-of-fame-main-menu:hover,
+.hall-of-fame-main-menu:focus-visible {
+  outline: 2px solid rgb(237 210 137 / 0.9);
+  outline-offset: -8px;
+}

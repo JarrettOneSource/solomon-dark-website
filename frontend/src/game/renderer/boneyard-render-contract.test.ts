@@ -194,6 +194,34 @@ test('enemy terminal output drives the exact native feedback accumulator and dec
   assert.equal(feedback.sample(1_000).magnitude, 0)
 })
 
+test('late join seeds authoritative feedback without replaying retained terminal events', () => {
+  const feedback = new NativeEnemyWorldFeedbackPresentation(
+    50,
+    { accumulator: 0.7, magnitude: 0.12 },
+    9,
+  )
+  assert.deepEqual(feedback.sample(50), {
+    accumulator: 0.7,
+    lastTick: 50,
+    magnitude: 0.12,
+  })
+  const event = {
+    actorId: 7,
+    eventId: 9,
+    output: 'zombie-collapse' as const,
+    runId: 'run-1',
+    tick: 50,
+    type: 'enemy-terminal-output' as const,
+  }
+  assert.equal(feedback.consume(event), false)
+  assert.equal(feedback.consume({ ...event, eventId: 10 }), true)
+  assert.deepEqual(feedback.sample(50), {
+    accumulator: Math.fround(0.7 + NATIVE_ENEMY_WORLD_FEEDBACK.accumulatorImpulse),
+    lastTick: 50,
+    magnitude: Math.fround(0.7 * NATIVE_ENEMY_WORLD_FEEDBACK.zombieIntensity),
+  })
+})
+
 test('enemy feedback scales the world around the local Player without moving its screen point', () => {
   const camera = { x: 1_000, y: 700, zoom: BONEYARD_CAMERA_ZOOM }
   const viewport = { height: 900, width: 1_600 }
@@ -219,6 +247,7 @@ test('enemy feedback scales the world around the local Player without moving its
 
 test('Boneyard renderer consumes terminal feedback once and applies it after semantic camera placement', () => {
   assert.match(boneyardRenderer, /worldFeedback\.consume\(event\)/)
+  assert.match(boneyardRenderer, /initialSnapshot\.world\.enemyWorldFeedback/)
   assert.match(boneyardRenderer, /worldFeedback\.sample\(snapshot\.tick\)/)
   assert.match(boneyardRenderer, /nativeEnemyWorldFeedbackTransform\(/)
   assert.match(boneyardRenderer, /worldFeedbackMagnitude/)

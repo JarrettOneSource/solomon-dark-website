@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import io
 import json
@@ -399,7 +400,9 @@ class WebsiteModSyncContractTests(unittest.TestCase):
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:
         document = json.dumps(
             {
-                "schemaVersion": 1,
+                "schemaVersion": 3,
+                "mods": [],
+                "modState": {},
                 "summary": {
                     "character": {
                         "discipline": "arcane",
@@ -440,7 +443,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, created)
         self.assertEqual(created["slot"], 0)
-        self.assertEqual(created["formatVersion"], 1)
+        self.assertEqual(created["formatVersion"], 3)
         self.assertEqual(created["revision"], 1)
         self.assertEqual(created["document"], document)
         self.assertEqual(created["size"], len(document.encode()))
@@ -487,8 +490,175 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertEqual(status, 200, missing)
         self.assertIsNone(missing["save"])
 
+    def test_game_leaderboards_are_authenticated_idempotent_and_independently_ranked(self) -> None:
+        status, empty = self.request("GET", "/api/game/leaderboards")
+        self.assertEqual(status, 200, empty)
+        self.assertEqual(empty, {"board": "awesomeness", "items": []})
 
+        first = {
+            "runId": "leaderboard-run-a",
+            "wizardName": "Volusius",
+            "element": "ether",
+            "discipline": "arcane",
+            "headingIndex": 4,
+            "portraitScale": 0.925,
+            "level": 1,
+            "awesomeness": 91,
+            "elapsedTicks": 33950,
+            "wave": 1,
+            "monstersKilled": 17,
+            "awesomestKill": "Skeleton",
+            "highestSkills": [
+                {"skillId": 7, "rank": 2},
+                {"skillId": 11, "rank": 1},
+            ],
+            "perksUsed": [3, 8],
+        }
+        status, rejected = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            json_body=first,
+        )
+        self.assertEqual(status, 401, rejected)
+        status, rejected = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json_body={**first, "headingIndex": 24},
+        )
+        self.assertEqual(status, 400, rejected)
+        status, rejected = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json_body={**first, "portraitScale": 0.8},
+        )
+        self.assertEqual(status, 400, rejected)
+        status, rejected = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers={"Authorization": f"Bearer {self.token}"},
+            json_body={**first, "unexpected": "not part of a Hall record"},
+        )
+        self.assertEqual(status, 400, rejected)
 
+        auth = {"Authorization": f"Bearer {self.token}"}
+        status, created = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers=auth,
+            json_body=first,
+        )
+        self.assertEqual(status, 201, created)
+        self.assertEqual(created["accountUsername"], "modsync")
+        self.assertEqual(created["awesomeness"], 91)
+        self.assertNotIn("email", created)
+
+        status, duplicate = self.request(
+            "POST",
+            "/api/game/leaderboards",
+            headers=auth,
+            json_body={**first, "awesomeness": 999999},
+        )
+        self.assertEqual(status, 200, duplicate)
+        self.assertEqual(duplicate["awesomeness"], 91)
+
+        concurrent_entry = {
+            **first,
+            "runId": "leaderboard-run-concurrent",
+            "wizardName": "Concurrentius",
+            "awesomeness": 1,
+            "elapsedTicks": 1,
+            "wave": 0,
+            "monstersKilled": 0,
+        }
+
+        def submit_concurrently(_: int) -> tuple[int, object]:
+            return self.request(
+                "POST",
+                "/api/game/leaderboards",
+                headers=auth,
+                json_body=concurrent_entry,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            concurrent = list(executor.map(submit_concurrently, range(2)))
+        self.assertEqual(sorted(status for status, _ in concurrent), [200, 201], concurrent)
+        self.assertEqual(
+            {payload["runId"] for _, payload in concurrent},
+            {"leaderboard-run-concurrent"},
+        )
+
+        status, registered = self.request(
+            "POST",
+            "/api/auth/register",
+            json_body={
+                "username": "leaderpeer",
+                "email": "leaderpeer@example.invalid",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(status, 201, registered)
+        peer_auth = {"Authorization": f"Bearer {registered['token']}"}
+        peer_entries = [
+            {
+                **first,
+                "runId": "leaderboard-run-b",
+                "wizardName": "Severina",
+                "awesomeness": 80,
+                "elapsedTicks": 40000,
+                "wave": 3,
+                "monstersKilled": 10,
+            },
+            {
+                **first,
+                "runId": "leaderboard-run-c",
+                "wizardName": "Cassian",
+                "awesomeness": 120,
+                "elapsedTicks": 30000,
+                "wave": 2,
+                "monstersKilled": 30,
+            },
+            {
+                **first,
+                "runId": "leaderboard-run-d",
+                "wizardName": "Aurelia",
+                "awesomeness": 120,
+                "elapsedTicks": 100,
+                "wave": 0,
+                "monstersKilled": 0,
+            },
+        ]
+        for entry in peer_entries:
+            status, payload = self.request(
+                "POST",
+                "/api/game/leaderboards",
+                headers=peer_auth,
+                json_body=entry,
+            )
+            self.assertEqual(status, 201, payload)
+
+        expected_first = {
+            "awesomeness": "leaderboard-run-d",
+            "wave": "leaderboard-run-b",
+            "kills": "leaderboard-run-c",
+            "time": "leaderboard-run-b",
+        }
+        for board, run_id in expected_first.items():
+            status, leaderboard = self.request(
+                "GET",
+                f"/api/game/leaderboards?board={board}",
+            )
+            self.assertEqual(status, 200, leaderboard)
+            self.assertEqual(leaderboard["board"], board)
+            self.assertEqual(leaderboard["items"][0]["rank"], 1)
+            self.assertEqual(leaderboard["items"][0]["runId"], run_id)
+
+        status, rejected = self.request(
+            "GET",
+            "/api/game/leaderboards?board=unknown",
+        )
+        self.assertEqual(status, 400, rejected)
 
     def test_subscriptions_are_account_owned_enabled_and_dependency_resolved(self) -> None:
         dependency_manifest = {
@@ -760,7 +930,12 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                     row[1]
                     for row in database.execute(f"PRAGMA table_info({table})")
                 }
-                for table in ("Mods", "ModVersions", "ModSubscriptions")
+                for table in (
+                    "Mods",
+                    "ModVersions",
+                    "ModSubscriptions",
+                    "GameLeaderboardEntries",
+                )
             }
         self.assertIn("PackageId", columns["Mods"])
         self.assertNotIn("LauncherModId", columns["Mods"])
@@ -772,6 +947,10 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         self.assertTrue(
             {"UserId", "ModId", "Enabled", "CreatedAtUtc", "UpdatedAtUtc"}
             <= columns["ModSubscriptions"]
+        )
+        self.assertTrue(
+            {"UserId", "RunId", "Awesomeness", "Wave", "MonstersKilled", "ElapsedTicks", "PortraitScale"}
+            <= columns["GameLeaderboardEntries"]
         )
 
 

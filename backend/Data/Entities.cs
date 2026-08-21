@@ -108,6 +108,29 @@ public sealed class WebGameSave
     public User User { get; set; } = null!;
 }
 
+public sealed class GameLeaderboardEntry
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string RunId { get; set; } = string.Empty;
+    public string WizardName { get; set; } = string.Empty;
+    public string Element { get; set; } = string.Empty;
+    public string Discipline { get; set; } = string.Empty;
+    public int HeadingIndex { get; set; }
+    public double PortraitScale { get; set; }
+    public int Level { get; set; }
+    public int Awesomeness { get; set; }
+    public int ElapsedTicks { get; set; }
+    public int Wave { get; set; }
+    public int MonstersKilled { get; set; }
+    public string? AwesomestKill { get; set; }
+    public string HighestSkillsJson { get; set; } = "[]";
+    public string PerksUsedJson { get; set; } = "[]";
+    public DateTime CompletedAtUtc { get; set; }
+
+    public User User { get; set; } = null!;
+}
+
 public sealed class BoneyardDraft
 {
     public int Id { get; set; }

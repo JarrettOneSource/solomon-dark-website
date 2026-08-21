@@ -7,6 +7,14 @@ import type { Vector2 } from '../core-kernels/vector.ts'
 export const HUB_PRIVATE_ROOM_EFFECT_DEPTH = 1_000_000
 export const HUB_PRIVATE_ROOM_LATE_FOREGROUND_DEPTH = 2_000_000
 
+export const HUB_MORTUARY_MEMORIAL_GLOW = {
+  count: 3,
+  depth: HUB_PRIVATE_ROOM_EFFECT_DEPTH + 1,
+  height: 54,
+  position: { x: 512, y: 507 },
+  width: 71,
+} as const
+
 export const HUB_LIBRARY_EXIT_MASKS = [
   { height: 121, width: 381, x: 16, y: 801 },
   { height: 121, width: 381, x: 627, y: 801 },

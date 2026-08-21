@@ -233,6 +233,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
       },
       enemies: [enemyAt(gateTipX + 300)],
       enemyEvents: [],
+      enemyWorldFeedback: { accumulator: 0.1, magnitude: 0 },
       enemyProjectileEffects: [],
       enemyProjectiles: [enemyProjectileAt(gateTipX + 200)],
       gateLeaves: [{
@@ -243,6 +244,16 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
         tip: { x: gateTipX, y: 300 },
       }],
       goodies: [],
+      hallOfFameRuns: {
+        local: {
+          awesomeness: 0,
+          awesomestKill: null,
+          elapsedTicks: null,
+          monstersKilled: 0,
+          portraitHeadingIndex: null,
+          portraitScale: null,
+        },
+      },
       kind: 'boneyard',
       lanternLightRegistration: { managerLane: 'actor', registrationOrdinal: 2 },
       loot: [],
