@@ -195,7 +195,8 @@ try {
     effect.playerId === guestPlayerId && effect.contentId === expectedContentId
   )), 'authoritative guest mod effect was not created')
   assert.equal(host.state().modEffects.some(effect => effect.playerId === hostPlayerId), false)
-  await inventory.getByRole('button', { name: 'Done' }).click()
+  await guestPage.keyboard.press('KeyI')
+  await inventory.waitFor({ state: 'detached', timeout: 10_000 })
   await waitUntil(() => {
     const progression = getPlayerProgression(host.state(), guestPlayerId)
     return progression.currentMana === progression.maximumMana
