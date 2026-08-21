@@ -913,6 +913,7 @@ export default function MainMenuScene({
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
               onAcceptPartyInvitation={session.acceptPartyInvitation}
+              onDenyPartyInvitation={session.denyPartyInvitation}
               onHubAction={session.sendHubAction}
               onInvitePlayer={session.inviteToParty}
               onLoadingError={cancelHubLoading}

@@ -70,6 +70,7 @@ interface HubSceneProps {
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onAcceptPartyInvitation: (invitationId: string) => void
+  onDenyPartyInvitation: (invitationId: string) => void
   onHubAction: (action: HubInventoryAction) => void
   onInvitePlayer: (playerId: string) => void
   onLoadingError: () => void
@@ -108,6 +109,7 @@ export default function HubScene({
   levelUpPresentationId,
   onInput,
   onAcceptPartyInvitation,
+  onDenyPartyInvitation,
   onHubAction,
   onInvitePlayer,
   onLoadingError,
@@ -536,12 +538,21 @@ export default function HubScene({
                 key={invitation.id}
               >
                 <span>{invitation.inviter.displayName} invited you</span>
-                <button
-                  type="button"
-                  onClick={() => onAcceptPartyInvitation(invitation.id)}
-                >
-                  Accept
-                </button>
+                <div className="hub-party-invitation-actions">
+                  <button
+                    type="button"
+                    onClick={() => onAcceptPartyInvitation(invitation.id)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="hub-party-invitation-deny"
+                    onClick={() => onDenyPartyInvitation(invitation.id)}
+                  >
+                    Deny
+                  </button>
+                </div>
               </div>
             ))}
           </section>

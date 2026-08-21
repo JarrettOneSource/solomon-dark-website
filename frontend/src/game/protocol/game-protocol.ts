@@ -201,7 +201,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 37
+export const GAME_PROTOCOL_VERSION = 38
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -354,6 +354,11 @@ export interface ClientPartyAcceptMessage {
   invitationId: string
 }
 
+export interface ClientPartyDenyMessage {
+  type: 'client-party-deny'
+  invitationId: string
+}
+
 export interface ClientAssignBeltSkillMessage {
   type: 'client-assign-belt-skill'
   skillId: number
@@ -415,6 +420,7 @@ export type ClientGameMessage =
   | ClientLevelUpActionMessage
   | ClientLuaExecuteMessage
   | ClientPartyAcceptMessage
+  | ClientPartyDenyMessage
   | ClientPartyInviteMessage
   | ClientSelectConcentrationMessage
   | ClientSelectPrimarySkillMessage
@@ -582,6 +588,13 @@ export function decodeClientGameMessage(payload: string): ClientGameMessage {
     onlyKeys(value, 'message', ['type', 'invitationId'])
     return {
       type: 'client-party-accept',
+      invitationId: partyIdentifier(value.invitationId, 'invitationId'),
+    }
+  }
+  if (value.type === 'client-party-deny') {
+    onlyKeys(value, 'message', ['type', 'invitationId'])
+    return {
+      type: 'client-party-deny',
       invitationId: partyIdentifier(value.invitationId, 'invitationId'),
     }
   }

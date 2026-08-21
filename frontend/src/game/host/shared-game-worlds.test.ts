@@ -6,12 +6,31 @@ import {
   acceptSharedPartyInvitation,
   addSharedHubPlayer,
   createSharedGameWorlds,
+  denySharedPartyInvitation,
   confirmSharedPartyLoadout,
   inviteSharedPartyPlayer,
   sharedGameStateForPlayer,
   startSharedPartyRun,
   stepSharedGameWorlds,
 } from './shared-game-worlds.ts'
+
+test('shared Hub denial removes the recipient invitation without moving either party', () => {
+  let worlds = createSharedGameWorlds()
+  worlds = addSharedHubPlayer(worlds, 'player-a', character('Aurelia'))
+  worlds = addSharedHubPlayer(worlds, 'player-b', character('Basil'))
+  worlds = inviteSharedPartyPlayer(worlds, 'player-a', 'player-b', 4).state
+  const invitation = worlds.parties.invitations[0]!
+
+  assert.equal(
+    denySharedPartyInvitation(worlds, 'player-a', invitation.id).reason,
+    'not-recipient',
+  )
+  const denied = denySharedPartyInvitation(worlds, 'player-b', invitation.id)
+  assert.equal(denied.accepted, true)
+  assert.deepEqual(denied.state.parties.invitations, [])
+  assert.equal(denied.state.parties.parties.length, 2)
+  assert.equal(denied.state.hub, worlds.hub)
+})
 
 const character = (displayName: string) => ({
   discipline: 'arcane' as const,

@@ -916,8 +916,8 @@ test('protocol v37 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v37 carries Hall archives, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 37)
+test('protocol v38 carries party denial, Hall archives, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 38)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2803,7 +2803,7 @@ test('protocol v37 strictly round-trips loot, Goodies, and their semantic event 
   )
 })
 
-test('party protocol strictly round-trips invite, acceptance, and local projection', () => {
+test('party protocol strictly round-trips invite, acceptance, denial, and local projection', () => {
   assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
     type: 'client-party-invite',
     targetPlayerId: 'player-2',
@@ -2817,6 +2817,13 @@ test('party protocol strictly round-trips invite, acceptance, and local projecti
   })), {
     type: 'client-party-accept',
     invitationId: 'invite-7',
+  })
+  assert.deepEqual(decodeClientGameMessage(encodeGameMessage({
+    type: 'client-party-deny',
+    invitationId: 'invite-8',
+  })), {
+    type: 'client-party-deny',
+    invitationId: 'invite-8',
   })
 
   const message = {

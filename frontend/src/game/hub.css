@@ -451,6 +451,11 @@
   border-top: 1px solid rgb(135 115 77 / 0.55);
 }
 
+.hub-party-invitation-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .hub-party-invitation button,
 .hub-player-profile button {
   min-height: 32px;
@@ -469,6 +474,17 @@
   border-color: #cfb978;
   color: #fff1bd;
   outline: none;
+}
+
+.hub-party-invitation .hub-party-invitation-deny {
+  border-color: #654945;
+  color: #c9aaa1;
+}
+
+.hub-party-invitation .hub-party-invitation-deny:hover,
+.hub-party-invitation .hub-party-invitation-deny:focus-visible {
+  border-color: #ad7469;
+  color: #f1c8bd;
 }
 
 .hub-player-profile-backdrop {

@@ -6,20 +6,26 @@ import {
 } from '../ally-hud.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 
-export const NATIVE_WORLD_NAMEPLATE = Object.freeze({
-  barHeight: 7,
-  barTopOffset: 17,
-  emptyColor: 0x360d0d,
-  emptyAlpha: 220 / 255,
-  fillColor: 0xbe1f18,
-  fillAlpha: 240 / 255,
+export const WORLD_NAMEPLATE_STYLE = Object.freeze({
+  barHeight: 5,
+  barTopOffset: 12,
+  emptyColor: 0x2b1312,
+  emptyAlpha: 0.94,
+  fillColor: 0xb9342c,
+  fillAlpha: 1,
   glyphScale: 0.5,
-  highlightColor: 0xff694e,
-  highlightAlpha: 210 / 255,
-  minimumBarWidth: 64,
+  highlightColor: 0xe78369,
+  highlightAlpha: 0.9,
+  horizontalPadding: 7,
+  minimumWidth: 42,
   nameWorldOffsetY: -45,
-  borderColor: 0x0c0606,
-  borderAlpha: 235 / 255,
+  plateAlpha: 0.86,
+  plateBorderAlpha: 0.9,
+  plateBorderColor: 0x806a45,
+  plateColor: 0x15110e,
+  plateHeight: 15,
+  plateTopOffset: -3,
+  textTint: 0xf0dfb0,
 } as const)
 
 export interface NativeWorldNameplateItem {
@@ -46,8 +52,6 @@ export interface NativeWorldScreenPoint {
 
 type WorldPlayer = Pick<ProtocolPlayerState, 'config' | 'position' | 'progression'>
 
-const NATIVE_NAMEPLATE_WHITESPACE = /\s/u
-
 export function nativeWorldNameplateHealthRatio(
   currentHealth: number,
   maximumHealth: number,
@@ -60,12 +64,34 @@ export function nativeWorldNameplateHealthRatio(
   return Math.min(1, Math.max(0, currentHealth / maximumHealth))
 }
 
-export function nativeWorldNameplateWidth(displayName: string): number {
-  let width = 0
-  for (const char of displayName) {
-    width += NATIVE_NAMEPLATE_WHITESPACE.test(char) ? 4 : 8
+export interface WorldNameplateVisualLayout {
+  readonly glyphBounds: Readonly<{ left: number; right: number }>
+  readonly glyphOffsetX: number
+  readonly glyphs: readonly NativeAllyNameGlyph[]
+  readonly width: number
+}
+
+export function worldNameplateVisualLayout(displayName: string): WorldNameplateVisualLayout {
+  const nativeLayout = layoutNativeAllyName(displayName, WORLD_NAMEPLATE_STYLE.glyphScale)
+  let left = 0
+  let right = nativeLayout.advance
+  for (const glyph of nativeLayout.glyphs) {
+    left = Math.min(left, glyph.left)
+    right = Math.max(right, glyph.left + glyph.width)
   }
-  return Math.max(NATIVE_WORLD_NAMEPLATE.minimumBarWidth, width)
+  const glyphOffsetX = -(left + right) / 2
+  return {
+    glyphBounds: {
+      left: left + glyphOffsetX,
+      right: right + glyphOffsetX,
+    },
+    glyphOffsetX,
+    glyphs: nativeLayout.glyphs,
+    width: Math.max(
+      WORLD_NAMEPLATE_STYLE.minimumWidth,
+      Math.ceil(right - left + WORLD_NAMEPLATE_STYLE.horizontalPadding * 2),
+    ),
+  }
 }
 
 export function deriveNativeWorldNameplateItems(
@@ -164,7 +190,7 @@ export class NativeWorldNameplateLayer {
       view.update(item.name, item.healthRatio)
       const screenPoint = project({
         x: item.position.x,
-        y: item.position.y + NATIVE_WORLD_NAMEPLATE.nameWorldOffsetY,
+        y: item.position.y + WORLD_NAMEPLATE_STYLE.nameWorldOffsetY,
       })
       const visible = options.renderable !== false && screenPoint !== null
       view.container.visible = visible
@@ -193,6 +219,7 @@ export class NativeWorldNameplateLayer {
 class NativeWorldNameplateView {
   readonly container = new Container({ label: 'native-world-nameplate' })
   private readonly bar = new Graphics({ label: 'native-world-health-bar' })
+  private readonly plate = new Graphics({ label: 'world-nameplate-plate' })
   private readonly name = new Container({ label: 'native-world-name' })
   private readonly fontAtlas: Texture
   private readonly glyphTextures = new Map<string, Texture>()
@@ -203,60 +230,74 @@ class NativeWorldNameplateView {
     this.container.eventMode = 'none'
     this.name.eventMode = 'none'
     this.bar.eventMode = 'none'
-    this.container.addChild(this.name, this.bar)
+    this.container.addChild(this.plate, this.name, this.bar)
   }
 
   update(displayName: string, healthRatio: number): void {
-    const width = nativeWorldNameplateWidth(displayName)
+    const layout = worldNameplateVisualLayout(displayName)
+    const width = layout.width
     if (displayName !== this.displayName) {
       this.displayName = displayName
       this.name.removeChildren().forEach((child) => child.destroy())
-      const layout = layoutNativeAllyName(
-        displayName,
-        NATIVE_WORLD_NAMEPLATE.glyphScale,
-      )
-      for (const glyph of layout.glyphs) this.addGlyph(glyph, width)
+      for (const glyph of layout.glyphs) this.addGlyph(glyph, layout.glyphOffsetX)
     }
+
+    this.plate.clear()
+      .rect(
+        -width / 2,
+        WORLD_NAMEPLATE_STYLE.plateTopOffset,
+        width,
+        WORLD_NAMEPLATE_STYLE.plateHeight,
+      )
+      .fill({
+        color: WORLD_NAMEPLATE_STYLE.plateColor,
+        alpha: WORLD_NAMEPLATE_STYLE.plateAlpha,
+      })
+      .stroke({
+        color: WORLD_NAMEPLATE_STYLE.plateBorderColor,
+        alpha: WORLD_NAMEPLATE_STYLE.plateBorderAlpha,
+        width: 1,
+      })
 
     const innerWidth = width - 2
     const fillWidth = innerWidth * Math.min(1, Math.max(0, healthRatio))
     this.bar.clear()
-      .rect(-width / 2, NATIVE_WORLD_NAMEPLATE.barTopOffset, width, NATIVE_WORLD_NAMEPLATE.barHeight)
+      .rect(-width / 2, WORLD_NAMEPLATE_STYLE.barTopOffset, width, WORLD_NAMEPLATE_STYLE.barHeight)
       .fill({
-        color: NATIVE_WORLD_NAMEPLATE.borderColor,
-        alpha: NATIVE_WORLD_NAMEPLATE.borderAlpha,
+        color: WORLD_NAMEPLATE_STYLE.plateBorderColor,
+        alpha: WORLD_NAMEPLATE_STYLE.plateBorderAlpha,
       })
       .rect(
         -width / 2 + 1,
-        NATIVE_WORLD_NAMEPLATE.barTopOffset + 1,
+        WORLD_NAMEPLATE_STYLE.barTopOffset + 1,
         innerWidth,
-        NATIVE_WORLD_NAMEPLATE.barHeight - 2,
+        WORLD_NAMEPLATE_STYLE.barHeight - 2,
       )
       .fill({
-        color: NATIVE_WORLD_NAMEPLATE.emptyColor,
-        alpha: NATIVE_WORLD_NAMEPLATE.emptyAlpha,
+        color: WORLD_NAMEPLATE_STYLE.emptyColor,
+        alpha: WORLD_NAMEPLATE_STYLE.emptyAlpha,
       })
     if (fillWidth <= 0) return
     this.bar
       .rect(
         -width / 2 + 1,
-        NATIVE_WORLD_NAMEPLATE.barTopOffset + 1,
+        WORLD_NAMEPLATE_STYLE.barTopOffset + 1,
         fillWidth,
-        NATIVE_WORLD_NAMEPLATE.barHeight - 2,
+        WORLD_NAMEPLATE_STYLE.barHeight - 2,
       )
       .fill({
-        color: NATIVE_WORLD_NAMEPLATE.fillColor,
-        alpha: NATIVE_WORLD_NAMEPLATE.fillAlpha,
+        color: WORLD_NAMEPLATE_STYLE.fillColor,
+        alpha: WORLD_NAMEPLATE_STYLE.fillAlpha,
       })
       .rect(
         -width / 2 + 1,
-        NATIVE_WORLD_NAMEPLATE.barTopOffset + 1,
+        WORLD_NAMEPLATE_STYLE.barTopOffset + 1,
         fillWidth,
         1,
       )
       .fill({
-        color: NATIVE_WORLD_NAMEPLATE.highlightColor,
-        alpha: NATIVE_WORLD_NAMEPLATE.highlightAlpha,
+        color: WORLD_NAMEPLATE_STYLE.highlightColor,
+        alpha: WORLD_NAMEPLATE_STYLE.highlightAlpha,
       })
   }
 
@@ -266,18 +307,18 @@ class NativeWorldNameplateView {
     this.glyphTextures.clear()
   }
 
-  private addGlyph(glyph: NativeAllyNameGlyph, nameWidth: number): void {
-    const atlasWidth = glyph.width / NATIVE_WORLD_NAMEPLATE.glyphScale
-    const atlasHeight = glyph.height / NATIVE_WORLD_NAMEPLATE.glyphScale
+  private addGlyph(glyph: NativeAllyNameGlyph, glyphOffsetX: number): void {
+    const atlasWidth = glyph.width / WORLD_NAMEPLATE_STYLE.glyphScale
+    const atlasHeight = glyph.height / WORLD_NAMEPLATE_STYLE.glyphScale
     const texture = this.glyphTexture(glyph, atlasWidth, atlasHeight)
     const sprite = new Sprite(texture)
     sprite.anchor.set(0.5)
     sprite.position.set(
-      -nameWidth / 2 + glyph.left + glyph.width / 2,
+      glyph.left + glyph.width / 2 + glyphOffsetX,
       glyph.top + glyph.height / 2,
     )
-    sprite.scale.set(NATIVE_WORLD_NAMEPLATE.glyphScale)
-    sprite.tint = 0xffffff
+    sprite.scale.set(WORLD_NAMEPLATE_STYLE.glyphScale)
+    sprite.tint = WORLD_NAMEPLATE_STYLE.textTint
     sprite.eventMode = 'none'
     this.name.addChild(sprite)
   }

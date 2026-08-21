@@ -4,12 +4,34 @@ import test from 'node:test'
 import {
   acceptPartyInvitation,
   createPartySystem,
+  denyPartyInvitation,
   invitePartyPlayer,
   partyForPlayer,
   projectPartyState,
   registerPartyPlayer,
   removePartyPlayer,
 } from './party-system.ts'
+
+test('only the recipient can deny one live invitation', () => {
+  let state = createPartySystem()
+  for (const playerId of ['player-a', 'player-b', 'player-c']) {
+    state = registerPartyPlayer(state, playerId)
+  }
+  state = invitePartyPlayer(state, 'player-a', 'player-b', 4).state
+  state = invitePartyPlayer(state, 'player-c', 'player-b', 4).state
+  const [first, second] = state.invitations
+  assert.ok(first)
+  assert.ok(second)
+
+  assert.equal(denyPartyInvitation(state, 'player-c', first.id).reason, 'not-recipient')
+  assert.equal(denyPartyInvitation(state, 'player-b', 'invite-404').reason, 'invitation-missing')
+
+  const denied = denyPartyInvitation(state, 'player-b', first.id)
+  assert.equal(denied.accepted, true)
+  assert.equal(denied.state.revision, state.revision + 1)
+  assert.deepEqual(denied.state.invitations, [second])
+  assert.deepEqual(denied.state.parties, state.parties)
+})
 
 test('every connected player starts as the leader of one singleton party', () => {
   let state = createPartySystem()

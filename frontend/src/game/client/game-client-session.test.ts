@@ -143,6 +143,11 @@ test('client carries character config, publishes authority, and tears down', asy
     type: 'client-party-accept',
     invitationId: 'invite-1',
   })
+  session.denyPartyInvitation('invite-1')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-deny',
+    invitationId: 'invite-1',
+  })
   let receivedCheckpoint = null
   const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
     receivedCheckpoint = checkpoint

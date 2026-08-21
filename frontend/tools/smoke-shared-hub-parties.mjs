@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
@@ -9,6 +11,7 @@ const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'
 const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
 const publicWebSocketOrigin = process.env.SDR_SHARED_HUB_PUBLIC_ORIGIN?.trim()
 const pointerMode = process.env.SDR_SHARED_HUB_POINTER_MODE?.trim() || 'mobile'
+const evidenceRoot = process.env.SDR_SHARED_HUB_EVIDENCE_DIR?.trim()
 if (Boolean(gatewayUrl) !== Boolean(publicWebSocketOrigin)) {
   throw new Error('SDR_SHARED_HUB_GATEWAY_URL and SDR_SHARED_HUB_PUBLIC_ORIGIN must be set together')
 }
@@ -26,6 +29,7 @@ const pageErrors = []
 const consoleErrors = []
 
 try {
+  if (evidenceRoot) await mkdir(evidenceRoot, { recursive: true })
   const host = await enterRawHub('Basil', 'earth')
   const hostBefore = await host.next((message) => (
     message.type === 'server-snapshot' && message.frame.world.kind === 'hub'
@@ -47,8 +51,18 @@ try {
   const invitation = first.page.locator('[data-party-invitation]')
   await invitation.waitFor()
   assert.match(await invitation.innerText(), /Basil invited you/)
+  const invitationEvidencePath = evidenceRoot ? join(evidenceRoot, 'party-invitation-deny.png') : null
+  if (invitationEvidencePath) await first.page.screenshot({ path: invitationEvidencePath })
+  await invitation.getByRole('button', { name: 'Deny' }).click()
+  await invitation.waitFor({ state: 'detached' })
+  assert.equal(await first.page.locator('[data-party-member]').count(), 1)
+
+  host.invitePlayer(first.playerId)
+  await invitation.waitFor()
   await invitation.getByRole('button', { name: 'Accept' }).click()
   await waitForPartySize(first.page, 2)
+  const hubEvidencePath = evidenceRoot ? join(evidenceRoot, 'hub-nameplates.png') : null
+  if (hubEvidencePath) await first.page.screenshot({ path: hubEvidencePath })
 
   const member = await enterRawHub('Cassia', 'water')
   await waitForPlayers(first.page, 3)
@@ -89,6 +103,74 @@ try {
   assert.ok(firstRunId)
   assert.equal(hostRun.boneyard.runId, firstRunId)
   assert.equal(memberRun.boneyard.runId, firstRunId)
+  const hostBoneyard = await host.next((message) => (
+    message.type === 'server-snapshot' && message.frame.world.kind === 'boneyard'
+  ), 'host Boneyard snapshot')
+  const memberBoneyard = await member.next((message) => (
+    message.type === 'server-snapshot' && message.frame.world.kind === 'boneyard'
+  ), 'member Boneyard snapshot')
+  const hostRunX = hostBoneyard.frame.players[host.playerId].position.x
+  const memberRunX = memberBoneyard.frame.players[member.playerId].position.x
+  host.sendInput(hostBoneyard.frame.tick + 1, 3, { x: -1, y: 0 })
+  member.sendInput(memberBoneyard.frame.tick + 1, 1, { x: 1, y: 0 })
+  const hostSeparated = await host.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'boneyard'
+    && message.frame.players[host.playerId]?.position.x < hostRunX - 60
+  ), 'host Boneyard separation')
+  const memberSeparated = await member.next((message) => (
+    message.type === 'server-snapshot'
+    && message.frame.world.kind === 'boneyard'
+    && message.frame.players[member.playerId]?.position.x > memberRunX + 60
+  ), 'member Boneyard separation')
+  host.sendInput(hostSeparated.frame.tick + 1, 4, { x: 0, y: 0 })
+  member.sendInput(memberSeparated.frame.tick + 1, 2, { x: 0, y: 0 })
+  await first.page.waitForTimeout(250)
+  const boneyardLighting = await firstBoneyard.evaluate((scene) => {
+    const canvas = scene.querySelector('.boneyard-environment-light')
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return {
+        environmentMode: Number(scene.dataset.environmentMode),
+        maximumAlpha: 0,
+        nonzeroPixels: 0,
+        present: false,
+      }
+    }
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+    let maximumAlpha = 0
+    let nonzeroPixels = 0
+    for (let index = 3; index < pixels.length; index += 4) {
+      const alpha = pixels[index]
+      if (alpha > 0) nonzeroPixels += 1
+      if (alpha > maximumAlpha) maximumAlpha = alpha
+    }
+    return {
+      environmentMode: Number(scene.dataset.environmentMode),
+      maximumAlpha,
+      nonzeroPixels,
+      present: true,
+    }
+  })
+  const boneyardEvidencePath = evidenceRoot ? join(evidenceRoot, 'boneyard-nameplates.png') : null
+  if (boneyardLighting.present) {
+    assert.ok(
+      boneyardLighting.maximumAlpha <= 28,
+      `overlapping direct player light reached alpha ${boneyardLighting.maximumAlpha}`,
+    )
+  }
+  if (boneyardEvidencePath) await first.page.screenshot({ path: boneyardEvidencePath })
+  const boneyardWithoutDirectLightPath = evidenceRoot && boneyardLighting.present
+    ? join(evidenceRoot, 'boneyard-without-direct-player-light.png')
+    : null
+  if (boneyardWithoutDirectLightPath) {
+    await first.page.locator('.boneyard-environment-light').evaluate((canvas) => {
+      canvas.style.visibility = 'hidden'
+    })
+    await first.page.screenshot({ path: boneyardWithoutDirectLightPath })
+    await first.page.locator('.boneyard-environment-light').evaluate((canvas) => {
+      canvas.style.visibility = ''
+    })
+  }
 
   const outsiderBefore = await outsiderHub
   const outsiderX = outsiderBefore.frame.players[outsider.playerId].position.x
@@ -122,6 +204,11 @@ try {
     secondPartyMemberPlayerId: member.playerId,
     remainingHubPlayerId: outsider.playerId,
     runId: firstRunId,
+    hubEvidencePath,
+    invitationEvidencePath,
+    boneyardEvidencePath,
+    boneyardLighting,
+    boneyardWithoutDirectLightPath,
     remainingHubBeforeX: outsiderX,
     remainingHubAfterX: outsiderAfter.frame.players[outsider.playerId].position.x,
     healthDuringRun,
@@ -161,7 +248,10 @@ async function enterHub(displayName, element, viewport, existingContext) {
       }
     }, { gateway: gatewayUrl, publicOrigin: publicWebSocketOrigin })
   }
-  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${baseUrl}/game`, {
+    timeout: 240_000,
+    waitUntil: 'domcontentloaded',
+  })
   await page.getByRole('button', { name: 'Play' }).waitFor({ timeout: 240_000 })
   await page.getByRole('button', { name: 'Play' }).click()
   const admission = page.waitForResponse((response) => (
@@ -241,6 +331,12 @@ async function enterRawHub(displayName, element) {
     acceptInvitation(invitationId) {
       socket.send(JSON.stringify({
         type: 'client-party-accept',
+        invitationId,
+      }))
+    },
+    denyInvitation(invitationId) {
+      socket.send(JSON.stringify({
+        type: 'client-party-deny',
         invitationId,
       }))
     },

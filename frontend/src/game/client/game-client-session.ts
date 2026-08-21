@@ -76,6 +76,7 @@ export interface GameClientSession {
   assignBeltSkill(slot: number, skillId: number): void
   confirmLoadout(): void
   destroy(): void
+  denyPartyInvitation(invitationId: string): void
   executeLua(code: string): Promise<GameLuaExecutionResult>
   acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
@@ -432,6 +433,13 @@ export function connectGameClientSession(
         pingListeners.clear()
         partyStateListeners.clear()
         saveCheckpointListeners.clear()
+      },
+      denyPartyInvitation(invitationId) {
+        if (!welcome || destroyed) return
+        options.transport.send(encodeGameMessage({
+          type: 'client-party-deny',
+          invitationId,
+        }))
       },
       executeLua(code) {
         if (!welcome || !snapshot || destroyed) {

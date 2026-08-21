@@ -160,6 +160,21 @@ export function acceptPartyInvitation(
   })
 }
 
+export function denyPartyInvitation(
+  state: PartySystemState,
+  playerId: string,
+  invitationId: string,
+): PartyActionResult {
+  const invitation = state.invitations.find(({ id }) => id === invitationId)
+  if (!invitation) return rejected(state, 'invitation-missing')
+  if (invitation.invitedPlayerId !== playerId) return rejected(state, 'not-recipient')
+  return accepted({
+    ...state,
+    invitations: state.invitations.filter(({ id }) => id !== invitationId),
+    revision: state.revision + 1,
+  })
+}
+
 export function partyForPlayer(
   state: PartySystemState,
   playerId: string,

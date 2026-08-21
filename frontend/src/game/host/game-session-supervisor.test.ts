@@ -144,6 +144,27 @@ test('game session supervisor admits independent players to one shared Hub and r
   }))
   const invited = await inviteForSecond
   assert.equal(invited.type, 'server-party-state')
+  const deniedForSecond = second.next((message) => (
+    message.type === 'server-party-state'
+    && message.state.revision > invited.state.revision
+    && message.state.invitations.length === 0
+    && message.state.party.memberPlayerIds.length === 1
+  ))
+  second.socket.send(encodeGameMessage({
+    type: 'client-party-deny',
+    invitationId: invited.state.invitations[0]!.id,
+  }))
+  await deniedForSecond
+
+  const reinviteForSecond = second.next((message) => (
+    message.type === 'server-party-state' && message.state.invitations.length === 1
+  ))
+  first.socket.send(encodeGameMessage({
+    type: 'client-party-invite',
+    targetPlayerId: second.welcome.playerId,
+  }))
+  const reinvited = await reinviteForSecond
+  assert.equal(reinvited.type, 'server-party-state')
   const acceptedForFirst = first.next((message) => (
     message.type === 'server-party-state'
     && message.state.party.memberPlayerIds.length === 2
@@ -154,7 +175,7 @@ test('game session supervisor admits independent players to one shared Hub and r
   ))
   second.socket.send(encodeGameMessage({
     type: 'client-party-accept',
-    invitationId: invited.state.invitations[0]!.id,
+    invitationId: reinvited.state.invitations[0]!.id,
   }))
   await Promise.all([acceptedForFirst, acceptedForSecond])
 

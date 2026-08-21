@@ -93,6 +93,7 @@ import {
   addSharedHubPlayer,
   confirmSharedPartyLoadout,
   createSharedGameWorlds,
+  denySharedPartyInvitation,
   inviteSharedPartyPlayer,
   removeSharedGamePlayer,
   replaceSharedGameStateForPlayer,
@@ -854,6 +855,20 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           state = sharedWorlds.hub
           broadcastPartyState()
           broadcastSnapshot()
+        }
+        return
+      }
+      if (message.type === 'client-party-deny') {
+        if (!sharedWorlds) return
+        const result = denySharedPartyInvitation(
+          sharedWorlds,
+          client.playerId,
+          message.invitationId,
+        )
+        if (result.accepted) {
+          sharedWorlds = result.state
+          state = sharedWorlds.hub
+          broadcastPartyState()
         }
         return
       }

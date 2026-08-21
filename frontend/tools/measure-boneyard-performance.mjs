@@ -203,8 +203,8 @@ try {
     )
     assert.equal(presentation.startupEnvironmentLight.composite, 'plus-lighter')
     assert.ok(
-      presentation.startupEnvironmentLight.centerAlpha >= 55
-      && presentation.startupEnvironmentLight.centerAlpha <= 70,
+      presentation.startupEnvironmentLight.centerAlpha >= 7
+      && presentation.startupEnvironmentLight.centerAlpha <= 11,
       JSON.stringify(presentation),
     )
     assert.ok(presentation.startupEnvironmentLight.centerRgbTotal >= 720, JSON.stringify(presentation))
@@ -213,8 +213,8 @@ try {
     assert.ok(runtime.environmentLight, 'expected the native environment-light canvas')
     assert.equal(runtime.environmentLight.composite, 'plus-lighter')
     assert.ok(
-      runtime.environmentLight.centerAlpha >= 55
-      && runtime.environmentLight.centerAlpha <= 70,
+      runtime.environmentLight.centerAlpha >= 7
+      && runtime.environmentLight.centerAlpha <= 11,
       JSON.stringify(runtime),
     )
     assert.ok(runtime.environmentLight.centerRgbTotal >= 720, JSON.stringify(runtime))

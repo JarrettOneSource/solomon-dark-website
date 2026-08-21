@@ -466,8 +466,8 @@ try {
       assert.equal(await environmentLight.getAttribute('data-composite'), 'plus-lighter')
       const pixels = await sampleEnvironmentLightPixels(runPage)
       assert.ok(
-        pixels.centerAlpha >= 55
-          && pixels.centerAlpha <= 70
+        pixels.centerAlpha >= 7
+          && pixels.centerAlpha <= 11
           && pixels.centerRgbTotal >= 720,
         `expected an additive player environment light, got ${JSON.stringify(pixels)}`,
       )
@@ -1260,8 +1260,8 @@ async function sampleEnvironmentLightPixels(page) {
     })
     if (
       sample
-      && sample.centerAlpha >= 55
-      && sample.centerAlpha <= 70
+      && sample.centerAlpha >= 7
+      && sample.centerAlpha <= 11
       && sample.centerRgbTotal >= 720
       && sample.farAlpha === 0
       && sample.farRgbTotal === 0

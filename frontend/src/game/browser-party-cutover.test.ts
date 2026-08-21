@@ -35,6 +35,8 @@ test('Hub player interaction shares one pointer path across mouse and touch', ()
   assert.match(hubScene, /Invite to Party/)
   assert.match(hubScene, /data-party-invitation/)
   assert.match(hubScene, /onAcceptPartyInvitation/)
+  assert.match(hubScene, /onDenyPartyInvitation/)
+  assert.match(hubScene, />\s*Deny\s*</)
   assert.doesNotMatch(hubScene, /onMouseDownCapture/)
 })
 

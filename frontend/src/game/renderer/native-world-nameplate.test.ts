@@ -6,10 +6,11 @@ import { createGameSimulation } from '../core-server/game-simulation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
 import {
+  WORLD_NAMEPLATE_STYLE,
   deriveNativeWorldNameplateItems,
   nativeWorldNameplateHealthRatio,
-  nativeWorldNameplateWidth,
   projectNativeWorldPoint,
+  worldNameplateVisualLayout,
   type NativeWorldScreenTransform,
 } from './native-world-nameplate.ts'
 
@@ -90,9 +91,16 @@ test('world nameplate health and width use native clamping and minimums', () => 
   assert.equal(nativeWorldNameplateHealthRatio(-1, 50), 0)
   assert.equal(nativeWorldNameplateHealthRatio(100, 50), 1)
   assert.equal(nativeWorldNameplateHealthRatio(1, 0), null)
-  assert.equal(nativeWorldNameplateWidth('Host'), 64)
-  assert.equal(nativeWorldNameplateWidth('123456789'), 72)
-  assert.equal(nativeWorldNameplateWidth('A B'), 64)
+  const short = worldNameplateVisualLayout('Host')
+  const long = worldNameplateVisualLayout('123456789')
+  const spaced = worldNameplateVisualLayout('A B')
+  assert.equal(short.width, WORLD_NAMEPLATE_STYLE.minimumWidth)
+  assert.ok(long.width > short.width)
+  assert.equal(spaced.width, WORLD_NAMEPLATE_STYLE.minimumWidth)
+  for (const layout of [short, long, spaced]) {
+    assert.ok(Math.abs(layout.glyphBounds.left + layout.glyphBounds.right) < 0.0001)
+    assert.ok(layout.width >= layout.glyphBounds.right - layout.glyphBounds.left)
+  }
 })
 
 test('world nameplate projection uses the post-world screen transform', () => {

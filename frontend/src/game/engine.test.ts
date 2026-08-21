@@ -120,6 +120,7 @@ function inertSession() {
     confirmLoadout() {},
     executeLua: async () => ({ error: null, ok: true, output: [], values: [] }),
     destroy() {},
+    denyPartyInvitation() {},
     getBoneyard: () => null,
     getGameplayPause: () => null,
     getPingMs: () => null,

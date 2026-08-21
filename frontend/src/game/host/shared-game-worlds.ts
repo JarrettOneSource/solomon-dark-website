@@ -20,6 +20,7 @@ import {
   acceptPartyInvitation,
   clearPartyInvitations,
   createPartySystem,
+  denyPartyInvitation,
   invitePartyPlayer,
   partyForPlayer,
   registerPartyPlayer,
@@ -163,6 +164,18 @@ export function acceptSharedPartyInvitation(
     invitationId,
     maximumMembers,
   )
+  return result.accepted
+    ? accepted({ ...state, parties: result.state })
+    : rejected(state, result.reason!)
+}
+
+export function denySharedPartyInvitation(
+  state: SharedGameWorldsState,
+  playerId: PlayerId,
+  invitationId: string,
+): SharedWorldActionResult {
+  if (!hubHasPlayer(state, playerId)) return rejected(state, 'not-in-hub')
+  const result = denyPartyInvitation(state.parties, playerId, invitationId)
   return result.accepted
     ? accepted({ ...state, parties: result.state })
     : rejected(state, result.reason!)
