@@ -9,6 +9,7 @@ import {
   createNativeWeldBoulderDebrisActor,
   createNativeWeldGroundSparkFadeActor,
   createNativeWeldMeteor,
+  createNativeWeldMeteorFlash,
   createNativeWeldPersistentActor,
   releaseNativeWeldPersistentActor,
   spawnNativeWeldOneShot,
@@ -25,6 +26,10 @@ import {
   spawnNativeWeldMeteorMarker,
 } from '../core-kernels/native-weld-meteor.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
+import {
+  createNativeWeldHailContactPresentation,
+  createNativeWeldHailTerrainImpact,
+} from '../core-kernels/native-weld-hail-contact.ts'
 import { createPrimarySpellWeldImpact } from '../core-kernels/primary-spells.ts'
 import {
   NATIVE_WELD_BADGUYS_RECORDS,
@@ -39,7 +44,7 @@ const WORLD_KEY = 'boneyard:weld-render'
 
 test('Weld atlas membership covers every recovered direct owner', () => {
   for (const record of [
-    6, 15, 18, 31, 43, 44, 50, 51, 70, 71, 76, 86,
+    6, 15, 18, 31, 32, 43, 44, 45, 50, 51, 70, 71, 76, 86,
     110, 111, 112, 168, 169, 170, 171, 251, 266, 271, 282,
     1836, 1839, 2008, 2010,
   ]) assert.ok((NATIVE_WELD_BADGUYS_RECORDS as readonly number[]).includes(record))
@@ -129,6 +134,36 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
   const frostFade = released.actors.find(({ kind }) => kind === 'weld-frost-fade')!
   assert.ok(nativeWeldVisualPlan(frostFade).sprites.length >= 3)
 
+  const terrain = createNativeWeldHailTerrainImpact({
+    actor: released.actors.find((actor) => (
+      actor.kind === 'weld-persistent' && actor.buildId === 1008
+    ))!,
+    enhancedEffects: true,
+    firstId: 110,
+    rng: released.rng,
+    tick: 4,
+  })
+  const terrainParticle = terrain.actors.find(({ kind }) => (
+    kind === 'weld-hail-terrain-particle'
+  ))!
+  const terrainBouncer = terrain.actors.find(({ kind }) => (
+    kind === 'weld-hail-terrain-bouncer'
+  ))!
+  assert.equal(nativeWeldVisualPlan(terrainParticle).sprites[0]!.record, 45)
+  assert.ok(nativeWeldVisualPlan(terrainBouncer).sprites.some(({ record }) => record === 32))
+  const contact = createNativeWeldHailContactPresentation({
+    actor: released.actors.find((actor) => (
+      actor.kind === 'weld-persistent' && actor.buildId === 1008
+    ))!,
+    end: { x: 5, y: 10 },
+    firstId: terrain.nextId,
+    rng: terrain.rng,
+    start: { x: 0, y: 0 },
+    tick: 5,
+  })
+  assert.equal(nativeWeldVisualPlan(contact.actors[0]).lines.length, 2)
+  assert.equal(nativeWeldVisualPlan(contact.actors[1]).sprites[0]!.record, 15)
+
   const marker = spawnNativeWeldMeteorMarker({
     direction: { x: 0, y: -1 }, id: 20, origin: { x: 0, y: 0 }, ownerId: 'wizard',
     rng: createNativeRng(3), tick: 1, vector: [8, 8, 2, 1, 1, 0, 0, 0, 0],
@@ -140,6 +175,7 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
     direction: { x: 1, y: 0 }, rng: createNativeRng(4), scale: 0.4,
   })
   const debris = createNativeWeldBoulderDebrisActor({
+    buildId: 1006,
     debris: debrisProgram.debris, direction: { x: 1, y: 0 }, id: 21,
     origin: { x: 0, y: 0 }, ownerId: 'wizard', tick: 1,
     vector: [8, 2, 1, 1, 1, 1], worldKey: WORLD_KEY,
@@ -149,15 +185,19 @@ test('retained rocks, independent fades, Meteor marker, and debris all render', 
 
 test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visible', () => {
   const meteor = createNativeWeldMeteor({
-    damage: 8, direction: { x: 0, y: -1 }, fallHeadingDegrees: 20,
-    fallScalar: 1, fallStep: 0.04, id: 40, impactTicks: 200,
+    bodyScale: 1, damage: 8, direction: { x: 0, y: -1 }, fallHeadingDegrees: 20,
+    fallHeight: 5, fallStep: 0.04, id: 40, impactTicks: 200,
     origin: { x: 0, y: 0 }, ownerId: 'wizard', position: { x: 0, y: 0 },
-    privateSeed: 1, size: 5, tick: 1, underpowered: false,
+    privateSeed: 1, tick: 1, underpowered: false,
     vector: [8, 8, 2, 1, 1, 0, 0, 0, 0], worldKey: WORLD_KEY,
   })
-  assert.ok(nativeWeldVisualPlan(meteor).sprites.length >= 2)
+  const fallPlan = nativeWeldVisualPlan(meteor)
+  assert.ok(fallPlan.sprites.length >= 2)
+  assert.equal(fallPlan.sprites[0]!.offset.y, -3840)
+  assert.equal(fallPlan.sprites[1]!.scaleX, 1)
+  assert.equal(fallPlan.sprites[1]!.scaleY, 2)
   const impactProgram = createNativeWeldMeteorImpactProgram({
-    fallScalar: -0.01, rng: createNativeRng(5), underpowered: false,
+    bodyScale: 1, rng: createNativeRng(5), underpowered: false,
   })
   const impacted = {
     ...meteor,
@@ -166,6 +206,11 @@ test('Meteor impact and all one-shot FadeFrost/FadeLightning variants are visibl
     phase: 'impact' as const,
   }
   assert.ok(nativeWeldVisualPlan(impacted).sprites.length >= 6)
+  const flash = createNativeWeldMeteorFlash({ actor: impacted, id: 41, tick: 2 })
+  assert.deepEqual(nativeWeldVisualPlan(flash).sprites.map(({ record, scaleX }) => ({
+    record,
+    scaleX,
+  })), [{ record: 15, scaleX: 6 }])
 
   for (const buildId of [1001, 1002, 1009] as const) {
     const spell = projectile(buildId)

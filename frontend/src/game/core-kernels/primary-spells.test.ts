@@ -72,6 +72,7 @@ import {
   type GameSimulationState,
 } from '../core-server/game-simulation.ts'
 import { playerCharacterRecords } from '../core-server/player-entity-store.ts'
+import { createNativeWeldMeteor } from './native-weld-primary-runtime.ts'
 
 const PLAYER_ID = 'caster'
 const ACTOR_LIGHT_REGISTRATION = {
@@ -1865,6 +1866,54 @@ test('all welded sustained families use one latch and run their native release v
   }
 })
 
+test('released Hail terrain obstruction replaces its carrier with every native child actor', () => {
+  const profile = weldedProfile(1008, 'persistent', [8, 10, 1.1, 1.5, 0.1, 0.5])
+  let state = { ...directSpellHarness('earth'), primarySkill: profile }
+  state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+  state = stepSpellKernel(state, true, 100, true, () => true, profile).state
+  state = stepSpellKernel(state, false, 100, true, () => true, profile).state
+  const hail = state.spells.transients.find((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1008
+  ))
+  assert.ok(hail?.kind === 'weld-persistent' && hail.buildId === 1008)
+  assert.equal(hail.phase, 'flight')
+  const rockCount = hail.rocks.length
+  assert.ok(rockCount > 0)
+  const sourceRng = state.rng
+  const player = state.players[PLAYER_ID]!
+  const stepped = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 100,
+        castProgressFactor: 1,
+        eligible: true,
+        primarySkill: profile,
+      },
+    },
+    inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
+    players: state.players,
+    previousPlayers: state.players,
+    rng: sourceRng,
+    spellObstructionPoint: () => ({ x: player.position.x, y: player.position.y }),
+    spells: state.spells,
+    tick: state.tick + 1,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  assert.equal(stepped.spells.transients.some((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1008
+  )), false)
+  assert.equal(stepped.spells.transients.filter(({ kind }) => (
+    kind === 'weld-hail-terrain-particle'
+  )).length, rockCount * 15)
+  assert.equal(stepped.spells.transients.filter(({ kind }) => (
+    kind === 'weld-hail-terrain-bouncer'
+  )).length, rockCount)
+  assert.deepEqual(stepped.rng, advanceNativeRngWords(sourceRng, rockCount * 83))
+})
+
 test('Meteor Swarm emits Iceblast every tick and keys Meteors to selected-primary age', () => {
   const profile = weldedProfile(1007, 'persistent', [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3])
   let state = { ...directSpellHarness('earth'), primarySkill: profile }
@@ -1896,6 +1945,55 @@ test('Meteor Swarm emits Iceblast every tick and keys Meteors to selected-primar
   assert.equal(weakMeteor.privateSeed, 0)
   assert.deepEqual(weakMeteor.vector.slice(5), [0, 0, 0, 0])
   assert.deepEqual(weak.rng, advanceNativeRngWords(createNativeRng(0), 16))
+})
+
+test('Meteor impact transition registers its additive flash as an independent actor', () => {
+  const harness = directSpellHarness('earth')
+  const meteor = createNativeWeldMeteor({
+    bodyScale: 1,
+    damage: 8,
+    direction: { x: 0, y: -1 },
+    fallHeadingDegrees: 0,
+    fallHeight: Math.fround(0.01),
+    fallStep: Math.fround(0.02),
+    id: 9,
+    impactTicks: 200,
+    origin: { x: 100, y: 200 },
+    ownerId: PLAYER_ID,
+    position: { x: 100, y: 200 },
+    privateSeed: 1,
+    tick: 1,
+    underpowered: false,
+    vector: [8, 8, 2, 1, 1, 0, 0, 0, 0],
+    worldKey: 'hub:courtyard',
+  })
+  const result = stepPrimarySpells({
+    ...EMPTY_SPELL_WORLD,
+    canPlaceProjectile: () => true,
+    castAuthority: {
+      [PLAYER_ID]: {
+        availableMana: 100,
+        castProgressFactor: 1,
+        eligible: true,
+        primarySkill: harness.primarySkill,
+      },
+    },
+    inputs: { [PLAYER_ID]: createIdlePlayerCharacterInput() },
+    players: harness.players,
+    previousPlayers: harness.players,
+    rng: createNativeRng(8),
+    spells: { nextId: 20, projectiles: [], transients: [meteor] },
+    tick: 2,
+    viewScale: 1.35,
+    worldKeyForPlayer: () => 'hub:courtyard',
+  })
+  const impacted = result.spells.transients.find(({ kind }) => kind === 'weld-meteor')
+  const flash = result.spells.transients.find(({ kind }) => kind === 'weld-meteor-flash')
+  assert.ok(impacted?.kind === 'weld-meteor' && impacted.phase === 'impact')
+  assert.ok(flash?.kind === 'weld-meteor-flash')
+  assert.equal(flash.id, 20)
+  assert.equal(flash.alpha, 2)
+  assert.equal(flash.scale, 6)
 })
 
 test('retained rock welds publish their constructor-randomized start pitch', () => {

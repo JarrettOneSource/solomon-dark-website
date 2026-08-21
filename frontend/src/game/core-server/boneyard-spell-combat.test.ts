@@ -971,6 +971,7 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
   const meteor: PrimarySpellTransientState = {
     ageTicks: 51,
     birthTick: 0,
+    bodyScale: 1,
     buildId: 1007,
     cameraDisplacement: { x: 10, y: 0 },
     damage: 20,
@@ -989,12 +990,12 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     })),
     direction: { x: 1, y: 0 },
     fallHeadingDegrees: 20,
-    fallScalar: 0,
+    fallHeight: 0,
     fallStep: Math.fround(0.04),
     id: 20,
     impactAgeTicks: 0,
     impactDue: true,
-    impactRadiusScalar: 0.5,
+    impactRadiusScalar: 1,
     impactRotationDegrees: 0,
     impactSoundPitch: null,
     impactThrowFirePitch: null,
@@ -1009,7 +1010,6 @@ test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pul
     pulseDue: false,
     pulseSequence: 0,
     pulseTicksRemaining: 10,
-    size: 5,
     underpowered: false,
     vector: [10, 20, 2, 1, 2, 0, 0, 0, 0],
     worldKey: WORLD_KEY,
@@ -1107,6 +1107,7 @@ test('released Hailstones rocks contact at carrier offsets and divide only pool 
     ageTicks: 1,
     birthTick: 0,
     buildId: 1008,
+    collisionRadius: 40,
     damage: 10,
     direction: { x: 1, y: 0 },
     id: 32,
@@ -1125,6 +1126,7 @@ test('released Hailstones rocks contact at carrier offsets and divide only pool 
       decay: 1,
       localPosition: { x: 0, y: 0, z: 0 },
       phase: 0,
+      rockId: 0,
       releaseOffset: { x: 0, y: 0 },
       spriteRecord: 168,
       visualScale: 0.2,
@@ -1142,12 +1144,101 @@ test('released Hailstones rocks contact at carrier offsets and divide only pool 
     4,
   )
   assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
-    { actorId: 1, amount: 4 },
     { actorId: 2, amount: 4 },
+    { actorId: 1, amount: 4 },
   ])
   const retained = resolved.spells.transients.find(({ id }) => id === 32)
   assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1008)
   assert.equal(retained.rocks[0]!.damageRemaining, 6)
+})
+
+test('Hail contacts own ColdSlow, one resident Knockback, and per-rock line and flash retirement', () => {
+  const spawned = spawnEnemies([
+    { position: { x: 0, y: 0 }, token: 'SKELETON' },
+  ])
+  const enemies = {
+    ...spawned,
+    actors: spawned.actors.map((actor) => ({
+      ...actor,
+      currentHealth: 10,
+      maximumHealth: 10,
+    })),
+  }
+  const hailstones: PrimarySpellTransientState = {
+    ageTicks: 2,
+    birthTick: 0,
+    buildId: 1008,
+    collisionRadius: 40,
+    damage: 1,
+    direction: { x: 1, y: 0 },
+    id: 40,
+    kind: 'weld-persistent',
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 40 },
+    maximumScale: 1,
+    origin: { x: 0, y: 0 },
+    ownerId: 'wizard',
+    phase: 'flight',
+    pulseSequence: 1,
+    pushback: 0.2,
+    releaseAgeTicks: 1,
+    releaseFadeScale: 1,
+    rocks: [0, 1].map((rockId) => ({
+      damageRemaining: 1,
+      decay: 1,
+      localPosition: { x: 0, y: 0, z: 0 },
+      phase: 1,
+      releaseOffset: { x: 0, y: 0 },
+      rockId,
+      spriteRecord: 168 as const,
+      visualScale: 0.2,
+    })),
+    scale: 0.5,
+    toughness: 1,
+    vector: [1, 2, 1, 1, 0.2, 0],
+    widen: 0,
+    worldKey: WORLD_KEY,
+  }
+  const releaseTick = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [{ ...hailstones, releaseAgeTicks: 0 }] }),
+    [],
+    3,
+  )
+  assert.deepEqual(releaseTick.hits, [])
+
+  const result = resolveCombatWithAuthority(
+    enemies,
+    spellState({ transients: [hailstones] }),
+    [],
+    4,
+    { rngSeed: 44 },
+  )
+  assert.deepEqual(result.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+    { actorId: 1, amount: 1 },
+    { actorId: 1, amount: 1 },
+  ])
+  assert.equal(result.targetEffects.length, 2)
+  assert.ok(result.targetEffects.every(({ patch }) => (
+    patch.coldSlowFactor === 0.5 && patch.coldSlowTicks === 250
+  )))
+  assert.equal(result.spells.transients.some((effect) => (
+    effect.kind === 'weld-persistent' && effect.buildId === 1008
+  )), false)
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'weld-hail-line').length, 2)
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'weld-hail-flash').length, 2)
+  assert.equal(result.spells.transients.filter(({ kind }) => kind === 'weld-hail-knockback').length, 1)
+  assert.equal(result.spells.transients.some(({ kind }) => kind === 'weld-boulder-debris'), false)
+  const knockback = result.spells.transients.find(({ kind }) => kind === 'weld-hail-knockback')
+  assert.ok(knockback?.kind === 'weld-hail-knockback')
+  assert.equal(knockback.remainingTicks, 4)
+
+  const moved = resolveCombatWithAuthority(result.enemies, result.spells, [], 5)
+  assert.deepEqual(moved.enemies.actors[0]?.position, { x: 1, y: 0 })
+  const retainedKnockback = moved.spells.transients.find(({ kind }) => (
+    kind === 'weld-hail-knockback'
+  ))
+  assert.ok(retainedKnockback?.kind === 'weld-hail-knockback')
+  assert.equal(retainedKnockback.remainingTicks, 3)
 })
 
 test('Disintegrate executes only below the strict post-hit twenty-percent gate', () => {

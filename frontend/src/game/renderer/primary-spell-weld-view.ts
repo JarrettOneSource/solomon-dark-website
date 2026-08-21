@@ -1,4 +1,4 @@
-import { Container, MeshSimple, Sprite } from 'pixi.js'
+import { Container, Graphics, MeshSimple, Sprite } from 'pixi.js'
 
 import type {
   PrimarySpellProjectileState,
@@ -31,6 +31,7 @@ export class WeldPrimarySpellView {
   readonly containers: readonly Container[]
   private readonly buildId: NativeWeldPresentationState['buildId']
   private readonly initialKind: NativeWeldPresentationState['kind']
+  private readonly lineGraphics: Graphics
   private readonly meshContainer: Container
   private readonly meshes: MeshSimple[] = []
   private plan: ReturnType<typeof nativeWeldVisualPlan>
@@ -48,8 +49,11 @@ export class WeldPrimarySpellView {
     this.initialKind = state.kind
     this.container = new Container({ label: `weld:${state.buildId}:${state.kind}` })
     this.container.eventMode = 'none'
+    this.lineGraphics = new Graphics({ label: 'weld:lines' })
+    this.lineGraphics.eventMode = 'none'
     this.meshContainer = new Container({ label: 'weld:meshes' })
     this.meshContainer.eventMode = 'none'
+    this.container.addChild(this.lineGraphics)
     this.container.addChild(this.meshContainer)
     this.containers = [this.container]
     this.plan = nativeWeldVisualPlan(state)
@@ -77,11 +81,22 @@ export class WeldPrimarySpellView {
       if (!registered) throw new Error(`Missing native Weld texture BadGuys:${draw.record}`)
       applySprite(this.sprites[index]!, registered, draw)
     }
+    this.lineGraphics.clear()
+    for (const draw of this.plan.lines) {
+      this.lineGraphics
+        .moveTo(draw.start.x, draw.start.y)
+        .lineTo(draw.end.x, draw.end.y)
+        .stroke({ alpha: draw.alpha, color: draw.color, width: draw.width })
+    }
     this.rebuildMeshes()
   }
 
   painterRoots(): readonly WeldPainterRoot[] {
-    if (this.plan.sprites.length === 0 && this.plan.meshes.length === 0) return []
+    if (
+      this.plan.sprites.length === 0
+      && this.plan.meshes.length === 0
+      && this.plan.lines.length === 0
+    ) return []
     return [{
       container: this.container,
       lane: 'world-sorted',

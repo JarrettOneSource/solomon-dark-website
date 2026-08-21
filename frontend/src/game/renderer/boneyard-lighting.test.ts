@@ -16,6 +16,7 @@ import {
   nativeSignedRandomFloatFromSemanticWords,
 } from '../core-kernels/native-random-domain.ts'
 import {
+  createNativeWeldMeteor,
   createNativeWeldPersistentActor,
   type NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
@@ -47,6 +48,7 @@ import {
   nativeRegionLightStamp,
   nativeSolomonSetPieceLighting,
   nativeWeldProjectileLightSource,
+  nativeWeldMeteorLightSource,
   nativeWeldRockLightSource,
 } from './boneyard-lighting.ts'
 import { etherPrimaryImpactLightSource } from './primary-spell-ether-native.ts'
@@ -613,6 +615,45 @@ test('projects every welded projectile and retained-rock light provider exactly'
     radius: 0.5,
   })
   assert.equal(nativeWeldRockLightSource({ ...retained, scale: 1 }).radius, 0.75)
+
+  const meteor = createNativeWeldMeteor({
+    bodyScale: 1,
+    damage: 8,
+    direction: { x: 0, y: -1 },
+    fallHeadingDegrees: 0,
+    fallHeight: 5,
+    fallStep: Math.fround(0.04),
+    id: 9,
+    impactTicks: 200,
+    origin: { x: 30, y: 40 },
+    ownerId: 'wizard',
+    position: { x: 30, y: 40 },
+    privateSeed: 1,
+    tick: 1,
+    underpowered: false,
+    vector: [8, 8, 2, 1, 1, 0, 0, 0, 0],
+    worldKey: 'boneyard:1',
+  })
+  assert.equal(nativeWeldMeteorLightSource(meteor), null)
+  assert.deepEqual(nativeWeldMeteorLightSource({ ...meteor, fallHeight: 0.5 }), {
+    castsDirectionalShadow: false,
+    intensity: 0.5,
+    position: { x: 30, y: 40 },
+    radius: Math.fround(0.6),
+  })
+  const impact = nativeWeldMeteorLightSource({
+    ...meteor,
+    fallHeight: 0,
+    impactRadiusScalar: 1.25,
+    impactTicksRemaining: 25,
+    phase: 'impact',
+  })
+  assert.deepEqual(impact, {
+    castsDirectionalShadow: false,
+    intensity: 0.5,
+    position: { x: 30, y: 40 },
+    radius: Math.fround(0.75),
+  })
 })
 
 test('table-drives every source-family disposition exposed by the pure lighting adapters', () => {

@@ -105,6 +105,7 @@ import {
   nativeSecondaryProviderLightSource,
   nativeSolomonSetPieceLighting,
   nativeWeldProjectileLightSource,
+  nativeWeldMeteorLightSource,
   nativeWeldRockLightSource,
   type NativeBoneyardLightSource,
   type NativeSolomonSetPieceLighting,
@@ -1441,6 +1442,17 @@ class BoneyardDynamicScene {
         lightProviderOwners.push({ registration, sources: [candidate.source] })
       }
       for (const effect of snapshot.primarySpells.transients) {
+        if (
+          effect.kind === 'weld-meteor'
+          && effect.worldKey === `boneyard:${snapshot.world.runId}`
+        ) {
+          const source = nativeWeldMeteorLightSource(effect)
+          lightProviderOwners.push({
+            registration: effect.lightRegistration,
+            sources: source === null ? [] : [source],
+          })
+          continue
+        }
         if (
           effect.kind === 'weld-persistent'
           && (effect.buildId === 1006 || effect.buildId === 1008)

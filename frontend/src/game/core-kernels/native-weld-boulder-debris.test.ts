@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  advanceNativeRngWords,
   createNativeRng,
   drawNativeFloat,
   drawNativeInteger,
 } from './native-rng.ts'
 import {
   NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS,
+  createNativeWeldBoulderContactDebrisProgram,
   createNativeWeldEtherealBoulderWeakDebrisProgram,
 } from './native-weld-boulder-debris.ts'
 
@@ -51,6 +53,19 @@ test('weak EBoulder debris preserves native count, macro redraw, and field order
     && visualScale > 0
     && visualScale <= Math.fround(0.75 * 0.75)
   )))
+})
+
+test('shared Boulder contact emits one independent native BoulderBit', () => {
+  const source = createNativeRng(101)
+  const program = createNativeWeldBoulderContactDebrisProgram({ rng: source, scale: 0.75 })
+  assert.equal(program.debris.length, 1)
+  assert.ok(program.debris[0]!.record >= 2008 && program.debris[0]!.record <= 2010)
+  assert.ok(program.debris[0]!.scale > 0 && program.debris[0]!.scale <= 0.75)
+  // The fixed path consumes ten words; the native MAX macro may consume one more.
+  assert.ok(
+    JSON.stringify(program.rng) === JSON.stringify(advanceNativeRngWords(source, 10))
+    || JSON.stringify(program.rng) === JSON.stringify(advanceNativeRngWords(source, 11)),
+  )
 })
 
 test('weak EBoulder debris uses the eight-piece floor and forward spawn socket', () => {

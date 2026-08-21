@@ -87,12 +87,22 @@ import {
   type NativeWeldGroundSparkFadeActorState,
   type NativeWeldImpactActorState,
   type NativeWeldMeteorActorState,
+  type NativeWeldMeteorFlashActorState,
   type NativeWeldMeteorFieldState,
   type NativeWeldProjectileState,
   type NativeWeldWorldActor,
 } from '../core-kernels/native-weld-primary-runtime.ts'
 import { NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS } from '../core-kernels/native-weld-boulder-debris.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
+import {
+  NATIVE_WELD_HAIL_FLASH_ALPHA_STEP,
+  NATIVE_WELD_HAIL_LINE_ALPHA_STEP,
+  type NativeWeldHailFlashState,
+  type NativeWeldHailKnockbackState,
+  type NativeWeldHailLineState,
+  type NativeWeldHailTerrainBouncerState,
+  type NativeWeldHailTerrainParticleState,
+} from '../core-kernels/native-weld-hail-contact.ts'
 import type { NativeWeldBuildId } from '../core-kernels/native-weld-primary-profile.ts'
 import type {
   NativeWeldMeteorDebrisSeed,
@@ -249,7 +259,7 @@ export type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 
-export const GAME_PROTOCOL_VERSION = 41
+export const GAME_PROTOCOL_VERSION = 42
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001
@@ -4279,6 +4289,10 @@ function uniqueWeldTargetIds(value: unknown, field: string): readonly string[] {
   return ids
 }
 
+function requireWeldHailBuild(buildId: NativeWeldBuildId, field: string): void {
+  if (buildId !== 1008) throw new GameProtocolError(`${field}.buildId is not Hailstones`)
+}
+
 function primarySpellWeldActor(
   source: Record<string, unknown>,
   field: string,
@@ -4439,8 +4453,8 @@ function primarySpellWeldActor(
 
   if (source.kind === 'weld-boulder-debris') {
     onlyKeys(source, field, [...commonKeys, 'debris', 'position'])
-    if (buildId !== 1006) {
-      throw new GameProtocolError(`${field}.buildId is not Ethereal Boulder`)
+    if (buildId !== 1006 && buildId !== 1008) {
+      throw new GameProtocolError(`${field}.buildId is not a Boulder carrier`)
     }
     if (common.ageTicks >= NATIVE_WELD_BOULDER_DEBRIS_LIFETIME_TICKS) {
       throw new GameProtocolError(`${field}.ageTicks exceeds the BoulderBit lifetime`)
@@ -4452,12 +4466,13 @@ function primarySpellWeldActor(
         index,
       ),
     )
-    if (debris.length < 8) {
-      throw new GameProtocolError(`${field}.debris is below the native eight-piece floor`)
+    if ((buildId === 1006 && debris.length !== 1 && debris.length < 8)
+      || (buildId === 1008 && debris.length !== 1)) {
+      throw new GameProtocolError(`${field}.debris does not match its native contact/release path`)
     }
     return {
       ...common,
-      buildId: 1006,
+      buildId,
       debris,
       kind: 'weld-boulder-debris',
       lightRegistration: absentNativeLightProviderRegistration(
@@ -4466,6 +4481,150 @@ function primarySpellWeldActor(
       ),
       position: vector(source.position, `${field}.position`),
     } satisfies NativeWeldBoulderDebrisActorState
+  }
+
+  if (source.kind === 'weld-hail-line') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'alphaStep', 'end', 'endAlpha', 'start', 'width',
+    ])
+    requireWeldHailBuild(buildId, field)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    if (alphaStep !== NATIVE_WELD_HAIL_LINE_ALPHA_STEP || common.ageTicks >= 14) {
+      throw new GameProtocolError(`${field} does not match the native Hail line lifetime`)
+    }
+    const endAlpha = positiveFinite(source.endAlpha, `${field}.endAlpha`)
+    if (endAlpha < 0.25 || endAlpha >= 0.5) {
+      throw new GameProtocolError(`${field}.endAlpha exceeds the native line range`)
+    }
+    const width = positiveFinite(source.width, `${field}.width`)
+    if (width !== 6) throw new GameProtocolError(`${field}.width is not native`)
+    return {
+      ...common,
+      alpha: positiveFinite(source.alpha, `${field}.alpha`),
+      alphaStep,
+      buildId: 1008,
+      end: vector(source.end, `${field}.end`),
+      endAlpha,
+      kind: 'weld-hail-line',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      start: vector(source.start, `${field}.start`),
+      width,
+    } satisfies NativeWeldHailLineState
+  }
+
+  if (source.kind === 'weld-hail-flash') {
+    onlyKeys(source, field, [...commonKeys, 'alpha', 'alphaStep', 'position', 'record'])
+    requireWeldHailBuild(buildId, field)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    if (alphaStep !== NATIVE_WELD_HAIL_FLASH_ALPHA_STEP || common.ageTicks >= 10) {
+      throw new GameProtocolError(`${field} does not match the native Hail flash lifetime`)
+    }
+    if (source.record !== 15) throw new GameProtocolError(`${field}.record is not BadGuys 15`)
+    return {
+      ...common,
+      alpha: positiveFinite(source.alpha, `${field}.alpha`),
+      alphaStep,
+      buildId: 1008,
+      kind: 'weld-hail-flash',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: 15,
+    } satisfies NativeWeldHailFlashState
+  }
+
+  if (source.kind === 'weld-hail-knockback') {
+    onlyKeys(source, field, [...commonKeys, 'delta', 'remainingTicks', 'targetId'])
+    requireWeldHailBuild(buildId, field)
+    const remainingTicks = positiveInteger(source.remainingTicks, `${field}.remainingTicks`)
+    if (remainingTicks > 20) {
+      throw new GameProtocolError(`${field}.remainingTicks exceeds native Hail push`)
+    }
+    return {
+      ...common,
+      buildId: 1008,
+      delta: unitVector(source.delta, `${field}.delta`),
+      kind: 'weld-hail-knockback',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      remainingTicks,
+      targetId: limitedString(source.targetId, `${field}.targetId`, 256),
+    } satisfies NativeWeldHailKnockbackState
+  }
+
+  if (source.kind === 'weld-hail-terrain-particle') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'alphaStep', 'position', 'record', 'rotationDegrees',
+      'scale', 'tint', 'velocity', 'velocityFactor',
+    ])
+    requireWeldHailBuild(buildId, field)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    const velocityFactor = positiveFinite(source.velocityFactor, `${field}.velocityFactor`)
+    if (alphaStep !== Math.fround(0.125) || velocityFactor !== Math.fround(0.92)
+      || common.ageTicks >= 8) {
+      throw new GameProtocolError(`${field} does not match native Hail terrain motion`)
+    }
+    if (source.record !== 45) throw new GameProtocolError(`${field}.record is not BadGuys 45`)
+    return {
+      ...common,
+      alpha: positiveFinite(source.alpha, `${field}.alpha`),
+      alphaStep,
+      buildId: 1008,
+      kind: 'weld-hail-terrain-particle',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: 45,
+      rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+      scale: positiveFinite(source.scale, `${field}.scale`),
+      tint: nonnegativeInteger(source.tint, `${field}.tint`),
+      velocity: vector(source.velocity, `${field}.velocity`),
+      velocityFactor,
+    } satisfies NativeWeldHailTerrainParticleState
+  }
+
+  if (source.kind === 'weld-hail-terrain-bouncer') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'bounceVelocity', 'enhancedShadow', 'height',
+      'position', 'record', 'rotationDegrees', 'rotationStepDegrees', 'scale',
+      'velocity', 'verticalVelocity',
+    ])
+    requireWeldHailBuild(buildId, field)
+    if (common.ageTicks >= 500 || source.record !== 32) {
+      throw new GameProtocolError(`${field} exceeds the native Hail bouncer contract`)
+    }
+    return {
+      ...common,
+      alpha: positiveFinite(source.alpha, `${field}.alpha`),
+      bounceVelocity: finite(source.bounceVelocity, `${field}.bounceVelocity`),
+      buildId: 1008,
+      enhancedShadow: boolean(source.enhancedShadow, `${field}.enhancedShadow`),
+      height: finite(source.height, `${field}.height`),
+      kind: 'weld-hail-terrain-bouncer',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: 32,
+      rotationDegrees: finite(source.rotationDegrees, `${field}.rotationDegrees`),
+      rotationStepDegrees: finite(
+        source.rotationStepDegrees,
+        `${field}.rotationStepDegrees`,
+      ),
+      scale: positiveFinite(source.scale, `${field}.scale`),
+      velocity: vector(source.velocity, `${field}.velocity`),
+      verticalVelocity: finite(source.verticalVelocity, `${field}.verticalVelocity`),
+    } satisfies NativeWeldHailTerrainBouncerState
   }
 
   if (source.kind === 'weld-hail-rock-fade') {
@@ -4616,22 +4775,58 @@ function primarySpellWeldActor(
     } satisfies NativeWeldSteamActorState
   }
 
+  if (source.kind === 'weld-meteor-flash') {
+    onlyKeys(source, field, [
+      ...commonKeys, 'alpha', 'alphaStep', 'position', 'record', 'scale',
+    ])
+    if (buildId !== 1007) throw new GameProtocolError(`${field}.buildId is not Meteor Swarm`)
+    const alpha = positiveFinite(source.alpha, `${field}.alpha`)
+    const alphaStep = positiveFinite(source.alphaStep, `${field}.alphaStep`)
+    if (alpha > 2 || alphaStep !== Math.fround(0.1) || common.ageTicks >= 20) {
+      throw new GameProtocolError(`${field} does not match the native Meteor flash lifetime`)
+    }
+    if (source.record !== 15 || source.scale !== 6) {
+      throw new GameProtocolError(`${field} does not use the native Meteor flash art`)
+    }
+    return {
+      ...common,
+      alpha,
+      alphaStep,
+      buildId: 1007,
+      kind: 'weld-meteor-flash',
+      lightRegistration: absentNativeLightProviderRegistration(
+        source.lightRegistration,
+        `${field}.lightRegistration`,
+      ),
+      position: vector(source.position, `${field}.position`),
+      record: 15,
+      scale: 6,
+    } satisfies NativeWeldMeteorFlashActorState
+  }
+
   if (source.kind === 'weld-meteor') {
     onlyKeys(source, field, [
-      ...commonKeys, 'cameraDisplacement', 'damage', 'debris', 'fallHeadingDegrees',
-      'fallScalar', 'fallStep', 'impactAgeTicks', 'impactDue', 'impactRadiusScalar',
+      ...commonKeys, 'bodyScale', 'cameraDisplacement', 'damage', 'debris',
+      'fallHeadingDegrees', 'fallHeight', 'fallStep', 'impactAgeTicks', 'impactDue',
+      'impactRadiusScalar',
       'impactRotationDegrees', 'impactSoundPitch', 'impactThrowFirePitch',
       'impactTicksRemaining',
       'phase', 'position', 'privateSeed', 'pulseDue', 'pulseSequence',
-      'pulseTicksRemaining', 'size', 'underpowered',
+      'pulseTicksRemaining', 'underpowered',
     ])
     if (buildId !== 1007) throw new GameProtocolError(`${field}.buildId is not Meteor Swarm`)
     if (source.phase !== 'fall' && source.phase !== 'impact') {
       throw new GameProtocolError(`${field}.phase is not a welded Meteor phase`)
     }
-    const fallScalar = finite(source.fallScalar, `${field}.fallScalar`)
-    if (fallScalar <= -0.021 || fallScalar >= 2) {
-      throw new GameProtocolError(`${field}.fallScalar is outside the native fall lane`)
+    const bodyScale = positiveFinite(source.bodyScale, `${field}.bodyScale`)
+    if (bodyScale < 0.75 || bodyScale > 1) {
+      throw new GameProtocolError(`${field}.bodyScale is outside the native constructor lane`)
+    }
+    const fallStep = positiveFinite(source.fallStep, `${field}.fallStep`)
+    const fallHeight = finite(source.fallHeight, `${field}.fallHeight`)
+    if ((source.phase === 'fall' && (fallHeight <= 0 || fallHeight > 6.25))
+      || (source.phase === 'impact' && (fallHeight > 0 || fallHeight <= -fallStep))) {
+      throw new GameProtocolError(`${field}.fallHeight does not match the Meteor phase`)
     }
     const underpowered = boolean(source.underpowered, `${field}.underpowered`)
     const privateSeed = nonnegativeInteger(source.privateSeed, `${field}.privateSeed`)
@@ -4664,7 +4859,12 @@ function primarySpellWeldActor(
       source.impactRadiusScalar,
       `${field}.impactRadiusScalar`,
     )
-    if (impactRadiusScalar < -1 || impactRadiusScalar > 0.5) {
+    if (impactRadiusScalar <= 0 || impactRadiusScalar > 1.5
+      || (source.phase === 'fall' && impactRadiusScalar !== 1)
+      || (source.phase === 'impact' && (
+        impactRadiusScalar < bodyScale
+        || impactRadiusScalar > Math.fround(bodyScale + 0.5)
+      ))) {
       throw new GameProtocolError(`${field}.impactRadiusScalar is outside the native lane`)
     }
     const impactRotationDegrees = finite(
@@ -4691,7 +4891,7 @@ function primarySpellWeldActor(
     ))
     if ((source.phase === 'fall' && (debris.length !== 0
       || cameraDisplacement !== null || impactAgeTicks !== 0
-      || impactRadiusScalar !== 0 || impactRotationDegrees !== 0
+      || impactRadiusScalar !== 1 || impactRotationDegrees !== 0
       || impactSoundPitch !== null || impactThrowFirePitch !== null))
       || (source.phase === 'impact' && (debris.length !== 5
         || cameraDisplacement === null))
@@ -4709,19 +4909,16 @@ function primarySpellWeldActor(
     if (fallHeadingDegrees < -50 || fallHeadingDegrees > 50) {
       throw new GameProtocolError(`${field}.fallHeadingDegrees is outside the native lane`)
     }
-    const size = positiveFinite(source.size, `${field}.size`)
-    if (size < 5 || size > 6.25) {
-      throw new GameProtocolError(`${field}.size is outside the native lane`)
-    }
     return {
       ...common,
+      bodyScale,
       buildId: 1007,
       cameraDisplacement,
       damage: positiveFinite(source.damage, `${field}.damage`),
       debris,
       fallHeadingDegrees,
-      fallScalar,
-      fallStep: positiveFinite(source.fallStep, `${field}.fallStep`),
+      fallHeight,
+      fallStep,
       impactAgeTicks,
       impactDue: boolean(source.impactDue, `${field}.impactDue`),
       impactRadiusScalar,
@@ -4741,7 +4938,6 @@ function primarySpellWeldActor(
       pulseDue: boolean(source.pulseDue, `${field}.pulseDue`),
       pulseSequence: nonnegativeInteger(source.pulseSequence, `${field}.pulseSequence`),
       pulseTicksRemaining,
-      size,
       underpowered,
     } satisfies NativeWeldMeteorActorState
   }
@@ -4945,7 +5141,7 @@ function primarySpellWeldHailstones(
   pulseSequence: number,
 ): NativeWeldHailstonesState {
   onlyKeys(source, field, [
-    ...commonKeys, 'damage', 'maximumScale', 'phase', 'pulseSequence',
+    ...commonKeys, 'collisionRadius', 'damage', 'maximumScale', 'phase', 'pulseSequence',
     'pushback', 'releaseAgeTicks', 'releaseFadeScale', 'rocks', 'scale',
     'toughness', 'widen',
   ])
@@ -4978,9 +5174,17 @@ function primarySpellWeldHailstones(
   const rocks = limitedArray(source.rocks, `${field}.rocks`, 4096).map((rock, index) => (
     primarySpellWeldHailstone(rock, `${field}.rocks[${index}]`, phase)
   ))
+  if (new Set(rocks.map(({ rockId }) => rockId)).size !== rocks.length) {
+    throw new GameProtocolError(`${field}.rocks contains a duplicate native identity`)
+  }
+  const collisionRadius = positiveFinite(source.collisionRadius, `${field}.collisionRadius`)
+  if (collisionRadius < 40 || (phase === 'held' && collisionRadius !== 40)) {
+    throw new GameProtocolError(`${field}.collisionRadius does not match the Hail phase`)
+  }
   return {
     ...common,
     buildId: 1008,
+    collisionRadius,
     damage: positiveFinite(source.damage, `${field}.damage`),
     kind: 'weld-persistent',
     lightRegistration: nativeLightProviderRegistration(
@@ -5009,7 +5213,7 @@ function primarySpellWeldHailstone(
   const source = record(value, field)
   onlyKeys(source, field, [
     'damageRemaining', 'decay', 'localPosition', 'phase', 'releaseOffset',
-    'spriteRecord', 'visualScale',
+    'rockId', 'spriteRecord', 'visualScale',
   ])
   const decay = positiveFinite(source.decay, `${field}.decay`)
   const phase = unitInterval(source.phase, `${field}.phase`)
@@ -5039,6 +5243,7 @@ function primarySpellWeldHailstone(
       z: finite(local.z, `${field}.localPosition.z`),
     },
     phase,
+    rockId: nonnegativeInteger(source.rockId, `${field}.rockId`),
     releaseOffset,
     spriteRecord,
     visualScale,
@@ -5078,9 +5283,15 @@ function primarySpellTransient(value: unknown, field: string): PrimarySpellTrans
     || source.kind === 'weld-channel'
     || source.kind === 'weld-frost-fade'
     || source.kind === 'weld-ground-spark-fade'
+    || source.kind === 'weld-hail-flash'
+    || source.kind === 'weld-hail-knockback'
+    || source.kind === 'weld-hail-line'
     || source.kind === 'weld-hail-rock-fade'
+    || source.kind === 'weld-hail-terrain-bouncer'
+    || source.kind === 'weld-hail-terrain-particle'
     || source.kind === 'weld-impact'
     || source.kind === 'weld-meteor'
+    || source.kind === 'weld-meteor-flash'
     || source.kind === 'weld-meteor-marker'
     || source.kind === 'weld-persistent'
     || source.kind === 'weld-steam') {

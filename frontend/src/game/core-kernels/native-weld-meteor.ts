@@ -62,14 +62,14 @@ export interface NativeWeldMeteorDebrisSeed {
 }
 
 export interface NativeWeldMeteorSpawnProgram {
+  readonly bodyScale: number
   readonly fallHeadingDegrees: number
-  readonly fallScalar: number
+  readonly fallHeight: number
   readonly fallStep: number
   readonly impactTicks: number
   readonly position: Vector2
   readonly privateSeed: number
   readonly rng: NativeRngState
-  readonly size: number
 }
 
 export interface NativeWeldMeteorImpactProgram {
@@ -160,7 +160,7 @@ export function createNativeWeldMeteorSpawnProgram(input: {
   readonly vector: readonly number[]
 }): NativeWeldMeteorSpawnProgram {
   let rng = input.rng
-  const fall = drawNativeFloat(rng, Math.fround(0.25)); rng = fall.state
+  const bodyScale = drawNativeFloat(rng, Math.fround(0.25)); rng = bodyScale.state
   const radius = drawNativeFloat(rng, NATIVE_METEOR_TARGET_RADIUS); rng = radius.state
   const radialDirection = drawNativeUnitVector(rng); rng = radialDirection.rng
   const candidate = Object.freeze({
@@ -190,19 +190,19 @@ export function createNativeWeldMeteorSpawnProgram(input: {
     ? 0
     : Math.fround(input.vector[4]! * NATIVE_METEOR_IMPACT_TOUGHNESS_TICKS)
   return Object.freeze({
+    bodyScale: Math.fround(1 - bodyScale.value),
     fallHeadingDegrees,
-    fallScalar: Math.fround(1 - fall.value),
+    fallHeight: Math.fround(Math.fround(size.value + 1) * 2.5 * 2),
     fallStep: Math.fround(NATIVE_METEOR_FALL_BASE_STEP * growth),
     impactTicks: Math.round(NATIVE_METEOR_IMPACT_BASE_TICKS + toughnessTicks),
     position: Object.freeze({ ...input.resolvePosition(candidate) }),
     privateSeed,
     rng,
-    size: Math.fround(Math.fround(size.value + 1) * 2.5 * 2),
   })
 }
 
 export function createNativeWeldMeteorImpactProgram(input: {
-  readonly fallScalar: number
+  readonly bodyScale: number
   readonly rng: NativeRngState
   readonly underpowered: boolean
 }): NativeWeldMeteorImpactProgram {
@@ -213,7 +213,7 @@ export function createNativeWeldMeteorImpactProgram(input: {
   const angleSeed = drawNativeFloat(rng, 360); rng = angleSeed.state
   let angle = angleSeed.value
   const debris: NativeWeldMeteorDebrisSeed[] = []
-  const scaleInput = Math.min(input.fallScalar, 1)
+  const scaleInput = Math.min(input.bodyScale, 1)
   for (let index = 0; index < NATIVE_WELD_METEOR_IMPACT_DEBRIS_COUNT; index += 1) {
     const bounce = drawNativeFloat(rng, 3); rng = bounce.state
     const overwrittenHeight = drawNativeFloat(rng, 20); rng = overwrittenHeight.state
@@ -273,7 +273,7 @@ export function createNativeWeldMeteorImpactProgram(input: {
       y: Math.fround(cameraDirection.value.y * 10),
     }),
     debris: Object.freeze(debris),
-    impactRadiusScalar: Math.fround(input.fallScalar + radius.value),
+    impactRadiusScalar: Math.fround(input.bodyScale + radius.value),
     impactRotationDegrees: rotation.value,
     impactSoundPitch: Math.fround(1 + pitch.value),
     impactThrowFirePitch: input.underpowered ? null : Math.fround(0.8),

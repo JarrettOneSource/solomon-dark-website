@@ -25108,7 +25108,7 @@ Region-light registration/submission, painter lane, release, and teardown.
 | 1004 Blizzard Beam | two-tick beam, widened Frost selection, Lightning chains | dedicated beam view; Cold-before-Stun target effects; no ordinary Frost-Jet substitution |
 | 1005 Steam Jet | one normal/over stream actor selected per eligible tick and target-owned Steamed | independently retained moving particle plus ten-tick fire payload lifecycle |
 | 1006 Ethereal Boulder | retained EBoulder and recursive separately registered children | actor-owned rock set/orientation/pools, provider registration, release/split cleanup |
-| 1007 Meteor Swarm | retained channel owner, periodic Meteor actors, impact debris/fire | exact cadence/RNG, per-Meteor lifecycle/provider registration, provider submits no light for normal size |
+| 1007 Meteor Swarm | retained channel owner, periodic Meteor actors, impact debris/fire | exact cadence/RNG, per-Meteor lifecycle/provider registration, final-descent/impact provider submission |
 | 1008 Hailstones | retained rock carrier and independently retiring released rocks | exact bucket rebuild/release/contact state, actor light, held/flight renderer |
 | 1009 Crawling Shock | center and two side GroundSparks, private movement and ElectricBurn | replicated private seed/native age/timer, exact 15-unit contacts, actor light |
 
@@ -25136,7 +25136,7 @@ Region-light registration/submission, painter lane, release, and teardown.
   movement factor one, and multiplies its sampled pitch by
   `.800000011920929`. The separate fizzle precedes the cast cue at gain one.
 
-Protocol 41 carries cast playback rate, sound variant, weak state, mutable
+Protocol 42 carries cast playback rate, sound variant, weak state, mutable
 base phase, Ball acceleration, both tick-owned Frost compositor lanes,
 Ground private word/native age/turn timer and independent fade children,
 effective per-actor vector, and provider registration. The
@@ -25165,9 +25165,9 @@ continuous presentation fields but never reroll authority.
 - Fire/Frost/Ball light is intensity `.75`, radius `.75+Float(.1)`, actor lane,
   with Multiple Shadows. Ground is actor lane, intensity `.5+Float(.5)`, radius
   `.4`, no directional shadow. EBoulder/Hail are actor lane, intensity `.5`,
-  radius `max(.5,scale*.75)`, with Multiple Shadows. Weld-created Meteor size
-  is `5..6.25`, so its registered `0x005E7040` provider takes the `size>1`
-  return and submits no light.
+  radius `max(.5,scale*.75)`, with Multiple Shadows. Meteor `+0x13C` is fall
+  height, not body size. Its registered `0x005E7040` provider is silent above
+  height one, then submits a non-shadow source during final descent and impact.
 - Render-global random samples are projected from stable actor/frame identity;
   this is the one explicit platform adaptation. Domains, recurrences, actor
   state, painter order, provider lane/order, and teardown remain native.
@@ -25222,3 +25222,51 @@ remaining draw-level translations (especially Flame Lash mesh curvature,
 Blizzard enhanced children, Meteor's native primitive body, and Hail/Steam
 contact children), followed by the canonical Website gate and real Mac mini
 visual/audio/light diagnostics for all ten builds.
+
+### 2026-08-21 v42 Meteor/Hail adjacency correction
+
+The v41 checkpoint above is historical. A direct pass over Meteor provider
+`0x005E7040`, Hail released tick `0x005FBDE0`, shared Boulder contact
+`0x00620B60`, modifier constructors `0x00623050/0x006233B0`, and the concrete
+child renderers corrected four conflations before browser acceptance:
+
+- Meteor `+0x13C` is the falling-height scalar initialized in `[5,6.25)` and
+  multiplied by `-768` for the falling glyph position. `+0x74` is the separate
+  `[.75,1)` body scale. Provider radius state `+0x15C` begins at one, then
+  becomes `bodyScale+Float(.5)` on impact. `0x005E7040` submits when fall
+  height is at most one: intensity is
+  `min(1,visibility*(1-fallHeight))`, where impact visibility is
+  `min(impactTicksRemaining,50)/50`, radius is `+0x15C*.6`, and directional
+  shadow is false. High fall is an empty provider submission, not permanent
+  silence. Impact constructor `0x00610880` also registers its orange
+  alpha-two/loss-`.1`, scale-six BadGuys-15 `Anim_FadeAdditive` as a separate
+  world actor; it is not a nested layer of the retained Meteor.
+- Hail does not use shared Boulder contact `0x00620B60`. A clear released tick
+  performs three ordered ten-unit substeps. Each positive-widen substep grows
+  carrier query radius and moves every rock's local and collision XY radially.
+  Collision retains the release-time offset; `.95` decay changes draw Y only.
+  Candidate targets are the outer loop and mutable rock identities the inner
+  loop. The strict per-rock predicate is
+  `distanceSquared < (targetRadius*1.5)^2`.
+- Every accepted Hail rock contact installs 250-tick `.5` ColdSlow before
+  damage. Positive push installs one resident `Mod_Knockback 0x1B6D` with a
+  unit cast-direction displacement for round-to-even `push*20` ticks; a second
+  Knockback is rejected while the first remains. Outgoing damage is
+  `min(targetHealth,rockPool)`, while toughness divides only pool consumption.
+  Pool exhaustion removes that rock, consumes one `Float(.25)` line-color
+  word, and creates separate 14-tick `Anim_Line` and ten-tick BadGuys-15
+  roots. It never creates a BoulderBit.
+- Static Hail line termination replaces the carrier with sixteen independently
+  registered children per remaining rock: fifteen additive moving BadGuys-45
+  actors plus one BadGuys-32 bouncer. The program consumes exactly 83 RNG words
+  per rock: five per moving child and eight for the bouncer/outer-angle path.
+  Moving children own `.125` alpha loss and `.92` velocity damping. Bouncers
+  own the native global-modulo-three pause, `.4` gravity, `.65` bounce/damping,
+  rerolled spin, `-.75` settle threshold, and `.015` alpha loss. All contact and
+  terrain children are self-lit/direct roots with no outbound Region light.
+
+Protocol 42 carries stable Hail rock identities, the independent collision
+radius/offset lanes, Knockback clocks, line/flash roots, and record-32/45
+terrain children. Focused kernel, combat, protocol, renderer, TypeScript, lint,
+and architecture checks cover the corrected state machine; canonical and Mac
+browser receipts remain later gates for the combined skill tree.

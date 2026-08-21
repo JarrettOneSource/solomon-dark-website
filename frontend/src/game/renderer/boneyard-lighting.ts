@@ -12,6 +12,7 @@ import type { NativeSecondaryActorState } from '../core-kernels/native-secondary
 import type {
   NativeWeldHailstonesState,
   NativeWeldEtherealBoulderState,
+  NativeWeldMeteorActorState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
 
@@ -365,6 +366,23 @@ export function nativeWeldRockLightSource(
     intensity: 0.5,
     position: { ...actor.origin },
     radius: Math.max(0.5, Math.fround(actor.scale * 0.75)),
+  }
+}
+
+export function nativeWeldMeteorLightSource(
+  actor: NativeWeldMeteorActorState,
+): NativeBoneyardLightSource | null {
+  if (actor.fallHeight > 1) return null
+  const visibility = actor.phase === 'impact'
+    ? Math.min(actor.impactTicksRemaining, 50) / 50
+    : 1
+  return {
+    castsDirectionalShadow: false,
+    intensity: Math.min(1, Math.fround(
+      visibility * Math.fround(1 - actor.fallHeight),
+    )),
+    position: { ...actor.position },
+    radius: Math.fround(actor.impactRadiusScalar * Math.fround(0.6)),
   }
 }
 

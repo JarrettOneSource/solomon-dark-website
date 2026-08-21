@@ -91,6 +91,7 @@ import {
   createNativeWeldGroundSparkFadeActor,
   createNativeWeldHailRockFadeActor,
   createNativeWeldMeteor,
+  createNativeWeldMeteorFlash,
   createNativeWeldPersistentActor,
   drawNativeWeldDamage,
   isChannelBuild,
@@ -115,6 +116,10 @@ import {
 } from './native-weld-meteor.ts'
 import { createNativeWeldGroundSparkFadeProgram } from './native-weld-ground-spark.ts'
 import { spawnNativeWeldSteamActor } from './native-weld-steam.ts'
+import {
+  createNativeWeldHailTerrainImpact,
+  NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
+} from './native-weld-hail-contact.ts'
 
 export type PrimarySpellProjectileKind = 'earth' | 'ether' | 'fire' | 'weld'
 export type PrimarySpellTransientKind =
@@ -831,13 +836,56 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
   const fireActorContacts: NativeFireActorContact[] = []
   for (const effect of context.spells.transients) {
     if (isNativeWeldWorldActor(effect)) {
+      if (
+        effect.kind === 'weld-persistent'
+        && effect.buildId === 1008
+        && effect.phase === 'flight'
+      ) {
+        const lookahead = {
+          x: Math.fround(
+            effect.origin.x + effect.direction.x * NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
+          ),
+          y: Math.fround(
+            effect.origin.y + effect.direction.y * NATIVE_WELD_HAIL_LOOKAHEAD_DISTANCE,
+          ),
+        }
+        if (context.spellObstructionPoint(effect.ownerId, effect.origin, lookahead) !== null) {
+          const impact = createNativeWeldHailTerrainImpact({
+            actor: effect,
+            enhancedEffects: true,
+            firstId: nextId,
+            rng,
+            tick: context.tick,
+          })
+          transients.push(...impact.actors)
+          nextId = impact.nextId
+          rng = impact.rng
+          continue
+        }
+      }
       const stepped = stepNativeWeldWorldActor(effect, rng, (actor, from, to) => (
         actor.buildId === 1006
           ? context.canPlaceProjectile(actor, to, actor.scale * PRIMARY_SPELL_EARTH_COLLISION_RADIUS_SCALE)
-          : context.spellObstructionPoint(actor.ownerId, from, to) === null
+          : actor.buildId === 1008
+            || context.spellObstructionPoint(actor.ownerId, from, to) === null
       ))
       rng = stepped.rng
-      if (stepped.actor) transients.push(stepped.actor)
+      if (stepped.actor) {
+        transients.push(stepped.actor)
+        if (
+          stepped.actor.kind === 'weld-meteor'
+          && stepped.actor.impactDue
+          && effect.kind === 'weld-meteor'
+          && !effect.impactDue
+        ) {
+          transients.push(createNativeWeldMeteorFlash({
+            actor: stepped.actor,
+            id: nextId,
+            tick: context.tick,
+          }))
+          nextId += 1
+        }
+      }
     } else if (
       effect.kind === 'earth-called-rock'
       || isNativePlayerStaffTransient(effect)
@@ -1563,6 +1611,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             }
             if (boulderDebris.length > 0) {
               transients.push(createNativeWeldBoulderDebrisActor({
+                buildId: 1006,
                 debris: boulderDebris,
                 direction: actor.direction,
                 id: nextId,
@@ -1639,10 +1688,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   )))
                 : authority.primarySkill.vector.values
               transients = [...transients, createNativeWeldMeteor({
+                bodyScale: spawn.bodyScale,
                 damage: Math.fround(meteorDamage * (underpowered ? 0.5 : 1)),
                 direction: aimDirection,
                 fallHeadingDegrees: spawn.fallHeadingDegrees,
-                fallScalar: spawn.fallScalar,
+                fallHeight: spawn.fallHeight,
                 fallStep: spawn.fallStep,
                 id: nextId,
                 impactTicks: spawn.impactTicks,
@@ -1651,7 +1701,6 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 position: spawn.position,
                 privateSeed: spawn.privateSeed,
                 registerLightProvider,
-                size: spawn.size,
                 tick: context.tick,
                 underpowered,
                 vector,
@@ -2457,9 +2506,15 @@ function transientLifetime(effect: PrimarySpellTransientState): number {
     case 'weld-channel': throw new Error('Weld channel lifetime is state driven')
     case 'weld-frost-fade': throw new Error('Weld Frost fade lifetime is state driven')
     case 'weld-ground-spark-fade': throw new Error('Weld GroundSpark fade lifetime is state driven')
+    case 'weld-hail-flash': throw new Error('Weld Hail flash lifetime is state driven')
+    case 'weld-hail-knockback': throw new Error('Weld Hail Knockback lifetime is combat owned')
+    case 'weld-hail-line': throw new Error('Weld Hail line lifetime is state driven')
     case 'weld-hail-rock-fade': throw new Error('Weld Hail fade lifetime is state driven')
+    case 'weld-hail-terrain-bouncer': throw new Error('Weld Hail bouncer lifetime is state driven')
+    case 'weld-hail-terrain-particle': throw new Error('Weld Hail particle lifetime is state driven')
     case 'weld-impact': throw new Error('Weld impact lifetime is state driven')
     case 'weld-meteor': throw new Error('Weld meteor lifetime is state driven')
+    case 'weld-meteor-flash': throw new Error('Weld Meteor flash lifetime is state driven')
     case 'weld-meteor-marker': throw new Error('Weld Meteor marker lifetime is state driven')
     case 'weld-persistent': throw new Error('Weld persistent lifetime is cast driven')
     case 'weld-steam': throw new Error('Weld Steam lifetime is state driven')
@@ -2473,9 +2528,15 @@ function isNativeWeldWorldActor(
     || effect.kind === 'weld-channel'
     || effect.kind === 'weld-frost-fade'
     || effect.kind === 'weld-ground-spark-fade'
+    || effect.kind === 'weld-hail-flash'
+    || effect.kind === 'weld-hail-knockback'
+    || effect.kind === 'weld-hail-line'
     || effect.kind === 'weld-hail-rock-fade'
+    || effect.kind === 'weld-hail-terrain-bouncer'
+    || effect.kind === 'weld-hail-terrain-particle'
     || effect.kind === 'weld-impact'
     || effect.kind === 'weld-meteor'
+    || effect.kind === 'weld-meteor-flash'
     || effect.kind === 'weld-meteor-marker'
     || effect.kind === 'weld-persistent'
     || effect.kind === 'weld-steam'

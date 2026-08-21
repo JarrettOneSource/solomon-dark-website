@@ -1137,6 +1137,7 @@ function meteorAudioActor(
   return {
     ageTicks: impact ? 51 : 50,
     birthTick: 0,
+    bodyScale: 1,
     buildId: 1007,
     cameraDisplacement: impact ? { x: 6, y: -8 } : null,
     damage: 12,
@@ -1157,12 +1158,12 @@ function meteorAudioActor(
       : [],
     direction: { x: 1, y: 0 },
     fallHeadingDegrees: 20,
-    fallScalar: impact ? 0 : 1,
+    fallHeight: impact ? 0 : 5,
     fallStep: Math.fround(0.04),
     id: underpowered ? 42 : 41,
     impactAgeTicks: 0,
     impactDue: impact,
-    impactRadiusScalar: impact ? 0.25 : 0,
+    impactRadiusScalar: impact ? 1.25 : 1,
     impactRotationDegrees: impact ? 45 : 0,
     impactSoundPitch: impact ? underpowered ? 0.9 : 1.05 : null,
     impactThrowFirePitch: impact && !underpowered ? Math.fround(0.8) : null,
@@ -1177,7 +1178,6 @@ function meteorAudioActor(
     pulseDue: false,
     pulseSequence: 0,
     pulseTicksRemaining: 10,
-    size: 5,
     underpowered,
     vector: underpowered
       ? [8, 16, 20, 1.1, 1.5, 0, 0, 0, 0]
@@ -1196,6 +1196,7 @@ function hailAudioActor(
     ageTicks: released ? 2 : 1,
     birthTick: 0,
     buildId: 1008,
+    collisionRadius: 40,
     damage: 7,
     direction: { x: 1, y: 0 },
     id: 43,

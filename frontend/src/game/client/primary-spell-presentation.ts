@@ -289,9 +289,15 @@ function fixedTransientTiming(
     case 'weld-channel':
     case 'weld-frost-fade':
     case 'weld-ground-spark-fade':
+    case 'weld-hail-flash':
+    case 'weld-hail-knockback':
+    case 'weld-hail-line':
     case 'weld-hail-rock-fade':
+    case 'weld-hail-terrain-bouncer':
+    case 'weld-hail-terrain-particle':
     case 'weld-impact':
     case 'weld-meteor':
+    case 'weld-meteor-flash':
     case 'weld-meteor-marker':
     case 'weld-persistent': return null
     case 'weld-steam': return null
@@ -707,6 +713,81 @@ function interpolateTransient(
       vector: [...actor.vector],
     }
   }
+  if (older.kind === 'weld-hail-flash' && newer.kind === 'weld-hail-flash') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-meteor-flash' && newer.kind === 'weld-meteor-flash') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (older.kind === 'weld-hail-line' && newer.kind === 'weld-hail-line') {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      end: lerpVector(older.end, newer.end, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      start: lerpVector(older.start, newer.start, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (
+    older.kind === 'weld-hail-terrain-particle'
+    && newer.kind === 'weld-hail-terrain-particle'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      velocity: lerpVector(older.velocity, newer.velocity, blend),
+      vector: [...actor.vector],
+    }
+  }
+  if (
+    older.kind === 'weld-hail-terrain-bouncer'
+    && newer.kind === 'weld-hail-terrain-bouncer'
+  ) {
+    const actor = blend < 1 ? older : newer
+    return {
+      ...actor,
+      ageTicks: lerp(older.ageTicks, newer.ageTicks, blend),
+      alpha: lerp(older.alpha, newer.alpha, blend),
+      direction: lerpVector(older.direction, newer.direction, blend),
+      height: lerp(older.height, newer.height, blend),
+      origin: lerpVector(older.origin, newer.origin, blend),
+      position: lerpVector(older.position, newer.position, blend),
+      rotationDegrees: lerpDegrees(
+        older.rotationDegrees,
+        newer.rotationDegrees,
+        blend,
+      ),
+      velocity: lerpVector(older.velocity, newer.velocity, blend),
+      vector: [...actor.vector],
+    }
+  }
   if (older.kind === 'weld-steam' && newer.kind === 'weld-steam') {
     const actor = blend < 1 ? older : newer
     return {
@@ -751,7 +832,8 @@ function interpolateTransient(
         : { ...actor.cameraDisplacement },
       debris: actor.debris.map(copyWeldMeteorDebris),
       direction: lerpVector(older.direction, newer.direction, blend),
-      fallScalar: lerp(older.fallScalar, newer.fallScalar, blend),
+      bodyScale: lerp(older.bodyScale, newer.bodyScale, blend),
+      fallHeight: lerp(older.fallHeight, newer.fallHeight, blend),
       lightRegistration: { ...actor.lightRegistration },
       origin: lerpVector(older.origin, newer.origin, blend),
       position: lerpVector(older.position, newer.position, blend),
@@ -863,9 +945,15 @@ function isWeldTransient(effect: PrimarySpellTransientState): boolean {
     || effect.kind === 'weld-channel'
     || effect.kind === 'weld-frost-fade'
     || effect.kind === 'weld-ground-spark-fade'
+    || effect.kind === 'weld-hail-flash'
+    || effect.kind === 'weld-hail-knockback'
+    || effect.kind === 'weld-hail-line'
     || effect.kind === 'weld-hail-rock-fade'
+    || effect.kind === 'weld-hail-terrain-bouncer'
+    || effect.kind === 'weld-hail-terrain-particle'
     || effect.kind === 'weld-impact'
     || effect.kind === 'weld-meteor'
+    || effect.kind === 'weld-meteor-flash'
     || effect.kind === 'weld-meteor-marker'
     || effect.kind === 'weld-persistent'
     || effect.kind === 'weld-steam'
@@ -1012,7 +1100,9 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
   }
   if (effect.kind === 'weld-frost-fade'
     || effect.kind === 'weld-ground-spark-fade'
-    || effect.kind === 'weld-hail-rock-fade') {
+    || effect.kind === 'weld-hail-flash'
+    || effect.kind === 'weld-hail-rock-fade'
+    || effect.kind === 'weld-meteor-flash') {
     return {
       ...effect,
       direction: { ...effect.direction },
@@ -1020,6 +1110,39 @@ function copyTransient(effect: PrimarySpellTransientState): PrimarySpellTransien
       origin: { ...effect.origin },
       position: { ...effect.position },
       vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-hail-line') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      end: { ...effect.end },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      start: { ...effect.start },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-hail-knockback') {
+    return {
+      ...effect,
+      delta: { ...effect.delta },
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      vector: [...effect.vector],
+    }
+  }
+  if (effect.kind === 'weld-hail-terrain-bouncer'
+    || effect.kind === 'weld-hail-terrain-particle') {
+    return {
+      ...effect,
+      direction: { ...effect.direction },
+      lightRegistration: null,
+      origin: { ...effect.origin },
+      position: { ...effect.position },
+      vector: [...effect.vector],
+      velocity: { ...effect.velocity },
     }
   }
   if (effect.kind === 'weld-steam') {

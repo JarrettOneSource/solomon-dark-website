@@ -48,10 +48,21 @@ import type {
   NativeSecondaryTargetEffectPatch,
 } from '../core-kernels/native-secondary-abilities.ts'
 import {
-  NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR,
+  createNativeWeldBoulderDebrisActor,
+  nativeWeldHailstoneDrawOffset,
+  nativeWeldHailstoneFlightContactSubsteps,
   retainNativeWeldHailstoneDamage,
   retainNativeWeldPersistentActorContacts,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import { createNativeWeldBoulderContactDebrisProgram } from '../core-kernels/native-weld-boulder-debris.ts'
+import {
+  createNativeWeldHailContactPresentation,
+  createNativeWeldHailKnockback,
+  NATIVE_WELD_HAIL_COLD_SLOW_FACTOR,
+  NATIVE_WELD_HAIL_COLD_SLOW_TICKS,
+  NATIVE_WELD_HAIL_FLIGHT_SUBSTEPS,
+  NATIVE_WELD_HAIL_TARGET_RADIUS_FACTOR,
+} from '../core-kernels/native-weld-hail-contact.ts'
 import {
   nativeWeldMeteorDirectRadius,
   nativeWeldMeteorPulseRadius,
@@ -195,6 +206,47 @@ export function resolveBoneyardSpellCombat(
     targetEffects.push(Object.freeze({ patch: Object.freeze({ ...patch }), targetId, worldKey }))
   }
 
+  const activeKnockbackTargetIds = new Set(sourceSpells.transients.flatMap((effect) => {
+    if (effect.worldKey !== worldKey) return []
+    if (effect.kind === 'weld-hail-knockback') return [effect.targetId]
+    if (effect.kind === 'player-staff-contact-knockback') return [effect.targetId]
+    return []
+  }))
+  for (const effect of sourceSpells.transients) {
+    if (effect.kind !== 'weld-hail-knockback' || effect.worldKey !== worldKey) continue
+    const actorId = parseEnemyTargetId(effect.targetId)
+    const row = actorId === null
+      ? undefined
+      : primaryTargetRows(enemies).find(({ actor }) => actor.id === actorId)
+    if (!row) {
+      consumedTransientIds.add(effect.id)
+      activeKnockbackTargetIds.delete(effect.targetId)
+      continue
+    }
+    const requested = {
+      x: Math.fround(row.target.position.x + effect.delta.x),
+      y: Math.fround(row.target.position.y + effect.delta.y),
+    }
+    const resolved = resolveEnemyMovement(
+      row.actor.id,
+      row.target.position,
+      requested,
+      row.target.bodyRadius,
+    )
+    enemies = positionBoneyardEnemy(enemies, row.actor.id, resolved).store
+    const remainingTicks = effect.remainingTicks - 1
+    if (remainingTicks <= 0) {
+      consumedTransientIds.add(effect.id)
+      activeKnockbackTargetIds.delete(effect.targetId)
+    } else {
+      updatedTransients.set(effect.id, Object.freeze({
+        ...effect,
+        ageTicks: effect.ageTicks + 1,
+        remainingTicks,
+      }))
+    }
+  }
+
   for (const pulse of steamedPulses) {
     if (pulse.worldKey !== worldKey) continue
     const privateSeed = drawNativeInteger(rng, 1_000_000)
@@ -245,6 +297,34 @@ export function resolveBoneyardSpellCombat(
     const impact = impactProgram.impact
     if (!impact) return
     impactTransients.push(impact)
+    nextSpellId += 1
+  }
+
+  const publishBoulderContactDebris = (effect: Readonly<{
+    buildId: 1006 | 1008
+    direction: Vector2
+    origin: Vector2
+    ownerId: string
+    scale: number
+    vector: readonly number[]
+    worldKey: string
+  }>): void => {
+    const program = createNativeWeldBoulderContactDebrisProgram({
+      rng,
+      scale: effect.scale,
+    })
+    rng = program.rng
+    impactTransients.push(createNativeWeldBoulderDebrisActor({
+      buildId: effect.buildId,
+      debris: program.debris,
+      direction: effect.direction,
+      id: nextSpellId,
+      origin: effect.origin,
+      ownerId: effect.ownerId,
+      tick,
+      vector: effect.vector,
+      worldKey: effect.worldKey,
+    }))
     nextSpellId += 1
   }
 
@@ -555,6 +635,7 @@ export function resolveBoneyardSpellCombat(
         if (!damaged.accepted) continue
         enemies = damaged.store
         events.push(...damaged.events)
+        publishBoulderContactDebris(effect)
         remainingDamage = contact.remainingPool
         hits.push({
           actorId: actor.id,
@@ -599,49 +680,121 @@ export function resolveBoneyardSpellCombat(
       continue
     }
     if (effect.buildId !== 1008) continue
-    const damageByIndex = effect.rocks.map(({ damageRemaining }) => damageRemaining)
-    for (let rockIndex = 0; rockIndex < effect.rocks.length; rockIndex += 1) {
-      const rock = effect.rocks[rockIndex]!
-      if (!rock.releaseOffset || damageByIndex[rockIndex]! < 0.001) continue
-      const point = {
-        x: effect.origin.x + rock.releaseOffset.x,
-        y: effect.origin.y + rock.releaseOffset.y,
+    if (effect.releaseAgeTicks === 0) continue
+    const damageByRockId = new Map(effect.rocks.map((rock) => [
+      rock.rockId,
+      rock.damageRemaining,
+    ]))
+    for (const [substepIndex, substep] of nativeWeldHailstoneFlightContactSubsteps(
+      effect,
+    ).entries()) {
+      const remainingSubsteps = NATIVE_WELD_HAIL_FLIGHT_SUBSTEPS - substepIndex - 1
+      let queryRadius = effect.collisionRadius
+      for (let remaining = 0; remaining < remainingSubsteps; remaining += 1) {
+        queryRadius = Math.fround(queryRadius - effect.widen)
       }
-      for (const row of rows) {
-        let remainingDamage = damageByIndex[rockIndex]!
-        if (remainingDamage < 0.001) break
-        if (!nativePrimaryTargetEligible(row.target, 0x2)) continue
-        const dx = point.x - row.target.position.x
-        const dy = point.y - row.target.position.y
-        const radius = row.target.bodyRadius * NATIVE_WELD_HAILSTONES_TARGET_RADIUS_FACTOR
-        if (dx * dx + dy * dy >= radius * radius) continue
-        const targetHealth = Math.max(0, row.actor.currentHealth)
-        const amount = Math.min(targetHealth, remainingDamage)
-        const consumed = remainingDamage < targetHealth
-          ? amount
-          : amount / effect.toughness
-        const damaged = damageBoneyardEnemy(enemies, {
-          actorId: row.actor.id,
-          amount,
-          sourcePlayerId: effect.ownerId,
-          tick,
-        })
-        if (!damaged.accepted) continue
-        enemies = damaged.store
-        remainingDamage = Math.max(0, remainingDamage - consumed)
-        damageByIndex[rockIndex] = remainingDamage
-        hits.push({
-          actorId: row.actor.id,
-          amount,
-          killed: damaged.killed,
-          ownerId: effect.ownerId,
-          spellId: effect.id,
-          spellKind: 'weld',
-          tick,
-        })
+      const currentRows = primaryTargetRows(enemies)
+      const targets = nativePrimaryRootTargets(
+        substep.origin,
+        queryRadius,
+        0x2,
+        currentRows.map(({ target }) => target),
+      )
+      for (const target of targets) {
+        const currentRow = primaryTargetRows(enemies).find(({ target: candidate }) => (
+          candidate.id === target.id
+        ))
+        if (!currentRow) continue
+        for (const rock of effect.rocks) {
+          const currentActor = primaryTargetRows(enemies).find(({ target: candidate }) => (
+            candidate.id === target.id
+          ))?.actor
+          if (!currentActor) break
+          const releaseOffset = substep.releaseOffsets[rock.rockId]
+          const remainingDamage = damageByRockId.get(rock.rockId) ?? 0
+          if (!releaseOffset || remainingDamage < 0.001) continue
+          const point = {
+            x: Math.fround(substep.origin.x + releaseOffset.x),
+            y: Math.fround(substep.origin.y + releaseOffset.y),
+          }
+          const dx = point.x - currentRow.target.position.x
+          const dy = point.y - currentRow.target.position.y
+          const radius = Math.fround(
+            currentRow.target.bodyRadius * NATIVE_WELD_HAIL_TARGET_RADIUS_FACTOR,
+          )
+          if (dx * dx + dy * dy >= radius * radius) continue
+
+          queueTargetEffect(currentActor.id, {
+            coldSlowFactor: NATIVE_WELD_HAIL_COLD_SLOW_FACTOR,
+            coldSlowMaterial: true,
+            coldSlowTicks: NATIVE_WELD_HAIL_COLD_SLOW_TICKS,
+            timeScale: NATIVE_WELD_HAIL_COLD_SLOW_FACTOR,
+          })
+          const targetKey = `enemy:${currentActor.id}`
+          if (!activeKnockbackTargetIds.has(targetKey)) {
+            const knockback = createNativeWeldHailKnockback({
+              actor: effect,
+              id: nextSpellId,
+              targetId: targetKey,
+              tick,
+            })
+            if (knockback) {
+              impactTransients.push(knockback)
+              activeKnockbackTargetIds.add(targetKey)
+              nextSpellId += 1
+            }
+          }
+
+          const targetHealth = Math.max(0, currentActor.currentHealth)
+          const amount = Math.min(targetHealth, remainingDamage)
+          const consumed = remainingDamage < targetHealth
+            ? amount
+            : amount / effect.toughness
+          const damaged = damageBoneyardEnemy(enemies, {
+            actorId: currentActor.id,
+            amount,
+            sourcePlayerId: effect.ownerId,
+            tick,
+          })
+          if (!damaged.accepted) continue
+          enemies = damaged.store
+          events.push(...damaged.events)
+          const nextDamage = Math.max(0, remainingDamage - consumed)
+          damageByRockId.set(rock.rockId, nextDamage)
+          hits.push({
+            actorId: currentActor.id,
+            amount,
+            killed: damaged.killed,
+            ownerId: effect.ownerId,
+            spellId: effect.id,
+            spellKind: 'weld',
+            tick,
+          })
+          if (nextDamage < 0.001) {
+            const drawOffset = nativeWeldHailstoneDrawOffset(rock)
+            const presentation = createNativeWeldHailContactPresentation({
+              actor: effect,
+              end: point,
+              firstId: nextSpellId,
+              rng,
+              start: {
+                x: Math.fround(substep.origin.x + drawOffset.x),
+                y: Math.fround(substep.origin.y + drawOffset.y),
+              },
+              tick,
+            })
+            rng = presentation.rng
+            impactTransients.push(...presentation.actors)
+            nextSpellId += presentation.actors.length
+          }
+          if (damaged.killed) break
+        }
       }
     }
-    const retained = retainNativeWeldHailstoneDamage(effect, damageByIndex)
+    const retained = retainNativeWeldHailstoneDamage(
+      effect,
+      effect.rocks.map((rock) => damageByRockId.get(rock.rockId) ?? 0),
+    )
     if (retained) updatedTransients.set(effect.id, retained)
     else consumedTransientIds.add(effect.id)
   }
@@ -1587,6 +1740,12 @@ function applyWaterPushback(
     targetBodyRadius(actor),
   )
   return positionBoneyardEnemy(source, actor.id, resolved).store
+}
+
+function parseEnemyTargetId(targetId: string): number | null {
+  if (!targetId.startsWith('enemy:')) return null
+  const value = Number(targetId.slice('enemy:'.length))
+  return Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
 function nativePrimaryRootTargetRows(

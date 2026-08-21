@@ -17,6 +17,65 @@ export interface NativeWeldBoulderDebrisProgram {
   readonly rng: NativeRngState
 }
 
+/** Shared Boulder/Hail contact child at 0x0060BC10. */
+export function createNativeWeldBoulderContactDebrisProgram(input: {
+  readonly rng: NativeRngState
+  readonly scale: number
+}): NativeWeldBoulderDebrisProgram {
+  let rng = input.rng
+  const angle = drawNativeFloat(rng, 360); rng = angle.state
+  const bounce = drawNativeFloat(rng, 3); rng = bounce.state
+  const height = drawNativeFloat(rng, 20); rng = height.state
+  const rotation = drawNativeFloat(rng, 360); rng = rotation.state
+  const rotationStep = drawNativeFloat(rng, 10); rng = rotationStep.state
+  const color = drawNativeFloat(rng, Math.fround(0.5)); rng = color.state
+  const record = drawNativeInteger(rng, 3); rng = record.state
+  const constructorScale = drawNativeFloat(rng, 2); rng = constructorScale.state
+  const distance = drawNativeFloat(rng, 10); rng = distance.state
+  const firstScaleProbe = drawNativeFloat(rng, Math.fround(0.75))
+  rng = firstScaleProbe.state
+  const firstScaleCandidate = Math.fround(
+    input.scale * Math.fround(firstScaleProbe.value + 0.5),
+  )
+  let nativeScale = Math.fround(0.45)
+  if (firstScaleCandidate >= nativeScale) {
+    const selectedScaleProbe = drawNativeFloat(rng, Math.fround(0.75))
+    rng = selectedScaleProbe.state
+    nativeScale = Math.fround(
+      input.scale * Math.fround(selectedScaleProbe.value + 0.5),
+    )
+  }
+  const radial = headingVector(angle.value)
+  const initialVelocity = {
+    x: Math.fround(radial.x * 1.5),
+    y: radial.y,
+  }
+  const spawnDistance = Math.fround(distance.value + 10)
+  void constructorScale
+  return Object.freeze({
+    debris: Object.freeze([Object.freeze({
+      alpha: NATIVE_WELD_BOULDER_DEBRIS_INITIAL_ALPHA,
+      colorGreen: color.value,
+      height: Math.fround(-height.value),
+      index: 0,
+      position: Object.freeze({
+        x: Math.fround(initialVelocity.x * spawnDistance),
+        y: Math.fround(initialVelocity.y * spawnDistance),
+      }),
+      record: NATIVE_BOULDER_BIT_RECORDS[record.value]!,
+      rotationDegrees: rotation.value,
+      rotationStepDegrees: Math.fround(rotationStep.value + 1),
+      scale: Math.min(Math.fround(0.75), Math.fround(nativeScale * 0.5)),
+      velocity: Object.freeze({
+        x: Math.fround(initialVelocity.x * input.scale * 0.75),
+        y: Math.fround(initialVelocity.y * input.scale * 0.75),
+      }),
+      verticalVelocity: Math.fround(-(bounce.value + 2)),
+    })]),
+    rng,
+  })
+}
+
 /**
  * Exact weak EBoulder handler program at 0x0054572C..0x00545B0C.
  * The duplicated scale draw is intentional: retail's MAX macro evaluates its

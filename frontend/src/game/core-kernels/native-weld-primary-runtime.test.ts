@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+
+import './native-weld-hail-contact.test.ts'
 import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
 import { createNativeRng, drawNativeFloat, drawNativeInteger } from './native-rng.ts'
 import {
@@ -115,10 +117,11 @@ test('weld missile fan matches the retail alternating geometry', () => {
 
 test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact ticks', () => {
   let actor = createNativeWeldMeteor({
+    bodyScale: 1,
     damage: 12,
     direction: { x: 1, y: 0 },
     fallHeadingDegrees: 20,
-    fallScalar: 1,
+    fallHeight: Math.fround(0.05),
     fallStep: Math.fround(0.02),
     id: 5,
     impactTicks: 200,
@@ -126,7 +129,6 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
     ownerId: 'p1',
     position: { x: 40, y: 80 },
     privateSeed: 4242,
-    size: 5,
     tick: 100,
     underpowered: false,
     vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
@@ -142,7 +144,7 @@ test('Meteor crosses its float32 fall lane then pulses every ten of 200 impact t
     fallTicks += 1
     assert.ok(fallTicks < 60)
   }
-  assert.equal(fallTicks, 51)
+  assert.equal(fallTicks, 3)
   assert.equal(actor.phase, 'impact')
   assert.equal(actor.impactDue, true)
   assert.equal(actor.debris.length, 5)
@@ -179,11 +181,12 @@ test('Meteor construction consumes every overwritten and retained native draw', 
     underpowered: false,
     vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
   })
-  assert.equal(spawn.fallScalar, Math.fround(1 - fall.value))
+  assert.equal(spawn.bodyScale, Math.fround(1 - fall.value))
+  assert.equal(spawn.fallHeight, Math.fround(Math.fround(size.value + 1) * 2.5 * 2))
   assert.equal(spawn.fallStep, Math.fround(Math.fround(0.02) * Math.fround(1.1 * 2)))
   assert.equal(spawn.impactTicks, 275)
   assert.equal(spawn.privateSeed, seed.value)
-  assert.equal(spawn.size, Math.fround(Math.fround(size.value + 1) * 2.5 * 2))
+  assert.equal(spawn.fallHeight, Math.fround(Math.fround(size.value + 1) * 2.5 * 2))
   assert.deepEqual(spawn.rng, seed.state)
 })
 
@@ -511,12 +514,13 @@ test('Hailstones bucket rebuild consumes native rock RNG in exact field order', 
 
   const stepped = stepNativeWeldWorldActor(actor, createNativeRng(3))
   assert.ok(stepped.actor?.kind === 'weld-persistent' && stepped.actor.buildId === 1008)
-  assert.deepEqual(stepped.actor.origin, { x: 0, y: 20 })
+  assert.deepEqual(stepped.actor.origin, { x: 20, y: 20 })
+  assert.equal(stepped.actor.collisionRadius, Math.fround(41.5))
   assert.equal(stepped.actor.rocks[0]!.decay, Math.fround(0.95))
   assert.equal(stepped.actor.rocks[0]!.phase, Math.fround(0.025))
   const firstRock = stepped.actor.rocks[0]!
   assert.equal(firstRock.releaseOffset!.x, firstRock.localPosition.x)
-  assert.equal(firstRock.releaseOffset!.y, Math.fround(
+  assert.notEqual(firstRock.releaseOffset!.y, Math.fround(
     firstRock.localPosition.y
       + Math.fround(
         Math.fround(50 - firstRock.localPosition.z * Math.fround(0.8))

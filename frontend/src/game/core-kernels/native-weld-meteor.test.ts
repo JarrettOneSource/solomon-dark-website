@@ -74,8 +74,8 @@ test('Meteor spawn retains seven normal words but omits weak private fire state'
     vector: [8, 16, 20, 1.1, 1.5, 3, 10, 2, 3],
   })
   assert.deepEqual(normal.rng, advanceNativeRngWords(rng, 7))
-  assert.ok(normal.fallScalar >= 0.75 && normal.fallScalar <= 1)
-  assert.ok(normal.size >= 5 && normal.size <= 6.25)
+  assert.ok(normal.bodyScale >= 0.75 && normal.bodyScale <= 1)
+  assert.ok(normal.fallHeight >= 5 && normal.fallHeight <= 6.25)
   assert.equal(normal.impactTicks, 275)
   assert.ok(normal.privateSeed >= 0 && normal.privateSeed < 10_000_000)
 
@@ -97,7 +97,7 @@ test('Meteor spawn retains seven normal words but omits weak private fire state'
 test('Meteor impact consumes 69 visual plus two sound words and five BoulderBit seeds', () => {
   const rng = createNativeRng(91)
   const impact = createNativeWeldMeteorImpactProgram({
-    fallScalar: Math.fround(-0.01),
+    bodyScale: Math.fround(0.75),
     rng,
     underpowered: false,
   })
@@ -117,7 +117,7 @@ test('Meteor impact consumes 69 visual plus two sound words and five BoulderBit 
   assert.equal(impact.impactThrowFirePitch, Math.fround(0.8))
 
   const weak = createNativeWeldMeteorImpactProgram({
-    fallScalar: Math.fround(-0.01),
+    bodyScale: Math.fround(0.75),
     rng,
     underpowered: true,
   })

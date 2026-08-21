@@ -243,7 +243,7 @@ test('client protocol validates character, input, lifecycle, Lua, and ping messa
   })), /ownerDisplayName/)
 })
 
-test('protocol v41 bounds Lua requests and structured results by wire bytes and shape', () => {
+test('protocol v42 bounds Lua requests and structured results by wire bytes and shape', () => {
   assert.throws(() => decodeClientGameMessage(JSON.stringify({
     type: 'client-lua-execute',
     code: '😀'.repeat(MAX_LUA_CONSOLE_CODE_LENGTH / 4 + 1),
@@ -304,7 +304,7 @@ test('protocol v41 bounds Lua requests and structured results by wire bytes and 
   }
 })
 
-test('protocol v41 accepts every authoritative inventory action and rejects malformed variants', () => {
+test('protocol v42 accepts every authoritative inventory action and rejects malformed variants', () => {
   const actions = [
     { type: 'buy-dowsing', offerId: 1 },
     { type: 'buy-fomentius', itemId: 2 },
@@ -491,7 +491,7 @@ test('server welcome round-trips content, kernel, character, and world ownership
   )
 })
 
-test('protocol v41 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
+test('protocol v42 strictly round-trips projected statuses, lighting, shields, payloads, and effects', () => {
   const loaded = loadedBoneyardFixture('modifier-protocol-run')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -921,8 +921,8 @@ test('protocol v41 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v41 carries party denial, Hall archives, secondary gates, and existing gameplay state', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 41)
+test('protocol v42 carries party denial, Hall archives, secondary gates, and existing gameplay state', () => {
+  assert.equal(GAME_PROTOCOL_VERSION, 42)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -1066,7 +1066,7 @@ test('protocol v41 carries party denial, Hall archives, secondary gates, and exi
   )
 })
 
-test('protocol v41 strictly owns the generated-arena transition', () => {
+test('protocol v42 strictly owns the generated-arena transition', () => {
   const loaded = loadedBoneyardFixture('arena-transition-run')
   loaded.scene.solomonDig = {
     frameProgram: [0, 1],
@@ -1160,7 +1160,7 @@ test('protocol v41 strictly owns the generated-arena transition', () => {
   )
 })
 
-test('protocol v41 preserves the bounded run-scoped enemy semantic-event lane', () => {
+test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', () => {
   const runId = 'enemy-event-protocol-run'
   const active = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -2698,7 +2698,7 @@ test('protocol strictly validates nested native Region screen-feedback events', 
   )
 })
 
-test('protocol v41 round-trips Frozen and FrostBurn target ownership without client inference', () => {
+test('protocol v42 round-trips Frozen and FrostBurn target ownership without client inference', () => {
   const snapshot = createGameSnapshot(
     createGameSimulation({ 'player-1': CHARACTER }),
     'player-1',
@@ -3255,7 +3255,7 @@ test('loaded Boneyard round-trips scene identity, geometry, and Solomon Dig', ()
   )
 })
 
-test('protocol v41 strictly round-trips loot, Goodies, and their semantic event lane', () => {
+test('protocol v42 strictly round-trips loot, Goodies, and their semantic event lane', () => {
   const runId = 'loot-protocol-run'
   let state = enterBoneyardWorld(
     createGameSimulation({ 'player-1': CHARACTER }),
@@ -3493,16 +3493,28 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     vector: [8, 12, 20, 1, 1, 0, 0, 0, 0],
   }, {
     ...common,
+    alpha: 2,
+    alphaStep: Math.fround(0.1),
+    buildId: 1007,
+    kind: 'weld-meteor-flash',
+    lightRegistration: null,
+    position: { x: 800, y: 350 },
+    record: 15,
+    scale: 6,
+    vector: [8, 12, 20, 1, 1, 0, 0, 0, 0],
+  }, {
+    ...common,
+    bodyScale: 1,
     buildId: 1007,
     cameraDisplacement: null,
     damage: 12,
     debris: [],
     fallHeadingDegrees: 20,
-    fallScalar: 1,
+    fallHeight: 5,
     fallStep: Math.fround(0.04),
     impactAgeTicks: 0,
     impactDue: false,
-    impactRadiusScalar: 0,
+    impactRadiusScalar: 1,
     impactRotationDegrees: 0,
     impactSoundPitch: null,
     impactThrowFirePitch: null,
@@ -3515,7 +3527,6 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     pulseDue: false,
     pulseSequence: 0,
     pulseTicksRemaining: 10,
-    size: 5,
     underpowered: false,
     vector: [8, 12, 20, 1, 1, 0, 0, 0, 0],
   }, {
@@ -3568,6 +3579,69 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     vector: [7, 2, 1, 1, 0, 0],
   }, {
     ...common,
+    alpha: 1,
+    alphaStep: Math.fround(0.075),
+    buildId: 1008,
+    end: { x: 820, y: 390 },
+    endAlpha: Math.fround(0.4),
+    kind: 'weld-hail-line',
+    lightRegistration: null,
+    start: { x: 800, y: 380 },
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+    width: 6,
+  }, {
+    ...common,
+    alpha: 1,
+    alphaStep: Math.fround(0.1),
+    buildId: 1008,
+    kind: 'weld-hail-flash',
+    lightRegistration: null,
+    position: { x: 820, y: 390 },
+    record: 15,
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+  }, {
+    ...common,
+    buildId: 1008,
+    delta: { x: 0, y: -1 },
+    kind: 'weld-hail-knockback',
+    lightRegistration: null,
+    remainingTicks: 4,
+    targetId: 'enemy:1',
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+  }, {
+    ...common,
+    alpha: Math.fround(0.75),
+    alphaStep: Math.fround(0.125),
+    buildId: 1008,
+    kind: 'weld-hail-terrain-particle',
+    lightRegistration: null,
+    position: { x: 820, y: 390 },
+    record: 45,
+    rotationDegrees: 240,
+    scale: Math.fround(0.4),
+    tint: 0xffffff,
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+    velocity: { x: 1, y: -1 },
+    velocityFactor: Math.fround(0.92),
+  }, {
+    ...common,
+    alpha: 1.5,
+    bounceVelocity: -2,
+    buildId: 1008,
+    enhancedShadow: true,
+    height: -10,
+    kind: 'weld-hail-terrain-bouncer',
+    lightRegistration: null,
+    position: { x: 820, y: 390 },
+    record: 32,
+    rotationDegrees: 240,
+    rotationStepDegrees: 5,
+    scale: Math.fround(0.6),
+    vector: [7, 2, 1, 1, 0.2, 0.5],
+    velocity: { x: 1, y: -1 },
+    verticalVelocity: -2,
+  }, {
+    ...common,
     assemblyScale: Math.fround(0.18),
     buildId: 1006,
     damage: 12,
@@ -3599,6 +3673,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
   }, {
     ...common,
     buildId: 1008,
+    collisionRadius: 40,
     damage: 7,
     kind: 'weld-persistent',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
@@ -3613,6 +3688,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
       decay: 1,
       localPosition: { x: 1, y: 2, z: 3 },
       phase: 0,
+      rockId: 0,
       releaseOffset: null,
       spriteRecord: 168,
       visualScale: 0.2,
@@ -3635,7 +3711,7 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     assert.equal(decoded.type, 'server-snapshot')
     assert.deepEqual(decoded.frame.primarySpells.transients, [actor])
   }
-  const hailActor = actors[11]
+  const hailActor = actors.find((actor) => 'rocks' in actor)
   if (!hailActor || !('rocks' in hailActor)) throw new Error('expected Hailstones fixture')
   assert.throws(() => decodeFrame({
     nextId: 2,

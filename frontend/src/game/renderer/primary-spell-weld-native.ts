@@ -11,8 +11,15 @@ import type {
   NativeWeldHailstonesState,
   NativeWeldImpactActorState,
   NativeWeldMeteorActorState,
+  NativeWeldMeteorFlashActorState,
   NativeWeldProjectileState,
 } from '../core-kernels/native-weld-primary-runtime.ts'
+import type {
+  NativeWeldHailFlashState,
+  NativeWeldHailLineState,
+  NativeWeldHailTerrainBouncerState,
+  NativeWeldHailTerrainParticleState,
+} from '../core-kernels/native-weld-hail-contact.ts'
 import type { NativeWeldMeteorMarkerState } from '../core-kernels/native-weld-meteor.ts'
 import type { NativeWeldSteamActorState } from '../core-kernels/native-weld-steam.ts'
 import { earthBoulderPresentationPlan } from './earth-boulder-presentation.ts'
@@ -25,7 +32,7 @@ import {
 const DEG = Math.PI / 180
 
 export const NATIVE_WELD_BADGUYS_RECORDS = Object.freeze([
-  6, 15, 18, 31, 43, 44, 50, 51, 70, 71, 76, 86, 110, 111, 112,
+  6, 15, 18, 31, 32, 43, 44, 45, 50, 51, 70, 71, 76, 86, 110, 111, 112,
   168, 169, 170, 171,
   ...integerRange(251, 266),
   ...integerRange(271, 282),
@@ -50,9 +57,15 @@ export type NativeWeldPresentationState =
         | 'weld-channel'
         | 'weld-frost-fade'
         | 'weld-ground-spark-fade'
+        | 'weld-hail-flash'
+        | 'weld-hail-knockback'
+        | 'weld-hail-line'
         | 'weld-hail-rock-fade'
+        | 'weld-hail-terrain-bouncer'
+        | 'weld-hail-terrain-particle'
         | 'weld-impact'
         | 'weld-meteor'
+        | 'weld-meteor-flash'
         | 'weld-meteor-marker'
         | 'weld-persistent'
         | 'weld-steam'
@@ -81,7 +94,17 @@ export interface NativeWeldMeshDraw {
   readonly vertices: readonly number[]
 }
 
+export interface NativeWeldLineDraw {
+  readonly alpha: number
+  readonly color: number
+  readonly end: Readonly<{ x: number; y: number }>
+  readonly role: string
+  readonly start: Readonly<{ x: number; y: number }>
+  readonly width: number
+}
+
 export interface NativeWeldVisualPlan {
+  readonly lines: readonly NativeWeldLineDraw[]
   readonly meshes: readonly NativeWeldMeshDraw[]
   readonly position: Readonly<{ x: number; y: number }>
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
@@ -98,9 +121,15 @@ export function isNativeWeldPresentationState(
     || state.kind === 'weld-channel'
     || state.kind === 'weld-frost-fade'
     || state.kind === 'weld-ground-spark-fade'
+    || state.kind === 'weld-hail-flash'
+    || state.kind === 'weld-hail-knockback'
+    || state.kind === 'weld-hail-line'
     || state.kind === 'weld-hail-rock-fade'
+    || state.kind === 'weld-hail-terrain-bouncer'
+    || state.kind === 'weld-hail-terrain-particle'
     || state.kind === 'weld-impact'
     || state.kind === 'weld-meteor'
+    || state.kind === 'weld-meteor-flash'
     || state.kind === 'weld-meteor-marker'
     || state.kind === 'weld-persistent'
     || state.kind === 'weld-steam'
@@ -125,9 +154,15 @@ export function nativeWeldVisualPlan(
         scaleY: state.scale,
       },
     )])
+    case 'weld-hail-flash': return hailFlashPlan(state)
+    case 'weld-hail-knockback': return empty(state.origin)
+    case 'weld-hail-line': return hailLinePlan(state)
     case 'weld-hail-rock-fade': return hailRockFadePlan(state)
+    case 'weld-hail-terrain-bouncer': return hailTerrainBouncerPlan(state)
+    case 'weld-hail-terrain-particle': return hailTerrainParticlePlan(state)
     case 'weld-impact': return impactPlan(state, presentationFrame)
     case 'weld-meteor': return meteorPlan(state, presentationFrame)
+    case 'weld-meteor-flash': return meteorFlashPlan(state)
     case 'weld-meteor-marker': return markerPlan(state)
     case 'weld-persistent':
       if (state.buildId === 1006) return etherealBoulderPlan(state, presentationFrame)
@@ -277,8 +312,8 @@ function markerPlan(state: NativeWeldMeteorMarkerState): NativeWeldVisualPlan {
 function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWeldVisualPlan {
   if (state.phase === 'fall') {
     const fallOffset = {
-      x: Math.fround(Math.sin(state.fallHeadingDegrees * DEG) * 768 * state.fallScalar),
-      y: Math.fround(-Math.cos(state.fallHeadingDegrees * DEG) * 768 * state.fallScalar),
+      x: 0,
+      y: Math.fround(-768 * state.fallHeight),
     }
     return positioned(state.position, [
       sprite(15, 'meteor-fall-corona', {
@@ -291,31 +326,37 @@ function meteorPlan(state: NativeWeldMeteorActorState, frame: number): NativeWel
       }),
       sprite(50, 'meteor-fall-body', {
         offset: fallOffset,
-        rotationRadians: (state.impactRotationDegrees + state.ageTicks) * DEG,
-        scaleX: state.size * 0.2,
-        scaleY: state.size * 0.2,
+        rotationRadians: (state.fallHeadingDegrees * 0.5 + 180) * DEG,
+        scaleX: Math.sqrt(Math.max(0, state.bodyScale)),
+        scaleY: Math.max(0, state.bodyScale * 2),
       }),
     ], { sortBias: fallOffset.y })
   }
-  const flashAlpha = Math.max(0, 2 - state.impactAgeTicks * 0.1)
-  return positioned(state.position, [
-    ...(flashAlpha > 0 ? [sprite(15, 'meteor-impact-flash', {
-      alpha: flashAlpha,
-      blend: 'add',
-      rotationRadians: state.impactRotationDegrees * DEG,
-      scaleX: 6,
-      scaleY: 6,
-      tint: 0xff8000,
-    })] : []),
-    ...debrisSprites(state.debris, state.impactAgeTicks, 'meteor-debris'),
-  ])
+  const impactAlpha = Math.min(1, state.impactTicksRemaining / 100)
+  return positioned(state.position, [sprite(50, 'meteor-impact-body', {
+    alpha: impactAlpha,
+    blend: 'add',
+    rotationRadians: state.impactRotationDegrees * DEG,
+    scaleX: state.impactRadiusScalar,
+    scaleY: state.impactRadiusScalar * 0.8,
+  }), ...debrisSprites(state.debris, state.impactAgeTicks, 'meteor-debris')])
+}
+
+function meteorFlashPlan(state: NativeWeldMeteorFlashActorState): NativeWeldVisualPlan {
+  return positioned(state.position, [sprite(15, 'meteor-impact-flash', {
+    alpha: state.alpha,
+    blend: 'add',
+    scaleX: state.scale,
+    scaleY: state.scale,
+    tint: 0xff8000,
+  })])
 }
 
 function debrisPlan(state: NativeWeldBoulderDebrisActorState): NativeWeldVisualPlan {
   return positioned(state.position, debrisSprites(
     state.debris,
     state.ageTicks,
-    'ethereal-boulder-weak-debris',
+    state.buildId === 1006 ? 'ethereal-boulder-debris' : 'hailstones-contact-debris',
   ))
 }
 
@@ -372,10 +413,18 @@ function hailstonesPlan(
     ))
   }
   for (const [index, rock] of state.rocks.entries()) {
-    const offset = rock.releaseOffset ?? {
-      x: rock.localPosition.x,
-      y: rock.localPosition.y,
-    }
+    const offset = state.phase === 'flight'
+      ? {
+          x: rock.localPosition.x,
+          y: Math.fround(
+            rock.localPosition.y
+              + Math.fround(
+                Math.fround(50 - rock.localPosition.z * Math.fround(0.8))
+                  - rock.localPosition.y,
+              ) * rock.decay,
+          ),
+        }
+      : { x: rock.localPosition.x, y: rock.localPosition.y }
     const scale = Math.max(0.45, rock.visualScale)
       * (state.phase === 'held' ? 0.85 : 0.75)
     sprites.push(sprite(rock.spriteRecord, `hailstones-rock-${index}`, {
@@ -391,6 +440,76 @@ function hailstonesPlan(
       Math.max(highest, rock.localPosition.z)
     ), 0),
   })
+}
+
+function hailTerrainParticlePlan(
+  state: NativeWeldHailTerrainParticleState,
+): NativeWeldVisualPlan {
+  return positioned(state.position, [sprite(45, 'hailstones-terrain-particle', {
+    alpha: state.alpha,
+    blend: 'add',
+    rotationRadians: state.rotationDegrees * DEG,
+    scaleX: state.scale,
+    scaleY: state.scale,
+    tint: state.tint,
+  })])
+}
+
+function hailTerrainBouncerPlan(
+  state: NativeWeldHailTerrainBouncerState,
+): NativeWeldVisualPlan {
+  const sprites: NativeWeldSpriteDraw[] = []
+  if (state.enhancedShadow && state.height !== 0) {
+    sprites.push(sprite(32, 'hailstones-terrain-bouncer-shadow', {
+      alpha: Math.min(1, state.alpha) * 0.5,
+      offset: { x: 0, y: 2 },
+      scaleX: state.scale * 0.5,
+      scaleY: state.scale * 0.5,
+      tint: 0x000000,
+    }))
+  }
+  sprites.push(sprite(32, 'hailstones-terrain-bouncer', {
+    alpha: Math.min(1, state.alpha),
+    offset: { x: 0, y: state.height },
+    rotationRadians: state.rotationDegrees * DEG,
+    scaleX: state.scale,
+    scaleY: state.scale,
+  }))
+  return positioned(state.position, sprites)
+}
+
+function hailLinePlan(state: NativeWeldHailLineState): NativeWeldVisualPlan {
+  const midpoint = {
+    x: Math.fround((state.end.x - state.start.x) * 0.5),
+    y: Math.fround((state.end.y - state.start.y) * 0.5),
+  }
+  const end = {
+    x: Math.fround(state.end.x - state.start.x),
+    y: Math.fround(state.end.y - state.start.y),
+  }
+  return positioned(state.start, [], {
+    lines: Object.freeze([Object.freeze({
+      alpha: state.alpha * 0.5,
+      color: 0x00ffff,
+      end: midpoint,
+      role: 'hailstones-contact-line-cyan',
+      start: Object.freeze({ x: 0, y: 0 }),
+      width: state.width,
+    }), Object.freeze({
+      alpha: state.alpha * state.endAlpha,
+      color: 0xffffff,
+      end,
+      role: 'hailstones-contact-line-white',
+      start: midpoint,
+      width: state.width,
+    })]),
+  })
+}
+
+function hailFlashPlan(state: NativeWeldHailFlashState): NativeWeldVisualPlan {
+  return positioned(state.position, [sprite(15, 'hailstones-contact-flash', {
+    alpha: state.alpha,
+  })])
 }
 
 function hailRockFadePlan(state: NativeWeldHailRockFadeActorState): NativeWeldVisualPlan {
@@ -583,12 +702,14 @@ function positioned(
   position: Readonly<{ x: number; y: number }>,
   sprites: readonly NativeWeldSpriteDraw[],
   options: Readonly<{
+    lines?: readonly NativeWeldLineDraw[]
     meshes?: readonly NativeWeldMeshDraw[]
     regionLightPoint?: Readonly<{ x: number; y: number }> | null
     sortBias?: number
   }> = {},
 ): NativeWeldVisualPlan {
   return Object.freeze({
+    lines: Object.freeze([...(options.lines ?? [])]),
     meshes: Object.freeze([...(options.meshes ?? [])]),
     position: Object.freeze({ ...position }),
     regionLightPoint: options.regionLightPoint === undefined
