@@ -13,7 +13,10 @@ import {
   SOLOMON_DIG_HOTKEY_CODE,
 } from './boneyard-dig-indicator.ts'
 import { BoneyardEnemyAmbientAudioSynchronizer } from './boneyard-enemy-ambient-audio.ts'
-import { BoneyardWeatherAudioSynchronizer } from './boneyard-weather-audio.ts'
+import {
+  BoneyardWeatherAudioSynchronizer,
+  nativeBoneyardWeatherArenaFade,
+} from './boneyard-weather-audio.ts'
 import { BONEYARD_SOLOMON_VOICE_CUES } from './core-kernels/boneyard-encounter.ts'
 import type { PlayerCharacterInput } from './core-kernels/player-character.ts'
 import {
@@ -505,7 +508,10 @@ export default function BoneyardScene({
           }
         }
         if (isBoneyardGameSnapshot(snapshot)) {
-          const weatherRequest = weatherAudio.update(loaded.scene.environmentMode)
+          const weatherRequest = weatherAudio.update(
+            loaded.scene.environmentMode,
+            nativeBoneyardWeatherArenaFade(snapshot.run.gameOverExitTicks),
+          )
           const localPlayer = snapshot.players[playerId]
           const requests = enemyAmbientAudio.update(snapshot, (position) => (
             nativeBoneyardPointGain(

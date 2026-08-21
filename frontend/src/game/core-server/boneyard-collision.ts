@@ -194,6 +194,18 @@ export function canPlaceBoneyardBody(
   return firstContact(position, world, radius, position) === null
 }
 
+/**
+ * Native world weather calls `MovementCollision` directly, without the arena
+ * bounds clearance used for mobile body placement.
+ */
+export function boneyardBodyCollides(
+  position: BoneyardPoint,
+  world: BoneyardCollisionWorld,
+  radius: number,
+): boolean {
+  return firstContact(position, world, radius, position) !== null
+}
+
 export function resolveBoneyardSpawnPosition(
   position: BoneyardPoint,
   bounds: BoneyardBounds,

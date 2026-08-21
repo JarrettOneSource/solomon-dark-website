@@ -6,7 +6,8 @@ export const NATIVE_BONEYARD_WEATHER_SPLASH = Object.freeze({
   entry: 24,
 })
 export const NATIVE_BONEYARD_WEATHER_COLLISION_RADIUS = 4
-export const NATIVE_BONEYARD_WEATHER_MAX_SPAWN_ATTEMPTS = 1_024
+export const NATIVE_BONEYARD_WEATHER_FIRST_ACTIVE_ARENA_AGE = 2
+export const NATIVE_BONEYARD_WEATHER_RNG_TICK_MULTIPLIER = 0x0ef3
 export const NATIVE_BONEYARD_WEATHER_STREAK_WIDTH = 1
 export const NATIVE_BONEYARD_WEATHER_STREAK_MIN_LENGTH = 20
 export const NATIVE_BONEYARD_WEATHER_STREAK_LENGTH_RANGE = 10
@@ -51,6 +52,7 @@ interface WeatherDropState {
   height: number
   id: number
   length: number
+  lightScalar: number | null
   position: BoneyardPoint
 }
 
@@ -68,29 +70,24 @@ export interface NativeBoneyardWeatherOptions {
   readonly enhancedEffects: boolean
   readonly initialTick: number
   readonly mode: number
-  readonly seed: number
 }
 
 export class NativeBoneyardWeather {
+  private arenaAge = 0
   private readonly enhancedEffects: boolean
   private readonly drops: WeatherDropState[] = []
   private readonly mode: number
   private readonly splashes: WeatherSplashState[] = []
   private currentTick: number
   private nextId = 1
-  private rng: NativeRngState
 
   constructor(options: NativeBoneyardWeatherOptions) {
     if (!Number.isSafeInteger(options.initialTick) || options.initialTick < 0) {
       throw new RangeError('native Boneyard weather initial tick must be non-negative')
     }
-    if (!Number.isSafeInteger(options.seed)) {
-      throw new RangeError('native Boneyard weather seed must be a safe integer')
-    }
     this.currentTick = options.initialTick
     this.enhancedEffects = options.enhancedEffects
     this.mode = options.mode
-    this.rng = createNativeRng(options.seed)
   }
 
   advanceTo(
@@ -107,22 +104,26 @@ export class NativeBoneyardWeather {
     if (!Number.isFinite(viewportWorldHeight) || viewportWorldHeight <= 0) {
       throw new RangeError('native Boneyard weather viewport height must be positive')
     }
-    const spawnCount = nativeBoneyardWeatherSpawnCount(this.mode, this.enhancedEffects)
     for (let nextTick = this.currentTick + 1; nextTick <= targetTick; nextTick += 1) {
+      let rng = createNativeRng(nativeBoneyardWeatherTickSeed(nextTick))
       this.stepExistingEffects()
+      this.arenaAge += 1
+      if (this.arenaAge < NATIVE_BONEYARD_WEATHER_FIRST_ACTIVE_ARENA_AGE) continue
+      const spawnCount = nativeBoneyardWeatherSpawnCount(this.mode, this.enhancedEffects)
       for (let spawnIndex = 0; spawnIndex < spawnCount; spawnIndex += 1) {
-        const point = this.sampleClearPoint(bounds, collides)
-        if (point === null) continue
-        const length = drawNativeFloat(this.rng, NATIVE_BONEYARD_WEATHER_STREAK_LENGTH_RANGE)
-        this.rng = length.state
+        const sampled = this.sampleClearPoint(bounds, collides, rng)
+        rng = sampled.rng
+        const length = drawNativeFloat(rng, NATIVE_BONEYARD_WEATHER_STREAK_LENGTH_RANGE)
+        rng = length.state
         this.drops.push({
           height: Math.fround(-viewportWorldHeight),
           id: this.nextId,
           length: Math.fround(NATIVE_BONEYARD_WEATHER_STREAK_MIN_LENGTH + length.value),
-          position: point,
+          lightScalar: null,
+          position: sampled.point,
         })
         this.nextId += 1
-        this.spawnSplash(point)
+        rng = this.spawnSplash(sampled.point, rng)
       }
     }
     this.currentTick = targetTick
@@ -130,7 +131,8 @@ export class NativeBoneyardWeather {
 
   plan(lightAt: (position: Readonly<BoneyardPoint>) => number = () => 1): NativeBoneyardWeatherPlan {
     const drops = this.drops.map((drop) => {
-      const scalar = clampUnit(lightAt(drop.position))
+      if (drop.lightScalar === null) drop.lightScalar = clampUnit(lightAt(drop.position))
+      const scalar = drop.lightScalar
       const color = grayscaleColor(scalar)
       return {
         end: {
@@ -180,39 +182,38 @@ export class NativeBoneyardWeather {
   private sampleClearPoint(
     bounds: Readonly<BoneyardBounds>,
     collides: NativeBoneyardWeatherSpawnCollision,
-  ): BoneyardPoint | null {
-    for (let attempt = 0; attempt < NATIVE_BONEYARD_WEATHER_MAX_SPAWN_ATTEMPTS; attempt += 1) {
-      const x = drawNativeFloat(this.rng, bounds.w)
-      this.rng = x.state
-      const y = drawNativeFloat(this.rng, bounds.h)
-      this.rng = y.state
+    source: NativeRngState,
+  ): { point: BoneyardPoint; rng: NativeRngState } {
+    let rng = source
+    for (;;) {
+      const x = drawNativeFloat(rng, bounds.w)
+      rng = x.state
+      const y = drawNativeFloat(rng, bounds.h)
+      rng = y.state
       const point = {
         x: Math.fround(bounds.x + x.value),
         y: Math.fround(bounds.y + y.value),
       }
-      if (!collides(point, NATIVE_BONEYARD_WEATHER_COLLISION_RADIUS)) return point
+      if (!collides(point, NATIVE_BONEYARD_WEATHER_COLLISION_RADIUS)) return { point, rng }
     }
-    return null
   }
 
-  private spawnSplash(position: BoneyardPoint): void {
-    const initialScale = drawNativeFloat(this.rng, 0.25)
-    this.rng = initialScale.state
-    const loss = drawNativeFloat(this.rng, 0.05)
-    this.rng = loss.state
-    const factor = drawNativeFloat(this.rng, 0.25)
-    this.rng = factor.state
+  private spawnSplash(position: BoneyardPoint, source: NativeRngState): NativeRngState {
+    const initialScale = drawNativeFloat(source, 0.25)
+    const loss = drawNativeFloat(initialScale.state, 0.05)
+    const factor = drawNativeFloat(loss.state, 0.25)
     const scaleFactor = Math.fround(0.75 + factor.value)
     this.splashes.push({
       ageTicks: 0,
-      growth: 1.01,
+      growth: Math.fround(1 + scaleFactor * 0.01),
       id: this.nextId,
-      life: Math.fround(scaleFactor * 0.5),
+      life: scaleFactor,
       loss: Math.fround((0.05 + loss.value) * scaleFactor),
       position: { ...position },
       scale: Math.fround(0.5 + initialScale.value),
     })
     this.nextId += 1
+    return factor.state
   }
 
   private stepExistingEffects(): void {
@@ -240,13 +241,11 @@ export function nativeBoneyardWeatherSpawnCount(
   return 0
 }
 
-export function nativeBoneyardWeatherSeed(runId: string, sourceSeed: string): number {
-  let hash = 0x811c9dc5
-  for (const value of `${runId}:${sourceSeed}`) {
-    hash ^= value.charCodeAt(0)
-    hash = Math.imul(hash, 0x01000193)
+export function nativeBoneyardWeatherTickSeed(tick: number): number {
+  if (!Number.isSafeInteger(tick) || tick < 0) {
+    throw new RangeError('native Boneyard weather tick must be a non-negative safe integer')
   }
-  return hash >>> 0
+  return (Math.imul(tick, NATIVE_BONEYARD_WEATHER_RNG_TICK_MULTIPLIER) >>> 0) & 0x3fff_ffff
 }
 
 function clampUnit(value: number): number {

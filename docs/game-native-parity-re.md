@@ -22444,18 +22444,53 @@ The retail class census identifies `Anim_WeatherRaindrop` at vtable
 | --- | --- | --- |
 | Clear mode 0 | no world drops, splashes, or rainfall request | exact-ported |
 | Rainy mode 1 | 3 procedural drops per Arena tick | exact-ported |
-| Stormy mode 2 | 10 drops, or 20 with Enhanced Effects | exact-ported |
-| World streak | `20 + RandomFloat(10)`, width 1, world-space gradient, floor retirement | exact-ported |
-| Spawn validity | bounds samples rejected by `FUN_005238C0` with native radius 4 | exact-ported |
-| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`) | exact-ported |
-| Ambient audio | shared `sounds\\rainfall__loop`, mode gain 0.4/1 | exact-ported |
+| Stormy mode 2 | 10 drops, or 20 with Enhanced Effects | exact-ported with the existing enabled browser effect configuration |
+| World streak | `20 + RandomFloat(10)`, width 1, cached world-light gradient, floor retirement | corrected after audit |
+| Spawn validity | visible-camera samples rejected only by `FUN_005238C0` with native radius 4; retry is unbounded | corrected after audit |
+| Splash child | `Anim_FadeScale` with `DeadHawg:24` (`DAT_00819994 + 0x1298`), `life=0.75..1`, scaled loss, and scaled growth | corrected after audit |
+| Ambient audio | shared `sounds\\rainfall__loop`, mode gain `0.4/1` times `1 - Arena+0x8E48` | corrected after audit |
 | Mode-1/2 compact scenery 25..28 | serialized authored rows already use the shared compact pass | verified-already-at-parity |
 | Snowy/Foggy labels, Hub/title scenes | not reachable from Boneyard's stock 0..2 authoring path | out-of-system |
 
 Weather drops/splashes are peer-local presentation state. They do not enter
-the protocol, authoritative RNG, collision actors, lighting sources, or the
-secondary-ability actor list. The Website uses a private seed, the carried
-scene mode/bounds, shared static collision, and post-main world ordering.
+the protocol, collision actors, lighting sources, or the secondary-ability
+actor list. The Arena resets its local `NativeRng` at `Arena+0x90` on every
+tick from `MyApp+0x28 * 0xEF3` before the weather call; the browser does the
+same from the presentation tick rather than deriving a run seed. The owner
+samples the carried camera bounds, uses collision-only placement, caches the
+drop's light scalar on its first draw, and submits the splash manager before
+the streak manager.
+
+### Re-check correction — 2026-08-20
+
+The first web pass was not yet a stock-equivalent receipt. A fresh read-only
+retail trace against the SHA above closed the whole world-weather membership:
+
+- `CPU::Tick` `0x00427800` increments the owner age at `+0x28` before Arena
+  tick, so `0x00468E50` begins on age 2, not immediately. `0x0046E570` derives
+  `{left, top, width, height}` at `+0x8BCC..+0x8BD8` from the visible camera
+  rectangle and calls the owner after that update.
+- `0x0046E570` resets `Arena+0x90` through `0x00401120(MyApp+0x28 * 0xEF3)`;
+  `0x00401310` then supplies the weather draw stream. This replaces the
+  incorrect private run-seed model.
+- `0x00468E50` uses a `do { sample } while (0x005238C0(..., radius=4, 0, 0))`
+  loop. `0x005238C0` tests collision shapes only; an added web arena-boundary
+  clearance and an invented retry cap were both wrong.
+- `Anim_WeatherRaindrop` is constructed at `0x00454B60`, advances by its
+  `20..30` length at `0x00454C00`, and retires only once `height > 0`. Its
+  `0x00459B60` light query is a one-time cache, then draws alpha `0 -> 0.5`.
+- The sibling `Anim_FadeScale` starts at scale `0.5..0.75`, alpha `0.75..1`,
+  loss `(0.05..0.10) * factor`, and growth `1 + factor * 0.01`, where
+  `factor=0.75..1`. The former half-life and fixed growth were wrong.
+- Arena render submits splash manager `+0x2C4` at `0x0046F6C0` before the
+  streak manager `+0x1E0` at `0x0046FFB7`; the web containers must preserve
+  that order. `GameOver::Tick` `0x005CF4F0` writes `Arena+0x8E48` only during
+  its 400-tick exit at `0.0025/tick`, and `0x00468E50` uses that field only to
+  attenuate the rainfall request.
+
+This correction intentionally keeps the right-click rain actor family outside
+the world-weather owner: its native constructors, collision, damage, and local
+effects remain a separate system.
 
 ### Implementation and validation receipt
 

@@ -5,6 +5,7 @@ import type { GameLoopCue } from './game-audio-native.ts'
 import {
   BONEYARD_WEATHER_AUDIO_OWNER,
   BoneyardWeatherAudioSynchronizer,
+  nativeBoneyardWeatherArenaFade,
   nativeBoneyardWeatherAudioRequest,
 } from './boneyard-weather-audio.ts'
 
@@ -38,6 +39,13 @@ test('native weather audio uses the shared rainfall loop and mode gains', () => 
     cue: 'rainfall-loop',
     gain: 1,
   })
+  assert.equal(nativeBoneyardWeatherArenaFade(null), 0)
+  assert.equal(nativeBoneyardWeatherArenaFade(200), 0.5)
+  assert.deepEqual(nativeBoneyardWeatherAudioRequest(1, 0.5), {
+    cue: 'rainfall-loop',
+    gain: 0.2,
+  })
+  assert.equal(nativeBoneyardWeatherAudioRequest(2, 1).gain, 0)
   assert.equal(nativeBoneyardWeatherAudioRequest(3).gain, 0)
 })
 
@@ -45,12 +53,12 @@ test('weather audio owns one channel separately from right-click rain owners', (
   const audio = new RecordingAudio()
   const synchronizer = new BoneyardWeatherAudioSynchronizer(audio)
   synchronizer.update(1)
-  synchronizer.update(2)
+  synchronizer.update(2, 0.5)
   synchronizer.update(0)
   synchronizer.destroy()
   assert.deepEqual(audio.starts, [
     { cue: 'rainfall-loop', owner: BONEYARD_WEATHER_AUDIO_OWNER, volume: 0.4 },
-    { cue: 'rainfall-loop', owner: BONEYARD_WEATHER_AUDIO_OWNER, volume: 1 },
+    { cue: 'rainfall-loop', owner: BONEYARD_WEATHER_AUDIO_OWNER, volume: 0.5 },
   ])
   assert.deepEqual(audio.stops, [{ cue: 'rainfall-loop', owner: BONEYARD_WEATHER_AUDIO_OWNER }])
 })

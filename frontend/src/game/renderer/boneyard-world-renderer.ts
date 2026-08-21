@@ -46,14 +46,13 @@ import type {
   SolomonDigState,
 } from '../core-kernels/boneyard.ts'
 import {
-  canPlaceBoneyardBody,
+  boneyardBodyCollides,
   createBoneyardCollisionWorld,
   withBoneyardGateCollision,
   type BoneyardCollisionWorld,
 } from '../core-server/boneyard-collision.ts'
 import {
   NativeBoneyardWeather,
-  nativeBoneyardWeatherSeed,
 } from '../core-kernels/native-boneyard-weather.ts'
 import { nativeSecondaryTargetMaterialTint } from '../core-kernels/native-secondary-abilities.ts'
 import {
@@ -1200,7 +1199,6 @@ class BoneyardDynamicScene {
       enhancedEffects: true,
       initialTick: initialSnapshot.tick,
       mode: boneyard.scene.environmentMode,
-      seed: nativeBoneyardWeatherSeed(boneyard.runId, boneyard.seed),
     })
     this.weatherView = new NativeBoneyardWeatherView(
       root,
@@ -1263,9 +1261,8 @@ class BoneyardDynamicScene {
       snapshot.tick,
       weatherBounds,
       viewport.height / camera.zoom,
-      (position, radius) => !canPlaceBoneyardBody(
+      (position, radius) => boneyardBodyCollides(
         position,
-        weatherBounds,
         weatherCollisionWorld,
         radius,
       ),

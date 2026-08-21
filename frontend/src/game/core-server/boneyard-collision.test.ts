@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { BoneyardScene } from '../core-kernels/boneyard.ts'
 import { createBoneyardGateLeaves } from '../core-kernels/boneyard-gate.ts'
 import {
+  boneyardBodyCollides,
   canPlaceBoneyardBody,
   clipBoneyardSegment,
   createBoneyardCollisionWorld,
@@ -177,6 +178,8 @@ test('full-candidate placement rejects authored collision and arena bounds', () 
   assert.equal(canPlaceBoneyardBody({ x: 180, y: 250 }, bounds, world, 25), true)
   assert.equal(canPlaceBoneyardBody({ x: 200, y: 250 }, bounds, world, 25), false)
   assert.equal(canPlaceBoneyardBody({ x: 24, y: 250 }, bounds, world, 25), false)
+  assert.equal(boneyardBodyCollides({ x: 24, y: 250 }, world, 25), false)
+  assert.equal(boneyardBodyCollides({ x: 200, y: 250 }, world, 25), true)
 })
 
 test('native spawn retries use actor-radius rings, compressed Y, and combat bounds', () => {

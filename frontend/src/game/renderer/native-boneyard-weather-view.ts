@@ -20,8 +20,10 @@ interface DropView {
 
 export class NativeBoneyardWeatherView {
   readonly container = new Container({ label: 'native-boneyard-weather' })
+  private readonly dropContainer = new Container({ label: 'native-boneyard-weather-streaks' })
   private readonly dropViews: DropView[] = []
   private readonly root: Container
+  private readonly splashContainer = new Container({ label: 'native-boneyard-weather-splashes' })
   private readonly splashAnchor: BoneyardPoint
   private readonly splashTexture: Texture
   private readonly splashViews: Sprite[] = []
@@ -42,6 +44,9 @@ export class NativeBoneyardWeatherView {
     this.splashTexture = splashTexture
     this.weather = weather
     this.container.sortableChildren = true
+    this.splashContainer.zIndex = 0
+    this.dropContainer.zIndex = 1
+    this.container.addChild(this.splashContainer, this.dropContainer)
     this.root.addChild(this.container)
   }
 
@@ -68,7 +73,6 @@ export class NativeBoneyardWeatherView {
       sprite.scale.set(splash.scale)
       sprite.alpha = splash.alpha
       sprite.tint = 0xffffff
-      sprite.zIndex = 1_000 + splash.id
     }
   }
 
@@ -101,7 +105,7 @@ export class NativeBoneyardWeatherView {
     const graphic = new Graphics({ label: 'native-boneyard-weather-drop' })
     graphic.eventMode = 'none'
     this.dropViews.push({ fill, graphic })
-    this.container.addChild(graphic)
+    this.dropContainer.addChild(graphic)
   }
 
   private addSplashView(): void {
@@ -109,7 +113,7 @@ export class NativeBoneyardWeatherView {
     sprite.eventMode = 'none'
     sprite.renderable = false
     this.splashViews.push(sprite)
-    this.container.addChild(sprite)
+    this.splashContainer.addChild(sprite)
   }
 }
 
@@ -121,5 +125,4 @@ function applyDrop(view: DropView, drop: NativeBoneyardWeatherDropPlan): void {
     .stroke({ cap: 'butt', fill: view.fill, width: drop.width })
   view.graphic.tint = drop.startColor
   view.graphic.alpha = 1
-  view.graphic.zIndex = drop.id
 }
