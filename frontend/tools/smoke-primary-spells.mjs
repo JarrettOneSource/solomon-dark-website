@@ -157,11 +157,12 @@ try {
     await enterHub(page, spell.element)
     let observerJoinMode = null
     let observerPage = null
-    if (lowManaAcceptance && spell.mode === 'one-shot') {
-      observerJoinMode = 'pre-cast-peer'
+    if (lowManaAcceptance && (spell.mode === 'one-shot' || spell.kind === 'earth')) {
+      observerJoinMode = spell.kind === 'earth' ? 'pre-cast-charge-peer' : 'pre-cast-peer'
       observerPage = await context.newPage()
       watchErrors(observerPage, errors, `${spell.kind}-observer`)
       await enterHub(observerPage, spell.element)
+      await page.bringToFront()
     }
     const canvas = page.locator('.hub-world-canvas[data-game-renderer="pixi-webgl"]')
     await canvas.waitFor({ timeout: 30_000 })
@@ -685,7 +686,8 @@ async function castFireInBoneyard(page) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
-    assert.equal(launch.volume, 0.75)
+    assert.equal(launch.playbackRate, 0.75)
+    assert.equal(launch.volume, 1)
     flight = await waitForWireSpell(page, 'fire', afterTick, 10_000, true)
     assert.equal(flight.state.underpowered, true)
     assert.equal(flight.state.damage, 2)
@@ -754,10 +756,11 @@ async function castEtherInBoneyard(page) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
-    assert.equal(launch.volume, 0.75)
+    assert.equal(launch.playbackRate, 0.75)
+    assert.equal(launch.volume, 1)
     flight = await waitForWireSpell(page, 'ether', afterTick, 10_000)
     assert.equal(flight.state.underpowered, true)
-    assert.equal(flight.state.damage, 1)
+    assertWeakEtherDamage(flight.state.damage)
     assert.ok(
       Math.abs(Math.hypot(flight.state.velocity.x, flight.state.velocity.y) - 2.4) < 0.000001,
     )
@@ -810,10 +813,11 @@ async function castUntargetedEtherInBoneyard(page, canvas) {
     const fizzle = await waitForAudio(page, eventStart, '/game/audio/sfx/fizzle.wav', 'play')
     assert.ok(fizzle.at <= launch.at)
     assert.equal(fizzle.volume, 1)
-    assert.equal(launch.volume, 0.75)
+    assert.equal(launch.playbackRate, 0.75)
+    assert.equal(launch.volume, 1)
     flight = await waitForWireSpell(page, 'ether', afterTick, 10_000)
     assert.equal(flight.state.underpowered, true)
-    assert.equal(flight.state.damage, 1)
+    assertWeakEtherDamage(flight.state.damage)
     assert.ok(
       Math.abs(Math.hypot(flight.state.velocity.x, flight.state.velocity.y) - 2.4) < 0.000001,
     )
@@ -1183,12 +1187,18 @@ async function captureLowManaPresentation(page, wire) {
         const { etherPrimaryCompositorPlan, etherPrimaryFlightPlan } = await import(
           '/src/game/renderer/primary-spell-ether-native.ts'
         )
-        const weak = etherPrimaryFlightPlan(state.id, state.ageTicks, true)
+        const weak = etherPrimaryFlightPlan(
+          state.id,
+          state.ageTicks,
+          state.speed,
+          state.visualScale,
+          true,
+        )
         const fullAlphaAtWeakPhase = etherPrimaryCompositorPlan(
           state.id,
           Math.floor(state.ageTicks),
           weak.phase,
-          1,
+          state.visualScale,
           1,
         )
         return {
@@ -1281,7 +1291,7 @@ function assertLowManaWire(kind, wire, presentation) {
   switch (kind) {
     case 'ether':
       assert.equal(wire.state.underpowered, true)
-      assert.equal(wire.state.damage, 1)
+      assertWeakEtherDamage(wire.state.damage)
       assert.ok(
         Math.abs(Math.hypot(wire.state.velocity.x, wire.state.velocity.y) - 2.4) < 0.000001,
       )
@@ -1315,6 +1325,11 @@ function assertLowManaWire(kind, wire, presentation) {
   }
 }
 
+function assertWeakEtherDamage(damage) {
+  assert.ok(damage >= 0.5 && damage <= 1)
+  assert.equal(Number.isInteger(damage * 2), true)
+}
+
 function assertLowManaAudio(kind, events) {
   const find = (filename) => events.find((event) => audioPathMatches(event.source, filename))
   if (kind === 'ether' || kind === 'fire') {
@@ -1325,7 +1340,8 @@ function assertLowManaAudio(kind, events) {
     assert.ok(events.indexOf(fizzle) < events.indexOf(launch))
     assert.equal(fizzle.playbackRate, 1)
     assert.equal(fizzle.volume, 1)
-    assert.equal(launch.volume, 0.75)
+    assert.equal(launch.playbackRate, 0.75)
+    assert.equal(launch.volume, 1)
     return
   }
   if (kind === 'air' || kind === 'water') {

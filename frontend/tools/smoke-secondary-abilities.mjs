@@ -20,6 +20,7 @@ import {
 import {
   getPlayerSkillBook,
 } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -162,10 +163,11 @@ try {
   )
 
   armQuickbar(host, playerId, baseSkillBook, NATIVE_SECONDARY_ABILITY_IDS.slice(0, 8))
-  await page.waitForFunction(() => (
-    [...document.querySelectorAll('.hub-hud-secondary-slot')]
-      .every((slot) => slot.querySelector('.hub-hud-secondary-skill-icon'))
-  ))
+  await page.waitForFunction(() => {
+    const slots = [...document.querySelectorAll('.hub-hud-quickbar-slot')]
+    return slots.length === 8
+      && slots.every((slot) => slot.querySelector('.hub-hud-quickbar-skill-icon'))
+  })
   const beltReceipt = await captureBeltReceipt(page)
   await page.screenshot({ path: `${screenshotRoot}/secondary-belt-all-slots.png` })
   let boneyardEnemyBaseline = null
@@ -212,6 +214,9 @@ try {
     const castSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
     const firstEventId = host.state().secondaryAbilities.nextEventId
     const sampleStart = await page.evaluate(() => window.__secondaryRenderSamples.length)
+    const materialTintBeforeCast = await page.evaluate(() => (
+      window.__secondaryRenderSamples.at(-1)?.materialTint ?? null
+    ))
     const audioStart = await page.evaluate(() => window.__sdrAudioEvents.length)
     let target
     let combatBaseline = null
@@ -295,7 +300,7 @@ try {
     }
     if (contract.skillId === 12) {
       await page.waitForFunction(() => (
-        document.querySelector('.hub-hud-secondary-slot[data-slot="0"]')
+        document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
           ?.getAttribute('aria-label')?.endsWith(', active')
       ))
       await castPrimaryPointer(page, target)
@@ -320,8 +325,14 @@ try {
         }, null, 2)}\n`)
         throw error
       }
-    } else if (contract.skillId === 46 || contract.skillId === 54) {
-      await waitForPlayerPresentation(page, contract.skillId)
+    }
+    let playerPresentation = null
+    if (contract.skillId === 46 || contract.skillId === 54) {
+      playerPresentation = await waitForPlayerPresentation(
+        page,
+        contract.skillId,
+        materialTintBeforeCast,
+      )
     }
     if (contract.skillId === 45) {
       if (singleGolemCapture) {
@@ -340,10 +351,15 @@ try {
         }
         maximumSet = { expectedSummonCap: 1, summons: 1 }
       } else {
-        await waitUntil(() => (
-          (host.state().secondaryAbilities.players[playerId]?.staffCastTicksRemaining ?? 0) === 0
-        ), 'Raise Golem StaffCast2 did not release before the second cast')
-        const secondCastSequence = host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0
+        await waitUntil(() => {
+          const player = host.state().secondaryAbilities.players[playerId]
+          return (player?.staffCastTicksRemaining ?? 0) === 0
+            && (player?.castSpinTicksRemaining ?? 0) === 0
+            && (player?.globalCooldownTicks ?? 0) === 0
+            && (player?.cooldownTicksBySkill[45] ?? 0) === 0
+        }, 'Raise Golem cast gates did not release before the second cast')
+        const secondCastSequence = host.state().secondaryAbilities.players[playerId]
+          ?.castSequence ?? 0
         await castSecondaryPointer(page, { x: target.x + 40, y: target.y })
         await waitUntil(() => (
           (host.state().secondaryAbilities.players[playerId]?.castSequence ?? 0)
@@ -377,7 +393,7 @@ try {
     let cooldownPath = null
     if (contract.skillId === 15 || contract.skillId === 48) {
       const path = page.locator(
-        '.hub-hud-secondary-slot[data-slot="0"] .hub-hud-secondary-cooldown path',
+        '.hub-hud-quickbar-slot[data-slot="0"] .hub-hud-quickbar-cooldown path',
       )
       await path.waitFor({ timeout: 2_000 })
       cooldownPath = await path.getAttribute('d')
@@ -462,6 +478,7 @@ try {
       maximumPrimitiveCount: Math.max(...samples.map(({ primitiveCount }) => primitiveCount)),
       maximumSet,
       name: contract.name,
+      playerPresentation,
       reportedPresentation,
       screenshotPath,
       ticksObserved: new Set(samples.map(({ tick }) => tick).filter(Number.isFinite)).size,
@@ -539,7 +556,11 @@ function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
   assert.notEqual(index, -1)
   const permanentRanks = [...baseSkillBook.permanentRanks]
   const effectiveRanks = [...baseSkillBook.effectiveRanks]
+  const learnedSkillOrder = [...baseSkillBook.learnedSkillOrder]
   for (const skillId of skillIds) {
+    if ((permanentRanks[skillId] ?? 0) === 0 && !learnedSkillOrder.includes(skillId)) {
+      learnedSkillOrder.push(skillId)
+    }
     permanentRanks[skillId] = rank
     effectiveRanks[skillId] = rank
   }
@@ -551,6 +572,7 @@ function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
   skillBooks[index] = {
     ...baseSkillBook,
     effectiveRanks: Object.freeze(effectiveRanks),
+    learnedSkillOrder: Object.freeze(learnedSkillOrder),
     permanentRanks: Object.freeze(permanentRanks),
     skillQuickbar,
   }
@@ -565,13 +587,15 @@ function armQuickbar(host, playerId, baseSkillBook, skillIds, rank = 1) {
     maximumHealth: 1_000_000,
     maximumMana: 10_000,
     pendingOffer: null,
+    revision: progressions[index].revision + 1,
   }
+  const playerEntities = replacePlayerEconomy({
+    ...state.playerEntities,
+    progressions: Object.freeze(progressions),
+    skillBooks: Object.freeze(skillBooks),
+  }, playerId, state.playerEntities.economies[index])
   Object.assign(state, {
-    playerEntities: {
-      ...state.playerEntities,
-      progressions: Object.freeze(progressions),
-      skillBooks: Object.freeze(skillBooks),
-    },
+    playerEntities,
     secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
   })
 }
@@ -600,13 +624,12 @@ function armMaximumSet(host, playerId, skillId, baseEquipment) {
       default: throw new Error(`maximum set recipe ${recipeIndex} is not equipment`)
     }
   }
-  const economies = [...state.playerEntities.economies]
-  economies[index] = { ...economies[index], equipment }
   Object.assign(state, {
-    playerEntities: {
-      ...state.playerEntities,
-      economies: Object.freeze(economies),
-    },
+    playerEntities: replacePlayerEconomy(
+      state.playerEntities,
+      playerId,
+      { ...state.playerEntities.economies[index], equipment },
+    ),
   })
 }
 
@@ -997,12 +1020,12 @@ async function resetSecondaryWorld(host) {
 }
 
 async function captureBeltReceipt(page) {
-  const slots = await page.locator('.hub-hud-secondary-slot').evaluateAll((nodes) => (
+  const slots = await page.locator('.hub-hud-quickbar-slot').evaluateAll((nodes) => (
     nodes.map((node) => {
       const bounds = node.getBoundingClientRect()
-      const icon = node.querySelector('.hub-hud-secondary-skill-icon')
-      const backing = node.querySelector('.hub-hud-secondary-key-backing')
-      const mouse = node.querySelector('.hub-hud-secondary-input-mouse')
+      const icon = node.querySelector('.hub-hud-quickbar-skill-icon')
+      const backing = node.querySelector('.hub-hud-quickbar-key-backing')
+      const mouse = node.querySelector('.hub-hud-quickbar-input-mouse')
       return {
         height: bounds.height,
         iconFilter: icon ? getComputedStyle(icon).filter : null,
@@ -1040,7 +1063,7 @@ async function captureBeltReceipt(page) {
 
 async function waitForBeltSkill(page, name) {
   await page.waitForFunction((expectedName) => (
-    document.querySelector('.hub-hud-secondary-slot[data-slot="0"]')
+    document.querySelector('.hub-hud-quickbar-slot[data-slot="0"]')
       ?.getAttribute('aria-label')?.startsWith(`${expectedName}, right mouse button`)
   ), name, { timeout: 10_000 })
 }
@@ -1093,14 +1116,34 @@ async function castPrimaryPointer(page, target) {
   }, target)
 }
 
-async function waitForPlayerPresentation(page, skillId) {
-  await page.waitForFunction((id) => {
+async function waitForPlayerPresentation(page, skillId, materialTintBeforeCast) {
+  const expectedMaterialTint = skillId === 46
+    ? halfMaterialTint(materialTintBeforeCast)
+    : null
+  await page.waitForFunction(({ id, tint }) => {
     const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
     const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
     if (!frame) return false
-    if (id === 46) return frame.playerMaterialTint === 0x808080
+    if (id === 46) return frame.playerMaterialTint === tint
     return frame.playerMagicShieldVisible && frame.playerMagicShieldScale >= 1.5
-  }, skillId, { timeout: 10_000 })
+  }, { id: skillId, tint: expectedMaterialTint }, { timeout: 10_000 })
+  return page.evaluate(({ before, expected }) => {
+    const canvas = document.querySelector('.hub-world-canvas, .boneyard-world-canvas')
+    const frame = canvas?.__sdrHubFrame ?? canvas?.__sdrBoneyardFrame
+    return {
+      materialTint: frame?.playerMaterialTint ?? null,
+      materialTintBeforeCast: before,
+      materialTintExpected: expected,
+      magicShieldScale: frame?.playerMagicShieldScale ?? null,
+      magicShieldVisible: frame?.playerMagicShieldVisible ?? null,
+    }
+  }, { before: materialTintBeforeCast, expected: expectedMaterialTint })
+}
+
+function halfMaterialTint(tint) {
+  assert.ok(Number.isInteger(tint) && tint >= 0 && tint <= 0xffffff)
+  const half = (shift) => Math.round(((tint >> shift) & 0xff) * 0.5)
+  return (half(16) << 16) | (half(8) << 8) | half(0)
 }
 
 async function waitForAudio(page, start, stem) {

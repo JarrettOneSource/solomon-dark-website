@@ -15309,7 +15309,7 @@ replication are all directly representable.
 | Shared mana helper | `0x0052B150`, called by pure-primary handlers with a negative cost and `rejectIfInsufficient=0` | Stores `max(0,currentMP-cost)` and returns underpowered when the stored MP is `<=0`; therefore exact-cost, partial-cost, and zero-MP casts all emit in the fixed weak lane. | high |
 | Pure-primary handlers | Ether `0x0053CFE0`, Fire `0x0053DC60`, Air `0x0053F9C0`, Water `0x00543860`, Earth `0x00544C60` | The helper result owns damage, projectile/effect construction, learned-upgrade gates, collision masks, and audio at the actual emission/sustain tick. | high |
 | Draw/tick consumers | Ether draw `0x005E0460`; Fire draw `0x006099C0`, tick `0x005FDD90`, impact `0x005E5160`; Air factory `0x00531640`, ribbon constructor `0x0045B2C0`, tessellator `0x00534510`; Water Normal draw `0x00457720` | Weak state is consumed by the native visual owners. It is not a generic CSS opacity treatment and does not propagate into unaffected impact/trail actors. | high |
-| Adjacent upgrade/audio paths | Lightning chain helper `0x00641340`; channel-volume helper `0x00407500`; Sound play helpers `0x00407B70` / `0x00407CD0`; registry entry 32 at audio registry `+0x598`, `sounds\\fizzle.wav` | Weak casts suppress specific learned branches and use spell-specific loop/launch gain. Earth owns a periodic pitched fizzle rather than a dimmed Boulder body. | high |
+| Adjacent upgrade/audio paths | Lightning chain helper `0x00641340`; channel-volume helper `0x00407500`; Sound play helpers `0x00407B70` / `0x00407CD0`; registry entry 32 at audio registry `+0x598`, `sounds\\fizzle.wav` | Weak casts suppress specific learned branches and use spell-specific loop gain or one-shot launch pitch. Earth owns a periodic pitched fizzle rather than a dimmed Boulder body. | high |
 
 ### Native low-mana contract
 
@@ -15328,11 +15328,11 @@ emitted. Running out of MP never ends an otherwise eligible channel.
 
 | Primary | Damage and gameplay | Native weak presentation and audio |
 | --- | --- | --- |
-| Ether / Magic Missile | Half direct damage; force one missile; speed `3 -> 2.4`; effective homing turn input `2 -> 1.2`; suppress pierce/bounce payloads. Target acquisition and collision stay native. | Projectile byte `+0x160` wraps the complete flight compositor in white alpha `0.5`; impact stays full strength. Play `fizzle` at gain `1`, then `magicmissile` at gain `0.75`. |
-| Fire / Fire Missile | Half direct damage; zero secondary fire payloads and suppress learned proc fields. Speed and collision stay unchanged. | Projectile byte `+0x168` halves all three Fireball body draws. Per-tick Fire particles, outbound light, and impact remain full strength. Play `fizzle` at gain `1`, then `throwfire` at gain `0.75`. |
+| Ether / Magic Missile | Half direct damage; force one missile; speed `3 -> 2.4`; effective homing turn input `2 -> 1.2`; suppress pierce/bounce payloads. Target acquisition and collision stay native. | Projectile byte `+0x160` wraps the complete flight compositor in white alpha `0.5`; impact stays full strength. Play `fizzle` at pitch/gain `1/1`, then `magicmissile` at pitch/gain `0.75/1`. |
+| Fire / Fire Missile | Half direct damage; zero secondary fire payloads and suppress learned proc fields. Speed and collision stay unchanged. | Projectile byte `+0x168` halves all three Fireball body draws. Per-tick Fire particles, outbound light, and impact remain full strength. Play `fizzle` at pitch/gain `1/1`, then `throwfire` at pitch/gain `0.75/1`. |
 | Air / Lightning | Half direct damage; no Hurricane progression, chains, Disintegrate, or Stun. Targeting and the first contact remain active. | Factory input becomes width `0.75`, RGBA `(0.5,1,1,0.5)`; the constructor's second ribbon is width `0.5625`, RGBA `(0,1,1,0.25)`, phase `+15`. The source corona is unchanged. Endpoint alpha is `.5,.3,.1`; its light starts at radius `.5*(1+U[0,.75))`, intensity `.5`, delta `-.05`. Path-light intensity is quartered and the loop gain is `0.75`. |
 | Water / Frost Jet | Half direct damage; actor query mask is `0x2`, excluding the normal `0x1080` environmental lane; suppress widen/push, Over, Hail, Permafrost scaling, Cold Aura, and Harden (including cleaning an active Harden owner). The weak ColdSlow scalar is fixed `0.75`. | Emit `max(1,trunc(normalCount/4))`; shipped Enhanced Effects therefore emits one particle instead of two. Force the Normal class, then multiply its additive-core alpha and whole-effect opacity by `0.25`: initial additive alpha is `0.1875`, core alpha is quartered, and the `<0.9` opacity gate suppresses the glint. Ice-loop gain is `0.5`. |
-| Earth / Boulder | The Boulder still materializes at zero MP. On every weak tick below full charge, halve its two release-damage bases. Once charge is strictly above `0.3`, set growth to zero; a cast below the gate keeps growing until it crosses, then remains near `0.30125`. Repeated weak ticks repeatedly halve the base. | No persistent weak-alpha flag is drawn on the Boulder. Every global tick divisible by 50 in the weak branch plays `fizzle` at pitch `0.5` and half positional gain. Release damage is `max(0.25,min((base*charge)*charge,base*1.25))`; the `0.25` floor survives an arbitrarily depleted base. |
+| Earth / Boulder | The Boulder still materializes at zero MP. On every weak tick below full charge, halve its two release-damage bases. Once charge is strictly above `0.3`, set growth to zero; a cast below the gate keeps growing until it crosses, then remains near `0.30125`. Repeated float32 halves may deplete the held bases to exactly zero; the wire therefore permits non-negative held damage, while flight remains positive. | No persistent weak-alpha flag is drawn on the Boulder. Every global tick divisible by 50 in the weak branch plays `fizzle` at pitch `0.5` and half positional gain. Release damage is `max(0.25,min((base*charge)*charge,base*1.25))`; the `0.25` floor survives an arbitrarily depleted base. |
 
 The Website implementation must store the underpowered decision on replicated
 projectiles/channel transients and the current cast/audio edge so rendering,
@@ -15350,7 +15350,7 @@ must prove the fixed half branch, Water mask `0x2`, Ether speed/turn changes,
 and Earth's repeated half/freeze/release-floor recurrence. Renderer tests must
 prove the weak Ether/Fire body-only alpha, the exact Air two-ribbon/contact/path
 light plan, and Water's one forced-Normal quarter-opacity particle. Audio tests
-must prove Ether/Fire fizzle-before-launch, `0.75` launch gain, Air/Water loop
+must prove Ether/Fire fizzle-before-launch, `0.75` launch pitch, Air/Water loop
 gains `0.75/0.5`, and Earth's 50-tick pitched fizzle without restarting loops.
 
 Browser acceptance requires a real `/game` Boneyard flow at zero MP for each
@@ -15376,9 +15376,9 @@ authoritative zero-MP fixture completed all five Hub and Boneyard journeys with
 empty page/console error arrays. The browser/wire/audio probes observed:
 
 - Ether damage `1`, speed `2.4`, turn input `1.2`, half-flight composition,
-  full impact, then fizzle `1.0` before launch gain `0.75`;
+  full impact, then fizzle pitch `1.0` before launch pitch `0.75`;
 - Fire damage `2`, half-alpha body draws, unchanged light/trail/impact, then
-  fizzle `1.0` before launch gain `0.75`;
+  fizzle pitch `1.0` before launch pitch `0.75`;
 - Air's exact two-ribbon and light plan, continued zero-MP contact, and loop
   gain `0.75`;
 - Water's forced single Normal quarter-opacity plan, continued zero-MP contact,

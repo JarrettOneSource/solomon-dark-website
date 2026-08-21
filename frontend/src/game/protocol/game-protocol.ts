@@ -3971,7 +3971,7 @@ function primarySpellProjectile(value: unknown, field: string): PrimarySpellProj
     if (maximumCharge < 1 || charge > maximumCharge) {
       throw new GameProtocolError(`${field}.charge exceeds its native Earth maximum`)
     }
-    const remainingDamage = positiveFinite(
+    const remainingDamage = nonnegativeFinite(
       source.remainingDamage,
       `${field}.remainingDamage`,
     )

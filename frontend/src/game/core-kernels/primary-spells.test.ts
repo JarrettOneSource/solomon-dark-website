@@ -671,6 +671,25 @@ test('Earth release finalization uses float32 quadratic damage with its native f
   assert.equal(nativeEarthBoulderReleasedDamage(10, 2), 12.5)
 })
 
+test('Earth can deplete its held weak base to zero before the release floor owns damage', () => {
+  let state = directSpellHarness('earth')
+  for (let tick = 0; tick < 200; tick += 1) {
+    state = stepSpellKernel(state, true, 0).state
+  }
+  const held = state.spells.projectiles[0]!
+  assert.equal(held.kind, 'earth')
+  assert.equal(held.phase, 'held')
+  assert.equal(held.damage, 0)
+  assert.equal(held.remainingDamage, 0)
+
+  const released = stepSpellKernel(state, false, 0)
+  const flight = released.state.spells.projectiles[0]!
+  assert.equal(flight.kind, 'earth')
+  assert.equal(flight.phase, 'flight')
+  assert.equal(flight.damage, 0.25)
+  assert.equal(flight.remainingDamage, 0.25)
+})
+
 test('Earth zero mana freezes above 0.3 and release still uses the terrain probe', () => {
   const cost = PRIMARY_SPELL_RANK_ONE_MANA_COSTS.earth
   let state = directSpellHarness('earth')

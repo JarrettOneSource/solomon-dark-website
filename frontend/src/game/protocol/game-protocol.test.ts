@@ -2190,6 +2190,30 @@ test('protocol rejects malformed cast programs and primary-spell ownership', () 
     ...frame,
     primarySpells: { nextId: 2, projectiles: [boulder], transients: [] },
   }))
+  const depletedBoulder = decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, damage: 0, remainingDamage: 0 }],
+      transients: [],
+    },
+  })
+  assert.equal(depletedBoulder.type, 'server-snapshot')
+  assert.equal(depletedBoulder.frame.primarySpells.projectiles[0]!.damage, 0)
+  assert.equal(
+    depletedBoulder.frame.primarySpells.projectiles[0]!.kind === 'earth'
+      ? depletedBoulder.frame.primarySpells.projectiles[0]!.remainingDamage
+      : null,
+    0,
+  )
+  assert.throws(() => decodeFrame({
+    ...frame,
+    primarySpells: {
+      nextId: 2,
+      projectiles: [{ ...boulder, remainingDamage: -1 }],
+      transients: [],
+    },
+  }), /remainingDamage must be nonnegative/)
   const decodedMissile = decodeFrame({
     ...frame,
     primarySpells: { nextId: 2, projectiles: [missile], transients: [] },
