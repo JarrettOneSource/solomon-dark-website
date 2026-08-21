@@ -287,6 +287,7 @@ export function createGameSnapshotFrame(
   const common = {
     hostPlayerId: snapshot.hostPlayerId,
     levelUpBarrier: snapshot.levelUpBarrier,
+    modEffects: snapshot.modEffects,
     players: playerSnapshotFrames(snapshot.players, baseline, keyframe),
     primarySpells: snapshot.primarySpells,
     secondaryAbilities: snapshot.secondaryAbilities,
@@ -468,6 +469,7 @@ export class EntityReplicationReconstructor {
     const common = {
       hostPlayerId: frame.hostPlayerId,
       levelUpBarrier: frame.levelUpBarrier,
+      modEffects: frame.modEffects,
       players,
       primarySpells: frame.primarySpells,
       secondaryAbilities: frame.secondaryAbilities,

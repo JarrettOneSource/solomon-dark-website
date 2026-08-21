@@ -17,19 +17,33 @@ public sealed record ModPackageInspection(
     int Priority,
     bool HasBoneyards,
     bool HasLua,
-    IReadOnlyList<string> RequiredMods);
+    IReadOnlyList<string> RequiredMods,
+    IReadOnlyList<string> RequiredCapabilities);
 
 public sealed class ModPackageValidationException(string message) : Exception(message);
 
 public static partial class ModPackageInspector
 {
-    private const string WebLuaApiVersion = "0.1.0";
+    private const string WebLuaApiVersion = "0.2.0";
     private const int MaxEntries = 2048;
     private const long MaxExpandedBytes = 256L * 1024 * 1024;
     private const long MaxManifestBytes = 1024 * 1024;
     private const int MaxRelativePathLength = 240;
     private const int MaxManifestItems = 256;
     private const int MaxStringLength = 256;
+
+    private static readonly HashSet<string> SupportedWebLuaCapabilities = new(
+        [
+            "events.filters.damage",
+            "events.filters.resources",
+            "items.consumables.register",
+            "loot.register",
+            "player.resources.owner",
+            "sprites.local.read",
+            "sprites.local.register",
+            "timer.local.scheduler"
+        ],
+        StringComparer.Ordinal);
 
     private static readonly JsonSerializerOptions ManifestJsonOptions = new()
     {
@@ -133,7 +147,8 @@ public static partial class ModPackageInspector
                 manifest.Overlays.Any(overlay =>
                     overlay.Target.EndsWith(".boneyard", StringComparison.OrdinalIgnoreCase)),
                 !string.IsNullOrWhiteSpace(manifest.Runtime.EntryScript),
-                manifest.RequiredMods.ToArray());
+                manifest.RequiredMods.ToArray(),
+                manifest.Runtime.RequiredCapabilities.ToArray());
         }
         catch (ModPackageValidationException)
         {
@@ -223,9 +238,10 @@ public static partial class ModPackageInspector
     {
         if (manifest.Id is null || manifest.Name is null || manifest.Version is null ||
             manifest.Overlays is null || manifest.Runtime is null ||
-            manifest.RequiredMods is null ||
+            manifest.RequiredMods is null || manifest.Runtime.RequiredCapabilities is null ||
             manifest.Overlays.Any(overlay => overlay is null) ||
-            manifest.RequiredMods.Any(required => required is null))
+            manifest.RequiredMods.Any(required => required is null) ||
+            manifest.Runtime.RequiredCapabilities.Any(required => required is null))
         {
             throw new ModPackageValidationException("manifest.json contains null fields or list entries.");
         }
@@ -255,13 +271,21 @@ public static partial class ModPackageInspector
                 "manifest.version must be 1-64 filename-safe characters.");
         }
 
+        if (manifest.MinimumLoaderVersion is not null &&
+            !StorageService.IsSafeVersion(manifest.MinimumLoaderVersion))
+        {
+            throw new ModPackageValidationException(
+                "manifest.minimumLoaderVersion must be 1-64 filename-safe characters when present.");
+        }
+
         if (manifest.Priority is < -100_000 or > 100_000)
         {
             throw new ModPackageValidationException("manifest.priority is outside the supported range.");
         }
 
         if (manifest.Overlays.Count > MaxManifestItems ||
-            manifest.RequiredMods.Count > MaxManifestItems)
+            manifest.RequiredMods.Count > MaxManifestItems ||
+            manifest.Runtime.RequiredCapabilities.Count > MaxManifestItems)
         {
             throw new ModPackageValidationException(
                 $"Manifest lists may contain at most {MaxManifestItems} entries.");
@@ -332,6 +356,21 @@ public static partial class ModPackageInspector
             {
                 throw new ModPackageValidationException(
                     $"runtime.apiVersion must be {WebLuaApiVersion}.");
+            }
+
+            var capabilities = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var capability in manifest.Runtime.RequiredCapabilities)
+            {
+                if (!capabilities.Add(capability))
+                {
+                    throw new ModPackageValidationException(
+                        $"runtime.requiredCapabilities contains a duplicate value: {capability}");
+                }
+                if (!SupportedWebLuaCapabilities.Contains(capability))
+                {
+                    throw new ModPackageValidationException(
+                        $"runtime.requiredCapabilities requests an unsupported web capability: {capability}");
+                }
             }
 
             var entryScript = ValidateManifestPath(manifest.Runtime.EntryScript, "Runtime entryScript");
@@ -475,6 +514,7 @@ public static partial class ModPackageInspector
         public string Id { get; init; } = string.Empty;
         public string Name { get; init; } = string.Empty;
         public string Version { get; init; } = string.Empty;
+        public string? MinimumLoaderVersion { get; init; }
         public int Priority { get; init; }
         public List<PackageOverlay> Overlays { get; init; } = [];
         public PackageRuntime Runtime { get; init; } = new();
@@ -497,6 +537,7 @@ public static partial class ModPackageInspector
         public string ApiVersion { get; init; } = string.Empty;
         public string EntryScript { get; init; } = string.Empty;
         public string EntryDll { get; init; } = string.Empty;
+        public List<string> RequiredCapabilities { get; init; } = [];
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; init; }
     }

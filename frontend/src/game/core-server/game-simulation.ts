@@ -60,6 +60,7 @@ import {
   type HubEconomyState,
   type HubInventoryItem,
   type HubInventoryAction,
+  type ModConsumableContent,
   type HubTraderId,
 } from '../core-kernels/hub-economy.ts'
 import { nativeEquipmentHasFeature } from '../core-kernels/native-equipment-effects.ts'
@@ -238,7 +239,9 @@ export interface GameSimulationState {
   hallOfFameClockStartedAtTick: number
   levelUpBarrier: PlayerLevelUpBarrierState | null
   lightProviderOrder: NativeLightProviderOrderState
+  modEffects: readonly GameSimulationModEffect[]
   nextLevelUpBarrierId: number
+  nextModConsumableUseId: number
   playerEntities: PlayerEntityStore
   gameRng: NativeRngState
   primarySpells: PrimarySpellSimulationState
@@ -258,6 +261,7 @@ export interface GameSimulationOptions {
 
 export interface GameSimulationInventoryActionResult {
   readonly accepted: boolean
+  readonly modConsumption: GameSimulationModConsumption | null
   readonly reason: HubEconomyRejection | 'service-unavailable' | null
   readonly state: GameSimulationState
 }
@@ -266,6 +270,50 @@ export type PlayerCharacterInputs = Readonly<Record<PlayerId, PlayerCharacterInp
 
 export interface GameSimulationTickOptions {
   readonly enemySpawnIntents?: readonly BoneyardEnemySpawnIntent[]
+  readonly extensions?: GameSimulationExtensions
+}
+
+export interface GameSimulationModEffect {
+  readonly color: readonly [number, number, number, number]
+  readonly contentId: string
+  readonly expiresTick: number
+  readonly playerId: string
+  readonly startedTick: number
+  readonly useId: number
+}
+
+export interface GameSimulationModConsumption {
+  readonly content: ModConsumableContent
+  readonly playerId: string
+  readonly tick: number
+  readonly useId: number
+}
+
+export interface GameSimulationDamageFilterInput {
+  readonly amount: number
+  readonly damageKind: 'magic' | 'physical' | 'poison'
+  readonly sourceActorId: number | null
+  readonly targetPlayerId: string
+  readonly tick: number
+}
+
+export interface GameSimulationManaFilterInput {
+  readonly currentMana: number
+  readonly delta: number
+  readonly maximumMana: number
+  readonly playerId: string
+  readonly source: 'overload' | 'passive-recovery' | 'primary-cast' | 'secondary-cast' | 'stock-orb' | 'stock-potion'
+  readonly tick: number
+}
+
+export interface GameSimulationExtensions {
+  createLootItems(input: Readonly<{
+    actorSeed: number
+    enemyToken: import('../core-kernels/boneyard-wave-schema.ts').BoneyardWaveEnemyToken
+  }>): readonly HubInventoryItem[]
+  filterDamage(input: GameSimulationDamageFilterInput): number
+  filterMana(input: GameSimulationManaFilterInput): number
+  hasConsumable(contentId: string): boolean
 }
 
 export const DEFAULT_PLAYER_ID = 'local-player'
@@ -339,7 +387,9 @@ export function createGameSimulation(
     hallOfFameClockStartedAtTick: 0,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),
+    modEffects: Object.freeze([]),
     nextLevelUpBarrierId: levelUpBarrier === null ? 1 : 2,
+    nextModConsumableUseId: 1,
     playerEntities,
     gameRng,
     primarySpells: createPrimarySpellSimulation(),
@@ -508,6 +558,7 @@ export function enterBoneyardWorld(
     ...state,
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
+    modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
     secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
@@ -535,6 +586,7 @@ export function returnGameSimulationToHub(state: GameSimulationState): GameSimul
   }))
   return {
     ...state,
+    modEffects: Object.freeze([]),
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
     playerEntities: clearPlayerEntityMindstars(resetPlayerEntitiesForNewRun(
@@ -583,6 +635,7 @@ function enterPostRunLoadout(
     hallOfFameClockStartedAtTick: state.tick,
     levelUpBarrier: null,
     lightProviderOrder: lightProviderOrder.state(),
+    modEffects: Object.freeze([]),
     playerEntities,
     primarySpells: createPrimarySpellSimulation(),
     secondaryAbilities: resetNativeSecondaryWorld(state.secondaryAbilities),
@@ -629,20 +682,25 @@ export function applyGameSimulationHubAction(
   state: GameSimulationState,
   playerId: PlayerId,
   action: HubInventoryAction,
+  extensions?: GameSimulationExtensions,
 ): GameSimulationInventoryActionResult {
   const economy = playerEconomyAt(state.playerEntities, playerId)
   const player = playerCharacterAt(state.playerEntities, playerId)
   if (!economy || !player || state.levelUpBarrier !== null) {
-    return { accepted: false, reason: 'service-unavailable', state }
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
   const trader = traderForAction(action)
   if (trader && !traderAvailable(state, playerId, player.position, trader)) {
-    return { accepted: false, reason: 'service-unavailable', state }
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
   }
 
   const consumedPotion = action.type === 'consume'
     ? economy.backpack.find(({ id }) => id === action.itemId) ?? null
     : null
+  if (consumedPotion?.modContent &&
+      extensions?.hasConsumable(consumedPotion.modContent.contentId) !== true) {
+    return { accepted: false, modConsumption: null, reason: 'service-unavailable', state }
+  }
   const result = (() => {
     switch (action.type) {
       case 'buy-dowsing': return buyDowsingOffer(economy, action.offerId)
@@ -688,12 +746,31 @@ export function applyGameSimulationHubAction(
   let playerEntities = replacePlayerEconomy(state.playerEntities, playerId, nextEconomy)
   let secondaryAbilities = state.secondaryAbilities
   let world = state.world
-  if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null) {
+  if (result.accepted && action.type === 'consume' && consumedPotion?.nativeSubtype != null &&
+      consumedPotion.modContent === undefined) {
+    const beforeMana = getPlayerProgression(state, playerId).currentMana
     playerEntities = applyPlayerEntityPotionEffect(
       playerEntities,
       playerId,
       consumedPotion.nativeSubtype,
     )
+    const afterPotion = playerProgressionAt(playerEntities, playerId)
+    if (afterPotion && afterPotion.currentMana !== beforeMana && extensions) {
+      const delta = filterManaDelta(
+        extensions,
+        state.tick,
+        playerId,
+        beforeMana,
+        afterPotion.maximumMana,
+        afterPotion.currentMana - beforeMana,
+        'stock-potion',
+      )
+      playerEntities = setPlayerEntityMana(
+        playerEntities,
+        playerId,
+        Math.max(0, Math.min(afterPotion.maximumMana, beforeMana + delta)),
+      )
+    }
     const hallRun = world.kind === 'boneyard'
       ? world.hallOfFameRuns[playerId]
       : undefined
@@ -719,11 +796,42 @@ export function applyGameSimulationHubAction(
       playerEntities = { ...playerEntities, progressions: Object.freeze(progressions) }
     }
   }
+  const modConsumption = result.accepted && action.type === 'consume' && consumedPotion?.modContent
+    ? Object.freeze({
+        content: consumedPotion.modContent,
+        playerId,
+        tick: state.tick,
+        useId: state.nextModConsumableUseId,
+      })
+    : null
+  const modEffects = modConsumption?.content.consumeVfx
+    ? Object.freeze([
+        ...state.modEffects.filter(effect => (
+          effect.playerId !== playerId || effect.contentId !== modConsumption.content.contentId
+        )),
+        Object.freeze({
+          color: modConsumption.content.consumeVfx.color,
+          contentId: modConsumption.content.contentId,
+          expiresTick: state.tick + Math.max(
+            1,
+            Math.ceil(modConsumption.content.durationMs / (GAME_FIXED_TICK_SECONDS * 1_000)),
+          ),
+          playerId,
+          startedTick: state.tick,
+          useId: modConsumption.useId,
+        }),
+       ])
+     : state.modEffects
   return {
     accepted: result.accepted,
+    modConsumption,
     reason: result.reason,
     state: {
       ...state,
+      modEffects,
+      nextModConsumableUseId: modConsumption
+        ? state.nextModConsumableUseId + 1
+        : state.nextModConsumableUseId,
       playerEntities,
       secondaryAbilities,
       world,
@@ -946,12 +1054,20 @@ export function stepGameSimulationTick(
   inputs: PlayerCharacterInputs,
   options: GameSimulationTickOptions = {},
 ): GameSimulationState {
+  const liveModEffects = state.modEffects.filter(effect => effect.expiresTick > state.tick)
+  if (liveModEffects.length !== state.modEffects.length) {
+    state = { ...state, modEffects: Object.freeze(liveModEffects) }
+  }
   if (state.run.phase === 'game-over') {
     if (state.world.kind !== 'boneyard') {
       throw new Error('Game Over requires the terminal Boneyard world')
     }
     let playerEntities = stepPlayerEntityOverlayLightingTick(state.playerEntities)
-    const combat = stepPlayerEntityCombatTick(playerEntities)
+    const combat = stepPlayerEntityCombatTick(
+      playerEntities,
+      new Set(),
+      playerCombatMutations(options.extensions, state.tick),
+    )
     playerEntities = combat.store
     let secondaryAbilities = state.secondaryAbilities
     for (const playerId of combat.deathBurstPlayerIds) {
@@ -1023,7 +1139,14 @@ export function stepGameSimulationTick(
   switch (state.world.kind) {
     case 'hub': {
       const result = stepHubWorldTick(state.world, players, activeInputs)
-      return finishGameSimulationTick(state, result, activeInputs, lightProviderOrder, null)
+      return finishGameSimulationTick(
+        state,
+        result,
+        activeInputs,
+        lightProviderOrder,
+        null,
+        options.extensions,
+      )
     }
     case 'boneyard': {
       const boneyardWorld = state.world
@@ -1078,6 +1201,7 @@ export function stepGameSimulationTick(
             position: actor.position,
           })),
         options.enemySpawnIntents ?? [],
+        options.extensions?.createLootItems,
       )
       return finishGameSimulationTick(
         state,
@@ -1085,6 +1209,7 @@ export function stepGameSimulationTick(
         activeInputs,
         lightProviderOrder,
         deferredEnemyProjectileRegistrations,
+        options.extensions,
       )
     }
   }
@@ -1119,6 +1244,7 @@ function finishGameSimulationTick(
   inputs: PlayerCharacterInputs,
   lightProviderOrder: NativeLightProviderOrder,
   deferredEnemyProjectileRegistrations: DeferredNativeLightProviderRegistrations | null,
+  extensions?: GameSimulationExtensions,
 ): GameSimulationState {
   const tick = previous.tick + 1
   let resolvedPlayers = result.players
@@ -1311,12 +1437,21 @@ function finishGameSimulationTick(
           gameWorldKey(world, damage.playerId),
         )
     secondaryAbilities = intercepted.state
-    if (intercepted.healthDamage <= 0) continue
+    const filteredHealthDamage = extensions
+      ? extensions.filterDamage({
+          amount: intercepted.healthDamage,
+          damageKind: damage.damageKind,
+          sourceActorId: damage.actorId,
+          targetPlayerId: damage.playerId,
+          tick,
+        })
+      : intercepted.healthDamage
+    if (!Number.isFinite(filteredHealthDamage) || filteredHealthDamage <= 0) continue
     const before = playerProgressionAt(playerEntities, damage.playerId)
     playerEntities = damagePlayerEntity(
       playerEntities,
       damage.playerId,
-      intercepted.healthDamage,
+      filteredHealthDamage,
       tick,
     )
     const after = playerProgressionAt(playerEntities, damage.playerId)
@@ -1435,10 +1570,13 @@ function finishGameSimulationTick(
             Math.fround(pickup.orbValue * 25),
           )
         } else if (pickup.orbKind === 'mana') {
-          playerEntities = restorePlayerEntityMana(
+          playerEntities = applyFilteredManaDelta(
             playerEntities,
             pickup.playerId,
             Math.fround(pickup.orbValue * 40),
+            'stock-orb',
+            tick,
+            extensions,
           )
         }
         break
@@ -1970,14 +2108,28 @@ function finishGameSimulationTick(
   }
   for (const [playerId, cost] of Object.entries(secondaryResult.manaSpent)) {
     if (cost <= 0) continue
-    const debit = tryDebitPlayerEntityMana(playerEntities, playerId, cost)
-    if (!debit.accepted) {
-      throw new Error(`secondary ability mana authority diverged for ${playerId}`)
-    }
-    playerEntities = debit.store
+    playerEntities = applyFilteredManaDelta(
+      playerEntities,
+      playerId,
+      -cost,
+      'secondary-cast',
+      tick,
+      extensions,
+      `secondary ability mana authority diverged for ${playerId}`,
+    )
   }
   for (const playerId of secondaryResult.overloadedPlayerIds) {
-    playerEntities = setPlayerEntityMana(playerEntities, playerId, 0)
+    const progression = playerProgressionAt(playerEntities, playerId)
+    if (progression) {
+      playerEntities = applyFilteredManaDelta(
+        playerEntities,
+        playerId,
+        -progression.currentMana,
+        'overload',
+        tick,
+        extensions,
+      )
+    }
   }
   for (const { playerId } of playerEntities.identities) {
     const wasActive = previous.secondaryAbilities.players[playerId]?.mindstar ?? false
@@ -2092,11 +2244,15 @@ function finishGameSimulationTick(
   })
   for (const [playerId, cost] of Object.entries(cast.manaSpent)) {
     if (cost <= 0) continue
-    const debit = tryDebitPlayerEntityMana(playerEntities, playerId, cost)
-    if (!debit.accepted) {
-      throw new Error(`primary spell mana authority diverged for ${playerId}`)
-    }
-    playerEntities = debit.store
+    playerEntities = applyFilteredManaDelta(
+      playerEntities,
+      playerId,
+      -cost,
+      'primary-cast',
+      tick,
+      extensions,
+      `primary spell mana authority diverged for ${playerId}`,
+    )
   }
   deferredEnemyProjectileRegistrations?.commit(lightProviderOrder)
   const hurricaneVisuals = synchronizeAirWaterPlayerVisualActors(
@@ -2330,7 +2486,11 @@ function finishGameSimulationTick(
   }
   playerEntities = replacePlayerCharacterRecords(playerEntities, players)
   playerEntities = stepPlayerEntityOverlayLightingTick(playerEntities)
-  const combat = stepPlayerEntityCombatTick(playerEntities, staffActingPlayerIds)
+  const combat = stepPlayerEntityCombatTick(
+    playerEntities,
+    staffActingPlayerIds,
+    playerCombatMutations(extensions, tick),
+  )
   playerEntities = combat.store
   for (const playerId of combat.deathBurstPlayerIds) {
     playerEntities = setPlayerEntitySpectating(playerEntities, playerId)
@@ -2361,7 +2521,9 @@ function finishGameSimulationTick(
     hallOfFameClockStartedAtTick: previous.hallOfFameClockStartedAtTick,
     levelUpBarrier,
     lightProviderOrder: lightProviderOrder.state(),
+    modEffects: previous.modEffects,
     nextLevelUpBarrierId,
+    nextModConsumableUseId: previous.nextModConsumableUseId,
     playerEntities,
     gameRng,
     primarySpells,
@@ -2376,6 +2538,94 @@ function gameWorldKey(world: GameWorldState, playerId: string): string {
   return world.kind === 'hub'
     ? `hub:${world.participants[playerId]?.region ?? 'courtyard'}`
     : `boneyard:${world.runId}`
+}
+
+function playerCombatMutations(
+  extensions: GameSimulationExtensions | undefined,
+  tick: number,
+): Readonly<{
+  filterMana?: (playerId: string, delta: number, current: number, maximum: number) => number
+  filterPoisonDamage?: (playerId: string, amount: number) => number
+}> {
+  if (!extensions) return {}
+  return {
+    filterMana: (playerId, delta, currentMana, maximumMana) => filterManaDelta(
+      extensions,
+      tick,
+      playerId,
+      currentMana,
+      maximumMana,
+      delta,
+      'passive-recovery',
+    ),
+    filterPoisonDamage: (targetPlayerId, amount) => {
+      const filtered = extensions.filterDamage({
+        amount,
+        damageKind: 'poison',
+        sourceActorId: null,
+        targetPlayerId,
+        tick,
+      })
+      return finiteModMutation(filtered, 'filtered poison damage') <= 0 ? 0 : filtered
+    },
+  }
+}
+
+function filterManaDelta(
+  extensions: GameSimulationExtensions,
+  tick: number,
+  playerId: string,
+  currentMana: number,
+  maximumMana: number,
+  delta: number,
+  source: GameSimulationManaFilterInput['source'],
+): number {
+  return finiteModMutation(extensions.filterMana({
+    currentMana,
+    delta,
+    maximumMana,
+    playerId,
+    source,
+    tick,
+  }), 'filtered mana delta')
+}
+
+function applyFilteredManaDelta(
+  source: PlayerEntityStore,
+  playerId: string,
+  requestedDelta: number,
+  mutationSource: GameSimulationManaFilterInput['source'],
+  tick: number,
+  extensions?: GameSimulationExtensions,
+  divergenceMessage?: string,
+): PlayerEntityStore {
+  const progression = playerProgressionAt(source, playerId)
+  if (!progression) return source
+  const delta = extensions
+    ? filterManaDelta(
+        extensions,
+        tick,
+        playerId,
+        progression.currentMana,
+        progression.maximumMana,
+        requestedDelta,
+        mutationSource,
+      )
+    : requestedDelta
+  if (delta < 0) {
+    const debit = tryDebitPlayerEntityMana(source, playerId, -delta)
+    if (debit.accepted) return debit.store
+    if (!extensions && divergenceMessage) throw new Error(divergenceMessage)
+    return source
+  }
+  return delta > 0 ? restorePlayerEntityMana(source, playerId, delta) : source
+}
+
+function finiteModMutation(value: number, field: string): number {
+  if (!Number.isFinite(value) || Math.abs(value) > 1_000_000) {
+    throw new RangeError(`${field} must be finite and within +/-1000000`)
+  }
+  return value
 }
 
 function parseNativeSecondaryGolemTargetId(targetId: string): number | null {

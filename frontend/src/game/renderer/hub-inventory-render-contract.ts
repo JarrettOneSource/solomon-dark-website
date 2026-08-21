@@ -369,6 +369,10 @@ export function hubInventoryItemInfoText(item: HubInventoryItem): HubInventoryIt
     case 'wizard-chug': return potionInfo(item, 'Quadruples the damage of all attacks for 60 seconds')
     case 'antidote': return potionInfo(item, 'Cures poisoning and grants immunity to poison for 10 seconds')
     case 'mind-chug': return potionInfo(item, 'Grants concentration of all skills (at once) for 60 seconds')
+    case 'mod-potion': {
+      if (!item.modContent) throw new Error('mod potion is missing its content identity')
+      return potionInfo(item, item.modContent.description)
+    }
     case 'rejuvenation-potion': return potionInfo(item, 'Restores your health and mana to maximum')
     case 'dye': return {
       description: 'Double click to dye an article of clothing',

@@ -131,6 +131,14 @@ import { NativeEnemyProjectileViews } from './native-enemy-projectile-view.ts'
 import { NativeEnemyProjectileEffectViews } from './native-enemy-projectile-effect-view.ts'
 import { NativeMaggotViews } from './native-maggot-view.ts'
 import { NativeGoodieViews, NativeLootViews } from './native-loot-view.ts'
+import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
+import type { GameModAsset } from '../protocol/game-protocol.ts'
+import {
+  loadModPresentationTextures,
+  type ModPresentationTextures,
+} from './mod-presentation-assets.ts'
+import { ModConsumableEffectViews } from './mod-consumable-effect-view.ts'
+import { modConsumableEffectId as modEffectId } from './mod-consumable-effect-presentation.ts'
 import {
   nativeGoodiePainterLayer,
   nativeLootPainterLayer,
@@ -344,6 +352,8 @@ interface BoneyardWorldRendererOptions {
   boneyard: LoadedBoneyard
   devicePixelRatio?: number
   initialSnapshot: GameSnapshot
+  modAssets: readonly GameModAsset[]
+  modCatalog: readonly ModConsumableCatalogEntry[]
   now?: () => number
   playerId: string
   viewport: GameViewportLayout
@@ -417,9 +427,10 @@ export async function createBoneyardWorldRenderer(
   options: BoneyardWorldRendererOptions,
 ): Promise<BoneyardWorldRenderer> {
   requireBoneyardSnapshot(options.initialSnapshot, options.boneyard.runId)
-  const [textures] = await Promise.all([
+  const [textures, , modTextures] = await Promise.all([
     loadBoneyardWorldTextures(),
     loadStaticPainterImages(),
+    loadModPresentationTextures(options.modAssets),
   ])
   const application = new Application()
   const devicePixelRatio = options.devicePixelRatio ?? window.devicePixelRatio
@@ -448,6 +459,7 @@ export async function createBoneyardWorldRenderer(
   } catch (error) {
     if (application.renderer) application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
+    modTextures.destroy()
     throw error
   }
   application.stop()
@@ -468,6 +480,7 @@ export async function createBoneyardWorldRenderer(
     world.destroy({ children: true })
     application.destroy({ removeView: true })
     destroyBoneyardWorldTextures(textures)
+    modTextures.destroy()
     throw error
   }
 
@@ -484,6 +497,8 @@ export async function createBoneyardWorldRenderer(
     staticWorld.treeInputs,
     staticWorld.treeResidents,
     options.initialSnapshot,
+    modTextures,
+    options.modCatalog,
   )
   const regionLightField = new BoneyardRegionLightField(
     world,
@@ -1070,6 +1085,7 @@ export async function createBoneyardWorldRenderer(
       staticWorld = null
       world.destroy({ children: true })
       destroyBoneyardWorldTextures(textures)
+      modTextures.destroy()
       application.destroy({ removeView: true })
       canvas.remove()
     },
@@ -1162,6 +1178,7 @@ class BoneyardDynamicScene {
   private readonly playerDeathWeapons: PlayerDeathWeaponViews
   private readonly maggots: NativeMaggotViews
   private readonly loot: NativeLootViews
+  private readonly modEffects: ModConsumableEffectViews
   private readonly mageLightningPulses: NativeMageLightningPulseViews
   private readonly primarySpells: PrimarySpellWorldView
   private readonly secondaryAbilities: NativeSecondaryWorldView
@@ -1189,6 +1206,8 @@ class BoneyardDynamicScene {
     treeInputs: readonly NativeTreeOcclusionInput[],
     treeResidents: ReadonlyMap<string, TreeResidents>,
     initialSnapshot: GameSnapshot,
+    modTextures: ModPresentationTextures,
+    modCatalog: readonly ModConsumableCatalogEntry[],
   ) {
     this.boneyard = boneyard
     this.collisionWorld = createBoneyardCollisionWorld(boneyard.scene)
@@ -1225,7 +1244,8 @@ class BoneyardDynamicScene {
     this.enemyProjectileEffects = new NativeEnemyProjectileEffectViews(root, textures)
     this.enemyProjectiles = new NativeEnemyProjectileViews(root, textures)
     this.maggots = new NativeMaggotViews(root, textures)
-    this.loot = new NativeLootViews(root, textures)
+    this.loot = new NativeLootViews(root, textures, modTextures, modCatalog)
+    this.modEffects = new ModConsumableEffectViews(root, textures)
     this.mageLightningPulses = new NativeMageLightningPulseViews(
       root,
       textures.primarySpells.air,
@@ -1338,6 +1358,7 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.update(snapshot.world.enemyProjectiles, snapshot.tick)
     this.maggots.update(snapshot.world.maggots)
     this.loot.update(snapshot.world.loot)
+    this.modEffects.update(snapshot)
     this.mageLightningPulses.update(
       snapshot.world.mageLightningPulses,
       snapshot.tick,
@@ -1750,6 +1771,13 @@ class BoneyardDynamicScene {
         nativeBoneyardLightScalar(actor.position, this.lightIndex),
       ))
     }
+    for (const effect of snapshot.modEffects) {
+      const player = snapshot.players[effect.playerId]
+      if (!player) continue
+      this.modEffects.setTint(modEffectId(effect), nativeBoneyardLightTint(
+        nativeBoneyardLightScalar(player.position, this.lightIndex),
+      ))
+    }
     for (const goodie of snapshot.world.goodies) {
       this.goodies.setTint(goodie.id, nativeBoneyardLightTint(
         nativeBoneyardLightScalar(goodie.position, this.lightIndex),
@@ -1846,6 +1874,7 @@ class BoneyardDynamicScene {
     for (const goodie of snapshot.world.goodies) {
       dynamicLayers.push(nativeGoodiePainterLayer(goodie, dynamicLayers.length))
     }
+    dynamicLayers.push(...this.modEffects.painterLayers(snapshot, dynamicLayers.length))
     for (const effect of snapshot.world.deathEffects) {
       dynamicLayers.push(nativeEnemyDeathEffectPainterLayer(effect, dynamicLayers.length))
     }
@@ -1998,6 +2027,13 @@ class BoneyardDynamicScene {
       this.loot.setDepth(
         actor.id,
         positionedDynamics.get(`loot:${actor.id}`)?.zIndex ?? 1,
+      )
+    }
+    for (const effect of snapshot.modEffects) {
+      const id = modEffectId(effect)
+      this.modEffects.setDepth(
+        id,
+        positionedDynamics.get(id)?.zIndex ?? 1,
       )
     }
     for (const goodie of snapshot.world.goodies) {
@@ -2213,6 +2249,7 @@ class BoneyardDynamicScene {
     this.enemyProjectiles.destroy()
     this.maggots.destroy()
     this.loot.destroy()
+    this.modEffects.destroy()
     this.goodies.destroy()
     this.mageLightningPulses.destroy()
     this.playerDeathBursts.destroy()

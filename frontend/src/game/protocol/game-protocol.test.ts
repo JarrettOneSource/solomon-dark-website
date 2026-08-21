@@ -393,6 +393,8 @@ test('server welcome round-trips content, kernel, character, and world ownership
       manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256,
       mods: [],
     },
+    modAssets: [],
+    modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
     snapshot: createGameSnapshot(
@@ -765,6 +767,8 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
       playerRadius: 25,
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
     boneyards: [loaded.choice],
     gameplayPause: null,
     snapshot,
@@ -1009,7 +1013,7 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
   )
 })
 
-test('protocol v48 carries leaderboard authority, modal pause identity, unforge state, and existing gameplay state', () => {
+test('protocol v48 carries mod content, leaderboard authority, modal pause identity, unforge state, and gameplay state', () => {
   assert.equal(GAME_PROTOCOL_VERSION, 48)
   const loaded = loadedBoneyardFixture('run-v16')
   const active = enterBoneyardWorld(
@@ -1391,6 +1395,8 @@ test('protocol v42 preserves the bounded run-scoped enemy semantic-event lane', 
       playerRadius: 25,
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
     boneyards: [loadedBoneyardFixture(runId).choice],
     gameplayPause: null,
     snapshot,
@@ -3267,6 +3273,8 @@ test('protocol bounds server-controlled world collections', () => {
       playerRadius: 25,
     },
     content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
     boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
     gameplayPause: null,
     snapshot: {

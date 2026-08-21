@@ -12,7 +12,7 @@ export const BONEYARD_LOOT_ENTITY_TYPE_ID = 7
 
 const POSITION_SCALE = 16
 const VALUE_SCALE = 1024
-const DESCRIPTOR_LENGTH = 12
+const DESCRIPTOR_LENGTH = 14
 const SAMPLE_LENGTH = 15
 const NATIVE_TYPES = [2038, 2012, 2011, 2013] as const
 const NATIVE_LOOT_WORLD_ID_MAXIMUM = 2_047
@@ -35,8 +35,10 @@ export const BONEYARD_LOOT_ENTITY_REGISTRATION = {
       || !nonnegativeInteger(descriptor[7])
       || !Number.isSafeInteger(descriptor[8])
       || !Number.isSafeInteger(descriptor[9])
-      || !nonnegativeInteger(descriptor[10])
-      || !nonnegativeInteger(descriptor[11])
+      || !Number.isSafeInteger(descriptor[10])
+      || !Number.isSafeInteger(descriptor[11])
+      || !nonnegativeInteger(descriptor[12])
+      || !nonnegativeInteger(descriptor[13])
     ) return false
     const kind = BONEYARD_LOOT_KINDS[descriptor[2]]!
     if (descriptor[3] !== NATIVE_TYPES[descriptor[2]]) return false
@@ -48,11 +50,19 @@ export const BONEYARD_LOOT_ENTITY_REGISTRATION = {
     }
     if (kind === 'gold' ? descriptor[7] > 3 : descriptor[7] !== 0) return false
     if (kind === 'sack') {
-      if (!nativeSackItemIdentity(descriptor[8], descriptor[9])) return false
-    } else if (descriptor[8] !== -1 || descriptor[9] !== -1) return false
+      if (!nativeSackItemIdentity(
+        descriptor[8],
+        descriptor[9],
+        descriptor[10],
+        descriptor[11],
+      )) return false
+    } else if (
+      descriptor[8] !== -1 || descriptor[9] !== -1 ||
+      descriptor[10] !== -1 || descriptor[11] !== -1
+    ) return false
     if (kind === 'gold') {
-      if (descriptor[11] > 99_999) return false
-    } else if (descriptor[11] !== 0) return false
+      if (descriptor[13] > 99_999) return false
+    } else if (descriptor[13] !== 0) return false
     return true
   },
   sampleIsValid(sample: ReplicatedEntitySample): boolean {
@@ -74,6 +84,7 @@ export function boneyardLootDescriptor(
   loot: BoneyardLootSnapshot,
 ): ReplicatedEntityDescriptor {
   const kind = requiredIndex(BONEYARD_LOOT_KINDS, loot.kind)
+  const contentId = loot.itemContentId === null ? null : BigInt(loot.itemContentId)
   return [
     BONEYARD_LOOT_ENTITY_TYPE_ID,
     loot.id,
@@ -85,6 +96,8 @@ export function boneyardLootDescriptor(
     loot.tier,
     loot.itemNativeTypeId ?? -1,
     loot.itemNativeSubtype ?? -1,
+    contentId === null ? -1 : Number(contentId >> 32n),
+    contentId === null ? -1 : Number(contentId & 0xffff_ffffn),
     loot.spawnTick,
     loot.scatterSeed,
   ]
@@ -138,6 +151,9 @@ export function materializeBoneyardLoot(
     bounceHeight: dequantize(sample[9], VALUE_SCALE),
     framePhase: dequantize(sample[8], VALUE_SCALE),
     id: descriptor[1],
+    itemContentId: descriptor[10] < 0
+      ? null
+      : (BigInt(descriptor[10]) << 32n | BigInt(descriptor[11])).toString(),
     itemNativeSubtype: descriptor[9] < 0 ? null : descriptor[9],
     itemNativeTypeId: descriptor[8] < 0 ? null : descriptor[8],
     kind: BONEYARD_LOOT_KINDS[descriptor[2]]!,
@@ -151,9 +167,9 @@ export function materializeBoneyardLoot(
     rotationDeg: dequantize(sample[14], VALUE_SCALE),
     scatterActive: sample[10] === 1,
     scatterProgress: dequantize(sample[11], VALUE_SCALE),
-    scatterSeed: descriptor[11],
+    scatterSeed: descriptor[13],
     source: BONEYARD_LOOT_SOURCES[descriptor[4]]!,
-    spawnTick: descriptor[10],
+    spawnTick: descriptor[12],
     tier: descriptor[7],
   }
 }
@@ -189,8 +205,21 @@ function arrayIndex(value: number, length: number): boolean {
   return nonnegativeInteger(value) && value < length
 }
 
-function nativeSackItemIdentity(nativeTypeId: number, nativeSubtype: number): boolean {
-  if (nativeTypeId === 7001) return integerWithin(nativeSubtype, 0, 5)
+function nativeSackItemIdentity(
+  nativeTypeId: number,
+  nativeSubtype: number,
+  contentIdHigh: number,
+  contentIdLow: number,
+): boolean {
+  const hasContentId = integerWithin(contentIdHigh, 0, 0x7fff_ffff)
+    && integerWithin(contentIdLow, 0, 0xffff_ffff)
+  const hasNoContentId = contentIdHigh === -1 && contentIdLow === -1
+  if (nativeTypeId === 7001) {
+    return nativeSubtype >= 0 && nativeSubtype <= 261 && (
+      nativeSubtype <= 5 ? hasNoContentId : hasContentId
+    )
+  }
+  if (!hasNoContentId) return false
   if (nativeTypeId === 7012) return integerWithin(nativeSubtype, 0, 3)
   if (nativeTypeId === 7008) return nativeSubtype === 0
   return [7002, 7003, 7004, 7005, 7006, 7011].includes(nativeTypeId)

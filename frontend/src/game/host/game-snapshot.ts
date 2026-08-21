@@ -47,6 +47,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
+        modEffects: state.modEffects,
         players,
         primarySpells: state.primarySpells,
         secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
@@ -67,6 +68,7 @@ export function createGameSnapshot(
       return {
         hostPlayerId,
         levelUpBarrier: state.levelUpBarrier,
+        modEffects: state.modEffects,
         players,
         primarySpells: state.primarySpells,
         secondaryAbilities: protocolSecondaryAbilities(state.secondaryAbilities),
@@ -151,6 +153,7 @@ export function createGameSnapshot(
             bounceHeight: actor.bounceHeight,
             framePhase: actor.framePhase,
             id: actor.id,
+            itemContentId: actor.item?.modContent?.contentId ?? null,
             itemNativeSubtype: actor.item?.nativeSubtype ?? null,
             itemNativeTypeId: actor.item?.nativeTypeId ?? null,
             kind: actor.kind,

@@ -221,6 +221,7 @@ export interface BoneyardLootSnapshot {
   bounceHeight: number
   framePhase: number
   id: number
+  itemContentId: string | null
   itemNativeSubtype: number | null
   itemNativeTypeId: number | null
   kind: typeof BONEYARD_LOOT_KINDS[number]
@@ -680,6 +681,7 @@ export type GameWorldSnapshotFrame = HubWorldSnapshotFrame | BoneyardWorldSnapsh
 export interface GameSnapshot {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
+  modEffects: readonly ProtocolModEffect[]
   players: Readonly<Record<string, ProtocolPlayerState>>
   primarySpells: PrimarySpellSimulationState
   secondaryAbilities: NativeSecondarySnapshotState
@@ -691,10 +693,20 @@ export interface GameSnapshot {
 export interface GameSnapshotFrame {
   hostPlayerId: string | null
   levelUpBarrier: PlayerLevelUpBarrierState | null
+  modEffects: readonly ProtocolModEffect[]
   players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>
   primarySpells: PrimarySpellSimulationState
   secondaryAbilities: NativeSecondarySnapshotState
   run: GameRunLifecycleState
   tick: number
   world: GameWorldSnapshotFrame
+}
+
+export interface ProtocolModEffect {
+  color: readonly [number, number, number, number]
+  contentId: string
+  expiresTick: number
+  playerId: string
+  startedTick: number
+  useId: number
 }

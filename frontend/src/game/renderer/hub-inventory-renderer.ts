@@ -20,6 +20,11 @@ import type { PlayerCharacterConfig, WizardElement } from '../core-kernels/playe
 import { HUB_TRADER_DIALOGUES, equipmentSlotsForItem } from '../hub-inventory-presentation.ts'
 import { playerCharacterStaffIsFront, playerCharacterStaffOrbOffset } from '../player-character-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from '../protocol/game-state.ts'
+import type { GameModAsset } from '../protocol/game-protocol.ts'
+import {
+  loadModPresentationTextures,
+  type ModPresentationTextures,
+} from './mod-presentation-assets.ts'
 import {
   createGameWebGlApplication,
   loadGameTextureMap,
@@ -162,11 +167,14 @@ const ATLAS_SOURCE: Readonly<Record<AtlasName, string>> = {
   UI: hub.trader.uiAtlas,
 }
 
-export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer> {
+export async function createHubInventoryRenderer(
+  modAssets: readonly GameModAsset[] = [],
+): Promise<HubInventoryRenderer> {
   let gpu: GameWebGlApplication | undefined
   let resources: GameTextureMap | undefined
+  let modTextures: ModPresentationTextures | undefined
   try {
-    ;[gpu, resources] = await Promise.all([
+    ;[gpu, resources, modTextures] = await Promise.all([
       createGameWebGlApplication({
         backgroundAlpha: 0,
         className: 'hub-inventory-native-canvas',
@@ -187,10 +195,12 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
         ...Object.values(playerCharacter.robeFixed),
         ...Object.values(playerCharacter.head),
       ]),
+      loadModPresentationTextures(modAssets),
     ])
   } catch (error) {
     gpu?.application.destroy({ removeView: true })
     resources?.destroy()
+    modTextures?.destroy()
     throw error
   }
 
@@ -229,6 +239,7 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
     atlasTextureCache,
     elementVfxTextures,
     glyphTextureCache,
+    modTextures,
     textures,
   }
 
@@ -244,6 +255,7 @@ export async function createHubInventoryRenderer(): Promise<HubInventoryRenderer
         for (const texture of frames) texture.destroy(false)
       }
       textures.destroy()
+      modTextures.destroy()
     },
     moveDrag(pointer) {
       if (!inventoryDragger) return
@@ -383,6 +395,7 @@ interface RenderContext {
   readonly atlasTextureCache: Map<string, Texture>
   readonly elementVfxTextures: PlayerWorldTextures['elementVfx']
   readonly glyphTextureCache: Map<string, Texture>
+  readonly modTextures: ModPresentationTextures
   readonly textures: GameTextureMap
 }
 
@@ -1591,7 +1604,7 @@ function addInventoryDragger(
 function addItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'iconTints' | 'recipeIndex'>,
+  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'iconTints' | 'modContent' | 'recipeIndex'>,
   centerX: number,
   centerY: number,
   element: WizardElement,
@@ -1600,6 +1613,15 @@ function addItemIcon(
     readonly tintOverride?: number
   } = {},
 ): readonly Sprite[] {
+  if (item.modContent) {
+    const sprite = new Sprite(context.modTextures.texture(item.modContent))
+    sprite.anchor.set(0.5)
+    sprite.position.set(centerX, centerY)
+    sprite.alpha = options.alpha ?? 1
+    sprite.tint = options.tintOverride ?? 0xffffff
+    layer.addChild(sprite)
+    return [sprite]
+  }
   const transform = item.equipmentType === null
     ? null
     : HUB_ITEM_ICON_TRANSFORMS[item.equipmentType]
@@ -1634,7 +1656,7 @@ function addItemIcon(
 function addClippedItemIcon(
   context: RenderContext,
   layer: Container,
-  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'recipeIndex'>,
+  item: Pick<HubInventoryItem, 'equipmentType' | 'iconRecords' | 'modContent' | 'recipeIndex'>,
   centerX: number,
   centerY: number,
   element: WizardElement,

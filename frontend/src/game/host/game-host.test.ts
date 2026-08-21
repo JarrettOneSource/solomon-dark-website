@@ -53,6 +53,7 @@ const SECOND_CHARACTER = {
 const SHARED_AUTHENTICATION = { kind: 'shared', credential: 'test-secret' } as const
 const LEADERBOARD_RECEIPT_SECRET = 'leaderboard-receipt-test-secret-that-is-long-enough'
 const EMPTY_SHARED_CONTENT = {
+  assets: [],
   boneyards: [],
   manifest: { manifestSha256: '0'.repeat(64), mods: [] },
   modSources: [],
@@ -1554,7 +1555,7 @@ test('host lazily executes bounded Lua for authority and applies semantic comman
   assert.equal(executed.type, 'server-lua-result')
   assert.equal(executed.ok, true)
   assert.deepEqual(executed.output, ['authority\ttrue'])
-  assert.deepEqual(executed.values, ['Helvidius', '0.1.0'])
+  assert.deepEqual(executed.values, ['Helvidius', '0.2.0'])
   await waitFor(() => getPlayerEconomy(host.state(), authority.welcome.playerId).gold === 4321)
   assert.notEqual((await hostHealth(host.address.url)).lua, null)
 

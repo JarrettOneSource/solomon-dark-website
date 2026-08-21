@@ -929,6 +929,8 @@ export default function MainMenuScene({
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              modAssets={session.modAssets}
+              modCatalog={session.getModCatalog()}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
               initialSnapshot={runtimeSnapshot}
@@ -956,6 +958,7 @@ export default function MainMenuScene({
               getPingMs={session.getPingMs}
               inputBlocked={sceneInputBlocked}
               inventoryRequestSequence={inventoryRequestSequence}
+              modAssets={session.modAssets}
               levelUpPresentationId={levelUpPresentationId}
               playerId={session.playerId}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}

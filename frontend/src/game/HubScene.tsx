@@ -41,7 +41,7 @@ import {
   projectNativeStickAim,
   projectNativeWorldPointer,
 } from './input/gameplay-pointer.ts'
-import type { BoneyardChoice, GameSnapshot } from './protocol/game-protocol.ts'
+import type { BoneyardChoice, GameModAsset, GameSnapshot } from './protocol/game-protocol.ts'
 import type { LocalPartyState } from './protocol/party-state.ts'
 import type {
   ProtocolPlayerEconomy,
@@ -67,6 +67,7 @@ interface HubSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  modAssets: readonly GameModAsset[]
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onAcceptPartyInvitation: (invitationId: string) => void
@@ -106,6 +107,7 @@ export default function HubScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  modAssets,
   levelUpPresentationId,
   onInput,
   onAcceptPartyInvitation,
@@ -521,6 +523,7 @@ export default function HubScene({
           config={hubInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || pickerOpen}
           economy={economy}
+          modAssets={modAssets}
           onAction={onHubAction}
           onSurfaceChange={setHubUiSurface}
           playerPosition={playerPosition}

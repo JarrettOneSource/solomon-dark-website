@@ -45,7 +45,9 @@ const SIMULATION_KEYS = [
   'hallOfFameClockStartedAtTick',
   'levelUpBarrier',
   'lightProviderOrder',
+  'modEffects',
   'nextLevelUpBarrierId',
+  'nextModConsumableUseId',
   'playerEntities',
   'primarySpells',
   'run',
@@ -109,6 +111,8 @@ export function createGameSaveDocument(
   const simulation = {
     ...ownerState,
     accumulatorSeconds: 0,
+    modEffects: [],
+    nextModConsumableUseId: 1,
     world: ownerState.world.kind === 'hub'
       ? serializeHubWorld(ownerState.world)
       : ownerState.world,
@@ -154,6 +158,12 @@ export function restoreGameSaveDocument(document: string): RestoredGameSaveDocum
     || Number(rawState.hallOfFameClockStartedAtTick) > Number(rawState.tick)
   ) throw new Error('game save Hall clock is invalid')
   if (rawState.tick !== parsed.summary.savedAtTick) throw new Error('game save tick summary drifted')
+  if (!Array.isArray(rawState.modEffects) || rawState.modEffects.length !== 0) {
+    throw new Error('game save may not persist active mod effects')
+  }
+  if (rawState.nextModConsumableUseId !== 1) {
+    throw new Error('game save mod consumable sequence is invalid')
+  }
   const rawWorld = record(rawState.world, 'game save world')
   if (rawWorld.kind !== parsed.summary.worldKind) throw new Error('game save world summary drifted')
 

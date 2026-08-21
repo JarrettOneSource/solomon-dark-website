@@ -45,6 +45,7 @@ export type HubItemKind =
   | 'key'
   | 'mana-potion'
   | 'mind-chug'
+  | 'mod-potion'
   | 'rejuvenation-potion'
   | 'sack'
   | 'wizard-chug'
@@ -56,6 +57,7 @@ export const HUB_ITEM_KINDS = [
   'key',
   'mana-potion',
   'mind-chug',
+  'mod-potion',
   'rejuvenation-potion',
   'sack',
   'wizard-chug',
@@ -69,6 +71,7 @@ export interface HubInventoryItem {
   readonly iconTints?: readonly [number | null, number | null]
   readonly id: number
   readonly kind: HubItemKind
+  readonly modContent?: ModConsumableContent
   readonly name: string
   readonly nativeSubtype: number | null
   readonly nativeSelector?: number
@@ -77,6 +80,43 @@ export interface HubInventoryItem {
   readonly quantity: number
   readonly rarity: 'Epic' | 'Rare' | null
   readonly recipeIndex: number | null
+}
+
+export interface ModSpriteFrame {
+  readonly centerOffsetX: number
+  readonly centerOffsetY: number
+  readonly contentHeight: number
+  readonly contentWidth: number
+  readonly height: number
+  readonly logicalHeight: number
+  readonly logicalWidth: number
+  readonly width: number
+  readonly x: number
+  readonly y: number
+}
+
+export interface ModConsumableContent {
+  readonly consumeVfx: Readonly<{
+    readonly color: readonly [number, number, number, number]
+    readonly kind: 'spell_glow'
+  }> | null
+  readonly contentId: string
+  readonly description: string
+  readonly durationMs: number
+  readonly icon: Readonly<{
+    readonly atlasId: string
+    readonly frame: ModSpriteFrame
+    readonly frameIndex: number
+    readonly imagePath: string
+  }>
+  readonly key: string
+  readonly modId: string
+}
+
+export interface ModConsumableCatalogEntry {
+  readonly content: ModConsumableContent
+  readonly name: string
+  readonly nativeSubtype: number
 }
 
 export interface NativeEquipmentEffect {
@@ -579,7 +619,8 @@ export function consumeInventoryItem(
 ): HubEconomyResult {
   const item = source.backpack.find((entry) => entry.id === itemId)
   if (!item) return rejected(source, 'item-not-found')
-  if (item.nativeTypeId !== 7001 || item.nativeSubtype === null) {
+  if (item.nativeTypeId !== 7001 || item.nativeSubtype === null ||
+      (item.kind === 'mod-potion' && item.modContent === undefined)) {
     return rejected(source, 'ineligible-item')
   }
   return accepted({
@@ -848,7 +889,9 @@ export function insertLootInventoryItem(
   if (item.nativeTypeId === 7001) {
     const stackIndex = source.backpack.findIndex((entry) => (
       entry.nativeTypeId === item.nativeTypeId
-      && entry.nativeSubtype === item.nativeSubtype
+      && (item.modContent === undefined
+        ? entry.modContent === undefined && entry.nativeSubtype === item.nativeSubtype
+        : entry.modContent?.contentId === item.modContent.contentId)
     ))
     if (stackIndex >= 0) {
       return {

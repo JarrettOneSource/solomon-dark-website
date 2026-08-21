@@ -13,6 +13,7 @@ import {
   WEB_LUA_CALLBACK_TIMEOUT_MS,
   WEB_LUA_DEV_CONSOLE_MOD,
   WEB_LUA_EVENT_NAMES,
+  WEB_LUA_FILTER_NAMES,
   WEB_LUA_EXECUTION_TIMEOUT_MS,
   WEB_LUA_MAX_CALLBACK_INVOCATIONS_PER_TICK,
   WEB_LUA_MAX_CALLBACKS,
@@ -23,14 +24,21 @@ import {
   WEB_LUA_VM_MEMORY_BYTES,
   type WebLuaCommand,
   type WebLuaEventName,
+  type WebLuaFilterName,
   type WebLuaExecutionRequest,
   type WebLuaExecutionResult,
   type WebLuaFrameState,
   type WebLuaRuntimeBindings,
   type WebLuaRuntimeLog,
   type WebLuaModIdentity,
+  type WebLuaModSource,
 } from './web-lua-contract.ts'
 import { WebLuaApi } from './web-lua-api.ts'
+import {
+  WebLuaContentRegistry,
+  type WebLuaContentModBinding,
+} from './web-lua-content-registry.ts'
+import { applyWebLuaFilterResult, type WebLuaFilterOutcome } from './web-lua-filters.ts'
 import {
   boundedError,
   encodedByteLength,
@@ -42,12 +50,15 @@ import {
 } from './web-lua-values.ts'
 
 const eventNameSet = new Set<string>(WEB_LUA_EVENT_NAMES)
+const filterNameSet = new Set<string>(WEB_LUA_FILTER_NAMES)
 const maximumTimerDelayMs = 24 * 60 * 60 * 1_000
 
 interface WebLuaRuntimeOptions {
   readonly bindings: WebLuaRuntimeBindings
+  readonly contentRegistry?: WebLuaContentRegistry
   readonly log?: WebLuaRuntimeLog
   readonly mod?: WebLuaModIdentity
+  readonly modSource?: WebLuaModSource
   readonly now?: () => number
   readonly wasmPath: string
 }
@@ -87,7 +98,9 @@ export class WebLuaRuntime {
   readonly #api: WebLuaApi
   readonly #bindings: WebLuaRuntimeBindings
   readonly #callbacks = new Map<WebLuaEventName, Map<number, LuaCallback>>()
+  readonly #content: WebLuaContentModBinding | null
   readonly #engine: LuaEngine
+  readonly #filters = new Map<WebLuaFilterName, Map<number, LuaCallback>>()
   readonly #log: WebLuaRuntimeLog
   readonly #now: () => number
   readonly #pendingExecutions: WebLuaExecutionRequest[] = []
@@ -100,6 +113,10 @@ export class WebLuaRuntime {
   #callbackLimitWarningTick = -1
   #closed = false
   #currentTick = 0
+  #entrypointRan = false
+  #filterResult: unknown = null
+  #filterResultSubmitted = false
+  #filterRunning = false
   #initializedAtMs: number
   #lastTickWorkMs = 0
   #maximumTickWorkMs = 0
@@ -142,8 +159,23 @@ export class WebLuaRuntime {
     this.#initializedAtMs = 0
     this.mod = Object.freeze(options.mod ?? WEB_LUA_DEV_CONSOLE_MOD)
     for (const name of WEB_LUA_EVENT_NAMES) this.#callbacks.set(name, new Map())
+    for (const name of WEB_LUA_FILTER_NAMES) this.#filters.set(name, new Map())
+    if (Boolean(options.contentRegistry) !== Boolean(options.modSource)) {
+      throw new Error('Lua content registry and mod source must be configured together')
+    }
+    this.#content = options.contentRegistry && options.modSource
+      ? options.contentRegistry.attach(options.modSource, {
+          invoke: (callback, owner, payload, activePlayerId) => this.#callStoredFunctionForPlayer(
+            callback,
+            owner,
+            activePlayerId,
+            payload,
+          ),
+        })
+      : null
     this.#api = new WebLuaApi({
       addCallback: (name, callback) => this.#addCallback(name, callback),
+      addFilter: (name, callback) => this.#addFilter(name, callback),
       addTimer: (delayMs, callback, repeating) => this.#addTimer(
         delayMs,
         callback,
@@ -163,12 +195,23 @@ export class WebLuaRuntime {
       now: () => this.#now(),
       print: (values) => this.#print(values),
       queueCommand: (command) => this.#queueCommand(command),
-    }, this.mod)
+      submitFilterResult: (value) => {
+        if (!this.#filterRunning || this.#filterResultSubmitted) {
+          throw new Error('Lua filter result submission is outside its callback')
+        }
+        this.#filterResult = value
+        this.#filterResultSubmitted = true
+      },
+    }, this.mod, this.#content)
   }
 
   runEntrypoint(code: string): void {
     if (this.#closed) throw new Error('Lua runtime is closed')
+    if (this.#entrypointRan) throw new Error('Lua mod entrypoint already ran')
+    this.#entrypointRan = true
+    this.#content?.openRegistration()
     const result = this.#execute(code, null)
+    this.#content?.finishRegistration(result.ok)
     if (!result.ok) throw new Error(result.error ?? `${this.mod.id} entry script failed`)
   }
 
@@ -226,14 +269,45 @@ export class WebLuaRuntime {
     }
   }
 
-  dispatch(name: WebLuaEventName, payload: LuaConsoleValue): void {
+  dispatch(
+    name: WebLuaEventName,
+    payload: LuaConsoleValue,
+    activePlayerId?: string,
+  ): void {
     if (this.#closed || name === 'runtime.tick') return
     if (!this.#postSimulationFrame) {
       this.#postSimulationFrame = true
       this.#tickFrame = null
     }
     this.#api.observeRunLifecycle(name, payload)
-    this.#dispatch(name, payload)
+    this.#dispatch(name, payload, activePlayerId)
+  }
+
+  applyFilter(
+    name: WebLuaFilterName,
+    payload: Extract<LuaConsoleValue, Record<string, LuaConsoleValue>>,
+    activePlayerId: string,
+  ): WebLuaFilterOutcome {
+    const callbacks = this.#filters.get(name)
+    if (!callbacks || callbacks.size === 0) return { canceled: false, payload }
+    let outcome: WebLuaFilterOutcome = { canceled: false, payload }
+    for (const entry of [...callbacks.values()]) {
+      if (this.#overTickBudget() || this.#callbackLimitReached()) return outcome
+      const invoked = this.#callFilterFunction(
+        entry.callback,
+        `${name} filter ${entry.handle}`,
+        activePlayerId,
+        outcome.payload,
+      )
+      if (!invoked.ok) continue
+      try {
+        outcome = applyWebLuaFilterResult(name, outcome.payload, invoked.result)
+      } catch (error) {
+        this.#log('warning', 'lua.filter_result_ignored', `${name}: ${boundedError(error)}`)
+      }
+      if (outcome.canceled) return outcome
+    }
+    return outcome
   }
 
   drainCommands(): readonly WebLuaCommand[] {
@@ -248,10 +322,7 @@ export class WebLuaRuntime {
   get metrics(): WebLuaRuntimeMetrics {
     return {
       budgetExceededCount: this.#budgetExceededCount,
-      callbackCount: [...this.#callbacks.values()].reduce(
-        (total, callbacks) => total + callbacks.size,
-        0,
-      ),
+      callbackCount: this.#registeredCallbackCount(),
       initializedAtMs: this.#initializedAtMs,
       lastTickWorkMs: this.#lastTickWorkMs,
       maximumTickWorkMs: this.#maximumTickWorkMs,
@@ -274,7 +345,9 @@ export class WebLuaRuntime {
       })
     }
     this.#callbacks.clear()
+    this.#filters.clear()
     this.#timers.clear()
+    this.#content?.close()
     this.#api.close()
     this.#commandQueue.length = 0
     this.#engine.global.close()
@@ -356,13 +429,18 @@ export class WebLuaRuntime {
     }
   }
 
-  #dispatch(name: WebLuaEventName, payload: LuaConsoleValue): void {
+  #dispatch(name: WebLuaEventName, payload: LuaConsoleValue, activePlayerId?: string): void {
     const callbacks = this.#callbacks.get(name)
     if (!callbacks || callbacks.size === 0) return
     for (const entry of [...callbacks.values()]) {
       if (this.#overTickBudget()) return
       if (this.#callbackLimitReached()) return
-      if (!this.#callStoredFunction(entry.callback, `${name} callback ${entry.handle}`, payload)) {
+      if (!this.#callStoredFunctionForPlayer(
+        entry.callback,
+        `${name} callback ${entry.handle}`,
+        activePlayerId ?? this.#bindings.getAuthorityPlayerId(),
+        payload,
+      )) {
         callbacks.delete(entry.handle)
       }
     }
@@ -373,16 +451,57 @@ export class WebLuaRuntime {
     owner: string,
     ...args: unknown[]
   ): boolean {
+    return this.#callStoredFunctionForPlayer(
+      callback,
+      owner,
+      this.#bindings.getAuthorityPlayerId(),
+      ...args,
+    )
+  }
+
+  #callStoredFunctionForPlayer(
+    callback: (...args: unknown[]) => unknown,
+    owner: string,
+    activePlayerId: string | null,
+    ...args: unknown[]
+  ): boolean {
     this.#callbackInvocationsThisTick += 1
-    this.#activePlayerId = this.#bindings.getAuthorityPlayerId()
+    this.#activePlayerId = activePlayerId
     try {
-      const result = this.#measureLuaWork(() => callback(...args))
+      const result = this.#measureLuaWork(() => callback(...args.map(luaCallbackPayload)))
       if (result instanceof Promise) throw new Error('Lua callbacks may not yield')
       return true
     } catch (error) {
       this.#log('warning', 'lua.callback_failed', `${owner}: ${boundedError(error)}`)
       return false
     } finally {
+      this.#activePlayerId = null
+    }
+  }
+
+  #callFilterFunction(
+    callback: (...args: unknown[]) => unknown,
+    owner: string,
+    activePlayerId: string,
+    payload: LuaConsoleValue,
+  ): { readonly ok: boolean; readonly result: unknown } {
+    this.#callbackInvocationsThisTick += 1
+    this.#activePlayerId = activePlayerId
+    this.#filterResult = null
+    this.#filterResultSubmitted = false
+    this.#filterRunning = true
+    try {
+      const result = this.#measureLuaWork(() => callback(luaCallbackPayload(payload)))
+      if (result instanceof Promise) throw new Error('Lua filters may not yield')
+      if (!this.#filterResultSubmitted) throw new Error('Lua filter returned no captured result')
+      return { ok: true, result: this.#filterResult }
+    } catch (error) {
+      this.#log('warning', 'lua.filter_failed', `${owner}: ${boundedError(error)}`)
+      return { ok: false, result: null }
+    } finally {
+      this.#filterRunning = false
+      this.#filterResult = null
+      this.#filterResultSubmitted = false
       this.#activePlayerId = null
     }
   }
@@ -466,10 +585,7 @@ export class WebLuaRuntime {
     const normalizedName = requireString(name, 'event name', 64)
     if (!eventNameSet.has(normalizedName)) throw new Error(`unsupported event: ${normalizedName}`)
     if (typeof callback !== 'function') throw new Error('event callback must be a function')
-    const callbackCount = [...this.#callbacks.values()].reduce(
-      (total, entries) => total + entries.size,
-      0,
-    )
+    const callbackCount = this.#registeredCallbackCount()
     if (callbackCount >= WEB_LUA_MAX_CALLBACKS) throw new Error('Lua callback limit reached')
     const handle = this.#newHandle()
     this.#callbacks.get(normalizedName as WebLuaEventName)!.set(handle, {
@@ -477,6 +593,30 @@ export class WebLuaRuntime {
       handle,
     })
     return true
+  }
+
+  #addFilter(name: unknown, callback: unknown): boolean {
+    const normalizedName = requireString(name, 'event filter name', 64)
+    if (!filterNameSet.has(normalizedName)) {
+      throw new Error(`unsupported mutable event filter: ${normalizedName}`)
+    }
+    if (typeof callback !== 'function') throw new Error('event filter callback must be a function')
+    if (this.#registeredCallbackCount() >= WEB_LUA_MAX_CALLBACKS) {
+      throw new Error('Lua callback limit reached')
+    }
+    const handle = this.#newHandle()
+    this.#filters.get(normalizedName as WebLuaFilterName)!.set(handle, {
+      callback: callback as (...args: unknown[]) => unknown,
+      handle,
+    })
+    return true
+  }
+
+  #registeredCallbackCount(): number {
+    return [...this.#callbacks.values(), ...this.#filters.values()].reduce(
+      (total, entries) => total + entries.size,
+      0,
+    )
   }
 
   #addTimer(delay: unknown, callback: unknown, repeating: boolean): number {
@@ -563,6 +703,16 @@ export class WebLuaRuntime {
 }
 
 const SANDBOX_BOOTSTRAP = `
+  if sd.events.filter ~= nil then
+    local register_filter = sd.events.filter
+    local submit_filter_result = __sd_submit_filter_result
+    sd.events.filter = function(name, handler)
+      return register_filter(name, function(event)
+        submit_filter_result(handler(event))
+      end)
+    end
+  end
+  __sd_submit_filter_result = nil
   io = nil
   os = nil
   package = nil
@@ -575,3 +725,11 @@ const SANDBOX_BOOTSTRAP = `
   collectgarbage = nil
   coroutine = nil
 `
+
+function luaCallbackPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(luaCallbackPayload)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value)
+    .filter(([, child]) => child !== null && child !== undefined)
+    .map(([key, child]) => [key, luaCallbackPayload(child)]))
+}

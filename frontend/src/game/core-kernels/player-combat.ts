@@ -50,6 +50,7 @@ export interface PlayerCombatTickOptions {
   readonly healthRecoveryPerTick?: number
   readonly manaCeiling?: number
   readonly manaRecoveryPerTick?: number
+  readonly poisonDamagePerTick?: number
 }
 
 export interface PlayerManaDebitResult<T extends PlayerCombatComponent> {
@@ -221,14 +222,17 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
   const manaRecoveryPerTick = options.manaRecoveryPerTick
     ?? PLAYER_MANA_RECOVERY_PER_TICK
   const manaCeiling = options.manaCeiling ?? source.maximumMana
+  const appliedPoisonDamagePerTick = options.poisonDamagePerTick ?? source.poisonDamagePerTick
   if (
     !Number.isFinite(healthRecoveryPerTick)
     || healthRecoveryPerTick < 0
     || !Number.isFinite(manaRecoveryPerTick)
-    || manaRecoveryPerTick < 0
+    || Math.abs(manaRecoveryPerTick) > 1_000_000
     || !Number.isFinite(manaCeiling)
     || manaCeiling < 0
     || manaCeiling > source.maximumMana
+    || !Number.isFinite(appliedPoisonDamagePerTick)
+    || appliedPoisonDamagePerTick < 0
   ) throw new RangeError('player combat recovery options are invalid')
   if (source.lifeState === 'lethal-pending') {
     return {
@@ -264,13 +268,13 @@ export function stepPlayerCombatTick<T extends PlayerCombatComponent>(
   const currentHealth = Math.min(
     source.maximumHealth,
     source.currentHealth
-      - (poisoned ? source.poisonDamagePerTick : 0)
+      - (poisoned ? appliedPoisonDamagePerTick : 0)
       + healthRecoveryPerTick,
   )
-  const currentMana = Math.min(
+  const currentMana = Math.max(0, Math.min(
     manaCeiling,
     source.currentMana + manaRecoveryPerTick,
-  )
+  ))
   const poisonDamagePerTick = poisonTicksRemaining === 0 ? 0 : source.poisonDamagePerTick
   const lifeState = currentHealth <= PLAYER_LETHAL_HEALTH
     ? 'lethal-pending' as const

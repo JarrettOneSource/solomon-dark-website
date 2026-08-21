@@ -63,6 +63,8 @@ import {
   type BoneyardWaveDirectorState,
 } from '../core-kernels/boneyard-wave-director.ts'
 import type { NativeHallOfFameRunState } from '../core-kernels/hall-of-fame-score.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
 import {
   applyNativeEnemyWorldFeedback,
   createNativeEnemyWorldFeedbackState,
@@ -93,6 +95,7 @@ import {
 import {
   createBoneyardLootStore,
   materializeBoneyardEnemyLoot,
+  spawnBoneyardCustomLootItems,
   rollBoneyardLootSeed,
   stepBoneyardLootStore,
   type BoneyardGoodieUnlock,
@@ -305,6 +308,10 @@ export function stepBoneyardWorldTick(
   abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>> = {},
   summons: readonly BoneyardSummonTarget[] = [],
   externalSpawnIntents: readonly BoneyardEnemySpawnIntent[] = [],
+  customLoot?: (input: Readonly<{
+    actorSeed: number
+    enemyToken: BoneyardWaveEnemyToken
+  }>) => readonly HubInventoryItem[],
 ): BoneyardWorldTickResult {
   let arenaTransition = world.arenaTransition === null
     ? null
@@ -626,6 +633,18 @@ export function stepBoneyardWorldTick(
       )),
     })
     loot = materialized.store
+    const customItems = customLoot?.({
+      actorSeed: reward.lootSource.actorSeed,
+      enemyToken: reward.lootSource.enemyToken,
+    }) ?? []
+    if (customItems.length > 0) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        customItems,
+        reward.lootSource.position,
+        tick,
+      ).store
+    }
   }
   const knockback = applyBoneyardPlayerKnockbacks(
     nextPlayers,

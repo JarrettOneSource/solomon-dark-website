@@ -56,6 +56,11 @@ Use the [combined example](/examples/combined-manifest.json).
   `.boneyard` under `files/`.
 - `runtime.entryScript` names an existing `.lua` file under `scripts/`.
 - `runtime.apiVersion` declares the web Lua API used by that script.
+- `runtime.requiredCapabilities` declares every host/content seam the entry
+  script needs. Session materialization fails before VM creation when any
+  requested capability is unavailable.
+- `minimumLoaderVersion` is retained for packages which also run through the
+  native Mod Loader. It is descriptive on the rebuilt web authority.
 - `requiredMods` lists package IDs which must also be subscribed and enabled.
 
 Paths use `/`, are relative, and must match archive case. Do not wrap the

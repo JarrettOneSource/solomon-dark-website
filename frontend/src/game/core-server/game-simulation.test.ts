@@ -40,6 +40,7 @@ import {
   BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   confirmGameSimulationLoadout,
   createGameSimulation,
+  DEFAULT_PLAYER_CHARACTER_CONFIG,
   enterBoneyardWorld,
   getPlayerCharacter,
   getPlayerEconomy,
@@ -52,6 +53,7 @@ import {
   selectGameSimulationPlayerSkill,
   stepGameSimulation,
   stepGameSimulationTick,
+  type GameSimulationExtensions,
   type GameSimulationState,
 } from './game-simulation.ts'
 import {
@@ -71,6 +73,7 @@ import {
   replacePlayerCharacterRecords,
   replacePlayerEconomy,
   selectPlayerEntityConcentration,
+  setPlayerEntityMana,
 } from './player-entity-store.ts'
 
 function gameplayInput(x: number, y: number) {
@@ -2335,4 +2338,118 @@ function seedForIntegerDraw(
     if (predicate(drawNativeInteger(createNativeRng(seed), bound).value)) return seed
   }
   throw new Error(`could not find native RNG seed for bound ${bound}`)
+}
+
+test('mod consumables retain identity, allocate one effect, and clear on run entry', () => {
+  let state = createGameSimulation({ guest: DEFAULT_PLAYER_CHARACTER_CONFIG })
+  const economy = getPlayerEconomy(state, 'guest')
+  const content = {
+    consumeVfx: {
+      color: [0.15, 1, 0.25, 1] as const,
+      kind: 'spell_glow' as const,
+    },
+    contentId: '8068156596081641415',
+    description: 'Three minutes of invincibility and unlimited mana.',
+    durationMs: 180_000,
+    icon: {
+      atlasId: 'canary.lua.invincibility_potion:invincibility_potion',
+      frame: {
+        centerOffsetX: 0,
+        centerOffsetY: 0,
+        contentHeight: 50,
+        contentWidth: 53,
+        height: 50,
+        logicalHeight: 50,
+        logicalWidth: 53,
+        width: 53,
+        x: 0,
+        y: 0,
+      },
+      frameIndex: 0,
+      imagePath: 'sprites/invincibility_potion.png',
+    },
+    key: 'invincibility_potion',
+    modId: 'canary.lua.invincibility_potion',
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'guest', {
+      ...economy,
+      backpack: [...economy.backpack, {
+        equipmentType: null,
+        iconRecords: [],
+        id: economy.nextItemId,
+        kind: 'mod-potion',
+        modContent: content,
+        name: 'Invincibility Potion',
+        nativeSubtype: 6,
+        nativeTypeId: 7001,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      }],
+      nextItemId: economy.nextItemId + 1,
+      revision: economy.revision + 1,
+    }),
+  }
+  const extensions = inertModExtensions(content.contentId)
+  const consumed = applyGameSimulationHubAction(
+    state,
+    'guest',
+    { itemId: economy.nextItemId, type: 'consume' },
+    extensions,
+  )
+  assert.equal(consumed.accepted, true)
+  assert.equal(consumed.modConsumption?.content.contentId, content.contentId)
+  assert.equal(consumed.modConsumption?.playerId, 'guest')
+  assert.equal(consumed.state.modEffects.length, 1)
+  assert.equal(getPlayerEconomy(consumed.state, 'guest').backpack.some(
+    ({ modContent }) => modContent?.contentId === content.contentId,
+  ), false)
+  assert.equal(enterBoneyardWorld(consumed.state, emptyBoneyard()).modEffects.length, 0)
+})
+
+test('simulation extensions filter poison and passive mana at their authoritative writers', () => {
+  let state = enterBoneyardWorld(
+    createGameSimulation({ guest: DEFAULT_PLAYER_CHARACTER_CONFIG }),
+    emptyBoneyard(),
+  )
+  state = {
+    ...state,
+    playerEntities: setPlayerEntityMana(
+      poisonPlayerEntity(state.playerEntities, 'guest', 10, 1),
+      'guest',
+      50,
+    ),
+  }
+  const damageKinds: string[] = []
+  const manaSources: string[] = []
+  const extensions: GameSimulationExtensions = {
+    createLootItems: () => [],
+    filterDamage: input => {
+      damageKinds.push(input.damageKind)
+      return input.damageKind === 'poison' ? 0 : input.amount
+    },
+    filterMana: input => {
+      manaSources.push(input.source)
+      return input.source === 'passive-recovery' ? 0 : input.delta
+    },
+    hasConsumable: () => false,
+  }
+  const before = getPlayerProgression(state, 'guest')
+  state = stepGameSimulationTick(state, { guest: gameplayInput(0, 0) }, { extensions })
+  const after = getPlayerProgression(state, 'guest')
+  assert.ok(after.currentHealth >= before.currentHealth)
+  assert.equal(after.currentMana, 50)
+  assert.ok(damageKinds.includes('poison'))
+  assert.ok(manaSources.includes('passive-recovery'))
+})
+
+function inertModExtensions(contentId: string): GameSimulationExtensions {
+  return {
+    createLootItems: () => [],
+    filterDamage: input => input.amount,
+    filterMana: input => input.delta,
+    hasConsumable: candidate => candidate === contentId,
+  }
 }

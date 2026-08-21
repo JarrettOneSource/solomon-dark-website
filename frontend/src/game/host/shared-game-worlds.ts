@@ -14,6 +14,7 @@ import {
   removePlayerCharacter,
   stepGameSimulationTick,
   type GameSimulationState,
+  type GameSimulationExtensions,
   type PlayerId,
 } from '../core-server/game-simulation.ts'
 import {
@@ -237,6 +238,7 @@ export function stepSharedGameWorlds(
   pausedPartyIds: ReadonlySet<string> = new Set(),
   enemySpawnIntents: ReadonlyMap<string, readonly BoneyardEnemySpawnIntent[]> = new Map(),
   hubPaused = false,
+  extensions: ReadonlyMap<string, GameSimulationExtensions> = new Map(),
 ): SharedGameWorldsState {
   return {
     ...state,
@@ -250,7 +252,10 @@ export function stepSharedGameWorlds(
           state: stepGameSimulationTick(
             run.state,
             inputsForState(run.state, inputs),
-            { enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [] },
+            {
+              enemySpawnIntents: enemySpawnIntents.get(run.partyId) ?? [],
+              extensions: extensions.get(run.partyId),
+            },
           ),
         }),
   }

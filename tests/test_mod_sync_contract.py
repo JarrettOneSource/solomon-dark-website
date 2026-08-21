@@ -27,6 +27,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BONEYARD_FIXTURE = ROOT / "tests" / "fixtures" / "flat_multiplayer_test.boneyard"
+ONE_PIXEL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Xz6rAAAAAElFTkSuQmCC"
+)
+ONE_FRAME_BUNDLE = bytes.fromhex(
+    "00000000000000000000803f0000803f01000000010000000000803f0000803f"
+    "00000000000000000000000000"
+)
 
 
 def package(files: dict[str, bytes], manifest: dict[str, object]) -> bytes:
@@ -848,7 +855,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "version": "1.0.0",
             "priority": 10,
             "runtime": {
-                "apiVersion": "0.1.0",
+                "apiVersion": "0.2.0",
                 "entryScript": "scripts/main.lua",
             },
         }
@@ -872,7 +879,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
                 }
             ],
             "runtime": {
-                "apiVersion": "0.1.0",
+                "apiVersion": "0.2.0",
                 "entryScript": "scripts/main.lua",
             },
             "requiredMods": ["tests.web-dependency"],
@@ -1084,6 +1091,62 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             package({"files/SolomonDark.exe": b"not executable"}, forbidden_target_manifest),
         )
         self.assertEqual(status, 400)
+
+    def test_web_lua_api_02_consumable_package_resolves_active_assets(self) -> None:
+        manifest = {
+            "id": "tests.web-consumable",
+            "name": "Web Consumable",
+            "version": "1.0.0",
+            "minimumLoaderVersion": "0.1.0-beta.29",
+            "runtime": {
+                "apiVersion": "0.2.0",
+                "entryScript": "scripts/main.lua",
+                "requiredCapabilities": [
+                    "events.filters.damage",
+                    "events.filters.resources",
+                    "items.consumables.register",
+                    "loot.register",
+                    "player.resources.owner",
+                    "sprites.local.read",
+                    "sprites.local.register",
+                    "timer.local.scheduler",
+                ],
+            },
+        }
+        status, created = self.upload(
+            "Web Consumable",
+            "1.0.0",
+            package(
+                {
+                    "scripts/main.lua": b"return true\n",
+                    "sprites/item.bundle": ONE_FRAME_BUNDLE,
+                    "sprites/item.png": ONE_PIXEL_PNG,
+                },
+                manifest,
+            ),
+        )
+        self.assertEqual(status, 201, created)
+        authorization = {"Authorization": f"Bearer {self.token}"}
+        status, subscribed = self.request(
+            "PUT",
+            f"/api/mods/{created['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 201, subscribed)
+        status, active = self.request("GET", "/api/mods/active", headers=authorization)
+        self.assertEqual(status, 200, active)
+        resolved = next(mod for mod in active["mods"] if mod["id"] == manifest["id"])
+        self.assertEqual(
+            resolved["requiredCapabilities"],
+            manifest["runtime"]["requiredCapabilities"],
+        )
+        self.assertEqual(resolved["assetCount"], 2)
+        status, _ = self.request(
+            "DELETE",
+            f"/api/mods/{created['slug']}/subscription",
+            headers=authorization,
+        )
+        self.assertEqual(status, 204)
 
 
 

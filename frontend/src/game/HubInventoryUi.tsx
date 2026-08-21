@@ -35,6 +35,7 @@ import {
   nearestHubTrader,
 } from './hub-inventory-presentation.ts'
 import type { ProtocolPlayerEconomy, ProtocolPlayerProgression } from './protocol/game-state.ts'
+import type { GameModAsset } from './protocol/game-protocol.ts'
 import {
   createHubInventoryRenderer,
   type HubInventoryDragModel,
@@ -128,6 +129,7 @@ interface HubInventoryUiProps {
   disabled: boolean
   economy: ProtocolPlayerEconomy
   onAction: (action: HubInventoryAction) => void
+  modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
   playerPosition: Vector2
   progression: ProtocolPlayerProgression
@@ -143,6 +145,7 @@ export default function HubInventoryUi({
   disabled,
   economy,
   onAction,
+  modAssets,
   onSurfaceChange,
   playerPosition,
   progression,
@@ -230,6 +233,7 @@ export default function HubInventoryUi({
       audio={audio}
       config={config}
       economy={economy}
+      modAssets={modAssets}
       onAction={onAction}
       onClose={closeSurface}
       onSurfaceChange={onSurfaceChange}
@@ -243,6 +247,7 @@ function NativeHubSurface({
   audio,
   config,
   economy,
+  modAssets,
   onAction,
   onClose,
   onSurfaceChange,
@@ -252,6 +257,7 @@ function NativeHubSurface({
   audio: GameAudioDirector
   config: PlayerCharacterConfig
   economy: ProtocolPlayerEconomy
+  modAssets: readonly GameModAsset[]
   onAction: (action: HubInventoryAction) => void
   onClose: () => void
   onSurfaceChange: (surface: HubUiSurface) => void
@@ -369,7 +375,7 @@ function NativeHubSurface({
     if (!host) return
     let disposed = false
     let renderer: HubInventoryRenderer | undefined
-    void createHubInventoryRenderer().then((created) => {
+    void createHubInventoryRenderer(modAssets).then((created) => {
       if (disposed) {
         created.destroy()
         return
@@ -405,7 +411,7 @@ function NativeHubSurface({
       renderer?.destroy()
       host.replaceChildren()
     }
-  }, [beginChatPhase, surface.kind])
+  }, [beginChatPhase, modAssets, surface.kind])
 
   useEffect(() => {
     if (surface.kind !== 'dialogue' && inventorySelection) {

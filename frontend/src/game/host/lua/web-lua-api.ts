@@ -10,9 +10,11 @@ import {
   WEB_LUA_STOCK_ENEMIES,
   type WebLuaCommand,
   type WebLuaEventName,
+  type WebLuaFilterName,
   type WebLuaFrameState,
   type WebLuaModIdentity,
 } from './web-lua-contract.ts'
+import type { WebLuaContentModBinding } from './web-lua-content-registry.ts'
 import {
   encodedByteLength,
   luaObjectString,
@@ -34,6 +36,7 @@ const capabilitySet = new Set<string>(WEB_LUA_CAPABILITIES)
 
 interface WebLuaApiBindings {
   addCallback(name: unknown, callback: unknown): boolean
+  addFilter(name: unknown, callback: unknown): boolean
   addTimer(delayMs: unknown, callback: unknown, repeating: boolean): number
   addTimerSequence(steps: unknown): number
   cancelTimer(handle: number): boolean
@@ -45,10 +48,12 @@ interface WebLuaApiBindings {
   now(): number
   print(values: readonly unknown[]): void
   queueCommand(command: WebLuaCommand): void
+  submitFilterResult(value: unknown): void
 }
 
 export class WebLuaApi {
   readonly #bindings: WebLuaApiBindings
+  readonly #content: WebLuaContentModBinding | null
   readonly #mod: WebLuaModIdentity
   readonly #state = new Map<string, LuaConsoleValue>()
   readonly #stateEntryBytes = new Map<string, number>()
@@ -58,8 +63,13 @@ export class WebLuaApi {
   #stateEntryBytesTotal = 0
   #stateRevision = 0
 
-  constructor(bindings: WebLuaApiBindings, mod: WebLuaModIdentity) {
+  constructor(
+    bindings: WebLuaApiBindings,
+    mod: WebLuaModIdentity,
+    content: WebLuaContentModBinding | null = null,
+  ) {
     this.#bindings = bindings
+    this.#content = content
     this.#mod = Object.freeze({
       id: requireString(mod.id, 'mod id', 128),
       name: requireString(mod.name, 'mod name', 128),
@@ -68,6 +78,10 @@ export class WebLuaApi {
   }
 
   install(engine: LuaEngine): void {
+    engine.global.set(
+      '__sd_submit_filter_result',
+      (value: unknown) => this.#bindings.submitFilterResult(value),
+    )
     engine.global.set('print', (...values: unknown[]) => this.#bindings.print(values))
     engine.global.set('sd', {
       enemies: {
@@ -81,6 +95,12 @@ export class WebLuaApi {
       events: {
         names: () => [...WEB_LUA_EVENT_NAMES],
         on: (name: unknown, callback: unknown) => this.#bindings.addCallback(name, callback),
+        ...(this.#content ? {
+          filter: (name: unknown, callback: unknown) => this.#bindings.addFilter(
+            name as WebLuaFilterName,
+            callback,
+          ),
+        } : {}),
       },
       gameplay: {
         get_combat_state: () => this.#combatState(),
@@ -92,6 +112,17 @@ export class WebLuaApi {
       hub: {
         get_surface_state: () => this.#hubSurfaceState(),
       },
+      ...(this.#content ? {
+        items: {
+          get: (identity: unknown) => this.#content!.item(identity),
+          list: () => this.#content!.items(),
+          register: (definition: unknown) => this.#content!.registerItem(definition),
+        },
+        loot: {
+          list: () => this.#content!.loot(),
+          register: (definition: unknown) => this.#content!.registerLoot(definition),
+        },
+      } : {}),
       player: {
         get_state: (playerId?: unknown) => webLuaPlayerState(this.#resolvePlayer(playerId)),
         grant_experience: (amount: unknown, playerId?: unknown) => this.#queuePlayerCommand({
@@ -146,6 +177,16 @@ export class WebLuaApi {
         set: (key: unknown, value: unknown) => this.#setState(key, value),
         snapshot: () => Object.fromEntries(this.#state),
       },
+      ...(this.#content ? {
+        sprites: {
+          get: (key: unknown) => this.#content!.sprite(key),
+          list: () => this.#content!.sprites(),
+          register: (key: unknown, image: unknown, bundle: unknown) => (
+            this.#content!.registerSprite(key, image, bundle)
+          ),
+          unregister: (key: unknown) => this.#content!.unregisterSprite(key),
+        },
+      } : {}),
       timer: {
         after: (delayMs: unknown, callback: unknown) => this.#bindings.addTimer(
           delayMs,

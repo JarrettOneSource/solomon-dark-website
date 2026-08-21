@@ -53,6 +53,7 @@ import {
 } from './input/gameplay-pointer.ts'
 import type {
   BoneyardEnemyEventSnapshot,
+  GameModAsset,
   GameSnapshot,
   LoadedBoneyard,
 } from './protocol/game-protocol.ts'
@@ -61,6 +62,7 @@ import type {
   ProtocolPlayerProgression,
 } from './protocol/game-state.ts'
 import type { GameRunLifecycleState } from './core-kernels/game-run.ts'
+import type { ModConsumableCatalogEntry } from './core-kernels/hub-economy.ts'
 import { PlayerFootstepAudioSynchronizer } from './player-footstep-audio.ts'
 import { BoneyardLootEventSynchronizer } from './loot-event-audio.ts'
 import {
@@ -94,6 +96,8 @@ interface BoneyardSceneProps {
   initialSnapshot: GameSnapshot
   inputBlocked: boolean
   inventoryRequestSequence: number
+  modAssets: readonly GameModAsset[]
+  modCatalog: readonly ModConsumableCatalogEntry[]
   levelUpPresentationId: number | null
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
@@ -131,6 +135,8 @@ export default function BoneyardScene({
   initialSnapshot,
   inputBlocked,
   inventoryRequestSequence,
+  modAssets,
+  modCatalog,
   levelUpPresentationId,
   onInput,
   onLoadingError,
@@ -475,6 +481,8 @@ export default function BoneyardScene({
     const rendererPromise = createBoneyardWorldRenderer({
       boneyard: loaded,
       initialSnapshot: boneyardInitialSnapshot,
+      modAssets,
+      modCatalog,
       playerId,
       viewport: viewportRef.current,
     })
@@ -648,7 +656,17 @@ export default function BoneyardScene({
       rendererRef.current?.destroy()
       rendererRef.current = null
     }
-  }, [audio, boneyardInitialSnapshot, digPosition, loaded, onInput, playerId, samplePresentation])
+  }, [
+    audio,
+    boneyardInitialSnapshot,
+    digPosition,
+    loaded,
+    modAssets,
+    modCatalog,
+    onInput,
+    playerId,
+    samplePresentation,
+  ])
 
   const localPlayer = boneyardInitialSnapshot.players[playerId]
   const element = localPlayer?.config.element ?? 'ether'
@@ -759,6 +777,7 @@ export default function BoneyardScene({
           config={boneyardInitialSnapshot.players[playerId]!.config}
           disabled={inputBlocked || run.phase !== 'active'}
           economy={economy}
+          modAssets={modAssets}
           onAction={onHubAction}
           onSurfaceChange={setInventorySurface}
           playerPosition={playerPosition}

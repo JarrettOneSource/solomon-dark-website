@@ -12,8 +12,9 @@
     }
   ],
   "runtime": {
-    "apiVersion": "0.1.0",
-    "entryScript": "scripts/main.lua"
+    "apiVersion": "0.2.0",
+    "entryScript": "scripts/main.lua",
+    "requiredCapabilities": []
   },
   "requiredMods": []
 }

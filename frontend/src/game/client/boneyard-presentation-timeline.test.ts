@@ -188,6 +188,7 @@ function snapshotAt(tick: number, playerX: number, gateTipX: number): BoneyardGa
   return {
     hostPlayerId: 'local',
     levelUpBarrier: null,
+    modEffects: [],
     players: { local: playerAt(playerX) },
     primarySpells: createPrimarySpellSimulation(),
     secondaryAbilities: DEFAULT_SNAPSHOT.secondaryAbilities,

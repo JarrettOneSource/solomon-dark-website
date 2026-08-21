@@ -330,6 +330,7 @@ export async function startGameSessionSupervisor(
       luaWasmPath: options.luaWasmPath,
       leaderboardReceiptSecret: options.adminSecret,
       content: admission.content.manifest,
+      modAssets: admission.content.assets,
       mods: admission.content.modSources,
       maxPlayers: maxConnectionsPerSession,
       onPlayerCountChanged: (playerCount) => {

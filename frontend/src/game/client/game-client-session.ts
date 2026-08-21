@@ -25,7 +25,9 @@ import {
   type LoadedBoneyard,
   type ServerLuaResultMessage,
   type ServerWelcomeMessage,
+  type GameModAsset,
 } from '../protocol/game-protocol.ts'
+import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
 import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
 import type { HubParticipantState } from '../core-kernels/hub-regions.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
@@ -73,6 +75,7 @@ export interface GameClientSessionOptions {
 export interface GameClientSession {
   readonly boneyards: readonly BoneyardChoice[]
   readonly isHost: boolean
+  readonly modAssets: readonly GameModAsset[]
   readonly playerId: string
   readonly resumeToken: string
   bindSkillQuickbar(skillId: number, slot: number): void
@@ -83,6 +86,7 @@ export interface GameClientSession {
   acceptPartyInvitation(invitationId: string): void
   getBoneyard(): LoadedBoneyard | null
   getGameplayPause(): GameplayPauseState | null
+  getModCatalog(): readonly ModConsumableCatalogEntry[]
   getPingMs(): number | null
   getPartyState(): LocalPartyState | null
   getSaveCheckpoint(): GameSaveCheckpoint | null
@@ -90,6 +94,7 @@ export interface GameClientSession {
   onBoneyard(listener: (boneyard: LoadedBoneyard) => void): () => void
   onGameplayPause(listener: (pause: GameplayPauseState | null) => void): () => void
   onLeaderboardReceipt(listener: (receipt: string) => void): () => void
+  onModCatalog(listener: (catalog: readonly ModConsumableCatalogEntry[]) => void): () => void
   onEnemyEvent(listener: (event: BoneyardEnemyEventSnapshot) => void): () => void
   onPing(listener: (pingMs: number) => void): () => void
   onPartyState(listener: (state: LocalPartyState) => void): () => void
@@ -161,6 +166,7 @@ export function connectGameClientSession(
     let boneyardPresentationTimeline: BoneyardPresentationTimeline | undefined
     let loadedBoneyard: LoadedBoneyard | null = null
     let gameplayPause: GameplayPauseState | null = null
+    let modCatalog: readonly ModConsumableCatalogEntry[] = []
     let lastSnapshotReceivedAtMs = 0
     let lastSnapshotSequence = 0
     let latestPingMs: number | null = null
@@ -182,6 +188,9 @@ export function connectGameClientSession(
     const boneyardListeners = new Set<(boneyard: LoadedBoneyard) => void>()
     const gameplayPauseListeners = new Set<(pause: GameplayPauseState | null) => void>()
     const leaderboardReceiptListeners = new Set<(receipt: string) => void>()
+    const modCatalogListeners = new Set<(
+      catalog: readonly ModConsumableCatalogEntry[],
+    ) => void>()
     const enemyEventListeners = new Set<(event: BoneyardEnemyEventSnapshot) => void>()
     const pingListeners = new Set<(pingMs: number) => void>()
     const partyStateListeners = new Set<(state: LocalPartyState) => void>()
@@ -213,6 +222,7 @@ export function connectGameClientSession(
         welcome = message
         snapshot = message.snapshot
         gameplayPause = message.gameplayPause
+        modCatalog = message.modCatalog
         enemyEventCursor = initialEnemyEventCursor(snapshot)
         lastSnapshotSequence = message.snapshotSequence
         entityReplication.reset(snapshot, lastSnapshotSequence)
@@ -250,6 +260,11 @@ export function connectGameClientSession(
       if (message.type === 'server-boneyard-loaded') {
         loadedBoneyard = message.boneyard
         for (const listener of boneyardListeners) listener(message.boneyard)
+        return
+      }
+      if (message.type === 'server-mod-catalog') {
+        modCatalog = message.items
+        for (const listener of modCatalogListeners) listener(modCatalog)
         return
       }
       if (message.type === 'server-save-checkpoint') {
@@ -429,6 +444,10 @@ export function connectGameClientSession(
       get isHost() {
         return !!welcome && snapshot?.hostPlayerId === welcome.playerId
       },
+      get modAssets() {
+        if (!welcome) throw new Error('game session has not been welcomed')
+        return welcome.modAssets
+      },
       get playerId() {
         if (!welcome) throw new Error('game session has not been welcomed')
         return welcome.playerId
@@ -457,6 +476,7 @@ export function connectGameClientSession(
         boneyardListeners.clear()
         gameplayPauseListeners.clear()
         leaderboardReceiptListeners.clear()
+        modCatalogListeners.clear()
         enemyEventListeners.clear()
         pingListeners.clear()
         partyStateListeners.clear()
@@ -517,6 +537,9 @@ export function connectGameClientSession(
       getGameplayPause() {
         return gameplayPause
       },
+      getModCatalog() {
+        return modCatalog
+      },
       getPingMs() {
         return latestPingMs
       },
@@ -545,6 +568,10 @@ export function connectGameClientSession(
       onLeaderboardReceipt(listener) {
         leaderboardReceiptListeners.add(listener)
         return () => leaderboardReceiptListeners.delete(listener)
+      },
+      onModCatalog(listener) {
+        modCatalogListeners.add(listener)
+        return () => modCatalogListeners.delete(listener)
       },
       onEnemyEvent(listener) {
         enemyEventListeners.add(listener)

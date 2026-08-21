@@ -5,6 +5,8 @@ import type {
   BoneyardLootSnapshot,
 } from '../protocol/game-state.ts'
 import type { BoneyardWorldTextures } from './boneyard-textures.ts'
+import type { ModConsumableCatalogEntry } from '../core-kernels/hub-economy.ts'
+import type { ModPresentationTextures } from './mod-presentation-assets.ts'
 import { nativeLootSpriteRecord } from './native-loot-assets.ts'
 import {
   nativeGoodiePresentationPlan,
@@ -16,11 +18,20 @@ export class NativeLootViews {
   private readonly liveIds = new Set<number>()
   private readonly root: Container
   private readonly textures: BoneyardWorldTextures
+  private readonly modCatalog: ReadonlyMap<string, ModConsumableCatalogEntry>
+  private readonly modTextures: ModPresentationTextures
   private readonly views = new Map<number, NativeLootView>()
 
-  constructor(root: Container, textures: BoneyardWorldTextures) {
+  constructor(
+    root: Container,
+    textures: BoneyardWorldTextures,
+    modTextures: ModPresentationTextures,
+    modCatalog: readonly ModConsumableCatalogEntry[],
+  ) {
     this.root = root
     this.textures = textures
+    this.modTextures = modTextures
+    this.modCatalog = new Map(modCatalog.map(item => [item.content.contentId, item]))
   }
 
   update(actors: readonly BoneyardLootSnapshot[]): void {
@@ -29,7 +40,13 @@ export class NativeLootViews {
       this.liveIds.add(actor.id)
       let view = this.views.get(actor.id)
       if (!view) {
-        view = new NativeLootView(this.root, this.textures, actor)
+        view = new NativeLootView(
+          this.root,
+          this.textures,
+          this.modTextures,
+          this.modCatalog,
+          actor,
+        )
         this.views.set(actor.id, view)
       } else {
         view.update(actor)
@@ -124,10 +141,20 @@ class NativeLootView {
   private scatterSeed: number
   private readonly sprites: Sprite[] = []
   private readonly textures: BoneyardWorldTextures
+  private readonly modCatalog: ReadonlyMap<string, ModConsumableCatalogEntry>
+  private readonly modTextures: ModPresentationTextures
 
-  constructor(root: Container, textures: BoneyardWorldTextures, actor: BoneyardLootSnapshot) {
+  constructor(
+    root: Container,
+    textures: BoneyardWorldTextures,
+    modTextures: ModPresentationTextures,
+    modCatalog: ReadonlyMap<string, ModConsumableCatalogEntry>,
+    actor: BoneyardLootSnapshot,
+  ) {
     this.root = root
     this.textures = textures
+    this.modTextures = modTextures
+    this.modCatalog = modCatalog
     this.initialScatterSeed = actor.scatterSeed
     this.scatterSeed = actor.scatterSeed
     this.container = new Container({ label: `loot:${actor.kind}:${actor.id}` })
@@ -141,9 +168,21 @@ class NativeLootView {
       this.initialScatterSeed = actor.scatterSeed
       this.scatterSeed = actor.scatterSeed
     }
-    const plan = nativeLootPresentationPlan(actor, this.scatterSeed)
-    this.scatterSeed = plan.nextScatterSeed
-    updateLayers(this.container, this.sprites, plan.layers, this.textures)
+    if (actor.itemContentId !== null) {
+      const item = this.modCatalog.get(actor.itemContentId)
+      if (!item) throw new Error(`mod loot catalog is missing ${actor.itemContentId}`)
+      updateModPotionLayer(
+        this.container,
+        this.sprites,
+        this.modTextures.texture(item.content),
+        actor.bounceHeight,
+        actor.itemContentId,
+      )
+    } else {
+      const plan = nativeLootPresentationPlan(actor, this.scatterSeed)
+      this.scatterSeed = plan.nextScatterSeed
+      updateLayers(this.container, this.sprites, plan.layers, this.textures)
+    }
     this.container.label = `loot:${actor.kind}:${actor.id}`
     this.container.position.set(actor.position.x, actor.position.y)
   }
@@ -165,6 +204,31 @@ class NativeLootView {
     this.container.destroy({ children: true })
     this.sprites.length = 0
   }
+}
+
+function updateModPotionLayer(
+  container: Container,
+  sprites: Sprite[],
+  texture: Texture,
+  bounceHeight: number,
+  contentId: string,
+): void {
+  while (sprites.length > 1) sprites.pop()!.destroy()
+  const sprite = sprites[0] ?? new Sprite()
+  if (sprites.length === 0) {
+    sprite.eventMode = 'none'
+    sprites.push(sprite)
+    container.addChild(sprite)
+  }
+  sprite.label = `mod-potion:${contentId}`
+  sprite.texture = texture
+  sprite.anchor.set(0.5)
+  sprite.position.set(0, bounceHeight)
+  sprite.scale.set(1)
+  sprite.rotation = 0
+  sprite.alpha = 1
+  sprite.blendMode = 'normal'
+  sprite.tint = 0xffffff
 }
 
 class NativeGoodieView {

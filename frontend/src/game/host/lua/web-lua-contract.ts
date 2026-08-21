@@ -2,7 +2,7 @@ import { BONEYARD_WAVE_ENEMY_TYPES } from '../../core-kernels/boneyard-wave-dire
 import type { BoneyardWaveEnemyToken } from '../../core-kernels/boneyard-wave-schema.ts'
 import type { LuaConsoleValue } from '../../protocol/game-protocol.ts'
 
-export const WEB_LUA_API_VERSION = '0.1.0'
+export const WEB_LUA_API_VERSION = '0.2.0'
 export const WEB_LUA_DEV_CONSOLE_MOD = Object.freeze({
   id: 'web.dev-console',
   name: 'Browser Dev Console',
@@ -25,6 +25,7 @@ export const WEB_LUA_EVENT_NAMES = [
   'enemy.death',
   'enemy.spawned',
   'gold.changed',
+  'item.consumed',
   'level.up',
   'run.ended',
   'run.started',
@@ -35,18 +36,33 @@ export const WEB_LUA_EVENT_NAMES = [
 
 export type WebLuaEventName = typeof WEB_LUA_EVENT_NAMES[number]
 
+export const WEB_LUA_FILTER_NAMES = [
+  'damage.taken',
+  'mana.changing',
+] as const
+
+export type WebLuaFilterName = typeof WEB_LUA_FILTER_NAMES[number]
+
 export const WEB_LUA_CAPABILITIES = [
   'enemies.read',
   'enemies.spawn',
+  'events.filters.damage',
+  'events.filters.resources',
   'events.read',
   'gameplay.read',
   'hub.read',
+  'items.consumables.register',
+  'loot.register',
   'player.read',
   'player.resources.write',
+  'player.resources.owner',
   'rng.run.seed',
   'runtime.read',
   'scene.read',
   'state.session',
+  'sprites.local.read',
+  'sprites.local.register',
+  'timer.local.scheduler',
   'timer.session',
   'waves.read',
   'world.read',
@@ -62,7 +78,9 @@ export interface WebLuaModIdentity {
 
 export interface WebLuaModSource {
   readonly entryScript: string
+  readonly files: Readonly<Record<string, Uint8Array>>
   readonly identity: WebLuaModIdentity
+  readonly requiredCapabilities: readonly WebLuaCapability[]
 }
 
 export const WEB_LUA_STOCK_ENEMIES = [

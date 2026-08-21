@@ -1,4 +1,5 @@
 import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
 import { seedBoneyardWaveRng } from '../core-kernels/boneyard-wave-timeline.ts'
 import {
   NATIVE_LOOT_ACTOR_SEED_BOUND,
@@ -308,6 +309,31 @@ export function spawnBoneyardLootSpecs(
 ): SpawnBoneyardLootResult {
   validateTick(tick)
   const work = working(source)
+  spawnSpecs(work, specs, tick)
+  return {
+    rejectedCount: work.rejectedCount,
+    store: finishWorking(source.lastStepTick, work),
+  }
+}
+
+export function spawnBoneyardCustomLootItems(
+  source: BoneyardLootStore,
+  items: readonly HubInventoryItem[],
+  position: Readonly<BoneyardPoint>,
+  tick: number,
+): SpawnBoneyardLootResult {
+  validateTick(tick)
+  const work = working(source)
+  const specs = items.map((item): NativeLootDropSpec => ({
+    activationDelayTicks: 0,
+    id: 0,
+    item: { ...item, id: work.nextItemId++ },
+    kind: 'sack',
+    nativeTypeId: 2013,
+    phase: 0,
+    position,
+    source: 'enemy',
+  }))
   spawnSpecs(work, specs, tick)
   return {
     rejectedCount: work.rejectedCount,

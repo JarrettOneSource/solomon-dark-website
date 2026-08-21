@@ -8,6 +8,7 @@ using SolomonDarkRevived.Data;
 namespace SolomonDarkRevived.Services;
 
 public sealed record WebModBoneyard(string Target, string BytesBase64);
+public sealed record WebModPackageFile(string Path, string BytesBase64);
 
 public sealed record WebResolvedMod(
     string Id,
@@ -17,7 +18,9 @@ public sealed record WebResolvedMod(
     string ContentSha256,
     int Priority,
     string? EntryScript,
-    IReadOnlyList<WebModBoneyard> Boneyards);
+    IReadOnlyList<WebModBoneyard> Boneyards,
+    IReadOnlyList<string> RequiredCapabilities,
+    IReadOnlyList<WebModPackageFile> Files);
 
 public sealed record WebSessionContent(
     string ManifestSha256,
@@ -31,6 +34,9 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
     public const int MaxActiveLuaMods = 8;
     private const int MaxEntryScriptBytes = 256 * 1024;
     private const int MaxBoneyardBytes = 8 * 1024 * 1024;
+    private const int MaxPackageFileBytes = 1024 * 1024;
+    private const int MaxPackageFiles = 64;
+    private const int MaxPackageFilesBytes = 4 * 1024 * 1024;
     private const int MaxProvisionedContentBytes = 32 * 1024 * 1024;
 
     public async Task<WebSessionContent> ResolveAsync(
@@ -92,7 +98,8 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         }
         var totalBytes = ordered.Sum(package =>
             Encoding.UTF8.GetByteCount(package.EntryScript ?? string.Empty) +
-            package.Boneyards.Sum(boneyard => boneyard.ByteCount));
+            package.Boneyards.Sum(boneyard => boneyard.ByteCount) +
+            package.Files.Sum(file => file.ByteCount));
         if (totalBytes > MaxProvisionedContentBytes)
         {
             throw new WebModContentException(
@@ -109,7 +116,11 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
             package.EntryScript,
             package.Boneyards.Select(boneyard => new WebModBoneyard(
                 boneyard.Target,
-                Convert.ToBase64String(boneyard.Bytes))).ToArray())).ToArray();
+                Convert.ToBase64String(boneyard.Bytes))).ToArray(),
+            package.RequiredCapabilities,
+            package.Files.Select(file => new WebModPackageFile(
+                file.Path,
+                Convert.ToBase64String(file.Bytes))).ToArray())).ToArray();
         return new WebSessionContent(ManifestSha256(resolved), resolved);
     }
 
@@ -133,7 +144,16 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
 
         var packagePath = storage.GetModFilePath(version.FileName);
         await using var packageStream = File.OpenRead(packagePath);
-        var inspection = await ModPackageInspector.InspectAsync(packageStream, cancellationToken);
+        ModPackageInspection inspection;
+        try
+        {
+            inspection = await ModPackageInspector.InspectAsync(packageStream, cancellationToken);
+        }
+        catch (ModPackageValidationException exception)
+        {
+            throw new WebModContentException(
+                $"{mod.Name} has an incompatible package: {exception.Message}");
+        }
         if (!string.Equals(inspection.PackageId, mod.PackageId, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(inspection.ManifestVersion, version.ManifestVersion, StringComparison.Ordinal) ||
             !string.Equals(inspection.PackageSha256, version.PackageSha256, StringComparison.OrdinalIgnoreCase) ||
@@ -149,6 +169,7 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         var manifest = manifestDocument.RootElement;
         var entryScript = await ReadEntryScriptAsync(manifest, archive, cancellationToken);
         var boneyards = await ReadBoneyardsAsync(manifest, archive, cancellationToken);
+        var files = await ReadPackageFilesAsync(archive, cancellationToken);
         return new LoadedPackage(
             mod.Id,
             version.Id,
@@ -159,8 +180,10 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
             inspection.ContentSha256.ToLowerInvariant(),
             inspection.Priority,
             inspection.RequiredMods,
+            inspection.RequiredCapabilities,
             entryScript,
-            boneyards);
+            boneyards,
+            files);
     }
 
     private static async Task<JsonDocument> ReadJsonAsync(
@@ -234,6 +257,45 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         return boneyards;
     }
 
+    private static async Task<IReadOnlyList<LoadedPackageFile>> ReadPackageFilesAsync(
+        ZipArchive archive,
+        CancellationToken cancellationToken)
+    {
+        var entries = archive.Entries
+            .Where(entry =>
+                entry.FullName.StartsWith("sprites/", StringComparison.Ordinal) &&
+                (entry.FullName.EndsWith(".png", StringComparison.Ordinal) ||
+                 entry.FullName.EndsWith(".bundle", StringComparison.Ordinal)))
+            .OrderBy(entry => entry.FullName, StringComparer.Ordinal)
+            .ToArray();
+        if (entries.Length > MaxPackageFiles)
+        {
+            throw new WebModContentException(
+                $"A web mod may provision at most {MaxPackageFiles} sprite files.");
+        }
+        var files = new List<LoadedPackageFile>(entries.Length);
+        var totalBytes = 0;
+        foreach (var entry in entries)
+        {
+            if (entry.Length <= 0 || entry.Length > MaxPackageFileBytes)
+            {
+                throw new WebModContentException(
+                    $"The mod sprite file has an invalid size: {entry.FullName}");
+            }
+            totalBytes = checked(totalBytes + (int)entry.Length);
+            if (totalBytes > MaxPackageFilesBytes)
+            {
+                throw new WebModContentException(
+                    "The mod sprite files exceed the 4 MiB web-session limit.");
+            }
+            await using var source = entry.Open();
+            using var destination = new MemoryStream((int)entry.Length);
+            await source.CopyToAsync(destination, cancellationToken);
+            files.Add(new LoadedPackageFile(entry.FullName, destination.ToArray()));
+        }
+        return files;
+    }
+
     private static IReadOnlyList<LoadedPackage> DependencyOrder(
         IReadOnlyList<LoadedPackage> packages)
     {
@@ -289,6 +351,11 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         public int ByteCount => Bytes.Length;
     }
 
+    private sealed record LoadedPackageFile(string Path, byte[] Bytes)
+    {
+        public int ByteCount => Bytes.Length;
+    }
+
     private sealed record LoadedPackage(
         int ModId,
         int VersionId,
@@ -299,6 +366,8 @@ public sealed class WebModContentService(AppDb db, StorageService storage)
         string ContentSha256,
         int Priority,
         IReadOnlyList<string> RequiredMods,
+        IReadOnlyList<string> RequiredCapabilities,
         string? EntryScript,
-        IReadOnlyList<LoadedBoneyard> Boneyards);
+        IReadOnlyList<LoadedBoneyard> Boneyards,
+        IReadOnlyList<LoadedPackageFile> Files);
 }

@@ -150,6 +150,9 @@ import {
   type HubInventoryItem,
   type HubItemKind,
   type HubShopItem,
+  type ModConsumableContent,
+  type ModConsumableCatalogEntry,
+  type ModSpriteFrame,
   type NativeUnforgeOutcome,
 } from '../core-kernels/hub-economy.ts'
 import {
@@ -227,6 +230,7 @@ import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerState,
   ProtocolPlayerSnapshotFrame,
+  ProtocolModEffect,
   ProtocolStudentState,
   NativeHallOfFameRunSnapshot,
   NativeSecondarySnapshotState as ProtocolNativeSecondarySnapshotState,
@@ -520,10 +524,23 @@ export interface ServerWelcomeMessage {
   kernelVersion: string
   kernelParameters: PlayerCharacterKernelParameters
   content: GameContentManifest
+  modAssets: readonly GameModAsset[]
+  modCatalog: readonly ModConsumableCatalogEntry[]
   boneyards: readonly BoneyardChoice[]
   gameplayPause: GameplayPauseState | null
   snapshot: GameSnapshot
   snapshotSequence: number
+}
+
+export interface GameModAsset {
+  bytesBase64: string
+  modId: string
+  path: string
+}
+
+export interface ServerModCatalogMessage {
+  type: 'server-mod-catalog'
+  items: readonly ModConsumableCatalogEntry[]
 }
 
 export interface ServerSnapshotMessage {
@@ -608,6 +625,7 @@ export type ServerGameMessage =
   | ServerSaveCheckpointMessage
   | ServerLeaderboardReceiptMessage
   | ServerLuaResultMessage
+  | ServerModCatalogMessage
   | ServerPartyStateMessage
   | ServerPongMessage
   | ServerDisconnectMessage
@@ -809,6 +827,8 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       'kernelVersion',
       'kernelParameters',
       'content',
+      'modAssets',
+      'modCatalog',
       'boneyards',
       'gameplayPause',
       'snapshot',
@@ -831,10 +851,19 @@ export function decodeServerGameMessage(payload: string): ServerGameMessage {
       kernelVersion: limitedString(value.kernelVersion, 'kernelVersion', 128),
       kernelParameters: playerCharacterKernelParameters(value.kernelParameters),
       content: contentManifest(value.content),
+      modAssets: gameModAssets(value.modAssets),
+      modCatalog: modConsumableCatalog(value.modCatalog, 'modCatalog'),
       boneyards: boneyardChoices(value.boneyards),
       gameplayPause,
       snapshot,
       snapshotSequence: nonnegativeInteger(value.snapshotSequence, 'snapshotSequence'),
+    }
+  }
+  if (value.type === 'server-mod-catalog') {
+    onlyKeys(value, 'message', ['type', 'items'])
+    return {
+      type: 'server-mod-catalog',
+      items: modConsumableCatalog(value.items, 'items'),
     }
   }
   if (value.type === 'server-snapshot') {
@@ -1785,7 +1814,9 @@ function inventoryItem(
     'iconRecords',
     'iconTints',
     'id',
+    'itemContentId',
     'kind',
+    'modContent',
     'name',
     'nativeSubtype',
     'nativeSelector',
@@ -1823,7 +1854,10 @@ function inventoryItem(
   }
   const nativeSubtype = source.nativeSubtype === null
     ? null
-    : boundedInteger(source.nativeSubtype, `${field}.nativeSubtype`, 0, 32)
+    : boundedInteger(source.nativeSubtype, `${field}.nativeSubtype`, 0, 261)
+  const modContent = source.modContent === undefined
+    ? undefined
+    : modConsumableContent(source.modContent, `${field}.modContent`)
   const iconRecords = limitedArray(source.iconRecords, `${field}.iconRecords`, 2)
     .map((recordIndex, index) => boundedInteger(
       recordIndex,
@@ -1831,7 +1865,9 @@ function inventoryItem(
       0,
       83,
     ))
-  if (iconRecords.length < 1) throw new GameProtocolError(`${field}.iconRecords is empty`)
+  if (iconRecords.length < 1 && modContent === undefined) {
+    throw new GameProtocolError(`${field}.iconRecords is empty`)
+  }
   const name = limitedString(source.name, `${field}.name`, 128)
   const nativeTypeId = boundedInteger(source.nativeTypeId, `${field}.nativeTypeId`, 7001, 7012)
   const quantity = boundedInteger(source.quantity, `${field}.quantity`, 1, 9_999)
@@ -1937,6 +1973,17 @@ function inventoryItem(
       )))
     ) throw new GameProtocolError(`${field} named equipment identity is inconsistent`)
   }
+  if (kind === 'mod-potion') {
+    if (
+      modContent === undefined
+      || nativeTypeId !== 7001
+      || nativeSubtype === null
+      || nativeSubtype < 6
+      || iconRecords.length !== 0
+    ) throw new GameProtocolError(`${field} mod potion identity is inconsistent`)
+  } else if (modContent !== undefined) {
+    throw new GameProtocolError(`${field}.modContent requires kind mod-potion`)
+  }
   if (
     contents !== undefined
     && (kind !== 'sack' || nativeTypeId !== 7008 || nativeSubtype !== 0)
@@ -1949,6 +1996,7 @@ function inventoryItem(
     ...(iconTints === undefined ? {} : { iconTints }),
     id: positiveInteger(source.id, `${field}.id`),
     kind: kind as HubItemKind,
+    ...(modContent === undefined ? {} : { modContent }),
     name,
     nativeSubtype,
     ...(nativeSelector === undefined ? {} : { nativeSelector }),
@@ -1958,6 +2006,90 @@ function inventoryItem(
     rarity,
     recipeIndex,
   }
+}
+
+function modConsumableContent(value: unknown, field: string): ModConsumableContent {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'consumeVfx', 'contentId', 'description', 'durationMs', 'icon', 'key', 'modId',
+  ])
+  const contentId = limitedString(source.contentId, `${field}.contentId`, 19)
+  if (!/^[1-9][0-9]{0,18}$/.test(contentId)) {
+    throw new GameProtocolError(`${field}.contentId is invalid`)
+  }
+  const modId = limitedString(source.modId, `${field}.modId`, 128)
+  const key = limitedString(source.key, `${field}.key`, 128)
+  if (!/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId) ||
+      !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(key)) {
+    throw new GameProtocolError(`${field} has a noncanonical content key`)
+  }
+  const iconSource = record(source.icon, `${field}.icon`)
+  onlyKeys(iconSource, `${field}.icon`, ['atlasId', 'frame', 'frameIndex', 'imagePath'])
+  const atlasId = limitedString(iconSource.atlasId, `${field}.icon.atlasId`, 257)
+  const imagePath = limitedString(iconSource.imagePath, `${field}.icon.imagePath`, 240)
+  if (!atlasId.startsWith(`${modId}:`) || !/^sprites\/.+\.png$/.test(imagePath)) {
+    throw new GameProtocolError(`${field}.icon is outside its mod asset ownership`)
+  }
+  const consumeVfx = source.consumeVfx === null
+    ? null
+    : (() => {
+        const vfx = record(source.consumeVfx, `${field}.consumeVfx`)
+        onlyKeys(vfx, `${field}.consumeVfx`, ['color', 'kind'])
+        if (vfx.kind !== 'spell_glow') {
+          throw new GameProtocolError(`${field}.consumeVfx.kind is unsupported`)
+        }
+        const values = array(vfx.color, `${field}.consumeVfx.color`)
+        if (values.length !== 4) {
+          throw new GameProtocolError(`${field}.consumeVfx.color must contain RGBA`)
+        }
+        const color = values.map((component, index) => {
+          const number = finite(component, `${field}.consumeVfx.color[${index}]`)
+          if (number < 0 || number > 1) {
+            throw new GameProtocolError(`${field}.consumeVfx.color[${index}] must be within 0..1`)
+          }
+          return number
+        }) as [number, number, number, number]
+        return { color, kind: 'spell_glow' as const }
+      })()
+  return {
+    consumeVfx,
+    contentId,
+    description: limitedString(source.description, `${field}.description`, 1_024),
+    durationMs: boundedInteger(source.durationMs, `${field}.durationMs`, 0, 86_400_000),
+    icon: {
+      atlasId,
+      frame: modSpriteFrame(iconSource.frame, `${field}.icon.frame`),
+      frameIndex: boundedInteger(iconSource.frameIndex, `${field}.icon.frameIndex`, 0, 4_095),
+      imagePath,
+    },
+    key,
+    modId,
+  }
+}
+
+function modSpriteFrame(value: unknown, field: string): ModSpriteFrame {
+  const source = record(value, field)
+  onlyKeys(source, field, [
+    'centerOffsetX', 'centerOffsetY', 'contentHeight', 'contentWidth', 'height',
+    'logicalHeight', 'logicalWidth', 'width', 'x', 'y',
+  ])
+  const frame = {
+    centerOffsetX: finite(source.centerOffsetX, `${field}.centerOffsetX`),
+    centerOffsetY: finite(source.centerOffsetY, `${field}.centerOffsetY`),
+    contentHeight: positiveFinite(source.contentHeight, `${field}.contentHeight`),
+    contentWidth: positiveFinite(source.contentWidth, `${field}.contentWidth`),
+    height: positiveFinite(source.height, `${field}.height`),
+    logicalHeight: positiveInteger(source.logicalHeight, `${field}.logicalHeight`),
+    logicalWidth: positiveInteger(source.logicalWidth, `${field}.logicalWidth`),
+    width: positiveFinite(source.width, `${field}.width`),
+    x: finite(source.x, `${field}.x`),
+    y: finite(source.y, `${field}.y`),
+  }
+  if (Object.values(frame).some(component => Math.abs(component) > 16_384) ||
+      frame.x < 0 || frame.y < 0) {
+    throw new GameProtocolError(`${field} exceeds mod sprite geometry bounds`)
+  }
+  return frame
 }
 
 function isGeneratedEquipmentIdentity(
@@ -3130,7 +3262,7 @@ function validatedBarrierPlayerIds(
 function gameSnapshot(value: unknown): GameSnapshot {
   const source = record(value, 'snapshot')
   onlyKeys(source, 'snapshot', [
-    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run',
+    'hostPlayerId', 'levelUpBarrier', 'modEffects', 'players', 'primarySpells', 'run',
     'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'snapshot.players')
@@ -3152,6 +3284,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
     throw new GameProtocolError('snapshot.hostPlayerId is not present in snapshot.players')
   }
   const tick = nonnegativeInteger(source.tick, 'snapshot.tick')
+  const modEffects = protocolModEffects(source.modEffects, 'snapshot.modEffects', players, tick)
   const world = gameWorldSnapshot(source.world, 'snapshot.world', tick)
   const run = gameRunLifecycle(source.run, 'snapshot.run')
   const levelUpBarrier = source.levelUpBarrier === null
@@ -3183,6 +3316,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
   return {
     hostPlayerId,
     levelUpBarrier,
+    modEffects,
     players,
     primarySpells,
     secondaryAbilities,
@@ -3195,7 +3329,7 @@ function gameSnapshot(value: unknown): GameSnapshot {
 function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   const source = record(value, 'frame')
   onlyKeys(source, 'frame', [
-    'hostPlayerId', 'levelUpBarrier', 'players', 'primarySpells', 'run',
+    'hostPlayerId', 'levelUpBarrier', 'modEffects', 'players', 'primarySpells', 'run',
     'secondaryAbilities', 'tick', 'world',
   ])
   const rawPlayers = record(source.players, 'frame.players')
@@ -3214,6 +3348,7 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     throw new GameProtocolError('frame.hostPlayerId is not present in frame.players')
   }
   const tick = nonnegativeInteger(source.tick, 'frame.tick')
+  const modEffects = protocolModEffects(source.modEffects, 'frame.modEffects', players, tick)
   const world = gameWorldSnapshotFrame(source.world, 'frame.world', tick)
   const run = gameRunLifecycle(source.run, 'frame.run')
   const levelUpBarrier = source.levelUpBarrier === null
@@ -3236,6 +3371,7 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
   return {
     hostPlayerId,
     levelUpBarrier,
+    modEffects,
     players,
     primarySpells,
     secondaryAbilities,
@@ -3243,6 +3379,49 @@ function gameSnapshotFrame(value: unknown): GameSnapshotFrame {
     tick,
     world,
   }
+}
+
+function protocolModEffects(
+  value: unknown,
+  field: string,
+  players: Readonly<Record<string, ProtocolPlayerSnapshotFrame>>,
+  tick: number,
+): readonly ProtocolModEffect[] {
+  return limitedArray(value, field, 256).map((value, index) => {
+    const effectField = `${field}[${index}]`
+    const source = record(value, effectField)
+    onlyKeys(source, effectField, [
+      'color', 'contentId', 'expiresTick', 'playerId', 'startedTick', 'useId',
+    ])
+    const contentId = limitedString(source.contentId, `${effectField}.contentId`, 19)
+    if (!/^[1-9][0-9]{0,18}$/.test(contentId)) {
+      throw new GameProtocolError(`${effectField}.contentId is invalid`)
+    }
+    const playerId = validatedPlayerId(source.playerId, `${effectField}.playerId`)
+    if (!players[playerId]) throw new GameProtocolError(`${effectField}.playerId is not present`)
+    const startedTick = nonnegativeInteger(source.startedTick, `${effectField}.startedTick`)
+    const expiresTick = positiveInteger(source.expiresTick, `${effectField}.expiresTick`)
+    if (startedTick > tick || expiresTick <= tick || expiresTick <= startedTick) {
+      throw new GameProtocolError(`${effectField} has an invalid active interval`)
+    }
+    const rawColor = array(source.color, `${effectField}.color`)
+    if (rawColor.length !== 4) throw new GameProtocolError(`${effectField}.color must contain RGBA`)
+    const color = rawColor.map((component, colorIndex) => {
+      const value = finite(component, `${effectField}.color[${colorIndex}]`)
+      if (value < 0 || value > 1) {
+        throw new GameProtocolError(`${effectField}.color[${colorIndex}] must be within 0..1`)
+      }
+      return value
+    }) as [number, number, number, number]
+    return {
+      color,
+      contentId,
+      expiresTick,
+      playerId,
+      startedTick,
+      useId: positiveInteger(source.useId, `${effectField}.useId`),
+    }
+  })
 }
 
 function gameRunLifecycle(value: unknown, field: string): GameRunLifecycleState {
@@ -7207,13 +7386,19 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
     : boundedInteger(source.itemNativeTypeId, `${field}.itemNativeTypeId`, 7001, 7012)
   const itemNativeSubtype = source.itemNativeSubtype === null
     ? null
-    : boundedInteger(source.itemNativeSubtype, `${field}.itemNativeSubtype`, 0, 32)
+    : boundedInteger(source.itemNativeSubtype, `${field}.itemNativeSubtype`, 0, 261)
+  const itemContentId = source.itemContentId === null
+    ? null
+    : limitedString(source.itemContentId, `${field}.itemContentId`, 19)
+  if (itemContentId !== null && !/^[1-9][0-9]{0,18}$/.test(itemContentId)) {
+    throw new GameProtocolError(`${field}.itemContentId is invalid`)
+  }
   if ((kind === 'sack') !== (itemNativeTypeId !== null)) {
     throw new GameProtocolError(`${field}.item identity does not match kind`)
   }
   if (
     kind === 'sack'
-    && !validBoneyardSackItemIdentity(itemNativeTypeId!, itemNativeSubtype)
+    && !validBoneyardSackItemIdentity(itemNativeTypeId!, itemNativeSubtype, itemContentId)
   ) throw new GameProtocolError(`${field}.item identity is not a native Sack payload`)
   const alpha = finite(source.alpha, `${field}.alpha`)
   const orbValue = nonnegativeFinite(source.orbValue, `${field}.orbValue`)
@@ -7261,6 +7446,7 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
     bounceHeight,
     framePhase,
     id: boundedInteger(source.id, `${field}.id`, 1, 2_047),
+    itemContentId,
     itemNativeSubtype,
     itemNativeTypeId,
     kind: kind as BoneyardLootSnapshot['kind'],
@@ -7281,8 +7467,12 @@ function boneyardLootSnapshot(value: unknown, field: string): BoneyardLootSnapsh
 function validBoneyardSackItemIdentity(
   nativeTypeId: number,
   nativeSubtype: number | null,
+  contentId: string | null,
 ): boolean {
-  if (nativeTypeId === 7001) return nativeSubtype !== null && nativeSubtype <= 5
+  if (nativeTypeId === 7001) return nativeSubtype !== null && (
+    nativeSubtype <= 5 ? contentId === null : contentId !== null
+  )
+  if (contentId !== null) return false
   if (nativeTypeId === 7012) return nativeSubtype !== null && nativeSubtype <= 3
   if (nativeTypeId === 7008) return nativeSubtype === 0
   return [7002, 7003, 7004, 7005, 7006, 7011].includes(nativeTypeId)
@@ -8955,4 +9145,57 @@ function contentManifest(value: unknown): GameContentManifest {
       },
     ),
   }
+}
+
+function gameModAssets(value: unknown): readonly GameModAsset[] {
+  const seen = new Set<string>()
+  return limitedArray(value, 'modAssets', 64).map((value, index) => {
+    const field = `modAssets[${index}]`
+    const source = record(value, field)
+    onlyKeys(source, field, ['bytesBase64', 'modId', 'path'])
+    const modId = limitedString(source.modId, `${field}.modId`, 128)
+    const path = limitedString(source.path, `${field}.path`, 240)
+    const bytesBase64 = limitedString(source.bytesBase64, `${field}.bytesBase64`, 1_398_104)
+    const key = `${modId.toLowerCase()}\0${path.toLowerCase()}`
+    const padding = bytesBase64.endsWith('==') ? 2 : bytesBase64.endsWith('=') ? 1 : 0
+    const decodedLength = bytesBase64.length / 4 * 3 - padding
+    if (
+      !/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/.test(modId)
+      || !/^sprites\/.+\.png$/.test(path)
+      || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(bytesBase64)
+      || !Number.isInteger(decodedLength)
+      || decodedLength < 1
+      || decodedLength > 1024 * 1024
+      || seen.has(key)
+    ) throw new GameProtocolError(`${field} is not a bounded unique PNG asset`)
+    seen.add(key)
+    return { bytesBase64, modId, path }
+  })
+}
+
+function modConsumableCatalog(
+  value: unknown,
+  field: string,
+): readonly ModConsumableCatalogEntry[] {
+  const ids = new Set<string>()
+  return limitedArray(value, field, 256).map((value, index) => {
+    const itemField = `${field}[${index}]`
+    const source = record(value, itemField)
+    onlyKeys(source, itemField, ['content', 'name', 'nativeSubtype'])
+    const content = modConsumableContent(source.content, `${itemField}.content`)
+    if (ids.has(content.contentId)) {
+      throw new GameProtocolError(`${field} duplicates content id ${content.contentId}`)
+    }
+    ids.add(content.contentId)
+    return {
+      content,
+      name: limitedString(source.name, `${itemField}.name`, 128),
+      nativeSubtype: boundedInteger(
+        source.nativeSubtype,
+        `${itemField}.nativeSubtype`,
+        6,
+        261,
+      ),
+    }
+  })
 }

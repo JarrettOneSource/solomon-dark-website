@@ -643,6 +643,10 @@ export function setPlayerEntityMindstar(
 export function stepPlayerEntityCombatTick(
   source: PlayerEntityStore,
   actingPlayerIds: ReadonlySet<string> = new Set(),
+  mutations: Readonly<{
+    filterMana?: (playerId: string, delta: number, current: number, maximum: number) => number
+    filterPoisonDamage?: (playerId: string, amount: number) => number
+  }> = {},
 ): PlayerEntityCombatTickResult {
   const beganDeathEpochPlayerIds: string[] = []
   const deathBurstPlayerIds: string[] = []
@@ -673,9 +677,25 @@ export function stepPlayerEntityCombatTick(
       },
     )
     skillRuntimes[index] = skillTick.runtime
-    const result = stepPlayerCombatTick(stepPlayerPotionEffects(progression), {
+    const potionStepped = stepPlayerPotionEffects(progression)
+    const manaRecoveryPerTick = mutations.filterMana
+      ? mutations.filterMana(
+          source.identities[index]!.playerId,
+          skillTick.manaRecoveryPerTick,
+          potionStepped.currentMana,
+          potionStepped.maximumMana,
+        )
+      : skillTick.manaRecoveryPerTick
+    const poisonDamagePerTick = mutations.filterPoisonDamage
+      ? mutations.filterPoisonDamage(
+          source.identities[index]!.playerId,
+          potionStepped.poisonDamagePerTick,
+        )
+      : potionStepped.poisonDamagePerTick
+    const result = stepPlayerCombatTick(potionStepped, {
       healthRecoveryPerTick: derived.healthRecoveryPerTick,
-      manaRecoveryPerTick: skillTick.manaRecoveryPerTick,
+      manaRecoveryPerTick,
+      poisonDamagePerTick,
     })
     const playerId = source.identities[index]!.playerId
     if (result.beganDeathEpoch) beganDeathEpochPlayerIds.push(playerId)

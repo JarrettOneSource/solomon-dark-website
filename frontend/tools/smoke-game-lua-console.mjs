@@ -112,7 +112,7 @@ try {
   assert.deepEqual(identity.output, ['web-lua\tLua 5.4'])
   assert.deepEqual(identity.values, [
     'Lua 5.4',
-    '0.1.0',
+    '0.2.0',
     true,
     true,
     'nil',

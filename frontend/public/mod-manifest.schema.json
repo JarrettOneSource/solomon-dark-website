@@ -21,6 +21,12 @@
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
     },
+    "minimumLoaderVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+    },
     "priority": { "type": "integer", "minimum": -100000, "maximum": 100000 },
     "overlays": {
       "type": "array",
@@ -49,7 +55,7 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["apiVersion", "entryScript"],
+      "required": ["apiVersion", "entryScript", "requiredCapabilities"],
       "properties": {
         "apiVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
         "entryScript": {
@@ -57,6 +63,23 @@
           "minLength": 13,
           "maxLength": 240,
           "pattern": "^scripts/.+\\.lua$"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 256,
+          "items": {
+            "enum": [
+              "events.filters.damage",
+              "events.filters.resources",
+              "items.consumables.register",
+              "loot.register",
+              "player.resources.owner",
+              "sprites.local.read",
+              "sprites.local.register",
+              "timer.local.scheduler"
+            ]
+          }
         }
       }
     },

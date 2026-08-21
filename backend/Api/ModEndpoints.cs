@@ -237,7 +237,9 @@ public static class ModEndpoints
                     mod.ContentSha256,
                     mod.Priority,
                     hasLua = mod.EntryScript is not null,
-                    boneyardCount = mod.Boneyards.Count
+                    boneyardCount = mod.Boneyards.Count,
+                    mod.RequiredCapabilities,
+                    assetCount = mod.Files.Count
                 }).ToArray()
             });
         }
