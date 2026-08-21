@@ -198,7 +198,7 @@ export default function Game() {
       return
     }
     try {
-      preparedEndpoint.current = await admitSharedHubPlayer()
+      preparedEndpoint.current = await admitSharedHubPlayer(getToken())
       diagnostics.info(
         'hub.admitted',
         'A shared Hub admission was issued.',

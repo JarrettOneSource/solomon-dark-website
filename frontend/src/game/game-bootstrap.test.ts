@@ -34,15 +34,17 @@ test('browser provisioning accepts only a credentialed public WSS endpoint', () 
   }), /invalid endpoint/)
 })
 
-test('browser New Game requests a shared-Hub admission without lobby identity', async () => {
-  const endpoint = await admitSharedHubPlayer(async (input, init) => {
+test('signed-in New Game carries account identity into its shared-Hub admission', async () => {
+  const endpoint = await admitSharedHubPlayer('account-token', async (input, init) => {
     assert.equal(input, '/api/game/hub')
     assert.ok(init)
     assert.equal(init.method, 'POST')
+    const headers = new Headers(init.headers)
     assert.equal(
-      (init.headers as Record<string, string>)['x-solomon-dark-session'],
+      headers.get('x-solomon-dark-session'),
       'enter-hub',
     )
+    assert.equal(headers.get('authorization'), 'Bearer account-token')
     return new Response(JSON.stringify({
       kind: 'remote',
       url: 'wss://solomondarker.com/game-hub',
@@ -56,5 +58,20 @@ test('browser New Game requests a shared-Hub admission without lobby identity', 
     kind: 'remote',
     url: 'wss://solomondarker.com/game-hub',
     credential: 'single-use-hub-ticket',
+  })
+})
+
+test('guest New Game keeps shared-Hub admission anonymous', async () => {
+  await admitSharedHubPlayer(null, async (_input, init) => {
+    const headers = new Headers(init?.headers)
+    assert.equal(headers.get('authorization'), null)
+    return new Response(JSON.stringify({
+      kind: 'remote',
+      url: 'wss://solomondarker.com/game-hub',
+      credential: 'anonymous-hub-ticket',
+    }), {
+      headers: { 'content-type': 'application/json' },
+      status: 201,
+    })
   })
 })

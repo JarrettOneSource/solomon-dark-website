@@ -53,15 +53,18 @@ export async function resolveGameEndpoint(
 }
 
 export async function admitSharedHubPlayer(
+  token: string | null,
   request: typeof fetch = fetch,
 ): Promise<GameEndpoint> {
+  const headers = new Headers({
+    accept: 'application/json',
+    'x-solomon-dark-session': 'enter-hub',
+  })
+  if (token) headers.set('authorization', `Bearer ${token}`)
   const response = await request('/api/game/hub', {
     method: 'POST',
     credentials: 'same-origin',
-    headers: {
-      accept: 'application/json',
-      'x-solomon-dark-session': 'enter-hub',
-    },
+    headers,
   })
   const payload = await readJson(response)
   if (!response.ok) throw new Error(apiError(payload, 'The shared Hub is not available right now.'))
