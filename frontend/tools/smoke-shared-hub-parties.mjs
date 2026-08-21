@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
+import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol.ts'
+
 const baseUrl = process.env.SDR_SHARED_HUB_SMOKE_URL || 'http://127.0.0.1:5173'
 const gatewayUrl = process.env.SDR_SHARED_HUB_GATEWAY_URL?.trim()
 const publicWebSocketOrigin = process.env.SDR_SHARED_HUB_PUBLIC_ORIGIN?.trim()
@@ -230,7 +232,7 @@ async function enterRawHub(displayName, element) {
   const next = rawMessageQueue(socket)
   socket.send(JSON.stringify({
     type: 'client-hello',
-    protocolVersion: 35,
+    protocolVersion: GAME_PROTOCOL_VERSION,
     credential: admission.credential,
     character: { discipline: 'arcane', displayName, element },
   }))

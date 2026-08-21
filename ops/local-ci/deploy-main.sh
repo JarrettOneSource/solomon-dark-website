@@ -10,6 +10,8 @@ ssh_command="${SDR_DEPLOY_SSH_COMMAND:-/usr/bin/ssh}"
 scp_command="${SDR_DEPLOY_SCP_COMMAND:-/usr/bin/scp}"
 ssh_identity="${SDR_DEPLOY_SSH_IDENTITY:-$HOME/.ssh/id_ed25519_nfoservers_root}"
 public_url="${SDR_DEPLOY_PUBLIC_URL:-https://solomondarker.com}"
+caddy_source_path="ops/nfo/solomon-dark-revived.caddy"
+remote_caddy_site="/etc/caddy/sites/solomon-dark-revived.caddy"
 ssh_options=(
     -o BatchMode=yes
     -o ConnectTimeout=15
@@ -86,6 +88,11 @@ remote_deployed_sha() {
         "test -r /opt/solomon-dark-revived/DEPLOYED_GIT_SHA && tr -d '\\r\\n' </opt/solomon-dark-revived/DEPLOYED_GIT_SHA"
 }
 
+remote_caddy_checksum() {
+    "$ssh_command" "${ssh_options[@]}" "$remote_host" \
+        "if test -r '$remote_caddy_site'; then sha256sum '$remote_caddy_site' | awk '{print \$1}'; else printf 'missing\n'; fi"
+}
+
 remote_session_count() {
     local health
     health="$("$ssh_command" "${ssh_options[@]}" "$remote_host" \
@@ -104,7 +111,7 @@ print(sessions)
 PY
 }
 
-for command_name in curl date flock git mktemp python3 sha256sum tar; do
+for command_name in curl date flock git install mktemp python3 sha256sum tar; do
     require_command "$command_name"
 done
 [[ -x "$ssh_command" ]] || fail "SSH client is not executable: $ssh_command"
@@ -136,16 +143,28 @@ fi
 
 target_sha="$(fetch_main)"
 [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || fail "origin/main did not resolve to a commit"
+target_caddy_checksum="$(
+    git --git-dir="$mirror" show "$target_sha:$caddy_source_path" |
+        sha256sum |
+        awk '{print $1}'
+)"
+[[ "$target_caddy_checksum" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "origin/main did not contain a valid Caddy site configuration"
 short_sha="${target_sha:0:12}"
 artifact="$artifact_root/$target_sha.tar.gz"
 checksum_file="$artifact.sha256"
 
 deployed_sha="$(remote_deployed_sha)"
-if [[ "$deployed_sha" == "$target_sha" ]]; then
+live_caddy_checksum="$(remote_caddy_checksum)"
+if [[ "$deployed_sha" == "$target_sha" &&
+    "$live_caddy_checksum" == "$target_caddy_checksum" ]]; then
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
     [[ ! -f "$checksum_file" ]] || unlink -- "$checksum_file"
     log "Production is already at origin/main $target_sha"
     exit 0
+fi
+if [[ "$deployed_sha" == "$target_sha" ]]; then
+    log "Production runtime is current but its Caddy site configuration drifted"
 fi
 
 artifact_checksum=""
@@ -194,8 +213,12 @@ if [[ -z "$artifact_checksum" ]]; then
         --nologo \
         --verbosity minimal
     printf '%s\n' "$target_sha" >"$publish_dir/DEPLOYED_GIT_SHA"
+    install -D -m 0644 \
+        "$source_checkout/$caddy_source_path" \
+        "$publish_dir/Deploy/solomon-dark-revived.caddy"
 
     for required_file in \
+        Deploy/solomon-dark-revived.caddy \
         Server.dll \
         GameHost/game-session-supervisor.mjs \
         GameHost/lua54.wasm \
@@ -226,7 +249,9 @@ if [[ "$newest_sha" != "$target_sha" ]]; then
 fi
 
 deployed_sha="$(remote_deployed_sha)"
-if [[ "$deployed_sha" == "$target_sha" ]]; then
+live_caddy_checksum="$(remote_caddy_checksum)"
+if [[ "$deployed_sha" == "$target_sha" &&
+    "$live_caddy_checksum" == "$target_caddy_checksum" ]]; then
     unlink -- "$artifact" "$checksum_file"
     log "Production reached $target_sha while this run was building"
     exit 0
@@ -258,6 +283,11 @@ rollback="$live.rollback-pre-$short_sha-$timestamp"
 failed_release="$live.failed-$short_sha-$timestamp"
 database=/var/lib/solomon-dark-revived/sdr.db
 backup_dir="/var/backups/solomon-dark-revived/pre-$short_sha-$timestamp"
+caddy_site=/etc/caddy/sites/solomon-dark-revived.caddy
+caddy_candidate="/etc/caddy/sites/.solomon-dark-revived.$short_sha-$timestamp.candidate"
+caddy_next="${caddy_site}.next"
+caddy_backup=""
+caddy_changed=0
 rollback_needed=0
 website_stopped=0
 
@@ -278,8 +308,37 @@ print(sessions)
 PY
 }
 
+restore_caddy_config() {
+    if (( caddy_changed == 0 )); then
+        return
+    fi
+    [[ -n "$caddy_backup" && -f "$caddy_backup" ]]
+    install -o root -g root -m 0644 -- "$caddy_backup" "$caddy_next"
+    mv -- "$caddy_next" "$caddy_site"
+    caddy validate --config /etc/caddy/Caddyfile >/dev/null
+    systemctl reload caddy.service
+    caddy_changed=0
+}
+
+install_caddy_config() {
+    if cmp --silent "$caddy_candidate" "$caddy_site"; then
+        return
+    fi
+    install -d -m 0700 "$backup_dir"
+    caddy_backup="$backup_dir/solomon-dark-revived.caddy"
+    install -o root -g root -m 0644 -- "$caddy_site" "$caddy_backup"
+    install -o root -g root -m 0644 -- "$caddy_candidate" "$caddy_next"
+    mv -- "$caddy_next" "$caddy_site"
+    caddy_changed=1
+    caddy validate --config /etc/caddy/Caddyfile >/dev/null
+    systemctl reload caddy.service
+    systemctl is-active --quiet caddy.service
+}
+
 cleanup_upload() {
     [[ ! -f "$artifact" ]] || unlink -- "$artifact"
+    [[ ! -f "$caddy_candidate" ]] || unlink -- "$caddy_candidate"
+    [[ ! -f "$caddy_next" ]] || unlink -- "$caddy_next"
     if (( website_stopped == 1 && rollback_needed == 0 )); then
         systemctl start solomon-dark-revived.service || true
         website_stopped=0
@@ -299,9 +358,12 @@ rollback_release() {
         fi
         if [[ -d "$rollback" ]]; then
             mv -- "$rollback" "$live"
-            systemctl start solomon-dark-game.service solomon-dark-revived.service || true
-            website_stopped=0
         fi
+    fi
+    restore_caddy_config || true
+    if (( rollback_needed == 1 )); then
+        systemctl start solomon-dark-game.service solomon-dark-revived.service || true
+        website_stopped=0
     fi
     cleanup_upload
     exit "$exit_code"
@@ -313,8 +375,26 @@ checksum_output="$(sha256sum "$artifact")"
 actual_checksum="${checksum_output%% *}"
 [[ "$actual_checksum" == "$expected_checksum" ]]
 
+tar --extract --gzip --file "$artifact" --to-stdout \
+    ./Deploy/solomon-dark-revived.caddy >"$caddy_candidate"
+chown root:root "$caddy_candidate"
+chmod 0644 "$caddy_candidate"
+caddy validate --config "$caddy_candidate" --adapter caddyfile >/dev/null
+
 current_sha="$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")"
 if [[ "$current_sha" == "$target_sha" ]]; then
+    sessions="$(session_count)"
+    if (( sessions != 0 )); then
+        printf 'Caddy reconciliation deferred because %s game session(s) became active\n' \
+            "$sessions" >&2
+        exit 75
+    fi
+    install_caddy_config
+    [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
+        "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
+    caddy_changed=0
+    printf 'Reconciled Caddy for %s\nCaddy backup: %s\n' \
+        "$target_sha" "${caddy_backup:-unchanged}"
     exit 0
 fi
 
@@ -327,6 +407,7 @@ fi
 mkdir -- "$stage"
 tar --extract --gzip --file "$artifact" --directory "$stage"
 for required_file in \
+    Deploy/solomon-dark-revived.caddy \
     Server.dll \
     GameHost/game-session-supervisor.mjs \
     GameHost/lua54.wasm \
@@ -360,6 +441,7 @@ mv -- "$live" "$rollback"
 rollback_needed=1
 mv -- "$stage" "$live"
 stage=""
+install_caddy_config
 systemctl start solomon-dark-game.service solomon-dark-revived.service
 website_stopped=0
 
@@ -379,10 +461,13 @@ done
 [[ "$(systemctl show -p NRestarts --value solomon-dark-game.service)" == 0 ]]
 [[ "$(sqlite3 "$database" 'PRAGMA integrity_check;')" == "ok" ]]
 [[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
+[[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
+    "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
 
 rollback_needed=0
-printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\n' \
-    "$target_sha" "$rollback" "$backup_dir"
+caddy_changed=0
+printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\n' \
+    "$target_sha" "$rollback" "$backup_dir" "${caddy_backup:-unchanged}"
 REMOTE_DEPLOY
 then
     deploy_exit=0
@@ -400,6 +485,9 @@ remote_upload=""
 
 live_sha="$(remote_deployed_sha)"
 [[ "$live_sha" == "$target_sha" ]] || fail "production reports $live_sha after deploying $target_sha"
+live_caddy_checksum="$(remote_caddy_checksum)"
+[[ "$live_caddy_checksum" == "$target_caddy_checksum" ]] ||
+    fail "production Caddy site does not match origin/main after deploying $target_sha"
 curl --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
 

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
 import { GAME_SETTINGS_STORAGE_KEY } from '../src/game/game-settings.ts'
+import { GAME_PROTOCOL_NAME } from '../src/game/protocol/game-protocol.ts'
 
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
 const webRoot = fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url))
@@ -50,7 +51,7 @@ let browser
 let page
 try {
   const readiness = await readHostReadiness(host)
-  assert.equal(readiness.protocol, 'solomon-dark/35')
+  assert.equal(readiness.protocol, GAME_PROTOCOL_NAME)
   const healthUrl = new URL(readiness.url)
   healthUrl.protocol = 'http:'
   healthUrl.pathname = '/health'

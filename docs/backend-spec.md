@@ -28,6 +28,8 @@ EF Core, SQLite, JWT bearer authentication, and filesystem storage rooted at
 - `/api/game/hub` issues one single-use admission to the resident shared browser
   Hub. `/api/game/sessions` remains the non-discoverable private operations seam.
 - `/api/game/saves*` provides the authoritative browser cloud slot.
+- `/api/game/diagnostics` accepts an explicit, bounded browser connection
+  report without a session credential.
 - `/api/boneyards*` provides user-scoped Boneyard editor drafts and publication.
 - `/api/stats` provides public aggregate counts.
 
@@ -36,6 +38,12 @@ The rebuilt browser game has no lobby namespace, directory, or join URL.
 and returns a `Cache-Control: no-store` credentialed WSS endpoint. The
 supervisor consumes that admission once, and the authoritative host creates
 party membership only after the completed character authenticates.
+
+Browser diagnostics correlate the report with exactly one of three endpoint
+classes: `null` when no provisioned session is known, `shared-hub` for the
+resident Hub, or the existing 32-character URL-safe private-session id. Other
+short labels remain invalid. The report remains consent-driven, rate-limited,
+credential-free, and stored as a private diagnostic archive.
 
 ## Web mod subscriptions and sessions
 

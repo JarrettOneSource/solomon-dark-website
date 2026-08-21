@@ -2,12 +2,16 @@
 
 This worker polls `origin/main` from its own bare mirror, validates the exact
 commit with `./scripts/validate.sh`, publishes an immutable release archive,
-and deploys it to NFO. It never reads or modifies a developer checkout.
+and deploys it to NFO. The archive includes the checked-in Caddy site, whose
+live checksum is reconciled even when the runtime commit is already current.
+It never reads or modifies a developer checkout.
 
 The cutover is fail-closed: a changed `main` is not deployed until validation
 passes, active browser-game sessions defer deployment, the SQLite database is
 backed up and checked, and an unhealthy release is rolled back atomically.
-Successful cutovers retain the previous release and database backup on NFO.
+Changed Caddy configuration is validated before installation, reloaded
+gracefully, and restored with a failed release. Successful cutovers retain the
+previous release, database backup, and any replaced Caddy site on NFO.
 
 The worker is intentionally a fixed local systemd service instead of a GitHub
 Actions self-hosted runner. This is a public repository, so a persistent Actions

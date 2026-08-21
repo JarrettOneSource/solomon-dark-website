@@ -54,16 +54,24 @@ disconnect reason and may explicitly send the bounded in-memory client log to
 the website. Those reports use the private diagnostic-log archive rather than
 public uploads.
 
-Deploy the checked-in unit and Caddy site, validate both before reloading, and
-restart the game supervisor together with the website whenever the bundled game
+The guarded main deployment worker packages the checked-in Caddy site beside
+the runtime. It compares the live site hash even when the deployed Git SHA is
+already current, validates a candidate before an atomic install, retains the
+prior site in the release backup, and gracefully reloads Caddy. Any later
+release failure restores and reloads that backup. The active-session guard
+still applies before either reconciliation or runtime cutover.
+
+Restart the game supervisor together with the website whenever the bundled game
 protocol changes. A release is healthy only when all of these pass:
 
 1. the website and game units are active with zero unexpected restarts;
 2. `http://127.0.0.1:5222/health` reports the release protocol;
-3. private provisioning and shared-Hub admission responses are `no-store` and
+3. the live Caddy site checksum matches the release artifact, with
+   `/game-hub` and `/game-sessions/*` before the Website fallback;
+4. private provisioning and shared-Hub admission responses are `no-store` and
    return same-origin `wss` URLs where applicable;
-4. independently admitted clients enter one Hub with distinct singleton
+5. independently admitted clients enter one Hub with distinct singleton
    parties and authoritative movement; and
-5. a real three-browser journey proves invite, accept, party-only Boneyard
+6. a real three-browser journey proves invite, accept, party-only Boneyard
    launch, and an unrelated player continuing in the Hub without console or
    page errors.

@@ -101,6 +101,20 @@ safety does not mistake an empty resident Hub process for an occupied session.
 Private per-session provisioning remains an explicit operations/test seam and
 is not a browser New Game path.
 
+The TLS edge is part of the browser-game release contract, not an out-of-band
+host prerequisite. The release artifact carries the checked-in Caddy site;
+deployment compares its expected hash with the live site even when the runtime
+SHA already matches, validates a candidate before installation, backs up and
+atomically installs changed configuration, reloads Caddy gracefully, and
+restores the prior site with the runtime rollback. Shared `/game-hub` and
+private `/game-sessions/*` handlers must precede the ordinary Website
+fallback.
+
+Browser connection diagnostics use endpoint-class correlation rather than a
+credential: `shared-hub` for the resident host, a 32-character private
+session id, or `null` before endpoint selection. Client and backend validate
+that same closed set; arbitrary labels are rejected.
+
 Platform shells remain deliberately different. A desktop shell can supervise
 a child process and access local storage; a browser shell asks the website to
 provision a remote instance. Those adapters may differ without creating a

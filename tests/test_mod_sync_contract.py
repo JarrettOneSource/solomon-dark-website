@@ -318,7 +318,7 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             "capturedAtUtc": captured_at,
             "protocolVersion": 21,
             "pageUrl": "https://solomondarker.com/game",
-            "sessionId": "01234567890123456789012345678901",
+            "sessionId": "shared-hub",
             "online": False,
             "userAgent": "Contract Browser/1.0",
             "droppedEntries": 0,
@@ -352,6 +352,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
             report,
             include_submission_header=False,
         )
+        self.assertEqual(status, 400)
+
+        invalid_label = {
+            **report,
+            "clientLogId": str(uuid.uuid4()),
+            "sessionId": "another-hub",
+        }
+        status, _ = self.browser_game_diagnostic_upload(invalid_label)
         self.assertEqual(status, 400)
 
         status, receipt = self.browser_game_diagnostic_upload(report)
@@ -395,6 +403,19 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         status, duplicate = self.browser_game_diagnostic_upload(report)
         self.assertEqual(status, 200, duplicate)
         self.assertEqual(duplicate["logId"], receipt["logId"])
+
+        for session_id in (None, "01234567890123456789012345678901"):
+            with self.subTest(session_id=session_id):
+                sibling_report = {
+                    **report,
+                    "clientLogId": str(uuid.uuid4()),
+                    "sessionId": session_id,
+                }
+                status, sibling_receipt = self.browser_game_diagnostic_upload(
+                    sibling_report
+                )
+                self.assertEqual(status, 201, sibling_receipt)
+                uuid.UUID(sibling_receipt["logId"])
 
 
     def test_browser_game_slot_is_account_owned_hashed_and_revision_conditional(self) -> None:

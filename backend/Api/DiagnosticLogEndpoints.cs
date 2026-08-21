@@ -11,6 +11,7 @@ public static class DiagnosticLogEndpoints
 {
     private const long BrowserGameRequestLimit = 1024L * 1024;
     private const string BrowserGameSubmissionHeader = "X-Solomon-Dark-Diagnostics";
+    private const string BrowserSharedHubSessionId = "shared-hub";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static void Map(IEndpointRouteBuilder app)
@@ -221,6 +222,7 @@ public static class DiagnosticLogEndpoints
 
     private static bool IsBrowserSessionId(string? value) =>
         value is null ||
+        value == BrowserSharedHubSessionId ||
         (value.Length == 32 && value.All(character =>
             char.IsAsciiLetterOrDigit(character) || character is '_' or '-'));
 

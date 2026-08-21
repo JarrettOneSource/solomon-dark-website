@@ -124,6 +124,29 @@ class ValidationContractTests(unittest.TestCase):
                     f"{path.relative_to(ROOT)} bypasses {CANONICAL_LINT}",
                 )
 
+    def test_main_deployment_owns_browser_game_caddy_routes(self) -> None:
+        caddy = (ROOT / "ops/nfo/solomon-dark-revived.caddy").read_text()
+        shared_hub = caddy.index("handle /game-hub")
+        private_sessions = caddy.index("handle /game-sessions/*")
+        website_fallback = caddy.index("\n\thandle {", private_sessions)
+        self.assertLess(shared_hub, private_sessions)
+        self.assertLess(private_sessions, website_fallback)
+
+        deploy = (ROOT / "ops/local-ci/deploy-main.sh").read_text()
+        required_ownership = [
+            "ops/nfo/solomon-dark-revived.caddy",
+            "Deploy/solomon-dark-revived.caddy",
+            "remote_caddy_checksum",
+            "target_caddy_checksum",
+            'caddy validate --config "$caddy_candidate" --adapter caddyfile',
+            'install_caddy_config',
+            'restore_caddy_config',
+            "systemctl reload caddy.service",
+        ]
+        for member in required_ownership:
+            with self.subTest(member=member):
+                self.assertIn(member, deploy)
+
 
 if __name__ == "__main__":
     unittest.main()
