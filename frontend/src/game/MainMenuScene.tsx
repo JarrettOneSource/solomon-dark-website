@@ -942,6 +942,7 @@ export default function MainMenuScene({
               modAssets={session.modAssets}
               modCatalog={session.getModCatalog()}
               levelUpPresentationId={levelUpPresentationId}
+              nativeUiStageStyle={nativeStageStyle}
               playerId={session.playerId}
               initialSnapshot={runtimeSnapshot}
               onInput={session.sendInput}
@@ -971,6 +972,7 @@ export default function MainMenuScene({
               inventoryRequestSequence={inventoryRequestSequence}
               modAssets={session.modAssets}
               levelUpPresentationId={levelUpPresentationId}
+              nativeUiStageStyle={nativeStageStyle}
               playerId={session.playerId}
               progression={runtimeProgression ?? runtimeSnapshot.players[session.playerId]!.progression}
               initialSnapshot={runtimeSnapshot}

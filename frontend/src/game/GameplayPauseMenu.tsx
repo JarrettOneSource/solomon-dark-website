@@ -124,16 +124,23 @@ export default function GameplayPauseMenu({
     setClosing(action)
   }
   const consumeEscape = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Escape') return
+    if (
+      event.key !== 'Escape'
+      || event.repeat
+      || event.altKey
+      || event.ctrlKey
+      || event.metaKey
+      || presentation.kind !== 'owner'
+    ) return
     event.preventDefault()
     event.stopPropagation()
+    beginClose('resume')
   }
   const renderPlan = nativePauseMenuRenderPlan(reveal, pressedAction)
 
   return (
     <div
-      className="main-menu-native-stage gameplay-pause-stage"
-      style={style}
+      className="gameplay-pause-overlay gameplay-pause-stage"
       data-gameplay-pause-owner-id={pause.ownerPlayerId}
       data-gameplay-pause-owner-name={pause.ownerDisplayName}
       data-gameplay-pause-source={pause.source}
@@ -151,36 +158,38 @@ export default function GameplayPauseMenu({
         style={{ backgroundColor: `rgb(0 0 0 / ${renderPlan.dimAlpha})` }}
         aria-hidden
       />
-      {presentation.kind === 'owner' ? (
-        <>
-          <div ref={rendererHostRef} className="gameplay-pause-native-render" aria-hidden />
-          {pressedAction ? <NativePausePressedRow action={pressedAction} /> : null}
-          <NativePauseButton
-            action="resume"
-            buttonRef={resumeRef}
-            closing={closing}
-            onBeginClose={beginClose}
-            onPressedChange={setPressedAction}
-          />
-          <NativePauseButton
-            action="settings"
-            closing={closing}
-            onBeginClose={beginClose}
-            onPressedChange={setPressedAction}
-          />
-          <NativePauseButton
-            action="leave"
-            closing={closing}
-            onBeginClose={beginClose}
-            onPressedChange={setPressedAction}
-          />
-        </>
-      ) : (
-        <div className="gameplay-pause-waiting" style={{ opacity: reveal }}>
-          <p>{presentation.label}</p>
-          <span>{presentation.detail}</span>
-        </div>
-      )}
+      <div className="main-menu-native-stage gameplay-pause-native-stage" style={style}>
+        {presentation.kind === 'owner' ? (
+          <>
+            <div ref={rendererHostRef} className="gameplay-pause-native-render" aria-hidden />
+            {pressedAction ? <NativePausePressedRow action={pressedAction} /> : null}
+            <NativePauseButton
+              action="resume"
+              buttonRef={resumeRef}
+              closing={closing}
+              onBeginClose={beginClose}
+              onPressedChange={setPressedAction}
+            />
+            <NativePauseButton
+              action="settings"
+              closing={closing}
+              onBeginClose={beginClose}
+              onPressedChange={setPressedAction}
+            />
+            <NativePauseButton
+              action="leave"
+              closing={closing}
+              onBeginClose={beginClose}
+              onPressedChange={setPressedAction}
+            />
+          </>
+        ) : (
+          <div className="gameplay-pause-waiting" style={{ opacity: reveal }}>
+            <p>{presentation.label}</p>
+            <span>{presentation.detail}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

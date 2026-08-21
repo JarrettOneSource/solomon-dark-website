@@ -182,7 +182,7 @@ test('every action has the same exact pressed substitution and no hover render b
   assert.equal(nativePauseMenuRenderPlan.length, 2)
   assert.match(
     pauseCss,
-    /\.main-menu-native-stage\.gameplay-pause-stage\s*\{[^}]*z-index:\s*80;[^}]*pointer-events:\s*auto;/s,
+    /\.gameplay-pause-overlay\s*\{[^}]*z-index:\s*80;[^}]*pointer-events:\s*auto;/s,
   )
   assert.doesNotMatch(pauseCss, /\.gameplay-pause-action:(?:hover|focus-visible)/)
   assert.doesNotMatch(pauseCss, /\.gameplay-pause-frame/)
@@ -217,4 +217,30 @@ test('native Game Settings exposes learned primary and concentration selectors',
   assert.match(settingsComponent, /onSelectPrimarySkill/)
   assert.match(settingsComponent, /onSelectConcentration/)
   assert.match(pauseComponent, /onSettings/)
+})
+
+test('pause owns the full display separately from its transformed native stage', () => {
+  assert.match(
+    pauseCss,
+    /\.gameplay-pause-overlay\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*80;[^}]*inset:\s*0;[^}]*pointer-events:\s*auto;/s,
+  )
+  assert.match(
+    pauseCss,
+    /\.gameplay-pause-dim\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*width:\s*100%;[^}]*height:\s*100%;/s,
+  )
+  assert.match(
+    pauseComponent,
+    /className="gameplay-pause-overlay gameplay-pause-stage"[\s\S]*className="main-menu-native-stage gameplay-pause-native-stage"[\s\S]*style=\{style\}/,
+  )
+  assert.match(
+    pauseComponent,
+    /className="gameplay-pause-native-render"[\s\S]*<NativePauseButton[\s\S]*action="resume"/,
+  )
+})
+
+test('a qualifying second owner Escape uses the existing Resume close path', () => {
+  assert.match(
+    pauseComponent,
+    /const consumeEscape =[\s\S]*event\.key !== 'Escape'[\s\S]*event\.repeat[\s\S]*event\.altKey[\s\S]*event\.ctrlKey[\s\S]*event\.metaKey[\s\S]*presentation\.kind !== 'owner'[\s\S]*beginClose\('resume'\)/,
+  )
 })

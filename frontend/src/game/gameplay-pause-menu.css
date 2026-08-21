@@ -1,10 +1,24 @@
-.main-menu-native-stage.gameplay-pause-stage {
+.gameplay-pause-overlay {
+  position: absolute;
   z-index: 80;
+  inset: 0;
   overflow: hidden;
   pointer-events: auto;
 }
 
-.gameplay-pause-dim,
+.main-menu-native-stage.gameplay-pause-native-stage {
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.gameplay-pause-dim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .gameplay-pause-native-render,
 .gameplay-pause-canvas {
   position: absolute;

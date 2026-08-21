@@ -13,15 +13,27 @@
   transform: translateX(-50%);
 }
 
-.hub-native-ui-stage {
+.hub-native-ui-overlay {
   position: absolute;
   z-index: 30000;
   inset: 0;
+  overflow: hidden;
+  background: #000;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.hub-native-ui-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 1600px;
   height: 900px;
   overflow: hidden;
   pointer-events: auto;
   touch-action: none;
+  transform-origin: 0 0;
   user-select: none;
 }
 

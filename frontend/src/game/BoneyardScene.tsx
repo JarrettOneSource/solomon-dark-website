@@ -105,6 +105,7 @@ interface BoneyardSceneProps {
   modAssets: readonly GameModAsset[]
   modCatalog: readonly ModConsumableCatalogEntry[]
   levelUpPresentationId: number | null
+  nativeUiStageStyle: CSSProperties
   onInput: (input: PlayerCharacterInput) => void
   onLoadingError: () => void
   onHubAction: (action: HubInventoryAction) => void
@@ -146,6 +147,7 @@ export default function BoneyardScene({
   modAssets,
   modCatalog,
   levelUpPresentationId,
+  nativeUiStageStyle,
   onInput,
   onLoadingError,
   onHubAction,
@@ -840,8 +842,10 @@ export default function BoneyardScene({
           inventoryKeyCode={settings.controls.openInventory}
           menuKeyCode={settings.controls.openMenu}
           modAssets={modAssets}
+          nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
           onSurfaceChange={setInventorySurface}
+          overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
           region="courtyard"

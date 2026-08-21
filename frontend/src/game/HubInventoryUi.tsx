@@ -9,7 +9,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from 'react'
+import { createPortal } from 'react-dom'
 
 import nativeAssetsJson from '../assets/game/hub-trader-native-assets.json' with { type: 'json' }
 import {
@@ -130,9 +132,11 @@ interface HubInventoryUiProps {
   economy: ProtocolPlayerEconomy
   inventoryKeyCode: string
   menuKeyCode: string
+  nativeUiStageStyle: CSSProperties
   onAction: (action: HubInventoryAction) => void
   modAssets: readonly GameModAsset[]
   onSurfaceChange: (surface: HubUiSurface) => void
+  overlayRoot: RefObject<HTMLDivElement | null>
   playerPosition: Vector2
   progression: ProtocolPlayerProgression
   region: HubRegionId
@@ -148,9 +152,11 @@ export default function HubInventoryUi({
   economy,
   inventoryKeyCode,
   menuKeyCode,
+  nativeUiStageStyle,
   onAction,
   modAssets,
   onSurfaceChange,
+  overlayRoot,
   playerPosition,
   progression,
   region,
@@ -241,7 +247,7 @@ export default function HubInventoryUi({
   }
 
   const surfaceKey = `${surface.kind}-${'trader' in surface ? surface.trader : 'player'}`
-  return (
+  const overlay = (
     <NativeHubSurface
       key={surfaceKey}
       audio={audio}
@@ -252,9 +258,11 @@ export default function HubInventoryUi({
       onClose={closeSurface}
       onSurfaceChange={onSurfaceChange}
       progression={progression}
+      style={nativeUiStageStyle}
       surface={surface}
     />
   )
+  return overlayRoot.current ? createPortal(overlay, overlayRoot.current) : null
 }
 
 function NativeHubSurface({
@@ -266,6 +274,7 @@ function NativeHubSurface({
   onClose,
   onSurfaceChange,
   progression,
+  style,
   surface,
 }: {
   audio: GameAudioDirector
@@ -276,6 +285,7 @@ function NativeHubSurface({
   onClose: () => void
   onSurfaceChange: (surface: HubUiSurface) => void
   progression: ProtocolPlayerProgression
+  style: CSSProperties
   surface: Exclude<HubUiSurface, null>
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -485,122 +495,125 @@ function NativeHubSurface({
       : HUB_TRADER_DIALOGUES[surface.trader].title
 
   return (
-    <section
-      className="hub-native-ui-stage"
-      role="dialog"
-      aria-modal="true"
-      aria-label={label}
-      data-native-ui-schema={nativeAssetsJson.schema}
-      data-source-executable={nativeAssetsJson.sourceExecutableSha256}
-      data-renderer-state={rendererState}
-      data-native-chat-phase={surface.kind === 'dialogue' ? chat.phase : ''}
-      data-native-notice={notice?.title ?? ''}
-      data-native-inventory-selection={inventorySelection
-        ? `${inventorySelection.owner}:${inventorySelection.equipmentSlot ?? inventorySelection.id}`
-        : ''}
-      data-native-inventory-dragging={inventoryDrag
-        ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
-        : ''}
-    >
-      <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
-      <div className="hub-native-ui-actions">
-        <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
-          {economy.gold.toLocaleString()} gold
-        </span>
-        {notice ? (
-          <>
-            <span className="hub-native-ui-semantic" role="alert">
-              {notice.title} {notice.summary ? `${notice.summary} ` : ''}{notice.body}
-            </span>
-            <NativeAction
-              label={notice.actionLabel}
-              rect={notice.variant === 'unforge-confirmation'
-                ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
-                : notice.variant === 'unforge-result'
-                  ? HUB_UNFORGE_RESULT.primaryButtonRect
-                  : HUB_DOWSING_MSGBOX.primaryButtonRect}
-              onClick={() => click(() => {
-                if (notice.variant === 'unforge-confirmation'
-                  && notice.unforgeItemId !== undefined) {
-                  onAction({ type: 'unforge', itemId: notice.unforgeItemId })
-                }
-                setNotice(null)
-              })}
-            />
-            {notice.variant === 'unforge-confirmation' ? (
+    <div className="hub-native-ui-overlay">
+      <section
+        className="hub-native-ui-stage"
+        style={style}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        data-native-ui-schema={nativeAssetsJson.schema}
+        data-source-executable={nativeAssetsJson.sourceExecutableSha256}
+        data-renderer-state={rendererState}
+        data-native-chat-phase={surface.kind === 'dialogue' ? chat.phase : ''}
+        data-native-notice={notice?.title ?? ''}
+        data-native-inventory-selection={inventorySelection
+          ? `${inventorySelection.owner}:${inventorySelection.equipmentSlot ?? inventorySelection.id}`
+          : ''}
+        data-native-inventory-dragging={inventoryDrag
+          ? `${inventoryDrag.owner}:${inventoryDrag.equipmentSlot ?? inventoryDrag.itemId}`
+          : ''}
+      >
+        <div ref={hostRef} className="hub-native-ui-renderer" aria-hidden />
+        <div className="hub-native-ui-actions">
+          <span className="hub-native-ui-semantic hub-gold-ledger" data-player-gold={economy.gold}>
+            {economy.gold.toLocaleString()} gold
+          </span>
+          {notice ? (
+            <>
+              <span className="hub-native-ui-semantic" role="alert">
+                {notice.title} {notice.summary ? `${notice.summary} ` : ''}{notice.body}
+              </span>
               <NativeAction
-                label={notice.secondaryActionLabel ?? 'CANCEL'}
-                rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}
-                onClick={() => click(() => setNotice(null))}
+                label={notice.actionLabel}
+                rect={notice.variant === 'unforge-confirmation'
+                  ? HUB_UNFORGE_CONFIRMATION.primaryButtonRect
+                  : notice.variant === 'unforge-result'
+                    ? HUB_UNFORGE_RESULT.primaryButtonRect
+                    : HUB_DOWSING_MSGBOX.primaryButtonRect}
+                onClick={() => click(() => {
+                  if (notice.variant === 'unforge-confirmation'
+                    && notice.unforgeItemId !== undefined) {
+                    onAction({ type: 'unforge', itemId: notice.unforgeItemId })
+                  }
+                  setNotice(null)
+                })}
               />
-            ) : null}
-          </>
-        ) : surface.kind === 'dialogue' ? (
-          <DialogueActions
-            chat={chat}
-            trader={surface.trader}
-            onClose={onClose}
-            onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
-              ? { ...current, acceleratedAtMs: performance.now() }
-              : current)}
-            onAdvance={() => beginChatPhase('choices')}
-            onPrices={() => click(() => beginChatPhase('prices'))}
-            onService={() => click(() => onSurfaceChange({ kind: 'service', trader: surface.trader }))}
-          />
-        ) : surface.kind === 'service' ? (
-          <ServiceActions
-            economy={economy}
-            inventorySelection={inventorySelection}
-            selection={serviceSelection}
-            trader={surface.trader}
-            onAction={(action) => {
-              if (action.type.startsWith('buy-')) audio.playSound('click')
-              onAction(action)
-            }}
-            onInventoryAction={(action) => {
-              if (action.type !== 'consume' && action.type !== 'transfer'
-                && action.type !== 'unforge') audio.playSound('click')
-              onAction(action)
-            }}
-            onClose={() => {
-              audio.playSound('open-panel')
-              onClose()
-            }}
-            onDragChange={setInventoryDrag}
-            onDragMove={(point) => rendererRef.current?.moveDrag(point)}
-            onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
-            onInventorySelect={(next) => {
-              audio.playSound('click')
-              setInventorySelection(next)
-            }}
-            onInteractionSound={(cue) => {
-              if (cue === 'storage-drag-start' || cue === 'shop-activation') audio.playSound('click')
-            }}
-            onNotice={setNotice}
-            onSelect={setServiceSelection}
-          />
-        ) : (
-          <InventoryActions
-            economy={economy}
-            selection={inventorySelection}
-            onAction={(action) => {
-              if (action.type !== 'consume' && action.type !== 'unforge') audio.playSound('click')
-              onAction(action)
-            }}
-            onDragChange={setInventoryDrag}
-            onDragMove={(point) => rendererRef.current?.moveDrag(point)}
-            onNotice={setNotice}
-            onSelect={(next) => {
-              audio.playSound('click')
-              setInventorySelection(next)
-            }}
-          />
-        )}
-      </div>
-      {rendererState === 'error' ? (
-        <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>
-      ) : null}
-    </section>
+              {notice.variant === 'unforge-confirmation' ? (
+                <NativeAction
+                  label={notice.secondaryActionLabel ?? 'CANCEL'}
+                  rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}
+                  onClick={() => click(() => setNotice(null))}
+                />
+              ) : null}
+            </>
+          ) : surface.kind === 'dialogue' ? (
+            <DialogueActions
+              chat={chat}
+              trader={surface.trader}
+              onClose={onClose}
+              onAccelerate={() => setChat((current) => current.acceleratedAtMs === null
+                ? { ...current, acceleratedAtMs: performance.now() }
+                : current)}
+              onAdvance={() => beginChatPhase('choices')}
+              onPrices={() => click(() => beginChatPhase('prices'))}
+              onService={() => click(() => onSurfaceChange({ kind: 'service', trader: surface.trader }))}
+            />
+          ) : surface.kind === 'service' ? (
+            <ServiceActions
+              economy={economy}
+              inventorySelection={inventorySelection}
+              selection={serviceSelection}
+              trader={surface.trader}
+              onAction={(action) => {
+                if (action.type.startsWith('buy-')) audio.playSound('click')
+                onAction(action)
+              }}
+              onInventoryAction={(action) => {
+                if (action.type !== 'consume' && action.type !== 'transfer'
+                  && action.type !== 'unforge') audio.playSound('click')
+                onAction(action)
+              }}
+              onClose={() => {
+                audio.playSound('open-panel')
+                onClose()
+              }}
+              onDragChange={setInventoryDrag}
+              onDragMove={(point) => rendererRef.current?.moveDrag(point)}
+              onInsufficientGold={() => setNotice(HUB_DOWSING_INSUFFICIENT_GOLD)}
+              onInventorySelect={(next) => {
+                audio.playSound('click')
+                setInventorySelection(next)
+              }}
+              onInteractionSound={(cue) => {
+                if (cue === 'storage-drag-start' || cue === 'shop-activation') audio.playSound('click')
+              }}
+              onNotice={setNotice}
+              onSelect={setServiceSelection}
+            />
+          ) : (
+            <InventoryActions
+              economy={economy}
+              selection={inventorySelection}
+              onAction={(action) => {
+                if (action.type !== 'consume' && action.type !== 'unforge') audio.playSound('click')
+                onAction(action)
+              }}
+              onDragChange={setInventoryDrag}
+              onDragMove={(point) => rendererRef.current?.moveDrag(point)}
+              onNotice={setNotice}
+              onSelect={(next) => {
+                audio.playSound('click')
+                setInventorySelection(next)
+              }}
+            />
+          )}
+        </div>
+        {rendererState === 'error' ? (
+          <p className="hub-native-ui-error" role="alert">Native inventory renderer unavailable.</p>
+        ) : null}
+      </section>
+    </div>
   )
 }
 

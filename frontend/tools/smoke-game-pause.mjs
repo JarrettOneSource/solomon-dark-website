@@ -37,6 +37,10 @@ const screenshots = {
     || '/tmp/solomon-dark-pause-skill-settings.png',
   hubWaiting: process.env.SDR_GAME_PAUSE_WAITING_SCREENSHOT
     || '/tmp/solomon-dark-pause-hub-waiting.png',
+  largeHubInventory: process.env.SDR_GAME_PAUSE_LARGE_INVENTORY_SCREENSHOT
+    || '/tmp/solomon-dark-large-hub-inventory.png',
+  largeHubPause: process.env.SDR_GAME_PAUSE_LARGE_SCREENSHOT
+    || '/tmp/solomon-dark-large-hub-pause.png',
   leavePressed: process.env.SDR_GAME_PAUSE_LEAVE_PRESSED_SCREENSHOT
     || '/tmp/solomon-dark-pause-leave-pressed.png',
   resumePressed: process.env.SDR_GAME_PAUSE_RESUME_PRESSED_SCREENSHOT
@@ -93,6 +97,68 @@ try {
   }, runtime)
   await enterHub(page, 'Fire')
   grantLearnedSkill(57)
+
+  await page.setViewportSize({ height: 1200, width: 1920 })
+  const largeHubScene = page.locator('.hub-scene')
+  await largeHubScene.getByRole('button', { name: /Open inventory/ }).click()
+  const largeHubInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await largeHubInventory.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor()
+  await assertFixedUiGeometry(
+    page,
+    page.locator('.hub-native-ui-overlay'),
+    largeHubInventory,
+    largeHubInventory.locator('.hub-inventory-native-canvas'),
+  )
+  await dragScaledInventoryItem(
+    page,
+    largeHubInventory,
+    largeHubInventory.getByRole('button', { exact: true, name: 'Weapon, Staff' }).first(),
+    { x: 800, y: 650 },
+  )
+  const largeBackpackStaff = largeHubInventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Staff, quantity 1',
+  })
+  await largeBackpackStaff.waitFor()
+  await largeBackpackStaff.dblclick()
+  await largeHubInventory.getByRole('button', {
+    exact: true,
+    name: 'Weapon, Staff',
+  }).first().waitFor()
+  await page.screenshot({ path: screenshots.largeHubInventory })
+  await largeHubInventory.getByRole('button', { name: 'Done' }).click()
+
+  await pressPause(page, '.hub-scene')
+  const largeHubPause = page.locator(
+    '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
+  )
+  await largeHubPause.waitFor()
+  await page.waitForTimeout(350)
+  const largeHubHeld = simulationReceipt()
+  await assertFixedUiGeometry(
+    page,
+    largeHubPause,
+    largeHubPause.locator('.gameplay-pause-native-stage'),
+    largeHubPause.locator('.gameplay-pause-canvas'),
+  )
+  assertBoxClose(
+    await largeHubPause.locator('.gameplay-pause-dim').boundingBox(),
+    { height: 1200, width: 1920, x: 0, y: 0 },
+  )
+  await page.screenshot({ path: screenshots.largeHubPause })
+  await largeHubPause.dispatchEvent('keydown', { key: 'Escape', repeat: true })
+  await largeHubPause.dispatchEvent('keydown', { altKey: true, key: 'Escape' })
+  assert.equal(await largeHubPause.count(), 1)
+  const largeHubResumeStartedAt = performance.now()
+  await page.keyboard.press('Escape')
+  await largeHubPause.waitFor({ state: 'detached' })
+  assertNoCatchUp(largeHubHeld.tick, largeHubResumeStartedAt, 'large Hub Escape resume')
+  await page.setViewportSize({ height: 900, width: 1600 })
+  await page.waitForFunction(() => (
+    document.querySelector('.hub-scene')?.getAttribute('data-viewport-width') === '1600'
+  ))
 
   peer = await joinRaw({
     discipline: 'mind',
@@ -358,6 +424,8 @@ try {
   assert.match(await hubWaiting.textContent() || '', /Vibia has paused the game\./)
   assert.match(await hubWaiting.textContent() || '', /Waiting for Vibia to resume\./)
   assert.equal(await hubWaiting.getByRole('button').count(), 0)
+  await hubWaiting.dispatchEvent('keydown', { key: 'Escape' })
+  assert.equal(await hubWaiting.count(), 1)
   await page.screenshot({ path: screenshots.hubWaiting })
   const peerHeldHub = simulationReceipt()
   await page.waitForTimeout(550)
@@ -381,6 +449,21 @@ try {
     page.locator('.boneyard-scene[data-renderer-state="ready"]').waitFor({ timeout: 90_000 }),
   ])
 
+  await page.setViewportSize({ height: 1080, width: 2560 })
+  const largeBoneyard = page.locator('.boneyard-scene')
+  await largeBoneyard.getByRole('button', { name: /Open inventory/ }).click()
+  const largeBoneyardInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await largeBoneyardInventory.locator(
+    '.hub-inventory-native-canvas[data-native-reveal="settled"]',
+  ).waitFor()
+  await assertFixedUiGeometry(
+    page,
+    page.locator('.hub-native-ui-overlay'),
+    largeBoneyardInventory,
+    largeBoneyardInventory.locator('.hub-inventory-native-canvas'),
+  )
+  await largeBoneyardInventory.getByRole('button', { name: 'Done' }).click()
+
   const peerSawBoneyardPause = nextRawMessage(peer.socket, (message) => (
     message.type === 'server-gameplay-pause' && message.pause?.ownerPlayerId === host.hostPlayerId()
   ))
@@ -389,6 +472,13 @@ try {
     '.gameplay-pause-stage[data-gameplay-pause-view="owner"]',
   )
   await Promise.all([boneyardOwner.waitFor(), peerSawBoneyardPause])
+  await page.waitForTimeout(350)
+  await assertFixedUiGeometry(
+    page,
+    boneyardOwner,
+    boneyardOwner.locator('.gameplay-pause-native-stage'),
+    boneyardOwner.locator('.gameplay-pause-canvas'),
+  )
   const heldBoneyardOwner = simulationReceipt()
   const heldBoneyardOwnerFrame = await canvasFrame(page, '.boneyard-world-canvas')
   await page.waitForTimeout(550)
@@ -584,6 +674,55 @@ async function pauseCompositeFrame(page) {
   return page.screenshot({
     clip: { height: 500, width: 500, x: 550, y: 210 },
   })
+}
+
+async function assertFixedUiGeometry(page, overlay, stage, canvas) {
+  const viewport = page.viewportSize()
+  assert.ok(viewport)
+  const scale = Math.min(viewport.width / 1600, viewport.height / 900)
+  const expectedStage = {
+    height: 900 * scale,
+    width: 1600 * scale,
+    x: (viewport.width - 1600 * scale) / 2,
+    y: (viewport.height - 900 * scale) / 2,
+  }
+  assertBoxClose(await overlay.boundingBox(), {
+    height: viewport.height,
+    width: viewport.width,
+    x: 0,
+    y: 0,
+  })
+  assertBoxClose(await stage.boundingBox(), expectedStage)
+  assertBoxClose(await canvas.boundingBox(), expectedStage)
+}
+
+function assertBoxClose(actual, expected, epsilon = 0.01) {
+  assert.ok(actual)
+  for (const key of ['height', 'width', 'x', 'y']) {
+    assert.ok(
+      Math.abs(actual[key] - expected[key]) <= epsilon,
+      `${key}: ${actual[key]} is not within ${epsilon} of ${expected[key]}`,
+    )
+  }
+}
+
+async function dragScaledInventoryItem(page, inventory, source, nativeDestination) {
+  const sourceBox = await source.boundingBox()
+  const stageBox = await inventory.boundingBox()
+  assert.ok(sourceBox)
+  assert.ok(stageBox)
+  const destination = {
+    x: stageBox.x + nativeDestination.x * stageBox.width / 1600,
+    y: stageBox.y + nativeDestination.y * stageBox.height / 900,
+  }
+  await page.mouse.move(
+    sourceBox.x + sourceBox.width / 2,
+    sourceBox.y + sourceBox.height / 2,
+  )
+  await page.mouse.down()
+  await page.mouse.move(destination.x, destination.y, { steps: 4 })
+  assert.match(await inventory.getAttribute('data-native-inventory-dragging') || '', /^equipment:weapon$/)
+  await page.mouse.up()
 }
 
 async function capturePressedAction({

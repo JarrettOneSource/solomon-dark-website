@@ -42,6 +42,33 @@ import {
   hubUnforgeTargetTint,
 } from './hub-inventory-render-contract.ts'
 
+const inventoryComponent = readFileSync(new URL('../HubInventoryUi.tsx', import.meta.url), 'utf8')
+const inventoryCss = readFileSync(new URL('../hub-inventory.css', import.meta.url), 'utf8')
+const mainScene = readFileSync(new URL('../MainMenuScene.tsx', import.meta.url), 'utf8')
+const hubScene = readFileSync(new URL('../HubScene.tsx', import.meta.url), 'utf8')
+const boneyardScene = readFileSync(new URL('../BoneyardScene.tsx', import.meta.url), 'utf8')
+
+test('every inventory and trader modal consumes the shell fixed-stage projection', () => {
+  assert.equal(mainScene.match(/nativeUiStageStyle=\{nativeStageStyle\}/g)?.length, 2)
+  for (const scene of [hubScene, boneyardScene]) {
+    assert.match(scene, /nativeUiStageStyle: CSSProperties/)
+    assert.match(scene, /<HubInventoryUi[\s\S]*nativeUiStageStyle=\{nativeUiStageStyle\}/)
+  }
+  assert.match(
+    inventoryComponent,
+    /className="hub-native-ui-overlay"[\s\S]*className="hub-native-ui-stage"[\s\S]*style=\{style\}/,
+  )
+  assert.match(
+    inventoryCss,
+    /\.hub-native-ui-overlay\s*\{[^}]*position:\s*absolute;[^}]*z-index:\s*30000;[^}]*inset:\s*0;[^}]*background:\s*#000;/s,
+  )
+  assert.match(
+    inventoryCss,
+    /\.hub-native-ui-stage\s*\{[^}]*width:\s*1600px;[^}]*height:\s*900px;/s,
+  )
+  assert.match(inventoryComponent, /closest\('\.hub-native-ui-stage'\)/)
+})
+
 test('stock inventory owns the fixed 1600 by 900 stage and all 88 authored cells', () => {
   assert.deepEqual(HUB_NATIVE_UI_SIZE, { height: 900, width: 1600 })
   assert.equal(HUB_INVENTORY_GRID.columns * HUB_INVENTORY_GRID.rows, 88)

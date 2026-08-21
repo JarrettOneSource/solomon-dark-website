@@ -77,6 +77,7 @@ interface HubSceneProps {
   inventoryRequestSequence: number
   modAssets: readonly GameModAsset[]
   levelUpPresentationId: number | null
+  nativeUiStageStyle: CSSProperties
   onInput: (input: PlayerCharacterInput) => void
   onAcceptPartyInvitation: (invitationId: string) => void
   onDenyPartyInvitation: (invitationId: string) => void
@@ -119,6 +120,7 @@ export default function HubScene({
   inventoryRequestSequence,
   modAssets,
   levelUpPresentationId,
+  nativeUiStageStyle,
   onInput,
   onAcceptPartyInvitation,
   onDenyPartyInvitation,
@@ -606,8 +608,10 @@ export default function HubScene({
           inventoryKeyCode={settings.controls.openInventory}
           menuKeyCode={settings.controls.openMenu}
           modAssets={modAssets}
+          nativeUiStageStyle={nativeUiStageStyle}
           onAction={onHubAction}
           onSurfaceChange={setHubUiSurface}
+          overlayRoot={sceneRef}
           playerPosition={playerPosition}
           progression={progression}
           region={currentRegion}
