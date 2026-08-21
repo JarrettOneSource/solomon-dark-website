@@ -26941,5 +26941,47 @@ validated immutable ZIP + required capabilities
 
 ### Implementation validation receipt
 
-Pending implementation, exact-tree validation, production data migration,
-publication, guarded deployment, and live affected-account acceptance.
+- Website functional cutoff `84049999013c8b9665c4f78e92f97a092394bb4b`
+  implements API `0.2.0` admission, capability rejection, the isolated package
+  file/content registry, stable decimal content identities, registered sprite,
+  item, and additive-loot owners, guest-correct consumption, synchronous
+  damage/mana filters, protocol-48 replication, custom ground/inventory art,
+  and the recovered flash/ring renderer. The browser journey caught and closed
+  one missing presentation member before publication: `BadGuys[110]` had not
+  been included in the preload census. The 78-record asset contract now owns it.
+- The exact merged functional tree passed `./scripts/validate.sh` on native
+  Windows and the Apple-silicon Mac mini: 14 backend tests; frontend groups of
+  4, 43, 225, 1,239, 17, 10, 7, 17, and 16 tests; five desktop tests; formatting,
+  lint, architecture boundaries, Release backend build, production client and
+  portable-host builds, media policy, and a 353,613-byte raw / 100,134-byte
+  gzip Game entry. The later two Website commits change only the committed
+  built-browser acceptance tool and pass the supported lint gate on both hosts.
+- Deterministic package `invincibility-potion-0.3.0.zip` is 6,642 bytes with
+  package SHA-256
+  `5d294cc374403745c12ee1b441f1822bbadce126a4d78c2ea7f1125638eb1c54`
+  and content SHA-256
+  `df9eae2b56b32bbb3a15c765ecf0f8e2427d10d75f87ba8fc3793b379021c0ee`.
+  Its fixed native content ID is `8068156596081641415`.
+- Native Windows Chrome and Mac Chrome each ran the built production client
+  with two WebGL2 contexts against that exact extracted ZIP. Both proved the
+  registered green ground pickup and Inventory icon, guest-only consumption,
+  mana restoration, a real held Air cast with no debit, advancing poison with
+  no health loss, one authoritative guest effect rendered on both clients, and
+  empty page, console, network, and host-error arrays. Both independently
+  derived session manifest SHA-256
+  `28151cb4867ab55416a73f5fd65b6c7d3210286076d554e0c29fb19ec4bdcf00`.
+  Windows Inventory/effect screenshots hash to
+  `78664f6ef2b34667a855964047fa0558b533dfd304fdfdd1ae4126a8a9ba7924`
+  and `6f3d2fba739e0347ea6028fdd53672ba2e915c11c5f3644ff4737f109fdeb59c`;
+  Mac equivalents hash to
+  `a12690d5b9e431cd8f63f3ce2b5c5729a5ed45cf74fdb5098598d7a25ed65eaf`
+  and `0830cdde5035369b1f3951f96be963fbcb8b802f2824da3aa64977adfbb7f4e1`.
+- Mod Loader cutoff `470758e2776eb06a3108bb10cecece021f3cf31e`
+  passes 88/88 portable modules (801 tests) and 491/491 static RE contracts in
+  WSL and on the Mac mini. The two pre-existing failures introduced by the
+  concurrent Unforge documentation merge were closed by adding its three
+  document-only initialized fields and two promoted captures to their complete
+  censuses.
+
+Production data migration, publication, guarded deployment, and live
+affected-account acceptance remain pending at this receipt.

@@ -881,13 +881,32 @@ allocator have explicit per-VM and aggregate bounds. Instruction hooks
 interrupt both entry chunks and stored callbacks. A package with no Lua member
 creates no VM.
 
-The first API version exposes only semantic owners already implemented in
-`/game`: runtime/state/events/timer, run seed, scene/gameplay/Hub reads,
-player resource reads/mutations, world/wave reads, and the bounded stock-enemy
-descriptor/spawn subset. `sd.state` is the only durable mod-owned value domain;
-schema-two checkpoints snapshot it as bounded JSON and restore it only for an
-exact identity match. Client presentation, a cross-mod bus, raw Lua networking,
-bots, input synthesis, time scaling, navigation, and every native-memory/debug
-path remain absent until their web owners exist.
+API `0.2.0` adds one host-owned content registry beneath the VMs. Admission
+provides each mod only its validated immutable package files. During its sole
+entrypoint, a mod may register bounded local sprite atlases, consumables, and
+additive loot rows; a failed entrypoint rolls back the whole registration.
+The registry publishes only validated PNG bytes, frame geometry, and immutable
+content metadata. Stable native `sd.content.v1` identities cross Lua and JSON
+as decimal strings so JavaScript never rounds a 63-bit item ID.
+
+The simulation sees that registry through a narrow extension interface rather
+than importing Lua. Custom loot enters the existing authoritative ground-actor
+and pickup lanes. A consume action allocates one use ID, invokes the owning
+callback for the actual participant, dispatches `item.consumed` to every mod
+VM, and snapshots the bounded actor-attached effect. Synchronous
+`damage.taken` and `mana.changing` filters run at the existing direct/poison
+health and primary/secondary/overload/recovery/orb/potion mana writers. Filter
+errors fail open for that handler; cancellation remains monotonic. Protocol 48
+carries package assets, catalog entries, content-identified inventory/ground
+items, and active effects together with the independently merged Unforge
+state.
+
+`sd.state` remains the only durable mod-owned value domain. Schema-three
+checkpoints snapshot it as bounded JSON and restore it only for an exact mod
+identity match; live Lua callbacks, timers, and active consumable effects are
+run-scoped and deliberately not checkpointed. Client-authored Lua,
+cross-mod buses, raw Lua networking, bots, input synthesis, time scaling,
+navigation, recipe-backed dynamic items, and every native-memory/debug path
+remain absent until their web owners exist.
 The complete disposition is recorded in `game-native-parity-re.md` and the Mod
 Loader's `web-lua-runtime-parity-contract.md`.
