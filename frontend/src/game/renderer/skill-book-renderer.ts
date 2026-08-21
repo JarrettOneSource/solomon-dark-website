@@ -311,7 +311,7 @@ function drawSkillEntry(
     .rect(centerX - 43, centerY - 43, 86, 86)
     .stroke({ color: borderTint, width: 3 }))
 
-  const iconRecord = weldBuild?.skillsAtlasIconRecord ?? row.iconRecord
+  const iconRecord = weldBuild?.skillScreenIconRecord ?? row.iconRecord
   const iconShadow = spriteFor(textures, 'Skills', iconRecord)
   iconShadow.anchor.set(0.5)
   iconShadow.position.set(centerX + 2, centerY + 2)
